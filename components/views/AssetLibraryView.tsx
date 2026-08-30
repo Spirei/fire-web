@@ -1417,7 +1417,7 @@ export default function AssetLibraryView() {
                         title="更多市场"
                         aria-expanded={marketMenuOpen}
                         className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-ink transition-all duration-200 ${
-                          marketMenuOpen ? "bg-brand-hover text-ink" : "bg-bg-gray hover:bg-brand-hover hover:text-ink"
+                          marketMenuOpen ? "bg-brand-hover text-ink dark:bg-white/10 dark:text-white" : "bg-bg-gray hover:bg-brand-hover hover:text-ink dark:bg-[#1c222d] dark:text-[#d9e1ec] dark:hover:bg-white/10"
                         }`}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
@@ -1711,7 +1711,7 @@ export default function AssetLibraryView() {
                           type="button"
                           disabled={!!busy[busyKey]}
                           onClick={() => fileRefs.current[busyKey]?.click()}
-                          className="group relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)]"
+                          className="group relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)] dark:bg-[#1c1c1e]"
                           title="点击上传自定义旗帜"
                         >
                           <span className="absolute inset-0 grid place-items-center text-xl">{country.flag}</span>
@@ -1774,7 +1774,7 @@ export default function AssetLibraryView() {
                           type="button"
                           disabled={!!busy[busyKey]}
                           onClick={(e) => (e.currentTarget.closest("div")?.querySelector('input[type="file"]') as HTMLInputElement | null)?.click()}
-                          className="group relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)]"
+                          className="group relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)] dark:bg-[#1c1c1e]"
                           title="点击上传/更换图标"
                         >
                           {url ? <img src={url} alt="" className="h-full w-full rounded-full object-cover" /> : <MarketIcon market={key} size={24} />}
@@ -1926,7 +1926,7 @@ export default function AssetLibraryView() {
                             type="button"
                             disabled={!!busy[busyKey]}
                             onClick={(e) => (e.currentTarget.closest("div")?.querySelector('input[type="file"]') as HTMLInputElement | null)?.click()}
-                            className="group relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)]"
+                            className="group relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)] dark:bg-[#1c1c1e]"
                             title="点击上传/更换券商图标"
                           >
                             {url ? (
@@ -2033,7 +2033,7 @@ export default function AssetLibraryView() {
                             exists
                               ? "border-edge bg-bg-gray/50 text-faint dark:text-[#99a3b2]"
                               : "border-edge bg-white text-ink-2 hover:bg-brand-hover hover:text-ink dark:bg-[#151a26] dark:text-[#e5e7eb] dark:hover:bg-white/10"
-                          }`}
+                          } dark:bg-[#1c222d] dark:text-[#d9e1ec]`}
                         >
                           {adding ? "添加中…" : exists ? `✓ ${it.name}` : it.name}
                         </button>
@@ -2475,7 +2475,7 @@ export default function AssetLibraryView() {
                           type="button"
                           disabled={saving}
                           onClick={(e) => (e.currentTarget.closest("div")?.querySelector('input[type="file"]') as HTMLInputElement | null)?.click()}
-                          className="group relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)]"
+                          className="group relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)] dark:bg-[#1c1c1e]"
                           title="点击上传/更换图标"
                         >
                           {row.url ? (

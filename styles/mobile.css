@@ -278,6 +278,15 @@
 
 /* 紧凑手机：把用户宽表转换成卡片列表，保留用户、角色与操作。 */
 @media (max-width: 420px) {
+  .trade-orders-toolbar { align-items: flex-start; }
+  .trade-orders-actions { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; gap: 6px; }
+  .trade-orders-actions > :first-child { grid-column: 1 / -1; }
+  .trade-orders-actions > :first-child input { width: 100%; }
+  .trade-orders-actions > span { align-self: center; }
+  .trade-orders-actions > button { min-width: 32px; }
+  .trade-orders-actions > button[title^="导出"],
+  .trade-orders-actions > button[title^="导入"] { width: 32px; padding-inline: 0; font-size: 0; }
+
   .mobile-users-table { display: block; min-width: 0; }
   .mobile-users-table thead { display: none; }
   .mobile-users-table tbody { display: grid; gap: 10px; padding: 10px; }

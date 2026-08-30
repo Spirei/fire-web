@@ -16,6 +16,7 @@ export default function SiteLogo({
 }) {
   // 初始值由服务端设置直接传入，避免刷新时闪现默认 logo
   const [logo, setLogo] = useState(initialLogo);
+  const [logoFailed, setLogoFailed] = useState(false);
   const [text, setText] = useState(initialText);
   const [font, setFont] = useState(initialFont);
 
@@ -25,6 +26,7 @@ export default function SiteLogo({
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           setLogo(data?.settings?.siteLogo ?? "");
+          setLogoFailed(false);
           setText(data?.settings?.logoText ?? "");
           setFont(data?.settings?.logoFont ?? "diatype");
         })
@@ -37,8 +39,8 @@ export default function SiteLogo({
 
   return (
     <span className="inline-flex items-center gap-2.5">
-      {logo ? (
-        <img src={logo} alt="logo" className={small ? "h-5 w-auto" : "h-7 w-auto"} />
+      {logo && !logoFailed ? (
+        <img src={logo} alt="logo" onError={() => setLogoFailed(true)} className={small ? "h-5 w-auto" : "h-7 w-auto"} />
       ) : (
         <span className={`inline-flex items-center justify-center bg-white text-ink-2 border border-edge-strong shadow-sm ${small ? "h-[26px] w-[26px] rounded-lg" : "h-[34px] w-[34px] rounded-[10px]"}`}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">

@@ -610,6 +610,7 @@ export default function HomeContent({ settings, initialDark = false }: { setting
               link.rel = "icon";
               document.head.appendChild(link);
             }
+            link.onerror = () => { link!.onerror = null; link!.href = "/uploads/ico/pwa-192.png"; };
             link.href = s.ico;
           }
           if (s.homepageBg) setLiveBg(s.homepageBg);

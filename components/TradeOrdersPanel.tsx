@@ -1030,7 +1030,7 @@ export default function TradeOrdersPanel({
   const Wrapper = bare ? "div" : "section";
   return (
     <Wrapper className={bare ? "overflow-hidden" : "card overflow-hidden"}>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-5 py-3.5">
+      <div className="trade-orders-toolbar flex flex-wrap items-center justify-between gap-3 border-b border-edge px-5 py-3.5">
         <div className="flex items-center gap-6">
           {([["today", "当日订单"], ["history", "历史订单"]] as const).map(([key, label]) => (
             <button
@@ -1046,7 +1046,7 @@ export default function TradeOrdersPanel({
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="trade-orders-actions flex items-center gap-2">
           <div ref={searchRef} className="relative">
             <div className="relative">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint">
