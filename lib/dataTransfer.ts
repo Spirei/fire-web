@@ -234,7 +234,7 @@ export function restoreBackupPayload(payload: unknown, userId: string, isAdmin: 
   const groupIdMap = new Map<string, string>();
   const groups = asArr("watchGroups").map((g) => {
     const ids = mapOwnedId("watch_groups", g.id, "wg"); groupIdMap.set(ids.oldId, ids.id);
-    return { id: ids.id, user_id: userId, name: text(g.name, "watchGroups.name", 100, true), icon: text(g.icon, "watchGroups.icon", 500), sort: numberValue(g.sort, "watchGroups.sort", false) ?? 0, visible: numberValue(g.visible, "watchGroups.visible", false) ?? -1, kind: enumValue(g.kind, "watchGroups.kind", ["custom", "system"], "custom"), market: text(g.market, "watchGroups.market", 20), created_at: text(g.created_at, "watchGroups.created_at", 64, true) };
+    return { id: ids.id, user_id: userId, name: text(g.name, "watchGroups.name", 100, true), icon: text(g.icon, "watchGroups.icon", 500), sort: numberValue(g.sort, "watchGroups.sort", false) ?? 0, visible: numberValue(g.visible, "watchGroups.visible", false) ?? -1, kind: enumValue(g.kind, "watchGroups.kind", ["custom", "market"], "custom"), market: text(g.market, "watchGroups.market", 20), created_at: text(g.created_at, "watchGroups.created_at", 64, true) };
   });
   const recordIdMap = new Map<string, string>();
   const recordCodeMap = new Map<string, string>();
