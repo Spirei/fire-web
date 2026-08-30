@@ -2283,6 +2283,8 @@
 
 /* 自选股表格操作列：横向滚动时保持可见，同时收紧大屏留白 */
 .quotes-actions-cell { position: sticky; z-index: 2; right: 0; width: 164px; min-width: 164px; border-left: 1px solid var(--edge); background: #fff; box-shadow: -8px 0 16px rgba(10,14,25,.06); }
+.quotes-control-panel { border: 1px solid var(--edge); border-radius: 16px; background: rgba(255,255,255,.86); box-shadow: 0 8px 24px rgba(15,23,42,.045); }
+.dark .quotes-control-panel { border-color: #252c3a; background: #151a26; box-shadow: 0 12px 30px rgba(0,0,0,.16); }
 thead .quotes-actions-cell { z-index: 3; background: var(--bg-gray); }
 tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .quotes-actions-cell.is-selected { background: #f7fbff; }

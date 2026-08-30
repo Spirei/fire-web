@@ -658,8 +658,9 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
         </div>
       </div>
 
-      {/* 行情板标题栏 */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-1">
+      {/* 行情板控制面板：标题、刷新和分组筛选保持在同一层级 */}
+      <section className="quotes-control-panel mb-5 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3.5">
         <div className="flex items-center gap-2">
           <h3 className="text-base font-bold">我的行情板</h3>
           <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold tabular-nums text-faint">{filtered.length}</span>
@@ -688,7 +689,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                 /* 忽略存储不可用 */
               }
             }}
-            className="h-8 rounded-[9px] border border-edge bg-white px-2.5 text-[11px] font-semibold text-muted outline-none transition-colors hover:border-edge-strong focus:border-edge-strong"
+            className="h-8 rounded-[9px] border border-edge bg-bg-gray px-2.5 text-[11px] font-semibold text-muted outline-none transition-colors hover:border-edge-strong focus:border-edge-strong"
             aria-label="刷新间隔"
             title="刷新间隔"
           >
@@ -699,8 +700,8 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
         </div>
       </div>
 
-      {/* 分组筛选（iOS 关注页同款：全部 + 市场分组 + 自定义分组，末尾加号打开分组管理） */}
-      <div className="mb-4 flex flex-wrap items-center gap-2 px-1">
+      {/* 分组筛选（全部 + 市场分组 + 自定义分组，末尾加号打开分组管理） */}
+      <div className="flex flex-wrap items-center gap-2 bg-bg-gray/30 px-4 py-3">
         {groupChips.visible.map((chip) => {
           const selected = filterId === chip.id;
           const g = watchGroups.find((x) => x.id === chip.id);
@@ -715,8 +716,8 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
               }}
               className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 ${
                 selected
-                  ? "border border-edge-strong bg-white text-ink-2 shadow-sm dark:bg-[#26282e] dark:text-white"
-                  : "border border-edge-strong bg-white text-muted hover:bg-brand-hover hover:text-ink active:bg-bg-gray"
+                  ? "border border-edge-strong bg-white text-ink-2 shadow-sm dark:bg-[#2a3342] dark:text-white"
+                  : "border border-edge-strong bg-white text-muted hover:bg-brand-hover hover:text-ink active:bg-bg-gray dark:bg-[#1b2230]"
               }`}
             >
               {!g ? (
@@ -751,6 +752,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
           </svg>
         </button>
       </div>
+      </section>
 
       {editMode && selected.size > 0 && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-edge bg-bg-gray/50 px-3 py-2">
