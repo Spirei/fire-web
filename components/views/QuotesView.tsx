@@ -83,6 +83,17 @@ function MiniChart({ data, code }: { data?: Intraday; code: string }) {
   );
 }
 
+function QuotesCheckbox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
+  return (
+    <label className="quotes-checkbox-wrap">
+      <input type="checkbox" checked={checked} onChange={onChange} className="quotes-checkbox" aria-label={label} />
+      <svg className="quotes-checkbox-mark" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M3.2 8.3 6.5 11.4 12.8 4.8" />
+      </svg>
+    </label>
+  );
+}
+
 export default function QuotesView({ initialSymbol, records, quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onBatchDelete, onUpdate, onRemove, groups, onDetailChange, onToggleWatch }: Props) {
   const { brokerIcons, stockIcons } = useAssetIcons(["broker", "stock"]);
   const [added, setAdded] = useState("");
@@ -825,7 +836,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
               <thead>
                 <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-muted">
                   {editMode && <th className="w-10 px-4 py-[13px]">
-                    <input type="checkbox" checked={filtered.length > 0 && filtered.every((r) => selected.has(r.id))} onChange={toggleAll} className="quotes-checkbox" aria-label="全选" />
+                    <QuotesCheckbox checked={filtered.length > 0 && filtered.every((r) => selected.has(r.id))} onChange={toggleAll} label="全选" />
                   </th>}
                   <th className="px-3 py-[13px] text-center">序号</th>
                   <th className="min-w-[210px] px-4 py-[13px] text-left">股票</th>
@@ -844,7 +855,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                   return (
                     <tr key={r.id} className={`quotes-row group whitespace-nowrap border-t border-edge transition-colors ${selected.has(r.id) ? "is-selected" : "hover:bg-[#fafbfc] dark:hover:bg-[#1a212e]"}`}>
                       {editMode && <td className="px-4 py-3.5">
-                        <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} className="quotes-checkbox" aria-label={`选择 ${r.name}`} />
+                        <QuotesCheckbox checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} label={`选择 ${r.name}`} />
                       </td>}
                       <td className="px-3 py-3.5 text-center text-xs tabular-nums text-faint">{(safePage - 1) * PAGE_SIZE + i + 1}</td>
                       <td className="cursor-pointer px-4 py-3.5 transition-colors hover:bg-brand-hover/30 dark:hover:bg-[#202735]" onClick={() => openDetail(r)}>
