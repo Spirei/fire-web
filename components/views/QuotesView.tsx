@@ -835,7 +835,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                 {pageRows.map((r, i) => {
                   const q = quotes[r.id];
                   return (
-                    <tr key={r.id} className={`quotes-row group whitespace-nowrap border-t border-edge transition-colors ${selected.has(r.id) ? "bg-[#3297f6]/[.045] dark:bg-[#3297f6]/10" : "hover:bg-[#fafbfc] dark:hover:bg-[#1a212e]"}`}>
+                    <tr key={r.id} className={`quotes-row group whitespace-nowrap border-t border-edge transition-colors ${selected.has(r.id) ? "is-selected bg-[#3297f6]/[.045] dark:bg-[#3297f6]/10" : "hover:bg-[#fafbfc] dark:hover:bg-[#1a212e]"}`}>
                       <td className="px-4 py-3.5">
                         <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} className="h-4 w-4 cursor-pointer accent-[#3297f6]" aria-label={`选择 ${r.name}`} />
                       </td>
