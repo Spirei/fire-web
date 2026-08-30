@@ -660,12 +660,12 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
 
       {/* 行情板控制面板：标题、刷新和分组筛选保持在同一层级 */}
       <section className="quotes-control-panel mb-5 overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3.5">
-        <div className="flex items-center gap-2">
+      <div className="quotes-control-header flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+        <div className="quotes-control-title flex items-center gap-2">
           <h3 className="text-base font-bold">我的行情板</h3>
           <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold tabular-nums text-faint">{filtered.length}</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="quotes-control-actions flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => { setEditMode((v) => !v); setSelected(new Set()); setAssignOpen(false); }} className={`btn btn-ghost btn-sm ${editMode ? "text-brand-deep" : ""}`} aria-pressed={editMode}>
             {editMode ? "完成" : "编辑"}
           </button>
@@ -701,7 +701,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
       </div>
 
       {/* 分组筛选（全部 + 市场分组 + 自定义分组，末尾加号打开分组管理） */}
-      <div className="flex flex-wrap items-center gap-2 bg-bg-gray/30 px-4 py-3">
+      <div className="quotes-control-groups flex min-w-0 items-center gap-2 px-4 py-3">
         {groupChips.visible.map((chip) => {
           const selected = filterId === chip.id;
           const g = watchGroups.find((x) => x.id === chip.id);
@@ -714,7 +714,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                 setFilterId(chip.id);
                 setPage(1);
               }}
-              className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 ${
+              className={`flex flex-none items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 ${
                 selected
                   ? "border border-edge-strong bg-white text-ink-2 shadow-sm dark:bg-[#2a3342] dark:text-white"
                   : "border border-edge-strong bg-white text-muted hover:bg-brand-hover hover:text-ink active:bg-bg-gray dark:bg-[#1b2230]"
