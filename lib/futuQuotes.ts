@@ -12,7 +12,7 @@ import { spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import { marketSessionState } from "./marketSessions";
-import { getSiteSettings } from "./settings";
+import { getSiteSettings, normalizeFutuHost } from "./settings";
 import type { Quote, QuoteItem } from "./quotes";
 import type { SearchMatch } from "./types";
 
@@ -39,7 +39,7 @@ function checkPort(host: string, port: number, timeoutMs: number): Promise<boole
 async function isFutuAvailable(): Promise<boolean> {
   const now = Date.now();
   const { futuHost, futuPort } = getSiteSettings();
-  const host = futuHost || "127.0.0.1";
+  const host = normalizeFutuHost(futuHost || "127.0.0.1");
   const port = Number(futuPort) || 11111;
   if (availabilityCache && availabilityCache.host === host && availabilityCache.port === port) {
     const ttl = availabilityCache.ok ? AVAILABLE_TTL : UNAVAILABLE_TTL;
@@ -165,7 +165,7 @@ export async function getFutuStatus(): Promise<{ available: boolean; host: strin
 
 /** 设置页「测试连接」：用指定 host/port 真实拉一次 AAPL 快照，验证 OpenD 可达且已登录。 */
 export async function testFutuConnection(host: string, port: number): Promise<{ ok: boolean; message: string }> {
-  const h = host.trim() || "127.0.0.1";
+  const h = normalizeFutuHost(host || "127.0.0.1");
   const p = Number(port) || 11111;
   if (!(await checkPort(h, p, 1500))) {
     return { ok: false, message: `无法连接 ${h}:${p}（端口未开放）` };

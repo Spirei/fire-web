@@ -110,6 +110,10 @@
 
 1. Docker 挂载后全球经济热图国旗缺失 —— 群晖将宿主机 `uploads` 挂载到 `/app/public/uploads` 后，旧容器或默认素材复制失败会遮住镜像内置旗帜文件，热图 tooltip 因图片 404 只显示「🌐」。上传资源路由现在在挂载目录未找到文件时回读镜像内置 `resource-default`，保留用户自定义资源优先级，线上默认国旗不再丢失。
 
+2. 兼容富途 OpenD 主机地址格式 —— 修复设置中误填 `http://192.168.x.x` 导致容器 TCP 明明可达但 Fire 判断端口未开放的问题。保存设置、读取旧配置和测试连接时统一将 OpenD 主机归一化为纯 hostname/IP，自动去掉协议、端口与路径。
+
+3. GHCR 镜像内置富途 OpenD 桥接运行时 —— 修复线上容器 TCP 可连接 OpenD 但测试仍报 `spawn python3 ENOENT`：生产镜像此前未包含 Python。现在 runner 镜像内置 Python venv 与 `futu-api`，设置正确的 OpenD 主机和端口后无需手动进入群晖容器安装依赖。
+
 ## v0.1.16 · 2026-08-24
 
 > 修复美股盘前/盘后/夜盘当日盈亏「昨收」基准错位（富途 prev_close_price 落后一个常规交易日）。

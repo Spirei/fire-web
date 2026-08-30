@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import fs from "node:fs";
 import { getAuthUser, isAdmin } from "@/lib/auth";
-import { getSiteSettings, updateSiteSettings } from "@/lib/settings";
+import { getSiteSettings, normalizeFutuHost, updateSiteSettings } from "@/lib/settings";
 import { syncRecordGroups } from "@/lib/brokers";
 import { localPathOf, removeFileIfUnused } from "@/lib/fileCleanup";
 
@@ -57,7 +57,7 @@ export async function PUT(request: Request) {
       body.quoteSource === "auto" || body.quoteSource === "futu" || body.quoteSource === "tencent"
         ? body.quoteSource
         : undefined,
-    futuHost: body.futuHost !== undefined ? String(body.futuHost).trim() : undefined,
+    futuHost: body.futuHost !== undefined ? normalizeFutuHost(String(body.futuHost)) : undefined,
     futuPort: /^\d{1,5}$/.test(String(body.futuPort ?? "")) ? String(body.futuPort).trim() : undefined,
     footerDesc: body.footerDesc !== undefined ? String(body.footerDesc) : undefined,
     quoteApiUrl: body.quoteApiUrl !== undefined ? String(body.quoteApiUrl) : undefined,

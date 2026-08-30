@@ -196,6 +196,17 @@ function normalizeDefault(tabs: TabConfig[]) {
 // 写后统一失效重建，保证跨请求一致。
 let settingsCache: SiteSettings | null = null;
 
+/** OpenD 主机只接受 hostname/IP；兼容旧版误填的 http(s)://地址和附带端口。 */
+export function normalizeFutuHost(value: string): string {
+  const raw = value.trim();
+  if (!raw) return "127.0.0.1";
+  try {
+    return new URL(raw.includes("://") ? raw : `http://${raw}`).hostname || raw;
+  } catch {
+    return raw.replace(/^https?:\/\//i, "").split("/")[0] || "127.0.0.1";
+  }
+}
+
 export function getSiteSettings(): SiteSettings {
   if (settingsCache) return settingsCache;
   const rows = getDb()
@@ -212,6 +223,7 @@ export function getSiteSettings(): SiteSettings {
   if (map.quoteSource !== "auto" && map.quoteSource !== "futu" && map.quoteSource !== "tencent") {
     result.quoteSource = "auto";
   }
+  result.futuHost = normalizeFutuHost(result.futuHost);
   if (!/^\d{1,5}$/.test(result.futuPort)) result.futuPort = "11111";
   if (map.dbType === "postgres") result.dbType = "postgres";
   const parsedTabs = parseTabs(map.tabs);

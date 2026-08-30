@@ -3,8 +3,8 @@
 # Fire 投资记实 —— 纯净生产版镜像（Node 22 + SQLite + sharp）
 # 目标：运行镜像只含生产依赖 + .next 产物 + 静态资源，无源码/dev 依赖/构建工具。
 # 数据与上传走 volume（宿主机 ./data、./uploads），镜像本身不含数据。
-# 富途 OpenD 桥接（scripts/futu_quotes.py）为可选项：纯净版镜像不含 python3，
-# 未配置时行情自动回退腾讯/雅虎（腾讯源已支持美股/港股/A股，日常足够）。
+# 富途 OpenD 桥接（scripts/futu_quotes.py）随生产镜像提供 Python + futu-api，
+# 未配置或不可达时行情自动回退腾讯/雅虎（腾讯源已支持美股/港股/A股）。
 # =====================================================================
 
 # ---------- 1. 依赖：全量安装（供构建用），含原生模块编译工具 ----------
@@ -55,6 +55,14 @@ COPY --from=build /app/lib ./lib
 COPY package.json ./
 COPY next.config.mjs ./
 COPY scripts/entrypoint.sh /app/entrypoint.sh
+# OpenD 桥接依赖必须随 GHCR 生产镜像提供；否则线上容器虽能连通 11111，
+# Node spawn("python3") 仍会因运行时缺少 Python 直接报 ENOENT。
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 python3-venv && \
+    python3 -m venv /opt/futu-venv && \
+    /opt/futu-venv/bin/pip install --no-cache-dir -r /app/scripts/requirements-futu.txt && \
+    rm -rf /var/lib/apt/lists/*
+ENV PATH="/opt/futu-venv/bin:${PATH}"
 RUN chmod +x /app/entrypoint.sh
 
 # 运行期数据与上传占位（由 compose volume 挂载覆盖）
