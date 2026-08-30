@@ -10,10 +10,10 @@
     padding: 6px;
     border: 1px solid rgba(201,206,216,.58);
     background: rgba(247,248,250,.96);
-    box-shadow: 0 5px 16px rgba(18,28,44,.05);
+    box-shadow: 0 5px 16px rgba(18,28,44,.05), inset -22px 0 18px -22px rgba(18,28,44,.5);
   }
   .mobile-tab-nav > button { min-width: 78px; }
-  .dark .mobile-tab-nav { border-color: rgba(255,255,255,.08); background: rgba(10,14,25,.96); }
+  .dark .mobile-tab-nav { border-color: rgba(255,255,255,.08); background: rgba(10,14,25,.96); box-shadow: 0 6px 18px rgba(0,0,0,.18), inset -22px 0 18px -22px rgba(0,0,0,.7); }
   .economy-map-layout { grid-template-columns: minmax(0, 1fr); }
   .economy-map-stage { padding-inline: 16px; }
   .economy-ranking-list { grid-template-columns: repeat(2, minmax(0,1fr)); column-gap: 32px; }

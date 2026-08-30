@@ -23,11 +23,16 @@
     border-bottom: 1px solid rgba(201,206,216,.58);
     border-radius: 0;
     background: rgba(247,248,250,.97);
-    box-shadow: 0 5px 14px rgba(18,28,44,.05);
+    box-shadow: 0 5px 14px rgba(18,28,44,.05), inset -18px 0 16px -18px rgba(18,28,44,.55);
     scroll-snap-type: x proximity;
   }
   .mobile-tab-nav > button { min-width: 68px; padding: 7px 6px; scroll-snap-align: center; }
-  .dark .mobile-tab-nav { border-color: rgba(255,255,255,.08); background: rgba(10,14,25,.97); box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+  .dark .mobile-tab-nav { border-color: rgba(255,255,255,.08); background: rgba(10,14,25,.97); box-shadow: 0 6px 18px rgba(0,0,0,.18), inset -18px 0 16px -18px rgba(0,0,0,.75); }
+  .asset-analysis-page > .asset-analysis-split aside:first-child .card > div:first-child button[aria-label="分享当日盈亏"],
+  .asset-analysis-page > .asset-analysis-split aside:first-child .card > div:first-child button[title="刷新账户资产"] {
+    min-width: 36px;
+    min-height: 36px;
+  }
 
   /* 公开首页股票预览：手机只保留四个决策列，避免中文被压成逐字竖排。 */
   .home-preview { margin-top: 24px; }
