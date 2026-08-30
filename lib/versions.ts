@@ -1868,6 +1868,10 @@ export const V0_1_18_ENTRY: VersionEntry = {
     title: "新增首次部署引导页视觉稿",
     desc: "新增独立的首次部署引导页 HTML 视觉稿，展示服务状态、管理员创建、基础配置步骤及 data/uploads 持久化提示；当前仅供预览，尚未接入首访路由。",
     kind: "feature"
+  }, {
+    title: "修复 Docker 挂载后全球经济热图国旗缺失",
+    desc: "群晖将宿主机 uploads 挂载到 /app/public/uploads 后，旧容器或默认素材复制失败会遮住镜像内置旗帜文件，热图 tooltip 因图片 404 只显示 🌐。上传资源路由现在在挂载目录未找到文件时回读镜像内置 resource-default，保留用户自定义资源优先级，线上默认国旗不再丢失。",
+    kind: "fix"
   }]
 };
 
