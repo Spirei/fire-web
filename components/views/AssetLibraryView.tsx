@@ -12,6 +12,7 @@ import Pagination from "@/components/Pagination";
 import DeleteIcon from "@/components/DeleteIcon";
 import type { WatchGroup } from "@/lib/watchGroups";
 import type { CountryCatalogItem } from "@/lib/countryCatalog";
+import { defaultFlagUrl } from "@/lib/flagAssets";
 
 type TabKey = "stock" | "market" | "flag" | "broker" | "group" | "crypto" | "metal" | "icon";
 
@@ -1701,7 +1702,7 @@ export default function AssetLibraryView() {
                   const custom = assets.find((asset) => asset.type === "flag" && asset.code.toUpperCase() === country.iso2);
                   const busyKey = `flag:${country.iso2}`;
                   // 默认本地开源高清 SVG（lipis/flag-icons 4x3，public/uploads/asset/flag/{iso2}.svg）
-                  const src = custom?.url || `/uploads/asset/flag/${country.flagCode}.svg`;
+                  const src = custom?.url || defaultFlagUrl(country.flagCode);
                   return (
                     <div key={country.iso2} className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-2 border-b border-edge px-4 py-2.5 text-sm last:border-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5">
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-bg-gray text-[10px] font-bold text-muted">{listStart + index + 1}</span>

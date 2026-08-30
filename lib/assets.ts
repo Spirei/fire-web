@@ -138,6 +138,12 @@ export function ensureCategoryAssets(type: "crypto" | "metal" | "flag"): void {
   const db = getDb();
   files.forEach((file) => {
     const stem = file.replace(/\.(svg|png|webp|jpg)$/i, "");
+    // 欧盟默认旗帜遵循素材库「中文名 + 代码」命名，但对外仍以 EU 作为唯一代码。
+    if (type === "flag" && stem === "欧盟EU") {
+      const existing = db.prepare("SELECT COUNT(*) AS n FROM assets WHERE type = 'flag' AND market = '' AND upper(code) = 'EU'").get() as { n: number };
+      if (existing.n === 0) upsertAsset({ type, market: "", code: "EU", name: "欧盟", url: `/uploads/asset/${subdir}/${file}` });
+      return;
+    }
     const m = type === "flag" ? null : stem.match(/([A-Z0-9]{2,})$/);
     const code = type === "flag" ? stem : m ? m[1] : stem;
     const name = type === "flag" ? stem.toUpperCase() : m ? stem.slice(0, stem.length - m[1].length).trim().replace(/[-_]+$/, "") || stem : stem;

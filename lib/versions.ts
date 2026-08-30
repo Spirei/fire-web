@@ -1887,7 +1887,20 @@ export const V0_1_18_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_18_ENTRY;
+export const V0_1_19_ENTRY: VersionEntry = {
+  ...V0_1_18_ENTRY,
+  version: "v0.1.19",
+  date: "2026-08-31",
+  summary: "统一欧元默认使用随源码与 Docker 镜像发布的欧盟 SVG。",
+  software: V0_1_18_ENTRY.software.map((item) => item.name === "Fire" ? { ...item, version: "v0.1.19" } : item),
+  changes: [{
+    title: "线上与本地欧元默认旗帜统一为欧盟 SVG",
+    desc: "欧元市场码 EU 不再回退到通用 eu.svg，货币选择器、市场图标、全球经济热图与素材库统一使用 /uploads/asset/flag/欧盟EU.svg。新增既有数据库一次性迁移，仅替换旧内置 eu.svg，不覆盖用户上传的其他自定义旗帜；新部署会以 EU 代码播种该素材，Docker 镜像同步携带并在 uploads 挂载缺失时从 resource-default 兜底。",
+    kind: "fix"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_19_ENTRY;
 
 // 完整历史数组已拆分到 lib/versions-history.ts（约 200KB 历史文案，仅供版本弹窗
 // 懒加载引用）；本文件保留类型 + 当前版本条目，让设置页 / 健康检查只引用轻量常量。

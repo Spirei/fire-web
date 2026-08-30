@@ -1,6 +1,7 @@
 "use client";
 
 import { useAssetIcons } from "@/lib/useAssetIcons";
+import { defaultFlagUrl } from "@/lib/flagAssets";
 
 // 市场图标全部走本地素材库（含镜像打包的默认市场图标），不依赖远程 CDN。
 // 无本地素材时回退为本地矢量地球，保证线上/线下、离线都稳定。
@@ -23,7 +24,7 @@ export default function MarketIcon({
   const custom = marketIcons[code];
   // 无素材库市场图标时，回退本地打包的国旗（asset/flag，UK→gb），不依赖远程 CDN
   const flagIso = code === "UK" ? "gb" : code.toLowerCase();
-  const flagSrc = /^[a-z]{2}$/.test(flagIso) ? `/uploads/asset/flag/${flagIso}.svg` : null;
+  const flagSrc = /^[a-z]{2}$/.test(flagIso) ? defaultFlagUrl(flagIso) : null;
   const imgStyle = { width: size, height: size };
   if (custom || flagSrc) {
     return (

@@ -2,6 +2,7 @@
 
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
+import { defaultFlagUrl } from "@/lib/flagAssets";
 
 export default function CurrencyFlag({
   market,
@@ -16,7 +17,7 @@ export default function CurrencyFlag({
   const code = (market || "").trim().toLowerCase();
   if (!/^[a-z]{2}$/.test(code)) return null;
   // 素材库自定义旗帜优先（用户上传），否则回退本地圆形 SVG
-  const src = countryFlags[code.toUpperCase()] || `/uploads/asset/flag/${code}.svg`;
+  const src = countryFlags[code.toUpperCase()] || defaultFlagUrl(code);
   return (
     <SafeAssetImage
       src={src}

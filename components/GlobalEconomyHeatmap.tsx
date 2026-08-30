@@ -5,6 +5,7 @@ import echarts, { type EChartsInstance } from "@/lib/echarts";
 import { WORLD_ECONOMY_INDICATORS, type WorldEconomyCountry, type WorldEconomyIndicator } from "@/lib/worldEconomy";
 import { countryCatalogForMapNames, type CountryCatalogItem } from "@/lib/countryCatalog";
 import { useAssetIcons } from "@/lib/useAssetIcons";
+import { defaultFlagUrl } from "@/lib/flagAssets";
 
 interface EconomyResponse {
   indicator: WorldEconomyIndicator;
@@ -177,13 +178,13 @@ function flagMarkup(country: Pick<CountryCatalogItem, "iso2" | "flag" | "flagCod
   const fallback = `<span style="display:${country.flagCode ? "none" : "grid"};width:20px;height:20px;place-items:center;font-size:18px;line-height:20px">${escapeHtml(country.flag || "🌐")}</span>`;
   if (!country.flagCode) return fallback;
   // 默认本地素材库圆形 SVG（hatscripts/circle-flags，public/uploads/asset/flag/{iso2}.svg），自定义旗帜优先
-  const src = customUrl || `/uploads/asset/flag/${country.flagCode}.svg`;
+  const src = customUrl || defaultFlagUrl(country.flagCode);
   return `<img src="${escapeHtml(src)}" alt="" style="display:block;width:20px;height:20px;object-fit:cover;border-radius:50%" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"/>${fallback}`;
 }
 
 function CountryFlag({ iso2, flag, customUrl }: { iso2: string; flag: string; customUrl?: string }) {
   const [failed, setFailed] = useState(false);
-  const src = customUrl || (iso2 ? `/uploads/asset/flag/${iso2.toLowerCase()}.svg` : "");
+  const src = customUrl || (iso2 ? defaultFlagUrl(iso2) : "");
   useEffect(() => setFailed(false), [src]);
   return (
     <span className="economy-ranking-flag" aria-hidden="true">

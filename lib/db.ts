@@ -398,6 +398,7 @@ function migrate(database: Database.Database) {
   database.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_uid ON users(uid)");
   migrateDefaultCelebAvatars(database);
   migrateDefaultFireIcon(database);
+  migrateDefaultEuroFlag(database);
   migrateEconomicRealizedPnl(database);
 }
 
@@ -445,6 +446,34 @@ function migrateDefaultFireIcon(database: Database.Database) {
       SET url = ?, url_dark = ?, updated_at = ?
       WHERE type = 'icon' AND upper(code) = 'FIRE'
     `).run("/uploads/asset/icon/fire.svg", "/uploads/asset/icon/fire-dark.svg", new Date().toISOString());
+    database.prepare("INSERT INTO site_settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(migrationKey, targetVersion);
+  })();
+}
+
+/** 既有本地库与线上库都把内置欧元旗帜改为随镜像发布的「欧盟EU.svg」，不覆盖用户上传的其他 URL。 */
+function migrateDefaultEuroFlag(database: Database.Database) {
+  const migrationKey = "migration.default_euro_flag";
+  const targetVersion = "named_eu_svg_v1";
+  const targetUrl = "/uploads/asset/flag/欧盟EU.svg";
+  const applied = database.prepare("SELECT value FROM site_settings WHERE key = ?").get(migrationKey) as { value: string } | undefined;
+  if (applied?.value === targetVersion) return;
+
+  database.transaction(() => {
+    const now = new Date().toISOString();
+    database.prepare(`
+      INSERT OR IGNORE INTO assets (id,type,market,code,name,url,source,updated_at)
+      VALUES ('flag:EU','flag','','EU','欧盟',?,'manual',?)
+    `).run(targetUrl, now);
+    database.prepare(`
+      UPDATE assets
+      SET name = '欧盟', url = ?, updated_at = ?
+      WHERE id = 'flag:EU' AND (url = '/uploads/asset/flag/eu.svg' OR url = ?)
+    `).run(targetUrl, now, targetUrl);
+    database.prepare(`
+      DELETE FROM assets
+      WHERE id = 'flag:欧盟EU' AND url = ?
+    `).run(targetUrl);
     database.prepare("INSERT INTO site_settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
       .run(migrationKey, targetVersion);
   })();
