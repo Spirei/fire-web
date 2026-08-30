@@ -2318,6 +2318,27 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .dark .quotes-row.is-selected,
 .dark .quotes-row.is-selected > td { background-color: #1a2a40; }
 .quotes-row.is-selected .quotes-actions-cell { box-shadow: none; }
+.quotes-checkbox {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  cursor: pointer;
+  appearance: none;
+  border: 1px solid var(--edge-strong);
+  border-radius: 3px;
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
+  transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+.quotes-checkbox:hover { border-color: #3297f6; }
+.quotes-checkbox:checked {
+  border-color: #3297f6;
+  background-color: #3297f6;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.2 8.3 6.5 11.4 12.8 4.8' fill='none' stroke='%23fff' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.quotes-checkbox:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(50,151,246,.22); }
 .quotes-action-btn { background: var(--bg-gray); color: var(--muted); }
 .dark .quotes-action-btn { background: #1b2230; border-color: #323a4b; color: #aab4c2; }
 .dark .quotes-action-btn:hover { background: #273142; border-color: #465269; color: #eef1f6; }

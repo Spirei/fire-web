@@ -681,8 +681,8 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
         <div className="quotes-control-title flex items-center gap-2">
           <h3 className="text-base font-bold">我的行情板</h3>
           <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold tabular-nums text-faint">{filtered.length}</span>
-          <button type="button" onClick={toggleEditMode} className={`quotes-edit-toggle ml-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-faint transition-colors hover:bg-bg-gray hover:text-ink ${editMode ? "is-active text-brand-deep" : ""}`} aria-label={editMode ? "完成编辑" : "编辑行情板"} title={editMode ? "完成编辑" : "编辑行情板"} aria-pressed={editMode}>
-            {editMode ? "完成" : "编辑"}
+          <button type="button" onClick={toggleEditMode} className={`quotes-edit-toggle ml-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-faint transition-colors hover:bg-bg-gray hover:text-ink ${editMode ? "is-active text-brand-deep" : ""}`} aria-label={editMode ? "取消编辑" : "编辑行情板"} title={editMode ? "取消编辑" : "编辑行情板"} aria-pressed={editMode}>
+            {editMode ? "取消" : "编辑"}
           </button>
         </div>
         <div className="quotes-control-actions flex flex-wrap items-center gap-2">
@@ -825,7 +825,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
               <thead>
                 <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-muted">
                   {editMode && <th className="w-10 px-4 py-[13px]">
-                    <input type="checkbox" checked={filtered.length > 0 && filtered.every((r) => selected.has(r.id))} onChange={toggleAll} className="h-4 w-4 cursor-pointer accent-[#3297f6]" aria-label="全选" />
+                    <input type="checkbox" checked={filtered.length > 0 && filtered.every((r) => selected.has(r.id))} onChange={toggleAll} className="quotes-checkbox" aria-label="全选" />
                   </th>}
                   <th className="px-3 py-[13px] text-center">序号</th>
                   <th className="min-w-[210px] px-4 py-[13px] text-left">股票</th>
@@ -844,7 +844,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                   return (
                     <tr key={r.id} className={`quotes-row group whitespace-nowrap border-t border-edge transition-colors ${selected.has(r.id) ? "is-selected" : "hover:bg-[#fafbfc] dark:hover:bg-[#1a212e]"}`}>
                       {editMode && <td className="px-4 py-3.5">
-                        <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} className="h-4 w-4 cursor-pointer accent-[#3297f6]" aria-label={`选择 ${r.name}`} />
+                        <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} className="quotes-checkbox" aria-label={`选择 ${r.name}`} />
                       </td>}
                       <td className="px-3 py-3.5 text-center text-xs tabular-nums text-faint">{(safePage - 1) * PAGE_SIZE + i + 1}</td>
                       <td className="cursor-pointer px-4 py-3.5 transition-colors hover:bg-brand-hover/30 dark:hover:bg-[#202735]" onClick={() => openDetail(r)}>
