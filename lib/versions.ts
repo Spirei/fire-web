@@ -1891,11 +1891,15 @@ export const V0_1_19_ENTRY: VersionEntry = {
   ...V0_1_18_ENTRY,
   version: "v0.1.19",
   date: "2026-08-31",
-  summary: "统一欧元默认使用随源码与 Docker 镜像发布的欧盟 SVG。",
+  summary: "统一欧元旗帜，并精简个人资料与用户管理界面。",
   software: V0_1_18_ENTRY.software.map((item) => item.name === "Fire" ? { ...item, version: "v0.1.19" } : item),
   changes: [{
     title: "线上与本地欧元默认旗帜统一为欧盟 SVG",
     desc: "欧元市场码 EU 不再回退到通用 eu.svg，货币选择器、市场图标、全球经济热图与素材库统一使用 /uploads/asset/flag/欧盟EU.svg。新增既有数据库一次性迁移，仅替换旧内置 eu.svg，不覆盖用户上传的其他自定义旗帜；新部署会以 EU 代码播种该素材，Docker 镜像同步携带并在 uploads 挂载缺失时从 resource-default 兜底。",
+    kind: "fix"
+  }, {
+    title: "个人资料与用户管理现代化精简",
+    desc: "移除个人信息编辑态昵称与登录邮箱输入框中的示例占位文字，避免把提示误当作已有资料；用户管理由高占位宽表重构为紧凑成员列表，顶部概览总用户、在线与管理员数量，身份区合并昵称、登录名、UID 与状态，操作统一为带无障碍说明的图标按钮；窄屏自动转为完整卡片布局，不再依赖横向滚动。",
     kind: "fix"
   }]
 };

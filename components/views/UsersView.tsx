@@ -48,6 +48,8 @@ export default function UsersView() {
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [resetUser, setResetUser] = useState<AdminUser | null>(null);
   const [busy, setBusy] = useState(false);
+  const onlineCount = users.filter((u) => u.online).length;
+  const adminCount = users.filter((u) => u.role === "admin").length;
 
   async function load(opts?: { force?: boolean }) {
     if (!opts?.force && usersCache && Date.now() - usersCache.at < USERS_CACHE_TTL) {
@@ -144,15 +146,21 @@ export default function UsersView() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold">用户管理</h2>
+          <h2 className="text-lg font-bold tracking-[-0.02em]">用户管理</h2>
+          <div className="mt-2 flex items-center gap-3 text-xs text-muted">
+            <span><b className="mr-1 font-semibold text-ink">{users.length}</b>位用户</span>
+            <span className="h-3 w-px bg-edge" />
+            <span className="inline-flex items-center gap-1.5"><i className="h-1.5 w-1.5 rounded-full bg-down" /><b className="font-semibold text-ink">{onlineCount}</b>在线</span>
+            <span className="h-3 w-px bg-edge" />
+            <span><b className="mr-1 font-semibold text-ink">{adminCount}</b>管理员</span>
+          </div>
         </div>
-        <button type="button" onClick={() => load({ force: true })} className="btn btn-ghost btn-icon">
+        <button type="button" onClick={() => load({ force: true })} disabled={loading} aria-label="刷新用户列表" title="刷新用户列表" className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-edge bg-white text-muted transition-colors hover:bg-brand-hover hover:text-ink disabled:opacity-50 dark:bg-[#151a26] dark:hover:bg-white/10">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
             <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
           </svg>
-          刷新
         </button>
       </div>
 
@@ -162,60 +170,49 @@ export default function UsersView() {
         </p>
       )}
 
-      <div className="overflow-hidden rounded-card border border-edge bg-white shadow-card">
+      <div className="overflow-hidden rounded-[16px] border border-edge bg-white shadow-card dark:bg-[#151a26]">
         {loading && users.length === 0 ? (
           <div className="flex items-center justify-center py-16 text-sm text-faint">
             <svg viewBox="0 0 24 24" fill="none" className="mr-2 h-4 w-4 animate-spin text-brand"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.2" /><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg>
             加载中…
           </div>
         ) : (
-        <div className="overflow-x-auto">
-          <table className="mobile-users-table w-full text-sm">
-            <thead>
-              <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-muted">
-                <th className="px-4 py-[13px] text-left">用户</th>
-                <th className="px-4 py-[13px] text-left">邮箱</th>
-                <th className="px-4 py-[13px] text-left">角色</th>
-                <th className="px-4 py-[13px] text-left">注册时间</th>
-                <th className="px-4 py-[13px] text-right">记录数</th>
-                <th className="px-4 py-[13px] text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div>
+          <div className="hidden grid-cols-[minmax(220px,1.5fr)_minmax(170px,1fr)_100px_140px_64px_112px] items-center gap-4 border-b border-edge bg-bg-gray/65 px-4 py-2.5 text-[11px] font-semibold text-muted lg:grid dark:bg-white/[.025]">
+            <span>用户</span><span>邮箱</span><span>权限</span><span>注册时间</span><span className="text-right">记录</span><span className="text-right">操作</span>
+          </div>
+          <div className="divide-y divide-edge">
               {users.map((u) => (
-                <tr key={u.id} className="whitespace-nowrap border-t border-edge transition-colors hover:bg-[#fafbfc] dark:hover:bg-[#1a212e]">
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-3">
+                <div key={u.id} className="grid gap-3 px-4 py-3.5 transition-colors hover:bg-[#fafbfc] sm:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(220px,1.5fr)_minmax(170px,1fr)_100px_140px_64px_112px] lg:items-center lg:gap-4 dark:hover:bg-[#1a212e]">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-3">
                       <UserAvatar user={u} />
-                      <span>
-                        <span className="flex items-center gap-1.5">
-                          <b className="font-semibold">{u.username}</b>
-                          {u.online && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-down-bg px-2 py-0.5 text-[11px] font-semibold text-down">
-                              <span className="h-1.5 w-1.5 rounded-full bg-down shadow-[0_0_0_2px_rgba(15,160,123,.18)]" />
-                              在线
-                            </span>
-                          )}
-                        </span>
-                        {u.nickname && <span className="ml-1.5 text-xs text-muted">({u.nickname})</span>}
-                        {u.id === me && <span className="ml-1.5 rounded-full bg-brand-light px-2 py-0.5 text-[11px] font-semibold text-brand-deep">当前账号</span>}
-                        {u.isTest && <span className="ml-1.5 rounded-full border border-dashed border-edge-strong bg-bg-gray px-2 py-0.5 text-[11px] font-semibold text-muted">测试</span>}
-                        <small className="block text-[11px] text-faint">{u.isTest ? "测试账号 · 不占用 UID" : `UID: ${u.uid || "—"}`}</small>
-                      </span>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <b className="truncate font-semibold text-ink">{u.nickname || u.username}</b>
+                          {u.online && <span className="h-1.5 w-1.5 flex-none rounded-full bg-down shadow-[0_0_0_3px_rgba(15,160,123,.12)]" title="在线" />}
+                          {u.id === me && <span className="flex-none rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-semibold text-brand-deep">当前</span>}
+                          {u.isTest && <span className="flex-none rounded-full border border-dashed border-edge px-2 py-0.5 text-[10px] font-semibold text-muted">测试</span>}
+                        </div>
+                        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-faint">
+                          {u.nickname && <span className="truncate">@{u.username}</span>}
+                          {u.nickname && <span>·</span>}
+                          <span className="flex-none">{u.isTest ? "无 UID" : `UID ${u.uid || "—"}`}</span>
+                        </div>
+                      </div>
                     </div>
-                  </td>
-                  <td className="px-4 py-3.5 text-muted">{u.email || <span className="text-faint">—</span>}</td>
-                  <td className="px-4 py-3.5">
-                    <span className={`inline-block rounded-full border px-2.5 py-[3px] text-xs ${u.role === "admin" ? "border-edge-strong/30 bg-brand-light text-brand-deep" : "border-edge bg-bg-gray text-ink-2"}`}>
+                  </div>
+                  <div className="min-w-0 text-xs text-muted sm:col-span-2 lg:col-span-1"><span className="lg:hidden text-faint">邮箱 · </span><span className="break-all">{u.email || "未绑定"}</span></div>
+                  <div className="sm:col-start-2 sm:row-start-1 sm:self-start sm:justify-self-end lg:col-start-auto lg:row-start-auto lg:self-auto lg:justify-self-start">
+                    <span className={`inline-flex rounded-full border px-2.5 py-[3px] text-[11px] font-medium ${u.role === "admin" ? "border-edge-strong/30 bg-brand-light text-brand-deep" : "border-edge bg-bg-gray text-ink-2 dark:bg-white/[.04]"}`}>
                       {u.role === "admin" ? "管理员" : "普通用户"}
                     </span>
-                  </td>
-                  <td className="px-4 py-3.5 text-xs text-muted">{fmtDateTime(u.createdAt)}</td>
-                  <td className="px-4 py-3.5 text-right tabular-nums">{u.recordsCount}</td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex justify-end gap-1.5">
-                      <button type="button" onClick={() => setEditUser(u)} className="inline-flex h-8 items-center rounded-[9px] border border-edge bg-white px-3 text-xs font-medium text-muted transition-colors hover:bg-brand-hover hover:text-ink">编辑</button>
-                      <button type="button" onClick={() => setResetUser(u)} className="inline-flex h-8 items-center rounded-[9px] border border-edge bg-white px-3 text-xs font-medium text-muted transition-colors hover:bg-brand-hover hover:text-ink">重置密码</button>
+                  </div>
+                  <div className="text-[11px] text-faint"><span className="lg:hidden">注册于 </span>{fmtDateTime(u.createdAt)}</div>
+                  <div className="text-xs tabular-nums text-muted lg:text-right"><span className="lg:hidden">{u.recordsCount} 条记录</span><span className="hidden lg:inline">{u.recordsCount}</span></div>
+                  <div className="flex gap-1.5 sm:col-start-2 sm:row-start-3 sm:justify-self-end lg:col-start-auto lg:row-start-auto lg:justify-end">
+                      <button type="button" onClick={() => setEditUser(u)} aria-label={`编辑 ${u.username}`} title="编辑资料" className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-white text-muted transition-colors hover:bg-brand-hover hover:text-ink dark:bg-[#1c222d] dark:hover:bg-white/10"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+                      <button type="button" onClick={() => setResetUser(u)} aria-label={`重置 ${u.username} 的密码`} title="重置密码" className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-white text-muted transition-colors hover:bg-brand-hover hover:text-ink dark:bg-[#1c222d] dark:hover:bg-white/10"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/><circle cx="12" cy="12" r="2.25"/><path d="m13.6 13.6 2.4 2.4"/></svg></button>
                       <button
                         type="button"
                         disabled={u.id === me}
@@ -225,12 +222,10 @@ export default function UsersView() {
                       >
                         <DeleteIcon size={15} />
                       </button>
-                    </div>
-                  </td>
-                </tr>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+          </div>
         </div>
         )}
       </div>

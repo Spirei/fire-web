@@ -2617,7 +2617,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <div className="sw-row-label"><b>昵称</b><span>最多 20 个字符</span></div>
                         <div className="ctrl" style={{ flex: 1 }}>
                           {editingProfile ? (
-                            <input ref={nickInputRef} value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="如：我的投资笔记" className="sw-row-input" />
+                            <input ref={nickInputRef} value={nickname} onChange={(e) => setNickname(e.target.value)} className="sw-row-input" />
                           ) : (
                             <span className="settings-profile-value" title={nickname}>{nickname || "未设置昵称"}</span>
                           )}
@@ -2627,7 +2627,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <div className="sw-row-label"><b>登录邮箱<span className="ml-0.5" style={{ display: "inline" }}>*</span></b><span>用于账号识别与通知</span></div>
                         <div className="ctrl" style={{ flex: 1 }}>
                           {editingProfile ? (
-                            <input ref={emailInputRef} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" className="sw-row-input" />
+                            <input ref={emailInputRef} type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="sw-row-input" />
                           ) : (
                             <span className="settings-profile-value" title={email}>{email || "未设置邮箱"}</span>
                           )}
