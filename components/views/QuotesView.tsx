@@ -91,6 +91,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
   const [intervalMs, setIntervalMs] = useState(60000);
   const [lastRefreshAt, setLastRefreshAt] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showMoreGroups, setShowMoreGroups] = useState(false);
 
   // 恢复上次选择的刷新间隔（默认每分钟；挂载后应用，避免 SSR hydration 不匹配）
   useEffect(() => {
@@ -221,15 +222,24 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
     const customs = watchGroups
       .filter((g) => g.kind === "custom")
       .map((g) => ({ id: g.id, label: g.name, count: groupCount(g, records), g }));
+    const defaultVisible = markets.slice(0, 3);
+    const additional = [...markets.slice(3), ...customs];
+    const visibleAdditional = additional.filter((c) => {
+      const group = watchGroups.find((g) => g.id === c.id);
+      return group ? groupVisible(group, c.count) : true;
+    });
     return {
       all: [{ id: "", label: "全部", count: records.length }, ...markets, ...customs],
       visible: [
         { id: "", label: "全部", count: records.length },
-        ...markets.filter((c) => groupVisible(watchGroups.find((g) => g.id === c.id)!, c.count)),
-        ...customs.filter((c) => groupVisible(c.g, c.count))
-      ]
+        ...(showMoreGroups ? additional : defaultVisible).filter((c) => {
+          const group = watchGroups.find((g) => g.id === c.id);
+          return group ? groupVisible(group, c.count) : true;
+        })
+      ],
+      moreCount: visibleAdditional.length
     };
-  }, [records, watchGroups]);
+  }, [records, showMoreGroups, watchGroups]);
 
   // 自定义分组默认图标：无自传图标、且非券商分组时，取组内市值最高的股票图标
   const groupStockIcon = useMemo(() => {
@@ -666,7 +676,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
           <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold tabular-nums text-faint">{filtered.length}</span>
         </div>
         <div className="quotes-control-actions flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => { setEditMode((v) => !v); setSelected(new Set()); setAssignOpen(false); }} className={`btn btn-ghost btn-sm ${editMode ? "text-brand-deep" : ""}`} aria-pressed={editMode}>
+          <button type="button" onClick={() => { setEditMode((v) => !v); setSelected(new Set()); setAssignOpen(false); }} className={`btn btn-sm border-0 bg-transparent px-2.5 text-muted hover:bg-bg-gray hover:text-ink ${editMode ? "bg-brand-hover text-brand-deep" : ""}`} aria-pressed={editMode}>
             {editMode ? "完成" : "编辑"}
           </button>
           <span
@@ -740,6 +750,15 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
             </button>
           );
         })}
+        {groupChips.moreCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowMoreGroups((v) => !v)}
+            className="flex flex-none items-center rounded-full px-2.5 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink"
+          >
+            {showMoreGroups ? "收起" : `更多 ${groupChips.moreCount}`}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setGroupSheetOpen(true)}

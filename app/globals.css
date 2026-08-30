@@ -2285,10 +2285,10 @@
 .quotes-actions-cell { position: sticky; z-index: 2; right: 0; width: 164px; min-width: 164px; border-left: 1px solid var(--edge); background: #fff; box-shadow: -8px 0 16px rgba(10,14,25,.06); }
 .quotes-control-panel { display:grid; width:100%; max-width:100%; min-width:0; box-sizing:border-box; grid-template-columns:minmax(0,auto) minmax(0,1fr) minmax(0,auto); align-items:center; border:1px solid var(--edge); border-radius:16px; background:rgba(255,255,255,.86); box-shadow:0 8px 24px rgba(15,23,42,.045); }
 .quotes-control-header { display:contents; }
-.quotes-control-title { grid-column:1; grid-row:1; min-width:max-content; }
+.quotes-control-title { grid-column:1; grid-row:1; min-width:max-content; padding-left:24px; }
 .quotes-control-groups { grid-column:2; grid-row:1; min-width:0; overflow-x:auto; scrollbar-width:none; }
 .quotes-control-groups::-webkit-scrollbar { display:none; }
-.quotes-control-actions { grid-column:3; grid-row:1; min-width:0; max-width:100%; overflow:hidden; }
+.quotes-control-actions { grid-column:3; grid-row:1; min-width:0; max-width:100%; overflow:hidden; padding-right:12px; }
 .quotes-control-actions select { max-width:96px; }
 .dark .quotes-control-panel { border-color:#252c3a; background:#151a26; box-shadow:0 12px 30px rgba(0,0,0,.16); }
 @media (max-width: 1100px) {
@@ -2299,7 +2299,7 @@
 }
 @media (max-width: 640px) {
   .quotes-control-panel { grid-template-columns:1fr; }
-  .quotes-control-title { grid-column:1; grid-row:1; }
+  .quotes-control-title { grid-column:1; grid-row:1; padding-right:16px; }
   .quotes-control-actions { grid-column:1; grid-row:2; min-width:0; }
   .quotes-control-groups { grid-column:1; grid-row:3; }
 }
