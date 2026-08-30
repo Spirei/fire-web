@@ -674,12 +674,8 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
         <div className="quotes-control-title flex items-center gap-2">
           <h3 className="text-base font-bold">我的行情板</h3>
           <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold tabular-nums text-faint">{filtered.length}</span>
-          <button type="button" onClick={() => { setEditMode((v) => !v); setSelected(new Set()); setAssignOpen(false); }} className={`quotes-edit-toggle ml-1 inline-flex h-6 w-6 items-center justify-center rounded-md border-0 bg-transparent text-faint transition-colors hover:bg-bg-gray hover:text-ink ${editMode ? "is-active text-brand-deep" : ""}`} aria-label={editMode ? "完成编辑" : "编辑行情板"} title={editMode ? "完成编辑" : "编辑行情板"} aria-pressed={editMode}>
-            {editMode ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[14px] w-[14px]"><path d="m5 12 4 4L19 6" /></svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[14px] w-[14px]"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>
-            )}
+          <button type="button" onClick={() => { setEditMode((v) => !v); setSelected(new Set()); setAssignOpen(false); }} className={`quotes-edit-toggle ml-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-faint transition-colors hover:bg-bg-gray hover:text-ink ${editMode ? "is-active text-brand-deep" : ""}`} aria-label={editMode ? "完成编辑" : "编辑行情板"} title={editMode ? "完成编辑" : "编辑行情板"} aria-pressed={editMode}>
+            {editMode ? "完成" : "编辑"}
           </button>
         </div>
         <div className="quotes-control-actions flex flex-wrap items-center gap-2">
