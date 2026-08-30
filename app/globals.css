@@ -2307,6 +2307,10 @@ thead .quotes-actions-cell { z-index: 3; background: var(--bg-gray); }
 tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .quotes-actions-cell.is-selected { background: #f7fbff; }
 .dark .quotes-actions-cell { background: #151a26; box-shadow: -8px 0 18px rgba(7,11,18,.3); }
+.mobile-quotes-table thead tr { background-color: #f7f8fa; }
+.dark .mobile-quotes-table thead tr { background-color: #10141d; }
+.mobile-quotes-table thead .quotes-actions-cell { background-color: #f7f8fa; }
+.dark .mobile-quotes-table thead .quotes-actions-cell { background-color: #10141d; }
 .dark tbody tr:hover .quotes-actions-cell { background: #1a212e; }
 .dark .quotes-actions-cell.is-selected { background: #172233; }
 .quotes-action-btn { background: var(--bg-gray); color: var(--muted); }
