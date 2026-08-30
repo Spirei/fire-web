@@ -692,9 +692,6 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
         <div className="quotes-control-title flex items-center gap-2">
           <h3 className="text-base font-bold">我的行情板</h3>
           <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold tabular-nums text-faint">{filtered.length}</span>
-          <button type="button" onClick={toggleEditMode} className={`quotes-edit-toggle ml-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-faint transition-colors hover:bg-bg-gray hover:text-ink ${editMode ? "is-active text-brand-deep" : ""}`} aria-label={editMode ? "取消编辑" : "编辑行情板"} title={editMode ? "取消编辑" : "编辑行情板"} aria-pressed={editMode}>
-            {editMode ? "取消" : "编辑"}
-          </button>
         </div>
         <div className="quotes-control-actions flex flex-wrap items-center gap-2">
           <span
@@ -705,6 +702,25 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
             <i className={`h-1.5 w-1.5 rounded-full ${refreshing ? "animate-pulse bg-[#3297f6]" : quoteAt ? "bg-down" : "bg-faint"}`} />
             {refreshing ? "刷新中…" : quoteAt ? `更新于 ${quoteAt}` : lastRefreshAt ? `上次刷新 ${lastRefreshAt}` : "等待行情"}
           </span>
+          <button
+            type="button"
+            onClick={toggleEditMode}
+            className={`quotes-edit-toggle inline-flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover hover:text-ink active:scale-[.97] ${editMode ? "is-active" : ""}`}
+            aria-label={editMode ? "取消编辑" : "编辑行情板"}
+            title={editMode ? "取消编辑" : "编辑行情板"}
+            aria-pressed={editMode}
+          >
+            {editMode ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="h-4 w-4" aria-hidden="true">
+                <path d="m7 7 10 10M17 7 7 17" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                <path d="M4 6h9M4 12h7M4 18h6" />
+                <path d="m14.5 17.5 1-.2 5.1-5.1a1.7 1.7 0 0 0-2.4-2.4l-5.1 5.1-.3 2.8Z" />
+              </svg>
+            )}
+          </button>
           <RefreshButton onClick={refreshQuotes} title="立即刷新行情" className="h-8 w-8 rounded-[9px]" />
           <select
             value={intervalMs}

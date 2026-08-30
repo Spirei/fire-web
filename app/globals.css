@@ -2374,7 +2374,8 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .dark .quotes-action-btn:hover { background: #273142; border-color: #465269; color: #eef1f6; }
 .quotes-action-delete:hover { color: #e23d3d; }
 .dark .quotes-action-delete:hover { color: #ff8f8f; }
-.quotes-edit-toggle.is-active { background: var(--brand-hover); color: var(--brand-deep); }
+.quotes-edit-toggle.is-active { border-color:#91c5f7; background:#e8f2ff; color:#1677d2; }
+.dark .quotes-edit-toggle.is-active { border-color:#315b86; background:#203b5a; color:#8ec8ff; }
 .quotes-row-actions { opacity: 1; transform: none; pointer-events: auto; }
 .quotes-row-actions button:focus-visible,
 .quotes-row-actions select:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }

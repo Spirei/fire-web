@@ -33,11 +33,13 @@ export default function RefreshButton({
         strokeWidth="2.1"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className={`h-3 w-3 ${turning ? "animate-spin" : ""}`}
+        className={`h-3.5 w-3.5 ${turning ? "animate-spin" : ""}`}
         style={turning ? { animationDuration: "0.6s", animationIterationCount: 1 } : undefined}
       >
-        <path d="M20 11a8 8 0 1 0-3.05 6.29" />
-        <path d="M20 5v6h-6" />
+        <path d="M20 11a8 8 0 0 0-14.9-4" />
+        <path d="M4 5v5h5" />
+        <path d="M4 13a8 8 0 0 0 14.9 4" />
+        <path d="M20 19v-5h-5" />
       </svg>
     </button>
   );
