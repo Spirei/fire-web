@@ -2327,24 +2327,30 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   vertical-align: middle;
 }
 .quotes-checkbox {
+  display: block;
+  box-sizing: border-box;
   width: 16px;
   height: 16px;
+  margin: 0;
   flex: none;
   cursor: pointer;
   appearance: none;
-  border: 1px solid var(--edge-strong);
+  -webkit-appearance: none;
+  border: 1px solid #c9ced8;
   border-radius: 3px;
-  background-color: transparent;
+  background-color: #fff;
   background-position: center;
   background-repeat: no-repeat;
   background-size: 12px 12px;
   transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
 }
+.dark .quotes-checkbox { border-color: #697386; background-color: #1b2230; }
 .quotes-checkbox:hover { border-color: #3297f6; }
 .quotes-checkbox:checked {
   border-color: #3297f6;
   background-color: #3297f6;
 }
+.dark .quotes-checkbox:checked { border-color: #3297f6; background-color: #3297f6; }
 .quotes-checkbox:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(50,151,246,.22); }
 .quotes-checkbox-mark {
   position: absolute;
