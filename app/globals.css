@@ -2309,6 +2309,12 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .dark .quotes-actions-cell { background: #151a26; box-shadow: -8px 0 18px rgba(7,11,18,.3); }
 .dark tbody tr:hover .quotes-actions-cell { background: #1a212e; }
 .dark .quotes-actions-cell.is-selected { background: #172233; }
+.quotes-action-btn { background: var(--bg-gray); color: var(--muted); }
+.dark .quotes-action-btn { background: #1b2230; border-color: #323a4b; color: #aab4c2; }
+.dark .quotes-action-btn:hover { background: #273142; border-color: #465269; color: #eef1f6; }
+.quotes-action-delete:hover { color: #e23d3d; }
+.dark .quotes-action-delete:hover { color: #ff8f8f; }
+.quotes-edit-toggle.is-active { background: var(--brand-hover); color: var(--brand-deep); }
 .quotes-row-actions { opacity: 1; transform: none; pointer-events: auto; }
 .quotes-row-actions button:focus-visible,
 .quotes-row-actions select:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }

@@ -676,8 +676,12 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
           <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold tabular-nums text-faint">{filtered.length}</span>
         </div>
         <div className="quotes-control-actions flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => { setEditMode((v) => !v); setSelected(new Set()); setAssignOpen(false); }} className={`btn btn-sm border-0 bg-transparent px-2.5 text-muted hover:bg-bg-gray hover:text-ink ${editMode ? "bg-brand-hover text-brand-deep" : ""}`} aria-pressed={editMode}>
-            {editMode ? "完成" : "编辑"}
+          <button type="button" onClick={() => { setEditMode((v) => !v); setSelected(new Set()); setAssignOpen(false); }} className={`quotes-edit-toggle inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-colors hover:border-edge-strong hover:bg-brand-hover hover:text-ink ${editMode ? "is-active text-brand-deep" : ""}`} aria-label={editMode ? "完成编辑" : "编辑行情板"} title={editMode ? "完成编辑" : "编辑行情板"} aria-pressed={editMode}>
+            {editMode ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]"><path d="m5 12 4 4L19 6" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>
+            )}
           </button>
           <span
             className="inline-flex h-8 items-center gap-1.5 rounded-full border border-edge bg-bg-gray/50 px-3 text-[11px] text-muted"
@@ -877,7 +881,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                       <td className="px-4 py-3.5 text-right tabular-nums">{(() => { const cap = q?.marketCap || (q?.totalShares && q?.price ? q.price * q.totalShares : 0); return cap ? fmtUsd(cap) : "—"; })()}</td>
                       {editMode && <td className={`quotes-actions-cell px-3 py-3.5 ${selected.has(r.id) ? "is-selected" : ""}`}>
                         <div className="quotes-row-actions flex justify-end gap-1">
-                          <button type="button" title="编辑" onClick={() => openEdit(r)} className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-colors hover:border-edge-strong hover:bg-brand-hover hover:text-ink">
+                          <button type="button" title="编辑" onClick={() => openEdit(r)} className="quotes-action-btn inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-colors hover:border-edge-strong hover:bg-brand-hover hover:text-ink">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>
                           </button>
                           <select
@@ -889,7 +893,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                             }}
                             title={customWatchGroups.length === 0 ? "请先新建自定义分组" : "移动到分组"}
                             aria-label={`移动 ${r.name} 到分组`}
-                            className="quotes-move-select h-8 w-[66px] cursor-pointer rounded-[9px] border border-edge bg-bg-gray px-1 text-center text-xs text-muted outline-none transition-colors hover:border-edge-strong hover:bg-brand-hover focus:border-edge-strong disabled:cursor-not-allowed disabled:opacity-45"
+                            className="quotes-move-select quotes-action-btn h-8 w-[66px] cursor-pointer rounded-[9px] border border-edge bg-bg-gray px-1 text-center text-xs text-muted outline-none transition-colors hover:border-edge-strong hover:bg-brand-hover focus:border-edge-strong disabled:cursor-not-allowed disabled:opacity-45"
                           >
                             <option value="" disabled>移动</option>
                             {customWatchGroups.map((g) => (
@@ -897,7 +901,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                             ))}
                             <option value="__none__">移出分组</option>
                           </select>
-                          <button type="button" title="删除" onClick={() => setDeleteRecord(r)} className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-colors hover:border-down/40 hover:bg-down/10 hover:text-down dark:text-white/70 dark:hover:border-down/50 dark:hover:bg-down/10 dark:hover:text-down">
+                          <button type="button" title="删除" onClick={() => setDeleteRecord(r)} className="quotes-action-btn quotes-action-delete inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-colors hover:border-down/40 hover:bg-down/10 hover:text-down dark:text-white/70 dark:hover:border-down/50 dark:hover:bg-down/10 dark:hover:text-down">
                             <DeleteIcon size={15} />
                           </button>
                         </div>
