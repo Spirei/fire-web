@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-  "dev": "NEXT_DIST_DIR=.next-dev next dev -H 0.0.0.0 -p 3000",
-  "build": "next build",
-  "start": "next start -H 0.0.0.0 -p 3000",
-  "audit:public": "node scripts/audit-public-repo.mjs",
-  "clean:caches": "node scripts/clean-next-cache.mjs",
-  "clean:dsstore": "find .. -name .DS_Store -not -path '*/node_modules/*' -delete && echo '已清理 .DS_Store'"
+    "dev": "NEXT_DIST_DIR=.next-dev next dev -H 0.0.0.0 -p 3000",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3000",
+    "audit:public": "node scripts/audit-public-repo.mjs",
+    "audit:deploy": "node scripts/audit-deploy-parity.mjs",
+    "clean:caches": "node scripts/clean-next-cache.mjs",
+    "clean:dsstore": "find .. -name .DS_Store -not -path '*/node_modules/*' -delete && echo '已清理 .DS_Store'"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.2",

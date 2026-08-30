@@ -5,7 +5,7 @@
 
 ## 打包内容
 - `Dockerfile` —— 多阶段（deps → build → runner），Node 22-slim；`next start` 运行。
-- `docker-compose.yml` —— `fire` 服务，端口 `3000`，挂载 `./data` 与 `./uploads`，`env_file: .env`，healthcheck。
+- `docker-compose.yml` —— 本地源码构建入口；端口和持久化目录读取 `.env` 的 `HOST_PORT`、`DATA_DIR`、`UPLOADS_DIR`，未配置时默认 `3000`、`./data`、`./uploads`。
 - `.dockerignore` —— 排除 node_modules / .next / data / uploads / .env / .git。
 
 ## 部署步骤
@@ -41,7 +41,7 @@ docker compose up -d --build
 ### 4. 访问
 - 浏览器打开 `http://群晖IP:3000`。
 - 用 `.env` 里 `INITIAL_ADMIN_USERNAME/PASSWORD` 登录（仅首次空库时创建管理员）。
-- 如果端口 3000 被占用，改 `docker-compose.yml` 的 `ports`（如 `3001:3000`）。
+- 如果端口 3000 被占用，在 `.env` 设置 `HOST_PORT=3001`，无需修改 Compose 文件。
 
 ## 数据持久化与备份
 - **SQLite 数据库 / 附件 / 备份 / 缓存** → `/volume1/docker/fire/data/`（挂载到 `/app/data`）。
@@ -50,7 +50,7 @@ docker compose up -d --build
 - 升级：拉新代码后重跑 `docker compose up -d --build`，数据不动。
 
 ## 说明 / 注意
-- **富途 OpenD 桥接**（`scripts/futu_quotes.py`）已随 GHCR 生产镜像打包 Python 运行时与 `futu-api`，未配置或不可达时行情自动回退腾讯 / 雅虎（腾讯源已支持美股港股 A股）。在设置→股票设置→交易·富途里把 OpenD 主机填写为纯 IP/主机名（如 `192.168.x.x`，不要带 `http://`），端口通常为 `11111`，并确保容器能访问该端口。
+- **富途 OpenD 桥接**（`scripts/futu_quotes.py`）已由共用 `Dockerfile` 打包 Python 运行时与 `futu-api`，因此本地源码构建和 GHCR 镜像能力一致。未配置或不可达时行情自动回退腾讯 / 雅虎（腾讯源已支持美股港股 A股）。在设置→股票设置→交易·富途里把 OpenD 主机填写为纯 IP/主机名（如 `192.168.x.x`，不要带 `http://`），端口通常为 `11111`，并确保容器能访问该端口。
 - **资源**：默认不写死 CPU / 内存限制，请在 Container Manager 中按自己的 NAS 配置设置。
 - **健康检查**：每 60s 请求 `/api/settings/public`，失败 5 次标记 unhealthy（不影响运行）。
 - 默认 `CMD` 为 `npx next start -H 0.0.0.0 -p 3000`；若后续需要自定义启动（如迁移数据、预建库），可改为挂载自定义 `entrypoint.sh`。

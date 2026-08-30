@@ -8,7 +8,7 @@ services:
     restart: unless-stopped
     hostname: fire
     ports:
-      - "3000:3000"
+      - "${HOST_PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
@@ -18,10 +18,9 @@ services:
       - path: .env
         required: false
     volumes:
-      # 数据（SQLite + 附件 + 备份 + 缓存）持久化到宿主机 ./data
-      - ./data:/app/data
-      # 上传的素材（图标 / 头像 / 截图等）持久化到宿主机 ./uploads
-      - ./uploads:/app/public/uploads
+      # 与 GHCR 部署使用相同的变量；未配置时仍使用项目内 ./data 与 ./uploads。
+      - ${DATA_DIR:-./data}:/app/data
+      - ${UPLOADS_DIR:-./uploads}:/app/public/uploads
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/settings/public').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 60s

@@ -36,6 +36,10 @@
 | 14 | 站点域名自动检测内外网 | `/api/settings/public` 在未手动配置（或仍为占位 `localhost:3000`）时按请求 `Host` 自动推导；手动填写则尊重 |
 | 15 | 镜像瘦身 | `.dockerignore` 排除 `public/mockups`、`fire-planner-preview.html`、`settings-mockup-standard.html`、`public/fire`、`dist` 等非运行产物 |
 | 16 | 图标加载兜底 `SafeAssetImage` | 图片加载失败回退内置矢量默认图标，避免浏览器「? / 破图」占位；接入侧栏、货币、设置菜单预览 |
+| 17 | 挂载卷遮挡默认资源兜底 | `/uploads/[...path]` 在宿主机挂载目录缺文件时回读镜像内 `resource-default`，全球经济热图国旗、默认图标与名人头像不再因旧卷缺文件而 404 |
+| 18 | 名人头像发布映射同步 | 内置名人默认头像与 `default-avatars.json` 一起进入默认资源，本地源码重建和 GHCR 新容器均使用同一套定制头像 |
+| 19 | 富途运行时两端统一 | 共用 `Dockerfile` 的 runner 内置 Python venv 与 `futu-api`；本地 `docker compose up --build` 和 GHCR 都不会再出现 `spawn python3 ENOENT` |
+| 20 | 部署一致性自动审计 | 新增 `npm run audit:deploy` 并接入 GitHub Actions，自动检查两份 Compose 的端口/卷/环境一致性，以及默认资源和富途运行时是否仍被打包 |
 
 ---
 
@@ -53,6 +57,10 @@
 - `components/MarketIcon.tsx`：本地国旗兜底 ✅
 - `lib/assets-default-stock.json`：股票预置种子（约 171KB）✅
 - `scripts/entrypoint.sh`：`resource-default` 复制 ✅
+- `Dockerfile`：runner 含 Python venv + `futu-api`，本地 / GHCR 共用 ✅
+- `app/uploads/[...path]/route.ts`：挂载目录缺文件时回读 `resource-default` ✅
+- `docker-compose.yml` / `docker-compose.ghcr.yml`：端口与持久化目录变量一致 ✅
+- `npm run audit:deploy`：CI 自动阻止两端配置漂移 ✅
 
 ### 建议本地回归
 ```bash
