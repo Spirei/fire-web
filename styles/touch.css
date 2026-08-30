@@ -1,0 +1,9 @@
+/* Capability-based interaction adjustments, independent of screen or user agent. */
+@media (hover: none) and (pointer: coarse) {
+  button, a, [role="button"] { -webkit-tap-highlight-color: transparent; }
+  .mobile-tab-nav > button { min-height: 44px; }
+  .btn:not(.btn-icon) { min-height: 40px; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea { font-size: max(16px, 1em); }
+}

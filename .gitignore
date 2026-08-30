@@ -1,0 +1,20 @@
+node_modules/
+.next/
+.cache/
+out/
+dist/
+.next-dev/
+.next-dev.oldbak/
+.next-qa/
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+.env
+.env.*
+!.env.example
+# Runtime data and local deployment state
+data/
+
+# User-generated uploads (default assets remain tracked)
+public/uploads/avatar/
+public/uploads/reports/

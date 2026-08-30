@@ -1,0 +1,84 @@
+"use client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fmtMoney } from "@/lib/format";
+import { showToast } from "@/lib/toast";
+import CurrencySelect from "@/components/CurrencySelect";
+import FundEntryDialog from "@/components/FundEntryDialog";
+import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/currencyPrefs";
+
+type Currency = CurrencyCode;
+interface Tx { id: string; currency: Currency; type: string; amount: number; direction: 1 | -1; note: string; occurredAt: string }
+const TYPE_LABEL: Record<string, string> = { opening: "期初资金", deposit: "转入", withdrawal: "转出", adjustment: "余额调整" };
+const EMPTY: Record<Currency, number> = { USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 };
+
+export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdingAssets: Record<Currency, number>; onBalancesChange: (balances: Record<Currency, number>) => void }) {
+  const [currency, setCurrency] = useState<Currency>("USD");
+  const [balances, setBalances] = useState<Record<Currency, number>>(EMPTY);
+  const [transactions, setTransactions] = useState<Tx[]>([]);
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState("deposit");
+  const [direction, setDirection] = useState<1 | -1>(1);
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [occurredAt, setOccurredAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [saving, setSaving] = useState(false);
+  const recordsRef = useRef<HTMLDivElement>(null);
+  const load = useCallback(async () => {
+    const res = await fetch("/api/v1/funds?limit=100", { cache: "no-store" });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) return;
+    const next = { ...EMPTY, ...(json?.data?.balances || {}) };
+    setBalances(next); setTransactions(json?.data?.transactions || []); onBalancesChange(next);
+  }, [onBalancesChange]);
+  useEffect(() => { void load(); }, [load]);
+  const submit = async () => {
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value <= 0) return showToast("请输入有效金额", "err");
+    setSaving(true);
+    const normalizedType = type === "deposit" && direction < 0 ? "withdrawal" : type;
+    const res = await fetch("/api/v1/funds", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currency, type: normalizedType, amount: value, direction, note, occurredAt }) });
+    const json = await res.json().catch(() => null); setSaving(false);
+    if (!res.ok) return showToast(json?.message || "保存失败", "err");
+    setOpen(false); setAmount(""); setNote(""); setOccurredAt(new Date().toISOString().slice(0, 10)); await load(); showToast("资金记录已保存");
+  };
+  const remove = async (id: string) => {
+    const res = await fetch(`/api/v1/funds/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!res.ok) return showToast("删除失败", "err");
+    await load();
+  };
+  const cash = balances[currency] || 0;
+  const holdings = holdingAssets[currency] || 0;
+  const recent = transactions.filter((item) => item.currency === currency).slice(0, 5);
+  const currencyTransactions = transactions.filter((item) => item.currency === currency);
+  const openingAsset = currencyTransactions.filter((item) => item.type === "opening").reduce((sum, item) => sum + item.amount * item.direction, 0);
+  const cashNetFlow = currencyTransactions.filter((item) => item.type === "deposit" || item.type === "withdrawal").reduce((sum, item) => sum + item.amount * item.direction, 0);
+  const stockNetFlow = 0;
+  const otherNetFlow = currencyTransactions.filter((item) => item.type === "adjustment").reduce((sum, item) => sum + item.amount * item.direction, 0);
+  const currentInvestment = cashNetFlow + stockNetFlow + otherNetFlow;
+  const endingAsset = cash + holdings;
+  const profit = endingAsset - openingAsset - currentInvestment;
+  const fullMoney = (value: number, signed = false) => `${signed && value > 0 ? "+" : ""}${fmtMoney(value, CURRENCY_SYMBOLS[currency])}`;
+  const metric = (label: string, value: number, tone: "plain" | "flow" | "result" = "plain") => <div className={`fund-flow-card fund-flow-card--${tone}`} title={`${label}：${fullMoney(value, tone !== "result")}`}><span className="fund-flow-label">{label}</span><strong className={`fund-flow-value ${tone !== "result" && value !== 0 ? value > 0 ? "text-up" : "text-down" : ""}`}>{fullMoney(value, tone !== "result")}</strong></div>;
+  const latestAt = currencyTransactions[0]?.occurredAt;
+  return <section className="funds-panel card overflow-visible">
+    <div className="flex items-center justify-between gap-3 border-b border-edge px-4 py-4"><div className="min-w-0"><div className="flex items-center gap-2.5"><h3 className="text-base font-bold">资金系统</h3><CurrencySelect value={currency} align="left" onChange={(next) => setCurrency(next as Currency)} /></div><p className="mt-0.5 truncate text-[11px] text-muted">现金与持仓共同构成账户资产{latestAt ? ` · 更新至 ${new Date(latestAt).toLocaleDateString("zh-CN")}` : ""}</p></div><button type="button" onClick={() => setOpen(true)} className="btn-line h-8 shrink-0 px-3 text-xs"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="mr-1 h-3.5 w-3.5"><path d="M10 4v12M4 10h12" /></svg>记一笔</button></div>
+    <div className="p-5">
+      <div className="fund-flow-grid">
+        <div aria-hidden="true" className="fund-flow-bracket fund-flow-bracket--left" />
+        <div aria-hidden="true" className="fund-flow-bracket fund-flow-bracket--right" />
+        <div aria-hidden="true" className="fund-flow-center-line fund-flow-center-line--left" />
+        <div aria-hidden="true" className="fund-flow-center-line fund-flow-center-line--right" />
+        <div className="col-start-1 row-start-1">{metric("现金净流入", cashNetFlow)}</div>
+        <div className="col-start-1 row-start-2">{metric("股票净流入", stockNetFlow)}</div>
+        <div className="col-start-1 row-start-3">{metric("其他净流入", otherNetFlow)}</div>
+        <div className="col-start-2 row-start-1">{metric("期初总资产", openingAsset, "flow")}</div>
+        <div className="col-start-2 row-start-2">{metric("当期净投入", currentInvestment, "flow")}</div>
+        <div className="col-start-2 row-start-3">{metric("盈亏额", profit, "flow")}</div>
+        <div className="col-start-3 row-start-2">{metric("期末总资产", endingAsset, "result")}</div>
+      </div>
+      <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 当期净投入 = 现金净流入 + 股票净流入 + 其他净流入。<button type="button" onClick={() => recordsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })} className="ml-1 text-[#3297f6] hover:underline">查看资金记录</button></p></div>
+      <div ref={recordsRef} className="mt-4 border-t border-edge pt-3"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold">资金记录</span><span className="text-[10px] text-muted">最近 5 笔</span></div>{recent.length ? recent.map((item) => <div key={item.id} className="group flex items-center justify-between gap-2 border-t border-edge/70 py-2.5 text-[11px] first:border-0"><span className="min-w-0"><b>{item.type === "deposit" || item.type === "withdrawal" ? item.direction > 0 ? "资金转入" : "资金转出" : TYPE_LABEL[item.type] || "资金变动"}</b><small className="ml-2 text-muted">{new Date(item.occurredAt).toLocaleDateString("zh-CN")}</small>{item.note && <small className="mt-0.5 block truncate text-muted">{item.note}</small>}</span><span className="flex shrink-0 items-center gap-1.5"><b className={item.direction > 0 ? "text-up" : "text-down"}>{item.direction > 0 ? "+" : "−"}{fmtMoney(item.amount, CURRENCY_SYMBOLS[currency])}</b><button type="button" onClick={() => void remove(item.id)} className="flex h-6 w-6 items-center justify-center rounded-md text-sm text-muted opacity-0 transition-all hover:bg-bg-gray hover:text-down group-hover:opacity-100" title="删除记录">×</button></span></div>) : <div className="py-4 text-center text-[11px] text-muted">暂无资金记录，点击右上角“记一笔”开始</div>}</div>
+    </div>
+    {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={cash} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
+  </section>;
+}

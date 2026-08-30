@@ -1,0 +1,4 @@
+/* Desktop owns the full-density layout. Component defaults remain the source of truth. */
+@media (min-width: 1024px) {
+  .app-shell-main, .records-app { min-width: 0; }
+}

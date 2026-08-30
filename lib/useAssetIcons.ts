@@ -1,0 +1,291 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { RELATED_ETF_MAIN_STOCK } from "@/lib/relatedEtfs";
+
+export interface Asset {
+  id: string;
+  type: "stock" | "market" | "flag" | "broker" | "crypto" | "metal" | "icon";
+  market: string;
+  code: string;
+  name: string;
+  url: string;
+  urlDark?: string;
+  marketCap: number;
+  price: number | null;
+  changePct: number | null;
+  source: "auto" | "manual";
+  lastCheckedAt: string;
+  board: string;
+  updatedAt: string;
+}
+
+type AssetType = Asset["type"];
+type HookOptions = {
+  /** 服务端已经读取设置时直接注入，避免再次请求 /api/settings。 */
+  stockIconCdn?: boolean;
+  /** 仅确实需要 CDN 开关的组件才读取设置。 */
+  loadCdnSetting?: boolean;
+};
+
+const ALL_TYPES: AssetType[] = ["stock", "market", "flag", "broker", "crypto", "metal", "icon"];
+const CACHE_TTL = 5 * 60 * 1000;
+const cache = new Map<AssetType, { assets: Asset[]; at: number }>();
+const inflight = new Map<AssetType, Promise<void>>();
+const listeners = new Set<() => void>();
+const subscribedTypes = new Set<AssetType>();
+const cdnListeners = new Set<(value: boolean) => void>();
+let cdnEnabled = false;
+let cdnLoaded = false;
+let cdnInflight: Promise<void> | null = null;
+let cdnRequested = false;
+
+/**
+ * 用服务端首屏注入的紧凑图标表预热共享缓存。
+ * at 保持 0，让完整素材库仍会在后台刷新；首帧则无需等待 /api/assets。
+ */
+export function primeStockIconCache(icons: Record<string, string>) {
+  const current = cache.get("stock");
+  const byKey = new Map<string, Asset>();
+  (current?.assets ?? []).forEach((asset) => byKey.set(`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`, asset));
+  Object.entries(icons).forEach(([rawKey, url]) => {
+    if (!url) return;
+    const separator = rawKey.indexOf(":");
+    if (separator <= 0) return;
+    const market = rawKey.slice(0, separator).toUpperCase();
+    const code = rawKey.slice(separator + 1).toUpperCase();
+    const key = `${market}:${code}`;
+    if (byKey.has(key)) return;
+    byKey.set(key, {
+      id: `stock:${key}`,
+      type: "stock",
+      market,
+      code,
+      name: code,
+      url,
+      marketCap: 0,
+      price: null,
+      changePct: null,
+      source: "auto",
+      lastCheckedAt: "",
+      board: "",
+      updatedAt: ""
+    });
+  });
+  cache.set("stock", { assets: [...byKey.values()], at: current?.at ?? 0 });
+}
+
+function cacheKey(type: AssetType) {
+  return `fire:assets:cache:${type}`;
+}
+
+function normalizeTypes(types?: readonly AssetType[]): AssetType[] {
+  const requested = types?.length ? types : ALL_TYPES;
+  return [...new Set(requested)].sort() as AssetType[];
+}
+
+function loadLocalType(type: AssetType): { assets: Asset[]; at: number } | null {
+  try {
+    const raw = localStorage.getItem(cacheKey(type));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Asset[] | { assets?: Asset[]; at?: number };
+    // 兼容旧版仅保存数组的分类型缓存；时间记为 0，展示后立即后台刷新。
+    const list = Array.isArray(parsed) ? parsed : parsed.assets;
+    if (!Array.isArray(list)) return null;
+    const assets = list.filter((asset) => asset.type === type).map((asset) => {
+      // FIRE 已恢复为系统默认火焰图标，归一化浏览器里旧的 fire-gray 缓存。
+      // 这样不必等待 5 分钟的缓存 TTL 到期，本地版与线上首屏即一致。
+      if (type === "icon" && asset.code.toUpperCase() === "FIRE") {
+        return { ...asset, url: "/uploads/asset/icon/fire.svg", urlDark: "/uploads/asset/icon/fire-dark.svg" };
+      }
+      return asset;
+    });
+    return {
+      assets,
+      at: Array.isArray(parsed) ? 0 : Number(parsed.at) || 0
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalType(type: AssetType, assets: Asset[]) {
+  try {
+    localStorage.setItem(cacheKey(type), JSON.stringify({ assets, at: Date.now() }));
+  } catch {
+    /* 存储空间不足不影响页面 */
+  }
+}
+
+function notify() {
+  listeners.forEach((listener) => listener());
+}
+
+async function refreshType(type: AssetType, force = false) {
+  const current = cache.get(type);
+  if (!force && current && Date.now() - current.at < CACHE_TTL) return;
+  const pending = inflight.get(type);
+  if (pending && !force) return pending;
+
+  let task!: Promise<void>;
+  task = (async () => {
+    try {
+      const response = await fetch(`/api/assets?type=${encodeURIComponent(type)}`, force ? { cache: "no-store" } : undefined);
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !Array.isArray(data?.assets)) return;
+      const assets = (data.assets as Asset[]).filter((asset) => asset.type === type);
+      cache.set(type, { assets, at: Date.now() });
+      saveLocalType(type, assets);
+      notify();
+    } catch {
+      /* 保留已有缓存与默认图标 */
+    } finally {
+      if (inflight.get(type) === task) inflight.delete(type);
+    }
+  })();
+  inflight.set(type, task);
+  return task;
+}
+
+async function refreshTypes(types: readonly AssetType[], force = false) {
+  await Promise.all(types.map((type) => refreshType(type, force)));
+}
+
+function assetsFor(types: readonly AssetType[]) {
+  return types.flatMap((type) => cache.get(type)?.assets ?? []);
+}
+
+function publishCdn(value: boolean) {
+  cdnEnabled = value;
+  cdnLoaded = true;
+  cdnListeners.forEach((listener) => listener(value));
+}
+
+function ensureCdnSetting() {
+  if (cdnLoaded || cdnInflight) return cdnInflight;
+  cdnInflight = fetch("/api/settings")
+    .then((response) => (response.ok ? response.json() : null))
+    .then((data) => {
+      if (typeof data?.settings?.stockIconCdn === "boolean") publishCdn(data.settings.stockIconCdn);
+    })
+    .catch(() => {})
+    .finally(() => {
+      cdnInflight = null;
+    });
+  return cdnInflight;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("fire:assets-updated", () => {
+    void refreshTypes([...subscribedTypes], true);
+  });
+  window.addEventListener("fire:settings-updated", () => {
+    if (cdnRequested) {
+      cdnLoaded = false;
+      void ensureCdnSetting();
+    }
+  });
+}
+
+export function useAssetIcons(types?: readonly AssetType[], options: HookOptions = {}) {
+  const typeKey = normalizeTypes(types).join(",");
+  const requestedTypes = useMemo(() => typeKey.split(",").filter(Boolean) as AssetType[], [typeKey]);
+  const [assets, setAssets] = useState<Asset[]>(() => assetsFor(requestedTypes));
+  const [cdn, setCdn] = useState(options.stockIconCdn ?? cdnEnabled);
+  const [dark, setDark] = useState(() => typeof document !== "undefined" && document.documentElement.classList.contains("dark"));
+
+  useEffect(() => {
+    const element = document.documentElement;
+    const sync = () => setDark(element.classList.contains("dark"));
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(element, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (typeof options.stockIconCdn === "boolean") publishCdn(options.stockIconCdn);
+    if (options.loadCdnSetting) {
+      cdnRequested = true;
+      void ensureCdnSetting();
+    }
+    const onCdn = (value: boolean) => setCdn(value);
+    cdnListeners.add(onCdn);
+    return () => {
+      cdnListeners.delete(onCdn);
+    };
+  }, [options.loadCdnSetting, options.stockIconCdn]);
+
+  useEffect(() => {
+    let cancelled = false;
+    requestedTypes.forEach((type) => {
+      subscribedTypes.add(type);
+      if (cache.has(type)) return;
+      const saved = loadLocalType(type);
+      if (saved) cache.set(type, saved);
+    });
+    setAssets(assetsFor(requestedTypes));
+
+    void refreshTypes(requestedTypes).then(() => {
+      if (!cancelled) setAssets(assetsFor(requestedTypes));
+    });
+    const onUpdate = () => setAssets(assetsFor(requestedTypes));
+    listeners.add(onUpdate);
+    return () => {
+      cancelled = true;
+      listeners.delete(onUpdate);
+    };
+  }, [typeKey, requestedTypes]);
+
+  const marketIcons = useMemo(() => {
+    const map: Record<string, string> = {};
+    assets.forEach((asset) => {
+      if (asset.type === "market") map[asset.market.toUpperCase()] = asset.url;
+    });
+    return map;
+  }, [assets]);
+
+  const countryFlags = useMemo(() => {
+    const map: Record<string, string> = {};
+    assets.forEach((asset) => {
+      if (asset.type === "flag") map[asset.code.toUpperCase()] = asset.url;
+    });
+    return map;
+  }, [assets]);
+
+  const stockIcons = useMemo(() => {
+    const map: Record<string, string> = {};
+    assets.forEach((asset) => {
+      if (asset.type === "stock") map[`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`] = asset.url;
+    });
+    Object.entries(RELATED_ETF_MAIN_STOCK).forEach(([etf, main]) => {
+      const fallbackUrl = map[`US:${etf}`] || map[`US:${main}`];
+      if (!fallbackUrl) return;
+      ["", ".AM", ".N", ".OQ", ".PS", ".K"].forEach((suffix) => {
+        const key = `US:${etf}${suffix}`;
+        if (!map[key]) map[key] = fallbackUrl;
+      });
+    });
+    return map;
+  }, [assets]);
+
+  const assetIcons = useMemo(() => {
+    const map: Record<string, string> = {};
+    assets.forEach((asset) => {
+      if (asset.type === "crypto" || asset.type === "metal" || asset.type === "icon") {
+        map[asset.code.toUpperCase()] = dark ? asset.urlDark || asset.url : asset.url;
+      }
+    });
+    return map;
+  }, [assets, dark]);
+
+  const brokerIcons = useMemo(() => {
+    const map: Record<string, string> = {};
+    assets.forEach((asset) => {
+      if (asset.type === "broker" && asset.name) map[asset.name] = asset.url;
+    });
+    return map;
+  }, [assets]);
+
+  return { assets, marketIcons, countryFlags, stockIcons, assetIcons, brokerIcons, cdnEnabled: cdn };
+}

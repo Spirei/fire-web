@@ -1,0 +1,21 @@
+/* Tablet and medium split-view layout. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .app-shell-main { padding: 28px 20px 40px; }
+  .records-app { display: block; width: 100%; }
+  .mobile-tab-nav {
+    position: sticky;
+    top: 72px;
+    z-index: 42;
+    margin-bottom: 20px;
+    padding: 6px;
+    border: 1px solid rgba(201,206,216,.58);
+    background: rgba(247,248,250,.96);
+    box-shadow: 0 5px 16px rgba(18,28,44,.05);
+  }
+  .mobile-tab-nav > button { min-width: 78px; }
+  .dark .mobile-tab-nav { border-color: rgba(255,255,255,.08); background: rgba(10,14,25,.96); }
+  .economy-map-layout { grid-template-columns: minmax(0, 1fr); }
+  .economy-map-stage { padding-inline: 16px; }
+  .economy-ranking-list { grid-template-columns: repeat(2, minmax(0,1fr)); column-gap: 32px; }
+  .economy-ranking-row:nth-last-child(-n+2) { border-bottom: 0; }
+}

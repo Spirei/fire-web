@@ -1,0 +1,14 @@
+/* Shared responsive primitives. Layout-specific rules live in mobile/tablet/desktop files. */
+@media (max-width: 1023px) {
+  .records-app,
+  .records-app .tab-panel,
+  .asset-analysis-split > * { min-width: 0; }
+
+  .mobile-tab-nav {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .mobile-tab-nav::-webkit-scrollbar { display: none; }
+}

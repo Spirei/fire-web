@@ -1,0 +1,3 @@
+# 富途 OpenAPI 桥接依赖（scripts/futu_quotes.py 使用）
+# 安装：python3 -m pip install -r scripts/requirements-futu.txt
+futu-api>=10.5.6508

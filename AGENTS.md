@@ -1,0 +1,206 @@
+# AGENTS.md — Fire 投资记实
+
+## 项目
+
+- 技术栈：Next.js 15（App Router）+ React 19 + TypeScript + Tailwind CSS，SQLite（better-sqlite3）。
+- 常用命令：开发 `npm run dev`（固定监听 `0.0.0.0:3000`，禁止临时切换端口）；构建 `npm run build`；冒烟测试 `./scripts/smoke-test.sh`（期望全部 PASS，测试会备份并还原设置，不污染用户数据）。
+
+## 收尾 Review 规范（重要）
+
+- **每完成一个大功能 / 新建一个页面 / 一次较大重构 / 一次大的 UI 调整，收尾前必须做一次 Review**：先自查、修完所有发现的问题，再交付；禁止在仍有明显 bug / 未决问题时就交“半成品”。
+
+Review 自查清单（按项目实际走一遍）：
+1. **编译/类型**：`npx tsc --noEmit` 通过；相关页面可正常编译加载。
+2. **逻辑一致性**：涉及数据 / 金额 / 统计改动时，核对**同一数值在不同视图是否同源、一致**（例如 FIRE「当前资产」上方卡片与水球、每年明细「当前资产」必须同值）。
+3. **持久化**：新增“刷新要保持”的状态按「状态持久化决策树」选 URL / localStorage（`fire:xxx`）/ 服务端；不得刷新即还原。
+4. **深色模式**：新增颜色 / 透明度 / hover 背景变化时同步补 `app/globals.css` 的 `.dark` 覆盖；深浅色都要检查。
+5. **图标唯一性 + 命名规范**：新增导航 / 设置图标按「交互与适配约定」注册专属图标；素材 / 文件命名按「素材库文件命名规范」；股票/ETF 名称按规范三表同步。
+6. **HTML 合法性**：禁止按钮嵌套按钮（`<button>` 内 `<button>`）等 hydration 错误；嵌套点击项用 `span role="button"`（或改成并列兄弟元素）。
+7. **汇率 / 货币**：涉及币种展示时确认按「默认/主货币 → 显示币种」换算，未把显示币种当主货币；收益率 / 进度等比值不随币种改变。
+8. **版本记录**：按「版本记录约定」把本次变更写入 `lib/versions.ts` + 仓库根 `VERSIONS.md`。
+9. **冒烟测试**（影响全局 / 数据源 / 设置时）：跑 `./scripts/smoke-test.sh`，期望全 PASS。
+
+- 交付答复里写明：改了哪些文件、Review 结论、是否还有遗留风险 / 待办。
+
+## 排序与拖动：全局持久化约定（重要）
+
+- 所有排序类交互必须**全局生效**：结果保存到 `/api/settings`（`markets`、`tabs`、`groups`、`homeNav`），禁止只存在组件本地状态。
+- 可拖动的区域（账户资产市场标签、设置-导航菜单、设置-分组管理、网站管理-首页导航）统一使用 HTML5 拖拽：拖动手柄 + 拖动排序 + 保存后 Toast 提示；保存成功后派发 `fire:settings-updated` 事件（或通过回调同步父级状态）让全站立即一致。
+- 新增任何可排序/可拖动 UI 时沿用此约定（拖动手柄、持久化、事件通知、Toast），不要做成"刷新即还原"。
+
+## 状态持久化决策树（重要）
+
+新增任何"刷新后要保持"的状态，先按下面规则选持久化方式，不要随手拍脑袋：
+
+1. **当前视图状态 → URL 参数**：tab、市场筛选、货币、排序、个股详情 `?symbol=`、自选股筛选 `?filter=` 等"此刻看什么"——可分享/收藏、刷新与前进后退天然保持；中文值用 `encodeURIComponent`。
+2. **个人偏好 → localStorage**：货币默认、趋势周期、图表 tab、加权方式、隐藏态、列排序/列设置、刷新间隔等"我喜欢怎么用"——用 `lib/usePersistedState.ts`（key 用 `fire:xxx` 统一前缀，稳定命名，方便日后迁移）；单机即时生效。
+3. **全局 / 跨端共享配置 → 服务端**：券商、自选股分组（`watch_groups`）、列定义（`holdingColumns`）、站点设置——Web 与 iOS 必须一致。
+
+判断口诀：**能分享用 URL，只关自己用 localStorage，要同步用服务端**。URL 优先于 localStorage（视图类），localStorage 优先于 URL（偏好类，避免地址栏噪音）；不要把大/敏感数据放 URL 或 localStorage。
+
+## 自选股分组（方案 A：独立分组实体，2026-08-09 起）
+
+- 分组是服务端独立实体（`watch_groups` 表，见 `lib/watchGroupsStore.ts`），记录通过 `watch_group_id` 归属；券商仍走 `records.group_name`（持仓显示），**禁止再把券商名当分组名用**。
+- 接口统一走 v1：`GET/POST /api/v1/watch-groups`、`PUT/DELETE /api/v1/watch-groups/{id}`、`POST /api/v1/watch-groups/reorder`、`POST /api/v1/records/group-assign`；重命名 / 删除分组只改实体 + 一条 SQL 清空归属，**禁止循环逐条 PUT 记录**。
+- 市场分组（美股/港股/A股/新加坡/日股/韩股）是内置实体：不可删除、动态按 `records.market` 过滤（大前提逻辑，添加股票自动进入全部 + 对应市场）；自定义分组才是显式归属。
+- 分组图标走 `PUT /watch-groups/{id}` 的 `icon` 字段，同时注册素材库 `type=group`（`saveGroupAsset`，防文件清理丢失）；上传文件用 `kind=asset + folder=broker + name=分组名` 规范命名。
+- 显隐 `visible`：`-1` 自动（空分组隐藏）/ `0` 隐藏 / `1` 显示；全部分组网格不受显隐影响。
+- 筛选状态写入 URL `?filter=<分组id>`；兼容旧 `?filter=M:US` / `G:名称` 与 `?market=` 自动迁移；分组不存在自动回退「全部」。
+- 旧 localStorage 配置（`fire:watch-groups:v1`）首次加载一次性迁移到服务端并清除（`migrateLegacyWatchGroups`）。
+- 外部数据源地址（实时行情 / 搜索 / 分时走势 / 美股财报）统一从设置读取：`quoteApiUrl`、`searchApiUrl`、`chartApiUrl`、`earningsApiUrl`，不要硬编码到业务代码。
+- 深色模式：所有颜色用主题类（`bg-white`、`text-ink`、`border-edge` 等），新增透明度变体时同步在 `app/globals.css` 补 `.dark` 覆盖。
+
+## 按钮间距约定
+
+- 区块/表单底部的主操作按钮（保存、提交、确认修改等）与上方内容间距统一为 16px：按钮本身加 `mt-4`，或所在容器用 `gap-4` / `flex-col gap-4`。
+- 同一设置区块内多个底部按钮（如「测试连接 + 保存」）用 `mt-4 flex flex-wrap gap-3` 包裹，保持各区块一致。
+- 弹窗底部操作区统一用 `mt-5 flex justify-end gap-2.5`（或 `border-t pt-4`），不要出现按钮紧贴上方表单的情况。
+
+## 交互与适配约定（原「苹果色块标准」已取消）
+
+> 2026-08-08 起取消「苹果蓝（#0071e3）」全局配色规范，品牌色 / 按钮配色不再强制苹果蓝；以下与颜色无关的交互与适配约定继续生效：
+
+- 焦点样式：点击/激活/聚焦一律**无轮廓、无光晕**（globals.css 已全局定义 `outline: none; box-shadow: none`），任何场景（含 Safari、macOS「键盘导航」开启）都不出现白框/白圈；新增按钮不要依赖浏览器默认 focus ring，不要给 `:focus-visible` 添加可见 ring。
+- 深浅色都要适配：新增颜色透明度变体或 hover 背景时，同步在 `app/globals.css` 的 `.dark` 区补对应覆盖。
+- 素材库图标（市场 / 股票 / 加密货币 / 贵金属）必须全局生效：`useAssetIcons` 已带 localStorage 缓存，刷新不得闪现默认图标；新增图标类型时沿用该缓存机制。
+- **图标唯一性（重要）**：同一界面内导航 / 设置项图标语义必须唯一，禁止两个条目共用同一图标。新增导航或设置页签时，必须先在 `components/SettingsHeader.tsx` 的 `ICON_PATHS` 注册与页面 key 一致的专属图标；**禁止依赖 `SubNavIcon` 的 site 回退**（未注册的 key 会静默回退成「网站设置」的地球图标，造成图标重复——例如关于页曾与网站设置共用地球）。排查手段：新增图标后全站走查导航 / 设置侧栏，确保每个 key 都能在 `ICON_PATHS` 中找到且形状互不相同。
+
+## 中性色按钮标准（浅灰边框 + 白色块状，2026-08-08 起）
+
+- 全站主按钮 / 色块统一为「白底 + 浅灰边框 + 深色文字」：`border border-edge-strong bg-white text-ink-2`（深色模式 `dark:bg-[#1c1c1e] dark:text-white`）。
+- hover 统一为**明显浅灰背景**（`hover:bg-brand-hover`，浅色 ≈ #e9ebee；深色模式 globals.css 已补 `.dark .hover\:bg-brand-hover:hover` 为 #262c37），文字保持深色、边框颜色不变。
+- 动画：按钮带 `transition-all duration-200`，hover 轻微上浮 `hover:-translate-y-px` + 阴影，点击 `active:scale-[.97]`。
+- 选中态（tab / 分页当前页 / 胶囊）：`bg-white text-ink-2 shadow-sm border border-edge-strong`（白底浅灰边框 + 阴影），不再使用任何蓝色选中块。
+- 品牌色板已整体改为中性灰：`brand.DEFAULT=#6b7280`、`brand.hover=#e9ebee`、`brand.light=#f1f3f5`、`brand.deep=#3f4652`；旧苹果蓝 `#0071e3` 及蓝色阴影/焦点光环已全量清除（焦点光环改中性灰）。
+- 新增按钮 / 色块一律遵循上述中性色标准，不再引入蓝色或彩色块状。
+
+## 素材库文件命名规范（全局，重要）
+
+- 所有素材文件按「中文名称 + 英文简称/代码」命名，禁止时间戳随机名：
+  - 市场图标：`中文名+市场码`（美股US.svg / 新加坡SG.png）
+  - 加密货币 / 贵金属：`中文名+代码`（比特币BTC.svg / 黄金GOLD.png）
+  - 股票图标：`中文名+股票代码`（苹果AAPL.png / 寒武纪688256.png，与素材库同步一致）
+  - 券商图标：`券商名称`（长桥证劵.png，对应「设置 → 股票设置 → 券商管理」中的券商分组），存放 `public/uploads/asset/broker/`
+  - 分组图标：`分组名称`（科技.png，对应自选股自定义分组，非券商分组），存放 `public/uploads/asset/group/`，素材库「分组图标」分类与 `watch_groups.icon` 同步
+
+## 资源本地化约定（重要）
+
+- **线上版 / 线下版资源一律走本地素材库**，禁止依赖远程 CDN 图标（flagcdn / 长桥 LB 等）。图标、市场 / 货币旗帜、名人头像、导航图、登录图、site logo、背景等展示资源以 `public/uploads/` 的本地文件为准：镜像打包默认资源（`asset` / `celebs` / `currency` / `ico` / `login` / `logo` / `background`，不含用户 `avatar` / `reports` / 分组图标），首次启动由 `entrypoint.sh` 复制到 `./uploads` 挂载；素材库按类别用 `ensureIconAssets` / `ensureMarketAssets` / `ensureCategoryAssets` 播种缺失的默认条目（icon / market / crypto / metal），不覆盖用户已上传素材。
+- 前端图标渲染：素材库自定义图标优先，加载失败 `SafeAssetImage` 回退内置矢量默认图标；市场图标 `MarketIcon` 无本地素材时回退本地矢量地球，**不再请求任何远程图标地址**。
+- 新增任何可上传 / 可展示的图标时，同步确认本地素材存在 + 素材库播种逻辑 + `SafeAssetImage` 兜底，避免出现「?」破图。
+- **上传文件一律经 `/uploads/[...path]` 动态路由服务**：`next start`（生产）只服务构建/启动时已存在的 `public` 文件，运行时上传到 `public/uploads/...` 的文件不会走静态服务（会 404）。上传内容必须能被该路由从磁盘读取返回（`Cache-Control: max-age=0, must-revalidate`），否则上传后立即无法访问。
+
+## 股票 / ETF 名称规范（全局，重要）
+
+- 杠杆 ETF 统一格式：`主体名称 + 空格 + N 倍做多 + 空格 + ETF`，如 `Rocket Lab 2 倍做多 ETF`、`苹果 2 倍做多 ETF`、`英伟达 2 倍做多 ETF`；倍数一律用中文「2 倍做多」（不写 `2x` / `2X` / `two times`），禁止「2倍做多2x」这类冗余重复。
+- 中英文主体写法：英文主体保留英文（`Rocket Lab 2 倍做多 ETF`、`Tesla 2 倍做多 ETF`、`Robinhood 2 倍做多 ETF`），中文主体用中文（`苹果 2 倍做多 ETF`、`超微电脑 2 倍做多 ETF`）；主体与「2 倍做多 ETF」之间用全角空格分隔。
+- 「ETF」统一大写；禁止无空格拼接与小写写法（如 `标普500etfvanguard`、`Spcx2倍做多2x etf`、`etf` 一律不允许）。
+- 指数 / 商品 ETF：主体含指数或基金公司时用全角括号标注（如 `标普 500 ETF（Vanguard）`、`太空 ETF`），禁止把公司名直接拼进主体。
+- 适用范围：`records.name`、`trade_orders.name`（成交时快照）与 `activities.stock_name`（操作日志）三处必须一致；修改任一股票名称时必须同步更新这三张表，避免订单 / 日志仍显示旧名。
+- 新增 / 编辑股票时按上述格式命名；发现历史脏数据（冗余倍数、小写 etf、无空格拼接）时批量规范化并按三表同步。
+
+## 券商（Broker）数据规范（Web + iOS / Android 统一）
+
+- 券商 = 设置-股票设置-券商管理中的分组，模型：`{ id, name, alias, icon }`——`id` 为分组 ID（小写为规范）、`name` 为券商名称、`alias` 为别名（如 盈透证券 → IBKR，展示在名称下方小字，可选）、`icon` 为素材库券商图标本地 URL（无图标为空，客户端回退名称首字母）。
+- 存储：券商列表在 `site_settings.groups`（顺序即展示顺序）；图标在 `assets`（type=broker，code=分组ID，name=券商名）；持仓记录 `records.group_name` 存券商名称。
+- 同步：改名/删除券商后必须同步持仓记录（`lib/brokers.ts` 的 `syncRecordGroups`）；保存分组设置时同步素材库 broker 素材名称（`UPPER(code)=分组ID`）。
+- 接口：v1 统一入口 `GET/POST/DELETE /api/v1/brokers`（详见 docs/api-spec.md「券商 Brokers」）；素材库 broker 素材 code 存库为大写，匹配一律大小写不敏感。
+- 防误清：券商列表为空时保存必须二次确认（前端已实现），禁止用空列表覆盖非空券商。
+- 券商数据只读基准：修改 `site_settings.groups` 必须基于**当前完整列表**增量操作（读取 → 增删改 → 全量写回），**禁止用硬编码列表覆盖**（曾因迁移脚本用 3 个硬编码券商覆盖，导致用户添加的 6 个券商分组丢失）；恢复时可从 `assets`（type=broker，code=分组ID）与 `records.group_name` 反推被删分组。
+
+## 相关 ETF 与正股双向关系 / 图标规范
+
+- 正股详情显示「相关 ETF」；已收录 ETF 的详情页反向显示「正股」，两边均从 `lib/relatedEtfs.ts` 的 `US_RELATED_ETFS` / `RELATED_ETF_MAIN_STOCK` 单一关系源派生，禁止在组件或图标模块另写一份关系清单。
+- 所有已映射的相关 ETF 固定使用**正股股票图标**（不以 ETF 是否已有自有图标为条件），覆盖常见交易所后缀（.AM / .N / .OQ / .PS / .K），通过 `useAssetIcons.stockIcons` 在全站（个股详情 / 自选股 / 我的持仓 / 素材库 / 名人持仓）生效；主体图标缺失时才回退名称首字母。
+- 历史 2X 产品（RKLX / SPCH / MSTU / SSO / QLD / SPUU）也必须进入 `US_RELATED_ETFS`；禁止另建仅供图标使用的平行映射。美股代码匹配需兼容 `.AM` / `.N` / `.OQ` / `.PS` / `.K` 交易所后缀，确保列表代码与详情反向正股一致。
+
+## 行情数据源注意事项
+
+- 腾讯行情接口（qt.gtimg.cn）**批量查询已失效**：每次请求只返回第一条记录，所有行情批量调用（fetchQuotes / 财报图标价 / 迷你走势）必须**逐条请求 + 并发限制**（lib/quotes.ts fetchBatch 已实现并发 6）；任何新增行情拉取逻辑禁止批量拼接，回填脚本 scripts/backfill-quotes.mjs 同样逐条。
+- 日股 / 韩股现价：腾讯前缀 `jp{code}`（去 .T）/ `kr{code}`（去 .KS/.KQ），仅素材库回填与行情脚本使用；自选股 / 持仓行情接口暂不支持 JP/KR。
+- 手动添加的美股 ETF（VOO / IVV / VTI / TLT）东财不返回市值（基金规模），如需要市值按公开净资产近似填写并注明；BRK.B 用东财 secid `106.BRK_B`（下划线）、DJT `105.DJT`、北交所 `0.{code}`。
+
+## 个股详情交互规范（重要）
+
+- **前端（首页 / 门户）**：个股点击一律使用**弹窗**（`StockDetailView`，moomoo 风格：头部行情 + 指标延伸 + 概览/期权/财务/公司 tab + 双引擎 K 线），不改页面地址。
+- **后端（自选股 / 我的持仓 / 行情板等管理视图）**：个股点击一律**无感进入详情视图**——当前视图内容平滑过渡为详情页（fade 过渡、不整页刷新），左上角「返回」回到列表，并同步 URL（如 `?symbol=US:AAPL`，刷新 / 前进后退保持），禁止用弹窗承载后端详情。
+- **持仓交易入口**：我的持仓一级页只展示组合和编辑 / 删除，不放买入、卖出或订单标签；点击股票进入二级个股详情后，统一通过「交易」按钮选择买入 / 卖出，并在同页查看该股票今日 / 历史订单。
+- **订单与持仓**：订单是不可变成交凭证，持仓是最新快照；成交写订单与更新数量 / 成本必须在同一数据库事务内完成，禁止超卖。买入成本包含费用并加权，卖出记录扣除费用后的已实现盈亏。
+- 详情头部与指标必须使用真实行情（`Quote` 的 volume / amount / pe / turnover / marketCap 字段）；盘后行情行无数据源时不展示。
+- 持仓数值校验：现价与数量禁止负数；成本价允许负数，用于返佣、期权收入或累计回款超过投入后的负成本场景。普通 records 接口与 v1 records 接口必须保持一致并返回准确字段提示。
+- 候选去重：素材库「新增主流券商」候选（MAIN_BROKERS）中同一券商只保留一个规范名，其他写法 / 英文名放 `aliases`（如 IBKR = 盈透证券、Schwab = 嘉信理财、Webull = 微牛证券）；添加与 ✓ 置灰判断必须同时比对规范名 + 别名，并做「证劵/证券」归一化（`brokerNameKey`）。新增候选时先检查全表，禁止同一券商以不同名称重复列出。
+- 命名由服务端 `lib/upload.ts` 的 `assetFilename` 统一生成（读上传表单的 name / code / market），前端上传时 FormData 必须带这三个字段；URL 用 `encodeURIComponent` 存库。
+- 存量文件命名迁移 / 规范化一律使用项目内工具 `scripts/rename-assets.mjs`（`node scripts/rename-assets.mjs [--dry-run]`）：只重命名不删除、URL 先 `decodeURIComponent`、路径前缀 `/uploads/...`，并自动同步 `assets.url` / `assets.name`；不要手写遍历脚本改素材文件名。
+- 文件分类存放：`public/uploads/asset/{market|crypto|metal|stock/{市场}}/`，禁止散落到 `uploads/asset` 根目录；出现根目录残留时按本规范迁移并更新 `assets.url`。
+- 素材库市场图标同步维护：新增市场必须同时补 `MARKET_META`（lib/types.ts，含 label/currency/flag）、`MARKET_CURRENCY`（lib/useRates.ts）、`FALLBACK_RATES` 与服务端 `/api/rates` 拉取币种，否则市值会按 1:1 误算成美元。
+
+## 头像命名规范
+
+- 用户头像文件按「登录名(UID编号)」命名（如 `deployer(UID1).png`，括号内为 `UID` + 数字，无冒号/横线分隔），由 `lib/upload.ts` 的 avatar 分支统一生成；新用户上传延续此命名，禁止时间戳随机名。
+- 头像重命名 / 清理时同步更新 `users.avatar`，并通过 `removeFileIfUnused` 清理旧文件（保留其他引用）。
+
+## 素材清理注意事项（防止误删）
+
+- 清理孤立文件必须用项目内 `lib/fileCleanup.ts` 的 `cleanupOrphanFiles`（内部已做 URL 解码 `safeDecode` + `PUBLIC_DIR` 相对路径比对），**不要**手写遍历脚本。
+- 手写文件操作脚本时，URL 与磁盘路径对比必须先 `decodeURIComponent`，且相对路径前缀必须为 `/uploads/...`（不是 `/public/uploads/...`）。
+- 素材上传 / 删除后，`assets.url` 必须与磁盘文件名一致（统一 encodeURIComponent 存库）；出现不一致时按「素材库文件命名规范」迁移并同步更新记录。
+
+## 货币换算规范
+
+- 素材库 / 资产总览等所有市值展示统一换算为美元：`usdCap(market, cap, rates) = cap ÷ rates[MARKET_CURRENCY[market]]`。
+- 新增市场（如新加坡 / 英国 / 德国 / 法国 / 澳大利亚 / 加拿大 / 印度 / 台湾 / 巴西）必须同步：`MARKET_CURRENCY` 映射市场→货币、`FALLBACK_RATES` 补兜底汇率、`lib/rates.ts` 的 frankfurter `symbols` 追加币种。
+- 此问题已两次出现（港股 / A股早期、全球市场新增时），后续新增任何市场类型必须按此检查清单执行。
+
+## 苹果风格开关（Toggle）标准（重要）
+
+- **「苹果风格」的基准 = 名人持仓 → 名人管理中的启用开关**；此后用户说「苹果风格」（开关类）一律指该样式。
+- 外观规范：
+  - 开启：轨道苹果绿 `#34c759`，圆点纯白
+  - 关闭：轨道浅灰 `#e9e9ea`（深色模式 `#3a3a3c`）
+  - 圆点：必须纯白，且用**内联样式** `style={{ backgroundColor: "#fff" }}`，禁止用 `bg-white` 类——全局暗黑规则 `.dark .bg-white` 会把圆点覆盖成深色（#151a26）
+  - 阴影：圆点加 `shadow`（`0 1px 3px rgba(0,0,0,.25)` 量级）
+  - 过渡：300ms，iOS 缓动 `cubic-bezier(.32,.72,0,1)`（通过内联 `transitionTimingFunction` 或对应 easing 类）
+  - 尺寸基准：36×20（名人管理标准），圆点 16，横向位移约 18px
+- 动画规范（与名人管理开关一致）：
+  - 轨道颜色过渡：300ms，`transition-colors duration-300 ease-out`
+  - 圆点滑动：300ms，缓动 `cubic-bezier(.32,.72,0,1)`（iOS 开关专用曲线，内联 `transitionTimingFunction`），从关闭位平滑滑到开启位，无跳变、无卡顿
+  - 点击响应：状态切换乐观更新（立即翻转、后台保存），失败回滚并提示；切换时页面整体无抖动、不重挂载
+  - 禁止给开关添加额外的弹跳 / 缩放 / 闪烁动画，保持与系统级开关一致的克制感
+- 适用场景：全站所有开关类控件（启用 / 停用、CDN 图标通道、允许新用户注册、自动备份等）统一使用该风格，不得混用其他轨道色或圆点写法。
+- 深浅色模式都要一致：圆点纯白、开启苹果绿、关闭浅灰/深灰。
+
+## 名人持仓版本标记（重要）
+
+- **名人持仓 F1** = 本次“额头置顶于扇形之上”改造前的版本，完整备份在 `docs/celebs-ring/celebs-ring-F1.tsx`（即当时的 `components/views/CelebsView.tsx` 全文）。
+- **名人持仓 F2** = 头像置顶于扇形之上（圆环统一渲染在人物之下，悬停弹出块状从头像后面穿过、不覆盖人物），完整备份在 `docs/celebs-ring/celebs-ring-F2.tsx`（已更新至含收益曲线 / 悬停优化等全部新功能的快照）。
+- **名人持仓 F3** = F1 下半身 + F2 上半身融合版（头像融合，含原始 path 事件悬停）：透明头像拆成双层——下层（圆环之下）只显示身体下半部分，领带下方被圆环环带遮挡（F1 效果）；上层（圆环之上）只显示头部上半部分，额头从洞里探出、压住上方扇形（F2 效果）。头像尺寸 0.74、上移 6px（悬停 8px）；上层 mask `#000 0-50% → rgba(.8) 54% → rgba(.3) 58% → transparent 62%`，下层 mask `transparent 40% → rgba(.4) 50% → #000 58% → #000 100%`。完整备份在 `docs/celebs-ring/celebs-ring-F3.tsx`。
+- **名人持仓 F4** = 当前版本（F3 融合版头像 + 扇区悬停修复）：头像层全部 `pointer-events-none`（不再遮挡环带内缘），扇区 hover 改为容器级几何判定——鼠标在环带任意位置（含基础环露出的细线区）按角度映射到对应扇区，头像上浮由容器统一判定（鼠标在中心洞里触发）。完整备份在 `docs/celebs-ring/celebs-ring-F4.tsx`。
+- 用户说「恢复至名人持仓 F1 版本」时：用 `docs/celebs-ring/celebs-ring-F1.tsx` 整体替换 `components/views/CelebsView.tsx` 即可（该文件是当时的完整快照，含 CelebRing / 头像渲染 / 圆环逻辑）。
+- 用户说「恢复至名人持仓 F2 版本」时：用 `docs/celebs-ring/celebs-ring-F2.tsx` 整体替换 `components/views/CelebsView.tsx`。
+- 用户说「恢复至名人持仓 F3 版本」时：用 `docs/celebs-ring/celebs-ring-F3.tsx` 整体替换 `components/views/CelebsView.tsx`。
+- 用户说「恢复至名人持仓 F4 版本」时：用 `docs/celebs-ring/celebs-ring-F4.tsx` 整体替换 `components/views/CelebsView.tsx`。
+- 后续每次重要改造前，先在 `docs/celebs-ring/` 备份当前 `CelebsView.tsx` 并编号（F1、F2…），并在 AGENTS.md 此节登记新版本含义，便于随时恢复。
+
+## 货币显示规范（重要）
+
+- 金额一律「符号在前」：美股 `$7.31`、港股 `HK$173.00`、A股 `¥12.50`（`MARKET_META.currency` 为前导符号）。
+- **各市场盈利卡片右上角的币种标识固定为规范形式，未经用户指示不可更改**：美股 `USD$`、港股 `HKD$`、A股 `CNY¥`、日股 `JPY¥`、韩股 `KRW₩`（`MARKET_META.code` 字段）。禁止把该处改成前导符号或去掉代码。
+- 总资产货币切换显示用符号：`$` / `¥` / `HK$`。
+
+## 技术栈登记约定（重要）
+
+- **每次引入新的框架 / 技术栈 / 外部依赖 / 数据源时，必须同步更新「设置 → 关于」页面的对应清单**（前端框架、后端与数据、外部数据源、架构特性等卡片）。
+- 涉及的关键位置：`components/views/SettingsView.tsx` 中 `sub === "about"` 渲染块内的列表数据。
+- 引入新依赖（如 npm 包）时，同时确认其在「关于」页面有对应条目；未使用的依赖不在页面展示（如仅测试）。
+
+## 版本记录约定（重要）
+
+- **网站每一次更新（新功能、漏洞修复、安全加固、界面变动、技术栈变动）都必须写入版本记录**，禁止只改代码不记版本。
+- 版本记录单一数据源：`lib/versions.ts`（类型 + 当前版本条目 `CURRENT_VERSION_ENTRY` + `CURRENT_VERSION`）；历史数组 `VERSIONS` 已拆分到 `lib/versions-history.ts`（仅供版本弹窗懒加载，避免约 200KB 历史文案进首屏包）。设置 → 关于 → 版本弹窗展示的内容全部来自这两个文件；同时同步一份人工可读日志到仓库根目录 `VERSIONS.md`。
+- 每次更新完成后：
+  1. **版本以「日」为判断标准**：同一天内的多次更新合并进当天版本号，不单独递增；跨过凌晨（新的一天）后的首次更新才开启新的版本号（v0.1.0 → v0.1.1 → v0.1.2 ...）。
+  2. 今天已有版本条目 → 把新变更追加到 `lib/versions.ts` 的 `CURRENT_VERSION_ENTRY.changes`；跨天 → 把旧 `CURRENT_VERSION_ENTRY` 整体移入 `lib/versions-history.ts` 的 `VERSIONS` 数组头部（替换其中 `CURRENT_VERSION_ENTRY` 占位引用），再在 `lib/versions.ts` 写入新条目（`CURRENT_VERSION_ENTRY` 即当前版本）；
+  3. 变更按类型标记：`feature`（新功能）/ `fix`（修复）/ `security`（安全）；
+  4. 弹窗内「前端版本 / 软件版本 / 新功能」三个分区内容保持齐全，软件版本号与当前条目一致；
+  5. 同步更新 `VERSIONS.md` 对应章节（新功能 / 修复 / 安全修复 / 界面与规范）。
+- 版本弹窗（`components/VersionModal.tsx`）在未来多版本时自动展示顶部版本切换胶囊，维护时无需额外改动。
