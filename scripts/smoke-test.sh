@@ -133,7 +133,7 @@ NEW2=$(curl -s -b "$JAR_NEW" -X POST "$BASE/api/records" -H 'Content-Type: appli
 check "测试账号创建记录" "r-" "$(echo "$NEW2" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"][:2])')"
 ACT2=$(curl -s -b "$JAR_NEW" "$BASE/api/activities")
 check "测试账号有活动日志" 1 "$(echo "$ACT2" | python3 -c 'import json,sys; print(1 if len(json.load(sys.stdin)["activities"])>0 else 0)')"
-CLEAR=$(curl -s -b "$JAR_NEW" -X DELETE "$BASE/api/records")
+CLEAR=$(curl -s -b "$JAR_NEW" -X DELETE "$BASE/api/records" -H 'Content-Type: application/json' --data-raw '{"password":"newpass1234"}')
 check "清空记录接口" 200 "$(echo "$CLEAR" | python3 -c 'import json,sys; print(200 if json.load(sys.stdin).get("ok") else 0)')"
 COUNT4=$(curl -s -b "$JAR_NEW" "$BASE/api/records" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
 check "清空后记录=0" 0 "$COUNT4"
@@ -152,7 +152,7 @@ check "非法文件类型被拒" 400 "$(code -b "$JAR_DEMO" -X POST "$BASE/api/u
 dd if=/dev/zero of=/tmp/smoke-big.png bs=1024 count=1100 2>/dev/null
 check "超过 1024KB 头像被拒" 400 "$(code -b "$JAR_DEMO" -X POST "$BASE/api/upload" -F "kind=avatar" -F "file=@/tmp/smoke-big.png;type=image/png")"
 check "未登录不能上传" 401 "$(code -X POST "$BASE/api/upload" -F "kind=avatar" -F "file=@/tmp/smoke-avatar.png;type=image/png")"
-PROFILE_BODY='{"username":"demo","email":"demo-new@fire.local"}'
+PROFILE_BODY='{"username":"demo","email":"demo-new@fire.local","currentPassword":"demo1234"}'
 check "更新个人邮箱" "demo-new@fire.local" "$(curl -s -b "$JAR_DEMO" -X PUT "$BASE/api/auth/profile" -H 'Content-Type: application/json' --data-raw "$PROFILE_BODY" | python3 -c 'import json,sys; print(json.load(sys.stdin)["user"]["email"])')"
 check "邮箱格式校验" 400 "$(code -b "$JAR_DEMO" -X PUT "$BASE/api/auth/profile" -H 'Content-Type: application/json' --data-raw '{"email":"bad-email"}')"
 
@@ -207,7 +207,7 @@ restore_backup
 RESTORED_TITLE=$(curl -s -b "$JAR_DEMO" "$BASE/api/settings" | python3 -c 'import json,sys; print(json.load(sys.stdin)["settings"]["title"])')
 BACKUP_TITLE=$(python3 -c "import json; print(json.load(open('$BACKUP_FILE'))['title'])")
 check "还原网站设置（与备份一致）" "$BACKUP_TITLE" "$RESTORED_TITLE"
-RESTORE_PROFILE_BODY="{\"username\":\"demo\",\"email\":\"$EMAIL_BACKUP\",\"nickname\":\"$NICKNAME_BACKUP\"}"
+RESTORE_PROFILE_BODY="{\"username\":\"demo\",\"email\":\"$EMAIL_BACKUP\",\"nickname\":\"$NICKNAME_BACKUP\",\"currentPassword\":\"demo1234\"}"
 check "还原 demo 邮箱" "$EMAIL_BACKUP" "$(curl -s -b "$JAR_DEMO" -X PUT "$BASE/api/auth/profile" -H 'Content-Type: application/json' --data-raw "$RESTORE_PROFILE_BODY" | python3 -c 'import json,sys; print(json.load(sys.stdin)["user"]["email"])')"
 python3 -c "import sqlite3; db=sqlite3.connect('data/fire.db'); db.execute(\"UPDATE users SET avatar='' WHERE id='demo-user'\"); db.commit()"
 

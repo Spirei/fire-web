@@ -20,7 +20,7 @@ const CATEGORIES: { title: string; endpoints: Endpoint[] }[] = [
       { method: "POST", path: "/api/auth/login", desc: "登录，创建会话", auth: false },
       { method: "POST", path: "/api/auth/register", desc: "注册新账号", auth: false },
       { method: "GET", path: "/api/auth/me", desc: "获取当前登录用户", auth: true },
-      { method: "PUT", path: "/api/auth/profile", desc: "更新昵称 / 邮箱 / 头像等资料", auth: true },
+      { method: "PUT", path: "/api/auth/profile", desc: "更新昵称 / 邮箱 / 头像等资料（修改邮箱需 currentPassword）", auth: true },
       { method: "POST", path: "/api/auth/password", desc: "修改登录密码", auth: true },
       { method: "POST", path: "/api/auth/logout", desc: "退出登录", auth: true }
     ]
@@ -33,7 +33,7 @@ const CATEGORIES: { title: string; endpoints: Endpoint[] }[] = [
       { method: "PUT", path: "/api/records/{id}", desc: "更新指定记录", auth: true },
       { method: "DELETE", path: "/api/records/{id}", desc: "删除指定记录", auth: true },
       { method: "POST", path: "/api/records/batch-delete", desc: "按 ID 批量删除", auth: true },
-      { method: "DELETE", path: "/api/records", desc: "清空全部记录", auth: true }
+      { method: "DELETE", path: "/api/records", desc: "清空全部记录（需 body.password）", auth: true }
     ]
   },
   {

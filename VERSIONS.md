@@ -114,6 +114,8 @@
 
 3. GHCR 镜像内置富途 OpenD 桥接运行时 —— 修复线上容器 TCP 可连接 OpenD 但测试仍报 `spawn python3 ENOENT`：生产镜像此前未包含 Python。现在 runner 镜像内置 Python venv 与 `futu-api`，设置正确的 OpenD 主机和端口后无需手动进入群晖容器安装依赖。
 
+4. 修复全站冒烟测试安全参数遗漏 —— 清空记录和修改邮箱测试此前未携带接口要求的当前密码，造成误报。现按真实前端协议补齐 `password` / `currentPassword`，并在 API 文档标明高风险操作的验证字段。
+
 ## v0.1.16 · 2026-08-24
 
 > 修复美股盘前/盘后/夜盘当日盈亏「昨收」基准错位（富途 prev_close_price 落后一个常规交易日）。
