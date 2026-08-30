@@ -674,15 +674,15 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
         <div className="quotes-control-title flex items-center gap-2">
           <h3 className="text-base font-bold">我的行情板</h3>
           <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold tabular-nums text-faint">{filtered.length}</span>
-        </div>
-        <div className="quotes-control-actions flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => { setEditMode((v) => !v); setSelected(new Set()); setAssignOpen(false); }} className={`quotes-edit-toggle inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-colors hover:border-edge-strong hover:bg-brand-hover hover:text-ink ${editMode ? "is-active text-brand-deep" : ""}`} aria-label={editMode ? "完成编辑" : "编辑行情板"} title={editMode ? "完成编辑" : "编辑行情板"} aria-pressed={editMode}>
+          <button type="button" onClick={() => { setEditMode((v) => !v); setSelected(new Set()); setAssignOpen(false); }} className={`quotes-edit-toggle ml-1 inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-edge bg-bg-gray text-muted transition-colors hover:border-edge-strong hover:bg-brand-hover hover:text-ink ${editMode ? "is-active text-brand-deep" : ""}`} aria-label={editMode ? "完成编辑" : "编辑行情板"} title={editMode ? "完成编辑" : "编辑行情板"} aria-pressed={editMode}>
             {editMode ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]"><path d="m5 12 4 4L19 6" /></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[14px] w-[14px]"><path d="m5 12 4 4L19 6" /></svg>
             ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[14px] w-[14px]"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>
             )}
           </button>
+        </div>
+        <div className="quotes-control-actions flex flex-wrap items-center gap-2">
           <span
             className="inline-flex h-8 items-center gap-1.5 rounded-full border border-edge bg-bg-gray/50 px-3 text-[11px] text-muted"
             aria-live="polite"
