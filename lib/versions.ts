@@ -1864,6 +1864,10 @@ export const V0_1_18_ENTRY: VersionEntry = {
     title: "公开仓库净化与自动防泄漏审计",
     desc: "部署配置改为通过 GHCR_IMAGE、HOST_PORT、DATA_DIR、UPLOADS_DIR 环境变量注入，不再写死账号、端口、NAS 路径或硬件限制；出站代理默认关闭，移除数据库初始化中的特定用户名 UID 规则及无引用的用户上传站点素材。新增 npm run audit:public 并接入 GitHub Actions，自动拦截个人账号、本机路径、个人代理、硬编码群晖配置、时间戳用户素材及常见 Token/API Key/私钥。",
     kind: "security"
+  }, {
+    title: "新增首次部署引导页视觉稿",
+    desc: "新增独立的首次部署引导页 HTML 视觉稿，展示服务状态、管理员创建、基础配置步骤及 data/uploads 持久化提示；当前仅供预览，尚未接入首访路由。",
+    kind: "feature"
   }]
 };
 
