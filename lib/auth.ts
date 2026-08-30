@@ -43,19 +43,11 @@ export function findUserById(id: string): UserRow | undefined {
   return getDb().prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
 }
 
-/** 恒定走一次 scrypt，减少用户名枚举时的响应时间差；生产环境禁用仍使用公开默认密码的 demo 管理员。 */
+/** 恒定走一次 scrypt，减少用户名枚举时的响应时间差。管理员身份完全由数据库 role 决定，不绑定任何固定用户 ID。 */
 export function authenticateUser(username: string, password: string): UserRow | null {
   const row = findUserByLogin(username);
   const valid = verifyPassword(password, row?.password_hash ?? DUMMY_PASSWORD_HASH);
   if (!row || !valid) return null;
-  if (
-    process.env.NODE_ENV === "production" &&
-    row.id === "demo-user" &&
-    row.role === "admin" &&
-    verifyPassword("demo1234", row.password_hash)
-  ) {
-    return null;
-  }
   return row;
 }
 
