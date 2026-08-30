@@ -674,7 +674,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
         <div className="quotes-control-title flex items-center gap-2">
           <h3 className="text-base font-bold">我的行情板</h3>
           <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold tabular-nums text-faint">{filtered.length}</span>
-          <button type="button" onClick={() => { setEditMode((v) => !v); setSelected(new Set()); setAssignOpen(false); }} className={`quotes-edit-toggle ml-1 inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-edge bg-bg-gray text-muted transition-colors hover:border-edge-strong hover:bg-brand-hover hover:text-ink ${editMode ? "is-active text-brand-deep" : ""}`} aria-label={editMode ? "完成编辑" : "编辑行情板"} title={editMode ? "完成编辑" : "编辑行情板"} aria-pressed={editMode}>
+          <button type="button" onClick={() => { setEditMode((v) => !v); setSelected(new Set()); setAssignOpen(false); }} className={`quotes-edit-toggle ml-1 inline-flex h-6 w-6 items-center justify-center rounded-md border-0 bg-transparent text-faint transition-colors hover:bg-bg-gray hover:text-ink ${editMode ? "is-active text-brand-deep" : ""}`} aria-label={editMode ? "完成编辑" : "编辑行情板"} title={editMode ? "完成编辑" : "编辑行情板"} aria-pressed={editMode}>
             {editMode ? (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[14px] w-[14px]"><path d="m5 12 4 4L19 6" /></svg>
             ) : (
@@ -901,7 +901,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                             ))}
                             <option value="__none__">移出分组</option>
                           </select>
-                          <button type="button" title="删除" onClick={() => setDeleteRecord(r)} className="quotes-action-btn quotes-action-delete inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-colors hover:border-down/40 hover:bg-down/10 hover:text-down dark:text-white/70 dark:hover:border-down/50 dark:hover:bg-down/10 dark:hover:text-down">
+                          <button type="button" title="删除" onClick={() => setDeleteRecord(r)} className="quotes-action-btn quotes-action-delete inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-colors hover:border-down/40 hover:bg-down/10 hover:text-down">
                             <DeleteIcon size={15} />
                           </button>
                         </div>
