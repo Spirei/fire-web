@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSiteSettings } from "@/lib/settings";
 
 /** 站点域名：未手动配置（或仍为占位 localhost:3000）时按请求 Host 自动推导，
- *  内网访问 http://192.168.x.x:16000 即显示该地址，外网访问公网域名即显示公网域名。 */
+ *  内网访问时显示实际 IP 与端口，外网访问时显示公网域名。 */
 function effectiveDomain(request: Request, stored: string): string {
   const host = request.headers.get("host") || "";
   const placeholder = stored === "localhost:3000" || !stored;

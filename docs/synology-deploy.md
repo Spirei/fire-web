@@ -5,7 +5,7 @@
 
 ## 打包内容
 - `Dockerfile` —— 多阶段（deps → build → runner），Node 22-slim；`next start` 运行。
-- `docker-compose.yml` —— `fire` 服务，端口 `3000`，挂载 `./data` 与 `./uploads`，`env_file: .env`，healthcheck，资源上限（1G 内存 / 2 CPU）。
+- `docker-compose.yml` —— `fire` 服务，端口 `3000`，挂载 `./data` 与 `./uploads`，`env_file: .env`，healthcheck。
 - `.dockerignore` —— 排除 node_modules / .next / data / uploads / .env / .git。
 
 ## 部署步骤
@@ -30,7 +30,7 @@ cp .env.example .env
 cd /volume1/docker/fire
 docker compose up -d --build
 ```
-- 首次构建会拉取 `node:22-slim` 并安装依赖，低功耗 NAS 上约需几分钟。
+- 首次构建会拉取 `node:22-slim` 并安装依赖，所需时间取决于 NAS 性能与网络。
 - 看日志 `docker compose logs -f fire`，出现监听 3000 即成功。
 
 ### 3b. 或用群晖 Container Manager（图形界面）
@@ -52,6 +52,6 @@ docker compose up -d --build
 ## 说明 / 注意
 - **富途 OpenD 桥接**（`scripts/futu_quotes.py`）为可选：纯净版运行镜像**不含 python3 / futu SDK**，未配置时行情自动回退腾讯 / 雅虎（腾讯源已支持美股港股 A股，足够日常）。
   若要启用富途：需要额外的 python3 + `futu` SDK 运行环境（可在 Dockerfile runner 阶段自行加 `apt-get install python3` + `pip install futu-api`），并在设置→股票设置→交易·富途里把 OpenD 主机指向运行 OpenD 的机器（如宿主机 `192.168.x.x:11111`），并让容器能访问该端口。
-- **资源**：`mem_limit: 1g` / `cpus: 2.0` 按 低功耗 NAS 保守设置，可按需调整。
+- **资源**：默认不写死 CPU / 内存限制，请在 Container Manager 中按自己的 NAS 配置设置。
 - **健康检查**：每 60s 请求 `/api/settings/public`，失败 5 次标记 unhealthy（不影响运行）。
 - 默认 `CMD` 为 `npx next start -H 0.0.0.0 -p 3000`；若后续需要自定义启动（如迁移数据、预建库），可改为挂载自定义 `entrypoint.sh`。

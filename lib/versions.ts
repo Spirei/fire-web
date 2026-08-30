@@ -658,7 +658,7 @@ export const V0_1_11_ENTRY: VersionEntry = {
     },
     {
       title: "用户管理：按 UID 排序 + 进入秒开（缓存 + 即时渲染表壳）",
-      desc: "1) 排序：/api/users 由 created_at 升序改为按 UID 数字升序（CAST(uid AS INTEGER)），测试账号（无 UID）固定排在最后，实测 deployer(1) → demo(2) → 测试账号；2) 加载优化：进入用户管理不再整页「加载中…」——新增模块级 5s 短缓存（切页秒开、先渲染表壳再后台刷新），首次加载也在卡片内显示小型加载行而不是整页占位；编辑/重置密码/删除/手动刷新后强制重新拉取。tsc 无错误、npm run build 通过。",
+      desc: "1) 排序：/api/users 由 created_at 升序改为按 UID 数字升序（CAST(uid AS INTEGER)），测试账号（无 UID）固定排在最后，实测 admin(1) → demo(2) → 测试账号；2) 加载优化：进入用户管理不再整页「加载中…」——新增模块级 5s 短缓存（切页秒开、先渲染表壳再后台刷新），首次加载也在卡片内显示小型加载行而不是整页占位；编辑/重置密码/删除/手动刷新后强制重新拉取。tsc 无错误、npm run build 通过。",
       kind: "fix"
     },
     {
@@ -1716,7 +1716,7 @@ export const V0_1_17_ENTRY: VersionEntry = {
     },
     {
       title: "个人信息「复制 UID」改图标 + 设置页内容溢出排查",
-      desc: "「个人信息」昵称/登录邮箱/登录名三行统一结构：值区改为 flex:1 容器、内容左对齐，各加一个 30px 圆角复制图标在最右(昵称/邮箱/UID 分别复制，disabled 降透明度)——复制图标按钮不再超宽、三行值起点与复制按钮位置一致对齐；同时给 .settings-code-value 去掉边框/背景、左对齐纯文本并加 flex:1 1 auto 填充(带 max-width:100% + ellipsis/nowrap 防长值撑宽)，使 deployer、/api/v1 等只读代码值与其它只读展示一致。tsc 无错误。",
+      desc: "「个人信息」昵称/登录邮箱/登录名三行统一结构：值区改为 flex:1 容器、内容左对齐，各加一个 30px 圆角复制图标在最右(昵称/邮箱/UID 分别复制，disabled 降透明度)——复制图标按钮不再超宽、三行值起点与复制按钮位置一致对齐；同时给 .settings-code-value 去掉边框/背景、左对齐纯文本并加 flex:1 1 auto 填充(带 max-width:100% + ellipsis/nowrap 防长值撑宽)，使 admin、/api/v1 等只读代码值与其它只读展示一致。tsc 无错误。",
       kind: "fix"
     },
     {
@@ -1771,7 +1771,7 @@ export const V0_1_17_ENTRY: VersionEntry = {
     },
     {
       title: "个人信息值区收紧并让复制按钮跟随文字",
-      desc: "按文字边界重排个人资料三行：撤销将复制按钮吸附卡片右侧的操作列方案，昵称、邮箱、用户名的复制图标改为紧跟各自文字尾部；字段标签列由 180px 收紧到 142px 临界宽度，让“屋檐上的猫”、邮箱和 deployer 整体左移并消除中间大块空白。长邮箱仍保留省略号与最大宽度保护，移动端标签列进一步收紧为 112px。",
+      desc: "按文字边界重排个人资料三行：撤销将复制按钮吸附卡片右侧的操作列方案，昵称、邮箱、用户名的复制图标改为紧跟各自文字尾部；字段标签列由 180px 收紧到 142px 临界宽度，让昵称、邮箱和用户名整体左移并消除中间大块空白。长邮箱仍保留省略号与最大宽度保护，移动端标签列进一步收紧为 112px。",
       kind: "fix"
     },
     {
@@ -1860,6 +1860,10 @@ export const V0_1_18_ENTRY: VersionEntry = {
     title: "FIRE 导航图标恢复默认火焰图标",
     desc: "修复历史上本地与线上数据库中 icon:FIRE 保留自定义 fire-gray.svg，导致导航显示波浪线图标。增加一次性数据库迁移，将 FIRE 统一恢复为随镜像发布的 fire.svg / fire-dark.svg，新库与既有库都一致。",
     kind: "fix"
+  }, {
+    title: "公开仓库净化与自动防泄漏审计",
+    desc: "部署配置改为通过 GHCR_IMAGE、HOST_PORT、DATA_DIR、UPLOADS_DIR 环境变量注入，不再写死账号、端口、NAS 路径或硬件限制；出站代理默认关闭，移除数据库初始化中的特定用户名 UID 规则及无引用的用户上传站点素材。新增 npm run audit:public 并接入 GitHub Actions，自动拦截个人账号、本机路径、个人代理、硬编码群晖配置、时间戳用户素材及常见 Token/API Key/私钥。",
+    kind: "security"
   }]
 };
 

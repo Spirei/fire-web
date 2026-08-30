@@ -15,7 +15,8 @@ services:
       PORT: 3000
     # 生产环境密钥 / 首次建库管理员（密码需 8-128 位且含字母与数字）
     env_file:
-      - .env
+      - path: .env
+        required: false
     volumes:
       # 数据（SQLite + 附件 + 备份 + 缓存）持久化到宿主机 ./data
       - ./data:/app/data
@@ -27,9 +28,3 @@ services:
       timeout: 10s
       retries: 5
       start_period: 40s
-    # 资源限制（低功耗 NAS，适度收紧）
-    mem_limit: 6g
-    # 群晖/部分内核不支持 CPU CFS 配额（NanoCPUs），会导致
-    # "NanoCPUs can not be set, as your kernel does not support CPU CFS" 报错，
-    # 故默认不限制 CPU（单机单服务足够）；如需限核请在容器设置里用 CPU 亲和。
-    # cpus: 2.0

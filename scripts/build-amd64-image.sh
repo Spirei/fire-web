@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-# 本机构建群晖(x86_64)用的 fire 纯净版镜像,并导出 tar 供 docker load。
+# 本机构建 linux/amd64 平台的 fire 纯净版镜像，并导出 tar 供 docker load。
 # 用法(在 fire-web/scripts 下或仓库根): ./scripts/build-amd64-image.sh
 # 依赖:Docker Desktop 已启动,且有 linux/amd64 构建能力(buildx / QEMU)。
 # =====================================================================
@@ -14,17 +14,11 @@ cd "$ROOT"
 echo "==> 构建 linux/amd64 纯净版镜像 fire:latest ..."
 docker buildx build --platform linux/amd64 -t fire:latest .
 
-# 优先导出到群晖 WebDAV/SMB 共享盘;否则落到本地 ./dist
-NAS_DIR="/srv/docker/fire"
-if [ -d "$NAS_DIR" ] && touch "$NAS_DIR/.writetest" 2>/dev/null; then
-  rm -f "$NAS_DIR/.writetest"
-  OUT="$NAS_DIR/fire-amd64-image.tar.gz"
-  echo "==> 导出到群晖共享盘: $OUT ..."
-else
-  mkdir -p ./dist
-  OUT="$ROOT/dist/fire-amd64-image.tar.gz"
-  echo "==> 未检测到可写群晖共享盘,导出到本地: $OUT"
-fi
+# 默认导出到仓库 ./dist；可用 FIRE_IMAGE_OUTPUT_DIR 指定其他目录。
+OUTPUT_DIR="${FIRE_IMAGE_OUTPUT_DIR:-$ROOT/dist}"
+mkdir -p "$OUTPUT_DIR"
+OUT="$OUTPUT_DIR/fire-amd64-image.tar.gz"
+echo "==> 导出到: $OUT ..."
 
 echo "==> 正在导出镜像(约 300–400MB,视网络速度)..."
 docker save fire:latest | gzip > "$OUT"

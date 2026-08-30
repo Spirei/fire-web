@@ -1,10 +1,10 @@
 /* ---------- 出站代理工具 ----------
  *
  * 国外数据源（SEC EDGAR、Dataroma、Wikipedia 等）在部分网络环境无法直连，
- * 可经 本地代理 等本地代理访问：
- *  - 默认代理：http://127.0.0.1:7890（本地代理 macOS 代理共享默认端口）
- *  - 环境变量覆盖：STOCKLOG_PROXY=http://127.0.0.1:7890 或 socks5://127.0.0.1:7890
- *  - 设 STOCKLOG_PROXY=off 可彻底关闭代理（全部直连）
+ * 可经 HTTP / SOCKS5 代理访问：
+ *  - 默认关闭，避免把开发者本机代理带入服务器或公开部署
+ *  - 通过环境变量启用：STOCKLOG_PROXY=http://proxy-host:8080
+ *  - 设 STOCKLOG_PROXY=off 可显式关闭代理（全部直连）
  * 代理端口探测结果缓存 60 秒：代理未开启时自动直连，无需重启服务；
  * 代理请求失败时也会自动回退直连，保证数据源任何情况下都不阻塞页面。
  */
@@ -12,7 +12,6 @@
 import net from "node:net";
 import { ProxyAgent } from "undici";
 
-const DEFAULT_PROXY = "http://127.0.0.1:7890";
 const PROBE_TTL_OK = 60 * 1000;
 const PROBE_TTL_FAIL = 10 * 1000;
 
@@ -26,8 +25,8 @@ let agent: ProxyAgent | null = null;
 
 export function proxyConfig(): { url: string; enabled: boolean } {
   const env = process.env.STOCKLOG_PROXY?.trim() ?? "";
-  if (env === "off" || env === "0" || env === "false") return { url: "", enabled: false };
-  return { url: env || DEFAULT_PROXY, enabled: true };
+  if (!env || env === "off" || env === "0" || env === "false") return { url: "", enabled: false };
+  return { url: env, enabled: true };
 }
 
 function parseProxyUrl(url: string): { host: string; port: number } | null {

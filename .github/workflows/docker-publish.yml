@@ -3,6 +3,8 @@ name: Build and publish Fire image
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -27,12 +29,15 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Public repository safety audit
+        run: npm run audit:public
       - name: TypeScript check
         run: npx tsc --noEmit
 
   publish:
     name: Publish linux/amd64 image
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read

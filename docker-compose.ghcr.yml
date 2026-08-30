@@ -1,25 +1,25 @@
 services:
   fire:
-    # 替换为你的 GitHub 用户名 / 仓库名；也可以在群晖 .env 中设置 GHCR_IMAGE。
-    image: ${GHCR_IMAGE:-ghcr.io/your-github-name/fire-web}:${IMAGE_TAG:-latest}
+    # 在 .env 中设置 GHCR_IMAGE，例如 ghcr.io/your-github-name/fire-web。
+    image: ${GHCR_IMAGE:?请在 .env 中设置 GHCR_IMAGE}:${IMAGE_TAG:-latest}
     container_name: fire
     restart: unless-stopped
     hostname: fire
     ports:
-      - "16000:3000"
+      - "${HOST_PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: 3000
     env_file:
-      - .env
+      - path: .env
+        required: false
     volumes:
-      - /volume1/docker/fire/data:/app/data
-      - /volume1/docker/fire/uploads:/app/public/uploads
+      - ${DATA_DIR:-./data}:/app/data
+      - ${UPLOADS_DIR:-./uploads}:/app/public/uploads
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/settings/public').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 60s
       timeout: 10s
       retries: 5
       start_period: 40s
-    mem_limit: 6g

@@ -392,8 +392,7 @@ function migrate(database: Database.Database) {
   const legacyUid = (database
     .prepare("SELECT COUNT(*) AS n FROM users WHERE is_test = 0 AND (uid IS NULL OR uid = '' OR uid NOT GLOB '[0-9]*')")
     .get() as { n: number }).n;
-  const deployer = database.prepare("SELECT uid FROM users WHERE username = 'deployer'").get() as { uid: string } | undefined;
-  if (legacyUid > 0 || (deployer && deployer.uid !== "1")) {
+  if (legacyUid > 0) {
     reassignUids(database);
   }
   database.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_uid ON users(uid)");
@@ -581,11 +580,8 @@ function reassignUids(database: Database.Database) {
   const rows = database
     .prepare("SELECT id, username, created_at, is_test FROM users")
     .all() as { id: string; username: string; created_at: string; is_test: number }[];
-  // deployer 固定 UID=1，其余（不含测试账号）按注册时间先后编号；测试账号不占用 UID
+  // 非测试账号按注册时间先后编号；测试账号不占用 UID。
   rows.sort((a, b) => {
-    const aSpire = a.username === "deployer" ? 0 : 1;
-    const bSpire = b.username === "deployer" ? 0 : 1;
-    if (aSpire !== bSpire) return aSpire - bSpire;
     return a.created_at.localeCompare(b.created_at);
   });
   const setUid = database.prepare("UPDATE users SET uid = ? WHERE id = ?");

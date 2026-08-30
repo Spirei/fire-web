@@ -120,7 +120,7 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
       urlPrefix = `/uploads/asset/${folder}`;
     }
   }
-  // 命名规范：素材按「中文名+代码」；头像按「登录名(UID编号)」（如 deployer(UID1)，无冒号分隔）；其他类型保持时间戳随机名
+  // 命名规范：素材按「中文名+代码」；头像按「登录名(UID编号)」（如 admin(UID1)，无冒号分隔）；其他类型保持时间戳随机名
   let filename: string;
   if (kind === "asset") {
     filename = assetFilename(form, folder, `.${ext}`);
