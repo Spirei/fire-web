@@ -29,6 +29,21 @@ const sharedCompose = [
 ];
 requireText("本地 Compose", localCompose, sharedCompose);
 requireText("GHCR Compose", ghcrCompose, sharedCompose);
+requireText("GHCR 受限容器更新", ghcrCompose, [
+  "containrrr/watchtower:1.7.1",
+  "WATCHTOWER_HTTP_API_UPDATE: \"true\"",
+  "WATCHTOWER_HTTP_API_TOKEN:",
+  "WATCHTOWER_LABEL_ENABLE: \"true\"",
+  "WATCHTOWER_SCOPE: fire",
+  "DOCKER_CONFIG: /config",
+  "com.centurylinklabs.watchtower.enable: \"true\"",
+  "com.centurylinklabs.watchtower.scope: \"fire\"",
+  "/var/run/docker.sock:/var/run/docker.sock",
+  "${DOCKER_CONFIG_DIR:-/root/.docker}:/config:ro"
+]);
+
+const updaterBlock = ghcrCompose.split("  fire-updater:")[1] || "";
+if (/^\s{4}ports:/m.test(updaterBlock)) failures.push("Watchtower 不得映射宿主机端口");
 
 requireText("生产镜像", dockerfile, [
   "COPY --from=build /app/public/uploads /app/resource-default",

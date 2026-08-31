@@ -11,15 +11,38 @@ services:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: 3000
+      FIRE_UPDATER_URL: http://fire-updater:8080/v1/update
     env_file:
       - path: .env
         required: false
     volumes:
       - ${DATA_DIR:-./data}:/app/data
       - ${UPLOADS_DIR:-./uploads}:/app/public/uploads
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.scope: "fire"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/settings/public').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 60s
       timeout: 10s
       retries: 5
       start_period: 40s
+
+  fire-updater:
+    image: containrrr/watchtower:1.7.1
+    container_name: fire-updater
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_HTTP_API_UPDATE: "true"
+      WATCHTOWER_HTTP_API_TOKEN: ${WATCHTOWER_HTTP_API_TOKEN:?请在 .env 中设置 WATCHTOWER_HTTP_API_TOKEN}
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_SCOPE: fire
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_NO_STARTUP_MESSAGE: "true"
+      DOCKER_CONFIG: /config
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_CONFIG_DIR:-/root/.docker}:/config:ro
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+      com.centurylinklabs.watchtower.scope: "fire"

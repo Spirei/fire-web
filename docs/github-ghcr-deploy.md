@@ -18,7 +18,11 @@ GitHub Actions 使用仓库自带的 `GITHUB_TOKEN` 发布镜像；GHCR 私有�
 ```dotenv
 GHCR_IMAGE=ghcr.io/你的用户名/fire-web
 IMAGE_TAG=latest
+WATCHTOWER_HTTP_API_TOKEN=用_openssl_rand_hex_32_生成的随机值
+DOCKER_CONFIG_DIR=/root/.docker
 ```
+
+随机值可用 `openssl rand -hex 32` 生成。`DOCKER_CONFIG_DIR` 指向执行 `docker login ghcr.io` 后生成 `config.json` 的目录，默认是 root 用户的 `/root/.docker`；该目录以只读方式提供给更新器。`docker-compose.ghcr.yml` 会启动一个仅在 Compose 内网可访问的 `fire-updater`：它只更新同时带有 Fire 专属标签与 scope 的容器，8080 端口不会映射到群晖。不要把 Docker Socket 或 Watchtower API 暴露到局域网 / 公网。
 
 在群晖 Container Manager 的终端执行一次登录（不要把 Token 写进 Compose 文件）：
 
@@ -38,13 +42,17 @@ git commit -m "describe change"
 git push origin main
 ```
 
-Actions 完成后，在群晖执行：
+Actions 完成后，可由管理员打开 `/deploy-status`，点击流程中的“更新群晖”。页面会通知 Watchtower 拉取最新 GHCR 镜像，并观察 Fire 重启与健康恢复。
+
+首次增加 Watchtower 服务、修改端口 / 环境变量 / 挂载目录，或网页更新不可用时，仍在群晖执行：
 
 ```bash
 cd /volume1/docker/fire
 docker compose -f docker-compose.ghcr.yml pull
 docker compose -f docker-compose.ghcr.yml up -d --force-recreate
 ```
+
+网页按钮只替换镜像，不会同步新的 Compose 配置；这是刻意的安全边界。服务端接口固定调用 Compose 内网地址，不接受浏览器传入容器名、镜像名或命令，且仅管理员可操作。
 
 Registry 会复用未变化的镜像层，不再需要每次手工搬运完整 tar.gz。数据库和上传文件仍在 `/volume1/docker/fire/data`、`/volume1/docker/fire/uploads`，更新镜像不会覆盖它们。
 

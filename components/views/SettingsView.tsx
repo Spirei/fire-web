@@ -2968,6 +2968,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <span className="settings-detail-value">Node.js · SQLite · PostgreSQL</span>
                   </div>
                   <div className="sw-row">
+                    <div className="sw-row-label"><b>部署运行</b><span>容器镜像与受限更新</span></div>
+                    <span className="settings-detail-value">Docker · GHCR · Watchtower</span>
+                  </div>
+                  <div className="sw-row">
                     <div className="sw-row-label"><b>外部数据源</b><span>行情、财报、汇率与公开披露</span></div>
                     <span className="settings-detail-value">腾讯行情 · 东方财富 · SEC EDGAR · CompaniesMarketCap</span>
                   </div>

@@ -2009,6 +2009,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "重排发布状态圆点与说明",
     desc: "最新发布状态圆点与标题改为同一基线，提交与时间独立缩进；成功和失败保持静态，仅排队/进行中使用呼吸动效，底部文字说明改为三个醒目的圆点状态标签。",
     kind: "fix"
+  }, {
+    title: "发布监控页支持一键更新群晖容器",
+    desc: "GHCR 部署增加受限 Watchtower 服务，发布流程可由管理员直接拉取最新 Fire 镜像并观察重启与健康恢复。更新器仅匹配 Fire 专属 enable 标签与 scope，API 只在 Compose 内网开放并使用 32 位以上随机 Token；网页服务端固定调用更新端点，不接收任意命令、容器或镜像参数，并限制 30 秒内重复触发。Compose 配置变化仍需群晖手动执行 compose up。",
+    kind: "security"
   }]
 };
 
