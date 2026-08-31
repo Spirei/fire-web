@@ -2121,6 +2121,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "区分等待检查与状态未知",
     desc: "main 新提交已出现但 GitHub Actions 运行记录尚未生成时显示橙色‘等待检查’，并临时提高到每 10 秒刷新；只有 main 本身无法读取时才显示‘检查未知’。",
     kind: "fix"
+  }, {
+    title: "精简线上版本胶囊",
+    desc: "线上版本仅在匹配最新 main 时显示绿色圆点，非最新版统一使用灰色圆点；边框改为轻量内描边与中性底色并移除浮起阴影。",
+    kind: "fix"
   }]
 };
 

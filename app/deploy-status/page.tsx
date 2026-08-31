@@ -309,7 +309,7 @@ export default function DeployStatusPage() {
   const runtimeState = runtimeVersion?.matchesMain
     ? { label: `线上 ${runtimeVersion.shortSha}`, dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" }
     : runtimeVersion?.sha && runtimeVersion.sha !== "unknown"
-      ? { label: runtimeVersion.matchesImage ? `运行旧镜像 ${runtimeVersion.shortSha}` : `待更新 ${runtimeVersion.shortSha}`, dot: "bg-orange-500", text: "text-orange-700 dark:text-orange-300" }
+      ? { label: runtimeVersion.matchesImage ? `运行旧镜像 ${runtimeVersion.shortSha}` : `待更新 ${runtimeVersion.shortSha}`, dot: "bg-slate-400", text: "text-slate-600 dark:text-slate-300" }
       : { label: "线上版本未知", dot: "bg-slate-400", text: "text-slate-500" };
   const canUpdateContainer = updaterAvailable && Boolean(imageVersion?.matchesMain) && !runtimeVersion?.matchesImage && !imageBuilding;
   const showImageProgress = Boolean(imageProgress && (imageProgress.status !== "completed" || imageVersion?.matchesMain));
@@ -342,7 +342,7 @@ export default function DeployStatusPage() {
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none sm:p-5">
           <div className="mb-4 flex min-h-6 items-center justify-between gap-3">
             <h2 className="text-sm font-medium">发布流程</h2>
-            {runtimeVersion?.sha && runtimeVersion.sha !== "unknown" && <a href="/" target="_blank" rel="noreferrer" title="打开当前线上容器" className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 py-1 font-mono text-[10px] font-medium leading-none text-slate-950 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 dark:border-white/15 dark:bg-[#0d1117] dark:text-white dark:hover:border-white/25 dark:hover:bg-[#161b22]"><span className={`h-1.5 w-1.5 rounded-full ${runtimeState.dot}`} /><span className="font-sans text-slate-500 dark:text-slate-400">线上</span>{runtimeVersion.shortSha}</a>}
+            {runtimeVersion?.sha && runtimeVersion.sha !== "unknown" && <a href="/" target="_blank" rel="noreferrer" title="打开当前线上容器" className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50/80 px-2.5 py-1 font-mono text-[10px] font-medium leading-none text-slate-950 ring-1 ring-inset ring-white/70 transition hover:border-slate-300 hover:bg-white dark:border-white/10 dark:bg-[#0d1117] dark:text-white dark:ring-white/[.04] dark:hover:border-white/20 dark:hover:bg-[#161b22]"><span className={`h-1.5 w-1.5 rounded-full ${runtimeState.dot}`} /><span className="font-sans text-slate-500 dark:text-slate-400">线上</span>{runtimeVersion.shortSha}</a>}
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs sm:flex sm:flex-wrap sm:items-center">
             <a href={sourceVersion?.url || `https://github.com/${repository}`} target="_blank" rel="noreferrer" title="查看 fire-web main 最新提交" className={`inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 sm:w-auto dark:border-slate-700 dark:bg-transparent dark:hover:border-slate-600 dark:hover:bg-white/[.04] ${sourceState.text}`}><span className={`h-2.5 w-2.5 rounded-full ${sourceState.dot}`} /><IconGitBranch aria-hidden="true" size={16} stroke={1.8} />fire-web main</a>
