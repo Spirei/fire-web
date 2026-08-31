@@ -2117,6 +2117,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "显示 Watchtower 在线状态",
     desc: "复用发布流程末端的更新节点，以灰、绿、红圆点分别表示 Watchtower 检测中、在线和离线；已是最新时显示‘更新服务在线’，避免新增元素挤压 720px 布局。",
     kind: "fix"
+  }, {
+    title: "区分等待检查与状态未知",
+    desc: "main 新提交已出现但 GitHub Actions 运行记录尚未生成时显示橙色‘等待检查’，并临时提高到每 10 秒刷新；只有 main 本身无法读取时才显示‘检查未知’。",
+    kind: "fix"
   }]
 };
 

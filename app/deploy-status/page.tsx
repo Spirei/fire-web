@@ -198,7 +198,8 @@ export default function DeployStatusPage() {
       setUpdaterReason("无法连接更新服务");
     }
   }, []);
-  const refreshInterval = imageProgress && imageProgress.status !== "completed" ? 10000 : 60000;
+  const currentMainCheck = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && run.event === "push" && run.sha === sourceVersion?.shortSha);
+  const refreshInterval = imageProgress && imageProgress.status !== "completed" || sourceVersion && !currentMainCheck ? 10000 : 60000;
   useEffect(() => { void load(); const timer = window.setInterval(() => void load(), refreshInterval); return () => window.clearInterval(timer); }, [load, refreshInterval]);
   useEffect(() => { fetch("/api/deploy-status/config").then(async (response) => response.ok ? setConfig(await readApiJson<typeof config>(response)) : null).catch(() => {}); }, []);
   useEffect(() => { void loadUpdater(); const timer = window.setInterval(() => void loadUpdater(), 15000); return () => window.clearInterval(timer); }, [loadUpdater]);
@@ -279,7 +280,7 @@ export default function DeployStatusPage() {
   const publishLabel = manualPublishActive ? "镜像构建进行中…" : triggering ? "正在触发…" : "立即构建镜像";
   const publishTitle = manualPublishActive ? "镜像构建进行中" : triggering ? "正在触发镜像构建" : "生成并推送 GHCR 镜像";
   const latest = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && (run.event === "schedule" || run.event === "workflow_dispatch"));
-  const latestMainCheck = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && run.event === "push" && run.sha === sourceVersion?.shortSha);
+  const latestMainCheck = currentMainCheck;
   const latestState = latest ? stateOf(latest) : { label: hasLoaded ? "未知" : "读取中", className: "bg-slate-400", ring: "ring-slate-400/15" };
   const finishedJobCount = imageProgress?.jobs.filter((job) => job.status === "completed").length || 0;
   const imageBuilding = Boolean(imageProgress && imageProgress.status !== "completed");
@@ -287,8 +288,10 @@ export default function DeployStatusPage() {
   const sourceState = sourceVersion
     ? { label: `main ${sourceVersion.shortSha}`, dot: "bg-slate-400", text: "text-slate-600 dark:text-slate-300" }
     : { label: "main 未知", dot: "bg-slate-400", text: "text-slate-500" };
-  const checkState = !latestMainCheck
+  const checkState = !sourceVersion
     ? { label: "检查未知", dot: "bg-slate-400", text: "text-slate-500" }
+    : !latestMainCheck
+      ? { label: "等待检查", dot: "bg-amber-500 motion-safe:animate-pulse", text: "text-amber-700 dark:text-amber-300" }
     : latestMainCheck.status !== "completed"
       ? { label: "检查中", dot: "bg-amber-500 motion-safe:animate-pulse", text: "text-amber-700 dark:text-amber-300" }
       : latestMainCheck.conclusion === "success"
