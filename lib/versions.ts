@@ -2055,7 +2055,7 @@ export const V0_1_19_ENTRY: VersionEntry = {
     kind: "fix"
   }, {
     title: "继续打磨发布监控页信息层级",
-    desc: "桌面内容区扩展为更舒适的宽版布局，使完整发布流程稳定保持单行；GHCR 入口换为更简洁的单包图标，移除重复状态图例。GitHub API 异常时仍保留服务端返回的实际仓库名，避免顶部链接退回 owner/repository 占位地址。",
+    desc: "发布流程保持原有页面宽度；GHCR 入口换为更简洁的单包图标，移除重复状态图例。GitHub API 异常时仍保留服务端返回的实际仓库名，避免顶部链接退回 owner/repository 占位地址。",
     kind: "fix"
   }, {
     title: "发布监控补齐真实加载与更新器在线状态",
