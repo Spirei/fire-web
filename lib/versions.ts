@@ -1933,6 +1933,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "发布状态页增加手动推送与可视化流程",
     desc: "状态页新增“立即手动推送”操作，服务端安全调用 GitHub Actions workflow_dispatch 发布 main 最新提交，浏览器不接触 GitHub Token；增加本地源码、检查、定时/手动、GHCR、线上容器五段流程图，并提供触发中、成功和失败反馈。",
     kind: "feature"
+  }, {
+    title: "发布监控页右上角增加浅色/深色切换",
+    desc: "复用全站 ThemeToggle，在 /deploy-status 页面右上角提供太阳/月亮图标，主题选择通过现有 localStorage 与 Cookie 持久化，刷新后保持一致。",
+    kind: "fix"
   }]
 };
 
