@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # 北京时间每天 00:00（UTC 前一日 16:00）发布 main 最新提交
+    - cron: "0 16 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -39,7 +42,8 @@ jobs:
   publish:
     name: Publish linux/amd64 image
     needs: test
-    if: github.event_name != 'pull_request'
+    # 提交/PR 只检查；定时任务或手动运行才发布 GHCR，避免每次小改动都推送镜像。
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
