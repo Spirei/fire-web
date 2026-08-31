@@ -264,9 +264,12 @@ export default function DeployStatusPage() {
       : { label: "线上版本未知", dot: "bg-slate-400", text: "text-slate-500" };
   const canUpdateContainer = updaterAvailable && Boolean(imageVersion?.matchesMain) && !runtimeVersion?.matchesImage && !imageBuilding;
   const runActionLabel = (run: Run) => {
-    const failed = run.conclusion !== "success";
-    if (run.event === "workflow_dispatch" || run.event === "schedule") return failed ? "镜像构建失败" : "镜像构建成功";
-    return failed ? "推送失败" : "推送成功";
+    const imageRun = run.event === "workflow_dispatch" || run.event === "schedule";
+    const prefix = imageRun ? "镜像构建" : "推送";
+    if (run.status !== "completed") return `${prefix}中`;
+    if (run.conclusion === "success") return `${prefix}成功`;
+    if (run.conclusion === "skipped") return `${prefix}跳过`;
+    return `${prefix}失败`;
   };
   return (
     <main className="min-h-[100dvh] bg-slate-50 px-4 py-6 text-slate-900 dark:bg-[#0b0f16] dark:text-slate-100 sm:px-8 sm:py-10">
