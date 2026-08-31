@@ -151,7 +151,7 @@ export default function DeployStatusPage() {
     } catch (err) { setConfigError(err instanceof Error ? err.message : "保存失败"); }
   };
   const triggerPublish = async () => {
-    if (triggering || runs.some((run) => run.event === "workflow_dispatch" && run.status !== "completed")) return;
+    if (triggering || runs.some((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && run.event === "workflow_dispatch" && run.status !== "completed")) return;
     setTriggering(true); setNotice(""); setError("");
     try {
       const response = await fetch("/api/deploy-status", { method: "POST" });
@@ -207,6 +207,7 @@ export default function DeployStatusPage() {
   const publishTitle = manualPublishActive ? "已有 Push image 正在运行" : triggering ? "正在触发镜像构建" : "生成并推送 GHCR 镜像";
   const latest = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && (run.event === "schedule" || run.event === "workflow_dispatch"));
   const latestState = latest ? stateOf(latest) : { label: "待发布", className: "bg-slate-400", ring: "ring-slate-400/15" };
+  const finishedJobCount = imageProgress?.jobs.filter((job) => job.status === "completed").length || 0;
   return (
     <main className="min-h-[100dvh] bg-slate-50 px-4 py-6 text-slate-900 dark:bg-[#0b0f16] dark:text-slate-100 sm:px-8 sm:py-10">
       <style jsx>{`main section button, main section a { transition-timing-function: cubic-bezier(.22,1,.36,1); } main section button:active, main section a:active { transform: translateY(1px) scale(.985); }`}</style>
@@ -240,11 +241,11 @@ export default function DeployStatusPage() {
             <a href="/" target="_blank" rel="noreferrer" className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><IconExternalLink aria-hidden="true" size={16} stroke={1.8} />线上容器</a>
           </div>
         </section>
-        {imageProgress && <section className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
+        {imageProgress && <section aria-live="polite" aria-busy={imageProgress.status !== "completed"} className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
           <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <div>
               <h2 className="text-sm font-medium">镜像构建进度</h2>
-              <p className="mt-1 text-xs text-slate-500">{imageProgress.sha} · {formatDuration(imageProgress.startedAt, imageProgress.status === "completed" ? imageProgress.updatedAt : null, checkedAt || imageProgress.updatedAt)}</p>
+              <p className="mt-1 text-xs text-slate-500">{imageProgress.sha} · {finishedJobCount} / {imageProgress.jobs.length || 2} 阶段 · {formatDuration(imageProgress.startedAt, imageProgress.status === "completed" ? imageProgress.updatedAt : null, checkedAt || imageProgress.updatedAt)}</p>
             </div>
             <a href={imageProgress.url} target="_blank" rel="noreferrer" className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-white/[.04]">
               <StatusIcon status={imageProgress.status} conclusion={imageProgress.conclusion} size={16} />
@@ -253,13 +254,13 @@ export default function DeployStatusPage() {
             </a>
           </div>
           {imageProgress.jobs.length > 0 ? <div className="flex flex-col items-stretch gap-2 p-4 sm:flex-row sm:items-start sm:gap-3 sm:p-5">
-            {imageProgress.jobs.map((job, index) => <div key={job.id} className="contents">
-              <details open={job.status !== "completed" ? true : undefined} className="group min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/70 open:bg-white dark:border-slate-700 dark:bg-slate-950/20 dark:open:bg-white/[.025]">
+            {imageProgress.jobs.map((job, index) => { const currentStep = job.steps.find((step) => step.status === "in_progress") || job.steps.find((step) => step.status === "queued"); const jobTone = job.status === "in_progress" ? "border-amber-300 bg-amber-50/60 dark:border-amber-400/35 dark:bg-amber-400/[.05]" : job.status === "completed" && job.conclusion !== "success" && job.conclusion !== "skipped" ? "border-red-300 bg-red-50/60 dark:border-red-400/35 dark:bg-red-400/[.05]" : "border-slate-200 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-950/20"; return <div key={job.id} className="contents">
+              <details open={job.status !== "completed" ? true : undefined} className={`group min-w-0 flex-1 rounded-xl border ${jobTone} open:bg-white dark:open:bg-white/[.025]`}>
                 <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-3.5 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400/50 [&::-webkit-details-marker]:hidden">
                   <StatusIcon status={job.status} conclusion={job.conclusion} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-200">{job.name}</span>
-                    <span className="mt-0.5 block text-xs text-slate-500">{buildStatusLabel(job.status, job.conclusion)} · {formatDuration(job.startedAt, job.completedAt, checkedAt || imageProgress.updatedAt)}</span>
+                    <span className="mt-0.5 block truncate text-xs text-slate-500">{currentStep ? currentStep.name : buildStatusLabel(job.status, job.conclusion)} · {job.conclusion === "skipped" ? "已跳过" : formatDuration(job.startedAt, job.completedAt, checkedAt || imageProgress.updatedAt)}</span>
                   </span>
                   <IconChevronRight aria-hidden="true" className="shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-90" size={16} stroke={1.8} />
                 </summary>
@@ -267,18 +268,18 @@ export default function DeployStatusPage() {
                   {job.steps.map((step) => <div key={step.number} className="flex items-center gap-2.5 py-2 text-xs">
                     <StatusIcon status={step.status} conclusion={step.conclusion} size={15} />
                     <span className={`min-w-0 flex-1 truncate ${step.status === "in_progress" ? "font-medium text-slate-800 dark:text-slate-200" : "text-slate-500 dark:text-slate-400"}`}>{step.name}</span>
-                    <span className="shrink-0 text-slate-400">{formatDuration(step.startedAt, step.completedAt, checkedAt || imageProgress.updatedAt)}</span>
+                    <span className="shrink-0 text-slate-400">{step.conclusion === "skipped" ? "已跳过" : formatDuration(step.startedAt, step.completedAt, checkedAt || imageProgress.updatedAt)}</span>
                   </div>)}
                 </div>}
               </details>
               {index < imageProgress.jobs.length - 1 && <IconChevronRight aria-hidden="true" className="mx-auto shrink-0 rotate-90 self-center text-slate-300 sm:mx-0 sm:mt-6 sm:rotate-0 dark:text-slate-700" size={18} stroke={1.8} />}
-            </div>)}
+            </div>})}
           </div> : <p className="px-5 py-8 text-center text-sm text-slate-500">GitHub 正在创建构建任务…</p>}
         </section>}
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
           <div><div className="flex items-center gap-2.5"><span className={`h-3 w-3 shrink-0 rounded-full ${latestState.className} ring-4 ${latestState.ring} ${latest && latest.status !== "completed" ? "animate-pulse" : ""}`} /><p className="text-lg font-medium">最新发布 <span className="text-slate-400">·</span> {latestState.label}</p></div><p className="mt-1.5 pl-[22px] text-xs text-slate-500">{latest ? `${latest.sha} · ${formatTime(latest.updatedAt)}` : "等待读取 GitHub Actions"}</p></div>
-          {error && <p className="mt-4 rounded-xl bg-red-400/10 px-3 py-2 text-xs text-red-300">{error}</p>}
-          {notice && <p className="mt-4 rounded-xl bg-emerald-400/10 px-3 py-2 text-xs text-emerald-300">{notice}</p>}
+          {error && <p role="alert" className="mt-4 rounded-xl bg-red-400/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{error}</p>}
+          {notice && <p role="status" className="mt-4 rounded-xl bg-emerald-400/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">{notice}</p>}
         </section>
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
           <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800"><h2 className="text-sm font-medium">最近运行</h2><p className="mt-1 text-xs text-slate-500">{repository}{checkedAt ? ` · 检查于 ${formatTime(checkedAt)}` : ""}</p></div>

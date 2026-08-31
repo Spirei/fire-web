@@ -2037,6 +2037,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "新增镜像构建实时进度",
     desc: "Push image 后从 GitHub Actions Jobs API 读取真实构建状态，在发布页展示 TypeScript 检查与 linux/amd64 镜像发布两个阶段；运行中的 Job 默认展开，可继续查看 Checkout、GHCR 登录、Buildx 与 Build and push 等步骤、状态和耗时。构建期间每 10 秒刷新，完成后恢复每分钟刷新，并对 Job 数据分级缓存以控制 GitHub API 用量。",
     kind: "feature"
+  }, {
+    title: "打磨镜像构建进度交互",
+    desc: "构建进度增加已完成阶段计数，Job 摘要直接显示当前执行步骤；运行中与失败阶段使用克制的语义边框区分，跳过步骤不再误显示为等待中。修正其他 workflow_dispatch 任务误锁定 Push image 的前端判断，并为动态状态、成功提示和错误提示补充无障碍播报与浅色模式文字对比。",
+    kind: "fix"
   }]
 };
 
