@@ -11,8 +11,10 @@ interface Props {
 }
 
 function BrokerIcon({ url, name, size = 20 }: { url?: string; name: string; size?: number }) {
-  if (url) {
-    return <img src={url} alt="" className="flex-none rounded-full object-cover" style={{ width: size, height: size }} />;
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [url]);
+  if (url && !failed) {
+    return <img src={url} alt="" onError={() => setFailed(true)} className="flex-none rounded-full object-cover" style={{ width: size, height: size }} />;
   }
   return (
     <span

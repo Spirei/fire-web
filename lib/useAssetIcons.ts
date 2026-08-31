@@ -30,6 +30,7 @@ type HookOptions = {
 
 const ALL_TYPES: AssetType[] = ["stock", "market", "flag", "broker", "crypto", "metal", "icon"];
 const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_VERSION = 2;
 const cache = new Map<AssetType, { assets: Asset[]; at: number }>();
 const inflight = new Map<AssetType, Promise<void>>();
 const listeners = new Set<() => void>();
@@ -88,7 +89,7 @@ function loadLocalType(type: AssetType): { assets: Asset[]; at: number } | null 
   try {
     const raw = localStorage.getItem(cacheKey(type));
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Asset[] | { assets?: Asset[]; at?: number };
+    const parsed = JSON.parse(raw) as Asset[] | { assets?: Asset[]; at?: number; version?: number };
     // 兼容旧版仅保存数组的分类型缓存；时间记为 0，展示后立即后台刷新。
     const list = Array.isArray(parsed) ? parsed : parsed.assets;
     if (!Array.isArray(list)) return null;
@@ -102,7 +103,7 @@ function loadLocalType(type: AssetType): { assets: Asset[]; at: number } | null 
     });
     return {
       assets,
-      at: Array.isArray(parsed) ? 0 : Number(parsed.at) || 0
+      at: Array.isArray(parsed) || parsed.version !== CACHE_VERSION ? 0 : Number(parsed.at) || 0
     };
   } catch {
     return null;
@@ -111,7 +112,7 @@ function loadLocalType(type: AssetType): { assets: Asset[]; at: number } | null 
 
 function saveLocalType(type: AssetType, assets: Asset[]) {
   try {
-    localStorage.setItem(cacheKey(type), JSON.stringify({ assets, at: Date.now() }));
+    localStorage.setItem(cacheKey(type), JSON.stringify({ assets, at: Date.now(), version: CACHE_VERSION }));
   } catch {
     /* 存储空间不足不影响页面 */
   }

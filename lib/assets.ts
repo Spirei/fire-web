@@ -24,14 +24,18 @@ export interface Asset {
 }
 
 function rowToAsset(r: Record<string, unknown>): Asset {
+  const rawUrl = String(r.url ?? "");
+  const rawUrlDark = String(r.url_dark ?? "");
   return {
     id: String(r.id),
     type: String(r.type) as AssetType,
     market: String(r.market ?? ""),
     code: String(r.code ?? ""),
     name: String(r.name ?? ""),
-    url: String(r.url),
-    urlDark: String(r.url_dark ?? ""),
+    // 数据库可能保留已被迁移/清理的历史文件 URL。不再把必然 404 的地址下发给全站，
+    // 让各组件走现有的内置图标/首字母/CDN 兜底。resource-default 可读时仍视为有效。
+    url: localAssetExists(rawUrl) ? rawUrl : "",
+    urlDark: localAssetExists(rawUrlDark) ? rawUrlDark : "",
     marketCap: Number(r.market_cap) || 0,
     price: r.price === null || r.price === undefined ? null : Number(r.price),
     changePct: r.change_pct === null || r.change_pct === undefined ? null : Number(r.change_pct),
@@ -125,6 +129,22 @@ function brokerNameKey(value: string): string {
   return value.trim().toLocaleLowerCase("zh-CN").replace(/[\s·._-]+/g, "").replace(/证[劵卷]/g, "证券");
 }
 
+function bundledAssetUrl(folder: string, file: string): string {
+  return `/uploads/asset/${folder}/${encodeURIComponent(file)}`;
+}
+
+function localAssetExists(url: string): boolean {
+  if (!url.startsWith("/uploads/")) return true;
+  let rel = url.slice("/uploads/".length);
+  try { rel = decodeURIComponent(rel); } catch { /* malformed legacy URL: treat as missing */ }
+  return [
+    path.join(process.cwd(), "public", "uploads", rel),
+    path.join(process.cwd(), "resource-default", rel)
+  ].some((file) => {
+    try { return fs.statSync(file).isFile(); } catch { return false; }
+  });
+}
+
 /** 用镜像内置券商素材补齐当前券商配置；按券商名称/别名匹配，幂等且不覆盖用户图标。 */
 export function ensureBrokerAssets(): void {
   const dirs = [
@@ -137,12 +157,21 @@ export function ensureBrokerAssets(): void {
   if (!files.length) return;
   const byName = new Map(files.map((file) => [brokerNameKey(file.replace(/\.(svg|png|webp|jpg|jpeg)$/i, "")), file]));
   const db = getDb();
-  const exists = db.prepare("SELECT COUNT(*) AS n FROM assets WHERE type = 'broker' AND upper(code) = upper(?)");
+  const findByCode = db.prepare("SELECT id, url FROM assets WHERE type = 'broker' AND upper(code) = upper(?) LIMIT 1");
+  const repairUrl = db.prepare("UPDATE assets SET name = ?, url = ?, updated_at = ? WHERE id = ?");
   for (const group of getSiteSettings().groups) {
-    if ((exists.get(group.id) as { n: number }).n > 0) continue;
     const file = byName.get(brokerNameKey(group.name)) || (group.alias ? byName.get(brokerNameKey(group.alias)) : undefined);
+    const existing = findByCode.get(group.id) as { id: string; url: string } | undefined;
+    if (existing) {
+      // 旧版曾把券商图标迁到 stock/GROUP；即使临时文件还在，也统一改回 broker 规范目录。
+      const legacyFolder = existing.url.includes("/asset/stock/GROUP/");
+      if (file && (legacyFolder || !existing.url || !localAssetExists(existing.url))) {
+        repairUrl.run(group.name, bundledAssetUrl("broker", file), new Date().toISOString(), existing.id);
+      }
+      continue;
+    }
     if (!file) continue;
-    upsertAsset({ type: "broker", market: "GROUP", code: group.id, name: group.name, url: `/uploads/asset/broker/${file}` });
+    upsertAsset({ type: "broker", market: "GROUP", code: group.id, name: group.name, url: bundledAssetUrl("broker", file) });
   }
 }
 
@@ -200,7 +229,7 @@ export function ensureStockAssets(): void {
   list.forEach((it) => {
     const market = (it.market || "").trim().toUpperCase();
     const code = (it.code || "").trim().toUpperCase();
-    if (!market || !code || !it.url) return;
+    if (!market || !code || !it.url || !localAssetExists(it.url)) return;
     if ((exists.get(market, code) as { n: number }).n > 0) return;
     upsertAsset({ type: "stock", market, code, name: it.name || code, url: it.url, source: "manual" });
   });

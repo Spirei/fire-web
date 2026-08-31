@@ -399,7 +399,112 @@ function migrate(database: Database.Database) {
   migrateDefaultCelebAvatars(database);
   migrateDefaultFireIcon(database);
   migrateDefaultEuroFlag(database);
+  migrateMissingBrokerGroups(database);
+  migrateMissingAssetUrls(database);
   migrateEconomicRealizedPnl(database);
+}
+
+/**
+ * 历史版本曾把 site_settings.groups 覆盖成不完整列表，但券商素材仍在。
+ * 只执行一次：保留用户现有顺序，把 assets(type=broker) 中的孤立券商追加回配置。
+ * 正常删除会同时删除素材，且迁移标记防止券商之后被“自动复活”。
+ */
+function migrateMissingBrokerGroups(database: Database.Database) {
+  const migrationKey = "migration.restore_missing_broker_groups";
+  const targetVersion = "2";
+  const applied = database.prepare("SELECT value FROM site_settings WHERE key = ?").get(migrationKey) as { value: string } | undefined;
+  if (applied?.value === targetVersion) return;
+
+  const row = database.prepare("SELECT value FROM site_settings WHERE key = 'groups'").get() as { value: string } | undefined;
+  let groups: { id: string; name: string; alias?: string }[] = [];
+  try {
+    const parsed = JSON.parse(row?.value ?? "[]");
+    if (Array.isArray(parsed)) {
+      groups = parsed.filter((g): g is { id: string; name: string; alias?: string } =>
+        !!g && typeof g.id === "string" && typeof g.name === "string"
+      );
+    }
+  } catch { /* 损坏的旧配置从空列表恢复 */ }
+
+  const idKeys = new Set(groups.map((g) => g.id.trim().toLowerCase()));
+  const nameKey = (value: string) => value.trim().toLocaleLowerCase("zh-CN").replace(/[\s·._-]+/g, "").replace(/证[劵卷]/g, "证券");
+  const nameKeys = new Set(groups.map((g) => nameKey(g.name)));
+  const knownAliases: Record<string, string> = {
+    "长桥证券": "Longbridge", "华泰证券": "HTSC", "盈透证券": "IBKR", "富途证券": "Futu",
+    "同花顺": "10jqka", "东方财富": "东财", "老虎证券": "Tiger", "罗宾汉": "Robinhood", "嘉信理财": "Schwab"
+  };
+  groups = groups.map((group) => group.alias ? group : { ...group, alias: knownAliases[nameKey(group.name)] });
+  const orphaned = database.prepare(
+    "SELECT code, name FROM assets WHERE type = 'broker' AND trim(code) <> '' AND trim(name) <> '' ORDER BY updated_at, rowid"
+  ).all() as { code: string; name: string }[];
+  orphaned.forEach((asset) => {
+    const id = asset.code.trim().toLowerCase();
+    const normalizedName = nameKey(asset.name);
+    if (!id || !normalizedName || idKeys.has(id) || nameKeys.has(normalizedName)) return;
+    groups.push({ id, name: asset.name.trim(), alias: knownAliases[normalizedName] });
+    idKeys.add(id);
+    nameKeys.add(normalizedName);
+  });
+
+  const save = database.transaction(() => {
+    database.prepare("INSERT INTO site_settings (key,value) VALUES ('groups',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(JSON.stringify(groups));
+    database.prepare("INSERT INTO site_settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(migrationKey, targetVersion);
+  });
+  save();
+}
+
+/** 清空数据库中已无磁盘文件/镜像默认文件的本地素材 URL，保留素材元数据供兜底展示。 */
+function migrateMissingAssetUrls(database: Database.Database) {
+  const migrationKey = "migration.clear_missing_asset_urls";
+  const targetVersion = "3";
+  const applied = database.prepare("SELECT value FROM site_settings WHERE key = ?").get(migrationKey) as { value: string } | undefined;
+  if (applied?.value === targetVersion) return;
+
+  const exists = (url: string) => {
+    if (!url.startsWith("/uploads/")) return true;
+    let rel = url.slice("/uploads/".length);
+    try { rel = decodeURIComponent(rel); } catch { /* 非法编码视为原路径 */ }
+    return [path.join(process.cwd(), "public", "uploads", rel), path.join(process.cwd(), "resource-default", rel)]
+      .some((file) => {
+        try { return fs.statSync(file).isFile(); } catch { return false; }
+      });
+  };
+  const brokerDirs = [
+    path.join(process.cwd(), "public", "uploads", "asset", "broker"),
+    path.join(process.cwd(), "resource-default", "asset", "broker")
+  ];
+  const brokerKey = (value: string) => value.trim().toLocaleLowerCase("zh-CN").replace(/[\s·._-]+/g, "").replace(/证[劵卷]/g, "证券");
+  const brokerFiles = new Map<string, string>();
+  brokerDirs.forEach((dir) => {
+    try {
+      fs.readdirSync(dir).filter((file) => /\.(svg|png|webp|jpe?g)$/i.test(file)).forEach((file) => {
+        brokerFiles.set(brokerKey(file.replace(/\.(svg|png|webp|jpe?g)$/i, "")), file);
+      });
+    } catch { /* 当前部署无默认券商目录 */ }
+  });
+  const rows = database.prepare("SELECT id, type, name, url, url_dark FROM assets").all() as { id: string; type: string; name: string; url: string; url_dark: string }[];
+  const clear = database.prepare("UPDATE assets SET url = ?, url_dark = ?, updated_at = ? WHERE id = ?");
+  const apply = database.transaction(() => {
+    const now = new Date().toISOString();
+    rows.forEach((row) => {
+      let legacyStem = "";
+      if (row.type === "broker" && row.url) {
+        try { legacyStem = decodeURIComponent(path.basename(row.url)).replace(/\.(svg|png|webp|jpe?g)$/i, ""); } catch { /* 忽略无效旧 URL */ }
+      }
+      const brokerFile = row.type === "broker"
+        ? brokerFiles.get(brokerKey(row.name)) || (legacyStem ? brokerFiles.get(brokerKey(legacyStem)) : undefined)
+        : undefined;
+      const normalizedBrokerUrl = brokerFile ? `/uploads/asset/broker/${encodeURIComponent(brokerFile)}` : row.url;
+      const url = normalizedBrokerUrl && !exists(normalizedBrokerUrl) ? "" : normalizedBrokerUrl;
+      const urlDark = row.url_dark && !exists(row.url_dark) ? "" : row.url_dark;
+      if (url !== row.url || urlDark !== row.url_dark) clear.run(url, urlDark, now, row.id);
+    });
+    database.prepare("INSERT INTO site_settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(migrationKey, targetVersion);
+  });
+  apply();
 }
 
 /**

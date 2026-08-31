@@ -1,6 +1,8 @@
 import { getDb } from "./db";
 import type { HomeNavItem, Market, SiteSettings, TabConfig, TickerConfig } from "./types";
 import { DEFAULT_HOLDING_COLUMNS, normalizeHoldingColumns } from "./holdingColumns";
+import fs from "fs";
+import path from "path";
 
 export const DEFAULT_HOME_NAV: HomeNavItem[] = [
   { key: "preview", label: "产品预览", href: "#preview", enabled: true },
@@ -216,6 +218,21 @@ export function getSiteSettings(): SiteSettings {
   const result: SiteSettings = { ...DEFAULTS };
   SIMPLE_KEYS.forEach((k) => {
     if (typeof map[k] === "string" && map[k] !== "") (result as unknown as Record<string, string>)[k] = map[k];
+  });
+  // 用户可能在外部删除 uploads 文件，或从旧备份恢复了已过期路径。
+  // 本地站点素材不存在时按空值下发，让首页/登录页正常显示内置兜底，而不是空白或破图。
+  (["ico", "homepageBg", "siteLogo", "loginSideImage"] as const).forEach((key) => {
+    const value = result[key];
+    if (!value.startsWith("/uploads/")) return;
+    let rel = value.slice("/uploads/".length);
+    try { rel = decodeURIComponent(rel); } catch { /* 非法编码按原字符检查 */ }
+    const exists = [
+      path.join(process.cwd(), "public", "uploads", rel),
+      path.join(process.cwd(), "resource-default", rel)
+    ].some((file) => {
+      try { return fs.statSync(file).isFile(); } catch { return false; }
+    });
+    if (!exists) result[key] = "";
   });
   if (map.logoFont !== "diatype" && map.logoFont !== "diatype-regular" && map.logoFont !== "system") {
     result.logoFont = "diatype";
