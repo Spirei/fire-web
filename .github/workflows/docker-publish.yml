@@ -40,11 +40,43 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
+  scheduled-change-gate:
+    name: Check scheduled source changes
+    needs: test
+    if: always() && needs.test.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      should_publish: ${{ steps.gate.outputs.should_publish || steps.manual.outputs.should_publish }}
+    steps:
+      - name: Skip unchanged scheduled image
+        id: gate
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          last_sha=$(gh api "repos/${REPOSITORY}/actions/workflows/docker-publish.yml/runs?event=schedule&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // ""')
+          if [ "$last_sha" = "$CURRENT_SHA" ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "main 未发生变化，跳过本次定时镜像构建。"
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "检测到 main 新提交，继续构建镜像。"
+          fi
+      - name: Allow manual image publish
+        id: manual
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "should_publish=true" >> "$GITHUB_OUTPUT"
+
   publish:
     name: Publish linux/amd64 image
-    needs: test
-    # 提交/PR 只检查；定时任务或手动运行才发布 GHCR，避免每次小改动都推送镜像。
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: [test, scheduled-change-gate]
+    # 提交/PR 只检查；定时任务仅在 main 有新提交时发布，手动运行始终允许发布。
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && needs.scheduled-change-gate.outputs.should_publish == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
