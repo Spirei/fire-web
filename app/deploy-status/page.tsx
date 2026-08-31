@@ -252,11 +252,9 @@ export default function DeployStatusPage() {
     ? { label: "镜像生成中", dot: "bg-amber-500 motion-safe:animate-pulse", text: "text-amber-700 dark:text-amber-300" }
     : latestAttemptFailed
       ? { label: "镜像构建失败", dot: "bg-red-500", text: "text-red-700 dark:text-red-300" }
-      : imageVersion?.matchesMain
+      : imageVersion?.latestSuccessfulSha
         ? { label: "镜像已构建完成", dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" }
-        : imageVersion?.latestSuccessfulSha
-          ? { label: "构建新镜像", dot: "bg-orange-500", text: "text-orange-700 dark:text-orange-300" }
-          : { label: "尚无镜像", dot: "bg-slate-400", text: "text-slate-500" };
+        : { label: "尚无镜像", dot: "bg-slate-400", text: "text-slate-500" };
   const runtimeState = runtimeVersion?.matchesMain
     ? { label: `线上 ${runtimeVersion.shortSha}`, dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" }
     : runtimeVersion?.sha && runtimeVersion.sha !== "unknown"
