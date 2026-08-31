@@ -2065,6 +2065,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "重排线上镜像版本徽章",
     desc: "移除流程末尾重复的线上旧镜像节点，起点改为 fire-web main，并将当前容器实际运行的短 SHA 放到该节点右上角的 GitHub 风格胶囊中；镜像与 main 一致时显示绿色圆点和‘镜像已构建完成’。",
     kind: "fix"
+  }, {
+    title: "GHCR 历史镜像自动保留",
+    desc: "镜像发布成功后自动清理过旧容器版本，至少保留最近两个版本，避免 GHCR 存储空间被历史 SHA 标签持续占用；清理失败不会影响本次发布结果。",
+    kind: "fix"
   }]
 };
 

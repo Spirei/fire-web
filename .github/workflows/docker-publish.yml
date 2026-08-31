@@ -91,3 +91,13 @@ jobs:
             FIRE_BUILD_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Retain latest two image versions
+        if: success()
+        continue-on-error: true
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: fire-web
+          package-type: container
+          min-versions-to-keep: 2
+          delete-only-untagged-versions: false
