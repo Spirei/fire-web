@@ -59,7 +59,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           CURRENT_SHA: ${{ github.sha }}
         run: |
-          last_sha=$(gh api "repos/${REPOSITORY}/actions/workflows/docker-publish.yml/runs?event=schedule&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // ""')
+          last_sha=$(gh api "repos/${REPOSITORY}/actions/workflows/docker-publish.yml/runs?status=success&per_page=30" --jq '[.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch")][0].head_sha // ""')
           if [ "$last_sha" = "$CURRENT_SHA" ]; then
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
             echo "main 未发生变化，跳过本次定时镜像构建。"

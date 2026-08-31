@@ -2071,7 +2071,7 @@ export const V0_1_19_ENTRY: VersionEntry = {
     kind: "fix"
   }, {
     title: "定时任务跳过无变化镜像",
-    desc: "每日凌晨仍会执行源码与安全检查，但仅当 main 相比上次成功定时发布发生新提交时才构建镜像；手动 Push image 继续作为强制发布兜底。",
+    desc: "每日凌晨仍会执行源码与安全检查，但仅当 main 相比上次成功的定时或手动发布发生新提交时才构建镜像；手动 Push image 继续作为强制发布兜底。",
     kind: "fix"
   }]
 };
