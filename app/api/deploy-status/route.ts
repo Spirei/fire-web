@@ -18,6 +18,9 @@ type GithubRun = {
   html_url: string;
 };
 
+const DISPATCH_COOLDOWN_MS = 30_000;
+let lastDispatchAt = 0;
+
 function repositoryName() {
   const imageRepository = process.env.GHCR_IMAGE?.replace(/^ghcr\.io\//, "").replace(/:[^/]+$/, "");
   const configuredRepository = (getDb().prepare("SELECT value FROM site_settings WHERE key = 'deployGithubRepository'").get() as { value?: string } | undefined)?.value || "";
@@ -70,12 +73,42 @@ export async function POST(request: Request) {
   const token = deployToken();
   if (!token) return NextResponse.json({ error: "未配置 GITHUB_TOKEN，无法手动触发发布" }, { status: 503 });
   const repository = repositoryName();
-  const response = await fetch(`https://api.github.com/repos/${repository}/actions/workflows/docker-publish.yml/dispatches`, {
-    method: "POST",
-    headers: { accept: "application/vnd.github+json", "content-type": "application/json", authorization: `Bearer ${token}`, "user-agent": "fire-deploy-status" },
-    body: JSON.stringify({ ref: "main" }),
-    cache: "no-store"
-  });
-  if (!response.ok) return NextResponse.json({ error: `触发失败（GitHub API ${response.status}）` }, { status: 502 });
+  const now = Date.now();
+  if (now - lastDispatchAt < DISPATCH_COOLDOWN_MS) {
+    return NextResponse.json({ error: "手动发布刚刚已触发，请勿重复点击" }, { status: 409 });
+  }
+  lastDispatchAt = now;
+  try {
+    const runsResponse = await fetch(`https://api.github.com/repos/${repository}/actions/workflows/docker-publish.yml/runs?event=workflow_dispatch&branch=main&per_page=10`, {
+      headers: { accept: "application/vnd.github+json", authorization: `Bearer ${token}`, "user-agent": "fire-deploy-status" },
+      cache: "no-store"
+    });
+    if (runsResponse.ok) {
+      const payload = await runsResponse.json() as { workflow_runs?: GithubRun[] };
+      const activeRun = payload.workflow_runs?.find((run) => run.status !== "completed");
+      if (activeRun) {
+        lastDispatchAt = 0;
+        return NextResponse.json({ error: "已有手动发布正在排队或运行，请等待完成", runUrl: activeRun.html_url }, { status: 409 });
+      }
+    }
+  } catch {
+    // GitHub 状态预检失败时仍由下面的 dispatch 请求给出最终结果。
+  }
+  let response: Response;
+  try {
+    response = await fetch(`https://api.github.com/repos/${repository}/actions/workflows/docker-publish.yml/dispatches`, {
+      method: "POST",
+      headers: { accept: "application/vnd.github+json", "content-type": "application/json", authorization: `Bearer ${token}`, "user-agent": "fire-deploy-status" },
+      body: JSON.stringify({ ref: "main" }),
+      cache: "no-store"
+    });
+  } catch {
+    lastDispatchAt = 0;
+    return NextResponse.json({ error: "无法连接 GitHub，请稍后重试" }, { status: 502 });
+  }
+  if (!response.ok) {
+    lastDispatchAt = 0;
+    return NextResponse.json({ error: `触发失败（GitHub API ${response.status}）` }, { status: 502 });
+  }
   return NextResponse.json({ ok: true, repository, message: "已触发手动发布，请稍候查看状态" });
 }
