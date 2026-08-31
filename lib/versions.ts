@@ -1989,6 +1989,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "修正手动 Token 权限提示",
     desc: "网页配置将备用 Token 明确为发布 Token，提示手动触发 workflow 需要目标仓库 Actions 的 Read and write 权限，并同步更新环境变量示例。",
     kind: "fix"
+  }, {
+    title: "修复网页 GitHub 配置仍返回 API 404",
+    desc: "发布状态读取统一使用网页保存的 OAuth 或手动 Token，网页配置的仓库优先于环境变量与 GHCR 镜像推导值；错误信息同时显示实际请求仓库，解决私有仓库和占位环境变量导致的 404。",
+    kind: "fix"
   }]
 };
 

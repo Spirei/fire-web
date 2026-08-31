@@ -20,7 +20,8 @@ type GithubRun = {
 
 function repositoryName() {
   const imageRepository = process.env.GHCR_IMAGE?.replace(/^ghcr\.io\//, "").replace(/:[^/]+$/, "");
-  return process.env.GITHUB_REPOSITORY || imageRepository || (getDb().prepare("SELECT value FROM site_settings WHERE key = 'deployGithubRepository'").get() as { value?: string } | undefined)?.value || "owner/repository";
+  const configuredRepository = (getDb().prepare("SELECT value FROM site_settings WHERE key = 'deployGithubRepository'").get() as { value?: string } | undefined)?.value || "";
+  return configuredRepository || process.env.GITHUB_REPOSITORY || imageRepository || "owner/repository";
 }
 
 function deployToken() {
@@ -32,17 +33,18 @@ function deployToken() {
 
 export async function GET() {
   const repository = repositoryName();
+  const token = deployToken();
   const endpoint = `https://api.github.com/repos/${repository}/actions/runs?branch=main&per_page=20`;
   try {
     const response = await fetch(endpoint, {
       headers: {
         accept: "application/vnd.github+json",
         "user-agent": "fire-deploy-status",
-        ...(process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {})
+        ...(token ? { authorization: `Bearer ${token}` } : {})
       },
       cache: "no-store"
     });
-    if (!response.ok) return NextResponse.json({ error: `GitHub API ${response.status}`, repository }, { status: 502 });
+    if (!response.ok) return NextResponse.json({ error: `GitHub API ${response.status}（仓库：${repository}）`, repository }, { status: 502 });
     const payload = await response.json() as { workflow_runs?: GithubRun[] };
     const runs = (payload.workflow_runs || []).map((run) => ({
       id: run.id,
