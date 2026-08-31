@@ -70,6 +70,7 @@ export default function DeployStatusPage() {
   const latestState = latest ? stateOf(latest) : { label: "待发布", className: "bg-slate-400", ring: "ring-slate-400/15" };
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-10 text-slate-900 transition-colors dark:bg-[#0b0f16] dark:text-slate-100 sm:px-8">
+      <style jsx>{`button[aria-label="刷新状态"]:hover svg, button[aria-label="刷新中"] svg { animation: deploy-refresh-spin .75s linear infinite; } @keyframes deploy-refresh-spin { to { transform: rotate(360deg); } }`}</style>
       <div className="mx-auto max-w-3xl">
         <div className="mb-8 flex items-start justify-between gap-4">
           <div><p className="mb-2 text-xs uppercase tracking-[.22em] text-slate-500">Fire deployment</p><h1 className="text-2xl font-semibold tracking-tight">本地 → 线上发布状态</h1><p className="mt-2 text-sm text-slate-400">源码以 main 为唯一来源，每日 00:00 自动发布，也可在 GitHub 手动运行。</p></div>
