@@ -2077,6 +2077,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "提升 GHCR 镜像清单兼容性",
     desc: "发布镜像时关闭额外 provenance 与 SBOM 清单，保留标准 linux/amd64 镜像，兼容群晖 Docker 拉取并避免 registry 返回 manifest unknown。",
     kind: "fix"
+  }, {
+    title: "统一发布版本胶囊视觉",
+    desc: "线上版本短 SHA 改为 GitHub 风格中性胶囊，浅色模式使用黑色文字，深色模式使用白色文字；版本是否落后仅由状态圆点表达，移除整块橙色告警感。",
+    kind: "fix"
   }]
 };
 
