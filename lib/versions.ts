@@ -1937,6 +1937,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "发布监控页右上角增加浅色/深色切换",
     desc: "复用全站 ThemeToggle，在 /deploy-status 页面右上角提供太阳/月亮图标，主题选择通过现有 localStorage 与 Cookie 持久化，刷新后保持一致。",
     kind: "fix"
+  }, {
+    title: "GitHub OAuth 授权与 Token 安全兜底",
+    desc: "发布监控页同时支持 GitHub OAuth 授权和手动 Token 兜底。OAuth 使用一次性 state、管理员权限和 workflow 最小权限；授权及备用 Token 仅服务端保存，并通过 DEPLOY_STATUS_SECRET 使用 AES-GCM 加密，页面只显示授权账号/已配置状态。",
+    kind: "security"
   }]
 };
 
