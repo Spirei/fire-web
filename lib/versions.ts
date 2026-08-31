@@ -1953,6 +1953,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "发布监控页刷新按钮增加动效",
     desc: "刷新图标悬停时以轻量旋转动画反馈操作，保持顶栏简洁并强化可发现性。",
     kind: "fix"
+  }, {
+    title: "发布流程节点改为可操作按钮",
+    desc: "流程图中的 main、检查、立即发布、GHCR 与线上容器节点均可直接操作或跳转，状态检查和手动发布无需离开监控页。",
+    kind: "feature"
   }]
 };
 
