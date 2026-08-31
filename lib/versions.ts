@@ -2085,6 +2085,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "移除发布流程重复版本提示",
     desc: "当前线上 SHA 已由 fire-web main 节点右上角胶囊展示，镜像未覆盖最新 main 时，构建节点改为‘构建新镜像’，不再重复显示‘镜像落后 + 相同 SHA’。",
     kind: "fix"
+  }, {
+    title: "收紧发布监控页临界宽度",
+    desc: "桌面内容区由 800px 收紧至 720px，在四段发布流程仍能稳定保持单行的前提下减少横向空白；更窄视口继续使用现有响应式网格。",
+    kind: "fix"
   }]
 };
 
