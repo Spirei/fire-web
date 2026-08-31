@@ -94,9 +94,46 @@ function migrateLegacyGroups(userId: string) {
   });
 }
 
+/**
+ * 收敛旧版导入遗留的重复分组。市场分组按 market 唯一，自定义分组按
+ * 规范化名称唯一；记录统一迁移到最早的分组，避免只隐藏重复项而丢失归属。
+ */
+function dedupeWatchGroups(userId: string) {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT * FROM watch_groups WHERE user_id = ? ORDER BY sort, created_at, id")
+    .all(userId) as WatchGroupRow[];
+  const canonicalByKey = new Map<string, WatchGroupRow>();
+  const duplicates: { duplicate: WatchGroupRow; canonical: WatchGroupRow }[] = [];
+
+  for (const row of rows) {
+    const normalizedName = row.name.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+    const key = row.kind === "market"
+      ? `market:${row.market.trim().toUpperCase()}`
+      : `custom:${normalizedName}`;
+    const canonical = canonicalByKey.get(key);
+    if (canonical) duplicates.push({ duplicate: row, canonical });
+    else canonicalByKey.set(key, row);
+  }
+  if (duplicates.length === 0) return;
+
+  const merge = db.transaction(() => {
+    const reassign = db.prepare("UPDATE records SET watch_group_id = ? WHERE user_id = ? AND watch_group_id = ?");
+    const remove = db.prepare("DELETE FROM watch_groups WHERE id = ? AND user_id = ?");
+    const removeAsset = db.prepare("DELETE FROM assets WHERE id = ?");
+    for (const { duplicate, canonical } of duplicates) {
+      reassign.run(canonical.id, userId, duplicate.id);
+      removeAsset.run(assetId("group", "GROUP", duplicate.id));
+      remove.run(duplicate.id, userId);
+    }
+  });
+  merge();
+}
+
 export function listWatchGroups(userId: string): WatchGroupDto[] {
   seedMarketGroups(userId);
   migrateLegacyGroups(userId);
+  dedupeWatchGroups(userId);
   const rows = getDb()
     .prepare("SELECT * FROM watch_groups WHERE user_id = ? ORDER BY sort, created_at")
     .all(userId) as WatchGroupRow[];

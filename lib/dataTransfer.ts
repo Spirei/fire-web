@@ -231,11 +231,36 @@ export function restoreBackupPayload(payload: unknown, userId: string, isAdmin: 
     const existing = db.prepare(`SELECT user_id FROM ${table} WHERE id = ?`).get(oldId) as { user_id?: string } | undefined;
     return { oldId, id: existing?.user_id === userId ? oldId : newId(prefix) };
   };
+  const groupIdentity = (kind: string, market: string, name: string) =>
+    kind === "market"
+      ? `market:${market.trim().toUpperCase()}`
+      : `custom:${name.trim().replace(/\s+/g, " ").toLocaleLowerCase("zh-CN")}`;
+  const existingGroups = db
+    .prepare("SELECT id,name,kind,market FROM watch_groups WHERE user_id = ? ORDER BY sort,id")
+    .all(userId) as { id: string; name: string; kind: string; market: string }[];
+  const canonicalGroupByIdentity = new Map<string, string>();
+  const duplicateGroupIds = new Map<string, string>();
+  for (const group of existingGroups) {
+    const identity = groupIdentity(group.kind, group.market, group.name);
+    const canonical = canonicalGroupByIdentity.get(identity);
+    if (canonical) duplicateGroupIds.set(group.id, canonical);
+    else canonicalGroupByIdentity.set(identity, group.id);
+  }
   const groupIdMap = new Map<string, string>();
-  const groups = asArr("watchGroups").map((g) => {
-    const ids = mapOwnedId("watch_groups", g.id, "wg"); groupIdMap.set(ids.oldId, ids.id);
-    return { id: ids.id, user_id: userId, name: text(g.name, "watchGroups.name", 100, true), icon: text(g.icon, "watchGroups.icon", 500), sort: numberValue(g.sort, "watchGroups.sort", false) ?? 0, visible: numberValue(g.visible, "watchGroups.visible", false) ?? -1, kind: enumValue(g.kind, "watchGroups.kind", ["custom", "market"], "custom"), market: text(g.market, "watchGroups.market", 20), created_at: text(g.created_at, "watchGroups.created_at", 64, true) };
-  });
+  const groupsById = new Map<string, Record<string, unknown>>();
+  for (const g of asArr("watchGroups")) {
+    const oldId = text(g.id, "watch_groups.id", 128, true);
+    const name = text(g.name, "watchGroups.name", 100, true);
+    const kind = enumValue(g.kind, "watchGroups.kind", ["custom", "market"], "custom");
+    const market = text(g.market, "watchGroups.market", 20).toUpperCase();
+    const identity = groupIdentity(kind, market, name);
+    const existingSameId = existingGroups.find((item) => item.id === oldId);
+    const id = canonicalGroupByIdentity.get(identity) ?? (existingSameId ? oldId : newId("wg"));
+    canonicalGroupByIdentity.set(identity, id);
+    groupIdMap.set(oldId, id);
+    groupsById.set(id, { id, user_id: userId, name, icon: text(g.icon, "watchGroups.icon", 500), sort: numberValue(g.sort, "watchGroups.sort", false) ?? 0, visible: numberValue(g.visible, "watchGroups.visible", false) ?? -1, kind, market, created_at: text(g.created_at, "watchGroups.created_at", 64, true) });
+  }
+  const groups = [...groupsById.values()];
   const recordIdMap = new Map<string, string>();
   const recordCodeMap = new Map<string, string>();
   const records = asArr("records").map((r) => {
@@ -267,6 +292,11 @@ export function restoreBackupPayload(payload: unknown, userId: string, isAdmin: 
   const celebs = asArr("celebs").map((c) => ({ id: text(c.id, "celebs.id", 128, true), name: text(c.name, "celebs.name", 200, true), title: text(c.title, "celebs.title", 200), avatar: text(c.avatar, "celebs.avatar", 1000), enabled: numberValue(c.enabled, "celebs.enabled", false) ?? 1, sort: numberValue(c.sort, "celebs.sort", false) ?? 0, source_kind: text(c.source_kind, "celebs.source_kind", 30), cik: text(c.cik, "celebs.cik", 20), entity: text(c.entity, "celebs.entity", 200), source_label: text(c.source_label, "celebs.source_label", 200), holdings_json: jsonText(c.holdings_json, "celebs.holdings_json", 5_000_000), trades_json: jsonText(c.trades_json, "celebs.trades_json", 5_000_000), returns_json: jsonText(c.returns_json, "celebs.returns_json", 1_000_000), created_at: text(c.created_at, "celebs.created_at", 64, true), updated_at: text(c.updated_at, "celebs.updated_at", 64, true), stock_icons_json: jsonText(c.stock_icons_json, "celebs.stock_icons_json", 1_000_000), refresh_hours: numberValue(c.refresh_hours, "celebs.refresh_hours", false) ?? 0 }));
 
   const tx = db.transaction(() => {
+    // 导入必须幂等：市场按 market、自定义分组按规范化名称合并；同时收敛历史导入留下的重复分组。
+    for (const [duplicateId, canonicalId] of duplicateGroupIds) {
+      db.prepare("UPDATE records SET watch_group_id = ? WHERE user_id = ? AND watch_group_id = ?").run(canonicalId, userId, duplicateId);
+      db.prepare("DELETE FROM watch_groups WHERE id = ? AND user_id = ?").run(duplicateId, userId);
+    }
     for (const g of groups) upsertRow(db, "watch_groups", "id", g);
     for (const r of records) upsertRow(db, "records", "id", r);
     for (const o of orders) upsertRow(db, "trade_orders", "id", o);
