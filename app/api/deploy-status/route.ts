@@ -71,11 +71,11 @@ export async function POST(request: Request) {
   const user = getAuthUser(request);
   if (!user || !isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
   const token = deployToken();
-  if (!token) return NextResponse.json({ error: "未配置 GITHUB_TOKEN，无法手动触发发布" }, { status: 503 });
+  if (!token) return NextResponse.json({ error: "未配置 GITHUB_TOKEN，无法执行 Push image" }, { status: 503 });
   const repository = repositoryName();
   const now = Date.now();
   if (now - lastDispatchAt < DISPATCH_COOLDOWN_MS) {
-    return NextResponse.json({ error: "手动发布刚刚已触发，请勿重复点击" }, { status: 409 });
+    return NextResponse.json({ error: "Push image 刚刚已触发，请勿重复点击" }, { status: 409 });
   }
   lastDispatchAt = now;
   try {
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       const activeRun = payload.workflow_runs?.find((run) => run.status !== "completed");
       if (activeRun) {
         lastDispatchAt = 0;
-        return NextResponse.json({ error: "已有手动发布正在排队或运行，请等待完成", runUrl: activeRun.html_url }, { status: 409 });
+        return NextResponse.json({ error: "已有 Push image 正在排队或运行，请等待完成", runUrl: activeRun.html_url }, { status: 409 });
       }
     }
   } catch {
@@ -110,5 +110,5 @@ export async function POST(request: Request) {
     lastDispatchAt = 0;
     return NextResponse.json({ error: `触发失败（GitHub API ${response.status}）` }, { status: 502 });
   }
-  return NextResponse.json({ ok: true, repository, message: "已触发手动发布，请稍候查看状态" });
+  return NextResponse.json({ ok: true, repository, message: "已触发 Push image，请稍候查看状态" });
 }

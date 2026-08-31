@@ -2021,6 +2021,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "阻止重复触发手动发布",
     desc: "顶部推送图标与流程中的立即发布按钮共享 GitHub 运行状态：已有 workflow_dispatch 排队或运行时同时禁用并显示发布进行中。服务端触发前再次查询当前工作流，并增加 30 秒触发锁，防止快速连点、多标签页或网络延迟产生重复运行；失败或完成后仍可正常重试。",
     kind: "fix"
+  }, {
+    title: "明确 Push image 镜像构建入口",
+    desc: "发布流程将原先含义模糊的立即发布明确命名为 Push image，点击后生成并推送 GHCR 镜像；原构建 GHCR 链接改为查看 GHCR，顶部图标、流程按钮与最近运行记录使用一致名称并继续共享防重复保护。",
+    kind: "feature"
   }]
 };
 
