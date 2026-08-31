@@ -237,7 +237,7 @@ export default function DeployStatusPage() {
   const imageBuilding = Boolean(imageProgress && imageProgress.status !== "completed");
   const latestAttemptFailed = Boolean(imageProgress && imageProgress.status === "completed" && imageProgress.conclusion !== "success" && sourceVersion && imageProgress.sha === sourceVersion.shortSha);
   const sourceState = sourceVersion
-    ? { label: `main ${sourceVersion.shortSha}`, dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" }
+    ? { label: `main ${sourceVersion.shortSha}`, dot: "bg-slate-400", text: "text-slate-600 dark:text-slate-300" }
     : { label: "main 未知", dot: "bg-slate-400", text: "text-slate-500" };
   const checkState = !latestMainCheck
     ? { label: "检查未知", dot: "bg-slate-400", text: "text-slate-500" }
