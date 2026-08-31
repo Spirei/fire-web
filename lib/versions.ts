@@ -1985,6 +1985,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "深色模式保存配置改为白底黑字",
     desc: "深色模式下保存配置按钮使用白色背景与深色文字，并补充键盘焦点环，提升对比度和可访问性。",
     kind: "fix"
+  }, {
+    title: "修正手动 Token 权限提示",
+    desc: "网页配置将备用 Token 明确为发布 Token，提示手动触发 workflow 需要目标仓库 Actions 的 Read and write 权限，并同步更新环境变量示例。",
+    kind: "fix"
   }]
 };
 
