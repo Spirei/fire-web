@@ -2125,6 +2125,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "精简线上版本胶囊",
     desc: "线上版本仅在匹配最新 main 时显示绿色圆点，非最新版统一使用灰色圆点；边框改为轻量内描边与中性底色并移除浮起阴影。",
     kind: "fix"
+  }, {
+    title: "增加运行次数数字徽标",
+    desc: "最近运行标题旁以紧凑圆形徽标显示 GitHub Actions 总运行次数，仅保留数字；同时将单次读取上限提高到 100，使页面分页数量与 GitHub 总数一致。",
+    kind: "fix"
   }]
 };
 

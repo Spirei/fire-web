@@ -64,7 +64,7 @@ export async function GET(request: Request) {
   if (!user || !isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
   const repository = repositoryName();
   const token = deployToken();
-  const endpoint = `https://api.github.com/repos/${repository}/actions/runs?branch=main&per_page=50`;
+  const endpoint = `https://api.github.com/repos/${repository}/actions/runs?branch=main&per_page=100`;
   try {
     const response = await fetch(endpoint, {
       headers: {
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
       cache: "no-store"
     });
     if (!response.ok) return NextResponse.json({ error: `GitHub API ${response.status}（仓库：${repository}）`, repository }, { status: 502 });
-    const payload = await response.json() as { workflow_runs?: GithubRun[] };
+    const payload = await response.json() as { total_count?: number; workflow_runs?: GithubRun[] };
     const workflowRuns = payload.workflow_runs || [];
     const runs = workflowRuns.map((run) => ({
       id: run.id,
@@ -166,6 +166,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       repository,
       packageName,
+      workflowRunCount: payload.total_count ?? workflowRuns.length,
       runs,
       imageProgress,
       source: mainSha ? { sha: mainSha, shortSha: mainSha.slice(0, 7), url: mainCommit?.html_url || `https://github.com/${repository}/commit/${mainSha}` } : null,

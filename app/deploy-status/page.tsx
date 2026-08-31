@@ -149,6 +149,7 @@ export default function DeployStatusPage() {
   const [imageVersion, setImageVersion] = useState<ImageVersion | null>(null);
   const [runtimeVersion, setRuntimeVersion] = useState<RuntimeVersion | null>(null);
   const [packageName, setPackageName] = useState("fire-web");
+  const [workflowRunCount, setWorkflowRunCount] = useState(0);
   const [page, setPage] = useState(1);
   const [repository, setRepository] = useState("owner/repository");
   const [checkedAt, setCheckedAt] = useState("");
@@ -171,7 +172,7 @@ export default function DeployStatusPage() {
       const data = await readApiJson<{
         repository?: string; error?: string; runs?: Run[]; imageProgress?: ImageProgress | null;
         source?: SourceVersion | null; image?: ImageVersion | null; runtime?: RuntimeVersion | null;
-        packageName?: string; checkedAt?: string;
+        packageName?: string; workflowRunCount?: number; checkedAt?: string;
       }>(response);
       if (data.repository) setRepository(data.repository);
       if (!response.ok) throw new Error(data.error || "读取失败");
@@ -181,6 +182,7 @@ export default function DeployStatusPage() {
       setImageVersion(data.image || null);
       setRuntimeVersion(data.runtime || null);
       setPackageName(data.packageName || "fire-web");
+      setWorkflowRunCount(data.workflowRunCount ?? data.runs?.length ?? 0);
       setCheckedAt(data.checkedAt || "");
       setError("");
     } catch (err) { setNotice(""); setError(err instanceof Error ? err.message : "暂时无法读取发布状态"); }
@@ -395,7 +397,7 @@ export default function DeployStatusPage() {
           {notice && <p role="status" className="mt-4 rounded-xl bg-emerald-400/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">{notice}</p>}
         </section>
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
-          <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800"><h2 className="text-sm font-medium">最近运行</h2><p className="mt-1 text-xs text-slate-500">{repository}{checkedAt ? ` · 检查于 ${formatTime(checkedAt)}` : ""}</p></div>
+          <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800"><div className="flex items-center gap-2"><h2 className="text-sm font-medium">最近运行</h2>{hasLoaded && workflowRunCount > 0 && <span aria-label={`共 ${workflowRunCount} 次运行`} title={`${workflowRunCount} workflow runs`} className="inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-1.5 text-[10px] font-semibold tabular-nums text-slate-600 ring-1 ring-inset ring-white/70 dark:border-white/10 dark:bg-white/[.06] dark:text-slate-300 dark:ring-white/[.04]">{workflowRunCount}</span>}</div><p className="mt-1 text-xs text-slate-500">{repository}{checkedAt ? ` · 检查于 ${formatTime(checkedAt)}` : ""}</p></div>
           {!hasLoaded ? <div className="divide-y divide-slate-200 dark:divide-slate-800" aria-label="正在读取运行记录">{[0, 1, 2].map((item) => <div key={item} className="flex items-center gap-3 px-5 py-4 motion-safe:animate-pulse"><span className="h-2.5 w-2.5 rounded-full bg-slate-200 dark:bg-slate-700" /><span className="flex-1"><span className="block h-3 w-2/5 rounded bg-slate-200 dark:bg-slate-700" /><span className="mt-2 block h-2.5 w-1/4 rounded bg-slate-100 dark:bg-slate-800" /></span></div>)}</div> : <div className="divide-y divide-slate-200 dark:divide-slate-800">{pagedRuns.map((run) => { const state = stateOf(run); return <a key={run.id} href={run.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-5 py-4 transition hover:bg-slate-50 dark:hover:bg-white/[.03]"><span className={`h-2.5 w-2.5 shrink-0 rounded-full ${state.className}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm text-slate-800 dark:text-slate-200">{run.title}</span><span className="mt-1 block text-xs text-slate-500">{run.sha} · {runActionLabel(run)} · {formatTime(run.updatedAt)}</span></span></a>; })}</div>}
           {hasLoaded && !runs.length && !error && <p className="px-5 py-10 text-center text-sm text-slate-500">暂无运行记录</p>}
           {runs.length > RUNS_PER_PAGE && <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3 text-xs text-slate-500 dark:border-slate-800"><span>第 {page} / {totalPages} 页 · 共 {runs.length} 条</span><div className="flex gap-2"><button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1} className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-white/[.04]">上一页</button><button onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages} className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-white/[.04]">下一页</button></div></div>}
