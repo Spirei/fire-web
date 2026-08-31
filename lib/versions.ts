@@ -2001,6 +2001,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "修复深浅色切换短暂延迟",
     desc: "主题按钮点击时同步更新根节点 class、持久化设置和 Cookie，不再等待 React 副作用；发布监控页移除整页颜色缓动，主题即时生效。",
     kind: "fix"
+  }, {
+    title: "修复提交检查被误显示为发布成功",
+    desc: "顶部最新发布状态仅统计定时 schedule 与手动 workflow_dispatch 运行，普通 main 提交的检查成功不再被误判为镜像发布成功。",
+    kind: "fix"
   }]
 };
 

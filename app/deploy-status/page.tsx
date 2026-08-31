@@ -74,7 +74,7 @@ export default function DeployStatusPage() {
     } catch (err) { setError(err instanceof Error ? err.message : "触发失败"); }
     finally { setTriggering(false); }
   };
-  const latest = runs[0];
+  const latest = runs.find((run) => run.event === "schedule" || run.event === "workflow_dispatch");
   const latestState = latest ? stateOf(latest) : { label: "待发布", className: "bg-slate-400", ring: "ring-slate-400/15" };
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-10 text-slate-900 dark:bg-[#0b0f16] dark:text-slate-100 sm:px-8">
