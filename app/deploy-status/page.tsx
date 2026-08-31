@@ -186,10 +186,22 @@ export default function DeployStatusPage() {
     } catch (err) { setNotice(""); setError(err instanceof Error ? err.message : "暂时无法读取发布状态"); }
     finally { setRefreshing(false); setHasLoaded(true); }
   }, []);
+  const loadUpdater = useCallback(async () => {
+    try {
+      const response = await fetch("/api/deploy-status/container-update", { cache: "no-store" });
+      if (!response.ok) throw new Error("unavailable");
+      const data = await readApiJson<{ available?: boolean; reason?: string }>(response);
+      setUpdaterAvailable(Boolean(data.available));
+      setUpdaterReason(data.reason || "更新服务不可用");
+    } catch {
+      setUpdaterAvailable(false);
+      setUpdaterReason("无法连接更新服务");
+    }
+  }, []);
   const refreshInterval = imageProgress && imageProgress.status !== "completed" ? 10000 : 60000;
   useEffect(() => { void load(); const timer = window.setInterval(() => void load(), refreshInterval); return () => window.clearInterval(timer); }, [load, refreshInterval]);
   useEffect(() => { fetch("/api/deploy-status/config").then(async (response) => response.ok ? setConfig(await readApiJson<typeof config>(response)) : null).catch(() => {}); }, []);
-  useEffect(() => { fetch("/api/deploy-status/container-update", { cache: "no-store" }).then(async (response) => { if (!response.ok) return; const data = await readApiJson<{ available?: boolean; reason?: string }>(response); setUpdaterAvailable(Boolean(data.available)); setUpdaterReason(data.reason || "更新服务不可用"); }).catch(() => setUpdaterReason("无法检查更新服务")); }, []);
+  useEffect(() => { void loadUpdater(); const timer = window.setInterval(() => void loadUpdater(), 15000); return () => window.clearInterval(timer); }, [loadUpdater]);
   const totalPages = Math.max(1, Math.ceil(runs.length / RUNS_PER_PAGE));
   const pagedRuns = runs.slice((page - 1) * RUNS_PER_PAGE, page * RUNS_PER_PAGE);
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
@@ -197,6 +209,7 @@ export default function DeployStatusPage() {
     if (refreshing) return;
     setRefreshTurns((value) => value + 1);
     void load();
+    void loadUpdater();
   };
   const saveConfig = async () => {
     setConfigError("");
@@ -334,7 +347,7 @@ export default function DeployStatusPage() {
             <IconChevronRight aria-hidden="true" className="hidden text-slate-400 sm:block dark:text-slate-600" size={15} stroke={1.8} />
             <button onClick={() => void triggerPublish()} disabled={publishBusy} title={publishTitle} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-blue-600 bg-blue-600 px-3.5 py-2.5 font-semibold text-white shadow-sm shadow-blue-600/15 transition hover:border-blue-500 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 disabled:cursor-wait disabled:opacity-60 sm:w-auto dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950 dark:shadow-none dark:hover:border-blue-300 dark:hover:bg-blue-300"><span className={`h-2.5 w-2.5 rounded-full ${imageState.dot}`} /><IconPackageExport aria-hidden="true" className={publishBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{publishBusy ? publishLabel : imageState.label}</button>
             <IconChevronRight aria-hidden="true" className="hidden text-slate-400 sm:block dark:text-slate-600" size={15} stroke={1.8} />
-            <button onClick={() => void updateContainer()} disabled={!canUpdateContainer || containerBusy} title={!updaterAvailable ? updaterReason : imageBuilding ? "请等待镜像构建完成" : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像" : runtimeVersion?.matchesImage ? "线上已运行最新镜像" : "拉取已校验的 GHCR 镜像并重启 Fire"} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><IconServerCog aria-hidden="true" className={containerBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{containerBusy ? containerButtonLabel : !updaterAvailable && updaterReason.includes("未启动") ? "更新服务离线" : runtimeVersion?.matchesImage ? "群晖已是最新" : "更新群晖"}</button>
+            <button onClick={() => void updateContainer()} disabled={!canUpdateContainer || containerBusy} title={!updaterAvailable ? updaterReason : imageBuilding ? "请等待镜像构建完成" : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像" : runtimeVersion?.matchesImage ? "线上已运行最新镜像" : "拉取已校验的 GHCR 镜像并重启 Fire"} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><IconServerCog aria-hidden="true" className={containerBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{containerBusy ? containerButtonLabel : !updaterAvailable ? "更新服务离线" : runtimeVersion?.matchesImage ? "群晖已是最新" : "更新群晖"}</button>
           </div>
         </section>
         {imageProgress && showImageProgress && <section aria-live="polite" aria-busy={imageProgress.status !== "completed"} className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
