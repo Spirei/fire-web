@@ -133,6 +133,13 @@ const RUNS_PER_PAGE = 5;
 type ContainerUpdateState = "idle" | "triggering" | "watching" | "restarting" | "healthy" | "unchanged" | "failed";
 
 const sleep = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+const readApiJson = async <T extends Record<string, unknown>>(response: Response): Promise<T> => {
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(`接口返回异常（HTTP ${response.status}），请确认线上容器已更新`);
+  }
+  return response.json() as Promise<T>;
+};
 
 export default function DeployStatusPage() {
   const [runs, setRuns] = useState<Run[]>([]);
@@ -161,7 +168,11 @@ export default function DeployStatusPage() {
     setRefreshing(true);
     try {
       const response = await fetch("/api/deploy-status", { cache: "no-store" });
-      const data = await response.json();
+      const data = await readApiJson<{
+        repository?: string; error?: string; runs?: Run[]; imageProgress?: ImageProgress | null;
+        source?: SourceVersion | null; image?: ImageVersion | null; runtime?: RuntimeVersion | null;
+        packageName?: string; checkedAt?: string;
+      }>(response);
       if (data.repository) setRepository(data.repository);
       if (!response.ok) throw new Error(data.error || "读取失败");
       setRuns(data.runs || []);
@@ -170,15 +181,15 @@ export default function DeployStatusPage() {
       setImageVersion(data.image || null);
       setRuntimeVersion(data.runtime || null);
       setPackageName(data.packageName || "fire-web");
-      setCheckedAt(data.checkedAt);
+      setCheckedAt(data.checkedAt || "");
       setError("");
-    } catch (err) { setError(err instanceof Error ? err.message : "暂时无法读取发布状态"); }
+    } catch (err) { setNotice(""); setError(err instanceof Error ? err.message : "暂时无法读取发布状态"); }
     finally { setRefreshing(false); setHasLoaded(true); }
   }, []);
   const refreshInterval = imageProgress && imageProgress.status !== "completed" ? 10000 : 60000;
   useEffect(() => { void load(); const timer = window.setInterval(() => void load(), refreshInterval); return () => window.clearInterval(timer); }, [load, refreshInterval]);
-  useEffect(() => { fetch("/api/deploy-status/config").then(async (response) => response.ok ? setConfig(await response.json()) : null).catch(() => {}); }, []);
-  useEffect(() => { fetch("/api/deploy-status/container-update", { cache: "no-store" }).then(async (response) => { if (!response.ok) return; const data = await response.json(); setUpdaterAvailable(Boolean(data.available)); setUpdaterReason(data.reason || "更新服务不可用"); }).catch(() => setUpdaterReason("无法检查更新服务")); }, []);
+  useEffect(() => { fetch("/api/deploy-status/config").then(async (response) => response.ok ? setConfig(await readApiJson<typeof config>(response)) : null).catch(() => {}); }, []);
+  useEffect(() => { fetch("/api/deploy-status/container-update", { cache: "no-store" }).then(async (response) => { if (!response.ok) return; const data = await readApiJson<{ available?: boolean; reason?: string }>(response); setUpdaterAvailable(Boolean(data.available)); setUpdaterReason(data.reason || "更新服务不可用"); }).catch(() => setUpdaterReason("无法检查更新服务")); }, []);
   const totalPages = Math.max(1, Math.ceil(runs.length / RUNS_PER_PAGE));
   const pagedRuns = runs.slice((page - 1) * RUNS_PER_PAGE, page * RUNS_PER_PAGE);
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
@@ -191,7 +202,7 @@ export default function DeployStatusPage() {
     setConfigError("");
     try {
       const response = await fetch("/api/deploy-status/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ repository: config.repository, token }) });
-      const data = await response.json();
+      const data = await readApiJson<typeof config & { error?: string }>(response);
       if (!response.ok) throw new Error(data.error || "保存失败");
       setConfig(data); setToken(""); setConfigOpen(false); setNotice("发布配置已保存，Token 仅保存在服务端");
     } catch (err) { setConfigError(err instanceof Error ? err.message : "保存失败"); }
@@ -201,7 +212,7 @@ export default function DeployStatusPage() {
     setTriggering(true); setNotice(""); setError("");
     try {
       const response = await fetch("/api/deploy-status", { method: "POST" });
-      const data = await response.json();
+      const data = await readApiJson<{ error?: string }>(response);
       if (response.status === 409) { setNotice(data.error || "镜像构建进行中"); void load(); return; }
       if (!response.ok) throw new Error(data.error || "触发失败");
       setNotice("已触发镜像构建，GitHub 正在生成并推送 GHCR 镜像");
@@ -215,7 +226,7 @@ export default function DeployStatusPage() {
     setContainerUpdateState("triggering"); setNotice(""); setError("");
     try {
       const response = await fetch("/api/deploy-status/container-update", { method: "POST" });
-      const data = await response.json();
+      const data = await readApiJson<{ error?: string; message?: string }>(response);
       if (!response.ok) throw new Error(data.error || "无法触发群晖更新");
       setContainerUpdateState("watching");
       setNotice(data.message || "已通知群晖拉取最新镜像");
@@ -226,7 +237,7 @@ export default function DeployStatusPage() {
         try {
           const health = await fetch(`/api/health?deployCheck=${Date.now()}`, { cache: "no-store" });
           if (!health.ok) throw new Error("unhealthy");
-          const healthPayload = await health.json() as { data?: { buildSha?: string } };
+          const healthPayload = await readApiJson<{ data?: { buildSha?: string } }>(health);
           const runningSha = healthPayload.data?.buildSha || "unknown";
           if (targetSha && runningSha === targetSha) {
             setContainerUpdateState("healthy");

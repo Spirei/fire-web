@@ -2101,6 +2101,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "统一发布页中文操作文案",
     desc: "将 Push image、镜像发布提示和顶部说明统一为中文表达，保留 GitHub、GHCR 等专有名词，减少中英文混排造成的阅读跳跃。",
     kind: "fix"
+  }, {
+    title: "修复发布接口 HTML 解析报错",
+    desc: "发布页统一校验 API 响应类型；接口返回 404、登录页或其他 HTML 时显示明确的 HTTP 与容器版本提示，不再暴露 Unexpected token 解析错误，也不再同时显示成功和错误提示。",
+    kind: "fix"
   }]
 };
 
