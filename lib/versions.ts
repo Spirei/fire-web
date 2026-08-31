@@ -2081,6 +2081,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "统一发布版本胶囊视觉",
     desc: "线上版本短 SHA 改为 GitHub 风格中性胶囊，浅色模式使用黑色文字，深色模式使用白色文字；版本是否落后仅由状态圆点表达，移除整块橙色告警感。",
     kind: "fix"
+  }, {
+    title: "移除发布流程重复版本提示",
+    desc: "当前线上 SHA 已由 fire-web main 节点右上角胶囊展示，镜像未覆盖最新 main 时，构建节点改为‘构建新镜像’，不再重复显示‘镜像落后 + 相同 SHA’。",
+    kind: "fix"
   }]
 };
 

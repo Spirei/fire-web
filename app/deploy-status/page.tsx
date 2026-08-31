@@ -255,7 +255,7 @@ export default function DeployStatusPage() {
       : imageVersion?.matchesMain
         ? { label: "镜像已构建完成", dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" }
         : imageVersion?.latestSuccessfulSha
-          ? { label: `镜像落后 ${imageVersion.latestSuccessfulShortSha}`, dot: "bg-orange-500", text: "text-orange-700 dark:text-orange-300" }
+          ? { label: "构建新镜像", dot: "bg-orange-500", text: "text-orange-700 dark:text-orange-300" }
           : { label: "尚无镜像", dot: "bg-slate-400", text: "text-slate-500" };
   const runtimeState = runtimeVersion?.matchesMain
     ? { label: `线上 ${runtimeVersion.shortSha}`, dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" }
