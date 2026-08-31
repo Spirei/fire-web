@@ -11,8 +11,8 @@ import {
   IconExternalLink,
   IconGitBranch,
   IconLoader2,
+  IconPackage,
   IconPackageExport,
-  IconPackages,
   IconRefresh,
   IconServerCog,
   IconShieldCheck
@@ -114,6 +114,7 @@ const sleep = (milliseconds: number) => new Promise((resolve) => window.setTimeo
 
 export default function DeployStatusPage() {
   const [runs, setRuns] = useState<Run[]>([]);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [imageProgress, setImageProgress] = useState<ImageProgress | null>(null);
   const [sourceVersion, setSourceVersion] = useState<SourceVersion | null>(null);
   const [imageVersion, setImageVersion] = useState<ImageVersion | null>(null);
@@ -128,6 +129,7 @@ export default function DeployStatusPage() {
   const [triggering, setTriggering] = useState(false);
   const [containerUpdateState, setContainerUpdateState] = useState<ContainerUpdateState>("idle");
   const [updaterAvailable, setUpdaterAvailable] = useState(false);
+  const [updaterReason, setUpdaterReason] = useState("正在检查更新服务");
   const [notice, setNotice] = useState("");
   const [config, setConfig] = useState({ repository: "", hasToken: false, githubAccount: "" });
   const [configOpen, setConfigOpen] = useState(false);
@@ -138,6 +140,7 @@ export default function DeployStatusPage() {
     try {
       const response = await fetch("/api/deploy-status", { cache: "no-store" });
       const data = await response.json();
+      if (data.repository) setRepository(data.repository);
       if (!response.ok) throw new Error(data.error || "读取失败");
       setRuns(data.runs || []);
       setImageProgress(data.imageProgress || null);
@@ -145,16 +148,15 @@ export default function DeployStatusPage() {
       setImageVersion(data.image || null);
       setRuntimeVersion(data.runtime || null);
       setPackageName(data.packageName || "fire-web");
-      setRepository(data.repository);
       setCheckedAt(data.checkedAt);
       setError("");
     } catch (err) { setError(err instanceof Error ? err.message : "暂时无法读取发布状态"); }
-    finally { setRefreshing(false); }
+    finally { setRefreshing(false); setHasLoaded(true); }
   }, []);
   const refreshInterval = imageProgress && imageProgress.status !== "completed" ? 10000 : 60000;
   useEffect(() => { void load(); const timer = window.setInterval(() => void load(), refreshInterval); return () => window.clearInterval(timer); }, [load, refreshInterval]);
   useEffect(() => { fetch("/api/deploy-status/config").then(async (response) => response.ok ? setConfig(await response.json()) : null).catch(() => {}); }, []);
-  useEffect(() => { fetch("/api/deploy-status/container-update", { cache: "no-store" }).then(async (response) => response.ok ? setUpdaterAvailable(Boolean((await response.json()).available)) : null).catch(() => {}); }, []);
+  useEffect(() => { fetch("/api/deploy-status/container-update", { cache: "no-store" }).then(async (response) => { if (!response.ok) return; const data = await response.json(); setUpdaterAvailable(Boolean(data.available)); setUpdaterReason(data.reason || "更新服务不可用"); }).catch(() => setUpdaterReason("无法检查更新服务")); }, []);
   const totalPages = Math.max(1, Math.ceil(runs.length / RUNS_PER_PAGE));
   const pagedRuns = runs.slice((page - 1) * RUNS_PER_PAGE, page * RUNS_PER_PAGE);
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
@@ -232,7 +234,7 @@ export default function DeployStatusPage() {
   const publishTitle = manualPublishActive ? "已有 Push image 正在运行" : triggering ? "正在触发镜像构建" : "生成并推送 GHCR 镜像";
   const latest = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && (run.event === "schedule" || run.event === "workflow_dispatch"));
   const latestMainCheck = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && run.event === "push" && run.sha === sourceVersion?.shortSha);
-  const latestState = latest ? stateOf(latest) : { label: "待发布", className: "bg-slate-400", ring: "ring-slate-400/15" };
+  const latestState = latest ? stateOf(latest) : { label: hasLoaded ? "未知" : "读取中", className: "bg-slate-400", ring: "ring-slate-400/15" };
   const finishedJobCount = imageProgress?.jobs.filter((job) => job.status === "completed").length || 0;
   const imageBuilding = Boolean(imageProgress && imageProgress.status !== "completed");
   const latestAttemptFailed = Boolean(imageProgress && imageProgress.status === "completed" && imageProgress.conclusion !== "success" && sourceVersion && imageProgress.sha === sourceVersion.shortSha);
@@ -264,7 +266,7 @@ export default function DeployStatusPage() {
   return (
     <main className="min-h-[100dvh] bg-slate-50 px-4 py-6 text-slate-900 dark:bg-[#0b0f16] dark:text-slate-100 sm:px-8 sm:py-10">
       <style jsx>{`main section button, main section a { transition-timing-function: cubic-bezier(.22,1,.36,1); } main section button:active, main section a:active { transform: translateY(1px) scale(.985); }`}</style>
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-5xl">
         <div className="mb-7 sm:mb-8 sm:flex sm:items-start sm:justify-between sm:gap-6">
           <div className="min-w-0"><p className="mb-2 hidden text-xs uppercase tracking-[.22em] text-slate-500 sm:block">Fire deployment</p><h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-2xl"><span className="sm:hidden">发布状态</span><span className="hidden sm:inline">GitHub main 到线上发布状态</span></h1><p className="mt-1.5 max-w-[30rem] text-[13px] leading-5 text-slate-500 sm:mt-2 sm:text-sm dark:text-slate-400"><span className="sm:hidden">每日 00:00 自动生成镜像，也可手动 Push image。</span><span className="hidden sm:inline">GitHub main 是发布源，每日 00:00 自动生成镜像，也可手动 Push image。</span></p></div>
           <div className="mt-4 flex w-full items-center justify-between gap-2 sm:mt-0 sm:w-auto sm:justify-end">
@@ -273,7 +275,7 @@ export default function DeployStatusPage() {
               <IconRefresh aria-hidden="true" size={16} stroke={1.8} style={{ transform: `rotate(${refreshTurns * 360}deg)`, transition: "transform 720ms cubic-bezier(.22,.75,.2,1)" }} />
             </button>
             <a href="/api/deploy-status/github/start" target="_blank" rel="noreferrer" title="使用 GitHub 授权" aria-label="使用 GitHub 授权，新窗口打开" className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 text-slate-800 transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-500 dark:hover:bg-white/[.04]"><IconBrandGithub aria-hidden="true" size={17} stroke={1.8} /></a>
-            <a href={`https://github.com/${repository}/pkgs/container/${packageName}`} target="_blank" rel="noreferrer" title="查看 GHCR 镜像" aria-label="查看 GHCR 镜像，新窗口打开" className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-white/[.04]"><IconPackages aria-hidden="true" size={17} stroke={1.8} /></a>
+            <a href={`https://github.com/${repository}/pkgs/container/${packageName}`} target="_blank" rel="noreferrer" title="查看 GHCR 镜像" aria-label="查看 GHCR 镜像，新窗口打开" className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-white/[.04]"><IconPackage aria-hidden="true" size={17} stroke={1.8} /></a>
             <button onClick={() => setConfigOpen((value) => !value)} title="配置账号" aria-label="配置账号" className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-white/[.04]"><IconAdjustmentsHorizontal aria-hidden="true" size={17} stroke={1.8} /></button>
           </div>
         </div>
@@ -287,7 +289,7 @@ export default function DeployStatusPage() {
             <IconChevronRight aria-hidden="true" className="hidden text-slate-400 sm:block dark:text-slate-600" size={15} stroke={1.8} />
             <button onClick={() => void triggerPublish()} disabled={publishBusy} title={publishTitle} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-blue-600 bg-blue-600 px-3.5 py-2.5 font-semibold text-white shadow-sm shadow-blue-600/15 transition hover:border-blue-500 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 disabled:cursor-wait disabled:opacity-60 sm:w-auto dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950 dark:shadow-none dark:hover:border-blue-300 dark:hover:bg-blue-300"><span className={`h-2.5 w-2.5 rounded-full ${imageState.dot}`} /><IconPackageExport aria-hidden="true" className={publishBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{publishBusy ? publishLabel : imageState.label}</button>
             <IconChevronRight aria-hidden="true" className="hidden text-slate-400 sm:block dark:text-slate-600" size={15} stroke={1.8} />
-            <button onClick={() => void updateContainer()} disabled={!canUpdateContainer || containerBusy} title={!updaterAvailable ? "群晖尚未配置 Watchtower Token" : imageBuilding ? "请等待镜像构建完成" : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像" : runtimeVersion?.matchesImage ? "线上已运行最新镜像" : "拉取已校验的 GHCR 镜像并重启 Fire"} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><IconServerCog aria-hidden="true" className={containerBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{containerBusy ? containerButtonLabel : runtimeVersion?.matchesImage ? "群晖已是最新" : "更新群晖"}</button>
+            <button onClick={() => void updateContainer()} disabled={!canUpdateContainer || containerBusy} title={!updaterAvailable ? updaterReason : imageBuilding ? "请等待镜像构建完成" : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像" : runtimeVersion?.matchesImage ? "线上已运行最新镜像" : "拉取已校验的 GHCR 镜像并重启 Fire"} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><IconServerCog aria-hidden="true" className={containerBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{containerBusy ? containerButtonLabel : !updaterAvailable && updaterReason.includes("未启动") ? "更新服务离线" : runtimeVersion?.matchesImage ? "群晖已是最新" : "更新群晖"}</button>
             <IconChevronRight aria-hidden="true" className="hidden text-slate-400 sm:block dark:text-slate-600" size={15} stroke={1.8} />
             <a href="/" target="_blank" rel="noreferrer" title="打开当前线上容器" className={`inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 sm:w-auto dark:border-slate-700 dark:bg-transparent dark:hover:border-slate-600 dark:hover:bg-white/[.04] ${runtimeState.text}`}><span className={`h-2.5 w-2.5 rounded-full ${runtimeState.dot}`} /><IconExternalLink aria-hidden="true" size={16} stroke={1.8} />{runtimeState.label}</a>
           </div>
@@ -334,11 +336,10 @@ export default function DeployStatusPage() {
         </section>
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
           <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800"><h2 className="text-sm font-medium">最近运行</h2><p className="mt-1 text-xs text-slate-500">{repository}{checkedAt ? ` · 检查于 ${formatTime(checkedAt)}` : ""}</p></div>
-          <div className="divide-y divide-slate-200 dark:divide-slate-800">{pagedRuns.map((run) => { const state = stateOf(run); return <a key={run.id} href={run.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-5 py-4 transition hover:bg-slate-50 dark:hover:bg-white/[.03]"><span className={`h-2.5 w-2.5 shrink-0 rounded-full ${state.className}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm text-slate-800 dark:text-slate-200">{run.title}</span><span className="mt-1 block text-xs text-slate-500">{run.sha} · {run.event === "schedule" ? "定时构建" : run.event === "workflow_dispatch" ? "Push image" : "提交检查"} · {formatTime(run.updatedAt)}</span></span><span className="text-xs text-slate-500">{state.label}</span></a>; })}</div>
-          {!runs.length && !error && <p className="px-5 py-10 text-center text-sm text-slate-500">暂无运行记录</p>}
+          {!hasLoaded ? <div className="divide-y divide-slate-200 dark:divide-slate-800" aria-label="正在读取运行记录">{[0, 1, 2].map((item) => <div key={item} className="flex items-center gap-3 px-5 py-4 motion-safe:animate-pulse"><span className="h-2.5 w-2.5 rounded-full bg-slate-200 dark:bg-slate-700" /><span className="flex-1"><span className="block h-3 w-2/5 rounded bg-slate-200 dark:bg-slate-700" /><span className="mt-2 block h-2.5 w-1/4 rounded bg-slate-100 dark:bg-slate-800" /></span></div>)}</div> : <div className="divide-y divide-slate-200 dark:divide-slate-800">{pagedRuns.map((run) => { const state = stateOf(run); return <a key={run.id} href={run.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-5 py-4 transition hover:bg-slate-50 dark:hover:bg-white/[.03]"><span className={`h-2.5 w-2.5 shrink-0 rounded-full ${state.className}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm text-slate-800 dark:text-slate-200">{run.title}</span><span className="mt-1 block text-xs text-slate-500">{run.sha} · {run.event === "schedule" ? "定时构建" : run.event === "workflow_dispatch" ? "Push image" : "提交检查"} · {formatTime(run.updatedAt)}</span></span><span className="text-xs text-slate-500">{state.label}</span></a>; })}</div>}
+          {hasLoaded && !runs.length && !error && <p className="px-5 py-10 text-center text-sm text-slate-500">暂无运行记录</p>}
           {runs.length > RUNS_PER_PAGE && <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3 text-xs text-slate-500 dark:border-slate-800"><span>第 {page} / {totalPages} 页 · 共 {runs.length} 条</span><div className="flex gap-2"><button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1} className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-white/[.04]">上一页</button><button onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages} className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-white/[.04]">下一页</button></div></div>}
         </section>
-        <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs text-slate-500"><span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-emerald-400 ring-4 ring-emerald-400/15" />发布成功</span><span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 animate-pulse rounded-full bg-slate-400 ring-4 ring-slate-400/15" />排队 / 进行中</span><span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-red-400 ring-4 ring-red-400/15" />构建 / 发布失败</span></div>
       </div>
     </main>
   );

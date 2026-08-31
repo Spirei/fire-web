@@ -1,3 +1,4 @@
+import { connect } from "node:net";
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 
@@ -19,10 +20,30 @@ function requireAdmin(request: Request) {
   return Boolean(user && isAdmin(user));
 }
 
+function updaterReachable(url: string) {
+  return new Promise<boolean>((resolve) => {
+    let target: URL;
+    try { target = new URL(url); } catch { resolve(false); return; }
+    const socket = connect({ host: target.hostname, port: Number(target.port || (target.protocol === "https:" ? 443 : 80)) });
+    const finish = (reachable: boolean) => { socket.destroy(); resolve(reachable); };
+    socket.setTimeout(1500);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+  });
+}
+
 export async function GET(request: Request) {
   if (!requireAdmin(request)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
-  const { token } = updaterConfig();
-  return NextResponse.json({ available: token.length >= 32 });
+  const { url, token } = updaterConfig();
+  const configured = token.length >= 32;
+  const reachable = configured ? await updaterReachable(url) : false;
+  return NextResponse.json({
+    available: configured && reachable,
+    configured,
+    reachable,
+    reason: !configured ? "群晖尚未配置 Watchtower Token" : !reachable ? "fire-updater 未启动或不在当前 Compose 网络" : "更新服务在线"
+  });
 }
 
 export async function POST(request: Request) {
