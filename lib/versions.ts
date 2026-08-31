@@ -1945,6 +1945,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "修复发布监控页浅色主题不生效",
     desc: "监控页面板、流程节点、边框、按钮和运行列表补齐浅色/深色双主题样式，右上角 ThemeToggle 现在会即时改变整个页面并在刷新后保持。",
     kind: "fix"
+  }, {
+    title: "发布监控页工具栏改为图标操作",
+    desc: "刷新改为带无障碍说明的循环箭头图标，并将 GitHub 授权入口直接放入右上角，使用 GitHub 标志图标，打开页面即可看到。",
+    kind: "fix"
   }]
 };
 
