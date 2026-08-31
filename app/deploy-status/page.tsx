@@ -25,7 +25,7 @@ const formatTime = (value: string) => new Intl.DateTimeFormat("zh-CN", { dateSty
 
 export default function DeployStatusPage() {
   const [runs, setRuns] = useState<Run[]>([]);
-  const [repository, setRepository] = useState("your-github-name/fire-web");
+  const [repository, setRepository] = useState("owner/repository");
   const [checkedAt, setCheckedAt] = useState("");
   const [error, setError] = useState("");
   const load = useCallback(async () => {

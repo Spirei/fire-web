@@ -16,7 +16,8 @@ type GithubRun = {
 };
 
 export async function GET() {
-  const repository = process.env.GITHUB_REPOSITORY || "your-github-name/fire-web";
+  const imageRepository = process.env.GHCR_IMAGE?.replace(/^ghcr\.io\//, "").replace(/:[^/]+$/, "");
+  const repository = process.env.GITHUB_REPOSITORY || imageRepository || "owner/repository";
   const endpoint = `https://api.github.com/repos/${repository}/actions/runs?branch=main&per_page=20`;
   try {
     const response = await fetch(endpoint, {
