@@ -202,9 +202,9 @@ export default function DeployStatusPage() {
     try {
       const response = await fetch("/api/deploy-status", { method: "POST" });
       const data = await response.json();
-      if (response.status === 409) { setNotice(data.error || "已有 Push image 正在运行"); void load(); return; }
+      if (response.status === 409) { setNotice(data.error || "已有镜像构建正在运行"); void load(); return; }
       if (!response.ok) throw new Error(data.error || "触发失败");
-      setNotice("已触发 Push image，GitHub 正在生成并推送 GHCR 镜像");
+      setNotice("已触发镜像构建，GitHub 正在生成并推送 GHCR 镜像");
       window.setTimeout(() => void load(), 2000);
       window.setTimeout(() => void load(), 5000);
     } catch (err) { setError(err instanceof Error ? err.message : "触发失败"); }
@@ -252,8 +252,8 @@ export default function DeployStatusPage() {
   const containerButtonLabel = containerUpdateState === "triggering" ? "正在通知…" : containerUpdateState === "watching" ? "等待重启…" : containerUpdateState === "restarting" ? "健康恢复中…" : containerUpdateState === "healthy" ? "容器已更新" : containerUpdateState === "unchanged" ? "已是最新" : "更新群晖";
   const manualPublishActive = runs.some((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && run.event === "workflow_dispatch" && run.status !== "completed");
   const publishBusy = triggering || manualPublishActive;
-  const publishLabel = manualPublishActive ? "镜像生成中…" : triggering ? "正在触发…" : "Push image";
-  const publishTitle = manualPublishActive ? "已有 Push image 正在运行" : triggering ? "正在触发镜像构建" : "生成并推送 GHCR 镜像";
+  const publishLabel = manualPublishActive ? "镜像生成中…" : triggering ? "正在触发…" : "立即构建镜像";
+  const publishTitle = manualPublishActive ? "已有镜像构建正在运行" : triggering ? "正在触发镜像构建" : "生成并推送 GHCR 镜像";
   const latest = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && (run.event === "schedule" || run.event === "workflow_dispatch"));
   const latestMainCheck = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && run.event === "push" && run.sha === sourceVersion?.shortSha);
   const latestState = latest ? stateOf(latest) : { label: hasLoaded ? "未知" : "读取中", className: "bg-slate-400", ring: "ring-slate-400/15" };
@@ -296,7 +296,7 @@ export default function DeployStatusPage() {
       <style jsx>{`main section button, main section a { transition-timing-function: cubic-bezier(.22,1,.36,1); } main section button:active, main section a:active { transform: translateY(1px) scale(.985); }`}</style>
       <div className="mx-auto max-w-[720px]">
         <div className="mb-7 sm:mb-8 sm:flex sm:items-start sm:justify-between sm:gap-6">
-          <div className="min-w-0"><p className="mb-2 hidden text-xs uppercase tracking-[.22em] text-slate-500 sm:block">Fire deployment</p><div className="flex flex-wrap items-center gap-2"><h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-2xl"><span className="sm:hidden">发布状态</span><span className="hidden sm:inline">GitHub main 到线上发布状态</span></h1></div><p className="mt-1.5 max-w-[30rem] text-[13px] leading-5 text-slate-500 sm:mt-2 sm:text-sm dark:text-slate-400"><span className="sm:hidden">每日 00:00 自动生成镜像，也可手动 Push image。</span><span className="hidden sm:inline">GitHub main 是发布源，每日 00:00 自动生成镜像，也可手动 Push image。</span></p></div>
+          <div className="min-w-0"><p className="mb-2 hidden text-xs uppercase tracking-[.22em] text-slate-500 sm:block">Fire deployment</p><div className="flex flex-wrap items-center gap-2"><h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-2xl"><span className="sm:hidden">发布状态</span><span className="hidden sm:inline">GitHub main 到线上发布状态</span></h1></div><p className="mt-1.5 max-w-[30rem] text-[13px] leading-5 text-slate-500 sm:mt-2 sm:text-sm dark:text-slate-400"><span className="sm:hidden">每日 00:00 自动生成镜像，也可手动构建。</span><span className="hidden sm:inline">GitHub main 是发布源，每日 00:00 自动生成镜像，也可手动构建。</span></p></div>
           <div className="mt-4 flex w-full items-center justify-between gap-2 sm:mt-0 sm:w-auto sm:justify-end">
             <ThemeToggle />
             <button onClick={refreshNow} title={refreshing ? "正在刷新" : "刷新状态"} aria-label={refreshing ? "正在刷新" : "刷新状态"} disabled={refreshing} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-wait dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-white/[.04]">

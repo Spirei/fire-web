@@ -2097,6 +2097,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "修复线上版本胶囊越界",
     desc: "将当前线上版本胶囊从 main 节点的负定位悬浮层移到发布流程标题行右侧，保留 GitHub 风格与状态圆点，同时避免越过节点边框、挤压流程箭头或影响 720px 布局。",
     kind: "fix"
+  }, {
+    title: "统一发布页中文操作文案",
+    desc: "将 Push image、镜像发布提示和顶部说明统一为中文表达，保留 GitHub、GHCR 等专有名词，减少中英文混排造成的阅读跳跃。",
+    kind: "fix"
   }]
 };
 
