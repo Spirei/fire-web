@@ -202,7 +202,7 @@ export default function DeployStatusPage() {
     try {
       const response = await fetch("/api/deploy-status", { method: "POST" });
       const data = await response.json();
-      if (response.status === 409) { setNotice(data.error || "已有镜像构建正在运行"); void load(); return; }
+      if (response.status === 409) { setNotice(data.error || "镜像构建进行中"); void load(); return; }
       if (!response.ok) throw new Error(data.error || "触发失败");
       setNotice("已触发镜像构建，GitHub 正在生成并推送 GHCR 镜像");
       window.setTimeout(() => void load(), 2000);
@@ -252,8 +252,8 @@ export default function DeployStatusPage() {
   const containerButtonLabel = containerUpdateState === "triggering" ? "正在通知…" : containerUpdateState === "watching" ? "等待重启…" : containerUpdateState === "restarting" ? "健康恢复中…" : containerUpdateState === "healthy" ? "容器已更新" : containerUpdateState === "unchanged" ? "已是最新" : "更新群晖";
   const manualPublishActive = runs.some((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && run.event === "workflow_dispatch" && run.status !== "completed");
   const publishBusy = triggering || manualPublishActive;
-  const publishLabel = manualPublishActive ? "镜像生成中…" : triggering ? "正在触发…" : "立即构建镜像";
-  const publishTitle = manualPublishActive ? "已有镜像构建正在运行" : triggering ? "正在触发镜像构建" : "生成并推送 GHCR 镜像";
+  const publishLabel = manualPublishActive ? "镜像构建进行中…" : triggering ? "正在触发…" : "立即构建镜像";
+  const publishTitle = manualPublishActive ? "镜像构建进行中" : triggering ? "正在触发镜像构建" : "生成并推送 GHCR 镜像";
   const latest = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && (run.event === "schedule" || run.event === "workflow_dispatch"));
   const latestMainCheck = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && run.event === "push" && run.sha === sourceVersion?.shortSha);
   const latestState = latest ? stateOf(latest) : { label: hasLoaded ? "未知" : "读取中", className: "bg-slate-400", ring: "ring-slate-400/15" };
