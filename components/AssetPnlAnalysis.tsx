@@ -923,7 +923,6 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
                               onClick={() => {
                                 setDisplayCurrency(option.code);
                                 setCurrencyMenuOpen(false);
-                                try { localStorage.setItem("fire:display-currency", option.code); } catch { /* 忽略 */ }
                               }}
                               className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition ${displayCurrency === option.code ? "bg-[#3297f6]/15 font-bold text-[#3297f6]" : "text-ink hover:bg-bg-gray"}`}
                             >

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FALLBACK_RATES, type StockRecord, type Quote } from "@/lib/types";
 import { usdCap } from "@/lib/currency";
 import CurrencyFlag from "@/components/CurrencyFlag";
-import { CURRENCIES, type CurrencyCode } from "@/lib/currencyPrefs";
+import { CURRENCIES, type CurrencyCode, useDisplayCurrency } from "@/lib/currencyPrefs";
 import FireReefCurrent from "@/components/FireReefCurrent";
 
 const CURRENCY_OPTIONS: { value: CurrencyCode; label: string; code: CurrencyCode; market: string; flag: string }[] = CURRENCIES.map((c) => ({
@@ -360,11 +360,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   }, [records, livePrice, rates]);
 
   // —— 货币：真实净资产 & FIRE 计划值统一到「显示币种」，进度比率保持稳定 ——
-  const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode>(() => {
-    if (typeof window === "undefined") return "CNY";
-    const saved = localStorage.getItem("fire:display-currency");
-    return CURRENCIES.some((c) => c.code === saved) ? (saved as CurrencyCode) : "CNY";
-  });
+  const { currency: displayCurrency, setCurrency: setDisplayCurrency } = useDisplayCurrency();
   // 默认/主货币：FIRE 计划数值以它录入，显示时再从它换算到「显示币种」
   const [baseCurrency, setBaseCurrency] = useState<CurrencyCode>(() => {
     if (typeof window === "undefined") return "CNY";
@@ -711,7 +707,6 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
                         onClick={() => {
                           setDisplayCurrency(option.value);
                           setCurrencyMenuOpen(false);
-                          try { localStorage.setItem("fire:display-currency", option.value); } catch { /* 忽略 */ }
                         }}
                         className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left text-xs"
                       >
