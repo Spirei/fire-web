@@ -2061,6 +2061,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "发布监控补齐真实加载与更新器在线状态",
     desc: "首次读取 GitHub 运行记录时显示与最终列表结构一致的骨架行，不再短暂误报待发布或暂无记录；群晖更新器状态由仅检查 Token 改为同时探测 Compose 内网端口，fire-updater 未启动或网络不可达时按钮提前显示更新服务离线，不再等点击后才报错。",
     kind: "fix"
+  }, {
+    title: "重排线上镜像版本徽章",
+    desc: "移除流程末尾重复的线上旧镜像节点，起点改为 fire-web main，并将当前容器实际运行的短 SHA 放到该节点右上角的 GitHub 风格胶囊中；镜像与 main 一致时显示绿色圆点和‘镜像已构建完成’。",
+    kind: "fix"
   }]
 };
 
