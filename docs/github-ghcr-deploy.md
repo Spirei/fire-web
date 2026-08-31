@@ -5,7 +5,9 @@
 1. 在 GitHub 创建**私有**仓库，建议仓库名使用小写 `fire-web`。
 2. 只把 `fire-web/` 项目提交到仓库；不要提交 `data/`、`.env`、`.next`、`node_modules` 或 Docker 导出包。
 3. 将本目录的 `.github/workflows/docker-publish.yml` 一并提交。
-4. `main` 分支每次 push 通过 TypeScript 检查后，GitHub Actions 会构建 `linux/amd64` 并推送到私有 GHCR。镜像标签包含 `latest`、短 commit SHA 和 Git tag。
+4. `main` 分支每次 push 只执行 TypeScript、公开仓库与部署一致性检查；GitHub Actions 在每天北京时间 00:00 统一构建 `linux/amd64` 并推送到私有 GHCR。镜像标签包含 `latest`、短 commit SHA 和 Git tag。
+
+> `workflow_dispatch` 仅用于用户明确要求“立即上线 / 立即发布 / 手动推送”的情况。日常修改、“同步线上代码”或“线上版同步更新”都不得自动触发手动 GHCR 发布。
 
 GitHub Actions 使用仓库自带的 `GITHUB_TOKEN` 发布镜像；GHCR 私有镜像在群晖拉取时需要 GitHub Personal Access Token（classic），至少授予 `read:packages`。
 
