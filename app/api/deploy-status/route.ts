@@ -160,7 +160,8 @@ export async function GET(request: Request) {
 
     const imageRuns = workflowRuns.filter((run) => run.path === ".github/workflows/docker-publish.yml" && (run.event === "schedule" || run.event === "workflow_dispatch"));
     const latestSuccessfulImageRun = imageRuns.find((run) => run.status === "completed" && run.conclusion === "success") || null;
-    const mainSha = mainCommit?.sha || "";
+    const latestMainPushRun = workflowRuns.find((run) => run.path === ".github/workflows/docker-publish.yml" && run.event === "push") || null;
+    const mainSha = mainCommit?.sha || latestMainPushRun?.head_sha || "";
     const deployedSha = process.env.FIRE_BUILD_SHA?.trim() || "unknown";
     const packageName = repository.split("/").filter(Boolean).pop() || "fire-web";
     return NextResponse.json({

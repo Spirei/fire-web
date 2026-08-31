@@ -2129,6 +2129,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "增加运行次数数字徽标",
     desc: "最近运行标题旁以紧凑圆形徽标显示 GitHub Actions 总运行次数，仅保留数字；同时将单次读取上限提高到 100，使页面分页数量与 GitHub 总数一致。",
     kind: "fix"
+  }, {
+    title: "修复最新版镜像误判",
+    desc: "GitHub 提交详情接口读取失败时，改用最新 main push 运行的完整 head SHA 作为回退，避免同一版本被错误显示为检查未知、立即构建和线上非最新。",
+    kind: "fix"
   }]
 };
 
