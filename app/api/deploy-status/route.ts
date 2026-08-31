@@ -34,7 +34,7 @@ function deployToken() {
 export async function GET() {
   const repository = repositoryName();
   const token = deployToken();
-  const endpoint = `https://api.github.com/repos/${repository}/actions/runs?branch=main&per_page=20`;
+  const endpoint = `https://api.github.com/repos/${repository}/actions/runs?branch=main&per_page=50`;
   try {
     const response = await fetch(endpoint, {
       headers: {
