@@ -285,8 +285,10 @@ export default function DeployStatusPage() {
     ? { label: "镜像生成中", dot: "bg-amber-500 motion-safe:animate-pulse", text: "text-amber-700 dark:text-amber-300" }
     : latestAttemptFailed
       ? { label: "镜像构建失败", dot: "bg-red-500", text: "text-red-700 dark:text-red-300" }
-      : imageVersion?.latestSuccessfulSha
+      : imageVersion?.matchesMain
         ? { label: "镜像已构建完成", dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" }
+        : imageVersion?.latestSuccessfulSha
+          ? { label: "立即构建", dot: "bg-orange-500", text: "text-orange-700 dark:text-orange-300" }
         : { label: "尚无镜像", dot: "bg-slate-400", text: "text-slate-500" };
   const runtimeState = runtimeVersion?.matchesMain
     ? { label: `线上 ${runtimeVersion.shortSha}`, dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" }
@@ -294,6 +296,7 @@ export default function DeployStatusPage() {
       ? { label: runtimeVersion.matchesImage ? `运行旧镜像 ${runtimeVersion.shortSha}` : `待更新 ${runtimeVersion.shortSha}`, dot: "bg-orange-500", text: "text-orange-700 dark:text-orange-300" }
       : { label: "线上版本未知", dot: "bg-slate-400", text: "text-slate-500" };
   const canUpdateContainer = updaterAvailable && Boolean(imageVersion?.matchesMain) && !runtimeVersion?.matchesImage && !imageBuilding;
+  const showImageProgress = Boolean(imageProgress && (imageProgress.status !== "completed" || imageVersion?.matchesMain));
   const runActionLabel = (run: Run) => {
     const imageRun = run.event === "workflow_dispatch" || run.event === "schedule";
     const prefix = imageRun ? "镜像构建" : "推送";
@@ -334,7 +337,7 @@ export default function DeployStatusPage() {
             <button onClick={() => void updateContainer()} disabled={!canUpdateContainer || containerBusy} title={!updaterAvailable ? updaterReason : imageBuilding ? "请等待镜像构建完成" : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像" : runtimeVersion?.matchesImage ? "线上已运行最新镜像" : "拉取已校验的 GHCR 镜像并重启 Fire"} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><IconServerCog aria-hidden="true" className={containerBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{containerBusy ? containerButtonLabel : !updaterAvailable && updaterReason.includes("未启动") ? "更新服务离线" : runtimeVersion?.matchesImage ? "群晖已是最新" : "更新群晖"}</button>
           </div>
         </section>
-        {imageProgress && <section aria-live="polite" aria-busy={imageProgress.status !== "completed"} className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
+        {imageProgress && showImageProgress && <section aria-live="polite" aria-busy={imageProgress.status !== "completed"} className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
           <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <div>
               <h2 className="text-sm font-medium">镜像构建进度</h2>

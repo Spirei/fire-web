@@ -2105,6 +2105,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "修复发布接口 HTML 解析报错",
     desc: "发布页统一校验 API 响应类型；接口返回 404、登录页或其他 HTML 时显示明确的 HTTP 与容器版本提示，不再暴露 Unexpected token 解析错误，也不再同时显示成功和错误提示。",
     kind: "fix"
+  }, {
+    title: "新提交恢复待构建状态",
+    desc: "上一轮镜像仅在与当前 main 匹配时显示绿色完成；main 出现新推送后切换为橙色‘立即构建’，并隐藏已过期的上一轮完成进度卡。",
+    kind: "fix"
   }]
 };
 
