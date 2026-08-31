@@ -2033,6 +2033,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "GitHub 授权改为新窗口打开",
     desc: "右上角与配置面板中的 GitHub OAuth 入口统一使用新窗口打开，并补充安全的 noreferrer 属性和无障碍提示，避免离开发布监控页面。",
     kind: "fix"
+  }, {
+    title: "新增镜像构建实时进度",
+    desc: "Push image 后从 GitHub Actions Jobs API 读取真实构建状态，在发布页展示 TypeScript 检查与 linux/amd64 镜像发布两个阶段；运行中的 Job 默认展开，可继续查看 Checkout、GHCR 登录、Buildx 与 Build and push 等步骤、状态和耗时。构建期间每 10 秒刷新，完成后恢复每分钟刷新，并对 Job 数据分级缓存以控制 GitHub API 用量。",
+    kind: "feature"
   }]
 };
 

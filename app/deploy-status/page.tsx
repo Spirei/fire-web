@@ -6,8 +6,12 @@ import {
   IconBrandDocker,
   IconBrandGithub,
   IconChevronRight,
+  IconCircleCheck,
+  IconCircleX,
+  IconClock,
   IconExternalLink,
   IconGitBranch,
+  IconLoader2,
   IconPackageExport,
   IconRefresh,
   IconServerCog,
@@ -23,9 +27,41 @@ type Run = {
   status: string;
   conclusion: string | null;
   event: string;
+  workflowPath: string;
   startedAt: string;
   updatedAt: string;
   url: string;
+};
+
+type BuildStep = {
+  number: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+};
+
+type BuildJob = {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  url: string;
+  steps: BuildStep[];
+};
+
+type ImageProgress = {
+  id: number;
+  status: string;
+  conclusion: string | null;
+  sha: string;
+  startedAt: string;
+  updatedAt: string;
+  url: string;
+  jobs: BuildJob[];
 };
 
 function stateOf(run: Run) {
@@ -35,6 +71,32 @@ function stateOf(run: Run) {
 }
 
 const formatTime = (value: string) => new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+const formatDuration = (startedAt: string | null, completedAt: string | null, fallback: string) => {
+  if (!startedAt) return "等待中";
+  const end = new Date(completedAt || fallback).getTime();
+  const seconds = Math.max(0, Math.round((end - new Date(startedAt).getTime()) / 1000));
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes} 分 ${seconds % 60} 秒`;
+};
+
+function StatusIcon({ status, conclusion, size = 18 }: { status: string; conclusion: string | null; size?: number }) {
+  if (status !== "completed") {
+    if (status === "in_progress") return <IconLoader2 aria-hidden="true" className="motion-safe:animate-spin text-amber-500" size={size} stroke={2} />;
+    return <IconClock aria-hidden="true" className="text-slate-400" size={size} stroke={1.8} />;
+  }
+  if (conclusion === "success") return <IconCircleCheck aria-hidden="true" className="text-emerald-500" size={size} stroke={2} />;
+  if (conclusion === "skipped") return <IconClock aria-hidden="true" className="text-slate-400" size={size} stroke={1.8} />;
+  return <IconCircleX aria-hidden="true" className="text-red-500" size={size} stroke={2} />;
+}
+
+const buildStatusLabel = (status: string, conclusion: string | null) => {
+  if (status === "queued") return "等待中";
+  if (status === "in_progress") return "构建中";
+  if (conclusion === "success") return "已完成";
+  if (conclusion === "skipped") return "已跳过";
+  return "失败";
+};
 const RUNS_PER_PAGE = 10;
 type ContainerUpdateState = "idle" | "triggering" | "watching" | "restarting" | "healthy" | "unchanged" | "failed";
 
@@ -42,6 +104,7 @@ const sleep = (milliseconds: number) => new Promise((resolve) => window.setTimeo
 
 export default function DeployStatusPage() {
   const [runs, setRuns] = useState<Run[]>([]);
+  const [imageProgress, setImageProgress] = useState<ImageProgress | null>(null);
   const [page, setPage] = useState(1);
   const [repository, setRepository] = useState("owner/repository");
   const [checkedAt, setCheckedAt] = useState("");
@@ -62,11 +125,12 @@ export default function DeployStatusPage() {
       const response = await fetch("/api/deploy-status", { cache: "no-store" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "读取失败");
-      setRuns(data.runs || []); setRepository(data.repository); setCheckedAt(data.checkedAt); setError("");
+      setRuns(data.runs || []); setImageProgress(data.imageProgress || null); setRepository(data.repository); setCheckedAt(data.checkedAt); setError("");
     } catch (err) { setError(err instanceof Error ? err.message : "暂时无法读取发布状态"); }
     finally { setRefreshing(false); }
   }, []);
-  useEffect(() => { void load(); const timer = window.setInterval(() => void load(), 60000); return () => window.clearInterval(timer); }, [load]);
+  const refreshInterval = imageProgress && imageProgress.status !== "completed" ? 10000 : 60000;
+  useEffect(() => { void load(); const timer = window.setInterval(() => void load(), refreshInterval); return () => window.clearInterval(timer); }, [load, refreshInterval]);
   useEffect(() => { fetch("/api/deploy-status/config").then(async (response) => response.ok ? setConfig(await response.json()) : null).catch(() => {}); }, []);
   useEffect(() => { fetch("/api/deploy-status/container-update", { cache: "no-store" }).then(async (response) => response.ok ? setUpdaterAvailable(Boolean((await response.json()).available)) : null).catch(() => {}); }, []);
   const totalPages = Math.max(1, Math.ceil(runs.length / RUNS_PER_PAGE));
@@ -95,7 +159,8 @@ export default function DeployStatusPage() {
       if (response.status === 409) { setNotice(data.error || "已有 Push image 正在运行"); void load(); return; }
       if (!response.ok) throw new Error(data.error || "触发失败");
       setNotice("已触发 Push image，GitHub 正在生成并推送 GHCR 镜像");
-      window.setTimeout(() => void load(), 4000);
+      window.setTimeout(() => void load(), 2000);
+      window.setTimeout(() => void load(), 5000);
     } catch (err) { setError(err instanceof Error ? err.message : "触发失败"); }
     finally { setTriggering(false); }
   };
@@ -136,11 +201,11 @@ export default function DeployStatusPage() {
   };
   const containerBusy = containerUpdateState === "triggering" || containerUpdateState === "watching" || containerUpdateState === "restarting";
   const containerButtonLabel = containerUpdateState === "triggering" ? "正在通知…" : containerUpdateState === "watching" ? "等待重启…" : containerUpdateState === "restarting" ? "健康恢复中…" : containerUpdateState === "healthy" ? "容器已更新" : containerUpdateState === "unchanged" ? "已是最新" : "更新群晖";
-  const manualPublishActive = runs.some((run) => run.event === "workflow_dispatch" && run.status !== "completed");
+  const manualPublishActive = runs.some((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && run.event === "workflow_dispatch" && run.status !== "completed");
   const publishBusy = triggering || manualPublishActive;
   const publishLabel = manualPublishActive ? "镜像生成中…" : triggering ? "正在触发…" : "Push image";
   const publishTitle = manualPublishActive ? "已有 Push image 正在运行" : triggering ? "正在触发镜像构建" : "生成并推送 GHCR 镜像";
-  const latest = runs.find((run) => run.event === "schedule" || run.event === "workflow_dispatch");
+  const latest = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && (run.event === "schedule" || run.event === "workflow_dispatch"));
   const latestState = latest ? stateOf(latest) : { label: "待发布", className: "bg-slate-400", ring: "ring-slate-400/15" };
   return (
     <main className="min-h-[100dvh] bg-slate-50 px-4 py-6 text-slate-900 dark:bg-[#0b0f16] dark:text-slate-100 sm:px-8 sm:py-10">
@@ -175,6 +240,41 @@ export default function DeployStatusPage() {
             <a href="/" target="_blank" rel="noreferrer" className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><IconExternalLink aria-hidden="true" size={16} stroke={1.8} />线上容器</a>
           </div>
         </section>
+        {imageProgress && <section className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
+          <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div>
+              <h2 className="text-sm font-medium">镜像构建进度</h2>
+              <p className="mt-1 text-xs text-slate-500">{imageProgress.sha} · {formatDuration(imageProgress.startedAt, imageProgress.status === "completed" ? imageProgress.updatedAt : null, checkedAt || imageProgress.updatedAt)}</p>
+            </div>
+            <a href={imageProgress.url} target="_blank" rel="noreferrer" className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-white/[.04]">
+              <StatusIcon status={imageProgress.status} conclusion={imageProgress.conclusion} size={16} />
+              {buildStatusLabel(imageProgress.status, imageProgress.conclusion)}
+              <IconExternalLink aria-hidden="true" size={14} stroke={1.8} />
+            </a>
+          </div>
+          {imageProgress.jobs.length > 0 ? <div className="flex flex-col items-stretch gap-2 p-4 sm:flex-row sm:items-start sm:gap-3 sm:p-5">
+            {imageProgress.jobs.map((job, index) => <div key={job.id} className="contents">
+              <details open={job.status !== "completed" ? true : undefined} className="group min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/70 open:bg-white dark:border-slate-700 dark:bg-slate-950/20 dark:open:bg-white/[.025]">
+                <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-3.5 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400/50 [&::-webkit-details-marker]:hidden">
+                  <StatusIcon status={job.status} conclusion={job.conclusion} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-200">{job.name}</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">{buildStatusLabel(job.status, job.conclusion)} · {formatDuration(job.startedAt, job.completedAt, checkedAt || imageProgress.updatedAt)}</span>
+                  </span>
+                  <IconChevronRight aria-hidden="true" className="shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-90" size={16} stroke={1.8} />
+                </summary>
+                {job.steps.length > 0 && <div className="border-t border-slate-200 px-3.5 py-2.5 dark:border-slate-800">
+                  {job.steps.map((step) => <div key={step.number} className="flex items-center gap-2.5 py-2 text-xs">
+                    <StatusIcon status={step.status} conclusion={step.conclusion} size={15} />
+                    <span className={`min-w-0 flex-1 truncate ${step.status === "in_progress" ? "font-medium text-slate-800 dark:text-slate-200" : "text-slate-500 dark:text-slate-400"}`}>{step.name}</span>
+                    <span className="shrink-0 text-slate-400">{formatDuration(step.startedAt, step.completedAt, checkedAt || imageProgress.updatedAt)}</span>
+                  </div>)}
+                </div>}
+              </details>
+              {index < imageProgress.jobs.length - 1 && <IconChevronRight aria-hidden="true" className="mx-auto shrink-0 rotate-90 self-center text-slate-300 sm:mx-0 sm:mt-6 sm:rotate-0 dark:text-slate-700" size={18} stroke={1.8} />}
+            </div>)}
+          </div> : <p className="px-5 py-8 text-center text-sm text-slate-500">GitHub 正在创建构建任务…</p>}
+        </section>}
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
           <div><div className="flex items-center gap-2.5"><span className={`h-3 w-3 shrink-0 rounded-full ${latestState.className} ring-4 ${latestState.ring} ${latest && latest.status !== "completed" ? "animate-pulse" : ""}`} /><p className="text-lg font-medium">最新发布 <span className="text-slate-400">·</span> {latestState.label}</p></div><p className="mt-1.5 pl-[22px] text-xs text-slate-500">{latest ? `${latest.sha} · ${formatTime(latest.updatedAt)}` : "等待读取 GitHub Actions"}</p></div>
           {error && <p className="mt-4 rounded-xl bg-red-400/10 px-3 py-2 text-xs text-red-300">{error}</p>}
