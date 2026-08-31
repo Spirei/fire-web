@@ -2133,6 +2133,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "修复最新版镜像误判",
     desc: "GitHub 提交详情接口读取失败时，改用最新 main push 运行的完整 head SHA 作为回退，避免同一版本被错误显示为检查未知、立即构建和线上非最新。",
     kind: "fix"
+  }, {
+    title: "明确容器最新状态",
+    desc: "发布流程末端的绿色圆点继续代表 Watchtower 在线；线上已运行最新镜像时文字改为‘容器已是最新’，并取消禁用态整体变淡，保持状态圆点清晰。",
+    kind: "fix"
   }]
 };
 
