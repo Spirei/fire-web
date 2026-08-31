@@ -2005,6 +2005,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "修复提交检查被误显示为发布成功",
     desc: "顶部最新发布状态仅统计定时 schedule 与手动 workflow_dispatch 运行，普通 main 提交的检查成功不再被误判为镜像发布成功。",
     kind: "fix"
+  }, {
+    title: "重排发布状态圆点与说明",
+    desc: "最新发布状态圆点与标题改为同一基线，提交与时间独立缩进；成功和失败保持静态，仅排队/进行中使用呼吸动效，底部文字说明改为三个醒目的圆点状态标签。",
+    kind: "fix"
   }]
 };
 
