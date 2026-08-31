@@ -12,6 +12,7 @@
     "clean:dsstore": "find .. -name .DS_Store -not -path '*/node_modules/*' -delete && echo '已清理 .DS_Store'"
   },
   "dependencies": {
+    "@tabler/icons-react": "^3.46.0",
     "better-sqlite3": "^13.0.2",
     "echarts": "^6.1.0",
     "gsap": "^3.15.0",
