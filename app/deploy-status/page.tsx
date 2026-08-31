@@ -77,7 +77,7 @@ export default function DeployStatusPage() {
   const latest = runs[0];
   const latestState = latest ? stateOf(latest) : { label: "待发布", className: "bg-slate-400", ring: "ring-slate-400/15" };
   return (
-    <main className="min-h-screen bg-slate-50 px-5 py-10 text-slate-900 transition-colors dark:bg-[#0b0f16] dark:text-slate-100 sm:px-8">
+    <main className="min-h-screen bg-slate-50 px-5 py-10 text-slate-900 dark:bg-[#0b0f16] dark:text-slate-100 sm:px-8">
       <style jsx>{`button[aria-label="刷新中"] svg { animation: deploy-refresh-spin .9s cubic-bezier(.45,.05,.55,.95) infinite; } main section button, main section a { transition-timing-function: cubic-bezier(.22,1,.36,1); } main section button:active, main section a:active { transform: translateY(1px) scale(.985); } @keyframes deploy-refresh-spin { to { transform: rotate(360deg); } }`}</style>
       <div className="mx-auto max-w-3xl">
         <div className="mb-8 flex flex-col items-start justify-between gap-4 sm:flex-row">

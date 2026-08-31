@@ -5,6 +5,16 @@ import { setThemeCookie } from "@/lib/theme";
 
 export const THEME_KEY = "fire.theme";
 
+function applyTheme(dark: boolean) {
+  document.documentElement.classList.toggle("dark", dark);
+  try {
+    localStorage.setItem(THEME_KEY, dark ? "dark" : "light");
+  } catch {
+    /* 忽略存储异常 */
+  }
+  setThemeCookie(dark);
+}
+
 export default function ThemeToggle() {
   const [dark, setDark] = useState(false);
   const [ready, setReady] = useState(false);
@@ -20,19 +30,19 @@ export default function ThemeToggle() {
 
   useEffect(() => {
     if (!ready) return;
-    document.documentElement.classList.toggle("dark", dark);
-    try {
-      localStorage.setItem(THEME_KEY, dark ? "dark" : "light");
-    } catch {
-      /* 忽略存储异常 */
-    }
-    setThemeCookie(dark);
+    applyTheme(dark);
   }, [dark, ready]);
+
+  const toggleTheme = () => {
+    const next = !document.documentElement.classList.contains("dark");
+    applyTheme(next);
+    setDark(next);
+  };
 
   return (
     <button
       type="button"
-      onClick={() => setDark((d) => !d)}
+      onClick={toggleTheme}
       className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-edge-strong text-muted transition-colors hover:bg-brand-hover hover:text-ink"
       title={dark ? "切换到浅色" : "切换到深色"}
       aria-label="切换深浅色"
