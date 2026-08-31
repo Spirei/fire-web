@@ -2866,18 +2866,18 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .holdings-pnl-sankey-card > header > div { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .holdings-pnl-sankey-card h4 { color: #303844; font-size: 13px; font-weight: 800; white-space: nowrap; }
 .holdings-pnl-sankey-card > header > span { overflow: hidden; color: #8a929e; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.holdings-pnl-header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.holdings-pnl-header-actions { display: flex; min-width: 0; max-width: 100%; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; }
 .holdings-pnl-share-btn { display: inline-flex; height: 34px; align-items: center; gap: 6px; border: 1px solid rgba(201,206,216,.72); border-radius: 999px; background: rgba(246,247,249,.86); padding: 0 12px 0 10px; color: #5f6875; font-size: 11px; font-weight: 800; cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
 .holdings-pnl-share-btn:hover { border-color: rgba(126,135,148,.68); background: #fff; transform: translateY(-1px); }
 .holdings-pnl-share-btn:disabled { cursor: not-allowed; opacity: .38; transform: none; }
 .holdings-pnl-share-btn > svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.holdings-pnl-currency-picker { position: relative; margin-left: auto; }
-.holdings-pnl-currency-picker > summary { display: inline-flex; height: 34px; cursor: pointer; list-style: none; align-items: center; gap: 7px; border: 1px solid rgba(201,206,216,.72); border-radius: 999px; background: rgba(246,247,249,.86); padding: 0 10px 0 6px; color: #5f6875; font-size: 11px; font-weight: 800; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.holdings-pnl-currency-picker { position: relative; min-width: 0; max-width: 100%; margin-left: auto; }
+.holdings-pnl-currency-picker > summary { display: inline-flex; max-width: 100%; height: 34px; cursor: pointer; list-style: none; align-items: center; gap: 7px; border: 1px solid rgba(201,206,216,.72); border-radius: 999px; background: rgba(246,247,249,.86); padding: 0 10px 0 6px; color: #5f6875; font-size: 11px; font-weight: 800; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
 .holdings-pnl-currency-picker > summary::-webkit-details-marker { display: none; }
 .holdings-pnl-currency-picker > summary:hover { border-color: rgba(126,135,148,.68); background: #fff; transform: translateY(-1px); }
 .holdings-pnl-currency-picker > summary > svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform .18s ease; }
 .holdings-pnl-currency-picker[open] > summary > svg { transform: rotate(180deg); }
-.holdings-pnl-currency-menu { position: absolute; z-index: 35; top: calc(100% + 8px); right: 0; width: 216px; overflow: hidden; border: 1px solid rgba(201,206,216,.72); border-radius: 15px; background: rgba(255,255,255,.98); padding: 8px; box-shadow: 0 16px 42px rgba(24,31,43,.16); backdrop-filter: blur(18px); }
+.holdings-pnl-currency-menu { position: absolute; z-index: 35; top: calc(100% + 8px); right: 0; width: 216px; max-width: calc(100vw - 24px); box-sizing: border-box; overflow: hidden; border: 1px solid rgba(201,206,216,.72); border-radius: 15px; background: rgba(255,255,255,.98); padding: 8px; box-shadow: 0 16px 42px rgba(24,31,43,.16); backdrop-filter: blur(18px); }
 .holdings-pnl-currency-menu > p { padding: 5px 8px 8px; color: #8a929e; font-size: 10px; font-weight: 800; letter-spacing: .04em; }
 .holdings-pnl-currency-menu > button { display: flex; width: 100%; align-items: center; gap: 10px; border: 0; border-radius: 10px; background: transparent; padding: 8px; color: #4a5360; text-align: left; transition: background .16s ease, color .16s ease; }
 .holdings-pnl-currency-menu > button:hover { background: #f2f4f7; color: #202631; }

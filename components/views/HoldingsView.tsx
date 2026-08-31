@@ -172,7 +172,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     });
     return map;
   });
-  const labelFor = (m: string) => labels[m]?.label || marketMeta(m).label;
+  const labelFor = (m: string) => m === "US" ? "美股" : labels[m]?.label || marketMeta(m).label;
   const flagFor = (m: string) => labels[m]?.flag || marketMeta(m).flag;
 
   const displayedTabs = tabOverride ? [...tabOverride, ...baseTabs.filter((m) => !tabOverride.includes(m))] : baseTabs;

@@ -636,7 +636,7 @@ export default function AssetLibraryView() {
   function marketLabelOf(key: string): string {
     if (key === "EU") return marketLabels.find((l) => l.key === "EU")?.label ?? "欧盟";
     if (BASE_MARKETS.includes(key)) return marketMeta(key).label;
-    return marketLabels.find((l) => l.key === key)?.label ?? marketMeta(key).label;
+    return key === "US" ? "美股" : marketLabels.find((l) => l.key === key)?.label ?? marketMeta(key).label;
   }
 
   async function saveMarketLabel(key: string, raw: string) {

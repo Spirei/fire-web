@@ -286,7 +286,7 @@ export default function HomeContent({ settings, initialDark = false }: { setting
     });
     return list;
   }, [marketsCfg.markets]);
-  const chipLabel = (k: string) => marketsCfg.labels.find((l) => l.key === k)?.label || marketMeta(k).label;
+  const chipLabel = (k: string) => k === "US" ? "美股" : marketsCfg.labels.find((l) => l.key === k)?.label || marketMeta(k).label;
   const chipFlag = (k: string) => marketsCfg.labels.find((l) => l.key === k)?.flag || "";
   // 筛选：ALL = 全部，其余为市场代码
   const [chip, setChip] = useState<string>("ALL");
