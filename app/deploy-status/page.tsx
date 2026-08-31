@@ -76,7 +76,12 @@ type RuntimeVersion = { sha: string; shortSha: string; matchesImage: boolean; ma
 
 function stateOf(run: Run) {
   if (run.status !== "completed") return { label: "待发布", className: "bg-slate-400", ring: "ring-slate-400/15" };
-  if (run.conclusion === "success") return { label: "成功", className: "bg-emerald-400", ring: "ring-emerald-400/15" };
+  if (run.conclusion === "success") {
+    const imageRun = run.event === "workflow_dispatch" || run.event === "schedule";
+    return imageRun
+      ? { label: "成功", className: "bg-emerald-400", ring: "ring-emerald-400/15" }
+      : { label: "成功", className: "bg-blue-500", ring: "ring-blue-500/15" };
+  }
   return { label: "失败", className: "bg-red-400", ring: "ring-red-400/15" };
 }
 
