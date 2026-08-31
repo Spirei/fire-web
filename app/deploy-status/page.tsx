@@ -107,6 +107,28 @@ const buildStatusLabel = (status: string, conclusion: string | null) => {
   if (conclusion === "skipped") return "已跳过";
   return "失败";
 };
+const translateWorkflowLabel = (label: string) => ({
+  "TypeScript check": "TypeScript 检查",
+  "Check scheduled source changes": "检查定时源码变更",
+  "Publish linux/amd64 image": "发布 linux/amd64 镜像",
+  "Set up job": "准备任务",
+  Checkout: "检出代码",
+  "Use Node.js 22": "使用 Node.js 22",
+  "Install dependencies": "安装依赖",
+  "Public repository safety audit": "公开仓库安全审计",
+  "Local and GHCR deployment parity audit": "本地与 GHCR 部署一致性审计",
+  "Skip unchanged scheduled image": "跳过无变化的定时构建",
+  "Allow manual image publish": "允许手动构建镜像",
+  "Complete job": "完成任务",
+  "Log in to GHCR": "登录 GHCR",
+  "Docker metadata": "Docker 元数据",
+  "Set up Buildx": "准备 Buildx",
+  "Build and push": "构建并推送",
+  "Post Build and push": "收尾：构建并推送",
+  "Post Set up Buildx": "收尾：Buildx",
+  "Post Log in to GHCR": "收尾：GHCR 登录",
+  "Post Checkout": "收尾：检出代码"
+} as Record<string, string>)[label] || label;
 const RUNS_PER_PAGE = 5;
 type ContainerUpdateState = "idle" | "triggering" | "watching" | "restarting" | "healthy" | "unchanged" | "failed";
 
@@ -319,15 +341,15 @@ export default function DeployStatusPage() {
                 <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-3.5 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400/50 [&::-webkit-details-marker]:hidden">
                   <StatusIcon status={job.status} conclusion={job.conclusion} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-200">{job.name}</span>
-                    <span className="mt-0.5 block truncate text-xs text-slate-500">{currentStep ? currentStep.name : buildStatusLabel(job.status, job.conclusion)} · {job.conclusion === "skipped" ? "已跳过" : formatDuration(job.startedAt, job.completedAt, checkedAt || imageProgress.updatedAt)}</span>
+                    <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-200">{translateWorkflowLabel(job.name)}</span>
+                    <span className="mt-0.5 block truncate text-xs text-slate-500">{currentStep ? translateWorkflowLabel(currentStep.name) : buildStatusLabel(job.status, job.conclusion)} · {job.conclusion === "skipped" ? "已跳过" : formatDuration(job.startedAt, job.completedAt, checkedAt || imageProgress.updatedAt)}</span>
                   </span>
                   <IconChevronRight aria-hidden="true" className="shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-90" size={16} stroke={1.8} />
                 </summary>
                 {job.steps.length > 0 && <div className="border-t border-slate-200 px-3.5 py-2.5 dark:border-slate-800">
                   {job.steps.map((step) => <div key={step.number} className="flex items-center gap-2.5 py-2 text-xs">
                     <StatusIcon status={step.status} conclusion={step.conclusion} size={15} />
-                    <span className={`min-w-0 flex-1 truncate ${step.status === "in_progress" ? "font-medium text-slate-800 dark:text-slate-200" : "text-slate-500 dark:text-slate-400"}`}>{step.name}</span>
+                    <span className={`min-w-0 flex-1 truncate ${step.status === "in_progress" ? "font-medium text-slate-800 dark:text-slate-200" : "text-slate-500 dark:text-slate-400"}`}>{translateWorkflowLabel(step.name)}</span>
                     <span className="shrink-0 text-slate-400">{step.conclusion === "skipped" ? "已跳过" : formatDuration(step.startedAt, step.completedAt, checkedAt || imageProgress.updatedAt)}</span>
                   </div>)}
                 </div>}
