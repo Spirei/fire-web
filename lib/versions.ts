@@ -1941,6 +1941,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "GitHub OAuth 授权与 Token 安全兜底",
     desc: "发布监控页同时支持 GitHub OAuth 授权和手动 Token 兜底。OAuth 使用一次性 state、管理员权限和 workflow 最小权限；授权及备用 Token 仅服务端保存，并通过 DEPLOY_STATUS_SECRET 使用 AES-GCM 加密，页面只显示授权账号/已配置状态。",
     kind: "security"
+  }, {
+    title: "修复发布监控页浅色主题不生效",
+    desc: "监控页面板、流程节点、边框、按钮和运行列表补齐浅色/深色双主题样式，右上角 ThemeToggle 现在会即时改变整个页面并在刷新后保持。",
+    kind: "fix"
   }]
 };
 
