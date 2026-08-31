@@ -2113,6 +2113,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "自动恢复更新服务状态",
     desc: "发布页每 15 秒复检一次 fire-updater，手动刷新时也同步检查；更新服务后启动无需重开页面即可由离线恢复，并统一显示明确的离线文案。",
     kind: "fix"
+  }, {
+    title: "显示 Watchtower 在线状态",
+    desc: "复用发布流程末端的更新节点，以灰、绿、红圆点分别表示 Watchtower 检测中、在线和离线；已是最新时显示‘更新服务在线’，避免新增元素挤压 720px 布局。",
+    kind: "fix"
   }]
 };
 
