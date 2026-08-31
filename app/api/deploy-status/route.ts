@@ -47,3 +47,18 @@ export async function GET() {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无法读取 GitHub 状态", repository }, { status: 502 });
   }
 }
+
+export async function POST() {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) return NextResponse.json({ error: "未配置 GITHUB_TOKEN，无法手动触发发布" }, { status: 503 });
+  const imageRepository = process.env.GHCR_IMAGE?.replace(/^ghcr\.io\//, "").replace(/:[^/]+$/, "");
+  const repository = process.env.GITHUB_REPOSITORY || imageRepository || "owner/repository";
+  const response = await fetch(`https://api.github.com/repos/${repository}/actions/workflows/docker-publish.yml/dispatches`, {
+    method: "POST",
+    headers: { accept: "application/vnd.github+json", "content-type": "application/json", authorization: `Bearer ${token}`, "user-agent": "fire-deploy-status" },
+    body: JSON.stringify({ ref: "main" }),
+    cache: "no-store"
+  });
+  if (!response.ok) return NextResponse.json({ error: `触发失败（GitHub API ${response.status}）` }, { status: 502 });
+  return NextResponse.json({ ok: true, repository, message: "已触发手动发布，请稍候查看状态" });
+}

@@ -1929,6 +1929,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "统一本地与线上发布节奏并新增状态监控页",
     desc: "main 提交继续执行公开仓库、部署一致性与 TypeScript 检查，但不再每次提交都发布 GHCR；工作流改为北京时间每天 00:00 自动构建发布，并保留 workflow_dispatch 手动兜底。新增 /deploy-status 与 /api/deploy-status，展示最近运行的提交、触发方式和时间，绿色圆点表示成功、灰色表示排队/进行中、红色表示失败，页面每分钟自动刷新。",
     kind: "feature"
+  }, {
+    title: "发布状态页增加手动推送与可视化流程",
+    desc: "状态页新增“立即手动推送”操作，服务端安全调用 GitHub Actions workflow_dispatch 发布 main 最新提交，浏览器不接触 GitHub Token；增加本地源码、检查、定时/手动、GHCR、线上容器五段流程图，并提供触发中、成功和失败反馈。",
+    kind: "feature"
   }]
 };
 
