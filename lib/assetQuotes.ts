@@ -198,3 +198,31 @@ export function enrichAssetQuotes<T extends { type: string; code: string; price:
   }
   return assets;
 }
+
+/**
+ * 默认股票素材只携带名称与图标；线上新数据库不能依赖本地历史回填结果。
+ * 这里从与「全球预览」相同的持久化行情缓存补齐股票字段，使本地/GHCR 使用同一数据链路。
+ */
+export async function enrichStockAssetQuotes<T extends { type: string; market: string; code: string; price: number | null; changePct: number | null; marketCap: number }>(assets: T[]): Promise<T[]> {
+  if (!assets.some((asset) => asset.type === "stock" && (asset.price == null || !asset.marketCap))) return assets;
+  const markets = ["US", "HK", "CN", "JP", "KR"] as const;
+  const results = await Promise.allSettled(markets.map((market) => getTopStocks(market)));
+  const quotes = new Map<string, AssetQuote>();
+  results.forEach((result) => {
+    if (result.status !== "fulfilled") return;
+    result.value.items.forEach((item) => quotes.set(`${item.market}:${item.code.toUpperCase()}`, {
+      price: item.price ?? 0,
+      changePct: item.changePct ?? 0,
+      marketCap: item.marketCap || 0
+    }));
+  });
+  assets.forEach((asset) => {
+    if (asset.type !== "stock") return;
+    const quote = quotes.get(`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`);
+    if (!quote) return;
+    if (quote.price > 0) asset.price = quote.price;
+    asset.changePct = quote.changePct;
+    if (quote.marketCap > 0) asset.marketCap = quote.marketCap;
+  });
+  return assets;
+}

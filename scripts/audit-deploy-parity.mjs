@@ -7,6 +7,8 @@ const localCompose = read("docker-compose.yml");
 const ghcrCompose = read("docker-compose.ghcr.yml");
 const dockerfile = read("Dockerfile");
 const entrypoint = read("scripts/entrypoint.sh");
+const uploadRoute = read("app/uploads/[...path]/route.ts");
+const assetsModule = read("lib/assets.ts");
 
 const failures = [];
 function requireText(label, text, needles) {
@@ -39,6 +41,18 @@ requireText("启动脚本", entrypoint, [
   "if [ -d /app/resource-default ]",
   "cp -rn /app/resource-default/* /app/public/uploads/"
 ]);
+requireText("上传资源路由", uploadRoute, ["resource-default", "defaultAbs", "fs.readFileSync(source)"]);
+requireText("素材播种", assetsModule, ["resource-default", "ensureBrokerAssets", "ensureCategoryAssets"]);
+
+for (const [label, directory, minimum] of [
+  ["国旗默认素材", "public/uploads/asset/flag", 200],
+  ["券商默认素材", "public/uploads/asset/broker", 1],
+  ["贵金属默认素材", "public/uploads/asset/metal", 4]
+]) {
+  const full = path.join(root, directory);
+  const count = fs.existsSync(full) ? fs.readdirSync(full).filter((file) => /\.(svg|png|webp|jpe?g)$/i.test(file)).length : 0;
+  if (count < minimum) failures.push(`${label}不完整：${count}/${minimum}`);
+}
 
 for (const [label, text] of [["本地 Compose", localCompose], ["GHCR Compose", ghcrCompose]]) {
   if (/\/volume\d+\//.test(text)) failures.push(`${label} 含群晖个人绝对路径`);

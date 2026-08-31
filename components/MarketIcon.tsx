@@ -2,6 +2,8 @@
 
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import { defaultFlagUrl } from "@/lib/flagAssets";
+import SafeAssetImage from "@/components/SafeAssetImage";
+import { countryFlagEmoji } from "@/lib/countryCatalog";
 
 // 市场图标全部走本地素材库（含镜像打包的默认市场图标），不依赖远程 CDN。
 // 无本地素材时回退为本地矢量地球，保证线上/线下、离线都稳定。
@@ -28,13 +30,16 @@ export default function MarketIcon({
   const imgStyle = { width: size, height: size };
   if (custom || flagSrc) {
     return (
-      <img
-        key={code}
+      <SafeAssetImage
         src={custom || flagSrc!}
-        alt=""
         title={title ?? code}
         className={`block flex-none rounded-full object-cover ${className}`}
         style={imgStyle}
+        fallback={
+          <span className={`inline-flex flex-none items-center justify-center overflow-hidden rounded-full ${className}`} style={imgStyle} aria-hidden>
+            <span style={{ fontSize: Math.max(14, size), lineHeight: 1 }}>{countryFlagEmoji(flagIso)}</span>
+          </span>
+        }
       />
     );
   }

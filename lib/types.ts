@@ -78,6 +78,15 @@ export const MARKET_META: Record<string, { label: string; currency: string; code
   CN: { label: "A股", currency: "¥", code: "CNY¥", flag: "🇨🇳" },
   JP: { label: "日股", currency: "¥", code: "JPY¥", flag: "🇯🇵" },
   KR: { label: "韩股", currency: "₩", code: "KRW₩", flag: "🇰🇷" },
+  SG: { label: "新加坡", currency: "S$", code: "SGD$", flag: "🇸🇬" },
+  UK: { label: "英国", currency: "£", code: "GBP£", flag: "🇬🇧" },
+  DE: { label: "德国", currency: "€", code: "EUR€", flag: "🇩🇪" },
+  FR: { label: "法国", currency: "€", code: "EUR€", flag: "🇫🇷" },
+  AU: { label: "澳大利亚", currency: "A$", code: "AUD$", flag: "🇦🇺" },
+  CA: { label: "加拿大", currency: "C$", code: "CAD$", flag: "🇨🇦" },
+  IN: { label: "印度", currency: "₹", code: "INR₹", flag: "🇮🇳" },
+  TW: { label: "中国台湾", currency: "NT$", code: "TWD$", flag: "🇹🇼" },
+  BR: { label: "巴西", currency: "R$", code: "BRL$", flag: "🇧🇷" },
   OTHER: { label: "其他", currency: "", code: "", flag: "🌐" }
 };
 

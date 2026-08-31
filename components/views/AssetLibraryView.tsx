@@ -57,6 +57,7 @@ const BASE_ASSETS: { key: string; name: string; type: "crypto" | "metal" }[] = [
   { key: "GOLD", name: "黄金", type: "metal" },
   { key: "SILVER", name: "白银", type: "metal" },
   { key: "PALLAD", name: "钯金", type: "metal" },
+  { key: "PLAT", name: "铂金", type: "metal" },
   { key: "BTC", name: "比特币", type: "crypto" },
   { key: "ETH", name: "以太坊", type: "crypto" }
 ];
@@ -634,6 +635,7 @@ export default function AssetLibraryView() {
 
   function marketLabelOf(key: string): string {
     if (key === "EU") return marketLabels.find((l) => l.key === "EU")?.label ?? "欧盟";
+    if (BASE_MARKETS.includes(key)) return marketMeta(key).label;
     return marketLabels.find((l) => l.key === key)?.label ?? marketMeta(key).label;
   }
 

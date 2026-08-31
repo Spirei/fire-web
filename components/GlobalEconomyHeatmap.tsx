@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import echarts, { type EChartsInstance } from "@/lib/echarts";
 import { WORLD_ECONOMY_INDICATORS, type WorldEconomyCountry, type WorldEconomyIndicator } from "@/lib/worldEconomy";
-import { countryCatalogForMapNames, type CountryCatalogItem } from "@/lib/countryCatalog";
+import { countryCatalogForMapNames, countryFlagEmoji, countryNameZh, type CountryCatalogItem } from "@/lib/countryCatalog";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import { defaultFlagUrl } from "@/lib/flagAssets";
 
@@ -175,7 +175,8 @@ function escapeHtml(value: string) {
 }
 
 function flagMarkup(country: Pick<CountryCatalogItem, "iso2" | "flag" | "flagCode">, customUrl?: string) {
-  const fallback = `<span style="display:${country.flagCode ? "none" : "grid"};width:20px;height:20px;place-items:center;font-size:18px;line-height:20px">${escapeHtml(country.flag || "🌐")}</span>`;
+  const emoji = country.flag && country.flag !== "🌐" ? country.flag : countryFlagEmoji(country.iso2 || country.flagCode);
+  const fallback = `<span style="display:${country.flagCode ? "none" : "grid"};width:20px;height:20px;place-items:center;font-size:18px;line-height:20px">${escapeHtml(emoji)}</span>`;
   if (!country.flagCode) return fallback;
   // 默认本地素材库圆形 SVG（hatscripts/circle-flags，public/uploads/asset/flag/{iso2}.svg），自定义旗帜优先
   const src = customUrl || defaultFlagUrl(country.flagCode);
@@ -188,7 +189,7 @@ function CountryFlag({ iso2, flag, customUrl }: { iso2: string; flag: string; cu
   useEffect(() => setFailed(false), [src]);
   return (
     <span className="economy-ranking-flag" aria-hidden="true">
-      {src && !failed ? <img src={src} alt="" className="h-full w-full rounded-full object-cover" onError={() => setFailed(true)} /> : flag || "🌐"}
+      {src && !failed ? <img src={src} alt="" className="h-full w-full rounded-full object-cover" onError={() => setFailed(true)} /> : flag && flag !== "🌐" ? flag : countryFlagEmoji(iso2)}
     </span>
   );
 }
@@ -571,7 +572,7 @@ export default function GlobalEconomyHeatmap() {
             if (!item) return "";
             const country = catalogByIso.get(item.flagCode.toUpperCase());
             const identity = country ?? { iso2: item.flagCode.toUpperCase(), flag: item.flag, flagCode: item.flagCode };
-            return `<div style="display:flex;align-items:center;gap:8px">${flagMarkup(identity, countryFlags[item.flagCode.toUpperCase()])}<strong>${escapeHtml(country?.name || item.name)}</strong><span style="margin-left:8px">${escapeHtml(fmtValue(item.value, data.meta.unit))}</span></div>`;
+            return `<div style="display:flex;align-items:center;gap:8px">${flagMarkup(identity, countryFlags[item.flagCode.toUpperCase()])}<strong>${escapeHtml(country?.name || countryNameZh(item.flagCode, item.name))}</strong><span style="margin-left:8px">${escapeHtml(fmtValue(item.value, data.meta.unit))}</span></div>`;
           }
         },
         xAxis: {
@@ -631,7 +632,7 @@ export default function GlobalEconomyHeatmap() {
           const iso2 = country?.iso2 || item?.flagCode.toUpperCase() || "";
           const identity = country ?? { iso2, flag: item?.flag || "🌐", flagCode: item?.flagCode || "" };
           const flag = flagMarkup(identity, countryFlags[iso2]);
-          const countryName = country?.name || item?.name || params.name;
+          const countryName = country?.name || countryNameZh(iso2, item?.name || params.name);
           const heading = `<div style="display:flex;align-items:center;gap:9px;font-size:15px;font-weight:600;line-height:20px"><span style="display:grid;width:20px;height:20px;flex:none;place-items:center;overflow:hidden;border-radius:50%">${flag}</span><span>${escapeHtml(countryName)}</span></div>`;
           if (!item) return `<div style="min-width:196px">${heading}<div style="margin-top:4px;color:${palette.muted};font-size:14px;line-height:20px">暂无数据</div></div>`;
           const tooltipValue = fmtValue(item.value, data.meta.unit).replace(/%$/, " %");

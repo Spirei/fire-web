@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
-import { deleteAsset, ensureCategoryAssets, ensureIconAssets, ensureMarketAssets, ensureStockAssets, getAssets, upsertAsset, type AssetType } from "@/lib/assets";
-import { enrichAssetQuotes } from "@/lib/assetQuotes";
+import { deleteAsset, ensureBrokerAssets, ensureCategoryAssets, ensureIconAssets, ensureMarketAssets, ensureStockAssets, getAssets, upsertAsset, type AssetType } from "@/lib/assets";
+import { enrichAssetQuotes, enrichStockAssetQuotes } from "@/lib/assetQuotes";
 import { getDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -13,12 +13,13 @@ export async function GET(request: Request) {
   if (type === "market") ensureMarketAssets();
   if (type === "crypto" || type === "metal" || type === "flag") ensureCategoryAssets(type);
   if (type === "stock") ensureStockAssets();
+  if (type === "broker") ensureBrokerAssets();
   const assets =
     type === "stock" || type === "market" || type === "flag" || type === "crypto" || type === "metal" || type === "broker" || type === "group" || type === "icon"
       ? getAssets(type)
       : getAssets();
   // crypto / metal 行合并实时行情（CoinGecko + 贵金属），缺失字段补上市值 / 现价 / 涨跌幅
-  return NextResponse.json({ assets: enrichAssetQuotes(assets) });
+  return NextResponse.json({ assets: await enrichStockAssetQuotes(enrichAssetQuotes(assets)) });
 }
 
 export async function POST(request: Request) {

@@ -2,6 +2,7 @@ import { getDb } from "./db";
 import { isLocalUrl, removeFileIfUnused } from "./fileCleanup";
 import fs from "fs";
 import path from "path";
+import { getSiteSettings } from "./settings";
 
 export type AssetType = "stock" | "market" | "flag" | "crypto" | "metal" | "broker" | "group" | "icon";
 
@@ -120,6 +121,31 @@ export function ensureMarketAssets(): void {
   });
 }
 
+function brokerNameKey(value: string): string {
+  return value.trim().toLocaleLowerCase("zh-CN").replace(/[\s·._-]+/g, "").replace(/证[劵卷]/g, "证券");
+}
+
+/** 用镜像内置券商素材补齐当前券商配置；按券商名称/别名匹配，幂等且不覆盖用户图标。 */
+export function ensureBrokerAssets(): void {
+  const dirs = [
+    path.join(process.cwd(), "public", "uploads", "asset", "broker"),
+    path.join(process.cwd(), "resource-default", "asset", "broker")
+  ];
+  const files = [...new Set(dirs.flatMap((dir) => {
+    try { return fs.readdirSync(dir).filter((file) => /\.(svg|png|webp|jpg|jpeg)$/i.test(file)); } catch { return []; }
+  }))];
+  if (!files.length) return;
+  const byName = new Map(files.map((file) => [brokerNameKey(file.replace(/\.(svg|png|webp|jpg|jpeg)$/i, "")), file]));
+  const db = getDb();
+  const exists = db.prepare("SELECT COUNT(*) AS n FROM assets WHERE type = 'broker' AND upper(code) = upper(?)");
+  for (const group of getSiteSettings().groups) {
+    if ((exists.get(group.id) as { n: number }).n > 0) continue;
+    const file = byName.get(brokerNameKey(group.name)) || (group.alias ? byName.get(brokerNameKey(group.alias)) : undefined);
+    if (!file) continue;
+    upsertAsset({ type: "broker", market: "GROUP", code: group.id, name: group.name, url: `/uploads/asset/broker/${file}` });
+  }
+}
+
 /**
  * 从镜像打包的默认素材目录播种素材库（crypto / metal / flag）。
  * - crypto / metal：文件名「名称 + 代码」，末尾大写串为代码（AaveAAVE.svg / 白银SILVER.svg）；
@@ -128,13 +154,14 @@ export function ensureMarketAssets(): void {
  */
 export function ensureCategoryAssets(type: "crypto" | "metal" | "flag"): void {
   const subdir = type;
-  const dir = path.join(process.cwd(), "public", "uploads", "asset", subdir);
-  let files: string[] = [];
-  try {
-    files = fs.readdirSync(dir).filter((f) => /\.(svg|png|webp|jpg)$/i.test(f));
-  } catch {
-    return; // 目录不存在（如未打包/未复制）则跳过
-  }
+  const dirs = [
+    path.join(process.cwd(), "public", "uploads", "asset", subdir),
+    path.join(process.cwd(), "resource-default", "asset", subdir)
+  ];
+  const files = [...new Set(dirs.flatMap((dir) => {
+    try { return fs.readdirSync(dir).filter((f) => /\.(svg|png|webp|jpg)$/i.test(f)); } catch { return []; }
+  }))];
+  if (!files.length) return;
   const db = getDb();
   files.forEach((file) => {
     const stem = file.replace(/\.(svg|png|webp|jpg)$/i, "");
