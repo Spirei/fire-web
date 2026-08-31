@@ -11,7 +11,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: fire-image-${{ github.ref }}
+  # 检查与正式发布互不取消；同一种触发只保留最新一次。
+  group: fire-image-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -72,6 +73,7 @@ jobs:
             type=ref,event=tag
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
@@ -85,5 +87,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            FIRE_BUILD_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

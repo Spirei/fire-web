@@ -18,6 +18,7 @@ export async function GET() {
     service: "fire",
     time: new Date().toISOString(),
     version: CURRENT_VERSION.version,
+    buildSha: process.env.FIRE_BUILD_SHA?.trim() || "unknown",
     quoteSource: configured,
     effectiveSource,
     futuOpenD: futu

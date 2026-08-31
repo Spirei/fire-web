@@ -37,6 +37,11 @@ type GithubJob = {
   }>;
 };
 
+type GithubCommit = {
+  sha: string;
+  html_url: string;
+};
+
 const DISPATCH_COOLDOWN_MS = 30_000;
 let lastDispatchAt = 0;
 const jobsCache = new Map<string, { fetchedAt: number; jobs: GithubJob[] }>();
@@ -54,7 +59,9 @@ function deployToken() {
   return (oauth ? decryptDeploySecret(oauth) : "") || process.env.GITHUB_TOKEN || (fallback ? decryptDeploySecret(fallback) : "");
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const user = getAuthUser(request);
+  if (!user || !isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
   const repository = repositoryName();
   const token = deployToken();
   const endpoint = `https://api.github.com/repos/${repository}/actions/runs?branch=main&per_page=50`;
@@ -89,7 +96,9 @@ export async function GET() {
       let jobs: GithubJob[] = [];
       const cacheKey = `${repository}:${latestImageRun.id}`;
       const cachedJobs = jobsCache.get(cacheKey);
-      const cacheTtl = latestImageRun.status === "completed" ? 300_000 : 15_000;
+      // 不能只看 run：run 可能刚完成，而缓存里的 jobs 仍停留在进行中。
+      const cachedJobsComplete = cachedJobs?.jobs.length && cachedJobs.jobs.every((job) => job.status === "completed");
+      const cacheTtl = cachedJobsComplete ? 300_000 : 15_000;
       if (cachedJobs && Date.now() - cachedJobs.fetchedAt < cacheTtl) {
         jobs = cachedJobs.jobs;
       } else {
@@ -134,7 +143,47 @@ export async function GET() {
         }))
       };
     }
-    return NextResponse.json({ repository, runs, imageProgress, checkedAt: new Date().toISOString() }, { headers: { "cache-control": "no-store" } });
+    let mainCommit: GithubCommit | null = null;
+    try {
+      const commitResponse = await fetch(`https://api.github.com/repos/${repository}/commits/main`, {
+        headers: {
+          accept: "application/vnd.github+json",
+          "user-agent": "fire-deploy-status",
+          ...(token ? { authorization: `Bearer ${token}` } : {})
+        },
+        cache: "no-store"
+      });
+      if (commitResponse.ok) mainCommit = await commitResponse.json() as GithubCommit;
+    } catch {
+      // Actions 数据仍可展示，源码版本暂时标记为未知。
+    }
+
+    const imageRuns = workflowRuns.filter((run) => run.path === ".github/workflows/docker-publish.yml" && (run.event === "schedule" || run.event === "workflow_dispatch"));
+    const latestSuccessfulImageRun = imageRuns.find((run) => run.status === "completed" && run.conclusion === "success") || null;
+    const mainSha = mainCommit?.sha || "";
+    const deployedSha = process.env.FIRE_BUILD_SHA?.trim() || "unknown";
+    const packageName = repository.split("/").filter(Boolean).pop() || "fire-web";
+    return NextResponse.json({
+      repository,
+      packageName,
+      runs,
+      imageProgress,
+      source: mainSha ? { sha: mainSha, shortSha: mainSha.slice(0, 7), url: mainCommit?.html_url || `https://github.com/${repository}/commit/${mainSha}` } : null,
+      image: {
+        latestSuccessfulSha: latestSuccessfulImageRun?.head_sha || "",
+        latestSuccessfulShortSha: latestSuccessfulImageRun?.head_sha.slice(0, 7) || "",
+        latestSuccessfulAt: latestSuccessfulImageRun?.updated_at || "",
+        latestSuccessfulUrl: latestSuccessfulImageRun?.html_url || "",
+        matchesMain: Boolean(mainSha && latestSuccessfulImageRun?.head_sha === mainSha)
+      },
+      runtime: {
+        sha: deployedSha,
+        shortSha: deployedSha === "unknown" ? "unknown" : deployedSha.slice(0, 7),
+        matchesImage: Boolean(latestSuccessfulImageRun?.head_sha && deployedSha === latestSuccessfulImageRun.head_sha),
+        matchesMain: Boolean(mainSha && deployedSha === mainSha)
+      },
+      checkedAt: new Date().toISOString()
+    }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "无法读取 GitHub 状态", repository }, { status: 502 });
   }
@@ -152,13 +201,13 @@ export async function POST(request: Request) {
   }
   lastDispatchAt = now;
   try {
-    const runsResponse = await fetch(`https://api.github.com/repos/${repository}/actions/workflows/docker-publish.yml/runs?event=workflow_dispatch&branch=main&per_page=10`, {
+    const runsResponse = await fetch(`https://api.github.com/repos/${repository}/actions/workflows/docker-publish.yml/runs?branch=main&per_page=10`, {
       headers: { accept: "application/vnd.github+json", authorization: `Bearer ${token}`, "user-agent": "fire-deploy-status" },
       cache: "no-store"
     });
     if (runsResponse.ok) {
       const payload = await runsResponse.json() as { workflow_runs?: GithubRun[] };
-      const activeRun = payload.workflow_runs?.find((run) => run.status !== "completed");
+      const activeRun = payload.workflow_runs?.find((run) => (run.event === "schedule" || run.event === "workflow_dispatch") && run.status !== "completed");
       if (activeRun) {
         lastDispatchAt = 0;
         return NextResponse.json({ error: "已有 Push image 正在排队或运行，请等待完成", runUrl: activeRun.html_url }, { status: 409 });

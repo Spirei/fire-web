@@ -34,6 +34,8 @@ RUN (test -d node_modules && npm prune --omit=dev >/dev/null 2>&1 || true)
 # ---------- 3. 构建：生成 .next 生产产物 ----------
 FROM node:22-slim AS build
 WORKDIR /app
+ARG FIRE_BUILD_SHA=unknown
+ENV FIRE_BUILD_SHA=${FIRE_BUILD_SHA}
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -42,7 +44,9 @@ RUN npm run build
 # ---------- 4. 运行：纯净精简镜像 ----------
 FROM node:22-slim AS runner
 WORKDIR /app
+ARG FIRE_BUILD_SHA=unknown
 ENV NODE_ENV=production
+ENV FIRE_BUILD_SHA=${FIRE_BUILD_SHA}
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # 只带运行必需：生产 node_modules + .next 产物 + 静态 + 配置 + 仓库脚本(futu 桥接脚本文件)
