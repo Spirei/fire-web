@@ -1560,6 +1560,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   // 命令面板固定在设置窗口内右上角、紧贴搜索按钮下方（保持在窗口内以继承主题变量与深色适配）
   function openCmdPalette() {
+    setCmdIndex(0);
     setCmdOpen(true);
     setTimeout(() => cmdRef.current?.focus(), 0);
   }
@@ -1705,56 +1706,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             </svg>
           </button>
         </div>
-        {cmdOpen && (
-          <div className="sw-cmd-pop overflow-hidden rounded-xl border bg-white shadow-pop dark:border-[#2a3140] dark:bg-[#1b2029]" style={{ position: "fixed", top: 52, right: 20, left: "auto", width: 180, minWidth: 180, maxWidth: "calc(100vw - 36px)", flex: "0 0 auto", alignSelf: "flex-start", zIndex: 200, borderColor: "var(--sv-card-border)", background: "var(--sv-card)", color: "var(--sv-text)" }}>
-            <div className="flex items-center gap-2 border-b px-3 py-2" style={{ borderColor: "var(--sv-border)" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-[13px] w-[13px] flex-none opacity-60"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-              <input
-                ref={cmdRef}
-                value={cmdQuery}
-                autoFocus
-                onChange={(e) => { setCmdQuery(e.target.value); setCmdIndex(0); }}
-                onBlur={() => setTimeout(() => setCmdOpen(false), 160)}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowDown") { e.preventDefault(); setCmdIndex((i) => Math.min(i + 1, cmdResults.length - 1)); }
-                  else if (e.key === "ArrowUp") { e.preventDefault(); setCmdIndex((i) => Math.max(i - 1, 0)); }
-                  else if (e.key === "Enter" && cmdResults[cmdIndex]) { e.preventDefault(); jumpTo(cmdResults[cmdIndex]); }
-                }}
-                placeholder="搜索设置…"
-                className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:opacity-50"
-                style={{ color: "var(--sv-text)" }}
-              />
-            </div>
-            <div className="max-h-[240px] overflow-y-auto py-1">
-              {cmdResults.length === 0 ? (
-                <p className="px-3 py-2 text-[11px] opacity-60">没有匹配的设置项</p>
-              ) : (
-                cmdResults.map((item, i) => (
-                  <button
-                    key={item.sub + item.anchor}
-                    type="button"
-                    onMouseDown={(e) => { e.preventDefault(); jumpTo(item); }}
-                    onMouseEnter={() => setCmdIndex(i)}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] transition-colors ${i === cmdIndex ? "opacity-90" : ""}`}
-                    style={i === cmdIndex ? { background: "var(--sv-hover-bg)" } : undefined}
-                  >
-                    <SubNavIcon name={SETTINGS_ANCHOR_ICONS[item.anchor] || item.sub} className="h-3.5 w-3.5 opacity-70" />
-                    <span className="font-semibold">{item.label}</span>
-                    <span className="ml-auto text-[10px] opacity-60">{item.groupLabel}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-        <button
-          id="fire-settings-command-trigger"
-          type="button"
-          tabIndex={-1}
-          aria-hidden="true"
-          className="hidden"
-          onClick={openCmdPalette}
-        />
         {navGroups.map((g) => (
           <div key={g.label} className="sw-nav-group">
             <p className="sw-nav-group-title">{g.label}</p>
@@ -1799,7 +1750,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
       {cmdOpen && (
         <div
-          className="sw-cmd-pop fixed right-4 top-[52px] z-[200] w-[min(240px,calc(100vw-32px))] overflow-hidden rounded-xl border shadow-pop md:hidden"
+          role="dialog"
+          aria-label="搜索设置"
+          className="sw-cmd-pop fixed right-4 top-[52px] z-[200] w-[min(240px,calc(100vw-32px))] overflow-hidden rounded-xl border shadow-pop md:right-5 md:w-[180px]"
           style={{ borderColor: "var(--sv-card-border)", background: "var(--sv-card)", color: "var(--sv-text)" }}
         >
           <div className="flex items-center gap-2 border-b px-3 py-2" style={{ borderColor: "var(--sv-border)" }}>
@@ -1811,23 +1764,33 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               onChange={(e) => { setCmdQuery(e.target.value); setCmdIndex(0); }}
               onBlur={() => setTimeout(() => setCmdOpen(false), 160)}
               onKeyDown={(e) => {
-                if (e.key === "ArrowDown") { e.preventDefault(); setCmdIndex((i) => Math.min(i + 1, cmdResults.length - 1)); }
+                if (e.key === "ArrowDown" && cmdResults.length > 0) { e.preventDefault(); setCmdIndex((i) => Math.min(i + 1, cmdResults.length - 1)); }
                 else if (e.key === "ArrowUp") { e.preventDefault(); setCmdIndex((i) => Math.max(i - 1, 0)); }
                 else if (e.key === "Enter" && cmdResults[cmdIndex]) { e.preventDefault(); jumpTo(cmdResults[cmdIndex]); }
               }}
+              role="combobox"
+              aria-label="搜索设置项"
+              aria-controls="fire-settings-command-results"
+              aria-expanded="true"
+              aria-autocomplete="list"
+              aria-activedescendant={cmdResults[cmdIndex] ? `fire-settings-command-option-${cmdIndex}` : undefined}
               placeholder="搜索设置…"
               className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:opacity-50"
               style={{ color: "var(--sv-text)" }}
             />
           </div>
-          <div className="max-h-[min(240px,calc(100vh-110px))] overflow-y-auto py-1">
+          <div id="fire-settings-command-results" role="listbox" className="max-h-[min(240px,calc(100vh-110px))] overflow-y-auto py-1">
             {cmdResults.length === 0 ? (
-              <p className="px-3 py-2 text-[11px] opacity-60">输入名称查找设置项</p>
+              <p className="px-3 py-2 text-[11px] opacity-60">{cmdQuery.trim() ? "没有匹配的设置项" : "输入名称查找设置项"}</p>
             ) : cmdResults.map((item, i) => (
               <button
+                id={`fire-settings-command-option-${i}`}
                 key={item.sub + item.anchor}
                 type="button"
                 onPointerDown={(e) => { e.preventDefault(); jumpTo(item); }}
+                onPointerEnter={() => setCmdIndex(i)}
+                role="option"
+                aria-selected={i === cmdIndex}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px]"
                 style={i === cmdIndex ? { background: "var(--sv-hover-bg)" } : undefined}
               >
