@@ -2,6 +2,7 @@ import { MARKET_META, type Market, type SearchMatch } from "./types";
 import { getSiteSettings } from "./settings";
 import { fetchUsExtendedQuote } from "./usExtendedQuote";
 import { fetchFutuQuotes, searchFutu } from "./futuQuotes";
+import { getCryptoQuote } from "./assetQuotes";
 
 const DEFAULT_QUOTE_URL = "https://qt.gtimg.cn/q=";
 const DEFAULT_SEARCH_URL = "https://smartbox.gtimg.cn/s3/?v=2&q={q}&t=all";
@@ -162,9 +163,14 @@ export async function fetchBatch(symbols: string[]): Promise<Map<string, Quote>>
 
 export async function fetchQuotes(items: QuoteItem[]): Promise<Record<string, Quote>> {
   const result: Record<string, Quote> = {};
+  const cryptoItems = items.filter((item) => item.market === "ASSET");
+  await Promise.all(cryptoItems.map(async (item) => {
+    const q = await getCryptoQuote(item.code);
+    if (q) result[item.id] = { name: item.code, price: q.price, change: q.price * q.changePct / 100, changePct: q.changePct, open: q.price, high: q.price, low: q.price, time: new Date().toISOString(), marketCap: q.marketCap, source: "auto" };
+  }));
   const quoteSource = getSiteSettings().quoteSource || "auto";
   const usItems = items.filter((item) => item.market === "US");
-  const nonUsItems = items.filter((item) => item.market !== "US");
+  const nonUsItems = items.filter((item) => item.market !== "US" && item.market !== "ASSET");
 
   // 美股主行情走富途 OpenAPI（盘前/盘后/夜盘口径统一，支持 24 小时行情）；
   // 港股/A股直接走腾讯（更成熟稳定，且避免与美股混批导致富途桥接超时拖垮整体）。

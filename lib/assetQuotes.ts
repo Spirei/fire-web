@@ -61,6 +61,14 @@ const CRYPTO_IDS: Record<string, string> = {
   XMR: "monero"
 };
 
+export async function getCryptoQuote(code: string): Promise<AssetQuote | null> {
+  const key = code.trim().toUpperCase();
+  if (!key || !CRYPTO_IDS[key]) return null;
+  const rows = await enrichAssetQuotes([{ type: "crypto", code: key, price: null, changePct: null, marketCap: 0 }]);
+  const row = rows[0];
+  return row?.price != null ? { price: row.price, changePct: row.changePct ?? 0, marketCap: row.marketCap ?? 0 } : null;
+}
+
 const CACHE_FILE = path.join(process.cwd(), "data", "asset-quotes-cache.json");
 const CRYPTO_TTL = 5 * 60 * 1000;
 const METAL_TTL = 6 * 60 * 60 * 1000;
