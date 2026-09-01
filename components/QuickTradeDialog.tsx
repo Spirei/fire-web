@@ -49,6 +49,8 @@ function zonedInputToIso(value: string, timeZone: string) {
     const seenUtc = Date.UTC(Number(seen[1]), Number(seen[2]) - 1, Number(seen[3]), Number(seen[4]), Number(seen[5]));
     guess += wanted - seenUtc;
   }
+  // 夏令时切换会产生不存在的当地时间；必须往返一致才允许入账。
+  if (zonedInputValue(new Date(guess), timeZone) !== value) return "";
   return new Date(guess).toISOString();
 }
 

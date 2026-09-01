@@ -8,6 +8,8 @@ import { parseMarket } from "./store";
 import type { OrderSide, OrderType, OrderValidity, TradeOrder } from "./types";
 
 type OrderRow = Record<string, unknown>;
+const ORDER_TYPES = new Set<OrderType>(["limit", "market", "trigger_buy", "trigger_sell", "rebound_buy", "rebound_sell"]);
+const ORDER_VALIDITIES = new Set<OrderValidity>(["day", "gtc", "custom"]);
 
 function rowToOrder(row: OrderRow): TradeOrder {
   return {
@@ -83,11 +85,6 @@ export function listOrders(
     conditions.push("record_id = ?");
     params.push(recordId);
   }
-  if (scope === "today") {
-    conditions.push("date(traded_at, 'localtime') = date('now', 'localtime')");
-  } else if (scope === "history") {
-    conditions.push("date(traded_at, 'localtime') < date('now', 'localtime')");
-  }
   if (market && market !== "ALL") {
     conditions.push("UPPER(market) = ?");
     params.push(market.toUpperCase());
@@ -96,9 +93,14 @@ export function listOrders(
     conditions.push("status = ?");
     params.push(status);
   }
-  params.push(limit);
-  const rows = db.prepare(`SELECT * FROM trade_orders WHERE ${conditions.join(" AND ")} ORDER BY traded_at DESC, created_at DESC LIMIT ?`).all(...params) as OrderRow[];
-  return rows.map(rowToOrder);
+  const rows = db.prepare(`SELECT * FROM trade_orders WHERE ${conditions.join(" AND ")} ORDER BY traded_at DESC, created_at DESC`).all(...params) as OrderRow[];
+  const now = Date.now();
+  return rows.map(rowToOrder).filter((order) => {
+    if (scope === "all") return true;
+    const orderDay = exchangeDate(order.tradedAt, order.market);
+    const today = exchangeDate(now, order.market);
+    return scope === "today" ? orderDay === today : orderDay < today;
+  }).slice(0, limit);
 }
 
 export function executeOrder(input: {
@@ -251,7 +253,11 @@ export async function settlePendingOrders(userId: string): Promise<{ checked: nu
   let expired = 0;
   for (const o of pending) {
     const order = rowToOrder(o);
-    const customExpired = order.tif === "custom" && order.expiresAt ? now > Date.parse(order.expiresAt) : false;
+    const customExpired = order.tif === "custom" && order.expiresAt
+      ? /^\d{4}-\d{2}-\d{2}$/.test(order.expiresAt)
+        ? exchangeDate(now, order.market) > order.expiresAt
+        : now > Date.parse(order.expiresAt)
+      : false;
     const dayExpired = order.tif === "day" && exchangeDate(now, order.market) > exchangeDate(order.createdAt, order.market);
     if (customExpired || dayExpired) {
       db.prepare("UPDATE trade_orders SET status='expired', trigger_status='已失效' WHERE id=? AND status='pending'").run(order.id);
@@ -286,16 +292,30 @@ export function placeOrder(input: {
 }): { order: TradeOrder; position: { qty: number; cost: number | null }; pending: boolean } {
   const orderType = input.orderType || "limit";
   const tif = input.tif || "day";
+  if (!ORDER_TYPES.has(orderType)) throw new Error("不支持的订单类型");
+  if (!ORDER_VALIDITIES.has(tif)) throw new Error("不支持的订单有效期");
   const session = String(input.session || "");
-  const expiresAt = input.expiresAt && !Number.isNaN(Date.parse(input.expiresAt)) ? new Date(input.expiresAt).toISOString() : null;
+  const rawExpiry = String(input.expiresAt || "").trim();
+  const expiresAt = /^\d{4}-\d{2}-\d{2}$/.test(rawExpiry)
+    ? rawExpiry
+    : rawExpiry && !Number.isNaN(Date.parse(rawExpiry)) ? new Date(rawExpiry).toISOString() : null;
   // 旧版持仓详情没有 mode/orderType，语义一直是“补录已成交”，保持兼容。
   const mode = input.mode ?? (input.orderType ? "order" : "record");
   if (mode === "record") {
-    const tradedAt = input.tradedAt ? Date.parse(input.tradedAt) : NaN;
+    const legacyRecord = input.mode == null && input.orderType == null;
+    const tradedAt = input.tradedAt ? Date.parse(input.tradedAt) : legacyRecord ? Date.now() : NaN;
     if (!Number.isFinite(tradedAt)) throw new Error("请选择有效的成交时间");
     if (tradedAt > Date.now() + 60_000) throw new Error("成交时间不能晚于当前时间");
-    const res = executeOrder({ ...input, orderType, tif, session, expiresAt, triggerStatus: "手工记录" });
+    const res = executeOrder({ ...input, tradedAt: new Date(tradedAt).toISOString(), orderType, tif, session, expiresAt, triggerStatus: legacyRecord ? "兼容成交" : "手工记录" });
     return { ...res, pending: false };
+  }
+  if (tif === "custom") {
+    if (!expiresAt) throw new Error("请选择有效期");
+    const recordMarket = String((getDb().prepare("SELECT market FROM records WHERE id = ? AND user_id = ?").get(input.recordId, input.userId) as OrderRow | undefined)?.market || "CN");
+    const expired = /^\d{4}-\d{2}-\d{2}$/.test(expiresAt)
+      ? expiresAt < exchangeDate(Date.now(), recordMarket)
+      : Date.parse(expiresAt) <= Date.now();
+    if (expired) throw new Error("有效期不能早于今天");
   }
   const pending = orderType !== "market";
   if (!pending) {
@@ -308,6 +328,7 @@ export function placeOrder(input: {
   if (!record) throw new Error("持仓记录不存在");
   const oldQty = Number(record.qty || 0);
   const oldCost = Number(record.cost || 0);
+  if (input.side === "sell" && input.qty > oldQty + 1e-10) throw new Error(`可卖数量不足，当前最多 ${oldQty}`);
   const now = new Date().toISOString();
   const id = "o-" + randomBytes(8).toString("hex");
   const orderNo = nextOrderNo();
