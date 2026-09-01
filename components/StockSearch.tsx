@@ -141,7 +141,7 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
       {open && (
         <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-[14px] border border-edge bg-white shadow-pop">
           {results.length === 0 ? (
-            <div className="px-4 py-4 text-sm text-faint">未找到相关股票，可直接手动填写</div>
+            <div className="px-4 py-4 text-sm text-faint">未找到相关股票或加密货币，可直接手动填写</div>
           ) : (
             results.map((m, i) => (
               <div
@@ -156,7 +156,7 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
                 >
                   <span className="min-w-0">
                     <span className="block truncate font-semibold">{m.name}</span>
-                    <span className="block text-xs text-muted">{m.code} · {marketMeta(m.market).label}</span>
+                    <span className="block text-xs text-muted">{m.code} · {m.type === "crypto" ? "加密货币" : marketMeta(m.market).label}</span>
                   </span>
                   <span className="flex flex-col items-end">
                     {m.price !== null && <span className="font-semibold tabular-nums">{fmtNumMarket(m.price, m.market)}</span>}

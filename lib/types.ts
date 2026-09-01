@@ -169,6 +169,7 @@ export interface SearchMatch {
   market: Market;
   price: number | null;
   changePct: number | null;
+  type?: "stock" | "crypto" | "metal";
 }
 
 export interface Activity {

@@ -2161,6 +2161,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "增加加密货币市值备用来源",
     desc: "CoinGecko 返回价格但缺少市值时，使用 CompaniesMarketCap 全球资产榜中的加密货币市值补齐，避免限流或字段缺失再次产生 0 市值条目。",
     kind: "fix"
+  }, {
+    title: "自选股与持仓支持加密货币搜索",
+    desc: "添加持仓和自选股时，统一搜索入口同步返回 CoinGecko 加密货币候选，可直接保存为加密货币记录并在结果中明确标注资产类型；股票搜索源不可用时不受影响。",
+    kind: "feature"
   }]
 };
 
