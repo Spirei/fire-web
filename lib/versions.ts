@@ -2205,10 +2205,6 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "加密货币色块改用白色字体",
     desc: "搜索框及持仓相关市场色块统一使用白色‘币’文字，搭配深琥珀底色，避免黑字观感不一致。",
     kind: "fix"
-  }, {
-    title: "加密货币搜索优先主流币",
-    desc: "搜索结果按 BTC、ETH、BNB、SOL、XRP 等主流币优先排序，再展示其他匹配币种。",
-    kind: "feature"
   }]
 };
 
