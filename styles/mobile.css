@@ -66,15 +66,8 @@
   .asset-analysis-split { gap: 12px; }
   .mobile-hide-duplicate-summary { display: none; }
   .asset-analysis-page .card { padding-left: 14px; padding-right: 14px; }
-  .mobile-analysis-holdings { min-width: 0 !important; table-layout: fixed; }
-  .mobile-analysis-holdings [data-holding-column] { display: none; }
-  .mobile-analysis-holdings [data-holding-column="identity"],
-  .mobile-analysis-holdings [data-holding-column="price"],
-  .mobile-analysis-holdings [data-holding-column="pnlRate"] { display: table-cell; }
-  .mobile-analysis-holdings [data-holding-column="identity"] { width: 50%; }
-  .mobile-analysis-holdings [data-holding-column="price"] { width: 22%; }
-  .mobile-analysis-holdings [data-holding-column="pnlRate"] { width: 28%; }
-  .mobile-analysis-holdings [data-holding-column="identity"] > * { min-width: 0 !important; }
+  .mobile-analysis-holdings { min-width: 760px !important; table-layout: auto; }
+  .mobile-analysis-holdings [data-holding-column] { display: table-cell; width: auto; }
   .mobile-analysis-holdings th, .mobile-analysis-holdings td { padding: 11px 8px; }
 
   .mobile-quotes-table { min-width: 0 !important; table-layout: fixed; }
@@ -150,15 +143,8 @@
   .mobile-users-table th:nth-child(5), .mobile-users-table td:nth-child(5) { display: none; }
   .mobile-users-table { min-width: 520px; }
 
-  .mobile-holdings-table { min-width: 0 !important; table-layout: fixed; }
-  .mobile-holdings-table [data-mobile-column] { display: none; }
-  .mobile-holdings-table [data-mobile-column="identity"],
-  .mobile-holdings-table [data-mobile-column="price"],
-  .mobile-holdings-table [data-mobile-column="pnlRate"] { display: table-cell; }
-  .mobile-holdings-table [data-mobile-column="identity"] { width: 50%; }
-  .mobile-holdings-table [data-mobile-column="price"] { width: 23%; }
-  .mobile-holdings-table [data-mobile-column="pnlRate"] { width: 27%; }
-  .mobile-holdings-table [data-mobile-column="identity"] > * { min-width: 0 !important; }
+  .mobile-holdings-table { min-width: 860px !important; table-layout: auto; }
+  .mobile-holdings-table [data-mobile-column] { display: table-cell; width: auto; }
   .mobile-holdings-table th, .mobile-holdings-table td { padding: 11px 8px; }
   .holdings-sankey-module { display: block; }
   .holdings-pnl-sankey-card > header {
