@@ -3015,6 +3015,8 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   .dark .asset-analysis-resizer:hover > i,.dark .asset-analysis-resizer:active > i { color: #58aaff; border-color: rgba(50,151,246,.65); }
 }
 @media (max-width: 767px) {
+  .deploy-heatmap-grid { gap:2px; }
+  .deploy-heatmap-grid > button { height:auto!important; aspect-ratio:1; border-radius:3px; }
   .stock-chart-shell { border-radius: 14px; }
   .stock-chart-toolbar { flex-direction:column; align-items:stretch; gap:6px; padding:10px 10px 6px; }
   .stock-chart-ranges { width:100%; flex:none; }
