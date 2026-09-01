@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { fmtDateTime } from "@/lib/format";
 import { marketMeta, type Activity, type SystemLog } from "@/lib/types";
@@ -20,6 +20,7 @@ const ACTION_META: Record<Activity["action"], { label: string; cls: string }> = 
 };
 
 function systemLevel(event: string) {
+  if (event.includes("rate_limited")) return { label: "警告", cls: "bg-amber-500/10 text-amber-700 dark:text-amber-300" };
   if (event.includes("failed") || event.includes("denied") || event.includes("error")) return { label: "失败", cls: "bg-red-500/10 text-red-600 dark:text-red-300" };
   if (event.includes("success")) return { label: "成功", cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300" };
   if (event.includes("logout")) return { label: "退出", cls: "bg-slate-500/10 text-muted" };
@@ -27,7 +28,9 @@ function systemLevel(event: string) {
 }
 function systemEventLabel(event: string) {
   const labels: Record<string, string> = { "auth.login.success": "登录成功", "auth.login.failed": "登录失败", "auth.login.rate_limited": "登录限流", "auth.register.success": "注册成功", "auth.logout": "退出登录" };
-  return labels[event] || (event.startsWith("auth.") ? `账户 · ${event.slice(5).replace(/[._]/g, " ")}` : event);
+  const modules: Record<string, string> = { auth: "账户", security: "安全", permission: "权限", deploy: "部署", system: "系统" };
+  const [module, action] = event.split(/[.:/]/);
+  return labels[event] || `${modules[module] || "系统"} · ${(action || event).replace(/[._]/g, " ")}`;
 }
 const isKeySystemEvent = (event: string) => /^(auth\.|security\.|permission\.|deploy\.|system\.)/.test(event);
 
@@ -38,6 +41,8 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<Activity["action"] | "all">("all");
   const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
+  const [lastRefreshed, setLastRefreshed] = useState("");
   const pageSize = 10;
   const visibleActivities = activities.filter((a) => `${a.stockName} ${a.stockCode} ${a.userName}`.toLowerCase().includes(query.toLowerCase()));
   const visibleSystemLogs = systemLogs.filter((log) => isKeySystemEvent(log.event) && `${log.event} ${log.detail} ${log.userName} ${log.ip}`.toLowerCase().includes(query.toLowerCase()) && (systemFilter === "all" || log.event.split(/[.:/]/)[0] === systemFilter));
@@ -48,15 +53,15 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
   useEffect(() => { setPage(1); }, [scope, filter, systemFilter, query]);
   useEffect(() => {
     if (!onRefresh) return;
-    const timer = window.setInterval(() => { void onRefresh(); }, 30_000);
+    const timer = window.setInterval(() => { void refreshLogs(); }, 30_000);
     return () => window.clearInterval(timer);
   }, [scope, isAdmin, onRefresh]);
-  const refreshLogs = async () => { if (!onRefresh || refreshing) return; setRefreshing(true); try { await onRefresh(); } finally { setRefreshing(false); } };
+  const refreshLogs = async () => { if (!onRefresh || refreshingRef.current) return; refreshingRef.current = true; setRefreshing(true); try { await onRefresh(); setLastRefreshed(new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })); } finally { refreshingRef.current = false; setRefreshing(false); } };
   return (
     <div className="overflow-hidden rounded-[18px] border border-edge bg-white shadow-card dark:bg-[#151b26]">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-edge px-5 pt-4">
         <div className="flex gap-6">{(["user", "system"] as const).map((key) => <button key={key} type="button" onClick={() => setScope(key)} className={`border-b-2 pb-3 text-sm font-semibold transition ${scope === key ? "border-ink text-ink dark:border-white dark:text-white" : "border-transparent text-muted hover:text-ink dark:hover:text-white"}`}>{key === "user" ? "用户日志" : "系统日志"}<span className="ml-1.5 text-xs font-normal text-faint">{key === "user" ? activities.length : systemLogs.length}</span></button>)}</div>
-        <div className="mb-3 flex w-full items-center gap-2 sm:w-auto"><input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="搜索日志" placeholder="搜索名称、代码或事件" className="h-9 w-full rounded-lg border border-edge bg-transparent px-3 text-sm outline-none transition placeholder:text-faint focus:border-ink dark:focus:border-white sm:w-64" />{onRefresh && <RefreshButton onClick={() => void refreshLogs()} title={refreshing ? "正在刷新日志" : "刷新日志"} />}</div>
+        <div className="mb-3 flex w-full items-center gap-2 sm:w-auto"><input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="搜索日志" placeholder="搜索名称、代码或事件" className="h-9 w-full rounded-lg border border-edge bg-transparent px-3 text-sm outline-none transition placeholder:text-faint focus:border-ink dark:focus:border-white sm:w-64" />{onRefresh && <RefreshButton onClick={() => void refreshLogs()} title={refreshing ? "正在刷新日志" : "刷新日志"} />}{lastRefreshed && <span className="hidden whitespace-nowrap text-[11px] text-faint sm:inline">更新于 {lastRefreshed}</span>}</div>
       </div>
       {scope === "system" && !isAdmin && <div className="p-8 text-center text-sm text-faint">系统日志仅管理员可见</div>}
       {scope === "system" && isAdmin && <>
