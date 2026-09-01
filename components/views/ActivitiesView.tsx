@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 
 import { fmtDateTime } from "@/lib/format";
 import { marketMeta, type Activity, type SystemLog } from "@/lib/types";
+import RefreshButton from "@/components/RefreshButton";
 
 interface Props {
   activities: Activity[];
   systemLogs?: SystemLog[];
   isAdmin?: boolean;
+  onRefresh?: () => Promise<void> | void;
 }
 
 const ACTION_META: Record<Activity["action"], { label: string; cls: string }> = {
@@ -24,12 +26,13 @@ function systemLevel(event: string) {
   return { label: "记录", cls: "bg-amber-500/10 text-amber-700 dark:text-amber-300" };
 }
 
-export default function ActivitiesView({ activities, systemLogs = [], isAdmin = false }: Props) {
+export default function ActivitiesView({ activities, systemLogs = [], isAdmin = false, onRefresh }: Props) {
   const [scope, setScope] = useState<"user" | "system">("user");
   const [systemFilter, setSystemFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<Activity["action"] | "all">("all");
+  const [refreshing, setRefreshing] = useState(false);
   const pageSize = 10;
   const visibleActivities = activities.filter((a) => `${a.stockName} ${a.stockCode} ${a.userName}`.toLowerCase().includes(query.toLowerCase()));
   const visibleSystemLogs = systemLogs.filter((log) => `${log.event} ${log.detail} ${log.userName} ${log.ip}`.toLowerCase().includes(query.toLowerCase()) && (systemFilter === "all" || log.event.split(/[.:/]/)[0] === systemFilter));
@@ -38,11 +41,17 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const pageRows = rows.slice((Math.min(page, totalPages) - 1) * pageSize, Math.min(page, totalPages) * pageSize);
   useEffect(() => { setPage(1); }, [scope, filter, systemFilter, query]);
+  useEffect(() => {
+    if (scope !== "system" || !isAdmin || !onRefresh) return;
+    const timer = window.setInterval(() => { void onRefresh(); }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [scope, isAdmin, onRefresh]);
+  const refreshLogs = async () => { if (!onRefresh || refreshing) return; setRefreshing(true); try { await onRefresh(); } finally { setRefreshing(false); } };
   return (
     <div className="overflow-hidden rounded-[18px] border border-edge bg-white shadow-card dark:bg-[#151b26]">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-edge px-5 pt-4">
         <div className="flex gap-6">{(["user", "system"] as const).map((key) => <button key={key} type="button" onClick={() => setScope(key)} className={`border-b-2 pb-3 text-sm font-semibold transition ${scope === key ? "border-ink text-ink dark:border-white dark:text-white" : "border-transparent text-muted hover:text-ink dark:hover:text-white"}`}>{key === "user" ? "用户日志" : "系统日志"}<span className="ml-1.5 text-xs font-normal text-faint">{key === "user" ? activities.length : systemLogs.length}</span></button>)}</div>
-        <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="搜索日志" placeholder="搜索名称、代码或事件" className="mb-3 h-9 w-full rounded-lg border border-edge bg-transparent px-3 text-sm outline-none transition placeholder:text-faint focus:border-ink dark:focus:border-white sm:w-64" />
+        <div className="mb-3 flex w-full items-center gap-2 sm:w-auto"><input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="搜索日志" placeholder="搜索名称、代码或事件" className="h-9 w-full rounded-lg border border-edge bg-transparent px-3 text-sm outline-none transition placeholder:text-faint focus:border-ink dark:focus:border-white sm:w-64" />{scope === "system" && isAdmin && <RefreshButton onClick={() => void refreshLogs()} title={refreshing ? "正在刷新系统日志" : "刷新系统日志"} />}</div>
       </div>
       {scope === "system" && !isAdmin && <div className="p-8 text-center text-sm text-faint">系统日志仅管理员可见</div>}
       {scope === "system" && isAdmin && <>

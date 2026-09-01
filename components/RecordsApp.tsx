@@ -779,7 +779,7 @@ export default function RecordsApp({
             />
           )}
           {activeTab === "pnl" && <AssetPnlAnalysisView onBack={() => selectTab("assets")} />}
-          {activeTab === "activities" && <ActivitiesView activities={activities} systemLogs={systemLogs} isAdmin={user?.role === "admin"} />}
+          {activeTab === "activities" && <ActivitiesView activities={activities} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
           {activeTab === "global" && <GlobalPreviewView />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} />}
