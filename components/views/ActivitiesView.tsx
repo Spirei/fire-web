@@ -44,10 +44,10 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
   }
 
   return (
-    <div className="card overflow-hidden">
+    <div className="card overflow-hidden rounded-2xl border-edge/80 shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3">
-        <div className="inline-flex rounded-lg border border-edge bg-bg-gray p-1">{(["user", "system"] as const).map((key) => <button key={key} type="button" onClick={() => setScope(key)} className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${scope === key ? "bg-white text-ink shadow-sm dark:bg-[#252d3a] dark:text-white" : "text-muted"}`}>{key === "user" ? `用户日志 ${activities.length}` : `系统日志 ${systemLogs.length}`}</button>)}</div>
-        <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="搜索日志" placeholder="搜索日志…" className="h-9 w-full rounded-lg border border-edge bg-transparent px-3 text-sm outline-none placeholder:text-faint focus:border-brand sm:w-64" />
+        <div className="inline-flex rounded-xl border border-edge bg-bg-gray p-1">{(["user", "system"] as const).map((key) => <button key={key} type="button" onClick={() => setScope(key)} className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${scope === key ? "bg-white text-ink shadow-sm dark:bg-[#252d3a] dark:text-white" : "text-muted hover:text-ink dark:hover:text-white"}`}>{key === "user" ? `用户日志 ${activities.length}` : `系统日志 ${systemLogs.length}`}</button>)}</div>
+        <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="搜索日志" placeholder="搜索日志…" className="h-9 w-full rounded-xl border border-edge bg-bg-gray/70 px-3 text-sm outline-none transition focus:border-brand focus:bg-white dark:focus:bg-[#1b2230] sm:w-64" />
       </div>
       {scope === "system" && !isAdmin && <div className="p-8 text-center text-sm text-faint">系统日志仅管理员可见</div>}
       {scope === "system" && isAdmin && <>
@@ -56,7 +56,7 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
       </>}
       {scope === "system" ? null : <>
       <div className="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-3">
-        <span className="mr-1 text-xs font-semibold text-muted">操作分类</span>
+        <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-muted">操作</span>
         {(["all", "created", "updated", "deleted"] as const).map((key) => {
           const count = key === "all" ? activities.length : activities.filter((activity) => activity.action === key).length;
           const label = key === "all" ? "全部" : ACTION_META[key].label;
