@@ -1035,9 +1035,11 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
           const color = change >= 0 ? "#e5484d" : "#0aa77d";
           const ohlc = data.ohlc[p.dataIndex] || [];
           const amount = amounts[p.dataIndex] || 0;
-          const line = (label: string, value: string, valueColor = ink) => `<div style="display:flex;justify-content:space-between;gap:26px;margin-top:3px"><span style="color:${muted}">${label}</span><b style="color:${valueColor};font-variant-numeric:tabular-nums">${value}</b></div>`;
-          const core = `${ohlc.length ? line("开盘", Number(ohlc[0]).toFixed(3), Number(ohlc[0]) >= previous ? "#e5484d" : "#0aa77d") + line("最高", Number(ohlc[3]).toFixed(3), "#e5484d") + line("最低", Number(ohlc[2]).toFixed(3), "#0aa77d") + line("收盘", Number(ohlc[1]).toFixed(3), color) : line("价格", price.toFixed(3))}${line("涨跌额", `${change >= 0 ? "+" : ""}${change.toFixed(3)}`, color)}${line("涨跌幅", `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`, color)}${line("成交额", fmtAmount(amount))}${line("成交量", fmtVolume(data.volumes[p.dataIndex] || 0))}`;
-          return `<div style="min-width:174px;font-size:12px"><div style="font-weight:700;margin-bottom:5px">${tooltipDate(p.axisValue, range === "DAY" || range === "5D", market)}</div>${core}</div>`;
+          const compact = typeof window !== "undefined" && window.innerWidth <= 767;
+          const line = (label: string, value: string, valueColor = ink) => `<div style="display:flex;justify-content:space-between;gap:${compact ? 14 : 26}px;margin-top:${compact ? 2 : 3}px"><span style="color:${muted}">${label}</span><b style="color:${valueColor};font-variant-numeric:tabular-nums">${value}</b></div>`;
+          const fullCore = `${ohlc.length ? line("开盘", Number(ohlc[0]).toFixed(3), Number(ohlc[0]) >= previous ? "#e5484d" : "#0aa77d") + line("最高", Number(ohlc[3]).toFixed(3), "#e5484d") + line("最低", Number(ohlc[2]).toFixed(3), "#0aa77d") + line("收盘", Number(ohlc[1]).toFixed(3), color) : line("价格", price.toFixed(3))}${line("涨跌额", `${change >= 0 ? "+" : ""}${change.toFixed(3)}`, color)}${line("涨跌幅", `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`, color)}${line("成交额", fmtAmount(amount))}${line("成交量", fmtVolume(data.volumes[p.dataIndex] || 0))}`;
+          const compactCore = `${line("收盘", price.toFixed(3), color)}${line("涨跌额", `${change >= 0 ? "+" : ""}${change.toFixed(3)}`, color)}${line("涨跌幅", `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`, color)}`;
+          return `<div style="min-width:${compact ? 132 : 174}px;font-size:${compact ? 11 : 12}px"><div style="font-weight:700;margin-bottom:${compact ? 3 : 5}px">${tooltipDate(p.axisValue, range === "DAY" || range === "5D", market)}</div>${compact ? compactCore : fullCore}</div>`;
         } },
         grid: [
           { left: gridLeft, right: gridRight, top: 16, height: subCount === 0 ? "82%" : subCount === 1 ? "66%" : "56%", containLabel: gridContain },
