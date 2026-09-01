@@ -317,15 +317,15 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
       ) : (
         <div className="overflow-hidden rounded-card border border-edge bg-white shadow-card">
           <div className="overflow-x-auto">
-            <table className="mobile-global-table w-full text-sm">
+            <table className="mobile-global-table w-full min-w-[780px] text-sm">
               <thead>
                 <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-muted">
                   <th className="px-4 py-3 text-center">排名</th>
                   <th className="px-4 py-3 text-left">资产</th>
                   <th className="px-4 py-3 text-center">价格</th>
-                  <th className="px-4 py-3 text-center">涨跌幅</th>
+                  <th className="min-w-[96px] px-5 py-3 text-center">涨跌幅</th>
                   <th className="px-4 py-3 text-center">月K</th>
-                  <th className="px-4 py-3 text-center">市值</th>
+                  <th className="min-w-[128px] px-5 py-3 text-center">市值</th>
                   <th className="px-4 py-3 text-center">市场</th>
                 </tr>
               </thead>

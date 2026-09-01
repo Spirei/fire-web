@@ -850,7 +850,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
           <div className="py-16 text-center text-sm text-faint">还没有自选股票，先用上方搜索添加吧。</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className={`mobile-quotes-table w-full text-sm ${editMode ? "min-w-[1120px]" : ""}`}>
+            <table className={`mobile-quotes-table w-full min-w-[860px] text-sm ${editMode ? "min-w-[1120px]" : ""}`}>
               <thead>
                 <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-muted">
                   {editMode && <th className="w-10 px-4 py-[13px]">

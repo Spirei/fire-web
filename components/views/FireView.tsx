@@ -1027,10 +1027,10 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
                       <span className="text-ink-2 dark:text-white">{editing && !isPast ? input("current") : money(row.current)}</span>
                     </td>
                     <td className={`${tdCls} text-right`}>
-                      <span className={`${profitN != null && profitN >= 0 ? "text-up" : "text-down"}`}>{profitDisplay}</span>
+                      <span className={`${profitN == null || profitN >= 0 ? "text-up" : "text-down"}`}>{profitDisplay}</span>
                     </td>
                     <td className={`${tdCls} text-right`}>
-                      <span className={`${rateN != null && rateN >= 0 ? "text-up" : "text-down"}`}>{rateDisplay}</span>
+                      <span className={`${rateN == null || rateN >= 0 ? "text-up" : "text-down"}`}>{rateDisplay}</span>
                     </td>
                     <td className={`${tdCls} text-right`}>
                       {editing && !isPast ? input("target") : targetBase > 0 ? fmtPlan(targetBase * k) : "—"}

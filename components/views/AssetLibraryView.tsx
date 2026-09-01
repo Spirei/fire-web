@@ -1481,8 +1481,8 @@ export default function AssetLibraryView() {
 
             {/* 股票图标列表（微牛样式：白卡片 + 表头 + 行） */}
             {assetsLoading ? (
-              <div className="asset-library-stock-list overflow-hidden rounded-[14px] border border-edge bg-white shadow-card dark:bg-[#16181d]">
-                <div className="asset-library-stock-row grid grid-cols-[36px_minmax(0,1fr)_80px_72px_72px_140px] items-center gap-2 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted dark:bg-white/5">
+              <div className="asset-library-stock-list overflow-x-auto rounded-[14px] border border-edge bg-white shadow-card dark:bg-[#16181d]">
+                <div className="asset-library-stock-row grid min-w-[680px] grid-cols-[56px_minmax(190px,1fr)_90px_82px_82px_140px] items-center gap-2 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted dark:bg-white/5">
                   <span>序号</span>
                   <span>名称 / 代码</span>
                   <span className="text-right">市值</span>
@@ -1491,7 +1491,7 @@ export default function AssetLibraryView() {
                   <span>市场</span>
                 </div>
                 {Array.from({ length: 10 }).map((_, i) => (
-                  <div key={i} className="asset-library-stock-row grid grid-cols-[36px_minmax(0,1fr)_80px_72px_72px_140px] items-center gap-2 border-b border-edge px-4 py-2.5 dark:border-[#2a2f3a]">
+                  <div key={i} className="asset-library-stock-row grid min-w-[680px] grid-cols-[56px_minmax(190px,1fr)_90px_82px_82px_140px] items-center gap-2 border-b border-edge px-4 py-2.5 dark:border-[#2a2f3a]">
                     <span className="h-4 w-4 animate-pulse rounded-full bg-bg-gray dark:bg-white/10" />
                     <span className="flex items-center gap-2.5">
                       <span className="h-9 w-9 animate-pulse rounded-full bg-bg-gray dark:bg-white/10" />
@@ -1579,8 +1579,8 @@ export default function AssetLibraryView() {
                 </p>
               )
             ) : (
-              <div className="asset-library-stock-list overflow-hidden rounded-[14px] border border-edge bg-white shadow-card dark:bg-[#16181d]">
-                <div className="asset-library-stock-row grid grid-cols-[36px_minmax(0,1fr)_80px_72px_72px_140px] items-center gap-2 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted dark:bg-white/5">
+              <div className="asset-library-stock-list overflow-x-auto rounded-[14px] border border-edge bg-white shadow-card dark:bg-[#16181d]">
+                <div className="asset-library-stock-row grid min-w-[680px] grid-cols-[56px_minmax(190px,1fr)_90px_82px_82px_140px] items-center gap-2 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted dark:bg-white/5">
                   <button type="button" onClick={() => toggleSort("rank")} className={`inline-flex items-center gap-1 text-left transition-colors ${sortKey === "rank" ? "text-brand-deep" : "hover:text-ink"}`}>
                     序号 <SortArrow k="rank" />
                   </button>
@@ -1608,7 +1608,7 @@ export default function AssetLibraryView() {
                   return (
                     <div
                       key={key}
-                      className="asset-library-stock-row grid grid-cols-[36px_minmax(0,1fr)_80px_72px_72px_140px] items-center gap-2 border-b border-edge px-4 py-2 text-sm last:border-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5"
+                      className="asset-library-stock-row grid min-w-[680px] grid-cols-[56px_minmax(190px,1fr)_90px_82px_82px_140px] items-center gap-2 border-b border-edge px-4 py-2 text-sm last:border-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5"
                     >
                       <span
                         className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
@@ -1678,7 +1678,7 @@ export default function AssetLibraryView() {
         )}
 
         {(tab === "market" || tab === "flag" || tab === "broker" || tab === "group" || tab === "crypto" || tab === "metal" || tab === "icon") && (
-          <div className="overflow-hidden rounded-[14px] border border-edge bg-white shadow-card dark:bg-[#16181d]">
+          <div className="overflow-x-auto rounded-[14px] border border-edge bg-white shadow-card dark:bg-[#16181d]">
             {tab === "flag" ? (
               <>
                 <div className="flex items-center justify-between gap-3 border-b border-edge bg-[#f6f7f9] px-4 py-2.5 dark:bg-white/5">
@@ -2408,7 +2408,7 @@ export default function AssetLibraryView() {
                     className="ml-auto h-[34px] w-[180px] rounded-full border border-edge-strong bg-white px-3.5 text-xs outline-none transition-shadow focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] dark:bg-[#151a26] dark:text-[#e5e7eb]"
                   />
                 </div>
-                <div className="grid grid-cols-[40px_minmax(0,1fr)_100px_80px_80px] items-center gap-2 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted dark:bg-white/5">
+                <div className="grid min-w-[620px] grid-cols-[56px_minmax(190px,1fr)_110px_90px_90px] items-center gap-2 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted dark:bg-white/5">
                   <span>序号</span>
                   <span>名称 / 代码</span>
                   <button type="button" onClick={() => toggleSort("marketCap")} className={`inline-flex items-center justify-end gap-1 text-right transition-colors ${sortKey === "marketCap" ? "text-brand-deep" : "hover:text-ink"}`}>
@@ -2470,7 +2470,7 @@ export default function AssetLibraryView() {
                   const saving = !!busy[busyKey];
                   const isUp = (row.changePct ?? 0) >= 0;
                   return (
-                    <div key={row.key} className="grid grid-cols-[40px_minmax(0,1fr)_100px_80px_80px] items-center gap-2 border-b border-edge px-4 py-2.5 text-sm last:border-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5">
+                    <div key={row.key} className="grid min-w-[620px] grid-cols-[56px_minmax(190px,1fr)_110px_90px_90px] items-center gap-2 border-b border-edge px-4 py-2.5 text-sm last:border-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5">
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-bg-gray text-[10px] font-bold text-muted">{listStart + i + 1}</span>
                       <span className="flex min-w-0 items-center gap-2.5">
                         <button

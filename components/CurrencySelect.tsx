@@ -13,7 +13,7 @@ export default function CurrencySelect({ value, onChange, allowedCodes, align = 
   const current = options.find((c) => c.code === currency) ?? options[0] ?? CURRENCIES[0];
   const selectCurrency = (next: CurrencyCode) => onChange ? onChange(next) : displayCurrency.setCurrency(next);
   return (
-    <div className="relative">
+    <div className="relative max-w-full flex-none">
       <button
         type="button"
         title={`显示货币：${current.label}`}
@@ -26,7 +26,7 @@ export default function CurrencySelect({ value, onChange, allowedCodes, align = 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className={`absolute top-full z-50 mt-2 max-h-[min(320px,calc(100vh-96px))] min-w-[160px] overflow-x-hidden overflow-y-auto rounded-xl border border-edge-strong bg-white p-1.5 shadow-pop dark:border-[#2a3140] dark:bg-[#1b2029] ${align === "left" ? "left-0" : "right-0"}`}>
+          <div className={`absolute top-full z-50 mt-2 max-h-[min(320px,calc(100vh-96px))] w-[160px] max-w-[calc(100vw-32px)] overflow-x-hidden overflow-y-auto rounded-xl border border-edge-strong bg-white p-1.5 shadow-pop dark:border-[#2a3140] dark:bg-[#1b2029] ${align === "left" ? "left-0" : "left-0 sm:left-auto sm:right-0"}`}>
             {options.map((option) => (
               <button
                 key={option.code}

@@ -137,6 +137,42 @@ const translateWorkflowLabel = (label: string) => ({
 const RUNS_PER_PAGE = 5;
 type ContainerUpdateState = "idle" | "triggering" | "watching" | "restarting" | "healthy" | "unchanged" | "failed";
 
+function UpdateHeatmap({ runs }: { runs: Run[] }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setDate(start.getDate() - 364 - start.getDay());
+  const counts = new Map<string, number>();
+  runs.forEach((run) => {
+    const key = new Date(run.updatedAt).toLocaleDateString("en-CA");
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  const weeks = Array.from({ length: 53 }, (_, week) =>
+    Array.from({ length: 7 }, (_, day) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + week * 7 + day);
+      const key = date.toLocaleDateString("en-CA");
+      return { date, key, count: date > today ? -1 : counts.get(key) || 0 };
+    })
+  );
+  const monthLabels = weeks.map((week, index) => {
+    const date = week[0].date;
+    const previous = index ? weeks[index - 1][0].date.getMonth() : -1;
+    return date.getMonth() !== previous ? `${date.getMonth() + 1}月` : "";
+  });
+  const tone = (count: number) => count < 0 ? "bg-transparent" : count === 0 ? "bg-slate-100 dark:bg-[#202731]" : count === 1 ? "bg-emerald-200 dark:bg-emerald-950" : count === 2 ? "bg-emerald-400 dark:bg-emerald-700" : count <= 4 ? "bg-emerald-600 dark:bg-emerald-500" : "bg-emerald-800 dark:bg-emerald-300";
+  return <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none sm:p-5">
+    <div className="mb-4"><h2 className="text-sm font-medium">更新热力图</h2><p className="mt-1 text-xs text-slate-500">最近一年每日工作流更新频率</p></div>
+    <div className="overflow-x-auto pb-1">
+      <div className="min-w-[690px]">
+        <div className="mb-1 grid grid-cols-[repeat(53,10px)] gap-[3px] text-[9px] text-slate-500">{monthLabels.map((label, index) => <span key={index} className="whitespace-nowrap">{label}</span>)}</div>
+        <div className="grid grid-flow-col grid-rows-7 gap-[3px]">{weeks.flatMap((week) => week.map((cell) => <span key={cell.key} title={`${cell.key} · ${Math.max(0, cell.count)} 次更新`} className={`h-[10px] w-[10px] rounded-[2px] ${tone(cell.count)}`} />))}</div>
+        <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-slate-500"><span>少</span>{[0,1,2,3,5].map((count) => <span key={count} className={`h-[10px] w-[10px] rounded-[2px] ${tone(count)}`} />)}<span>多</span></div>
+      </div>
+    </div>
+  </section>;
+}
+
 const sleep = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 const readApiJson = async <T extends Record<string, unknown>>(response: Response): Promise<T> => {
   const contentType = response.headers.get("content-type") || "";
@@ -311,7 +347,7 @@ export default function DeployStatusPage() {
       : imageVersion?.matchesMain
         ? { label: "镜像已构建完成", dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" }
         : imageVersion?.latestSuccessfulSha
-          ? { label: "立即构建", dot: "bg-orange-500", text: "text-orange-700 dark:text-orange-300" }
+          ? { label: "立即构建", dot: "bg-emerald-400 deploy-breathe", text: "text-emerald-700 dark:text-emerald-300" }
         : { label: "尚无镜像", dot: "bg-slate-400", text: "text-slate-500" };
   const runtimeState = runtimeVersion?.matchesMain
     ? { label: `线上 ${runtimeVersion.shortSha}`, dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" }
@@ -331,11 +367,11 @@ export default function DeployStatusPage() {
   };
   return (
     <main className="min-h-[100dvh] bg-slate-50 px-4 py-6 text-slate-900 dark:bg-[#0b0f16] dark:text-slate-100 sm:px-8 sm:py-10">
-      <style jsx>{`main section button, main section a { transition-timing-function: cubic-bezier(.22,1,.36,1); } main section button:active, main section a:active { transform: translateY(1px) scale(.985); }`}</style>
+      <style jsx global>{`main section button, main section a { transition-timing-function: cubic-bezier(.22,1,.36,1); } main section button:active, main section a:active { transform: translateY(1px) scale(.985); } @keyframes deploy-breathe { 0%,100% { opacity:.66; transform:scale(.86); box-shadow:0 0 0 0 rgb(52 211 153 / .18); } 50% { opacity:1; transform:scale(1); box-shadow:0 0 0 5px rgb(52 211 153 / 0); } } .deploy-breathe { animation: deploy-breathe 2.6s cubic-bezier(.45,0,.55,1) infinite; } @media (prefers-reduced-motion:reduce) { .deploy-breathe { animation:none; } }`}</style>
       <div className="mx-auto max-w-[720px]">
         <div className="mb-7 sm:mb-8 sm:flex sm:items-start sm:justify-between sm:gap-6">
           <div className="min-w-0"><p className="mb-2 hidden text-xs uppercase tracking-[.22em] text-slate-500 sm:block">Fire deployment</p><div className="flex flex-wrap items-center gap-2"><h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-2xl"><span className="sm:hidden">发布状态</span><span className="hidden sm:inline">GitHub main 到线上发布状态</span></h1></div><p className="mt-1.5 max-w-[30rem] text-[13px] leading-5 text-slate-500 sm:mt-2 sm:text-sm dark:text-slate-400"><span className="sm:hidden">每日 00:00 自动生成镜像，也可手动构建。</span><span className="hidden sm:inline">GitHub main 是发布源，每日 00:00 自动生成镜像，也可手动构建。</span></p></div>
-          <div className="mt-4 flex w-full items-center justify-between gap-2 sm:mt-0 sm:w-auto sm:justify-end">
+          <div className="mt-4 flex w-full items-center justify-end gap-2 sm:mt-0 sm:w-auto">
             <ThemeToggle />
             <button onClick={refreshNow} title={refreshing ? "正在刷新" : "刷新状态"} aria-label={refreshing ? "正在刷新" : "刷新状态"} disabled={refreshing} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-wait dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-white/[.04]">
               <IconRefresh aria-hidden="true" size={16} stroke={1.8} style={{ transform: `rotate(${refreshTurns * 360}deg)`, transition: "transform 720ms cubic-bezier(.22,.75,.2,1)" }} />
@@ -407,6 +443,7 @@ export default function DeployStatusPage() {
           {hasLoaded && !runs.length && !error && <p className="px-5 py-10 text-center text-sm text-slate-500">暂无运行记录</p>}
           {runs.length > RUNS_PER_PAGE && <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3 text-xs text-slate-500 dark:border-slate-800"><span>第 {page} / {totalPages} 页 · 共 {runs.length} 条</span><div className="flex gap-2"><button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1} className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-white/[.04]">上一页</button><button onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages} className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-white/[.04]">下一页</button></div></div>}
         </section>
+        <UpdateHeatmap runs={runs} />
       </div>
     </main>
   );
