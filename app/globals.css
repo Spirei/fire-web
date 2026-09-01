@@ -3021,8 +3021,37 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   .stock-chart-range-scroll { overflow-x:auto; overscroll-behavior-inline:contain; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
   .stock-chart-range-scroll::-webkit-scrollbar { display:none; }
   .stock-chart-action-group { width:100%; flex-wrap:wrap; justify-content:flex-start; gap:5px; }
+  .stock-chart-menu,
+  .stock-chart-menu.style-menu.is-draggable {
+    position:fixed!important;
+    z-index:220!important;
+    top:auto!important;
+    right:max(12px,env(safe-area-inset-right))!important;
+    bottom:max(12px,env(safe-area-inset-bottom))!important;
+    left:max(12px,env(safe-area-inset-left))!important;
+    width:auto!important;
+    min-width:0!important;
+    max-height:min(70dvh,520px)!important;
+    overflow-x:hidden;
+    overflow-y:auto;
+    border-radius:16px;
+    transform:none!important;
+    touch-action:pan-y;
+  }
   .stock-chart-range { min-height: 34px; padding: 0 10px; font-size: 12px; }
   .stock-chart-style-trigger { min-width: 58px; min-height: 36px; }
+}
+@media (max-width: 420px) {
+  /* 小屏保持合理的绘图区宽高比，ECharts 的 ResizeObserver 会同步画布像素尺寸。 */
+  .stock-chart-canvas { height:clamp(300px,92vw,360px)!important; }
+  .stock-detail-heading { gap:6px; }
+  .stock-detail-back,.stock-detail-logo { width:32px; height:32px; }
+  .stock-detail-heading h2 { font-size:17px; line-height:22px; }
+  .stock-detail-code { display:none; }
+  .stock-detail-price { margin-top:10px; padding-left:38px; }
+  .stock-detail-price-line { column-gap:7px; }
+  .stock-detail-price-line > span:first-child { font-size:30px; }
+  .stock-detail-price-line > span:nth-child(2) { font-size:13px; }
 }
 /* 全球经济：双入口、TradingView 风格宏观地图、色阶联动与历史时间轴。 */
 .global-economy-page { width:100%; margin-left:0; margin-right:auto; }
