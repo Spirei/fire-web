@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import {
   MARKET_LIST,
   marketMeta,
-  type Activity, type SystemLog,
+  type Activity, type SystemLog, type TradeOrder,
   type GroupConfig,
   type Market,
   type MarketOption,
@@ -132,6 +132,7 @@ export default function RecordsApp({
   const mobileNavRef = useRef<HTMLDivElement>(null);
   const [activities, setActivities] = useState<Activity[]>(initialActivities);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
+  const [orders, setOrders] = useState<TradeOrder[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
   const [navReady, setNavReady] = useState(true);
@@ -189,6 +190,7 @@ export default function RecordsApp({
       .then((data) => {
         if (data?.activities) setActivities(data.activities);
         if (data?.systemLogs) setSystemLogs(data.systemLogs);
+        if (data?.orders) setOrders(data.orders);
       })
       .catch(() => {});
   }, []);
@@ -779,7 +781,7 @@ export default function RecordsApp({
             />
           )}
           {activeTab === "pnl" && <AssetPnlAnalysisView onBack={() => selectTab("assets")} />}
-          {activeTab === "activities" && <ActivitiesView activities={activities} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
+          {activeTab === "activities" && <ActivitiesView activities={activities} orders={orders} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
           {activeTab === "global" && <GlobalPreviewView />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} />}
