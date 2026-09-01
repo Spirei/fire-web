@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { fmtDateTime } from "@/lib/format";
 import { marketMeta, type Activity, type SystemLog, type TradeOrder } from "@/lib/types";
 import RefreshButton from "@/components/RefreshButton";
+import MarketIcon from "@/components/MarketIcon";
 
 interface Props {
   activities: Activity[];
@@ -116,7 +117,7 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
                   <td className="px-5 py-3.5">
                     <div className="flex flex-col leading-[1.35]">
                       <b className="font-semibold">{a.stockName}</b>
-                      <small className="text-xs text-muted">{a.stockCode} · {marketInfo.label}</small>
+                      <small className="flex items-center gap-1 text-xs text-muted"><MarketIcon market={market} size={13} />{a.stockCode} · {marketInfo.label}</small>
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-xs tabular-nums text-muted">{fmtDateTime(a.createdAt)}</td>
