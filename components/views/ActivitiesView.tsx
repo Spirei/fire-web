@@ -36,16 +36,8 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
   const userRows = visibleActivities.filter((a) => filter === "all" || a.action === filter);
   const rows = scope === "user" ? userRows : visibleSystemLogs;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const pageRows = scope === "user" ? userRows.slice((Math.min(page, totalPages) - 1) * pageSize, Math.min(page, totalPages) * pageSize) : [];
+  const pageRows = rows.slice((Math.min(page, totalPages) - 1) * pageSize, Math.min(page, totalPages) * pageSize);
   useEffect(() => { setPage(1); }, [scope, filter, systemFilter, query]);
-  if (scope === "user" && activities.length === 0) {
-    return (
-      <div className="card py-20 text-center text-sm text-faint shadow-card">
-        暂无日志，添加、修改或删除股票后会记录在这里。
-      </div>
-    );
-  }
-
   return (
     <div className="overflow-hidden rounded-[18px] border border-edge bg-white shadow-card dark:bg-[#151b26]">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-edge px-5 pt-4">
@@ -55,7 +47,8 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
       {scope === "system" && !isAdmin && <div className="p-8 text-center text-sm text-faint">系统日志仅管理员可见</div>}
       {scope === "system" && isAdmin && <>
         <div className="flex items-center justify-between border-b border-edge px-5 py-3"><select value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)} className="h-8 rounded-lg border border-edge bg-transparent px-2.5 text-xs text-muted outline-none"><option value="all">全部模块</option>{Array.from(new Set(systemLogs.map((log) => log.event.split(/[.:/]/)[0]).filter(Boolean))).slice(0, 8).map((key) => <option key={key} value={key}>{key}</option>)}</select><span className="text-xs text-faint">{visibleSystemLogs.length} 条</span></div>
-        <div className="data-table-scroll"><table className="w-full min-w-[700px] text-sm"><thead><tr className="bg-bg-gray text-xs font-semibold text-muted"><th className="px-4 py-3 text-left">级别</th><th className="px-4 py-3 text-left">模块 / 事件</th><th className="px-4 py-3 text-left">详情</th><th className="px-4 py-3 text-left">用户 / IP</th><th className="px-4 py-3 text-left">时间</th></tr></thead><tbody>{visibleSystemLogs.map((log) => { const level = systemLevel(log.event); return <tr key={log.id} className="border-t border-edge"><td className="px-4 py-3"><span className={`rounded-md px-2 py-1 text-xs font-semibold ${level.cls}`}>{level.label}</span></td><td className="px-4 py-3 font-semibold">{log.event}</td><td className="max-w-[320px] px-4 py-3 text-xs text-muted"><details><summary className="cursor-pointer truncate">{log.detail || "查看详情"}</summary><p className="mt-2 whitespace-pre-wrap break-words text-xs">{log.detail || "—"}</p></details></td><td className="px-4 py-3 text-xs text-muted">{log.userName}<br />{log.ip || "—"}</td><td className="whitespace-nowrap px-4 py-3 text-xs text-muted">{fmtDateTime(log.createdAt)}</td></tr>; })}</tbody></table>{visibleSystemLogs.length === 0 && <div className="py-12 text-center text-sm text-faint">该模块暂无日志</div>}</div>
+        <div className="data-table-scroll"><table className="w-full min-w-[700px] text-sm"><thead><tr className="bg-bg-gray text-xs font-semibold text-muted"><th className="px-4 py-3 text-left">级别</th><th className="px-4 py-3 text-left">模块 / 事件</th><th className="px-4 py-3 text-left">详情</th><th className="px-4 py-3 text-left">用户 / IP</th><th className="px-4 py-3 text-left">时间</th></tr></thead><tbody>{pageRows.map((log) => { if (!("event" in log)) return null; const level = systemLevel(log.event); return <tr key={log.id} className="border-t border-edge"><td className="px-4 py-3"><span className={`rounded-md px-2 py-1 text-xs font-semibold ${level.cls}`}>{level.label}</span></td><td className="px-4 py-3 font-semibold">{log.event}</td><td className="max-w-[320px] px-4 py-3 text-xs text-muted"><details><summary className="cursor-pointer truncate">{log.detail || "查看详情"}</summary><p className="mt-2 whitespace-pre-wrap break-words text-xs">{log.detail || "—"}</p></details></td><td className="px-4 py-3 text-xs text-muted">{log.userName}<br />{log.ip || "—"}</td><td className="whitespace-nowrap px-4 py-3 text-xs text-muted">{fmtDateTime(log.createdAt)}</td></tr>; })}</tbody></table>{visibleSystemLogs.length === 0 && <div className="py-12 text-center text-sm text-faint">该模块暂无日志</div>}</div>
+        <div className="flex items-center justify-between border-t border-edge px-5 py-3 text-xs text-muted"><span>{visibleSystemLogs.length ? `${(Math.min(page, totalPages) - 1) * pageSize + 1}-${Math.min(Math.min(page, totalPages) * pageSize, visibleSystemLogs.length)} / ${visibleSystemLogs.length}` : "暂无记录"}</span><div className="flex gap-2"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-lg border border-edge px-3 py-1.5 disabled:opacity-40">上一页</button><button type="button" disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="rounded-lg border border-edge px-3 py-1.5 disabled:opacity-40">下一页</button></div></div>
       </>}
       {scope === "system" ? null : <>
       <div className="flex items-center justify-between border-b border-edge px-5 py-3">
@@ -74,6 +67,7 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
           </thead>
           <tbody>
             {scope === "user" && pageRows.map((a) => {
+              if (!("action" in a)) return null;
               const meta = ACTION_META[a.action];
               const market = a.market || "OTHER";
               const marketInfo = marketMeta(market);
