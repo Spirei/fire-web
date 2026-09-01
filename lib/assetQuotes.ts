@@ -74,6 +74,7 @@ interface QuoteCache {
 
 let memCache: QuoteCache | null = null;
 let refreshing = false;
+let refreshPromise: Promise<void> | null = null;
 
 function loadDiskCache(): QuoteCache | null {
   try {
@@ -163,15 +164,23 @@ async function refreshQuotes(): Promise<void> {
 function ensureRefresh() {
   const cache = memCache ?? loadDiskCache();
   const now = Date.now();
-  const stale = !cache || now - cache.cryptoAt > CRYPTO_TTL || now - cache.metalAt > METAL_TTL;
+  const cryptoMissingCaps = !cache || Object.values(cache.crypto).some((quote) => !Number.isFinite(quote.marketCap) || quote.marketCap <= 0);
+  const stale = !cache || cryptoMissingCaps || now - cache.cryptoAt > CRYPTO_TTL || now - cache.metalAt > METAL_TTL;
   if (stale && !refreshing) {
     refreshing = true;
-    void refreshQuotes()
+    refreshPromise = refreshQuotes()
       .catch(() => {})
       .finally(() => {
         refreshing = false;
+        refreshPromise = null;
       });
   }
+}
+
+/** 全球市值榜首次加载必须等待行情补齐，避免冷启动把加密货币以 0 市值排到末尾。 */
+export async function ensureAssetQuotesReady() {
+  ensureRefresh();
+  if (refreshPromise) await refreshPromise;
 }
 
 /**

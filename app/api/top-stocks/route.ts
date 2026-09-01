@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getTopStocks, type TopMarket } from "@/lib/topStocks";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { getAssets } from "@/lib/assets";
-import { enrichAssetQuotes } from "@/lib/assetQuotes";
+import { enrichAssetQuotes, ensureAssetQuotesReady } from "@/lib/assetQuotes";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +20,7 @@ export async function GET(request: Request) {
   try {
     const result = await getTopStocks(market);
     if (market === "ALL") {
+      await ensureAssetQuotesReady();
       const cryptoMetal = enrichAssetQuotes([...getAssets("crypto"), ...getAssets("metal")]);
       const extraItems = cryptoMetal
         .filter((asset) => asset.type === "crypto" || asset.type === "metal")
