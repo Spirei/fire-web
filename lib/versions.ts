@@ -2165,6 +2165,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "自选股与持仓支持加密货币搜索",
     desc: "添加持仓和自选股时，统一搜索入口同步返回 CoinGecko 加密货币候选，可直接保存为加密货币记录并在结果中明确标注资产类型；股票搜索源不可用时不受影响。",
     kind: "feature"
+  }, {
+    title: "补齐加密货币 K 线",
+    desc: "加密货币详情页 K 线改用 CoinGecko 历史价格数据，支持 BTC、ETH、SOL 等主流币种的日 K 展示。",
+    kind: "fix"
   }]
 };
 
