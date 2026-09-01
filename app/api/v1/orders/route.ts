@@ -40,7 +40,8 @@ export async function POST(request: Request) {
       expiresAt: body.expiresAt ? String(body.expiresAt) : null,
       session: body.session ? String(body.session) : "",
       tradedAt: body.tradedAt ? String(body.tradedAt) : undefined,
-      note: String(body.note || "")
+      note: String(body.note || ""),
+      mode: body.mode === "record" ? "record" : body.mode === "order" ? "order" : undefined
     }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "订单执行失败";

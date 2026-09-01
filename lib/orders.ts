@@ -218,6 +218,15 @@ function fillPendingRow(row: OrderRow, fillPrice: number): boolean {
 const lastSettle = new Map<string, number>();
 const SETTLE_MIN_INTERVAL = 12_000;
 
+function exchangeDate(value: string | number, market: string) {
+  const timeZone = market.toUpperCase() === "US" ? "America/New_York"
+    : market.toUpperCase() === "HK" ? "Asia/Hong_Kong"
+      : market.toUpperCase() === "JP" ? "Asia/Tokyo"
+        : market.toUpperCase() === "KR" ? "Asia/Seoul"
+          : "Asia/Shanghai";
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
+}
+
 /** 惰性结算挂单：拉取挂单标的现价，命中触发价则成交，超期/失效则标记过期。 */
 export async function settlePendingOrders(userId: string): Promise<{ checked: number; filled: number; expired: number }> {
   const db = getDb();
@@ -228,9 +237,6 @@ export async function settlePendingOrders(userId: string): Promise<{ checked: nu
   lastSettle.set(userId, Date.now());
 
   const now = Date.now();
-  const dayEnd = new Date();
-  dayEnd.setHours(23, 59, 59, 999);
-
   let quotes: Record<string, { price: number }> = {};
   try {
     quotes = await fetchQuotes(
@@ -246,7 +252,7 @@ export async function settlePendingOrders(userId: string): Promise<{ checked: nu
   for (const o of pending) {
     const order = rowToOrder(o);
     const customExpired = order.tif === "custom" && order.expiresAt ? now > Date.parse(order.expiresAt) : false;
-    const dayExpired = order.tif === "day" && now > dayEnd.getTime();
+    const dayExpired = order.tif === "day" && exchangeDate(now, order.market) > exchangeDate(order.createdAt, order.market);
     if (customExpired || dayExpired) {
       db.prepare("UPDATE trade_orders SET status='expired', trigger_status='已失效' WHERE id=? AND status='pending'").run(order.id);
       expired++;
@@ -262,7 +268,7 @@ export async function settlePendingOrders(userId: string): Promise<{ checked: nu
   return { checked, filled, expired };
 }
 
-/** 创建订单：市价单 / 限价单+当日有效 立即成交；其余（限价挂单、到价、反弹、回落）记为挂单。 */
+/** 创建订单：历史成交记录直接入账；实时委托仅市价单立即成交，其余等待行情触发。 */
 export function placeOrder(input: {
   userId: string;
   recordId: string;
@@ -276,12 +282,22 @@ export function placeOrder(input: {
   expiresAt?: string | null;
   session?: string;
   note?: string;
+  mode?: "record" | "order";
 }): { order: TradeOrder; position: { qty: number; cost: number | null }; pending: boolean } {
   const orderType = input.orderType || "limit";
   const tif = input.tif || "day";
   const session = String(input.session || "");
   const expiresAt = input.expiresAt && !Number.isNaN(Date.parse(input.expiresAt)) ? new Date(input.expiresAt).toISOString() : null;
-  const pending = !(orderType === "limit" && tif === "day") && orderType !== "market";
+  // 旧版持仓详情没有 mode/orderType，语义一直是“补录已成交”，保持兼容。
+  const mode = input.mode ?? (input.orderType ? "order" : "record");
+  if (mode === "record") {
+    const tradedAt = input.tradedAt ? Date.parse(input.tradedAt) : NaN;
+    if (!Number.isFinite(tradedAt)) throw new Error("请选择有效的成交时间");
+    if (tradedAt > Date.now() + 60_000) throw new Error("成交时间不能晚于当前时间");
+    const res = executeOrder({ ...input, orderType, tif, session, expiresAt, triggerStatus: "手工记录" });
+    return { ...res, pending: false };
+  }
+  const pending = orderType !== "market";
   if (!pending) {
     const res = executeOrder({ ...input, orderType, tif, session, expiresAt, triggerStatus: "已成交" });
     return { ...res, pending: false };
