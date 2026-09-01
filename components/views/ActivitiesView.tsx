@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { fmtDateTime } from "@/lib/format";
 import { marketMeta, type Activity, type SystemLog } from "@/lib/types";
@@ -21,9 +21,16 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
   const [scope, setScope] = useState<"user" | "system">("user");
   const [systemFilter, setSystemFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [filter, setFilter] = useState<Activity["action"] | "all">("all");
+  const pageSize = 10;
   const visibleActivities = activities.filter((a) => `${a.stockName} ${a.stockCode} ${a.userName}`.toLowerCase().includes(query.toLowerCase()));
   const visibleSystemLogs = systemLogs.filter((log) => `${log.event} ${log.detail} ${log.userName} ${log.ip}`.toLowerCase().includes(query.toLowerCase()) && (systemFilter === "all" || log.event.split(/[.:/]/)[0] === systemFilter));
-  const [filter, setFilter] = useState<Activity["action"] | "all">("all");
+  const userRows = visibleActivities.filter((a) => filter === "all" || a.action === filter);
+  const rows = scope === "user" ? userRows : visibleSystemLogs;
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const pageRows = scope === "user" ? userRows.slice((Math.min(page, totalPages) - 1) * pageSize, Math.min(page, totalPages) * pageSize) : [];
+  useEffect(() => { setPage(1); }, [scope, filter, systemFilter, query]);
   const filteredActivities = useMemo(
     () => filter === "all" ? activities : activities.filter((activity) => activity.action === filter),
     [activities, filter]
@@ -78,7 +85,7 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
             </tr>
           </thead>
           <tbody>
-            {visibleActivities.filter((a) => filter === "all" || a.action === filter).map((a) => {
+            {scope === "user" && pageRows.map((a) => {
               const meta = ACTION_META[a.action];
               const market = a.market || "OTHER";
               const marketInfo = marketMeta(market);
@@ -113,6 +120,7 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
           </tbody>
         </table>
       </div>
+      {scope === "user" && <div className="flex items-center justify-between gap-3 border-t border-edge px-4 py-3 text-xs text-muted"><span>{rows.length ? `${(Math.min(page, totalPages) - 1) * pageSize + 1}-${Math.min(page, totalPages) * pageSize > rows.length ? rows.length : Math.min(page, totalPages) * pageSize} / ${rows.length}` : "暂无记录"}</span><div className="flex gap-2"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-lg border border-edge px-3 py-1.5 disabled:opacity-40">上一页</button><button type="button" disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="rounded-lg border border-edge px-3 py-1.5 disabled:opacity-40">下一页</button></div></div>}
       {filteredActivities.length === 0 && <div className="py-12 text-center text-sm text-faint">该分类暂无日志</div>}
       </>}
     </div>
