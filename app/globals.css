@@ -3016,7 +3016,11 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 }
 @media (max-width: 767px) {
   .stock-chart-shell { border-radius: 14px; }
-  .stock-chart-toolbar { padding: 10px 10px 6px; }
+  .stock-chart-toolbar { flex-direction:column; align-items:stretch; gap:6px; padding:10px 10px 6px; }
+  .stock-chart-ranges { width:100%; flex:none; }
+  .stock-chart-range-scroll { overflow-x:auto; overscroll-behavior-inline:contain; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .stock-chart-range-scroll::-webkit-scrollbar { display:none; }
+  .stock-chart-action-group { width:100%; flex-wrap:wrap; justify-content:flex-start; gap:5px; }
   .stock-chart-range { min-height: 34px; padding: 0 10px; font-size: 12px; }
   .stock-chart-style-trigger { min-width: 58px; min-height: 36px; }
 }
