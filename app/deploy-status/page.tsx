@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   IconAdjustmentsHorizontal,
   IconBrandGithub,
@@ -216,6 +216,8 @@ export default function DeployStatusPage() {
   const [configOpen, setConfigOpen] = useState(false);
   const [token, setToken] = useState("");
   const [configError, setConfigError] = useState("");
+  const autoUpdateKeyRef = useRef("");
+  const [autoUpdateSeconds, setAutoUpdateSeconds] = useState<number | null>(null);
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -290,6 +292,7 @@ export default function DeployStatusPage() {
   };
   const updateContainer = async () => {
     if (containerUpdateState === "triggering" || containerUpdateState === "watching" || containerUpdateState === "restarting") return;
+    setAutoUpdateSeconds(null);
     setContainerUpdateState("triggering"); setNotice(""); setError("");
     try {
       const response = await fetch("/api/deploy-status/container-update", { method: "POST" });
@@ -337,6 +340,33 @@ export default function DeployStatusPage() {
   const latestState = latest ? stateOf(latest) : { label: hasLoaded ? "未知" : "读取中", className: "bg-slate-400", ring: "ring-slate-400/15" };
   const finishedJobCount = imageProgress?.jobs.filter((job) => job.status === "completed").length || 0;
   const imageBuilding = Boolean(imageProgress && imageProgress.status !== "completed");
+  const autoUpdateEligible = Boolean(
+    latest?.status === "completed" && latest.conclusion === "success" &&
+    imageVersion?.matchesMain && updaterAvailable && runtimeVersion &&
+    !runtimeVersion.matchesImage && !imageBuilding
+  );
+  useEffect(() => {
+    if (!autoUpdateEligible || autoUpdateSeconds !== null) return;
+    const key = `${latest?.id || ""}:${imageVersion?.latestSuccessfulSha || ""}`;
+    if (!key || autoUpdateKeyRef.current === key) return;
+    autoUpdateKeyRef.current = key;
+    setAutoUpdateSeconds(300);
+  }, [autoUpdateEligible, autoUpdateSeconds, imageVersion?.latestSuccessfulSha, latest?.id]);
+  useEffect(() => {
+    if (autoUpdateSeconds === null) return;
+    const timer = window.setInterval(() => {
+      setAutoUpdateSeconds((value) => {
+        if (value === null) return null;
+        if (value <= 1) {
+          window.clearInterval(timer);
+          void updateContainer();
+          return null;
+        }
+        return value - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [autoUpdateSeconds, updateContainer]);
   const latestAttemptFailed = Boolean(imageProgress && imageProgress.status === "completed" && imageProgress.conclusion !== "success" && sourceVersion && imageProgress.sha === sourceVersion.shortSha);
   const sourceState = sourceVersion
     ? { label: `main ${sourceVersion.shortSha}`, dot: "bg-slate-400", text: "text-slate-600 dark:text-slate-300" }
@@ -406,6 +436,7 @@ export default function DeployStatusPage() {
             <IconChevronRight aria-hidden="true" className="hidden text-slate-400 sm:block dark:text-slate-600" size={15} stroke={1.8} />
             <button onClick={() => void updateContainer()} disabled={!canUpdateContainer || containerBusy} title={!updaterAvailable ? updaterReason : imageBuilding ? "请等待镜像构建完成" : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像" : runtimeVersion?.matchesImage ? "Watchtower 在线，容器已运行最新镜像" : "Watchtower 在线，可拉取最新 GHCR 镜像并重启 Fire"} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><span className={`h-2.5 w-2.5 rounded-full ${updaterDot}`} /><IconServerCog aria-hidden="true" className={containerBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{containerBusy ? containerButtonLabel : updaterReason === "正在检查更新服务" ? "服务检测中" : !updaterAvailable ? "服务离线" : runtimeVersion?.matchesImage ? "容器已是最新" : "有新镜像"}</button>
           </div>
+          {autoUpdateSeconds !== null && <p className="mt-3 text-xs text-emerald-700 dark:text-emerald-300">镜像已构建成功，将在 {Math.floor(autoUpdateSeconds / 60)} 分 {String(autoUpdateSeconds % 60).padStart(2, "0")} 秒后自动更新容器</p>}
         </section>
         {imageProgress && showImageProgress && <section aria-live="polite" aria-busy={imageProgress.status !== "completed"} className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
           <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:px-5">
