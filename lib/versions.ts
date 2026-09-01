@@ -2181,6 +2181,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "补齐 ADA/BCH 加密货币图标",
     desc: "补充艾达币与比特币现金高清开源 SVG，避免缺少素材时错误回退为比特币符号。",
     kind: "fix"
+  }, {
+    title: "行情板复用加密货币素材图标",
+    desc: "自选股与我的持仓列表不再只查股票图标；ASSET 加密货币记录改为复用素材库 crypto 图标。",
+    kind: "fix"
   }]
 };
 
