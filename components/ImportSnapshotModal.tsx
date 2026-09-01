@@ -193,7 +193,7 @@ export default function ImportSnapshotModal({
             </div>
           )}
           <div className="max-h-[46vh] overflow-auto rounded-2xl border border-edge">
-            <table className="w-full text-xs">
+            <table className="w-full min-w-[620px] text-xs">
               <thead className="sticky top-0 z-10 bg-bg-gray text-[11px] font-semibold text-muted">
                 <tr>
                   <th className="px-3 py-2.5 text-left">名称</th>

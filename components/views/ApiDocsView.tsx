@@ -125,8 +125,8 @@ export default function ApiDocsView() {
             </span>
             <span className="text-[13px] font-bold text-ink-2">{cat.title}</span>
           </div>
-          <div className="overflow-hidden rounded-[12px] border border-edge">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-[12px] border border-edge">
+            <table className="w-full min-w-[520px] text-sm">
               <thead>
                 <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-muted">
                   <th className="px-3.5 py-2.5 text-left">方法</th>
