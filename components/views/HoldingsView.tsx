@@ -964,7 +964,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   }
 
   return (
-    <div>
+    <div className="min-w-0 max-w-full">
       {/* 一级标题 */}
       <div className="mb-4 flex items-center gap-2.5">
         <h2 className="text-lg font-bold">账户资产</h2>
@@ -1155,7 +1155,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       )}
 
       {/* 市场股票表 */}
-      <div className="card overflow-hidden">
+      <div className="card min-w-0 max-w-full overflow-hidden">
         {filtered.length === 0 ? (
           <div className="py-20 text-center text-sm text-faint">
             {active === "TOTAL" ? "暂无持仓，可在上方「添加股票」搜索加入。" : `${labelFor(active)}暂无股票，可在上方「添加股票」搜索加入，填写数量后计入持仓。`}
