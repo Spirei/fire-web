@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       method: "GET",
       headers: { authorization: `Bearer ${token}` },
       cache: "no-store",
-      signal: AbortSignal.timeout(12_000)
+      signal: AbortSignal.timeout(30_000)
     });
     if (!response.ok) {
       lastTriggerAt = 0;
@@ -76,9 +76,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     lastTriggerAt = 0;
-    const message = error instanceof Error && error.name === "TimeoutError"
-      ? "容器更新服务响应超时，请检查 fire-updater 日志"
-      : "无法连接容器更新服务，请确认 fire-updater 已启动";
-    return NextResponse.json({ error: message }, { status: 502 });
+    if (error instanceof Error && error.name === "TimeoutError") {
+      return NextResponse.json({
+        ok: true,
+        pending: true,
+        message: "更新请求已接受，fire-updater 仍在后台拉取镜像，正在等待容器恢复"
+      }, { status: 202 });
+    }
+    return NextResponse.json({ error: "无法连接容器更新服务，请确认 fire-updater 已启动" }, { status: 502 });
   }
 }
