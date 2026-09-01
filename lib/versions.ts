@@ -2169,6 +2169,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "补齐加密货币 K 线",
     desc: "加密货币详情页 K 线改用 CoinGecko 历史价格数据，支持 BTC、ETH、SOL 等主流币种的日 K 展示。",
     kind: "fix"
+  }, {
+    title: "替换 BTC/ETH 高清开源图标",
+    desc: "素材库比对多个开源集合后，采用 cryptocurrency-icons 的 CC0 彩色 SVG 替换比特币与以太坊图标，统一圆角容器下的清晰度与视觉风格。",
+    kind: "feature"
   }]
 };
 
