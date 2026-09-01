@@ -743,7 +743,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                   return (
                     <div
                       key={`${row.symbol}-${row.date}`}
-                      className="earnings-result-row grid grid-cols-[1.6fr_auto_1fr_1fr] items-center gap-3 rounded-[14px] border border-edge bg-white px-4 py-3 shadow-card transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong/35 hover:shadow-pop md:grid-cols-[1.8fr_auto_1fr_1.2fr_1fr]"
+                      className="earnings-result-row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 rounded-[14px] border border-edge bg-white px-4 py-3 shadow-card transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong/35 hover:shadow-pop md:grid-cols-[1.8fr_auto_1fr_1.2fr_1fr]"
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="h-9 w-9" />

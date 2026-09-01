@@ -859,7 +859,12 @@
 
 /* 订单宽表：横向滚动条始终可见（样式化后 macOS Chrome 不再用覆盖式滚动条），避免误以为列被切断 */
 .orders-scroll {
+  max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(120, 130, 145, 0.45) transparent;
 }
@@ -2438,7 +2443,7 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .financial-summary b { color: #151b25; font-size: 17px; font-variant-numeric: tabular-nums; }
 .financial-summary em { font-size: 10px; font-style: normal; font-weight: 700; }
 .financial-chart-card,.financial-table-card { overflow: hidden; border: 1px solid #dde1e7; border-radius: 14px; background: rgba(255,255,255,.72); }
-.financial-table-card { margin-top: 10px; overflow-x: auto; }
+.financial-table-card { margin-top: 10px; overflow-x: auto; overscroll-behavior-inline:contain; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; }
 .financial-table-card table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 12px; }
 .financial-table-card th,.financial-table-card td { padding: 12px 14px; border-bottom: 1px solid #e6e9ee; text-align: right; font-variant-numeric: tabular-nums; }
 .financial-table-card th { color: #8a93a0; background: #f7f8fa; font-size: 10px; }

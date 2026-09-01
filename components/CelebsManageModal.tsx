@@ -495,16 +495,17 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
                   <h4 className="text-[13px] font-bold text-ink">持仓明细（SEC 拉取成功后自动替换，示例 / 手动维护用这里）</h4>
                   <button type="button" onClick={() => patch({ holdings: [...draft.holdings, { code: "", name: "", market: "US", weight: 0, price: 0, changePct: 0, target: 0 }] })} className="btn btn-line px-3 py-1.5 text-xs">+ 添加持仓</button>
                 </div>
-                <div className="mb-1.5 grid grid-cols-[2.2rem_1fr_1.2fr_0.9fr_0.8fr_0.8fr_2rem] items-center gap-2 px-0.5 text-center text-[11px] font-semibold text-muted">
-                  <span>图标</span>
-                  <span>股票代码</span>
-                  <span>股票名称</span>
-                  <span>市场</span>
-                  <span>占比%</span>
-                  <span>目标价</span>
-                  <span />
-                </div>
-                <div className="space-y-2">
+                <div className="data-table-scroll">
+                  <div className="mb-1.5 grid min-w-[680px] grid-cols-[2.2rem_1fr_1.2fr_0.9fr_0.8fr_0.8fr_2rem] items-center gap-2 px-0.5 text-center text-[11px] font-semibold text-muted">
+                    <span>图标</span>
+                    <span>股票代码</span>
+                    <span>股票名称</span>
+                    <span>市场</span>
+                    <span>占比%</span>
+                    <span>目标价</span>
+                    <span />
+                  </div>
+                  <div className="min-w-[680px] space-y-2">
                   {draft.holdings.length === 0 && <p className="text-[12px] text-faint">暂无持仓，点击右上角添加</p>}
                   {draft.holdings.map((h, i) => (
                     <div key={i} className="grid grid-cols-[2.2rem_1fr_1.2fr_0.9fr_0.8fr_0.8fr_2rem] items-center gap-2">
@@ -545,6 +546,7 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
                       </button>
                     </div>
                   ))}
+                  </div>
                 </div>
               </section>
 
@@ -554,14 +556,15 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
                   <h4 className="text-[13px] font-bold text-ink">近期操作（卡片左侧标签）</h4>
                   <button type="button" onClick={() => patch({ trades: [...draft.trades, { code: "", name: "", changePct: 0, action: "买入" }] })} className="btn btn-line px-3 py-1.5 text-xs">+ 添加操作</button>
                 </div>
-                <div className="mb-1.5 grid grid-cols-[1fr_1.2fr_0.8fr_1fr_2rem] items-center gap-2 px-0.5 text-center text-[11px] font-semibold text-muted">
-                  <span>股票代码</span>
-                  <span>股票名称</span>
-                  <span>涨跌幅%</span>
-                  <span>操作</span>
-                  <span />
-                </div>
-                <div className="space-y-2">
+                <div className="data-table-scroll">
+                  <div className="mb-1.5 grid min-w-[520px] grid-cols-[1fr_1.2fr_0.8fr_1fr_2rem] items-center gap-2 px-0.5 text-center text-[11px] font-semibold text-muted">
+                    <span>股票代码</span>
+                    <span>股票名称</span>
+                    <span>涨跌幅%</span>
+                    <span>操作</span>
+                    <span />
+                  </div>
+                  <div className="min-w-[520px] space-y-2">
                   {draft.trades.map((t, i) => (
                     <div key={i} className="grid grid-cols-[1fr_1.2fr_0.8fr_1fr_2rem] items-center gap-2">
                       <input value={t.code} onChange={(e) => patchTrade(i, { code: e.target.value })} placeholder="代码" className={`${inputCls} w-full`} />
@@ -577,6 +580,7 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
                       </button>
                     </div>
                   ))}
+                  </div>
                 </div>
               </section>
 
