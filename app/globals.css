@@ -2292,8 +2292,8 @@
 .dark .stock-etf-summary button,.dark .stock-etf-row,.dark .stock-dividend-summary > div,.dark .stock-dividend-row { background:rgba(255,255,255,.035); }
 .dark .stock-etf-summary button:hover,.dark .stock-etf-summary button.is-active,.dark .stock-etf-row:hover,.dark .stock-dividend-row:hover { background:rgba(255,255,255,.075); }
 
-/* 自选股表格操作列：横向滚动时保持可见，同时收紧大屏留白 */
-.quotes-actions-cell { position: sticky; z-index: 2; right: 0; width: 164px; min-width: 164px; border-left: 1px solid var(--edge); background: #fff; box-shadow: -8px 0 16px rgba(10,14,25,.06); }
+/* 自选股表格操作列：与其他数据列一起横向滚动。 */
+.quotes-actions-cell { width: 164px; min-width: 164px; border-left: 1px solid var(--edge); background: #fff; }
 .quotes-control-panel { display:grid; width:100%; max-width:100%; min-width:0; box-sizing:border-box; grid-template-columns:minmax(0,auto) minmax(0,1fr) minmax(0,auto); align-items:center; border:1px solid var(--edge); border-radius:16px; background:rgba(255,255,255,.86); box-shadow:0 8px 24px rgba(15,23,42,.045); }
 .quotes-control-header { display:contents; }
 .quotes-control-title { grid-column:1; grid-row:1; min-width:max-content; padding-left:24px; }
@@ -2333,10 +2333,10 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   .mobile-global-table tr { display:grid; width:800px; grid-template-columns:54px 184px 112px 104px 116px 158px 72px; }
   .mobile-global-table th,.mobile-global-table td { display:block; min-width:0; box-sizing:border-box; }
   .mobile-quotes-table .quotes-rank-cell { display:none; }
-  .mobile-quotes-table .quotes-identity-cell { position:sticky; z-index:2; left:0; width:176px; min-width:176px; max-width:176px; background:#fff; box-shadow:8px 0 14px rgba(10,14,25,.055); }
-  .mobile-quotes-table thead .quotes-identity-cell { z-index:3; background:#f7f8fa; }
+  .mobile-quotes-table .quotes-identity-cell { width:176px; min-width:176px; max-width:176px; background:#fff; }
+  .mobile-quotes-table thead .quotes-identity-cell { background:#f7f8fa; }
   .mobile-quotes-table tbody tr:hover .quotes-identity-cell { background:#fafbfc; }
-  .dark .mobile-quotes-table .quotes-identity-cell { background:#151a26; box-shadow:8px 0 16px rgba(7,11,18,.24); }
+  .dark .mobile-quotes-table .quotes-identity-cell { background:#151a26; }
   .dark .mobile-quotes-table thead .quotes-identity-cell { background:#10141d; }
   .dark .mobile-quotes-table tbody tr:hover .quotes-identity-cell { background:#1a212e; }
 }
