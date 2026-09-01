@@ -2173,6 +2173,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "替换 BTC/ETH 高清开源图标",
     desc: "素材库比对多个开源集合后，采用 cryptocurrency-icons 的 CC0 彩色 SVG 替换比特币与以太坊图标，统一圆角容器下的清晰度与视觉风格。",
     kind: "feature"
+  }, {
+    title: "修复加密货币图标错配",
+    desc: "素材播种会修复历史上 ETH 指向比特币图标的错误映射，同时保留用户手动上传的自定义图标不被覆盖。",
+    kind: "fix"
   }]
 };
 

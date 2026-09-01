@@ -204,8 +204,15 @@ export function ensureCategoryAssets(type: "crypto" | "metal" | "flag"): void {
     const code = type === "flag" ? stem : m ? m[1] : stem;
     const name = type === "flag" ? stem.toUpperCase() : m ? stem.slice(0, stem.length - m[1].length).trim().replace(/[-_]+$/, "") || stem : stem;
     if (!code) return;
-    const existing = db.prepare("SELECT COUNT(*) AS n FROM assets WHERE type = ? AND market = '' AND code = ?").get(type, code) as { n: number };
-    if (existing.n > 0) return;
+    const existing = db.prepare("SELECT id, url FROM assets WHERE type = ? AND market = '' AND upper(code) = upper(?) LIMIT 1").get(type, code) as { id?: string; url?: string } | undefined;
+    if (existing?.id) {
+      // 默认素材升级时修复历史错误映射（例如 ETH 曾误指向 BTC 图标）。
+      const expected = `/uploads/asset/${subdir}/${file}`;
+      if (existing.url !== expected && (!existing.url || /BTC|比特币/i.test(existing.url) && code === "ETH")) {
+        db.prepare("UPDATE assets SET url = ?, name = ?, updated_at = ? WHERE id = ?").run(expected, name, new Date().toISOString(), existing.id);
+      }
+      return;
+    }
     upsertAsset({ type, market: "", code, name, url: `/uploads/asset/${subdir}/${file}` });
   });
 }
