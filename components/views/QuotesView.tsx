@@ -95,7 +95,7 @@ function QuotesCheckbox({ checked, onChange, label }: { checked: boolean; onChan
 }
 
 export default function QuotesView({ initialSymbol, records, quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onBatchDelete, onUpdate, onRemove, groups, onDetailChange, onToggleWatch }: Props) {
-  const { brokerIcons, stockIcons } = useAssetIcons(["broker", "stock"]);
+  const { brokerIcons, stockIcons, assetIcons } = useAssetIcons(["broker", "stock", "crypto", "metal"]);
   const [added, setAdded] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [charts, setCharts] = useState<Record<string, Intraday>>({});
@@ -260,7 +260,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
       let best: { url: string; cap: number } | null = null;
       for (const r of records) {
         if (r.watchGroupId !== g.id) continue;
-        const url = stockIcons[`${r.market.toUpperCase()}:${r.code.toUpperCase()}`];
+        const url = r.market.toUpperCase() === "ASSET" ? assetIcons[r.code.toUpperCase()] : stockIcons[`${r.market.toUpperCase()}:${r.code.toUpperCase()}`];
         if (!url) continue;
         const cap = quotes[r.id]?.marketCap ?? 0;
         if (!best || cap > best.cap) best = { url, cap };
@@ -268,7 +268,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
       if (best) map[g.id] = best.url;
     }
     return map;
-  }, [watchGroups, records, quotes, stockIcons, brokerIcons]);
+  }, [watchGroups, records, quotes, stockIcons, brokerIcons, assetIcons]);
 
   const filtered = useMemo(
     () => {
@@ -878,10 +878,10 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                       <td className="px-3 py-3.5 text-center text-xs tabular-nums text-faint">{(safePage - 1) * PAGE_SIZE + i + 1}</td>
                       <td className="cursor-pointer px-4 py-3.5 transition-colors hover:bg-brand-hover/30 dark:hover:bg-[#202735]" onClick={() => openDetail(r)}>
                         <div className="flex items-center gap-2.5">
-                          {stockIcons[`${r.market.toUpperCase()}:${r.code.toUpperCase()}`] ? (
+                          {(r.market.toUpperCase() === "ASSET" ? assetIcons[r.code.toUpperCase()] : stockIcons[`${r.market.toUpperCase()}:${r.code.toUpperCase()}`]) ? (
                             <span className="relative flex-none">
                               <img
-                                src={stockIcons[`${r.market.toUpperCase()}:${r.code.toUpperCase()}`]}
+                                src={r.market.toUpperCase() === "ASSET" ? assetIcons[r.code.toUpperCase()] : stockIcons[`${r.market.toUpperCase()}:${r.code.toUpperCase()}`]}
                                 alt=""
                                 className="h-9 w-9 flex-none rounded-full object-cover"
                               />

@@ -126,7 +126,7 @@ function SortTh({
 }
 
 export default function HoldingsView({ records, quotes, livePrice, refreshQuotes, onAddMatch, onUpdate, onRemove, groups, markets, marketLabels, marketOptions, onMarketsChange, onOrdersChanged }: Props) {
-  const { brokerIcons, stockIcons } = useAssetIcons(["broker", "stock"]);
+  const { brokerIcons, stockIcons, assetIcons } = useAssetIcons(["broker", "stock", "crypto", "metal"]);
   const { columns: holdingColumns } = useHoldingColumns();
   const enabledHoldingColumns = holdingColumns.filter((column) => column.visible);
   const [sessionNow, setSessionNow] = useState(() => new Date());
@@ -516,7 +516,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const weight = marketValue !== null && filteredMarketValue ? marketValue * factor / filteredMarketValue : null;
 
     if (key === "identity") {
-      const icon = stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
+      const icon = record.market.toUpperCase() === "ASSET" ? assetIcons[record.code.toUpperCase()] : stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
       return <button type="button" onClick={() => openHoldingDetail(record)} className="group flex min-w-[180px] max-w-full items-center gap-2.5 text-left" title={`查看 ${record.name} 持仓概览与订单`}>
         {icon ? <img src={icon} alt="" className="h-9 w-9 flex-none rounded-full object-cover" /> : <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">{(record.name || "?").slice(0, 1)}</span>}
         <span className="min-w-0"><span className="block truncate font-semibold text-ink transition-colors group-hover:text-brand-deep dark:group-hover:text-[#c6cdd8]">{record.name}</span><span className="block truncate text-[11px] text-faint">{record.code}</span></span>
@@ -849,7 +849,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       : 1;
     const detailDisplayCurrency = active === "TOTAL" ? totalCurLabel : detailMeta.currency;
     const detailSession = marketSessionState(selectedHolding.market, sessionNow);
-    const detailIcon = stockIcons[`${selectedHolding.market.toUpperCase()}:${selectedHolding.code.toUpperCase()}`];
+    const detailIcon = selectedHolding.market.toUpperCase() === "ASSET" ? assetIcons[selectedHolding.code.toUpperCase()] : stockIcons[`${selectedHolding.market.toUpperCase()}:${selectedHolding.code.toUpperCase()}`];
     const quoteTime = (() => {
       if (!detailQuote?.time) return detailSession.localDate;
       const compact = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(detailQuote.time.replace(/\D/g, ""));
