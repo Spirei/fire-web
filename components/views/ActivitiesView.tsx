@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { fmtDateTime } from "@/lib/format";
 import { marketMeta, type Activity, type SystemLog } from "@/lib/types";
@@ -31,10 +31,6 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const pageRows = scope === "user" ? userRows.slice((Math.min(page, totalPages) - 1) * pageSize, Math.min(page, totalPages) * pageSize) : [];
   useEffect(() => { setPage(1); }, [scope, filter, systemFilter, query]);
-  const filteredActivities = useMemo(
-    () => filter === "all" ? activities : activities.filter((activity) => activity.action === filter),
-    [activities, filter]
-  );
   if (scope === "user" && activities.length === 0) {
     return (
       <div className="card py-20 text-center text-sm text-faint shadow-card">
@@ -44,34 +40,20 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
   }
 
   return (
-    <div className="card overflow-hidden rounded-2xl border-edge/80 shadow-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3">
-        <div className="inline-flex rounded-xl border border-edge bg-bg-gray p-1">{(["user", "system"] as const).map((key) => <button key={key} type="button" onClick={() => setScope(key)} className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${scope === key ? "bg-white text-ink shadow-sm dark:bg-[#252d3a] dark:text-white" : "text-muted hover:text-ink dark:hover:text-white"}`}>{key === "user" ? `用户日志 ${activities.length}` : `系统日志 ${systemLogs.length}`}</button>)}</div>
-        <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="搜索日志" placeholder="搜索日志…" className="h-9 w-full rounded-xl border border-edge bg-bg-gray/70 px-3 text-sm outline-none transition focus:border-brand focus:bg-white dark:focus:bg-[#1b2230] sm:w-64" />
+    <div className="overflow-hidden rounded-[18px] border border-edge bg-white shadow-card dark:bg-[#151b26]">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-edge px-5 pt-4">
+        <div className="flex gap-6">{(["user", "system"] as const).map((key) => <button key={key} type="button" onClick={() => setScope(key)} className={`border-b-2 pb-3 text-sm font-semibold transition ${scope === key ? "border-ink text-ink dark:border-white dark:text-white" : "border-transparent text-muted hover:text-ink dark:hover:text-white"}`}>{key === "user" ? "用户日志" : "系统日志"}<span className="ml-1.5 text-xs font-normal text-faint">{key === "user" ? activities.length : systemLogs.length}</span></button>)}</div>
+        <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="搜索日志" placeholder="搜索名称、代码或事件" className="mb-3 h-9 w-full rounded-lg border border-edge bg-transparent px-3 text-sm outline-none transition placeholder:text-faint focus:border-ink dark:focus:border-white sm:w-64" />
       </div>
       {scope === "system" && !isAdmin && <div className="p-8 text-center text-sm text-faint">系统日志仅管理员可见</div>}
       {scope === "system" && isAdmin && <>
-        <div className="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-3"><span className="mr-1 text-xs font-semibold text-muted">系统模块</span>{["all", ...Array.from(new Set(systemLogs.map((log) => log.event.split(/[.:/]/)[0]).filter(Boolean))).slice(0, 8)].map((key) => <button key={key} type="button" onClick={() => setSystemFilter(key)} aria-pressed={systemFilter === key} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${systemFilter === key ? "border-brand bg-brand-light text-brand-deep" : "border-edge text-muted"}`}>{key === "all" ? "全部" : key}</button>)}</div>
+        <div className="flex items-center justify-between border-b border-edge px-5 py-3"><select value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)} className="h-8 rounded-lg border border-edge bg-transparent px-2.5 text-xs text-muted outline-none"><option value="all">全部模块</option>{Array.from(new Set(systemLogs.map((log) => log.event.split(/[.:/]/)[0]).filter(Boolean))).slice(0, 8).map((key) => <option key={key} value={key}>{key}</option>)}</select><span className="text-xs text-faint">{visibleSystemLogs.length} 条</span></div>
         <div className="data-table-scroll"><table className="w-full min-w-[700px] text-sm"><thead><tr className="bg-bg-gray text-xs font-semibold text-muted"><th className="px-4 py-3 text-left">级别</th><th className="px-4 py-3 text-left">模块 / 事件</th><th className="px-4 py-3 text-left">详情</th><th className="px-4 py-3 text-left">用户 / IP</th><th className="px-4 py-3 text-left">时间</th></tr></thead><tbody>{visibleSystemLogs.map((log) => <tr key={log.id} className="border-t border-edge"><td className="px-4 py-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">审计</span></td><td className="px-4 py-3 font-semibold">{log.event}</td><td className="max-w-[320px] px-4 py-3 text-xs text-muted"><details><summary className="cursor-pointer truncate">{log.detail || "查看详情"}</summary><p className="mt-2 whitespace-pre-wrap break-words text-xs">{log.detail || "—"}</p></details></td><td className="px-4 py-3 text-xs text-muted">{log.userName}<br />{log.ip || "—"}</td><td className="whitespace-nowrap px-4 py-3 text-xs text-muted">{fmtDateTime(log.createdAt)}</td></tr>)}</tbody></table>{visibleSystemLogs.length === 0 && <div className="py-12 text-center text-sm text-faint">该模块暂无日志</div>}</div>
       </>}
       {scope === "system" ? null : <>
-      <div className="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-3">
-        <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-muted">操作</span>
-        {(["all", "created", "updated", "deleted"] as const).map((key) => {
-          const count = key === "all" ? activities.length : activities.filter((activity) => activity.action === key).length;
-          const label = key === "all" ? "全部" : ACTION_META[key].label;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setFilter(key)}
-              aria-pressed={filter === key}
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${filter === key ? "border-brand bg-brand-light text-brand-deep" : "border-edge text-muted hover:border-brand/50 hover:text-ink"}`}
-            >
-              {label} <span className="ml-1 text-[10px] opacity-70">{count}</span>
-            </button>
-          );
-        })}
+      <div className="flex items-center justify-between border-b border-edge px-5 py-3">
+        <select value={filter} onChange={(e) => setFilter(e.target.value as Activity["action"] | "all")} className="h-8 rounded-lg border border-edge bg-transparent px-2.5 text-xs text-muted outline-none"><option value="all">全部操作</option><option value="created">新增</option><option value="updated">修改</option><option value="deleted">删除</option></select>
+        <span className="text-xs text-faint">{userRows.length} 条记录</span>
       </div>
       <div className="data-table-scroll">
         <table className="mobile-activities-table w-full min-w-[620px] text-sm">
@@ -120,7 +102,7 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
         </table>
       </div>
       {scope === "user" && <div className="flex items-center justify-between gap-3 border-t border-edge px-4 py-3 text-xs text-muted"><span>{rows.length ? `${(Math.min(page, totalPages) - 1) * pageSize + 1}-${Math.min(page, totalPages) * pageSize > rows.length ? rows.length : Math.min(page, totalPages) * pageSize} / ${rows.length}` : "暂无记录"}</span><div className="flex gap-2"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-lg border border-edge px-3 py-1.5 disabled:opacity-40">上一页</button><button type="button" disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="rounded-lg border border-edge px-3 py-1.5 disabled:opacity-40">下一页</button></div></div>}
-      {filteredActivities.length === 0 && <div className="py-12 text-center text-sm text-faint">该分类暂无日志</div>}
+      {userRows.length === 0 && <div className="py-12 text-center text-sm text-faint">没有符合条件的日志</div>}
       </>}
     </div>
   );
