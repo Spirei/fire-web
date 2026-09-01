@@ -17,6 +17,13 @@ const ACTION_META: Record<Activity["action"], { label: string; cls: string }> = 
   deleted: { label: "删除", cls: "bg-up-bg text-up" }
 };
 
+function systemLevel(event: string) {
+  if (event.includes("failed") || event.includes("denied") || event.includes("error")) return { label: "失败", cls: "bg-red-500/10 text-red-600 dark:text-red-300" };
+  if (event.includes("success")) return { label: "成功", cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300" };
+  if (event.includes("logout")) return { label: "退出", cls: "bg-slate-500/10 text-muted" };
+  return { label: "记录", cls: "bg-amber-500/10 text-amber-700 dark:text-amber-300" };
+}
+
 export default function ActivitiesView({ activities, systemLogs = [], isAdmin = false }: Props) {
   const [scope, setScope] = useState<"user" | "system">("user");
   const [systemFilter, setSystemFilter] = useState("all");
@@ -48,7 +55,7 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
       {scope === "system" && !isAdmin && <div className="p-8 text-center text-sm text-faint">系统日志仅管理员可见</div>}
       {scope === "system" && isAdmin && <>
         <div className="flex items-center justify-between border-b border-edge px-5 py-3"><select value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)} className="h-8 rounded-lg border border-edge bg-transparent px-2.5 text-xs text-muted outline-none"><option value="all">全部模块</option>{Array.from(new Set(systemLogs.map((log) => log.event.split(/[.:/]/)[0]).filter(Boolean))).slice(0, 8).map((key) => <option key={key} value={key}>{key}</option>)}</select><span className="text-xs text-faint">{visibleSystemLogs.length} 条</span></div>
-        <div className="data-table-scroll"><table className="w-full min-w-[700px] text-sm"><thead><tr className="bg-bg-gray text-xs font-semibold text-muted"><th className="px-4 py-3 text-left">级别</th><th className="px-4 py-3 text-left">模块 / 事件</th><th className="px-4 py-3 text-left">详情</th><th className="px-4 py-3 text-left">用户 / IP</th><th className="px-4 py-3 text-left">时间</th></tr></thead><tbody>{visibleSystemLogs.map((log) => <tr key={log.id} className="border-t border-edge"><td className="px-4 py-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">审计</span></td><td className="px-4 py-3 font-semibold">{log.event}</td><td className="max-w-[320px] px-4 py-3 text-xs text-muted"><details><summary className="cursor-pointer truncate">{log.detail || "查看详情"}</summary><p className="mt-2 whitespace-pre-wrap break-words text-xs">{log.detail || "—"}</p></details></td><td className="px-4 py-3 text-xs text-muted">{log.userName}<br />{log.ip || "—"}</td><td className="whitespace-nowrap px-4 py-3 text-xs text-muted">{fmtDateTime(log.createdAt)}</td></tr>)}</tbody></table>{visibleSystemLogs.length === 0 && <div className="py-12 text-center text-sm text-faint">该模块暂无日志</div>}</div>
+        <div className="data-table-scroll"><table className="w-full min-w-[700px] text-sm"><thead><tr className="bg-bg-gray text-xs font-semibold text-muted"><th className="px-4 py-3 text-left">级别</th><th className="px-4 py-3 text-left">模块 / 事件</th><th className="px-4 py-3 text-left">详情</th><th className="px-4 py-3 text-left">用户 / IP</th><th className="px-4 py-3 text-left">时间</th></tr></thead><tbody>{visibleSystemLogs.map((log) => { const level = systemLevel(log.event); return <tr key={log.id} className="border-t border-edge"><td className="px-4 py-3"><span className={`rounded-md px-2 py-1 text-xs font-semibold ${level.cls}`}>{level.label}</span></td><td className="px-4 py-3 font-semibold">{log.event}</td><td className="max-w-[320px] px-4 py-3 text-xs text-muted"><details><summary className="cursor-pointer truncate">{log.detail || "查看详情"}</summary><p className="mt-2 whitespace-pre-wrap break-words text-xs">{log.detail || "—"}</p></details></td><td className="px-4 py-3 text-xs text-muted">{log.userName}<br />{log.ip || "—"}</td><td className="whitespace-nowrap px-4 py-3 text-xs text-muted">{fmtDateTime(log.createdAt)}</td></tr>; })}</tbody></table>{visibleSystemLogs.length === 0 && <div className="py-12 text-center text-sm text-faint">该模块暂无日志</div>}</div>
       </>}
       {scope === "system" ? null : <>
       <div className="flex items-center justify-between border-b border-edge px-5 py-3">
