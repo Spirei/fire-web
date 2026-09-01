@@ -56,13 +56,13 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
         <span className="text-xs text-faint">{userRows.length} 条记录</span>
       </div>
       <div className="data-table-scroll">
-        <table className="mobile-activities-table w-full min-w-[620px] text-sm">
+        <table className="mobile-activities-table w-full min-w-[620px] text-[13px]">
           <thead>
             <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-muted">
-              <th className="px-4 py-[13px] text-left">用户</th>
-              <th className="px-4 py-[13px] text-left">操作</th>
-              <th className="px-4 py-[13px] text-left">股票</th>
-              <th className="px-4 py-[13px] text-left">操作时间</th>
+              <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-wide">用户</th>
+              <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-wide">操作</th>
+              <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-wide">股票</th>
+              <th className="px-5 py-3 text-left text-[11px] font-medium uppercase tracking-wide">操作时间</th>
             </tr>
           </thead>
           <tbody>
@@ -73,8 +73,8 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
               const marketInfo = marketMeta(market);
               const displayName = a.userName || "?";
               return (
-                <tr key={a.id} className="whitespace-nowrap border-t border-edge transition-colors hover:bg-[#fafbfc] dark:hover:bg-[#1a212e]">
-                  <td className="px-4 py-3.5">
+                <tr key={a.id} className="whitespace-nowrap border-t border-edge transition-colors hover:bg-bg-gray/50 dark:hover:bg-white/[.03]">
+                  <td className="px-5 py-3.5">
                     {a.userAvatar ? (
                       <img src={a.userAvatar} alt={displayName} title={displayName} className="h-8 w-8 cursor-default rounded-full object-cover ring-2 ring-edge-strong" />
                     ) : (
@@ -86,16 +86,16 @@ export default function ActivitiesView({ activities, systemLogs = [], isAdmin = 
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3.5">
-                    <span className={`inline-block rounded-full px-2.5 py-[3px] text-xs font-semibold ${meta.cls}`}>{meta.label}</span>
+                  <td className="px-5 py-3.5">
+                    <span className={`inline-block rounded-md px-2 py-1 text-[11px] font-semibold ${meta.cls}`}>{meta.label}</span>
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td className="px-5 py-3.5">
                     <div className="flex flex-col leading-[1.35]">
                       <b className="font-semibold">{a.stockName}</b>
                       <small className="text-xs text-muted">{a.stockCode} · {marketInfo.label}</small>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 text-xs text-muted">{fmtDateTime(a.createdAt)}</td>
+                  <td className="px-5 py-3.5 text-xs tabular-nums text-muted">{fmtDateTime(a.createdAt)}</td>
                 </tr>
               );
             })}
