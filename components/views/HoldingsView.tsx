@@ -1055,7 +1055,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       {active === "TOTAL" && (
         <div className="mb-4 flex items-center gap-2.5">
           <span className="text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">显示货币</span>
-          <CurrencySelect />
+          <CurrencySelect value={displayCur} onChange={setDisplayCur} />
         </div>
       )}
 
