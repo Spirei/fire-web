@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticateUser, createSession, LEGACY_SESSION_COOKIE, sessionCookieMaxAge, sessionCookieSecure, SESSION_COOKIE } from "@/lib/auth";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
+import { logSecurityEvent } from "@/lib/securityAudit";
 
 export async function POST(request: Request) {
   // 登录限流：同 IP 15 分钟最多 50 次尝试，防暴力破解（全局 100 次/15 分钟兜底）
@@ -23,10 +24,12 @@ export async function POST(request: Request) {
   const userRow = authenticateUser(username, password);
 
   if (!userRow) {
+    logSecurityEvent(request, "", "auth.login.failed", `username=${username.slice(0, 80)}`);
     return NextResponse.json({ error: "用户名或密码错误" }, { status: 401 });
   }
 
   const token = createSession(userRow.id);
+  logSecurityEvent(request, userRow.id, "auth.login.success", "网页登录成功");
   // Web 登录只通过 httpOnly Cookie 交付会话，避免 token 暴露给页面 JavaScript。
   // 原生客户端使用独立的 /api/v1/auth/login 获取 Bearer token。
   const res = NextResponse.json({

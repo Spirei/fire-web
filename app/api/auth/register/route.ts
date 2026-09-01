@@ -3,6 +3,7 @@ import { createSession, createUser, findUserByUsername, LEGACY_SESSION_COOKIE, s
 import { validatePassword } from "@/lib/password";
 import { getSiteSettings } from "@/lib/settings";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
+import { logSecurityEvent } from "@/lib/securityAudit";
 
 export async function POST(request: Request) {
   // 注册限流：同 IP 15 分钟最多 5 次，防批量注册
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
   }
 
   const user = createUser(username, password, isTest);
+  logSecurityEvent(request, user.id, "auth.register.success", isTest ? "创建测试账号" : "注册账号");
   const token = createSession(user.id);
   const res = NextResponse.json({ user }, { status: 201 });
   res.cookies.set(SESSION_COOKIE, token, {

@@ -197,7 +197,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
         <button
           type="submit"
           disabled={loading || !formValid}
-          className="mt-1 h-[46px] rounded-[10px] bg-[#1FBE9E] text-[15px] font-bold text-white transition-all duration-200 hover:bg-[#17A887] active:scale-[.98] disabled:bg-bg-gray disabled:text-faint"
+          className="mt-1 h-[46px] rounded-[10px] bg-[#1FBE9E] text-[15px] font-bold text-white transition-all duration-200 hover:bg-[#17A887] active:scale-[.98] disabled:cursor-not-allowed disabled:bg-bg-gray disabled:text-faint dark:disabled:bg-[#263040] dark:disabled:text-[#aab4c2]"
         >
           {loading ? "请稍候…" : mode === "login" ? "登录" : "注册并登录"}
         </button>
