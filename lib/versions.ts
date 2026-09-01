@@ -2157,6 +2157,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "修复加密货币市值冷启动",
     desc: "全球市值榜首次加载时等待 CoinGecko 市值行情补齐，并对缓存中缺失市值的加密货币自动刷新，避免 BTC、ETH 等项目以 0 市值落到第 99、100 位。",
     kind: "fix"
+  }, {
+    title: "增加加密货币市值备用来源",
+    desc: "CoinGecko 返回价格但缺少市值时，使用 CompaniesMarketCap 全球资产榜中的加密货币市值补齐，避免限流或字段缺失再次产生 0 市值条目。",
+    kind: "fix"
   }]
 };
 

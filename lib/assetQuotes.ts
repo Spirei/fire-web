@@ -126,6 +126,23 @@ async function fetchCryptoQuotes(): Promise<Record<string, AssetQuote>> {
       };
     }
   }
+  // CoinGecko 可能只返回价格而暂时缺少市值；用同一全球资产榜的加密货币行补齐，避免 0 市值参与排序。
+  if (Object.values(CRYPTO_IDS).some((id) => {
+    const code = Object.entries(CRYPTO_IDS).find(([, value]) => value === id)?.[0];
+    return code && (!out[code] || out[code].marketCap <= 0);
+  })) {
+    try {
+      const fallback = await getTopStocks("ALL");
+      fallback.items.forEach((item) => {
+        if (item.type !== "crypto" || item.marketCap <= 0) return;
+        const code = item.code.toUpperCase();
+        if (!out[code]) out[code] = { price: item.price ?? 0, marketCap: item.marketCap, changePct: item.changePct ?? 0 };
+        else if (out[code].marketCap <= 0) out[code].marketCap = item.marketCap;
+      });
+    } catch {
+      /* 备用来源失败时保留 CoinGecko 已返回的价格 */
+    }
+  }
   return out;
 }
 
