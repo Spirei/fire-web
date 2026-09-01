@@ -176,6 +176,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
   const [following, setFollowing] = useState(false);
   const [showCur, setShowCur] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
   const [tab, setTab] = useState<Tab>(initialTab);
   const [extendedPrices, setExtendedPrices] = useState<{ pre: ExtendedPoint | null; after: ExtendedPoint | null; regular: ExtendedPoint | null }>({ pre: null, after: null, regular: null });
   const [marketClock, setMarketClock] = useState(() => Date.now());
@@ -193,6 +194,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
   useEffect(() => {
     setFaved(!!followed);
     setShowMore(false);
+    setShowMetrics(false);
     setSelectedRelatedETF(null);
     setEtfFilter("all");
     setDividends([]);
@@ -560,14 +562,14 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
   return (
     <div data-testid="stock-detail-view" className="w-full max-w-[720px]">
       {/* ===== 头部 ===== */}
-      <div className="flex items-center gap-2">
+      <div className="stock-detail-heading flex min-w-0 items-center gap-2">
         {onBack && (
           <button
             type="button"
             onClick={onBack}
             aria-label="返回行情板"
             title="返回行情板"
-            className="-ml-1 mr-0.5 flex h-9 w-9 flex-none items-center justify-center rounded-full bg-bg-gray text-ink-2 transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover active:scale-[.97] dark:text-white"
+            className="stock-detail-back -ml-1 mr-0.5 flex h-9 w-9 flex-none items-center justify-center rounded-full bg-bg-gray text-ink-2 transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover active:scale-[.97] dark:text-white"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
               <path d="m15 18-6-6 6-6" />
@@ -578,16 +580,18 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
           <img
             src={stockIcons[`${market.toUpperCase()}:${code.toUpperCase()}`]}
             alt=""
-            className="h-9 w-9 flex-none rounded-full object-cover"
+            className="stock-detail-logo h-9 w-9 flex-none rounded-full object-cover"
           />
         ) : (
-          <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">
+          <span className="stock-detail-logo flex h-9 w-9 flex-none items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">
             {(name || "?").slice(0, 1)}
           </span>
         )}
-        <h2 className="text-xl font-bold text-ink">{displayName}</h2>
-        <span className="text-sm text-muted">{code}</span>
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
+          <h2 className="min-w-0 truncate text-xl font-bold text-ink" title={displayName}>{displayName}</h2>
+          <span className="stock-detail-code flex-none text-sm text-muted">{code}</span>
+        </div>
+        <div className="ml-auto flex flex-none items-center gap-1.5">
           <MarketIcon market={market} flag={meta.flag} size={18} />
           <button
             type="button"
@@ -616,11 +620,11 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
       </div>
 
       {/* 现价 */}
-      <div className={`mt-3 ${onBack ? "pl-10" : ""}`}>
+      <div className={`stock-detail-price mt-3 ${onBack ? "pl-10" : ""}`}>
         <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
           {/* 今天 / 常规盘 */}
           <div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="stock-detail-price-line flex flex-wrap items-center gap-x-2 gap-y-1">
               <span
                 className={`text-[34px] font-bold leading-none tabular-nums ${currentPhase === "REGULAR" ? "" : "text-ink"}`}
                 style={currentPhase === "REGULAR" ? { color: activeColor } : undefined}
@@ -667,8 +671,25 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
         </div>
       </div>
 
-      {/* 指标 4 列网格（moomoo 样式：标签上 / 数值下） */}
-      <div className="mt-3 grid grid-cols-4 gap-2">
+      <div className="mt-3 flex items-center justify-between px-0.5">
+        <span className="text-[11px] font-medium text-muted">行情指标</span>
+        <button
+          type="button"
+          onClick={() => {
+            setShowMetrics((value) => !value);
+            if (showMetrics) setShowMore(false);
+          }}
+          className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] font-medium text-muted transition-colors hover:bg-bg-gray hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+          aria-expanded={showMetrics}
+          aria-controls="stock-quote-metrics"
+        >
+          {showMetrics ? "隐藏" : "显示"}
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 transition-transform ${showMetrics ? "" : "rotate-180"}`} aria-hidden="true"><path d="m6 12 4-4 4 4" /></svg>
+        </button>
+      </div>
+
+      {/* 行情指标：手机端 2 × 2，桌面端 4 列。 */}
+      {showMetrics && <div id="stock-quote-metrics" className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {cell([
           { label: "最高", value: quote ? fmtNumMarket(quote.high, market) : "—", color: quote && quote.high >= quote.open ? UP : undefined },
           { label: "最低", value: quote ? fmtNumMarket(quote.low, market) : "—", color: quote && quote.low <= quote.open ? DOWN : undefined }
@@ -689,9 +710,9 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
             dots: true
           }
         ], true)}
-      </div>
+      </div>}
 
-      {showMore && (
+      {showMetrics && showMore && (
         <div className="mt-2 grid auto-rows-max content-start grid-cols-2 items-start gap-x-4 gap-y-2 rounded-[10px] border border-edge bg-bg-gray/25 px-4 py-3 sm:grid-cols-4 dark:bg-white/[0.025]">
           {[
             ["52 周高", quote?.weekHigh ? fmtNumMarket(quote.weekHigh, market) : yearHigh != null ? fmtNumMarket(yearHigh, market) : "—"],
