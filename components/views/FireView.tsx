@@ -952,7 +952,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
 
       {/* 每年明细表 */}
       <div className="fire-yearly-table overflow-hidden rounded-xl border border-edge bg-white dark:border-edge-strong dark:bg-[#16181c]">
-        <div className="overflow-x-auto">
+        <div className="data-table-scroll">
           <table className="w-full min-w-[860px] border-collapse">
             <thead>
               <tr className="border-b border-edge bg-bg-gray dark:border-edge-strong dark:bg-[#202328]">

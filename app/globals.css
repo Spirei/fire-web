@@ -584,6 +584,12 @@
   animation: ticker-in 0.45s ease both;
 }
 
+/* 全站宽数据区域：嵌套卡片/分栏中仍由当前区域接管横向手势。 */
+.data-table-scroll { max-width:100%; overflow-x:auto; overscroll-behavior-inline:contain; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; scrollbar-gutter:stable; }
+.overflow-x-auto { overscroll-behavior-inline:contain; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; }
+.asset-analysis-split div:has(> .mobile-analysis-holdings) { max-width:100%; overflow-x:auto; overscroll-behavior-inline:contain; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; scrollbar-gutter:stable; }
+.mobile-analysis-holdings { touch-action:pan-x pan-y; }
+
 @keyframes modal-in {
   from {
     opacity: 0;

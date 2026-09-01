@@ -960,8 +960,8 @@ export default function HomeContent({ settings, initialDark = false }: { setting
                   </div>
                 ) : (
                   <>
-                    <div className="home-preview-table overflow-hidden rounded-[14px] border border-edge">
-                      <div className={`home-preview-grid ${profitColumn ? "home-preview-grid-profit" : ""} grid ${gridCls} items-center gap-3.5 bg-bg-gray px-[18px] py-2.5 text-xs font-semibold text-muted`}>
+                    <div className="home-preview-table data-table-scroll rounded-[14px] border border-edge">
+                      <div className={`home-preview-grid ${profitColumn ? "home-preview-grid-profit" : ""} grid min-w-[720px] ${gridCls} items-center gap-3.5 bg-bg-gray px-[18px] py-2.5 text-xs font-semibold text-muted`}>
                         {headerCells.map((h, i) => (
                           headerSortKeys[i]
                             ? <button
@@ -1007,7 +1007,7 @@ export default function HomeContent({ settings, initialDark = false }: { setting
                         </div>
                       ) : (
                         showRows.map((row, i) => (
-                          <div key={row.key} className={`home-preview-grid ${profitColumn ? "home-preview-grid-profit" : ""} grid ${gridCls} items-center gap-3.5 border-t border-edge px-[18px] py-[13px] text-sm`}>
+                          <div key={row.key} className={`home-preview-grid ${profitColumn ? "home-preview-grid-profit" : ""} grid min-w-[720px] ${gridCls} items-center gap-3.5 border-t border-edge px-[18px] py-[13px] text-sm`}>
                             <span className="flex justify-center">
                               <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">
                                 {(safePage - 1) * PREVIEW_PAGE_SIZE + i + 1}

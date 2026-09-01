@@ -1162,7 +1162,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <div className="data-table-scroll">
               <table className="mobile-holdings-table w-full text-sm" style={{ minWidth: `${Math.max(860, (enabledHoldingColumns.length + 3) * 135)}px` }}>
                 <thead>
                   <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">

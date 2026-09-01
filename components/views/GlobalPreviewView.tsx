@@ -316,7 +316,7 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
         <p className="rounded-[14px] border border-dashed border-edge-strong py-12 text-center text-sm text-faint">{err}</p>
       ) : (
         <div className="overflow-hidden rounded-card border border-edge bg-white shadow-card">
-          <div className="overscroll-x-contain overflow-x-auto">
+          <div className="data-table-scroll">
             <table className="mobile-global-table w-full min-w-[800px] table-fixed text-sm">
               <colgroup>
                 <col className="w-[54px]" /><col className="w-[184px]" /><col className="w-[112px]" /><col className="w-[104px]" /><col className="w-[116px]" /><col className="w-[158px]" /><col className="w-[72px]" />
