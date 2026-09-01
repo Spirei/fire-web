@@ -2312,6 +2312,8 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .dark .mobile-quotes-table thead tr { background-color: #10141d; }
 .mobile-quotes-table thead .quotes-actions-cell { background-color: #f7f8fa; }
 .dark .mobile-quotes-table thead .quotes-actions-cell { background-color: #10141d; }
+.asset-library-tabs { scrollbar-width:none; }
+.asset-library-tabs::-webkit-scrollbar { display:none; }
 @media (max-width: 640px) {
   .mobile-quotes-table .quotes-rank-cell { display:none; }
   .mobile-quotes-table .quotes-identity-cell { position:sticky; z-index:2; left:0; width:176px; min-width:176px; max-width:176px; background:#fff; box-shadow:8px 0 14px rgba(10,14,25,.055); }

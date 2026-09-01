@@ -1332,8 +1332,8 @@ export default function AssetLibraryView() {
         }
       />
 
-      <div className="asset-library-card flex flex-col gap-5 rounded-card border border-edge bg-white p-6 shadow-card">
-        <div className="asset-library-tabs flex w-fit rounded-full border border-edge-strong bg-bg-gray/60 p-0.5 text-xs font-semibold">
+      <div className="asset-library-card flex flex-col gap-5 rounded-card border border-edge bg-white p-3 shadow-card sm:p-6">
+        <div className="asset-library-tabs flex max-w-full overflow-x-auto rounded-full border border-edge-strong bg-bg-gray/60 p-0.5 text-xs font-semibold">
           {([
             { key: "stock" as TabKey, label: "股票图标" },
             { key: "crypto" as TabKey, label: "加密货币" },
@@ -1348,7 +1348,7 @@ export default function AssetLibraryView() {
               key={t.key}
               type="button"
               onClick={() => setTab(t.key)}
-              className={`rounded-full px-4 py-2 transition-colors duration-200 ${tab === t.key ? "seg-active" : "text-muted hover:text-ink"}`}
+              className={`flex-none whitespace-nowrap rounded-full px-4 py-2 transition-colors duration-200 ${tab === t.key ? "seg-active" : "text-muted hover:text-ink"}`}
             >
               {t.label}
             </button>

@@ -296,14 +296,14 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold">全球资产市值排行</h2>
-          <p className="mt-0.5 text-xs text-muted">
-            全球市值前 {items.length || 100} 名 · 数据来源 CompaniesMarketCap · 市值与价格有延迟
-          </p>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2.5">
+          <h2 className="min-w-0 text-lg font-bold">全球资产市值排行</h2>
+          <CurrencySelect align="left" />
         </div>
-        <CurrencySelect />
+        <p className="mt-0.5 text-xs text-muted">
+          全球市值前 {items.length || 100} 名 · 数据来源 CompaniesMarketCap · 市值与价格有延迟
+        </p>
       </div>
 
       {loading ? (
