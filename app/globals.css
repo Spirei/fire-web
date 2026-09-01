@@ -2315,6 +2315,12 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .asset-library-tabs { scrollbar-width:none; }
 .asset-library-tabs::-webkit-scrollbar { display:none; }
 @media (max-width: 640px) {
+  /* 手机端宽数据表禁止浏览器自行压缩/省略列：固定七列后仅由外层横向滚动。 */
+  .mobile-global-table { display:block; width:800px; min-width:800px; table-layout:fixed; }
+  .mobile-global-table colgroup { display:none; }
+  .mobile-global-table thead,.mobile-global-table tbody { display:block; width:800px; }
+  .mobile-global-table tr { display:grid; width:800px; grid-template-columns:54px 184px 112px 104px 116px 158px 72px; }
+  .mobile-global-table th,.mobile-global-table td { display:block; min-width:0; box-sizing:border-box; }
   .mobile-quotes-table .quotes-rank-cell { display:none; }
   .mobile-quotes-table .quotes-identity-cell { position:sticky; z-index:2; left:0; width:176px; min-width:176px; max-width:176px; background:#fff; box-shadow:8px 0 14px rgba(10,14,25,.055); }
   .mobile-quotes-table thead .quotes-identity-cell { z-index:3; background:#f7f8fa; }

@@ -25,7 +25,7 @@ export default function ActivitiesView({ activities }: Props) {
   return (
     <div className="card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="mobile-activities-table w-full text-sm">
+        <table className="mobile-activities-table w-full min-w-[620px] text-sm">
           <thead>
             <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-muted">
               <th className="px-4 py-[13px] text-left">用户</th>

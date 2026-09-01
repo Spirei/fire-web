@@ -358,7 +358,7 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
                       <td className={`px-4 py-3 text-center tabular-nums ${it.changePct == null ? "text-faint" : up ? "text-up" : "text-down"}`}>
                         {it.changePct == null ? "—" : `${up ? "+" : ""}${fmtPct(it.changePct / 100)}`}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-3 text-center">
                         <MiniKline item={it} />
                       </td>
                       <td className="px-4 py-3 text-center">

@@ -1575,7 +1575,7 @@ export default function TradeOrdersPanel({
                 <div className="rounded-[12px] bg-bg-gray/60 py-8 text-center text-xs text-faint dark:bg-white/5">暂无导出记录</div>
               ) : (
                 <div className="overflow-x-auto rounded-[12px] border border-edge">
-                  <table className="w-full whitespace-nowrap text-[11px]">
+                  <table className="w-full min-w-[620px] whitespace-nowrap text-[11px]">
                     <thead>
                       <tr className="bg-bg-gray text-muted dark:bg-white/5">
                         <th className="px-3 py-2 text-left font-semibold">订单导出时间范围</th>
@@ -1670,7 +1670,7 @@ export default function TradeOrdersPanel({
                   </div>
                   {importPreview.groups.length > 0 && (
                     <div className="overflow-x-auto rounded-[12px] border border-edge">
-                      <table className="w-full whitespace-nowrap text-[11px]">
+                      <table className="w-full min-w-[520px] whitespace-nowrap text-[11px]">
                         <thead>
                           <tr className="bg-bg-gray text-muted dark:bg-white/5">
                             <th className="px-3 py-2 text-left font-semibold">股票</th>
