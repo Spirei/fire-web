@@ -1747,6 +1747,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             </div>
           </div>
         )}
+        <button
+          id="fire-settings-command-trigger"
+          type="button"
+          tabIndex={-1}
+          aria-hidden="true"
+          className="hidden"
+          onClick={openCmdPalette}
+        />
         {navGroups.map((g) => (
           <div key={g.label} className="sw-nav-group">
             <p className="sw-nav-group-title">{g.label}</p>
@@ -1788,6 +1796,49 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           </div>
         </div>
       </aside>
+
+      {cmdOpen && (
+        <div
+          className="sw-cmd-pop fixed right-4 top-[52px] z-[200] w-[min(240px,calc(100vw-32px))] overflow-hidden rounded-xl border shadow-pop md:hidden"
+          style={{ borderColor: "var(--sv-card-border)", background: "var(--sv-card)", color: "var(--sv-text)" }}
+        >
+          <div className="flex items-center gap-2 border-b px-3 py-2" style={{ borderColor: "var(--sv-border)" }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-[13px] w-[13px] flex-none opacity-60"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+            <input
+              ref={cmdRef}
+              value={cmdQuery}
+              autoFocus
+              onChange={(e) => { setCmdQuery(e.target.value); setCmdIndex(0); }}
+              onBlur={() => setTimeout(() => setCmdOpen(false), 160)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") { e.preventDefault(); setCmdIndex((i) => Math.min(i + 1, cmdResults.length - 1)); }
+                else if (e.key === "ArrowUp") { e.preventDefault(); setCmdIndex((i) => Math.max(i - 1, 0)); }
+                else if (e.key === "Enter" && cmdResults[cmdIndex]) { e.preventDefault(); jumpTo(cmdResults[cmdIndex]); }
+              }}
+              placeholder="搜索设置…"
+              className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:opacity-50"
+              style={{ color: "var(--sv-text)" }}
+            />
+          </div>
+          <div className="max-h-[min(240px,calc(100vh-110px))] overflow-y-auto py-1">
+            {cmdResults.length === 0 ? (
+              <p className="px-3 py-2 text-[11px] opacity-60">输入名称查找设置项</p>
+            ) : cmdResults.map((item, i) => (
+              <button
+                key={item.sub + item.anchor}
+                type="button"
+                onPointerDown={(e) => { e.preventDefault(); jumpTo(item); }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px]"
+                style={i === cmdIndex ? { background: "var(--sv-hover-bg)" } : undefined}
+              >
+                <SubNavIcon name={SETTINGS_ANCHOR_ICONS[item.anchor] || item.sub} className="h-3.5 w-3.5 opacity-70" />
+                <span className="font-semibold">{item.label}</span>
+                <span className="ml-auto text-[10px] opacity-60">{item.groupLabel}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="sw-content flex min-w-0 flex-1 flex-col">
         {/* 内容头部 */}

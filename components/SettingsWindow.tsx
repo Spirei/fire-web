@@ -172,7 +172,11 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
           <span className="ml-auto flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => window.dispatchEvent(new Event("fire:settings-cmd-open"))}
+              onClick={() => {
+                const trigger = document.getElementById("fire-settings-command-trigger");
+                if (trigger instanceof HTMLButtonElement) trigger.click();
+                else window.dispatchEvent(new Event("fire:settings-cmd-open"));
+              }}
               title="搜索设置（⌘K）"
               aria-label="搜索设置"
               className="flex items-center justify-center"
