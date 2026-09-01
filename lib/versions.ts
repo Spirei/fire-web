@@ -2185,6 +2185,10 @@ export const V0_1_19_ENTRY: VersionEntry = {
     title: "行情板复用加密货币素材图标",
     desc: "自选股与我的持仓列表不再只查股票图标；ASSET 加密货币记录改为复用素材库 crypto 图标。",
     kind: "fix"
+  }, {
+    title: "搜索结果补充市场色块",
+    desc: "我的持仓与自选股搜索候选使用与资产分析持仓明细一致的市场色块，股票与加密货币市场标识更直观。",
+    kind: "feature"
   }]
 };
 

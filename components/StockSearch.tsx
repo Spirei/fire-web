@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { marketMeta, type SearchMatch } from "@/lib/types";
 import { fmtNum, fmtNumMarket, fmtPct } from "@/lib/format";
 import RainbowTextInput from "@/components/RainbowTextInput";
+import { getMarketBadge } from "@/lib/marketBadge";
 
 interface Props {
   onSelect: (match: SearchMatch) => void;
@@ -156,7 +157,10 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
                 >
                   <span className="min-w-0">
                     <span className="block truncate font-semibold">{m.name}</span>
-                    <span className="block text-xs text-muted">{m.code} · {m.type === "crypto" ? "加密货币" : marketMeta(m.market).label}</span>
+                    <span className="mt-1 flex items-center gap-1.5 text-xs text-muted">
+                      <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: getMarketBadge(m.market, m.code).bg, color: getMarketBadge(m.market, m.code).fg }}>{m.type === "crypto" ? "加密" : marketMeta(m.market).label}</span>
+                      <span>{m.code}</span>
+                    </span>
                   </span>
                   <span className="flex flex-col items-end">
                     {m.price !== null && <span className="font-semibold tabular-nums">{fmtNumMarket(m.price, m.market)}</span>}
