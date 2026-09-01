@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fmtMoney, fmtPct, fmtPrice, fmtQty } from "@/lib/format";
+import { fmtMoney, fmtMoneyCompact, fmtPct, fmtPrice, fmtQty } from "@/lib/format";
 import {
   MARKET_LIST,
   FALLBACK_RATES,
@@ -21,7 +21,7 @@ import GroupSelect from "@/components/GroupSelect";
 import MarketSelect from "@/components/MarketSelect";
 import AppModal from "@/components/AppModal";
 import CurrencySelect from "@/components/CurrencySelect";
-import { CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
+import { CURRENCY_SYMBOLS, useCurrencyDisplayUnit, useDisplayCurrency } from "@/lib/currencyPrefs";
 import { showToast } from "@/lib/toast";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import HoldingsPnlSankey, { type PnlSankeyItem } from "@/components/HoldingsPnlSankey";
@@ -243,6 +243,13 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     }
   });
   const { currency: displayCur, setCurrency: setDisplayCur } = useDisplayCurrency();
+  const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
+  const compactMoney = useCallback((value: number, currency: string) => {
+    const mobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+    return currencyDisplayUnit === "compact" || (currencyDisplayUnit === "auto" && mobile)
+      ? fmtMoneyCompact(value, currency)
+      : fmtMoney(value, currency);
+  }, [currencyDisplayUnit]);
   // 各市场盈利卡片拖动顺序（本地记忆）
   const [pnlOrder, setPnlOrder] = useState<string[]>(() => {
     try {
@@ -522,13 +529,13 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
         <span className="min-w-0"><span className="block truncate font-semibold text-ink transition-colors group-hover:text-brand-deep dark:group-hover:text-[#c6cdd8]">{record.name}</span><span className="block truncate text-[11px] text-faint">{record.code}</span></span>
       </button>;
     }
-    if (key === "marketValue") return marketValue !== null ? <span className="font-semibold">{fmtMoney(marketValue * displayMoneyFactor, displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;
+    if (key === "marketValue") return marketValue !== null ? <span className="font-semibold">{compactMoney(marketValue * displayMoneyFactor, displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;
     if (key === "cost") return hasCost ? fmtPrice(cost, meta.currency, record.market) : "—";
     if (key === "price") return <><div className="font-semibold">{fmtPrice(price, meta.currency, record.market)}</div>{quote && <div className={`text-xs font-semibold ${quote.changePct >= 0 ? "text-up" : "text-down"}`}>{quote.changePct >= 0 ? "+" : ""}{fmtPct(quote.changePct / 100)}</div>}</>;
     if (key === "qty") return qty > 0 ? fmtQty(qty) : <button type="button" onClick={() => openEdit(record)} className="rounded-full bg-brand-light px-2 py-0.5 text-[11px] font-semibold text-brand-deep transition-colors hover:bg-brand-hover">待填数量</button>;
-    if (key === "dayPnl") return dayPnl !== null ? <span className={`font-semibold ${dayPnl >= 0 ? "text-up" : "text-down"}`}>{dayPnl >= 0 ? "+" : "−"}{fmtMoney(Math.abs(dayPnl * displayMoneyFactor), displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;
+    if (key === "dayPnl") return dayPnl !== null ? <span className={`font-semibold ${dayPnl >= 0 ? "text-up" : "text-down"}`}>{dayPnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(dayPnl * displayMoneyFactor), displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;
     if (key === "dayPnlRate") return dayPnlRate !== null ? <span className={`font-semibold ${dayPnlRate >= 0 ? "text-up" : "text-down"}`}>{dayPnlRate >= 0 ? "+" : ""}{fmtPct(dayPnlRate)}</span> : <span className="text-faint">—</span>;
-    if (key === "pnl") return pnl !== null ? <span className={`font-semibold ${pnl >= 0 ? "text-up" : "text-down"}`}>{pnl >= 0 ? "+" : "−"}{fmtMoney(Math.abs(pnl * displayMoneyFactor), displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;
+    if (key === "pnl") return pnl !== null ? <span className={`font-semibold ${pnl >= 0 ? "text-up" : "text-down"}`}>{pnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(pnl * displayMoneyFactor), displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;
     if (key === "pnlRate") return pnlRate !== null ? <span className={`font-semibold ${pnlRate >= 0 ? "text-up" : "text-down"}`}>{pnlRate >= 0 ? "+" : ""}{fmtPct(pnlRate)}</span> : <span className="text-faint">—</span>;
     return weight !== null ? <span className="font-semibold">{fmtPct(weight)}</span> : <span className="text-faint">—</span>;
   }
@@ -898,9 +905,9 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
             </div>
 
             <dl className="grid grid-cols-2 gap-x-5 gap-y-3 rounded-[15px] border border-edge px-4 py-3.5">
-              <div><dt className="text-[11px] text-muted">持仓市值</dt><dd className="mt-1 font-semibold tabular-nums text-ink">{fmtMoney(detailMarketValue * detailDisplayFactor, detailDisplayCurrency)}</dd></div>
-              <div><dt className="text-[11px] text-muted">持仓盈亏</dt><dd className={`mt-1 font-semibold tabular-nums ${detailPnl == null ? "text-faint" : detailPnl >= 0 ? "text-up" : "text-down"}`}>{detailPnl == null ? "—" : `${detailPnl >= 0 ? "+" : "−"}${fmtMoney(Math.abs(detailPnl * detailDisplayFactor), detailDisplayCurrency)}`}</dd></div>
-              <div><dt className="text-[11px] text-muted">当日盈亏</dt><dd className={`mt-1 font-semibold tabular-nums ${detailDayPnl == null ? "text-faint" : detailDayPnl >= 0 ? "text-up" : "text-down"}`}>{detailDayPnl == null ? "—" : `${detailDayPnl >= 0 ? "+" : "−"}${fmtMoney(Math.abs(detailDayPnl * detailDisplayFactor), detailDisplayCurrency)}`}</dd></div>
+              <div><dt className="text-[11px] text-muted">持仓市值</dt><dd className="mt-1 font-semibold tabular-nums text-ink">{compactMoney(detailMarketValue * detailDisplayFactor, detailDisplayCurrency)}</dd></div>
+              <div><dt className="text-[11px] text-muted">持仓盈亏</dt><dd className={`mt-1 font-semibold tabular-nums ${detailPnl == null ? "text-faint" : detailPnl >= 0 ? "text-up" : "text-down"}`}>{detailPnl == null ? "—" : `${detailPnl >= 0 ? "+" : "−"}${compactMoney(Math.abs(detailPnl * detailDisplayFactor), detailDisplayCurrency)}`}</dd></div>
+              <div><dt className="text-[11px] text-muted">当日盈亏</dt><dd className={`mt-1 font-semibold tabular-nums ${detailDayPnl == null ? "text-faint" : detailDayPnl >= 0 ? "text-up" : "text-down"}`}>{detailDayPnl == null ? "—" : `${detailDayPnl >= 0 ? "+" : "−"}${compactMoney(Math.abs(detailDayPnl * detailDisplayFactor), detailDisplayCurrency)}`}</dd></div>
               <div><dt className="text-[11px] text-muted">盈亏率</dt><dd className={`mt-1 font-semibold tabular-nums ${detailPnlRate == null ? "text-faint" : detailPnlRate >= 0 ? "text-up" : "text-down"}`}>{detailPnlRate == null ? "—" : `${detailPnlRate >= 0 ? "+" : ""}${fmtPct(detailPnlRate)}`}</dd></div>
               <div><dt className="text-[11px] text-muted">成本价</dt><dd className="mt-1 font-semibold tabular-nums text-ink">{Number.isFinite(detailCost) ? fmtPrice(detailCost, detailMeta.currency, selectedHolding.market) : "—"}</dd></div>
               <div><dt className="text-[11px] text-muted">持仓数量</dt><dd className="mt-1 font-semibold tabular-nums text-ink">{fmtQty(detailQty)}</dd></div>
@@ -1002,7 +1009,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           </svg>
           总资产
           <span className={`text-xs tabular-nums ${active === "TOTAL" ? "opacity-80" : "text-faint"}`}>
-            {metricsReady ? fmtMoney(metrics.mv * totalFactor, totalCurLabel) : "…"}
+            {metricsReady ? compactMoney(metrics.mv * totalFactor, totalCurLabel) : "…"}
           </span>
         </button>
         {displayedTabs.map((m, i) => {
@@ -1063,22 +1070,22 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <div className="card p-4">
           <span className="block text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">净资产（{totalCurLabel}）</span>
-          <strong className="mt-1 block text-lg font-extrabold tabular-nums">{metricsReady ? fmtMoney(metrics.mv * totalFactor, totalCurLabel) : "…"}</strong>
+          <strong className="mt-1 block text-lg font-extrabold tabular-nums">{metricsReady ? compactMoney(metrics.mv * totalFactor, totalCurLabel) : "…"}</strong>
         </div>
         <div className="card p-4">
           <span className="block text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">当日盈亏</span>
           <strong className={`mt-1 block text-lg font-extrabold tabular-nums ${metrics.day >= 0 ? "text-up" : "text-down"}`}>
-            {metricsReady ? `${metrics.day >= 0 ? "+" : "-"}${fmtMoney(Math.abs(metrics.day * totalFactor), totalCurLabel)}` : "…"}
+            {metricsReady ? `${metrics.day >= 0 ? "+" : "-"}${compactMoney(Math.abs(metrics.day * totalFactor), totalCurLabel)}` : "…"}
           </strong>
         </div>
         <div className="card p-4">
           <span className="block text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">持仓市值</span>
-          <strong className="mt-1 block text-lg font-extrabold tabular-nums">{metricsReady ? fmtMoney(metrics.mv * totalFactor, totalCurLabel) : "…"}</strong>
+          <strong className="mt-1 block text-lg font-extrabold tabular-nums">{metricsReady ? compactMoney(metrics.mv * totalFactor, totalCurLabel) : "…"}</strong>
         </div>
         <div className="card p-4">
           <span className="block text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">持仓盈亏</span>
           <strong className={`mt-1 block text-lg font-extrabold tabular-nums ${metrics.pnl >= 0 ? "text-up" : "text-down"}`}>
-            {metricsReady ? `${metrics.pnl >= 0 ? "+" : "-"}${fmtMoney(Math.abs(metrics.pnl * totalFactor), totalCurLabel)}` : "…"}
+            {metricsReady ? `${metrics.pnl >= 0 ? "+" : "-"}${compactMoney(Math.abs(metrics.pnl * totalFactor), totalCurLabel)}` : "…"}
           </strong>
         </div>
         <div className="card p-4">
@@ -1133,7 +1140,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                     <div className="flex items-baseline justify-between">
                       <span className="text-xs text-[#73777f] dark:text-[#a3a8b2]">持仓盈利</span>
                       <strong className={`text-[15px] font-bold tabular-nums ${e.pnl >= 0 ? "text-up" : "text-down"}`}>
-                        {e.pnl >= 0 ? "+" : "-"}{fmtMoney(Math.abs(e.pnl), mcur)}
+                        {e.pnl >= 0 ? "+" : "-"}{compactMoney(Math.abs(e.pnl), mcur)}
                       </strong>
                     </div>
                     <div className="flex items-baseline justify-between">
@@ -1144,7 +1151,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                     </div>
                     <div className="flex items-baseline justify-between border-t border-edge pt-2.5">
                       <span className="text-xs text-[#73777f] dark:text-[#a3a8b2]">持仓市值</span>
-                      <strong className="text-sm font-semibold tabular-nums text-ink">{fmtMoney(e.mv, mcur)}</strong>
+                      <strong className="text-sm font-semibold tabular-nums text-ink">{compactMoney(e.mv, mcur)}</strong>
                     </div>
                   </div>
                 </div>

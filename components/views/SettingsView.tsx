@@ -16,6 +16,7 @@ import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import type { BackupConfig } from "@/lib/backup";
 import { DEFAULT_HOLDING_COLUMNS } from "@/lib/holdingColumns";
+import { useCurrencyDisplayUnit, type CurrencyDisplayUnit } from "@/lib/currencyPrefs";
 
 // 版本历史弹窗按需懒加载：完整 VERSIONS 数组只在点开「版本」弹窗时下载，不进首屏包。
 const VersionModal = dynamic(() => import("@/components/VersionModal"), { ssr: false });
@@ -57,6 +58,7 @@ const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; group
   { sub: "stocks", anchor: "sources", label: "股票来源接口", groupLabel: "股票", keywords: "股票来源 接口 行情 财报 图标 url 数据源" },
   { sub: "stocks", anchor: "trade", label: "交易 · 富途", groupLabel: "股票", keywords: "富途 futu opend 交易 行情源 主机 端口 腾讯 yahoo 备用" },
   { sub: "profile", anchor: "profile", label: "个人信息", groupLabel: "账号", keywords: "头像 昵称 密码 邮箱 导出 清空 数据" },
+  { sub: "profile", anchor: "currency-display", label: "货币金额显示", groupLabel: "账号", keywords: "货币 单位 金额 万 百万 千万 亿 缩写" },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
   { sub: "api", anchor: "api", label: "API 接口", groupLabel: "系统", keywords: "api 接口 开发 文档 鉴权" },
@@ -605,6 +607,7 @@ const BRAND_MAX_VEL = 2000; // 角速度上限（deg/s），连续狂点时避�
 
 export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub }: Props) {
   const isAdminUser = user?.role === "admin";
+  const { unit: currencyDisplayUnit, setUnit: setCurrencyDisplayUnit } = useCurrencyDisplayUnit();
   const [brandSpinning, setBrandSpinning] = useState(false);
   // 品牌花标转动系统：临界阻尼弹簧在“角度目标”上做物理积分，
   // 目标每点击 +360°，弹簧平滑地追赶并最终停在整数圈，观感流畅。
@@ -2698,6 +2701,21 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <div className="sw-row-label"><b>注销账号</b><span>永久删除本账号及全部数据，不可恢复</span></div>
                     <button type="button" onClick={() => setShowDeleteConfirm(true)} className="btn btn-ghost btn-sm !text-up">注销账号</button>
                   </div>
+                  </div>
+                </SettingsSection>
+                <SettingsSection id="currency-display" icon="stocks" title="货币金额显示" desc="控制持仓、资产分析等页面的大额金额展示方式">
+                  <div className="sw-row">
+                    <div className="sw-row-label">
+                      <b>金额单位</b>
+                      <span>小屏自动使用万、百万、千万、亿，桌面保持完整数字</span>
+                    </div>
+                    <div className="ctrl">
+                      <select value={currencyDisplayUnit} onChange={(e) => setCurrencyDisplayUnit(e.target.value as CurrencyDisplayUnit)} className="sw-row-input" aria-label="货币金额显示单位">
+                        <option value="auto">跟随设备（小屏缩写）</option>
+                        <option value="compact">始终缩写</option>
+                        <option value="full">始终完整</option>
+                      </select>
+                    </div>
                   </div>
                 </SettingsSection>
               </div>

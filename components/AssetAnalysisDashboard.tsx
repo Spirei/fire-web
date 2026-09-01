@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import echarts from "@/lib/echarts";
 import CurrencyFlag from "@/components/CurrencyFlag";
-import { fmtMoney, fmtPct, fmtPrice, fmtQty } from "@/lib/format";
+import { fmtMoney, fmtMoneyCompact, fmtPct, fmtPrice, fmtQty } from "@/lib/format";
 import { marketMeta, type Quote, type StockRecord, type TradeOrder } from "@/lib/types";
 import { showToast } from "@/lib/toast";
 import { HoldingColumnManager, HoldingColumnsButton, useHoldingColumns } from "@/components/HoldingColumnManager";
 import { HOLDING_COLUMN_LABELS, type HoldingColumnKey } from "@/lib/holdingColumns";
 import { usePersistedState } from "@/lib/usePersistedState";
-import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
+import { CURRENCIES, CURRENCY_SYMBOLS, useCurrencyDisplayUnit, useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
 import TradeOrdersPanel from "@/components/TradeOrdersPanel";
 import RefreshButton from "@/components/RefreshButton";
 import DailyPnlShareModal, { preloadDailyPnlTemplates, waitForDailyPnlTemplates, type DailyPnlShareItem } from "@/components/DailyPnlShareModal";
@@ -215,6 +215,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const [assetMarket, setAssetMarket] = usePersistedState("fire:asset-asset-market", "ALL");
   const [holdingsMarket, setHoldingsMarket] = usePersistedState("fire:asset-holdings-market", "ALL");
   const { currency: displayCurrency, setCurrency: setDisplayCurrency } = useDisplayCurrency();
+  const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
   const [assetsVisible, setAssetsVisible] = useState(true);
   const [leftPanePct, setLeftPanePct] = useState(29);
   const splitRef = useRef<HTMLDivElement>(null);
@@ -313,6 +314,12 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   };
   const currencyFactor = rates[displayCurrency] || 1;
   const symbol = CURRENCY_SYMBOLS[displayCurrency] || displayCurrency;
+  const compactMoney = useCallback((value: number) => {
+    const mobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+    return currencyDisplayUnit === "compact" || (currencyDisplayUnit === "auto" && mobile)
+      ? fmtMoneyCompact(value, symbol)
+      : fmtMoney(value, symbol);
+  }, [currencyDisplayUnit, symbol]);
   const toDisplay = (record: StockRecord, value: number) => {
     const iso = ISO_BY_MARKET[record.market] || "USD";
     const usd = value / (rates[iso] || 1);
@@ -690,7 +697,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     return rows;
   }, [positions, pnlMarket, recordCloses, activeRange, period, rates, displayCurrency, livePrice]);
   const shownPnlPositions = pnlExpanded ? pnlPositions : pnlPositions.slice(0, 10);
-  const maskMoney = (value: number, signed = false) => assetsVisible ? `${signed ? (value >= 0 ? "+" : "−") : ""}${fmtMoney(Math.abs(value), symbol)}` : "******";
+  const maskMoney = (value: number, signed = false) => assetsVisible ? `${signed ? (value >= 0 ? "+" : "−") : ""}${compactMoney(Math.abs(value))}` : "******";
   const MarketPills = ({ value, onChange, includeAll = true }: { value: string; onChange: (key: string) => void; includeAll?: boolean }) => <div className="flex gap-2 overflow-x-auto px-0.5 pb-1 pt-1.5">
     {(includeAll ? ["ALL", ...marketKeys] : marketKeys).map((key) => <button key={key} type="button" onClick={() => onChange(key)} className={`flex-none rounded-full border px-4 py-1.5 text-xs font-bold transition-colors ${value === key ? "border-[#3297f6] bg-[#3297f6]/15 text-[#3297f6] shadow-sm" : "border-edge-strong bg-bg-gray text-muted hover:bg-brand-hover hover:text-ink"}`}>{key === "ALL" ? "全部" : marketMeta(key).label}</button>)}
   </div>;
@@ -725,13 +732,13 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
       const icon = stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
       return <span className="flex min-w-[150px] items-center gap-2">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic">{record.name.slice(0, 1)}</i>}<span><b className="block">{record.name}</b><small className="text-muted">{record.code}</small></span></span>;
     }
-    if (key === "marketValue") return fmtMoney(displayMarketValue, symbol);
+    if (key === "marketValue") return compactMoney(displayMarketValue);
     if (key === "cost") return fmtPrice(cost, meta.currency, record.market);
     if (key === "price") return fmtPrice(price, meta.currency, record.market);
     if (key === "qty") return fmtQty(qty);
-    if (key === "dayPnl") return <span className={displayDayPnl >= 0 ? "text-up" : "text-down"}>{displayDayPnl >= 0 ? "+" : "−"}{fmtMoney(Math.abs(displayDayPnl), symbol)}</span>;
+    if (key === "dayPnl") return <span className={displayDayPnl >= 0 ? "text-up" : "text-down"}>{displayDayPnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(displayDayPnl))}</span>;
     if (key === "dayPnlRate") return <span className={dayPnlRate >= 0 ? "text-up" : "text-down"}>{dayPnlRate >= 0 ? "+" : ""}{fmtPct(dayPnlRate)}</span>;
-    if (key === "pnl") return <span className={displayPnl >= 0 ? "text-up" : "text-down"}>{displayPnl >= 0 ? "+" : "−"}{fmtMoney(Math.abs(displayPnl), symbol)}</span>;
+    if (key === "pnl") return <span className={displayPnl >= 0 ? "text-up" : "text-down"}>{displayPnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(displayPnl))}</span>;
     if (key === "pnlRate") return <span className={pnlRate >= 0 ? "text-up" : "text-down"}>{pnlRate >= 0 ? "+" : ""}{fmtPct(pnlRate)}</span>;
     return <span className="font-semibold">{fmtPct(weight)}</span>;
   };
@@ -822,7 +829,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
                 {icon ? <img src={icon} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" /> : <i className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-gray not-italic text-ink-2">{record.name.slice(0, 1)}</i>}
                 <span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 block truncate text-muted">{record.code}</small></span>
               </span>
-              <span className={`text-right font-bold tabular-nums ${pnl >= 0 ? "text-up" : "text-down"}`}>{pnl >= 0 ? "+" : "−"}{fmtMoney(Math.abs(pnl), symbol)}</span>
+              <span className={`text-right font-bold tabular-nums ${pnl >= 0 ? "text-up" : "text-down"}`}>{pnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(pnl))}</span>
             </div>;
           })}</div>
           {shownPnlPositions.length === 0 && <div className="py-10 text-center text-xs text-muted">当前市场暂无可计算的持仓盈亏</div>}

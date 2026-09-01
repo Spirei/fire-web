@@ -26,6 +26,19 @@ export function fmtMoney(n: number, currency: string) {
   return sign + currency + Math.abs(n).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** 货币金额紧凑显示，避免韩元等高面额货币撑破卡片。 */
+export function fmtMoneyCompact(n: number, currency: string): string {
+  if (!Number.isFinite(n)) return "—";
+  const sign = n < 0 ? "-" : "";
+  const value = Math.abs(n);
+  const format = (amount: number, unit: string) => `${sign}${currency}${amount.toLocaleString("zh-CN", { minimumFractionDigits: amount < 10 ? 2 : 1, maximumFractionDigits: 2 })}${unit}`;
+  if (value >= 1e8) return format(value / 1e8, "亿");
+  if (value >= 1e7) return format(value / 1e7, "千万");
+  if (value >= 1e6) return format(value / 1e6, "百万");
+  if (value >= 1e4) return format(value / 1e4, "万");
+  return fmtMoney(n, currency);
+}
+
 /** 大数简化（市值等）：万亿 / 亿 / 万，如 4.57 万亿、306.17 亿 */
 export function fmtCap(n: number): string {
   if (!n || !Number.isFinite(n)) return "—";
