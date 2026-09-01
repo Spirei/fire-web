@@ -300,8 +300,13 @@ export async function fetchFutuDailyKline(
 
 /** 富途 OpenAPI 额度（实时订阅 + 历史K线）；不可用 / 失败返回 null */
 export async function fetchFutuQuota(host = "127.0.0.1", port = 11111): Promise<FutuQuota | null> {
+  const h = normalizeFutuHost(host || "127.0.0.1");
+  const p = Number(port) || 11111;
+  // 与行情、搜索、K 线保持一致：OpenD 未启动时先快速失败，避免进入
+  // futu-api 的内部重连流程。额度查询使用临时配置，不能复用全局可用性缓存。
+  if (!(await checkPort(h, p, 800))) return null;
   try {
-    const parsed = await runBridge({ cmd: "quota" }, host, port);
+    const parsed = await runBridge({ cmd: "quota" }, h, p);
     return (parsed.quota as FutuQuota | undefined) ?? null;
   } catch {
     return null;
