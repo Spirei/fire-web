@@ -2231,7 +2231,7 @@ export const V0_1_19_ENTRY: VersionEntry = {
     kind: "fix"
   }, {
     title: "修复嵌套分栏内宽表无法触摸横滑",
-    desc: "定位资产分析持仓表虽有 overflow-x 但触摸手势被外层分栏接管的问题；新增全站 data-table-scroll 手势规范与 pan-x 惯性滚动，覆盖持仓、自选、全球排行、FIRE、日志、订单、API 文档及所有 overflow-x-auto 区域；首页 Grid 伪表格同步设置完整最小宽度。名人持仓编辑的固定七列表单增加独立横滑，财报日历手机行移除隐藏列残留轨道，避免名称被无故压缩。通过 iPhone 12 Pro 390px 实机视口复现并移除旧版 ≤420px 强制删列规则，持仓与资产分析在所有手机尺寸统一保留完整列并横滑。",
+    desc: "定位资产分析持仓表虽有 overflow-x 但触摸手势被外层分栏接管的问题；新增全站 data-table-scroll 手势规范与 pan-x 惯性滚动，覆盖持仓、自选、全球排行、FIRE、日志、订单、API 文档及所有 overflow-x-auto 区域。通过 iPhone 12 Pro 390px 浏览器逐页复现并移除旧版 ≤420px 强制删列规则：我的持仓、资产分析、自选行情、全球资产、日志、素材库、名人持仓及首页预览在所有手机尺寸统一保留完整列并内部横滑。",
     kind: "fix"
   }]
 };

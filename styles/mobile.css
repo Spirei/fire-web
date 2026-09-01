@@ -34,32 +34,13 @@
     min-height: 36px;
   }
 
-  /* 公开首页股票预览：手机只保留四个决策列，避免中文被压成逐字竖排。 */
+  /* 公开首页股票预览：保留完整列宽，由卡片内部横向滑动。 */
   .home-preview { margin-top: 24px; }
   .home-preview > div:nth-child(2) > div { padding: 14px 12px 18px; }
   .home-preview-toolbar { gap: 8px; }
   .home-preview-search { flex-basis: 100%; min-width: 0; }
   .home-preview-toolbar > button { min-height: 38px; white-space: nowrap; }
-  .home-preview-grid {
-    grid-template-columns: 32px minmax(0,1fr) 70px 68px !important;
-    gap: 7px;
-    padding-inline: 10px;
-  }
-  .home-preview-grid > :nth-child(5) { display: none; }
-  .home-preview-grid-profit > :nth-child(3) { display: none; }
-  .home-preview-grid-profit {
-    grid-template-columns: 32px minmax(0,1fr) 68px 76px !important;
-  }
-  .home-preview-identity { overflow: hidden; }
-  .home-preview-identity > img { display: none; }
-  .home-preview-name {
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-height: 1.35;
-    overflow-wrap: anywhere;
-  }
+  .home-preview-grid { min-width: 720px; }
 
   .asset-analysis-page { row-gap: 12px; }
   .asset-analysis-page > div:first-child { margin-bottom: -2px; }
@@ -70,27 +51,12 @@
   .mobile-analysis-holdings [data-holding-column] { display: table-cell; width: auto; }
   .mobile-analysis-holdings th, .mobile-analysis-holdings td { padding: 11px 8px; }
 
-  .mobile-quotes-table { min-width: 0 !important; table-layout: fixed; }
-  .mobile-quotes-table th:nth-child(1), .mobile-quotes-table td:nth-child(1),
-  .mobile-quotes-table th:nth-child(2), .mobile-quotes-table td:nth-child(2),
-  .mobile-quotes-table th:nth-child(6), .mobile-quotes-table td:nth-child(6),
-  .mobile-quotes-table th:nth-child(7), .mobile-quotes-table td:nth-child(7),
-  .mobile-quotes-table th:nth-child(8), .mobile-quotes-table td:nth-child(8),
-  .mobile-quotes-table th:nth-child(9), .mobile-quotes-table td:nth-child(9),
-  .mobile-quotes-table th:nth-child(10), .mobile-quotes-table td:nth-child(10) { display: none; }
-  .mobile-quotes-table th:nth-child(3), .mobile-quotes-table td:nth-child(3) { width: 48%; }
-  .mobile-quotes-table th:nth-child(4), .mobile-quotes-table td:nth-child(4) { width: 27%; }
-  .mobile-quotes-table th:nth-child(5), .mobile-quotes-table td:nth-child(5) { width: 25%; }
+  .mobile-quotes-table { min-width: 860px !important; table-layout: auto; }
+  .mobile-quotes-table th, .mobile-quotes-table td { display: table-cell !important; width: auto !important; }
   .mobile-quotes-table th, .mobile-quotes-table td { padding: 11px 9px; }
 
-  .mobile-global-table { min-width: 0 !important; table-layout: fixed; }
-  .mobile-global-table th:nth-child(3), .mobile-global-table td:nth-child(3),
-  .mobile-global-table th:nth-child(5), .mobile-global-table td:nth-child(5),
-  .mobile-global-table th:nth-child(7), .mobile-global-table td:nth-child(7) { display: none; }
-  .mobile-global-table th:nth-child(1), .mobile-global-table td:nth-child(1) { width: 14%; }
-  .mobile-global-table th:nth-child(2), .mobile-global-table td:nth-child(2) { width: 42%; }
-  .mobile-global-table th:nth-child(4), .mobile-global-table td:nth-child(4) { width: 20%; }
-  .mobile-global-table th:nth-child(6), .mobile-global-table td:nth-child(6) { width: 24%; }
+  .mobile-global-table { min-width: 800px !important; table-layout: auto; }
+  .mobile-global-table th, .mobile-global-table td { display: table-cell !important; width: auto !important; }
   .mobile-global-table th, .mobile-global-table td { padding: 10px 6px; }
 
   .global-economy-page { gap: 16px; }
@@ -131,11 +97,8 @@
   .dark .economy-ranking-row:nth-last-child(-n+2) { border-bottom-color: #2e2e2e; }
   .economy-ranking-row:last-child { border-bottom: 0; }
 
-  .mobile-activities-table { min-width: 0 !important; table-layout: fixed; }
-  .mobile-activities-table th:nth-child(1), .mobile-activities-table td:nth-child(1) { display: none; }
-  .mobile-activities-table th:nth-child(2), .mobile-activities-table td:nth-child(2) { width: 24%; }
-  .mobile-activities-table th:nth-child(3), .mobile-activities-table td:nth-child(3) { width: 42%; }
-  .mobile-activities-table th:nth-child(4), .mobile-activities-table td:nth-child(4) { width: 34%; white-space: normal; }
+  .mobile-activities-table { min-width: 640px !important; table-layout: auto; }
+  .mobile-activities-table th, .mobile-activities-table td { display: table-cell !important; width: auto !important; white-space: nowrap; }
   .mobile-activities-table th, .mobile-activities-table td { padding: 11px 8px; }
 
   .mobile-users-table th:nth-child(2), .mobile-users-table td:nth-child(2),
@@ -190,13 +153,7 @@
   .celeb-summary-card { gap: 10px; padding: 16px !important; }
   .celeb-summary-ring { display: none; }
   .celeb-detail-summary { gap: 14px; padding: 16px !important; }
-  .celeb-holdings-row {
-    grid-template-columns: minmax(0,1fr) 70px 68px 64px !important;
-    gap: 6px;
-    padding-inline: 10px;
-  }
-  .celeb-holdings-row > :nth-child(5),
-  .celeb-holdings-row > :nth-child(6) { display: none; }
+  .celeb-holdings-row { min-width: 700px; }
 
   .earnings-result-row {
     grid-template-columns: minmax(0,1fr) auto 74px !important;
@@ -223,7 +180,7 @@
     min-height: 36px;
   }
 
-  /* 素材库：分段标签不允许压成竖排，股票表在小屏保留核心列。 */
+  /* 素材库：分段标签不允许压成竖排，股票表保留完整列。 */
   .asset-library-card { gap: 16px; padding: 14px; }
   .asset-library-tabs {
     width: 100%;
@@ -248,17 +205,7 @@
     margin-left: 0;
     margin-top: 6px;
   }
-  .asset-library-stock-row {
-    grid-template-columns: 32px minmax(124px,1fr) 74px 74px !important;
-    min-width: 0;
-    gap: 6px;
-    padding-inline: 10px;
-  }
-  .asset-library-stock-row > :nth-child(3),
-  .asset-library-stock-row > :nth-child(6) { display: none; }
-  .asset-library-stock-row > :nth-child(2) { min-width: 0; }
-  .asset-library-stock-row > :nth-child(4),
-  .asset-library-stock-row > :nth-child(5) { white-space: nowrap; }
+  .asset-library-stock-row { min-width: 680px; }
 
   .quick-trade-window { max-width: calc(100vw - 16px) !important; border-radius: 14px; }
   .quick-trade-titlebar { min-height: 48px; }

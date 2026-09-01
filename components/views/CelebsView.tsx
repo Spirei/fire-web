@@ -1561,6 +1561,7 @@ export default function CelebsView({
               )}
             </div>
           </div>
+          <div className="data-table-scroll">
           <div className="celeb-holdings-row grid items-center gap-2 border-b border-edge bg-bg-gray/60 px-5 py-2 text-[11px] font-semibold text-muted dark:bg-white/5" style={colGridStyle}>
             {visibleCols.map((c) => (
               <span key={c.key} className={c.key === "code" ? "" : "text-right"}>{c.label}</span>
@@ -1627,6 +1628,7 @@ export default function CelebsView({
               </div>
             );
           })}
+          </div>
         </div>
 
         <ReturnAnalysis celeb={active} />
