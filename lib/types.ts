@@ -186,6 +186,15 @@ export interface Activity {
   createdAt: string;
 }
 
+export interface SystemLog {
+  id: string;
+  event: string;
+  detail: string;
+  ip: string;
+  createdAt: string;
+  userName: string;
+}
+
 export interface TabConfig {
   key: string;
   label: string;

@@ -3,10 +3,12 @@
 import { useMemo, useState } from "react";
 
 import { fmtDateTime } from "@/lib/format";
-import { marketMeta, type Activity } from "@/lib/types";
+import { marketMeta, type Activity, type SystemLog } from "@/lib/types";
 
 interface Props {
   activities: Activity[];
+  systemLogs?: SystemLog[];
+  isAdmin?: boolean;
 }
 
 const ACTION_META: Record<Activity["action"], { label: string; cls: string }> = {
@@ -15,13 +17,14 @@ const ACTION_META: Record<Activity["action"], { label: string; cls: string }> = 
   deleted: { label: "删除", cls: "bg-up-bg text-up" }
 };
 
-export default function ActivitiesView({ activities }: Props) {
+export default function ActivitiesView({ activities, systemLogs = [], isAdmin = false }: Props) {
+  const [scope, setScope] = useState<"user" | "system">("user");
   const [filter, setFilter] = useState<Activity["action"] | "all">("all");
   const filteredActivities = useMemo(
     () => filter === "all" ? activities : activities.filter((activity) => activity.action === filter),
     [activities, filter]
   );
-  if (activities.length === 0) {
+  if (scope === "user" && activities.length === 0) {
     return (
       <div className="card py-20 text-center text-sm text-faint shadow-card">
         暂无日志，添加、修改或删除股票后会记录在这里。
@@ -31,6 +34,12 @@ export default function ActivitiesView({ activities }: Props) {
 
   return (
     <div className="card overflow-hidden">
+      <div className="flex items-center gap-1 border-b border-edge px-4 pt-3">
+        {(["user", "system"] as const).map((key) => <button key={key} type="button" onClick={() => setScope(key)} className={`border-b-2 px-3 pb-3 text-sm font-semibold ${scope === key ? "border-brand text-brand-deep" : "border-transparent text-muted"}`}>{key === "user" ? `用户日志 ${activities.length}` : `系统日志 ${systemLogs.length}`}</button>)}
+      </div>
+      {scope === "system" && !isAdmin && <div className="p-8 text-center text-sm text-faint">系统日志仅管理员可见</div>}
+      {scope === "system" && isAdmin && <div className="data-table-scroll"><table className="w-full min-w-[700px] text-sm"><thead><tr className="bg-bg-gray text-xs font-semibold text-muted"><th className="px-4 py-3 text-left">级别</th><th className="px-4 py-3 text-left">模块 / 事件</th><th className="px-4 py-3 text-left">详情</th><th className="px-4 py-3 text-left">用户 / IP</th><th className="px-4 py-3 text-left">时间</th></tr></thead><tbody>{systemLogs.map((log) => <tr key={log.id} className="border-t border-edge"><td className="px-4 py-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">审计</span></td><td className="px-4 py-3 font-semibold">{log.event}</td><td className="max-w-[320px] truncate px-4 py-3 text-xs text-muted" title={log.detail}>{log.detail || "—"}</td><td className="px-4 py-3 text-xs text-muted">{log.userName}<br />{log.ip || "—"}</td><td className="whitespace-nowrap px-4 py-3 text-xs text-muted">{fmtDateTime(log.createdAt)}</td></tr>)}</tbody></table>{systemLogs.length === 0 && <div className="py-12 text-center text-sm text-faint">暂无系统日志</div>}</div>}
+      {scope === "system" ? null : <>
       <div className="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-3">
         <span className="mr-1 text-xs font-semibold text-muted">操作分类</span>
         {(["all", "created", "updated", "deleted"] as const).map((key) => {
@@ -96,6 +105,7 @@ export default function ActivitiesView({ activities }: Props) {
         </table>
       </div>
       {filteredActivities.length === 0 && <div className="py-12 text-center text-sm text-faint">该分类暂无日志</div>}
+      </>}
     </div>
   );
 }

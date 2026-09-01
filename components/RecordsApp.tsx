@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import {
   MARKET_LIST,
   marketMeta,
-  type Activity,
+  type Activity, type SystemLog,
   type GroupConfig,
   type Market,
   type MarketOption,
@@ -131,6 +131,7 @@ export default function RecordsApp({
   const quoteCacheKeyRef = useRef("");
   const mobileNavRef = useRef<HTMLDivElement>(null);
   const [activities, setActivities] = useState<Activity[]>(initialActivities);
+  const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
   const [navReady, setNavReady] = useState(true);
@@ -187,6 +188,7 @@ export default function RecordsApp({
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.activities) setActivities(data.activities);
+        if (data?.systemLogs) setSystemLogs(data.systemLogs);
       })
       .catch(() => {});
   }, []);
@@ -777,7 +779,7 @@ export default function RecordsApp({
             />
           )}
           {activeTab === "pnl" && <AssetPnlAnalysisView onBack={() => selectTab("assets")} />}
-          {activeTab === "activities" && <ActivitiesView activities={activities} />}
+          {activeTab === "activities" && <ActivitiesView activities={activities} systemLogs={systemLogs} isAdmin={user?.role === "admin"} />}
           {activeTab === "global" && <GlobalPreviewView />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} />}
