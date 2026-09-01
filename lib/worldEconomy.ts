@@ -61,7 +61,10 @@ export async function getWorldEconomyData(indicator: WorldEconomyIndicator, year
   const latest = new Map<string, WorldEconomyCountry>();
   for (const row of valueJson?.[1] ?? []) {
     const code = row.countryiso3code;
-    if (!countries.has(code) || row.value == null || !Number.isFinite(Number(row.value)) || latest.has(code)) continue;
+    if (!countries.has(code) || row.value == null || !Number.isFinite(Number(row.value))) continue;
+    const rowYear = Number(row.date);
+    const previous = latest.get(code);
+    if (previous && previous.year >= rowYear) continue;
     const country = countries.get(code);
     const name = country?.name ?? row.country.value;
     latest.set(code, {
@@ -69,7 +72,7 @@ export async function getWorldEconomyData(indicator: WorldEconomyIndicator, year
       name: countryDisplayName(country?.iso2 ?? "", name),
       mapName: NAME_ALIASES[name] ?? name,
       value: Number(row.value),
-      year: Number(row.date),
+      year: rowYear,
       flag: countryFlagEmoji(country?.iso2 ?? ""),
       flagCode: (country?.iso2 ?? "").toLowerCase()
     });
