@@ -2312,6 +2312,15 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .dark .mobile-quotes-table thead tr { background-color: #10141d; }
 .mobile-quotes-table thead .quotes-actions-cell { background-color: #f7f8fa; }
 .dark .mobile-quotes-table thead .quotes-actions-cell { background-color: #10141d; }
+@media (max-width: 640px) {
+  .mobile-quotes-table .quotes-rank-cell { display:none; }
+  .mobile-quotes-table .quotes-identity-cell { position:sticky; z-index:2; left:0; width:176px; min-width:176px; max-width:176px; background:#fff; box-shadow:8px 0 14px rgba(10,14,25,.055); }
+  .mobile-quotes-table thead .quotes-identity-cell { z-index:3; background:#f7f8fa; }
+  .mobile-quotes-table tbody tr:hover .quotes-identity-cell { background:#fafbfc; }
+  .dark .mobile-quotes-table .quotes-identity-cell { background:#151a26; box-shadow:8px 0 16px rgba(7,11,18,.24); }
+  .dark .mobile-quotes-table thead .quotes-identity-cell { background:#10141d; }
+  .dark .mobile-quotes-table tbody tr:hover .quotes-identity-cell { background:#1a212e; }
+}
 .dark tbody tr:hover .quotes-actions-cell { background: #1a212e; }
 .dark .quotes-actions-cell.is-selected { background: #172233; }
 .quotes-row.is-selected,

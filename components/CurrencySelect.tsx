@@ -26,7 +26,7 @@ export default function CurrencySelect({ value, onChange, allowedCodes, align = 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className={`fixed bottom-4 left-4 right-4 z-50 max-h-[min(320px,calc(100vh-96px))] overflow-x-hidden overflow-y-auto rounded-xl border border-edge-strong bg-white p-1.5 shadow-pop dark:border-[#2a3140] dark:bg-[#1b2029] sm:absolute sm:bottom-auto sm:left-auto sm:right-auto sm:top-full sm:mt-2 sm:w-[160px] ${align === "left" ? "sm:left-0" : "sm:right-0"}`}>
+          <div className={`absolute left-0 top-full z-50 mt-2 max-h-[min(320px,calc(100vh-96px))] w-[160px] max-w-[calc(100vw-32px)] overflow-x-hidden overflow-y-auto rounded-xl border border-edge-strong bg-white p-1.5 shadow-pop dark:border-[#2a3140] dark:bg-[#1b2029] sm:left-auto ${align === "left" ? "sm:left-0" : "sm:right-0"}`}>
             {options.map((option) => (
               <button
                 key={option.code}

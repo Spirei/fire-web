@@ -316,13 +316,16 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
         <p className="rounded-[14px] border border-dashed border-edge-strong py-12 text-center text-sm text-faint">{err}</p>
       ) : (
         <div className="overflow-hidden rounded-card border border-edge bg-white shadow-card">
-          <div className="overflow-x-auto">
-            <table className="mobile-global-table w-full min-w-[780px] text-sm">
+          <div className="overscroll-x-contain overflow-x-auto">
+            <table className="mobile-global-table w-full min-w-[800px] table-fixed text-sm">
+              <colgroup>
+                <col className="w-[54px]" /><col className="w-[184px]" /><col className="w-[112px]" /><col className="w-[104px]" /><col className="w-[116px]" /><col className="w-[158px]" /><col className="w-[72px]" />
+              </colgroup>
               <thead>
                 <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-muted">
-                  <th className="px-4 py-3 text-center">排名</th>
-                  <th className="px-4 py-3 text-left">资产</th>
-                  <th className="px-4 py-3 text-center">价格</th>
+                  <th className="px-3 py-3 text-center">排名</th>
+                  <th className="px-3 py-3 text-left">资产</th>
+                  <th className="px-3 py-3 text-right">现价</th>
                   <th className="min-w-[96px] px-5 py-3 text-center">涨跌幅</th>
                   <th className="px-4 py-3 text-center">月K</th>
                   <th className="min-w-[128px] px-5 py-3 text-center">市值</th>
@@ -337,21 +340,21 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
                   const rankSize = rankNo === 1 ? "text-[18px] font-bold" : rankNo === 2 ? "text-[15px] font-bold" : rankNo === 3 ? "text-[12px] font-semibold" : "text-[12px] font-semibold";
                   return (
                     <tr key={`${it.market}-${it.code}`} className="whitespace-nowrap border-t border-edge transition-colors hover:bg-[#fafbfc] dark:hover:bg-[#1a212e]">
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-3 text-center">
                         <span className={`inline-block w-[28px] text-center tabular-nums leading-none ${rankSize}`} style={{ color: rankColor }}>
                           {rankNo}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-left">
-                        <div className="flex items-center justify-start gap-3">
+                      <td className="px-3 py-3 text-left">
+                        <div className="flex items-center justify-start gap-2.5">
                           <AssetLogo item={it} custom={customLogo(it)} />
-                          <span className="min-w-0 max-w-[190px]">
+                          <span className="min-w-0 max-w-[126px]">
                             <span className="block truncate font-semibold text-ink">{zhName(it)}</span>
                             <span className="block text-[11px] text-faint">{it.code}</span>
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-center tabular-nums text-ink-2">{it.price != null ? fmtPrice(it.price, rate, symbol, currency) : "—"}</td>
+                      <td className="px-3 py-3 text-right font-medium tabular-nums text-ink-2">{it.price != null ? fmtPrice(it.price, rate, symbol, currency) : "—"}</td>
                       <td className={`px-4 py-3 text-center tabular-nums ${it.changePct == null ? "text-faint" : up ? "text-up" : "text-down"}`}>
                         {it.changePct == null ? "—" : `${up ? "+" : ""}${fmtPct(it.changePct / 100)}`}
                       </td>
