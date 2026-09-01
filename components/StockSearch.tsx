@@ -155,11 +155,11 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
                   onClick={() => choose(m)}
                   className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
                 >
-                  <span className="min-w-0">
-                    <span className="block truncate font-semibold">{m.name}</span>
-                    <span className="mt-1 flex items-center gap-1.5 text-xs text-muted">
-                      <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: getMarketBadge(m.market, m.code).bg, color: getMarketBadge(m.market, m.code).fg }}>{m.type === "crypto" ? "加密" : marketMeta(m.market).label}</span>
-                      <span>{m.code}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block max-w-[min(46vw,260px)] truncate font-semibold">{m.name}</span>
+                    <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted">
+                      <span className="inline-flex h-[18px] min-w-[30px] flex-none items-center justify-center rounded-[4px] px-1 text-[10px] font-bold leading-none" style={{ background: getMarketBadge(m.market, m.code).bg, color: getMarketBadge(m.market, m.code).fg }}>{m.type === "crypto" ? "加密" : marketMeta(m.market).label}</span>
+                      <span className="min-w-0 truncate">{m.code}</span>
                     </span>
                   </span>
                   <span className="flex flex-col items-end">
