@@ -8,6 +8,6 @@ export function getMarketBadge(market: string, code: string): { label: string; b
     const isSH = first === "6" || first === "9";
     return { label: isSH ? "SH" : "SZ", bg: "#e0919f", fg: "#4a2430" };
   }
-  if (m === "ASSET" || m === "CRYPTO") return { label: "币", bg: "#f59e0b", fg: "#111827" };
+  if (m === "ASSET" || m === "CRYPTO") return { label: "币", bg: "#d97706", fg: "#ffffff" };
   return { label: m || "US", bg: "#6b7280", fg: "#ffffff" };
 }
