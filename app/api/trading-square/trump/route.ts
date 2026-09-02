@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSiteSettings } from "@/lib/settings";
-import fs from "node:fs";
 import path from "node:path";
+import { readJsonFile, writeJsonAtomic } from "@/lib/tradingSquareCache";
 
 const SOURCE = "https://trumpstruth.org/";
 const CACHE_FILE = path.join(process.cwd(), "data", "trump-translations.json");
 const POSTS_CACHE_FILE = path.join(process.cwd(), "data", "trump-posts.json");
-function readTranslations(): Record<string, string> { try { return JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")); } catch { return {}; } }
-function writeTranslations(cache: Record<string, string>) { try { fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true }); fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2)); } catch { /* read-only deployments still work without persistence */ } }
+function readTranslations(): Record<string, string> { return readJsonFile<Record<string, string>>(CACHE_FILE, {}) }
+function writeTranslations(cache: Record<string, string>) { try { writeJsonAtomic(CACHE_FILE, cache) } catch { /* read-only deployments still work without persistence */ } }
 function validTranslation(value?: string) { return !!value && !/MYMEMORY WARNING|USED ALL AVAILABLE FREE TRANSLATIONS|QUOTA|RATE LIMIT/i.test(value); }
 function readPostsCache(): Array<{ id: string; date: string; text: string; originalUrl: string; archiveUrl: string }> {
-  try { return JSON.parse(fs.readFileSync(POSTS_CACHE_FILE, "utf8")); } catch { /* cache miss */ }
-  return [];
+  return readJsonFile(POSTS_CACHE_FILE, []);
 }
 
 let feedCache: { posts: Array<Record<string, unknown>>; fetchedAt: number } | null = null;
@@ -57,7 +56,7 @@ export async function GET(request: NextRequest) {
     }).filter((post) => post.text && post.date);
     // Keep every post in the requested 30-day window; pagination is handled by the client.
     const recent = Array.from(new Map(posts.filter((post) => Date.parse(post.date) >= cutoff).map((post) => [post.id, post])).values());
-    try { fs.mkdirSync(path.dirname(POSTS_CACHE_FILE), { recursive: true }); fs.writeFileSync(POSTS_CACHE_FILE, JSON.stringify(recent)); } catch { /* read-only deployments */ }
+    try { writeJsonAtomic(POSTS_CACHE_FILE, recent) } catch { /* read-only deployments */ }
     const translations = readTranslations();
     const localized = await Promise.all(recent.map(async (post, index) => {
       if (validTranslation(translations[post.id])) return { ...post, textZh: translations[post.id] };

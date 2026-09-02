@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "node:fs";
 import path from "node:path";
+import { readJsonFile, writeJsonAtomic } from "@/lib/tradingSquareCache";
 
 const USER_ID = "1247347556";
 const CACHE_FILE = path.join(process.cwd(), "data", "duan-posts.json");
@@ -8,7 +8,7 @@ type Category = "hot" | "original" | "longform";
 type DuanPost = { id: string; date: string; text: string; originalUrl: string; categories: Category[]; replies?: number; likes?: number };
 
 function clean(value = "") { return value.replace(/<br\s*\/?\s*>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim(); }
-function cached(): DuanPost[] { try { return JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")); } catch { return []; } }
+function cached(): DuanPost[] { return readJsonFile<DuanPost[]>(CACHE_FILE, []) }
 function categories(text: string, likes = 0, replies = 0): Category[] {
   const values: Category[] = [];
   if (likes >= 500 || replies >= 100) values.push("hot");
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       live.forEach(item => { const saved = merged.get(item.id); merged.set(item.id, { ...saved, ...item, categories: Array.from(new Set([...(saved?.categories || []), ...item.categories])) }) });
       posts = Array.from(merged.values()).sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
       refreshed = true;
-      try { fs.writeFileSync(CACHE_FILE, JSON.stringify(posts, null, 2)); } catch { /* read-only deployment */ }
+      try { writeJsonAtomic(CACHE_FILE, posts) } catch { /* read-only deployment */ }
     }
   } catch { /* serve last known public posts */ }
   return NextResponse.json({ posts, user: { id: USER_ID, handle: "slowisquick", name: "大道无形我有型" }, source: refreshed ? "live" : "cache" });

@@ -20,21 +20,18 @@ export default function TradingSquareView() {
   const [posts, setPosts] = useState<Post[]>([]), [loading, setLoading] = useState(true), [selected, setSelected] = useState<"all" | AuthorId>("all"), [duanCategory, setDuanCategory] = useState<"all" | DuanCategory>("all"), [page, setPage] = useState(1), [original, setOriginal] = useState<Record<string, boolean>>({});
   const size = 10;
   useEffect(() => {
-    let active = true, settled = 0;
-    const load = async (author: AuthorId, url: string) => {
+    let active = true;
+    const load = async () => {
       try {
-        const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(2500) });
+        const response = await fetch("/api/trading-square/feed", { signal: AbortSignal.timeout(1500) });
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json();
         if (!active) return;
-        const incoming: Post[] = (data.posts ?? []).map((post: Omit<Post, "author">) => ({ ...post, author }));
-        setPosts(current => [...current.filter(post => post.author !== author), ...incoming].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)));
-        if (incoming.length) setLoading(false);
+        setPosts(data.posts ?? []);
       } catch { /* another source or the existing local cache can still render */ }
-      finally { settled += 1; if (active && settled === 2) setLoading(false) }
+      finally { if (active) setLoading(false) }
     };
-    void load("duan", "/api/trading-square/duan");
-    void load("trump", "/api/trading-square/trump");
+    void load();
     return () => { active = false };
   }, []);
   const visible = useMemo(() => posts.filter(post => { if (selected !== "all" && post.author !== selected) return false; if (selected === "duan" && duanCategory !== "all") return post.categories?.includes(duanCategory) === true; return true }), [duanCategory, posts, selected]);
