@@ -56,7 +56,7 @@ export async function GET() {
       return { id: archiveUrl.split("/").pop() || String(index), date, text: content, originalUrl, archiveUrl: archiveUrl.startsWith("http") ? archiveUrl : `https://trumpstruth.org/statuses/${archiveUrl}` };
     }).filter((post) => post.text && post.date);
     // Keep every post in the requested 30-day window; pagination is handled by the client.
-    const recent = posts.filter((post) => Date.parse(post.date) >= cutoff);
+    const recent = Array.from(new Map(posts.filter((post) => Date.parse(post.date) >= cutoff).map((post) => [post.id, post])).values());
     try { fs.mkdirSync(path.dirname(POSTS_CACHE_FILE), { recursive: true }); fs.writeFileSync(POSTS_CACHE_FILE, JSON.stringify(recent)); } catch { /* read-only deployments */ }
     const translations = readTranslations();
     const localized = await Promise.all(recent.map(async (post, index) => {
