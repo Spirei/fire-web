@@ -2,17 +2,98 @@ import path from "node:path";
 import { getSiteSettings } from "@/lib/settings";
 import { readJsonFile, writeJsonAtomic } from "@/lib/tradingSquareCache";
 import { backfillTrumpTranslations } from "@/lib/tradingSquareTranslate";
+import { proxyFetch } from "@/lib/net";
 
 const DATA = path.join(process.cwd(), "data");
 const TRUMP_FILE = path.join(DATA, "trump-posts.json");
 const DUAN_FILE = path.join(DATA, "duan-posts.json");
 const TRUMP_SOURCE = "https://trumpstruth.org/";
 const DUAN_USER = "1247347556";
-const WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const TRUMP_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const DUAN_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
 export type TrumpPost = { id: string; date: string; text: string; originalUrl: string; archiveUrl: string };
 type DuanCategory = "hot" | "original" | "longform";
-export type DuanPost = { id: string; date: string; text: string; originalUrl: string; categories: DuanCategory[]; replies?: number; likes?: number };
+export type Quote = { name: string; text: string; url?: string };
+export type DuanPost = { id: string; date: string; text: string; originalUrl: string; categories: DuanCategory[]; replies?: number; likes?: number; quote?: Quote };
+
+type XueqiuStatus = {
+  id?: number | string;
+  created_at?: number | string;
+  text?: string;
+  description?: string;
+  title?: string;
+  like_count?: number;
+  reply_count?: number;
+  comments_count?: number;
+  target?: string;
+  user?: { id?: number | string; screen_name?: string; name?: string };
+  retweeted_status?: XueqiuStatus;
+  retweet_status?: XueqiuStatus;
+  reply_comment?: XueqiuStatus;
+  reply_status?: XueqiuStatus;
+  quoted_status?: XueqiuStatus;
+  comment?: XueqiuStatus;
+};
+
+let xueqiuCookie = "";
+
+function mergeSetCookie(existing: string, setCookies: string[]): string {
+  const map = new Map<string, string>();
+  for (const part of existing.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (name && rest.length) map.set(name, rest.join("="));
+  }
+  for (const raw of setCookies) {
+    const pair = raw.split(";")[0] ?? "";
+    const eq = pair.indexOf("=");
+    if (eq > 0) map.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+  }
+  return [...map.entries()].map(([name, value]) => `${name}=${value}`).join("; ");
+}
+
+async function xueqiuFetch(pathAndQuery: string): Promise<unknown | null> {
+  const headers: Record<string, string> = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    Referer: "https://xueqiu.com/u/slowisquick",
+    Accept: "application/json"
+  };
+  if (xueqiuCookie) headers.Cookie = xueqiuCookie;
+  const urls = [`https://xueqiu.com${pathAndQuery}`, `https://api.xueqiu.com${pathAndQuery}`];
+  for (const url of urls) {
+    try {
+      const response = await proxyFetch(url, { headers, signal: AbortSignal.timeout(4000), cache: "no-store" });
+      const setCookies = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
+      if (setCookies.length) {
+        xueqiuCookie = mergeSetCookie(xueqiuCookie, setCookies);
+        headers.Cookie = xueqiuCookie;
+      }
+      const contentType = response.headers.get("content-type") || "";
+      if (!response.ok || !contentType.includes("json")) continue;
+      const json = await response.json() as { error_code?: unknown };
+      if (json && typeof json === "object" && json.error_code) continue;
+      return json;
+    } catch {
+      /* try next host */
+    }
+  }
+  return null;
+}
+
+async function warmXueqiuSession() {
+  if (xueqiuCookie) return;
+  try {
+    const response = await proxyFetch("https://xueqiu.com/u/slowisquick", {
+      headers: { "User-Agent": "Mozilla/5.0", Accept: "text/html" },
+      signal: AbortSignal.timeout(4000),
+      cache: "no-store"
+    });
+    const setCookies = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
+    if (setCookies.length) xueqiuCookie = mergeSetCookie(xueqiuCookie, setCookies);
+  } catch {
+    /* continue without pre-warmed cookies */
+  }
+}
 
 let trumpRunning = false;
 let duanRunning = false;
@@ -71,7 +152,7 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
   trumpRunning = true;
   const existing = readTrumpPosts();
   const known = new Set(existing.map((post) => post.id));
-  const cutoff = Date.now() - WINDOW_MS;
+  const cutoff = Date.now() - TRUMP_WINDOW_MS;
   const settings = getSiteSettings();
   const source = settings.trumpArchiveApiUrl || TRUMP_SOURCE;
   const incoming: TrumpPost[] = [];
@@ -126,56 +207,102 @@ function duanCategories(text: string, likes = 0, replies = 0): DuanCategory[] {
   return values;
 }
 
+function asQuote(value: unknown): Quote | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const item = value as XueqiuStatus;
+  const user = item.user && typeof item.user === "object" ? item.user : {};
+  const name = String(user.screen_name || user.name || "").trim();
+  const text = clean(String(item.text || item.description || item.title || ""));
+  if (!text) return undefined;
+  const id = item.id != null ? String(item.id) : "";
+  const uid = user.id != null ? String(user.id) : "";
+  return { name: name || "原动态", text, url: id && uid ? `https://xueqiu.com/${uid}/${id}` : undefined };
+}
+
+function extractQuote(item: XueqiuStatus): Quote | undefined {
+  return asQuote(item.reply_comment) || asQuote(item.reply_status) || asQuote(item.comment) || asQuote(item.retweeted_status) || asQuote(item.retweet_status) || asQuote(item.quoted_status);
+}
+
+function mapDuanStatus(item: XueqiuStatus): DuanPost | null {
+  const text = clean(item.text || item.description || item.title || "");
+  const id = String(item.id || "");
+  if (!id || !text) return null;
+  const likes = Number(item.like_count || 0);
+  const replies = Number(item.reply_count || item.comments_count || 0);
+  const quote = extractQuote(item);
+  return {
+    id,
+    date: typeof item.created_at === "number" ? new Date(item.created_at).toISOString() : new Date(item.created_at || Date.now()).toISOString(),
+    text,
+    originalUrl: `https://xueqiu.com/${DUAN_USER}/${item.id}`,
+    categories: duanCategories(text, likes, replies),
+    likes,
+    replies,
+    ...(quote && quote.text !== text ? { quote } : {})
+  };
+}
+
+async function fillMissingQuotes(posts: DuanPost[]): Promise<DuanPost[]> {
+  const missing = posts.filter((post) => !post.quote && /^\s*回复@/.test(post.text)).slice(0, 40);
+  if (!missing.length) return posts;
+  const quotes = new Map<string, Quote>();
+  for (let index = 0; index < missing.length; index += 3) {
+    const batch = missing.slice(index, index + 3);
+    await Promise.all(batch.map(async (post) => {
+      const detail = await xueqiuFetch(`/statuses/show.json?id=${encodeURIComponent(post.id)}`) as XueqiuStatus | null;
+      const quote = detail ? extractQuote(detail) : undefined;
+      if (quote && quote.text !== post.text) quotes.set(post.id, quote);
+    }));
+  }
+  if (!quotes.size) return posts;
+  return posts.map((post) => quotes.has(post.id) ? { ...post, quote: quotes.get(post.id) } : post);
+}
+
 export async function refreshDuanPosts(): Promise<DuanPost[]> {
   if (duanRunning) return readDuanPosts();
   duanRunning = true;
   const existing = readDuanPosts();
   const known = new Set(existing.map((post) => post.id));
-  const cutoff = Date.now() - WINDOW_MS;
+  const cutoff = Date.now() - DUAN_WINDOW_MS;
+  const oldest = existing.reduce((min, post) => {
+    const time = postTimestamp(post.date);
+    return time && time < min ? time : min;
+  }, Date.now());
+  const needsWindowBackfill = !existing.length || oldest > cutoff + 3 * 24 * 60 * 60 * 1000;
+  const needsQuoteBackfill = existing.some((post) => !post.quote && /^\s*回复@/.test(post.text));
   const live: DuanPost[] = [];
-  const maxPages = existing.length ? 2 : 8;
+  const maxPages = needsWindowBackfill || needsQuoteBackfill ? 18 : 4;
   try {
+    await warmXueqiuSession();
     for (let page = 1; page <= maxPages; page += 1) {
-      const response = await fetch(
-        `https://xueqiu.com/v4/statuses/user_timeline.json?user_id=${DUAN_USER}&page=${page}&count=20&type=0`,
-        {
-          headers: { "User-Agent": "Mozilla/5.0", Referer: "https://xueqiu.com/u/slowisquick", Accept: "application/json" },
-          signal: AbortSignal.timeout(3000),
-          cache: "no-store"
-        }
-      );
-      const contentType = response.headers.get("content-type") || "";
-      if (!response.ok || !contentType.includes("json")) break;
-      const data = await response.json() as {
-        statuses?: Array<{ id?: number | string; created_at?: number | string; text?: string; description?: string; title?: string; like_count?: number; reply_count?: number; comments_count?: number }>;
-      };
-      const batch = (data.statuses || []).map((item) => {
-        const text = clean(item.text || item.description || item.title || "");
-        const likes = Number(item.like_count || 0);
-        const replies = Number(item.reply_count || item.comments_count || 0);
-        return {
-          id: String(item.id || ""),
-          date: typeof item.created_at === "number" ? new Date(item.created_at).toISOString() : new Date(item.created_at || Date.now()).toISOString(),
-          text,
-          originalUrl: `https://xueqiu.com/${DUAN_USER}/${item.id}`,
-          categories: duanCategories(text, likes, replies),
-          likes,
-          replies
-        };
-      }).filter((item) => item.id && item.text);
+      const data = await xueqiuFetch(`/v4/statuses/user_timeline.json?user_id=${DUAN_USER}&page=${page}&count=20&type=0`) as { statuses?: XueqiuStatus[] } | null;
+      if (!data) break;
+      const batch = (data.statuses || []).map(mapDuanStatus).filter((item): item is DuanPost => item !== null);
       let overlap = 0;
+      let reachedCutoff = false;
       for (const item of batch) {
-        if (postTimestamp(item.date) < cutoff) continue;
+        if (postTimestamp(item.date) < cutoff) {
+          reachedCutoff = true;
+          continue;
+        }
         if (known.has(item.id)) overlap += 1;
+        else known.add(item.id);
         live.push(item);
       }
-      if (!batch.length || batch.some((item) => postTimestamp(item.date) < cutoff) || (existing.length > 0 && overlap >= 3)) break;
+      if (!batch.length || reachedCutoff) break;
+      if (!needsWindowBackfill && !needsQuoteBackfill && overlap >= 3) break;
     }
-    if (!live.length) return existing;
+    const quoted = await fillMissingQuotes(live);
+    if (!quoted.length) return existing.filter((item) => postTimestamp(item.date) >= cutoff);
     const merged = new Map(existing.filter((item) => postTimestamp(item.date) >= cutoff).map((item) => [item.id, item]));
-    live.forEach((item) => {
+    quoted.forEach((item) => {
       const saved = merged.get(item.id);
-      merged.set(item.id, { ...saved, ...item, categories: Array.from(new Set([...(saved?.categories || []), ...item.categories])) });
+      merged.set(item.id, {
+        ...saved,
+        ...item,
+        quote: item.quote || saved?.quote,
+        categories: Array.from(new Set([...(saved?.categories || []), ...item.categories]))
+      });
     });
     const posts = Array.from(merged.values()).sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date));
     try { writeJsonAtomic(DUAN_FILE, posts); } catch { /* read-only deployment */ }

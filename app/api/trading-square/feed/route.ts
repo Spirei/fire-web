@@ -6,7 +6,7 @@ import { getSiteSettings } from "@/lib/settings";
 import { backfillTrumpTranslations } from "@/lib/tradingSquareTranslate";
 import { isDuanRefreshing, isTrumpRefreshing, postTimestamp, readTrumpPosts, refreshDuanPosts, refreshTrumpPosts } from "@/lib/tradingSquareRefresh";
 
-type CachedPost = { id: string; date: string; text: string; textZh?: string; originalUrl: string; categories?: string[] };
+type CachedPost = { id: string; date: string; text: string; textZh?: string; originalUrl: string; categories?: string[]; quote?: { name: string; text: string; url?: string } };
 type FeedPost = CachedPost & { author: "trump" | "duan" };
 const DATA = path.join(process.cwd(), "data");
 const TRUMP = path.join(DATA, "trump-posts.json");

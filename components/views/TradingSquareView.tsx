@@ -8,7 +8,8 @@ import SafeAssetImage from "@/components/SafeAssetImage";
 
 type AuthorId = "trump" | "duan";
 type DuanCategory = "hot" | "original" | "longform";
-type Post = { id: string; author: AuthorId; date: string; text: string; textZh?: string; originalUrl: string; categories?: DuanCategory[] };
+type Quote = { name: string; text: string; url?: string };
+type Post = { id: string; author: AuthorId; date: string; text: string; textZh?: string; originalUrl: string; categories?: DuanCategory[]; quote?: Quote };
 
 const PEOPLE = [
   { id: "trump" as const, name: "特朗普", handle: "@realDonaldTrump", platform: "Truth Social", avatar: "/uploads/celebs/trump-custom-1786043526485-1e34c87e.png" },
@@ -283,8 +284,8 @@ export default function TradingSquareView({ avatars }: { avatars?: Record<string
             </div>
           ) : visible.length === 0 ? (
             <div className="px-6 py-16 text-center">
-              <p className="text-sm font-medium text-ink dark:text-white">{refreshing ? "正在拉取近 30 天动态" : "这个分类暂时没有动态"}</p>
-              <p className="mt-1 text-xs text-muted">{refreshing ? "页面会自动显示新内容，无需手动刷新" : "切换其他分类查看近 30 天内容"}</p>
+              <p className="text-sm font-medium text-ink dark:text-white">{refreshing ? "正在拉取近期动态" : "这个分类暂时没有动态"}</p>
+              <p className="mt-1 text-xs text-muted">{refreshing ? "页面会自动显示新内容，无需手动刷新" : "切换其他分类查看近期内容"}</p>
             </div>
           ) : visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE).map((post) => {
             const showOriginal = original[post.id] === true;
@@ -302,6 +303,15 @@ export default function TradingSquareView({ avatars }: { avatars?: Record<string
                       <time className="text-muted" dateTime={post.date}>{formatPostTime(post.date)}</time>
                     </div>
                     <p className="mt-2 whitespace-pre-line break-words text-[15px] leading-7 text-ink dark:text-slate-200">{showOriginal ? post.text : (post.textZh ?? post.text)}</p>
+                    {post.quote && (
+                      <div className="mt-3 rounded-xl border border-edge bg-bg-gray/60 px-3 py-2.5 dark:border-white/10 dark:bg-white/[.04]">
+                        <p className="text-xs font-semibold text-muted">{post.quote.name}</p>
+                        <p className="mt-1 whitespace-pre-line break-words text-[13px] leading-6 text-ink-2 dark:text-slate-300">{post.quote.text}</p>
+                        {post.quote.url && (
+                          <a href={post.quote.url} target="_blank" rel="noreferrer" className="mt-1.5 inline-block text-[11px] font-semibold text-brand-deep">查看原动态 ↗</a>
+                        )}
+                      </div>
+                    )}
                     <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted">
                       <a href={post.originalUrl} target="_blank" rel="noreferrer" className="font-semibold text-brand-deep">查看原文 ↗</a>
                       {post.textZh && (
