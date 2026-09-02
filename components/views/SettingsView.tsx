@@ -1564,6 +1564,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     window.dispatchEvent(new CustomEvent("fire:navigate", { detail: { tab: "settings", sub: key } }));
   }
 
+  function syncSettingsUrl(nextSub: SubKey, anchor: string) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("sub", nextSub);
+    url.searchParams.set("anchor", anchor);
+    window.history.replaceState({}, "", url.toString());
+  }
+
   /* ---------- ⌘K 命令搜索 ---------- */
   const cmdRef = useRef<HTMLInputElement | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -1612,6 +1619,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     setCmdOpen(false);
     changeSub(item.sub);
     setActiveAnchor(item.anchor);
+    syncSettingsUrl(item.sub, item.anchor);
     setTimeout(() => {
       const container = contentScrollRef.current;
       const el = document.getElementById(item.anchor);
