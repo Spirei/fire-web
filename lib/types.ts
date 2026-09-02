@@ -258,6 +258,10 @@ export interface SiteSettings {
   deepseekApiUrl: string;
   deepseekModel: string;
   deepseekApiKey: string;
+  llmProvider: string;
+  llmApiUrl: string;
+  llmModel: string;
+  llmApiKey: string;
   dbType: "sqlite" | "postgres";
   pgHost: string;
   pgPort: string;
