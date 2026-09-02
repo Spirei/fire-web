@@ -5,9 +5,14 @@ import path from "node:path";
 
 const SOURCE = "https://trumpstruth.org/";
 const CACHE_FILE = path.join(process.cwd(), "data", "trump-translations.json");
+const POSTS_CACHE_FILE = path.join(process.cwd(), "data", "trump-posts.json");
 function readTranslations(): Record<string, string> { try { return JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")); } catch { return {}; } }
 function writeTranslations(cache: Record<string, string>) { try { fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true }); fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2)); } catch { /* read-only deployments still work without persistence */ } }
 function validTranslation(value?: string) { return !!value && !/MYMEMORY WARNING|USED ALL AVAILABLE FREE TRANSLATIONS|QUOTA|RATE LIMIT/i.test(value); }
+function readPostsCache(): Array<{ id: string; date: string; text: string; originalUrl: string; archiveUrl: string }> {
+  try { const stat = fs.statSync(POSTS_CACHE_FILE); if (Date.now() - stat.mtimeMs < 5 * 60_000) return JSON.parse(fs.readFileSync(POSTS_CACHE_FILE, "utf8")); } catch { /* cache miss */ }
+  return [];
+}
 
 let feedCache: { posts: Array<Record<string, unknown>>; fetchedAt: number } | null = null;
 
@@ -22,6 +27,13 @@ export async function GET() {
     }
     const settings = getSiteSettings();
     const source = settings.trumpArchiveApiUrl || SOURCE;
+    const cachedPosts = readPostsCache();
+    if (cachedPosts.length) {
+      const translations = readTranslations();
+      const localized = cachedPosts.map((post) => validTranslation(translations[post.id]) ? { ...post, textZh: translations[post.id] } : post);
+      feedCache = { posts: localized, fetchedAt: Date.now() };
+      return NextResponse.json({ posts: localized, source: SOURCE, fetchedAt: new Date().toISOString(), cached: true });
+    }
     let html = "";
     let nextUrl = source;
     const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -43,7 +55,9 @@ export async function GET() {
       const archiveUrl = block.match(/data-status-url="([^" ]+)/)?.[1] ?? SOURCE;
       return { id: archiveUrl.split("/").pop() || String(index), date, text: content, originalUrl, archiveUrl: archiveUrl.startsWith("http") ? archiveUrl : `https://trumpstruth.org/statuses/${archiveUrl}` };
     }).filter((post) => post.text && post.date);
-    const recent = posts.filter((post) => Date.parse(post.date) >= cutoff).slice(0, 30);
+    // Keep every post in the requested 30-day window; pagination is handled by the client.
+    const recent = posts.filter((post) => Date.parse(post.date) >= cutoff);
+    try { fs.mkdirSync(path.dirname(POSTS_CACHE_FILE), { recursive: true }); fs.writeFileSync(POSTS_CACHE_FILE, JSON.stringify(recent)); } catch { /* read-only deployments */ }
     const translations = readTranslations();
     const localized = await Promise.all(recent.map(async (post, index) => {
       if (validTranslation(translations[post.id])) return { ...post, textZh: translations[post.id] };
