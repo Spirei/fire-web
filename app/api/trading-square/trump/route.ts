@@ -41,7 +41,7 @@ export async function GET() {
     const localized = await Promise.all(recent.map(async (post, index) => {
       if (validTranslation(translations[post.id])) return { ...post, textZh: translations[post.id] };
       delete translations[post.id];
-      if (index >= 1) return post;
+      if (index >= 20) return post;
       try {
         if (!settings.translationEnabled) return post;
         let textZh: string | undefined;
