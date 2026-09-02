@@ -19,7 +19,24 @@ function ActivityIcon() { return <span className="grid h-11 w-11 place-items-cen
 export default function TradingSquareView() {
   const [posts, setPosts] = useState<Post[]>([]), [loading, setLoading] = useState(true), [selected, setSelected] = useState<"all" | AuthorId>("all"), [duanCategory, setDuanCategory] = useState<"all" | DuanCategory>("all"), [page, setPage] = useState(1), [original, setOriginal] = useState<Record<string, boolean>>({});
   const size = 10;
-  useEffect(() => { Promise.allSettled([fetch("/api/trading-square/trump", { cache: "no-store" }).then(r => r.json()), fetch("/api/trading-square/duan", { cache: "no-store" }).then(r => r.json())]).then(([trumpResult, duanResult]) => { const trump = trumpResult.status === "fulfilled" ? trumpResult.value : { posts: [] }, duan = duanResult.status === "fulfilled" ? duanResult.value : { posts: [] }; const merged: Post[] = [...(trump.posts ?? []).map((post: Omit<Post, "author">) => ({ ...post, author: "trump" as const })), ...(duan.posts ?? []).map((post: Omit<Post, "author">) => ({ ...post, author: "duan" as const }))]; setPosts(merged.sort((a, b) => Date.parse(b.date) - Date.parse(a.date))) }).finally(() => setLoading(false)) }, []);
+  useEffect(() => {
+    let active = true, settled = 0;
+    const load = async (author: AuthorId, url: string) => {
+      try {
+        const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(2500) });
+        if (!response.ok) throw new Error(String(response.status));
+        const data = await response.json();
+        if (!active) return;
+        const incoming: Post[] = (data.posts ?? []).map((post: Omit<Post, "author">) => ({ ...post, author }));
+        setPosts(current => [...current.filter(post => post.author !== author), ...incoming].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)));
+        if (incoming.length) setLoading(false);
+      } catch { /* another source or the existing local cache can still render */ }
+      finally { settled += 1; if (active && settled === 2) setLoading(false) }
+    };
+    void load("duan", "/api/trading-square/duan");
+    void load("trump", "/api/trading-square/trump");
+    return () => { active = false };
+  }, []);
   const visible = useMemo(() => posts.filter(post => { if (selected !== "all" && post.author !== selected) return false; if (selected === "duan" && duanCategory !== "all") return post.categories?.includes(duanCategory) === true; return true }), [duanCategory, posts, selected]);
   const orderedPeople = useMemo(() => [...people].sort((a, b) => {
     const latest = (author: AuthorId) => posts.find(post => post.author === author)?.date;

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSiteSettings } from "@/lib/settings";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,7 +10,7 @@ function readTranslations(): Record<string, string> { try { return JSON.parse(fs
 function writeTranslations(cache: Record<string, string>) { try { fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true }); fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2)); } catch { /* read-only deployments still work without persistence */ } }
 function validTranslation(value?: string) { return !!value && !/MYMEMORY WARNING|USED ALL AVAILABLE FREE TRANSLATIONS|QUOTA|RATE LIMIT/i.test(value); }
 function readPostsCache(): Array<{ id: string; date: string; text: string; originalUrl: string; archiveUrl: string }> {
-  try { const stat = fs.statSync(POSTS_CACHE_FILE); if (Date.now() - stat.mtimeMs < 5 * 60_000) return JSON.parse(fs.readFileSync(POSTS_CACHE_FILE, "utf8")); } catch { /* cache miss */ }
+  try { return JSON.parse(fs.readFileSync(POSTS_CACHE_FILE, "utf8")); } catch { /* cache miss */ }
   return [];
 }
 
@@ -20,7 +20,7 @@ function clean(value: string) {
   return value.replace(/<br\s*\/?\s*>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#039;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+\n/g, "\n").replace(/\n\s+/g, "\n").trim();
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     if (feedCache && Date.now() - feedCache.fetchedAt < 60_000) {
       return NextResponse.json({ posts: feedCache.posts, source: SOURCE, fetchedAt: new Date(feedCache.fetchedAt).toISOString(), cached: true });
@@ -28,7 +28,7 @@ export async function GET() {
     const settings = getSiteSettings();
     const source = settings.trumpArchiveApiUrl || SOURCE;
     const cachedPosts = readPostsCache();
-    if (cachedPosts.length) {
+    if (cachedPosts.length && request.nextUrl.searchParams.get("refresh") !== "1") {
       const translations = readTranslations();
       const localized = cachedPosts.map((post) => validTranslation(translations[post.id]) ? { ...post, textZh: translations[post.id] } : post);
       feedCache = { posts: localized, fetchedAt: Date.now() };
