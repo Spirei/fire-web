@@ -262,6 +262,7 @@ export interface SiteSettings {
   llmApiUrl: string;
   llmModel: string;
   llmApiKey: string;
+  llmApiKeyConfigured?: boolean;
   dbType: "sqlite" | "postgres";
   pgHost: string;
   pgPort: string;

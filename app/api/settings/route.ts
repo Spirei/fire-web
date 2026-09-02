@@ -15,7 +15,7 @@ export async function GET(request: Request) {
       settings: { ...settings, pgHost: "", pgPort: "", pgDatabase: "", pgUser: "", pgPassword: "" }
     });
   }
-  return NextResponse.json({ settings });
+  return NextResponse.json({ settings: { ...settings, llmApiKey: "", deepseekApiKey: "", llmApiKeyConfigured: Boolean(settings.llmApiKey || settings.deepseekApiKey) } });
 }
 
 export async function PUT(request: Request) {
