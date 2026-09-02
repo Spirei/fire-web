@@ -40,10 +40,9 @@ export async function GET() {
     }).filter((post) => post.text && post.date);
     const recent = posts.filter((post) => Date.parse(post.date) >= cutoff).slice(0, 100);
     const translations = readTranslations();
-    const localized = await Promise.all(recent.map(async (post, index) => {
+    const localized = await Promise.all(recent.map(async (post) => {
       if (validTranslation(translations[post.id])) return { ...post, textZh: translations[post.id] };
       delete translations[post.id];
-      if (index >= 20) return post;
       try {
         if (!settings.translationEnabled) return post;
         let textZh: string | undefined;
