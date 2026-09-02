@@ -54,7 +54,7 @@ export async function GET() {
           const data = await translation.json() as { responseData?: { translatedText?: string } };
           textZh = data.responseData?.translatedText || undefined;
         }
-        if (validTranslation(textZh)) { translations[post.id] = textZh; writeTranslations(translations); return { ...post, textZh }; }
+        if (textZh && validTranslation(textZh)) { translations[post.id] = textZh; writeTranslations(translations); return { ...post, textZh }; }
         return post;
       } catch { return post; }
     }));
