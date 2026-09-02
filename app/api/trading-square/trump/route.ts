@@ -26,8 +26,8 @@ export async function GET() {
       const next = pageHtml.match(/<a href="([^"]*cursor=[^"]+)"[^>]*>Next Page/i)?.[1];
       nextUrl = next ? new URL(next.replace(/&amp;/g, "&"), source).toString() : "";
     }
-    const posts = [...html.matchAll(/<div class="status"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/g)].map((match, index) => {
-      const block = match[0];
+    const posts = html.split('<div class="status"').slice(1).map((tail, index) => {
+      const block = tail.split('<div class="status"')[0];
       const date = block.match(/status-info__meta-item">([^<]+,\s*\d{4},\s*[^<]+)</)?.[1] ?? "";
       const originalUrl = block.match(/href="(https:\/\/truthsocial\.com\/@realDonaldTrump\/[^" ]+)"/)?.[1] ?? "https://truthsocial.com/@realDonaldTrump";
       const content = clean(block.match(/<div class="status__content">([\s\S]*?)<\/div>/)?.[1] ?? "");
