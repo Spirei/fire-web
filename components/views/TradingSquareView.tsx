@@ -6,6 +6,7 @@ import useDraggableWindow from "@/lib/useDraggableWindow";
 import Pagination from "@/components/Pagination";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import StockDetailView from "@/components/StockDetailView";
+import StockTextLink from "@/components/StockTextLink";
 import { normalizeCode, parseSymbolToken, splitTradingText, type HoldingHint } from "@/lib/tradingSquareText";
 import type { StockRecord } from "@/lib/types";
 
@@ -157,14 +158,14 @@ function PostBody({ text, holdings, onStock, className = "mt-2 whitespace-pre-li
         }
         if (part.type === "stock") {
           return (
-            <button
+            <StockTextLink
               key={`${part.market}-${part.code}-${index}`}
-              type="button"
+              value={part.value}
+              market={part.market}
+              code={part.code}
+              name={part.name}
               onClick={() => onStock({ market: part.market, code: part.code, name: part.name })}
-              className={LINK_CLASS}
-            >
-              {part.value}
-            </button>
+            />
           );
         }
         return <span key={index}>{part.value}</span>;
