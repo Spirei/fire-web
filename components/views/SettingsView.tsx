@@ -531,7 +531,7 @@ interface DbStatus {
 
 // 股票来源接口的卡片元数据（顺序即展示顺序）
 const SOURCE_FIELDS: {
-  key: "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "earningsApiUrl" | "cnEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey";
+  key: "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "earningsApiUrl" | "cnEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "translationProvider";
   name: string;
   desc: string;
   placeholder: string;
@@ -546,6 +546,7 @@ const SOURCE_FIELDS: {
   { key: "usLogoApiUrl", name: "美股公司图标", desc: "直接拼接代码 .png", placeholder: "https://g.foolcdn.com/art/companylogos/square/", icon: "us" },
   { key: "cnLogoApiUrl", name: "A股公司图标", desc: "自动拼接 代码.SS / 代码.SZ", placeholder: "https://assets.parqet.com/logos/symbol/", icon: "logo" },
   { key: "trumpArchiveApiUrl", name: "特朗普平台归档", desc: "交易广场公开动态来源", placeholder: "https://trumpstruth.org/", icon: "trump" },
+  { key: "translationProvider", name: "翻译提供商", desc: "mymemory / deepseek / openai-compatible", placeholder: "deepseek", icon: "translate" },
   { key: "translationApiUrl", name: "动态翻译接口", desc: "免费或自建翻译接口", placeholder: "https://api.mymemory.translated.net/get", icon: "translate" },
   { key: "deepseekApiUrl", name: "DeepSeek API 地址", desc: "OpenAI 兼容 Chat Completions 地址", placeholder: "https://api.deepseek.com/chat/completions", icon: "translate" },
   { key: "deepseekModel", name: "DeepSeek 模型", desc: "默认使用 deepseek-chat", placeholder: "deepseek-chat", icon: "translate" },
@@ -811,7 +812,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   useEffect(() => {
     const anchors = new Set(SETTINGS_SEARCH_INDEX.map((x) => x.anchor));
     document.querySelectorAll<HTMLElement>(".settings-section-card[id]").forEach((el) => {
-      if (anchors.has(el.id)) el.hidden = el.id !== activeAnchor;
+      if (anchors.has(el.id)) el.hidden = el.id !== activeAnchor && !(activeAnchor === "translation" && el.id === "sources");
     });
   }, [sub, activeAnchor]);
 
@@ -1247,7 +1248,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       : activeAnchor === "ticker" ? editingTicker
         : activeAnchor === "nav" ? (editingHomeNav || editingTabs)
           : activeAnchor === "groups" ? editingStockGroups
-            : activeAnchor === "sources" ? editingSources
+            : activeAnchor === "sources" || activeAnchor === "translation" ? editingSources
               : activeAnchor === "trade" ? editingFutu
                 : activeAnchor === "profile" ? editingProfile
                   : activeAnchor === "database" ? editingDb
@@ -1260,7 +1261,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     else if (activeAnchor === "ticker") setEditingTicker(true);
     else if (activeAnchor === "nav") { setEditingHomeNav(true); setEditingTabs(true); }
     else if (activeAnchor === "groups") setEditingStockGroups(true);
-    else if (activeAnchor === "sources") setEditingSources(true);
+    else if (activeAnchor === "sources" || activeAnchor === "translation") setEditingSources(true);
     else if (activeAnchor === "trade") setEditingFutu(true);
     else if (activeAnchor === "profile") setEditingProfile(true);
     else if (activeAnchor === "database") setEditingDb(true);
@@ -2454,7 +2455,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   action={editingSources ? <button type="button" onClick={() => setEditingSources(false)} className="btn btn-line btn-sm">完成</button> : undefined}
                 >
                   <div id="translation" className="flex flex-col">
-                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场 · 归档与翻译", ["trumpArchiveApiUrl", "translationApiUrl", "deepseekApiUrl", "deepseekModel", "deepseekApiKey"]]] as const).map(([label, keys]) => {
+                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场 · 归档与翻译", ["translationProvider", "trumpArchiveApiUrl", "translationApiUrl", "deepseekApiUrl", "deepseekModel", "deepseekApiKey"]]] as const).map(([label, keys]) => {
                       const fields = SOURCE_FIELDS.filter((f) => (keys as readonly string[]).includes(f.key));
                       if (!fields.length) return null;
                       return (
