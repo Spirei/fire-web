@@ -905,7 +905,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "保存失败");
-      setSite((s) => ({ ...s, ...data.settings }));
+      setSite((s) => ({ ...s, ...data.settings, llmApiKey: s.llmApiKey }));
       captureSaved(data.settings);
       setBlockMsg((m) => ({ ...m, [key]: { type: "ok", text: hint } }));
       showToast(hint);
@@ -2466,7 +2466,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   action={editingSources ? <button type="button" onClick={() => setEditingSources(false)} className="btn btn-line btn-sm">完成</button> : undefined}
                 >
                   <div className="flex flex-col">
-                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场数据源", ["trumpArchiveApiUrl"]]] as const).map(([label, keys]) => {
+                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场数据源", ["trumpArchiveApiUrl", "translationApiUrl"]]] as const).map(([label, keys]) => {
                       const fields = SOURCE_FIELDS.filter((f) => (keys as readonly string[]).includes(f.key));
                       if (!fields.length) return null;
                       return (
