@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSiteSettings } from "@/lib/settings";
+import fs from "node:fs";
+import path from "node:path";
 
 const SOURCE = "https://trumpstruth.org/";
+const CACHE_FILE = path.join(process.cwd(), "data", "trump-translations.json");
+function readTranslations(): Record<string, string> { try { return JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")); } catch { return {}; } }
+function writeTranslations(cache: Record<string, string>) { try { fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true }); fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2)); } catch { /* read-only deployments still work without persistence */ } }
 
 function clean(value: string) {
   return value.replace(/<br\s*\/?\s*>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#039;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+\n/g, "\n").replace(/\n\s+/g, "\n").trim();
@@ -31,13 +36,17 @@ export async function GET() {
     }).filter((post) => post.text && post.date);
     const cutoff = Date.now() - 183 * 24 * 60 * 60 * 1000;
     const recent = posts.filter((post) => Date.parse(post.date) >= cutoff).slice(0, 100);
+    const translations = readTranslations();
     const localized = await Promise.all(recent.map(async (post, index) => {
+      if (translations[post.id]) return { ...post, textZh: translations[post.id] };
       if (index >= 3) return post;
       try {
         if (!settings.translationEnabled) return post;
         const translation = await fetch(`${settings.translationApiUrl}?q=${encodeURIComponent(post.text.slice(0, 480))}&langpair=en|zh-CN`, { signal: AbortSignal.timeout(1800), next: { revalidate: 3600 } });
         const data = await translation.json() as { responseData?: { translatedText?: string } };
-        return { ...post, textZh: data.responseData?.translatedText || undefined };
+        const textZh = data.responseData?.translatedText || undefined;
+        if (textZh) { translations[post.id] = textZh; writeTranslations(translations); }
+        return { ...post, textZh };
       } catch { return post; }
     }));
     return NextResponse.json({ posts: localized, source: SOURCE, fetchedAt: new Date().toISOString() });
