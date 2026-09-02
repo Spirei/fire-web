@@ -1423,8 +1423,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           translationApiUrl: site.translationApiUrl,
           deepseekApiUrl: site.deepseekApiUrl,
           deepseekModel: site.deepseekModel,
-          deepseekApiKey: site.llmApiKey
-          ,llmProvider: site.llmProvider, llmApiUrl: site.llmApiUrl, llmModel: site.llmModel, llmApiKey: site.llmApiKey
+          llmProvider: site.llmProvider, llmApiUrl: site.llmApiUrl, llmModel: site.llmModel, llmApiKey: site.llmApiKey
         })
       });
       const data = await res.json().catch(() => null);
@@ -2536,7 +2535,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 </SettingsSection>
 
                 <SettingsSection id="translation" icon="plug" title="翻译服务" desc="交易广场中文翻译与大模型配置（DeepSeek / OpenAI 兼容）" action={editingSources ? <button type="button" onClick={async () => { await saveStockSources(); setEditingSources(false); }} className="btn btn-line btn-sm">保存</button> : <button type="button" onClick={() => setEditingSources(true)} className="btn btn-ghost btn-sm">编辑</button>}>
-                  {(["llmProvider", "llmApiUrl", "llmModel", "llmApiKey"] as const).map((key) => <div key={key} className="sw-row"><div className="sw-row-label"><b>{key === "llmProvider" ? "大模型提供商" : key === "llmApiUrl" ? "API 地址" : key === "llmModel" ? "模型名称" : <>API Key <span className={`ml-2 inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle ring-2 ring-white dark:ring-[#151b26] ${(site.llmApiKey || site.deepseekApiKey) ? "bg-emerald-500" : "bg-slate-300"}`} title={(site.llmApiKey || site.deepseekApiKey) ? "已配置" : "未配置"} /></>}</b></div><input className="sw-row-input" type={key === "deepseekApiKey" ? "password" : "text"} autoComplete="off" value={(site as unknown as Record<string, string>)[key] || ""} onChange={(e) => setSite((s) => ({ ...s, [key]: e.target.value }))} readOnly={!editingSources} placeholder={key === "deepseekModel" ? "deepseek-chat" : ""} /></div>)}
+                  {(["llmProvider", "llmApiUrl", "llmModel", "llmApiKey"] as const).map((key) => <div key={key} className="sw-row"><div className="sw-row-label"><b>{key === "llmProvider" ? "大模型提供商" : key === "llmApiUrl" ? "API 地址" : key === "llmModel" ? "模型名称" : <>API Key <span className={`ml-2 inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle ring-2 ring-white dark:ring-[#151b26] ${site.llmApiKey ? "bg-emerald-500" : "bg-slate-300"}`} title={site.llmApiKey ? "已配置" : "未配置"} /></>}</b></div><input className="sw-row-input" type={key === "deepseekApiKey" ? "password" : "text"} autoComplete="off" value={(site as unknown as Record<string, string>)[key] || ""} onChange={(e) => setSite((s) => ({ ...s, [key]: e.target.value }))} readOnly={!editingSources} placeholder={key === "deepseekModel" ? "deepseek-chat" : ""} /></div>)}
                 </SettingsSection>
 
                 {/* 交易：富途 OpenAPI 连接配置 + 行情源切换（两块分开，不揉在一起） */}
