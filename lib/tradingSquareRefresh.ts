@@ -125,13 +125,17 @@ function parseTrumpPage(html: string, source: string): TrumpPost[] {
     const date = toIsoDate(block.match(/status-info__meta-item">([^<]+,\s*\d{4},\s*[^<]+)</)?.[1] ?? "");
     const originalUrl = block.match(/href="(https:\/\/truthsocial\.com\/@realDonaldTrump\/[^" ]+)"/)?.[1] ?? "https://truthsocial.com/@realDonaldTrump";
     const content = clean(block.match(/<div class="status__content">([\s\S]*?)<\/div>/)?.[1] ?? "");
-    const archiveUrl = block.match(/data-status-url="([^" ]+)/)?.[1] ?? source;
+    const rawArchive = block.match(/data-status-url="([^" ]+)/)?.[1] ?? source;
+    const archiveUrl = rawArchive.startsWith("http") ? rawArchive : `https://trumpstruth.org/statuses/${rawArchive}`;
+    const archiveId = archiveUrl.split("/").pop() || "";
+    const truthId = originalUrl.match(/\/(\d{8,})$/)?.[1] || "";
+    const id = /^\d{4,}$/.test(archiveId) ? archiveId : truthId || String(index);
     return {
-      id: archiveUrl.split("/").pop() || String(index),
+      id,
       date,
       text: content,
       originalUrl,
-      archiveUrl: archiveUrl.startsWith("http") ? archiveUrl : `https://trumpstruth.org/statuses/${archiveUrl}`
+      archiveUrl
     };
   }).filter((post) => post.text && post.date);
 }
@@ -181,7 +185,7 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
     }
     const merged = Array.from(new Map([...incoming, ...existing].map((post) => [post.id, { ...post, date: toIsoDate(post.date) }])).values());
     try { writeJsonAtomic(TRUMP_FILE, merged); } catch { /* read-only deployments */ }
-    void backfillTrumpTranslations(merged, 3);
+    void backfillTrumpTranslations(merged, 20);
     return merged;
   } finally {
     trumpRunning = false;

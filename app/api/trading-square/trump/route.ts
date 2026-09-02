@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const forceRefresh = request.nextUrl.searchParams.get("refresh") === "1";
     const posts = forceRefresh ? await refreshTrumpPosts() : readTrumpPosts();
     const localized = withZh(posts);
-    if (!forceRefresh && posts.length) void backfillTrumpTranslations(posts, 3);
+    if (!forceRefresh && posts.length) void backfillTrumpTranslations(posts, 20);
     return NextResponse.json({
       posts: localized,
       source: SOURCE,

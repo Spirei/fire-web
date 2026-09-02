@@ -17,8 +17,12 @@ function writeTranslations(cache: Record<string, string>) {
 }
 
 let backfillRunning = false;
+const FAILED_COOLDOWN_MS = 30 * 60 * 1000;
+const recentlyFailed = new Map<string, number>();
+let providerCooldownUntil = 0;
 
 async function translateOne(text: string): Promise<string | undefined> {
+  if (Date.now() < providerCooldownUntil) return undefined;
   const settings = getSiteSettings();
   if (!settings.translationEnabled) return undefined;
   if (settings.llmApiKey || settings.deepseekApiKey) {
@@ -33,44 +37,69 @@ async function translateOne(text: string): Promise<string | undefined> {
           { role: "user", content: text.slice(0, 4000) }
         ]
       }),
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(12000),
       cache: "no-store"
     });
+    if (translation.status === 429) {
+      providerCooldownUntil = Date.now() + 10 * 60 * 1000;
+      return undefined;
+    }
     const data = await translation.json() as { choices?: Array<{ message?: { content?: string } }> };
     return data.choices?.[0]?.message?.content?.trim();
   }
   const translation = await fetch(
     `${settings.translationApiUrl}?q=${encodeURIComponent(text.slice(0, 480))}&langpair=en|zh-CN`,
-    { signal: AbortSignal.timeout(2500), next: { revalidate: 3600 } }
+    { signal: AbortSignal.timeout(8000), next: { revalidate: 3600 } }
   );
+  if (translation.status === 429) {
+    providerCooldownUntil = Date.now() + 10 * 60 * 1000;
+    return undefined;
+  }
   const data = await translation.json() as { responseData?: { translatedText?: string } };
   return data.responseData?.translatedText || undefined;
 }
 
-/** 只翻译尚未有有效中文的帖子，按时间顺序取前 limit 条，不占用已译条目的名额。 */
+function applyTranslations<T extends { id: string; text: string }>(posts: T[], translations: Record<string, string>): T[] {
+  return posts.map((post) => validTranslation(translations[post.id]) ? { ...post, textZh: translations[post.id] } : post);
+}
+
+/** 翻译尚未有中文的帖子。失败的条目冷却后重试，不挡住更早的未译队列。 */
 export async function backfillTrumpTranslations<T extends { id: string; text: string }>(
   posts: T[],
-  limit = 3
+  limit = 20
 ): Promise<T[]> {
-  if (backfillRunning || limit <= 0) {
-    const cached = readTranslations();
-    return posts.map((post) => validTranslation(cached[post.id]) ? { ...post, textZh: cached[post.id] } : post);
-  }
-  backfillRunning = true;
   const translations = readTranslations();
-  const missing = posts.filter((post) => !validTranslation(translations[post.id])).slice(0, limit);
+  if (backfillRunning || limit <= 0) return applyTranslations(posts, translations);
+  backfillRunning = true;
+  const now = Date.now();
+  const missing = posts.filter((post) => {
+    if (validTranslation(translations[post.id])) return false;
+    const failedAt = recentlyFailed.get(post.id) ?? 0;
+    return now - failedAt >= FAILED_COOLDOWN_MS;
+  });
   try {
-    await Promise.all(missing.map(async (post) => {
-      try {
-        const textZh = await translateOne(post.text);
-        if (textZh && validTranslation(textZh)) translations[post.id] = textZh;
-      } catch {
-        /* keep original text; next visit retries */
-      }
-    }));
-    if (missing.length) writeTranslations(translations);
+    const deadline = now + 25_000;
+    let saved = 0;
+    for (let index = 0; index < missing.length && saved < limit && Date.now() < deadline; index += 4) {
+      const batch = missing.slice(index, index + 4);
+      await Promise.all(batch.map(async (post) => {
+        try {
+          const textZh = await translateOne(post.text);
+          if (textZh && validTranslation(textZh)) {
+            translations[post.id] = textZh;
+            recentlyFailed.delete(post.id);
+            saved += 1;
+          } else {
+            recentlyFailed.set(post.id, Date.now());
+          }
+        } catch {
+          recentlyFailed.set(post.id, Date.now());
+        }
+      }));
+      if (saved) writeTranslations(translations);
+    }
   } finally {
     backfillRunning = false;
   }
-  return posts.map((post) => validTranslation(translations[post.id]) ? { ...post, textZh: translations[post.id] } : post);
+  return applyTranslations(posts, readTranslations());
 }
