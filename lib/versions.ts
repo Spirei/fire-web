@@ -2268,7 +2268,7 @@ export const V0_1_20_ENTRY: VersionEntry = {
   ...V0_1_19_ENTRY,
   version: "v0.1.20",
   date: "2026-09-03",
-  summary: "空实例首次设置接入真实流程，设置标题栏保存当前分区，并上线交易广场本地缓存动态。",
+  summary: "空实例首次设置接入真实流程，设置标题栏保存当前分区，交易广场本地缓存动态，正文股票代码可点开详情。",
   software: V0_1_19_ENTRY.software.map((item) => item.name === "Fire" ? { ...item, version: "v0.1.20" } : item),
   changes: [{
     title: "空实例首次设置接入真实三步向导",
@@ -2313,6 +2313,10 @@ export const V0_1_20_ENTRY: VersionEntry = {
   }, {
     title: "操作日志分类检索并纳入交易活动",
     desc: "系统日志增加分类、搜索、分页与深浅色对比；认证审计与交易活动写入同一日志，并按市场拆分前一日盈亏摘要。",
+    kind: "feature"
+  }, {
+    title: "交易广场正文股票代码和链接可点开个股详情",
+    desc: "动态正文里的雪球 $名称(代码)$、美元代码、$AAPL 这类标记、雪球/Yahoo/东财股票链接，以及持仓里的代码和名称，都会高亮并可点开同一套个股详情；普通新闻链接仍跳转原文。返回箭头回到当前动态列表，刷新后仍停留在该股票。",
     kind: "feature"
   }]
 };

@@ -5,6 +5,9 @@ import { IconPin, IconWindmill } from "@tabler/icons-react";
 import useDraggableWindow from "@/lib/useDraggableWindow";
 import Pagination from "@/components/Pagination";
 import SafeAssetImage from "@/components/SafeAssetImage";
+import StockDetailView from "@/components/StockDetailView";
+import { normalizeCode, parseSymbolToken, splitTradingText, type HoldingHint } from "@/lib/tradingSquareText";
+import type { StockRecord } from "@/lib/types";
 
 type AuthorId = "trump" | "duan";
 type DuanCategory = "hot" | "original" | "longform";
@@ -105,8 +108,8 @@ function formatUpdatedAt(value: string | null) {
   return `${new Date(time).toLocaleDateString("zh-CN")} 更新`;
 }
 
-function readQuery(): { selected: "all" | AuthorId; duanCategory: "all" | DuanCategory; page: number } {
-  if (typeof window === "undefined") return { selected: "all", duanCategory: "all", page: 1 };
+function readQuery(): { selected: "all" | AuthorId; duanCategory: "all" | DuanCategory; page: number; symbol: string } {
+  if (typeof window === "undefined") return { selected: "all", duanCategory: "all", page: 1, symbol: "" };
   const params = new URLSearchParams(window.location.search);
   const person = params.get("person");
   const cat = params.get("cat");
@@ -114,11 +117,12 @@ function readQuery(): { selected: "all" | AuthorId; duanCategory: "all" | DuanCa
   return {
     selected: person === "trump" || person === "duan" ? person : "all",
     duanCategory: cat === "hot" || cat === "original" || cat === "longform" ? cat : "all",
-    page: Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1
+    page: Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1,
+    symbol: params.get("symbol") || ""
   };
 }
 
-function writeQuery(selected: "all" | AuthorId, duanCategory: "all" | DuanCategory, page: number) {
+function writeQuery(selected: "all" | AuthorId, duanCategory: "all" | DuanCategory, page: number, symbol = "") {
   const url = new URL(window.location.href);
   if (selected === "all") url.searchParams.delete("person");
   else url.searchParams.set("person", selected);
@@ -126,11 +130,50 @@ function writeQuery(selected: "all" | AuthorId, duanCategory: "all" | DuanCatego
   else url.searchParams.delete("cat");
   if (page > 1) url.searchParams.set("page", String(page));
   else url.searchParams.delete("page");
+  if (symbol) url.searchParams.set("symbol", symbol);
+  else url.searchParams.delete("symbol");
   const next = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : "");
   window.history.replaceState(null, "", next);
 }
 
-export default function TradingSquareView({ avatars }: { avatars?: Record<string, string> }) {
+function parseSymbol(raw: string): { market: string; code: string; name: string } | null {
+  const match = /^([A-Z]{2,5})[:.](.+)$/i.exec(raw.trim());
+  if (!match) return null;
+  const parsed = parseSymbolToken(match[2]);
+  const market = parsed?.market || match[1].toUpperCase();
+  const code = parsed?.code || match[2].toUpperCase();
+  return { market, code, name: code };
+}
+
+const LINK_CLASS = "inline bg-transparent p-0 font-semibold text-brand-deep hover:underline";
+
+function PostBody({ text, holdings, onStock, className = "mt-2 whitespace-pre-line break-words text-[15px] leading-7 text-ink dark:text-slate-200" }: { text: string; holdings: HoldingHint[]; onStock: (item: HoldingHint) => void; className?: string }) {
+  const parts = useMemo(() => splitTradingText(text, holdings), [holdings, text]);
+  return (
+    <div className={className}>
+      {parts.map((part, index) => {
+        if (part.type === "url") {
+          return <a key={`${part.value}-${index}`} href={part.value} target="_blank" rel="noreferrer" className={`${LINK_CLASS} break-all`}>{part.value}</a>;
+        }
+        if (part.type === "stock") {
+          return (
+            <button
+              key={`${part.market}-${part.code}-${index}`}
+              type="button"
+              onClick={() => onStock({ market: part.market, code: part.code, name: part.name })}
+              className={LINK_CLASS}
+            >
+              {part.value}
+            </button>
+          );
+        }
+        return <span key={index}>{part.value}</span>;
+      })}
+    </div>
+  );
+}
+
+export default function TradingSquareView({ avatars, records = [] }: { avatars?: Record<string, string>; records?: StockRecord[] }) {
   const [posts, setPosts] = useState<Post[]>(() => readLocalFeed()?.posts ?? []);
   const [loading, setLoading] = useState(() => !readLocalFeed());
   const [refreshing, setRefreshing] = useState(false);
@@ -138,6 +181,7 @@ export default function TradingSquareView({ avatars }: { avatars?: Record<string
   const [selected, setSelected] = useState<"all" | AuthorId>(() => readQuery().selected);
   const [duanCategory, setDuanCategory] = useState<"all" | DuanCategory>(() => readQuery().duanCategory);
   const [page, setPage] = useState(() => readQuery().page);
+  const [detail, setDetail] = useState<{ market: string; code: string; name: string } | null>(() => parseSymbol(readQuery().symbol));
   const [original, setOriginal] = useState<Record<string, boolean>>({});
   const [fixed, setFixed] = useState(false);
   const fixedInitialized = useRef(false);
@@ -147,6 +191,20 @@ export default function TradingSquareView({ avatars }: { avatars?: Record<string
     () => PEOPLE.map((person) => ({ ...person, avatar: avatars?.[person.id] || person.avatar })),
     [avatars]
   );
+  const holdings = useMemo<HoldingHint[]>(() => {
+    const seen = new Set<string>();
+    const list: HoldingHint[] = [];
+    records.forEach((record) => {
+      const market = record.market.toUpperCase();
+      const code = normalizeCode(record.code, market);
+      const key = `${market}:${code}`;
+      if (!code || seen.has(key)) return;
+      seen.add(key);
+      list.push({ market, code, name: record.name || code });
+    });
+    return list;
+  }, [records]);
+  const openStock = (item: HoldingHint) => setDetail({ market: item.market, code: item.code, name: item.name });
 
   useEffect(() => {
     if (fixedInitialized.current) return;
@@ -226,8 +284,8 @@ export default function TradingSquareView({ avatars }: { avatars?: Record<string
   }, [duanCategory, selected]);
 
   useEffect(() => {
-    writeQuery(selected, duanCategory, safePage);
-  }, [duanCategory, safePage, selected]);
+    writeQuery(selected, duanCategory, safePage, detail ? `${detail.market}:${detail.code}` : "");
+  }, [detail, duanCategory, safePage, selected]);
 
   useEffect(() => {
     if (page !== safePage) setPage(safePage);
@@ -241,6 +299,20 @@ export default function TradingSquareView({ avatars }: { avatars?: Record<string
   const categoryCount = (category: DuanCategory) => posts.filter((post) => post.author === "duan" && post.categories?.includes(category)).length;
   const windowStyle = { "--trading-x": `${pos.x}px`, "--trading-y": `${pos.y}px` } as CSSProperties;
   const freshness = refreshing ? "正在检查更新" : formatUpdatedAt(updatedAt);
+  const followed = detail ? records.some((record) => {
+    const market = record.market.toUpperCase();
+    return market === detail.market && normalizeCode(record.code, market) === detail.code;
+  }) : false;
+
+  if (detail) {
+    return (
+      <main style={windowStyle} className={`mx-auto w-full max-w-[800px] overflow-hidden rounded-2xl border border-edge bg-white shadow-card dark:bg-[#10151d] md:[transform:translate(var(--trading-x),var(--trading-y))] ${dragging ? "select-none" : ""}`}>
+        <div style={{ animation: "fade-in .25s ease" }}>
+          <StockDetailView market={detail.market} code={detail.code} name={detail.name} onBack={() => setDetail(null)} followed={followed} />
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main style={windowStyle} className={`mx-auto grid w-full max-w-[800px] overflow-hidden rounded-2xl border border-edge bg-white shadow-card dark:bg-[#10151d] md:grid-cols-[200px_minmax(0,1fr)] md:[transform:translate(var(--trading-x),var(--trading-y))] ${dragging ? "select-none" : ""}`}>
@@ -324,11 +396,16 @@ export default function TradingSquareView({ avatars }: { avatars?: Record<string
                       <span className="text-faint">·</span>
                       <time className="text-muted" dateTime={post.date}>{formatPostTime(post.date)}</time>
                     </div>
-                    <p className="mt-2 whitespace-pre-line break-words text-[15px] leading-7 text-ink dark:text-slate-200">{showOriginal ? post.text : (post.textZh ?? post.text)}</p>
+                    <PostBody text={showOriginal ? post.text : (post.textZh ?? post.text)} holdings={holdings} onStock={openStock} />
                     {post.quote && (
                       <div className="mt-3 rounded-xl border border-edge bg-bg-gray/60 px-3 py-2.5 dark:border-white/10 dark:bg-white/[.04]">
                         <p className="text-xs font-semibold text-muted">{post.quote.name}</p>
-                        <p className="mt-1 whitespace-pre-line break-words text-[13px] leading-6 text-ink-2 dark:text-slate-300">{post.quote.text}</p>
+                        <PostBody
+                          text={post.quote.text}
+                          holdings={holdings}
+                          onStock={openStock}
+                          className="mt-1 whitespace-pre-line break-words text-[13px] leading-6 text-ink-2 dark:text-slate-300"
+                        />
                         {post.quote.url && (
                           <a href={post.quote.url} target="_blank" rel="noreferrer" className="mt-1.5 inline-block text-[11px] font-semibold text-brand-deep">查看原动态 ↗</a>
                         )}
