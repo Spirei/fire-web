@@ -503,6 +503,9 @@ const DEFAULT_SETTINGS: SiteSettings = {
   cnEarningsApiUrl: "",
   usLogoApiUrl: "",
   cnLogoApiUrl: "",
+  trumpArchiveApiUrl: "",
+  translationApiUrl: "",
+  translationEnabled: true,
   dbType: "sqlite",
   pgHost: "",
   pgPort: "5432",
@@ -2433,7 +2436,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   action={editingSources ? <button type="button" onClick={() => setEditingSources(false)} className="btn btn-line btn-sm">完成</button> : undefined}
                 >
                   <div className="flex flex-col">
-                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]]] as const).map(([label, keys]) => {
+                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场", ["trumpArchiveApiUrl", "translationApiUrl"]]] as const).map(([label, keys]) => {
                       const fields = SOURCE_FIELDS.filter((f) => (keys as readonly string[]).includes(f.key));
                       if (!fields.length) return null;
                       return (
