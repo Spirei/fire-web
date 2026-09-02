@@ -2446,7 +2446,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <div key={label}>
                           <p className="subhead">{label}</p>
                           {fields.map((f) => {
-                            const value = (site as unknown as Record<string, string>)[f.key];
+                            const value = (site as unknown as Record<string, string>)[f.key] || f.placeholder;
                             return (
                               <div key={f.key} className="sw-row">
                                 <div className="sw-row-label"><b>{f.name}</b><span>{f.desc}</span></div>
