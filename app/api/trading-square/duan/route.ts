@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -17,8 +17,12 @@ function categories(text: string, likes = 0, replies = 0): Category[] {
   return values;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   let posts = cached();
+  let refreshed = false;
+  if (request.nextUrl.searchParams.get("refresh") !== "1") {
+    return NextResponse.json({ posts, user: { id: USER_ID, handle: "slowisquick", name: "大道无形我有型" }, source: "cache" });
+  }
   try {
     const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
     const live: DuanPost[] = [];
@@ -31,7 +35,13 @@ export async function GET() {
       live.push(...batch.filter(item => Date.parse(item.date) >= cutoff));
       if (!batch.length || batch.some(item => Date.parse(item.date) < cutoff)) break;
     }
-    if (live.length) { const saved = new Map(posts.map(item => [item.id, item])); posts = Array.from(new Map(live.map(item => [item.id, { ...item, categories: Array.from(new Set([...(saved.get(item.id)?.categories || []), ...item.categories])) }])).values()); try { fs.writeFileSync(CACHE_FILE, JSON.stringify(posts, null, 2)); } catch { /* read-only deployment */ } }
+    if (live.length) {
+      const merged = new Map(posts.filter(item => Date.parse(item.date) >= cutoff).map(item => [item.id, item]));
+      live.forEach(item => { const saved = merged.get(item.id); merged.set(item.id, { ...saved, ...item, categories: Array.from(new Set([...(saved?.categories || []), ...item.categories])) }) });
+      posts = Array.from(merged.values()).sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+      refreshed = true;
+      try { fs.writeFileSync(CACHE_FILE, JSON.stringify(posts, null, 2)); } catch { /* read-only deployment */ }
+    }
   } catch { /* serve last known public posts */ }
-  return NextResponse.json({ posts, user: { id: USER_ID, handle: "slowisquick", name: "大道无形我有型" }, cached: true });
+  return NextResponse.json({ posts, user: { id: USER_ID, handle: "slowisquick", name: "大道无形我有型" }, source: refreshed ? "live" : "cache" });
 }
