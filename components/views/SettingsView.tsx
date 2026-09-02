@@ -2454,8 +2454,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   ) : undefined}
                   action={editingSources ? <button type="button" onClick={() => setEditingSources(false)} className="btn btn-line btn-sm">完成</button> : undefined}
                 >
-                  <div id="translation" className="flex flex-col">
-                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["翻译服务 · DeepSeek / OpenAI", ["translationProvider", "trumpArchiveApiUrl", "translationApiUrl", "deepseekApiUrl", "deepseekModel", "deepseekApiKey"]]] as const).map(([label, keys]) => {
+                  <div className="flex flex-col">
+                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]]] as const).map(([label, keys]) => {
                       const fields = SOURCE_FIELDS.filter((f) => (keys as readonly string[]).includes(f.key));
                       if (!fields.length) return null;
                       return (
@@ -2521,6 +2521,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       );
                     })}
                   </div>
+                </SettingsSection>
+
+                <SettingsSection id="translation" icon="plug" title="翻译服务" desc="交易广场中文翻译与大模型配置（DeepSeek / OpenAI 兼容）">
+                  {(["translationProvider", "trumpArchiveApiUrl", "translationApiUrl", "deepseekApiUrl", "deepseekModel", "deepseekApiKey"] as const).map((key) => <div key={key} className="sw-row"><div className="sw-row-label"><b>{key === "translationProvider" ? "翻译提供商" : key === "trumpArchiveApiUrl" ? "特朗普平台归档" : key === "translationApiUrl" ? "备用翻译接口" : key === "deepseekApiUrl" ? "DeepSeek API 地址" : key === "deepseekModel" ? "DeepSeek 模型" : "DeepSeek API Key"}</b></div><input className="sw-row-input" type={key === "deepseekApiKey" ? "password" : "text"} value={(site as unknown as Record<string, string>)[key] || ""} onChange={(e) => setSite((s) => ({ ...s, [key]: e.target.value }))} readOnly={!editingSources} placeholder={key === "deepseekModel" ? "deepseek-chat" : ""} /></div>)}
                 </SettingsSection>
 
                 {/* 交易：富途 OpenAPI 连接配置 + 行情源切换（两块分开，不揉在一起） */}
