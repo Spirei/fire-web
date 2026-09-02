@@ -9,8 +9,6 @@ const TRUMP_FILE = path.join(DATA, "trump-posts.json");
 const DUAN_FILE = path.join(DATA, "duan-posts.json");
 const TRUMP_SOURCE = "https://trumpstruth.org/";
 const DUAN_USER = "1247347556";
-const TRUMP_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
-const DUAN_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
 export type TrumpPost = { id: string; date: string; text: string; originalUrl: string; archiveUrl: string };
 type DuanCategory = "hot" | "original" | "longform";
@@ -146,19 +144,18 @@ export function readDuanPosts(): DuanPost[] {
   return readJsonFile<DuanPost[]>(DUAN_FILE, []);
 }
 
-/** 有缓存时只翻到与旧帖重叠为止，避免每次刷新抓 30 页归档。 */
+/** 有缓存时只翻到与旧帖重叠为止；不再按天数丢弃历史。 */
 export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
   if (trumpRunning) return readTrumpPosts();
   trumpRunning = true;
   const existing = readTrumpPosts();
   const known = new Set(existing.map((post) => post.id));
-  const cutoff = Date.now() - TRUMP_WINDOW_MS;
   const settings = getSiteSettings();
   const source = settings.trumpArchiveApiUrl || TRUMP_SOURCE;
   const incoming: TrumpPost[] = [];
   let nextUrl = source;
   let overlap = 0;
-  const maxPages = existing.length ? 3 : 12;
+  const maxPages = existing.length < 200 ? 40 : 5;
   try {
     for (let page = 0; page < maxPages && nextUrl; page += 1) {
       const response = await fetch(nextUrl, {
@@ -169,13 +166,8 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
       if (!response.ok) break;
       const html = await response.text();
       const parsed = parseTrumpPage(html, source);
-      let reachedCutoff = false;
+      if (!parsed.length) break;
       for (const post of parsed) {
-        const time = postTimestamp(post.date);
-        if (time && time < cutoff) {
-          reachedCutoff = true;
-          continue;
-        }
         if (known.has(post.id)) {
           overlap += 1;
           continue;
@@ -185,12 +177,9 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
       }
       const next = html.match(/<a href="([^"]*cursor=[^"]+)"[^>]*>Next Page/i)?.[1];
       nextUrl = next ? new URL(next.replace(/&amp;/g, "&"), source).toString() : "";
-      if (reachedCutoff || (existing.length > 0 && overlap >= 2)) nextUrl = "";
+      if (existing.length >= 200 && overlap >= 2) nextUrl = "";
     }
-    const merged = Array.from(new Map([...incoming, ...existing].filter((post) => {
-      const time = postTimestamp(post.date);
-      return !time || time >= cutoff;
-    }).map((post) => [post.id, { ...post, date: toIsoDate(post.date) }])).values());
+    const merged = Array.from(new Map([...incoming, ...existing].map((post) => [post.id, { ...post, date: toIsoDate(post.date) }])).values());
     try { writeJsonAtomic(TRUMP_FILE, merged); } catch { /* read-only deployments */ }
     void backfillTrumpTranslations(merged, 3);
     return merged;
@@ -263,38 +252,27 @@ export async function refreshDuanPosts(): Promise<DuanPost[]> {
   duanRunning = true;
   const existing = readDuanPosts();
   const known = new Set(existing.map((post) => post.id));
-  const cutoff = Date.now() - DUAN_WINDOW_MS;
-  const oldest = existing.reduce((min, post) => {
-    const time = postTimestamp(post.date);
-    return time && time < min ? time : min;
-  }, Date.now());
-  const needsWindowBackfill = !existing.length || oldest > cutoff + 3 * 24 * 60 * 60 * 1000;
   const needsQuoteBackfill = existing.some((post) => !post.quote && /^\s*回复@/.test(post.text));
   const live: DuanPost[] = [];
-  const maxPages = needsWindowBackfill || needsQuoteBackfill ? 18 : 4;
+  const maxPages = existing.length < 200 || needsQuoteBackfill ? 40 : 5;
   try {
     await warmXueqiuSession();
     for (let page = 1; page <= maxPages; page += 1) {
       const data = await xueqiuFetch(`/v4/statuses/user_timeline.json?user_id=${DUAN_USER}&page=${page}&count=20&type=0`) as { statuses?: XueqiuStatus[] } | null;
       if (!data) break;
       const batch = (data.statuses || []).map(mapDuanStatus).filter((item): item is DuanPost => item !== null);
+      if (!batch.length) break;
       let overlap = 0;
-      let reachedCutoff = false;
       for (const item of batch) {
-        if (postTimestamp(item.date) < cutoff) {
-          reachedCutoff = true;
-          continue;
-        }
         if (known.has(item.id)) overlap += 1;
         else known.add(item.id);
         live.push(item);
       }
-      if (!batch.length || reachedCutoff) break;
-      if (!needsWindowBackfill && !needsQuoteBackfill && overlap >= 3) break;
+      if (existing.length >= 200 && !needsQuoteBackfill && overlap >= 3) break;
     }
     const quoted = await fillMissingQuotes(live);
-    if (!quoted.length) return existing.filter((item) => postTimestamp(item.date) >= cutoff);
-    const merged = new Map(existing.filter((item) => postTimestamp(item.date) >= cutoff).map((item) => [item.id, item]));
+    if (!quoted.length) return existing;
+    const merged = new Map(existing.map((item) => [item.id, item]));
     quoted.forEach((item) => {
       const saved = merged.get(item.id);
       merged.set(item.id, {
