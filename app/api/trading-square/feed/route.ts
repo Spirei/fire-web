@@ -46,9 +46,9 @@ async function runBackgroundRefresh() {
   if (due.trump) lastRefreshAttempt.trump = now;
   if (due.duan) lastRefreshAttempt.duan = now;
   try {
-    void backfillTrumpTranslations(readTrumpPosts(), 20);
     if (due.trump) await refreshTrumpPosts();
     if (due.duan) await refreshDuanPosts();
+    void backfillTrumpTranslations(readTrumpPosts(), 20);
   } catch {
     /* keep serving local cache */
   }

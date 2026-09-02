@@ -1,7 +1,7 @@
 import path from "node:path";
 import { getSiteSettings } from "@/lib/settings";
 import { readJsonFile, writeJsonAtomic } from "@/lib/tradingSquareCache";
-import { backfillTrumpTranslations } from "@/lib/tradingSquareTranslate";
+import { backfillTrumpTranslations, translateTrumpPostsNow } from "@/lib/tradingSquareTranslate";
 import { proxyFetch } from "@/lib/net";
 
 const DATA = path.join(process.cwd(), "data");
@@ -182,6 +182,10 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
       const next = html.match(/<a href="([^"]*cursor=[^"]+)"[^>]*>Next Page/i)?.[1];
       nextUrl = next ? new URL(next.replace(/&amp;/g, "&"), source).toString() : "";
       if (existing.length >= 200 && overlap >= 2) nextUrl = "";
+    }
+    if (incoming.length) {
+      const newest = [...incoming].sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date));
+      await translateTrumpPostsNow(newest.slice(0, 15));
     }
     const merged = Array.from(new Map([...incoming, ...existing].map((post) => [post.id, { ...post, date: toIsoDate(post.date) }])).values());
     try { writeJsonAtomic(TRUMP_FILE, merged); } catch { /* read-only deployments */ }

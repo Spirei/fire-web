@@ -36,6 +36,24 @@ function readLocalFeed(): { posts: Post[]; updatedAt: string | null } | null {
 function writeLocalFeed(posts: Post[], updatedAt: string | null) {
   try { localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ posts, updatedAt })); } catch { /* quota / private mode */ }
 }
+
+function mergeFeedPosts(previous: Post[], incoming: Post[]): Post[] {
+  const prevById = new Map(previous.map((post) => [post.id, post]));
+  const newestShown = previous.reduce((max, post) => {
+    if (post.author !== "trump") return max;
+    const time = Date.parse(post.date);
+    return Number.isFinite(time) && time > max ? time : max;
+  }, 0);
+  return incoming.flatMap((post) => {
+    const old = prevById.get(post.id);
+    const next = !post.textZh && old?.textZh ? { ...post, textZh: old.textZh } : post;
+    if (next.author === "trump" && !next.textZh && !old) {
+      const time = Date.parse(next.date);
+      if (Number.isFinite(time) && time > newestShown) return [];
+    }
+    return [next];
+  });
+}
 const BADGE_SHAPE = "M8.82.521a1.596 1.596 0 012.36 0l.362.398c.42.46 1.07.635 1.664.445l.512-.163a1.596 1.596 0 012.043 1.18l.115.525a1.596 1.596 0 001.218 1.218l.525.115a1.596 1.596 0 011.18 2.043l-.163.513a1.596 1.596 0 00.446 1.663l.397.362a1.596 1.596 0 010 2.36l-.397.362c-.461.42-.635 1.07-.446 1.664l.163.512a1.59 1.59 0 01-1.18 2.043l-.525.115a1.596 1.596 0 00-1.218 1.218l-.115.525a1.596 1.596 0 01-2.043 1.18l-.512-.163a1.596 1.596 0 00-1.664.445l-.362.398a1.596 1.596 0 01-2.36 0l-.362-.398a1.596 1.596 0 00-1.663-.445l-.513.163a1.596 1.596 0 01-2.043-1.18l-.115-.525a1.59 1.59 0 00-1.218-1.218l-.525-.115a1.596 1.596 0 01-1.18-2.043l.164-.512a1.596 1.596 0 00-.446-1.664L.52 11.18a1.596 1.596 0 010-2.36l.398-.362c.46-.42.635-1.07.446-1.663L1.2 6.282a1.596 1.596 0 011.18-2.043l.525-.115a1.596 1.596 0 001.218-1.218l.115-.525A1.596 1.596 0 016.282 1.2l.513.163c.594.19 1.244.015 1.663-.445L8.821.52z";
 
 function PlatformBadge({ platform }: { platform: AuthorId }) {
@@ -150,12 +168,14 @@ export default function TradingSquareView({ avatars }: { avatars?: Record<string
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json() as { posts?: Post[]; updatedAt?: string | null; refreshing?: boolean };
         if (!active) return;
-        const nextPosts = data.posts ?? [];
-        setPosts(nextPosts);
+        setPosts((current) => {
+          const nextPosts = mergeFeedPosts(current, data.posts ?? []);
+          writeLocalFeed(nextPosts, data.updatedAt ?? null);
+          return nextPosts;
+        });
         setUpdatedAt(data.updatedAt ?? null);
         setRefreshing(Boolean(data.refreshing));
-        writeLocalFeed(nextPosts, data.updatedAt ?? null);
-        if (data.refreshing) pollLeft.current = Math.max(pollLeft.current, 2);
+        if (data.refreshing) pollLeft.current = Math.max(pollLeft.current, 12);
       } catch {
         /* keep existing cache on screen */
       } finally {
@@ -174,14 +194,16 @@ export default function TradingSquareView({ avatars }: { avatars?: Record<string
         .then((response) => (response.ok ? response.json() : null))
         .then((data) => {
           if (!data) return;
-          const nextPosts = data.posts ?? [];
-          setPosts(nextPosts);
+          setPosts((current) => {
+            const nextPosts = mergeFeedPosts(current, data.posts ?? []);
+            writeLocalFeed(nextPosts, data.updatedAt ?? null);
+            return nextPosts;
+          });
           setUpdatedAt(data.updatedAt ?? null);
           setRefreshing(Boolean(data.refreshing) && pollLeft.current > 0);
-          writeLocalFeed(nextPosts, data.updatedAt ?? null);
         })
         .catch(() => setRefreshing(false));
-    }, 2500);
+    }, 3000);
     return () => window.clearTimeout(timer);
   }, [refreshing, updatedAt]);
 

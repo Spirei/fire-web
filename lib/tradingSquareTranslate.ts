@@ -19,85 +19,151 @@ function writeTranslations(cache: Record<string, string>) {
 let backfillRunning = false;
 const FAILED_COOLDOWN_MS = 30 * 60 * 1000;
 const recentlyFailed = new Map<string, number>();
-let providerCooldownUntil = 0;
+let llmCooldownUntil = 0;
+let memoryCooldownUntil = 0;
 
-async function translateOne(text: string): Promise<string | undefined> {
-  if (Date.now() < providerCooldownUntil) return undefined;
+function llmKey(): string {
   const settings = getSiteSettings();
-  if (!settings.translationEnabled) return undefined;
-  if (settings.llmApiKey || settings.deepseekApiKey) {
-    const translation = await fetch(settings.llmApiUrl || settings.deepseekApiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.llmApiKey || settings.deepseekApiKey}` },
-      body: JSON.stringify({
-        model: settings.llmModel || settings.deepseekModel || "deepseek-chat",
-        temperature: 0.1,
-        messages: [
-          { role: "system", content: "将用户提供的英文社交媒体内容准确翻译为简体中文，只输出译文，不添加解释。" },
-          { role: "user", content: text.slice(0, 4000) }
-        ]
-      }),
-      signal: AbortSignal.timeout(12000),
-      cache: "no-store"
-    });
-    if (translation.status === 429) {
-      providerCooldownUntil = Date.now() + 10 * 60 * 1000;
-      return undefined;
-    }
-    const data = await translation.json() as { choices?: Array<{ message?: { content?: string } }> };
-    return data.choices?.[0]?.message?.content?.trim();
+  return (settings.llmApiKey || settings.deepseekApiKey || process.env.DEEPSEEK_API_KEY || process.env.LLM_API_KEY || "").trim();
+}
+
+async function translateWithLlm(text: string): Promise<string | undefined> {
+  if (Date.now() < llmCooldownUntil) return undefined;
+  const key = llmKey();
+  if (!key) return undefined;
+  const settings = getSiteSettings();
+  const translation = await fetch(settings.llmApiUrl || settings.deepseekApiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model: settings.llmModel || settings.deepseekModel || "deepseek-chat",
+      temperature: 0.1,
+      messages: [
+        { role: "system", content: "将用户提供的英文社交媒体内容准确翻译为简体中文，只输出译文，不添加解释。" },
+        { role: "user", content: text.slice(0, 4000) }
+      ]
+    }),
+    signal: AbortSignal.timeout(12000),
+    cache: "no-store"
+  });
+  if (translation.status === 429) {
+    llmCooldownUntil = Date.now() + 10 * 60 * 1000;
+    return undefined;
   }
+  if (!translation.ok) return undefined;
+  const data = await translation.json() as { choices?: Array<{ message?: { content?: string } }> };
+  return data.choices?.[0]?.message?.content?.trim();
+}
+
+async function translateWithMyMemory(text: string): Promise<string | undefined> {
+  if (Date.now() < memoryCooldownUntil) return undefined;
+  const settings = getSiteSettings();
   const translation = await fetch(
     `${settings.translationApiUrl}?q=${encodeURIComponent(text.slice(0, 480))}&langpair=en|zh-CN`,
     { signal: AbortSignal.timeout(8000), next: { revalidate: 3600 } }
   );
   if (translation.status === 429) {
-    providerCooldownUntil = Date.now() + 10 * 60 * 1000;
+    memoryCooldownUntil = Date.now() + 10 * 60 * 1000;
     return undefined;
   }
+  if (!translation.ok) return undefined;
   const data = await translation.json() as { responseData?: { translatedText?: string } };
   return data.responseData?.translatedText || undefined;
+}
+
+/** 大模型优先，失败或未配置时再走 MyMemory。 */
+async function translateOne(text: string): Promise<string | undefined> {
+  const settings = getSiteSettings();
+  if (!settings.translationEnabled) return undefined;
+  try {
+    const llm = await translateWithLlm(text);
+    if (llm && validTranslation(llm)) return llm;
+  } catch {
+    /* fall through to MyMemory */
+  }
+  try {
+    const fallback = await translateWithMyMemory(text);
+    if (fallback && validTranslation(fallback)) return fallback;
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+async function acquireBackfill(timeoutMs = 35_000): Promise<boolean> {
+  const start = Date.now();
+  while (backfillRunning) {
+    if (Date.now() - start > timeoutMs) return false;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  }
+  backfillRunning = true;
+  return true;
 }
 
 function applyTranslations<T extends { id: string; text: string }>(posts: T[], translations: Record<string, string>): T[] {
   return posts.map((post) => validTranslation(translations[post.id]) ? { ...post, textZh: translations[post.id] } : post);
 }
 
-/** 翻译尚未有中文的帖子。失败的条目冷却后重试，不挡住更早的未译队列。 */
+async function translateMissing<T extends { id: string; text: string }>(
+  posts: T[],
+  limit: number,
+  opts: { skipCooldown?: boolean; deadlineMs?: number }
+): Promise<number> {
+  const translations = readTranslations();
+  const now = Date.now();
+  const missing = posts.filter((post) => {
+    if (validTranslation(translations[post.id])) return false;
+    if (opts.skipCooldown) return true;
+    const failedAt = recentlyFailed.get(post.id) ?? 0;
+    return now - failedAt >= FAILED_COOLDOWN_MS;
+  });
+  const deadline = now + (opts.deadlineMs ?? 25_000);
+  let saved = 0;
+  for (let index = 0; index < missing.length && saved < limit && Date.now() < deadline; index += 3) {
+    const batch = missing.slice(index, index + 3);
+    await Promise.all(batch.map(async (post) => {
+      try {
+        const textZh = await translateOne(post.text);
+        if (textZh && validTranslation(textZh)) {
+          translations[post.id] = textZh;
+          recentlyFailed.delete(post.id);
+          saved += 1;
+        } else {
+          recentlyFailed.set(post.id, Date.now());
+        }
+      } catch {
+        recentlyFailed.set(post.id, Date.now());
+      }
+    }));
+    if (saved) writeTranslations(translations);
+  }
+  return saved;
+}
+
+/** 新帖优先：等锁、译完再返回，调用方随后才写入本地 JSON。 */
+export async function translateTrumpPostsNow<T extends { id: string; text: string }>(posts: T[]): Promise<T[]> {
+  if (!posts.length) return posts;
+  const got = await acquireBackfill(40_000);
+  if (!got) return applyTranslations(posts, readTranslations());
+  try {
+    await translateMissing(posts, posts.length, { skipCooldown: true, deadlineMs: 40_000 });
+  } finally {
+    backfillRunning = false;
+  }
+  return applyTranslations(posts, readTranslations());
+}
+
+/** 翻译尚未有中文的历史帖子。失败的条目冷却后重试，不挡住队列。 */
 export async function backfillTrumpTranslations<T extends { id: string; text: string }>(
   posts: T[],
   limit = 20
 ): Promise<T[]> {
   const translations = readTranslations();
-  if (backfillRunning || limit <= 0) return applyTranslations(posts, translations);
-  backfillRunning = true;
-  const now = Date.now();
-  const missing = posts.filter((post) => {
-    if (validTranslation(translations[post.id])) return false;
-    const failedAt = recentlyFailed.get(post.id) ?? 0;
-    return now - failedAt >= FAILED_COOLDOWN_MS;
-  });
+  if (limit <= 0) return applyTranslations(posts, translations);
+  const got = await acquireBackfill(5_000);
+  if (!got) return applyTranslations(posts, translations);
   try {
-    const deadline = now + 25_000;
-    let saved = 0;
-    for (let index = 0; index < missing.length && saved < limit && Date.now() < deadline; index += 4) {
-      const batch = missing.slice(index, index + 4);
-      await Promise.all(batch.map(async (post) => {
-        try {
-          const textZh = await translateOne(post.text);
-          if (textZh && validTranslation(textZh)) {
-            translations[post.id] = textZh;
-            recentlyFailed.delete(post.id);
-            saved += 1;
-          } else {
-            recentlyFailed.set(post.id, Date.now());
-          }
-        } catch {
-          recentlyFailed.set(post.id, Date.now());
-        }
-      }));
-      if (saved) writeTranslations(translations);
-    }
+    await translateMissing(posts, limit, { deadlineMs: 25_000 });
   } finally {
     backfillRunning = false;
   }
