@@ -41,12 +41,12 @@ export async function GET() {
     const localized = await Promise.all(recent.map(async (post, index) => {
       if (validTranslation(translations[post.id])) return { ...post, textZh: translations[post.id] };
       delete translations[post.id];
-      if (index >= 3) return post;
+      if (index >= 1) return post;
       try {
         if (!settings.translationEnabled) return post;
         let textZh: string | undefined;
         if (settings.llmApiKey || settings.deepseekApiKey) {
-          const translation = await fetch(settings.llmApiUrl || settings.deepseekApiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.llmApiKey || settings.deepseekApiKey}` }, body: JSON.stringify({ model: settings.llmModel || settings.deepseekModel || "deepseek-chat", temperature: 0.1, messages: [{ role: "system", content: "将用户提供的英文社交媒体内容准确翻译为简体中文，只输出译文，不添加解释。" }, { role: "user", content: post.text.slice(0, 4000) }] }), signal: AbortSignal.timeout(8000), cache: "no-store" });
+          const translation = await fetch(settings.llmApiUrl || settings.deepseekApiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.llmApiKey || settings.deepseekApiKey}` }, body: JSON.stringify({ model: settings.llmModel || settings.deepseekModel || "deepseek-chat", temperature: 0.1, messages: [{ role: "system", content: "将用户提供的英文社交媒体内容准确翻译为简体中文，只输出译文，不添加解释。" }, { role: "user", content: post.text.slice(0, 4000) }] }), signal: AbortSignal.timeout(3500), cache: "no-store" });
           const data = await translation.json() as { choices?: Array<{ message?: { content?: string } }> };
           textZh = data.choices?.[0]?.message?.content?.trim();
         } else {
