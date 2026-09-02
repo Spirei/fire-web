@@ -2455,12 +2455,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   action={editingSources ? <button type="button" onClick={() => setEditingSources(false)} className="btn btn-line btn-sm">完成</button> : undefined}
                 >
                   <div id="translation" className="flex flex-col">
-                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场 · 归档与翻译", ["translationProvider", "trumpArchiveApiUrl", "translationApiUrl", "deepseekApiUrl", "deepseekModel", "deepseekApiKey"]]] as const).map(([label, keys]) => {
+                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["翻译服务 · DeepSeek / OpenAI", ["translationProvider", "trumpArchiveApiUrl", "translationApiUrl", "deepseekApiUrl", "deepseekModel", "deepseekApiKey"]]] as const).map(([label, keys]) => {
                       const fields = SOURCE_FIELDS.filter((f) => (keys as readonly string[]).includes(f.key));
                       if (!fields.length) return null;
                       return (
                         <div key={label}>
-                          <p className="subhead">{label}</p>
+                          <p className={`subhead ${label.startsWith("翻译服务") ? "mt-6 border-t border-edge pt-5 text-brand-deep" : ""}`}>{label}</p>
                           {fields.map((f) => {
                             const value = (site as unknown as Record<string, string>)[f.key] || f.placeholder;
                             return (
