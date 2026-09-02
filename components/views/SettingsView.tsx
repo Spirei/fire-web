@@ -1413,7 +1413,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           earningsApiUrl: site.earningsApiUrl,
           cnEarningsApiUrl: site.cnEarningsApiUrl,
           usLogoApiUrl: site.usLogoApiUrl,
-          cnLogoApiUrl: site.cnLogoApiUrl
+          cnLogoApiUrl: site.cnLogoApiUrl,
+          translationProvider: site.translationProvider,
+          trumpArchiveApiUrl: site.trumpArchiveApiUrl,
+          translationApiUrl: site.translationApiUrl,
+          deepseekApiUrl: site.deepseekApiUrl,
+          deepseekModel: site.deepseekModel,
+          deepseekApiKey: site.deepseekApiKey
         })
       });
       const data = await res.json().catch(() => null);
@@ -2524,7 +2530,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                 </SettingsSection>
 
-                <SettingsSection id="translation" icon="plug" title="翻译服务" desc="交易广场中文翻译与大模型配置（DeepSeek / OpenAI 兼容）" action={editingSources ? <button type="button" onClick={() => setEditingSources(false)} className="btn btn-line btn-sm">完成</button> : <button type="button" onClick={() => setEditingSources(true)} className="btn btn-ghost btn-sm">编辑</button>}>
+                <SettingsSection id="translation" icon="plug" title="翻译服务" desc="交易广场中文翻译与大模型配置（DeepSeek / OpenAI 兼容）" action={editingSources ? <button type="button" onClick={async () => { await saveStockSources(); setEditingSources(false); }} className="btn btn-line btn-sm">完成</button> : <button type="button" onClick={() => setEditingSources(true)} className="btn btn-ghost btn-sm">编辑</button>}>
                   {(["translationProvider", "translationApiUrl", "deepseekApiUrl", "deepseekModel", "deepseekApiKey"] as const).map((key) => <div key={key} className="sw-row"><div className="sw-row-label"><b>{key === "translationProvider" ? "翻译提供商" : key === "translationApiUrl" ? "备用翻译接口" : key === "deepseekApiUrl" ? "DeepSeek API 地址" : key === "deepseekModel" ? "DeepSeek 模型" : "DeepSeek API Key"}</b></div><input className="sw-row-input" type={key === "deepseekApiKey" ? "password" : "text"} autoComplete="off" value={(site as unknown as Record<string, string>)[key] || ""} onChange={(e) => setSite((s) => ({ ...s, [key]: e.target.value }))} readOnly={!editingSources} placeholder={key === "deepseekModel" ? "deepseek-chat" : ""} /></div>)}
                 </SettingsSection>
 
