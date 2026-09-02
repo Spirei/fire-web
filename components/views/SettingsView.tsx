@@ -43,10 +43,10 @@ interface Props {
   initialSub?: string;
 }
 
-type SubKey = "site" | "stocks" | "api" | "profile" | "database" | "cron" | "about";
+type SubKey = "site" | "features" | "stocks" | "api" | "profile" | "database" | "cron" | "about";
 
 // 仅管理员可见的设置子项
-const ADMIN_SUB_KEYS = new Set<SubKey>(["site", "stocks", "database", "cron"]);
+const ADMIN_SUB_KEYS = new Set<SubKey>(["site", "features", "stocks", "database", "cron"]);
 
 /** ⌘K 命令搜索索引：关键词 → 子分类 + 锚点 */
 const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; groupLabel: string; keywords: string }[] = [
@@ -54,6 +54,7 @@ const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; group
   { sub: "site", anchor: "appearance", label: "网站形象", groupLabel: "网站", keywords: "图标 logo 字体 背景 形象 favicon 图片" },
   { sub: "site", anchor: "ticker", label: "首页指数", groupLabel: "网站", keywords: "指数 轮换 首页 ticker 行情条" },
   { sub: "site", anchor: "nav", label: "首页导航", groupLabel: "网站", keywords: "导航 菜单 首页 入口" },
+  { sub: "features", anchor: "trading-square", label: "交易广场", groupLabel: "功能", keywords: "交易广场 特朗普 段永平 更新 刷新 频率 缓存" },
   { sub: "stocks", anchor: "groups", label: "券商分组", groupLabel: "股票", keywords: "券商 分组 别名 持仓" },
   { sub: "stocks", anchor: "sources", label: "股票来源接口", groupLabel: "股票", keywords: "股票来源 接口 行情 财报 图标 url 数据源" },
   { sub: "stocks", anchor: "translation", label: "翻译配置", groupLabel: "股票", keywords: "翻译配置 DeepSeek 交易广场 中文" },
@@ -71,6 +72,7 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   appearance: "image",
   ticker: "stocks",
   nav: "home",
+  "trading-square": "features",
   groups: "tag",
   sources: "plug",
   trade: "trade",
@@ -235,6 +237,7 @@ function SubPill({
 
 const SUB_NAV: { key: SubKey; label: string }[] = [
   { key: "site", label: "网站设置" },
+  { key: "features", label: "功能" },
   { key: "stocks", label: "股票设置" },
   { key: "profile", label: "个人信息" },
   { key: "database", label: "数据库增强" },
@@ -249,6 +252,10 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
     items: [
       { key: "site", label: "网站设置", desc: "站点信息与首页文案、导航" }
     ]
+  },
+  {
+    label: "功能",
+    items: [{ key: "features", label: "功能", desc: "业务功能与更新策略" }]
   },
   {
     label: "股票",
@@ -514,6 +521,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   llmApiUrl: "https://api.deepseek.com/chat/completions",
   llmModel: "deepseek-chat",
   llmApiKey: "",
+  tradingSquareTrumpRefreshMinutes: 5,
+  tradingSquareDuanRefreshMinutes: 5,
   translationEnabled: true,
   dbType: "sqlite",
   pgHost: "",
@@ -743,13 +752,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       return acc;
     }, []);
   const [sub, setSub] = useState<SubKey>(() => {
-    const valid = initialSub === "site" || initialSub === "stocks" || initialSub === "api" || initialSub === "profile" || initialSub === "database" || initialSub === "cron" || initialSub === "about"
+    const valid = initialSub === "site" || initialSub === "features" || initialSub === "stocks" || initialSub === "api" || initialSub === "profile" || initialSub === "database" || initialSub === "cron" || initialSub === "about"
       ? (initialSub as SubKey)
       : (isAdminUser ? "site" : "profile");
     return isAdminUser || !ADMIN_SUB_KEYS.has(valid) ? valid : "profile";
   });
   const [activeAnchor, setActiveAnchor] = useState<string>(() => {
-    const valid = (initialSub === "site" || initialSub === "stocks" || initialSub === "api" || initialSub === "profile" || initialSub === "database" || initialSub === "cron" || initialSub === "about") ? initialSub : (isAdminUser ? "site" : "profile");
+    const valid = (initialSub === "site" || initialSub === "features" || initialSub === "stocks" || initialSub === "api" || initialSub === "profile" || initialSub === "database" || initialSub === "cron" || initialSub === "about") ? initialSub : (isAdminUser ? "site" : "profile");
     const requested = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("anchor") : null;
     return requested && SETTINGS_SEARCH_INDEX.some((x) => x.sub === valid && x.anchor === requested) ? requested : SETTINGS_SEARCH_INDEX.find((x) => x.sub === valid)?.anchor || "info";
   });
@@ -786,7 +795,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const tickerDragIndex = useRef<number | null>(null);
 
   useEffect(() => {
-    if (initialSub === "site" || initialSub === "stocks" || initialSub === "api" || initialSub === "profile" || initialSub === "database" || initialSub === "cron" || initialSub === "about") {
+    if (initialSub === "site" || initialSub === "features" || initialSub === "stocks" || initialSub === "api" || initialSub === "profile" || initialSub === "database" || initialSub === "cron" || initialSub === "about") {
       const next = initialSub as SubKey;
       setSub(isAdminUser || !ADMIN_SUB_KEYS.has(next) ? next : "profile");
     }
@@ -1243,12 +1252,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [showAllHomeNav, setShowAllHomeNav] = useState(false);
   const [showAllTabs, setShowAllTabs] = useState(false);
   const [editingSources, setEditingSources] = useState(false);
+  const [editingTradingSquare, setEditingTradingSquare] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingSiteInfo, setEditingSiteInfo] = useState(false);
   const [editingFutu, setEditingFutu] = useState(false);
   const [editingAppearance, setEditingAppearance] = useState(false);
   const [editingDb, setEditingDb] = useState(false);
-  const activeEditState = activeAnchor === "info" ? editingSiteInfo
+  const activeEditState = activeAnchor === "trading-square" ? editingTradingSquare
+    : activeAnchor === "info" ? editingSiteInfo
     : activeAnchor === "appearance" ? editingAppearance
       : activeAnchor === "ticker" ? editingTicker
         : activeAnchor === "nav" ? (editingHomeNav || editingTabs)
@@ -1261,7 +1272,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const activePageMeta = SETTINGS_SEARCH_INDEX.find((item) => item.sub === sub && item.anchor === activeAnchor);
 
   function beginActiveEdit() {
-    if (activeAnchor === "info") setEditingSiteInfo(true);
+    if (activeAnchor === "trading-square") setEditingTradingSquare(true);
+    else if (activeAnchor === "info") setEditingSiteInfo(true);
     else if (activeAnchor === "appearance") setEditingAppearance(true);
     else if (activeAnchor === "ticker") setEditingTicker(true);
     else if (activeAnchor === "nav") { setEditingHomeNav(true); setEditingTabs(true); }
@@ -1290,6 +1302,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setEditingTabs(false);
       setEditingStockGroups(false);
       setEditingSources(false);
+      setEditingTradingSquare(false);
       setEditingFutu(false);
       setEditingProfile(false);
       setEditingDb(false);
@@ -2298,6 +2311,50 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   )}
                 </SettingsSection>}
 
+              </div>
+            )}
+
+            {/* ===== 功能：交易广场 ===== */}
+            {sub === "features" && isAdminUser && (
+              <div className="flex flex-col gap-6">
+                <SettingsSection
+                  id="trading-square"
+                  icon="features"
+                  title="交易广场"
+                  desc="公开动态使用本地缓存，访问页面时在后台按频率检查更新"
+                  action={editingTradingSquare ? (
+                    <button type="button" disabled={blockSaving.tradingSquare} onClick={async () => {
+                      const ok = await saveBlock("tradingSquare", {
+                        tradingSquareTrumpRefreshMinutes: site.tradingSquareTrumpRefreshMinutes,
+                        tradingSquareDuanRefreshMinutes: site.tradingSquareDuanRefreshMinutes
+                      }, "交易广场更新频率已保存");
+                      if (ok) setEditingTradingSquare(false);
+                    }} className="btn btn-line btn-sm disabled:opacity-60">{blockSaving.tradingSquare ? "保存中…" : "保存"}</button>
+                  ) : <button type="button" onClick={() => setEditingTradingSquare(true)} className="btn btn-ghost btn-sm">编辑</button>}
+                >
+                  <div className="flex flex-col">
+                    {([
+                      ["tradingSquareTrumpRefreshMinutes", "特朗普", "Truth Social 公开动态"],
+                      ["tradingSquareDuanRefreshMinutes", "段永平", "雪球公开动态"]
+                    ] as const).map(([key, name, desc]) => (
+                      <div key={key} className="sw-row">
+                        <div className="sw-row-label"><b>{name}</b><span>{desc}</span></div>
+                        <div className="ctrl">
+                          {editingTradingSquare ? (
+                            <select className="sw-row-input !w-[150px]" value={site[key]} onChange={(event) => setSite(current => ({ ...current, [key]: Number(event.target.value) }))}>
+                              {[1, 5, 10, 15, 30, 60, 180, 360, 720, 1440].map(minutes => <option key={minutes} value={minutes}>{minutes < 60 ? `${minutes} 分钟` : minutes === 60 ? "1 小时" : minutes === 1440 ? "24 小时" : `${minutes / 60} 小时`}</option>)}
+                            </select>
+                          ) : <span className="text-[12.5px] font-semibold text-ink">{site[key] < 60 ? `${site[key]} 分钟` : site[key] === 60 ? "1 小时" : site[key] === 1440 ? "24 小时" : `${site[key] / 60} 小时`}</span>}
+                        </div>
+                      </div>
+                    ))}
+                    <div className="sw-row">
+                      <div className="sw-row-label"><b>更新方式</b><span>页面始终先读取本地 JSON，不等待外部平台响应</span></div>
+                      <div className="ctrl"><span className="inline-flex items-center gap-1.5 text-[12px] text-muted"><i className="h-1.5 w-1.5 rounded-full bg-emerald-500" />缓存优先 · 访问触发</span></div>
+                    </div>
+                  </div>
+                  {blockMsg.tradingSquare && <p className={`settings-form-message ${blockMsg.tradingSquare.type === "ok" ? "is-ok" : "is-error"}`}>{blockMsg.tradingSquare.text}</p>}
+                </SettingsSection>
               </div>
             )}
 

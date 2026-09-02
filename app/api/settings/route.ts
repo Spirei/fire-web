@@ -79,6 +79,8 @@ export async function PUT(request: Request) {
     llmApiUrl: body.llmApiUrl !== undefined ? String(body.llmApiUrl) : undefined,
     llmModel: body.llmModel !== undefined ? String(body.llmModel) : undefined,
     llmApiKey: body.llmApiKey !== undefined ? String(body.llmApiKey) : undefined,
+    tradingSquareTrumpRefreshMinutes: Number.isFinite(Number(body.tradingSquareTrumpRefreshMinutes)) ? Number(body.tradingSquareTrumpRefreshMinutes) : undefined,
+    tradingSquareDuanRefreshMinutes: Number.isFinite(Number(body.tradingSquareDuanRefreshMinutes)) ? Number(body.tradingSquareDuanRefreshMinutes) : undefined,
     homeNav: Array.isArray(body.homeNav) ? body.homeNav : undefined,
     tabs: Array.isArray(body.tabs) ? body.tabs : undefined,
     groups: Array.isArray(body.groups) ? body.groups : undefined,

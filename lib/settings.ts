@@ -79,6 +79,8 @@ const DEFAULTS: SiteSettings = {
   llmApiUrl: "https://api.deepseek.com/chat/completions",
   llmModel: "deepseek-chat",
   llmApiKey: "",
+  tradingSquareTrumpRefreshMinutes: 5,
+  tradingSquareDuanRefreshMinutes: 5,
   dbType: "sqlite",
   pgHost: "",
   pgPort: "5432",
@@ -374,6 +376,8 @@ export function getSiteSettings(): SiteSettings {
   }
   result.allowRegister = map.allowRegister !== "0";
   result.stockIconCdn = map.stockIconCdn === "1";
+  result.tradingSquareTrumpRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareTrumpRefreshMinutes) || 5)));
+  result.tradingSquareDuanRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareDuanRefreshMinutes) || 5)));
   settingsCache = result;
   return result;
 }
@@ -528,6 +532,12 @@ export function updateSiteSettings(patch: Partial<SiteSettings>): SiteSettings {
   }
   if (typeof patch.stockIconCdn === "boolean") {
     upsert.run("stockIconCdn", patch.stockIconCdn ? "1" : "0");
+  }
+  if (typeof patch.tradingSquareTrumpRefreshMinutes === "number") {
+    upsert.run("tradingSquareTrumpRefreshMinutes", String(Math.min(1440, Math.max(1, Math.round(patch.tradingSquareTrumpRefreshMinutes)))));
+  }
+  if (typeof patch.tradingSquareDuanRefreshMinutes === "number") {
+    upsert.run("tradingSquareDuanRefreshMinutes", String(Math.min(1440, Math.max(1, Math.round(patch.tradingSquareDuanRefreshMinutes)))));
   }
   settingsCache = null;
   return getSiteSettings();

@@ -263,6 +263,8 @@ export interface SiteSettings {
   llmModel: string;
   llmApiKey: string;
   llmApiKeyConfigured?: boolean;
+  tradingSquareTrumpRefreshMinutes: number;
+  tradingSquareDuanRefreshMinutes: number;
   dbType: "sqlite" | "postgres";
   pgHost: string;
   pgPort: string;

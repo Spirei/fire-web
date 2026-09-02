@@ -23,6 +23,14 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
       <path d="M7 15.5 10 12l3 2.5 4.5-6" />
     </>
   ),
+  features: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="2" />
+      <rect x="14" y="3" width="7" height="7" rx="2" />
+      <rect x="3" y="14" width="7" height="7" rx="2" />
+      <path d="M17.5 14v7M14 17.5h7" />
+    </>
+  ),
   profile: (
     <>
       <circle cx="12" cy="8" r="4" />
