@@ -9,12 +9,17 @@ function readTranslations(): Record<string, string> { try { return JSON.parse(fs
 function writeTranslations(cache: Record<string, string>) { try { fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true }); fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2)); } catch { /* read-only deployments still work without persistence */ } }
 function validTranslation(value?: string) { return !!value && !/MYMEMORY WARNING|USED ALL AVAILABLE FREE TRANSLATIONS|QUOTA|RATE LIMIT/i.test(value); }
 
+let feedCache: { posts: Array<Record<string, unknown>>; fetchedAt: number } | null = null;
+
 function clean(value: string) {
   return value.replace(/<br\s*\/?\s*>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#039;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+\n/g, "\n").replace(/\n\s+/g, "\n").trim();
 }
 
 export async function GET() {
   try {
+    if (feedCache && Date.now() - feedCache.fetchedAt < 60_000) {
+      return NextResponse.json({ posts: feedCache.posts, source: SOURCE, fetchedAt: new Date(feedCache.fetchedAt).toISOString(), cached: true });
+    }
     const settings = getSiteSettings();
     const source = settings.trumpArchiveApiUrl || SOURCE;
     let html = "";
@@ -40,14 +45,15 @@ export async function GET() {
     }).filter((post) => post.text && post.date);
     const recent = posts.filter((post) => Date.parse(post.date) >= cutoff).slice(0, 30);
     const translations = readTranslations();
-    const localized = await Promise.all(recent.map(async (post) => {
+    const localized = await Promise.all(recent.map(async (post, index) => {
       if (validTranslation(translations[post.id])) return { ...post, textZh: translations[post.id] };
+      if (index >= 5) return post;
       delete translations[post.id];
       try {
         if (!settings.translationEnabled) return post;
         let textZh: string | undefined;
         if (settings.llmApiKey || settings.deepseekApiKey) {
-          const translation = await fetch(settings.llmApiUrl || settings.deepseekApiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.llmApiKey || settings.deepseekApiKey}` }, body: JSON.stringify({ model: settings.llmModel || settings.deepseekModel || "deepseek-chat", temperature: 0.1, messages: [{ role: "system", content: "将用户提供的英文社交媒体内容准确翻译为简体中文，只输出译文，不添加解释。" }, { role: "user", content: post.text.slice(0, 4000) }] }), signal: AbortSignal.timeout(3500), cache: "no-store" });
+          const translation = await fetch(settings.llmApiUrl || settings.deepseekApiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.llmApiKey || settings.deepseekApiKey}` }, body: JSON.stringify({ model: settings.llmModel || settings.deepseekModel || "deepseek-chat", temperature: 0.1, messages: [{ role: "system", content: "将用户提供的英文社交媒体内容准确翻译为简体中文，只输出译文，不添加解释。" }, { role: "user", content: post.text.slice(0, 4000) }] }), signal: AbortSignal.timeout(2000), cache: "no-store" });
           const data = await translation.json() as { choices?: Array<{ message?: { content?: string } }> };
           textZh = data.choices?.[0]?.message?.content?.trim();
         } else {
@@ -59,8 +65,10 @@ export async function GET() {
         return post;
       } catch { return post; }
     }));
-    return NextResponse.json({ posts: localized, source: SOURCE, fetchedAt: new Date().toISOString() });
+    feedCache = { posts: localized, fetchedAt: Date.now() };
+    return NextResponse.json({ posts: localized, source: SOURCE, fetchedAt: new Date(feedCache.fetchedAt).toISOString() });
   } catch (error) {
+    if (feedCache) return NextResponse.json({ posts: feedCache.posts, source: SOURCE, fetchedAt: new Date(feedCache.fetchedAt).toISOString(), cached: true, stale: true });
     return NextResponse.json({ posts: [], source: SOURCE, fetchedAt: new Date().toISOString(), error: error instanceof Error ? error.message : "archive unavailable" }, { status: 502 });
   }
 }
