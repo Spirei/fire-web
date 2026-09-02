@@ -35,6 +35,7 @@ const DEFAULTS: SiteSettings = {
     { key: "fire", label: "FIRE", url: "/fire" },
     { key: "watchlist", label: "自选股", url: "/watchlist" },
     { key: "global", label: "全球经济", url: "/global" },
+    { key: "trading", label: "交易广场", url: "/trading" },
     { key: "earnings", label: "财报日历", url: "/earnings" },
     { key: "celebs", label: "名人持仓", url: "/celebs" },
     { key: "users", label: "用户管理", url: "/users" },
@@ -82,7 +83,7 @@ const SIMPLE_KEYS: ("domain" | "title" | "ico" | "homepageBg" | "loginSideImage"
   "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword"
 ];
 
-export const NAV_KEYS = ["holdings", "assets", "fire", "watchlist", "global", "earnings", "celebs", "users", "attachments", "library", "activities", "settings"] as const;
+export const NAV_KEYS = ["holdings", "assets", "fire", "watchlist", "global", "trading", "earnings", "celebs", "users", "attachments", "library", "activities", "settings"] as const;
 const DEFAULT_LABELS: Record<string, string> = Object.fromEntries(
   DEFAULTS.tabs.map((t) => [t.key, t.label])
 );

@@ -31,6 +31,7 @@ const FireView = dynamic(() => import("@/components/views/FireView"), { ssr: tru
 const ActivitiesView = dynamic(() => import("@/components/views/ActivitiesView"), { ssr: false, loading: TabLoading });
 const EarningsCalendarView = dynamic(() => import("@/components/views/EarningsCalendarView"), { ssr: false, loading: TabLoading });
 const CelebsView = dynamic(() => import("@/components/views/CelebsView"), { ssr: false, loading: TabLoading });
+const TradingSquareView = dynamic(() => import("@/components/views/TradingSquareView"), { ssr: false, loading: TabLoading });
 const SettingsView = dynamic(() => import("@/components/views/SettingsView"), { ssr: false, loading: TabLoading });
 const UsersView = dynamic(() => import("@/components/views/UsersView"), { ssr: false, loading: TabLoading });
 const AssetLibraryView = dynamic(() => import("@/components/views/AssetLibraryView"), { ssr: false, loading: TabLoading });
@@ -49,6 +50,7 @@ const VIEW_PRELOADERS: Record<string, () => Promise<unknown>> = {
   global: () => import("@/components/views/GlobalPreviewView"),
   earnings: () => import("@/components/views/EarningsCalendarView"),
   celebs: () => import("@/components/views/CelebsView"),
+  trading: () => import("@/components/views/TradingSquareView"),
   users: () => import("@/components/views/UsersView"),
   attachments: () => import("@/components/views/AttachmentsView"),
   library: () => import("@/components/views/AssetLibraryView"),
@@ -62,7 +64,7 @@ import { primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
 
-type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "earnings" | "celebs" | "users" | "attachments" | "library" | "settings" | "pnl";
+type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "attachments" | "library" | "settings" | "pnl";
 
 function NoPermission() {
   return (
@@ -79,6 +81,7 @@ const DEFAULT_TABS: TabConfig[] = [
   { key: "fire", label: "FIRE", url: "/fire" },
   { key: "watchlist", label: "自选股", url: "/watchlist" },
   { key: "global", label: "全球经济", url: "/global" },
+  { key: "trading", label: "交易广场", url: "/trading" },
   { key: "quotes", label: "股票添加", url: "/quotes" },
   { key: "earnings", label: "财报日历", url: "/earnings" },
   { key: "celebs", label: "名人持仓", url: "/celebs" },
@@ -783,6 +786,7 @@ export default function RecordsApp({
           {activeTab === "pnl" && <AssetPnlAnalysisView onBack={() => selectTab("assets")} />}
           {activeTab === "activities" && <ActivitiesView activities={activities} orders={orders} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
           {activeTab === "global" && <GlobalPreviewView />}
+          {activeTab === "trading" && <TradingSquareView />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} />}
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
