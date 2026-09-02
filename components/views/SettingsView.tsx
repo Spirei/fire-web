@@ -1292,21 +1292,54 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("fire:settings-edit-state", { detail: { editing: activeEditState } }));
   }, [activeEditState]);
-  // 标题栏点击「完成」时退出当前编辑
+  const saveActiveEditRef = useRef<() => Promise<void>>(async () => {});
+  const savingEditRef = useRef(false);
+  async function saveActiveEdit() {
+    if (savingEditRef.current || !activeEditState) return;
+    savingEditRef.current = true;
+    try {
+      if (activeAnchor === "trading-square") {
+        const ok = await saveBlock("tradingSquare", {
+          tradingSquareTrumpRefreshMinutes: site.tradingSquareTrumpRefreshMinutes,
+          tradingSquareDuanRefreshMinutes: site.tradingSquareDuanRefreshMinutes
+        }, "交易广场更新频率已保存");
+        if (ok) setEditingTradingSquare(false);
+      } else if (activeAnchor === "info") {
+        const ok = await saveBlock("siteInfo", { title: site.title, domain: site.domain, allowRegister: site.allowRegister, footerDesc: site.footerDesc }, "站点信息已保存");
+        if (ok) setEditingSiteInfo(false);
+      } else if (activeAnchor === "appearance") {
+        const ok = await saveBlock("brand", { ico: site.ico, siteLogo: site.siteLogo, logoText: site.logoText, logoFont: site.logoFont, homepageBg: site.homepageBg, loginSideImage: site.loginSideImage }, "网站形象已保存");
+        if (ok) setEditingAppearance(false);
+      } else if (activeAnchor === "ticker") {
+        const ok = await saveBlock("ticker", { ticker: site.ticker }, "首页指数已保存");
+        if (ok) setEditingTicker(false);
+      } else if (activeAnchor === "nav") {
+        const ok = await saveBlock("navigation", { homeNav: site.homeNav, tabs }, "导航设置已保存");
+        if (ok) { setEditingHomeNav(false); setEditingTabs(false); }
+      } else if (activeAnchor === "groups") {
+        await saveStockGroups();
+      } else if (activeAnchor === "sources" || activeAnchor === "translation") {
+        const ok = await saveStockSources();
+        if (ok) setEditingSources(false);
+      } else if (activeAnchor === "trade") {
+        const ok = await saveBlock("futu", { futuHost: site.futuHost, futuPort: site.futuPort, quoteSource: site.quoteSource }, "交易与行情源设置已保存");
+        if (ok) setEditingFutu(false);
+      } else if (activeAnchor === "profile") {
+        await saveProfile();
+      } else if (activeAnchor === "database") {
+        const ok = await saveDb();
+        if (ok) setEditingDb(false);
+      }
+    } finally {
+      savingEditRef.current = false;
+    }
+  }
+
+  saveActiveEditRef.current = saveActiveEdit;
+
+  // 标题栏的完成图标与卡片保存共用同一提交链路；失败时保留编辑态。
   useEffect(() => {
-    const onComplete = () => {
-      setEditingSiteInfo(false);
-      setEditingAppearance(false);
-      setEditingTicker(false);
-      setEditingHomeNav(false);
-      setEditingTabs(false);
-      setEditingStockGroups(false);
-      setEditingSources(false);
-      setEditingTradingSquare(false);
-      setEditingFutu(false);
-      setEditingProfile(false);
-      setEditingDb(false);
-    };
+    const onComplete = () => { void saveActiveEditRef.current(); };
     window.addEventListener("fire:settings-edit-complete", onComplete);
     return () => window.removeEventListener("fire:settings-edit-complete", onComplete);
   }, []);
@@ -1415,7 +1448,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     };
   }, []);
 
-  async function saveStockSources() {
+  async function saveStockSources(): Promise<boolean> {
     setSrcSaving(true);
     setSrcMsg(null);
     try {
@@ -1446,8 +1479,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       window.dispatchEvent(new Event("fire:settings-updated"));
       setSrcMsg({ type: "ok", text: "股票来源接口已保存，行情 / 财报 / 图标即时生效" });
       showToast("股票来源接口已保存");
+      return true;
     } catch (err) {
       setSrcMsg({ type: "err", text: err instanceof Error ? err.message : "保存失败" });
+      return false;
     } finally {
       setSrcSaving(false);
     }
@@ -1483,7 +1518,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     }
   }
 
-  async function saveDb() {
+  async function saveDb(): Promise<boolean> {
     setDbSaving(true);
     setDbMsg(null);
     try {
@@ -1505,8 +1540,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       captureSaved(data.settings);
       setDbMsg({ type: "ok", text: `数据库配置已保存（当前类型：${data.settings.dbType === "postgres" ? "PostgreSQL" : "SQLite"}）` });
       showToast("数据库配置已保存");
+      return true;
     } catch (err) {
       setDbMsg({ type: "err", text: err instanceof Error ? err.message : "保存失败" });
+      return false;
     } finally {
       setDbSaving(false);
     }
@@ -1884,7 +1921,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                       </button>
                     ) : undefined}
-                    action={editingSiteInfo ? <button type="button" onClick={() => setEditingSiteInfo(false)} className="btn btn-line btn-sm">完成</button> : undefined}
+                    action={editingSiteInfo ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
                   >
                     <div className="flex flex-col">
                       <div className="sw-row">
@@ -1926,7 +1963,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       action={
                         <div className="flex items-center gap-2">
                           {editingAppearance && (
-                            <button type="button" onClick={() => setEditingAppearance(false)} className="btn btn-line btn-sm">完成</button>
+                            <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button>
                           )}
                           <button
                             type="button"
@@ -2014,7 +2051,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
                         </button>
                       ) : undefined}
-                      action={editingTicker ? <button type="button" onClick={() => setEditingTicker(false)} className="btn btn-line btn-sm">完成</button> : undefined}
+                      action={editingTicker ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
                     >
                       <div className="settings-compact-list mb-3 flex flex-wrap items-center gap-3 rounded-[10px] bg-bg-gray/60 px-3 py-2.5">
                         <span className="text-[13px] font-semibold text-ink-2">轮换间隔</span>
@@ -2129,7 +2166,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
                         </button>
                       ) : undefined}
-                      action={editingHomeNav ? <button type="button" onClick={() => setEditingHomeNav(false)} className="btn btn-line btn-sm">完成</button> : undefined}
+                      action={editingHomeNav ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
                     >
                       <div className="settings-compact-list flex flex-col gap-2">
                         {(site.homeNav || []).slice(0, showAllHomeNav ? (site.homeNav || []).length : 5).map((item) => (
@@ -2520,7 +2557,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
                     </button>
                   ) : undefined}
-                  action={editingSources ? <button type="button" onClick={() => setEditingSources(false)} className="btn btn-line btn-sm">完成</button> : undefined}
+                  action={editingSources ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
                 >
                   <div className="flex flex-col">
                     {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场数据源", ["trumpArchiveApiUrl", "translationApiUrl"]]] as const).map(([label, keys]) => {
@@ -2591,7 +2628,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                 </SettingsSection>
 
-                <SettingsSection id="translation" icon="plug" title="翻译服务" desc="交易广场中文翻译与大模型配置（DeepSeek / OpenAI 兼容）" action={editingSources ? <button type="button" onClick={async () => { await saveStockSources(); setEditingSources(false); }} className="btn btn-line btn-sm">保存</button> : <button type="button" onClick={() => setEditingSources(true)} className="btn btn-ghost btn-sm">编辑</button>}>
+                <SettingsSection id="translation" icon="plug" title="翻译服务" desc="交易广场中文翻译与大模型配置（DeepSeek / OpenAI 兼容）" action={editingSources ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : <button type="button" onClick={() => setEditingSources(true)} className="btn btn-ghost btn-sm">编辑</button>}>
                   {(["llmProvider", "llmApiUrl", "llmModel", "llmApiKey"] as const).map((key) => <div key={key} className="sw-row"><div className="sw-row-label"><b>{key === "llmProvider" ? "大模型提供商" : key === "llmApiUrl" ? "API 地址" : key === "llmModel" ? "模型名称" : <>API Key <span className={`ml-2 inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle ring-2 ring-white dark:ring-[#151b26] ${(site.llmApiKey || site.llmApiKeyConfigured) ? "bg-emerald-500" : "bg-slate-300"}`} title={(site.llmApiKey || site.llmApiKeyConfigured) ? "已配置" : "未配置"} /></>}</b></div><input className="sw-row-input" type={key === "llmApiKey" ? "password" : "text"} autoComplete="off" value={key === "llmApiKey" && !site.llmApiKey && site.llmApiKeyConfigured ? "********" : ((site as unknown as Record<string, string>)[key] || "")} onFocus={key === "llmApiKey" ? (e) => { if (e.currentTarget.value === "********") e.currentTarget.value = ""; } : undefined} onChange={(e) => setSite((s) => ({ ...s, [key]: e.target.value }))} onBlur={key === "llmApiKey" ? (e) => { const value = e.currentTarget.value.trim(); if (value) fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ llmApiKey: value }) }).then(() => setSite((s) => ({ ...s, llmApiKey: value }))).catch(() => {}); } : undefined} readOnly={!editingSources} placeholder={key === "llmModel" ? "deepseek-chat" : ""} /></div>)}
                 </SettingsSection>
 
@@ -2606,7 +2643,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                     </button>
                   ) : undefined}
-                  action={editingFutu ? <button type="button" onClick={() => setEditingFutu(false)} className="btn btn-line btn-sm">完成</button> : undefined}
+                  action={editingFutu ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
                 >
                   <div className="flex flex-col">
                     <div className="flex flex-col">
@@ -2845,7 +2882,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                     </button>
                   ) : undefined}
-                  action={editingDb ? <button type="button" onClick={() => setEditingDb(false)} className="btn btn-line btn-sm">完成</button> : undefined}
+                  action={editingDb ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
                 >
                   <div className="subhead">数据库类型</div>
                   <div className="grid gap-3 sm:grid-cols-2">

@@ -4,7 +4,7 @@ Next.js 15 + React 19 + TypeScript + Tailwind + SQLite（better-sqlite3）全栈
 
 ## 生产环境首次启动
 
-空数据库在生产环境不会再创建公开的默认管理员。首次启动前请参考 `.env.example` 配置 `INITIAL_ADMIN_USERNAME` 与高强度 `INITIAL_ADMIN_PASSWORD`；已有数据库不受此初始化逻辑影响。
+空数据库在生产环境不会再创建公开的默认管理员。未配置 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` 时，首次访问登录或后台会进入 `/setup` 创建首位管理员；也可参考 `.env.example` 用环境变量预置管理员。已有数据库不受此初始化逻辑影响。
 
 ## 常用命令
 

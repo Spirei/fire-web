@@ -83,7 +83,7 @@ export function createUser(username: string, password: string, isTest = false, e
   // 首个非测试注册用户自动成为管理员，后续注册均为普通用户。
   // 测试账号不占位（is_test=1 不参与判断）；若 seed 已用 INITIAL_ADMIN_* 建过管理员，
   // 这里会因已有非测试用户而判定为普通用户。
-  const isFirst = !db.prepare("SELECT 1 FROM users WHERE is_test = 0 LIMIT 1").get();
+  const isFirst = needsSetup();
   const role = isFirst ? "admin" : "user";
   for (let attempt = 0; attempt < 5; attempt++) {
     const last = db.prepare("SELECT uid FROM users ORDER BY CAST(uid AS INTEGER) DESC LIMIT 1").get() as { uid: string } | undefined;
@@ -99,6 +99,11 @@ export function createUser(username: string, password: string, isTest = false, e
     }
   }
   return { id, username, nickname: "", uid, email: "", avatar: "", role };
+}
+
+/** 没有任何非测试用户时，需要走首次管理员设置。 */
+export function needsSetup(): boolean {
+  return !getDb().prepare("SELECT 1 FROM users WHERE is_test = 0 LIMIT 1").get();
 }
 
 export function updatePassword(userId: string, newPassword: string): boolean {

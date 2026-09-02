@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createSession, createUser, findUserByUsername, LEGACY_SESSION_COOKIE, sessionCookieMaxAge, sessionCookieSecure, SESSION_COOKIE } from "@/lib/auth";
+import { createSession, createUser, findUserByUsername, LEGACY_SESSION_COOKIE, needsSetup, sessionCookieMaxAge, sessionCookieSecure, SESSION_COOKIE } from "@/lib/auth";
 import { validatePassword } from "@/lib/password";
 import { getSiteSettings } from "@/lib/settings";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
@@ -24,8 +24,8 @@ export async function POST(request: Request) {
   if (isTest && process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "生产环境不支持创建测试账号" }, { status: 403 });
   }
-  // 网站设置关闭注册时，普通注册一律拒绝（测试账号不受影响）
-  if (!isTest && !getSiteSettings().allowRegister) {
+  // 网站设置关闭注册时，普通注册一律拒绝；空实例首次创建管理员除外。
+  if (!isTest && !getSiteSettings().allowRegister && !needsSetup()) {
     return NextResponse.json({ error: "管理员已关闭注册" }, { status: 403 });
   }
 

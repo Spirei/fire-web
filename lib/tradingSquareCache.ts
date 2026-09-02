@@ -8,6 +8,6 @@ export function readJsonFile<T>(file: string, fallback: T): T {
 export function writeJsonAtomic(file: string, value: unknown): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(temporary, JSON.stringify(value, null, 2));
+  fs.writeFileSync(temporary, JSON.stringify(value));
   fs.renameSync(temporary, file);
 }

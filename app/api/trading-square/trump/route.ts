@@ -1,87 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSiteSettings } from "@/lib/settings";
-import path from "node:path";
-import { readJsonFile, writeJsonAtomic } from "@/lib/tradingSquareCache";
+import { readTrumpPosts, refreshTrumpPosts } from "@/lib/tradingSquareRefresh";
+import { backfillTrumpTranslations, readTranslations, validTranslation } from "@/lib/tradingSquareTranslate";
 
 const SOURCE = "https://trumpstruth.org/";
-const CACHE_FILE = path.join(process.cwd(), "data", "trump-translations.json");
-const POSTS_CACHE_FILE = path.join(process.cwd(), "data", "trump-posts.json");
-function readTranslations(): Record<string, string> { return readJsonFile<Record<string, string>>(CACHE_FILE, {}) }
-function writeTranslations(cache: Record<string, string>) { try { writeJsonAtomic(CACHE_FILE, cache) } catch { /* read-only deployments still work without persistence */ } }
-function validTranslation(value?: string) { return !!value && !/MYMEMORY WARNING|USED ALL AVAILABLE FREE TRANSLATIONS|QUOTA|RATE LIMIT/i.test(value); }
-function readPostsCache(): Array<{ id: string; date: string; text: string; originalUrl: string; archiveUrl: string }> {
-  return readJsonFile(POSTS_CACHE_FILE, []);
-}
 
-let feedCache: { posts: Array<Record<string, unknown>>; fetchedAt: number } | null = null;
-
-function clean(value: string) {
-  return value.replace(/<br\s*\/?\s*>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#039;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+\n/g, "\n").replace(/\n\s+/g, "\n").trim();
+function withZh(posts: ReturnType<typeof readTrumpPosts>) {
+  const translations = readTranslations();
+  return posts.map((post) => validTranslation(translations[post.id]) ? { ...post, textZh: translations[post.id] } : post);
 }
 
 export async function GET(request: NextRequest) {
   try {
-    if (feedCache && Date.now() - feedCache.fetchedAt < 60_000) {
-      return NextResponse.json({ posts: feedCache.posts, source: SOURCE, fetchedAt: new Date(feedCache.fetchedAt).toISOString(), cached: true });
-    }
-    const settings = getSiteSettings();
-    const source = settings.trumpArchiveApiUrl || SOURCE;
-    const cachedPosts = readPostsCache();
-    if (cachedPosts.length && request.nextUrl.searchParams.get("refresh") !== "1") {
-      const translations = readTranslations();
-      const localized = cachedPosts.map((post) => validTranslation(translations[post.id]) ? { ...post, textZh: translations[post.id] } : post);
-      feedCache = { posts: localized, fetchedAt: Date.now() };
-      return NextResponse.json({ posts: localized, source: SOURCE, fetchedAt: new Date().toISOString(), cached: true });
-    }
-    let html = "";
-    let nextUrl = source;
-    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    for (let page = 0; page < 30 && nextUrl; page += 1) {
-      const response = await fetch(nextUrl, { headers: { "User-Agent": "Fire/1.0 public archive reader" }, next: { revalidate: 60 }, signal: AbortSignal.timeout(5000) });
-      if (!response.ok) throw new Error(`archive ${response.status}`);
-      const pageHtml = await response.text();
-      html += pageHtml;
-      const next = pageHtml.match(/<a href="([^"]*cursor=[^"]+)"[^>]*>Next Page/i)?.[1];
-      nextUrl = next ? new URL(next.replace(/&amp;/g, "&"), source).toString() : "";
-      const dates = [...pageHtml.matchAll(/status-info__meta-item">([^<]+,\s*\d{4},\s*[^<]+)/g)].map((m) => Date.parse(m[1])).filter(Number.isFinite);
-      if (dates.length && Math.min(...dates) < cutoff) nextUrl = "";
-    }
-    const posts = html.split('<div class="status"').slice(1).map((tail, index) => {
-      const block = tail.split('<div class="status"')[0];
-      const date = block.match(/status-info__meta-item">([^<]+,\s*\d{4},\s*[^<]+)</)?.[1] ?? "";
-      const originalUrl = block.match(/href="(https:\/\/truthsocial\.com\/@realDonaldTrump\/[^" ]+)"/)?.[1] ?? "https://truthsocial.com/@realDonaldTrump";
-      const content = clean(block.match(/<div class="status__content">([\s\S]*?)<\/div>/)?.[1] ?? "");
-      const archiveUrl = block.match(/data-status-url="([^" ]+)/)?.[1] ?? SOURCE;
-      return { id: archiveUrl.split("/").pop() || String(index), date, text: content, originalUrl, archiveUrl: archiveUrl.startsWith("http") ? archiveUrl : `https://trumpstruth.org/statuses/${archiveUrl}` };
-    }).filter((post) => post.text && post.date);
-    // Keep every post in the requested 30-day window; pagination is handled by the client.
-    const recent = Array.from(new Map(posts.filter((post) => Date.parse(post.date) >= cutoff).map((post) => [post.id, post])).values());
-    try { writeJsonAtomic(POSTS_CACHE_FILE, recent) } catch { /* read-only deployments */ }
-    const translations = readTranslations();
-    const localized = await Promise.all(recent.map(async (post, index) => {
-      if (validTranslation(translations[post.id])) return { ...post, textZh: translations[post.id] };
-      if (index >= 5) return post;
-      delete translations[post.id];
-      try {
-        if (!settings.translationEnabled) return post;
-        let textZh: string | undefined;
-        if (settings.llmApiKey || settings.deepseekApiKey) {
-          const translation = await fetch(settings.llmApiUrl || settings.deepseekApiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.llmApiKey || settings.deepseekApiKey}` }, body: JSON.stringify({ model: settings.llmModel || settings.deepseekModel || "deepseek-chat", temperature: 0.1, messages: [{ role: "system", content: "将用户提供的英文社交媒体内容准确翻译为简体中文，只输出译文，不添加解释。" }, { role: "user", content: post.text.slice(0, 4000) }] }), signal: AbortSignal.timeout(2000), cache: "no-store" });
-          const data = await translation.json() as { choices?: Array<{ message?: { content?: string } }> };
-          textZh = data.choices?.[0]?.message?.content?.trim();
-        } else {
-          const translation = await fetch(`${settings.translationApiUrl}?q=${encodeURIComponent(post.text.slice(0, 480))}&langpair=en|zh-CN`, { signal: AbortSignal.timeout(1800), next: { revalidate: 3600 } });
-          const data = await translation.json() as { responseData?: { translatedText?: string } };
-          textZh = data.responseData?.translatedText || undefined;
-        }
-        if (textZh && validTranslation(textZh)) { translations[post.id] = textZh; writeTranslations(translations); return { ...post, textZh }; }
-        return post;
-      } catch { return post; }
-    }));
-    feedCache = { posts: localized, fetchedAt: Date.now() };
-    return NextResponse.json({ posts: localized, source: SOURCE, fetchedAt: new Date(feedCache.fetchedAt).toISOString() });
+    const forceRefresh = request.nextUrl.searchParams.get("refresh") === "1";
+    const posts = forceRefresh ? await refreshTrumpPosts() : readTrumpPosts();
+    const localized = withZh(posts);
+    if (!forceRefresh && posts.length) void backfillTrumpTranslations(posts, 3);
+    return NextResponse.json({
+      posts: localized,
+      source: SOURCE,
+      fetchedAt: new Date().toISOString(),
+      cached: !forceRefresh
+    });
   } catch (error) {
-    if (feedCache) return NextResponse.json({ posts: feedCache.posts, source: SOURCE, fetchedAt: new Date(feedCache.fetchedAt).toISOString(), cached: true, stale: true });
+    const fallback = withZh(readTrumpPosts());
+    if (fallback.length) {
+      return NextResponse.json({ posts: fallback, source: SOURCE, fetchedAt: new Date().toISOString(), cached: true, stale: true });
+    }
     return NextResponse.json({ posts: [], source: SOURCE, fetchedAt: new Date().toISOString(), error: error instanceof Error ? error.message : "archive unavailable" }, { status: 502 });
   }
 }

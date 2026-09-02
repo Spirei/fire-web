@@ -2264,7 +2264,44 @@ export const V0_1_19_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_19_ENTRY;
+export const V0_1_20_ENTRY: VersionEntry = {
+  ...V0_1_19_ENTRY,
+  version: "v0.1.20",
+  date: "2026-09-03",
+  summary: "空实例首次设置接入真实流程，设置标题栏保存当前分区，并上线交易广场本地缓存动态。",
+  software: V0_1_19_ENTRY.software.map((item) => item.name === "Fire" ? { ...item, version: "v0.1.20" } : item),
+  changes: [{
+    title: "空实例首次设置接入真实三步向导",
+    desc: "生产空库不再只依赖登录页注册。无非测试用户时，访问登录或后台会进入 /setup：创建管理员、填写站点标题与注册开关、然后开始使用。关闭注册时仍允许创建首位管理员；已初始化实例访问 /setup 会回到登录或后台。公开接口 GET /api/auth/setup-status 与 /api/v1/auth/setup-status 只返回 needsSetup 布尔值。",
+    kind: "feature"
+  }, {
+    title: "设置标题栏完成改为真正保存当前分区",
+    desc: "设置窗口标题栏对勾从“退出编辑”改为保存当前分区；站点信息、形象、指数、导航、来源、翻译、富途与数据库的卡片按钮同步走同一提交链路。保存失败保留编辑态，避免未写入就退出。",
+    kind: "fix"
+  }, {
+    title: "交易广场改为本地缓存优先的社交动态",
+    desc: "交易广场展示特朗普 Truth Social 与段永平雪球公开动态：页面先读本地 JSON，访问时按设置频率后台刷新；支持人物切换、拖动压缩布局、近一个月归档分页与中文翻译。设置中可分别配置两位作者的更新间隔。",
+    kind: "feature"
+  }, {
+    title: "翻译服务统一为大模型配置且密钥不下发浏览器",
+    desc: "设置新增独立翻译服务分区，统一 llmProvider / llmApiUrl / llmModel / llmApiKey；已保存的 API Key 只返回配置状态与掩码占位，不再把明文密钥发给页面。",
+    kind: "security"
+  }, {
+    title: "交易广场补齐中文翻译、刷新与浏览记忆",
+    desc: "特朗普动态的翻译改为只处理尚未翻译的帖子，不再被已有译文占满前 5 条名额；访问页面后会后台继续补译，并在刷新完成后自动更新列表。人物、分类和页码写入 URL，时间显示到分钟，分页改为可跳转页码；头像跟随名人持仓自定义图。",
+    kind: "fix"
+  }, {
+    title: "交易广场刷新不再堵住页面加载",
+    desc: "打开或刷新交易广场时立刻返回本地缓存；归档抓取改为增量（已有缓存只翻到与旧帖重叠），翻译改到后台小批量进行，不再等 30 页归档和模型翻译结束才出列表。再次进入会先画出上次缓存内容。",
+    kind: "fix"
+  }, {
+    title: "操作日志分类检索并纳入交易活动",
+    desc: "系统日志增加分类、搜索、分页与深浅色对比；认证审计与交易活动写入同一日志，并按市场拆分前一日盈亏摘要。",
+    kind: "feature"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_20_ENTRY;
 
 // 完整历史数组已拆分到 lib/versions-history.ts（约 200KB 历史文案，仅供版本弹窗
 // 懒加载引用）；本文件保留类型 + 当前版本条目，让设置页 / 健康检查只引用轻量常量。

@@ -185,8 +185,8 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => window.dispatchEvent(new Event(editing ? "fire:settings-edit-complete" : "fire:settings-edit-active"))}
-              title={editing ? "退出编辑" : "编辑当前设置"}
-              aria-label={editing ? "退出编辑" : "编辑当前设置"}
+              title={editing ? "保存当前设置" : "编辑当前设置"}
+              aria-label={editing ? "保存当前设置" : "编辑当前设置"}
               className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-white/10"
             >
               {editing ? (

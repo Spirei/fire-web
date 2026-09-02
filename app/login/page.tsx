@@ -1,15 +1,21 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import LoginForm from "@/components/LoginForm";
-import SiteLogo from "@/components/SiteLogo";
 import { getSiteSettings } from "@/lib/settings";
 import { logoFontClass } from "@/lib/logoFont";
+import { needsSetup } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "登录 - Fire"
 };
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams
+}: {
+  searchParams: Promise<{ skipSetup?: string }>;
+}) {
+  const params = await searchParams;
+  if (needsSetup() && params.skipSetup !== "1") redirect("/setup");
   const settings = getSiteSettings();
   const logoFontCls = logoFontClass(settings.logoFont);
   return (

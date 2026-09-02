@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { getSiteSettings } from "@/lib/settings";
 import { getCelebAvatars } from "@/lib/celebsData";
-import { LEGACY_SESSION_COOKIE, SESSION_COOKIE, getUserByToken } from "@/lib/auth";
+import { LEGACY_SESSION_COOKIE, SESSION_COOKIE, getUserByToken, needsSetup } from "@/lib/auth";
 import { listActivities, listRecords } from "@/lib/store";
 import RecordsApp from "@/components/RecordsApp";
 import UserMenu from "@/components/UserMenu";
@@ -48,7 +48,7 @@ export default async function SlugLayout({
   const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
   const user = getUserByToken(token);
   if (!user) {
-    redirect("/login");
+    redirect(needsSetup() ? "/setup" : "/login");
   }
 
   // 后台首屏数据在服务端鉴权后直接读取。避免浏览器再次串行请求

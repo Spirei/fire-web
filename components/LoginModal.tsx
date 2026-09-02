@@ -14,7 +14,16 @@ export default function LoginModal() {
 
   useEffect(() => {
     function openLogin() {
-      setOpen(true);
+      fetch("/api/auth/setup-status")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.needsSetup) {
+            window.location.assign("/setup");
+            return;
+          }
+          setOpen(true);
+        })
+        .catch(() => setOpen(true));
     }
     window.addEventListener(OPEN_LOGIN_EVENT, openLogin);
     return () => window.removeEventListener(OPEN_LOGIN_EVENT, openLogin);
