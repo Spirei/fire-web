@@ -20,8 +20,15 @@ export async function GET() {
       return { id: archiveUrl.split("/").pop() || String(index), date, text: content, originalUrl, archiveUrl: archiveUrl.startsWith("http") ? archiveUrl : `https://trumpstruth.org/statuses/${archiveUrl}` };
     }).filter((post) => post.text && post.date);
     const cutoff = Date.now() - 183 * 24 * 60 * 60 * 1000;
-    const recent = posts.filter((post) => Date.parse(post.date) >= cutoff);
-    return NextResponse.json({ posts: recent.length ? recent : posts, source: SOURCE, fetchedAt: new Date().toISOString() });
+    const recent = posts.slice(0, 20);
+    const localized = await Promise.all(recent.map(async (post) => {
+      try {
+        const translation = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(post.text.slice(0, 480))}&langpair=en|zh-CN`, { signal: AbortSignal.timeout(5000), cache: "no-store" });
+        const data = await translation.json() as { responseData?: { translatedText?: string } };
+        return { ...post, textZh: data.responseData?.translatedText || undefined };
+      } catch { return post; }
+    }));
+    return NextResponse.json({ posts: localized, source: SOURCE, fetchedAt: new Date().toISOString() });
   } catch (error) {
     return NextResponse.json({ posts: [], source: SOURCE, fetchedAt: new Date().toISOString(), error: error instanceof Error ? error.message : "archive unavailable" }, { status: 502 });
   }
