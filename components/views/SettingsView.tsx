@@ -1424,6 +1424,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           deepseekApiUrl: site.deepseekApiUrl,
           deepseekModel: site.deepseekModel,
           deepseekApiKey: site.deepseekApiKey
+          ,llmProvider: site.llmProvider, llmApiUrl: site.llmApiUrl, llmModel: site.llmModel, llmApiKey: site.llmApiKey
         })
       });
       const data = await res.json().catch(() => null);

@@ -45,8 +45,8 @@ export async function GET() {
       try {
         if (!settings.translationEnabled) return post;
         let textZh: string | undefined;
-        if ((settings.translationProvider === "deepseek" || settings.deepseekApiKey) && settings.deepseekApiKey) {
-          const translation = await fetch(settings.deepseekApiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.deepseekApiKey}` }, body: JSON.stringify({ model: settings.deepseekModel || "deepseek-chat", temperature: 0.1, messages: [{ role: "system", content: "将用户提供的英文社交媒体内容准确翻译为简体中文，只输出译文，不添加解释。" }, { role: "user", content: post.text.slice(0, 4000) }] }), signal: AbortSignal.timeout(8000), cache: "no-store" });
+        if (settings.llmApiKey) {
+          const translation = await fetch(settings.llmApiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.llmApiKey}` }, body: JSON.stringify({ model: settings.llmModel || "deepseek-chat", temperature: 0.1, messages: [{ role: "system", content: "将用户提供的英文社交媒体内容准确翻译为简体中文，只输出译文，不添加解释。" }, { role: "user", content: post.text.slice(0, 4000) }] }), signal: AbortSignal.timeout(8000), cache: "no-store" });
           const data = await translation.json() as { choices?: Array<{ message?: { content?: string } }> };
           textZh = data.choices?.[0]?.message?.content?.trim();
         } else {
