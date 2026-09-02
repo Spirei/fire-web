@@ -13,7 +13,7 @@ export async function GET() {
     const source = settings.trumpArchiveApiUrl || SOURCE;
     let html = "";
     let nextUrl = source;
-    for (let page = 0; page < 3 && nextUrl; page += 1) {
+    for (let page = 0; page < 2 && nextUrl; page += 1) {
       const response = await fetch(nextUrl, { headers: { "User-Agent": "Fire/1.0 public archive reader" }, next: { revalidate: 60 }, signal: AbortSignal.timeout(5000) });
       if (!response.ok) throw new Error(`archive ${response.status}`);
       const pageHtml = await response.text();
@@ -31,7 +31,8 @@ export async function GET() {
     }).filter((post) => post.text && post.date);
     const cutoff = Date.now() - 183 * 24 * 60 * 60 * 1000;
     const recent = posts.filter((post) => Date.parse(post.date) >= cutoff).slice(0, 100);
-    const localized = await Promise.all(recent.map(async (post) => {
+    const localized = await Promise.all(recent.map(async (post, index) => {
+      if (index >= 8) return post;
       try {
         if (!settings.translationEnabled) return post;
         const translation = await fetch(`${settings.translationApiUrl}?q=${encodeURIComponent(post.text.slice(0, 480))}&langpair=en|zh-CN`, { signal: AbortSignal.timeout(1800), next: { revalidate: 3600 } });
