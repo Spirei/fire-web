@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # 检查与正式发布互不取消；同一种触发只保留最新一次。
+  # 保留队列中的推送，避免连续提交时互相取消并产生大量失败/取消记录。
   group: fire-image-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -39,6 +39,8 @@ jobs:
         run: npm run audit:deploy
       - name: TypeScript check
         run: npx tsc --noEmit
+      - name: Production build check
+        run: npm run build
 
   scheduled-change-gate:
     name: Check scheduled source changes
