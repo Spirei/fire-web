@@ -44,9 +44,16 @@ export async function GET() {
       if (index >= 3) return post;
       try {
         if (!settings.translationEnabled) return post;
-        const translation = await fetch(`${settings.translationApiUrl}?q=${encodeURIComponent(post.text.slice(0, 480))}&langpair=en|zh-CN`, { signal: AbortSignal.timeout(1800), next: { revalidate: 3600 } });
-        const data = await translation.json() as { responseData?: { translatedText?: string } };
-        const textZh = data.responseData?.translatedText || undefined;
+        let textZh: string | undefined;
+        if ((settings.translationProvider === "deepseek" || settings.deepseekApiKey) && settings.deepseekApiKey) {
+          const translation = await fetch(settings.deepseekApiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.deepseekApiKey}` }, body: JSON.stringify({ model: settings.deepseekModel || "deepseek-chat", temperature: 0.1, messages: [{ role: "system", content: "将用户提供的英文社交媒体内容准确翻译为简体中文，只输出译文，不添加解释。" }, { role: "user", content: post.text.slice(0, 4000) }] }), signal: AbortSignal.timeout(8000), cache: "no-store" });
+          const data = await translation.json() as { choices?: Array<{ message?: { content?: string } }> };
+          textZh = data.choices?.[0]?.message?.content?.trim();
+        } else {
+          const translation = await fetch(`${settings.translationApiUrl}?q=${encodeURIComponent(post.text.slice(0, 480))}&langpair=en|zh-CN`, { signal: AbortSignal.timeout(1800), next: { revalidate: 3600 } });
+          const data = await translation.json() as { responseData?: { translatedText?: string } };
+          textZh = data.responseData?.translatedText || undefined;
+        }
         if (validTranslation(textZh)) { translations[post.id] = textZh; writeTranslations(translations); return { ...post, textZh }; }
         return post;
       } catch { return post; }
