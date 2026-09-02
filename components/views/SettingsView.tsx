@@ -812,7 +812,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   useEffect(() => {
     const anchors = new Set(SETTINGS_SEARCH_INDEX.map((x) => x.anchor));
     document.querySelectorAll<HTMLElement>(".settings-section-card[id]").forEach((el) => {
-      if (anchors.has(el.id)) el.hidden = el.id !== activeAnchor && !(activeAnchor === "translation" && el.id === "sources");
+      if (anchors.has(el.id)) el.hidden = el.id !== activeAnchor;
     });
   }, [sub, activeAnchor]);
 
