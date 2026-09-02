@@ -19,13 +19,16 @@ export async function GET() {
     const source = settings.trumpArchiveApiUrl || SOURCE;
     let html = "";
     let nextUrl = source;
-    for (let page = 0; page < 1 && nextUrl; page += 1) {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    for (let page = 0; page < 30 && nextUrl; page += 1) {
       const response = await fetch(nextUrl, { headers: { "User-Agent": "Fire/1.0 public archive reader" }, next: { revalidate: 60 }, signal: AbortSignal.timeout(5000) });
       if (!response.ok) throw new Error(`archive ${response.status}`);
       const pageHtml = await response.text();
       html += pageHtml;
       const next = pageHtml.match(/<a href="([^"]*cursor=[^"]+)"[^>]*>Next Page/i)?.[1];
       nextUrl = next ? new URL(next.replace(/&amp;/g, "&"), source).toString() : "";
+      const dates = [...pageHtml.matchAll(/status-info__meta-item">([^<]+,\s*\d{4},\s*[^<]+)/g)].map((m) => Date.parse(m[1])).filter(Number.isFinite);
+      if (dates.length && Math.min(...dates) < cutoff) nextUrl = "";
     }
     const posts = html.split('<div class="status"').slice(1).map((tail, index) => {
       const block = tail.split('<div class="status"')[0];
@@ -35,7 +38,6 @@ export async function GET() {
       const archiveUrl = block.match(/data-status-url="([^" ]+)/)?.[1] ?? SOURCE;
       return { id: archiveUrl.split("/").pop() || String(index), date, text: content, originalUrl, archiveUrl: archiveUrl.startsWith("http") ? archiveUrl : `https://trumpstruth.org/statuses/${archiveUrl}` };
     }).filter((post) => post.text && post.date);
-    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
     const recent = posts.filter((post) => Date.parse(post.date) >= cutoff).slice(0, 100);
     const translations = readTranslations();
     const localized = await Promise.all(recent.map(async (post, index) => {
