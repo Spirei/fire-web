@@ -542,7 +542,7 @@ const SOURCE_FIELDS: {
   { key: "usLogoApiUrl", name: "美股公司图标", desc: "直接拼接代码 .png", placeholder: "https://g.foolcdn.com/art/companylogos/square/", icon: "us" },
   { key: "cnLogoApiUrl", name: "A股公司图标", desc: "自动拼接 代码.SS / 代码.SZ", placeholder: "https://assets.parqet.com/logos/symbol/", icon: "logo" },
   { key: "trumpArchiveApiUrl", name: "特朗普平台归档", desc: "交易广场公开动态来源", placeholder: "https://trumpstruth.org/", icon: "trump" },
-  { key: "translationApiUrl", name: "动态翻译接口", desc: "将英文动态翻译为中文", placeholder: "https://api.mymemory.translated.net/get", icon: "translate" }
+  { key: "translationApiUrl", name: "动态翻译接口（兼容 DeepSeek）", desc: "将英文动态翻译为中文，可替换为 DeepSeek 兼容接口", placeholder: "https://api.mymemory.translated.net/get", icon: "translate" }
 ];
 
 const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
