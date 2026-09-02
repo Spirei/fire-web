@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
  * 可拖动桌面窗口（与设置窗口同款）：按住标题栏拖动整个容器，
  * 位置自动保存到 localStorage；默认 (0,0) 靠左。
  */
-export default function useDraggableWindow(storageKey: string) {
+export default function useDraggableWindow(storageKey: string, locked = false) {
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
@@ -67,6 +67,7 @@ export default function useDraggableWindow(storageKey: string) {
   }, [dragging, storageKey]);
 
   function onTitleMouseDown(e: ReactMouseEvent<HTMLDivElement>) {
+    if (locked || window.innerWidth < 768) return;
     if ((e.target as HTMLElement).closest("a,button,input,select,textarea,[data-drag-skip]")) return;
     e.preventDefault();
     dragRef.current = { startX: e.clientX, startY: e.clientY, baseX: posRef.current.x, baseY: posRef.current.y };
