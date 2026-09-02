@@ -35,7 +35,7 @@ export async function GET() {
       const archiveUrl = block.match(/data-status-url="([^" ]+)/)?.[1] ?? SOURCE;
       return { id: archiveUrl.split("/").pop() || String(index), date, text: content, originalUrl, archiveUrl: archiveUrl.startsWith("http") ? archiveUrl : `https://trumpstruth.org/statuses/${archiveUrl}` };
     }).filter((post) => post.text && post.date);
-    const cutoff = Date.now() - 183 * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
     const recent = posts.filter((post) => Date.parse(post.date) >= cutoff).slice(0, 100);
     const translations = readTranslations();
     const localized = await Promise.all(recent.map(async (post, index) => {
