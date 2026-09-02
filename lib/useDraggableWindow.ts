@@ -9,7 +9,7 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 export default function useDraggableWindow(storageKey: string, locked = false) {
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number; minX: number; maxX: number } | null>(null);
   const [dragging, setDragging] = useState(false);
 
   // 挂载后恢复位置，避免水合不一致；默认最左边 (0,0)
@@ -23,7 +23,7 @@ export default function useDraggableWindow(storageKey: string, locked = false) {
         typeof y === "number" &&
         Number.isFinite(x) &&
         Number.isFinite(y) &&
-        x >= 0 &&
+        x > -10000 &&
         y >= 0 &&
         x < 10000 &&
         y < 10000
@@ -42,9 +42,7 @@ export default function useDraggableWindow(storageKey: string, locked = false) {
     function onMove(e: MouseEvent) {
       const d = dragRef.current;
       if (!d) return;
-      // 与设置窗口同款：transform 坐标左边界为 0（不越过内容区左缘），右/下限制防拖出屏幕
-      const maxX = Math.max(0, window.innerWidth - 200);
-      const nextX = Math.min(maxX, Math.max(0, d.baseX + e.clientX - d.startX));
+      const nextX = Math.min(d.maxX, Math.max(d.minX, d.baseX + e.clientX - d.startX));
       const nextY = Math.max(0, d.baseY + e.clientY - d.startY);
       posRef.current = { x: nextX, y: nextY };
       setPos(posRef.current);
@@ -70,7 +68,13 @@ export default function useDraggableWindow(storageKey: string, locked = false) {
     if (locked || window.innerWidth < 768) return;
     if ((e.target as HTMLElement).closest("a,button,input,select,textarea,[data-drag-skip]")) return;
     e.preventDefault();
-    dragRef.current = { startX: e.clientX, startY: e.clientY, baseX: posRef.current.x, baseY: posRef.current.y };
+    const panel = e.currentTarget.closest("main") as HTMLElement | null;
+    const panelRect = panel?.getBoundingClientRect();
+    const boundaryRect = panel?.parentElement?.getBoundingClientRect();
+    const baseX = posRef.current.x;
+    const minX = panelRect && boundaryRect ? baseX + boundaryRect.left - panelRect.left : -window.innerWidth + 200;
+    const maxX = panelRect && boundaryRect ? baseX + boundaryRect.right - panelRect.right : window.innerWidth - 200;
+    dragRef.current = { startX: e.clientX, startY: e.clientY, baseX, baseY: posRef.current.y, minX, maxX };
     setDragging(true);
   }
 
