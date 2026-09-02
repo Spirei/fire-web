@@ -13,8 +13,8 @@ export async function GET() {
     const source = settings.trumpArchiveApiUrl || SOURCE;
     let html = "";
     let nextUrl = source;
-    for (let page = 0; page < 30 && nextUrl; page += 1) {
-      const response = await fetch(nextUrl, { headers: { "User-Agent": "Fire/1.0 public archive reader" }, cache: "no-store", signal: AbortSignal.timeout(12000) });
+    for (let page = 0; page < 3 && nextUrl; page += 1) {
+      const response = await fetch(nextUrl, { headers: { "User-Agent": "Fire/1.0 public archive reader" }, next: { revalidate: 60 }, signal: AbortSignal.timeout(5000) });
       if (!response.ok) throw new Error(`archive ${response.status}`);
       const pageHtml = await response.text();
       html += pageHtml;
@@ -34,7 +34,7 @@ export async function GET() {
     const localized = await Promise.all(recent.map(async (post) => {
       try {
         if (!settings.translationEnabled) return post;
-        const translation = await fetch(`${settings.translationApiUrl}?q=${encodeURIComponent(post.text.slice(0, 480))}&langpair=en|zh-CN`, { signal: AbortSignal.timeout(5000), cache: "no-store" });
+        const translation = await fetch(`${settings.translationApiUrl}?q=${encodeURIComponent(post.text.slice(0, 480))}&langpair=en|zh-CN`, { signal: AbortSignal.timeout(1800), next: { revalidate: 3600 } });
         const data = await translation.json() as { responseData?: { translatedText?: string } };
         return { ...post, textZh: data.responseData?.translatedText || undefined };
       } catch { return post; }
