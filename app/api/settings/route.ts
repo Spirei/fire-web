@@ -29,7 +29,7 @@ export async function PUT(request: Request) {
   // 数据源地址仅允许 http(s)，防止配置成 file:// 或内网探测地址（管理端接口）
   const URL_KEYS = [
     "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl",
-    "earningsApiUrl", "cnEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl"
+    "earningsApiUrl", "cnEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl"
   ] as const;
   for (const k of URL_KEYS) {
     if (body[k] !== undefined) {
@@ -68,6 +68,13 @@ export async function PUT(request: Request) {
     cnEarningsApiUrl: body.cnEarningsApiUrl !== undefined ? String(body.cnEarningsApiUrl) : undefined,
     usLogoApiUrl: body.usLogoApiUrl !== undefined ? String(body.usLogoApiUrl) : undefined,
     cnLogoApiUrl: body.cnLogoApiUrl !== undefined ? String(body.cnLogoApiUrl) : undefined,
+    trumpArchiveApiUrl: body.trumpArchiveApiUrl !== undefined ? String(body.trumpArchiveApiUrl) : undefined,
+    translationApiUrl: body.translationApiUrl !== undefined ? String(body.translationApiUrl) : undefined,
+    translationEnabled: typeof body.translationEnabled === "boolean" ? body.translationEnabled : undefined,
+    translationProvider: ["mymemory", "deepseek", "openai-compatible"].includes(body.translationProvider) ? body.translationProvider : undefined,
+    deepseekApiUrl: body.deepseekApiUrl !== undefined ? String(body.deepseekApiUrl) : undefined,
+    deepseekModel: body.deepseekModel !== undefined ? String(body.deepseekModel) : undefined,
+    deepseekApiKey: body.deepseekApiKey !== undefined ? String(body.deepseekApiKey) : undefined,
     homeNav: Array.isArray(body.homeNav) ? body.homeNav : undefined,
     tabs: Array.isArray(body.tabs) ? body.tabs : undefined,
     groups: Array.isArray(body.groups) ? body.groups : undefined,

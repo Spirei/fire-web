@@ -68,6 +68,13 @@ const DEFAULTS: SiteSettings = {
   cnEarningsApiUrl: "https://datacenter.eastmoney.com/securities/api/data/v1/get",
   usLogoApiUrl: "https://g.foolcdn.com/art/companylogos/square/",
   cnLogoApiUrl: "https://assets.parqet.com/logos/symbol/",
+  trumpArchiveApiUrl: "https://trumpstruth.org/",
+  translationApiUrl: "https://api.mymemory.translated.net/get",
+  translationEnabled: true,
+  translationProvider: "mymemory",
+  deepseekApiUrl: "https://api.deepseek.com/chat/completions",
+  deepseekModel: "deepseek-chat",
+  deepseekApiKey: "",
   dbType: "sqlite",
   pgHost: "",
   pgPort: "5432",
@@ -77,7 +84,7 @@ const DEFAULTS: SiteSettings = {
   ticker: DEFAULT_TICKER
 };
 
-const SIMPLE_KEYS: ("domain" | "title" | "ico" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "earningsApiUrl" | "cnEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword")[] = [
+const SIMPLE_KEYS: ("domain" | "title" | "ico" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "earningsApiUrl" | "cnEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword")[] = [
   "domain", "title", "ico", "homepageBg", "loginSideImage", "siteLogo", "logoText", "logoFont", "quoteSource", "futuHost", "futuPort", "footerDesc",
   "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl", "earningsApiUrl", "cnEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl",
   "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword"

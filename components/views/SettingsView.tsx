@@ -506,6 +506,10 @@ const DEFAULT_SETTINGS: SiteSettings = {
   cnLogoApiUrl: "",
   trumpArchiveApiUrl: "",
   translationApiUrl: "",
+  translationProvider: "mymemory",
+  deepseekApiUrl: "",
+  deepseekModel: "deepseek-chat",
+  deepseekApiKey: "",
   translationEnabled: true,
   dbType: "sqlite",
   pgHost: "",
@@ -527,7 +531,7 @@ interface DbStatus {
 
 // 股票来源接口的卡片元数据（顺序即展示顺序）
 const SOURCE_FIELDS: {
-  key: "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "earningsApiUrl" | "cnEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl";
+  key: "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "earningsApiUrl" | "cnEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey";
   name: string;
   desc: string;
   placeholder: string;
@@ -542,7 +546,10 @@ const SOURCE_FIELDS: {
   { key: "usLogoApiUrl", name: "美股公司图标", desc: "直接拼接代码 .png", placeholder: "https://g.foolcdn.com/art/companylogos/square/", icon: "us" },
   { key: "cnLogoApiUrl", name: "A股公司图标", desc: "自动拼接 代码.SS / 代码.SZ", placeholder: "https://assets.parqet.com/logos/symbol/", icon: "logo" },
   { key: "trumpArchiveApiUrl", name: "特朗普平台归档", desc: "交易广场公开动态来源", placeholder: "https://trumpstruth.org/", icon: "trump" },
-  { key: "translationApiUrl", name: "动态翻译接口（兼容 DeepSeek）", desc: "将英文动态翻译为中文，可替换为 DeepSeek 兼容接口", placeholder: "https://api.mymemory.translated.net/get", icon: "translate" }
+  { key: "translationApiUrl", name: "动态翻译接口", desc: "免费或自建翻译接口", placeholder: "https://api.mymemory.translated.net/get", icon: "translate" },
+  { key: "deepseekApiUrl", name: "DeepSeek API 地址", desc: "OpenAI 兼容 Chat Completions 地址", placeholder: "https://api.deepseek.com/chat/completions", icon: "translate" },
+  { key: "deepseekModel", name: "DeepSeek 模型", desc: "默认使用 deepseek-chat", placeholder: "deepseek-chat", icon: "translate" },
+  { key: "deepseekApiKey", name: "DeepSeek API Key", desc: "仅服务端使用，不下发浏览器", placeholder: "sk-…", icon: "translate" }
 ];
 
 const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
@@ -2439,7 +2446,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   action={editingSources ? <button type="button" onClick={() => setEditingSources(false)} className="btn btn-line btn-sm">完成</button> : undefined}
                 >
                   <div id="translation" className="flex flex-col">
-                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场 · 归档与翻译", ["trumpArchiveApiUrl", "translationApiUrl"]]] as const).map(([label, keys]) => {
+                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场 · 归档与翻译", ["trumpArchiveApiUrl", "translationApiUrl", "deepseekApiUrl", "deepseekModel", "deepseekApiKey"]]] as const).map(([label, keys]) => {
                       const fields = SOURCE_FIELDS.filter((f) => (keys as readonly string[]).includes(f.key));
                       if (!fields.length) return null;
                       return (

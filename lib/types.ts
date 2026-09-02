@@ -251,6 +251,13 @@ export interface SiteSettings {
   cnEarningsApiUrl: string;
   usLogoApiUrl: string;
   cnLogoApiUrl: string;
+  trumpArchiveApiUrl: string;
+  translationApiUrl: string;
+  translationEnabled: boolean;
+  translationProvider: "mymemory" | "deepseek" | "openai-compatible";
+  deepseekApiUrl: string;
+  deepseekModel: string;
+  deepseekApiKey: string;
   dbType: "sqlite" | "postgres";
   pgHost: string;
   pgPort: string;
