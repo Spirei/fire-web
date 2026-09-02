@@ -90,7 +90,7 @@ const DEFAULTS: SiteSettings = {
 
 const SIMPLE_KEYS: ("domain" | "title" | "ico" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "earningsApiUrl" | "cnEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword")[] = [
   "domain", "title", "ico", "homepageBg", "loginSideImage", "siteLogo", "logoText", "logoFont", "quoteSource", "futuHost", "futuPort", "footerDesc",
-  "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl", "earningsApiUrl", "cnEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl", "translationProvider", "deepseekApiUrl", "deepseekModel", "deepseekApiKey",
+  "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl", "earningsApiUrl", "cnEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl", "translationProvider", "deepseekApiUrl", "deepseekModel", "deepseekApiKey", "llmProvider", "llmApiUrl", "llmModel", "llmApiKey",
   "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword"
 ];
 
