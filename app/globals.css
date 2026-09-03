@@ -4293,3 +4293,16 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .rainbow-text-placeholder { color:#8d99ab; font-family:inherit; font-size:inherit; font-weight:400 !important; letter-spacing:inherit; }
 .rainbow-text-native,.rainbow-text-native:focus { position:absolute; inset:0; z-index:1; border:0 !important; background:transparent !important; color:transparent !important; caret-color:#54a8ff !important; -webkit-text-fill-color:transparent !important; outline:none !important; box-shadow:none !important; }
 .rainbow-text-native::selection { background:color-mix(in srgb,#4ca9f5 25%,transparent); -webkit-text-fill-color:transparent; }
+
+/* react-photo-view 工具栏按钮：沿用组件类名，去掉默认按钮描边 */
+button.PhotoView-Slider__toolbarIcon {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+  box-shadow: none;
+}

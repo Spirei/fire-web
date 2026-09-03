@@ -2269,6 +2269,10 @@ export const V0_1_20_ENTRY: VersionEntry = {
   version: "v0.1.20",
   date: "2026-09-03",
   summary: "空实例首次设置接入真实流程，设置标题栏保存当前分区，交易广场本地缓存动态，正文股票代码可点开详情。",
+  frontend: [
+    ...V0_1_19_ENTRY.frontend,
+    { name: "react-photo-view", version: "1.2.7", desc: "交易广场配图页内预览（官方组件 · 手势 / 工具栏缩放）" }
+  ],
   software: V0_1_19_ENTRY.software.map((item) => item.name === "Fire" ? { ...item, version: "v0.1.20" } : item),
   changes: [{
     title: "空实例首次设置接入真实三步向导",
@@ -2352,8 +2356,12 @@ export const V0_1_20_ENTRY: VersionEntry = {
     kind: "feature"
   }, {
     title: "交易广场动态展示发帖配图并支持页内缩放预览",
-    desc: "特朗普归档附件图与段永平雪球配图在后台刷新时下载到本地 /uploads/trading-square/，列表只加载本地下载成功的图片，不引用外链；点击后在当前页按原比例打开预览，可用按钮或滚轮放大缩小，不新开标签、不挡住列表首次加载。已缓存的旧帖在下次抓取重叠页时补图。",
+    desc: "特朗普归档附件图与段永平雪球配图在后台刷新时下载到本地 /uploads/trading-square/，列表只加载本地下载成功的图片，不引用外链。预览改用官方 react-photo-view：点击缩略图在当前页按原比例打开，支持双指缩放、拖动、工具栏放大缩小与键盘切换，不新开标签、不挡住列表首次加载。已缓存的旧帖在下次抓取重叠页时补图。",
     kind: "feature"
+  }, {
+    title: "交易广场配图下载与预览安全加固",
+    desc: "配图远程抓取改为 HTTPS 主机白名单（雪球 / Truth Social 归档附件域），拒绝内网、localhost、带用户名的 URL 以及跳转后落到白名单外的地址；落盘前用文件魔数校验，只保存 jpg/png/gif/webp，拒绝 svg/ico；列表与预览只接受 /uploads/trading-square/{作者}/{16位哈希}.{扩展名}，不把外链交给 react-photo-view。npm audit 对新增依赖 0 漏洞。",
+    kind: "security"
   }]
 };
 

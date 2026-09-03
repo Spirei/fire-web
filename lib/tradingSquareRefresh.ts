@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { sniffImageExt } from "@/lib/imageSecurity";
+import { isAllowedRemoteImageUrl, isLocalPostImageUrl } from "@/lib/tradingSquareImages";
 import { getSiteSettings } from "@/lib/settings";
 import { readJsonFile, writeJsonAtomic } from "@/lib/tradingSquareCache";
 import { backfillTrumpTranslations, translateTrumpPostsNow } from "@/lib/tradingSquareTranslate";
@@ -136,7 +137,7 @@ function absoluteUrl(value: string): string {
 }
 
 function isPostImage(url: string): boolean {
-  if (!/^https?:\/\//i.test(url)) return false;
+  if (!isAllowedRemoteImageUrl(url)) return false;
   if (/avatar|logo\.svg|emoji|profile_image|accounts\/avatars|preview_cards|status-info__avatar/i.test(url)) return false;
   return /\.(jpe?g|png|gif|webp|bmp)(\?|$)/i.test(url) || /xqimg|imedao|linodeobjects|\/attachments\/|media_attachments/i.test(url);
 }
@@ -211,7 +212,8 @@ function lookupLocal(author: string, key: string): string | undefined {
     folder = new Map();
     try {
       for (const name of fs.readdirSync(path.join(IMAGE_DIR, author))) {
-        folder.set(name.replace(/\.[^.]+$/, ""), `/uploads/trading-square/${author}/${name}`);
+        const local = `/uploads/trading-square/${author}/${name}`;
+        if (isLocalPostImageUrl(local)) folder.set(name.replace(/\.[^.]+$/, ""), local);
       }
     } catch {
       /* first download creates the folder */
@@ -231,10 +233,12 @@ function rememberLocal(author: string, key: string, url: string) {
 }
 
 async function downloadImage(author: string, url: string): Promise<string | undefined> {
-  if (url.startsWith("/uploads/trading-square/")) return url;
+  if (author !== "trump" && author !== "duan") return undefined;
+  if (isLocalPostImageUrl(url)) return url;
+  if (!isAllowedRemoteImageUrl(url)) return undefined;
   const key = sourceKey(url);
   const existing = lookupLocal(author, key);
-  if (existing) return existing;
+  if (existing && isLocalPostImageUrl(existing)) return existing;
   try {
     const referer = /xueqiu|imedao|xqimg/i.test(url) ? "https://xueqiu.com/" : "https://trumpstruth.org/";
     const response = await proxyFetch(url, {
@@ -244,9 +248,11 @@ async function downloadImage(author: string, url: string): Promise<string | unde
         Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
       },
       signal: AbortSignal.timeout(8000),
-      cache: "no-store"
+      cache: "no-store",
+      redirect: "follow"
     });
     if (!response.ok) return undefined;
+    if (!isAllowedRemoteImageUrl(response.url || url)) return undefined;
     const buf = Buffer.from(await response.arrayBuffer());
     if (!buf.length || buf.length > MAX_IMAGE_BYTES) return undefined;
     const ext = sniffImageExt(buf);
@@ -256,6 +262,7 @@ async function downloadImage(author: string, url: string): Promise<string | unde
     const filename = `${key}.${ext}`;
     fs.writeFileSync(path.join(dir, filename), buf);
     const local = `/uploads/trading-square/${author}/${filename}`;
+    if (!isLocalPostImageUrl(local)) return undefined;
     rememberLocal(author, key, local);
     return local;
   } catch {
@@ -284,8 +291,8 @@ export function keepLocalImages(urls?: string[], map?: Map<string, string>): str
   const seen = new Set<string>();
   const out: string[] = [];
   (urls || []).forEach((url) => {
-    const local = url.startsWith("/uploads/trading-square/") ? url : map?.get(url);
-    if (!local || seen.has(local)) return;
+    const local = isLocalPostImageUrl(url) ? url : map?.get(url);
+    if (!local || !isLocalPostImageUrl(local) || seen.has(local)) return;
     seen.add(local);
     out.push(local);
   });

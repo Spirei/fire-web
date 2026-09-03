@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { IconMinus, IconPin, IconPlus, IconWindmill, IconX } from "@tabler/icons-react";
+import { IconMinus, IconPin, IconPlus, IconWindmill } from "@tabler/icons-react";
+import { PhotoProvider, PhotoView } from "react-photo-view";
+import "react-photo-view/dist/react-photo-view.css";
 import useDraggableWindow from "@/lib/useDraggableWindow";
 import Pagination from "@/components/Pagination";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import StockDetailView from "@/components/StockDetailView";
 import StockTextLink from "@/components/StockTextLink";
+import { isLocalPostImageUrl } from "@/lib/tradingSquareImages";
 import { normalizeCode, parseSymbolToken, splitTradingText, type HoldingHint } from "@/lib/tradingSquareText";
 import type { StockRecord } from "@/lib/types";
 
@@ -103,7 +106,7 @@ function countUnseen(posts: Post[], seen: AuthorTimes): Record<string, number> {
 }
 
 function localUrls(urls?: string[]): string[] {
-  return (urls || []).filter((url) => url.startsWith("/uploads/"));
+  return (urls || []).filter((url) => isLocalPostImageUrl(url));
 }
 
 function mergeFeedPosts(previous: Post[], incoming: Post[]): Post[] {
@@ -234,100 +237,41 @@ function parseSymbol(raw: string): { market: string; code: string; name: string 
 
 const LINK_CLASS = "inline bg-transparent p-0 font-semibold text-brand-deep hover:underline";
 
-const PREVIEW_MIN = 0.5;
-const PREVIEW_MAX = 4;
-
-function PostImagePreview({ urls, index, onClose }: { urls: string[]; index: number; onClose: () => void }) {
-  const [current, setCurrent] = useState(index);
-  const [scale, setScale] = useState(1);
-  const stageRef = useRef<HTMLDivElement>(null);
-  const zoom = (delta: number) => setScale((value) => Math.min(PREVIEW_MAX, Math.max(PREVIEW_MIN, Number((value + delta).toFixed(2)))));
-
-  useEffect(() => { setScale(1); }, [current]);
-
-  useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-      if (event.key === "+" || event.key === "=") zoom(0.25);
-      if (event.key === "-" || event.key === "_") zoom(-0.25);
-      if (event.key === "ArrowRight" && current < urls.length - 1) setCurrent((value) => value + 1);
-      if (event.key === "ArrowLeft" && current > 0) setCurrent((value) => value - 1);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = previous;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [current, onClose, urls.length]);
-
-  useEffect(() => {
-    const node = stageRef.current;
-    if (!node) return;
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      zoom(event.deltaY > 0 ? -0.25 : 0.25);
-    };
-    node.addEventListener("wheel", onWheel, { passive: false });
-    return () => node.removeEventListener("wheel", onWheel);
-  }, []);
-
-  return (
-    <div className="fixed inset-0 z-[80] flex flex-col bg-black/75" role="dialog" aria-modal="true" aria-label="图片预览" onClick={onClose}>
-      <div className="flex items-center justify-center gap-2 px-4 py-3" onClick={(event) => event.stopPropagation()}>
-        <button type="button" onClick={() => zoom(-0.25)} disabled={scale <= PREVIEW_MIN} aria-label="缩小" title="缩小" className="grid h-8 w-8 place-items-center rounded-full bg-white/15 text-white transition hover:bg-white/25 active:scale-[.97] disabled:opacity-40">
-          <IconMinus size={16} stroke={2} />
-        </button>
-        <span className="min-w-[3.5rem] text-center text-xs tabular-nums text-white/80">{Math.round(scale * 100)}%</span>
-        <button type="button" onClick={() => zoom(0.25)} disabled={scale >= PREVIEW_MAX} aria-label="放大" title="放大" className="grid h-8 w-8 place-items-center rounded-full bg-white/15 text-white transition hover:bg-white/25 active:scale-[.97] disabled:opacity-40">
-          <IconPlus size={16} stroke={2} />
-        </button>
-        <button type="button" onClick={onClose} aria-label="关闭预览" title="关闭" className="ml-2 grid h-8 w-8 place-items-center rounded-full bg-white/15 text-white transition hover:bg-white/25 active:scale-[.97]">
-          <IconX size={16} stroke={2} />
-        </button>
-      </div>
-      <div ref={stageRef} className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4" onClick={(event) => event.stopPropagation()}>
-        <img
-          src={urls[current]}
-          alt=""
-          draggable={false}
-          className="max-h-[80vh] max-w-[90vw] origin-center object-contain transition-transform duration-200"
-          style={{ transform: `scale(${scale})` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 function PostImages({ urls }: { urls?: string[] }) {
-  const [preview, setPreview] = useState<number | null>(null);
-  if (!urls?.length) return null;
-  const list = urls.filter((url) => url.startsWith("/uploads/")).slice(0, 4);
+  const list = localUrls(urls).slice(0, 4);
   if (!list.length) return null;
   return (
-    <>
+    <PhotoProvider
+      bannerVisible
+      maskClosable
+      pullClosable
+      toolbarRender={({ onScale, scale }) => (
+        <>
+          <button type="button" className="PhotoView-Slider__toolbarIcon" aria-label="缩小" title="缩小" onClick={() => onScale(scale - 1)}>
+            <IconMinus size={18} stroke={2} />
+          </button>
+          <button type="button" className="PhotoView-Slider__toolbarIcon" aria-label="放大" title="放大" onClick={() => onScale(scale + 1)}>
+            <IconPlus size={18} stroke={2} />
+          </button>
+        </>
+      )}
+    >
       <div className={`mt-3 grid gap-2 ${list.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
-        {list.map((url, index) => (
-          <button
-            key={url}
-            type="button"
-            onClick={() => setPreview(index)}
-            className="overflow-hidden rounded-xl border border-edge bg-bg-gray dark:border-white/10 dark:bg-white/[.04]"
-          >
+        {list.map((url) => (
+          <PhotoView key={url} src={url}>
             <img
               src={url}
               alt=""
               loading="lazy"
               referrerPolicy="no-referrer"
-              onError={(event) => { event.currentTarget.parentElement?.setAttribute("hidden", ""); }}
-              className={`w-full object-cover ${list.length === 1 ? "max-h-80" : "h-36"}`}
+              onError={(event) => { event.currentTarget.style.display = "none"; }}
+              className={`w-full cursor-pointer overflow-hidden rounded-xl border border-edge bg-bg-gray object-cover dark:border-white/10 dark:bg-white/[.04] ${list.length === 1 ? "max-h-80" : "h-36"}`}
+              style={{ objectFit: "cover" }}
             />
-          </button>
+          </PhotoView>
         ))}
       </div>
-      {preview != null ? <PostImagePreview urls={list} index={preview} onClose={() => setPreview(null)} /> : null}
-    </>
+    </PhotoProvider>
   );
 }
 
