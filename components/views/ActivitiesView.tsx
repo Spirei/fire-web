@@ -368,7 +368,12 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
                 >
                   <p className="flex items-center gap-1.5 text-[11px] text-muted">
                     {market === "TOTAL" ? (
-                      <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-slate-200 text-[8px] font-bold text-slate-600 dark:bg-white/10 dark:text-slate-300">Σ</span>
+                      <span className="inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-bg-gray dark:bg-white/10" aria-hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[62%] w-[62%] text-muted">
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M3 12h18M12 3c2.4 2.45 3.6 5.45 3.6 9S14.4 18.55 12 21c-2.4-2.45-3.6-5.45-3.6-9S9.6 5.45 12 3Z" />
+                        </svg>
+                      </span>
                     ) : (
                       <MarketIcon market={market} flag={marketMeta(market).flag} size={14} />
                     )}
