@@ -76,6 +76,13 @@ const ORDER_STATUS: Record<string, string> = {
   cancelled: "已撤单",
   expired: "已失效"
 };
+const USER_FILTERS: Array<{ id: RowFilter; label: string }> = [
+  { id: "all", label: "全部动态" },
+  { id: "trade", label: "交易" },
+  { id: "created", label: "新增" },
+  { id: "updated", label: "修改" },
+  { id: "deleted", label: "删除" }
+];
 
 function systemLevel(event: string) {
   if (event.includes("rate_limited")) return { label: "警告", cls: "bg-amber-500/10 text-amber-700 dark:text-amber-300" };
@@ -146,6 +153,7 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
   const [page, setPage] = useState(initial.page);
   const [filter, setFilter] = useState<RowFilter>(initial.filter);
   const [marketFilter, setMarketFilter] = useState<MarketFilter>(initial.market);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const refreshingRef = useRef(false);
   const [lastRefreshed, setLastRefreshed] = useState("");
@@ -261,7 +269,7 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
             <button
               key={key}
               type="button"
-              onClick={() => setScope(key)}
+              onClick={() => { setScope(key); setFilterOpen(false); }}
               className={`border-b-2 pb-3 text-sm font-semibold transition ${scope === key ? "border-ink text-ink dark:border-white dark:text-white" : "border-transparent text-muted hover:text-ink dark:hover:text-white"}`}
             >
               {key === "user" ? "用户日志" : "系统日志"}
@@ -270,6 +278,51 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
           ))}
         </div>
         <div className="mb-3 flex w-full items-center gap-2 sm:w-auto">
+          {(scope === "user" || isAdmin) && (
+            <div className="relative">
+              <button
+                type="button"
+                title={scope === "user" ? (USER_FILTERS.find((item) => item.id === filter)?.label || "筛选动态") : (systemFilter === "all" ? "全部模块" : MODULE_LABELS[systemFilter] || systemFilter)}
+                aria-label={scope === "user" ? "筛选动态" : "筛选模块"}
+                aria-expanded={filterOpen}
+                aria-pressed={scope === "user" ? filter !== "all" : systemFilter !== "all"}
+                onClick={() => setFilterOpen((open) => !open)}
+                className={`grid h-9 w-9 flex-none place-items-center rounded-lg border transition ${filterOpen || (scope === "user" ? filter !== "all" : systemFilter !== "all") ? "border-edge-strong bg-bg-gray text-ink dark:bg-white/10 dark:text-white" : "border-edge text-muted hover:bg-bg-gray hover:text-ink dark:hover:bg-white/10 dark:hover:text-white"}`}
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <path d="M4 5h16l-6 7v5l-4 2v-7L4 5Z" />
+                </svg>
+              </button>
+              {filterOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setFilterOpen(false)} />
+                  <div className="absolute left-0 top-full z-50 mt-2 w-36 overflow-hidden rounded-xl border border-edge-strong bg-white p-1.5 shadow-pop dark:border-[#2a3140] dark:bg-[#1b2029]">
+                    {scope === "user"
+                      ? USER_FILTERS.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => { setFilter(item.id); setFilterOpen(false); }}
+                          className={`flex w-full items-center rounded-lg px-3 py-2 text-left text-xs transition ${filter === item.id ? "bg-bg-gray font-semibold text-ink dark:bg-white/10 dark:text-white" : "text-ink hover:bg-bg-gray dark:text-slate-200 dark:hover:bg-white/10"}`}
+                        >
+                          {item.label}
+                        </button>
+                      ))
+                      : [{ id: "all", label: "全部模块" }, ...systemModules.map((key) => ({ id: key, label: MODULE_LABELS[key] || key }))].map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => { setSystemFilter(item.id); setFilterOpen(false); }}
+                          className={`flex w-full items-center rounded-lg px-3 py-2 text-left text-xs transition ${systemFilter === item.id ? "bg-bg-gray font-semibold text-ink dark:bg-white/10 dark:text-white" : "text-ink hover:bg-bg-gray dark:text-slate-200 dark:hover:bg-white/10"}`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -334,15 +387,6 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
 
       {scope === "system" && isAdmin && (
         <>
-          <div className="flex items-center justify-between border-b border-edge px-5 py-3">
-            <select value={systemFilter} onChange={(event) => setSystemFilter(event.target.value)} className="h-8 rounded-lg border border-edge bg-transparent px-2.5 text-xs text-muted outline-none">
-              <option value="all">全部模块</option>
-              {systemModules.map((key) => (
-                <option key={key} value={key}>{MODULE_LABELS[key] || key}</option>
-              ))}
-            </select>
-            <span className="text-xs text-faint">{visibleSystemLogs.length} 条</span>
-          </div>
           <div className="data-table-scroll">
             <table className="w-full min-w-[700px] text-sm">
               <thead>
@@ -388,17 +432,7 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
 
       {scope === "user" && (
         <>
-          <div className="flex items-center justify-between border-b border-edge px-5 py-3">
-            <select value={filter} onChange={(event) => setFilter(event.target.value as RowFilter)} className="h-8 rounded-lg border border-edge bg-transparent px-2.5 text-xs text-muted outline-none">
-              <option value="all">全部动态</option>
-              <option value="trade">交易</option>
-              <option value="created">新增</option>
-              <option value="updated">修改</option>
-              <option value="deleted">删除</option>
-            </select>
-            <span className="text-xs text-faint">{userRows.length} 条{marketFilter !== "all" ? ` · ${marketMeta(marketFilter).label}` : ""}</span>
-          </div>
-          <div className="data-table-scroll">
+          <div className="mt-4 data-table-scroll">
             <table className="mobile-activities-table w-full min-w-[620px] text-[13px]">
               <thead>
                 <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-muted">
