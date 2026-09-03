@@ -1,14 +1,66 @@
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
-import { getDb } from "@/lib/db";
+import { fetchDailyKline } from "@/lib/kline";
+import { marketSessionState } from "@/lib/marketSessions";
+import { listRecords } from "@/lib/store";
+
+const KLINE_MARKETS = new Set(["US", "HK", "CN", "JP", "KR"]);
+
+type MarketAgg = { holdings: number; pnl: number; date: string };
+
+async function poolMap<T>(items: T[], size: number, worker: (item: T) => Promise<void>) {
+  let index = 0;
+  const run = async () => {
+    while (index < items.length) {
+      const current = items[index];
+      index += 1;
+      await worker(current);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(size, 1), items.length) }, () => run()));
+}
 
 export async function GET(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
-  const today = new Date().toISOString().slice(0, 10);
-  const row = getDb().prepare(`SELECT substr(traded_at, 1, 10) AS date, COUNT(*) AS trades, COALESCE(SUM(realized_pnl), 0) AS realized FROM trade_orders WHERE user_id = ? AND status = 'filled' AND substr(traded_at, 1, 10) < ? GROUP BY substr(traded_at, 1, 10) ORDER BY date DESC LIMIT 1`).get(user.id, today) as { date?: string; trades: number; realized: number } | undefined;
-  if (!row?.date) return NextResponse.json({ date: "", trades: 0, realized: 0, markets: {}, currency: "原币种合计", settlement: "暂无已成交记录" });
-  const marketRows = getDb().prepare(`SELECT market, COUNT(*) AS trades, COALESCE(SUM(realized_pnl), 0) AS realized FROM trade_orders WHERE user_id = ? AND status = 'filled' AND substr(traded_at, 1, 10) = ? GROUP BY market`).all(user.id, row.date) as { market: string; trades: number; realized: number }[];
-  const markets = Object.fromEntries(marketRows.map((item) => [item.market, { trades: Number(item.trades), realized: Number(item.realized) }]));
-  return NextResponse.json({ date: row.date, trades: Number(row.trades), realized: Number(row.realized), markets, currency: "原币种合计", settlement: "最近一个有成交记录的交易日" });
+
+  const positions = listRecords(user.id).filter((record) => Number(record.qty) > 0 && KLINE_MARKETS.has(String(record.market || "").toUpperCase()));
+  const markets: Record<string, MarketAgg> = {};
+  const dates = new Set<string>();
+
+  await poolMap(positions, 5, async (record) => {
+    const qty = Number(record.qty);
+    const market = String(record.market).toUpperCase();
+    try {
+      const items = await fetchDailyKline(market, record.code, 16);
+      const today = marketSessionState(market).localDate;
+      let index = -1;
+      for (let i = items.length - 1; i >= 0; i -= 1) {
+        if (items[i].d < today) {
+          index = i;
+          break;
+        }
+      }
+      if (index < 1) return;
+      const date = items[index].d;
+      const pnl = (items[index].c - items[index - 1].c) * qty;
+      const current = markets[market] ?? { holdings: 0, pnl: 0, date };
+      current.holdings += 1;
+      current.pnl += pnl;
+      if (date > current.date) current.date = date;
+      markets[market] = current;
+      dates.add(date);
+    } catch {
+      /* 单只 K 线失败不影响其余持仓 */
+    }
+  });
+
+  const dateList = [...dates].sort();
+  const holdings = Object.values(markets).reduce((sum, item) => sum + item.holdings, 0);
+  return NextResponse.json({
+    date: dateList.length === 1 ? dateList[0] : dateList.length ? `${dateList[0]} ~ ${dateList[dateList.length - 1]}` : "",
+    holdings,
+    markets,
+    settlement: "上一交易日收盘相对前收盘"
+  });
 }

@@ -21,12 +21,36 @@ interface Props {
 }
 
 type Scope = "user" | "system";
-type OpFilter = Activity["action"] | "all";
+type RowFilter = Activity["action"] | "trade" | "all";
+type MarketFilter = "all" | "US" | "HK" | "CN";
+type DailySummary = {
+  date: string;
+  holdings: number;
+  markets: Record<string, { holdings: number; pnl: number; date: string }>;
+  settlement: string;
+};
+type TimelineRow = {
+  id: string;
+  at: string;
+  kind: "activity" | "order";
+  action: Activity["action"] | TradeOrder["side"];
+  market: string;
+  name: string;
+  code: string;
+  userName: string;
+  userAvatar: string;
+  qty?: number;
+  price?: number;
+  status?: string;
+};
 
-const ACTION_META: Record<Activity["action"], { label: string; cls: string }> = {
+const ACTION_META: Record<TimelineRow["action"], { label: string; cls: string }> = {
   created: { label: "新增", cls: "bg-brand-light text-brand-deep" },
   updated: { label: "修改", cls: "bg-[#fff4e5] text-[#b06a00]" },
-  deleted: { label: "删除", cls: "bg-up-bg text-up" }
+  deleted: { label: "删除", cls: "bg-up-bg text-up" },
+  buy: { label: "买入", cls: "bg-up-bg text-up" },
+  sell: { label: "卖出", cls: "bg-down-bg text-down" },
+  dividend: { label: "股息", cls: "bg-brand-light text-brand-deep" }
 };
 
 const MODULE_LABELS: Record<string, string> = {
@@ -41,11 +65,16 @@ const SUMMARY_MARKETS: Array<{ label: string; market: string }> = [
   { label: "美股", market: "US" },
   { label: "港股", market: "HK" },
   { label: "A股", market: "CN" },
-  { label: "总盈利", market: "TOTAL" }
+  { label: "合计", market: "TOTAL" }
 ];
 
 const PAGE_SIZE = 10;
-const ORDER_PREVIEW = 10;
+const ORDER_STATUS: Record<string, string> = {
+  filled: "已成交",
+  pending: "待成交",
+  cancelled: "已撤单",
+  expired: "已失效"
+};
 
 function systemLevel(event: string) {
   if (event.includes("rate_limited")) return { label: "警告", cls: "bg-amber-500/10 text-amber-700 dark:text-amber-300" };
@@ -69,26 +98,30 @@ function systemEventLabel(event: string) {
 
 const isKeySystemEvent = (event: string) => /^(auth\.|security\.|permission\.|deploy\.|system\.)/.test(event);
 
-function readQuery(): { scope: Scope; filter: OpFilter; systemFilter: string; page: number; query: string } {
-  if (typeof window === "undefined") return { scope: "user", filter: "all", systemFilter: "all", page: 1, query: "" };
+function readQuery(): { scope: Scope; filter: RowFilter; systemFilter: string; market: MarketFilter; page: number; query: string } {
+  if (typeof window === "undefined") return { scope: "user", filter: "all", systemFilter: "all", market: "all", page: 1, query: "" };
   const params = new URLSearchParams(window.location.search);
   const op = params.get("op");
+  const market = params.get("market");
   const page = Number(params.get("page") || "1");
   return {
     scope: params.get("scope") === "system" ? "system" : "user",
-    filter: op === "created" || op === "updated" || op === "deleted" ? op : "all",
+    filter: op === "created" || op === "updated" || op === "deleted" || op === "trade" ? op : "all",
     systemFilter: params.get("mod") || "all",
+    market: market === "US" || market === "HK" || market === "CN" ? market : "all",
     page: Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1,
     query: params.get("q") || ""
   };
 }
 
-function writeQuery(scope: Scope, filter: OpFilter, systemFilter: string, page: number, query: string) {
+function writeQuery(scope: Scope, filter: RowFilter, systemFilter: string, market: MarketFilter, page: number, query: string) {
   const url = new URL(window.location.href);
   if (scope === "system") url.searchParams.set("scope", "system");
   else url.searchParams.delete("scope");
   if (scope === "user" && filter !== "all") url.searchParams.set("op", filter);
   else url.searchParams.delete("op");
+  if (scope === "user" && market !== "all") url.searchParams.set("market", market);
+  else url.searchParams.delete("market");
   if (scope === "system" && systemFilter !== "all") url.searchParams.set("mod", systemFilter);
   else url.searchParams.delete("mod");
   if (page > 1) url.searchParams.set("page", String(page));
@@ -97,10 +130,6 @@ function writeQuery(scope: Scope, filter: OpFilter, systemFilter: string, page: 
   else url.searchParams.delete("q");
   const next = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : "");
   window.history.replaceState(null, "", next);
-}
-
-function orderTime(order: TradeOrder) {
-  return Date.parse(order.tradedAt || order.createdAt) || 0;
 }
 
 function signedMoney(value: number, symbol: string) {
@@ -114,41 +143,61 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
   const [systemFilter, setSystemFilter] = useState(initial.systemFilter);
   const [query, setQuery] = useState(initial.query);
   const [page, setPage] = useState(initial.page);
-  const [filter, setFilter] = useState<OpFilter>(initial.filter);
+  const [filter, setFilter] = useState<RowFilter>(initial.filter);
+  const [marketFilter, setMarketFilter] = useState<MarketFilter>(initial.market);
   const [refreshing, setRefreshing] = useState(false);
   const refreshingRef = useRef(false);
   const [lastRefreshed, setLastRefreshed] = useState("");
-  const [dailySummary, setDailySummary] = useState<{
-    date: string;
-    trades: number;
-    realized: number;
-    markets: Record<string, { trades: number; realized: number }>;
-    currency: string;
-    settlement: string;
-  } | null>(null);
+  const [dailySummary, setDailySummary] = useState<DailySummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
   const { symbol, rates, fx } = useDisplayCurrency();
   const { stockIcons } = useAssetIcons(["stock"]);
+  const profile = activities[0];
 
-  const visibleActivities = useMemo(
-    () => activities.filter((item) => `${item.stockName} ${item.stockCode} ${item.userName}`.toLowerCase().includes(query.toLowerCase())),
-    [activities, query]
-  );
+  const timeline = useMemo<TimelineRow[]>(() => {
+    const activityRows: TimelineRow[] = activities.map((item) => ({
+      id: `a-${item.id}`,
+      at: item.createdAt,
+      kind: "activity",
+      action: item.action,
+      market: item.market,
+      name: item.stockName,
+      code: item.stockCode,
+      userName: item.userName,
+      userAvatar: item.userAvatar
+    }));
+    const orderRows: TimelineRow[] = orders.map((order) => ({
+      id: `o-${order.id}`,
+      at: order.tradedAt || order.createdAt,
+      kind: "order",
+      action: order.side,
+      market: order.market,
+      name: order.name,
+      code: order.code,
+      userName: profile?.userName || "",
+      userAvatar: profile?.userAvatar || "",
+      qty: order.qty,
+      price: order.price,
+      status: order.status
+    }));
+    return [...activityRows, ...orderRows].sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || a.id.localeCompare(b.id));
+  }, [activities, orders, profile?.userAvatar, profile?.userName]);
+
   const visibleSystemLogs = useMemo(
     () => systemLogs.filter((log) => isKeySystemEvent(log.event) && `${log.event} ${log.detail} ${log.userName} ${log.ip}`.toLowerCase().includes(query.toLowerCase()) && (systemFilter === "all" || log.event.split(/[.:/]/)[0] === systemFilter)),
     [query, systemFilter, systemLogs]
   );
-  const userRows = useMemo(
-    () => visibleActivities.filter((item) => filter === "all" || item.action === filter),
-    [filter, visibleActivities]
-  );
+  const userRows = useMemo(() => timeline.filter((item) => {
+    if (filter === "trade" && item.kind !== "order") return false;
+    if (filter !== "all" && filter !== "trade" && item.action !== filter) return false;
+    if (marketFilter !== "all" && item.market.toUpperCase() !== marketFilter) return false;
+    const hay = `${item.name} ${item.code} ${item.userName} ${ACTION_META[item.action].label}`.toLowerCase();
+    return hay.includes(query.toLowerCase());
+  }), [filter, marketFilter, query, timeline]);
   const rows = scope === "user" ? userRows : visibleSystemLogs;
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pageRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const recentOrders = useMemo(
-    () => [...orders].sort((a, b) => orderTime(b) - orderTime(a)).slice(0, ORDER_PREVIEW),
-    [orders]
-  );
   const systemModules = useMemo(
     () => Array.from(new Set(systemLogs.map((log) => log.event.split(/[.:/]/)[0]).filter(Boolean))).slice(0, 8),
     [systemLogs]
@@ -157,15 +206,15 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
   const convertedMarkets = useMemo(() => {
     const map: Record<string, number> = {};
     Object.entries(dailySummary?.markets ?? {}).forEach(([market, item]) => {
-      map[market] = fx(usdCap(market, item.realized, rates));
+      map[market] = fx(usdCap(market, item.pnl, rates));
     });
     return map;
   }, [dailySummary, fx, rates]);
   const convertedTotal = Object.values(convertedMarkets).reduce((sum, value) => sum + value, 0);
 
-  useEffect(() => { setPage(1); }, [scope, filter, systemFilter, query]);
+  useEffect(() => { setPage(1); }, [scope, filter, systemFilter, marketFilter, query]);
   useEffect(() => { if (page !== safePage) setPage(safePage); }, [page, safePage]);
-  useEffect(() => { writeQuery(scope, filter, systemFilter, safePage, query); }, [filter, query, safePage, scope, systemFilter]);
+  useEffect(() => { writeQuery(scope, filter, systemFilter, marketFilter, safePage, query); }, [filter, marketFilter, query, safePage, scope, systemFilter]);
 
   useEffect(() => {
     if (!onRefresh) return;
@@ -175,10 +224,14 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
 
   useEffect(() => {
     if (scope !== "user") return;
-    fetch("/api/activities/daily-summary", { cache: "no-store" })
+    const controller = new AbortController();
+    setSummaryLoading(true);
+    fetch("/api/activities/daily-summary", { cache: "no-store", signal: controller.signal })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => { if (data) setDailySummary(data); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!controller.signal.aborted) setSummaryLoading(false); });
+    return () => controller.abort();
   }, [lastRefreshed, scope]);
 
   const refreshLogs = async () => {
@@ -194,6 +247,11 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
     }
   };
 
+  const selectMarket = (market: string) => {
+    if (market === "TOTAL") setMarketFilter("all");
+    else setMarketFilter((current) => (current === market ? "all" : market as MarketFilter));
+  };
+
   return (
     <div className="overflow-hidden rounded-[18px] border border-edge bg-white shadow-card dark:bg-[#151b26]">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-edge px-5 pt-4">
@@ -206,7 +264,7 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
               className={`border-b-2 pb-3 text-sm font-semibold transition ${scope === key ? "border-ink text-ink dark:border-white dark:text-white" : "border-transparent text-muted hover:text-ink dark:hover:text-white"}`}
             >
               {key === "user" ? "用户日志" : "系统日志"}
-              <span className="ml-1.5 text-xs font-normal text-faint">{key === "user" ? activities.length : systemLogs.filter((log) => isKeySystemEvent(log.event)).length}</span>
+              <span className="ml-1.5 text-xs font-normal text-faint">{key === "user" ? timeline.length : systemLogs.filter((log) => isKeySystemEvent(log.event)).length}</span>
             </button>
           ))}
         </div>
@@ -225,22 +283,32 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
 
       {scope === "system" && !isAdmin && <div className="p-8 text-center text-sm text-faint">系统日志仅管理员可见</div>}
 
-      {scope === "user" && dailySummary && (
+      {scope === "user" && (
         <div className="mx-5 mt-4 rounded-xl border border-edge bg-bg-gray/50 px-4 py-3 dark:bg-white/[.04]">
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-muted">最近交易日盈利摘要</p>
-              <p className="mt-1 text-[11px] text-faint">{dailySummary.date || "暂无日期"} · {dailySummary.settlement}</p>
+              <p className="text-xs font-semibold text-muted">前一日持仓盈利</p>
+              <p className="mt-1 text-[11px] text-faint">
+                {summaryLoading ? "正在汇总上一交易日收盘盈亏" : `${dailySummary?.date || "暂无日期"} · ${dailySummary?.settlement || "上一交易日收盘相对前收盘"}`}
+              </p>
             </div>
-            <span className="text-[11px] text-faint">{dailySummary.trades} 笔成交</span>
+            <span className="text-[11px] text-faint">{dailySummary?.holdings ? `${dailySummary.holdings} 只持仓` : summaryLoading ? "…" : "暂无持仓"}</span>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {SUMMARY_MARKETS.map(({ label, market }, index) => {
-              const raw = market === "TOTAL" ? (dailySummary.trades ? convertedTotal : undefined) : dailySummary.markets[market]?.realized;
+              const raw = market === "TOTAL" ? (dailySummary?.holdings ? convertedTotal : undefined) : dailySummary?.markets[market]?.pnl;
               const value = market === "TOTAL" ? raw : (raw === undefined ? undefined : convertedMarkets[market] ?? 0);
-              const trades = market === "TOTAL" ? dailySummary.trades : dailySummary.markets[market]?.trades;
+              const count = market === "TOTAL" ? dailySummary?.holdings : dailySummary?.markets[market]?.holdings;
+              const date = market === "TOTAL" ? dailySummary?.date : dailySummary?.markets[market]?.date;
+              const selected = market === "TOTAL" ? marketFilter === "all" : marketFilter === market;
               return (
-                <div key={market} className={`pl-3 ${index === 0 ? "border-0 pl-0" : "border-l border-edge"}`}>
+                <button
+                  key={market}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => selectMarket(market)}
+                  className={`rounded-lg px-1 py-1 text-left transition ${index === 0 ? "" : "sm:border-l sm:border-edge sm:pl-3"} ${selected ? "bg-white shadow-sm dark:bg-[#1c222d]" : "hover:bg-white/70 dark:hover:bg-white/[.06]"}`}
+                >
                   <p className="flex items-center gap-1.5 text-[11px] text-muted">
                     {market === "TOTAL" ? (
                       <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-slate-200 text-[8px] font-bold text-slate-600 dark:bg-white/10 dark:text-slate-300">Σ</span>
@@ -250,62 +318,12 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
                     {label}
                   </p>
                   <strong className={`mt-1 block text-sm tabular-nums ${value === undefined ? "text-faint" : value >= 0 ? "text-up" : "text-down"}`}>
-                    {value === undefined ? "—" : signedMoney(value, symbol)}
+                    {summaryLoading && value === undefined ? "…" : value === undefined ? "—" : signedMoney(value, symbol)}
                   </strong>
-                  <span className="mt-0.5 block text-[10px] text-faint">{trades ? `${trades} 笔` : "无成交"}</span>
-                </div>
+                  <span className="mt-0.5 block text-[10px] text-faint">{count ? `${count} 只${date ? ` · ${date.slice(5)}` : ""}` : "无持仓"}</span>
+                </button>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {scope === "user" && recentOrders.length > 0 && (
-        <div className="mx-5 mt-4 overflow-hidden rounded-xl border border-edge">
-          <div className="flex items-center justify-between border-b border-edge px-4 py-3">
-            <span className="text-xs font-semibold text-muted">交易记录</span>
-            <span className="text-[11px] text-faint">{orders.length > ORDER_PREVIEW ? `最近 ${ORDER_PREVIEW} 条 / 共 ${orders.length} 条` : `买卖与挂单 · ${orders.length} 条`}</span>
-          </div>
-          <div className="data-table-scroll">
-            <table className="w-full min-w-[620px] text-[12px]">
-              <thead>
-                <tr className="bg-bg-gray text-[11px] text-muted">
-                  <th className="px-4 py-2 text-left">市场</th>
-                  <th className="px-4 py-2 text-left">方向</th>
-                  <th className="px-4 py-2 text-left">股票</th>
-                  <th className="px-4 py-2 text-right">数量</th>
-                  <th className="px-4 py-2 text-right">价格</th>
-                  <th className="px-4 py-2 text-left">状态</th>
-                  <th className="px-4 py-2 text-right">时间</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentOrders.map((order) => {
-                  const meta = marketMeta(order.market);
-                  return (
-                    <tr key={order.id} className="border-t border-edge">
-                      <td className="px-4 py-2.5">
-                        <span className="inline-flex items-center gap-1.5">
-                          <MarketIcon market={order.market} flag={meta.flag} size={15} />
-                          <span className="text-muted">{meta.label}</span>
-                        </span>
-                      </td>
-                      <td className={`px-4 py-2.5 font-semibold ${order.side === "buy" ? "text-up" : order.side === "sell" ? "text-down" : "text-muted"}`}>
-                        {order.side === "buy" ? "买入" : order.side === "sell" ? "卖出" : "股息"}
-                      </td>
-                      <td className="px-4 py-2.5 font-semibold">
-                        {order.name}
-                        <span className="ml-1 font-normal text-muted">{order.code}</span>
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{fmtQty(order.qty)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{fmtPrice(order.price, meta.currency, order.market)}</td>
-                      <td className="px-4 py-2.5 text-muted">{order.status === "filled" ? "已成交" : order.status === "pending" ? "待成交" : order.status === "cancelled" ? "已撤单" : "已失效"}</td>
-                      <td className="px-4 py-2.5 text-right text-muted">{fmtDateTime(order.tradedAt || order.createdAt)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           </div>
         </div>
       )}
@@ -367,13 +385,14 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
       {scope === "user" && (
         <>
           <div className="flex items-center justify-between border-b border-edge px-5 py-3">
-            <select value={filter} onChange={(event) => setFilter(event.target.value as OpFilter)} className="h-8 rounded-lg border border-edge bg-transparent px-2.5 text-xs text-muted outline-none">
-              <option value="all">全部操作</option>
+            <select value={filter} onChange={(event) => setFilter(event.target.value as RowFilter)} className="h-8 rounded-lg border border-edge bg-transparent px-2.5 text-xs text-muted outline-none">
+              <option value="all">全部动态</option>
+              <option value="trade">交易</option>
               <option value="created">新增</option>
               <option value="updated">修改</option>
               <option value="deleted">删除</option>
             </select>
-            <span className="text-xs text-faint">{userRows.length} 条记录</span>
+            <span className="text-xs text-faint">{userRows.length} 条{marketFilter !== "all" ? ` · ${marketMeta(marketFilter).label}` : ""}</span>
           </div>
           <div className="data-table-scroll">
             <table className="mobile-activities-table w-full min-w-[620px] text-[13px]">
@@ -387,12 +406,12 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
               </thead>
               <tbody>
                 {pageRows.map((item) => {
-                  if (!("action" in item)) return null;
+                  if (!("kind" in item)) return null;
                   const meta = ACTION_META[item.action];
                   const market = item.market || "OTHER";
                   const marketInfo = marketMeta(market);
                   const displayName = item.userName || "?";
-                  const icon = stockIcons[`${market.toUpperCase()}:${item.stockCode.toUpperCase()}`];
+                  const icon = stockIcons[`${market.toUpperCase()}:${item.code.toUpperCase()}`];
                   return (
                     <tr key={item.id} className="whitespace-nowrap border-t border-edge transition-colors hover:bg-bg-gray/50 dark:hover:bg-white/[.03]">
                       <td className="px-5 py-3.5">
@@ -410,18 +429,20 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           {icon ? (
-                            <SafeAssetImage src={icon} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" fallback={<span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-bg-gray text-[10px] font-bold text-muted">{item.stockName.slice(0, 1)}</span>} />
+                            <SafeAssetImage src={icon} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" fallback={<span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-bg-gray text-[10px] font-bold text-muted">{item.name.slice(0, 1)}</span>} />
                           ) : null}
                           <div className="flex min-w-0 flex-col leading-[1.35]">
-                            <b className="font-semibold">{item.stockName}</b>
+                            <b className="font-semibold">{item.name}</b>
                             <small className="flex items-center gap-1 text-xs text-muted">
                               <MarketIcon market={market} flag={marketInfo.flag} size={13} />
-                              {item.stockCode} · {marketInfo.label}
+                              {item.code} · {marketInfo.label}
+                              {item.kind === "order" && item.qty != null ? ` · ${fmtQty(item.qty)} × ${fmtPrice(item.price ?? "", marketInfo.currency, market)}` : ""}
+                              {item.status ? ` · ${ORDER_STATUS[item.status] || item.status}` : ""}
                             </small>
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 text-xs tabular-nums text-muted">{fmtDateTime(item.createdAt)}</td>
+                      <td className="px-5 py-3.5 text-xs tabular-nums text-muted">{fmtDateTime(item.at)}</td>
                     </tr>
                   );
                 })}
