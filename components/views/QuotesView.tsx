@@ -155,10 +155,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
     async function load() {
       try {
         const res = await fetch("/api/v1/watch-groups");
-        if (res.status === 401) {
-          window.location.href = "/login";
-          return;
-        }
+        if (!res.ok) return;
         const data = await res.json().catch(() => null);
         const list: WatchGroup[] = data?.data?.groups ?? [];
         if (cancelled) return;
@@ -401,10 +398,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
           sample: true
         })
       });
-      if (res.status === 401) {
-        window.location.href = "/login";
-        return;
-      }
+      if (!res.ok) return;
       const data = await res.json();
       if (data.charts) setCharts((prev) => ({ ...prev, ...data.charts }));
     } catch {

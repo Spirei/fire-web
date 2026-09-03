@@ -54,8 +54,15 @@ export default function UserMenu({ goTo, initialUser = null }: { goTo?: string; 
             setReady(true);
             return;
           }
-          if (res.status === 401) setUser(null);
           setReady(true);
+          if (res.status !== 401) return;
+          // 后台壳已有服务端用户：去登录页，不要在头像位置闪「登录」按钮。
+          // 首页由 HomeContent 统一切换访客顶栏。
+          if (initialUser && !goTo) {
+            router.replace("/login");
+            return;
+          }
+          if (!initialUser) setUser(null);
         })
         .catch(() => setReady(true));
     }
@@ -123,6 +130,9 @@ export default function UserMenu({ goTo, initialUser = null }: { goTo?: string; 
   }
 
   if (!user) {
+    if (initialUser) {
+      return <span aria-hidden className="inline-flex h-10 w-10 flex-none rounded-full bg-bg-gray/80 dark:bg-white/10" />;
+    }
     return (
       <button
         type="button"

@@ -20,12 +20,12 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
   const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { cache: "no-store", credentials: "same-origin" })
       .then((res) => {
         if (res.ok) router.replace("/records");
       })
       .catch(() => {
-        // 网络异常按未登录处理，避免未捕获 Promise，同时必须结束检查态。
+        // 超时 / 5xx 保持登录表单，不把瞬时失败当成已登录。
       })
       .finally(() => setChecking(false));
     fetch("/api/settings/public")

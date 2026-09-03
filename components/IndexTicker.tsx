@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useState } from "react";
 import MarketIcon from "@/components/MarketIcon";
 import { marketMeta } from "@/lib/types";
 
@@ -85,20 +85,41 @@ function TickerChip({ item }: { item: TickerItem }) {
   );
 }
 
+const TICKER_CACHE_KEY = "fire:ticker";
+
+function readTickerCache(): { items: TickerItem[]; interval?: number } | null {
+  try {
+    const raw = JSON.parse(sessionStorage.getItem(TICKER_CACHE_KEY) || "null") as { items?: TickerItem[]; interval?: number } | null;
+    if (Array.isArray(raw?.items) && raw.items.length) return { items: raw.items, interval: raw.interval };
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 export default function IndexTicker() {
   const [items, setItems] = useState<TickerItem[]>([]);
   const [intervalSec, setIntervalSec] = useState(5);
   const [idx, setIdx] = useState(0);
+
+  useLayoutEffect(() => {
+    const cached = readTickerCache();
+    if (!cached) return;
+    setItems(cached.items);
+    if (typeof cached.interval === "number" && cached.interval >= 3) setIntervalSec(cached.interval);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
         const res = await fetch("/api/ticker", { cache: "no-store" });
+        if (!res.ok) return;
         const data = await res.json().catch(() => null);
         if (!cancelled && data?.items) {
           setItems(data.items);
           if (typeof data.interval === "number" && data.interval >= 3) setIntervalSec(data.interval);
+          try { sessionStorage.setItem(TICKER_CACHE_KEY, JSON.stringify({ items: data.items, interval: data.interval })); } catch { /* quota */ }
         }
       } catch {
         /* 静默失败，下轮重试 */

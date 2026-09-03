@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import LoginForm from "@/components/LoginForm";
 import { getSiteSettings } from "@/lib/settings";
 import { logoFontClass } from "@/lib/logoFont";
-import { needsSetup } from "@/lib/auth";
+import { getUserByToken, LEGACY_SESSION_COOKIE, needsSetup, SESSION_COOKIE } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "登录 - Fire"
@@ -16,6 +19,9 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   if (needsSetup() && params.skipSetup !== "1") redirect("/setup");
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
+  if (getUserByToken(token)) redirect("/records");
   const settings = getSiteSettings();
   const logoFontCls = logoFontClass(settings.logoFont);
   return (

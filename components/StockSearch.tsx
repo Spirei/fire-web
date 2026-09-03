@@ -45,8 +45,8 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
       setLoading(true);
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-        if (res.status === 401) {
-          window.location.href = "/login";
+        if (!res.ok) {
+          setResults([]);
           return;
         }
         const data = await res.json();

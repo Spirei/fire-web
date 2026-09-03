@@ -253,10 +253,7 @@ export default function RecordsApp({
           items: quoteRecords.map((r) => ({ id: r.id, market: r.market, code: r.code }))
         })
       });
-      if (res.status === 401) {
-        router.replace("/login");
-        return;
-      }
+      if (!res.ok) return;
       const data = await res.json();
       if (data.quotes) {
         setQuotes((prev) => {
