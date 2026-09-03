@@ -12,10 +12,10 @@ interface StockStats {
   watchlist: number;
 }
 
-export default function UserMenu({ goTo }: { goTo?: string }) {
+export default function UserMenu({ goTo, initialUser = null }: { goTo?: string; initialUser?: User | null }) {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [ready, setReady] = useState(false);
+  const [user, setUser] = useState<User | null>(initialUser);
+  const [ready, setReady] = useState(Boolean(initialUser));
   const [open, setOpen] = useState(false);
   const [dark, setDark] = useState(false);
   const [stats, setStats] = useState<StockStats>({ holdings: 0, watchlist: 0 });
@@ -46,16 +46,18 @@ export default function UserMenu({ goTo }: { goTo?: string }) {
 
   useEffect(() => {
     function loadUser() {
-      fetch("/api/auth/me")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          setUser(data?.user ?? null);
+      fetch("/api/auth/me", { cache: "no-store", credentials: "same-origin" })
+        .then(async (res) => {
+          if (res.ok) {
+            const data = await res.json().catch(() => null);
+            setUser(data?.user ?? null);
+            setReady(true);
+            return;
+          }
+          if (res.status === 401) setUser(null);
           setReady(true);
         })
-        .catch(() => {
-          setUser(null);
-          setReady(true);
-        });
+        .catch(() => setReady(true));
     }
     loadUser();
     window.addEventListener("fire:user-updated", loadUser);
@@ -117,7 +119,7 @@ export default function UserMenu({ goTo }: { goTo?: string }) {
 
   // 登录状态确认前渲染占位，避免刷新闪现「登录」按钮
   if (!ready) {
-    return <span aria-hidden className="inline-flex h-9 w-9 flex-none rounded-full" />;
+    return <span aria-hidden className="inline-flex h-10 w-10 flex-none rounded-full bg-bg-gray/80 dark:bg-white/10" />;
   }
 
   if (!user) {

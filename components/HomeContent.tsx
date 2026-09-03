@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { marketMeta, type HomeNavItem, type SearchMatch, type SiteSettings } from "@/lib/types";
+import { marketMeta, type HomeNavItem, type SearchMatch, type SiteSettings, type User } from "@/lib/types";
 import UserMenu from "@/components/UserMenu";
 import IndexTicker from "@/components/IndexTicker";
 import StockSearch from "@/components/StockSearch";
@@ -208,11 +208,11 @@ const NAV_FALLBACK: Record<string, { label: string; href: string }> = {
   records: { label: "自选记录", href: "/records" }
 };
 
-export default function HomeContent({ settings, initialDark = false }: { settings: SiteSettings; initialDark?: boolean }) {
+export default function HomeContent({ settings, initialDark = false, initialUser = null }: { settings: SiteSettings; initialDark?: boolean; initialUser?: User | null }) {
   // SSR 阶段直接使用服务端主题（Cookie），避免刷新时 hero 遮罩先按浅色渲染造成大片白色
   const [dark, setDark] = useState(initialDark);
   const [themeReady, setThemeReady] = useState(false);
-  const [auth, setAuth] = useState<"checking" | "in" | "out">("checking");
+  const [auth, setAuth] = useState<"in" | "out">(initialUser ? "in" : "out");
   const [liveBg, setLiveBg] = useState(settings.homepageBg);
   const [liveDomain, setLiveDomain] = useState(settings.domain);
   const [liveLogo, setLiveLogo] = useState(settings.siteLogo);
@@ -487,30 +487,24 @@ export default function HomeContent({ settings, initialDark = false }: { setting
   }, []);
 
   useEffect(() => {
-    if (auth === "checking") {
-      // auth 检查中：保留挂载时已应用的缓存数据，不重置为空态
-    } else {
-      if (auth === "in") {
-        // 登录：先读上次缓存秒出，随后后台刷新
-        try {
-          const raw = localStorage.getItem("fire:home:live");
-          if (raw) {
-            const parsed = JSON.parse(raw) as { rows?: LiveRow[]; charts?: Record<string, number[]> };
-            if (Array.isArray(parsed?.rows)) {
-              setLiveRows(parsed.rows);
-              if (parsed.charts) setLiveCharts(parsed.charts);
-            }
+    if (auth === "in") {
+      try {
+        const raw = localStorage.getItem("fire:home:live");
+        if (raw) {
+          const parsed = JSON.parse(raw) as { rows?: LiveRow[]; charts?: Record<string, number[]> };
+          if (Array.isArray(parsed?.rows)) {
+            setLiveRows(parsed.rows);
+            if (parsed.charts) setLiveCharts(parsed.charts);
           }
-        } catch {
-          /* 缓存无效忽略 */
         }
-      } else {
-        setLiveRows(null);
-        setLiveCharts({});
+      } catch {
+        /* 缓存无效忽略 */
       }
-      // 登录读后端记录、未登录读本地访客自选
-      void loadLive();
+    } else {
+      setLiveRows(null);
+      setLiveCharts({});
     }
+    void loadLive();
     window.addEventListener("fire:records-updated", loadLive);
     return () => window.removeEventListener("fire:records-updated", loadLive);
   }, [auth, loadLive]);
@@ -584,15 +578,23 @@ export default function HomeContent({ settings, initialDark = false }: { setting
   }, [dark, themeReady]);
 
   function checkLogin() {
-    fetch("/api/auth/me")
-      .then((res) => setAuth(res.ok ? "in" : "out"))
-      .catch(() => setAuth("out"));
+    fetch("/api/auth/me", { cache: "no-store", credentials: "same-origin" })
+      .then((res) => {
+        if (res.ok) setAuth("in");
+        else if (res.status === 401) setAuth("out");
+      })
+      .catch(() => {});
   }
 
   useEffect(() => {
     checkLogin();
+    const onUserUpdated = () => setAuth("in");
     window.addEventListener("focus", checkLogin);
-    return () => window.removeEventListener("focus", checkLogin);
+    window.addEventListener("fire:user-updated", onUserUpdated);
+    return () => {
+      window.removeEventListener("focus", checkLogin);
+      window.removeEventListener("fire:user-updated", onUserUpdated);
+    };
   }, []);
 
   useEffect(() => {
@@ -756,9 +758,9 @@ export default function HomeContent({ settings, initialDark = false }: { setting
           </nav>
 
           <div className="home-header-actions ml-auto flex flex-none items-center gap-2.5 md:ml-0">
-            {/* 登录后：B 站风格头像（点击跳转后台）；未登录 / 检查中默认渲染主题按钮 + 登录，避免刷新后顶栏空着 */}
+            {/* 登录后：B 站风格头像（点击跳转后台）；未登录才显示主题按钮 + 登录 */}
             {auth === "in" ? (
-              <UserMenu goTo="/records" />
+              <UserMenu goTo="/records" initialUser={initialUser} />
             ) : (
               <>
                 {/* 浅色 / 深色切换（未登录也可调） */}

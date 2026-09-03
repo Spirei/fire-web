@@ -91,7 +91,7 @@ export default async function SlugLayout({
           </Link>
           <div className="app-shell-ticker min-w-0 overflow-hidden"><IndexTicker /></div>
           <div className="ml-auto flex flex-none items-center gap-2.5">
-            <UserMenu />
+            <UserMenu initialUser={user} />
           </div>
         </div>
       </header>
