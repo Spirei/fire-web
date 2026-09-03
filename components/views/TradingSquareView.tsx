@@ -416,7 +416,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
           <ActivityIcon />
           <div className="min-w-0">
             <strong className="block text-sm text-ink dark:text-white">全部动态</strong>
-            <span className="block truncate text-xs text-muted">{allFreshness || "尚未同步"}</span>
+            <span className="text-xs tabular-nums text-muted">{posts.length || "—"} 条</span>
           </div>
         </button>
         {orderedPeople.map((person) => (
@@ -434,6 +434,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="text-lg font-bold text-ink dark:text-white">{selected === "all" ? "全部动态" : people.find((person) => person.id === selected)?.name}</h1>
+              {selected === "all" && allFreshness ? <p className="mt-0.5 text-[11px] text-faint">{allFreshness}</p> : null}
               {personFreshness ? <p className="mt-0.5 text-[11px] text-faint">{personFreshness}</p> : null}
             </div>
             <div className="flex items-center gap-2">
