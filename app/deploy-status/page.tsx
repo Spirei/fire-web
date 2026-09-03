@@ -138,43 +138,113 @@ const RUNS_PER_PAGE = 5;
 type ContainerUpdateState = "idle" | "triggering" | "watching" | "restarting" | "healthy" | "unchanged" | "failed";
 
 type HeatView = "day" | "week" | "month" | "total";
-type HeatCell = { key: string; label: string; count: number; date?: Date; weekKey?: string; monthKey?: string };
+type HeatCell = { key: string; label: string; count: number; date?: Date; weekKey?: string; monthKey?: string; empty?: boolean };
+
+function dayKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function monthBlock(year: number, month: number, today: Date, counts: Map<string, number>): HeatCell[] {
+  const first = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const leading = first.getDay();
+  const weeks = Math.ceil((leading + daysInMonth) / 7);
+  return Array.from({ length: weeks * 7 }, (_, index) => {
+    const day = index - leading + 1;
+    if (day < 1 || day > daysInMonth) {
+      return { key: `${year}-${month + 1}-pad-${index}`, label: "", count: 0, empty: true };
+    }
+    const date = new Date(year, month, day);
+    const future = date > today;
+    const key = dayKey(date);
+    return {
+      key,
+      label: `${month + 1}月${day}日`,
+      count: future ? 0 : counts.get(key) || 0,
+      date,
+      weekKey: `week-${year}-${month + 1}-${Math.floor(index / 7)}`,
+      monthKey: `month-${year}-${month + 1}`,
+      empty: future
+    };
+  });
+}
 
 function UpdateHeatmap({ runs }: { runs: Run[] }) {
   const [view, setView] = useState<HeatView>("day");
   const [selected, setSelected] = useState<HeatCell | null>(null);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const start = new Date(today);
-  start.setDate(start.getDate() - 364 - start.getDay());
-  const counts = new Map<string, number>();
-  runs.forEach((run) => {
-    const date = new Date(run.updatedAt);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    counts.set(key, (counts.get(key) || 0) + 1);
-  });
-  const weeks = Array.from({ length: 53 }, (_, week) =>
-    Array.from({ length: 7 }, (_, day) => {
-      const date = new Date(start);
-      date.setDate(start.getDate() + week * 7 + day);
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-      return { date, key, count: date > today ? -1 : counts.get(key) || 0 };
-    })
-  );
-  const dayCells = weeks.flatMap((week, weekIndex) => week.map((cell) => ({ key: cell.key, label: `${cell.date.getMonth() + 1}月${cell.date.getDate()}日`, count: Math.max(0, cell.count), date: cell.date, weekKey: `week-${weekIndex}`, monthKey: `month-${cell.date.getFullYear()}-${cell.date.getMonth() + 1}` })));
+  const today = useMemo(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, []);
+  const counts = useMemo(() => {
+    const map = new Map<string, number>();
+    runs.forEach((run) => {
+      const date = new Date(run.updatedAt);
+      const key = dayKey(date);
+      map.set(key, (map.get(key) || 0) + 1);
+    });
+    return map;
+  }, [runs]);
+  const months = useMemo(() => Array.from({ length: 12 }, (_, month) => {
+    const year = month > today.getMonth() ? today.getFullYear() - 1 : today.getFullYear();
+    return { month, year, cells: monthBlock(year, month, today, counts) };
+  }), [counts, today]);
+  const dayCells = months.flatMap((block) => block.cells.filter((cell) => cell.date));
   const max = Math.max(1, ...dayCells.map((cell) => cell.count));
   const tone = (count: number) => count === 0 ? "rgba(100,116,139,.14)" : `rgba(16,185,129,${(0.22 + 0.7 * Math.min(1, count / max)).toFixed(2)})`;
   const tabs: [HeatView, string][] = [["day", "每日"], ["week", "每周"], ["month", "每月"], ["total", "累计"]];
-  const monthLabels = Array.from({ length: 12 }, (_, index) => `${index + 1}月`);
-  return <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none sm:p-5">
-    <div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-medium">更新热力图</h2><p className="mt-1 text-xs text-slate-500">最近一年工作流更新频率</p></div><div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-xs dark:bg-white/[.06]" role="tablist" aria-label="热力图统计周期">{tabs.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => { setView(key); setSelected(null); }} className={`rounded-md px-2 py-1 transition ${view === key ? "bg-white font-medium text-slate-900 shadow-sm dark:bg-white/10 dark:text-white" : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"}`}>{label}</button>)}</div></div>
-    <div className="mb-1 grid grid-cols-12 gap-1 text-[9px] text-slate-500">{monthLabels.map((label) => <span key={label} className="text-center">{label}</span>)}</div>
-    <div className="deploy-heatmap-grid grid w-full grid-flow-col grid-cols-[repeat(53,minmax(0,1fr))] grid-rows-7 gap-[3px]">
-      {dayCells.map((cell) => { const groupKey = view === "week" ? cell.weekKey : view === "month" ? cell.monthKey : null; const highlighted = Boolean(groupKey && selected?.[view === "week" ? "weekKey" : "monthKey"] === groupKey); const total = groupKey ? dayCells.filter((item) => item[view === "week" ? "weekKey" : "monthKey"] === groupKey).reduce((sum, item) => sum + item.count, 0) : cell.count; return <button key={cell.key} type="button" onClick={() => setSelected({ ...cell, count: total })} aria-label={`${cell.label}，${total} 次 workflow`} title={`${cell.label} · ${total} workflow`} className={`h-3 min-w-0 rounded-[3px] transition hover:ring-2 hover:ring-emerald-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${highlighted ? "ring-2 ring-emerald-400/80" : ""}`} style={{ backgroundColor: tone(cell.count) }} />; })}
-    </div>
-    {selected && <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700 dark:bg-white/[.06] dark:text-slate-200">{view === "week" ? `${selected.label}所在周` : view === "month" ? `${selected.date ? selected.date.getMonth() + 1 : ""}月` : selected.label} · {selected.count} workflow</p>}
-    <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-slate-500"><span>少</span>{[0, .25, .5, .75, 1].map((ratio) => <span key={ratio} className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: tone(ratio * max) }} />)}<span>多</span></div>
-  </section>;
+  return (
+    <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none sm:p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-medium">更新热力图</h2>
+          <p className="mt-1 text-xs text-slate-500">最近一年工作流更新频率</p>
+        </div>
+        <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-xs dark:bg-white/[.06]" role="tablist" aria-label="热力图统计周期">
+          {tabs.map(([key, label]) => (
+            <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => { setView(key); setSelected(null); }} className={`rounded-md px-2 py-1 transition ${view === key ? "bg-white font-medium text-slate-900 shadow-sm dark:bg-white/10 dark:text-white" : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"}`}>{label}</button>
+          ))}
+        </div>
+      </div>
+      <div className="deploy-heatmap-months grid w-full grid-cols-12 gap-x-1 sm:gap-x-1.5">
+        {months.map((block) => (
+          <div key={block.month} className="min-w-0">
+            <div className="mb-1 overflow-hidden text-center text-[10px] leading-4 text-slate-500" style={{ whiteSpace: "nowrap" }}>{block.month + 1}月</div>
+            <div className="deploy-heatmap-grid grid w-full grid-flow-col grid-rows-7 gap-[2px]" style={{ gridTemplateColumns: `repeat(${block.cells.length / 7}, minmax(0, 1fr))` }}>
+              {block.cells.map((cell) => {
+                if (!cell.date) return <span key={cell.key} className="min-w-0 rounded-[2px]" style={{ aspectRatio: "1 / 1" }} />;
+                const groupKey = view === "week" ? cell.weekKey : view === "month" ? cell.monthKey : null;
+                const highlighted = Boolean(groupKey && selected?.[view === "week" ? "weekKey" : "monthKey"] === groupKey);
+                const total = groupKey ? dayCells.filter((item) => item[view === "week" ? "weekKey" : "monthKey"] === groupKey).reduce((sum, item) => sum + item.count, 0) : cell.count;
+                return (
+                  <button
+                    key={cell.key}
+                    type="button"
+                    onClick={() => setSelected({ ...cell, count: total })}
+                    aria-label={`${cell.label}，${total} 次 workflow`}
+                    title={`${cell.label} · ${total} workflow`}
+                    className={`min-w-0 rounded-[2px] p-0 transition hover:ring-2 hover:ring-emerald-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${highlighted ? "ring-2 ring-emerald-400/80" : ""}`}
+                    style={{ backgroundColor: cell.empty ? "transparent" : tone(cell.count), aspectRatio: "1 / 1" }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      {selected && (
+        <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700 dark:bg-white/[.06] dark:text-slate-200">
+          {view === "week" ? `${selected.label}所在周` : view === "month" ? `${selected.date ? selected.date.getMonth() + 1 : ""}月` : selected.label} · {selected.count} workflow
+        </p>
+      )}
+      <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-slate-500">
+        <span>少</span>
+        {[0, 0.25, 0.5, 0.75, 1].map((ratio) => <span key={ratio} className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: tone(ratio * max) }} />)}
+        <span>多</span>
+      </div>
+    </section>
+  );
 }
 
 const sleep = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
