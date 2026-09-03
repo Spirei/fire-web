@@ -13,7 +13,7 @@ const TRUMP = path.join(DATA, "trump-posts.json");
 const TRANSLATIONS = path.join(DATA, "trump-translations.json");
 const DUAN = path.join(DATA, "duan-posts.json");
 const lastRefreshAttempt = { trump: 0, duan: 0 };
-let assembled: { key: string; posts: FeedPost[]; updatedAt: number } | null = null;
+let assembled: { key: string; posts: FeedPost[]; updatedAt: number; updatedByAuthor: { trump: number; duan: number } } | null = null;
 let scheduled = false;
 
 function modifiedAt(file: string): number {
@@ -21,13 +21,20 @@ function modifiedAt(file: string): number {
 }
 
 function assembleFeed() {
-  const key = `${modifiedAt(TRUMP)}:${modifiedAt(TRANSLATIONS)}:${modifiedAt(DUAN)}`;
+  const trumpAt = modifiedAt(TRUMP);
+  const duanAt = modifiedAt(DUAN);
+  const key = `${trumpAt}:${modifiedAt(TRANSLATIONS)}:${duanAt}`;
   if (assembled?.key === key) return assembled;
   const translations = readJsonFile<Record<string, string>>(TRANSLATIONS, {});
   const trump = readJsonFile<CachedPost[]>(TRUMP, []).map((post) => translations[post.id] ? { ...post, textZh: translations[post.id], author: "trump" as const } : { ...post, author: "trump" as const });
   const duan = readJsonFile<CachedPost[]>(DUAN, []).map((post) => ({ ...post, author: "duan" as const }));
   const posts = [...trump, ...duan].sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date));
-  assembled = { key, posts, updatedAt: Math.max(modifiedAt(TRUMP), modifiedAt(TRANSLATIONS), modifiedAt(DUAN)) };
+  assembled = {
+    key,
+    posts,
+    updatedAt: Math.max(trumpAt, modifiedAt(TRANSLATIONS), duanAt),
+    updatedByAuthor: { trump: trumpAt, duan: duanAt }
+  };
   return assembled;
 }
 
@@ -66,13 +73,21 @@ export async function GET() {
   const settings = getSiteSettings();
   const feed = assembleFeed();
   const due = dueRefresh();
-  const refreshing = due.trump || due.duan || isTrumpRefreshing() || isDuanRefreshing();
+  const refreshingByAuthor = {
+    trump: due.trump || isTrumpRefreshing(),
+    duan: due.duan || isDuanRefreshing()
+  };
   scheduleBackgroundRefresh();
   return NextResponse.json({
     posts: feed.posts,
     updatedAt: feed.updatedAt ? new Date(feed.updatedAt).toISOString() : null,
+    updatedByAuthor: {
+      trump: feed.updatedByAuthor.trump ? new Date(feed.updatedByAuthor.trump).toISOString() : null,
+      duan: feed.updatedByAuthor.duan ? new Date(feed.updatedByAuthor.duan).toISOString() : null
+    },
     source: "local-cache",
-    refreshing,
+    refreshing: refreshingByAuthor.trump || refreshingByAuthor.duan,
+    refreshingByAuthor,
     refreshMinutes: { trump: settings.tradingSquareTrumpRefreshMinutes, duan: settings.tradingSquareDuanRefreshMinutes }
   }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -27,18 +27,60 @@ const CATEGORY_OPTIONS: Array<{ id: "all" | DuanCategory; label: string }> = [
 ];
 const PAGE_SIZE = 10;
 const FEED_CACHE_KEY = "fire:trading-square-feed";
+const SEEN_CACHE_KEY = "fire:trading-square-seen";
+type AuthorTimes = Record<AuthorId, string | null>;
+type AuthorFlags = Record<AuthorId, boolean>;
+type FeedPayload = { posts?: Post[]; updatedAt?: string | null; updatedByAuthor?: AuthorTimes; refreshing?: boolean; refreshingByAuthor?: AuthorFlags };
 
-function readLocalFeed(): { posts: Post[]; updatedAt: string | null } | null {
+function emptyTimes(): AuthorTimes { return { trump: null, duan: null }; }
+function emptyFlags(): AuthorFlags { return { trump: false, duan: false }; }
+
+function latestPostTime(posts: Post[], author: AuthorId): string | null {
+  return posts.find((post) => post.author === author)?.date ?? null;
+}
+
+function readLocalFeed(): { posts: Post[]; updatedAt: string | null; updatedByAuthor: AuthorTimes } | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = JSON.parse(localStorage.getItem(FEED_CACHE_KEY) || "null") as { posts?: Post[]; updatedAt?: string | null } | null;
-    if (Array.isArray(raw?.posts) && raw.posts.length) return { posts: raw.posts, updatedAt: raw.updatedAt ?? null };
+    const raw = JSON.parse(localStorage.getItem(FEED_CACHE_KEY) || "null") as { posts?: Post[]; updatedAt?: string | null; updatedByAuthor?: AuthorTimes } | null;
+    if (Array.isArray(raw?.posts) && raw.posts.length) {
+      return {
+        posts: raw.posts,
+        updatedAt: raw.updatedAt ?? null,
+        updatedByAuthor: { trump: raw.updatedByAuthor?.trump ?? null, duan: raw.updatedByAuthor?.duan ?? null }
+      };
+    }
   } catch { /* ignore broken cache */ }
   return null;
 }
 
-function writeLocalFeed(posts: Post[], updatedAt: string | null) {
-  try { localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ posts, updatedAt })); } catch { /* quota / private mode */ }
+function writeLocalFeed(posts: Post[], updatedAt: string | null, updatedByAuthor: AuthorTimes) {
+  try { localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ posts, updatedAt, updatedByAuthor })); } catch { /* quota / private mode */ }
+}
+
+function readSeen(posts: Post[]): AuthorTimes {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SEEN_CACHE_KEY) || "null") as AuthorTimes | null;
+    if (raw && typeof raw === "object" && (raw.trump || raw.duan)) {
+      return { trump: raw.trump ?? latestPostTime(posts, "trump"), duan: raw.duan ?? latestPostTime(posts, "duan") };
+    }
+  } catch { /* ignore */ }
+  const seeded = { trump: latestPostTime(posts, "trump"), duan: latestPostTime(posts, "duan") };
+  writeSeen(seeded);
+  return seeded;
+}
+
+function writeSeen(seen: AuthorTimes) {
+  try { localStorage.setItem(SEEN_CACHE_KEY, JSON.stringify(seen)); } catch { /* quota / private mode */ }
+}
+
+function unseenCount(posts: Post[], author: AuthorId, seen: AuthorTimes): number {
+  const seenAt = Date.parse(seen[author] || "");
+  return posts.filter((post) => {
+    if (post.author !== author) return false;
+    const time = Date.parse(post.date);
+    return Number.isFinite(time) && (!Number.isFinite(seenAt) || time > seenAt);
+  }).length;
 }
 
 function mergeFeedPosts(previous: Post[], incoming: Post[]): Post[] {
@@ -97,16 +139,17 @@ function formatPostTime(value: string) {
   return new Date(time).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-function formatUpdatedAt(value: string | null) {
+function formatUpdatedAt(value: string | null, withSuffix = true) {
   if (!value) return "";
   const time = Date.parse(value);
   if (!Number.isFinite(time)) return "";
   const minutes = Math.max(0, Math.round((Date.now() - time) / 60_000));
-  if (minutes < 1) return "刚刚更新";
-  if (minutes < 60) return `${minutes} 分钟前更新`;
+  const suffix = withSuffix ? "更新" : "";
+  if (minutes < 1) return `刚刚${suffix}`;
+  if (minutes < 60) return `${minutes} 分钟前${suffix}`;
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} 小时前更新`;
-  return `${new Date(time).toLocaleDateString("zh-CN")} 更新`;
+  if (hours < 24) return `${hours} 小时前${suffix}`;
+  return `${new Date(time).toLocaleDateString("zh-CN")}${suffix ? ` ${suffix}` : ""}`;
 }
 
 function readQuery(): { selected: "all" | AuthorId; duanCategory: "all" | DuanCategory; page: number; symbol: string } {
@@ -177,8 +220,9 @@ function PostBody({ text, holdings, onStock, className = "mt-2 whitespace-pre-li
 export default function TradingSquareView({ avatars, records = [] }: { avatars?: Record<string, string>; records?: StockRecord[] }) {
   const [posts, setPosts] = useState<Post[]>(() => readLocalFeed()?.posts ?? []);
   const [loading, setLoading] = useState(() => !readLocalFeed());
-  const [refreshing, setRefreshing] = useState(false);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(() => readLocalFeed()?.updatedAt ?? null);
+  const [refreshingByAuthor, setRefreshingByAuthor] = useState<AuthorFlags>(emptyFlags);
+  const [updatedByAuthor, setUpdatedByAuthor] = useState<AuthorTimes>(() => readLocalFeed()?.updatedByAuthor ?? emptyTimes());
+  const [seen, setSeen] = useState<AuthorTimes>(() => readSeen(readLocalFeed()?.posts ?? []));
   const [selected, setSelected] = useState<"all" | AuthorId>(() => readQuery().selected);
   const [duanCategory, setDuanCategory] = useState<"all" | DuanCategory>(() => readQuery().duanCategory);
   const [page, setPage] = useState(() => readQuery().page);
@@ -225,16 +269,17 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
       try {
         const response = await fetch("/api/trading-square/feed", { cache: "no-store", signal: AbortSignal.timeout(4000) });
         if (!response.ok) throw new Error(String(response.status));
-        const data = await response.json() as { posts?: Post[]; updatedAt?: string | null; refreshing?: boolean };
+        const data = await response.json() as FeedPayload;
         if (!active) return;
+        const nextUpdated = { trump: data.updatedByAuthor?.trump ?? null, duan: data.updatedByAuthor?.duan ?? null };
         setPosts((current) => {
           const nextPosts = mergeFeedPosts(current, data.posts ?? []);
-          writeLocalFeed(nextPosts, data.updatedAt ?? null);
+          writeLocalFeed(nextPosts, data.updatedAt ?? null, nextUpdated);
           return nextPosts;
         });
-        setUpdatedAt(data.updatedAt ?? null);
-        setRefreshing(Boolean(data.refreshing));
-        if (data.refreshing) pollLeft.current = Math.max(pollLeft.current, 12);
+        setUpdatedByAuthor(nextUpdated);
+        setRefreshingByAuthor({ trump: Boolean(data.refreshingByAuthor?.trump), duan: Boolean(data.refreshingByAuthor?.duan) });
+        if (data.refreshingByAuthor?.trump || data.refreshingByAuthor?.duan || data.refreshing) pollLeft.current = Math.max(pollLeft.current, 12);
       } catch {
         /* keep existing cache on screen */
       } finally {
@@ -245,26 +290,32 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
     return () => { active = false; };
   }, []);
 
+  const refreshing = refreshingByAuthor.trump || refreshingByAuthor.duan;
+
   useEffect(() => {
     if (!refreshing || pollLeft.current <= 0) return;
     const timer = window.setTimeout(() => {
       pollLeft.current -= 1;
       void fetch("/api/trading-square/feed", { cache: "no-store", signal: AbortSignal.timeout(4000) })
         .then((response) => (response.ok ? response.json() : null))
-        .then((data) => {
+        .then((data: FeedPayload | null) => {
           if (!data) return;
+          const nextUpdated = { trump: data.updatedByAuthor?.trump ?? null, duan: data.updatedByAuthor?.duan ?? null };
           setPosts((current) => {
             const nextPosts = mergeFeedPosts(current, data.posts ?? []);
-            writeLocalFeed(nextPosts, data.updatedAt ?? null);
+            writeLocalFeed(nextPosts, data.updatedAt ?? null, nextUpdated);
             return nextPosts;
           });
-          setUpdatedAt(data.updatedAt ?? null);
-          setRefreshing(Boolean(data.refreshing) && pollLeft.current > 0);
+          setUpdatedByAuthor(nextUpdated);
+          setRefreshingByAuthor({
+            trump: Boolean(data.refreshingByAuthor?.trump) && pollLeft.current > 0,
+            duan: Boolean(data.refreshingByAuthor?.duan) && pollLeft.current > 0
+          });
         })
-        .catch(() => setRefreshing(false));
+        .catch(() => setRefreshingByAuthor(emptyFlags()));
     }, 3000);
     return () => window.clearTimeout(timer);
-  }, [refreshing, updatedAt]);
+  }, [refreshing, updatedByAuthor]);
 
   const visible = useMemo(() => posts.filter((post) => {
     if (selected !== "all" && post.author !== selected) return false;
@@ -292,14 +343,38 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
     if (page !== safePage) setPage(safePage);
   }, [page, safePage]);
 
+  const markSeen = (author: AuthorId) => {
+    const latest = latestPostTime(posts, author);
+    if (!latest || seen[author] === latest) return;
+    const next = { ...seen, [author]: latest };
+    setSeen(next);
+    writeSeen(next);
+  };
+
   const changePerson = (next: "all" | AuthorId) => {
+    if (next !== "all") markSeen(next);
     setSelected(next);
     setPage(1);
   };
 
+  useEffect(() => {
+    if (selected === "trump" || selected === "duan") markSeen(selected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts, selected]);
+
   const categoryCount = (category: DuanCategory) => posts.filter((post) => post.author === "duan" && post.categories?.includes(category)).length;
   const windowStyle = { "--trading-x": `${pos.x}px`, "--trading-y": `${pos.y}px` } as CSSProperties;
-  const freshness = refreshing ? "正在检查更新" : formatUpdatedAt(updatedAt);
+  const freshness = selected === "all"
+    ? PEOPLE.map((person) => {
+      if (refreshingByAuthor[person.id]) return `${person.name}正在检查`;
+      const label = formatUpdatedAt(updatedByAuthor[person.id], false);
+      return label ? `${person.name} ${label}` : "";
+    }).filter(Boolean).join(" · ")
+    : refreshingByAuthor[selected] ? "正在检查更新" : formatUpdatedAt(updatedByAuthor[selected]);
+  const newCounts = {
+    trump: unseenCount(posts, "trump", seen),
+    duan: unseenCount(posts, "duan", seen)
+  };
   const followed = detail ? records.some((record) => {
     const market = record.market.toUpperCase();
     return market === detail.market && normalizeCode(record.code, market) === detail.code;
@@ -325,22 +400,30 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
             <span className="text-xs tabular-nums text-muted">{posts.length || "—"} 条</span>
           </div>
         </button>
-        {orderedPeople.map((person) => (
-          <button key={person.id} type="button" aria-pressed={selected === person.id} onClick={() => changePerson(person.id)} className={`flex min-w-[142px] items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-bg-gray active:scale-[.98] dark:hover:bg-white/[.035] md:mb-1 md:w-full md:min-w-0 ${selected === person.id ? "bg-brand-light dark:bg-[#1a202a]" : ""}`}>
-            <Avatar src={person.avatar} name={person.name} />
-            <div className="min-w-0">
-              <strong className="flex items-center truncate text-sm text-ink dark:text-white">{person.name}<PlatformBadge platform={person.id} /></strong>
-              <span className="block truncate text-xs text-muted">{person.platform}</span>
-            </div>
-          </button>
-        ))}
+        {orderedPeople.map((person) => {
+          const fresh = newCounts[person.id];
+          return (
+            <button key={person.id} type="button" aria-pressed={selected === person.id} onClick={() => changePerson(person.id)} className={`flex min-w-[168px] items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-bg-gray active:scale-[.98] dark:hover:bg-white/[.035] md:mb-1 md:w-full md:min-w-0 ${selected === person.id ? "bg-brand-light dark:bg-[#1a202a]" : ""}`}>
+              <Avatar src={person.avatar} name={person.name} />
+              <div className="min-w-0 flex-1">
+                <strong className="flex items-center truncate text-sm text-ink dark:text-white">{person.name}<PlatformBadge platform={person.id} /></strong>
+                <span className="block truncate text-xs text-muted">{person.platform}</span>
+              </div>
+              {fresh > 0 && (
+                <span className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-up px-1.5 text-[10px] font-bold tabular-nums leading-none text-white" title={`自上次查看后新增 ${fresh} 条`}>
+                  {fresh > 99 ? "99+" : fresh}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </aside>
       <section className="min-w-0">
         <header onMouseDown={onTitleMouseDown} title={fixed ? undefined : "按住拖动窗口"} className={`border-b border-edge px-4 py-4 dark:border-white/10 sm:px-5 ${fixed ? "" : "md:cursor-grab md:active:cursor-grabbing"}`}>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="text-lg font-bold text-ink dark:text-white">{selected === "all" ? "全部动态" : people.find((person) => person.id === selected)?.name}</h1>
-              {freshness ? <p className="mt-0.5 text-[11px] text-faint">{freshness}</p> : null}
+              {freshness ? <p className="mt-0.5 break-words text-[11px] leading-4 text-faint">{freshness}</p> : null}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs tabular-nums text-muted">{visible.length} 条</span>
