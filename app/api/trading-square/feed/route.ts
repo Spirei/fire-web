@@ -4,9 +4,9 @@ import path from "node:path";
 import { readJsonFile } from "@/lib/tradingSquareCache";
 import { getSiteSettings } from "@/lib/settings";
 import { backfillTrumpTranslations } from "@/lib/tradingSquareTranslate";
-import { isDuanRefreshing, isTrumpRefreshing, postTimestamp, readTrumpPosts, refreshDuanPosts, refreshTrumpPosts } from "@/lib/tradingSquareRefresh";
+import { isDuanRefreshing, isTrumpRefreshing, postTimestamp, readTrumpPosts, refreshDuanPosts, refreshTrumpPosts, withoutRemoteImages } from "@/lib/tradingSquareRefresh";
 
-type CachedPost = { id: string; date: string; text: string; textZh?: string; originalUrl: string; categories?: string[]; quote?: { name: string; text: string; url?: string } };
+type CachedPost = { id: string; date: string; text: string; textZh?: string; originalUrl: string; categories?: string[]; quote?: { name: string; text: string; url?: string; images?: string[] }; images?: string[] };
 type FeedPost = CachedPost & { author: "trump" | "duan" };
 const DATA = path.join(process.cwd(), "data");
 const TRUMP = path.join(DATA, "trump-posts.json");
@@ -26,8 +26,8 @@ function assembleFeed() {
   const key = `${trumpAt}:${modifiedAt(TRANSLATIONS)}:${duanAt}`;
   if (assembled?.key === key) return assembled;
   const translations = readJsonFile<Record<string, string>>(TRANSLATIONS, {});
-  const trump = readJsonFile<CachedPost[]>(TRUMP, []).map((post) => translations[post.id] ? { ...post, textZh: translations[post.id], author: "trump" as const } : { ...post, author: "trump" as const });
-  const duan = readJsonFile<CachedPost[]>(DUAN, []).map((post) => ({ ...post, author: "duan" as const }));
+  const trump = readJsonFile<CachedPost[]>(TRUMP, []).map((post) => withoutRemoteImages(translations[post.id] ? { ...post, textZh: translations[post.id], author: "trump" as const } : { ...post, author: "trump" as const }));
+  const duan = readJsonFile<CachedPost[]>(DUAN, []).map((post) => withoutRemoteImages({ ...post, author: "duan" as const }));
   const posts = [...trump, ...duan].sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date));
   assembled = {
     key,

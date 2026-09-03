@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
+import { sniffImageExt } from "@/lib/imageSecurity";
 import { getSiteSettings } from "@/lib/settings";
 import { readJsonFile, writeJsonAtomic } from "@/lib/tradingSquareCache";
 import { backfillTrumpTranslations, translateTrumpPostsNow } from "@/lib/tradingSquareTranslate";
@@ -10,10 +13,10 @@ const DUAN_FILE = path.join(DATA, "duan-posts.json");
 const TRUMP_SOURCE = "https://trumpstruth.org/";
 const DUAN_USER = "1247347556";
 
-export type TrumpPost = { id: string; date: string; text: string; originalUrl: string; archiveUrl: string };
+export type TrumpPost = { id: string; date: string; text: string; originalUrl: string; archiveUrl: string; images?: string[] };
 type DuanCategory = "hot" | "original" | "longform";
-export type Quote = { name: string; text: string; url?: string };
-export type DuanPost = { id: string; date: string; text: string; originalUrl: string; categories: DuanCategory[]; replies?: number; likes?: number; quote?: Quote };
+export type Quote = { name: string; text: string; url?: string; images?: string[] };
+export type DuanPost = { id: string; date: string; text: string; originalUrl: string; categories: DuanCategory[]; replies?: number; likes?: number; quote?: Quote; images?: string[] };
 
 type XueqiuStatus = {
   id?: number | string;
@@ -25,6 +28,13 @@ type XueqiuStatus = {
   reply_count?: number;
   comments_count?: number;
   target?: string;
+  pic?: unknown;
+  pics?: unknown;
+  pic_urls?: unknown;
+  original_pic?: unknown;
+  bmiddle_pic?: unknown;
+  thumbnail_pic?: unknown;
+  cover_pic?: unknown;
   user?: { id?: number | string; screen_name?: string; name?: string };
   retweeted_status?: XueqiuStatus;
   retweet_status?: XueqiuStatus;
@@ -119,6 +129,184 @@ function toIsoDate(value: string): string {
   return time ? new Date(time).toISOString() : value;
 }
 
+function absoluteUrl(value: string): string {
+  const url = value.trim();
+  if (url.startsWith("//")) return `https:${url}`;
+  return url;
+}
+
+function isPostImage(url: string): boolean {
+  if (!/^https?:\/\//i.test(url)) return false;
+  if (/avatar|logo\.svg|emoji|profile_image|accounts\/avatars|preview_cards|status-info__avatar/i.test(url)) return false;
+  return /\.(jpe?g|png|gif|webp|bmp)(\?|$)/i.test(url) || /xqimg|imedao|linodeobjects|\/attachments\/|media_attachments/i.test(url);
+}
+
+function collectUrls(value: unknown, into: string[]) {
+  if (!value) return;
+  if (typeof value === "string") {
+    if (value.includes(",") && /https?:/i.test(value)) {
+      value.split(",").forEach((part) => collectUrls(part.trim(), into));
+      return;
+    }
+    const url = absoluteUrl(value);
+    if (isPostImage(url)) into.push(url);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectUrls(item, into));
+    return;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    collectUrls(record.url ?? record.src ?? record.pic ?? record.original ?? record.large ?? record.original_pic, into);
+  }
+}
+
+function uniqueImages(urls: string[]): string[] | undefined {
+  const seen = new Set<string>();
+  const list: string[] = [];
+  urls.forEach((url) => {
+    const cleanUrl = url.replace(/!.*$/, "");
+    if (seen.has(cleanUrl) || seen.has(url)) return;
+    seen.add(cleanUrl);
+    seen.add(url);
+    list.push(url);
+  });
+  return list.length ? list.slice(0, 9) : undefined;
+}
+
+function imagesFromHtml(html: string): string[] {
+  return [...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)].map((match) => absoluteUrl(match[1]));
+}
+
+function extractXueqiuImages(item: XueqiuStatus): string[] | undefined {
+  const urls: string[] = [];
+  collectUrls(item.pic, urls);
+  collectUrls(item.pics, urls);
+  collectUrls(item.pic_urls, urls);
+  collectUrls(item.original_pic, urls);
+  collectUrls(item.bmiddle_pic, urls);
+  collectUrls(item.thumbnail_pic, urls);
+  collectUrls(item.cover_pic, urls);
+  imagesFromHtml(String(item.text || item.description || "")).forEach((url) => collectUrls(url, urls));
+  return uniqueImages(urls);
+}
+
+function extractTrumpImages(block: string): string[] | undefined {
+  const hrefs = [...block.matchAll(/status-attachment__link[^>]*href=["']([^"']+)["']/gi)].map((match) => absoluteUrl(match[1]));
+  return uniqueImages([...imagesFromHtml(block), ...hrefs].filter((url) => isPostImage(url)));
+}
+
+const IMAGE_DIR = path.join(process.cwd(), "public", "uploads", "trading-square");
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const localIndex = new Map<string, Map<string, string>>();
+
+function sourceKey(url: string): string {
+  return createHash("sha1").update(url.replace(/!.*$/, "")).digest("hex").slice(0, 16);
+}
+
+function lookupLocal(author: string, key: string): string | undefined {
+  let folder = localIndex.get(author);
+  if (!folder) {
+    folder = new Map();
+    try {
+      for (const name of fs.readdirSync(path.join(IMAGE_DIR, author))) {
+        folder.set(name.replace(/\.[^.]+$/, ""), `/uploads/trading-square/${author}/${name}`);
+      }
+    } catch {
+      /* first download creates the folder */
+    }
+    localIndex.set(author, folder);
+  }
+  return folder.get(key);
+}
+
+function rememberLocal(author: string, key: string, url: string) {
+  let folder = localIndex.get(author);
+  if (!folder) {
+    folder = new Map();
+    localIndex.set(author, folder);
+  }
+  folder.set(key, url);
+}
+
+async function downloadImage(author: string, url: string): Promise<string | undefined> {
+  if (url.startsWith("/uploads/trading-square/")) return url;
+  const key = sourceKey(url);
+  const existing = lookupLocal(author, key);
+  if (existing) return existing;
+  try {
+    const referer = /xueqiu|imedao|xqimg/i.test(url) ? "https://xueqiu.com/" : "https://trumpstruth.org/";
+    const response = await proxyFetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        Referer: referer,
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
+      },
+      signal: AbortSignal.timeout(8000),
+      cache: "no-store"
+    });
+    if (!response.ok) return undefined;
+    const buf = Buffer.from(await response.arrayBuffer());
+    if (!buf.length || buf.length > MAX_IMAGE_BYTES) return undefined;
+    const ext = sniffImageExt(buf);
+    if (!ext || ext === "svg" || ext === "ico") return undefined;
+    const dir = path.join(IMAGE_DIR, author);
+    fs.mkdirSync(dir, { recursive: true });
+    const filename = `${key}.${ext}`;
+    fs.writeFileSync(path.join(dir, filename), buf);
+    const local = `/uploads/trading-square/${author}/${filename}`;
+    rememberLocal(author, key, local);
+    return local;
+  } catch {
+    return undefined;
+  }
+}
+
+function remoteImageUrls(urls?: string[]): string[] {
+  return (urls || []).filter((url) => /^https?:\/\//i.test(url) && isPostImage(url));
+}
+
+async function localizeUrlMap(author: string, urls: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const unique = [...new Set(remoteImageUrls(urls))];
+  for (let index = 0; index < unique.length; index += 4) {
+    const batch = unique.slice(index, index + 4);
+    await Promise.all(batch.map(async (url) => {
+      const local = await downloadImage(author, url);
+      if (local) map.set(url, local);
+    }));
+  }
+  return map;
+}
+
+export function keepLocalImages(urls?: string[], map?: Map<string, string>): string[] | undefined {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  (urls || []).forEach((url) => {
+    const local = url.startsWith("/uploads/trading-square/") ? url : map?.get(url);
+    if (!local || seen.has(local)) return;
+    seen.add(local);
+    out.push(local);
+  });
+  return out.length ? out : undefined;
+}
+
+export function withoutRemoteImages<T extends { images?: string[]; quote?: { images?: string[] } }>(post: T, map?: Map<string, string>): T {
+  const next = { ...post };
+  const images = keepLocalImages(post.images, map);
+  if (images) next.images = images;
+  else delete next.images;
+  if (next.quote) {
+    const quote = { ...next.quote };
+    const quoteImages = keepLocalImages(quote.images, map);
+    if (quoteImages) quote.images = quoteImages;
+    else delete quote.images;
+    next.quote = quote;
+  }
+  return next;
+}
+
 function parseTrumpPage(html: string, source: string): TrumpPost[] {
   return html.split('<div class="status"').slice(1).map((tail, index) => {
     const block = tail.split('<div class="status"')[0];
@@ -130,14 +318,16 @@ function parseTrumpPage(html: string, source: string): TrumpPost[] {
     const archiveId = archiveUrl.split("/").pop() || "";
     const truthId = originalUrl.match(/\/(\d{8,})$/)?.[1] || "";
     const id = /^\d{4,}$/.test(archiveId) ? archiveId : truthId || String(index);
+    const images = extractTrumpImages(block);
     return {
       id,
       date,
       text: content,
       originalUrl,
-      archiveUrl
+      archiveUrl,
+      ...(images ? { images } : {})
     };
-  }).filter((post) => post.text && post.date);
+  }).filter((post) => post.date && (post.text || post.images?.length));
 }
 
 export function readTrumpPosts(): TrumpPost[] {
@@ -172,11 +362,8 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
       const parsed = parseTrumpPage(html, source);
       if (!parsed.length) break;
       for (const post of parsed) {
-        if (known.has(post.id)) {
-          overlap += 1;
-          continue;
-        }
-        known.add(post.id);
+        if (known.has(post.id)) overlap += 1;
+        else known.add(post.id);
         incoming.push(post);
       }
       const next = html.match(/<a href="([^"]*cursor=[^"]+)"[^>]*>Next Page/i)?.[1];
@@ -187,10 +374,27 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
       const newest = [...incoming].sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date));
       await translateTrumpPostsNow(newest.slice(0, 15));
     }
-    const merged = Array.from(new Map([...incoming, ...existing].map((post) => [post.id, { ...post, date: toIsoDate(post.date) }])).values());
-    try { writeJsonAtomic(TRUMP_FILE, merged); } catch { /* read-only deployments */ }
-    void backfillTrumpTranslations(merged, 20);
-    return merged;
+    const localMap = await localizeUrlMap("trump", [
+      ...incoming.flatMap((post) => post.images || []),
+      ...existing.flatMap((post) => post.images || [])
+    ]);
+    const merged = new Map(existing.map((post) => [post.id, post]));
+    incoming.forEach((post) => {
+      const saved = merged.get(post.id);
+      const images = keepLocalImages(post.images?.length ? post.images : saved?.images, localMap);
+      const next = {
+        ...saved,
+        ...post,
+        date: toIsoDate(post.date)
+      };
+      if (images) next.images = images;
+      else delete next.images;
+      merged.set(post.id, next);
+    });
+    const mergedPosts = Array.from(merged.values()).map((post) => withoutRemoteImages(post, localMap));
+    try { writeJsonAtomic(TRUMP_FILE, mergedPosts); } catch { /* read-only deployments */ }
+    void backfillTrumpTranslations(mergedPosts, 20);
+    return mergedPosts;
   } finally {
     trumpRunning = false;
   }
@@ -213,7 +417,8 @@ function asQuote(value: unknown): Quote | undefined {
   if (!text) return undefined;
   const id = item.id != null ? String(item.id) : "";
   const uid = user.id != null ? String(user.id) : "";
-  return { name: name || "原动态", text, url: id && uid ? `https://xueqiu.com/${uid}/${id}` : undefined };
+  const images = extractXueqiuImages(item);
+  return { name: name || "原动态", text, url: id && uid ? `https://xueqiu.com/${uid}/${id}` : undefined, ...(images ? { images } : {}) };
 }
 
 function extractQuote(item: XueqiuStatus): Quote | undefined {
@@ -221,9 +426,10 @@ function extractQuote(item: XueqiuStatus): Quote | undefined {
 }
 
 function mapDuanStatus(item: XueqiuStatus): DuanPost | null {
+  const images = extractXueqiuImages(item);
   const text = clean(item.text || item.description || item.title || "");
   const id = String(item.id || "");
-  if (!id || !text) return null;
+  if (!id || (!text && !images?.length)) return null;
   const likes = Number(item.like_count || 0);
   const replies = Number(item.reply_count || item.comments_count || 0);
   const quote = extractQuote(item);
@@ -235,6 +441,7 @@ function mapDuanStatus(item: XueqiuStatus): DuanPost | null {
     categories: duanCategories(text, likes, replies),
     likes,
     replies,
+    ...(images ? { images } : {}),
     ...(quote && quote.text !== text ? { quote } : {})
   };
 }
@@ -243,16 +450,24 @@ async function fillMissingQuotes(posts: DuanPost[]): Promise<DuanPost[]> {
   const missing = posts.filter((post) => !post.quote && /^\s*回复@/.test(post.text)).slice(0, 40);
   if (!missing.length) return posts;
   const quotes = new Map<string, Quote>();
+  const images = new Map<string, string[]>();
   for (let index = 0; index < missing.length; index += 3) {
     const batch = missing.slice(index, index + 3);
     await Promise.all(batch.map(async (post) => {
       const detail = await xueqiuFetch(`/statuses/show.json?id=${encodeURIComponent(post.id)}`) as XueqiuStatus | null;
-      const quote = detail ? extractQuote(detail) : undefined;
+      if (!detail) return;
+      const quote = extractQuote(detail);
       if (quote && quote.text !== post.text) quotes.set(post.id, quote);
+      const pics = extractXueqiuImages(detail);
+      if (pics?.length && !post.images?.length) images.set(post.id, pics);
     }));
   }
-  if (!quotes.size) return posts;
-  return posts.map((post) => quotes.has(post.id) ? { ...post, quote: quotes.get(post.id) } : post);
+  if (!quotes.size && !images.size) return posts;
+  return posts.map((post) => ({
+    ...post,
+    ...(quotes.has(post.id) ? { quote: quotes.get(post.id) } : {}),
+    ...(images.has(post.id) ? { images: images.get(post.id) } : {})
+  }));
 }
 
 export async function refreshDuanPosts(): Promise<DuanPost[]> {
@@ -280,17 +495,29 @@ export async function refreshDuanPosts(): Promise<DuanPost[]> {
     }
     const quoted = await fillMissingQuotes(live);
     if (!quoted.length) return existing;
+    const remoteUrls = [
+      ...quoted.flatMap((item) => [...(item.images || []), ...(item.quote?.images || [])]),
+      ...existing.flatMap((item) => [...(item.images || []), ...(item.quote?.images || [])])
+    ];
+    const localMap = await localizeUrlMap("duan", remoteUrls);
     const merged = new Map(existing.map((item) => [item.id, item]));
     quoted.forEach((item) => {
       const saved = merged.get(item.id);
-      merged.set(item.id, {
+      const images = keepLocalImages(item.images?.length ? item.images : saved?.images, localMap);
+      const quoteSource = item.quote || saved?.quote;
+      const quoteImages = quoteSource ? keepLocalImages(quoteSource.images?.length ? quoteSource.images : saved?.quote?.images, localMap) : undefined;
+      const next = {
         ...saved,
         ...item,
-        quote: item.quote || saved?.quote,
+        quote: quoteSource ? { ...quoteSource, ...(quoteImages ? { images: quoteImages } : {}) } : undefined,
         categories: Array.from(new Set([...(saved?.categories || []), ...item.categories]))
-      });
+      };
+      if (images) next.images = images;
+      else delete next.images;
+      if (next.quote && !quoteImages) delete next.quote.images;
+      merged.set(item.id, next);
     });
-    const posts = Array.from(merged.values()).sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date));
+    const posts = Array.from(merged.values()).map((item) => withoutRemoteImages(item, localMap)).sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date));
     try { writeJsonAtomic(DUAN_FILE, posts); } catch { /* read-only deployment */ }
     return posts;
   } catch {

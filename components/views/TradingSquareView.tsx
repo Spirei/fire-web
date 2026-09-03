@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { IconPin, IconWindmill } from "@tabler/icons-react";
+import { IconMinus, IconPin, IconPlus, IconWindmill, IconX } from "@tabler/icons-react";
 import useDraggableWindow from "@/lib/useDraggableWindow";
 import Pagination from "@/components/Pagination";
 import SafeAssetImage from "@/components/SafeAssetImage";
@@ -12,8 +12,8 @@ import type { StockRecord } from "@/lib/types";
 
 type AuthorId = "trump" | "duan";
 type DuanCategory = "hot" | "original" | "longform";
-type Quote = { name: string; text: string; url?: string };
-type Post = { id: string; author: AuthorId; date: string; text: string; textZh?: string; originalUrl: string; categories?: DuanCategory[]; quote?: Quote };
+type Quote = { name: string; text: string; url?: string; images?: string[] };
+type Post = { id: string; author: AuthorId; date: string; text: string; textZh?: string; originalUrl: string; categories?: DuanCategory[]; quote?: Quote; images?: string[] };
 
 const PEOPLE = [
   { id: "trump" as const, name: "特朗普", handle: "@realDonaldTrump", platform: "Truth Social", avatar: "/uploads/celebs/trump-custom-1786043526485-1e34c87e.png" },
@@ -102,16 +102,33 @@ function countUnseen(posts: Post[], seen: AuthorTimes): Record<string, number> {
   return counts;
 }
 
+function localUrls(urls?: string[]): string[] {
+  return (urls || []).filter((url) => url.startsWith("/uploads/"));
+}
+
 function mergeFeedPosts(previous: Post[], incoming: Post[]): Post[] {
-  const prevById = new Map(previous.map((post) => [post.id, post]));
+  const prevById = new Map(previous.map((post) => [`${post.author}-${post.id}`, post]));
   const newestShown = previous.reduce((max, post) => {
     if (post.author !== "trump") return max;
     const time = Date.parse(post.date);
     return Number.isFinite(time) && time > max ? time : max;
   }, 0);
   return incoming.flatMap((post) => {
-    const old = prevById.get(post.id);
-    const next = !post.textZh && old?.textZh ? { ...post, textZh: old.textZh } : post;
+    const old = prevById.get(`${post.author}-${post.id}`);
+    let next = !post.textZh && old?.textZh ? { ...post, textZh: old.textZh } : post;
+    const images = localUrls(next.images).length ? localUrls(next.images) : localUrls(old?.images);
+    if (images.length) next = { ...next, images };
+    else {
+      next = { ...next };
+      delete next.images;
+    }
+    if (next.quote) {
+      const quoteImages = localUrls(next.quote.images).length ? localUrls(next.quote.images) : localUrls(old?.quote?.images);
+      const quote = { ...next.quote };
+      if (quoteImages.length) quote.images = quoteImages;
+      else delete quote.images;
+      next = { ...next, quote };
+    }
     if (next.author === "trump" && !next.textZh && !old) {
       const time = Date.parse(next.date);
       if (Number.isFinite(time) && time > newestShown) return [];
@@ -216,6 +233,103 @@ function parseSymbol(raw: string): { market: string; code: string; name: string 
 }
 
 const LINK_CLASS = "inline bg-transparent p-0 font-semibold text-brand-deep hover:underline";
+
+const PREVIEW_MIN = 0.5;
+const PREVIEW_MAX = 4;
+
+function PostImagePreview({ urls, index, onClose }: { urls: string[]; index: number; onClose: () => void }) {
+  const [current, setCurrent] = useState(index);
+  const [scale, setScale] = useState(1);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const zoom = (delta: number) => setScale((value) => Math.min(PREVIEW_MAX, Math.max(PREVIEW_MIN, Number((value + delta).toFixed(2)))));
+
+  useEffect(() => { setScale(1); }, [current]);
+
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key === "+" || event.key === "=") zoom(0.25);
+      if (event.key === "-" || event.key === "_") zoom(-0.25);
+      if (event.key === "ArrowRight" && current < urls.length - 1) setCurrent((value) => value + 1);
+      if (event.key === "ArrowLeft" && current > 0) setCurrent((value) => value - 1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [current, onClose, urls.length]);
+
+  useEffect(() => {
+    const node = stageRef.current;
+    if (!node) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      zoom(event.deltaY > 0 ? -0.25 : 0.25);
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onWheel);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[80] flex flex-col bg-black/75" role="dialog" aria-modal="true" aria-label="图片预览" onClick={onClose}>
+      <div className="flex items-center justify-center gap-2 px-4 py-3" onClick={(event) => event.stopPropagation()}>
+        <button type="button" onClick={() => zoom(-0.25)} disabled={scale <= PREVIEW_MIN} aria-label="缩小" title="缩小" className="grid h-8 w-8 place-items-center rounded-full bg-white/15 text-white transition hover:bg-white/25 active:scale-[.97] disabled:opacity-40">
+          <IconMinus size={16} stroke={2} />
+        </button>
+        <span className="min-w-[3.5rem] text-center text-xs tabular-nums text-white/80">{Math.round(scale * 100)}%</span>
+        <button type="button" onClick={() => zoom(0.25)} disabled={scale >= PREVIEW_MAX} aria-label="放大" title="放大" className="grid h-8 w-8 place-items-center rounded-full bg-white/15 text-white transition hover:bg-white/25 active:scale-[.97] disabled:opacity-40">
+          <IconPlus size={16} stroke={2} />
+        </button>
+        <button type="button" onClick={onClose} aria-label="关闭预览" title="关闭" className="ml-2 grid h-8 w-8 place-items-center rounded-full bg-white/15 text-white transition hover:bg-white/25 active:scale-[.97]">
+          <IconX size={16} stroke={2} />
+        </button>
+      </div>
+      <div ref={stageRef} className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4" onClick={(event) => event.stopPropagation()}>
+        <img
+          src={urls[current]}
+          alt=""
+          draggable={false}
+          className="max-h-[80vh] max-w-[90vw] origin-center object-contain transition-transform duration-200"
+          style={{ transform: `scale(${scale})` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PostImages({ urls }: { urls?: string[] }) {
+  const [preview, setPreview] = useState<number | null>(null);
+  if (!urls?.length) return null;
+  const list = urls.filter((url) => url.startsWith("/uploads/")).slice(0, 4);
+  if (!list.length) return null;
+  return (
+    <>
+      <div className={`mt-3 grid gap-2 ${list.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+        {list.map((url, index) => (
+          <button
+            key={url}
+            type="button"
+            onClick={() => setPreview(index)}
+            className="overflow-hidden rounded-xl border border-edge bg-bg-gray dark:border-white/10 dark:bg-white/[.04]"
+          >
+            <img
+              src={url}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={(event) => { event.currentTarget.parentElement?.setAttribute("hidden", ""); }}
+              className={`w-full object-cover ${list.length === 1 ? "max-h-80" : "h-36"}`}
+            />
+          </button>
+        ))}
+      </div>
+      {preview != null ? <PostImagePreview urls={list} index={preview} onClose={() => setPreview(null)} /> : null}
+    </>
+  );
+}
 
 function PostBody({ text, holdings, onStock, className = "mt-2 whitespace-pre-line break-words text-[15px] leading-7 text-ink dark:text-slate-200" }: { text: string; holdings: HoldingHint[]; onStock: (item: HoldingHint) => void; className?: string }) {
   const parts = useMemo(() => splitTradingText(text, holdings), [holdings, text]);
@@ -493,6 +607,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
                       <time className="text-muted" dateTime={post.date}>{formatPostTime(post.date)}</time>
                     </div>
                     <PostBody text={showOriginal ? post.text : (post.textZh ?? post.text)} holdings={holdings} onStock={openStock} />
+                    <PostImages urls={post.images} />
                     {post.quote && (
                       <div className="mt-3 rounded-xl border border-edge bg-bg-gray/60 px-3 py-2.5 dark:border-white/10 dark:bg-white/[.04]">
                         <p className="text-xs font-semibold text-muted">{post.quote.name}</p>
@@ -502,6 +617,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
                           onStock={openStock}
                           className="mt-1 whitespace-pre-line break-words text-[13px] leading-6 text-ink-2 dark:text-slate-300"
                         />
+                        <PostImages urls={post.quote.images} />
                         {post.quote.url && (
                           <a href={post.quote.url} target="_blank" rel="noreferrer" className="mt-1.5 inline-block text-[11px] font-semibold text-brand-deep">查看原动态 ↗</a>
                         )}

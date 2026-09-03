@@ -136,6 +136,7 @@ export function cleanupOrphanFiles(): { removed: number; failed: number } {
     for (const ent of entries) {
       const full = path.join(dir, ent.name);
       if (ent.isDirectory()) {
+        if (ent.name === "trading-square" && path.basename(dir) === "uploads") continue;
         walk(full);
         continue;
       }
