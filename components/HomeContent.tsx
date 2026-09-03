@@ -1,15 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { marketMeta, type HomeNavItem, type SearchMatch, type SiteSettings, type User } from "@/lib/types";
 import UserMenu from "@/components/UserMenu";
 import IndexTicker from "@/components/IndexTicker";
 import StockSearch from "@/components/StockSearch";
 import MarketIcon from "@/components/MarketIcon";
-import GlobalPreviewView from "@/components/views/GlobalPreviewView";
-import EarningsCalendarView from "@/components/views/EarningsCalendarView";
-import { useAssetIcons } from "@/lib/useAssetIcons";
+import { primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
 import { showToast } from "@/lib/toast";
 import { setThemeCookie } from "@/lib/theme";
 import { logoFontClass } from "@/lib/logoFont";
@@ -203,12 +202,22 @@ function Fireo({ market, code, name }: { market: string; code: string; name: str
 
 const CHIP_ORDER_KEY = "fire:home:chips-order";
 
+const GlobalPreviewView = dynamic(() => import("@/components/views/GlobalPreviewView"), {
+  ssr: false,
+  loading: () => <div className="h-64 animate-pulse rounded-card bg-bg-gray dark:bg-white/[.04]" />
+});
+const EarningsCalendarView = dynamic(() => import("@/components/views/EarningsCalendarView"), {
+  ssr: false,
+  loading: () => <div className="h-64 animate-pulse rounded-card bg-bg-gray dark:bg-white/[.04]" />
+});
+
 const NAV_FALLBACK: Record<string, { label: string; href: string }> = {
   preview: { label: "产品预览", href: "#preview" },
   records: { label: "自选记录", href: "/records" }
 };
 
-export default function HomeContent({ settings, initialDark = false, initialUser = null }: { settings: SiteSettings; initialDark?: boolean; initialUser?: User | null }) {
+export default function HomeContent({ settings, initialDark = false, initialUser = null, initialStockIcons = {} }: { settings: SiteSettings; initialDark?: boolean; initialUser?: User | null; initialStockIcons?: Record<string, string> }) {
+  primeStockIconCache(initialStockIcons);
   // SSR 阶段直接使用服务端主题（Cookie），避免刷新时 hero 遮罩先按浅色渲染造成大片白色
   const [dark, setDark] = useState(initialDark);
   const [themeReady, setThemeReady] = useState(false);

@@ -2,7 +2,17 @@ import { getDb } from "./db";
 import { isLocalUrl, removeFileIfUnused } from "./fileCleanup";
 import fs from "fs";
 import path from "path";
+import { RELATED_ETF_MAIN_STOCK } from "./relatedEtfs";
 import { getSiteSettings } from "./settings";
+
+const seeded = {
+  icon: false,
+  market: false,
+  stock: false,
+  broker: false,
+  category: new Set<string>()
+};
+const existsCache = new Map<string, boolean>();
 
 export type AssetType = "stock" | "market" | "flag" | "crypto" | "metal" | "broker" | "group" | "icon";
 
@@ -95,6 +105,8 @@ export const DEFAULT_ICONS: { code: string; name: string; url: string }[] = [
 
 /** 进入「图标」类目时补齐缺失的内置图标（按 code 逐条补齐，幂等，不覆盖已有素材） */
 export function ensureIconAssets(): void {
+  if (seeded.icon) return;
+  seeded.icon = true;
   const db = getDb();
   DEFAULT_ICONS.forEach((it) => {
     const existing = db
@@ -116,6 +128,8 @@ export const DEFAULT_MARKET_ICONS: { market: string; name: string; url: string }
 
 /** 进入「市场」类目时补齐缺失的内置市场图标（按 market 判断，缺失才播种，不覆盖用户已上传图标） */
 export function ensureMarketAssets(): void {
+  if (seeded.market) return;
+  seeded.market = true;
   const db = getDb();
   DEFAULT_MARKET_ICONS.forEach((it) => {
     const market = it.market.toUpperCase();
@@ -135,18 +149,62 @@ function bundledAssetUrl(folder: string, file: string): string {
 
 function localAssetExists(url: string): boolean {
   if (!url.startsWith("/uploads/")) return true;
+  const cached = existsCache.get(url);
+  if (cached !== undefined) return cached;
   let rel = url.slice("/uploads/".length);
   try { rel = decodeURIComponent(rel); } catch { /* malformed legacy URL: treat as missing */ }
-  return [
+  const ok = [
     path.join(process.cwd(), "public", "uploads", rel),
     path.join(process.cwd(), "resource-default", rel)
   ].some((file) => {
     try { return fs.statSync(file).isFile(); } catch { return false; }
   });
+  existsCache.set(url, ok);
+  return ok;
+}
+
+/** 当前持仓/自选需要的股票图标，按条查询，避免每次把 3000+ 素材扫一遍。 */
+export function stockIconKeysForRecords(records: { market: string; code: string }[]): Array<{ market: string; code: string }> {
+  const seen = new Set<string>();
+  const pairs: Array<{ market: string; code: string }> = [];
+  const add = (market: string, code: string) => {
+    const key = `${market}:${code}`;
+    if (!code || seen.has(key)) return;
+    seen.add(key);
+    pairs.push({ market, code });
+  };
+  records.forEach((record) => {
+    const market = record.market.toUpperCase();
+    const code = record.code.toUpperCase();
+    add(market, code);
+    if (market === "US") {
+      const baseCode = code.replace(/\.(AM|N|OQ|PS|K)$/i, "");
+      add("US", baseCode);
+      const main = RELATED_ETF_MAIN_STOCK[baseCode];
+      if (main) add("US", main);
+    }
+  });
+  return pairs;
+}
+
+export function getStockIconMap(pairs: Array<{ market: string; code: string }>): Record<string, string> {
+  if (!pairs.length) return {};
+  const db = getDb();
+  const stmt = db.prepare("SELECT market, code, url FROM assets WHERE type = 'stock' AND upper(market) = upper(?) AND upper(code) = upper(?) LIMIT 1");
+  const out: Record<string, string> = {};
+  pairs.forEach((pair) => {
+    const row = stmt.get(pair.market, pair.code) as { market?: string; code?: string; url?: string } | undefined;
+    const url = String(row?.url || "");
+    if (!url || !localAssetExists(url)) return;
+    out[`${String(row?.market).toUpperCase()}:${String(row?.code).toUpperCase()}`] = url;
+  });
+  return out;
 }
 
 /** 用镜像内置券商素材补齐当前券商配置；按券商名称/别名匹配，幂等且不覆盖用户图标。 */
 export function ensureBrokerAssets(): void {
+  if (seeded.broker) return;
+  seeded.broker = true;
   const dirs = [
     path.join(process.cwd(), "public", "uploads", "asset", "broker"),
     path.join(process.cwd(), "resource-default", "asset", "broker")
@@ -182,6 +240,8 @@ export function ensureBrokerAssets(): void {
  * 仅在素材库无该 type+code 条目时补种（幂等，不覆盖用户已上传/已同步的真实素材）。
  */
 export function ensureCategoryAssets(type: "crypto" | "metal" | "flag"): void {
+  if (seeded.category.has(type)) return;
+  seeded.category.add(type);
   const subdir = type;
   const dirs = [
     path.join(process.cwd(), "public", "uploads", "asset", subdir),
@@ -223,6 +283,8 @@ export function ensureCategoryAssets(type: "crypto" | "metal" | "flag"): void {
  * 全新部署开箱即用，无需「同步大市值」按需填充。
  */
 export function ensureStockAssets(): void {
+  if (seeded.stock) return;
+  seeded.stock = true;
   const seedPath = path.join(process.cwd(), "lib", "assets-default-stock.json");
   let list: { market: string; code: string; name: string; url: string }[] = [];
   try {
@@ -297,6 +359,8 @@ export function upsertAsset(input: {
        board=CASE WHEN assets.source <> 'manual' OR excluded.source = 'manual' THEN excluded.board ELSE assets.board END,
        updated_at=excluded.updated_at`
   ).run(id, input.type, market, code, name, url, urlDark, marketCap, price, changePct, source, lastCheckedAt, board, updatedAt);
+  if (url) existsCache.set(url, true);
+  if (urlDark) existsCache.set(urlDark, true);
   if (oldRow?.url && isLocalUrl(oldRow.url) && oldRow.url !== url) {
     // 旧文件仍被其它记录引用时保留（removeFileIfUnused 内部判断）
     removeFileIfUnused(oldRow.url);

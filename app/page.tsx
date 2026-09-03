@@ -3,6 +3,8 @@ import HomeContent from "@/components/HomeContent";
 import { cookies } from "next/headers";
 import { THEME_COOKIE } from "@/lib/theme";
 import { LEGACY_SESSION_COOKIE, SESSION_COOKIE, getUserByToken } from "@/lib/auth";
+import { getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
+import { listRecords } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -12,5 +14,6 @@ export default async function HomePage() {
   const initialDark = cookieStore.get(THEME_COOKIE)?.value === "dark";
   const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
   const initialUser = getUserByToken(token);
-  return <HomeContent settings={settings} initialDark={initialDark} initialUser={initialUser} />;
+  const initialStockIcons = initialUser ? getStockIconMap(stockIconKeysForRecords(listRecords(initialUser.id))) : {};
+  return <HomeContent settings={settings} initialDark={initialDark} initialUser={initialUser} initialStockIcons={initialStockIcons} />;
 }

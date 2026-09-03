@@ -10,8 +10,7 @@ import UserMenu from "@/components/UserMenu";
 import SiteLogo from "@/components/SiteLogo";
 import IndexTicker from "@/components/IndexTicker";
 import Toaster from "@/components/Toaster";
-import { getAssets } from "@/lib/assets";
-import { RELATED_ETF_MAIN_STOCK } from "@/lib/relatedEtfs";
+import { getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
 
@@ -57,23 +56,7 @@ export default async function SlugLayout({
   const initialActivities = listActivities(user.id);
   // 当前账户涉及的股票图标随 HTML 首屏下发，不再等待客户端请求 3,000+ 条素材。
   // 杠杆 ETF 同时带上正股图标，兼容素材库的正股兜底规则。
-  const wantedStockKeys = new Set<string>();
-  initialRecords.forEach((record) => {
-    const market = record.market.toUpperCase();
-    const code = record.code.toUpperCase();
-    wantedStockKeys.add(`${market}:${code}`);
-    if (market === "US") {
-      const baseCode = code.replace(/\.(AM|N|OQ|PS|K)$/i, "");
-      wantedStockKeys.add(`US:${baseCode}`);
-      const main = RELATED_ETF_MAIN_STOCK[baseCode];
-      if (main) wantedStockKeys.add(`US:${main}`);
-    }
-  });
-  const initialStockIcons = Object.fromEntries(
-    getAssets("stock")
-      .filter((asset) => asset.url && wantedStockKeys.has(`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`))
-      .map((asset) => [`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`, asset.url])
-  );
+  const initialStockIcons = getStockIconMap(stockIconKeysForRecords(initialRecords));
 
   return (
     <div className="min-h-screen bg-page">

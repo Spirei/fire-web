@@ -268,7 +268,7 @@ function Avatar({
 }
 
 export default function AssetLibraryView() {
-  const { assetIcons, stockIcons } = useAssetIcons();
+  const { assetIcons, stockIcons } = useAssetIcons(undefined, { fullCatalog: true });
   const rates = useRates();
   const [tab, setTab] = useState<TabKey>(() => {
     if (typeof window === "undefined") return "stock";

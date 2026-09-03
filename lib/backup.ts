@@ -160,7 +160,10 @@ export function maybeRunBackup(): void {
   const cfg = getBackupConfig();
   if (!cfg.enabled) return;
   if (cfg.lastAt && now - cfg.lastAt < cfg.intervalHours * 3_600_000) return;
-  runBackup().catch(() => {
-    /* 备份失败静默，下个周期重试 */
-  });
+  // 备份会复制整个 uploads，避开首屏磁盘争用
+  setTimeout(() => {
+    runBackup().catch(() => {
+      /* 备份失败静默，下个周期重试 */
+    });
+  }, 30_000);
 }

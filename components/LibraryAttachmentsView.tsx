@@ -112,7 +112,7 @@ function writeFinReportCache(data: FinancialAttachment[]) {
 }
 
 export function FinancialAttachments({ standalone }: { standalone?: boolean }) {
-  const { stockIcons, marketIcons, assets } = useAssetIcons(["stock", "market"]);
+  const { stockIcons, marketIcons, assets } = useAssetIcons(["stock", "market"], { fullCatalog: true });
   // 有本地缓存时直接秒出首帧，loading 保持 false，避免闪「正在读取财报文件」；无缓存才显示加载态
   const [cachedFiles] = useState(() => (typeof window === "undefined" ? null : readFinReportCache()));
   const [files, setFiles] = useState<FinancialAttachment[]>(cachedFiles ?? []);

@@ -2362,6 +2362,10 @@ export const V0_1_20_ENTRY: VersionEntry = {
     title: "交易广场配图下载与预览安全加固",
     desc: "配图远程抓取改为 HTTPS 主机白名单（雪球 / Truth Social 归档附件域），拒绝内网、localhost、带用户名的 URL 以及跳转后落到白名单外的地址；落盘前用文件魔数校验，只保存 jpg/png/gif/webp，拒绝 svg/ico；列表与预览只接受 /uploads/trading-square/{作者}/{16位哈希}.{扩展名}，不把外链交给 react-photo-view。npm audit 对新增依赖 0 漏洞。",
     kind: "security"
+  }, {
+    title: "加快全站首屏：不再每个页面拉取全部股票素材",
+    desc: "首页不再同步打进全球预览/财报日历整包；持仓与首页只下发当前记录需要的图标，不再每次扫描 3000+ 素材并下载约 1MB 的 /api/assets?type=stock。完整股票素材库仅在素材库/附件管理打开时加载。素材文件存在性检查加内存缓存，播种只执行一次；指数栏缓存 60 秒；自动备份推迟到首屏之后。",
+    kind: "fix"
   }]
 };
 

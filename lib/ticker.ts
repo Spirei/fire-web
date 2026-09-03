@@ -36,7 +36,7 @@ async function fetchQuotes(symbols: { secid: string }[]): Promise<Map<string, { 
   for (const host of EM_QUOTE_HOSTS) {
     try {
       const url = `${host}/api/qt/ulist.np/get?secids=${secids}&fields=f2,f3,f4,f12&fltt=2`;
-      const res = await fetch(url, { headers: EM_HEADERS, signal: AbortSignal.timeout(8000) });
+      const res = await fetch(url, { headers: EM_HEADERS, signal: AbortSignal.timeout(3000) });
       if (!res.ok) continue;
       const json = await res.json().catch(() => null);
       const diff = json?.data?.diff;
@@ -65,7 +65,7 @@ async function fetchTrend(secid: string): Promise<number[]> {
   for (const host of EM_TREND_HOSTS) {
     try {
       const url = `${host}/api/qt/stock/trends2/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays=1&iscr=0`;
-      const res = await fetch(url, { headers: EM_HEADERS, signal: AbortSignal.timeout(8000) });
+      const res = await fetch(url, { headers: EM_HEADERS, signal: AbortSignal.timeout(3000) });
       if (!res.ok) continue;
       const json = await res.json().catch(() => null);
       const trends = json?.data?.trends;
@@ -83,7 +83,7 @@ async function fetchTrend(secid: string): Promise<number[]> {
   return [];
 }
 
-const TTL = 30_000;
+const TTL = 60_000;
 let cache: { at: number; data: TickerItem[]; config: string } | null = null;
 let inflight: Promise<{ items: TickerItem[]; interval: number }> | null = null;
 

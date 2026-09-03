@@ -26,6 +26,8 @@ type HookOptions = {
   stockIconCdn?: boolean;
   /** 仅确实需要 CDN 开关的组件才读取设置。 */
   loadCdnSetting?: boolean;
+  /** 素材库等需要完整 3000+ 股票图标时才拉全量；持仓/首页只用预热或本地缓存。 */
+  fullCatalog?: boolean;
 };
 
 const ALL_TYPES: AssetType[] = ["stock", "market", "flag", "broker", "crypto", "metal", "icon"];
@@ -35,6 +37,7 @@ const cache = new Map<AssetType, { assets: Asset[]; at: number }>();
 const inflight = new Map<AssetType, Promise<void>>();
 const listeners = new Set<() => void>();
 const subscribedTypes = new Set<AssetType>();
+let fullStockCatalog = false;
 const cdnListeners = new Set<(value: boolean) => void>();
 let cdnEnabled = false;
 let cdnLoaded = false;
@@ -124,6 +127,7 @@ function notify() {
 
 async function refreshType(type: AssetType, force = false) {
   const current = cache.get(type);
+  if (type === "stock" && !force && !fullStockCatalog) return;
   if (!force && current && Date.now() - current.at < CACHE_TTL) return;
   const pending = inflight.get(type);
   if (pending && !force) return pending;
@@ -219,6 +223,7 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
 
   useEffect(() => {
     let cancelled = false;
+    if (options.fullCatalog) fullStockCatalog = true;
     requestedTypes.forEach((type) => {
       subscribedTypes.add(type);
       if (cache.has(type)) return;
@@ -227,7 +232,7 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
     });
     setAssets(assetsFor(requestedTypes));
 
-    void refreshTypes(requestedTypes).then(() => {
+    void refreshTypes(requestedTypes, Boolean(options.fullCatalog)).then(() => {
       if (!cancelled) setAssets(assetsFor(requestedTypes));
     });
     const onUpdate = () => setAssets(assetsFor(requestedTypes));
@@ -236,7 +241,7 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
       cancelled = true;
       listeners.delete(onUpdate);
     };
-  }, [typeKey, requestedTypes]);
+  }, [options.fullCatalog, requestedTypes, typeKey]);
 
   const marketIcons = useMemo(() => {
     const map: Record<string, string> = {};
