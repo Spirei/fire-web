@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import Pagination from "@/components/Pagination";
 import RefreshButton from "@/components/RefreshButton";
+import CurrencySelect from "@/components/CurrencySelect";
 import MarketIcon from "@/components/MarketIcon";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import { usdCap } from "@/lib/currency";
@@ -62,10 +63,10 @@ const MODULE_LABELS: Record<string, string> = {
 };
 
 const SUMMARY_MARKETS: Array<{ label: string; market: string }> = [
+  { label: "合计", market: "TOTAL" },
   { label: "美股", market: "US" },
   { label: "港股", market: "HK" },
-  { label: "A股", market: "CN" },
-  { label: "合计", market: "TOTAL" }
+  { label: "A股", market: "CN" }
 ];
 
 const PAGE_SIZE = 10;
@@ -150,7 +151,7 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
   const [lastRefreshed, setLastRefreshed] = useState("");
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
-  const { symbol, rates, fx } = useDisplayCurrency();
+  const { currency, setCurrency, symbol, rates, fx } = useDisplayCurrency();
   const { stockIcons } = useAssetIcons(["stock"]);
   const profile = activities[0];
 
@@ -285,14 +286,17 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
 
       {scope === "user" && (
         <div className="mx-5 mt-4 rounded-xl border border-edge bg-bg-gray/50 px-4 py-3 dark:bg-white/[.04]">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-xs font-semibold text-muted">前一日持仓盈利</p>
               <p className="mt-1 text-[11px] text-faint">
                 {summaryLoading ? "正在汇总上一交易日收盘盈亏" : `${dailySummary?.date || "暂无日期"} · ${dailySummary?.settlement || "上一交易日收盘相对前收盘"}`}
               </p>
             </div>
-            <span className="text-[11px] text-faint">{dailySummary?.holdings ? `${dailySummary.holdings} 只持仓` : summaryLoading ? "…" : "暂无持仓"}</span>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="text-[11px] text-faint">{dailySummary?.holdings ? `${dailySummary.holdings} 只持仓` : summaryLoading ? "…" : "暂无持仓"}</span>
+              <CurrencySelect value={currency} onChange={setCurrency} />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {SUMMARY_MARKETS.map(({ label, market }, index) => {
@@ -433,8 +437,7 @@ export default function ActivitiesView({ activities, systemLogs = [], orders = [
                           ) : null}
                           <div className="flex min-w-0 flex-col leading-[1.35]">
                             <b className="font-semibold">{item.name}</b>
-                            <small className="flex items-center gap-1 text-xs text-muted">
-                              <MarketIcon market={market} flag={marketInfo.flag} size={13} />
+                            <small className="text-xs text-muted">
                               {item.code} · {marketInfo.label}
                               {item.kind === "order" && item.qty != null ? ` · ${fmtQty(item.qty)} × ${fmtPrice(item.price ?? "", marketInfo.currency, market)}` : ""}
                               {item.status ? ` · ${ORDER_STATUS[item.status] || item.status}` : ""}
