@@ -10,7 +10,7 @@ import SafeAssetImage from "@/components/SafeAssetImage";
 import StockDetailView from "@/components/StockDetailView";
 import StockTextLink from "@/components/StockTextLink";
 import { isLocalPostImageUrl } from "@/lib/tradingSquareImages";
-import { normalizeCode, parseSymbolToken, splitTradingText, type HoldingHint } from "@/lib/tradingSquareText";
+import { hasTranslatableText, normalizeCode, parseSymbolToken, splitTradingText, type HoldingHint } from "@/lib/tradingSquareText";
 import type { StockRecord } from "@/lib/types";
 
 type AuthorId = "trump" | "duan";
@@ -118,7 +118,11 @@ function mergeFeedPosts(previous: Post[], incoming: Post[]): Post[] {
   }, 0);
   return incoming.flatMap((post) => {
     const old = prevById.get(`${post.author}-${post.id}`);
-    let next = !post.textZh && old?.textZh ? { ...post, textZh: old.textZh } : post;
+    let next = hasTranslatableText(post.text) && !post.textZh && old?.textZh ? { ...post, textZh: old.textZh } : post;
+    if (!hasTranslatableText(next.text) && next.textZh) {
+      next = { ...next };
+      delete next.textZh;
+    }
     const images = localUrls(next.images).length ? localUrls(next.images) : localUrls(old?.images);
     if (images.length) next = { ...next, images };
     else {
@@ -132,7 +136,7 @@ function mergeFeedPosts(previous: Post[], incoming: Post[]): Post[] {
       else delete quote.images;
       next = { ...next, quote };
     }
-    if (next.author === "trump" && !next.textZh && !old) {
+    if (next.author === "trump" && !next.textZh && !old && hasTranslatableText(next.text)) {
       const time = Date.parse(next.date);
       if (Number.isFinite(time) && time > newestShown) return [];
     }
@@ -538,6 +542,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
           ) : visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE).map((post) => {
             const showOriginal = original[post.id] === true;
             const author = people.find((person) => person.id === post.author) ?? people[0];
+            const bodyText = showOriginal ? post.text : (post.textZh ?? post.text);
             return (
               <article key={`${post.author}-${post.id}`} className="px-4 py-5 sm:px-5">
                 <div className="flex gap-3">
@@ -550,7 +555,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
                       <span className="text-faint">·</span>
                       <time className="text-muted" dateTime={post.date}>{formatPostTime(post.date)}</time>
                     </div>
-                    <PostBody text={showOriginal ? post.text : (post.textZh ?? post.text)} holdings={holdings} onStock={openStock} />
+                    {bodyText.trim() ? <PostBody text={bodyText} holdings={holdings} onStock={openStock} /> : null}
                     <PostImages urls={post.images} />
                     {post.quote && (
                       <div className="mt-3 rounded-xl border border-edge bg-bg-gray/60 px-3 py-2.5 dark:border-white/10 dark:bg-white/[.04]">

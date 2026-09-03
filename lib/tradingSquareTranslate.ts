@@ -1,11 +1,15 @@
 import path from "node:path";
 import { getSiteSettings } from "@/lib/settings";
 import { readJsonFile, writeJsonAtomic } from "@/lib/tradingSquareCache";
+import { hasTranslatableText } from "@/lib/tradingSquareText";
 
 const TRANSLATIONS = path.join(process.cwd(), "data", "trump-translations.json");
 
 export function validTranslation(value?: string) {
-  return !!value && !/MYMEMORY WARNING|USED ALL AVAILABLE FREE TRANSLATIONS|QUOTA|RATE LIMIT/i.test(value);
+  if (!value) return false;
+  if (/MYMEMORY WARNING|USED ALL AVAILABLE FREE TRANSLATIONS|QUOTA|RATE LIMIT/i.test(value)) return false;
+  if (/请提供|需要翻译的英文|请直接提供|无法访问外部链接|没有需要翻译|无可翻译|please provide|no (?:english )?text to translate|cannot access (?:the )?external links/i.test(value)) return false;
+  return true;
 }
 
 export function readTranslations(): Record<string, string> {
@@ -73,6 +77,7 @@ async function translateWithMyMemory(text: string): Promise<string | undefined> 
 
 /** 大模型优先，失败或未配置时再走 MyMemory。 */
 async function translateOne(text: string): Promise<string | undefined> {
+  if (!hasTranslatableText(text)) return undefined;
   const settings = getSiteSettings();
   if (!settings.translationEnabled) return undefined;
   try {
@@ -101,7 +106,14 @@ async function acquireBackfill(timeoutMs = 35_000): Promise<boolean> {
 }
 
 function applyTranslations<T extends { id: string; text: string }>(posts: T[], translations: Record<string, string>): T[] {
-  return posts.map((post) => validTranslation(translations[post.id]) ? { ...post, textZh: translations[post.id] } : post);
+  return posts.map((post) => {
+    if (!hasTranslatableText(post.text)) {
+      const next = { ...post } as T & { textZh?: string };
+      delete next.textZh;
+      return next;
+    }
+    return validTranslation(translations[post.id]) ? { ...post, textZh: translations[post.id] } : post;
+  });
 }
 
 async function translateMissing<T extends { id: string; text: string }>(
@@ -111,7 +123,18 @@ async function translateMissing<T extends { id: string; text: string }>(
 ): Promise<number> {
   const translations = readTranslations();
   const now = Date.now();
+  let purged = false;
+  posts.forEach((post) => {
+    if (!hasTranslatableText(post.text) || (translations[post.id] && !validTranslation(translations[post.id]))) {
+      if (translations[post.id]) {
+        delete translations[post.id];
+        purged = true;
+      }
+    }
+  });
+  if (purged) writeTranslations(translations);
   const missing = posts.filter((post) => {
+    if (!hasTranslatableText(post.text)) return false;
     if (validTranslation(translations[post.id])) return false;
     if (opts.skipCooldown) return true;
     const failedAt = recentlyFailed.get(post.id) ?? 0;

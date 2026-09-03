@@ -5,6 +5,8 @@ import { readJsonFile } from "@/lib/tradingSquareCache";
 import { getSiteSettings } from "@/lib/settings";
 import { backfillTrumpTranslations } from "@/lib/tradingSquareTranslate";
 import { isDuanRefreshing, isTrumpRefreshing, postTimestamp, readTrumpPosts, refreshDuanPosts, refreshTrumpPosts, withoutRemoteImages } from "@/lib/tradingSquareRefresh";
+import { validTranslation } from "@/lib/tradingSquareTranslate";
+import { hasTranslatableText } from "@/lib/tradingSquareText";
 
 type CachedPost = { id: string; date: string; text: string; textZh?: string; originalUrl: string; categories?: string[]; quote?: { name: string; text: string; url?: string; images?: string[] }; images?: string[] };
 type FeedPost = CachedPost & { author: "trump" | "duan" };
@@ -26,7 +28,10 @@ function assembleFeed() {
   const key = `${trumpAt}:${modifiedAt(TRANSLATIONS)}:${duanAt}`;
   if (assembled?.key === key) return assembled;
   const translations = readJsonFile<Record<string, string>>(TRANSLATIONS, {});
-  const trump = readJsonFile<CachedPost[]>(TRUMP, []).map((post) => withoutRemoteImages(translations[post.id] ? { ...post, textZh: translations[post.id], author: "trump" as const } : { ...post, author: "trump" as const }));
+  const trump = readJsonFile<CachedPost[]>(TRUMP, []).map((post) => {
+    const textZh = hasTranslatableText(post.text) && validTranslation(translations[post.id]) ? translations[post.id] : undefined;
+    return withoutRemoteImages(textZh ? { ...post, textZh, author: "trump" as const } : { ...post, author: "trump" as const });
+  });
   const duan = readJsonFile<CachedPost[]>(DUAN, []).map((post) => withoutRemoteImages({ ...post, author: "duan" as const }));
   const posts = [...trump, ...duan].sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date));
   assembled = {

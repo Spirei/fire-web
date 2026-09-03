@@ -1,5 +1,15 @@
 export type HoldingHint = { market: string; code: string; name: string };
 
+/** 去掉链接后仍有字母/汉字才值得送去翻译，避免纯图片或纯 URL 帖让模型编造回复。 */
+export function hasTranslatableText(text?: string): boolean {
+  const stripped = String(text || "")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/www\.\S+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /[A-Za-z]{2,}|[\u4e00-\u9fff]{2,}/.test(stripped);
+}
+
 export type TextPart =
   | { type: "text"; value: string }
   | { type: "url"; value: string }
