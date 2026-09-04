@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import CurrencySelect from "@/components/CurrencySelect";
 import { CURRENCIES, CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/currencyPrefs";
 import { fmtMoney } from "@/lib/format";
@@ -93,7 +94,15 @@ export default function FundEntryDialog(props: Props) {
     props.setAmount(digits);
   };
   const projectedBalance = props.currentBalance + (amountValid ? amountValue * props.direction : 0);
-  return (
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") props.onClose(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", closeOnEscape); };
+  }, [props.onClose]);
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") props.onClose(); }} onMouseDown={(event) => { if (event.target === event.currentTarget) props.onClose(); }}>
       <form onSubmit={(event) => { event.preventDefault(); if (!props.saving && amountValid) props.onSubmit(); }} role="dialog" aria-modal="true" aria-labelledby="fund-dialog-title" className="w-full max-w-[420px] overflow-visible rounded-[20px] border border-edge bg-white shadow-2xl dark:bg-[#1b2029]">
         <div className="flex items-start justify-between border-b border-edge px-5 py-4">
@@ -150,6 +159,7 @@ export default function FundEntryDialog(props: Props) {
           <button type="submit" disabled={props.saving || !amountValid} className="btn-line min-w-[98px] px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40">{props.saving ? "保存中…" : "确认记录"}</button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }
