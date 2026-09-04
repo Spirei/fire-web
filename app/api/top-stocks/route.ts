@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       await ensureAssetQuotesReady();
       const cryptoMetal = enrichAssetQuotes([...getAssets("crypto"), ...getAssets("metal")]);
       const extraItems = cryptoMetal
-        .filter((asset) => asset.type === "crypto" || asset.type === "metal")
+        .filter((asset) => (asset.type === "crypto" || asset.type === "metal") && Number.isFinite(asset.marketCap) && asset.marketCap > 0)
         .map((asset) => ({
           market: "ASSET" as const,
           code: asset.code,
@@ -49,6 +49,7 @@ export async function GET(request: Request) {
         merged.push(it);
       }
       result.items = merged
+        .filter((item) => Number.isFinite(item.marketCap) && item.marketCap > 0)
         .sort((a, b) => b.marketCap - a.marketCap)
         .slice(0, 100);
     }

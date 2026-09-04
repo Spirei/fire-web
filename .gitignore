@@ -13,7 +13,11 @@ next-env.d.ts
 .env.*
 !.env.example
 # Runtime data and local deployment state
-data/
+data/*
+!data/duan-posts.json
+!data/trump-posts.json
+!data/trump-translations.json
+!data/top-stocks-cache.json
 
 # User-generated uploads (default assets remain tracked)
 public/uploads/avatar/

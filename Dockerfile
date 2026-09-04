@@ -59,6 +59,7 @@ RUN mkdir -p /app/trading-square-default
 COPY --from=build /app/data/duan-posts.json /app/trading-square-default/duan-posts.json
 COPY --from=build /app/data/trump-posts.json /app/trading-square-default/trump-posts.json
 COPY --from=build /app/data/trump-translations.json /app/trading-square-default/trump-translations.json
+COPY --from=build /app/data/top-stocks-cache.json /app/trading-square-default/top-stocks-cache.json
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/lib ./lib
 COPY package.json ./

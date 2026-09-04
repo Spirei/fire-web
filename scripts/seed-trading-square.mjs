@@ -34,4 +34,15 @@ if (fs.existsSync(defaultsDir)) {
   const translationsTarget = path.join(dataDir, translationsName);
   const runtimeTranslations = readJson(translationsTarget, {});
   writeAtomic(translationsTarget, { ...bundledTranslations, ...runtimeTranslations });
+
+  const rankingsName = "top-stocks-cache.json";
+  const bundledRankings = readJson(path.join(defaultsDir, rankingsName), {});
+  const rankingsTarget = path.join(dataDir, rankingsName);
+  const runtimeRankings = readJson(rankingsTarget, {});
+  const rankings = { ...bundledRankings };
+  for (const [market, value] of Object.entries(runtimeRankings)) {
+    const bundledAt = Number(rankings[market]?.at || 0);
+    if (Number(value?.at || 0) >= bundledAt) rankings[market] = value;
+  }
+  if (Object.keys(rankings).length > 0) writeAtomic(rankingsTarget, rankings);
 }
