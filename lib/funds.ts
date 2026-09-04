@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import PinyinMatch from "pinyin-match";
 import { getDb } from "@/lib/db";
 
 export type FundCurrency = "USD" | "EUR" | "HKD" | "CNY" | "JPY" | "KRW" | "SGD";
@@ -6,11 +7,116 @@ export type FundType = "opening" | "deposit" | "withdrawal" | "adjustment";
 export interface FundTransaction {
   id: string; currency: FundCurrency; type: FundType; amount: number; direction: 1 | -1;
   note: string; occurredAt: string; createdAt: string; sourceOrderId: string | null;
+  stockCode?: string | null; stockName?: string | null; stockMarket?: string | null;
 }
 
-interface Row { id: string; currency: FundCurrency; type: FundType; amount: number; direction: 1 | -1; note: string; occurred_at: string; created_at: string }
+interface Row {
+  id: string; currency: FundCurrency; type: FundType; amount: number; direction: 1 | -1;
+  note: string; occurred_at: string; created_at: string;
+  stock_code?: string | null; stock_name?: string | null; stock_market?: string | null;
+}
 const AUTO_ORDER_PREFIX = "fund-order-";
-const mapRow = (row: Row): FundTransaction => ({ id: row.id, currency: row.currency, type: row.type, amount: Number(row.amount), direction: row.direction, note: row.note, occurredAt: row.occurred_at, createdAt: row.created_at, sourceOrderId: row.id.startsWith(AUTO_ORDER_PREFIX) ? row.id.slice(AUTO_ORDER_PREFIX.length) : null });
+const mapRow = (row: Row): FundTransaction => ({
+  id: row.id, currency: row.currency, type: row.type, amount: Number(row.amount), direction: row.direction,
+  note: row.note, occurredAt: row.occurred_at, createdAt: row.created_at,
+  sourceOrderId: row.id.startsWith(AUTO_ORDER_PREFIX) ? row.id.slice(AUTO_ORDER_PREFIX.length) : null,
+  stockCode: row.stock_code || null, stockName: row.stock_name || null, stockMarket: row.stock_market || null
+});
+const TYPE_SEARCH: Record<FundType, string[]> = {
+  opening: ["期初", "期初资金", "opening", "初始"],
+  deposit: ["转入", "入金", "deposit", "充值", "资金转入"],
+  withdrawal: ["转出", "出金", "withdrawal", "资金转出"],
+  adjustment: ["调整", "adjustment", "余额调整", "其他"]
+};
+const SIDE_SEARCH: Record<string, string[]> = {
+  buy: ["买入", "买", "buy"],
+  sell: ["卖出", "卖", "sell"],
+  dividend: ["股息", "分红", "dividend"]
+};
+const MARKET_SEARCH: Record<string, string[]> = {
+  US: ["美股", "us", "nasdaq", "nyse"],
+  HK: ["港股", "hk", "香港"],
+  CN: ["a股", "沪", "深", "京", "cn", "上证", "深证"],
+  JP: ["日股", "jp", "日本"],
+  KR: ["韩股", "kr", "韩国"],
+  SG: ["新加坡", "sg"],
+  EU: ["欧股", "eu"]
+};
+
+function compactQuery(query: string) {
+  return query.trim().toLocaleLowerCase("zh-CN").replace(/\s+/g, "");
+}
+
+function codeVariants(code: string, market = ""): string[] {
+  const raw = code.trim().toUpperCase().replace(/^(SH|SZ|BJ|HK)/, "");
+  const variants = new Set([raw, raw.replace(/^0+/, "") || "0"]);
+  if (market === "HK" || /^\d+$/.test(raw)) {
+    const digits = raw.replace(/^0+/, "") || "0";
+    variants.add(digits.padStart(4, "0"));
+    variants.add(digits.padStart(5, "0"));
+  }
+  return [...variants].map((value) => value.toLowerCase());
+}
+
+function pinyinHit(text: string, query: string) {
+  if (!text || !query) return false;
+  try { return Boolean(PinyinMatch.match(text, query)); } catch { return false; }
+}
+
+function stockMatchesQuery(query: string, stock: { name: string; code: string; market: string }) {
+  const q = compactQuery(query);
+  if (!q) return false;
+  const name = stock.name.toLocaleLowerCase("zh-CN");
+  if (name.includes(q) || compactQuery(stock.name).includes(q)) return true;
+  if (codeVariants(stock.code, stock.market).some((code) => code === q || (q.length >= 2 && (code.includes(q) || q.includes(code))))) return true;
+  return pinyinHit(stock.name, q) || pinyinHit(stock.name, query.trim());
+}
+
+function tokenMatches(query: string, tokens: string[]) {
+  const q = compactQuery(query);
+  if (!q) return false;
+  return tokens.some((token) => {
+    const value = token.toLocaleLowerCase("zh-CN");
+    return value === q || value.startsWith(q) || (q.length >= 2 && q.startsWith(value));
+  });
+}
+
+function dateLikes(query: string): string[] {
+  const q = query.trim();
+  const likes: string[] = [];
+  const cn = /^(\d{1,2})月(\d{1,2})日?$/.exec(q);
+  if (cn) likes.push(`%-${cn[1].padStart(2, "0")}-${cn[2].padStart(2, "0")}%`);
+  const dotted = /^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/.exec(q);
+  if (dotted) likes.push(`%${dotted[1]}-${dotted[2].padStart(2, "0")}-${dotted[3].padStart(2, "0")}%`);
+  return likes;
+}
+
+function fundQueryFilter(userId: string, query: string): { sql: string; args: Array<string | number> } {
+  const raw = query.trim();
+  if (!raw) return { sql: "", args: [] };
+  const like = `%${raw}%`;
+  const sqlParts = ["f.note LIKE ?", "f.occurred_at LIKE ?", "f.currency LIKE ?"];
+  const args: Array<string | number> = [like, like, `%${raw.toUpperCase()}%`];
+  dateLikes(raw).forEach((value) => { sqlParts.push("f.occurred_at LIKE ?"); args.push(value); });
+  (Object.entries(TYPE_SEARCH) as [FundType, string[]][]).forEach(([type, tokens]) => {
+    if (tokenMatches(raw, tokens)) { sqlParts.push("f.type = ?"); args.push(type); }
+  });
+  const db = getDb();
+  const orders = db.prepare("SELECT id,name,code,market,side FROM trade_orders WHERE user_id=? AND status='filled'").all(userId) as Array<{ id: string; name: string; code: string; market: string; side: string }>;
+  orders.forEach((order) => {
+    if (stockMatchesQuery(raw, order) || tokenMatches(raw, SIDE_SEARCH[order.side] || []) || tokenMatches(raw, MARKET_SEARCH[order.market.toUpperCase()] || [order.market])) {
+      sqlParts.push("f.id = ?");
+      args.push(`${AUTO_ORDER_PREFIX}${order.id}`);
+    }
+  });
+  const manuals = db.prepare("SELECT id,note FROM fund_transactions WHERE user_id=? AND id NOT LIKE ?").all(userId, `${AUTO_ORDER_PREFIX}%`) as Array<{ id: string; note: string }>;
+  manuals.forEach((row) => {
+    if (row.note && pinyinHit(row.note, compactQuery(raw))) { sqlParts.push("f.id = ?"); args.push(row.id); }
+  });
+  return { sql: ` AND (${sqlParts.join(" OR ")})`, args };
+}
+
+const FUND_SELECT = `SELECT f.id,f.currency,f.type,f.amount,f.direction,f.note,f.occurred_at,f.created_at,o.code AS stock_code,o.name AS stock_name,o.market AS stock_market FROM fund_transactions f LEFT JOIN trade_orders o ON o.user_id=f.user_id AND f.id = ? || o.id`;
 
 interface FilledOrderCashRow {
   id: string; user_id: string; market: string; code: string; name: string; side: "buy" | "sell" | "dividend";
@@ -69,23 +175,19 @@ export function ensureOrderCashTransactions(userId: string) {
 
 export function listFundTransactions(userId: string, limit = 40, offset = 0, currency?: FundCurrency, query = "") {
   const db = getDb();
-  const keyword = `%${query.trim()}%`;
-  const search = query.trim() ? " AND (note LIKE ? OR occurred_at LIKE ?)" : "";
-  const sql = `SELECT id,currency,type,amount,direction,note,occurred_at,created_at FROM fund_transactions WHERE user_id=?${currency ? " AND currency=?" : ""}${search} ORDER BY occurred_at DESC,created_at DESC LIMIT ? OFFSET ?`;
-  const args: Array<string | number> = [userId];
+  const filter = fundQueryFilter(userId, query);
+  const sql = `${FUND_SELECT} WHERE f.user_id=?${currency ? " AND f.currency=?" : ""}${filter.sql} ORDER BY f.occurred_at DESC,f.created_at DESC LIMIT ? OFFSET ?`;
+  const args: Array<string | number> = [AUTO_ORDER_PREFIX, userId];
   if (currency) args.push(currency);
-  if (query.trim()) args.push(keyword, keyword);
-  args.push(limit, offset);
-  const rows = db.prepare(sql).all(...args);
-  return (rows as Row[]).map(mapRow);
+  args.push(...filter.args, limit, offset);
+  return (db.prepare(sql).all(...args) as Row[]).map(mapRow);
 }
 export function countFundTransactions(userId: string, currency?: FundCurrency, query = "") {
-  const keyword = `%${query.trim()}%`;
-  const search = query.trim() ? " AND (note LIKE ? OR occurred_at LIKE ?)" : "";
-  const sql = `SELECT COUNT(*) count FROM fund_transactions WHERE user_id=?${currency ? " AND currency=?" : ""}${search}`;
-  const args: string[] = [userId];
+  const filter = fundQueryFilter(userId, query);
+  const sql = `SELECT COUNT(*) count FROM fund_transactions f WHERE f.user_id=?${currency ? " AND f.currency=?" : ""}${filter.sql}`;
+  const args: Array<string | number> = [userId];
   if (currency) args.push(currency);
-  if (query.trim()) args.push(keyword, keyword);
+  args.push(...filter.args);
   const row = getDb().prepare(sql).get(...args);
   return Number((row as { count?: number } | undefined)?.count) || 0;
 }

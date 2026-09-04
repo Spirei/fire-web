@@ -2377,7 +2377,24 @@ export const V0_1_20_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_20_ENTRY;
+export const V0_1_21_ENTRY: VersionEntry = {
+  ...V0_1_20_ENTRY,
+  version: "v0.1.21",
+  date: "2026-09-05",
+  summary: "资金记录可按股票名称、代码和拼音搜索，现金账与成交订单联动。",
+  frontend: [
+    ...V0_1_20_ENTRY.frontend,
+    { name: "pinyin-match", version: "1.2.10", desc: "中文名 / 拼音首字母 / 全拼搜索" }
+  ],
+  software: V0_1_20_ENTRY.software.map((item) => item.name === "Fire" ? { ...item, version: "v0.1.21" } : item),
+  changes: [{
+    title: "资金记录联动股票名称、代码和拼音",
+    desc: "资产分析资金记录搜索不再只匹配备注原文：自动记账流水关联成交订单，可用中文名、代码（含港股 700/00700）、拼音首字母（中国移动→zgyd）和全拼查找；同时支持买入/卖出/股息、美股/港股/A股，以及 9月3日 这类日期。列表展示股票代码。",
+    kind: "feature"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_21_ENTRY;
 
 // 完整历史数组已拆分到 lib/versions-history.ts（约 200KB 历史文案，仅供版本弹窗
 // 懒加载引用）；本文件保留类型 + 当前版本条目，让设置页 / 健康检查只引用轻量常量。
