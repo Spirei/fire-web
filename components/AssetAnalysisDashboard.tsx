@@ -95,11 +95,7 @@ function defaultDateRange(): DateRange {
 }
 
 function fmtAccountMoney(value: number, symbol: string) {
-  const abs = Math.abs(value);
-  const sign = value < 0 ? "-" : "";
-  if (abs >= 1e8) return `${sign}${symbol}${(abs / 1e8).toFixed(2)}亿`;
-  if (abs >= 1e4) return `${sign}${symbol}${(abs / 1e4).toFixed(2)}万`;
-  return fmtMoney(value, symbol);
+  return Math.abs(value) >= 1e7 ? fmtMoneyCompact(value, symbol) : fmtMoney(value, symbol);
 }
 function marketDate(value: string, market: string) {
   const timeZone = market.toUpperCase() === "US" ? "America/New_York" : "Asia/Shanghai";
@@ -316,7 +312,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const symbol = CURRENCY_SYMBOLS[displayCurrency] || displayCurrency;
   const compactMoney = useCallback((value: number) => {
     const mobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
-    return currencyDisplayUnit === "compact" || (currencyDisplayUnit === "auto" && mobile)
+    return (mobile && Math.abs(value) >= 1e7) || currencyDisplayUnit === "compact" || (currencyDisplayUnit === "auto" && mobile)
       ? fmtMoneyCompact(value, symbol)
       : fmtMoney(value, symbol);
   }, [currencyDisplayUnit, symbol]);

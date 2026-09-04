@@ -28,6 +28,7 @@ function compactMoney(value: number, currency: string) {
   const sign = value >= 0 ? "+" : "−";
   const abs = Math.abs(value);
   const symbol = CURRENCY_SYMBOLS[currency] || `${currency} `;
+  if (abs >= 1e12) return `${sign}${symbol}${(abs / 1e12).toFixed(2)}万亿`;
   if (abs >= 1e8) return `${sign}${symbol}${(abs / 1e8).toFixed(2)}亿`;
   if (abs >= 1e4) return `${sign}${symbol}${(abs / 1e4).toFixed(2)}万`;
   return `${sign}${symbol}${abs.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

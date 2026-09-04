@@ -12,6 +12,7 @@ import { primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
 import { showToast } from "@/lib/toast";
 import { setThemeCookie } from "@/lib/theme";
 import { logoFontClass } from "@/lib/logoFont";
+import { fmtMoneyAdaptive } from "@/lib/format";
 
 interface Dict {
   navPreview: string;
@@ -174,7 +175,8 @@ function fmtLivePrice(v: number): string {
 
 function fmtLiveProfit(v: number, market: string): string {
   const currency = marketMeta(market).currency || "";
-  return `${v >= 0 ? "+" : "-"}${currency}${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const body = fmtMoneyAdaptive(Math.abs(v), currency, 1e7);
+  return `${v >= 0 ? "+" : "-"}${body}`;
 }
 
 // 股票图标：素材库优先（唯一标识 市场:代码），无图标时回退首字母头像

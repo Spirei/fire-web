@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import CurrencySelect from "@/components/CurrencySelect";
 import { CURRENCIES, CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/currencyPrefs";
-import { fmtMoney } from "@/lib/format";
+import { fmtMoneyAdaptive } from "@/lib/format";
 
 interface Props {
   currency: CurrencyCode;
@@ -94,6 +94,7 @@ export default function FundEntryDialog(props: Props) {
     props.setAmount(digits);
   };
   const projectedBalance = props.currentBalance + (amountValid ? amountValue * props.direction : 0);
+  const responsiveMoney = (value: number) => fmtMoneyAdaptive(value, symbol);
   useEffect(() => {
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -137,8 +138,8 @@ export default function FundEntryDialog(props: Props) {
               <small className="ml-2 font-semibold text-muted">{props.currency}</small>
             </span>
             <span className="mt-2 flex min-h-4 items-center justify-between gap-3 text-[10px]" aria-live="polite">
-              {props.amount && !amountValid ? <span className="text-down">请输入 1 至 1 万亿之间的整数金额</span> : <span className="text-muted">当前余额 {fmtMoney(props.currentBalance, symbol)}</span>}
-              <span className="ml-auto text-muted">记账后 <b className={`font-semibold ${amountValid ? projectedBalance >= props.currentBalance ? "text-up" : "text-down" : "text-ink"}`}>{fmtMoney(projectedBalance, symbol)}</b></span>
+              {props.amount && !amountValid ? <span className="text-down">请输入 1 至 1 万亿之间的整数金额</span> : <span className="text-muted">当前余额 {responsiveMoney(props.currentBalance)}</span>}
+              <span className="ml-auto text-muted">记账后 <b className={`font-semibold ${amountValid ? projectedBalance >= props.currentBalance ? "text-up" : "text-down" : "text-ink"}`}>{responsiveMoney(projectedBalance)}</b></span>
             </span>
           </div>
 

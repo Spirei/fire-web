@@ -17,7 +17,7 @@ function compact(value?: number, perShare = false) {
   const abs = Math.abs(value);
   if (abs >= 1e12) return `${(value / 1e12).toFixed(2)}万亿`;
   if (abs >= 1e8) return `${(value / 1e8).toFixed(2)}亿`;
-  if (abs >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
+  if (abs >= 1e4) return `${(value / 1e4).toFixed(2)}万`;
   return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 const last = (rows?: Point[]) => rows?.[rows.length - 1];

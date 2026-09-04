@@ -8,6 +8,7 @@ import { useAssetIcons } from "@/lib/useAssetIcons";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { getMarketBadge } from "@/lib/marketBadge";
 import type { CurrencyCode } from "@/lib/currencyPrefs";
+import { fmtNumberCompactZh } from "@/lib/format";
 
 export interface DailyPnlShareItem {
   id: string;
@@ -70,7 +71,7 @@ function loadHtml2canvas() {
 }
 
 function formatAmount(value: number) {
-  return Math.abs(value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return fmtNumberCompactZh(Math.abs(value));
 }
 
 function formatPrice(value: number, market?: string) {

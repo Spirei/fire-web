@@ -247,8 +247,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const { currency: displayCur, setCurrency: setDisplayCur } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
   const compactMoney = useCallback((value: number, currency: string) => {
-    const mobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
-    return currencyDisplayUnit === "compact" || (currencyDisplayUnit === "auto" && mobile)
+    return Math.abs(value) >= 1e7 || currencyDisplayUnit === "compact"
       ? fmtMoneyCompact(value, currency)
       : fmtMoney(value, currency);
   }, [currencyDisplayUnit]);

@@ -6,6 +6,7 @@ import { usdCap } from "@/lib/currency";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { CURRENCIES, type CurrencyCode, useDisplayCurrency } from "@/lib/currencyPrefs";
 import FireReefCurrent from "@/components/FireReefCurrent";
+import { fmtMoneyAdaptive } from "@/lib/format";
 
 const CURRENCY_OPTIONS: { value: CurrencyCode; label: string; code: CurrencyCode; market: string; flag: string }[] = CURRENCIES.map((c) => ({
   value: c.code,
@@ -21,11 +22,6 @@ type FireViewProps = {
   quotes: Record<string, Quote>;
   livePrice: (r: StockRecord) => number;
 };
-
-function fmtMoney2(n: number) {
-  if (!Number.isFinite(n)) return "—";
-  return Math.round(n).toLocaleString("zh-CN");
-}
 
 function fmtPct2(n: number, digits = 1) {
   return `${n > 0 ? "+" : ""}${n.toFixed(digits)}%`;
@@ -376,8 +372,9 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   const k = curRate / baseRate; // 主货币 → 显示币种的换算系数
   const curSymbol = CURRENCY_SYMBOLS[displayCurrency] || "$";
   const curOption = CURRENCY_OPTIONS.find((c) => c.value === displayCurrency) ?? CURRENCY_OPTIONS[0];
-  const fmtCur = (usd: number) => `${curSymbol}${fmtMoney2(usd * curRate)}`;
-  const fmtPlan = (n: number) => `${curSymbol}${fmtMoney2(n)}`;
+  const compactForViewport = (value: number) => fmtMoneyAdaptive(value, curSymbol);
+  const fmtCur = (usd: number) => compactForViewport(usd * curRate);
+  const fmtPlan = (n: number) => compactForViewport(n);
   // 当前资产可手动覆盖：默认取真实净资产（按默认/主货币），用户改了则以其为准
   const savedCurrent = lsGet("fire:fire-current-ovr", "");
   const [currentInput, setCurrentInput] = useState(() => savedCurrent || String(Math.round(currentAssets * baseRate)));

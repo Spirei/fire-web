@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { IconArrowDownLeft, IconArrowUpRight, IconCash, IconCoins, IconReceipt, IconSearch, IconTrash } from "@tabler/icons-react";
-import { fmtMoney } from "@/lib/format";
+import { fmtMoney, fmtMoneyAdaptive } from "@/lib/format";
 import { showToast } from "@/lib/toast";
 import CurrencySelect from "@/components/CurrencySelect";
 import FundEntryDialog from "@/components/FundEntryDialog";
@@ -97,8 +97,9 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
   const currentInvestment = cashNetFlow + otherNetFlow;
   const endingAsset = cash + holdings;
   const profit = endingAsset - openingAsset - currentInvestment;
-  const fullMoney = (value: number, signed = false) => `${signed && value > 0 ? "+" : ""}${fmtMoney(value, CURRENCY_SYMBOLS[currency])}`;
-  const metric = (label: string, value: number, tone: "plain" | "flow" | "result" = "plain") => <div className={`fund-flow-card fund-flow-card--${tone}`} title={`${label}：${fullMoney(value, tone !== "result")}`}><span className="fund-flow-label">{label}</span><strong className={`fund-flow-value ${tone !== "result" && value !== 0 ? value > 0 ? "text-up" : "text-down" : ""}`}>{fullMoney(value, tone !== "result")}</strong></div>;
+  const exactMoney = (value: number, signed = false) => `${signed && value > 0 ? "+" : ""}${fmtMoney(value, CURRENCY_SYMBOLS[currency])}`;
+  const cardMoney = (value: number, signed = false) => <>{signed && value > 0 ? "+" : ""}{fmtMoneyAdaptive(value, CURRENCY_SYMBOLS[currency], 1e6)}</>;
+  const metric = (label: string, value: number, tone: "plain" | "flow" | "result" = "plain") => <div className={`fund-flow-card fund-flow-card--${tone}`} title={`${label}：${exactMoney(value, tone !== "result")}`}><span className="fund-flow-label">{label}</span><strong className={`fund-flow-value ${tone !== "result" && value !== 0 ? value > 0 ? "text-up" : "text-down" : ""}`}>{cardMoney(value, tone !== "result")}</strong></div>;
   return <section className="funds-panel card overflow-visible">
     <div className="flex items-center justify-between gap-3 border-b border-edge px-4 py-4"><div className="min-w-0"><div className="flex items-center gap-2.5"><h3 className="text-base font-bold">资金系统</h3><CurrencySelect value={currency} align="left" onChange={(next) => { setCurrency(next as Currency); setRecordsPage(0); }} /></div><p className="mt-0.5 truncate text-[11px] text-muted">现金与持仓共同构成账户资产</p></div><button type="button" onClick={() => setOpen(true)} className="btn-line h-8 shrink-0 px-3 text-xs"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="mr-1 h-3.5 w-3.5"><path d="M10 4v12M4 10h12" /></svg>记一笔</button></div>
     <div className="p-5">

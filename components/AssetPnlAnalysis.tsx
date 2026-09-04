@@ -11,6 +11,7 @@ import { getMarketBadge } from "@/lib/marketBadge";
 import { showToast } from "@/lib/toast";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
+import { fmtMoney, fmtMoneyCompact } from "@/lib/format";
 
 /** 成交日按市场时区归到 YYYY-MM-DD（与资产分析页同款，时间加权需要） */
 function marketDate(value: string, market: string) {
@@ -479,14 +480,16 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   const currencyFactor = rates[displayCurrency] || 1;
   const curSymbol = CURRENCY_SYMBOLS[displayCurrency] || displayCurrency;
   const curOption = CURRENCIES.find((o) => o.code === displayCurrency) || CURRENCIES[0];
-  const moneyDisp = (value: number) =>
-    `${value >= 0 ? "+" : "−"}${curSymbol}${Math.abs(value * currencyFactor).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const moneyDisp = (value: number) => {
+    const converted = value * currencyFactor;
+    const body = Math.abs(converted) >= 1e7 ? fmtMoneyCompact(Math.abs(converted), curSymbol) : fmtMoney(Math.abs(converted), curSymbol);
+    return `${converted >= 0 ? "+" : "−"}${body}`;
+  };
   const compactDisp = (value: number) => {
     const converted = value * currencyFactor;
     const abs = Math.abs(converted);
     const sign = converted < 0 ? "−" : "+";
-    const amount = abs >= 10000 ? `${(abs / 10000).toFixed(2)}万` : abs >= 1000 ? `${(abs / 1000).toFixed(2)}K` : abs.toFixed(2);
-    return `${sign}${curSymbol}${amount}`;
+    return `${sign}${fmtMoneyCompact(abs, curSymbol)}`;
   };
   const benchLabel = BENCHMARKS.find((b) => b.key === benchKey)?.label ?? "标普 500";
 
