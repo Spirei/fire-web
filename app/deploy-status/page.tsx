@@ -136,6 +136,7 @@ const translateWorkflowLabel = (label: string) => ({
 } as Record<string, string>)[label] || label;
 const RUNS_PER_PAGE = 5;
 type ContainerUpdateState = "idle" | "triggering" | "watching" | "restarting" | "healthy" | "unchanged" | "failed";
+type AutoUpdateSchedule = { key: string; deadline: number; triggered: boolean };
 
 type HeatView = "day" | "week" | "month" | "total";
 type HeatCell = { key: string; label: string; count: number; date?: Date; weekKey?: string; monthKey?: string; empty?: boolean };
@@ -248,6 +249,8 @@ function UpdateHeatmap({ runs }: { runs: Run[] }) {
 }
 
 const sleep = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+const AUTO_UPDATE_DELAY_MS = 5 * 60 * 1000;
+const AUTO_UPDATE_STORAGE_KEY = "fire:deploy-auto-update";
 const readApiJson = async <T extends Record<string, unknown>>(response: Response): Promise<T> => {
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) {
@@ -281,6 +284,7 @@ export default function DeployStatusPage() {
   const [token, setToken] = useState("");
   const [configError, setConfigError] = useState("");
   const autoUpdateKeyRef = useRef("");
+  const [autoUpdateDeadline, setAutoUpdateDeadline] = useState<number | null>(null);
   const [autoUpdateSeconds, setAutoUpdateSeconds] = useState<number | null>(null);
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -356,6 +360,10 @@ export default function DeployStatusPage() {
   };
   const updateContainer = async () => {
     if (containerUpdateState === "triggering" || containerUpdateState === "watching" || containerUpdateState === "restarting") return;
+    if (autoUpdateKeyRef.current) {
+      try { localStorage.setItem(AUTO_UPDATE_STORAGE_KEY, JSON.stringify({ key: autoUpdateKeyRef.current, deadline: autoUpdateDeadline, triggered: true })); } catch { /* storage unavailable */ }
+    }
+    setAutoUpdateDeadline(null);
     setAutoUpdateSeconds(null);
     setContainerUpdateState("triggering"); setNotice(""); setError("");
     try {
@@ -410,27 +418,39 @@ export default function DeployStatusPage() {
     !runtimeVersion.matchesImage && !imageBuilding
   );
   useEffect(() => {
-    if (!autoUpdateEligible || autoUpdateSeconds !== null) return;
+    if (!autoUpdateEligible) {
+      autoUpdateKeyRef.current = "";
+      setAutoUpdateDeadline(null);
+      setAutoUpdateSeconds(null);
+      return;
+    }
     const key = `${latest?.id || ""}:${imageVersion?.latestSuccessfulSha || ""}`;
     if (!key || autoUpdateKeyRef.current === key) return;
     autoUpdateKeyRef.current = key;
-    setAutoUpdateSeconds(300);
-  }, [autoUpdateEligible, autoUpdateSeconds, imageVersion?.latestSuccessfulSha, latest?.id]);
+    let saved: AutoUpdateSchedule | null = null;
+    try { saved = JSON.parse(localStorage.getItem(AUTO_UPDATE_STORAGE_KEY) || "null") as AutoUpdateSchedule | null; } catch { /* replace invalid state below */ }
+    if (saved?.key === key && saved.triggered) return;
+    const completedAt = Date.parse(imageVersion?.latestSuccessfulAt || latest?.updatedAt || "");
+    const canonicalDeadline = Number.isFinite(completedAt) ? completedAt + AUTO_UPDATE_DELAY_MS : Date.now() + AUTO_UPDATE_DELAY_MS;
+    const deadline = saved?.key === key && typeof saved.deadline === "number" && Number.isFinite(saved.deadline) ? saved.deadline : canonicalDeadline;
+    try { localStorage.setItem(AUTO_UPDATE_STORAGE_KEY, JSON.stringify({ key, deadline, triggered: false })); } catch { /* countdown still works for this page */ }
+    setAutoUpdateDeadline(deadline);
+    setAutoUpdateSeconds(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+  }, [autoUpdateEligible, imageVersion?.latestSuccessfulAt, imageVersion?.latestSuccessfulSha, latest?.id, latest?.updatedAt]);
   useEffect(() => {
-    if (autoUpdateSeconds === null) return;
-    const timer = window.setInterval(() => {
-      setAutoUpdateSeconds((value) => {
-        if (value === null) return null;
-        if (value <= 1) {
-          window.clearInterval(timer);
-          void updateContainer();
-          return null;
-        }
-        return value - 1;
-      });
-    }, 1000);
+    if (autoUpdateDeadline === null) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((autoUpdateDeadline - Date.now()) / 1000));
+      setAutoUpdateSeconds(remaining);
+      if (remaining === 0) {
+        window.clearInterval(timer);
+        void updateContainer();
+      }
+    };
+    const timer = window.setInterval(tick, 1000);
+    tick();
     return () => window.clearInterval(timer);
-  }, [autoUpdateSeconds, updateContainer]);
+  }, [autoUpdateDeadline]);
   const latestAttemptFailed = Boolean(imageProgress && imageProgress.status === "completed" && imageProgress.conclusion !== "success" && sourceVersion && imageProgress.sha === sourceVersion.shortSha);
   const sourceState = sourceVersion
     ? { label: `main ${sourceVersion.shortSha}`, dot: "bg-slate-400", text: "text-slate-600 dark:text-slate-300" }
