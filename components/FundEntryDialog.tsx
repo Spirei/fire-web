@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CurrencySelect from "@/components/CurrencySelect";
 import { CURRENCIES, CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/currencyPrefs";
@@ -81,6 +81,7 @@ function FundDatePicker({ value, onChange, max }: { value: string; onChange: (va
 
 export default function FundEntryDialog(props: Props) {
   const [amountFocused, setAmountFocused] = useState(false);
+  const amountInputRef = useRef<HTMLInputElement>(null);
   const current = CURRENCIES.find((item) => item.code === props.currency) ?? CURRENCIES[0];
   const symbol = CURRENCY_SYMBOLS[props.currency];
   const maxDate = new Date().toISOString().slice(0, 10);
@@ -88,11 +89,32 @@ export default function FundEntryDialog(props: Props) {
   const amountValid = Number.isFinite(amountValue) && amountValue > 0 && amountValue <= 1e12;
   const displayAmount = props.amount ? amountValue.toLocaleString("en-US", { maximumFractionDigits: 0 }) : "";
   const digitCount = displayAmount.replace(/\D/g, "").length;
-  let visibleDigitIndex = 0;
+  const amountChars = (() => {
+    const nodes: Array<{ key: string; character: string; color?: string }> = [];
+    let digitIndex = 0;
+    for (const character of displayAmount) {
+      if (character === ",") {
+        nodes.push({ key: `sep-${digitIndex}`, character });
+        continue;
+      }
+      nodes.push({ key: `d-${digitIndex}`, character, color: RAINBOW_DIGIT_COLORS[digitIndex % RAINBOW_DIGIT_COLORS.length] });
+      digitIndex += 1;
+    }
+    return nodes;
+  })();
   const updateAmount = (input: string) => {
     const digits = input.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 13);
     props.setAmount(digits);
   };
+  const pinAmountCaret = (input: HTMLInputElement) => {
+    const end = input.value.length;
+    input.setSelectionRange(end, end);
+  };
+  useLayoutEffect(() => {
+    const input = amountInputRef.current;
+    if (!input || document.activeElement !== input) return;
+    pinAmountCaret(input);
+  }, [displayAmount]);
   const projectedBalance = props.currentBalance + (amountValid ? amountValue * props.direction : 0);
   const responsiveMoney = (value: number) => fmtMoneyAdaptive(value, symbol);
   useEffect(() => {
@@ -125,21 +147,19 @@ export default function FundEntryDialog(props: Props) {
             <span className="fund-amount-field flex h-16 items-center rounded-xl border border-edge bg-white px-4 dark:bg-[#151a23]">
               <b className="mr-2 text-lg text-muted">{symbol}</b>
               <span className="relative h-full min-w-0 flex-1 overflow-hidden">
-                <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-nowrap text-[28px] font-bold leading-none tabular-nums">
-                  {displayAmount ? displayAmount.split("").map((character, index) => {
-                    if (character === ",") return <span key={`${index}-${character}`} className="text-muted/70">,</span>;
-                    const color = RAINBOW_DIGIT_COLORS[visibleDigitIndex++ % RAINBOW_DIGIT_COLORS.length];
-                    return <span key={`${index}-${character}`} style={{ color }}>{character}</span>;
-                  }) : <span className="text-faint">0</span>}
-                  {amountFocused && <i className="fund-rainbow-caret ml-px h-8 w-[2px] shrink-0 rounded-full" style={{ backgroundColor: RAINBOW_DIGIT_COLORS[digitCount % RAINBOW_DIGIT_COLORS.length], boxShadow: `0 0 9px ${RAINBOW_DIGIT_COLORS[digitCount % RAINBOW_DIGIT_COLORS.length]}` }} />}
+                <span aria-hidden="true" className="fund-amount-display">
+                  <span className="fund-amount-display-text">
+                    {displayAmount ? amountChars.map((item) => <span key={item.key} className={item.color ? undefined : "text-muted/70"} style={item.color ? { color: item.color } : undefined}>{item.character}</span>) : <span className="text-faint">0</span>}
+                    <i key="caret" className="fund-rainbow-caret" style={{ backgroundColor: RAINBOW_DIGIT_COLORS[digitCount % RAINBOW_DIGIT_COLORS.length], boxShadow: `0 0 9px ${RAINBOW_DIGIT_COLORS[digitCount % RAINBOW_DIGIT_COLORS.length]}`, visibility: amountFocused ? "visible" : "hidden" }} />
+                  </span>
                 </span>
-                <input aria-label="金额，仅可输入数字" autoFocus value={displayAmount} onFocus={(event) => { setAmountFocused(true); event.currentTarget.setSelectionRange(event.currentTarget.value.length, event.currentTarget.value.length); }} onClick={(event) => event.currentTarget.setSelectionRange(event.currentTarget.value.length, event.currentTarget.value.length)} onBlur={() => setAmountFocused(false)} onChange={(event) => updateAmount(event.target.value)} inputMode="numeric" autoComplete="off" className="fund-amount-input absolute inset-0 z-10 h-full w-full min-w-0 cursor-text border-0 bg-transparent p-0 text-[28px] font-bold leading-none text-transparent caret-transparent tabular-nums outline-none selection:bg-transparent" />
+                <input ref={amountInputRef} aria-label="金额，仅可输入数字" autoFocus value={displayAmount} onFocus={(event) => { setAmountFocused(true); pinAmountCaret(event.currentTarget); }} onClick={(event) => pinAmountCaret(event.currentTarget)} onKeyUp={(event) => pinAmountCaret(event.currentTarget)} onBlur={() => setAmountFocused(false)} onChange={(event) => updateAmount(event.target.value)} onKeyDown={(event) => { if (event.metaKey || event.ctrlKey || event.altKey) return; if (event.key.length === 1 && !/\d/.test(event.key)) event.preventDefault(); }} inputMode="numeric" autoComplete="off" className="fund-amount-input absolute inset-0 z-10 h-full w-full min-w-0 cursor-text border-0 bg-transparent p-0 text-[28px] font-bold leading-none text-transparent caret-transparent tabular-nums outline-none selection:bg-transparent" />
               </span>
-              <small className="ml-2 font-semibold text-muted">{props.currency}</small>
+              <small className="ml-2 shrink-0 font-semibold text-muted">{props.currency}</small>
             </span>
-            <span className="mt-2 flex min-h-4 items-center justify-between gap-3 text-[10px]" aria-live="polite">
-              {props.amount && !amountValid ? <span className="text-down">请输入 1 至 1 万亿之间的整数金额</span> : <span className="text-muted">当前余额 {responsiveMoney(props.currentBalance)}</span>}
-              <span className="ml-auto text-muted">记账后 <b className={`font-semibold ${amountValid ? projectedBalance >= props.currentBalance ? "text-up" : "text-down" : "text-ink"}`}>{responsiveMoney(projectedBalance)}</b></span>
+            <span className="mt-2 grid h-4 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden text-[10px] leading-4" aria-live="polite">
+              <span className={`truncate ${props.amount && !amountValid ? "text-down" : "text-muted"}`}>{props.amount && !amountValid ? "请输入 1 至 1 万亿之间的整数金额" : `当前余额 ${responsiveMoney(props.currentBalance)}`}</span>
+              <span className="truncate text-muted">记账后 <b className={`font-semibold ${amountValid ? projectedBalance >= props.currentBalance ? "text-up" : "text-down" : "text-ink"}`}>{responsiveMoney(projectedBalance)}</b></span>
             </span>
           </div>
 

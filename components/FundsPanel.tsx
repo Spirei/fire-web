@@ -6,7 +6,9 @@ import { showToast } from "@/lib/toast";
 import CurrencySelect from "@/components/CurrencySelect";
 import FundEntryDialog from "@/components/FundEntryDialog";
 import AppModal from "@/components/AppModal";
+import RainbowTextInput from "@/components/RainbowTextInput";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/currencyPrefs";
+import { stripTrailingStockCode } from "@/lib/stockTitle";
 import { useRates } from "@/lib/useRates";
 import { usePersistedState } from "@/lib/usePersistedState";
 
@@ -14,6 +16,16 @@ type Currency = CurrencyCode;
 interface Tx { id: string; currency: Currency; type: string; amount: number; direction: 1 | -1; note: string; occurredAt: string; sourceOrderId?: string | null; stockCode?: string | null; stockName?: string | null }
 interface Summary { openingAsset: number; cashNetFlow: number; stockNetFlow: number; otherNetFlow: number }
 const TYPE_LABEL: Record<string, string> = { opening: "期初资金", deposit: "转入", withdrawal: "转出", adjustment: "余额调整" };
+function recordLabel(item: Tx) {
+  if (!item.sourceOrderId) {
+    return item.type === "deposit" || item.type === "withdrawal" ? item.direction > 0 ? "资金转入" : "资金转出" : TYPE_LABEL[item.type] || "资金变动";
+  }
+  const prefix = item.note.split(" · ")[0];
+  const action = prefix.startsWith("买入") ? "买入" : prefix.startsWith("卖出") ? "卖出" : prefix.startsWith("股息") ? "股息" : "";
+  const name = stripTrailingStockCode(item.stockName || prefix.replace(/^(买入|卖出|股息)\s*/, ""), item.stockCode);
+  if (action && name) return `${action} ${name}`;
+  return stripTrailingStockCode(prefix, item.stockCode) || prefix;
+}
 const EMPTY: Record<Currency, number> = { USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 };
 const EMPTY_SUMMARY: Record<Currency, Summary> = Object.fromEntries(Object.keys(EMPTY).map((key) => [key, { openingAsset: 0, cashNetFlow: 0, stockNetFlow: 0, otherNetFlow: 0 }])) as Record<Currency, Summary>;
 const RECORD_PAGE_SIZE = 30;
@@ -152,11 +164,11 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
       <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 买卖与股息属于账户内部现金流，不计入外部投入。</p><p>3. <button type="button" onClick={() => { setRecordsPage(0); setRecordsOpen(true); }} className="border-b border-dashed border-muted/60 pb-px font-semibold text-muted transition-colors hover:border-ink hover:text-ink">查看资金记录</button></p></div>
     </div>
     {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={balances[currency] || 0} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
-    {recordsOpen && <AppModal title="资金记录" desc={`折算为 ${currency} · 共 ${recordsTotal} 笔 · 当前余额 ${fmtMoney(cash, CURRENCY_SYMBOLS[currency])}`} size="md" onClose={() => setRecordsOpen(false)} headerActions={<label className="relative block"><IconSearch size={14} stroke={1.8} className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted ${recordsLoading ? "animate-pulse" : ""}`} /><input autoFocus value={recordsQuery} onChange={(event) => setRecordsQuery(event.target.value)} className="h-9 w-full rounded-xl border border-edge bg-bg-gray pl-8 pr-8 text-[11px] text-ink outline-none transition-colors placeholder:text-faint focus:border-[#3297f6]/60 focus:bg-white dark:focus:bg-white/5" placeholder="名称、代码、拼音、买入/卖出" />{recordsQuery && <button type="button" onClick={() => setRecordsQuery("")} className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:bg-white hover:text-ink dark:hover:bg-white/10" aria-label="清空搜索">×</button>}</label>}>
-      <div className="-mx-3 max-h-[min(520px,62vh)] overflow-y-auto px-1 sm:-mx-2">
+    {recordsOpen && <AppModal title="资金记录" desc={`折算为 ${currency} · 共 ${recordsTotal} 笔 · 当前余额 ${fmtMoney(cash, CURRENCY_SYMBOLS[currency])}`} size="md" onClose={() => setRecordsOpen(false)} headerActions={<label className="relative block"><IconSearch size={14} stroke={1.8} className={`pointer-events-none absolute left-3 top-1/2 z-20 -translate-y-1/2 text-muted ${recordsLoading ? "animate-pulse" : ""}`} /><RainbowTextInput autoFocus value={recordsQuery} onChange={(event) => setRecordsQuery(event.target.value)} placeholder="名称、代码、拼音、买入/卖出" className="h-9 w-full rounded-xl border border-edge bg-bg-gray pl-8 pr-8 text-[11px] text-ink outline-none transition-colors focus-within:border-[#3297f6]/60 focus-within:bg-white dark:focus-within:bg-white/5" />{recordsQuery && <button type="button" onClick={() => setRecordsQuery("")} className="absolute right-1.5 top-1/2 z-20 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:bg-white hover:text-ink dark:hover:bg-white/10" aria-label="清空搜索">×</button>}</label>}>
+      <div className="-mx-3 h-[min(520px,62vh)] overflow-y-auto px-1 sm:-mx-2">
         {recordsLoading && currencyTransactions.length === 0 ? <div className="space-y-2 px-2 py-1">{Array.from({ length: 6 }, (_, index) => <div key={index} className="flex animate-pulse items-center gap-3 rounded-[14px] px-3 py-3"><i className="h-9 w-9 rounded-xl bg-bg-gray" /><span className="flex-1"><i className="block h-3 w-2/5 rounded bg-bg-gray" /><i className="mt-2 block h-2.5 w-1/4 rounded bg-bg-gray" /></span><i className="h-3 w-20 rounded bg-bg-gray" /></div>)}</div> : currencyTransactions.length ? currencyTransactions.map((item) => {
           const automatic = !!item.sourceOrderId;
-          const label = automatic ? item.note.split(" · ")[0] : item.type === "deposit" || item.type === "withdrawal" ? item.direction > 0 ? "资金转入" : "资金转出" : TYPE_LABEL[item.type] || "资金变动";
+          const label = recordLabel(item);
           const orderAction = label.startsWith("买入") ? "buy" : label.startsWith("卖出") ? "sell" : label.startsWith("股息") ? "dividend" : null;
           const orderIconClass = orderAction === "buy" ? "bg-up-bg text-up" : orderAction === "sell" ? "bg-down-bg text-down" : "bg-brand-light text-brand-deep";
           return <div key={item.id} className="group flex items-center gap-3 rounded-[14px] px-3 py-3 transition-colors hover:bg-bg-gray">

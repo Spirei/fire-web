@@ -4294,16 +4294,95 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   border-color:#566275;
   background:#171d27;
 }
+.fund-amount-display {
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  overflow:hidden;
+  pointer-events:none;
+}
+.fund-amount-display-text {
+  min-width:0;
+  overflow:hidden;
+  white-space:pre;
+  font-size:28px;
+  font-weight:700;
+  line-height:1;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0;
+}
 @keyframes fund-rainbow-caret-blink { 0%,46% { opacity:1; } 47%,100% { opacity:.15; } }
-.fund-rainbow-caret { animation:fund-rainbow-caret-blink 1.05s steps(1,end) infinite; }
+.fund-rainbow-caret {
+  display:inline-block;
+  width:2px;
+  height:.86em;
+  margin-left:1px;
+  vertical-align:-.06em;
+  border-radius:999px;
+  animation:fund-rainbow-caret-blink 1.05s steps(1,end) infinite;
+}
 @media (prefers-reduced-motion:reduce) { .fund-rainbow-caret { animation:none; } }
 
-/* 股票添加搜索框：允许中英文与数字，逐字符实时着色。 */
-.rainbow-text-field { position:relative; display:inline-flex; align-items:center; min-width:0; overflow:hidden; cursor:text; font-weight:700; }
-.rainbow-text-display,.rainbow-text-native { box-sizing:border-box; width:100%; min-width:0; font:inherit; line-height:inherit; letter-spacing:inherit; text-align:inherit; white-space:pre; }
-.rainbow-text-display { pointer-events:none; }
-.rainbow-text-placeholder { color:#8d99ab; font-family:inherit; font-size:inherit; font-weight:400 !important; letter-spacing:inherit; }
-.rainbow-text-native,.rainbow-text-native:focus { position:absolute; inset:0; z-index:1; border:0 !important; background:transparent !important; color:transparent !important; caret-color:#54a8ff !important; -webkit-text-fill-color:transparent !important; outline:none !important; box-shadow:none !important; }
+/* 彩虹搜索：彩色字与透明输入共用同一套字体/内边距，避免逐字输入时错位抖动。 */
+.rainbow-text-field {
+  position:relative;
+  display:flex;
+  align-items:center;
+  min-width:0;
+  overflow:hidden;
+  cursor:text;
+  font-weight:700;
+}
+.rainbow-text-display {
+  pointer-events:none;
+  display:flex;
+  align-items:center;
+  width:100%;
+  min-width:0;
+  overflow:hidden;
+  font:inherit;
+  line-height:inherit;
+  letter-spacing:inherit;
+}
+.rainbow-text-display-text {
+  min-width:0;
+  overflow:hidden;
+  white-space:pre;
+  font:inherit;
+  line-height:inherit;
+  letter-spacing:inherit;
+}
+.rainbow-text-placeholder {
+  color:#8d99ab;
+  font-family:inherit;
+  font-size:inherit;
+  font-weight:400 !important;
+  letter-spacing:inherit;
+  line-height:inherit;
+}
+.rainbow-text-native,
+.rainbow-text-native:focus {
+  position:absolute;
+  inset:0;
+  z-index:1;
+  box-sizing:border-box;
+  width:100%;
+  min-width:0;
+  padding:inherit;
+  font:inherit;
+  line-height:inherit;
+  letter-spacing:inherit;
+  text-align:inherit;
+  white-space:pre;
+  border:0 !important;
+  background:transparent !important;
+  color:transparent !important;
+  caret-color:#54a8ff !important;
+  -webkit-text-fill-color:transparent !important;
+  outline:none !important;
+  box-shadow:none !important;
+}
 .rainbow-text-native::selection { background:color-mix(in srgb,#4ca9f5 25%,transparent); -webkit-text-fill-color:transparent; }
 
 /* react-photo-view 工具栏按钮：沿用组件类名，去掉默认按钮描边 */

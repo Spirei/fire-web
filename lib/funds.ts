@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import PinyinMatch from "pinyin-match";
 import { getDb } from "@/lib/db";
+import { stockTitle } from "@/lib/stockTitle";
 
 export type FundCurrency = "USD" | "EUR" | "HKD" | "CNY" | "JPY" | "KRW" | "SGD";
 export type FundType = "opening" | "deposit" | "withdrawal" | "adjustment";
@@ -144,7 +145,7 @@ function writeOrderCashTransaction(order: FilledOrderCashRow) {
   if (!Number.isFinite(signed) || Math.abs(signed) < 0.00000001) return;
   const action = order.side === "buy" ? "买入" : order.side === "sell" ? "卖出" : "股息";
   db.prepare("INSERT INTO fund_transactions (id,user_id,currency,type,amount,direction,note,occurred_at,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
-    .run(id, order.user_id, settlementCurrency(order.market), "adjustment", Math.abs(signed), signed > 0 ? 1 : -1, `${action} ${order.name || order.code} · 订单自动记账`.slice(0, 200), order.traded_at, order.created_at);
+    .run(id, order.user_id, settlementCurrency(order.market), "adjustment", Math.abs(signed), signed > 0 ? 1 : -1, `${action} ${stockTitle(order.name, order.code)} · 订单自动记账`.slice(0, 200), order.traded_at, order.created_at);
 }
 
 /** 将一笔订单精确同步到现金账；待成交、撤销、删除订单不会留下现金流水。 */
