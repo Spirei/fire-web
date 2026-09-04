@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { IconArrowsExchange, IconCash, IconReceipt, IconTrash } from "@tabler/icons-react";
+import { IconArrowDownLeft, IconArrowUpRight, IconCash, IconCoins, IconReceipt, IconTrash } from "@tabler/icons-react";
 import { fmtMoney } from "@/lib/format";
 import { showToast } from "@/lib/toast";
 import CurrencySelect from "@/components/CurrencySelect";
@@ -95,8 +95,10 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
         {currencyTransactions.length ? currencyTransactions.map((item) => {
           const automatic = !!item.sourceOrderId;
           const label = automatic ? item.note.split(" · ")[0] : item.type === "deposit" || item.type === "withdrawal" ? item.direction > 0 ? "资金转入" : "资金转出" : TYPE_LABEL[item.type] || "资金变动";
+          const orderAction = label.startsWith("买入") ? "buy" : label.startsWith("卖出") ? "sell" : label.startsWith("股息") ? "dividend" : null;
+          const orderIconClass = orderAction === "buy" ? "bg-up-bg text-up" : orderAction === "sell" ? "bg-down-bg text-down" : "bg-brand-light text-brand-deep";
           return <div key={item.id} className="group flex items-center gap-3 rounded-[14px] px-3 py-3 transition-colors hover:bg-bg-gray">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-bg-gray text-muted group-hover:bg-white group-hover:text-ink-2 dark:group-hover:bg-white/10">{automatic ? <IconArrowsExchange size={17} stroke={1.7} /> : <IconCash size={17} stroke={1.7} />}</span>
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-[1.04] ${automatic ? orderIconClass : "bg-bg-gray text-muted"}`}>{orderAction === "buy" ? <IconArrowDownLeft size={18} stroke={1.9} /> : orderAction === "sell" ? <IconArrowUpRight size={18} stroke={1.9} /> : orderAction === "dividend" ? <IconCoins size={18} stroke={1.8} /> : <IconCash size={17} stroke={1.7} />}</span>
             <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><b className="truncate text-xs text-ink">{label}</b>{automatic && <small className="rounded-full border border-edge px-1.5 py-0.5 text-[9px] font-semibold text-muted">自动</small>}</span><small className="mt-1 block truncate text-[10px] text-muted">{new Date(item.occurredAt).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}{item.note && !automatic ? ` · ${item.note}` : ""}</small></span>
             <b className={`shrink-0 text-xs tabular-nums ${item.direction > 0 ? "text-up" : "text-down"}`}>{item.direction > 0 ? "+" : "−"}{fmtMoney(item.amount, CURRENCY_SYMBOLS[currency])}</b>
             {!automatic && <button type="button" onClick={() => void remove(item.id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted opacity-0 transition-all hover:bg-down/10 hover:text-down focus:opacity-100 group-hover:opacity-100" title="删除记录" aria-label="删除资金记录"><IconTrash size={15} stroke={1.7} /></button>}
