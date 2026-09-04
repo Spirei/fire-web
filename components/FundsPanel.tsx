@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { IconArrowDownLeft, IconArrowUpRight, IconCash, IconCoins, IconReceipt, IconSearch, IconTrash } from "@tabler/icons-react";
 import { fmtMoney, fmtMoneyAdaptive } from "@/lib/format";
 import { showToast } from "@/lib/toast";
@@ -34,23 +34,46 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
   const [note, setNote] = useState("");
   const [occurredAt, setOccurredAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
+  const recordsCache = useRef(new Map<string, { transactions: Tx[]; total: number }>());
+  const recordsRequest = useRef<{ id: number; controller: AbortController } | null>(null);
   const load = useCallback(async () => {
     const res = await fetch("/api/v1/funds?limit=1", { cache: "no-store" });
     const json = await res.json().catch(() => null);
     if (!res.ok) return;
+    recordsCache.current.clear();
     const next = { ...EMPTY, ...(json?.data?.balances || {}) };
     setBalances(next); setSummaries({ ...EMPTY_SUMMARY, ...(json?.data?.summaries || {}) }); onBalancesChange(next);
   }, [onBalancesChange]);
   const loadRecords = useCallback(async (nextCurrency: Currency, page: number, query = "") => {
+    const normalizedQuery = query.trim();
+    const key = `${nextCurrency}:${page}:${normalizedQuery.toLocaleLowerCase("zh-CN")}`;
+    const cached = recordsCache.current.get(key);
+    if (cached) {
+      setTransactions(cached.transactions);
+      setRecordsTotal(cached.total);
+      setRecordsLoading(false);
+      return;
+    }
+    recordsRequest.current?.controller.abort();
+    const controller = new AbortController();
+    const id = (recordsRequest.current?.id || 0) + 1;
+    recordsRequest.current = { id, controller };
     setRecordsLoading(true);
     try {
       const offset = page * RECORD_PAGE_SIZE;
-      const res = await fetch(`/api/v1/funds?currency=${nextCurrency}&limit=${RECORD_PAGE_SIZE}&offset=${offset}&q=${encodeURIComponent(query)}`, { cache: "no-store" });
+      const res = await fetch(`/api/v1/funds?recordsOnly=1&currency=${nextCurrency}&limit=${RECORD_PAGE_SIZE}&offset=${offset}&q=${encodeURIComponent(normalizedQuery)}`, { cache: "no-store", signal: controller.signal });
       const json = await res.json().catch(() => null);
-      if (!res.ok) return;
-      setTransactions(json?.data?.transactions || []);
-      setRecordsTotal(Number(json?.data?.pagination?.total) || 0);
-    } finally { setRecordsLoading(false); }
+      if (!res.ok || recordsRequest.current?.id !== id) return;
+      const nextTransactions = json?.data?.transactions || [];
+      const nextTotal = Number(json?.data?.pagination?.total) || 0;
+      recordsCache.current.set(key, { transactions: nextTransactions, total: nextTotal });
+      setTransactions(nextTransactions);
+      setRecordsTotal(nextTotal);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) showToast("资金记录搜索失败", "err");
+    } finally {
+      if (recordsRequest.current?.id === id) setRecordsLoading(false);
+    }
   }, []);
   useEffect(() => {
     void load();
@@ -66,7 +89,7 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
     if (recordsOpen) void loadRecords(currency, recordsPage, debouncedQuery);
   }, [currency, debouncedQuery, loadRecords, recordsOpen, recordsPage]);
   useEffect(() => {
-    const timer = window.setTimeout(() => { setRecordsPage(0); setDebouncedQuery(recordsQuery.trim()); }, 220);
+    const timer = window.setTimeout(() => { setRecordsPage(0); setDebouncedQuery(recordsQuery.trim()); }, 120);
     return () => window.clearTimeout(timer);
   }, [recordsQuery]);
   useEffect(() => {
@@ -87,6 +110,7 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
   const remove = async (id: string) => {
     const res = await fetch(`/api/v1/funds/${encodeURIComponent(id)}`, { method: "DELETE" });
     if (!res.ok) return showToast("删除失败", "err");
+    recordsCache.current.clear();
     await load(); await loadRecords(currency, recordsPage, debouncedQuery);
   };
   const cash = balances[currency] || 0;
@@ -119,9 +143,9 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
       <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 买卖与股息属于账户内部现金流，不计入外部投入。<button type="button" onClick={() => { setRecordsPage(0); setRecordsOpen(true); }} className="ml-1 font-semibold text-[#3297f6] transition-colors hover:text-[#1976d2] hover:underline">查看资金记录</button></p></div>
     </div>
     {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={cash} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
-    {recordsOpen && <AppModal title="资金记录" desc={`${currency} 账户 · 共 ${recordsTotal} 笔 · 当前余额 ${fmtMoney(cash, CURRENCY_SYMBOLS[currency])}`} size="md" onClose={() => setRecordsOpen(false)} headerActions={<label className="relative block"><IconSearch size={14} stroke={1.8} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" /><input autoFocus value={recordsQuery} onChange={(event) => setRecordsQuery(event.target.value)} className="h-9 w-full rounded-xl border border-edge bg-bg-gray pl-8 pr-8 text-[11px] text-ink outline-none transition-colors placeholder:text-faint focus:border-[#3297f6]/60 focus:bg-white dark:focus:bg-white/5" placeholder="搜索资金记录" />{recordsQuery && <button type="button" onClick={() => setRecordsQuery("")} className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:bg-white hover:text-ink dark:hover:bg-white/10" aria-label="清空搜索">×</button>}</label>}>
+    {recordsOpen && <AppModal title="资金记录" desc={`${currency} 账户 · 共 ${recordsTotal} 笔 · 当前余额 ${fmtMoney(cash, CURRENCY_SYMBOLS[currency])}`} size="md" onClose={() => setRecordsOpen(false)} headerActions={<label className="relative block"><IconSearch size={14} stroke={1.8} className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted ${recordsLoading ? "animate-pulse" : ""}`} /><input autoFocus value={recordsQuery} onChange={(event) => setRecordsQuery(event.target.value)} className="h-9 w-full rounded-xl border border-edge bg-bg-gray pl-8 pr-8 text-[11px] text-ink outline-none transition-colors placeholder:text-faint focus:border-[#3297f6]/60 focus:bg-white dark:focus:bg-white/5" placeholder="搜索资金记录" />{recordsQuery && <button type="button" onClick={() => setRecordsQuery("")} className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:bg-white hover:text-ink dark:hover:bg-white/10" aria-label="清空搜索">×</button>}</label>}>
       <div className="-mx-3 max-h-[min(520px,62vh)] overflow-y-auto px-1 sm:-mx-2">
-        {recordsLoading ? <div className="space-y-2 px-2 py-1">{Array.from({ length: 6 }, (_, index) => <div key={index} className="flex animate-pulse items-center gap-3 rounded-[14px] px-3 py-3"><i className="h-9 w-9 rounded-xl bg-bg-gray" /><span className="flex-1"><i className="block h-3 w-2/5 rounded bg-bg-gray" /><i className="mt-2 block h-2.5 w-1/4 rounded bg-bg-gray" /></span><i className="h-3 w-20 rounded bg-bg-gray" /></div>)}</div> : currencyTransactions.length ? currencyTransactions.map((item) => {
+        {recordsLoading && currencyTransactions.length === 0 ? <div className="space-y-2 px-2 py-1">{Array.from({ length: 6 }, (_, index) => <div key={index} className="flex animate-pulse items-center gap-3 rounded-[14px] px-3 py-3"><i className="h-9 w-9 rounded-xl bg-bg-gray" /><span className="flex-1"><i className="block h-3 w-2/5 rounded bg-bg-gray" /><i className="mt-2 block h-2.5 w-1/4 rounded bg-bg-gray" /></span><i className="h-3 w-20 rounded bg-bg-gray" /></div>)}</div> : currencyTransactions.length ? currencyTransactions.map((item) => {
           const automatic = !!item.sourceOrderId;
           const label = automatic ? item.note.split(" · ")[0] : item.type === "deposit" || item.type === "withdrawal" ? item.direction > 0 ? "资金转入" : "资金转出" : TYPE_LABEL[item.type] || "资金变动";
           const orderAction = label.startsWith("买入") ? "buy" : label.startsWith("卖出") ? "sell" : label.startsWith("股息") ? "dividend" : null;

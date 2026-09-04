@@ -6,15 +6,18 @@ const currencies = new Set(["USD", "EUR", "HKD", "CNY", "JPY", "KRW", "SGD"]);
 const types = new Set(["opening", "deposit", "withdrawal", "adjustment"]);
 export async function GET(request: Request) {
   const user = getAuthUser(request); if (!user) return fail(40101, "未登录", 401);
-  ensureOrderCashTransactions(user.id);
   const params = new URL(request.url).searchParams;
+  const recordsOnly = params.get("recordsOnly") === "1";
+  if (!recordsOnly) ensureOrderCashTransactions(user.id);
   const limit = Math.min(100, Math.max(1, Number(params.get("limit")) || 40));
   const offset = Math.max(0, Number(params.get("offset")) || 0);
   const requestedCurrency = String(params.get("currency") || "").toUpperCase();
   const currency = currencies.has(requestedCurrency) ? requestedCurrency as FundCurrency : undefined;
   const query = String(params.get("q") || "").trim().slice(0, 60);
   const total = countFundTransactions(user.id, currency, query);
-  return ok({ balances: fundBalances(user.id), summaries: fundSummaries(user.id), transactions: listFundTransactions(user.id, limit, offset, currency, query), pagination: { limit, offset, total, hasMore: offset + limit < total } });
+  const records = { transactions: listFundTransactions(user.id, limit, offset, currency, query), pagination: { limit, offset, total, hasMore: offset + limit < total } };
+  if (recordsOnly) return ok(records);
+  return ok({ balances: fundBalances(user.id), summaries: fundSummaries(user.id), ...records });
 }
 export async function POST(request: Request) {
   const user = getAuthUser(request); if (!user) return fail(40101, "未登录", 401);
