@@ -2289,6 +2289,41 @@
 .stock-dividend-dates > span { display:grid; gap:2px; }
 .stock-dividend-dates small { color:var(--faint); font-size:9px; }
 .stock-dividend-statement { overflow:hidden; color:var(--muted); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.holding-div-year-head { display:flex; align-items:baseline; gap:8px; margin:0 2px 8px; }
+.holding-div-year-head b { font-size:13px; color:var(--ink); letter-spacing:.04em; }
+.holding-div-year-head small { font-size:10px; color:var(--faint); }
+.holding-div-table { overflow:hidden; border:1px solid var(--edge); border-radius:14px; background:color-mix(in srgb,#fff 88%,transparent); }
+.holding-div-head,.holding-div-row {
+  display:grid;
+  grid-template-columns:minmax(0,1.25fr) 72px 72px 78px;
+  align-items:center;
+  gap:8px;
+  padding:9px 12px;
+}
+.holding-div-head { background:var(--bg-gray); color:var(--muted); font-size:10px; font-weight:700; letter-spacing:.04em; }
+.holding-div-row { border-top:1px solid var(--edge); font-size:12px; }
+.holding-div-row b { overflow:hidden; color:var(--ink); text-overflow:ellipsis; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.holding-div-row span { color:var(--muted); font-variant-numeric:tabular-nums; }
+.holding-div-row em {
+  justify-self:end;
+  border-radius:999px;
+  padding:3px 8px;
+  font-size:10px;
+  font-style:normal;
+  font-weight:700;
+  letter-spacing:.02em;
+  white-space:nowrap;
+}
+.holding-div-row.is-booked em { color:#0b8a6a; background:#e7f6f1; }
+.holding-div-row.is-missing em { color:#d12f2f; background:#fdecee; }
+.holding-div-row.is-pending em { color:#a46a0c; background:rgba(231,165,52,.14); }
+.holding-div-row.is-before em,.holding-div-row.is-unowned em,.holding-div-row.is-info em { color:var(--muted); background:var(--bg-gray); }
+.holding-div-row.is-before { opacity:.55; }
+.dark .holding-div-table { background:rgba(255,255,255,.035); }
+.dark .holding-div-row.is-booked em { color:#4fd6a8; background:#10322a; }
+.dark .holding-div-row.is-missing em { color:#ff8a8a; background:#3a1c1c; }
+.dark .holding-div-row.is-pending em { color:#f0c36a; background:#2b2413; }
+
 .dark .stock-etf-summary button,.dark .stock-etf-row,.dark .stock-dividend-summary > div,.dark .stock-dividend-row { background:rgba(255,255,255,.035); }
 .dark .stock-etf-summary button:hover,.dark .stock-etf-summary button.is-active,.dark .stock-etf-row:hover,.dark .stock-dividend-row:hover { background:rgba(255,255,255,.075); }
 

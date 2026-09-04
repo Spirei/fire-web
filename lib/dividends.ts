@@ -13,6 +13,14 @@ const OK_TTL_MS = 24 * 60 * 60 * 1000;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36";
 
 export type DividendKind = "cash" | "special";
+export type DividendPhase = "before" | "pending" | "booked" | "missing" | "unowned" | "info";
+export interface DividendLedgerRow {
+  exDate: string | null;
+  payDate: string | null;
+  heldQty: number;
+  booked: boolean;
+  phase: DividendPhase;
+}
 
 export interface DividendRecord {
   pubDate: string | null;
