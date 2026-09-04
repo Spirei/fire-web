@@ -214,6 +214,21 @@ export async function POST(request: Request) {
         lastDispatchAt = 0;
         return NextResponse.json({ error: "已有 Push image 正在排队或运行，请等待完成", runUrl: activeRun.html_url }, { status: 409 });
       }
+      const latestSuccessfulImage = payload.workflow_runs?.find((run) =>
+        (run.event === "schedule" || run.event === "workflow_dispatch") &&
+        run.status === "completed" && run.conclusion === "success"
+      );
+      const mainResponse = await fetch(`https://api.github.com/repos/${repository}/commits/main`, {
+        headers: { accept: "application/vnd.github+json", authorization: `Bearer ${token}`, "user-agent": "fire-deploy-status" },
+        cache: "no-store"
+      });
+      if (mainResponse.ok) {
+        const main = await mainResponse.json() as GithubCommit;
+        if (latestSuccessfulImage?.head_sha && latestSuccessfulImage.head_sha === main.sha) {
+          lastDispatchAt = 0;
+          return NextResponse.json({ error: "当前 main 提交已有可用镜像，无需重复构建", runUrl: latestSuccessfulImage.html_url }, { status: 409 });
+        }
+      }
     }
   } catch {
     // GitHub 状态预检失败时仍由下面的 dispatch 请求给出最终结果。
