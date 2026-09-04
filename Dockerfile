@@ -2,7 +2,7 @@
 # =====================================================================
 # Fire 投资记实 —— 纯净生产版镜像（Node 22 + SQLite + sharp）
 # 目标：运行镜像只含生产依赖 + .next 产物 + 静态资源，无源码/dev 依赖/构建工具。
-# 数据与上传走 volume（宿主机 ./data、./uploads），镜像本身不含数据。
+# 私有数据与上传走 volume；镜像仅携带公开只读缓存种子，确保新部署首屏与本地一致。
 # 富途 OpenD 桥接（scripts/futu_quotes.py）随生产镜像提供 Python + futu-api，
 # 未配置或不可达时行情自动回退腾讯/雅虎（腾讯源已支持美股/港股/A股）。
 # =====================================================================
@@ -54,12 +54,15 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/public/uploads /app/resource-default
-# 交易广场缓存作为首次启动种子；运行期仍写入挂载的 /app/data，已有数据不会被覆盖。
-RUN mkdir -p /app/trading-square-default
-COPY --from=build /app/data/duan-posts.json /app/trading-square-default/duan-posts.json
-COPY --from=build /app/data/trump-posts.json /app/trading-square-default/trump-posts.json
-COPY --from=build /app/data/trump-translations.json /app/trading-square-default/trump-translations.json
-COPY --from=build /app/data/top-stocks-cache.json /app/trading-square-default/top-stocks-cache.json
+# 公开展示缓存作为首次启动种子；运行期仍写入挂载的 /app/data，且按 ID / 时间戳合并，绝不覆盖较新数据。
+RUN mkdir -p /app/public-cache-default/earnings-cache
+COPY --from=build /app/data/duan-posts.json /app/public-cache-default/duan-posts.json
+COPY --from=build /app/data/trump-posts.json /app/public-cache-default/trump-posts.json
+COPY --from=build /app/data/trump-translations.json /app/public-cache-default/trump-translations.json
+COPY --from=build /app/data/top-stocks-cache.json /app/public-cache-default/top-stocks-cache.json
+COPY --from=build /app/data/asset-quotes-cache.json /app/public-cache-default/asset-quotes-cache.json
+COPY --from=build /app/data/celebs-cache.json /app/public-cache-default/celebs-cache.json
+COPY --from=build /app/data/earnings-cache/ /app/public-cache-default/earnings-cache/
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/lib ./lib
 COPY package.json ./

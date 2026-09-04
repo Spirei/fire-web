@@ -9,6 +9,7 @@ const dockerfile = read("Dockerfile");
 const entrypoint = read("scripts/entrypoint.sh");
 const uploadRoute = read("app/uploads/[...path]/route.ts");
 const assetsModule = read("lib/assets.ts");
+const dockerignore = read(".dockerignore");
 
 const failures = [];
 function requireText(label, text, needles) {
@@ -47,6 +48,9 @@ if (/^\s{4}ports:/m.test(updaterBlock)) failures.push("Watchtower 不得映射�
 
 requireText("生产镜像", dockerfile, [
   "COPY --from=build /app/public/uploads /app/resource-default",
+  "/app/public-cache-default/asset-quotes-cache.json",
+  "/app/public-cache-default/celebs-cache.json",
+  "/app/public-cache-default/earnings-cache/",
   "python3 python3-venv",
   "pip install --no-cache-dir -r /app/scripts/requirements-futu.txt",
   'ENV PATH="/opt/futu-venv/bin:${PATH}"',
@@ -54,7 +58,14 @@ requireText("生产镜像", dockerfile, [
 ]);
 requireText("启动脚本", entrypoint, [
   "if [ -d /app/resource-default ]",
-  "cp -rn /app/resource-default/* /app/public/uploads/"
+  "cp -rn /app/resource-default/* /app/public/uploads/",
+  "if [ -d /app/public-cache-default ]",
+  "seed-trading-square.mjs"
+]);
+requireText("Docker 构建上下文", dockerignore, [
+  "!data/asset-quotes-cache.json",
+  "!data/celebs-cache.json",
+  "!data/earnings-cache/*.json"
 ]);
 requireText("上传资源路由", uploadRoute, ["resource-default", "defaultAbs", "fs.readFileSync(source)"]);
 requireText("素材播种", assetsModule, ["resource-default", "ensureBrokerAssets", "ensureCategoryAssets"]);
@@ -68,6 +79,22 @@ for (const [label, directory, minimum] of [
   const count = fs.existsSync(full) ? fs.readdirSync(full).filter((file) => /\.(svg|png|webp|jpe?g)$/i.test(file)).length : 0;
   if (count < minimum) failures.push(`${label}不完整：${count}/${minimum}`);
 }
+
+for (const [label, file] of [
+  ["交易广场段永平缓存", "data/duan-posts.json"],
+  ["交易广场特朗普缓存", "data/trump-posts.json"],
+  ["全球市值排行缓存", "data/top-stocks-cache.json"],
+  ["加密货币与贵金属行情缓存", "data/asset-quotes-cache.json"],
+  ["名人持仓缓存", "data/celebs-cache.json"]
+]) {
+  const full = path.join(root, file);
+  if (!fs.existsSync(full) || fs.statSync(full).size < 3) failures.push(`${label}缺失或为空：${file}`);
+}
+const earningsDir = path.join(root, "data/earnings-cache");
+const earningsCount = fs.existsSync(earningsDir)
+  ? fs.readdirSync(earningsDir).filter((file) => file.endsWith(".json")).length
+  : 0;
+if (earningsCount === 0) failures.push("财报日历公开缓存缺失");
 
 for (const [label, text] of [["本地 Compose", localCompose], ["GHCR Compose", ghcrCompose]]) {
   if (/\/volume\d+\//.test(text)) failures.push(`${label} 含群晖个人绝对路径`);

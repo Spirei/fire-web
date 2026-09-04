@@ -9,9 +9,9 @@ if [ -d /app/resource-default ]; then
   cp -rn /app/resource-default/* /app/public/uploads/ 2>/dev/null || true
 fi
 
-# 将镜像内的交易广场种子按动态 ID 合并进数据卷；线上运行期版本优先，
-# 因此既能补齐新版镜像新增的历史动态，也不会回滚线上已经更新的内容。
-if [ -d /app/trading-square-default ]; then
+# 将镜像内的公开缓存种子合并进数据卷；线上运行期版本优先，
+# 因此既能补齐新版镜像数据，也不会回滚线上已经更新的内容。
+if [ -d /app/public-cache-default ]; then
   node /app/scripts/seed-trading-square.mjs
 fi
 

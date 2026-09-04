@@ -9,6 +9,10 @@ data/*
 !data/trump-posts.json
 !data/trump-translations.json
 !data/top-stocks-cache.json
+!data/asset-quotes-cache.json
+!data/celebs-cache.json
+!data/earnings-cache/
+!data/earnings-cache/*.json
 # 基础素材库图标、站点形象与名人默认头像打进镜像（新用户开箱即用）
 public/uploads/*
 !public/uploads/asset
