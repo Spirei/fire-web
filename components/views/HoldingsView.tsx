@@ -22,6 +22,7 @@ import MarketSelect from "@/components/MarketSelect";
 import AppModal from "@/components/AppModal";
 import CurrencySelect from "@/components/CurrencySelect";
 import { CURRENCY_SYMBOLS, useCurrencyDisplayUnit, useDisplayCurrency } from "@/lib/currencyPrefs";
+import type { CurrencyCode } from "@/lib/currencyPrefs";
 import { showToast } from "@/lib/toast";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import HoldingsPnlSankey, { type PnlSankeyItem } from "@/components/HoldingsPnlSankey";
@@ -242,6 +243,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       return false;
     }
   });
+  const [fundBalances, setFundBalances] = useState<Record<CurrencyCode, number>>({ USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 });
   const { currency: displayCur, setCurrency: setDisplayCur } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
   const compactMoney = useCallback((value: number, currency: string) => {
@@ -285,10 +287,31 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     void loadRates();
   }, [loadRates]);
 
+  const loadFundBalances = useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/funds?limit=1", { cache: "no-store" });
+      const json = res.ok ? await res.json() : null;
+      if (json?.data?.balances) setFundBalances((current) => ({ ...current, ...json.data.balances }));
+    } catch {
+      /* 资金服务异常时保留上一次余额，避免总资产闪回持仓市值 */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadFundBalances();
+    const refresh = () => void loadFundBalances();
+    window.addEventListener("fire:orders-updated", refresh);
+    window.addEventListener("fire:records-updated", refresh);
+    return () => {
+      window.removeEventListener("fire:orders-updated", refresh);
+      window.removeEventListener("fire:records-updated", refresh);
+    };
+  }, [loadFundBalances]);
+
   const refreshAccount = useCallback(async () => {
-    await Promise.allSettled([loadRates(), refreshQuotes?.({ force: true }) ?? Promise.resolve()]);
+    await Promise.allSettled([loadRates(), loadFundBalances(), refreshQuotes?.({ force: true }) ?? Promise.resolve()]);
     showToast("已刷新账户资产");
-  }, [loadRates, refreshQuotes]);
+  }, [loadRates, loadFundBalances, refreshQuotes]);
 
   const toUsd = (m: string, value: number) => {
     // 市场 → ISO 货币代码（marketMeta.currency 是符号，不能直接查汇率）
@@ -452,6 +475,10 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const totalCur = active === "TOTAL" ? displayCur : cur;
   // 总资产货币符号（ISO 码 → 符号；各市场盈利卡片仍用 USD$/HKD$/CNY¥ 规范标识）
   const totalCurLabel = CURRENCY_SYMBOLS[totalCur as keyof typeof CURRENCY_SYMBOLS] || totalCur;
+  const cashInUsd = useMemo(() => (Object.entries(fundBalances) as [CurrencyCode, number][]).reduce((sum, [iso, value]) => sum + value / (rates[iso] || 1), 0), [fundBalances, rates]);
+  const displayedNetAsset = active === "TOTAL"
+    ? (metrics.mv + cashInUsd) * totalFactor
+    : metrics.mv + (fundBalances[(Object.entries({ US: "USD", HK: "HKD", CN: "CNY", JP: "JPY", KR: "KRW", SG: "SGD" }).find(([market]) => market === active)?.[1] || "USD") as CurrencyCode] || 0);
 
   const recordMarketOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -1011,7 +1038,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           </svg>
           总资产
           <span className={`text-xs tabular-nums ${active === "TOTAL" ? "opacity-80" : "text-faint"}`}>
-            {metricsReady ? compactMoney(metrics.mv * totalFactor, totalCurLabel) : "…"}
+            {metricsReady ? compactMoney(displayedNetAsset, totalCurLabel) : "…"}
           </span>
         </button>
         {displayedTabs.map((m, i) => {
@@ -1072,7 +1099,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <div className="card p-4">
           <span className="block text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">净资产（{totalCurLabel}）</span>
-          <strong className="mt-1 block text-lg font-extrabold tabular-nums">{metricsReady ? compactMoney(metrics.mv * totalFactor, totalCurLabel) : "…"}</strong>
+          <strong className="mt-1 block text-lg font-extrabold tabular-nums">{metricsReady ? compactMoney(displayedNetAsset, totalCurLabel) : "…"}</strong>
         </div>
         <div className="card p-4">
           <span className="block text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">当日盈亏</span>
