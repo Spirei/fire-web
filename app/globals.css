@@ -4445,6 +4445,7 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   font-weight:400 !important;
   letter-spacing:inherit;
   line-height:inherit;
+  white-space:nowrap;
 }
 .rainbow-text-native,
 .rainbow-text-native:focus {
