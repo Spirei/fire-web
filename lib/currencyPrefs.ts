@@ -29,7 +29,7 @@ export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
 export const DISPLAY_CURRENCY_KEY = "fire:display-currency";
 export const DEFAULT_DISPLAY_CURRENCY: CurrencyCode = "USD";
 
-/** 金额单位偏好：auto 在小屏使用紧凑单位，桌面保持完整金额。 */
+/** 金额单位偏好：auto 为同一页面统一启用或关闭智能缩写。 */
 export type CurrencyDisplayUnit = "auto" | "full" | "compact";
 export const CURRENCY_DISPLAY_UNIT_KEY = "fire:currency-display-unit";
 export const DEFAULT_CURRENCY_DISPLAY_UNIT: CurrencyDisplayUnit = "auto";

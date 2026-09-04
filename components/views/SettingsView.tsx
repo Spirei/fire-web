@@ -2726,12 +2726,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   <div className="sw-row">
                     <div className="sw-row-label">
                       <b>金额单位</b>
-                      <span>小屏自动使用万、百万、千万、亿，桌面保持完整数字</span>
+                      <span>同一页面统一启用智能缩写，再按数值选用万、亿或万亿</span>
                     </div>
                     <div className="ctrl">
                       <select value={currencyDisplayUnit} onChange={(e) => setCurrencyDisplayUnit(e.target.value as CurrencyDisplayUnit)} className="sw-row-input" aria-label="货币金额显示单位">
-                        <option value="auto">跟随设备（小屏缩写）</option>
-                        <option value="compact">始终缩写</option>
+                        <option value="auto">按页面智能缩写（推荐）</option>
+                        <option value="compact">所有页面智能缩写</option>
                         <option value="full">始终完整</option>
                       </select>
                     </div>

@@ -246,11 +246,6 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const [fundBalances, setFundBalances] = useState<Record<CurrencyCode, number>>({ USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 });
   const { currency: displayCur, setCurrency: setDisplayCur } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
-  const compactMoney = useCallback((value: number, currency: string) => {
-    return Math.abs(value) >= 1e7 || currencyDisplayUnit === "compact"
-      ? fmtMoneyCompact(value, currency)
-      : fmtMoney(value, currency);
-  }, [currencyDisplayUnit]);
   // 各市场盈利卡片拖动顺序（本地记忆）
   const [pnlOrder, setPnlOrder] = useState<string[]>(() => {
     try {
@@ -478,6 +473,17 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const displayedNetAsset = active === "TOTAL"
     ? (metrics.mv + cashInUsd) * totalFactor
     : metrics.mv + (fundBalances[(Object.entries({ US: "USD", HK: "HKD", CN: "CNY", JP: "JPY", KR: "KRW", SG: "SGD" }).find(([market]) => market === active)?.[1] || "USD") as CurrencyCode] || 0);
+  const pageUsesCompactMoney = useMemo(() => {
+    const values = [
+    displayedNetAsset,
+    metrics.mv * totalFactor,
+    metrics.pnl * totalFactor,
+    metrics.day * totalFactor
+    ];
+    const max = Math.max(0, ...values.filter(Number.isFinite).map(Math.abs));
+    return currencyDisplayUnit === "compact" || (currencyDisplayUnit === "auto" && max >= 1e7);
+  }, [displayedNetAsset, metrics, totalFactor, currencyDisplayUnit]);
+  const compactMoney = useCallback((value: number, currency: string) => pageUsesCompactMoney ? fmtMoneyCompact(value, currency) : fmtMoney(value, currency), [pageUsesCompactMoney]);
 
   const recordMarketOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -1003,6 +1009,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       {/* 一级标题 */}
       <div className="mb-4 flex items-center gap-2.5">
         <h2 className="text-lg font-bold">账户资产</h2>
+        <span className="rounded-full border border-edge bg-bg-gray px-2.5 py-1 text-[10px] font-semibold text-muted">本页金额 · {totalCur}{pageUsesCompactMoney ? " · 智能缩写" : ""}</span>
         <RefreshButton onClick={() => void refreshAccount()} title="刷新账户资产" />
       </div>
 
@@ -1132,9 +1139,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {orderedPnl.map(([m, e], i) => {
-              const mcur = marketMeta(m).currency || "USD";
-              // 卡片右上角固定使用规范币种标识（USD$ / HKD$ / CNY¥），见 AGENTS.md，未经用户指示不可改
-              const mcurCode = marketMeta(m).code || mcur;
+              const marketFactor = toUsd(m, 1) * totalFactor;
               const rate = e.cost ? e.pnl / e.cost : null;
               return (
                 <div
@@ -1162,13 +1167,13 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                       <MarketIcon market={m} flag={flagFor(m)} size={20} />
                       <span className="truncate">{labelFor(m)}</span>
                     </span>
-                    <span className="flex-none text-[11px] font-mono text-faint">{mcurCode}</span>
+                    <span className="flex-none text-[11px] font-mono text-faint">{totalCur}</span>
                   </div>
                   <div className="mt-4 space-y-2.5">
                     <div className="flex items-baseline justify-between">
                       <span className="text-xs text-[#73777f] dark:text-[#a3a8b2]">持仓盈利</span>
                       <strong className={`text-[15px] font-bold tabular-nums ${e.pnl >= 0 ? "text-up" : "text-down"}`}>
-                        {e.pnl >= 0 ? "+" : "-"}{compactMoney(Math.abs(e.pnl), mcur)}
+                        {e.pnl >= 0 ? "+" : "-"}{compactMoney(Math.abs(e.pnl * marketFactor), totalCurLabel)}
                       </strong>
                     </div>
                     <div className="flex items-baseline justify-between">
@@ -1179,7 +1184,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                     </div>
                     <div className="flex items-baseline justify-between border-t border-edge pt-2.5">
                       <span className="text-xs text-[#73777f] dark:text-[#a3a8b2]">持仓市值</span>
-                      <strong className="text-sm font-semibold tabular-nums text-ink">{compactMoney(e.mv, mcur)}</strong>
+                      <strong className="text-sm font-semibold tabular-nums text-ink">{compactMoney(e.mv * marketFactor, totalCurLabel)}</strong>
                     </div>
                   </div>
                 </div>

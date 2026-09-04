@@ -94,9 +94,6 @@ function defaultDateRange(): DateRange {
   return { start: isoDate(start), end: isoDate(end) };
 }
 
-function fmtAccountMoney(value: number, symbol: string) {
-  return Math.abs(value) >= 1e7 ? fmtMoneyCompact(value, symbol) : fmtMoney(value, symbol);
-}
 function marketDate(value: string, market: string) {
   const timeZone = market.toUpperCase() === "US" ? "America/New_York" : "Asia/Shanghai";
   const date = new Date(value);
@@ -310,12 +307,6 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   };
   const currencyFactor = rates[displayCurrency] || 1;
   const symbol = CURRENCY_SYMBOLS[displayCurrency] || displayCurrency;
-  const compactMoney = useCallback((value: number) => {
-    const mobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
-    return (mobile && Math.abs(value) >= 1e7) || currencyDisplayUnit === "compact" || (currencyDisplayUnit === "auto" && mobile)
-      ? fmtMoneyCompact(value, symbol)
-      : fmtMoney(value, symbol);
-  }, [currencyDisplayUnit, symbol]);
   const toDisplay = (record: StockRecord, value: number) => {
     const iso = ISO_BY_MARKET[record.market] || "USD";
     const usd = value / (rates[iso] || 1);
@@ -667,11 +658,22 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   }) : searchedPositions;
   const enabledHoldingColumns = holdingColumns.filter((column) => column.visible);
   const marketEntries = Object.entries(summary.markets).sort((a, b) => b[1].asset - a[1].asset);
-  const accountCurrency = assetMarket === "ALL" ? displayCurrency : (ISO_BY_MARKET[assetMarket] || "USD");
-  const accountSymbol = CURRENCY_SYMBOLS[accountCurrency as keyof typeof CURRENCY_SYMBOLS] || accountCurrency;
-  const accountSummary = assetMarket === "ALL" ? summary : (nativeSummary[assetMarket] || { asset: 0, cost: 0, pnl: 0, day: 0 });
-  const accountCash = assetMarket === "ALL" ? cashTotal : fundBalances[accountCurrency as CurrencyCode] || 0;
+  const accountCurrency = displayCurrency;
+  const accountSymbol = symbol;
+  const accountSummary = assetMarket === "ALL" ? summary : (summary.markets[assetMarket] || { asset: 0, cost: 0, pnl: 0, day: 0 });
+  const marketCurrency = ISO_BY_MARKET[assetMarket] as CurrencyCode | undefined;
+  const accountCash = assetMarket === "ALL" ? cashTotal : marketCurrency ? (fundBalances[marketCurrency] || 0) / (rates[marketCurrency] || 1) * currencyFactor : 0;
   const accountNetAsset = accountSummary.asset + accountCash;
+  const pageUsesCompactMoney = useMemo(() => {
+    const values = [
+    totalAsset, summary.asset, summary.pnl, summary.day, cashTotal,
+    accountNetAsset, accountSummary.asset, accountSummary.pnl, accountSummary.day, accountCash,
+    ...Object.values(summary.markets).flatMap((market) => [market.asset, market.pnl, market.day])
+    ];
+    const max = Math.max(0, ...values.filter(Number.isFinite).map(Math.abs));
+    return currencyDisplayUnit === "compact" || (currencyDisplayUnit === "auto" && max >= 1e7);
+  }, [totalAsset, summary, cashTotal, accountNetAsset, accountSummary, accountCash, currencyDisplayUnit]);
+  const compactMoney = useCallback((value: number) => pageUsesCompactMoney ? fmtMoneyCompact(value, symbol) : fmtMoney(value, symbol), [pageUsesCompactMoney, symbol]);
   const holdingAssetsByCurrency = useMemo<Record<CurrencyCode, number>>(() => ({ USD: nativeSummary.US?.asset || 0, EUR: 0, HKD: nativeSummary.HK?.asset || 0, CNY: nativeSummary.CN?.asset || 0, JPY: nativeSummary.JP?.asset || 0, KRW: nativeSummary.KR?.asset || 0, SGD: nativeSummary.SG?.asset || 0 }), [nativeSummary]);
   const summaryMarketKeys = Object.keys(summary.markets);
   const marketKeys = ["US", "HK", "CN", ...summaryMarketKeys.filter((key) => !["US", "HK", "CN"].includes(key))]
@@ -742,6 +744,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   return <div className="asset-analysis-page space-y-4">
     <div className="flex flex-wrap items-center gap-3">
       <h2 className="text-lg font-extrabold">资产分析</h2>
+      <span className="rounded-full border border-edge bg-bg-gray px-2.5 py-1 text-[10px] font-semibold text-muted">本页金额 · {displayCurrency}{pageUsesCompactMoney ? " · 智能缩写" : ""}</span>
     </div>
 
     <div ref={splitRef} className="asset-analysis-split" style={{ "--asset-left-pct": `${leftPanePct}%` } as React.CSSProperties}>
@@ -841,7 +844,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
         <section className="mobile-hide-duplicate-summary card p-5">
           <div className="mb-2"><h3 className="text-base font-bold">账户总盈亏</h3></div>
           <MarketPills value={assetMarket} onChange={setAssetMarket} />
-          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{[["净资产", accountNetAsset], ["当日盈亏", accountSummary.day], ["持仓市值", accountSummary.asset], ["浮动盈亏", accountSummary.pnl], ["最大购买力", Math.max(0, accountCash)], ["可用现金", accountCash], ["冻结现金", 0]].map(([label, value]) => <div key={String(label)}><span className="text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}>{assetsVisible ? fmtAccountMoney(Number(value), accountSymbol) : "******"}</strong></div>)}</div>
+          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{[["净资产", accountNetAsset], ["当日盈亏", accountSummary.day], ["持仓市值", accountSummary.asset], ["浮动盈亏", accountSummary.pnl], ["最大购买力", Math.max(0, accountCash)], ["可用现金", accountCash], ["冻结现金", 0]].map(([label, value]) => <div key={String(label)}><span className="text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}>{assetsVisible ? (pageUsesCompactMoney ? fmtMoneyCompact(Number(value), accountSymbol) : fmtMoney(Number(value), accountSymbol)) : "******"}</strong></div>)}</div>
         </section>
 
         <section className="card overflow-hidden">
