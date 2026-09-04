@@ -17,6 +17,7 @@ export default function AppModal({
   desc,
   onClose,
   children,
+  headerActions,
   size = "sm",
   className = ""
 }: {
@@ -24,6 +25,7 @@ export default function AppModal({
   desc?: string;
   onClose: () => void;
   children: React.ReactNode;
+  headerActions?: React.ReactNode;
   size?: ModalSize;
   className?: string;
 }) {
@@ -74,6 +76,7 @@ export default function AppModal({
             {title && <h3 className="text-[19px] font-bold leading-snug text-ink">{title}</h3>}
             {desc && <p className="mt-1 text-[13px] text-muted">{desc}</p>}
           </div>
+          {headerActions && <div className="ml-auto min-w-0 flex-1 sm:max-w-[240px]">{headerActions}</div>}
           <button
             type="button"
             onClick={requestClose}
