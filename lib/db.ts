@@ -86,6 +86,7 @@ function migrate(database: Database.Database) {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_fund_transactions_user_time ON fund_transactions(user_id, occurred_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_fund_transactions_user_currency_time ON fund_transactions(user_id, currency, occurred_at DESC, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS trade_orders (
       id TEXT PRIMARY KEY,

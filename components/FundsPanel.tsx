@@ -10,15 +10,22 @@ import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/currencyPrefs";
 
 type Currency = CurrencyCode;
 interface Tx { id: string; currency: Currency; type: string; amount: number; direction: 1 | -1; note: string; occurredAt: string; sourceOrderId?: string | null }
+interface Summary { openingAsset: number; cashNetFlow: number; stockNetFlow: number; otherNetFlow: number }
 const TYPE_LABEL: Record<string, string> = { opening: "期初资金", deposit: "转入", withdrawal: "转出", adjustment: "余额调整" };
 const EMPTY: Record<Currency, number> = { USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 };
+const EMPTY_SUMMARY: Record<Currency, Summary> = Object.fromEntries(Object.keys(EMPTY).map((key) => [key, { openingAsset: 0, cashNetFlow: 0, stockNetFlow: 0, otherNetFlow: 0 }])) as Record<Currency, Summary>;
+const RECORD_PAGE_SIZE = 30;
 
 export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdingAssets: Record<Currency, number>; onBalancesChange: (balances: Record<Currency, number>) => void }) {
   const [currency, setCurrency] = useState<Currency>("USD");
   const [balances, setBalances] = useState<Record<Currency, number>>(EMPTY);
   const [transactions, setTransactions] = useState<Tx[]>([]);
+  const [summaries, setSummaries] = useState<Record<Currency, Summary>>(EMPTY_SUMMARY);
   const [open, setOpen] = useState(false);
   const [recordsOpen, setRecordsOpen] = useState(false);
+  const [recordsPage, setRecordsPage] = useState(0);
+  const [recordsTotal, setRecordsTotal] = useState(0);
+  const [recordsLoading, setRecordsLoading] = useState(false);
   const [type, setType] = useState("deposit");
   const [direction, setDirection] = useState<1 | -1>(1);
   const [amount, setAmount] = useState("");
@@ -26,12 +33,23 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
   const [occurredAt, setOccurredAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
   const load = useCallback(async () => {
-    const res = await fetch("/api/v1/funds?limit=100", { cache: "no-store" });
+    const res = await fetch("/api/v1/funds?limit=1", { cache: "no-store" });
     const json = await res.json().catch(() => null);
     if (!res.ok) return;
     const next = { ...EMPTY, ...(json?.data?.balances || {}) };
-    setBalances(next); setTransactions(json?.data?.transactions || []); onBalancesChange(next);
+    setBalances(next); setSummaries({ ...EMPTY_SUMMARY, ...(json?.data?.summaries || {}) }); onBalancesChange(next);
   }, [onBalancesChange]);
+  const loadRecords = useCallback(async (nextCurrency: Currency, page: number) => {
+    setRecordsLoading(true);
+    try {
+      const offset = page * RECORD_PAGE_SIZE;
+      const res = await fetch(`/api/v1/funds?currency=${nextCurrency}&limit=${RECORD_PAGE_SIZE}&offset=${offset}`, { cache: "no-store" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) return;
+      setTransactions(json?.data?.transactions || []);
+      setRecordsTotal(Number(json?.data?.pagination?.total) || 0);
+    } finally { setRecordsLoading(false); }
+  }, []);
   useEffect(() => {
     void load();
     const refresh = () => void load();
@@ -42,6 +60,14 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
       window.removeEventListener("fire:records-updated", refresh);
     };
   }, [load]);
+  useEffect(() => {
+    if (recordsOpen) void loadRecords(currency, recordsPage);
+  }, [currency, loadRecords, recordsOpen, recordsPage]);
+  useEffect(() => {
+    if (!recordsTotal) return;
+    const lastPage = Math.max(0, Math.ceil(recordsTotal / RECORD_PAGE_SIZE) - 1);
+    if (recordsPage > lastPage) setRecordsPage(lastPage);
+  }, [recordsPage, recordsTotal]);
   const submit = async () => {
     const value = Number(amount);
     if (!Number.isFinite(value) || value <= 0) return showToast("请输入有效金额", "err");
@@ -55,24 +81,20 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
   const remove = async (id: string) => {
     const res = await fetch(`/api/v1/funds/${encodeURIComponent(id)}`, { method: "DELETE" });
     if (!res.ok) return showToast("删除失败", "err");
-    await load();
+    await load(); await loadRecords(currency, recordsPage);
   };
   const cash = balances[currency] || 0;
   const holdings = holdingAssets[currency] || 0;
-  const currencyTransactions = transactions.filter((item) => item.currency === currency);
-  const openingAsset = currencyTransactions.filter((item) => item.type === "opening").reduce((sum, item) => sum + item.amount * item.direction, 0);
-  const cashNetFlow = currencyTransactions.filter((item) => item.type === "deposit" || item.type === "withdrawal").reduce((sum, item) => sum + item.amount * item.direction, 0);
-  const stockNetFlow = currencyTransactions.filter((item) => item.sourceOrderId).reduce((sum, item) => sum + item.amount * item.direction, 0);
-  const otherNetFlow = currencyTransactions.filter((item) => item.type === "adjustment" && !item.sourceOrderId).reduce((sum, item) => sum + item.amount * item.direction, 0);
+  const currencyTransactions = transactions;
+  const { openingAsset, cashNetFlow, stockNetFlow, otherNetFlow } = summaries[currency] || EMPTY_SUMMARY[currency];
   // 买卖股票只是现金与持仓之间互转，不属于外部投入，否则卖出会被重复计入盈亏。
   const currentInvestment = cashNetFlow + otherNetFlow;
   const endingAsset = cash + holdings;
   const profit = endingAsset - openingAsset - currentInvestment;
   const fullMoney = (value: number, signed = false) => `${signed && value > 0 ? "+" : ""}${fmtMoney(value, CURRENCY_SYMBOLS[currency])}`;
   const metric = (label: string, value: number, tone: "plain" | "flow" | "result" = "plain") => <div className={`fund-flow-card fund-flow-card--${tone}`} title={`${label}：${fullMoney(value, tone !== "result")}`}><span className="fund-flow-label">{label}</span><strong className={`fund-flow-value ${tone !== "result" && value !== 0 ? value > 0 ? "text-up" : "text-down" : ""}`}>{fullMoney(value, tone !== "result")}</strong></div>;
-  const latestAt = currencyTransactions[0]?.occurredAt;
   return <section className="funds-panel card overflow-visible">
-    <div className="flex items-center justify-between gap-3 border-b border-edge px-4 py-4"><div className="min-w-0"><div className="flex items-center gap-2.5"><h3 className="text-base font-bold">资金系统</h3><CurrencySelect value={currency} align="left" onChange={(next) => setCurrency(next as Currency)} /></div><p className="mt-0.5 truncate text-[11px] text-muted">现金与持仓共同构成账户资产{latestAt ? ` · 更新至 ${new Date(latestAt).toLocaleDateString("zh-CN")}` : ""}</p></div><button type="button" onClick={() => setOpen(true)} className="btn-line h-8 shrink-0 px-3 text-xs"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="mr-1 h-3.5 w-3.5"><path d="M10 4v12M4 10h12" /></svg>记一笔</button></div>
+    <div className="flex items-center justify-between gap-3 border-b border-edge px-4 py-4"><div className="min-w-0"><div className="flex items-center gap-2.5"><h3 className="text-base font-bold">资金系统</h3><CurrencySelect value={currency} align="left" onChange={(next) => { setCurrency(next as Currency); setRecordsPage(0); }} /></div><p className="mt-0.5 truncate text-[11px] text-muted">现金与持仓共同构成账户资产</p></div><button type="button" onClick={() => setOpen(true)} className="btn-line h-8 shrink-0 px-3 text-xs"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="mr-1 h-3.5 w-3.5"><path d="M10 4v12M4 10h12" /></svg>记一笔</button></div>
     <div className="p-5">
       <div className="fund-flow-grid">
         <div aria-hidden="true" className="fund-flow-bracket fund-flow-bracket--left" />
@@ -87,12 +109,12 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
         <div className="col-start-2 row-start-3">{metric("盈亏额", profit, "flow")}</div>
         <div className="col-start-3 row-start-2">{metric("期末总资产", endingAsset, "result")}</div>
       </div>
-      <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 买卖与股息属于账户内部现金流，不计入外部投入。<button type="button" onClick={() => setRecordsOpen(true)} className="ml-1 font-semibold text-[#3297f6] transition-colors hover:text-[#1976d2] hover:underline">查看资金记录</button></p></div>
+      <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 买卖与股息属于账户内部现金流，不计入外部投入。<button type="button" onClick={() => { setRecordsPage(0); setRecordsOpen(true); }} className="ml-1 font-semibold text-[#3297f6] transition-colors hover:text-[#1976d2] hover:underline">查看资金记录</button></p></div>
     </div>
     {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={cash} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
-    {recordsOpen && <AppModal title="资金记录" desc={`${currency} 账户 · 共 ${currencyTransactions.length} 笔 · 当前余额 ${fmtMoney(cash, CURRENCY_SYMBOLS[currency])}`} size="md" onClose={() => setRecordsOpen(false)}>
+    {recordsOpen && <AppModal title="资金记录" desc={`${currency} 账户 · 共 ${recordsTotal} 笔 · 当前余额 ${fmtMoney(cash, CURRENCY_SYMBOLS[currency])}`} size="md" onClose={() => setRecordsOpen(false)}>
       <div className="-mx-3 max-h-[min(520px,62vh)] overflow-y-auto px-1 sm:-mx-2">
-        {currencyTransactions.length ? currencyTransactions.map((item) => {
+        {recordsLoading ? <div className="space-y-2 px-2 py-1">{Array.from({ length: 6 }, (_, index) => <div key={index} className="flex animate-pulse items-center gap-3 rounded-[14px] px-3 py-3"><i className="h-9 w-9 rounded-xl bg-bg-gray" /><span className="flex-1"><i className="block h-3 w-2/5 rounded bg-bg-gray" /><i className="mt-2 block h-2.5 w-1/4 rounded bg-bg-gray" /></span><i className="h-3 w-20 rounded bg-bg-gray" /></div>)}</div> : currencyTransactions.length ? currencyTransactions.map((item) => {
           const automatic = !!item.sourceOrderId;
           const label = automatic ? item.note.split(" · ")[0] : item.type === "deposit" || item.type === "withdrawal" ? item.direction > 0 ? "资金转入" : "资金转出" : TYPE_LABEL[item.type] || "资金变动";
           const orderAction = label.startsWith("买入") ? "buy" : label.startsWith("卖出") ? "sell" : label.startsWith("股息") ? "dividend" : null;
@@ -105,6 +127,7 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
           </div>;
         }) : <div className="flex min-h-[240px] flex-col items-center justify-center px-6 text-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-edge bg-bg-gray text-muted"><IconReceipt size={21} stroke={1.6} /></span><b className="mt-4 text-sm text-ink">暂无资金记录</b><p className="mt-1 text-xs text-muted">新增资金或完成交易后，记录会显示在这里</p></div>}
       </div>
+      {recordsTotal > RECORD_PAGE_SIZE && <div className="mt-4 flex items-center justify-between border-t border-edge pt-4"><span className="text-[11px] tabular-nums text-muted">第 {recordsPage + 1} / {Math.ceil(recordsTotal / RECORD_PAGE_SIZE)} 页</span><div className="flex gap-2"><button type="button" disabled={recordsPage === 0 || recordsLoading} onClick={() => setRecordsPage((page) => Math.max(0, page - 1))} className="btn-line h-8 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-40">上一页</button><button type="button" disabled={(recordsPage + 1) * RECORD_PAGE_SIZE >= recordsTotal || recordsLoading} onClick={() => setRecordsPage((page) => page + 1)} className="btn-line h-8 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-40">下一页</button></div></div>}
     </AppModal>}
   </section>;
 }

@@ -1,14 +1,19 @@
 import { getAuthUser } from "@/lib/auth";
 import { fail, ok } from "@/lib/api";
-import { createFundTransaction, fundBalances, listFundTransactions, syncOrderCashTransactions, type FundCurrency, type FundType } from "@/lib/funds";
+import { countFundTransactions, createFundTransaction, ensureOrderCashTransactions, fundBalances, fundSummaries, listFundTransactions, type FundCurrency, type FundType } from "@/lib/funds";
 
 const currencies = new Set(["USD", "EUR", "HKD", "CNY", "JPY", "KRW", "SGD"]);
 const types = new Set(["opening", "deposit", "withdrawal", "adjustment"]);
 export async function GET(request: Request) {
   const user = getAuthUser(request); if (!user) return fail(40101, "未登录", 401);
-  const limit = Math.min(500, Math.max(1, Number(new URL(request.url).searchParams.get("limit")) || 100));
-  syncOrderCashTransactions(user.id);
-  return ok({ balances: fundBalances(user.id), transactions: listFundTransactions(user.id, limit) });
+  ensureOrderCashTransactions(user.id);
+  const params = new URL(request.url).searchParams;
+  const limit = Math.min(100, Math.max(1, Number(params.get("limit")) || 40));
+  const offset = Math.max(0, Number(params.get("offset")) || 0);
+  const requestedCurrency = String(params.get("currency") || "").toUpperCase();
+  const currency = currencies.has(requestedCurrency) ? requestedCurrency as FundCurrency : undefined;
+  const total = countFundTransactions(user.id, currency);
+  return ok({ balances: fundBalances(user.id), summaries: fundSummaries(user.id), transactions: listFundTransactions(user.id, limit, offset, currency), pagination: { limit, offset, total, hasMore: offset + limit < total } });
 }
 export async function POST(request: Request) {
   const user = getAuthUser(request); if (!user) return fail(40101, "未登录", 401);

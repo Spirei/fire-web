@@ -59,13 +59,46 @@ export function syncOrderCashTransactions(userId: string) {
   })();
 }
 
-export function listFundTransactions(userId: string, limit = 200) {
-  return (getDb().prepare("SELECT id,currency,type,amount,direction,note,occurred_at,created_at FROM fund_transactions WHERE user_id=? ORDER BY occurred_at DESC,created_at DESC LIMIT ?").all(userId, limit) as Row[]).map(mapRow);
+/** 常规读取只做 O(1) 数量校验；仅首次接入或数据不一致时才全量重建。 */
+export function ensureOrderCashTransactions(userId: string) {
+  const db = getDb();
+  const filled = db.prepare("SELECT COUNT(*) count FROM trade_orders WHERE user_id=? AND status='filled'").get(userId) as { count: number };
+  const linked = db.prepare("SELECT COUNT(*) count FROM fund_transactions WHERE user_id=? AND id LIKE ?").get(userId, `${AUTO_ORDER_PREFIX}%`) as { count: number };
+  if (Number(filled.count) !== Number(linked.count)) syncOrderCashTransactions(userId);
+}
+
+export function listFundTransactions(userId: string, limit = 40, offset = 0, currency?: FundCurrency) {
+  const db = getDb();
+  const rows = currency
+    ? db.prepare("SELECT id,currency,type,amount,direction,note,occurred_at,created_at FROM fund_transactions WHERE user_id=? AND currency=? ORDER BY occurred_at DESC,created_at DESC LIMIT ? OFFSET ?").all(userId, currency, limit, offset)
+    : db.prepare("SELECT id,currency,type,amount,direction,note,occurred_at,created_at FROM fund_transactions WHERE user_id=? ORDER BY occurred_at DESC,created_at DESC LIMIT ? OFFSET ?").all(userId, limit, offset);
+  return (rows as Row[]).map(mapRow);
+}
+export function countFundTransactions(userId: string, currency?: FundCurrency) {
+  const row = currency
+    ? getDb().prepare("SELECT COUNT(*) count FROM fund_transactions WHERE user_id=? AND currency=?").get(userId, currency)
+    : getDb().prepare("SELECT COUNT(*) count FROM fund_transactions WHERE user_id=?").get(userId);
+  return Number((row as { count?: number } | undefined)?.count) || 0;
+}
+export function fundSummaries(userId: string) {
+  const empty = () => ({ openingAsset: 0, cashNetFlow: 0, stockNetFlow: 0, otherNetFlow: 0 });
+  const result: Record<FundCurrency, ReturnType<typeof empty>> = { USD: empty(), EUR: empty(), HKD: empty(), CNY: empty(), JPY: empty(), KRW: empty(), SGD: empty() };
+  const rows = getDb().prepare(`SELECT currency,
+    SUM(CASE WHEN type='opening' THEN amount*direction ELSE 0 END) opening_asset,
+    SUM(CASE WHEN type IN ('deposit','withdrawal') THEN amount*direction ELSE 0 END) cash_net_flow,
+    SUM(CASE WHEN id LIKE 'fund-order-%' THEN amount*direction ELSE 0 END) stock_net_flow,
+    SUM(CASE WHEN type='adjustment' AND id NOT LIKE 'fund-order-%' THEN amount*direction ELSE 0 END) other_net_flow
+    FROM fund_transactions WHERE user_id=? GROUP BY currency`).all(userId) as { currency: FundCurrency; opening_asset: number; cash_net_flow: number; stock_net_flow: number; other_net_flow: number }[];
+  rows.forEach((row) => { result[row.currency] = { openingAsset: Number(row.opening_asset) || 0, cashNetFlow: Number(row.cash_net_flow) || 0, stockNetFlow: Number(row.stock_net_flow) || 0, otherNetFlow: Number(row.other_net_flow) || 0 }; });
+  return result;
 }
 export function fundBalances(userId: string): Record<FundCurrency, number> {
   const result: Record<FundCurrency, number> = { USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 };
   const rows = getDb().prepare("SELECT currency,SUM(amount*direction) balance FROM fund_transactions WHERE user_id=? GROUP BY currency").all(userId) as { currency: FundCurrency; balance: number }[];
-  rows.forEach((row) => { result[row.currency] = Number(row.balance) || 0; });
+  // 旧持仓/导入订单通常没有与之对应的期初入金。此时历史买入从 0 倒扣会产生
+  // 虚构的负现金，并跨币种抵消后来已确认的卖出回款。系统尚未支持融资负债，
+  // 因此可用现金采用“已知下限”：每个币种最低为 0；用户补录期初资金后自然恢复完整余额。
+  rows.forEach((row) => { result[row.currency] = Math.max(0, Number(row.balance) || 0); });
   return result;
 }
 export function createFundTransaction(input: { userId: string; currency: FundCurrency; type: FundType; amount: number; direction: 1 | -1; note?: string; occurredAt?: string }) {
