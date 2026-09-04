@@ -67,17 +67,26 @@ export function ensureOrderCashTransactions(userId: string) {
   if (Number(filled.count) !== Number(linked.count)) syncOrderCashTransactions(userId);
 }
 
-export function listFundTransactions(userId: string, limit = 40, offset = 0, currency?: FundCurrency) {
+export function listFundTransactions(userId: string, limit = 40, offset = 0, currency?: FundCurrency, query = "") {
   const db = getDb();
-  const rows = currency
-    ? db.prepare("SELECT id,currency,type,amount,direction,note,occurred_at,created_at FROM fund_transactions WHERE user_id=? AND currency=? ORDER BY occurred_at DESC,created_at DESC LIMIT ? OFFSET ?").all(userId, currency, limit, offset)
-    : db.prepare("SELECT id,currency,type,amount,direction,note,occurred_at,created_at FROM fund_transactions WHERE user_id=? ORDER BY occurred_at DESC,created_at DESC LIMIT ? OFFSET ?").all(userId, limit, offset);
+  const keyword = `%${query.trim()}%`;
+  const search = query.trim() ? " AND (note LIKE ? OR occurred_at LIKE ?)" : "";
+  const sql = `SELECT id,currency,type,amount,direction,note,occurred_at,created_at FROM fund_transactions WHERE user_id=?${currency ? " AND currency=?" : ""}${search} ORDER BY occurred_at DESC,created_at DESC LIMIT ? OFFSET ?`;
+  const args: Array<string | number> = [userId];
+  if (currency) args.push(currency);
+  if (query.trim()) args.push(keyword, keyword);
+  args.push(limit, offset);
+  const rows = db.prepare(sql).all(...args);
   return (rows as Row[]).map(mapRow);
 }
-export function countFundTransactions(userId: string, currency?: FundCurrency) {
-  const row = currency
-    ? getDb().prepare("SELECT COUNT(*) count FROM fund_transactions WHERE user_id=? AND currency=?").get(userId, currency)
-    : getDb().prepare("SELECT COUNT(*) count FROM fund_transactions WHERE user_id=?").get(userId);
+export function countFundTransactions(userId: string, currency?: FundCurrency, query = "") {
+  const keyword = `%${query.trim()}%`;
+  const search = query.trim() ? " AND (note LIKE ? OR occurred_at LIKE ?)" : "";
+  const sql = `SELECT COUNT(*) count FROM fund_transactions WHERE user_id=?${currency ? " AND currency=?" : ""}${search}`;
+  const args: string[] = [userId];
+  if (currency) args.push(currency);
+  if (query.trim()) args.push(keyword, keyword);
+  const row = getDb().prepare(sql).get(...args);
   return Number((row as { count?: number } | undefined)?.count) || 0;
 }
 export function fundSummaries(userId: string) {

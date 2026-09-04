@@ -12,8 +12,9 @@ export async function GET(request: Request) {
   const offset = Math.max(0, Number(params.get("offset")) || 0);
   const requestedCurrency = String(params.get("currency") || "").toUpperCase();
   const currency = currencies.has(requestedCurrency) ? requestedCurrency as FundCurrency : undefined;
-  const total = countFundTransactions(user.id, currency);
-  return ok({ balances: fundBalances(user.id), summaries: fundSummaries(user.id), transactions: listFundTransactions(user.id, limit, offset, currency), pagination: { limit, offset, total, hasMore: offset + limit < total } });
+  const query = String(params.get("q") || "").trim().slice(0, 60);
+  const total = countFundTransactions(user.id, currency, query);
+  return ok({ balances: fundBalances(user.id), summaries: fundSummaries(user.id), transactions: listFundTransactions(user.id, limit, offset, currency, query), pagination: { limit, offset, total, hasMore: offset + limit < total } });
 }
 export async function POST(request: Request) {
   const user = getAuthUser(request); if (!user) return fail(40101, "未登录", 401);
