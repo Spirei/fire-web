@@ -236,7 +236,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const handleFundBalances = useCallback((balances: Record<CurrencyCode, number>) => setFundBalances(balances), []);
   const [shareOpening, setShareOpening] = useState(false);
   // 快捷交易
-  const [tradeTarget, setTradeTarget] = useState<{ record: StockRecord; side: "buy" | "sell"; qty?: number } | null>(null);
+  const [tradeTarget, setTradeTarget] = useState<{ record: StockRecord; side: "buy" | "sell" | "dividend"; qty?: number; intent?: "close" | "dividend" } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; record: StockRecord } | null>(null);
   const [refreshing, setRefreshing] = useState<"assets" | "holdings" | "orders" | null>(null);
   const { columns: holdingColumns, saveColumns: saveHoldingColumns } = useHoldingColumns();
@@ -879,13 +879,14 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     {dailyShareOpen && <DailyPnlShareModal dayPnl={summary.day} totalPnl={summary.pnl} totalAsset={totalAsset} currency={displayCurrency} items={dailyShareItems} initialProfile={{ name: user?.nickname || user?.username || "我的投资记录", avatar: user?.avatar || "" }} onClose={() => setDailyShareOpen(false)} />}
     {ctxMenu && (
       <div className="fixed inset-0 z-[130]" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }}>
-        <div style={{ left: Math.min(ctxMenu.x, window.innerWidth - 92), top: Math.min(ctxMenu.y, window.innerHeight - 112) }} className="fixed z-[131] w-[80px] overflow-hidden rounded-xl border border-[#ececef] bg-white p-1 shadow-2xl dark:border-white/10 dark:bg-[#20232b]">
+        <div style={{ left: Math.min(ctxMenu.x, window.innerWidth - 100), top: Math.min(ctxMenu.y, window.innerHeight - 168) }} className="fixed z-[131] w-[88px] overflow-hidden rounded-xl border border-[#ececef] bg-white p-1 shadow-2xl dark:border-white/10 dark:bg-[#20232b]">
           <button type="button" onClick={() => { setTradeTarget({ record: ctxMenu.record, side: "buy" }); setCtxMenu(null); }} className="block w-full rounded-lg px-2 py-1.5 text-center text-[13px] font-medium text-[#1d1d1f] transition-colors hover:bg-[#2f6fed] hover:text-white dark:text-white">买入</button>
           <button type="button" onClick={() => { setTradeTarget({ record: ctxMenu.record, side: "sell" }); setCtxMenu(null); }} className="block w-full rounded-lg px-2 py-1.5 text-center text-[13px] font-medium text-[#1d1d1f] transition-colors hover:bg-[#2f6fed] hover:text-white dark:text-white">卖出</button>
-          <button type="button" onClick={() => { setTradeTarget({ record: ctxMenu.record, side: "sell", qty: Number(ctxMenu.record.qty) || 0 }); setCtxMenu(null); }} className="block w-full rounded-lg px-2 py-1.5 text-center text-[13px] font-medium text-[#1d1d1f] transition-colors hover:bg-[#2f6fed] hover:text-white dark:text-white">平仓</button>
+          <button type="button" onClick={() => { setTradeTarget({ record: ctxMenu.record, side: "sell", qty: Number(ctxMenu.record.qty) || 0, intent: "close" }); setCtxMenu(null); }} className="block w-full rounded-lg px-2 py-1.5 text-center text-[13px] font-medium text-[#1d1d1f] transition-colors hover:bg-[#2f6fed] hover:text-white dark:text-white">平仓</button>
+          <button type="button" onClick={() => { setTradeTarget({ record: ctxMenu.record, side: "dividend", intent: "dividend" }); setCtxMenu(null); }} className="block w-full rounded-lg px-2 py-1.5 text-center text-[13px] font-medium text-[#1d1d1f] transition-colors hover:bg-[#2f6fed] hover:text-white dark:text-white">股息</button>
         </div>
       </div>
     )}
-    <QuickTradeDialog open={!!tradeTarget} record={tradeTarget?.record ?? null} initialSide={tradeTarget?.side ?? "buy"} initialQty={tradeTarget?.qty} livePrice={livePrice} maxBuyPower={Math.max(0, accountCash)} dayChange={tradeTarget?.record ? (quotes[tradeTarget.record.id]?.change ?? 0) : 0} stockIcons={stockIcons} onClose={() => setTradeTarget(null)} onDone={() => { void handleRefresh("holdings"); void handleRefresh("orders"); }} />
+    <QuickTradeDialog open={!!tradeTarget} record={tradeTarget?.record ?? null} initialSide={tradeTarget?.side === "dividend" ? "sell" : tradeTarget?.side ?? "buy"} initialQty={tradeTarget?.qty} intent={tradeTarget?.intent} livePrice={livePrice} maxBuyPower={Math.max(0, accountCash)} dayChange={tradeTarget?.record ? (quotes[tradeTarget.record.id]?.change ?? 0) : 0} stockIcons={stockIcons} onClose={() => setTradeTarget(null)} onDone={() => { void handleRefresh("holdings"); void handleRefresh("orders"); }} />
   </div>;
 }

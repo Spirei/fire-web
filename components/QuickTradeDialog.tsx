@@ -6,6 +6,7 @@ import { showToast } from "@/lib/toast";
 
 type Side = "buy" | "sell";
 type TradeMode = "order" | "record";
+type TradeIntent = "trade" | "close" | "dividend";
 
 const ORDER_TYPES = [
   "限价单", "市价单", "到价买入", "到价卖出", "反弹买入", "回落卖出"
@@ -63,6 +64,7 @@ interface Props {
   record: StockRecord | null;
   initialSide: Side;
   initialQty?: number;
+  intent?: TradeIntent;
   livePrice: (r: StockRecord) => number;
   maxBuyPower?: number;
   dayChange?: number;
@@ -71,7 +73,7 @@ interface Props {
   onDone?: () => void;
 }
 
-export default function QuickTradeDialog({ open, record, initialSide, initialQty, livePrice, maxBuyPower = 0, dayChange = 0, stockIcons, onClose, onDone }: Props) {
+export default function QuickTradeDialog({ open, record, initialSide, initialQty, intent = "trade", livePrice, maxBuyPower = 0, dayChange = 0, stockIcons, onClose, onDone }: Props) {
   const [side, setSide] = useState<Side>(initialSide);
   const [tradeMode, setTradeMode] = useState<TradeMode>("order");
   const [orderType, setOrderType] = useState<(typeof ORDER_TYPES)[number]>("限价单");
@@ -95,6 +97,9 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
   const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [divHint, setDivHint] = useState("");
+  const isClose = intent === "close";
+  const isDividend = intent === "dividend";
   const [winPos, setWinPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const winPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const winRef = useRef<HTMLDivElement | null>(null);
@@ -189,32 +194,49 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
   // 打开时初始化
   useEffect(() => {
     if (!open || !record) return;
-    setSide(initialSide);
-    setTradeMode("order");
-    setOrderType("限价单");
+    setSide(isClose || isDividend ? "sell" : initialSide);
+    setTradeMode(isDividend ? "record" : "order");
+    setOrderType(isClose ? "市价单" : "限价单");
     setValidity("当日有效");
     setExpiryDate("");
     setShowCalendar(false);
     setSession("盘中 + 盘前盘后");
     const zone = MARKET_TIME_ZONE[record.market.toUpperCase()]?.zone || "Asia/Shanghai";
     setTradedAt(zonedInputValue(new Date(), zone));
-    const p = livePriceRef.current(record) || 0;
+    const p = isDividend ? 0 : livePriceRef.current(record) || 0;
     setPrice(p);
     setPriceStr(p ? fmtP(p) : "0");
-    const q = initialQty ?? 0;
+    const q = isClose ? Number(record.qty) || initialQty || 0 : initialQty ?? (isDividend ? Number(record.qty) || 0 : 0);
     setQty(q);
     setQtyStr(q ? String(round(q, 4)) : "0");
     setShowFractions(false);
     setMinimized(false);
     setMaximized(false);
     setSubmitting(false);
+    setDivHint("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, record?.id, initialSide, initialQty]);
+  }, [open, record?.id, initialSide, initialQty, intent]);
+  useEffect(() => {
+    if (!open || !record || !isDividend) return;
+    const controller = new AbortController();
+    fetch(`/api/v1/dividends?market=${encodeURIComponent(record.market)}&code=${encodeURIComponent(record.code)}`, { signal: controller.signal })
+      .then((res) => res.json())
+      .then((json) => {
+        const rows = Array.isArray(json?.data?.dividends) ? json.data.dividends as Array<{ amount?: number; currency?: string; exDate?: string; kind?: string }> : [];
+        const latest = rows.find((row) => row.kind !== "special" && Number(row.amount) > 0) || rows.find((row) => Number(row.amount) > 0);
+        if (!latest || !(Number(latest.amount) > 0)) return;
+        setPrice(Number(latest.amount));
+        setPriceStr(String(latest.amount));
+        setDivHint(`最近一期 ${latest.amount} ${latest.currency || ""} · 除息 ${latest.exDate || "—"}`);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [open, record, isDividend]);
 
   const holdQty = Number(record?.qty) || 0;      // 持仓可卖
   const priceN = Number(priceStr) || 0;
   const qtyN = Number(qtyStr) || 0;
-  const isBuy = side === "buy";
+  const isBuy = !isClose && !isDividend && side === "buy";
   const minUnit = usableMinUnit(record?.market ?? "");
   const cur = ({ US: "USD", HK: "HKD", CN: "CNY", JP: "JPY", KR: "KRW" } as Record<string, string>)[(record?.market ?? "").toUpperCase()] || "USD";
   const marketTime = MARKET_TIME_ZONE[(record?.market ?? "").toUpperCase()] || { zone: "Asia/Shanghai", label: "当地时间" };
@@ -224,11 +246,11 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
     ? (isBuy ? currentQuote <= priceN : currentQuote >= priceN)
     : false;
   const maxBuyN = priceN > 0 ? maxBuyPower / priceN : 0;
-  const estAmount = qtyN * priceN;
+  const estAmount = qtyN * (isClose ? (currentQuote || priceN) : priceN);
   const estCost = (() => {
     const cost = Number(record?.cost) || 0;
     const totalQty = isBuy ? holdQty + qtyN : Math.max(0, holdQty - qtyN);
-    if (!isBuy) return cost;
+    if (!isBuy || isDividend) return cost;
     return totalQty > 0 ? (cost * holdQty + estAmount) / totalQty : 0;
   })();
 
@@ -268,10 +290,12 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
   async function submit() {
     if (!record || submitting) return;
     if (qtyN <= 0) { alert("请输入有效的数量"); return; }
-    if (priceN <= 0) { alert("请输入有效的价格"); return; }
-    if (tradeMode === "order" && validity === "自定义有效期" && !expiryDate) { alert("请选择有效期"); return; }
-    const tradedAtIso = tradeMode === "record" ? zonedInputToIso(tradedAt, marketTime.zone) : "";
-    if (tradeMode === "record" && (!tradedAtIso || Date.parse(tradedAtIso) > Date.now() + 60_000)) {
+    const marketPx = currentQuote || priceN;
+    const submitPrice = isClose ? marketPx : priceN;
+    if (submitPrice <= 0) { alert(isClose ? "暂无行情，无法市价平仓" : "请输入有效的价格"); return; }
+    if (!isClose && !isDividend && tradeMode === "order" && validity === "自定义有效期" && !expiryDate) { alert("请选择有效期"); return; }
+    const tradedAtIso = isDividend || tradeMode === "record" ? zonedInputToIso(tradedAt, marketTime.zone) || new Date().toISOString() : "";
+    if (!isClose && tradeMode === "record" && (!tradedAtIso || Date.parse(tradedAtIso) > Date.now() + 60_000)) {
       alert("请选择不晚于当前时间的有效成交时间");
       return;
     }
@@ -280,11 +304,31 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
       const res = await fetch("/api/v1/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(isDividend ? {
+          recordId: record.id,
+          side: "dividend",
+          qty: qtyN,
+          price: submitPrice,
+          fees: 0,
+          mode: "record",
+          tradedAt: tradedAtIso || undefined,
+          note: "股息入账"
+        } : isClose ? {
+          recordId: record.id,
+          side: "sell",
+          qty: qtyN,
+          price: submitPrice,
+          fees: 0,
+          mode: "order",
+          orderType: "market",
+          tif: "day",
+          session: "",
+          note: "快捷平仓"
+        } : {
           recordId: record.id,
           side,
           qty: qtyN,
-          price: priceN,
+          price: submitPrice,
           fees: 0,
           mode: tradeMode,
           orderType: ORDER_TYPE_CODE[orderType],
@@ -297,10 +341,10 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        alert(data?.error || "下单失败");
+        alert(data?.error || data?.message || "下单失败");
         return;
       }
-      showToast(tradeMode === "record" ? "历史成交已入账" : data?.data?.pending ? "已挂单，等待成交" : "委托已成交", "ok");
+      showToast(isDividend ? "股息已入账" : isClose ? "已市价平仓" : tradeMode === "record" ? "历史成交已入账" : data?.data?.pending ? "已挂单，等待成交" : "委托已成交", "ok");
       window.dispatchEvent(new Event("fire:records-updated"));
       window.dispatchEvent(new Event("fire:orders-updated"));
       onDone?.();
@@ -357,7 +401,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
             <button type="button" onClick={() => setMinimized((v) => !v)} title={minimized ? "还原" : "最小化"} className="group grid h-3 w-3 place-items-center rounded-full bg-[#febc2e]"><svg viewBox="0 0 12 12" className="h-2 w-2 text-black/60 opacity-0 transition-opacity group-hover:opacity-100" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M2.5 6h7" /></svg></button>
             <button type="button" onClick={() => setMaximized((v) => !v)} title={maximized ? "还原大小" : "最大化"} className="group grid h-3 w-3 place-items-center rounded-full bg-[#28c840]"><svg viewBox="0 0 12 12" className="h-2 w-2 text-black/60 opacity-0 transition-opacity group-hover:opacity-100" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M6 3v6M3 6h6" /></svg></button>
           </span>
-          <span className="ml-2 text-sm font-bold text-[#1d1d1f] dark:text-white/90">交易</span>
+          <span className="ml-2 text-sm font-bold text-[#1d1d1f] dark:text-white/90">{isClose ? "平仓" : isDividend ? "股息入账" : "交易"}</span>
           <button
             type="button"
             onClick={() => setFixedTop((v) => !v)}
@@ -391,7 +435,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
         <div className={className("px-5 pb-3", minimized && "hidden")}>
           {/* 代码 / 类型 */}
           <div className="quick-trade-form grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
-            <div className="sm:col-span-2">
+            {!isClose && !isDividend && <div className="sm:col-span-2">
               <span className="mb-1 block text-xs text-[#8a8a8a] dark:text-white/60">操作方式</span>
               <div className={`grid grid-cols-2 overflow-hidden rounded-lg border ${fieldBorder} ${fieldBg}`}>
                 <button type="button" onClick={() => setTradeMode("order")} className={className("h-9 text-sm font-semibold transition-colors", tradeMode === "order" ? (isBuy ? "bg-[#ff6a3d] text-white" : "bg-[#00a985] text-white") : "text-[#6b6b70] hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/5")}>提交委托</button>
@@ -404,29 +448,36 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
                     ? `当前 ${fmtP(currentQuote)}，${isBuy ? "买入" : "卖出"}限价 ${fmtP(priceN)} ${limitReached ? "已满足触发条件" : "尚未达到，提交后保持待成交"}。`
                     : "委托将按实时行情与所选触发条件处理。"}
               </p>
-            </div>
+            </div>}
+            {isClose && <div className="sm:col-span-2 text-[11px] leading-relaxed text-[#6b6b70] dark:text-white/55">按当前市价立即卖出，成交后同步现金与持仓。</div>}
+            {isDividend && <div className="sm:col-span-2 text-[11px] leading-relaxed text-[#6b6b70] dark:text-white/55">不改变持仓数量。派息日到账会自动入账；这里用来补录漏记的股息。{divHint ? ` ${divHint}` : ""}</div>}
             <div className="hidden sm:block"><Field label="代码"><input value={`${record.code}.${record.market}`} readOnly className={inputCls} /></Field></div>
-            {tradeMode === "order" ? <Field label="类型">
+            {isClose ? <Field label="类型"><input value="市价单" readOnly className={inputCls} /></Field> : isDividend ? <Field label={`入账时间（${marketTime.label}）`}>
+              <input type="datetime-local" value={tradedAt} max={zonedInputValue(new Date(), marketTime.zone)} onChange={(e) => setTradedAt(e.target.value)} className={inputCls} />
+            </Field> : tradeMode === "order" ? <Field label="类型">
               <Dropdown value={orderType} open={showTypeMenu} onToggle={() => setShowTypeMenu((v) => !v)} onClose={() => setShowTypeMenu(false)} btnCls={`flex h-9 w-full items-center justify-between gap-2 rounded-lg border ${fieldBorder} ${fieldBg} px-3 text-sm outline-none transition-colors`}>
                 {ORDER_TYPES.map((t) => <MenuItem key={t} active={orderType === t} onClick={() => { setOrderType(t); setShowTypeMenu(false); }}>{t}</MenuItem>)}
               </Dropdown>
             </Field> : <Field label={`成交时间（${marketTime.label}）`}>
               <input type="datetime-local" value={tradedAt} max={zonedInputValue(new Date(), marketTime.zone)} onChange={(e) => setTradedAt(e.target.value)} className={inputCls} />
             </Field>}
-            {/* 方向 */}
-            <Field label="方向">
+            {!isClose && !isDividend && <Field label="方向">
               <div className={`flex h-9 overflow-hidden rounded-lg border ${fieldBorder}`}>
                 <button type="button" className={directionCls(isBuy)} onClick={() => setSide("buy")}>买入</button>
                 <button type="button" className={directionCls(!isBuy)} onClick={() => setSide("sell")}>卖出</button>
               </div>
-            </Field>
-            <Field label="价格">
+            </Field>}
+            {isClose && <Field label="方向"><input value="卖出" readOnly className={inputCls} /></Field>}
+            {isDividend && <Field label="方向"><input value="股息" readOnly className={inputCls} /></Field>}
+            <Field label={isDividend ? "每股股息" : isClose ? "价格" : "价格"}>
               <div className="relative">
                 <div className={`flex h-9 overflow-hidden rounded-lg border ${fieldBorder} ${fieldBg}`}>
+                  {isClose ? <input value={currentQuote ? `市价 ${fmtP(currentQuote)}` : "暂无行情"} readOnly className="min-w-0 flex-1 bg-transparent text-center text-sm text-[#1d1d1f] dark:text-white outline-none" /> : <>
                   <button type="button" className={stepperCls} onClick={() => setPriceStr(fmtP(priceN - priceStep(record.market)))}>−</button>
                   <input value={priceStr} onChange={(e) => setPriceStr(e.target.value)} onBlur={() => setPriceStr(fmtP(priceN))} inputMode="decimal" className="min-w-0 flex-1 bg-transparent text-center text-sm text-[#1d1d1f] dark:text-white outline-none" />
                   <button type="button" className={stepperCls} onClick={() => setPriceStr(fmtP(priceN + priceStep(record.market)))}>+</button>
-                  <button type="button" title="价格梯子" className="grid w-10 place-items-center border-l border-[#ececef] dark:border-[#3a3a40] text-[#6b6b70] dark:text-white/60 hover:text-[#1d1d1f] dark:hover:text-white" onClick={() => { setShowPriceMenu((v) => !v); setShowQtyMenu(false); setShowTypeMenu(false); setShowValidityMenu(false); setShowSessionMenu(false); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><circle cx="12" cy="12" r="3" /><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none" /><path d="M12 3v3.5M12 17.5v3.5M3 12h3.5M17.5 12H21" /></svg></button>
+                  {!isDividend && <button type="button" title="价格梯子" className="grid w-10 place-items-center border-l border-[#ececef] dark:border-[#3a3a40] text-[#6b6b70] dark:text-white/60 hover:text-[#1d1d1f] dark:hover:text-white" onClick={() => { setShowPriceMenu((v) => !v); setShowQtyMenu(false); setShowTypeMenu(false); setShowValidityMenu(false); setShowSessionMenu(false); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><circle cx="12" cy="12" r="3" /><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none" /><path d="M12 3v3.5M12 17.5v3.5M3 12h3.5M17.5 12H21" /></svg></button>}
+                  </>}
                 </div>
                 {showPriceMenu && (
                   <>
@@ -446,7 +497,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
               </div>
             </Field>
             {/* 数量 */}
-            <Field label="数量">
+            <Field label={isDividend ? "持仓股数" : "数量"}>
               <div className="relative">
                 <div className={`flex h-9 overflow-hidden rounded-lg border ${fieldBorder} ${fieldBg}`}>
                   <button type="button" className={stepperCls} onClick={() => stepper(qtyN - minUnit)}>−</button>
@@ -494,7 +545,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
               <span title="最小单位" className="ml-auto text-[10px] text-[#b5b5ba] dark:text-white/40">最小单位 {minUnit}</span>
             </div>
             {/* 委托模式才需要时效 / 时段 */}
-            {tradeMode === "order" && <><Field label="时效">
+            {tradeMode === "order" && !isClose && !isDividend && <><Field label="时效">
               <div className="relative">
                 <Dropdown value={validity === "自定义有效期" && expiryDate ? expiryDate : validity} open={showValidityMenu} onToggle={() => { setShowValidityMenu((v) => !v); setShowQtyMenu(false); setShowTypeMenu(false); setShowSessionMenu(false); setShowCalendar(false); }} onClose={() => setShowValidityMenu(false)} btnCls={`flex h-9 w-full items-center justify-between gap-2 rounded-lg border ${fieldBorder} ${fieldBg} px-3 text-sm outline-none transition-colors`}>
                   {VALIDITIES.map((v) => <MenuItem key={v} active={validity === v} onClick={() => { setValidity(v); setShowValidityMenu(false); if (v === "自定义有效期") setShowCalendar(true); }}>{v}</MenuItem>)}
@@ -518,14 +569,14 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
           </div>
 
           {/* 预留底部留白，保证买入/卖出高度一致 */}
-          <div className="h-4 sm:h-[104px]" aria-hidden />
+          {!isClose && !isDividend && <div className="h-4 sm:h-[104px]" aria-hidden />}
         </div>
 
         {/* 底部 */}
         <div className={className("flex items-center gap-4 border-t border-[#00000010] px-5 py-4 dark:border-white/10", minimized && "hidden")}>
           <div className="min-w-0">
             <div className="text-lg font-extrabold tabular-nums text-[#1d1d1f] dark:text-white">{estAmount ? `${estAmount.toFixed(2)} ${cur}` : `0.00 ${cur}`}</div>
-            <div className="truncate text-xs text-[#6b6b70] dark:text-white/55">预估成交后持仓成本 {estCost ? `${estCost.toFixed(2)} ${cur}` : `0.00 ${cur}`}</div>
+            <div className="truncate text-xs text-[#6b6b70] dark:text-white/55">{isDividend ? "股息入账不影响持仓数量与成本" : `预估成交后持仓成本 ${estCost ? `${estCost.toFixed(2)} ${cur}` : `0.00 ${cur}`}`}</div>
           </div>
           <button
             type="button"
@@ -536,7 +587,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
               isBuy ? "bg-[#ff8a5c] hover:bg-[#ff9d72] dark:bg-[#ff6a3d] dark:hover:bg-[#ff7f57]" : "bg-[#37c98a] hover:bg-[#4fd9a0] dark:bg-[#00a985] dark:hover:bg-[#12bd97]"
             )}
           >
-            {submitting ? "处理中…" : tradeMode === "record" ? `记录${isBuy ? "买入" : "卖出"}成交` : `提交${isBuy ? "买入" : "卖出"}委托`}
+            {submitting ? "处理中…" : isDividend ? "确认入账" : isClose ? "确认平仓" : tradeMode === "record" ? `记录${isBuy ? "买入" : "卖出"}成交` : `提交${isBuy ? "买入" : "卖出"}委托`}
           </button>
           </div>
         </div>
