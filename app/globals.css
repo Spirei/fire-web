@@ -4328,40 +4328,86 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  height:18px;
-  padding:0 6px;
-  border-radius:5px;
+  gap:5px;
+  height:20px;
+  padding:0 8px;
+  border:1px solid transparent;
+  border-radius:999px;
   font-size:10px;
   font-weight:700;
   line-height:1;
-  letter-spacing:.02em;
+  letter-spacing:.04em;
   white-space:nowrap;
 }
-.fund-record-chip--buy { background:#e23d3d; color:#fff; }
-.fund-record-chip--sell { background:#0fa07b; color:#fff; }
-.fund-record-chip--dividend { background:#17191d; color:#fff; }
-.fund-record-chip--in { background:#e23d3d; color:#fff; }
-.fund-record-chip--out { background:#0fa07b; color:#fff; }
-.fund-record-chip--open,
-.fund-record-chip--adjust { background:#17191d; color:#fff; }
+.fund-record-chip--buy::before,
+.fund-record-chip--sell::before,
+.fund-record-chip--dividend::before {
+  content:"";
+  width:5px;
+  height:5px;
+  border-radius:50%;
+  background:currentColor;
+}
+.fund-record-chip--buy {
+  background:#fdecee;
+  border-color:#f4c9c9;
+  color:#d12f2f;
+}
+.fund-record-chip--sell {
+  background:#e7f6f1;
+  border-color:#bfe6d8;
+  color:#0b8a6a;
+}
+.fund-record-chip--dividend {
+  background:#1a1c20;
+  border-color:#1a1c20;
+  color:#f4f5f7;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12);
+}
+.fund-record-chip--dividend::before { background:#fff; opacity:.88; }
 .fund-record-chip--code {
-  background:#4a5363;
-  color:#fff;
+  background:#f3f4f7;
+  border-color:#e4e7ec;
+  color:#4a5363;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
   font-variant-numeric:tabular-nums;
   font-weight:600;
-  letter-spacing:0;
+  letter-spacing:.02em;
 }
-.fund-record-chip--auto { background:#6b7382; color:#fff; }
-.dark .fund-record-chip--buy,
-.dark .fund-record-chip--in { background:#e23d3d; color:#fff; }
-.dark .fund-record-chip--sell,
-.dark .fund-record-chip--out { background:#0fa07b; color:#fff; }
-.dark .fund-record-chip--dividend,
-.dark .fund-record-chip--open,
-.dark .fund-record-chip--adjust { background:#eceff4; color:#17191d; }
-.dark .fund-record-chip--code { background:#3a4252; color:#eef1f6; }
-.dark .fund-record-chip--auto { background:#4d5564; color:#d5dbe4; }
+.fund-record-chip--auto {
+  background:#f7f8fa;
+  border-color:#e4e7ec;
+  color:#7a8494;
+  font-weight:600;
+  letter-spacing:.06em;
+}
+.dark .fund-record-chip--buy {
+  background:#3a1c1c;
+  border-color:#5a2a2a;
+  color:#ff8a8a;
+}
+.dark .fund-record-chip--sell {
+  background:#10322a;
+  border-color:#1d4d42;
+  color:#4fd6a8;
+}
+.dark .fund-record-chip--dividend {
+  background:#eceff4;
+  border-color:#eceff4;
+  color:#17191d;
+  box-shadow:none;
+}
+.dark .fund-record-chip--dividend::before { background:#17191d; opacity:1; }
+.dark .fund-record-chip--code {
+  background:#262c37;
+  border-color:#323a4b;
+  color:#c6cdd8;
+}
+.dark .fund-record-chip--auto {
+  background:#1f2430;
+  border-color:#323a4b;
+  color:#99a3b2;
+}
 
 /* 彩虹搜索：彩色字与透明输入共用同一套字体/内边距，避免逐字输入时错位抖动。 */
 .rainbow-text-field {
