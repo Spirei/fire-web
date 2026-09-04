@@ -2295,7 +2295,7 @@
 .holding-div-table { overflow:hidden; border:1px solid var(--edge); border-radius:14px; background:color-mix(in srgb,#fff 88%,transparent); }
 .holding-div-head,.holding-div-row {
   display:grid;
-  grid-template-columns:minmax(0,1.25fr) 72px 72px 78px;
+  grid-template-columns:minmax(0,1.2fr) 72px 72px 72px 78px;
   align-items:center;
   gap:8px;
   padding:9px 12px;
@@ -2304,6 +2304,10 @@
 .holding-div-row { border-top:1px solid var(--edge); font-size:12px; }
 .holding-div-row b { overflow:hidden; color:var(--ink); text-overflow:ellipsis; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .holding-div-row span { color:var(--muted); font-variant-numeric:tabular-nums; }
+.holding-div-yield { color:#0b8a6a; font-weight:700; }
+.dark .holding-div-yield { color:#4fd6a8; }
+.stock-dividend-yield { color:#0b8a6a; font-size:10px; font-style:normal; font-weight:700; }
+.dark .stock-dividend-yield { color:#4fd6a8; }
 .holding-div-row em {
   justify-self:end;
   border-radius:999px;
@@ -2323,6 +2327,10 @@
 .dark .holding-div-row.is-booked em { color:#4fd6a8; background:#10322a; }
 .dark .holding-div-row.is-missing em { color:#ff8a8a; background:#3a1c1c; }
 .dark .holding-div-row.is-pending em { color:#f0c36a; background:#2b2413; }
+@media (max-width: 560px) {
+  .holding-div-head,.holding-div-row { grid-template-columns:minmax(0,1fr) 64px 64px 70px; }
+  .holding-div-head span:nth-child(4),.holding-div-row > span:nth-child(4) { display:none; }
+}
 
 .dark .stock-etf-summary button,.dark .stock-etf-row,.dark .stock-dividend-summary > div,.dark .stock-dividend-row { background:rgba(255,255,255,.035); }
 .dark .stock-etf-summary button:hover,.dark .stock-etf-summary button.is-active,.dark .stock-etf-row:hover,.dark .stock-dividend-row:hover { background:rgba(255,255,255,.075); }

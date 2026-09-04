@@ -149,6 +149,7 @@ function DividendRow({ item }: { item: DividendRecord }) {
       <span className="stock-dividend-main">
         <span className="stock-dividend-title">
           <b>{item.amount != null ? `${item.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${item.currency ?? ""}` : "非现金分配"}</b>
+          {item.yieldPct != null && Number.isFinite(item.yieldPct) && <small className="stock-dividend-yield">股息率 {item.yieldPct >= 10 ? item.yieldPct.toFixed(1) : item.yieldPct.toFixed(2)}%</small>}
           <em className={status === "待派发" ? "is-pending" : ""}>{status}</em>
           {item.kind === "special" && <i>特别分配</i>}
         </span>

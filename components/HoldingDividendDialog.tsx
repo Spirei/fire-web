@@ -15,6 +15,11 @@ function fmtAmount(item: DividendRecord) {
   return `${item.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${item.currency || ""}`.trim();
 }
 
+function fmtYield(item: DividendRecord) {
+  if (item.yieldPct == null || !Number.isFinite(item.yieldPct)) return "—";
+  return `${item.yieldPct >= 10 ? item.yieldPct.toFixed(1) : item.yieldPct.toFixed(2)}%`;
+}
+
 function shortDate(value?: string | null) {
   if (!value) return "—";
   return value.slice(5);
@@ -132,7 +137,7 @@ export default function HoldingDividendDialog({
     <AppModal
       title={`${record.name} 股息`}
       desc={firstBuy ? `${record.code} · 自 ${firstBuy} 首次买入后入账` : `${record.code} · 尚未记录买入，历史派息不会入账`}
-      size="md"
+      size="lg"
       onClose={onClose}
       headerActions={
         <button type="button" disabled={settling || !firstBuy} onClick={() => void settleMissing()} className="btn-line h-9 shrink-0 px-3 text-xs disabled:opacity-50">
@@ -179,7 +184,7 @@ export default function HoldingDividendDialog({
                 )}
                 <div className="holding-div-table">
                   <div className="holding-div-head">
-                    <span>每股</span><span>除息</span><span>派付</span><span>状态</span>
+                    <span>每股</span><span>股息率</span><span>除息</span><span>派付</span><span>状态</span>
                   </div>
                   {rows.map((item, index) => {
                     const row = statusOf(item);
@@ -187,6 +192,7 @@ export default function HoldingDividendDialog({
                     return (
                       <div key={`${item.exDate || item.payDate || item.pubDate}-${index}`} className={`holding-div-row is-${phase}`}>
                         <b className="tabular-nums">{fmtAmount(item)}</b>
+                        <span className="holding-div-yield tabular-nums">{fmtYield(item)}</span>
                         <span className="tabular-nums">{shortDate(item.exDate)}</span>
                         <span className="tabular-nums">{shortDate(item.payDate)}</span>
                         <em>{PHASE_LABEL[phase]}</em>

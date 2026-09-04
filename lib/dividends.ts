@@ -7,6 +7,7 @@
  * 结果缓存 SQLite（dividend_cache）：成功 24h / 失败 6h，避免每次切页签都连 OpenD。
  */
 import { getDb } from "./db";
+import { fetchDailyKline } from "./kline";
 import { fetchFutuDividends, type FutuDividendRaw } from "./futuQuotes";
 
 const OK_TTL_MS = 24 * 60 * 60 * 1000;
@@ -33,6 +34,8 @@ export interface DividendRecord {
   amount: number | null;
   currency: string | null;
   kind: DividendKind;
+  /** 当期股息率：每股股息 / 除息日前收盘价 */
+  yieldPct?: number | null;
 }
 
 function normalizeDate(raw?: string): string | null {
@@ -114,6 +117,32 @@ async function fetchCnDividends(code: string): Promise<DividendRecord[]> {
 interface CacheRow {
   payload: string;
   fetched_at: number;
+}
+
+/** 当期股息率：每股现金股息 / 除息日前最近收盘价。K 线失败时收益率留空，不影响股息列表。 */
+export async function withPeriodYields(market: string, code: string, dividends: DividendRecord[]): Promise<DividendRecord[]> {
+  if (!dividends.length) return dividends;
+  try {
+    const closes = (await fetchDailyKline(market, code, 3200)).filter((item) => item.c > 0).sort((a, b) => a.d.localeCompare(b.d));
+    if (!closes.length) return dividends.map((item) => ({ ...item, yieldPct: null }));
+    return dividends.map((item) => {
+      if (!(Number(item.amount) > 0)) return { ...item, yieldPct: null };
+      const day = item.exDate || item.payDate || item.recordDate;
+      if (!day) return { ...item, yieldPct: null };
+      let close = 0;
+      for (let index = closes.length - 1; index >= 0; index -= 1) {
+        if (closes[index].d < day) {
+          close = closes[index].c;
+          break;
+        }
+      }
+      if (!(close > 0)) close = closes[closes.length - 1]?.c || 0;
+      if (!(close > 0)) return { ...item, yieldPct: null };
+      return { ...item, yieldPct: Number(item.amount) / close * 100 };
+    });
+  } catch {
+    return dividends.map((item) => ({ ...item, yieldPct: null }));
+  }
 }
 
 /**
