@@ -7,6 +7,7 @@ import MarketIcon from "@/components/MarketIcon";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import CurrencySelect from "@/components/CurrencySelect";
 import { useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
+import { IconChartHistogram, IconMap2 } from "@tabler/icons-react";
 
 interface TopAsset {
   market: string;
@@ -430,13 +431,8 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
 type GlobalSection = "assets" | "heatmap";
 
 function SectionIcon({ section }: { section: GlobalSection }) {
-  const base = section === "assets" ? "assets" : "heatmap";
-  return (
-    <span className="global-section-icon flex h-10 w-10 items-center justify-center rounded-[13px]">
-      <img src={`/icons/global-economy/${base}-light.svg`} alt="" className="h-6 w-6 object-contain dark:hidden" />
-      <img src={`/icons/global-economy/${base}-dark.svg`} alt="" className="hidden h-6 w-6 object-contain dark:block" />
-    </span>
-  );
+  const Icon = section === "assets" ? IconChartHistogram : IconMap2;
+  return <Icon className="global-section-icon" size={18} stroke={1.65} aria-hidden="true" />;
 }
 
 export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
@@ -456,10 +452,10 @@ export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
 
   return (
     <div className="global-economy-page flex flex-col gap-6">
-      <nav className="global-section-nav flex items-center gap-2" aria-label="全球经济功能">
+      <nav className="global-section-nav" aria-label="全球经济功能">
         {([
-          ["assets", "全球资产市值排行", "全球主要资产的市值、价格与走势"],
-          ["heatmap", "全球经济热图", "按国家比较关键宏观经济指标"]
+          ["assets", "市值排行", "全球主要资产的市值、价格与走势"],
+          ["heatmap", "经济热图", "按国家比较关键宏观经济指标"]
         ] as [GlobalSection, string, string][]).map(([key, label, description]) => (
           <button
             key={key}
@@ -468,10 +464,11 @@ export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
             title={label}
             aria-label={label}
             aria-current={section === key ? "page" : undefined}
-            className={`global-section-button is-icon-only group flex h-[50px] w-[50px] flex-none items-center justify-center rounded-[16px] border transition-[transform,background-color,border-color,box-shadow] duration-300 ${section === key ? "is-active border-[#0091ff]/35 bg-[#0091ff]/[.075] shadow-[0_8px_24px_rgba(0,145,255,.10)] dark:bg-[#0091ff]/[.11]" : "border-edge bg-white/75 hover:border-edge-strong dark:border-white/10 dark:bg-white/[.025]"}`}
+            className={`global-section-button ${section === key ? "is-active" : ""}`}
           >
             <SectionIcon section={key} />
-            <span className="sr-only">{label}：{description}</span>
+            <span>{label}</span>
+            <span className="sr-only">：{description}</span>
           </button>
         ))}
       </nav>

@@ -3064,14 +3064,24 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 @media (min-width:1280px) {
   .global-economy-page { width:min(100%,1024px); }
 }
-.global-section-button { flex: 0 1 310px; }
-.global-section-button.is-icon-only { flex:none; transform:translateZ(0); will-change:transform; }
-.global-section-button.is-icon-only:hover { transform:translateY(-2px) scale(1.035); box-shadow:0 9px 24px rgba(15,23,42,.10); }
-.global-section-button.is-icon-only:active { transform:translateY(0) scale(.96); transition-duration:100ms; }
-.global-section-button.is-icon-only:focus-visible { outline:2px solid rgba(41,98,255,.72); outline-offset:3px; }
-.global-section-button.is-active .global-section-icon { transform:scale(1.04); filter:drop-shadow(0 4px 8px rgba(0,145,255,.18)); }
-.global-section-button:hover .global-section-icon { transform:scale(1.08) rotate(-2deg); }
-.global-section-icon { transition:transform .34s cubic-bezier(.22,1,.36,1),filter .34s ease; }
+.global-section-nav { display:flex; align-items:center; align-self:stretch; gap:26px; min-height:48px; border-bottom:1px solid #e5e7eb; }
+.global-section-button { position:relative; display:flex; height:48px; align-items:center; gap:8px; border:0; background:transparent; padding:0 2px; color:#7b8290; font-size:13px; font-weight:600; letter-spacing:-.01em; white-space:nowrap; transition:color .18s ease,transform .12s ease; }
+.global-section-button:hover { color:#242a34; }
+.global-section-button:active { transform:translateY(1px); }
+.global-section-button:focus-visible { outline:2px solid rgba(41,98,255,.65); outline-offset:4px; border-radius:4px; }
+.global-section-button.is-active { color:#111827; }
+.global-section-button.is-active::after { content:""; position:absolute; right:0; bottom:-1px; left:0; height:2px; border-radius:2px 2px 0 0; background:#1687e8; }
+.global-section-icon { flex:none; color:#9299a6; transition:color .18s ease,transform .18s cubic-bezier(.22,1,.36,1); }
+.global-section-button:hover .global-section-icon { transform:translateY(-1px); color:#586171; }
+.global-section-button.is-active .global-section-icon { color:#1687e8; }
+.dark .global-section-nav { border-color:rgba(255,255,255,.09); }
+.dark .global-section-button { color:#7f8998; }
+.dark .global-section-button:hover { color:#cbd2dc; }
+.dark .global-section-button.is-active { color:#f0f3f7; }
+.dark .global-section-icon { color:#697586; }
+.dark .global-section-button:hover .global-section-icon { color:#a6b0bf; }
+.dark .global-section-button.is-active .global-section-icon { color:#78b7f5; }
+.dark .global-section-button.is-active::after { background:#78b7f5; }
 .global-section-panel { min-width:0; animation:global-section-panel-in .2s cubic-bezier(.22,1,.36,1); }
 .global-section-panel:has(.economy-map-card.is-map-fullscreen) { animation:none; }
 /* 这里只做透明度过渡。即使结束值写成 translateY(0)，动画填充层仍会创建
