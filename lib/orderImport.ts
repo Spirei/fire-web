@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { getDb } from "./db";
 import type { Market } from "./types";
 import { refreshEconomicRealizedPnl } from "./orders";
+import { syncOrderCashTransactions } from "./funds";
 
 /**
  * 券商订单导入：把「订单状态=已成交」的券商订单接入 trade_orders。
@@ -291,6 +292,7 @@ export function importBrokerOrders(userId: string, rawRows: ImportOrderInput[], 
     processGroups();
   } else {
     db.transaction(processGroups)();
+    syncOrderCashTransactions(userId);
   }
 
   return { totalFilled: filled.length, imported, skipped, duplicated, groups };

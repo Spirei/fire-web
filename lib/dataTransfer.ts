@@ -2,6 +2,7 @@ import { getDb } from "@/lib/db";
 import { CURRENT_VERSION } from "@/lib/versions";
 import { randomBytes } from "node:crypto";
 import { generateOrderNo } from "@/lib/orderNo";
+import { syncOrderCashTransactions } from "@/lib/funds";
 
 /**
  * 网站设置/数据 导出导入（无损迁移用）
@@ -97,7 +98,8 @@ export function buildBackupPayload(userId: string, isAdmin: boolean) {
     tradeOrders: db.prepare(`SELECT ${COLUMNS.trade_orders.map((column) => `o.${column}`).join(",")} FROM trade_orders o WHERE o.user_id = ? AND EXISTS (SELECT 1 FROM records r WHERE r.id = o.record_id AND r.user_id = o.user_id)`).all(userId),
     activities: db.prepare(`SELECT ${COLUMNS.activities.join(",")} FROM activities WHERE user_id = ?`).all(userId),
     watchGroups: db.prepare(`SELECT ${COLUMNS.watch_groups.join(",")} FROM watch_groups WHERE user_id = ?`).all(userId),
-    fundTransactions: db.prepare(`SELECT ${COLUMNS.fund_transactions.join(",")} FROM fund_transactions WHERE user_id = ?`).all(userId),
+    // 订单自动现金流水可由订单确定性重建，只迁移用户手工资金记录，避免重复入账。
+    fundTransactions: db.prepare(`SELECT ${COLUMNS.fund_transactions.join(",")} FROM fund_transactions WHERE user_id = ? AND id NOT LIKE 'fund-order-%'`).all(userId),
     celebs: isAdmin ? db.prepare(`SELECT ${COLUMNS.celebs.join(",")} FROM celebs`).all() : [],
     profile
   };
@@ -318,6 +320,7 @@ export function restoreBackupPayload(payload: unknown, userId: string, isAdmin: 
     if (nickname) db.prepare("UPDATE users SET nickname = ? WHERE id = ?").run(nickname, userId);
   });
   tx();
+  syncOrderCashTransactions(userId);
 
   return {
     counts: {

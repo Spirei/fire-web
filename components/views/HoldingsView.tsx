@@ -716,6 +716,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       const nextPosition = data?.data?.position;
       if (nextPosition && selectedHolding.id === order.recordId) setSelectedHolding({ ...selectedHolding, qty: nextPosition.qty || "", cost: nextPosition.cost ?? "" });
       window.dispatchEvent(new Event("fire:records-updated"));
+      window.dispatchEvent(new Event("fire:orders-updated"));
       onOrdersChanged?.();
       await loadOrders(selectedHolding.id);
       showToast("订单已删除，持仓与后续订单已重新计算");
@@ -829,6 +830,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       setTradeRecord(null);
       setEditingOrder(null);
       window.dispatchEvent(new Event("fire:records-updated"));
+      window.dispatchEvent(new Event("fire:orders-updated"));
       onOrdersChanged?.();
       const sideLabel = tradeSide === "buy" ? "买入" : tradeSide === "sell" ? "卖出" : "股息";
       showToast(corrected ? "订单已更正，持仓与后续订单已重新计算" : `${sideLabel}已入账，订单已更新`);

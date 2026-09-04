@@ -850,6 +850,7 @@ export default function TradeOrdersPanel({
       if (!response.ok || !data) throw new Error(data?.error || "导入失败");
       setImportPreview(data as ImportResultData);
       showToast(`已导入 ${data.imported} 笔订单`);
+      window.dispatchEvent(new Event("fire:orders-updated"));
       if (onRefresh) await onRefresh();
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "导入失败");

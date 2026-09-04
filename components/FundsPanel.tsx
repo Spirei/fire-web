@@ -7,7 +7,7 @@ import FundEntryDialog from "@/components/FundEntryDialog";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/currencyPrefs";
 
 type Currency = CurrencyCode;
-interface Tx { id: string; currency: Currency; type: string; amount: number; direction: 1 | -1; note: string; occurredAt: string }
+interface Tx { id: string; currency: Currency; type: string; amount: number; direction: 1 | -1; note: string; occurredAt: string; sourceOrderId?: string | null }
 const TYPE_LABEL: Record<string, string> = { opening: "期初资金", deposit: "转入", withdrawal: "转出", adjustment: "余额调整" };
 const EMPTY: Record<Currency, number> = { USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 };
 
@@ -30,7 +30,16 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
     const next = { ...EMPTY, ...(json?.data?.balances || {}) };
     setBalances(next); setTransactions(json?.data?.transactions || []); onBalancesChange(next);
   }, [onBalancesChange]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const refresh = () => void load();
+    window.addEventListener("fire:orders-updated", refresh);
+    window.addEventListener("fire:records-updated", refresh);
+    return () => {
+      window.removeEventListener("fire:orders-updated", refresh);
+      window.removeEventListener("fire:records-updated", refresh);
+    };
+  }, [load]);
   const submit = async () => {
     const value = Number(amount);
     if (!Number.isFinite(value) || value <= 0) return showToast("请输入有效金额", "err");
@@ -52,9 +61,10 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
   const currencyTransactions = transactions.filter((item) => item.currency === currency);
   const openingAsset = currencyTransactions.filter((item) => item.type === "opening").reduce((sum, item) => sum + item.amount * item.direction, 0);
   const cashNetFlow = currencyTransactions.filter((item) => item.type === "deposit" || item.type === "withdrawal").reduce((sum, item) => sum + item.amount * item.direction, 0);
-  const stockNetFlow = 0;
-  const otherNetFlow = currencyTransactions.filter((item) => item.type === "adjustment").reduce((sum, item) => sum + item.amount * item.direction, 0);
-  const currentInvestment = cashNetFlow + stockNetFlow + otherNetFlow;
+  const stockNetFlow = currencyTransactions.filter((item) => item.sourceOrderId).reduce((sum, item) => sum + item.amount * item.direction, 0);
+  const otherNetFlow = currencyTransactions.filter((item) => item.type === "adjustment" && !item.sourceOrderId).reduce((sum, item) => sum + item.amount * item.direction, 0);
+  // 买卖股票只是现金与持仓之间互转，不属于外部投入，否则卖出会被重复计入盈亏。
+  const currentInvestment = cashNetFlow + otherNetFlow;
   const endingAsset = cash + holdings;
   const profit = endingAsset - openingAsset - currentInvestment;
   const fullMoney = (value: number, signed = false) => `${signed && value > 0 ? "+" : ""}${fmtMoney(value, CURRENCY_SYMBOLS[currency])}`;
@@ -69,15 +79,15 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
         <div aria-hidden="true" className="fund-flow-center-line fund-flow-center-line--left" />
         <div aria-hidden="true" className="fund-flow-center-line fund-flow-center-line--right" />
         <div className="col-start-1 row-start-1">{metric("现金净流入", cashNetFlow)}</div>
-        <div className="col-start-1 row-start-2">{metric("股票净流入", stockNetFlow)}</div>
+        <div className="col-start-1 row-start-2">{metric("交易现金流", stockNetFlow)}</div>
         <div className="col-start-1 row-start-3">{metric("其他净流入", otherNetFlow)}</div>
         <div className="col-start-2 row-start-1">{metric("期初总资产", openingAsset, "flow")}</div>
         <div className="col-start-2 row-start-2">{metric("当期净投入", currentInvestment, "flow")}</div>
         <div className="col-start-2 row-start-3">{metric("盈亏额", profit, "flow")}</div>
         <div className="col-start-3 row-start-2">{metric("期末总资产", endingAsset, "result")}</div>
       </div>
-      <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 当期净投入 = 现金净流入 + 股票净流入 + 其他净流入。<button type="button" onClick={() => recordsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })} className="ml-1 text-[#3297f6] hover:underline">查看资金记录</button></p></div>
-      <div ref={recordsRef} className="mt-4 border-t border-edge pt-3"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold">资金记录</span><span className="text-[10px] text-muted">最近 5 笔</span></div>{recent.length ? recent.map((item) => <div key={item.id} className="group flex items-center justify-between gap-2 border-t border-edge/70 py-2.5 text-[11px] first:border-0"><span className="min-w-0"><b>{item.type === "deposit" || item.type === "withdrawal" ? item.direction > 0 ? "资金转入" : "资金转出" : TYPE_LABEL[item.type] || "资金变动"}</b><small className="ml-2 text-muted">{new Date(item.occurredAt).toLocaleDateString("zh-CN")}</small>{item.note && <small className="mt-0.5 block truncate text-muted">{item.note}</small>}</span><span className="flex shrink-0 items-center gap-1.5"><b className={item.direction > 0 ? "text-up" : "text-down"}>{item.direction > 0 ? "+" : "−"}{fmtMoney(item.amount, CURRENCY_SYMBOLS[currency])}</b><button type="button" onClick={() => void remove(item.id)} className="flex h-6 w-6 items-center justify-center rounded-md text-sm text-muted opacity-0 transition-all hover:bg-bg-gray hover:text-down group-hover:opacity-100" title="删除记录">×</button></span></div>) : <div className="py-4 text-center text-[11px] text-muted">暂无资金记录，点击右上角“记一笔”开始</div>}</div>
+      <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 买卖与股息属于账户内部现金流，不计入外部投入。<button type="button" onClick={() => recordsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })} className="ml-1 text-[#3297f6] hover:underline">查看资金记录</button></p></div>
+      <div ref={recordsRef} className="mt-4 border-t border-edge pt-3"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold">资金记录</span><span className="text-[10px] text-muted">最近 5 笔</span></div>{recent.length ? recent.map((item) => <div key={item.id} className="group flex items-center justify-between gap-2 border-t border-edge/70 py-2.5 text-[11px] first:border-0"><span className="min-w-0"><b>{item.sourceOrderId ? item.note.split(" · ")[0] : item.type === "deposit" || item.type === "withdrawal" ? item.direction > 0 ? "资金转入" : "资金转出" : TYPE_LABEL[item.type] || "资金变动"}</b><small className="ml-2 text-muted">{new Date(item.occurredAt).toLocaleDateString("zh-CN")}</small>{item.note && !item.sourceOrderId && <small className="mt-0.5 block truncate text-muted">{item.note}</small>}</span><span className="flex shrink-0 items-center gap-1.5"><b className={item.direction > 0 ? "text-up" : "text-down"}>{item.direction > 0 ? "+" : "−"}{fmtMoney(item.amount, CURRENCY_SYMBOLS[currency])}</b>{!item.sourceOrderId && <button type="button" onClick={() => void remove(item.id)} className="flex h-6 w-6 items-center justify-center rounded-md text-sm text-muted opacity-0 transition-all hover:bg-bg-gray hover:text-down group-hover:opacity-100" title="删除记录">×</button>}</span></div>) : <div className="py-4 text-center text-[11px] text-muted">暂无资金记录，点击右上角“记一笔”开始</div>}</div>
     </div>
     {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={cash} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
   </section>;

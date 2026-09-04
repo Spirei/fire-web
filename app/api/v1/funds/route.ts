@@ -1,12 +1,13 @@
 import { getAuthUser } from "@/lib/auth";
 import { fail, ok } from "@/lib/api";
-import { createFundTransaction, fundBalances, listFundTransactions, type FundCurrency, type FundType } from "@/lib/funds";
+import { createFundTransaction, fundBalances, listFundTransactions, syncOrderCashTransactions, type FundCurrency, type FundType } from "@/lib/funds";
 
 const currencies = new Set(["USD", "EUR", "HKD", "CNY", "JPY", "KRW", "SGD"]);
 const types = new Set(["opening", "deposit", "withdrawal", "adjustment"]);
 export async function GET(request: Request) {
   const user = getAuthUser(request); if (!user) return fail(40101, "未登录", 401);
   const limit = Math.min(500, Math.max(1, Number(new URL(request.url).searchParams.get("limit")) || 100));
+  syncOrderCashTransactions(user.id);
   return ok({ balances: fundBalances(user.id), transactions: listFundTransactions(user.id, limit) });
 }
 export async function POST(request: Request) {

@@ -3,6 +3,7 @@ import { getDb } from "./db";
 import { applyOrder } from "./tradeAccounting";
 import { generateOrderNo } from "./orderNo";
 import { replayEconomicOrders } from "./portfolioLedger";
+import { syncOrderCashTransaction } from "./funds";
 import { fetchQuotes } from "./quotes";
 import { parseMarket } from "./store";
 import type { OrderSide, OrderType, OrderValidity, TradeOrder } from "./types";
@@ -159,6 +160,7 @@ export function executeOrder(input: {
     db.prepare("UPDATE records SET qty = ?, cost = ?, updated_at = ? WHERE id = ? AND user_id = ?")
       .run(nextQty || null, nextCost, now, input.recordId, input.userId);
     refreshEconomicRealizedPnl(input.userId, input.recordId);
+    syncOrderCashTransaction(input.userId, id);
     const order = db.prepare("SELECT * FROM trade_orders WHERE id = ?").get(id) as OrderRow;
     return { order: rowToOrder(order), position: { qty: nextQty, cost: nextCost } };
   });
@@ -213,6 +215,7 @@ function fillPendingRow(row: OrderRow, fillPrice: number): boolean {
     db.prepare("UPDATE records SET qty=?, cost=?, updated_at=? WHERE id=? AND user_id=?")
       .run(nextQty || null, nextCost, now, String(row.record_id), userId);
     refreshEconomicRealizedPnl(userId, String(row.record_id));
+    syncOrderCashTransaction(userId, String(row.id));
     return true;
   })();
 }
@@ -424,6 +427,7 @@ export function updateOrder(input: {
     db.prepare("UPDATE records SET qty = ?, cost = ?, updated_at = ? WHERE id = ? AND user_id = ?")
       .run(qty || null, qty > 0 ? cost : null, now, target.recordId, input.userId);
     refreshEconomicRealizedPnl(input.userId, target.recordId);
+    syncOrderCashTransaction(input.userId, input.orderId);
     const updated = db.prepare("SELECT * FROM trade_orders WHERE id = ?").get(input.orderId) as OrderRow;
     return { order: rowToOrder(updated), position: { qty, cost: qty > 0 ? cost : null } };
   })();
@@ -445,6 +449,7 @@ export function deleteOrder(input: {
 
     const base = positionBeforeFirstOrder(rowToOrder(rows[0]));
     db.prepare("DELETE FROM trade_orders WHERE id = ? AND user_id = ?").run(input.orderId, input.userId);
+    syncOrderCashTransaction(input.userId, input.orderId);
 
     const replayRows = db.prepare("SELECT * FROM trade_orders WHERE user_id = ? AND record_id = ? AND status = 'filled' ORDER BY traded_at ASC, created_at ASC")
       .all(input.userId, target.recordId) as OrderRow[];
