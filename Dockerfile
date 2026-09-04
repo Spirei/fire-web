@@ -54,6 +54,11 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/public/uploads /app/resource-default
+# 交易广场缓存作为首次启动种子；运行期仍写入挂载的 /app/data，已有数据不会被覆盖。
+RUN mkdir -p /app/trading-square-default
+COPY --from=build /app/data/duan-posts.json /app/trading-square-default/duan-posts.json
+COPY --from=build /app/data/trump-posts.json /app/trading-square-default/trump-posts.json
+COPY --from=build /app/data/trump-translations.json /app/trading-square-default/trump-translations.json
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/lib ./lib
 COPY package.json ./

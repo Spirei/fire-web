@@ -175,7 +175,7 @@ function Avatar({ src, name, large = false, badge = 0 }: { src: string; name: st
         fallback={<span className={`grid ${box} place-items-center rounded-full bg-slate-200 text-xs font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300`}>{name.slice(0, 1)}</span>}
       />
       {badge > 0 ? (
-        <span className="absolute -bottom-0.5 -right-0.5 inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-up px-1 text-[9px] font-bold tabular-nums leading-none text-white ring-2 ring-white dark:ring-[#10151d]">
+        <span className="absolute -bottom-px -right-px inline-flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-up px-0.5 text-[8px] font-bold tabular-nums leading-none text-white ring-[1.5px] ring-white dark:ring-[#10151d]">
           {badge > 99 ? "99+" : badge}
         </span>
       ) : null}
