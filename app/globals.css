@@ -4432,6 +4432,7 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 }
 .rainbow-text-display-text {
   min-width:0;
+  width:100%;
   overflow:hidden;
   white-space:pre;
   font:inherit;
@@ -4439,13 +4440,18 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   letter-spacing:inherit;
 }
 .rainbow-text-placeholder {
+  display:block;
+  width:100%;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
   color:#8d99ab;
   font-family:inherit;
   font-size:inherit;
   font-weight:400 !important;
   letter-spacing:inherit;
   line-height:inherit;
-  white-space:nowrap;
 }
 .rainbow-text-native,
 .rainbow-text-native:focus {
