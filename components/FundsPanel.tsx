@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconArrowDownLeft, IconArrowUpRight, IconCash, IconCoins, IconReceipt, IconSearch, IconTrash } from "@tabler/icons-react";
 import { fmtMoney, fmtMoneyAdaptive } from "@/lib/format";
 import { showToast } from "@/lib/toast";
@@ -7,6 +7,8 @@ import CurrencySelect from "@/components/CurrencySelect";
 import FundEntryDialog from "@/components/FundEntryDialog";
 import AppModal from "@/components/AppModal";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/currencyPrefs";
+import { useRates } from "@/lib/useRates";
+import { usePersistedState } from "@/lib/usePersistedState";
 
 type Currency = CurrencyCode;
 interface Tx { id: string; currency: Currency; type: string; amount: number; direction: 1 | -1; note: string; occurredAt: string; sourceOrderId?: string | null }
@@ -17,7 +19,8 @@ const EMPTY_SUMMARY: Record<Currency, Summary> = Object.fromEntries(Object.keys(
 const RECORD_PAGE_SIZE = 30;
 
 export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdingAssets: Record<Currency, number>; onBalancesChange: (balances: Record<Currency, number>) => void }) {
-  const [currency, setCurrency] = useState<Currency>("USD");
+  const rates = useRates();
+  const [currency, setCurrency] = usePersistedState<Currency>("fire:funds-display-currency", "USD");
   const [balances, setBalances] = useState<Record<Currency, number>>(EMPTY);
   const [transactions, setTransactions] = useState<Tx[]>([]);
   const [summaries, setSummaries] = useState<Record<Currency, Summary>>(EMPTY_SUMMARY);
@@ -44,9 +47,9 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
     const next = { ...EMPTY, ...(json?.data?.balances || {}) };
     setBalances(next); setSummaries({ ...EMPTY_SUMMARY, ...(json?.data?.summaries || {}) }); onBalancesChange(next);
   }, [onBalancesChange]);
-  const loadRecords = useCallback(async (nextCurrency: Currency, page: number, query = "") => {
+  const loadRecords = useCallback(async (_nextCurrency: Currency, page: number, query = "") => {
     const normalizedQuery = query.trim();
-    const key = `${nextCurrency}:${page}:${normalizedQuery.toLocaleLowerCase("zh-CN")}`;
+    const key = `${page}:${normalizedQuery.toLocaleLowerCase("zh-CN")}`;
     const cached = recordsCache.current.get(key);
     if (cached) {
       setTransactions(cached.transactions);
@@ -61,7 +64,7 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
     setRecordsLoading(true);
     try {
       const offset = page * RECORD_PAGE_SIZE;
-      const res = await fetch(`/api/v1/funds?recordsOnly=1&currency=${nextCurrency}&limit=${RECORD_PAGE_SIZE}&offset=${offset}&q=${encodeURIComponent(normalizedQuery)}`, { cache: "no-store", signal: controller.signal });
+      const res = await fetch(`/api/v1/funds?recordsOnly=1&limit=${RECORD_PAGE_SIZE}&offset=${offset}&q=${encodeURIComponent(normalizedQuery)}`, { cache: "no-store", signal: controller.signal });
       const json = await res.json().catch(() => null);
       if (!res.ok || recordsRequest.current?.id !== id) return;
       const nextTransactions = json?.data?.transactions || [];
@@ -113,10 +116,16 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
     recordsCache.current.clear();
     await load(); await loadRecords(currency, recordsPage, debouncedQuery);
   };
-  const cash = balances[currency] || 0;
-  const holdings = holdingAssets[currency] || 0;
+  const convert = useCallback((value: number, from: Currency) => value / (rates[from] || 1) * (rates[currency] || 1), [currency, rates]);
+  const cash = useMemo(() => (Object.entries(balances) as [Currency, number][]).reduce((sum, [iso, value]) => sum + convert(value, iso), 0), [balances, convert]);
+  const holdings = useMemo(() => (Object.entries(holdingAssets) as [Currency, number][]).reduce((sum, [iso, value]) => sum + convert(value, iso), 0), [holdingAssets, convert]);
   const currencyTransactions = transactions;
-  const { openingAsset, cashNetFlow, stockNetFlow, otherNetFlow } = summaries[currency] || EMPTY_SUMMARY[currency];
+  const { openingAsset, cashNetFlow, stockNetFlow, otherNetFlow } = useMemo(() => (Object.entries(summaries) as [Currency, Summary][]).reduce((total, [iso, summary]) => ({
+    openingAsset: total.openingAsset + convert(summary.openingAsset, iso),
+    cashNetFlow: total.cashNetFlow + convert(summary.cashNetFlow, iso),
+    stockNetFlow: total.stockNetFlow + convert(summary.stockNetFlow, iso),
+    otherNetFlow: total.otherNetFlow + convert(summary.otherNetFlow, iso)
+  }), { openingAsset: 0, cashNetFlow: 0, stockNetFlow: 0, otherNetFlow: 0 }), [summaries, convert]);
   // 买卖股票只是现金与持仓之间互转，不属于外部投入，否则卖出会被重复计入盈亏。
   const currentInvestment = cashNetFlow + otherNetFlow;
   const endingAsset = cash + holdings;
@@ -140,10 +149,10 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
         <div className="col-start-2 row-start-3">{metric("盈亏额", profit, "flow")}</div>
         <div className="col-start-3 row-start-2">{metric("期末总资产", endingAsset, "result")}</div>
       </div>
-      <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 买卖与股息属于账户内部现金流，不计入外部投入。<button type="button" onClick={() => { setRecordsPage(0); setRecordsOpen(true); }} className="ml-1 font-semibold text-[#3297f6] transition-colors hover:text-[#1976d2] hover:underline">查看资金记录</button></p></div>
+      <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 买卖与股息属于账户内部现金流，不计入外部投入。</p><p>3. <button type="button" onClick={() => { setRecordsPage(0); setRecordsOpen(true); }} className="border-b border-dashed border-muted/60 pb-px font-semibold text-muted transition-colors hover:border-ink hover:text-ink">查看资金记录</button></p></div>
     </div>
-    {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={cash} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
-    {recordsOpen && <AppModal title="资金记录" desc={`${currency} 账户 · 共 ${recordsTotal} 笔 · 当前余额 ${fmtMoney(cash, CURRENCY_SYMBOLS[currency])}`} size="md" onClose={() => setRecordsOpen(false)} headerActions={<label className="relative block"><IconSearch size={14} stroke={1.8} className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted ${recordsLoading ? "animate-pulse" : ""}`} /><input autoFocus value={recordsQuery} onChange={(event) => setRecordsQuery(event.target.value)} className="h-9 w-full rounded-xl border border-edge bg-bg-gray pl-8 pr-8 text-[11px] text-ink outline-none transition-colors placeholder:text-faint focus:border-[#3297f6]/60 focus:bg-white dark:focus:bg-white/5" placeholder="搜索资金记录" />{recordsQuery && <button type="button" onClick={() => setRecordsQuery("")} className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:bg-white hover:text-ink dark:hover:bg-white/10" aria-label="清空搜索">×</button>}</label>}>
+    {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={balances[currency] || 0} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
+    {recordsOpen && <AppModal title="资金记录" desc={`折算为 ${currency} · 共 ${recordsTotal} 笔 · 当前余额 ${fmtMoney(cash, CURRENCY_SYMBOLS[currency])}`} size="md" onClose={() => setRecordsOpen(false)} headerActions={<label className="relative block"><IconSearch size={14} stroke={1.8} className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted ${recordsLoading ? "animate-pulse" : ""}`} /><input autoFocus value={recordsQuery} onChange={(event) => setRecordsQuery(event.target.value)} className="h-9 w-full rounded-xl border border-edge bg-bg-gray pl-8 pr-8 text-[11px] text-ink outline-none transition-colors placeholder:text-faint focus:border-[#3297f6]/60 focus:bg-white dark:focus:bg-white/5" placeholder="搜索资金记录" />{recordsQuery && <button type="button" onClick={() => setRecordsQuery("")} className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:bg-white hover:text-ink dark:hover:bg-white/10" aria-label="清空搜索">×</button>}</label>}>
       <div className="-mx-3 max-h-[min(520px,62vh)] overflow-y-auto px-1 sm:-mx-2">
         {recordsLoading && currencyTransactions.length === 0 ? <div className="space-y-2 px-2 py-1">{Array.from({ length: 6 }, (_, index) => <div key={index} className="flex animate-pulse items-center gap-3 rounded-[14px] px-3 py-3"><i className="h-9 w-9 rounded-xl bg-bg-gray" /><span className="flex-1"><i className="block h-3 w-2/5 rounded bg-bg-gray" /><i className="mt-2 block h-2.5 w-1/4 rounded bg-bg-gray" /></span><i className="h-3 w-20 rounded bg-bg-gray" /></div>)}</div> : currencyTransactions.length ? currencyTransactions.map((item) => {
           const automatic = !!item.sourceOrderId;
@@ -153,7 +162,7 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
           return <div key={item.id} className="group flex items-center gap-3 rounded-[14px] px-3 py-3 transition-colors hover:bg-bg-gray">
             <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-[1.04] ${automatic ? orderIconClass : "bg-bg-gray text-muted"}`}>{orderAction === "buy" ? <IconArrowDownLeft size={18} stroke={1.9} /> : orderAction === "sell" ? <IconArrowUpRight size={18} stroke={1.9} /> : orderAction === "dividend" ? <IconCoins size={18} stroke={1.8} /> : <IconCash size={17} stroke={1.7} />}</span>
             <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><b className="truncate text-xs text-ink">{label}</b>{automatic && <small className="rounded-full border border-edge px-1.5 py-0.5 text-[9px] font-semibold text-muted">自动</small>}</span><small className="mt-1 block truncate text-[10px] text-muted">{new Date(item.occurredAt).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}{item.note && !automatic ? ` · ${item.note}` : ""}</small></span>
-            <b className={`shrink-0 text-xs tabular-nums ${item.direction > 0 ? "text-up" : "text-down"}`}>{item.direction > 0 ? "+" : "−"}{fmtMoney(item.amount, CURRENCY_SYMBOLS[currency])}</b>
+            <b className={`shrink-0 text-xs tabular-nums ${item.direction > 0 ? "text-up" : "text-down"}`} title={`原币金额 ${fmtMoney(item.amount, CURRENCY_SYMBOLS[item.currency])}`}>{item.direction > 0 ? "+" : "−"}{fmtMoney(convert(item.amount, item.currency), CURRENCY_SYMBOLS[currency])}</b>
             {!automatic && <button type="button" onClick={() => void remove(item.id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted opacity-0 transition-all hover:bg-down/10 hover:text-down focus:opacity-100 group-hover:opacity-100" title="删除记录" aria-label="删除资金记录"><IconTrash size={15} stroke={1.7} /></button>}
           </div>;
         }) : <div className="flex min-h-[240px] flex-col items-center justify-center px-6 text-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-edge bg-bg-gray text-muted">{debouncedQuery ? <IconSearch size={21} stroke={1.6} /> : <IconReceipt size={21} stroke={1.6} />}</span><b className="mt-4 text-sm text-ink">{debouncedQuery ? "没有匹配的资金记录" : "暂无资金记录"}</b><p className="mt-1 text-xs text-muted">{debouncedQuery ? "试试股票名称、买入、卖出或日期" : "新增资金或完成交易后，记录会显示在这里"}</p></div>}
