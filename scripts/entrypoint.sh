@@ -9,17 +9,10 @@ if [ -d /app/resource-default ]; then
   cp -rn /app/resource-default/* /app/public/uploads/ 2>/dev/null || true
 fi
 
-# 数据卷首次创建时，用镜像内的交易广场缓存初始化。兼容此前线上已经生成的空数组文件，
-# 但绝不覆盖任何已有动态，避免容器升级回滚运行期抓取结果。
+# 将镜像内的交易广场种子按动态 ID 合并进数据卷；线上运行期版本优先，
+# 因此既能补齐新版镜像新增的历史动态，也不会回滚线上已经更新的内容。
 if [ -d /app/trading-square-default ]; then
-  mkdir -p /app/data
-  for source in /app/trading-square-default/*.json; do
-    [ -f "$source" ] || continue
-    target="/app/data/$(basename "$source")"
-    if [ ! -s "$target" ] || grep -Eq '^[[:space:]]*\[[[:space:]]*\][[:space:]]*$' "$target" 2>/dev/null; then
-      cp "$source" "$target"
-    fi
-  done
+  node /app/scripts/seed-trading-square.mjs
 fi
 
 exec "$@"
