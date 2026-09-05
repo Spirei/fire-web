@@ -118,10 +118,10 @@ check "搜「AAPL」返回苹果" 1 "$(echo "$SEARCH_AAPL" | python3 -c 'import 
 SEARCH_MAOTAI=$(curl -G -s -b "$JAR_DEMO" --data-urlencode "q=600519" "$BASE/api/search")
 check "搜「600519」返回贵州茅台" 1 "$(echo "$SEARCH_MAOTAI" | python3 -c 'import json,sys; r=json.load(sys.stdin)["results"]; print(1 if any(x["name"]=="贵州茅台" and x["market"]=="CN" for x in r) else 0)')"
 
-echo "== 交易记录（活动日志） =="
+echo "== 账户日志 =="
 ACT=$(curl -s -b "$JAR_DEMO" "$BASE/api/activities")
-check "demo 有操作日志" 1 "$(echo "$ACT" | python3 -c 'import json,sys; print(1 if len(json.load(sys.stdin)["activities"])>0 else 0)')"
-check "操作日志含操作人/市场/价格" 1 "$(echo "$ACT" | python3 -c 'import json,sys; a=json.load(sys.stdin)["activities"][0]; print(1 if a.get("userName") and a.get("market") and a.get("price") is not None else 0)')"
+check "demo 有账户日志" 1 "$(echo "$ACT" | python3 -c 'import json,sys; print(1 if len(json.load(sys.stdin).get("userLogs") or [])>0 else 0)')"
+check "账户日志含事件和操作人" 1 "$(echo "$ACT" | python3 -c 'import json,sys; a=(json.load(sys.stdin).get("userLogs") or [{}])[0]; print(1 if a.get("event") and a.get("userName") else 0)')"
 
 echo "== 修改密码 =="
 check "原密码错误被拒绝" 400 "$(code -b "$JAR_NEW" -X POST "$BASE/api/auth/password" -H 'Content-Type: application/json' -d '{"oldPassword":"wrong","newPassword":"newpass123"}')"
@@ -135,13 +135,13 @@ echo "== 清空全部记录 =="
 NEW2=$(curl -s -b "$JAR_NEW" -X POST "$BASE/api/records" -H 'Content-Type: application/json' -d '{"name":"待清理","code":"CLR","market":"US","price":10,"cost":8,"qty":5,"group":"测试","note":""}')
 check "测试账号创建记录" "r-" "$(echo "$NEW2" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"][:2])')"
 ACT2=$(curl -s -b "$JAR_NEW" "$BASE/api/activities")
-check "测试账号有活动日志" 1 "$(echo "$ACT2" | python3 -c 'import json,sys; print(1 if len(json.load(sys.stdin)["activities"])>0 else 0)')"
+check "测试账号有账户日志" 1 "$(echo "$ACT2" | python3 -c 'import json,sys; print(1 if len(json.load(sys.stdin).get("userLogs") or [])>0 else 0)')"
 CLEAR=$(curl -s -b "$JAR_NEW" -X DELETE "$BASE/api/records" -H 'Content-Type: application/json' --data-raw '{"password":"newpass1234"}')
 check "清空记录接口" 200 "$(echo "$CLEAR" | python3 -c 'import json,sys; print(200 if json.load(sys.stdin).get("ok") else 0)')"
 COUNT4=$(curl -s -b "$JAR_NEW" "$BASE/api/records" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
 check "清空后记录=0" 0 "$COUNT4"
 ACT3=$(curl -s -b "$JAR_NEW" "$BASE/api/activities")
-check "清空后日志=0" 0 "$(echo "$ACT3" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["activities"]))')"
+check "清空持仓写入审计日志" 1 "$(echo "$ACT3" | python3 -c 'import json,sys; print(1 if any(x.get("event")=="records_clear" for x in (json.load(sys.stdin).get("userLogs") or [])) else 0)')"
 COUNT5=$(curl -s -b "$JAR_DEMO" "$BASE/api/records" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
 check "demo 数据不受影响" 6 "$COUNT5"
 

@@ -50,7 +50,7 @@ const CATEGORIES: { title: string; endpoints: Endpoint[] }[] = [
   {
     title: "日志与用户",
     endpoints: [
-      { method: "GET", path: "/api/activities", desc: "操作日志", auth: true },
+      { method: "GET", path: "/api/activities", desc: "账户日志与系统审计", auth: true },
       { method: "GET", path: "/api/users", desc: "用户列表", auth: true },
       { method: "PUT", path: "/api/users/{id}", desc: "修改用户信息", auth: true },
       { method: "DELETE", path: "/api/users/{id}", desc: "删除用户", auth: true },

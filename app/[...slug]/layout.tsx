@@ -4,7 +4,7 @@ import Link from "next/link";
 import { getSiteSettings } from "@/lib/settings";
 import { getCelebAvatars } from "@/lib/celebsData";
 import { LEGACY_SESSION_COOKIE, SESSION_COOKIE, getUserByToken, needsSetup } from "@/lib/auth";
-import { listActivities, listRecords } from "@/lib/store";
+import { listRecords, listSecurityLogs } from "@/lib/store";
 import RecordsApp from "@/components/RecordsApp";
 import UserMenu from "@/components/UserMenu";
 import SiteLogo from "@/components/SiteLogo";
@@ -53,7 +53,7 @@ export default async function SlugLayout({
   // 后台首屏数据在服务端鉴权后直接读取。避免浏览器再次串行请求
   // /api/auth/me → records / activities / settings，首帧不再被全局转圈遮挡。
   const initialRecords = listRecords(user.id);
-  const initialActivities = listActivities(user.id);
+  const initialUserLogs = listSecurityLogs(200, user.id);
   // 当前账户涉及的股票图标随 HTML 首屏下发，不再等待客户端请求 3,000+ 条素材。
   // 杠杆 ETF 同时带上正股图标，兼容素材库的正股兜底规则。
   const initialStockIcons = getStockIconMap(stockIconKeysForRecords(initialRecords));
@@ -86,7 +86,7 @@ export default async function SlugLayout({
           initialCelebAvatars={celebAvatars}
           initialUser={user}
           initialRecords={initialRecords}
-          initialActivities={initialActivities}
+          initialUserLogs={initialUserLogs}
           initialStockIcons={initialStockIcons}
           initialSettings={{
             tabs: settings.tabs,

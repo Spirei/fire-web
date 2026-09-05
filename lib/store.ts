@@ -143,9 +143,24 @@ export function listActivities(userId: string, limit = 50): Activity[] {
   }));
 }
 
-export function listSystemLogs(limit = 100): import("@/lib/types").SystemLog[] {
-  const rows = getDb().prepare(`SELECT s.*, COALESCE(u.nickname, u.username, '系统') AS user_name FROM security_audit s LEFT JOIN users u ON u.id = s.user_id ORDER BY s.created_at DESC LIMIT ?`).all(limit) as Record<string, unknown>[];
-  return rows.map((r) => ({ id: String(r.id), event: String(r.event), detail: String(r.detail || ""), ip: String(r.ip || ""), createdAt: String(r.created_at), userName: String(r.user_name || "系统") }));
+export function listSecurityLogs(limit = 200, userId?: string): import("@/lib/types").SystemLog[] {
+  const db = getDb();
+  const rows = (userId
+    ? db.prepare(`SELECT s.*, COALESCE(u.nickname, u.username, '系统') AS user_name FROM security_audit s LEFT JOIN users u ON u.id = s.user_id WHERE s.user_id = ? ORDER BY s.created_at DESC LIMIT ?`).all(userId, limit)
+    : db.prepare(`SELECT s.*, COALESCE(u.nickname, u.username, '系统') AS user_name FROM security_audit s LEFT JOIN users u ON u.id = s.user_id ORDER BY s.created_at DESC LIMIT ?`).all(limit)
+  ) as Record<string, unknown>[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    event: String(r.event),
+    detail: String(r.detail || ""),
+    ip: String(r.ip || ""),
+    createdAt: String(r.created_at),
+    userName: String(r.user_name || "系统")
+  }));
+}
+
+export function listSystemLogs(limit = 200): import("@/lib/types").SystemLog[] {
+  return listSecurityLogs(limit);
 }
 
 export function clearAllRecords(userId: string): { records: number; orders: number; activities: number; fundTransactions: number } {

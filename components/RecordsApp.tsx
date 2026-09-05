@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import {
   MARKET_LIST,
   marketMeta,
-  type Activity, type SystemLog, type TradeOrder,
+  type SystemLog,
   type GroupConfig,
   type Market,
   type MarketOption,
@@ -107,7 +107,7 @@ export default function RecordsApp({
   initialCelebAvatars,
   initialUser,
   initialRecords,
-  initialActivities,
+  initialUserLogs,
   initialSettings,
   initialStockIcons
 }: {
@@ -116,7 +116,7 @@ export default function RecordsApp({
   initialCelebAvatars?: Record<string, string>;
   initialUser: User;
   initialRecords: StockRecord[];
-  initialActivities: Activity[];
+  initialUserLogs: SystemLog[];
   initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn">;
   initialStockIcons: Record<string, string>;
 }) {
@@ -133,9 +133,8 @@ export default function RecordsApp({
   const loadedQuoteIdsRef = useRef(new Set<string>());
   const quoteCacheKeyRef = useRef("");
   const mobileNavRef = useRef<HTMLDivElement>(null);
-  const [activities, setActivities] = useState<Activity[]>(initialActivities);
+  const [userLogs, setUserLogs] = useState<SystemLog[]>(initialUserLogs);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
-  const [orders, setOrders] = useState<TradeOrder[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
   const [navReady, setNavReady] = useState(true);
@@ -191,9 +190,8 @@ export default function RecordsApp({
     fetch("/api/activities")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.activities) setActivities(data.activities);
+        if (data?.userLogs) setUserLogs(data.userLogs);
         if (data?.systemLogs) setSystemLogs(data.systemLogs);
-        if (data?.orders) setOrders(data.orders);
       })
       .catch(() => {});
   }, []);
@@ -781,7 +779,7 @@ export default function RecordsApp({
             />
           )}
           {activeTab === "pnl" && <AssetPnlAnalysisView onBack={() => selectTab("assets")} />}
-          {activeTab === "activities" && <ActivitiesView activities={activities} orders={orders} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
+          {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
           {activeTab === "global" && <GlobalPreviewView />}
           {activeTab === "trading" && <TradingSquareView avatars={initialCelebAvatars} records={records} />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} />}

@@ -57,6 +57,7 @@ function migrate(database: Database.Database) {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_security_audit_time ON security_audit(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_security_audit_user_time ON security_audit(user_id, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS records (
       id TEXT PRIMARY KEY,
@@ -262,6 +263,7 @@ function migrate(database: Database.Database) {
   if (!actCols.includes("price")) database.exec("ALTER TABLE activities ADD COLUMN price REAL");
   if (!actCols.includes("cost")) database.exec("ALTER TABLE activities ADD COLUMN cost REAL");
   if (!actCols.includes("qty")) database.exec("ALTER TABLE activities ADD COLUMN qty REAL");
+  database.exec("CREATE INDEX IF NOT EXISTS idx_security_audit_user_time ON security_audit(user_id, created_at DESC);");
 
   // records 表增量字段（兼容旧库）
   const recCols = (database.prepare("PRAGMA table_info(records)").all() as { name: string }[]).map((c) => c.name);
