@@ -2,28 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppModal from "@/components/AppModal";
+import DividendTable, { fmtDividendAmount, yearOfDividend } from "@/components/DividendTable";
 import type { DividendLedgerRow, DividendPhase, DividendRecord } from "@/lib/dividends";
 import type { StockRecord } from "@/lib/types";
 import { showToast } from "@/lib/toast";
-
-function yearOf(item: DividendRecord) {
-  return item.exDate?.slice(0, 4) ?? item.payDate?.slice(0, 4) ?? item.pubDate?.slice(0, 4) ?? item.fiscalYear ?? "未知";
-}
-
-function fmtAmount(item: DividendRecord) {
-  if (item.amount == null) return "非现金";
-  return `${item.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${item.currency || ""}`.trim();
-}
-
-function fmtYield(item: DividendRecord) {
-  if (item.yieldPct == null || !Number.isFinite(item.yieldPct)) return "—";
-  return `${item.yieldPct >= 10 ? item.yieldPct.toFixed(1) : item.yieldPct.toFixed(2)}%`;
-}
-
-function shortDate(value?: string | null) {
-  if (!value) return "—";
-  return value.slice(5);
-}
 
 const PHASE_LABEL: Record<DividendPhase, string> = {
   booked: "已入账",
@@ -88,8 +70,8 @@ export default function HoldingDividendDialog({
     return statusByKey.get(ledgerKey({ exDate: item.exDate, payDate: item.payDate }));
   }
 
-  const years = useMemo(() => [...new Set(dividends.map(yearOf))].sort((a, b) => b.localeCompare(a)), [dividends]);
-  const visible = year ? dividends.filter((item) => yearOf(item) === year) : dividends;
+  const years = useMemo(() => [...new Set(dividends.map(yearOfDividend))].sort((a, b) => b.localeCompare(a)), [dividends]);
+  const visible = year ? dividends.filter((item) => yearOfDividend(item) === year) : dividends;
   const cash = dividends.filter((item) => item.kind === "cash" && Number(item.amount) > 0);
   const latestOwned = cash.find((item) => {
     const row = statusOf(item);
@@ -102,9 +84,7 @@ export default function HoldingDividendDialog({
   const yearTotal = yearCurrencies.length <= 1
     ? yearCash.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
     : null;
-  const grouped = year
-    ? [[year, visible] as const]
-    : years.map((label) => [label, dividends.filter((item) => yearOf(item) === label)] as const);
+  const rows = [...visible].sort((a, b) => (b.exDate || b.payDate || "").localeCompare(a.exDate || a.payDate || ""));
 
   async function settleMissing() {
     if (settling) return;
@@ -137,7 +117,7 @@ export default function HoldingDividendDialog({
     <AppModal
       title={`${record.name} 股息`}
       desc={firstBuy ? `${record.code} · 自 ${firstBuy} 首次买入后入账` : `${record.code} · 尚未记录买入，历史派息不会入账`}
-      size="lg"
+      size="md"
       onClose={onClose}
       headerActions={
         <button type="button" disabled={settling || !firstBuy} onClick={() => void settleMissing()} className="btn-line h-9 shrink-0 px-3 text-xs disabled:opacity-50">
@@ -146,63 +126,43 @@ export default function HoldingDividendDialog({
       }
     >
       {loading ? (
-        <div className="flex min-h-[240px] items-center justify-center text-sm text-muted">正在获取历年股息…</div>
+        <div className="flex min-h-[160px] items-center justify-center text-sm text-muted">正在获取历年股息…</div>
       ) : !sourceOk ? (
-        <div className="flex min-h-[240px] flex-col items-center justify-center gap-1 text-center text-sm text-muted">股息数据源暂时不可用<small className="text-xs text-faint">稍后重试，不影响持仓与订单</small></div>
+        <div className="flex min-h-[160px] flex-col items-center justify-center gap-1 text-center text-sm text-muted">股息数据源暂时不可用<small className="text-xs text-faint">稍后重试，不影响持仓与订单</small></div>
       ) : dividends.length === 0 ? (
-        <div className="flex min-h-[240px] items-center justify-center text-sm text-muted">暂无已披露的股息记录</div>
+        <div className="flex min-h-[160px] items-center justify-center text-sm text-muted">暂无已披露的股息记录</div>
       ) : (
         <div className="holding-div">
           <div className="stock-dividend-summary">
-            <div><span>最近每股</span><b>{latestOwned?.amount != null ? fmtAmount(latestOwned) : "—"}</b><small>{latestOwned?.exDate ? `除息 ${latestOwned.exDate}` : "暂无除息日"}</small></div>
+            <div><span>最近每股</span><b>{latestOwned?.amount != null ? fmtDividendAmount(latestOwned) : "—"}</b><small>{latestOwned?.exDate ? `除息 ${latestOwned.exDate}` : "暂无除息日"}</small></div>
             <div><span>{year || "披露"}累计</span><b>{yearTotal != null ? `${yearTotal.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${yearCurrencies[0] || ""}` : "多币种"}</b><small>{yearCash.length} 次现金</small></div>
             <div><span>订单入账</span><b>{booked} 期</b><small>{missing ? `${missing} 期待补录` : firstBuy ? "已按买入后对齐" : "需先有买入订单"}</small></div>
           </div>
-          <div className="mb-3 flex gap-1.5 overflow-x-auto pb-0.5">
-            {["全部", ...years].map((item) => {
-              const active = item === "全部" ? year === null : year === item;
-              return (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setYear(item === "全部" ? null : item)}
-                  className={`flex-none rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${active ? "border-edge-strong bg-white text-ink shadow-sm dark:bg-[#1c1c1e] dark:text-white" : "border-edge text-muted hover:bg-bg-gray hover:text-ink"}`}
-                >
-                  {item === "全部" ? "全部" : item}
-                </button>
-              );
-            })}
-          </div>
-          <div className="max-h-[min(440px,54vh)] space-y-3 overflow-y-auto pr-0.5">
-            {grouped.map(([label, rows]) => (
-              <section key={label} className="holding-div-year">
-                {year === null && (
-                  <header className="holding-div-year-head">
-                    <b>{label}</b>
-                    <small>{rows.length} 期</small>
-                  </header>
-                )}
-                <div className="holding-div-table">
-                  <div className="holding-div-head">
-                    <span>每股</span><span>股息率</span><span>除息</span><span>派付</span><span>状态</span>
-                  </div>
-                  {rows.map((item, index) => {
-                    const row = statusOf(item);
-                    const phase = row?.phase || "info";
-                    return (
-                      <div key={`${item.exDate || item.payDate || item.pubDate}-${index}`} className={`holding-div-row is-${phase}`}>
-                        <b className="tabular-nums">{fmtAmount(item)}</b>
-                        <span className="holding-div-yield tabular-nums">{fmtYield(item)}</span>
-                        <span className="tabular-nums">{shortDate(item.exDate)}</span>
-                        <span className="tabular-nums">{shortDate(item.payDate)}</span>
-                        <em>{PHASE_LABEL[phase]}</em>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
+          {years.length > 1 && (
+            <div className="mb-2.5 flex gap-1 overflow-x-auto pb-0.5">
+              {["全部", ...years].map((item) => {
+                const active = item === "全部" ? year === null : year === item;
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setYear(item === "全部" ? null : item)}
+                    className={`flex-none rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${active ? "border-edge-strong bg-white text-ink shadow-sm dark:bg-[#1c1c1e] dark:text-white" : "border-edge text-muted hover:bg-bg-gray hover:text-ink"}`}
+                  >
+                    {item === "全部" ? "全部" : item}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <DividendTable
+            rows={rows}
+            showYear={year === null && years.length > 1}
+            statusOf={(item) => {
+              const phase = statusOf(item)?.phase || "info";
+              return { label: PHASE_LABEL[phase], tone: phase };
+            }}
+          />
         </div>
       )}
     </AppModal>

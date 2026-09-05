@@ -14,6 +14,7 @@ import { MARKET_CURRENCY, MULTI_CURRENCIES, usdCap } from "@/lib/currency";
 import { relatedETFs, relatedStock, type RelatedETF } from "@/lib/relatedEtfs";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import { isDoubleEtf } from "@/lib/relatedEtfs";
+import DividendTable, { fmtDividendAmount, yearOfDividend } from "@/components/DividendTable";
 import type { DividendRecord } from "@/lib/dividends";
 
 interface Props {
@@ -124,45 +125,14 @@ function stockDisplayName(code: string, ...candidates: (string | undefined)[]) {
   return names.find((value) => key(value) !== codeKey) || names[0] || code;
 }
 
-function dividendYearOf(item: DividendRecord): string {
-  return item.exDate?.slice(0, 4) ?? item.payDate?.slice(0, 4) ?? item.pubDate?.slice(0, 4) ?? item.fiscalYear ?? "未知";
-}
-
 function dividendStatus(item: DividendRecord) {
   const raw = item.process?.trim() || "";
-  if (/完成|已派|实施/.test(raw)) return raw;
-  if (item.payDate) return new Date(`${item.payDate}T23:59:59`).getTime() < Date.now() ? "已派发" : "待派发";
-  return raw || "已披露";
-}
-
-function DividendRow({ item }: { item: DividendRecord }) {
-  const status = dividendStatus(item);
-  return (
-    <div className="stock-dividend-row">
-      <span className={`stock-dividend-kind ${item.kind === "cash" ? "is-cash" : "is-special"}`} aria-hidden="true">
-        {item.kind === "cash" ? (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 7h16v11H4z"/><path d="M7 7V5h10v2M8 12h8M12 9v6"/></svg>
-        ) : (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m12 3 2.2 4.6L19 9.8l-3.5 3.7.6 5.2-4.1-2.3-4.1 2.3.6-5.2L5 9.8l4.8-2.2L12 3Z"/></svg>
-        )}
-      </span>
-      <span className="stock-dividend-main">
-        <span className="stock-dividend-title">
-          <b>{item.amount != null ? `${item.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${item.currency ?? ""}` : "非现金分配"}</b>
-          {item.yieldPct != null && Number.isFinite(item.yieldPct) && <small className="stock-dividend-yield">股息率 {item.yieldPct >= 10 ? item.yieldPct.toFixed(1) : item.yieldPct.toFixed(2)}%</small>}
-          <em className={status === "待派发" ? "is-pending" : ""}>{status}</em>
-          {item.kind === "special" && <i>特别分配</i>}
-        </span>
-        <span className="stock-dividend-dates">
-          {item.exDate && <span><small>除息日</small>{item.exDate}</span>}
-          {item.recordDate && <span><small>登记日</small>{item.recordDate}</span>}
-          {item.payDate && <span><small>派付日</small>{item.payDate}</span>}
-          {!item.exDate && !item.recordDate && !item.payDate && item.pubDate && <span><small>公告日</small>{item.pubDate}</span>}
-        </span>
-        {item.statement && <span className="stock-dividend-statement" title={item.statement}>{item.statement}</span>}
-      </span>
-    </div>
-  );
+  if (/完成|已派|实施/.test(raw)) return { label: raw, tone: "booked" as const };
+  if (item.payDate) {
+    const pending = new Date(`${item.payDate}T23:59:59`).getTime() >= Date.now();
+    return pending ? { label: "待派发", tone: "pending" as const } : { label: "已派发", tone: "booked" as const };
+  }
+  return { label: raw || "已披露", tone: "info" as const };
 }
 
 export default function StockDetailView({ market, code, name, quote: propQuote, onBack, followed = false, onToggleFollow, initialTab = "overview", onTabChange }: Props) {
@@ -509,10 +479,10 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
     (counts, item) => ({ ...counts, [item.kind]: counts[item.kind] + 1 }),
     { long: 0, short: 0, income: 0 }
   );
-  const dividendYears = [...new Set(dividends.map(dividendYearOf))].sort((a, b) => b.localeCompare(a));
-  const activeDividendYear = dividendYear ?? dividendYears[0] ?? null;
-  const activeYearDividends = activeDividendYear ? dividends.filter((item) => dividendYearOf(item) === activeDividendYear) : dividends;
-  const cashDividends = activeYearDividends.filter((item) => item.kind === "cash" && item.amount != null);
+  const dividendYears = [...new Set(dividends.map(yearOfDividend))].sort((a, b) => b.localeCompare(a));
+  const visibleDividends = [...(dividendYear ? dividends.filter((item) => yearOfDividend(item) === dividendYear) : dividends)]
+    .sort((a, b) => (b.exDate || b.payDate || "").localeCompare(a.exDate || a.payDate || ""));
+  const cashDividends = visibleDividends.filter((item) => item.kind === "cash" && item.amount != null);
   const dividendCurrencies = [...new Set(cashDividends.map((item) => item.currency).filter(Boolean))];
   const activeYearCashTotal = dividendCurrencies.length <= 1
     ? cashDividends.reduce((sum, item) => sum + (item.amount || 0), 0)
@@ -877,7 +847,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
               <div className="stock-module-heading">
                 <div>
                   <h3 className="text-sm font-semibold text-ink">{displayName} 股息记录</h3>
-                  <p className="mt-1 text-[11px] text-muted">按除息年份归档，金额均为每股税前分配。</p>
+                  <p className="mt-1 text-[11px] text-muted">每股税前分配，按除息日倒序。</p>
                 </div>
                 <span className="stock-module-count">{dividends.length} 期</span>
               </div>
@@ -900,60 +870,36 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
               ) : (
                 <div className="mt-3">
                   <div className="stock-dividend-summary">
-                    <div><span>最近每股股息</span><b>{latestDividend?.amount != null ? `${latestDividend.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${latestDividend.currency || ""}` : "—"}</b><small>{latestDividend?.exDate ? `除息 ${latestDividend.exDate}` : "暂无除息日期"}</small></div>
-                    <div><span>{activeDividendYear || "当年"} 累计</span><b>{activeYearCashTotal != null ? `${activeYearCashTotal.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${dividendCurrencies[0] || ""}` : "多币种"}</b><small>{cashDividends.length} 次现金分配</small></div>
-                    <div><span>下一派付日</span><b>{upcomingDividend?.payDate || "暂无"}</b><small>{upcomingDividend?.amount != null ? `${upcomingDividend.amount} ${upcomingDividend.currency || ""}` : "以最新披露为准"}</small></div>
+                    <div><span>最近每股股息</span><b>{latestDividend?.amount != null ? fmtDividendAmount(latestDividend) : "—"}</b><small>{latestDividend?.exDate ? `除息 ${latestDividend.exDate}` : "暂无除息日期"}</small></div>
+                    <div><span>{dividendYear || "披露"}累计</span><b>{activeYearCashTotal != null ? `${activeYearCashTotal.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${dividendCurrencies[0] || ""}` : "多币种"}</b><small>{cashDividends.length} 次现金</small></div>
+                    <div><span>下一派付日</span><b>{upcomingDividend?.payDate || "暂无"}</b><small>{upcomingDividend?.amount != null ? fmtDividendAmount(upcomingDividend) : "以最新披露为准"}</small></div>
                   </div>
-                  {(() => {
-                    const years = dividendYears;
-                    const visible = dividendYear ? dividends.filter((item) => dividendYearOf(item) === dividendYear) : dividends;
-                    return (
-                      <>
-                        <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5 pt-1">
-                          {["全部", ...years].map((y) => {
-                            const active = y === "全部" ? dividendYear === null : dividendYear === y;
-                            return (
-                              <button
-                                key={y}
-                                type="button"
-                                onClick={() => setDividendYear(y === "全部" ? null : y)}
-                                className={`flex-none rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-all duration-200 active:scale-[.97] ${
-                                  active
-                                    ? "border-edge-strong bg-white text-ink shadow-sm dark:bg-[#1c1c1e] dark:text-white"
-                                    : "border-edge bg-transparent text-muted hover:-translate-y-px hover:bg-brand-hover hover:text-ink"
-                                }`}
-                              >
-                                {y === "全部" ? "全部" : `${y} 年`}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {dividendYear === null ? (
-                          <div className="space-y-4">
-                            {years.map((year) => (
-                              <div key={year}>
-                                <div className="mb-1.5 flex items-baseline gap-2 px-1">
-                                  <span className="text-[12px] font-bold text-ink">{year} 年</span>
-                                  <span className="text-[10px] text-faint">{visible.filter((item) => dividendYearOf(item) === year).length} 期</span>
-                                </div>
-                                <div className="space-y-2">
-                                  {visible.filter((item) => dividendYearOf(item) === year).map((item, idx) => (
-                                    <DividendRow key={`${item.exDate}-${idx}`} item={item} />
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {visible.map((item, idx) => (
-                              <DividendRow key={`${item.exDate}-${idx}`} item={item} />
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
+                  {dividendYears.length > 1 && (
+                    <div className="mb-2.5 flex gap-1 overflow-x-auto pb-0.5">
+                      {["全部", ...dividendYears].map((y) => {
+                        const active = y === "全部" ? dividendYear === null : dividendYear === y;
+                        return (
+                          <button
+                            key={y}
+                            type="button"
+                            onClick={() => setDividendYear(y === "全部" ? null : y)}
+                            className={`flex-none rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-all duration-200 active:scale-[.97] ${
+                              active
+                                ? "border-edge-strong bg-white text-ink shadow-sm dark:bg-[#1c1c1e] dark:text-white"
+                                : "border-edge bg-transparent text-muted hover:bg-brand-hover hover:text-ink"
+                            }`}
+                          >
+                            {y === "全部" ? "全部" : y}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <DividendTable
+                    rows={visibleDividends}
+                    showYear={dividendYear === null && dividendYears.length > 1}
+                    statusOf={dividendStatus}
+                  />
                 </div>
               )}
             </section>
