@@ -128,11 +128,69 @@
       scrollbar-width: thin; scrollbar-color: var(--dash) var(--bg);
     }
     .win-body.can-y { overflow-y: auto; }
-    .win-foot { display: none; flex: none; padding: 10px 16px 14px; background: var(--bg); }
-    .win-foot.on { display: block; }
-    .win-foot.gray { background: var(--page); }
-    .win-foot .cta { margin: 0; }
-    .win-foot .fab { margin: 0 auto; }
+    .win-body.has-dock { padding-bottom: 76px; }
+    .dock {
+      position: absolute; left: 16px; right: 16px; bottom: 12px; z-index: 22;
+      display: none; pointer-events: none;
+    }
+    .dock.on { display: block; }
+    .dock .cta, .dock .fab { pointer-events: auto; }
+    .dock .cta {
+      margin: 0; width: 100%; height: 48px; border-radius: 24px;
+      background: var(--blue); color: #fff; font-size: 16px; font-weight: 650;
+      box-shadow: 0 10px 28px rgba(34,163,255,.4);
+      transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+    }
+    .dock .cta:hover { filter: brightness(1.05); }
+    .dock .cta:active { transform: scale(.975); box-shadow: 0 4px 14px rgba(34,163,255,.28); }
+    .dock .fab {
+      margin: 0 auto; box-shadow: 0 10px 24px rgba(34,163,255,.4);
+      transition: transform .16s ease;
+    }
+    .dock .fab:active { transform: scale(.94); }
+    .sk-full {
+      position: absolute; inset: 42px 0 0 0; z-index: 18; display: none;
+      flex-direction: column; background: #0c0c0e; color: #eee;
+    }
+    .sk-full.on { display: flex; }
+    .sk-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 14px 8px; }
+    .sk-bar h2 { margin: 0; font-size: 17px; font-weight: 700; flex: none; }
+    .sk-bar .grow { flex: 1; }
+    .sk-dd { height: 28px; padding: 0 10px; border-radius: 8px; background: #1c1c1e; color: #ddd; font-size: 13px; }
+    .sk-modes { display: flex; background: #1c1c1e; border-radius: 10px; padding: 3px; }
+    .sk-modes button { height: 26px; padding: 0 10px; border-radius: 8px; color: #8e8e93; font-size: 13px; }
+    .sk-modes button.on { background: #2c2c2e; color: #fff; }
+    .sk-ico { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: #ccc; }
+    .sk-ico:hover { background: #1c1c1e; }
+    .sk-view {
+      flex: 1; min-height: 0; overflow: auto; cursor: grab;
+      -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y;
+    }
+    .sk-view:active { cursor: grabbing; }
+    .sk-view::-webkit-scrollbar { height: 6px; width: 6px; }
+    .sk-view::-webkit-scrollbar-thumb { background: #333; border-radius: 6px; }
+    .sk-canvas { display: block; min-height: 100%; }
+    .mems { display: flex; gap: 32px; justify-content: center; flex-wrap: wrap; margin: 48px 16px 24px; }
+    .mem { text-align: center; min-width: 88px; }
+    .avatar {
+      width: 76px; height: 76px; border-radius: 50%; margin: 0 auto 10px;
+      background: #f3b184; position: relative; overflow: hidden;
+    }
+    .avatar::before { content: ""; position: absolute; left: 14px; right: 14px; top: -6px; height: 28px; background: #f7f3ee; border-radius: 0 0 20px 20px; }
+    .avatar .dot { position: absolute; top: 34px; width: 6px; height: 6px; border-radius: 50%; background: #4a3a32; }
+    .avatar .dot.l { left: 24px; } .avatar .dot.r { right: 24px; }
+    .avatar .smile { position: absolute; left: 28px; right: 28px; bottom: 18px; height: 10px; border-bottom: 2px solid #4a3a32; border-radius: 0 0 10px 10px; }
+    .mem-add {
+      width: 76px; height: 76px; border-radius: 50%; margin: 0 auto 10px;
+      border: 1.5px dashed var(--dash); display: grid; place-items: center;
+      font-size: 30px; color: var(--faint); background: transparent;
+    }
+    .mem b { display: block; font-weight: 500; }
+    .mem .sub { color: var(--faint); font-size: 13px; }
+    button, .pill, .cat, .acct, .mini, .ghost-btn {
+      transition: transform .14s ease, background .14s ease, border-color .14s ease, opacity .14s ease;
+    }
+    .pill:active, .cat:active, .acct:active, .mini:active { transform: scale(.98); }
     .win-body::-webkit-scrollbar { width: 8px; height: 0; }
     .win-body::-webkit-scrollbar-track { background: var(--bg); }
     .win-body::-webkit-scrollbar-thumb { background: var(--dash); border-radius: 8px; }
@@ -149,7 +207,9 @@
     .screen.gray { background: var(--page); }
     .head { display: flex; align-items: center; gap: 4px; min-height: 48px; padding: 8px 12px 4px 8px; position: relative; }
     .head h1 { margin: 0; flex: 1; min-width: 0; font-size: 22px; font-weight: 750; line-height: 1.25; }
-    .head .right { display: flex; align-items: center; gap: 12px; margin-left: auto; flex: none; }
+    .head .right, .head .grow { display: flex; align-items: center; gap: 12px; margin-left: auto; flex: none; }
+    .head .grow { flex: 1; }
+    h1.page-title { margin: 4px 16px 12px; font-size: 26px; font-weight: 750; }
     .theme-btn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); }
     .theme-btn:hover { background: var(--gray); }
     .add-head { background: var(--add-head); padding: 12px 16px 18px; }
@@ -194,6 +254,7 @@
     .cta {
       display: block; margin: 20px 16px 4px; width: auto; height: 48px; border-radius: 24px;
       background: var(--blue); color: #fff; font-size: 16px; font-weight: 650;
+      box-shadow: 0 8px 20px rgba(34,163,255,.28);
     }
     .fab {
       display: grid; place-items: center; margin: 20px auto 8px;
@@ -264,8 +325,29 @@
     .tree-join { width: 56%; height: 18px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0 0 12px 12px; opacity: .7; }
     .comp { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; }
     .comp > div { min-width: 0; background: var(--card); border-radius: 12px; padding: 10px 12px; box-shadow: 0 0 0 1px var(--line); color: var(--ink); }
-    .money4 { display: flex; gap: 8px; }
-    .money4 > div { flex: 1; text-align: center; min-width: 0; }
+    .exp {
+      width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+      color: var(--muted); background: rgba(128,128,128,.12); border: 0; padding: 0;
+    }
+    .exp:hover { color: var(--ink); background: rgba(128,128,128,.2); }
+    .trend-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; justify-content: center; font-size: 12px; color: var(--muted); margin: 4px 0 8px; }
+    .trend-legend label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+    .trend-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    .trend-tabs { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-top: 10px; }
+    .trend-tabs button { height: 36px; color: var(--muted); }
+    .trend-tabs button.on { color: var(--blue); font-weight: 650; }
+    .trend-svg { width: 100%; height: 180px; display: block; }
+    .sheet-form .cap { text-align: center; font-weight: 650; flex: 1; }
+    .sheet-form .nick { font-size: 13px; color: var(--muted); margin: 18px 0 8px; }
+    .sheet-form input {
+      width: 100%; height: 48px; border: 0; border-radius: 12px; background: var(--input);
+      padding: 0 14px; margin: 0 0 22px;
+    }
+    .sheet-form .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 28px; font-size: 14px; }
+    .sheet-done { width: 100%; height: 48px; border-radius: 24px; background: var(--ok-off); color: var(--ok-off-t); font-size: 16px; font-weight: 650; }
+    .sheet-done.ready { background: var(--blue); color: #fff; }
+    .mem-shift { display: flex; justify-content: center; gap: 8px; margin-top: 6px; }
+    .mem-shift button { width: 28px; height: 22px; border-radius: 6px; background: var(--chip); color: var(--ink); font-size: 12px; }
     .tl { padding: 4px 0 8px 8px; border-left: 2px solid var(--line); margin-left: 8px; }
     .tl h4 { margin: 0 0 8px -15px; font-size: 13px; font-weight: 500; color: var(--muted); }
     .tl h4::before { content: ""; display: inline-block; width: 8px; height: 8px; border: 2px solid var(--dash); border-radius: 50%; background: var(--card); margin-right: 8px; }
@@ -326,7 +408,8 @@
     <button type="button" id="themeBtn" title="浅色 / 深色" aria-label="浅色深色切换" onclick="toggleTheme()"></button>
   </div>
   <div class="win-body" id="app"></div>
-  <div class="win-foot" id="foot"></div>
+  <div class="dock" id="foot"></div>
+  <div class="sk-full" id="skFull"></div>
   <i class="handle nw" data-dir="nw"></i>
   <i class="handle ne" data-dir="ne"></i>
   <i class="handle sw" data-dir="sw"></i>
@@ -348,7 +431,8 @@ const EMPTY = {
   reminder: 0, expected: 8,
   cash: [], fixed: [], receivable: [], debt: [], invest: [],
   cashflow: { stable: 0, flex: 0, income: 0 },
-  snaps: [], logs: []
+  snaps: [], logs: [],
+  members: [{ id: "me", name: "我" }]
 };
 const CATS = [
   { id: "cash", label: "流动资金", hint: "随时可取用的现金、活期、余额宝等" },
@@ -410,7 +494,8 @@ function esc(s) {
 function normalize(raw) {
   const p = raw && typeof raw === "object" ? raw : {};
   const next = { ...EMPTY, ...p, fx: { ...EMPTY.fx, ...(p.fx || {}) }, cashflow: { ...EMPTY.cashflow, ...(p.cashflow || {}) } };
-  for (const k of ["cash", "fixed", "receivable", "debt", "invest", "snaps", "logs"]) next[k] = Array.isArray(p[k]) ? p[k] : [];
+  for (const k of ["cash", "fixed", "receivable", "debt", "invest", "snaps", "logs", "members"]) next[k] = Array.isArray(p[k]) ? p[k] : [];
+  if (!next.members.length) next.members = [{ id: "me", name: "我" }];
   next.invest = next.invest.map((a) => ({ inAmt: a.inAmt || 0, outAmt: a.outAmt || 0, hist: Array.isArray(a.hist) ? a.hist : [], bucket: a.bucket || "长期", ...a }));
   return next;
 }
@@ -514,9 +599,10 @@ function toast(t) {
   setTimeout(() => n.classList.remove("on"), 1500);
 }
 function go(name, extra) {
+  const prev = route.name;
   route = { ...route, name, menu: false, showAll: false, ...(extra || {}) };
-  winState.h = 0;
-  render();
+  closeSankey();
+  render({ resize: PAGE_W[route.name] !== PAGE_W[prev] });
 }
 function navHead(back, title, right) {
   return `<div class="head">
@@ -526,7 +612,10 @@ function navHead(back, title, right) {
   </div>`;
 }
 function hideBtn() {
-  return `<button class="eye" type="button" onclick="S.hide=!S.hide;save();render()">${S.hide ? "🙈" : "👁"}</button>`;
+  const icon = S.hide
+    ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3l18 18M10.6 10.6A3 3 0 0 0 13.4 13.4M9.9 5.1A10 10 0 0 1 12 5c5 0 9.3 3.1 11 7.5a11.7 11.7 0 0 1-4.2 4.8M6.1 6.1A11.7 11.7 0 0 0 1 12.5 10.8 10.8 0 0 0 12 19c1.1 0 2.2-.2 3.2-.5"/></svg>`
+    : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>`;
+  return `<button class="eye" type="button" onclick="S.hide=!S.hide;save();render({resize:false})" aria-label="显示或隐藏金额">${icon}</button>`;
 }
 function listByCat(cat) { return cat === "invest" ? S.invest : (S[cat] || []); }
 function investPnl(a) { return (Number(a.amount) || 0) - ((Number(a.inAmt) || 0) - (Number(a.outAmt) || 0)); }
@@ -591,8 +680,11 @@ function daysAgo(s) {
 }
 function vis(list) {
   const rows = list || [];
-  if (route.member !== "我") return rows;
-  return rows.filter((x) => !x.owner || x.owner === "我");
+  if (!route.member || route.member === "全部") return rows;
+  return rows.filter((x) => !x.owner || x.owner === route.member);
+}
+function memberList() {
+  return (S.members && S.members.length) ? S.members : [{ id: "me", name: "我" }];
 }
 function moneyHelp(k) {
   const tips = {
@@ -640,14 +732,14 @@ function addLog(cat, item) {
   if (S.logs.length > 240) S.logs.length = 240;
 }
 function weatherState(t) {
-  if (t.empty) return { icon: "⛅", title: "尚未记账", desc: "记下第一笔资产后，这里会根据负债率和现金缓冲给出晴雨。" };
-  if (t.net < 0) return { icon: "⛈", title: "资不抵债", desc: "净资产为负，优先处理高息负债，再谈投资。" };
-  if (t.ratio >= 50) return { icon: "⛈", title: "负债偏高", desc: "负债率 " + t.ratio.toFixed(1) + "% ，建议先把杠杆降下来。" };
-  if (t.ratio >= 20) return { icon: "🌧", title: "转阴", desc: "负债率 " + t.ratio.toFixed(1) + "% ，留意还款节奏和现金流。" };
+  if (t.empty) return { icon: "阴", title: "尚未记账", desc: "记下第一笔资产后，这里会根据负债率和现金缓冲给出晴雨。" };
+  if (t.net < 0) return { icon: "雨", title: "资不抵债", desc: "净资产为负，优先处理高息负债，再谈投资。" };
+  if (t.ratio >= 50) return { icon: "雨", title: "负债偏高", desc: "负债率 " + t.ratio.toFixed(1) + "% ，建议先把杠杆降下来。" };
+  if (t.ratio >= 20) return { icon: "阴", title: "转阴", desc: "负债率 " + t.ratio.toFixed(1) + "% ，留意还款节奏和现金流。" };
   const spend = (Number(S.cashflow.stable) || 0) + (Number(S.cashflow.flex) || 0);
-  if (spend > 0 && t.cash < spend * 3) return { icon: "⛅", title: "现金偏紧", desc: "流动资金不足 3 个月支出，先补安全垫。" };
-  if (t.ratio === 0 && t.assets > 0) return { icon: "☀️", title: "晴好", desc: "没有负债，资产结构干净。继续保持更新节奏。" };
-  return { icon: "☀️", title: "晴好", desc: "负债率 " + t.ratio.toFixed(1) + "% ，整体健康。" };
+  if (spend > 0 && t.cash < spend * 3) return { icon: "阴", title: "现金偏紧", desc: "流动资金不足 3 个月支出，先补安全垫。" };
+  if (t.ratio === 0 && t.assets > 0) return { icon: "晴", title: "晴好", desc: "没有负债，资产结构干净。继续保持更新节奏。" };
+  return { icon: "晴", title: "晴好", desc: "负债率 " + t.ratio.toFixed(1) + "% ，整体健康。" };
 }
 function barH(v, max, cap) {
   if (!max) return 2;
@@ -790,6 +882,125 @@ function cashflowPage() {
     </div>
   </section>`;
 }
+function trendSeriesOn() {
+  return { cash: true, inv: true, fixed: true, rec: true, debt: true, ...(route.trendOn || {}) };
+}
+function trendPoints() {
+  const t = totals();
+  const snaps = (S.snaps || []).slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const list = snaps.map((s) => ({ ...s, net: (Number(s.assets) || 0) + (Number(s.debt) || 0) }));
+  const now = { at: today(), assets: t.assets, debt: t.debt, cash: t.cash, fixed: t.fixed, inv: t.inv, rec: t.rec, net: t.net };
+  if (!list.length || list[list.length - 1].at !== now.at) list.push(now);
+  else list[list.length - 1] = now;
+  const range = route.trendRange || "all";
+  const nowD = new Date();
+  if (range === "ytd") return list.filter((p) => String(p.at).slice(0, 4) === String(nowD.getFullYear()));
+  if (range === "1y") {
+    const cut = new Date(nowD);
+    cut.setFullYear(nowD.getFullYear() - 1);
+    return list.filter((p) => parseDay(p.at) >= cut.getTime());
+  }
+  return list;
+}
+function cycleTrendRange() {
+  const opts = ["all", "ytd", "1y"];
+  route.trendRange = opts[(opts.indexOf(route.trendRange || "all") + 1) % opts.length];
+  render({ resize: false });
+}
+function toggleTrend(k) {
+  const on = trendSeriesOn();
+  on[k] = !on[k];
+  route.trendOn = on;
+  render({ resize: false });
+}
+function trendSvg() {
+  const pts = trendPoints();
+  const mode = route.trendMode || "net";
+  const on = trendSeriesOn();
+  const W = 320, H = 180, L = 42, R = 10, T = 10, B = 24;
+  const iw = W - L - R, ih = H - T - B;
+  const keys = mode === "net" ? ["net"] : ["cash", "inv", "fixed", "rec", "debt"].filter((k) => on[k]);
+  const vals = [];
+  pts.forEach((p) => {
+    if (mode === "net") vals.push(Number(p.net) || 0);
+    else keys.forEach((k) => vals.push(Number(k === "inv" ? p.inv : p[k]) || 0));
+  });
+  let min = Math.min(0, ...vals);
+  let max = Math.max(1, ...vals);
+  if (min === max) max = min + 1;
+  const yv = (v) => T + ih - (v - min) / (max - min) * ih;
+  const xv = (i) => L + (pts.length <= 1 ? iw / 2 : iw * i / (pts.length - 1));
+  let grid = "";
+  for (let i = 0; i < 5; i++) {
+    const v = min + (max - min) * i / 4;
+    const yy = yv(v);
+    const lab = S.hide ? "****" : (Math.abs(v) >= 10000 ? (v / 10000).toFixed(1).replace(/\.0$/, "") + "万" : String(Math.round(v)));
+    grid += `<line x1="${L}" x2="${W - R}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="var(--line)"/>`;
+    grid += `<text x="2" y="${yy + 3}" font-size="9" fill="var(--muted)">${lab}</text>`;
+  }
+  const first = pts[0] ? pretty(pts[0].at) : "";
+  const last = pts.length ? pretty(pts[pts.length - 1].at) : "";
+  grid += `<text x="${L}" y="${H - 6}" font-size="10" fill="var(--faint)">${first}</text>`;
+  grid += `<text x="${W - 88}" y="${H - 6}" font-size="10" fill="var(--faint)">${last}</text>`;
+  const colors = { net: "#2eb789", cash: "#c47a52", inv: "#6b5ea7", fixed: "#5aa7b8", rec: "#6b8cce", debt: "#8a8a8a" };
+  let paths = "";
+  const xs = pts.map((_, i) => xv(i));
+  if (mode === "net") {
+    const ys = pts.map((p) => yv(p.net || 0));
+    if (pts.length === 1) paths += `<line x1="${L}" x2="${W - R}" y1="${ys[0]}" y2="${ys[0]}" stroke="${colors.net}" stroke-width="2"/>`;
+    else {
+      let d = `M${xs[0]},${ys[0]}`;
+      for (let i = 1; i < xs.length; i++) d += `L${xs[i]},${ys[i]}`;
+      paths += `<path d="${d}L${xs[xs.length - 1]},${yv(0)}L${xs[0]},${yv(0)}Z" fill="${colors.net}" opacity=".88"/>`;
+      paths += `<path d="${d}" fill="none" stroke="${colors.net}" stroke-width="1.4"/>`;
+    }
+  } else {
+    const acc = pts.map(() => 0);
+    ["cash", "inv", "fixed", "rec"].filter((k) => on[k]).forEach((k) => {
+      const top = pts.map((p, i) => acc[i] + (Number(k === "inv" ? p.inv : p[k]) || 0));
+      if (pts.length >= 2) {
+        let d = `M${xs[0]},${yv(top[0])}`;
+        for (let i = 1; i < xs.length; i++) d += `L${xs[i]},${yv(top[i])}`;
+        for (let i = xs.length - 1; i >= 0; i--) d += `L${xs[i]},${yv(acc[i])}`;
+        paths += `<path d="${d}Z" fill="${colors[k]}" opacity=".92"/>`;
+      }
+      top.forEach((v, i) => { acc[i] = v; });
+    });
+    if (on.debt && pts.length >= 2) {
+      let d = `M${xs[0]},${yv(pts[0].debt || 0)}`;
+      for (let i = 1; i < xs.length; i++) d += `L${xs[i]},${yv(pts[i].debt || 0)}`;
+      paths += `<path d="${d}L${xs[xs.length - 1]},${yv(0)}L${xs[0]},${yv(0)}Z" fill="url(#debtHatch)" opacity=".85"/>`;
+    }
+  }
+  return `<svg class="trend-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs><pattern id="debtHatch" patternUnits="userSpaceOnUse" width="6" height="6"><path d="M0 6L6 0" stroke="#888" stroke-width="1"/></pattern></defs>
+    ${grid}${paths}
+  </svg>`;
+}
+function trendCard() {
+  const mode = route.trendMode || "net";
+  const range = route.trendRange || "all";
+  const rangeLabel = { all: "记账以来", ytd: "今年", "1y": "近1年" }[range] || "记账以来";
+  const on = trendSeriesOn();
+  const cats = [
+    ["cash", "流动资金", "#c47a52"],
+    ["inv", "投资理财", "#6b5ea7"],
+    ["fixed", "固定资产", "#5aa7b8"],
+    ["rec", "应收款", "#6b8cce"],
+    ["debt", "负债", "#8a8a8a"]
+  ];
+  return `<div class="card" style="margin:0 16px 12px;padding:16px;border-radius:18px">
+    <div class="split"><b>资产趋势</b><button type="button" class="faint" onclick="cycleTrendRange()">${rangeLabel} ▾</button></div>
+    ${mode === "net"
+      ? `<div class="trend-legend"><label><i style="background:#2eb789"></i> 净资产</label></div>`
+      : `<div class="trend-legend">${cats.map(([k, lab, c]) => `<label><input type="checkbox" ${on[k] ? "checked" : ""} onchange="toggleTrend('${k}')"/><i style="background:${c}"></i> ${lab}</label>`).join("")}</div>`}
+    ${trendSvg()}
+    <div class="trend-tabs">
+      <button type="button" class="${mode === "all" ? "on" : ""}" onclick="route.trendMode='all';render({resize:false})">全部</button>
+      <button type="button" class="${mode === "net" ? "on" : ""}" onclick="route.trendMode='net';render({resize:false})">净资产</button>
+    </div>
+  </div>`;
+}
 function sparkCols(snaps, dA) {
   const cols = snaps.length ? snaps.slice(-3) : [{ assets: 0 }, { assets: 0 }, { assets: 0 }];
   while (cols.length < 3) cols.unshift({ assets: 0 });
@@ -825,28 +1036,22 @@ function family() {
   const invPct = t.assets ? t.inv / t.assets * 100 : 0;
   const logs = groupedLogs();
   const compareLabel = t.prev ? "相比" + md(t.prev.at) : "相比上次";
-  const four = [
-    ["活钱", "#d07a8a", t.buckets.活钱 || 0],
-    ["稳健", "#5aa7b8", t.buckets.稳健 || 0],
-    ["长期", "#5b57a3", t.buckets.长期 || 0],
-    ["保障", "#8a86c2", t.buckets.保障 || 0]
-  ];
   return `<section class="screen on gray">
     ${navHead("go('home')", "家庭资产记账")}
     <div class="pills">
-      <button class="pill ${route.member === "全部" ? "on" : ""}" onclick="route.member='全部';render()">全部</button>
-      <button class="pill ${route.member === "我" ? "on" : ""}" onclick="route.member='我';render()">我</button>
+      <button class="pill ${route.member === "全部" ? "on" : ""}" onclick="route.member='全部';render({resize:false})">全部</button>
+      ${memberList().filter((m) => m.show !== false).map((m) => `<button class="pill ${route.member === m.name ? "on" : ""}" onclick="route.member='${esc(m.name)}';render({resize:false})">${esc(m.name)}</button>`).join("")}
       <button class="manage" onclick="go('manage')">管理 ›</button>
     </div>
     <div class="lav-deep" style="margin:0 16px 12px;padding:16px;border-radius:18px">
       <div class="split"><span class="k">总资产 (元) ${hideBtn()}</span>
         <span class="k" style="display:flex;align-items:center;gap:8px">排除固定资产
-          <span class="toggle ${S.excludeFixed ? "on" : ""}" onclick="S.excludeFixed=!S.excludeFixed;save();render()"><i></i></span>
+          <span class="toggle ${S.excludeFixed ? "on" : ""}" onclick="S.excludeFixed=!S.excludeFixed;save();render({resize:false})"><i></i></span>
         </span>
       </div>
       <div class="n">${num(t.assets)}</div>
       <div class="faint" style="font-size:12px;margin:4px 0 8px">${t.empty ? "尚未记账" : relUpdate(t.last)}</div>
-      <div class="k">净资产 <b style="color:var(--ink)">${num(t.net)}</b>　负债率 ${t.empty ? "—" : t.ratio.toFixed(2) + "%"}</div>
+      <div class="k">净资产 <b style="color:var(--ink)">${num(t.net)}</b>　负债率 ${t.empty ? "—" : (S.hide ? "****" : t.ratio.toFixed(2) + "%")}</div>
       <div class="inner">
         <div class="split"><span>${compareLabel}</span><button class="faint" onclick="go('calendar')">资产月历 ›</button></div>
         <div class="cmp">
@@ -854,14 +1059,16 @@ function family() {
           <div style="display:flex;gap:8px;align-items:center"><span class="ico">▭</span><div><span class="k">总负债</span><div class="${dD ? tone(-dD) : "muted"}">${dD ? signedNum(dD) : "没有变化"}</div></div></div>
         </div>
         <div class="delta-bars">${deltas.map(([name, d]) => `<div>
-          <b class="${d ? "red" : "faint"}">${d && !S.hide ? ((d > 0 ? "↑" : "↓") + Math.round(Math.abs(d)).toLocaleString("zh-CN")) : "没有变化"}</b>
+          <b class="${d ? "red" : "faint"}">${!d ? "没有变化" : (S.hide ? "****" : ((d > 0 ? "↑" : "↓") + Math.round(Math.abs(d)).toLocaleString("zh-CN")))}</b>
           <i class="${d ? "on" : ""}" style="height:${barH(d, maxD, 52)}px"></i>
           <span>${name}</span>
         </div>`).join("")}</div>
       </div>
     </div>
     <div class="card" style="margin:0 16px 12px;padding:16px;border-radius:18px">
-      <div class="split"><b>资产组成</b><span class="faint">⤢</span></div>
+      <div class="split"><b>资产组成</b><button class="exp" type="button" title="完整查看" onclick="event.stopPropagation();openSankey()" aria-label="放大资产组成">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 3H3v6M21 3h-6v0M3 3l7 7M21 3l-7 7M9 21H3v-6M21 21h-6v0M3 21l7-7M21 21l-7-7"/></svg>
+      </button></div>
       <div class="sankey">${sankeySvg(t)}</div>
       <div class="comp">
         <div><span class="k" style="color:var(--cash-t)">流动资金 ${t.empty ? "—" : cashPct.toFixed(1) + "%"}</span><div>${num(t.cash)} 元</div></div>
@@ -871,12 +1078,7 @@ function family() {
         <div><span class="k">应收款</span><div>${num(t.rec)}</div></div>
       </div>
     </div>
-    <div class="card" style="margin:0 16px 12px;padding:16px;border-radius:18px">
-      <b>四笔钱配置</b>
-      <div class="money4" style="margin-top:16px">
-        ${four.map(([k, c, v]) => `<div><div class="k" style="color:${c}">${k} <button class="q" onclick="event.stopPropagation();moneyHelp('${k}')">?</button></div><div>${num(v)} 元</div></div>`).join("")}
-      </div>
-    </div>
+    ${trendCard()}
     <div class="card" style="margin:0 16px 12px;padding:16px;border-radius:18px">
       <b>更新记录</b>
       ${logs.length ? `<div class="tl" style="margin-top:12px">${logs.map((g) => `<h4>${md(g.at)}</h4>${g.items.map((it) => `<div class="row-card split"><span>${esc(it.name)}</span><b class="nowrap">${money(it.amount, it.cur)}</b></div>`).join("")}`).join("")}
@@ -929,6 +1131,140 @@ function sankeySvg(t) {
   </svg>`;
 }
 
+let skState = { mode: "amt" };
+function wan(n, base) {
+  if (skState.mode === "hide" || S.hide) return "";
+  if (skState.mode === "pct") {
+    const den = base || totals().assets || 1;
+    return (n / den * 100).toFixed(1) + "%";
+  }
+  const sign = n < 0 ? "-" : "";
+  const a = Math.abs(n);
+  if (a >= 10000) return sign + (a / 10000).toFixed(2).replace(/\.?0+$/, "") + "万";
+  return sign + a.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+}
+function closeSankey() {
+  const el = document.getElementById("skFull");
+  if (!el) return;
+  el.classList.remove("on");
+  el.innerHTML = "";
+}
+function openSankey() { drawSankeyFull(); }
+function setSkMode(m) { skState.mode = m; drawSankeyFull(); }
+function bindSkPan(el) {
+  if (!el) return;
+  let down = false, x0 = 0, y0 = 0, sl = 0, st = 0;
+  el.onpointerdown = (e) => {
+    if (e.button) return;
+    down = true; x0 = e.clientX; y0 = e.clientY; sl = el.scrollLeft; st = el.scrollTop;
+    try { el.setPointerCapture(e.pointerId); } catch {}
+  };
+  el.onpointermove = (e) => {
+    if (!down) return;
+    el.scrollLeft = sl - (e.clientX - x0);
+    el.scrollTop = st - (e.clientY - y0);
+  };
+  el.onpointerup = el.onpointercancel = () => { down = false; };
+}
+function downloadSankey() {
+  const svg = document.querySelector("#skFull svg");
+  if (!svg) { toast("暂无可导出的图"); return; }
+  const blob = new Blob([svg.outerHTML], { type: "image/svg+xml" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "家庭资产组成.svg";
+  a.click();
+}
+function drawSankeyFull() {
+  const el = document.getElementById("skFull");
+  if (!el) return;
+  const t = totals();
+  const groups = [
+    { label: "流动资金", color: "#c47a52", fill: "rgba(196,122,82,.62)", items: vis(S.cash) },
+    { label: "投资理财", color: "#6b5ea7", fill: "rgba(92,84,136,.82)", items: vis(S.invest) },
+    { label: "固定资产", color: "#8a8a8a", fill: "rgba(140,140,140,.5)", items: vis(S.fixed) },
+    { label: "应收款", color: "#7a90a8", fill: "rgba(122,144,168,.5)", items: vis(S.receivable) }
+  ].map((g) => {
+    const items = g.items.map((x) => ({ name: x.name, v: Math.abs(cny(x)) })).filter((x) => x.v || g.items.length);
+    const total = items.reduce((n, x) => n + x.v, 0);
+    return { ...g, items, total };
+  }).filter((g) => g.total > 0 || g.items.length);
+  const leafN = groups.reduce((n, g) => n + Math.max(g.items.length, 1), 0);
+  const H = Math.max(340, 72 + leafN * 36);
+  const W = 920;
+  const yTop = 56, colH = H - 80;
+  const assets = Math.max(t.assets, 1);
+  const debtAbs = Math.abs(t.debt);
+  const debtH = t.empty ? 10 : Math.max(8, Math.min(colH * 0.22, debtAbs / assets * colH));
+  const netH = colH - debtH;
+  let y = yTop;
+  groups.forEach((g) => {
+    const share = t.empty ? 1 / Math.max(groups.length, 1) : g.total / assets;
+    g.h = Math.max(28, colH * Math.max(share, 0.06));
+    g.y = y;
+    let iy = y;
+    const itemH = g.items.length ? g.h / g.items.length : g.h;
+    g.items.forEach((it) => {
+      it.h = Math.max(18, itemH);
+      it.y = iy;
+      iy += it.h;
+    });
+    y += g.h + 8;
+  });
+  let paths = "";
+  paths += `<rect x="36" y="${yTop}" width="96" height="${debtH}" rx="3" fill="#5c5c5c"/>`;
+  paths += `<path d="M40 ${yTop + debtH + 2} H128 Q150 ${yTop + debtH + 2} 150 ${yTop + debtH + 18} V${yTop + colH - 10} Q150 ${yTop + colH} 128 ${yTop + colH} H40 Z" fill="#1e6b56"/>`;
+  paths += `<rect x="188" y="${yTop}" width="14" height="${colH}" rx="3" fill="#5c5488"/>`;
+  const rDebt = ribbon(132, yTop, debtH, 188, yTop, Math.max(8, debtH * 0.4));
+  const rNet = ribbon(132, yTop + debtH + 2, netH - 2, 188, yTop + Math.max(10, debtH * 0.4), colH - Math.max(10, debtH * 0.4));
+  paths += `<path d="${rDebt}" fill="#6a6a6a" opacity=".85"/>`;
+  paths += `<path d="${rNet}" fill="#1e6b56" opacity=".8"/>`;
+  groups.forEach((g) => {
+    paths += `<path d="${ribbon(202, g.y, g.h, 360, g.y, g.h)}" fill="${g.fill}"/>`;
+    paths += `<rect x="360" y="${g.y}" width="10" height="${g.h}" fill="${g.color}"/>`;
+    const lab = skState.mode === "hide" ? g.label : g.label + " " + wan(g.total, assets);
+    paths += `<text x="248" y="${g.y + g.h / 2 + 4}" font-size="12" fill="#ddd">${esc(lab)}</text>`;
+    g.items.forEach((it) => {
+      paths += `<path d="${ribbon(370, it.y + 2, Math.max(10, it.h - 4), 560, it.y + 2, Math.max(10, it.h - 4))}" fill="${g.fill}"/>`;
+      const ilab = skState.mode === "hide" ? it.name : it.name + "  " + wan(it.v, assets);
+      paths += `<text x="572" y="${it.y + it.h / 2 + 4}" font-size="13" fill="#e8e8e8">${esc(ilab)}</text>`;
+    });
+  });
+  const debtLab = wan(-debtAbs, assets);
+  const astLab = wan(t.assets, assets);
+  const svg = `<svg class="sk-canvas" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+    <rect width="${W}" height="${H}" fill="#0c0c0e"/>
+    <g font-family="-apple-system,PingFang SC,sans-serif">
+      <rect x="36" y="16" rx="6" fill="#1c1c1e" width="88" height="32"/>
+      <text x="48" y="28" font-size="11" fill="#9a9a9a">负债</text>
+      <text x="48" y="42" font-size="12" fill="#ddd">${esc(debtLab || "—")}</text>
+      <rect x="132" y="16" rx="6" fill="#1c1c1e" width="100" height="32"/>
+      <text x="144" y="28" font-size="11" fill="#8b86c2">总资产</text>
+      <text x="144" y="42" font-size="12" fill="#ddd">${esc(astLab || "—")}</text>
+      ${paths}
+    </g>
+  </svg>`;
+  const mode = skState.mode;
+  el.innerHTML = `<div class="sk-bar">
+      <h2>家庭资产组成</h2>
+      <select class="sk-dd" onchange="route.member=this.value;drawSankeyFull()">
+        <option value="全部" ${route.member === "全部" ? "selected" : ""}>全部</option>
+        ${memberList().map((m) => `<option value="${esc(m.name)}" ${route.member === m.name ? "selected" : ""}>${esc(m.name)}</option>`).join("")}
+      </select>
+      <span class="grow"></span>
+      <div class="sk-modes">
+        <button class="${mode === "amt" ? "on" : ""}" onclick="setSkMode('amt')">金额</button>
+        <button class="${mode === "pct" ? "on" : ""}" onclick="setSkMode('pct')">比例</button>
+        <button class="${mode === "hide" ? "on" : ""}" onclick="setSkMode('hide')">隐藏金额</button>
+      </div>
+      <button class="sk-ico" title="导出" onclick="downloadSankey()">↓</button>
+      <button class="sk-ico" title="关闭" onclick="closeSankey()">×</button>
+    </div>
+    <div class="sk-view">${t.empty ? `<div style="padding:48px 24px;color:#888">还没有明细。记下流动资金或投资账户后，这里会展开到每一笔，并可左右拖动。</div>` : svg}</div>`;
+  el.classList.add("on");
+  bindSkPan(el.querySelector(".sk-view"));
+}
+
 function calendarPage() {
   const rows = S.snaps.slice().sort((a, b) => String(b.at).localeCompare(String(a.at)));
   return `<section class="screen on gray">
@@ -941,28 +1277,72 @@ function calendarPage() {
 }
 
 function managePage() {
-  const blocks = [
-    ["cash", "流动资金"], ["fixed", "固定资产"], ["invest", "投资理财"], ["receivable", "应收款"], ["debt", "负债"]
-  ];
+  const ms = memberList();
+  const colors = ["#f3b184", "#8bb7e0", "#a8d5b5", "#d5b4e0", "#e8c07a"];
+  const sorting = !!route.memSort;
   return `<section class="screen on gray">
-    ${navHead("go('family')", "管理", `<button class="ghost-btn" onclick="exportBook()">导出</button>`)}
-    <p class="muted pad">删除、改名都只动简化版账本，不会碰到完整版持仓。</p>
-    ${blocks.map(([id, label]) => {
-      const list = listByCat(id);
-      return `<div class="w-card"><b>${label}</b>
-        ${list.length ? list.map((a) => `<div class="split" style="margin-top:12px">
-          <button onclick="go('editItem',{cat:'${id}',itemId:'${a.id}'})" style="text-align:left;flex:1"><b>${esc(a.name)}</b><div class="k">${money(a.amount, a.cur)}</div></button>
-          <button class="danger" onclick="removeItem('${id}','${a.id}')">删除</button>
-        </div>`).join("") : `<div class="faint" style="margin-top:10px">暂无</div>`}
-        <button class="add-dash" style="margin:14px 0 0;width:100%" onclick="${id === "invest" ? "go('addInvest')" : `go('addItem',{cat:'${id}'})`}"><span>添加${label}</span><span>+</span></button>
-      </div>`;
-    }).join("")}
-    <div class="w-card">
-      <b>汇率（1 外币 = ? 人民币）</b>
-      <div class="field" style="margin-top:12px"><label>港元 HKD</label><input type="number" step="0.0001" value="${S.fx.HKD}" onchange="S.fx.HKD=Number(this.value)||S.fx.HKD;save();toast('已保存汇率')" /></div>
-      <div class="field" style="margin:0"><label>美元 USD</label><input type="number" step="0.0001" value="${S.fx.USD}" onchange="S.fx.USD=Number(this.value)||S.fx.USD;save();toast('已保存汇率')" /></div>
+    ${navHead("go('family')", "家庭成员", `<button type="button" class="faint ${sorting ? "red" : ""}" onclick="route.memSort=!route.memSort;render({resize:false})">排序</button>`)}
+    <p class="muted pad">记录多人家庭资产时，建议添加家庭成员，录入后分别查看每位成员的资产。</p>
+    <p class="muted pad">如有需要，你可以找一个方便的时间，和家人面对面坐下来一起讨论、交流和管理家庭资产。</p>
+    <div class="mems">
+      ${ms.map((m, i) => `<div class="mem">
+        <div class="avatar" style="background:${colors[i % colors.length]}"><i class="dot l"></i><i class="dot r"></i><i class="smile"></i></div>
+        <b>${esc(m.name)}</b>
+        ${sorting ? `<div class="mem-shift">
+          <button type="button" onclick="moveMember('${m.id}',-1)">左移</button>
+          <button type="button" onclick="moveMember('${m.id}',1)">右移</button>
+        </div>` : (m.id !== "me" ? `<button class="sub" onclick="removeMember('${m.id}')">移除</button>` : "")}
+      </div>`).join("")}
+      ${sorting ? "" : `<button class="mem" type="button" onclick="addMemberDlg()">
+        <div class="mem-add">+</div>
+        <span class="sub">添加成员</span>
+      </button>`}
     </div>
   </section>`;
+}
+function addMemberDlg() {
+  document.getElementById("mask").className = "mask on";
+  document.getElementById("mask").innerHTML = `<div class="sheet sheet-form">
+    <div class="split"><button type="button" onclick="closeMask()" style="font-size:20px">×</button><span class="cap">添加成员</span><span style="width:24px"></span></div>
+    <div class="nick">昵称</div>
+    <input id="memName" placeholder="为家人取个名字吧" oninput="syncMemOk()" />
+    <div class="row"><span>在家庭资产记账中显示该成员</span>
+      <span class="toggle on" id="memShow" onclick="this.classList.toggle('on')"><i></i></span>
+    </div>
+    <button class="sheet-done" id="memOk" disabled onclick="commitMember()">完成</button>
+  </div>`;
+  const el = document.getElementById("memName");
+  if (el) el.focus();
+}
+function syncMemOk() {
+  const name = (document.getElementById("memName") && document.getElementById("memName").value || "").trim();
+  const btn = document.getElementById("memOk");
+  if (!btn) return;
+  btn.disabled = !name;
+  btn.classList.toggle("ready", !!name);
+}
+function commitMember() {
+  const name = (document.getElementById("memName") && document.getElementById("memName").value || "").trim();
+  if (!name) { toast("请填写昵称"); return; }
+  const showEl = document.getElementById("memShow");
+  const show = showEl ? showEl.classList.contains("on") : true;
+  if (!S.members) S.members = memberList();
+  S.members.push({ id: uid(), name, show });
+  save(); closeMask(); render({ resize: false });
+}
+function removeMember(id) {
+  S.members = memberList().filter((m) => m.id !== id);
+  if (route.member !== "全部" && !S.members.some((m) => m.name === route.member)) route.member = "全部";
+  save(); render({ resize: false });
+}
+function moveMember(id, dir) {
+  const ms = memberList().slice();
+  const i = ms.findIndex((m) => m.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= ms.length) return;
+  const tmp = ms[i]; ms[i] = ms[j]; ms[j] = tmp;
+  S.members = ms;
+  save(); render({ resize: false });
 }
 
 function updateFamily() {
@@ -995,7 +1375,7 @@ function updateFamily() {
       <div class="amt">${money(a.amount, a.cur)}<small>${a.date ? md(a.date) : (a.updated ? relUpdate(a.updated) : "")}</small></div>
     </button>`).join("") : `<div class="faint" style="padding:24px;text-align:center">暂无记录</div>`}
     <button class="add-dash" onclick="${cur.id === "invest" ? "go('addInvest')" : `go('addItem',{cat:'${cur.id}'})`}">
-      <span>${cur.id === "debt" ? "⬤⬤⬤ 更多负债" : "继续添加"}</span><span>+</span>
+      <span>${cur.id === "debt" ? "更多负债" : "继续添加"}</span><span>+</span>
     </button>
   </section>`;
 }
@@ -1009,7 +1389,7 @@ function helpPage() {
   const c = CATS.find((x) => x.id === route.cat) || CATS[0];
   return `<section class="screen on gray">
     ${navHead(`go('update',{cat:'${c.id}'})`, `什么是${c.label}`)}
-    <div class="w-card help"><p>${c.hint}</p><p>金额按记账币种填写，家庭总览会按你在「管理」里的汇率折成人民币。</p></div>
+    <div class="w-card help"><p>${c.hint}</p><p>金额按记账币种填写，家庭总览会折成人民币显示。</p></div>
   </section>`;
 }
 function addItemPage() {
@@ -1135,7 +1515,7 @@ function investHome() {
   const ytds = S.invest.map(investStats).filter((s) => s.ytd != null);
   st.ytd = ytds.length ? ytds.reduce((n, s) => n + s.ytd * Math.max(s.net, 0), 0) / Math.max(1, ytds.reduce((n, s) => n + Math.max(s.net, 0), 0)) : null;
   return `<section class="screen on">
-    ${navHead("go('home')", "投资记账", `<button class="ghost-btn faint" onclick="openReminder()">${S.reminder ? "每月" + S.reminder + "日提醒" : "🔔 记账提醒"}</button>`)}
+    ${navHead("go('home')", "投资记账", `<button class="ghost-btn faint" onclick="openReminder()">${S.reminder ? "每月" + S.reminder + "日提醒" : "记账提醒"}</button>`)}
     <div class="pad"><b style="font-size:18px">分组汇总</b></div>
     <div class="inv" onclick="go('summary')">
       <div class="k">默认汇总 (元) ${hideBtn()}</div>
@@ -1145,8 +1525,15 @@ function investHome() {
         <div><div class="k">年化收益率</div><div class="${st.ytd == null ? "faint" : tone(st.ytd)}" style="font-size:16px;font-weight:700">${st.ytd == null ? "暂无" : pct(st.ytd)}</div></div>
       </div>
     </div>
-    <div class="pad split" style="margin-bottom:8px"><b>全部资产 ▾</b><button onclick="go('manage')">⋯</button></div>
-    ${S.invest.length ? S.invest.map((a) => {
+    <div class="pad split" style="margin-bottom:8px">
+      <button onclick="cycleInvFilter()"><b>${esc(route.invFilter || "全部资产")} ▾</b></button>
+      <button onclick="route.invMenu=!route.invMenu;render({resize:false})">⋯</button>
+    </div>
+    ${route.invMenu ? `<div class="menu">
+      <button onclick="go('manage')">家庭成员</button>
+      <button onclick="exportBook();route.invMenu=false;render({resize:false})">导出账本</button>
+    </div>` : ""}
+    ${(route.invFilter && route.invFilter !== "全部" && route.invFilter !== "全部资产" ? S.invest.filter((a) => a.bucket === route.invFilter) : S.invest).length ? (route.invFilter && route.invFilter !== "全部" && route.invFilter !== "全部资产" ? S.invest.filter((a) => a.bucket === route.invFilter) : S.invest).map((a) => {
       const s = investStats(a);
       const unit = a.cur === "USD" ? "美元" : a.cur === "HKD" ? "港元" : "元";
       return `<div class="asset">
@@ -1174,9 +1561,9 @@ function addInvestPage() {
       <div class="ex-row">${EXAMPLES.invest.map((n) => `<button class="ex-chip" type="button" onclick="fillExample('${n}')">${n}<small>金额 ****</small></button>`).join("")}</div>
     </div>
     <div class="add-body">
-      <div class="field"><label>✏️ 资产名称</label><input id="invName" placeholder="取个名字吧" value="${esc(d.name)}" oninput="draftField('name',this.value)" /></div>
-      <div class="field"><label>💳 当前资产金额</label><input type="number" placeholder="输入金额" value="${esc(d.amount)}" oninput="draftField('amount',this.value)" /></div>
-      <div class="field"><label>🌀 资产类型</label>
+      <div class="field"><label>资产名称</label><input id="invName" placeholder="取个名字吧" value="${esc(d.name)}" oninput="draftField('name',this.value)" /></div>
+      <div class="field"><label>当前资产金额</label><input type="number" placeholder="输入金额" value="${esc(d.amount)}" oninput="draftField('amount',this.value)" /></div>
+      <div class="field"><label>资产类型</label>
         <div class="types">${["活钱", "稳健", "长期"].map((b) => `<button type="button" class="${d.bucket === b ? "on" : ""}" onclick="draftField('bucket','${b}');render()">${b}</button>`).join("")}</div>
       </div>
       <button class="more" type="button" onclick="route.more=!route.more;render()">币种等更多设置 ›</button>
@@ -1247,7 +1634,7 @@ function compose(st) {
   const last = st.last ? pretty(st.last) : pretty(today());
   const box = (title, val, cls) => `<div class="box"><div class="k">${title}</div><b class="${cls || ""}">${val}</b></div>`;
   return `<div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
-    <div class="split"><b>资产构成</b><span class="ghost-btn">记账以来 ▾</span></div>
+    <div class="split"><b>资产构成</b><button class="ghost-btn" onclick="cycleComposeRange()">${({ all: "记账以来", ytd: "今年", "1y": "近1年" }[route.chartRange] || "记账以来")} ▾</button></div>
     <div class="tree">
       <div class="tree-row">${box("投入", "+" + num(st.inAmt), "red")}${box("转出", "-" + num(st.outAmt), "green")}</div>
       <div class="tree-join"></div>
@@ -1283,7 +1670,7 @@ function summary() {
   for (const a of S.invest) byBucket[a.bucket || "长期"] += cny(a);
   const parts = Object.entries(byBucket).filter(([, v]) => v);
   return `<section class="screen on gray">
-    ${navHead("go('invest')", "默认汇总", `<button onclick="go('settings')">⚙</button>`)}
+    ${navHead("go('invest')", "默认汇总", `<button type="button" onclick="go('settings')" aria-label="设置">设置</button>`)}
     <div class="pad faint" style="margin-bottom:8px">汇总 / 默认汇总</div>
     <div class="card" style="margin:0 16px;padding:16px;border-radius:16px">
       <div class="k">总资产 (元) ${hideBtn()}</div>
@@ -1315,7 +1702,7 @@ function account() {
   st.amount = a.amount;
   const hist = route.showAll ? st.hist.slice().reverse() : st.hist.slice().reverse().slice(0, 6);
   return `<section class="screen on gray">
-    ${navHead("go('invest')", `${esc(a.name)} <small style="font-size:11px;background:var(--lav);color:#8b86c8;border-radius:4px;padding:1px 6px">${esc(a.bucket)}</small>`, `<button onclick="go('settings',{account:'${a.id}'})">⚙</button>`)}
+    ${navHead("go('invest')", `${esc(a.name)} <small style="font-size:11px;background:var(--lav);color:#8b86c8;border-radius:4px;padding:1px 6px">${esc(a.bucket)}</small>`, `<button type="button" onclick="go('settings',{account:'${a.id}'})" aria-label="设置">设置</button>`)}
     <div class="card" style="margin:0 16px;padding:16px;border-radius:16px">
       <div class="split"><span class="k">资产 (元) ${hideBtn()}</span><span class="faint">${daysAgo(a.updated)}</span></div>
       <div class="n">${num(a.amount * fxRate(a.cur))}</div>
@@ -1368,10 +1755,10 @@ function openUpdate(id) {
     <div class="row-card muted">上次更新资产（${when}）至今，是否有未记录的资金进出？</div>
     <div class="pair">
       <button style="background:var(--in)" onclick="recordFlow(true)">
-        <div style="font-size:28px;color:var(--blue)">↕</div><b>有资金进出</b><div class="k">记录投入/转出</div>
+        <div style="font-size:22px;color:var(--blue);margin-bottom:6px">进 / 出</div><b>有资金进出</b><div class="k">记录投入/转出</div>
       </button>
       <button style="background:var(--out)" onclick="recordFlow(false)">
-        <div style="font-size:28px">👛</div><b>没有资金进出</b><div class="k">只更新资金金额</div>
+        <div style="font-size:22px;margin-bottom:6px">金额</div><b>没有资金进出</b><div class="k">只更新资金金额</div>
       </button>
     </div>
   </div>`;
@@ -1600,35 +1987,57 @@ window.addEventListener("pointermove", (e) => {
 window.addEventListener("pointerup", () => { if (!drag) return; drag = null; saveWin(); });
 window.addEventListener("resize", applyWin);
 
-function setFoot(html, gray) {
+function setFoot(html) {
   const f = document.getElementById("foot");
+  const body = document.getElementById("app");
   if (!f) return;
   f.innerHTML = html || "";
   f.classList.toggle("on", Boolean(html));
-  f.classList.toggle("gray", Boolean(gray));
+  if (body) body.classList.toggle("has-dock", Boolean(html));
 }
-function render() {
+function cycleInvFilter() {
+  const opts = ["全部资产", "活钱", "稳健", "长期"];
+  const i = opts.indexOf(route.invFilter || "全部资产");
+  route.invFilter = opts[(i + 1) % opts.length];
+  render({ resize: false });
+}
+function cycleComposeRange() {
+  const opts = ["all", "ytd", "1y"];
+  const i = opts.indexOf(route.chartRange || "all");
+  route.chartRange = opts[(i + 1) % opts.length];
+  render({ resize: false });
+}
+function render(opts) {
+  opts = opts || {};
   const map = {
     home, weather: weatherPage, cashflow: cashflowPage, family, calendar: calendarPage, manage: managePage,
     update: updateFamily, addItem: addItemPage, editItem: editItemPage, help: helpPage,
     invest: investHome, addInvest: addInvestPage, summary, account, settings: settingsPage
   };
-  document.getElementById("app").innerHTML = (map[route.name] || home)();
+  try {
+    document.getElementById("app").innerHTML = (map[route.name] || home)();
+  } catch (err) {
+    console.error(err);
+    toast("页面出错，已回到总览");
+    route.name = "home";
+    document.getElementById("app").innerHTML = home();
+  }
   const body = document.getElementById("app");
-  if (body) body.scrollTop = 0;
+  if (body && opts.keepScroll !== true) body.scrollTop = 0;
   if (route.name === "family") {
-    setFoot(`<button class="cta" type="button" onclick="go('update',{cat:'cash'})">更新资产</button>`, true);
+    setFoot(`<button class="cta" type="button" onclick="go('update',{cat:'cash'})">更新资产</button>`);
   } else if (route.name === "account" && route.account) {
-    setFoot(`<button class="cta" type="button" onclick="openUpdate('${route.account}')">更新收益</button>`, true);
+    setFoot(`<button class="cta" type="button" onclick="openUpdate('${route.account}')">更新收益</button>`);
   } else if (route.name === "update") {
     const idx = CATS.findIndex((c) => c.id === route.cat);
     const next = idx >= 0 && idx < CATS.length - 1 ? `go('update',{cat:'${CATS[idx + 1].id}'})` : "finishUpdate()";
-    setFoot(`<button class="fab" type="button" onclick="${next}">→</button>`, false);
+    setFoot(`<button class="fab" type="button" onclick="${next}">→</button>`);
   } else {
     setFoot("");
   }
-  applyWin();
+  if (opts.resize !== false) applyWin();
 }
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSankey(); });
 
 if (localStorage.getItem("fire-simple-theme") === "dark") document.documentElement.classList.add("dark");
 document.getElementById("themeBtn").innerHTML = themeIcon();
