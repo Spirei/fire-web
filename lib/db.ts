@@ -39,7 +39,8 @@ function migrate(database: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS user_settings (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-      fire TEXT NOT NULL DEFAULT '{}'
+      fire TEXT NOT NULL DEFAULT '{}',
+      simple TEXT NOT NULL DEFAULT '{}'
     );
 
     CREATE TABLE IF NOT EXISTS rate_limit (
@@ -247,6 +248,9 @@ function migrate(database: Database.Database) {
       if (prevFk) database.pragma("foreign_keys = ON");
     }
   }
+
+  const userSettingCols = (database.prepare("PRAGMA table_info(user_settings)").all() as { name: string }[]).map((c) => c.name);
+  if (!userSettingCols.includes("simple")) database.exec("ALTER TABLE user_settings ADD COLUMN simple TEXT NOT NULL DEFAULT '{}'");
 
   // celebs 表增量字段（兼容旧库）
   const celebCols = (database.prepare("PRAGMA table_info(celebs)").all() as { name: string }[]).map((c) => c.name);
