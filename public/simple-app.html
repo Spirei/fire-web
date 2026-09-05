@@ -128,6 +128,11 @@
       scrollbar-width: thin; scrollbar-color: var(--dash) var(--bg);
     }
     .win-body.can-y { overflow-y: auto; }
+    .win-foot { display: none; flex: none; padding: 10px 16px 14px; background: var(--bg); }
+    .win-foot.on { display: block; }
+    .win-foot.gray { background: var(--page); }
+    .win-foot .cta { margin: 0; }
+    .win-foot .fab { margin: 0 auto; }
     .win-body::-webkit-scrollbar { width: 8px; height: 0; }
     .win-body::-webkit-scrollbar-track { background: var(--bg); }
     .win-body::-webkit-scrollbar-thumb { background: var(--dash); border-radius: 8px; }
@@ -204,8 +209,9 @@
     .pill { height: 32px; padding: 0 16px; border-radius: 16px; background: var(--chip); color: var(--muted); font-size: 14px; }
     .pill.on { background: var(--tab); color: #fff; }
     .manage { margin-left: auto; flex: none; color: var(--muted); font-size: 14px; padding-left: 12px; border-left: 1px solid var(--line); white-space: nowrap; }
-    .cats { display: flex; gap: 10px; overflow-x: auto; padding: 4px 16px 16px; scrollbar-width: none; }
+    .cats { display: flex; align-items: center; gap: 0; overflow-x: auto; padding: 4px 16px 16px; scrollbar-width: none; }
     .cats::-webkit-scrollbar { display: none; }
+    .cat-next { flex: none; color: var(--faint); padding: 0 4px; font-size: 16px; }
     .cat { flex: none; width: 132px; min-height: 72px; padding: 12px; border-radius: 14px; background: var(--chip); text-align: center; color: var(--ink); }
     .cat b { display: block; font-size: 14px; font-weight: 650; }
     .cat span { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
@@ -214,7 +220,8 @@
     .cat.on-inv { background: var(--lav); color: #8b86c8; }
     html.dark .cat.on-inv { color: #b7b3e0; }
     .cat.on-debt { background: var(--chip); }
-    .hint { margin: 0 16px 12px; padding: 12px 14px; border-radius: 12px; background: var(--cash); color: var(--cash-t); font-size: 14px; display: flex; justify-content: space-between; }
+    .hint { margin: 0 16px 12px; padding: 12px 14px; border-radius: 12px; background: var(--cash); color: var(--cash-t); font-size: 14px; display: flex; justify-content: space-between; width: calc(100% - 32px); }
+    .hint.plain { background: var(--gray); color: var(--ink); }
     .me { margin: 0 16px; color: #6b67a8; font-weight: 750; font-size: 16px; }
     html.dark .me { color: #b7b3e0; }
     .acct { display: flex; justify-content: space-between; align-items: center; background: var(--card); border-radius: 14px; padding: 16px; margin: 8px 16px; color: var(--ink); }
@@ -234,8 +241,27 @@
     .bars span.up { background: var(--bar); }
     .bars + .labs { display: grid; grid-template-columns: repeat(5, 1fr); font-size: 11px; color: var(--lab); text-align: center; margin-top: 6px; }
     .bars + .labs span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .sankey { width: 100%; max-width: 520px; height: 200px; margin: 4px auto 8px; overflow: hidden; }
-    .sankey svg { width: 100%; height: 200px; display: block; }
+    .sankey { width: 100%; max-width: 520px; height: 188px; margin: 4px auto 8px; overflow: hidden; }
+    .sankey svg { width: 100%; height: 188px; display: block; }
+    .spark { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: end; height: 72px; gap: 10px; }
+    .spark i { display: block; width: 100%; border-radius: 3px 3px 0 0; background: var(--line); height: 3px; }
+    .spark i.up { background: var(--bar); }
+    .spark .arr { display: block; text-align: center; font-size: 12px; color: var(--faint); line-height: 1; margin-bottom: 4px; }
+    .spark .arr.hot { color: var(--red); }
+    .cmp { display: flex; gap: 18px; margin: 12px 0; }
+    .cmp .ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; background: var(--lav); flex: none; }
+    .delta-bars { display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; height: 72px; gap: 6px; margin-top: 4px; }
+    .delta-bars > div { min-width: 0; text-align: center; }
+    .delta-bars b { display: block; font-size: 10px; font-weight: 600; color: var(--red); min-height: 14px; }
+    .delta-bars i { display: block; width: 100%; border-radius: 3px 3px 0 0; background: var(--line); height: 2px; }
+    .delta-bars i.on { background: var(--bar); }
+    .delta-bars span { display: block; font-size: 10px; color: var(--lab); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .q { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid currentColor; font-size: 10px; opacity: .55; margin-left: 2px; vertical-align: 1px; }
+    .chip-mini { display: inline-block; background: var(--invest); color: var(--blue); border-radius: 4px; padding: 1px 6px; font-size: 11px; margin-right: 6px; }
+    .tree { display: flex; flex-direction: column; align-items: center; gap: 0; margin-top: 14px; }
+    .tree-row { display: flex; gap: 10px; justify-content: center; width: 100%; }
+    .tree-row .box { flex: 1; max-width: 150px; background: var(--gray); border-radius: 12px; padding: 12px 8px; text-align: center; color: var(--ink); }
+    .tree-join { width: 56%; height: 18px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0 0 12px 12px; opacity: .7; }
     .comp { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; }
     .comp > div { min-width: 0; background: var(--card); border-radius: 12px; padding: 10px 12px; box-shadow: 0 0 0 1px var(--line); color: var(--ink); }
     .money4 { display: flex; gap: 8px; }
@@ -300,6 +326,7 @@
     <button type="button" id="themeBtn" title="浅色 / 深色" aria-label="浅色深色切换" onclick="toggleTheme()"></button>
   </div>
   <div class="win-body" id="app"></div>
+  <div class="win-foot" id="foot"></div>
   <i class="handle nw" data-dir="nw"></i>
   <i class="handle ne" data-dir="ne"></i>
   <i class="handle sw" data-dir="sw"></i>
@@ -553,11 +580,28 @@ function latestDate() {
 }
 function relUpdate(s) {
   if (!s) return "尚未记账";
-  const days = Math.round((Date.now() - parseDay(s)) / 86400000);
+  return pretty(s) + " 更新";
+}
+function daysAgo(s) {
+  if (!s) return "尚未更新";
+  const days = Math.max(0, Math.round((Date.now() - parseDay(s)) / 86400000));
   if (days <= 0) return "今天更新";
   if (days === 1) return "昨天更新";
-  if (days < 30) return days + " 天前更新";
-  return pretty(s) + " 更新";
+  return days + "天前更新";
+}
+function vis(list) {
+  const rows = list || [];
+  if (route.member !== "我") return rows;
+  return rows.filter((x) => !x.owner || x.owner === "我");
+}
+function moneyHelp(k) {
+  const tips = {
+    活钱: "随时能用的钱：流动资金 + 投资里标成「活钱」的账户。",
+    稳健: "一到三年不急用、波动较小的投资。",
+    长期: "五年以上的长钱，股票、指数等。",
+    保障: "保险与应急备用，先留够再加风险资产。"
+  };
+  toast(tips[k] || "");
 }
 function monthUnupdated(s) {
   if (!s) return "尚未记账";
@@ -567,18 +611,19 @@ function monthUnupdated(s) {
   return (now.getMonth() + 1) + " 月未更新";
 }
 function totals() {
-  const cash = sum(S.cash);
-  const fixed = sum(S.fixed);
-  const inv = S.invest.reduce((n, x) => n + cny(x), 0);
-  const rec = sum(S.receivable);
-  const debt = sum(S.debt);
+  const cash = sum(vis(S.cash));
+  const fixed = sum(vis(S.fixed));
+  const invList = vis(S.invest);
+  const inv = invList.reduce((n, x) => n + cny(x), 0);
+  const rec = sum(vis(S.receivable));
+  const debt = sum(vis(S.debt));
   const assets = cash + (S.excludeFixed ? 0 : fixed) + inv + rec;
   const net = assets + debt;
   const ratio = assets ? Math.abs(debt) / assets * 100 : 0;
-  const pnl = S.invest.reduce((n, x) => n + investPnl(x) * fxRate(x.cur), 0);
+  const pnl = invList.reduce((n, x) => n + investPnl(x) * fxRate(x.cur), 0);
   const empty = isEmptyBook(S);
-  const buckets = { 活钱: cash, 稳健: 0, 长期: 0 };
-  for (const a of S.invest) buckets[a.bucket || "长期"] = (buckets[a.bucket || "长期"] || 0) + cny(a);
+  const buckets = { 活钱: cash, 稳健: 0, 长期: 0, 保障: 0 };
+  for (const a of invList) buckets[a.bucket || "长期"] = (buckets[a.bucket || "长期"] || 0) + cny(a);
   const last = latestDate();
   const prev = S.snaps.length > 1 ? S.snaps[1] : (S.snaps[0] && S.snaps[0].at !== today() ? S.snaps[0] : null);
   return { cash, fixed, inv, rec, debt, assets, net, ratio, pnl, empty, buckets, last, prev };
@@ -668,12 +713,7 @@ function home() {
       <div class="faint" style="font-size:12px">${t.empty ? "点此开始记录" : relUpdate(t.last)}</div>
       <div style="display:flex;align-items:end;gap:16px;margin-top:18px">
         <div style="flex:1">
-          <div class="bars" style="grid-template-columns:repeat(3,1fr);height:70px">
-            ${(snaps.length ? snaps : [{ assets: 0 }, { assets: 0 }, { assets: 0 }]).map((s, i, arr) => {
-              const up = s.assets && (i === arr.length - 1);
-              return `<span class="${up ? "up" : ""}" style="height:${barH(s.assets, maxA, 62)}px"></span>`;
-            }).join("")}
-          </div>
+          <div class="spark">${sparkCols(snaps, dA)}</div>
         </div>
         <div style="flex:1.2;font-size:13px;padding-bottom:8px">
           <div class="${dA ? tone(dA) : "muted"}">${dA ? ("资产" + (dA > 0 ? "增加 " : "减少 ") + num(Math.abs(dA)) + " 元") : "资产没有变化"}</div>
@@ -686,9 +726,12 @@ function home() {
         <div class="split"><b>投资记账</b><span class="faint">▾</span></div>
         <div class="${hasYtd ? tone(ytd) : "faint"}" style="font-size:22px;font-weight:750;margin:10px 0 4px">${hasYtd ? pct(ytd) : "暂无"} <small style="font-size:12px">年化</small></div>
         <div class="faint" style="font-size:12px">${S.invest.length ? relUpdate(t.last) : "尚未记账"}</div>
-        <div style="margin-top:22px">
-          <div class="k" style="margin-top:6px">今年净投入</div>
-          <b>${num(yearIn)} 元</b>
+        <div style="margin-top:22px;display:flex;align-items:end;gap:8px">
+          <span class="chip-mini">默认...</span>
+          <div>
+            <div class="k">今年净投入</div>
+            <b>${num(yearIn)} 元</b>
+          </div>
         </div>
       </div>
       <div class="mini" onclick="go('cashflow')">
@@ -747,6 +790,17 @@ function cashflowPage() {
     </div>
   </section>`;
 }
+function sparkCols(snaps, dA) {
+  const cols = snaps.length ? snaps.slice(-3) : [{ assets: 0 }, { assets: 0 }, { assets: 0 }];
+  while (cols.length < 3) cols.unshift({ assets: 0 });
+  const maxA = Math.max(...cols.map((s) => Math.abs(s.assets)), 1);
+  return cols.map((s, i) => {
+    const last = i === cols.length - 1;
+    const changed = last && dA;
+    const arr = changed ? (dA > 0 ? "↑" : "↓") : "→";
+    return `<div><span class="arr ${changed ? "hot" : ""}">${arr}</span><i class="${changed ? "up" : ""}" style="height:${barH(s.assets, maxA, 52)}px"></i></div>`;
+  }).join("");
+}
 function setCf(key, value) {
   S.cashflow[key] = value === "" ? 0 : Number(value) || 0;
   save();
@@ -758,14 +812,25 @@ function family() {
   const t = totals();
   const dA = t.prev ? t.assets - t.prev.assets : 0;
   const dD = t.prev ? t.debt - t.prev.debt : 0;
-  const maxCat = Math.max(t.cash, t.fixed, t.inv, t.rec, Math.abs(t.debt), 1);
-  const cats = [
-    ["流动资金", t.cash], ["固定资产", t.fixed], ["投资理财", t.inv], ["应收款", t.rec], ["负债", t.debt]
+  const p = t.prev || { cash: t.cash, fixed: t.fixed, inv: t.inv, rec: t.rec, debt: t.debt };
+  const deltas = [
+    ["流动资金", t.cash - (p.cash || 0)],
+    ["固定资产", t.fixed - (p.fixed || 0)],
+    ["投资理财", t.inv - (p.inv || 0)],
+    ["应收款", t.rec - (p.rec || 0)],
+    ["负债", t.debt - (p.debt || 0)]
   ];
+  const maxD = Math.max(...deltas.map((x) => Math.abs(x[1])), 1);
   const cashPct = t.assets ? t.cash / t.assets * 100 : 0;
   const invPct = t.assets ? t.inv / t.assets * 100 : 0;
   const logs = groupedLogs();
   const compareLabel = t.prev ? "相比" + md(t.prev.at) : "相比上次";
+  const four = [
+    ["活钱", "#d07a8a", t.buckets.活钱 || 0],
+    ["稳健", "#5aa7b8", t.buckets.稳健 || 0],
+    ["长期", "#5b57a3", t.buckets.长期 || 0],
+    ["保障", "#8a86c2", t.buckets.保障 || 0]
+  ];
   return `<section class="screen on gray">
     ${navHead("go('home')", "家庭资产记账")}
     <div class="pills">
@@ -784,12 +849,15 @@ function family() {
       <div class="k">净资产 <b style="color:var(--ink)">${num(t.net)}</b>　负债率 ${t.empty ? "—" : t.ratio.toFixed(2) + "%"}</div>
       <div class="inner">
         <div class="split"><span>${compareLabel}</span><button class="faint" onclick="go('calendar')">资产月历 ›</button></div>
-        <div style="display:flex;gap:18px;margin:12px 0">
-          <div><span class="k">总资产</span><div class="${dA ? tone(dA) : "muted"}">${dA ? signedNum(dA) : "没有变化"}</div></div>
-          <div><span class="k">总负债</span><div class="${dD ? tone(-dD) : "muted"}">${dD ? signedNum(dD) : "没有变化"}</div></div>
+        <div class="cmp">
+          <div style="display:flex;gap:8px;align-items:center"><span class="ico">▣</span><div><span class="k">总资产</span><div class="${dA ? tone(dA) : "muted"}">${dA ? "↑ " + num(Math.abs(dA)) : "没有变化"}</div></div></div>
+          <div style="display:flex;gap:8px;align-items:center"><span class="ico">▭</span><div><span class="k">总负债</span><div class="${dD ? tone(-dD) : "muted"}">${dD ? signedNum(dD) : "没有变化"}</div></div></div>
         </div>
-        <div class="bars">${cats.map((c) => `<span class="${c[1] ? "up" : ""}" style="height:${barH(c[1], maxCat, 78)}px"></span>`).join("")}</div>
-        <div class="labs"><span>流动资金</span><span>固定资产</span><span>投资理财</span><span>应收款</span><span>负债</span></div>
+        <div class="delta-bars">${deltas.map(([name, d]) => `<div>
+          <b class="${d ? "red" : "faint"}">${d && !S.hide ? ((d > 0 ? "↑" : "↓") + Math.round(Math.abs(d)).toLocaleString("zh-CN")) : "没有变化"}</b>
+          <i class="${d ? "on" : ""}" style="height:${barH(d, maxD, 52)}px"></i>
+          <span>${name}</span>
+        </div>`).join("")}</div>
       </div>
     </div>
     <div class="card" style="margin:0 16px 12px;padding:16px;border-radius:18px">
@@ -806,11 +874,8 @@ function family() {
     <div class="card" style="margin:0 16px 12px;padding:16px;border-radius:18px">
       <b>四笔钱配置</b>
       <div class="money4" style="margin-top:16px">
-        <div><div class="k" style="color:#d07a8a">活钱</div><div>${num(t.buckets.活钱 || 0)} 元</div></div>
-        <div><div class="k" style="color:#5aa7b8">稳健</div><div>${num(t.buckets.稳健 || 0)} 元</div></div>
-        <div><div class="k" style="color:#5b57a3">长期</div><div>${num(t.buckets.长期 || 0)} 元</div></div>
+        ${four.map(([k, c, v]) => `<div><div class="k" style="color:${c}">${k} <button class="q" onclick="event.stopPropagation();moneyHelp('${k}')">?</button></div><div>${num(v)} 元</div></div>`).join("")}
       </div>
-      <div class="faint" style="margin-top:10px;font-size:12px">活钱 = 流动资金 + 投资「活钱」；稳健 / 长期来自投资资产类型。</div>
     </div>
     <div class="card" style="margin:0 16px 12px;padding:16px;border-radius:18px">
       <b>更新记录</b>
@@ -818,7 +883,6 @@ function family() {
         ${S.logs.length > 8 && !route.showAll ? `<button class="faint" style="display:block;width:100%;padding:8px" onclick="route.showAll=true;render()">查看更多</button>` : ""}
       </div>` : `<div class="faint" style="text-align:center;padding:28px 8px">暂无更新记录</div>`}
     </div>
-    <button class="cta" onclick="go('update',{cat:'cash'})">更新资产</button>
   </section>`;
 }
 function groupedLogs() {
@@ -839,26 +903,29 @@ function ribbon(x0, y0, h0, x1, y1, h1) {
 function sankeySvg(t) {
   const debtN = S.debt.length;
   const assets = Math.max(t.assets, 1);
-  let cashR = t.empty ? 0.2 : Math.max(0.08, t.cash / assets);
-  let invR = t.empty ? 0.8 : Math.max(0.08, t.inv / assets);
-  const tot = cashR + invR;
-  cashR /= tot; invR /= tot;
-  const H = 120;
-  const ch = Math.max(18, H * cashR);
-  const ih = H - ch;
-  return `<svg viewBox="0 0 520 200" preserveAspectRatio="xMidYMid meet">
+  const debtH = t.empty ? 8 : Math.max(6, Math.min(28, Math.abs(t.debt) / assets * 120));
+  const netH = 120 - debtH;
+  let cashR = t.empty ? 0.18 : t.cash / assets;
+  let invR = t.empty ? 0.82 : t.inv / assets;
+  const rest = Math.max(0.0001, cashR + invR);
+  cashR = Math.max(0.1, cashR / rest);
+  invR = 1 - cashR;
+  const ch = 120 * cashR;
+  const ih = 120 - ch;
+  const y0 = 40;
+  return `<svg viewBox="0 0 520 188" preserveAspectRatio="xMidYMid meet">
     <text x="8" y="22" font-size="12" fill="var(--muted)">${debtN}项负债</text>
-    <rect x="8" y="28" width="86" height="7" rx="2" fill="var(--dash)"/>
-    <path d="M16 48 H100 Q122 48 122 66 V154 Q122 172 100 172 H16 Z" fill="var(--s-green)"/>
-    <rect x="10" y="48" width="6" height="124" rx="2" fill="#3cbf8a"/>
-    <text x="28" y="116" font-size="13" fill="var(--ink)">净资产</text>
-    <text x="150" y="38" font-size="12" fill="#8a86c2">负债 总资产</text>
-    <rect x="198" y="46" width="10" height="124" rx="2" fill="var(--bar)"/>
-    <path d="${ribbon(208, 50, ch, 348, 50, Math.max(16, ch - 8))}" fill="var(--cash)"/>
-    <path d="${ribbon(208, 50 + ch, ih, 348, 58 + ch, ih)}" fill="var(--s-purple)"/>
-    <rect x="346" y="50" width="6" height="${Math.max(16, ch - 8)}" fill="#c47a52"/>
-    <text x="360" y="${50 + Math.max(16, ch - 8) / 2 + 4}" font-size="12" fill="var(--cash-t)">流动资金</text>
-    <text x="360" y="${58 + ch + ih / 2 + 4}" font-size="13" fill="#8a86c2">投资理财</text>
+    <rect x="8" y="${y0}" width="90" height="${debtH}" rx="2" fill="var(--dash)"/>
+    <path d="M16 ${y0 + debtH + 2} H102 Q124 ${y0 + debtH + 2} 124 ${y0 + debtH + 18} V${y0 + debtH + netH - 8} Q124 ${y0 + debtH + netH} 102 ${y0 + debtH + netH} H16 Z" fill="var(--s-green)"/>
+    <rect x="10" y="${y0 + debtH + 2}" width="6" height="${netH - 4}" rx="2" fill="#3cbf8a"/>
+    <text x="28" y="${y0 + debtH + netH / 2 + 4}" font-size="13" fill="var(--ink)">净资产</text>
+    <text x="148" y="28" font-size="12" fill="#8a86c2">负债 总资产</text>
+    <rect x="196" y="${y0}" width="10" height="120" rx="2" fill="var(--bar)"/>
+    <path d="${ribbon(206, y0, Math.max(10, ch * 0.35), 350, y0 + 4, Math.max(10, ch * 0.28))}" fill="#e0c4b0"/>
+    <path d="${ribbon(206, y0 + Math.max(14, ch * 0.4), ih, 350, y0 + Math.max(22, ch * 0.45), ih)}" fill="var(--s-purple)"/>
+    <rect x="348" y="${y0 + 4}" width="5" height="${Math.max(10, ch * 0.28)}" fill="#c47a52"/>
+    <text x="360" y="${y0 + 10 + Math.max(10, ch * 0.28) / 2}" font-size="12" fill="var(--cash-t)">流动资金</text>
+    <text x="360" y="${y0 + Math.max(22, ch * 0.45) + ih / 2}" font-size="13" fill="#8a86c2">投资理财</text>
   </svg>`;
 }
 
@@ -899,7 +966,7 @@ function managePage() {
 }
 
 function updateFamily() {
-  const cats = CATS.map((c) => ({ ...c, list: listByCat(c.id) }));
+  const cats = CATS.map((c) => ({ ...c, list: vis(listByCat(c.id)) }));
   const cur = cats.find((c) => c.id === route.cat) || cats[0];
   const idx = cats.indexOf(cur);
   const tot = cur.id === "invest" ? S.invest.reduce((n, x) => n + cny(x), 0) : sum(cur.list);
@@ -911,17 +978,18 @@ function updateFamily() {
         <button onclick="location.href='/records'">切换完整版</button>
       </div>` : ""}
     <div class="cats">
-      ${cats.map((c) => {
-        const value = c.id === "invest" ? S.invest.reduce((n, x) => n + cny(x), 0) : sum(c.list);
+      ${cats.map((c, i) => {
+        const value = c.id === "invest" ? vis(S.invest).reduce((n, x) => n + cny(x), 0) : sum(c.list);
         const empty = c.list.length === 0;
-        return `<button class="cat ${c.id === cur.id ? (c.id === "cash" ? "on-cash" : c.id === "invest" ? "on-inv" : "on-debt") : ""}" onclick="go('update',{cat:'${c.id}'})">
+        const on = c.id === cur.id ? (c.id === "cash" ? "on-cash" : c.id === "invest" ? "on-inv" : "on-debt") : "";
+        return `${i ? `<span class="cat-next">›</span>` : ""}<button class="cat ${on}" onclick="go('update',{cat:'${c.id}'})">
           <b>${c.label}</b>
           <span>${empty && value === 0 && c.id !== "debt" ? "待填写" : num(value) + " 元"}</span>
         </button>`;
       }).join("")}
     </div>
-    ${cur.id !== "invest" ? `<button class="hint" onclick="go('help',{cat:'${cur.id}'})"><span>什么是${cur.label}</span><span>›</span></button>` : ""}
-    ${cur.id !== "invest" ? `<div class="me">我</div>` : ""}
+    <button class="hint ${cur.id === "cash" ? "" : "plain"}" onclick="go('help',{cat:'${cur.id}'})"><span>什么是${cur.label}</span><span>›</span></button>
+    <div class="me">我</div>
     ${cur.list.length ? cur.list.map((a) => `<button class="acct" onclick="${cur.id === "invest" ? `go('account',{account:'${a.id}'})` : `go('editItem',{cat:'${cur.id}',itemId:'${a.id}'})`}">
       <b>${esc(a.name)}</b>
       <div class="amt">${money(a.amount, a.cur)}<small>${a.date ? md(a.date) : (a.updated ? relUpdate(a.updated) : "")}</small></div>
@@ -929,7 +997,6 @@ function updateFamily() {
     <button class="add-dash" onclick="${cur.id === "invest" ? "go('addInvest')" : `go('addItem',{cat:'${cur.id}'})`}">
       <span>${cur.id === "debt" ? "⬤⬤⬤ 更多负债" : "继续添加"}</span><span>+</span>
     </button>
-    <button class="fab" onclick="${idx < cats.length - 1 ? `go('update',{cat:'${cats[idx + 1].id}'})` : `finishUpdate()`}">→</button>
   </section>`;
 }
 function finishUpdate() {
@@ -1083,7 +1150,7 @@ function investHome() {
       const s = investStats(a);
       const unit = a.cur === "USD" ? "美元" : a.cur === "HKD" ? "港元" : "元";
       return `<div class="asset">
-        <div class="split"><div><b>${esc(a.name)}</b><div class="faint" style="font-size:12px">${relUpdate(a.updated)}</div></div>
+        <div class="split"><div><b>${esc(a.name)}</b><div class="faint" style="font-size:12px">${daysAgo(a.updated)}</div></div>
           <button class="ghost-btn" onclick="event.stopPropagation();openUpdate('${a.id}')">更新收益</button></div>
         <div class="metric" onclick="go('account',{account:'${a.id}'})">
           <div><div class="k">资产 (${unit})</div><b>${num(a.amount)}</b></div>
@@ -1166,7 +1233,9 @@ function yearTable(hist, fallback) {
       <tr><td>年化收益率</td><td class="${st.ytd == null ? "faint" : tone(st.ytd)}">${st.ytd == null ? "暂无" : pct(st.ytd)}</td><td class="faint">暂无</td></tr>
       ${years.map((y) => {
         const v = yearMwr(hist, y);
-        return `<tr><td>${y}年</td><td class="${v == null ? "faint" : tone(v)}">${v == null ? "暂无" : pct(v)}</td><td class="faint">暂无</td></tr>`;
+        const now = new Date();
+        const sub = Number(y) === now.getFullYear() ? "年初至 " + pad(now.getMonth() + 1) + "-" + pad(now.getDate()) : "全年";
+        return `<tr><td>${y}年<div class="k">${sub}</div></td><td class="${v == null ? "faint" : tone(v)}">${v == null ? "暂无" : pct(v)}</td><td class="faint">暂无</td></tr>`;
       }).join("")}
       <tr><td>记账以来</td><td class="${st.mwr == null ? "faint" : tone(st.mwr)}">${st.mwr == null ? "暂无" : pct(st.mwr)}</td><td class="faint">暂无</td></tr>
     </table></div>
@@ -1176,16 +1245,16 @@ function yearTable(hist, fallback) {
 function compose(st) {
   const first = st.first ? pretty(st.first) : "—";
   const last = st.last ? pretty(st.last) : pretty(today());
+  const box = (title, val, cls) => `<div class="box"><div class="k">${title}</div><b class="${cls || ""}">${val}</b></div>`;
   return `<div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
     <div class="split"><b>资产构成</b><span class="ghost-btn">记账以来 ▾</span></div>
-    <div class="scroll-x"><div class="flow" style="margin-top:14px">
-      <div class="box"><div class="k">投入</div><b class="red">+${num(st.inAmt)}</b></div>
-      <div class="box"><div class="k">转出</div><b class="green">-${num(st.outAmt)}</b></div>
-      <div class="box"><div class="k">期初金额<br>(${first})</div><b>0.00</b></div>
-      <div class="box"><div class="k">净投入</div><b class="${tone(st.net)}">${signedNum(st.net)}</b></div>
-      <div class="box"><div class="k">收益</div><b class="${tone(st.pnl)}">${signedNum(st.pnl)}</b></div>
-      <div class="box wide"><div class="k">期末金额<br>(${last})</div><b>${num(st.amount)}</b></div>
-    </div></div>
+    <div class="tree">
+      <div class="tree-row">${box("投入", "+" + num(st.inAmt), "red")}${box("转出", "-" + num(st.outAmt), "green")}</div>
+      <div class="tree-join"></div>
+      <div class="tree-row">${box("期初金额<br>(" + first + ")", "0.00")}${box("净投入", signedNum(st.net), tone(st.net))}${box("收益", signedNum(st.pnl), tone(st.pnl))}</div>
+      <div class="tree-join"></div>
+      <div class="tree-row">${box("期末金额<br>(" + last + ")", num(st.amount))}</div>
+    </div>
   </div>`;
 }
 function allInvestVirtual() {
@@ -1248,7 +1317,7 @@ function account() {
   return `<section class="screen on gray">
     ${navHead("go('invest')", `${esc(a.name)} <small style="font-size:11px;background:var(--lav);color:#8b86c8;border-radius:4px;padding:1px 6px">${esc(a.bucket)}</small>`, `<button onclick="go('settings',{account:'${a.id}'})">⚙</button>`)}
     <div class="card" style="margin:0 16px;padding:16px;border-radius:16px">
-      <div class="split"><span class="k">资产 (元) ${hideBtn()}</span><span class="faint">${relUpdate(a.updated)}</span></div>
+      <div class="split"><span class="k">资产 (元) ${hideBtn()}</span><span class="faint">${daysAgo(a.updated)}</span></div>
       <div class="n">${num(a.amount * fxRate(a.cur))}</div>
       <div class="metric">
         <div><div class="k">累计收益 (元)</div><b class="${tone(st.pnl * fxRate(a.cur))}">${num(st.pnl * fxRate(a.cur))}</b></div>
@@ -1266,7 +1335,6 @@ function account() {
         ${st.hist.length > 6 && !route.showAll ? `<button class="faint" style="display:block;width:100%" onclick="route.showAll=true;render()">查看更多</button>` : ""}
       </div>
     </div>
-    <button class="cta" onclick="openUpdate('${a.id}')">更新收益</button>
   </section>`;
 }
 function settingsPage() {
@@ -1532,6 +1600,13 @@ window.addEventListener("pointermove", (e) => {
 window.addEventListener("pointerup", () => { if (!drag) return; drag = null; saveWin(); });
 window.addEventListener("resize", applyWin);
 
+function setFoot(html, gray) {
+  const f = document.getElementById("foot");
+  if (!f) return;
+  f.innerHTML = html || "";
+  f.classList.toggle("on", Boolean(html));
+  f.classList.toggle("gray", Boolean(gray));
+}
 function render() {
   const map = {
     home, weather: weatherPage, cashflow: cashflowPage, family, calendar: calendarPage, manage: managePage,
@@ -1541,6 +1616,17 @@ function render() {
   document.getElementById("app").innerHTML = (map[route.name] || home)();
   const body = document.getElementById("app");
   if (body) body.scrollTop = 0;
+  if (route.name === "family") {
+    setFoot(`<button class="cta" type="button" onclick="go('update',{cat:'cash'})">更新资产</button>`, true);
+  } else if (route.name === "account" && route.account) {
+    setFoot(`<button class="cta" type="button" onclick="openUpdate('${route.account}')">更新收益</button>`, true);
+  } else if (route.name === "update") {
+    const idx = CATS.findIndex((c) => c.id === route.cat);
+    const next = idx >= 0 && idx < CATS.length - 1 ? `go('update',{cat:'${CATS[idx + 1].id}'})` : "finishUpdate()";
+    setFoot(`<button class="fab" type="button" onclick="${next}">→</button>`, false);
+  } else {
+    setFoot("");
+  }
   applyWin();
 }
 
