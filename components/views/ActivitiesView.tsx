@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import Pagination from "@/components/Pagination";
 import RefreshButton from "@/components/RefreshButton";
 import CurrencySelect from "@/components/CurrencySelect";
+import MarketIcon from "@/components/MarketIcon";
 import { usdCap } from "@/lib/currency";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { fmtDateTime } from "@/lib/format";
-import type { SystemLog } from "@/lib/types";
+import { marketMeta, type SystemLog } from "@/lib/types";
 
 interface Props {
   userLogs?: SystemLog[];
@@ -48,7 +49,12 @@ const EVENT_LABELS: Record<string, string> = {
   account_delete_rejected: "注销失败"
 };
 
-const MARKET_LABEL: Record<string, string> = { US: "美股", HK: "港股", CN: "A股" };
+const MARKETS = [
+  { market: "US", label: "美股" },
+  { market: "HK", label: "港股" },
+  { market: "CN", label: "A股" }
+] as const;
+
 const PAGE_SIZE = 20;
 
 function logLevel(event: string): LogLevel {
@@ -60,8 +66,16 @@ function logLevel(event: string): LogLevel {
 }
 
 function eventLabel(event: string) {
-  if (EVENT_LABELS[event]) return EVENT_LABELS[event];
-  return event.replace(/[._]/g, " ");
+  return EVENT_LABELS[event] || event.replace(/[._]/g, " ");
+}
+
+function localDay(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function dayStamp(iso: string) {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso.slice(0, 10) : localDay(date);
 }
 
 function clock(iso: string) {
@@ -70,39 +84,55 @@ function clock(iso: string) {
   return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
-function dayStamp(iso: string) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso.slice(0, 10);
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function whenLabel(iso: string) {
+function dayHeading(key: string) {
   const now = new Date();
-  const key = dayStamp(iso);
-  const today = dayStamp(now.toISOString());
+  const today = localDay(now);
   const yest = new Date(now);
   yest.setDate(now.getDate() - 1);
-  const time = clock(iso);
-  if (key === today) return time;
-  if (key === dayStamp(yest.toISOString())) return `昨天 ${time}`;
-  if (key.slice(0, 4) === String(now.getFullYear())) return `${key.slice(5)} ${time}`;
-  return `${key} ${time}`;
+  if (key === today) return "今天";
+  if (key === localDay(yest)) return "昨天";
+  const [year, month, day] = key.split("-");
+  if (!month || !day) return key;
+  if (year === String(now.getFullYear())) return `${Number(month)}月${Number(day)}日`;
+  return `${year}年${Number(month)}月${Number(day)}日`;
+}
+
+function prettyDetail(event: string, detail: string) {
+  const raw = detail.trim();
+  if (!raw) return "";
+  if (event === "file_upload") {
+    const [kind, size, ext] = raw.split(":");
+    const bytes = Number(size);
+    const sizeText = Number.isFinite(bytes)
+      ? bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
+      : "";
+    return [kind, ext, sizeText].filter(Boolean).join(" · ");
+  }
+  if (raw.startsWith("{")) {
+    try {
+      const data = JSON.parse(raw) as Record<string, unknown>;
+      return Object.entries(data)
+        .filter(([, value]) => value != null && value !== "")
+        .slice(0, 4)
+        .map(([key, value]) => `${key} ${value}`)
+        .join(" · ");
+    } catch {
+      /* 非 JSON 原文 */
+    }
+  }
+  return raw.replace(/^username=/, "");
 }
 
 function logExtra(log: SystemLog, showUser: boolean) {
   const level = logLevel(log.event);
   const title = eventLabel(log.event);
-  const detail = (log.detail || "").trim();
-  const useful = detail && detail !== title && !/成功|退出登录|网页登录/.test(detail);
-  const bits = [
+  const detail = prettyDetail(log.event, log.detail || "");
+  const useful = Boolean(detail) && detail !== title && !/成功|退出登录|网页登录/.test(detail);
+  return [
     showUser ? log.userName : "",
     level === "fail" || level === "warn" || useful ? detail : "",
     log.ip && (level === "fail" || log.event.startsWith("auth.")) ? log.ip : ""
-  ].filter(Boolean);
-  return bits.join(" · ");
+  ].filter(Boolean).join(" · ");
 }
 
 function signedMoney(value: number, symbol: string) {
@@ -125,10 +155,7 @@ function writeQuery(scope: Scope, page: number, query: string) {
   const url = new URL(window.location.href);
   if (scope === "system") url.searchParams.set("scope", "system");
   else url.searchParams.delete("scope");
-  url.searchParams.delete("op");
-  url.searchParams.delete("level");
-  url.searchParams.delete("mod");
-  url.searchParams.delete("market");
+  ["op", "level", "mod", "market"].forEach((key) => url.searchParams.delete(key));
   if (page > 1) url.searchParams.set("page", String(page));
   else url.searchParams.delete("page");
   if (query) url.searchParams.set("q", query);
@@ -179,9 +206,6 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
     return map;
   }, [dailySummary, fx, rates]);
   const convertedTotal = Object.values(convertedMarkets).reduce((sum, value) => sum + value, 0);
-  const marketRows = (["US", "HK", "CN"] as const)
-    .filter((market) => dailySummary?.markets[market]?.holdings)
-    .map((market) => ({ market, label: MARKET_LABEL[market], value: convertedMarkets[market] ?? 0, count: dailySummary?.markets[market]?.holdings || 0 }));
 
   useEffect(() => { setPage(1); }, [scope, query]);
   useEffect(() => { if (page !== safePage) setPage(safePage); }, [page, safePage]);
@@ -208,8 +232,8 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
   }, [lastRefreshed, scope]);
 
   return (
-    <div className="overflow-hidden rounded-[18px] border border-edge bg-white shadow-card dark:bg-[#151b26]">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-edge px-5 pt-4">
+    <div className="w-full max-w-[800px] overflow-hidden rounded-[18px] border border-edge bg-white shadow-card dark:bg-[#151b26]">
+      <div className="flex items-end justify-between gap-3 border-b border-edge px-5 pt-4">
         <div className="flex gap-6">
           {(["user", "system"] as const).map((key) => (
             <button
@@ -222,23 +246,23 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
             </button>
           ))}
         </div>
-        <div className="mb-3 flex w-full items-center gap-2 sm:w-auto">
+        <div className="mb-3 flex min-w-0 items-center gap-2">
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             aria-label="搜索日志"
             placeholder="搜索"
-            className="h-9 w-full rounded-lg border border-edge bg-transparent px-3 text-sm outline-none transition placeholder:text-faint focus:border-ink dark:focus:border-white sm:w-52"
+            className="h-8 w-[148px] rounded-lg border border-edge bg-transparent px-2.5 text-[13px] outline-none transition placeholder:text-faint focus:border-ink dark:focus:border-white sm:w-[180px]"
           />
           {onRefresh && <RefreshButton onClick={() => void refreshLogs()} title={refreshing ? "正在刷新日志" : "刷新日志"} />}
         </div>
       </div>
 
-      {scope === "system" && !isAdmin && <div className="p-8 text-center text-sm text-faint">系统日志仅管理员可见</div>}
+      {scope === "system" && !isAdmin && <div className="p-10 text-center text-sm text-faint">系统日志仅管理员可见</div>}
 
       {scope === "user" && (
         <div className="px-5 py-5">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[13px] font-semibold text-ink">前一日持仓盈亏</p>
               <p className="mt-0.5 text-[11px] text-faint">
@@ -247,19 +271,26 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
             </div>
             <CurrencySelect value={currency} onChange={setCurrency} />
           </div>
-          <p className={`mt-3 text-[26px] font-bold leading-none tracking-tight tabular-nums ${summaryLoading || !dailySummary?.holdings ? "text-faint" : convertedTotal >= 0 ? "text-up" : "text-down"}`}>
+          <p className={`mt-3 text-[28px] font-bold leading-none tracking-tight tabular-nums ${summaryLoading || !dailySummary?.holdings ? "text-faint" : convertedTotal >= 0 ? "text-up" : "text-down"}`}>
             {summaryLoading ? "…" : dailySummary?.holdings ? signedMoney(convertedTotal, symbol) : "—"}
           </p>
-          {marketRows.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[12px] tabular-nums text-muted">
-              {marketRows.map((item) => (
-                <span key={item.market}>
-                  {item.label}{" "}
-                  <strong className={`font-semibold ${item.value >= 0 ? "text-up" : "text-down"}`}>{signedMoney(item.value, symbol)}</strong>
-                </span>
-              ))}
-            </div>
-          )}
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            {MARKETS.map(({ market, label }) => {
+              const has = Boolean(dailySummary?.markets[market]?.holdings);
+              const value = convertedMarkets[market];
+              return (
+                <div key={market}>
+                  <p className="flex items-center gap-1.5 text-[11px] text-muted">
+                    <MarketIcon market={market} flag={marketMeta(market).flag} size={14} />
+                    {label}
+                  </p>
+                  <p className={`mt-1 text-[13px] font-semibold tabular-nums ${!has || value === undefined ? "text-faint" : value >= 0 ? "text-up" : "text-down"}`}>
+                    {summaryLoading ? "…" : has && value !== undefined ? signedMoney(value, symbol) : "—"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -267,29 +298,35 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
         <>
           {pageLogs.length === 0 ? (
             <div className="border-t border-edge py-14 text-center text-sm text-faint">
-              {scope === "user" ? "暂无账户记录" : "暂无系统记录"}
+              {query ? "没有匹配的记录" : scope === "user" ? "暂无账户记录" : "暂无系统记录"}
             </div>
           ) : (
             <ul className="border-t border-edge">
-              {pageLogs.map((log) => {
+              {pageLogs.map((log, index) => {
                 const level = logLevel(log.event);
                 const extra = logExtra(log, scope === "system");
+                const day = dayStamp(log.createdAt);
+                const showDay = index === 0 || day !== dayStamp(pageLogs[index - 1].createdAt);
                 return (
-                  <li key={log.id} className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-3 border-b border-edge px-5 py-3.5 last:border-b-0">
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        level === "fail" ? "bg-up" : level === "warn" ? "bg-[#d08a16]" : "bg-edge-strong"
-                      }`}
-                      aria-label={level === "fail" ? "失败" : level === "warn" ? "警告" : "记录"}
-                    />
-                    <div className="min-w-0">
-                      <p className={`truncate text-[13px] font-medium ${level === "fail" ? "text-up" : "text-ink"}`}>{eventLabel(log.event)}</p>
-                      {extra ? <p className="mt-0.5 truncate text-[11px] text-muted" title={extra}>{extra}</p> : null}
-                    </div>
-                    <time className="whitespace-nowrap text-[11px] tabular-nums text-faint" dateTime={log.createdAt} title={fmtDateTime(log.createdAt)}>
-                      {whenLabel(log.createdAt)}
-                    </time>
-                  </li>
+                  <Fragment key={log.id}>
+                    {showDay && (
+                      <li className="border-b border-edge bg-bg-gray/50 px-5 py-1.5 text-[11px] text-muted dark:bg-white/[.03]">{dayHeading(day)}</li>
+                    )}
+                    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-edge px-5 py-3 last:border-b-0 transition-colors hover:bg-bg-gray/40 dark:hover:bg-white/[.03]">
+                      <div className="flex min-w-0 items-start gap-2.5">
+                        {(level === "fail" || level === "warn") && (
+                          <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${level === "fail" ? "bg-up" : "bg-[#d08a16]"}`} aria-label={level === "fail" ? "失败" : "警告"} />
+                        )}
+                        <div className="min-w-0">
+                          <p className={`truncate text-[13px] font-medium ${level === "fail" ? "text-up" : "text-ink"}`}>{eventLabel(log.event)}</p>
+                          {extra ? <p className="mt-0.5 truncate text-[11px] text-muted" title={extra}>{extra}</p> : null}
+                        </div>
+                      </div>
+                      <time className="whitespace-nowrap text-[11px] tabular-nums text-faint" dateTime={log.createdAt} title={fmtDateTime(log.createdAt)}>
+                        {clock(log.createdAt)}
+                      </time>
+                    </li>
+                  </Fragment>
                 );
               })}
             </ul>
