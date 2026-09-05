@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Fire 简化版</title>
+  <style>
+    :root {
+      --ink: #262626;
+      --muted: #8c8c8c;
+      --faint: #bfbfbf;
+      --bg: #ffffff;
+      --page: #f5f5f5;
+      --gray: #fafafa;
+      --line: #f0f0f0;
+      --red: #e55f5c;
+      --green: #2eb789;
+      --blue: #22a3ff;
+      --lav: #edebf6;
+      --lav-2: #f5f4f9;
+      --bar: #a4a2d4;
+      --tab: #a4a2d4;
+      --invest: #def1ff;
+      --cash: #f9ece6;
+      --cash-t: #ab5c35;
+      --chip-p: #e5e5f1;
+      --chip-t: #deecec;
+      --s-green: #c8e9de;
+      --s-purple: #d5d4e4;
+      --weather: #f2faeb;
+      --in: #e9ecfd;
+      --out: #fdeee7;
+      --chart-p: #7a5ea7;
+      --w: 402px;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; min-height: 100%; background: #ececec; }
+    body {
+      color: var(--ink);
+      font: 14px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", "SF Pro Display", "Helvetica Neue", sans-serif;
+      font-variant-numeric: tabular-nums;
+    }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; border: 0; background: none; }
+    .stage { width: min(var(--w), 100%); min-height: 100dvh; margin: 0 auto; background: var(--bg); position: relative; overflow: hidden; }
+    .screen { display: none; min-height: 100dvh; padding-bottom: 92px; background: var(--bg); }
+    .screen.on { display: block; }
+    .screen.gray { background: var(--page); }
+    .bar { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 14px; font-weight: 600; }
+    .bar .mid { position: absolute; left: 50%; transform: translateX(-50%); }
+    .bar .right { display: flex; align-items: center; gap: 14px; color: var(--ink); font-weight: 400; }
+    .back { width: 32px; height: 32px; display: grid; place-items: center; font-size: 22px; line-height: 1; }
+    .pad { padding: 0 16px; }
+    h1 { margin: 4px 16px 16px; font-size: 26px; font-weight: 750; letter-spacing: .02em; }
+    .eye { opacity: .55; font-size: 18px; }
+    .card { border-radius: 16px; background: #fff; }
+    .lav { background: var(--lav-2); }
+    .lav-deep { background: var(--lav); }
+    .shadow { box-shadow: 0 1px 0 rgba(0,0,0,.02); }
+    .red { color: var(--red); } .green { color: var(--green); }
+    .muted { color: var(--muted); } .faint { color: var(--faint); }
+    .cta {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+      width: min(370px, calc(100% - 32px)); height: 48px; border-radius: 24px;
+      background: var(--blue); color: #fff; font-size: 16px; font-weight: 650; z-index: 20;
+    }
+    .fab {
+      position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+      width: 56px; height: 56px; border-radius: 50%; background: var(--blue); color: #fff;
+      font-size: 26px; z-index: 20; box-shadow: 0 8px 20px rgba(34,163,255,.35);
+    }
+    .row-card { background: #fff; border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
+    .split { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .k { font-size: 12px; color: var(--muted); }
+    .n { font-size: 28px; font-weight: 750; letter-spacing: -.03em; }
+    .n small { font-size: 14px; font-weight: 500; margin-left: 2px; }
+    .pills { display: flex; align-items: center; gap: 8px; padding: 0 16px 12px; }
+    .pill { height: 32px; padding: 0 16px; border-radius: 16px; background: #f3f3f3; color: #666; font-size: 14px; }
+    .pill.on { background: var(--tab); color: #fff; }
+    .manage { margin-left: auto; color: #666; font-size: 14px; padding-left: 12px; border-left: 1px solid #eee; }
+    .cats { display: flex; gap: 10px; overflow-x: auto; padding: 4px 16px 16px; scrollbar-width: none; }
+    .cats::-webkit-scrollbar { display: none; }
+    .cat { flex: none; width: 118px; min-height: 72px; padding: 12px; border-radius: 14px; background: #f3f3f3; text-align: center; }
+    .cat b { display: block; font-size: 14px; font-weight: 650; }
+    .cat span { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
+    .cat.on-cash { background: var(--cash); color: var(--cash-t); }
+    .cat.on-cash span { color: var(--cash-t); }
+    .cat.on-inv { background: #eceaf8; color: #6b67a8; }
+    .cat.on-debt { background: #ececec; }
+    .hint { margin: 0 16px 12px; padding: 12px 14px; border-radius: 12px; background: var(--cash); color: var(--cash-t); font-size: 14px; display: flex; justify-content: space-between; }
+    .me { margin: 0 16px; color: #6b67a8; font-weight: 750; font-size: 16px; }
+    .acct { display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 14px; padding: 16px; margin: 8px 16px; }
+    .acct b { font-weight: 500; }
+    .acct .amt { text-align: right; }
+    .acct small { display: block; margin-top: 4px; color: var(--faint); font-size: 12px; }
+    .add-dash { margin: 18px 16px; padding: 16px; border: 1px dashed #d8d8d8; border-radius: 14px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 16px 16px; }
+    .mini { background: #fff; border-radius: 16px; padding: 16px; min-height: 168px; }
+    .weather { height: 32px; padding: 0 12px; border-radius: 16px; background: var(--weather); font-size: 13px; display: inline-flex; align-items: center; gap: 4px; }
+    .toggle { width: 42px; height: 24px; border-radius: 12px; background: #e6e6e6; position: relative; }
+    .toggle i { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px #0002; }
+    .toggle.on { background: var(--bar); } .toggle.on i { left: 20px; }
+    .inner { background: #fff; border-radius: 14px; padding: 14px; margin-top: 12px; }
+    .bars { display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; height: 86px; gap: 6px; margin-top: 8px; }
+    .bars span { display: block; height: 2px; background: #ececec; border-radius: 2px; }
+    .bars span.up { height: 54px; background: var(--bar); }
+    .bars + .labs { display: grid; grid-template-columns: repeat(5, 1fr); font-size: 11px; color: #888; text-align: center; margin-top: 6px; }
+    .sankey { height: 150px; position: relative; margin: 8px 0 12px; }
+    .sankey svg { width: 100%; height: 150px; }
+    .comp { display: flex; gap: 8px; overflow: auto; padding-bottom: 4px; }
+    .comp > div { flex: none; min-width: 120px; background: #fff; border-radius: 12px; padding: 10px 12px; }
+    .money4 { display: flex; gap: 8px; }
+    .money4 > div { flex: 1; text-align: center; }
+    .tl { padding: 4px 0 8px 8px; border-left: 2px solid #eee; margin-left: 8px; }
+    .tl h4 { margin: 0 0 8px -15px; font-size: 13px; font-weight: 500; color: #888; }
+    .tl h4::before { content: ""; display: inline-block; width: 8px; height: 8px; border: 2px solid #d0d0d0; border-radius: 50%; background: #fff; margin-right: 8px; }
+    .inv { background: var(--invest); border-radius: 16px; padding: 18px 16px 16px; margin: 0 16px 18px; }
+    .asset { background: var(--gray); border-radius: 16px; padding: 16px; margin: 0 16px 12px; }
+    .ghost-btn { height: 32px; padding: 0 12px; border: 1px solid #ddd; border-radius: 16px; font-size: 13px; background: #fff; }
+    .seg { display: flex; background: #f3f5f7; border-radius: 20px; padding: 3px; margin: 12px 0; }
+    .seg button { flex: 1; height: 32px; border-radius: 16px; color: #888; }
+    .seg button.on { background: #fff; color: var(--ink); font-weight: 650; }
+    .ranges { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid #eee; border-radius: 6px; overflow: hidden; margin-top: 8px; }
+    .ranges button { height: 32px; font-size: 12px; color: #888; border-right: 1px solid #eee; }
+    .ranges button:last-child { border: 0; }
+    .ranges button.on { color: var(--blue); }
+    .chart { height: 180px; }
+    .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .table th { color: var(--muted); font-weight: 400; text-align: left; padding: 6px 0; }
+    .table td { padding: 8px 0; }
+    .table td:nth-child(2), .table td:nth-child(3) { text-align: right; }
+    .flow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; justify-items: center; }
+    .flow .box { width: 100%; background: var(--gray); border-radius: 12px; padding: 12px 8px; text-align: center; }
+    .flow .wide { grid-column: 1 / -1; width: 58%; }
+    .mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 30; display: none; }
+    .mask.on { display: block; }
+    .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 16px 16px 0 0; padding: 18px 16px 28px; }
+    .sheet .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+    .sheet .pair button { height: 140px; border-radius: 16px; padding: 18px; text-align: center; }
+    .dlg { position: absolute; left: 24px; right: 24px; top: 30%; background: #fff; border-radius: 16px; padding: 20px 16px 16px; }
+    .dlg input { width: 100%; height: 40px; border: 1px solid #eee; border-radius: 8px; padding: 0 10px; outline: none; margin: 10px 0 14px; }
+    .dlg .ok { width: 100%; height: 40px; border-radius: 10px; background: var(--blue); color: #fff; }
+    .toast { position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%); background: #333; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; opacity: 0; transition: .2s; z-index: 50; }
+    .toast.on { opacity: 1; }
+  </style>
+</head>
+<body>
+<div class="stage" id="app"></div>
+<div class="mask" id="mask"></div>
+<div class="toast" id="toast"></div>
+<script>
+const FX = { CNY: 1, HKD: 0.92, USD: 7.18 };
+const KEY = "fire-simple-book";
+const SEED = {
+  hide: false,
+  excludeFixed: false,
+  cash: [
+    { id: "hsbc", name: "汇丰 (港币)", cur: "HKD", amount: 0, date: "05月31日" },
+    { id: "boc", name: "中银 (港币)", cur: "HKD", amount: 0, date: "05月31日" },
+    { id: "za", name: "众安 (港币)", cur: "HKD", amount: 20, date: "01月03日" },
+    { id: "ali", name: "支付宝微信", cur: "CNY", amount: 542, date: "01月07日" }
+  ],
+  fixed: [],
+  receivable: [],
+  debt: [
+    { id: "flash", name: "闪电贷", cur: "CNY", amount: -3695, date: "05月31日" },
+    { id: "jiebei", name: "借呗", cur: "CNY", amount: -20227, date: "05月31日" },
+    { id: "huabei", name: "花呗", cur: "CNY", amount: 0, date: "2025年12月15日" }
+  ],
+  invest: [
+    { id: "ganga", name: "港A", cur: "CNY", amount: 337135, pnl: 225119, ytd: 12.63, mwr: 62.44, bucket: "长期", updated: "6天前更新",
+      inAmt: 462016, outAmt: 350000, hist: [ { d: "2026年8月30日", v: 337135 }, { d: "2026年8月23日", v: 334758 }, { d: "2026年8月16日", v: 333248 } ] },
+    { id: "cq", name: "长桥（美股）", cur: "USD", amount: 41307, pnl: 12341.18, ytd: 37.69, mwr: null, bucket: "长期", updated: "6天前更新",
+      inAmt: 28000, outAmt: 0, hist: [ { d: "2026年8月30日", v: 41307 } ] },
+    { id: "ibkr", name: "ibkr", cur: "USD", amount: 7135, pnl: 711, ytd: null, mwr: null, bucket: "长期", updated: "6天前更新",
+      inAmt: 6500, outAmt: 0, hist: [ { d: "2026年8月30日", v: 7135 }, { d: "2026年8月24日", v: 7189 } ] },
+    { id: "futu", name: "富途", cur: "USD", amount: 1555, pnl: 148, ytd: null, mwr: null, bucket: "长期", updated: "118天前更新",
+      inAmt: 1400, outAmt: 0, hist: [ { d: "2026年5月04日", v: 1555 } ] }
+  ]
+};
+
+let S = load();
+let route = { name: "home", cat: "cash", account: "ganga" };
+let updateTarget = null;
+
+function load() {
+  try { const raw = localStorage.getItem(KEY); if (raw) return JSON.parse(raw); } catch {}
+  return structuredClone(SEED);
+}
+function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
+function cny(item) { return (Number(item.amount) || 0) * (FX[item.cur] || 1); }
+function sum(list) { return list.reduce((n, x) => n + cny(x), 0); }
+function money(n, cur) {
+  if (S.hide) return "****";
+  const abs = Math.abs(n).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const sign = n < 0 ? "-" : "";
+  if (cur === "USD") return sign + "$ " + abs;
+  if (cur === "HKD") return sign + "HK$ " + abs;
+  return sign + "¥ " + abs;
+}
+function num(n, d = 2) {
+  if (S.hide) return "****";
+  return Number(n).toLocaleString("zh-CN", { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+function pct(n) {
+  if (n == null || Number.isNaN(n)) return "暂无";
+  if (S.hide) return "****";
+  const v = Number(n);
+  return (v >= 0 ? "+" : "") + v.toFixed(2) + "%";
+}
+function toast(t) { const n = document.getElementById("toast"); n.textContent = t; n.classList.add("on"); setTimeout(() => n.classList.remove("on"), 1400); }
+function go(name, extra = {}) { route = { ...route, name, ...extra }; render(); window.scrollTo(0, 0); }
+
+function totals() {
+  const cash = sum(S.cash);
+  const fixed = sum(S.fixed);
+  const inv = S.invest.reduce((n, x) => n + cny(x), 0);
+  const rec = sum(S.receivable);
+  const debt = sum(S.debt);
+  const assets = cash + (S.excludeFixed ? 0 : fixed) + inv + rec;
+  const net = assets + debt;
+  const ratio = assets ? Math.abs(debt) / assets * 100 : 0;
+  const pnl = S.invest.reduce((n, x) => n + (Number(x.pnl) || 0) * (FX[x.cur] || 1), 0);
+  const ytd = 14.16;
+  return { cash, fixed, inv, rec, debt, assets, net, ratio, pnl, ytd };
+}
+
+function hideBtn() {
+  return `<button class="eye" type="button" onclick="S.hide=!S.hide;save();render()">${S.hide ? "🙈" : "👁"}</button>`;
+}
+
+function home() {
+  const t = totals();
+  return `<section class="screen on">
+    <div class="pad" style="display:flex;align-items:center;gap:8px;padding-top:18px">
+      <h1 style="margin:0;flex:1">家庭财务总览</h1>
+      ${hideBtn()}
+      <span class="weather">⛅ 财务晴雨表</span>
+    </div>
+    <div class="card lav pad" style="margin:12px 16px;padding:18px 16px" onclick="go('family')">
+      <div class="split"><span style="font-size:15px">家庭总资产</span><span class="faint">9 月未更新</span></div>
+      <div class="n" style="margin:8px 0 2px">${num(t.assets)}<small>元</small></div>
+      <div class="faint" style="font-size:12px">2026.08.30 更新</div>
+      <div style="display:flex;align-items:end;gap:16px;margin-top:18px">
+        <div style="flex:1">
+          <div class="bars" style="grid-template-columns:1fr 1fr 1fr;height:70px">
+            <span></span><span class="up"></span><span></span>
+          </div>
+        </div>
+        <div style="flex:1.1;font-size:13px;padding-bottom:8px">
+          <div>资产增加 <b class="red">${num(83712.69)} 元</b></div>
+          <div class="muted" style="margin-top:8px">负债没有变化</div>
+        </div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="mini" onclick="go('invest')">
+        <div class="split"><b>投资记账</b><span class="faint">▾</span></div>
+        <div class="red" style="font-size:22px;font-weight:750;margin:10px 0 4px">${pct(t.ytd)} <small style="font-size:12px">年化</small></div>
+        <div class="faint" style="font-size:12px">2026.08.30 更新</div>
+        <div style="margin-top:22px"><span style="background:#e8eefc;color:#6b7ab8;border-radius:4px;padding:1px 6px;font-size:11px">默认...</span>
+          <div class="k" style="margin-top:6px">今年净投入</div>
+          <b>${num(31796.89)} 元</b>
+        </div>
+      </div>
+      <div class="mini" onclick="toast('现金流计算器稍后做')">
+        <b>现金流计算器</b>
+        <div class="k" style="margin-top:6px">规划年度收支与结余</div>
+        <div style="display:flex;gap:6px;margin-top:36px;font-size:11px;text-align:center">
+          <div style="flex:1;background:var(--chip-p);border-radius:8px;padding:8px 4px">稳定<br>支出</div>
+          <div style="flex:1;background:var(--chip-t);border-radius:8px;padding:8px 4px">弹性<br>支出</div>
+          <div style="flex:1;background:#f3ead6;border-radius:8px;padding:8px 4px">年度<br>结余</div>
+        </div>
+      </div>
+    </div>
+  </section>`;
+}
+
+function family() {
+  const t = totals();
+  const cashPct = t.assets ? (t.cash / t.assets * 100) : 0;
+  const invPct = t.assets ? (t.inv / t.assets * 100) : 0;
+  return `<section class="screen on gray">
+    <div class="bar"><button class="back" onclick="go('home')">‹</button></div>
+    <h1>家庭资产记账</h1>
+    <div class="pills">
+      <button class="pill on">全部</button>
+      <button class="pill">我</button>
+      <button class="manage">管理 ›</button>
+    </div>
+    <div class="lav-deep" style="margin:0 16px 12px;padding:16px;border-radius:16px">
+      <div class="split"><span class="k">总资产 (元) ${hideBtn()}</span>
+        <span class="k" style="display:flex;align-items:center;gap:8px">排除固定资产
+          <span class="toggle ${S.excludeFixed ? "on" : ""}" onclick="S.excludeFixed=!S.excludeFixed;save();render()"><i></i></span>
+        </span>
+      </div>
+      <div class="n">${num(t.assets)}</div>
+      <div class="faint" style="font-size:12px;margin:4px 0 8px">2026.08.30 更新</div>
+      <div class="k">净资产 <b style="color:var(--ink)">${num(t.net)}</b>　负债率 ${t.ratio.toFixed(2)}%</div>
+      <div class="inner">
+        <div class="split"><span>相比 7月26日</span><span class="faint">资产月历 ›</span></div>
+        <div style="display:flex;gap:18px;margin:12px 0">
+          <div><span class="k">总资产</span><div class="red">↑ ${num(83712.69)}</div></div>
+          <div><span class="k">总负债</span><div class="muted">没有变化</div></div>
+        </div>
+        <div class="bars">
+          <span></span><span></span><span class="up"></span><span></span><span></span>
+        </div>
+        <div class="labs"><span>流动资金</span><span>固定资产</span><span>投资理财</span><span>应收款</span><span>负债</span></div>
+      </div>
+    </div>
+    <div class="card" style="margin:0 16px 12px;padding:16px;border-radius:16px">
+      <div class="split"><b>资产组成</b><span class="faint">⤢</span></div>
+      <div class="sankey">${sankeySvg(t)}</div>
+      <div class="comp">
+        <div><span class="k" style="color:var(--cash-t)">流动资金 ${cashPct.toFixed(1)}%</span><div>${num(t.cash)} 元</div></div>
+        <div><span class="k" style="color:#6b67a8">投资理财 ${invPct.toFixed(1)}%</span><div>${num(t.inv)} 元</div></div>
+        <div><span class="k">负债</span><div>${num(t.debt)}</div></div>
+      </div>
+    </div>
+    <div class="card" style="margin:0 16px 12px;padding:16px;border-radius:16px">
+      <b>四笔钱配置</b>
+      <div class="money4" style="margin-top:16px">
+        <div><div class="k" style="color:#d07a8a">活钱 ?</div><div>${S.hide ? "****" : "****"} 元</div></div>
+        <div><div class="k" style="color:#5aa7b8">稳健 ?</div><div>**** 元</div></div>
+        <div><div class="k" style="color:#5b57a3">长期 ?</div><div>**** 元</div></div>
+      </div>
+      <div style="height:6px;background:var(--bar);border-radius:3px;margin-top:12px"></div>
+    </div>
+    <div class="card" style="margin:0 16px 12px;padding:16px;border-radius:16px">
+      <b>更新记录</b>
+      <div class="tl" style="margin-top:12px">
+        <h4>08月30日</h4>
+        ${S.invest.map((a) => `<div class="row-card split"><span>${a.name} <span style="color:var(--blue)">🔗</span></span><span style="text-align:right">${money(a.amount, a.cur)}<small class="faint" style="display:block">已同步</small></span></div>`).join("")}
+        <h4>08月24日</h4>
+        <div class="row-card split"><span>ibkr <span style="color:var(--blue)">🔗</span></span><span style="text-align:right">$ 7,189.00<small class="faint" style="display:block">已同步</small></span></div>
+        <div class="faint" style="text-align:center;padding:8px">查看更多</div>
+      </div>
+    </div>
+    <button class="cta" onclick="go('update',{cat:'cash'})">更新资产</button>
+  </section>`;
+}
+
+function sankeySvg(t) {
+  const netH = 110, debtH = 18;
+  return `<svg viewBox="0 0 360 150" preserveAspectRatio="none">
+    <path d="M40 20 H110 Q140 20 140 40 V${20+netH} Q140 ${40+netH} 110 ${40+netH} H40 Z" fill="var(--s-green)" />
+    <rect x="36" y="20" width="6" height="${netH}" fill="#3cbf8a" />
+    <rect x="36" y="8" width="70" height="8" fill="#c9c9c9" />
+    <path d="M190 28 V${28+96} C190 ${28+96} 230 ${28+96} 260 ${28+70} V${28+20} C230 28 190 28 190 28Z" fill="var(--s-purple)" />
+    <rect x="184" y="28" width="8" height="96" fill="var(--bar)" />
+    <text x="8" y="16" font-size="11" fill="#999">2项负债</text>
+    <text x="8" y="90" font-size="12" fill="#666">净资产</text>
+    <text x="148" y="18" font-size="12" fill="#8a86c2">负债 总资产</text>
+    <text x="268" y="24" font-size="11" fill="#c47a52">流动资金</text>
+    <text x="268" y="88" font-size="12" fill="#8a86c2">投资理财</text>
+  </svg>`;
+}
+
+function updateFamily() {
+  const cats = [
+    { id: "cash", label: "流动资金", list: S.cash, cls: "on-cash" },
+    { id: "fixed", label: "固定资产", list: S.fixed, cls: "" },
+    { id: "invest", label: "投资理财", list: S.invest.map((a) => ({ ...a, date: a.updated })), cls: "on-inv" },
+    { id: "receivable", label: "应收款", list: S.receivable, cls: "" },
+    { id: "debt", label: "负债", list: S.debt, cls: "on-debt" }
+  ];
+  const cur = cats.find((c) => c.id === route.cat) || cats[0];
+  const idx = cats.indexOf(cur);
+  const total = cur.id === "invest" ? sum(S.invest.map((a) => ({ amount: a.amount, cur: a.cur }))) : sum(cur.list);
+  return `<section class="screen on">
+    <div class="bar">
+      <button class="back" onclick="go('family')">‹</button>
+      <span class="right"><span>↓ 导入</span><span>···</span></span>
+    </div>
+    <h1>更新家庭资产</h1>
+    <div class="cats">
+      ${cats.map((c) => {
+        const tot = c.id === "invest" ? sum(S.invest.map((a) => ({ amount: a.amount, cur: a.cur }))) : sum(c.list);
+        const empty = c.list.length === 0;
+        return `<button class="cat ${c.id === cur.id ? c.cls || "on-debt" : ""}" onclick="go('update',{cat:'${c.id}'})">
+          <b>${c.label}</b>
+          <span>${empty && c.id !== "debt" && c.id !== "cash" && tot === 0 ? "待填写" : num(tot) + " 元"}</span>
+        </button>`;
+      }).join("")}
+    </div>
+    ${cur.id === "cash" ? `<div class="hint"><span>什么是流动资金</span><span>›</span></div><div class="me">我</div>` : ""}
+    ${cur.list.length ? cur.list.map((a) => `<button class="acct" onclick="editItem('${cur.id}','${a.id}')">
+      <b>${a.name}</b>
+      <div class="amt">${money(a.amount, a.cur)}<small>${a.date || a.updated || ""}</small></div>
+    </button>`).join("") : `<div class="faint" style="padding:24px;text-align:center">暂无记录</div>`}
+    ${cur.id === "debt" ? `<div class="muted" style="margin:18px 16px 8px">继续添加</div>
+      <button class="add-dash" onclick="addItem('debt')"><span>⬤⬤⬤ 更多负债</span><span>+</span></button>` : ""}
+    ${cur.id === "cash" ? `<button class="add-dash" onclick="addItem('cash')"><span>继续添加</span><span>+</span></button>` : ""}
+    <button class="fab" onclick="${idx < cats.length - 1 ? `go('update',{cat:'${cats[idx + 1].id}'})` : `go('family');toast('已保存记录')`}">→</button>
+  </section>`;
+}
+
+function investHome() {
+  const t = totals();
+  const pnlCny = t.pnl;
+  return `<section class="screen on">
+    <div class="bar">
+      <button class="back" onclick="go('home')">‹</button>
+      <span class="mid">投资记账</span>
+      <span class="ghost-btn faint">🔔 记账提醒</span>
+    </div>
+    <div class="pad"><b style="font-size:18px">分组汇总</b></div>
+    <div class="inv" onclick="go('summary')">
+      <div class="k">默认汇总 (元) ${hideBtn()}</div>
+      <div class="n" style="margin:6px 0 14px">${num(t.inv)}</div>
+      <div style="display:flex;justify-content:space-between">
+        <div><div class="k">累计收益 (元)</div><div class="red" style="font-size:16px;font-weight:700">${num(pnlCny)}</div></div>
+        <div><div class="k">年化收益率</div><div class="red" style="font-size:16px;font-weight:700">${pct(14.16)}</div></div>
+      </div>
+    </div>
+    <div class="pad split" style="margin-bottom:8px"><b>全部资产 ▾</b><span>⋯</span></div>
+    ${S.invest.map((a) => `<div class="asset">
+      <div class="split"><div><b>${a.name}</b><div class="faint" style="font-size:12px">${a.updated}</div></div>
+        <button class="ghost-btn" onclick="event.stopPropagation();openUpdate('${a.id}')">更新收益</button></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;margin-top:14px" onclick="go('account',{account:'${a.id}'})">
+        <div><div class="k">资产 (${a.cur === "CNY" ? "元" : "美元"})</div><b>${num(a.amount)}</b></div>
+        <div><div class="k">累计收益 (${a.cur === "CNY" ? "元" : "美元"})</div><b class="red">${num(a.pnl)}</b></div>
+        <div><div class="k">年化收益率</div><b class="${a.ytd == null ? "faint" : "red"}">${a.ytd == null ? "暂无" : pct(a.ytd)}</b></div>
+      </div>
+    </div>`).join("")}
+    <button class="add-dash" onclick="addInvest()">+ 添加投资资产</button>
+  </section>`;
+}
+
+function chartBlock(a) {
+  return `<div class="seg"><button class="on">收益率曲线</button><button>累计收益曲线</button></div>
+    <div class="k" style="text-align:center">━ 资金加权收益率　━ 中证全指全收益 ▾<br>… 预期收益率</div>
+    <svg class="chart" viewBox="0 0 360 170" preserveAspectRatio="none">
+      <line x1="8" x2="352" y1="30" stroke="#f0f0f0" /><line x1="8" x2="352" y1="70" stroke="#f0f0f0" />
+      <line x1="8" x2="352" y1="110" stroke="#f0f0f0" /><line x1="8" x2="352" y1="150" stroke="#eee" />
+      <path d="M20 120 L80 108 L90 108 L160 108 L170 70 L250 70 L260 42 L300 38 L340 50 L350 46" fill="none" stroke="#22a3ff" stroke-width="2.2" />
+      <path d="M20 128 L70 118 L120 132 L160 140 L200 110 L250 78 L300 52 L350 70" fill="none" stroke="#7a5ea7" stroke-width="2" />
+      <line x1="20" y1="120" x2="350" y2="20" stroke="#ddd" stroke-dasharray="4 4" />
+      <text x="20" y="168" font-size="11" fill="#aaa">2022-09-20</text>
+      <text x="268" y="168" font-size="11" fill="#aaa">2026-08-30</text>
+    </svg>
+    <div class="ranges">
+      <button>今年</button><button>近1年</button><button class="on">记账以来</button><button>未来</button><button>自定义</button>
+    </div>`;
+}
+
+function yearTable(a) {
+  const ytd = a.ytd ?? 14.16;
+  const mwr = a.mwr ?? 69.31;
+  return `<div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
+    <div class="split"><b>年度收益对比</b><span class="faint">›</span></div>
+    <table class="table">
+      <tr><th>时间</th><th>资金加权收益率 ▾</th><th>中证全指全收益 ▾</th></tr>
+      <tr><td>年化收益率</td><td class="red">${pct(ytd)}</td><td class="red">+7.29%</td></tr>
+      <tr><td>2025年<div class="faint">全年</div></td><td class="red">+12.40%</td><td class="red">+27.03%</td></tr>
+      <tr><td>2026年<div class="faint">年初至 08-30</div></td><td class="green">${a.id === "ganga" ? "-18.46%" : "-7.75%"}</td><td class="red">+1.45%</td></tr>
+      <tr><td>记账以来</td><td class="red">${pct(mwr)}</td><td class="red">+31.98%</td></tr>
+    </table>
+  </div>`;
+}
+
+function compose(a) {
+  const net = (a.inAmt || 0) - (a.outAmt || 0);
+  return `<div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
+    <div class="split"><b>资产构成</b><span class="ghost-btn">记账以来 ▾</span></div>
+    <div class="flow" style="margin-top:14px">
+      <div class="box"><div class="k">投入</div><b class="red">+${num(a.inAmt || 0)}</b></div>
+      <div class="box"><div class="k">转出</div><b class="green">-${num(a.outAmt || 0)}</b></div>
+      <div class="box"><div class="k">期初金额<br>(2022-09-20)</div><b>0.00</b></div>
+      <div class="box"><div class="k">净投入</div><b class="red">+${num(net)}</b></div>
+      <div class="box" style="grid-column:2"><div class="k">收益</div><b class="red">+${num(a.pnl)}</b></div>
+      <div class="box wide"><div class="k">期末金额<br>(2026-08-30)</div><b>${num(a.amount)}</b></div>
+    </div>
+  </div>`;
+}
+
+function summary() {
+  const t = totals();
+  const fake = { id: "all", ytd: 14.16, mwr: 69.31, inAmt: 809143.15, outAmt: 432476, pnl: t.pnl, amount: t.inv };
+  return `<section class="screen on gray">
+    <div class="bar"><button class="back" onclick="go('invest')">‹</button><span class="right">⤴　⚙</span></div>
+    <div class="pad faint" style="margin-bottom:8px">汇总 / 默认汇总</div>
+    <div class="card" style="margin:0 16px;padding:16px;border-radius:16px">
+      <div class="k">总资产 (元) ${hideBtn()}</div>
+      <div class="n">${num(t.inv)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;margin:12px 0">
+        <div><div class="k">累计收益 (元)</div><b class="red">${num(t.pnl)}</b></div>
+        <div><div class="k">资金加权收益率</div><b class="red">${pct(69.31)}</b></div>
+        <div><div class="k">年化收益率</div><b class="red">${pct(14.16)}</b></div>
+      </div>
+      ${chartBlock(fake)}
+    </div>
+    ${yearTable(fake)}
+    ${compose(fake)}
+    <div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
+      <b>资产比例</b>
+      <div style="height:8px;background:var(--bar);border-radius:4px;margin:14px 0 12px"></div>
+      <div class="split"><span>● 长期 100.0%</span><span>¥ ${num(t.inv)}</span></div>
+      ${S.invest.map((a) => {
+        const p = t.inv ? (cny(a) / t.inv * 100) : 0;
+        return `<div class="split faint" style="margin-top:8px;padding-left:16px"><span>${a.name} ${p.toFixed(1)}%</span><span>${money(a.amount, a.cur)}</span></div>`;
+      }).join("")}
+    </div>
+  </section>`;
+}
+
+function account() {
+  const a = S.invest.find((x) => x.id === route.account) || S.invest[0];
+  return `<section class="screen on gray">
+    <div class="bar"><button class="back" onclick="go('invest')">‹</button><span class="right">⚙　⤴</span></div>
+    <h1 style="font-size:24px">${a.name} <small style="font-size:11px;background:#eceaf8;color:#6b67a8;border-radius:4px;padding:1px 6px">${a.bucket}</small></h1>
+    <div class="card" style="margin:0 16px;padding:16px;border-radius:16px">
+      <div class="split"><span class="k">资产 (元) ${hideBtn()}</span><span class="faint">${a.updated}</span></div>
+      <div class="n">${num(a.amount)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;margin:12px 0">
+        <div><div class="k">累计收益 (元)</div><b class="red">${num(a.pnl)}</b></div>
+        <div><div class="k">资金加权收益率</div><b class="red">${a.mwr == null ? "暂无" : pct(a.mwr)}</b></div>
+        <div><div class="k">年化收益率</div><b class="${a.ytd == null ? "faint" : "red"}">${a.ytd == null ? "暂无" : pct(a.ytd)}</b></div>
+      </div>
+      ${chartBlock(a)}
+    </div>
+    ${yearTable(a)}
+    ${compose(a)}
+    <div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
+      <b>更新记录</b>
+      <div class="tl" style="margin-top:12px">
+        ${(a.hist || []).map((h) => `<h4>${h.d}</h4><div class="row-card split"><span>当天资产金额</span><b>${Number(h.v).toLocaleString("zh-CN")}</b></div>`).join("")}
+        <div class="faint" style="text-align:center">查看更多</div>
+      </div>
+    </div>
+    <button class="cta" onclick="openUpdate('${a.id}')">更新收益</button>
+  </section>`;
+}
+
+function openUpdate(id) {
+  updateTarget = id;
+  const a = S.invest.find((x) => x.id === id);
+  document.getElementById("mask").className = "mask on";
+  document.getElementById("mask").innerHTML = `<div class="sheet">
+    <button onclick="closeMask()" style="font-size:20px">×</button>
+    <div class="row-card muted">上次更新资产（08 月 30 日）至今，是否有未记录的资金进出？</div>
+    <div class="pair">
+      <button style="background:var(--in)" onclick="recordFlow(true)">
+        <div style="font-size:28px;color:var(--blue)">↕</div><b>有资金进出</b><div class="k">记录投入/转出</div>
+      </button>
+      <button style="background:var(--out)" onclick="recordFlow(false)">
+        <div style="font-size:28px">👛</div><b>没有资金进出</b><div class="k">只更新资金金额</div>
+      </button>
+    </div>
+  </div>`;
+}
+
+function recordFlow(hasFlow) {
+  const a = S.invest.find((x) => x.id === updateTarget);
+  closeMask();
+  const title = hasFlow ? "记录投入/转出后的资产" : "更新 " + a.name + " 金额";
+  document.getElementById("mask").className = "mask on";
+  document.getElementById("mask").innerHTML = `<div class="dlg">
+    <b>${title}</b>
+    ${hasFlow ? `<input id="inAmt" type="number" placeholder="投入（可空）" /><input id="outAmt" type="number" placeholder="转出（可空）" />` : ""}
+    <input id="newAmt" type="number" value="${a.amount}" />
+    <button class="ok" onclick="commitUpdate(${hasFlow})">保存记录</button>
+  </div>`;
+}
+
+function commitUpdate(hasFlow) {
+  const a = S.invest.find((x) => x.id === updateTarget);
+  const v = Number(document.getElementById("newAmt").value);
+  if (!Number.isFinite(v)) { toast("请输入金额"); return; }
+  if (hasFlow) {
+    const inn = Number(document.getElementById("inAmt").value) || 0;
+    const out = Number(document.getElementById("outAmt").value) || 0;
+    a.inAmt = (a.inAmt || 0) + inn;
+    a.outAmt = (a.outAmt || 0) + out;
+  }
+  a.pnl = (a.pnl || 0) + (v - a.amount);
+  a.amount = v;
+  a.updated = "刚刚更新";
+  a.hist = [{ d: "今天", v }, ...(a.hist || [])];
+  save(); closeMask(); toast("已记下"); render();
+}
+
+function closeMask() { const m = document.getElementById("mask"); m.className = "mask"; m.innerHTML = ""; }
+
+function editItem(cat, id) {
+  const list = cat === "invest" ? S.invest : S[cat];
+  const item = list.find((x) => x.id === id);
+  if (!item) return;
+  document.getElementById("mask").className = "mask on";
+  document.getElementById("mask").innerHTML = `<div class="dlg">
+    <b>${item.name}</b>
+    <input id="newAmt" type="number" value="${item.amount}" />
+    <button class="ok" onclick="
+      const n=Number(document.getElementById('newAmt').value);
+      if(!Number.isFinite(n)) return;
+      const list='${cat}'==='invest'?S.invest:S['${cat}'];
+      const it=list.find(x=>x.id==='${id}');
+      it.amount=n; it.date='今天'; save(); closeMask(); render();
+    ">保存记录</button>
+  </div>`;
+}
+
+function addItem(cat) {
+  const name = prompt("名称");
+  if (!name) return;
+  const amount = Number(prompt("金额", "0"));
+  S[cat].push({ id: "x" + Date.now(), name, cur: "CNY", amount: cat === "debt" ? -Math.abs(amount || 0) : (amount || 0), date: "今天" });
+  save(); render();
+}
+function addInvest() {
+  const name = prompt("资产名称，如 港A / IBKR");
+  if (!name) return;
+  const amount = Number(prompt("当前金额", "0")) || 0;
+  const cur = prompt("币种 CNY / HKD / USD", "CNY") || "CNY";
+  S.invest.push({ id: "x" + Date.now(), name, cur, amount, pnl: 0, ytd: null, mwr: null, bucket: "长期", updated: "刚刚", inAmt: amount, outAmt: 0, hist: [{ d: "今天", v: amount }] });
+  save(); render();
+}
+
+function render() {
+  const map = { home, family, update: updateFamily, invest: investHome, summary, account };
+  document.getElementById("app").innerHTML = (map[route.name] || home)();
+}
+
+render();
+</script>
+</body>
+</html>
