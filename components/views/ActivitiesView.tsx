@@ -274,12 +274,12 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
           <p className={`mt-3 text-[28px] font-bold leading-none tracking-tight tabular-nums ${summaryLoading || !dailySummary?.holdings ? "text-faint" : convertedTotal >= 0 ? "text-up" : "text-down"}`}>
             {summaryLoading ? "…" : dailySummary?.holdings ? signedMoney(convertedTotal, symbol) : "—"}
           </p>
-          <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="mt-4 flex flex-wrap justify-start gap-x-8 gap-y-2">
             {MARKETS.map(({ market, label }) => {
               const has = Boolean(dailySummary?.markets[market]?.holdings);
               const value = convertedMarkets[market];
               return (
-                <div key={market}>
+                <div key={market} className="text-left">
                   <p className="flex items-center gap-1.5 text-[11px] text-muted">
                     <MarketIcon market={market} flag={marketMeta(market).flag} size={14} />
                     {label}
