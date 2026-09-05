@@ -7,6 +7,7 @@ import type { GroupConfig, SiteSettings, TabConfig, TickerConfig } from "@/lib/t
 import { showToast } from "@/lib/toast";
 import { copyText } from "@/lib/clipboard";
 import SettingsHeader, { SettingsSection, SubNavIcon } from "@/components/SettingsHeader";
+import SettingsPlayground from "@/components/SettingsPlayground";
 import { LOGO_FONT_LABELS, logoFontClass } from "@/lib/logoFont";
 import MarketIcon from "@/components/MarketIcon";
 import DeleteIcon from "@/components/DeleteIcon";
@@ -628,75 +629,9 @@ const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
 // 连续点击则目标不断前移，弹簧持续追赶，产生连续顺滑的转动。
 // 临界阻尼（无过冲、无回弹）+ 弹簧自身正是“起步缓、中间快、收尾柔”的缘故，
 // 比直接给速度/摩擦更流畅，不会有速度突跳或生硬停下的卡顿感。
-const BRAND_STIFFNESS = 58; // 弹簧刚度（越大转越快）
-const BRAND_DAMPING = 2 * Math.sqrt(BRAND_STIFFNESS); // 临界阻尼
-const BRAND_TURN = 360; // 每次点击的目标增量（一整圈）
-const BRAND_MAX_VEL = 2000; // 角速度上限（deg/s），连续狂点时避免过快导致视觉拖影/频闪
-
 export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub }: Props) {
   const isAdminUser = user?.role === "admin";
   const { unit: currencyDisplayUnit, setUnit: setCurrencyDisplayUnit } = useCurrencyDisplayUnit();
-  const [brandSpinning, setBrandSpinning] = useState(false);
-  // 品牌花标转动系统：临界阻尼弹簧在“角度目标”上做物理积分，
-  // 目标每点击 +360°，弹簧平滑地追赶并最终停在整数圈，观感流畅。
-  const petalsRef = useRef<SVGGElement | null>(null);
-  const brandInnerRef = useRef<SVGGElement | null>(null);
-  const brandPos = useRef(0); // 当前角度（deg）
-  const brandVel = useRef(0); // 当前角速度（deg/s）
-  const brandTarget = useRef(0); // 目标角度（deg），每次点击 +360
-  const brandLastTs = useRef(0);
-  const brandRaf = useRef<number | null>(null);
-  const brandMoving = useRef(false);
-  const brandReduced = useRef(false);
-
-  function kickBrand() {
-    if (brandReduced.current) return;
-    // 每次点击目标再加一整圈；弹簧会平滑地追上去，连续点击即连续转。
-    brandTarget.current += BRAND_TURN;
-    if (brandRaf.current == null) {
-      brandLastTs.current = performance.now();
-      brandRaf.current = requestAnimationFrame(brandStep);
-    }
-  }
-
-  function brandStep(ts: number) {
-    const dt = Math.min(0.05, (ts - brandLastTs.current) / 1000);
-    brandLastTs.current = ts;
-    const err = brandTarget.current - brandPos.current;
-    const accel = BRAND_STIFFNESS * err - BRAND_DAMPING * brandVel.current;
-    brandVel.current += accel * dt;
-    if (brandVel.current > BRAND_MAX_VEL) brandVel.current = BRAND_MAX_VEL;
-    else if (brandVel.current < -BRAND_MAX_VEL) brandVel.current = -BRAND_MAX_VEL;
-    brandPos.current += brandVel.current * dt;
-    if (petalsRef.current) petalsRef.current.style.transform = `rotate(${brandPos.current}deg)`;
-    if (brandInnerRef.current) brandInnerRef.current.style.transform = `rotate(${-brandPos.current}deg)`;
-    const moving = Math.abs(brandVel.current) > 4 || Math.abs(err) > 2;
-    if (moving !== brandMoving.current) {
-      brandMoving.current = moving;
-      setBrandSpinning(moving);
-    }
-    if (Math.abs(err) > 1 || Math.abs(brandVel.current) > 4) {
-      brandRaf.current = requestAnimationFrame(brandStep);
-    } else {
-      // 停稳：吸附到整数圈目标，避免弹簧无限逼近造成细微抖动
-      brandPos.current = brandTarget.current;
-      brandVel.current = 0;
-      brandRaf.current = null;
-      if (brandMoving.current) {
-        brandMoving.current = false;
-        setBrandSpinning(false);
-      }
-    }
-  }
-
-  useEffect(() => {
-    brandReduced.current = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-    return () => {
-      if (brandRaf.current != null) cancelAnimationFrame(brandRaf.current);
-      brandRaf.current = null;
-    };
-  }, []);
-
   const { assets: libraryAssets, assetIcons } = useAssetIcons(["broker", "icon"]);
   const brokerIconOf = (groupId: string) =>
     libraryAssets.find((a) => a.type === "broker" && a.code.toLowerCase() === groupId.toLowerCase())?.url ?? "";
@@ -1760,35 +1695,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       )}
       {/* 紧凑侧栏（桌面客户端风格） */}
       <aside className="sw-sidebar relative hidden w-[184px] flex-none flex-col border-r p-2 md:flex">
-        <div className="sw-brand" aria-label="Fire 投资记实">
-          <button
-            type="button"
-            className={`sw-brand-mark select-none ${brandSpinning ? "is-spinning" : ""}`}
-            onPointerDown={(e) => { if (e.button === 0) kickBrand(); }}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); kickBrand(); } }}
-            aria-label="连续点击让 Fire 转起来"
-            style={{ touchAction: "manipulation" }}
-          >
-            <svg viewBox="0 0 48 48" aria-hidden="true">
-              <g ref={petalsRef} style={{ transformOrigin: "24px 24px" }}>
-                <path
-                  className="sw-brand-petals-custom"
-                  d="M23.8 7.2c4.1-.2 7.4 1.5 9.3 4.5 4.5-.8 8.7 2.5 9 7.1 3.8 2.6 4.7 8 2 11.8.2 4.7-3.5 8.7-8.2 8.8-2.4 4.2-7.8 5.7-11.8 3-4.1 1.9-9.2-.2-10.8-4.5-4.5-.8-7.3-5.3-5.8-9.6-2.5-3.8-1-9 3-11.1 1-4.5 5.5-7.2 9.9-5.8.8-2.1 1.9-3.5 3.4-4.2Z"
-                />
-                <path
-                  className="sw-brand-petals"
-                  d="M24.00 6.00 C24.34 6.31 24.65 6.65 24.96 6.95 C25.26 7.25 25.54 7.55 25.83 7.80 C26.11 8.05 26.37 8.28 26.64 8.44 C26.92 8.61 27.18 8.73 27.47 8.79 C27.76 8.86 28.05 8.86 28.37 8.83 C28.69 8.80 29.02 8.71 29.38 8.61 C29.75 8.51 30.13 8.36 30.54 8.22 C30.94 8.08 31.37 7.91 31.81 7.78 C32.25 7.65 32.71 7.52 33.15 7.44 C33.60 7.37 34.05 7.31 34.48 7.32 C34.90 7.33 35.33 7.39 35.70 7.51 C36.07 7.63 36.42 7.82 36.72 8.05 C37.01 8.29 37.27 8.59 37.47 8.93 C37.67 9.26 37.82 9.66 37.93 10.07 C38.03 10.48 38.08 10.94 38.11 11.39 C38.13 11.84 38.10 12.32 38.07 12.78 C38.04 13.23 37.98 13.69 37.93 14.12 C37.89 14.54 37.82 14.95 37.80 15.33 C37.78 15.70 37.77 16.05 37.81 16.37 C37.86 16.68 37.93 16.97 38.06 17.23 C38.18 17.50 38.36 17.73 38.58 17.96 C38.80 18.19 39.08 18.40 39.39 18.62 C39.69 18.83 40.05 19.04 40.41 19.27 C40.77 19.50 41.18 19.73 41.55 19.99 C41.92 20.25 42.31 20.53 42.65 20.83 C42.99 21.13 43.32 21.46 43.57 21.79 C43.83 22.13 44.05 22.50 44.19 22.87 C44.32 23.23 44.40 23.62 44.40 24.00 C44.40 24.38 44.32 24.77 44.19 25.13 C44.05 25.50 43.83 25.87 43.57 26.21 C43.32 26.54 42.99 26.87 42.65 27.17 C42.31 27.47 41.92 27.75 41.55 28.01 C41.18 28.27 40.77 28.50 40.41 28.73 C40.05 28.96 39.69 29.17 39.39 29.38 C39.08 29.60 38.80 29.81 38.58 30.04 C38.36 30.27 38.18 30.50 38.06 30.77 C37.93 31.03 37.86 31.32 37.81 31.63 C37.77 31.95 37.78 32.30 37.80 32.67 C37.82 33.05 37.89 33.46 37.93 33.88 C37.98 34.31 38.04 34.77 38.07 35.22 C38.10 35.68 38.13 36.16 38.11 36.61 C38.08 37.06 38.03 37.52 37.93 37.93 C37.82 38.34 37.67 38.74 37.47 39.07 C37.27 39.41 37.01 39.71 36.72 39.95 C36.42 40.18 36.07 40.37 35.70 40.49 C35.33 40.61 34.90 40.67 34.48 40.68 C34.05 40.69 33.60 40.63 33.15 40.56 C32.71 40.48 32.25 40.35 31.81 40.22 C31.37 40.09 30.94 39.92 30.54 39.78 C30.13 39.64 29.75 39.49 29.38 39.39 C29.02 39.29 28.69 39.20 28.37 39.17 C28.05 39.14 27.76 39.14 27.47 39.21 C27.18 39.27 26.92 39.39 26.64 39.56 C26.37 39.72 26.11 39.95 25.83 40.20 C25.54 40.45 25.26 40.75 24.96 41.05 C24.65 41.35 24.34 41.69 24.00 42.00 C23.66 42.31 23.31 42.63 22.94 42.89 C22.57 43.15 22.18 43.40 21.79 43.57 C21.41 43.75 21.00 43.88 20.61 43.93 C20.22 43.98 19.83 43.97 19.46 43.89 C19.09 43.80 18.73 43.64 18.40 43.43 C18.08 43.21 17.77 42.92 17.49 42.59 C17.22 42.27 16.98 41.87 16.76 41.48 C16.54 41.08 16.36 40.64 16.19 40.22 C16.02 39.80 15.88 39.35 15.74 38.95 C15.59 38.55 15.47 38.15 15.33 37.80 C15.18 37.46 15.04 37.14 14.87 36.87 C14.69 36.60 14.50 36.38 14.27 36.20 C14.04 36.01 13.78 35.88 13.48 35.77 C13.18 35.66 12.84 35.59 12.47 35.53 C12.10 35.46 11.69 35.43 11.26 35.38 C10.84 35.33 10.38 35.30 9.93 35.22 C9.48 35.15 9.01 35.07 8.57 34.95 C8.14 34.82 7.70 34.67 7.32 34.48 C6.94 34.28 6.59 34.05 6.31 33.78 C6.02 33.51 5.78 33.19 5.62 32.85 C5.46 32.51 5.36 32.13 5.32 31.74 C5.29 31.35 5.33 30.92 5.41 30.51 C5.49 30.09 5.65 29.65 5.82 29.24 C5.99 28.82 6.23 28.40 6.45 28.01 C6.67 27.61 6.94 27.22 7.16 26.86 C7.38 26.50 7.62 26.15 7.80 25.83 C7.98 25.50 8.14 25.19 8.24 24.88 C8.34 24.58 8.40 24.29 8.40 24.00 C8.40 23.71 8.34 23.42 8.24 23.12 C8.14 22.81 7.98 22.50 7.80 22.17 C7.62 21.85 7.38 21.50 7.16 21.14 C6.94 20.78 6.67 20.39 6.45 19.99 C6.23 19.60 5.99 19.18 5.82 18.76 C5.65 18.35 5.49 17.91 5.41 17.49 C5.33 17.08 5.29 16.65 5.32 16.26 C5.36 15.87 5.46 15.49 5.62 15.15 C5.78 14.81 6.02 14.49 6.31 14.22 C6.59 13.95 6.94 13.72 7.32 13.52 C7.70 13.33 8.14 13.18 8.57 13.05 C9.01 12.93 9.48 12.85 9.93 12.78 C10.38 12.70 10.84 12.67 11.26 12.62 C11.69 12.57 12.10 12.54 12.47 12.47 C12.84 12.41 13.18 12.34 13.48 12.23 C13.78 12.12 14.04 11.99 14.27 11.80 C14.50 11.62 14.69 11.40 14.87 11.13 C15.04 10.86 15.18 10.54 15.33 10.20 C15.47 9.85 15.59 9.45 15.74 9.05 C15.88 8.65 16.02 8.20 16.19 7.78 C16.36 7.36 16.54 6.92 16.76 6.52 C16.98 6.13 17.22 5.73 17.49 5.41 C17.77 5.08 18.08 4.79 18.40 4.57 C18.73 4.36 19.09 4.20 19.46 4.11 C19.83 4.03 20.22 4.02 20.61 4.07 C21.00 4.12 21.41 4.25 21.79 4.43 C22.18 4.60 22.57 4.85 22.94 5.11 C23.31 5.37 23.66 5.69 24.00 6.00 Z"
-                />
-              </g>
-              <g ref={brandInnerRef} style={{ transformOrigin: "24px 24px" }}>
-                <g transform="translate(24 24) scale(0.84) translate(-24 -24)">
-                  <path className="sw-brand-trend" d="m17.5 27 4-4 3.2 2.7 6-7" />
-                  <path className="sw-brand-arrow" d="M27.7 18.7h3.2v3.2" />
-                </g>
-              </g>
-            </svg>
-          </button>
-        </div>
+        <SettingsPlayground />
         {navGroups.map((g) => (
           <div key={g.label} className="sw-nav-group">
             <p className="sw-nav-group-title">{g.label}</p>

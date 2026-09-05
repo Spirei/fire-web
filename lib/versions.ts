@@ -2388,10 +2388,6 @@ export const V0_1_21_ENTRY: VersionEntry = {
   ],
   software: V0_1_20_ENTRY.software.map((item) => item.name === "Fire" ? { ...item, version: "v0.1.21" } : item),
   changes: [{
-    title: "设置侧栏加入蘑菇王国互动彩蛋",
-    desc: "顶部徽标换为紧凑像素砖墙与问号砖（约 110px），人物选择和操作说明移入展开浮层，不挤占设置导航；点击角色跳跃并随机获得金币、蘑菇、星星或火焰花；管道往返地面与地下，精修六位像素角色并记住选择；支持左右键移动、上键或空格跳跃、下键钻管道，真实顶砖碰撞奖励，兼容深色及减少动态效果。",
-    kind: "feature"
-  }, {
     title: "资金记录联动股票名称、代码和拼音",
     desc: "资产分析资金记录搜索不再只匹配备注原文：自动记账流水关联成交订单，可用中文名、代码（含港股 700/00700）、拼音首字母（中国移动→zgyd）和全拼查找；同时支持买入/卖出/股息、美股/港股/A股，以及 9月3日 这类日期。列表展示股票代码。",
     kind: "feature"
@@ -2442,7 +2438,20 @@ export const V0_1_21_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_21_ENTRY;
+export const V0_1_22_ENTRY: VersionEntry = {
+  version: "v0.1.22",
+  date: "2026-09-06",
+  summary: "设置侧栏收为迷你像素关卡，展开浮层游玩，保留完整设置导航空间。",
+  frontend: V0_1_21_ENTRY.frontend,
+  software: V0_1_21_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.22" } : item),
+  changes: [{
+    title: "设置侧栏加入蘑菇王国互动彩蛋",
+    desc: "顶部徽标换为紧凑像素砖墙与问号砖（约 110px），人物选择和操作说明移入展开浮层，不挤占设置导航；点击角色跳跃并随机获得金币、蘑菇、星星或火焰花；管道往返地面与地下，精修六位像素角色并记住选择；支持左右键移动、上键或空格跳跃、下键钻管道，真实顶砖碰撞奖励，兼容深色及减少动态效果。",
+    kind: "feature"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_22_ENTRY;
 
 // 完整历史数组已拆分到 lib/versions-history.ts（约 200KB 历史文案，仅供版本弹窗
 // 懒加载引用）；本文件保留类型 + 当前版本条目，让设置页 / 健康检查只引用轻量常量。
