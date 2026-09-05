@@ -1717,7 +1717,7 @@ export default function AssetLibraryView() {
                           title="点击上传自定义旗帜"
                         >
                           <span className="absolute inset-0 grid place-items-center text-xl">{country.flag}</span>
-                          <img src={src} alt="" className="relative h-full w-full rounded-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+                          <img src={src} alt="" className="relative h-full w-full rounded-full object-cover p-[3px]" onError={(event) => { event.currentTarget.style.display = "none"; }} />
                           <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                             {busy[busyKey] ? (
                               <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" /><path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
@@ -1779,7 +1779,7 @@ export default function AssetLibraryView() {
                           className="group relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)] dark:bg-[#1c1c1e]"
                           title="点击上传/更换图标"
                         >
-                          {url ? <img src={url} alt="" className="h-full w-full rounded-full object-cover" /> : <MarketIcon market={key} size={24} />}
+                          {url ? <img src={url} alt="" className="h-full w-full rounded-full object-cover p-[3px]" /> : <MarketIcon market={key} size={24} />}
                           <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                             {busy[busyKey] ? (
                               <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">

@@ -3036,7 +3036,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>数据与服务</b><span>本地优先，可切换企业数据库</span></div>
-                    <span className="settings-detail-value">Node.js · SQLite · PostgreSQL</span>
+                    <span className="settings-detail-value">Node.js · SQLite · PostgreSQL · SheetJS(xlsx)</span>
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>部署运行</b><span>容器镜像与受限更新</span></div>

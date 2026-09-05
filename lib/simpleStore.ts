@@ -17,12 +17,14 @@ export type SimpleInvest = {
   cur: string;
   amount: number;
   bucket: string;
+  market?: string;
   group?: string;
   owner?: string;
   inAmt: number;
   outAmt: number;
   updated: string;
   expected?: number;
+  flowAdjusted?: boolean;
   hist: SimpleHist[];
 };
 
@@ -45,6 +47,8 @@ export type SimpleLog = {
   cur: string;
 };
 
+export type SimpleMember = { id: string; name: string; show?: boolean };
+
 export type SimpleState = {
   hide: boolean;
   excludeFixed: boolean;
@@ -60,6 +64,7 @@ export type SimpleState = {
   cashflow: { stable: number; flex: number; income: number };
   snaps: SimpleSnap[];
   logs: SimpleLog[];
+  members: SimpleMember[];
 };
 
 export const EMPTY_SIMPLE: SimpleState = {
@@ -76,7 +81,8 @@ export const EMPTY_SIMPLE: SimpleState = {
   invest: [],
   cashflow: { stable: 0, flex: 0, income: 0 },
   snaps: [],
-  logs: []
+  logs: [],
+  members: [{ id: "me", name: "我" }]
 };
 
 function asArray<T>(value: unknown, fallback: T[]): T[] {
@@ -102,7 +108,8 @@ export function normalizeSimple(raw: unknown): SimpleState {
     debt: asArray(parsed.debt, []),
     invest: asArray(parsed.invest, []),
     snaps: asArray(parsed.snaps, []),
-    logs: asArray(parsed.logs, [])
+    logs: asArray(parsed.logs, []),
+    members: asArray(parsed.members, []).length ? asArray(parsed.members, []) : [{ id: "me", name: "我" }]
   };
 }
 
