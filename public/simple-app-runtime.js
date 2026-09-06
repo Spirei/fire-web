@@ -16,7 +16,7 @@ const EMPTY = {
   fx: { CNY: 1, HKD: 0.92, USD: 7.18 },
   reminder: 0, expected: 8,
   cash: [], fixed: [], receivable: [], debt: [], invest: [],
-  cashflow: { schemaVersion: 4, started: false, completed: false, incomeItems: [], expenseItems: [] }, summaries: [],
+  cashflow: { schemaVersion: 5, started: false, completed: false, incomeItems: [], expenseItems: [] }, summaries: [],
   snaps: [], logs: [],
   members: [{ id: "me", name: "我" }]
 };
@@ -141,7 +141,7 @@ function cleanImportedHist(hist) {
 }
 function normalize(raw) {
   const p = raw && typeof raw === "object" ? raw : {};
-  const savedCf = p.cashflow && Number(p.cashflow.schemaVersion) === 4 ? p.cashflow : {};
+  const savedCf = p.cashflow && Number(p.cashflow.schemaVersion) === 5 ? p.cashflow : {};
   const next = { ...EMPTY, ...p, fx: { ...EMPTY.fx, ...(p.fx || {}) }, cashflow: { ...EMPTY.cashflow, ...savedCf } };
   const cf = next.cashflow;
   cf.incomeItems = Array.isArray(cf.incomeItems) ? cf.incomeItems : [];
@@ -1046,13 +1046,18 @@ function openCfEditor(kind,name,id) {
   const list = kind === "income" ? S.cashflow.incomeItems : S.cashflow.expenseItems;
   const old = id ? list.find((x)=>x.id===id) : null;
   const p = cfPreset(kind,name), title = name.startsWith("自定义") ? "" : name;
-  showCfSheet(`<div class="cf-sheet-head"><button onclick="closeMask()">×</button><h3>${esc(old ? old.name : name)}</h3></div><div class="cf-editor">
+  const heading = old && kind === "income" ? "修改收入" : esc(old ? old.name : name);
+  showCfSheet(`<div class="cf-sheet-head cf-editor-head"><button onclick="closeMask()">×</button><h3>${heading}</h3>${old ? `<button class="cf-top-save" onclick="saveCfItem('${kind}','${old.id}')">保存</button>` : "<span></span>"}</div><div class="cf-editor">
     <label>名称<input id="cfName" value="${esc(old ? old.name : title)}" placeholder="输入名称"></label>
-    <label>金额<div class="cf-amount"><select id="cfFreq"><option value="year" ${(old?.freq||"month")==="year"?"selected":""}>每年</option><option value="quarter" ${old?.freq==="quarter"?"selected":""}>每季</option><option value="month" ${(old?.freq||"month")==="month"?"selected":""}>每月</option></select><input id="cfAmount" type="number" inputmode="decimal" value="${old ? old.amount : ""}" placeholder="0"><span>元</span></div></label>
+    <label>金额<div class="cf-amount"><select id="cfFreq" onchange="syncCfAnnualHint('${kind}')"><option value="year" ${(old?.freq||"month")==="year"?"selected":""}>每年</option><option value="quarter" ${old?.freq==="quarter"?"selected":""}>每季</option><option value="month" ${(old?.freq||"month")==="month"?"selected":""}>每月</option></select><input id="cfAmount" type="number" inputmode="decimal" value="${old ? old.amount : ""}" placeholder="0" oninput="syncCfAnnualHint('${kind}')"><span>元</span></div><small class="cf-annual-hint" id="cfAnnualHint">${old ? `年度${kind === "income" ? "收入" : "支出"}金额为 ${num(cfAnnual(old))} 元` : ""}</small></label>
     ${kind === "expense" ? `<label>类型<div class="cf-types">${[["stable","稳定支出"],["flexible","弹性支出"],["other","其他支出"]].map(([v,l])=>`<button class="${(old?.type||p.type||"other")===v?"on":""}" data-type="${v}" onclick="pickCfType(this)">${l}</button>`).join("")}</div></label><p class="cf-type-help">稳定支出适合房租、房贷、保费等固定或刚性费用；弹性支出适合日常消费与兴趣安排。</p>` : ""}
-    <div class="cf-editor-actions">${old ? `<button class="cf-delete" onclick="deleteCfItem('${kind}','${old.id}')">删除</button>` : ""}<button class="cf-primary" onclick="saveCfItem('${kind}','${old?.id||""}')">${old ? "保存" : "添加"}</button></div>
+    <div class="cf-editor-actions">${old ? `<button class="cf-delete" onclick="deleteCfItem('${kind}','${old.id}')" aria-label="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M9 4h6l1 3H8l1-3ZM7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></button>` : `<button class="cf-primary" onclick="saveCfItem('${kind}','')">添加</button>`}</div>
   </div>`);
   setTimeout(()=>document.getElementById("cfAmount")?.focus(),0);
+}
+function syncCfAnnualHint(kind) {
+  const amount=Number(document.getElementById("cfAmount")?.value)||0, freq=document.getElementById("cfFreq")?.value||"month", el=document.getElementById("cfAnnualHint");
+  if (el) el.textContent=amount ? `年度${kind === "income" ? "收入" : "支出"}金额为 ${num(amount*cfMultiplier(freq))} 元` : "";
 }
 function pickCfType(el) { el.parentElement.querySelectorAll("button").forEach((x)=>x.classList.remove("on")); el.classList.add("on"); }
 function saveCfItem(kind,id) {
