@@ -866,7 +866,7 @@ function home() {
         <div class="${hasYtd ? tone(ytd) : "faint"}" style="font-size:22px;font-weight:750;margin:10px 0 4px">${hasYtd ? pct(ytd) : "暂无"} <small style="font-size:12px">年化</small></div>
         <div class="faint" style="font-size:12px">${S.invest.length ? relUpdate(t.last) : "尚未记账"}</div>
         <div class="inv-home-returns">
-          <div><span>累计收益</span><b class="${tone(t.pnl)}">${num(t.pnl)}<small> 元</small></b></div>
+          <div><span>累计收益</span><b class="${tone(t.pnl)}">${(t.pnl / 10000).toFixed(2)}<small> 万</small></b></div>
           <i></i>
           <div><span>今年收益</span><b class="${tone(yearProfit)}">${num(yearProfit)}<small> 元</small></b></div>
         </div>
@@ -1001,7 +1001,7 @@ function cfOverviewPage() {
   return `<section class="screen on cf-page cf-overview">
     <div class="cf-overview-title"><button class="back" onclick="go('home')" aria-label="返回">${chevLeft()}</button><div><h1>年度现金流</h1><button>${y} 年<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button></div><button class="cf-share" onclick="openCfShare()" aria-label="分享"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/></svg></button></div>
     <div class="cf-overview-card">
-      <div class="cf-overview-metrics"><div><span class="cf-balance-label">预估年度结余 ${hideBtn()}</span><strong>${num(t.surplus)}<em>元</em></strong><small>预估收入 ${num(t.income)}</small></div><div><span>储蓄率</span><strong>${t.income ? Math.round(t.rate * 10) / 10 + "%" : "—"}</strong><small>预估支出 ${num(t.expenses)} 元</small></div><button onclick="goCashflowStep('income')">编辑 ›</button></div>
+      <div class="cf-overview-metrics"><div><span class="cf-balance-label">预估年度结余 ${hideBtn()}</span><strong>${num(t.surplus)}<em>元</em></strong><small>预估收入 <i class="money-wide">${num(t.income)}</i><i class="money-short">${cfShort(t.income)}</i></small></div><div><span>储蓄率</span><strong>${t.income ? Math.round(t.rate * 10) / 10 + "%" : "—"}</strong><small>预估支出 <i class="money-wide">${num(t.expenses)} 元</i><i class="money-short">${cfShort(t.expenses)}</i></small></div><button onclick="goCashflowStep('income')">编辑 ›</button></div>
       <div class="cf-sankey-card">${cfSankeySvg("combined",false)}<button class="cf-expand" onclick="openCfSankey()" aria-label="展开桑基图">⌗</button></div>
     </div>
     <div class="cf-track-head"><div><h2>支出预算追踪</h2><p>${y} 年度支出 ${num(t.expenses)} 元</p></div><div class="invest-more"><button onclick="route.cfTrackMenu=!route.cfTrackMenu;render({resize:false,keepScroll:true})" aria-label="更多">⋯</button>${route.cfTrackMenu?`<div class="menu inv-menu"><button onclick="toggleCfSort()"><span class="menu-icon drag-icon">⠿</span>${route.cfSort?"保存排序":"支出排序"}</button></div>`:""}</div></div>

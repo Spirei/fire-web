@@ -252,7 +252,7 @@
     .ex-chip { background: var(--card); border-radius: 12px; padding: 10px 14px; color: var(--ex-t); font-size: 13px; text-align: left; border: 1px solid var(--line); }
     .ex-chip small { display: block; margin-top: 2px; font-size: 11px; }
     .add-body { background: var(--bg); border-radius: 20px 20px 0 0; margin-top: -8px; padding: 20px 16px 16px; }
-    .field { margin-bottom: 22px; }
+    .win-body .field { width:auto; height:auto; margin-bottom:22px; padding:0; border:0; border-radius:0; background:transparent; }
     .field label { display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 700; margin-bottom: 10px; color: var(--ink); }
     .field input, .field select {
       width: 100%; height: 52px; border: 0; border-radius: 14px; background: var(--input);
@@ -718,7 +718,7 @@
     .cf-tabs > span { color:var(--muted); font-size:28px; text-align:center; }
     .cf-total { padding:0 30px 34px; }
     .cf-total > span { display:block; color:var(--muted); font-size:17px; margin-bottom:2px; }
-    .cf-total strong { font-size:52px; line-height:1; letter-spacing:-.045em; font-variant-numeric:tabular-nums; }
+    .cf-total strong { font-size:clamp(36px,8vw,52px); line-height:1; letter-spacing:-.045em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
     .cf-total em { margin-left:6px; font-style:normal; font-size:18px; }
     .cf-flow-meta { display:flex; justify-content:space-between; margin:0 30px 12px; color:var(--muted); }
     .cf-flow-meta span { display:inline-flex; align-items:center; gap:8px; }
@@ -740,7 +740,8 @@
     .cf-more { margin-top:12px; }
     .cf-collapsed-note { margin:0 32px 20px; color:var(--faint); font-size:12px; }
     .cf-item-row { width:100%; min-height:76px; padding:0 24px; display:flex; justify-content:space-between; align-items:center; gap:14px; border-radius:18px; background:color-mix(in srgb,var(--gray) 80%,var(--card)); font-size:18px; text-align:left; }
-    .cf-item-row b { color:var(--muted); font-size:17px; font-weight:500; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .cf-item-row > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cf-item-row b { min-width:0; color:var(--muted); font-size:17px; font-weight:500; font-variant-numeric:tabular-nums; white-space:nowrap; }
     .cf-next { display:grid; place-items:center; width:72px; height:72px; margin:78px auto 16px; border-radius:50%; background:var(--cf); color:white; font-size:37px; font-weight:300; box-shadow:0 12px 30px color-mix(in srgb,var(--cf) 32%,transparent); }
     .cf-complete { margin-top:42px; }
     .cf-group { margin:0 30px 20px; padding:18px 14px 14px; border-radius:22px; background:color-mix(in srgb,var(--gray) 72%,var(--card)); }
@@ -756,19 +757,21 @@
     .cf-overview-title { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; align-items:center; gap:10px; padding:30px 28px 8px; }
     .cf-overview-title .back { display:grid; width:44px; height:44px; place-items:center; }
     .cf-overview-title .back svg { width:25px; height:25px; }
-    .cf-overview-title > div { display:flex; align-items:center; gap:14px; }
-    .cf-overview-title h1 { margin:0; font-size:32px; letter-spacing:-.04em; }
+    .cf-overview-title > div { min-width:0; display:flex; align-items:center; gap:14px; }
+    .cf-overview-title h1 { margin:0; font-size:32px; letter-spacing:-.04em; white-space:nowrap; }
     .cf-overview-title > div button { display:inline-flex; align-items:center; gap:5px; padding:8px 12px; border-radius:11px; background:var(--gray); color:var(--cf-deep); font-weight:700; white-space:nowrap; }
     .cf-overview-title > div button svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:1.8; }
     .cf-share { display:grid; width:44px; height:44px; place-items:center; }
     .cf-share svg { width:27px; height:27px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
     .cf-overview-card { padding:20px 8px 8px; background:color-mix(in srgb,var(--cf) 15%,var(--card)); }
     .cf-overview-metrics { display:grid; grid-template-columns:1fr 1fr auto; gap:14px; padding:8px 20px 22px; }
-    .cf-overview-metrics > div { display:flex; flex-direction:column; }
+    .cf-overview-metrics > div { min-width:0; display:flex; flex-direction:column; }
     .cf-overview-metrics span { color:var(--muted); font-size:15px; }
-    .cf-overview-metrics strong { margin:5px 0; font-size:31px; letter-spacing:-.035em; font-variant-numeric:tabular-nums; }
+    .cf-overview-metrics strong { margin:5px 0; font-size:clamp(23px,5.2vw,31px); letter-spacing:-.035em; font-variant-numeric:tabular-nums; white-space:nowrap; }
     .cf-overview-metrics strong em { margin-left:4px; font-size:14px; font-style:normal; font-weight:500; }
-    .cf-overview-metrics small { color:var(--muted); font-size:13px; }
+    .cf-overview-metrics small { min-width:0; color:var(--muted); font-size:13px; white-space:nowrap; }
+    .cf-overview-metrics small i { font-style:normal; }
+    .cf-overview-metrics .money-short { display:none; }
     .cf-overview-metrics > button { align-self:start; color:var(--muted); font-size:15px; }
     .cf-balance-label { display:flex!important; align-items:center; gap:5px; }
     .cf-balance-label .eye { display:grid; width:22px; height:22px; place-items:center; color:var(--muted); }
@@ -789,10 +792,10 @@
     .cf-track-list { display:grid; gap:16px; padding:0 30px 30px; }
     .cf-track-card,.cf-track-empty { padding:22px; border-radius:22px; background:var(--card); }
     .cf-track-grid { display:grid; grid-template-columns:1.15fr 1fr 1fr; gap:12px; }
-    .cf-track-grid > div { display:flex; flex-direction:column; gap:5px; }
+    .cf-track-grid > div { min-width:0; display:flex; flex-direction:column; gap:5px; }
     .cf-track-grid span,.cf-track-card p { color:var(--muted); font-size:13px; }
     .cf-track-grid > div:first-child span { width:max-content; padding:2px 8px; border:1px solid #c9a464; border-radius:5px; color:#a98445; }
-    .cf-track-grid b { font-size:18px; font-weight:600; }
+    .cf-track-grid b { min-width:0; overflow:hidden; text-overflow:ellipsis; font-size:18px; font-weight:600; white-space:nowrap; }
     .cf-track-grid i { display:inline-block; width:10px; height:10px; margin-right:5px; border-radius:3px; background:#e4e4e4; }
     .cf-track-grid i.spent { background:#efad89; }
     .cf-track-card p { margin:18px 0 8px; }
@@ -844,7 +847,8 @@
     .inv-home-returns { display:grid; grid-template-columns:1fr 1px 1fr; gap:10px; margin-top:20px; padding:13px 12px; border:1px solid var(--line); border-radius:14px; background:color-mix(in srgb,var(--gray) 62%,transparent); }
     .inv-home-returns > i { width:1px; background:var(--line); }
     .inv-home-returns span { display:block; margin-bottom:5px; color:var(--muted); font-size:11px; }
-    .inv-home-returns b { display:block; font-size:15px; line-height:1.2; font-variant-numeric:tabular-nums; }
+    .inv-home-returns > div { min-width:0; }
+    .inv-home-returns b { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; line-height:1.2; font-variant-numeric:tabular-nums; }
     .inv-home-returns small { font-size:10px; font-weight:500; }
     .cf-chart.compact { min-height:64px; height:64px; margin:0; border-width:1.5px; border-radius:13px; }
     .cf-chart.compact .cf-chart-part { min-width:0; border-right-width:2px; }
@@ -946,6 +950,9 @@
       .dock { padding: 10px 20px calc(12px + env(safe-area-inset-bottom, 0px)); }
       .dock .cta { height: 52px; border-radius: 26px; }
     }
+    @media (max-width: 500px) and (pointer:fine) {
+      .win { width:calc(100% - 16px) !important; max-width:calc(100% - 16px); }
+    }
     @media (max-width: 500px) {
       .grid2 { grid-template-columns: 1fr; }
       .mini { min-height: 148px; }
@@ -968,8 +975,10 @@
       .cf-total strong { font-size:44px; }
       .cf-summary-grid { grid-template-columns:1fr; margin-left:22px; margin-right:22px; }
       .cf-overview-title { padding-left:16px; padding-right:16px; }
-      .cf-overview-title h1 { font-size:27px; }
-      .cf-overview-metrics { grid-template-columns:1fr 1fr; }
+      .cf-overview-title > div { gap:8px; }
+      .cf-overview-title h1 { font-size:22px; }
+      .cf-overview-title > div button { padding:7px 9px; font-size:12px; }
+      .cf-overview-metrics { grid-template-columns:minmax(0,1.12fr) minmax(0,.88fr); gap:8px; padding-left:14px; padding-right:14px; }
       .cf-overview-metrics > button { grid-column:1/-1; justify-self:end; }
       .cf-track-head,.cf-track-list { padding-left:22px; padding-right:22px; }
       .cf-track-grid { grid-template-columns:1fr 1fr; }
@@ -995,7 +1004,14 @@
       .cf-overview-card { margin-left:16px; margin-right:16px; }
       .cf-sankey-card { min-height:230px; }
       .cf-sankey { min-height:225px; }
-      .cf-overview-metrics strong { font-size:27px; }
+      .cf-overview-metrics strong { font-size:22px; }
+      .cf-overview-metrics strong em { margin-left:2px; font-size:11px; }
+      .cf-overview-metrics small { font-size:11px; }
+      .cf-item-row { padding-left:18px; padding-right:18px; gap:9px; }
+      .cf-item-row b { font-size:clamp(13px,4vw,16px); }
+      .cf-share-footer { flex-wrap:wrap; gap:9px; }
+      .cf-share-tags { gap:8px; }
+      .cf-share-tags span,.cf-share-save { padding-left:10px; padding-right:10px; font-size:12px; }
       .cf-flow-meta { margin-left:22px; margin-right:22px; }
       .cf-estimate > .cf-chart { min-height:112px; }
     }
@@ -1005,7 +1021,11 @@
       .cf-total strong { font-size:39px; }
       .cf-editor { padding-left:20px; padding-right:20px; }
       .cf-types button { font-size:13px; }
-      .cf-overview-title h1 { font-size:24px; }
+      .cf-overview-title h1 { font-size:20px; }
       .cf-overview-title > div { gap:7px; }
       .cf-overview-title > div button { padding:7px 8px; }
+      .cf-overview-metrics span { font-size:12px; }
+      .cf-overview-metrics small { font-size:10px; }
+      .cf-overview-metrics .money-wide { display:none; }
+      .cf-overview-metrics .money-short { display:inline; }
     }

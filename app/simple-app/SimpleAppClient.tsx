@@ -27,6 +27,8 @@ export default function SimpleAppClient() {
         const mode = element.dataset.mode || "combined";
         const metric = element.dataset.metric || "amount";
         const compact = element.dataset.full !== "true";
+        const narrow = element.clientWidth < 700;
+        const veryNarrow = element.clientWidth < 340;
         const valueText = (value: number, base: number) => metric === "ratio"
           ? `${base ? Math.round(value / base * 10000) / 100 : 0}%`
           : Math.abs(value) >= 10000 ? `${Math.round(value / 100) / 100}万` : value.toLocaleString("zh-CN");
@@ -71,9 +73,14 @@ export default function SimpleAppClient() {
           });
           nodes.push(node("surplus",3,shown("年度结余",payload.surplus,payload.incomeTotal),"#C5E5E2","right",{ decal:{ symbol:"rect", dashArrayX:[1,0], dashArrayY:[3,3], rotation:-0.65, color:"#4F9E99" } }));
         }
+        if (narrow && !compact && mode === "combined") {
+          nodes.forEach((item) => {
+            if (item.name === "income-total") item.label = { position:"top", align:"right" };
+            if (item.name === "expense-total") item.label = { position:"top", align:"left" };
+          });
+        }
         const chart = echarts.getInstanceByDom(element) || echarts.init(element, null, { renderer:"svg" });
-        const narrow = element.clientWidth < 700;
-        chart.setOption({ animation:false, tooltip:{ show:false }, series:[{ type:"sankey", orient:"horizontal", left:compact?72:(narrow?78:145), right:compact?72:(narrow?88:145), top:compact?32:(narrow?62:46), bottom:compact?32:(narrow?54:46), nodeWidth:compact?9:14, nodeGap:compact?10:(narrow?12:16), nodeAlign:"justify", draggable:false, layoutIterations:0, data:nodes, links, lineStyle:{ curveness:.5, opacity:.9 }, itemStyle:{ borderWidth:0, borderRadius:2 }, label:{ color:"#66717d", fontSize:compact?9:(narrow?11:13), fontWeight:650, distance:compact?5:(narrow?6:9), formatter:(params:{data?:{displayLabel?:string}})=>params.data?.displayLabel||"" }, emphasis:{ focus:"adjacency" } }] }, true);
+        chart.setOption({ animation:false, tooltip:{ show:false }, series:[{ type:"sankey", orient:"horizontal", left:compact?72:(veryNarrow?66:narrow?78:145), right:compact?72:(veryNarrow?106:narrow?88:145), top:compact?32:(narrow?62:46), bottom:compact?32:(narrow?54:46), nodeWidth:compact?9:14, nodeGap:compact?10:(narrow?12:16), nodeAlign:"justify", draggable:false, layoutIterations:0, data:nodes, links, lineStyle:{ curveness:.5, opacity:.9 }, itemStyle:{ borderWidth:0, borderRadius:2 }, label:{ color:"#66717d", fontSize:compact?9:(veryNarrow?9:narrow?11:13), fontWeight:650, distance:compact?5:(veryNarrow?4:narrow?6:9), formatter:(params:{data?:{displayLabel?:string}})=>params.data?.displayLabel||"" }, emphasis:{ focus:"adjacency" } }] }, true);
         new ResizeObserver(() => chart.resize()).observe(element);
         window.setTimeout(() => chart.resize(), 100);
       });
