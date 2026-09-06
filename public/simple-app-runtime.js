@@ -3001,6 +3001,7 @@ readUrl();
 loadMarketIcons();
 render({ skipUrl: true });
 applyWin();
+document.documentElement.classList.add("simple-app-ready");
 if (window.ResizeObserver) {
   const appEl = document.getElementById("app");
   if (appEl) new ResizeObserver(() => syncScroll()).observe(appEl);
@@ -3012,6 +3013,7 @@ window.remountSimpleApp = function remountSimpleApp() {
   loadMarketIcons();
   render({ skipUrl: true });
   applyWin();
+  document.documentElement.classList.add("simple-app-ready");
   restoreDlg();
   hydrate();
 };

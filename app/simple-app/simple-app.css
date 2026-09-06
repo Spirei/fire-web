@@ -112,7 +112,9 @@
       background: var(--bg); border: 1px solid var(--line); border-radius: 18px;
       box-shadow: var(--win-shadow); overflow: hidden; isolation: isolate;
       transition: box-shadow .2s ease;
+      visibility: hidden;
     }
+    html.simple-app-ready .win { visibility: visible; }
     .win.is-fixed { box-shadow: 0 8px 24px rgba(0,0,0,.08); }
     html.dark .win.is-fixed { box-shadow: 0 8px 24px rgba(0,0,0,.35); }
     .win-bar {
