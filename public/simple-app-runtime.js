@@ -16,7 +16,7 @@ const EMPTY = {
   fx: { CNY: 1, HKD: 0.92, USD: 7.18 },
   reminder: 0, expected: 8,
   cash: [], fixed: [], receivable: [], debt: [], invest: [],
-  cashflow: { schemaVersion: 3, started: false, completed: false, incomeItems: [], expenseItems: [] }, summaries: [],
+  cashflow: { schemaVersion: 4, started: false, completed: false, incomeItems: [], expenseItems: [] }, summaries: [],
   snaps: [], logs: [],
   members: [{ id: "me", name: "我" }]
 };
@@ -141,7 +141,7 @@ function cleanImportedHist(hist) {
 }
 function normalize(raw) {
   const p = raw && typeof raw === "object" ? raw : {};
-  const savedCf = p.cashflow && Number(p.cashflow.schemaVersion) === 3 ? p.cashflow : {};
+  const savedCf = p.cashflow && Number(p.cashflow.schemaVersion) === 4 ? p.cashflow : {};
   const next = { ...EMPTY, ...p, fx: { ...EMPTY.fx, ...(p.fx || {}) }, cashflow: { ...EMPTY.cashflow, ...savedCf } };
   const cf = next.cashflow;
   cf.incomeItems = Array.isArray(cf.incomeItems) ? cf.incomeItems : [];
@@ -982,12 +982,56 @@ function cfItemRow(kind,x) { return `<button class="cf-item-row" onclick="openCf
 function cfOverviewPage() {
   const t = cfTotals(), y = new Date().getFullYear();
   return `<section class="screen on cf-page cf-overview">
-    ${navHead("go('home')", `${y} 年度现金流`)}
-    <div class="cf-overview-card"><div><span>储蓄率</span><strong>${t.income ? Math.round(t.rate * 10) / 10 + "%" : "—"}</strong></div>${cfChart(t,false)}</div>
-    <div class="cf-summary-grid"><div><span>年度收入</span><b>${num(t.income)} 元</b></div><div><span>年度支出</span><b>${num(t.expenses)} 元</b></div><div><span>年度结余</span><b>${num(t.surplus)} 元</b></div></div>
-    <button class="cf-primary" onclick="goCashflowStep('income')">调整计划</button>
+    <div class="cf-overview-title"><button class="back" onclick="go('home')" aria-label="返回">‹</button><div><h1>年度现金流</h1><button>${y} 年⌄</button></div><button class="cf-share" onclick="toast('年度现金流可通过浏览器分享')" aria-label="分享">↗</button></div>
+    <div class="cf-overview-card">
+      <div class="cf-overview-metrics"><div><span>预估年度结余</span><strong>${num(t.surplus)}<em>元</em></strong><small>预估收入 ${num(t.income)}</small></div><div><span>储蓄率</span><strong>${t.income ? Math.round(t.rate * 10) / 10 + "%" : "—"}</strong><small>预估支出 ${num(t.expenses)} 元</small></div><button onclick="goCashflowStep('income')">编辑 ›</button></div>
+      <div class="cf-sankey-card">${cfSankeySvg("combined",false)}<button class="cf-expand" onclick="openCfSankey()" aria-label="展开桑基图">⌗</button></div>
+    </div>
+    <div class="cf-track-head"><div><h2>支出预算追踪</h2><p>${y} 年度支出 ${num(t.expenses)} 元</p></div><span>↕ 排序</span></div>
+    <div class="cf-track-list">${(S.cashflow.expenseItems || []).map(cfTrackCard).join("") || `<div class="cf-track-empty">添加支出计划后，将在这里追踪每月预算</div>`}</div>
   </section>`;
 }
+function cfShort(n) { n=Number(n)||0; return Math.abs(n)>=10000 ? (Math.round(n/100)/100)+"万" : num(n); }
+function cfTrackCard(x) {
+  const monthly = cfAnnual(x)/12;
+  return `<div class="cf-track-card"><div class="cf-track-grid"><div><span>${cfFreqLabel(x.freq)}度</span><b>${esc(x.name)}</b></div><div><span><i class="spent"></i>${new Date().getMonth()+1}月支出</span><b>0 元</b></div><div><span><i></i>月度剩余</span><b>${num(monthly)} 元</b></div></div><p>月度支出</p><div class="cf-track-bar"><i style="width:0%"></i></div></div>`;
+}
+function cfSankeySvg(mode,full) {
+  const t=cfTotals(), income=S.cashflow.incomeItems||[], expenses=S.cashflow.expenseItems||[];
+  const W=full?960:520,H=full?390:260;
+  if (!t.income && !t.expenses) return `<div class="cf-sankey-empty">完成收支预估后生成现金流向图</div>`;
+  if (mode === "expense") return cfExpenseSankey(W,H,t,expenses);
+  const leftX=full?105:55, midX=full?390:245, rightX=full?760:420;
+  const top=full?112:74, bottom=full?314:210, total=Math.max(t.income,1);
+  const expenseH=Math.max(16,(bottom-top)*Math.min(t.expenses/total,.76));
+  const restH=Math.max(18,(bottom-top)-expenseH);
+  const incomeName=income.length===1?income[0].name:"预估收入";
+  const path=(x1,y1,x2,y2,h,c)=>`<path d="M${x1} ${y1} C${(x1+x2)/2} ${y1},${(x1+x2)/2} ${y2},${x2} ${y2} L${x2} ${y2+h} C${(x1+x2)/2} ${y2+h},${(x1+x2)/2} ${y1+h},${x1} ${y1+h}Z" fill="${c}"/>`;
+  let out=path(leftX,top,midX,top,bottom-top,"#aeddEB");
+  out+=path(midX,top,rightX,top,expenseH,"#efc2ae");
+  out+=path(midX,top+expenseH,rightX,top+expenseH,restH,"#b9dedb");
+  return `<svg class="cf-sankey" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+    ${out}<rect x="${leftX-9}" y="${top}" width="10" height="${bottom-top}" fill="#45afd0"/><rect x="${midX-9}" y="${top}" width="18" height="${bottom-top}" fill="#3aa9cc"/><rect x="${rightX-5}" y="${top}" width="10" height="${expenseH}" fill="#e98b62"/><rect x="${rightX-5}" y="${top+expenseH}" width="10" height="${restH}" fill="url(#cfHatch)"/>
+    <defs><pattern id="cfHatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><line x1="0" y1="0" x2="0" y2="7" stroke="#59aaa7" stroke-width="3"/></pattern></defs>
+    <text x="${leftX-20}" y="${top+(bottom-top)/2}" text-anchor="end" class="income-label">${esc(incomeName)}${full?" "+cfShort(t.income):""}</text>
+    <text x="${midX}" y="${top-18}" text-anchor="middle" class="income-label">预估收入${full?` ${cfShort(t.income)}`:""}</text>
+    <text x="${rightX+18}" y="${top+expenseH/2+5}" class="expense-label">预估支出${full?` ${cfShort(t.expenses)}`:""}</text>
+    <text x="${rightX+18}" y="${top+expenseH+restH/2+5}" class="rest-label">年度结余${full?` ${cfShort(t.surplus)}`:""}</text>
+  </svg>`;
+}
+function cfExpenseSankey(W,H,t,items) {
+  const leftX=120,midX=470,rightX=800,top=100,bottom=335,total=Math.max(t.expenses,1);
+  const groups=[["stable","稳定支出","#e78358","#efc1b1"],["flexible","弹性支出","#df9844","#f1cfaa"],["other","其他支出","#bca359","#eadfb4"]].filter(([k])=>t[k]>0);
+  let y=top, paths="", labels="";
+  groups.forEach(([k,label,node,flow])=>{ const gh=Math.max(18,(bottom-top)*t[k]/total), sy=y; paths+=`<path d="M${leftX} ${sy} C300 ${sy},300 ${y},${midX} ${y} L${midX} ${y+gh} C300 ${y+gh},300 ${sy+gh},${leftX} ${sy+gh}Z" fill="${flow}"/>`; paths+=`<rect x="${midX-9}" y="${y}" width="18" height="${gh}" fill="${node}"/>`; labels+=`<text x="${midX}" y="${y-12}" text-anchor="middle" fill="${node}">${label} ${Math.round(t[k]/total*10000)/100}%</text>`; let iy=y; items.filter(x=>(x.type||"other")===k).forEach(x=>{const ih=Math.max(7,gh*cfAnnual(x)/Math.max(t[k],1)); paths+=`<path d="M${midX+9} ${iy} C640 ${iy},640 ${iy},${rightX} ${iy} L${rightX} ${iy+ih} C640 ${iy+ih},640 ${iy+ih},${midX+9} ${iy+ih}Z" fill="${flow}"/><rect x="${rightX}" y="${iy}" width="18" height="${ih}" fill="${node}"/>`; labels+=`<text x="${rightX+30}" y="${iy+ih/2+5}" fill="${node}">${esc(x.name)} ${Math.round(cfAnnual(x)/total*10000)/100}%</text>`; iy+=ih;}); y+=gh; });
+  return `<svg class="cf-sankey" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet"><rect x="${leftX-18}" y="${top}" width="18" height="${bottom-top}" fill="#df7e43"/>${paths}<text x="${leftX}" y="${top-18}" text-anchor="middle" fill="#d67b49">预估支出 100.00%</text>${labels}</svg>`;
+}
+function openCfSankey() { route.cfSankeyMode="combined"; route.cfSankeyMetric="amount"; renderCfSankeyModal(); }
+function renderCfSankeyModal() {
+  const mode=route.cfSankeyMode||"combined", metric=route.cfSankeyMetric||"amount", y=new Date().getFullYear();
+  showCfSheet(`<div class="cf-sankey-modal"><div class="cf-sankey-toolbar"><div><b>${y} 年度现金流</b><button onclick="route.cfSankeyMenu=!route.cfSankeyMenu;renderCfSankeyModal()">${mode==="combined"?"收入与支出":"支出"}⌄</button>${route.cfSankeyMenu?`<div class="cf-sankey-menu"><button onclick="pickCfSankeyMode('combined')">收入与支出</button><button onclick="pickCfSankeyMode('expense')">支出</button></div>`:""}</div><div class="cf-sankey-seg"><button class="${metric==="amount"?"on":""}" onclick="route.cfSankeyMetric='amount';renderCfSankeyModal()">金额</button><button class="${metric==="ratio"?"on":""}" onclick="route.cfSankeyMetric='ratio';renderCfSankeyModal()">比例</button><button onclick="route.cfSankeyMetric='hidden';renderCfSankeyModal()">隐藏数据</button></div><button class="cf-download" onclick="toast('桑基图已准备导出')">↓</button><button class="cf-close-wide" onclick="closeMask()">×</button></div><div class="cf-sankey-stage ${metric==='hidden'?'hide-data':''}">${cfSankeySvg(mode,true)}</div><small>有知有行</small></div>`);
+}
+function pickCfSankeyMode(mode) { route.cfSankeyMode=mode; route.cfSankeyMenu=false; renderCfSankeyModal(); }
 function startCashflow() { S.cashflow.started = true; save(); goCashflowStep("income"); }
 function goCashflowStep(step) { route.cfStep = step; render(); }
 function finishCashflow() { S.cashflow.started = true; S.cashflow.completed = true; save(); route.cfStep = "overview"; render(); toast("年度现金流已保存"); }
