@@ -16,7 +16,7 @@ const EMPTY = {
   fx: { CNY: 1, HKD: 0.92, USD: 7.18 },
   reminder: 0, expected: 8,
   cash: [], fixed: [], receivable: [], debt: [], invest: [],
-  cashflow: { stable: 0, flex: 0, income: 0 }, summaries: [],
+  cashflow: { schemaVersion: 3, started: false, completed: false, incomeItems: [], expenseItems: [] }, summaries: [],
   snaps: [], logs: [],
   members: [{ id: "me", name: "我" }]
 };
@@ -141,7 +141,11 @@ function cleanImportedHist(hist) {
 }
 function normalize(raw) {
   const p = raw && typeof raw === "object" ? raw : {};
-  const next = { ...EMPTY, ...p, fx: { ...EMPTY.fx, ...(p.fx || {}) }, cashflow: { ...EMPTY.cashflow, ...(p.cashflow || {}) } };
+  const savedCf = p.cashflow && Number(p.cashflow.schemaVersion) === 3 ? p.cashflow : {};
+  const next = { ...EMPTY, ...p, fx: { ...EMPTY.fx, ...(p.fx || {}) }, cashflow: { ...EMPTY.cashflow, ...savedCf } };
+  const cf = next.cashflow;
+  cf.incomeItems = Array.isArray(cf.incomeItems) ? cf.incomeItems : [];
+  cf.expenseItems = Array.isArray(cf.expenseItems) ? cf.expenseItems : [];
   for (const k of ["cash", "fixed", "receivable", "debt", "invest", "snaps", "logs", "members", "summaries"]) next[k] = Array.isArray(p[k]) ? p[k] : [];
   if (!next.members.length) next.members = [{ id: "me", name: "我" }];
   next.invest = next.invest.map((a) => {
@@ -816,6 +820,7 @@ function chartSeries(list, kind) {
 
 function home() {
   const t = totals();
+  const cfT = cfTotals();
   const w = weatherState(t);
   const stats = S.invest.map(investStats);
   const ytd = stats.length ? stats.reduce((n, s) => n + (s.ytd || 0) * (s.net || 0), 0) / Math.max(1, stats.reduce((n, s) => n + Math.max(s.net, 0), 0)) : null;
@@ -854,14 +859,10 @@ function home() {
           <b>${num(yearIn)} 元</b>
         </div>
       </div>
-      <div class="mini" onclick="go('cashflow')" style="cursor:pointer">
-        <b>现金流计算器</b>
-        <div class="k" style="margin-top:6px">规划年度收支与结余</div>
-        <div class="cashflow-preview" aria-label="现金流配置预览">
-          <div class="stable">稳定<br>支出</div>
-          <div class="flexible">弹性<br>支出</div>
-          <div class="surplus">年度<br>结余</div>
-        </div>
+      <div class="mini cf-home-card" onclick="go('cashflow')" style="cursor:pointer">
+        <div class="split"><b>年度现金流</b><span class="cf-home-year">${new Date().getFullYear()}</span></div>
+        <div class="cf-home-rate">${cfT.income ? Math.round(cfT.rate * 10) / 10 + "%" : "待规划"}<small>${cfT.income ? "储蓄率" : "规划年度收支"}</small></div>
+        ${cfChart(cfT, true)}
       </div>
     </div>
   </section>`;
@@ -870,7 +871,7 @@ function home() {
 function weatherPage() {
   const t = totals();
   const w = weatherState(t);
-  const spend = (Number(S.cashflow.stable) || 0) + (Number(S.cashflow.flex) || 0);
+  const spend = cfTotals().expenses / 12;
   const months = spend > 0 ? t.cash / spend : null;
   return `<section class="screen on gray">
     ${navHead("go('home')", "财务晴雨表")}
@@ -889,27 +890,137 @@ function weatherPage() {
   </section>`;
 }
 
+const CF_INCOME_PRESETS = [
+  { name:"工资酬劳", icon:"薪" }, { name:"提取公积金", icon:"积" }, { name:"奖金", icon:"奖" }
+];
+const CF_EXPENSE_PRESETS = [
+  { name:"日常花销", icon:"日", type:"flexible" }, { name:"房租/还款", icon:"房", type:"stable" },
+  { name:"保费缴纳", icon:"保", type:"stable" }, { name:"兴趣爱好", icon:"趣", type:"flexible" },
+  { name:"孩子花费", icon:"童", type:"flexible" }
+];
+function cfMultiplier(freq) { return freq === "month" ? 12 : freq === "quarter" ? 4 : 1; }
+function cfAnnual(item) { return (Number(item && item.amount) || 0) * cfMultiplier(item && item.freq); }
+function cfTotals() {
+  const cf = S.cashflow || EMPTY.cashflow;
+  const income = (cf.incomeItems || []).reduce((n,x) => n + cfAnnual(x), 0);
+  const by = { stable:0, flexible:0, other:0 };
+  (cf.expenseItems || []).forEach((x) => { by[x.type] = (by[x.type] || 0) + cfAnnual(x); });
+  const expenses = by.stable + by.flexible + by.other;
+  const surplus = income - expenses;
+  return { income, expenses, surplus, rate:income ? surplus / income * 100 : 0, ...by };
+}
+function cfFreqLabel(freq) { return freq === "month" ? "月" : freq === "quarter" ? "季" : "年"; }
+function cfPreset(kind, name) {
+  const list = kind === "income" ? CF_INCOME_PRESETS : CF_EXPENSE_PRESETS;
+  return list.find((x) => x.name === name) || { name, icon: kind === "income" ? "收" : "支", type:kind === "expense" ? "other" : "" };
+}
+function cfIcon(kind, name) {
+  const p = cfPreset(kind, name);
+  return `<span class="cf-ico cf-ico-${kind}" aria-hidden="true">${esc(p.icon)}</span>`;
+}
+function cfChart(t, compact) {
+  const parts = [
+    ["stable", t.stable, "稳定支出"], ["flexible", t.flexible, "弹性支出"], ["other", t.other, "其他支出"]
+  ].filter((x) => x[1] > 0 || !compact);
+  const base = Math.max(t.income, t.expenses, 1);
+  const weights = [...parts.map((x) => Math.max(x[1] / base, compact ? .12 : .08)), Math.max(Math.max(t.surplus,0) / base,.28)];
+  const weightTotal = weights.reduce((n,x) => n + x, 0);
+  return `<div class="cf-chart ${compact ? "compact" : ""}" aria-label="年度现金流构成">
+    ${parts.map(([k,v,label],i) => `<div class="cf-chart-part ${k}" style="width:${weights[i] / weightTotal * 100}%">${compact ? "" : `<span>${label.replace("支出","<br>支出")}</span>`}</div>`).join("")}
+    <div class="cf-chart-part surplus" style="width:${weights[weights.length-1] / weightTotal * 100}%">${compact ? "" : "<span>年度<br>结余</span>"}</div>
+  </div>`;
+}
+function cfTabs(active) {
+  return `<div class="cf-tabs"><button class="${active === "income" ? "on" : ""}" onclick="goCashflowStep('income')">收入预估</button><span>›</span><button class="${active === "expense" ? "on" : ""}" onclick="goCashflowStep('expense')">支出预估</button></div>`;
+}
 function cashflowPage() {
   const cf = S.cashflow;
-  const yearSpend = ((Number(cf.stable) || 0) + (Number(cf.flex) || 0)) * 12;
-  const rest = (Number(cf.income) || 0) - yearSpend;
-  const rate = cf.income ? rest / cf.income * 100 : null;
-  return `<section class="screen on gray">
-    ${navHead("go('home')", "现金流计算器")}
-    <p class="muted pad">规划年度收支与结余</p>
-    <div class="w-card">
-      <div class="field"><label>稳定支出 / 月</label><input type="number" value="${cf.stable || ""}" placeholder="房租、生活必需" oninput="setCf('stable',this.value)" /></div>
-      <div class="field"><label>弹性支出 / 月</label><input type="number" value="${cf.flex || ""}" placeholder="旅行、购物、娱乐" oninput="setCf('flex',this.value)" /></div>
-      <div class="field" style="margin:0"><label>年度收入</label><input type="number" value="${cf.income || ""}" placeholder="税后收入合计" oninput="setCf('income',this.value)" /></div>
-    </div>
-    <div class="pad cf-grid">
-      <div class="cf-box"><div class="k">年度支出</div><div class="n" id="cfYearSpend" style="font-size:22px">${num(yearSpend)}</div></div>
-      <div class="cf-box"><div class="k">年度结余</div><div class="n ${tone(rest)}" id="cfRest" style="font-size:22px">${signedNum(rest)}</div></div>
-      <div class="cf-box"><div class="k">月结余</div><div class="n" id="cfMonth" style="font-size:22px">${num(rest / 12)}</div></div>
-      <div class="cf-box"><div class="k">结余率</div><div class="n" id="cfRate" style="font-size:22px">${rate == null ? "—" : pct(rate)}</div></div>
-    </div>
+  const step = route.cfStep || (cf.completed ? "overview" : cf.started ? "income" : "intro");
+  if (step === "intro") return cfIntroPage();
+  if (step === "overview") return cfOverviewPage();
+  return cfEstimatePage(step === "expense" ? "expense" : "income");
+}
+function cfIntroPage() {
+  const t = cfTotals(), y = new Date().getFullYear();
+  return `<section class="screen on cf-page cf-intro">
+    ${navHead("go('home')", "")}
+    <div class="cf-intro-copy"><h1>现金流计算器 (${y})</h1><p>预估一年的收入与开支，为自己规划更合理的年度现金流，并追踪开支计划是否与预期吻合。</p></div>
+    <div class="cf-legend"><span><i></i>年度收入 ${t.income ? num(t.income) : "****"} 元</span><span><i></i>年度结余 ${t.income ? num(t.surplus) : "****"} 元</span></div>
+    ${cfChart(t, false)}
+    <button class="cf-primary" onclick="startCashflow()">${S.cashflow.completed ? "继续规划" : "开始"}</button>
   </section>`;
 }
+function cfEstimatePage(kind) {
+  const isIncome = kind === "income", t = cfTotals(), y = new Date().getFullYear();
+  const items = isIncome ? S.cashflow.incomeItems : S.cashflow.expenseItems;
+  const presets = isIncome ? CF_INCOME_PRESETS : CF_EXPENSE_PRESETS;
+  const unused = presets.filter((p) => !items.some((x) => x.name === p.name));
+  const metric = isIncome ? t.income : t.expenses;
+  const groups = isIncome ? "" : cfExpenseGroups(items);
+  return `<section class="screen on cf-page cf-estimate">
+    ${navHead("go('cashflow',{cfStep:'intro'})", `${y} 年现金流`)}
+    ${cfTabs(kind)}
+    <div class="cf-total"><span>${isIncome ? "预估年度收入" : "预估年度支出"}</span><strong>${num(metric)}</strong><em>元</em></div>
+    ${isIncome ? "" : `<div class="cf-flow-meta"><span>收入 ${num(t.income)} 元</span><span>结余 ${num(t.surplus)} 元</span></div>${cfChart(t,false)}`}
+    <div class="cf-list-head"><b>${isIncome ? "收入项" : "支出项"}</b>${items.length > 1 ? "<span>↕ 排序</span>" : ""}</div>
+    ${items.length ? (isIncome ? `<div class="cf-added-list">${items.map((x) => cfItemRow(kind,x)).join("")}</div>` : groups) : `<div class="cf-choice-list">${presets.map((p) => cfChoice(kind,p)).join("")}</div>`}
+    ${items.length ? `<button class="cf-choice cf-more" onclick="openCfPicker('${kind}')">${cfIcon(kind,"更多") }<span>${isIncome ? "添加收入" : "添加支出"}</span><b>＋</b></button>` : `<button class="cf-choice cf-more" onclick="openCfPicker('${kind}')">${cfIcon(kind,"更多") }<span>${isIncome ? "更多其他收入" : "更多其他支出"}</span><b>＋</b></button>`}
+    ${items.length && unused.length ? `<p class="cf-collapsed-note">其他类别已收起，可从“${isIncome ? "添加收入" : "添加支出"}”继续选择</p>` : ""}
+    ${isIncome ? `<button class="cf-next" onclick="goCashflowStep('expense')" aria-label="下一步">→</button>` : `<button class="cf-primary cf-complete" onclick="finishCashflow()">完成</button>`}
+  </section>`;
+}
+function cfExpenseGroups(items) {
+  const labels = { stable:"稳定支出", flexible:"弹性支出", other:"其他支出" };
+  return ["stable","flexible","other"].map((type) => {
+    const rows = items.filter((x) => (x.type || "other") === type);
+    if (!rows.length) return "";
+    return `<div class="cf-group ${type}"><div class="cf-group-head"><div><b>${labels[type]}</b><span>总计 ${num(rows.reduce((n,x)=>n+cfAnnual(x),0))} 元/年</span></div>${rows.length > 1 ? "<em>↕ 排序</em>" : ""}</div>${rows.map((x)=>cfItemRow("expense",x)).join("")}</div>`;
+  }).join("");
+}
+function cfChoice(kind,p) { return `<button class="cf-choice" onclick="openCfEditor('${kind}','${esc(p.name)}')">${cfIcon(kind,p.name)}<span>${esc(p.name)}</span><b>＋</b></button>`; }
+function cfItemRow(kind,x) { return `<button class="cf-item-row" onclick="openCfEditor('${kind}','${esc(x.name)}','${x.id}')"><span>${esc(x.name)}</span><b>${num(x.amount)} 元/${cfFreqLabel(x.freq)}</b></button>`; }
+function cfOverviewPage() {
+  const t = cfTotals(), y = new Date().getFullYear();
+  return `<section class="screen on cf-page cf-overview">
+    ${navHead("go('home')", `${y} 年度现金流`)}
+    <div class="cf-overview-card"><div><span>储蓄率</span><strong>${t.income ? Math.round(t.rate * 10) / 10 + "%" : "—"}</strong></div>${cfChart(t,false)}</div>
+    <div class="cf-summary-grid"><div><span>年度收入</span><b>${num(t.income)} 元</b></div><div><span>年度支出</span><b>${num(t.expenses)} 元</b></div><div><span>年度结余</span><b>${num(t.surplus)} 元</b></div></div>
+    <button class="cf-primary" onclick="goCashflowStep('income')">调整计划</button>
+  </section>`;
+}
+function startCashflow() { S.cashflow.started = true; save(); goCashflowStep("income"); }
+function goCashflowStep(step) { route.cfStep = step; render(); }
+function finishCashflow() { S.cashflow.started = true; S.cashflow.completed = true; save(); route.cfStep = "overview"; render(); toast("年度现金流已保存"); }
+function openCfPicker(kind) {
+  const items = kind === "income" ? S.cashflow.incomeItems : S.cashflow.expenseItems;
+  const presets = (kind === "income" ? CF_INCOME_PRESETS : CF_EXPENSE_PRESETS).filter((p) => !items.some((x) => x.name === p.name));
+  const custom = { name:kind === "income" ? "自定义收入" : "自定义支出", icon:"＋", type:"other" };
+  showCfSheet(`<div class="cf-sheet-head"><button onclick="closeMask()">×</button><h3>${kind === "income" ? "添加收入" : "添加支出"}</h3></div><div class="cf-sheet-list">${[...presets,custom].map((p)=>cfChoice(kind,p)).join("")}</div>`);
+}
+function showCfSheet(html) { const m=document.getElementById("mask"); m.className="mask on cf-mask"; m.innerHTML=`<div class="cf-sheet" role="dialog" aria-modal="true" onclick="event.stopPropagation()">${html}</div>`; }
+function openCfEditor(kind,name,id) {
+  const list = kind === "income" ? S.cashflow.incomeItems : S.cashflow.expenseItems;
+  const old = id ? list.find((x)=>x.id===id) : null;
+  const p = cfPreset(kind,name), title = name.startsWith("自定义") ? "" : name;
+  showCfSheet(`<div class="cf-sheet-head"><button onclick="closeMask()">×</button><h3>${esc(old ? old.name : name)}</h3></div><div class="cf-editor">
+    <label>名称<input id="cfName" value="${esc(old ? old.name : title)}" placeholder="输入名称"></label>
+    <label>金额<div class="cf-amount"><select id="cfFreq"><option value="year" ${(old?.freq||"month")==="year"?"selected":""}>每年</option><option value="quarter" ${old?.freq==="quarter"?"selected":""}>每季</option><option value="month" ${(old?.freq||"month")==="month"?"selected":""}>每月</option></select><input id="cfAmount" type="number" inputmode="decimal" value="${old ? old.amount : ""}" placeholder="0"><span>元</span></div></label>
+    ${kind === "expense" ? `<label>类型<div class="cf-types">${[["stable","稳定支出"],["flexible","弹性支出"],["other","其他支出"]].map(([v,l])=>`<button class="${(old?.type||p.type||"other")===v?"on":""}" data-type="${v}" onclick="pickCfType(this)">${l}</button>`).join("")}</div></label><p class="cf-type-help">稳定支出适合房租、房贷、保费等固定或刚性费用；弹性支出适合日常消费与兴趣安排。</p>` : ""}
+    <div class="cf-editor-actions">${old ? `<button class="cf-delete" onclick="deleteCfItem('${kind}','${old.id}')">删除</button>` : ""}<button class="cf-primary" onclick="saveCfItem('${kind}','${old?.id||""}')">${old ? "保存" : "添加"}</button></div>
+  </div>`);
+  setTimeout(()=>document.getElementById("cfAmount")?.focus(),0);
+}
+function pickCfType(el) { el.parentElement.querySelectorAll("button").forEach((x)=>x.classList.remove("on")); el.classList.add("on"); }
+function saveCfItem(kind,id) {
+  const name = document.getElementById("cfName").value.trim(), amount = Number(document.getElementById("cfAmount").value), freq = document.getElementById("cfFreq").value;
+  if (!name || !(amount > 0)) { toast("请填写名称和金额"); return; }
+  const list = kind === "income" ? S.cashflow.incomeItems : S.cashflow.expenseItems;
+  const row = { id:id||uid(), name, amount, freq, kind };
+  if (kind === "expense") row.type = document.querySelector(".cf-types button.on")?.dataset.type || "other";
+  const at = list.findIndex((x)=>x.id===id); if (at >= 0) list[at] = row; else list.push(row);
+  S.cashflow.started = true; save(); closeMask(); render();
+}
+function deleteCfItem(kind,id) { const key=kind === "income" ? "incomeItems" : "expenseItems"; S.cashflow[key]=S.cashflow[key].filter((x)=>x.id!==id); save(); closeMask(); render(); }
 function trendSeriesOn() {
   return { cash: true, inv: true, fixed: true, rec: true, debt: true, ...(route.trendOn || {}) };
 }
