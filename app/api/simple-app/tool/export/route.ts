@@ -1,10 +1,17 @@
 import { NextRequest } from "next/server";
+import { getAuthUser } from "@/lib/auth";
 import { xlsxBuffer, type XlsxInvest } from "@/lib/simpleLedgerXlsx";
 
 export const runtime = "nodejs";
 
 /** POST { invest: XlsxInvest[] } → 返回「有知有行投资记账」xlsx 附件 */
 export async function POST(request: NextRequest) {
+  if (!getAuthUser(request)) {
+    return new Response(JSON.stringify({ ok: false, error: "未登录" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   const body = await request.json().catch(() => null);
   const invest = Array.isArray(body?.invest) ? (body.invest as XlsxInvest[]) : [];
   if (!invest.length) {

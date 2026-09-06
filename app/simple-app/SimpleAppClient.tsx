@@ -86,7 +86,7 @@ export default function SimpleAppClient() {
       });
     };
     window.downloadSimpleCashflowChart = (filename = "年度现金流") => {
-      const element = document.querySelector<HTMLElement>(".cf-share-image .cf-echart");
+      const element = document.querySelector<HTMLElement>(".cf-share-image .cf-echart, .cf-sankey-stage .cf-echart");
       const chart = element ? echarts.getInstanceByDom(element) : undefined;
       if (!chart) return;
       const link = document.createElement("a");

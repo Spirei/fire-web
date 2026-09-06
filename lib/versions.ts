@@ -2515,7 +2515,36 @@ export const V0_1_22_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_22_ENTRY;
+export const V0_1_23_ENTRY: VersionEntry = {
+  version: "v0.1.23",
+  date: "2026-09-07",
+  summary: "简化版年度现金流按参考图重做桑基图、编辑流程、分享导出与小屏适配。",
+  frontend: V0_1_22_ENTRY.frontend,
+  software: V0_1_22_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.23" } : item),
+  changes: [{
+    title: "简化版新增年度现金流规划与 ECharts 桑基图",
+    desc: "年度现金流仅在首次配置时进入计算器，完成后从总览卡片直接打开年度页；默认展示收入与支出桑基图，放大后可切换收入与支出/仅支出以及金额、比例、隐藏数据，收支、分类支出与年度结余均由同一年度口径计算。",
+    kind: "feature"
+  }, {
+    title: "现金流编辑、预算追踪与分享视图按移动端参考图重做",
+    desc: "收入和支出预估采用底部编辑页、彩虹金额输入、频率和支出类型选择；支出预算追踪支持排序；分享预览精简为图表、数据标签和保存图片，放大图下载按钮也可直接导出真实 PNG。",
+    kind: "feature"
+  }, {
+    title: "修复简化版小屏金额溢出与表单挤压",
+    desc: "修复全局 field 样式把添加/编辑投资资产、账户和汇总表单容器压成 44px 导致字段重叠的问题；补齐 320–500px 的窗口、金额、标题、列表和桑基图响应式规则，累计收益与超窄屏年度金额使用万单位。",
+    kind: "fix"
+  }, {
+    title: "修复简化版刷新控件闪现与金额初值",
+    desc: "页面准备完成前隐藏简化版窗口，避免刷新时右上角桌面控件闪现；更新收益金额默认留空，所有同类彩虹金额输入沿用完整记一笔的输入效果。",
+    kind: "fix"
+  }, {
+    title: "加固简化版账本导入导出接口",
+    desc: "Excel 导入和导出接口增加独立登录校验，不能绕过简化版页面直接调用；上传解析增加 10MB 文件上限，避免异常大文件占用服务资源。",
+    kind: "security"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_23_ENTRY;
 
 // 完整历史数组已拆分到 lib/versions-history.ts（约 200KB 历史文案，仅供版本弹窗
 // 懒加载引用）；本文件保留类型 + 当前版本条目，让设置页 / 健康检查只引用轻量常量。

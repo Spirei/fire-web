@@ -1,12 +1,15 @@
 import { NextRequest } from "next/server";
+import { getAuthUser } from "@/lib/auth";
 import { parseYouzhiyouxing, type XlsxInvest } from "@/lib/simpleLedgerXlsx";
 
 export const runtime = "nodejs";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 /** POST multipart（字段 file）→ 上传「有知有行」xlsx，返回解析后的投资账户数组 */
 export async function POST(request: NextRequest) {
+  if (!getAuthUser(request)) return json({ ok: false, error: "未登录" }, 401);
   let form: FormData;
   try {
     form = await request.formData();
@@ -16,6 +19,9 @@ export async function POST(request: NextRequest) {
   const file = form.get("file");
   if (!(file instanceof File)) {
     return json({ ok: false, error: "缺少文件" }, 400);
+  }
+  if (file.size > MAX_FILE_BYTES) {
+    return json({ ok: false, error: "文件不能超过 10MB" }, 413);
   }
 
   const name = String(file.name || "");
