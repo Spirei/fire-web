@@ -1008,22 +1008,36 @@ function cfSankeySvg(mode,full,metric) {
   const W=full?960:520,H=full?390:260;
   if (!t.income && !t.expenses) return `<div class="cf-sankey-empty">完成收支预估后生成现金流向图</div>`;
   if (mode === "expense") return cfExpenseSankey(W,H,t,expenses,metric);
-  const leftX=full?145:110, midX=full?430:270, rightX=full?780:420;
-  const top=full?112:74, bottom=full?314:210, total=Math.max(t.income,1);
-  const expenseH=Math.max(16,(bottom-top)*Math.min(t.expenses/total,.76));
-  const restH=Math.max(18,(bottom-top)-expenseH);
-  const incomeName=income.length===1?income[0].name:"预估收入";
+  const leftX=full?150:110, midX=full?420:270, splitX=full?650:420, rightX=full?800:420;
+  const top=full?105:74, bottom=full?325:210, total=Math.max(t.income,1), height=bottom-top;
+  const spendRatio=Math.min(Math.max(t.expenses/total,0),1);
+  const expenseH=Math.max(t.expenses?8:0,height*spendRatio), restH=Math.max(0,height-expenseH);
   const value=(n,base)=>metric==="ratio" ? (base ? Math.round(n/base*10000)/100+"%" : "0%") : cfShort(n);
   const path=(x1,y1,x2,y2,h,c)=>`<path d="M${x1} ${y1} C${(x1+x2)/2} ${y1},${(x1+x2)/2} ${y2},${x2} ${y2} L${x2} ${y2+h} C${(x1+x2)/2} ${y2+h},${(x1+x2)/2} ${y1+h},${x1} ${y1+h}Z" fill="${c}"/>`;
-  let out=path(leftX,top,midX,top,bottom-top,"#bee8f4");
-  out+=path(midX,top,rightX,top,expenseH,"#f1cbb8");
-  out+=path(midX,top+expenseH,rightX,top+expenseH,restH,"#c5e5e2");
+  const sources=income.filter(x=>cfAnnual(x)>0);
+  let sourceY=top, out="", labels="";
+  (sources.length?sources:[{name:"预估收入",amount:t.income,freq:"year"}]).forEach(x=>{
+    const amount=cfAnnual(x), h=height*amount/total;
+    out+=path(leftX,sourceY,midX,sourceY,h,"#bee8f4")+`<rect x="${leftX-9}" y="${sourceY}" width="10" height="${h}" rx="2" fill="#3dabcc"/>`;
+    if(full) labels+=`<text x="${leftX-18}" y="${sourceY+h/2+4}" text-anchor="end" class="income-label">${esc(x.name)} ${value(amount,total)}</text>`;
+    sourceY+=h;
+  });
+  out+=path(midX,top,splitX,top,expenseH,"#f1cbb8")+path(midX,top+expenseH,rightX,top+expenseH,restH,"#c5e5e2");
+  if(full && expenses.length){
+    let itemY=top;
+    expenses.filter(x=>cfAnnual(x)>0).forEach(x=>{
+      const amount=cfAnnual(x), h=height*Math.min(amount/total,spendRatio);
+      const palette=(x.type||"other")==="stable"?["#f1c9bf","#db7960"]:(x.type||"other")==="flexible"?["#f1d3b7","#da944e"]:["#eadfb4","#b9a15b"];
+      out+=path(splitX,itemY,rightX,itemY,h,palette[0])+`<rect x="${rightX-5}" y="${itemY}" width="10" height="${h}" rx="2" fill="${palette[1]}"/>`;
+      labels+=`<text x="${rightX+18}" y="${itemY+h/2+4}" class="expense-label" fill="${palette[1]}">${esc(x.name)} ${value(amount,total)}</text>`;
+      itemY+=h;
+    });
+  }
   return `<svg class="cf-sankey" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
-    ${out}<rect x="${leftX-9}" y="${top}" width="10" height="${bottom-top}" fill="#3dabcc"/><rect x="${midX-9}" y="${top}" width="18" height="${bottom-top}" fill="#3dabcc"/><rect x="${rightX-5}" y="${top}" width="10" height="${expenseH}" fill="#de7e4e"/><rect x="${rightX-5}" y="${top+expenseH}" width="10" height="${restH}" fill="url(#cfHatch)"/>
+    ${out}<rect x="${midX-9}" y="${top}" width="18" height="${height}" rx="2" fill="#3dabcc"/><rect x="${splitX-5}" y="${top}" width="10" height="${expenseH}" rx="2" fill="#de7e4e"/><rect x="${rightX-5}" y="${top+expenseH}" width="10" height="${restH}" fill="url(#cfHatch)"/>
     <defs><pattern id="cfHatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><line x1="0" y1="0" x2="0" y2="7" stroke="#4f9e99" stroke-width="3"/></pattern></defs>
-    <text x="${leftX-20}" y="${top+(bottom-top)/2}" text-anchor="end" class="income-label">${esc(incomeName)}${full?" "+value(t.income,t.income):""}</text>
-    <text x="${midX}" y="${top-18}" text-anchor="middle" class="income-label">预估收入${full?` ${value(t.income,t.income)}`:""}</text>
-    <text x="${rightX+18}" y="${top+expenseH/2+5}" class="expense-label">预估支出${full?` ${value(t.expenses,t.income)}`:""}</text>
+    ${labels}<text x="${midX}" y="${top-18}" text-anchor="middle" class="income-label">预估收入${full?` ${value(t.income,t.income)}`:""}</text>
+    <text x="${splitX}" y="${top-18}" text-anchor="middle" class="expense-label">预估支出${full?` ${value(t.expenses,t.income)}`:""}</text>
     <text x="${rightX+18}" y="${top+expenseH+restH/2+5}" class="rest-label">年度结余${full?` ${value(Math.max(t.surplus,0),t.income)}`:""}</text>
   </svg>`;
 }
