@@ -78,13 +78,22 @@ export default function SimpleAppClient() {
         window.setTimeout(() => chart.resize(), 100);
       });
     };
+    window.downloadSimpleCashflowChart = (filename = "年度现金流") => {
+      const element = document.querySelector<HTMLElement>(".cf-share-image .cf-echart");
+      const chart = element ? echarts.getInstanceByDom(element) : undefined;
+      if (!chart) return;
+      const link = document.createElement("a");
+      link.download = `${filename}.png`;
+      link.href = chart.getDataURL({ type:"png", pixelRatio:2, backgroundColor:"#101010" });
+      link.click();
+    };
     window.mountSimpleCashflowCharts(window.getSimpleCashflowChartData?.() || { income:[], expenses:[], incomeTotal:0, expensesTotal:0, surplus:0 });
     const observer = new MutationObserver((mutations) => {
       const added = mutations.some((mutation) => Array.from(mutation.addedNodes).some((node) => node instanceof Element && (node.matches(".cf-echart") || !!node.querySelector(".cf-echart"))));
       if (added) requestAnimationFrame(() => window.mountSimpleCashflowCharts?.(window.getSimpleCashflowChartData?.() || { income:[], expenses:[], incomeTotal:0, expensesTotal:0, surplus:0 }));
     });
     observer.observe(document.body, { childList:true, subtree:true });
-    return () => { observer.disconnect(); delete window.mountSimpleCashflowCharts; };
+    return () => { observer.disconnect(); delete window.mountSimpleCashflowCharts; delete window.downloadSimpleCashflowChart; };
   }, []);
 
   useEffect(() => {
@@ -154,6 +163,7 @@ declare global {
     remountSimpleApp?: () => void;
     getSimpleCashflowChartData?: () => CashflowChartPayload;
     mountSimpleCashflowCharts?: (payload: CashflowChartPayload) => void;
+    downloadSimpleCashflowChart?: (filename?: string) => void;
   }
 }
 
