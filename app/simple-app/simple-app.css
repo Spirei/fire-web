@@ -838,6 +838,25 @@
     .cf-delete svg { width:100%; height:100%; }
     html.dark .cf-page { --cf-stable:#482f2b; --cf-flex:#433728; --cf-other:#3d392b; }
     html.dark .cf-sheet-head { background:rgba(28,33,41,.92); }
+    @media (min-width: 761px) {
+      .cf-mask:has(.cf-editor) { align-items:center; padding:28px; }
+      .cf-mask:has(.cf-editor) .cf-sheet { width:min(720px,calc(100vw - 56px)); height:min(820px,calc(100dvh - 56px)); max-height:calc(100dvh - 56px); border-radius:28px; }
+      .cf-mask:has(.cf-editor) .cf-editor { min-height:calc(min(820px,calc(100dvh - 56px)) - 82px); padding:30px 40px 32px; gap:28px; }
+      .cf-mask:has(.cf-editor) .cf-editor label > input { height:86px; }
+      .cf-mask:has(.cf-editor) .cf-amount { min-height:118px; }
+      .cf-mask:has(.cf-editor) .cf-types button { height:58px; }
+      .cf-mask:has(.cf-editor) .cf-type-help { font-size:14px; padding:16px 20px; }
+      .cf-overview-card { margin-left:auto; margin-right:auto; width:calc(100% - 60px); max-width:760px; }
+      .cf-track-head,.cf-track-list { width:calc(100% - 60px); max-width:760px; margin-left:auto; margin-right:auto; padding-left:0; padding-right:0; }
+    }
+    @media (min-width: 501px) and (max-width: 760px) {
+      .cf-sheet { width:calc(100% - 28px); height:min(880px,calc(100dvh - 24px)); max-height:calc(100dvh - 24px); border-radius:28px 28px 0 0; }
+      .cf-editor { min-height:calc(min(880px,calc(100dvh - 24px)) - 82px); padding:30px 34px; gap:34px; }
+      .cf-editor label > input { height:96px; }
+      .cf-amount { min-height:138px; }
+      .cf-sankey-stage { overflow-x:auto; overscroll-behavior-inline:contain; }
+      .cf-sankey-stage .cf-sankey { min-width:860px; }
+    }
 
     :where(button, input, select, textarea):focus-visible {
       outline: 3px solid color-mix(in srgb, var(--blue) 44%, transparent);
@@ -911,4 +930,20 @@
       .cf-amount { min-height:128px; }
       .cf-types { gap:10px; }
       .cf-types button { height:58px; font-size:15px; }
+      .cf-overview-card { margin-left:16px; margin-right:16px; }
+      .cf-sankey-card { min-height:230px; }
+      .cf-sankey { min-height:225px; }
+      .cf-overview-metrics strong { font-size:27px; }
+      .cf-flow-meta { margin-left:22px; margin-right:22px; }
+      .cf-estimate > .cf-chart { min-height:112px; }
+    }
+    @media (max-width: 380px) {
+      .cf-tabs { grid-template-columns:1fr 20px 1fr; }
+      .cf-tabs button { height:64px; font-size:18px; }
+      .cf-total strong { font-size:39px; }
+      .cf-editor { padding-left:20px; padding-right:20px; }
+      .cf-types button { font-size:13px; }
+      .cf-overview-title h1 { font-size:24px; }
+      .cf-overview-title > div { gap:7px; }
+      .cf-overview-title > div button { padding:7px 8px; }
     }
