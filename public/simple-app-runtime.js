@@ -388,7 +388,8 @@ function leaveTrendHover(svg) {
 }
 function go(name, extra) {
   const prev = route.name;
-  route = { ...route, name, menu: false, invMenu: false, sortMenu: false, impMenu: false, editFlow: false, groupMenu: null, accMenu: false, showAll: false, ...(name === "invest" ? {} : { showArchived: false }), dlg: null, dlgTarget: null, ...(extra || {}) };
+  const freshEntry = (name === "addItem" || name === "addInvest") && prev !== name;
+  route = { ...route, name, menu: false, invMenu: false, sortMenu: false, impMenu: false, editFlow: false, groupMenu: null, accMenu: false, showAll: false, ...(name === "invest" ? {} : { showArchived: false }), ...(freshEntry ? { draft: null, more: false } : {}), dlg: null, dlgTarget: null, ...(extra || {}) };
   closeSankey();
   closeDrop();
   closeMask({ silent: true });
@@ -1049,19 +1050,28 @@ function openCfEditor(kind,name,id) {
   const heading = old && kind === "income" ? "修改收入" : esc(old ? old.name : name);
   showCfSheet(`<div class="cf-sheet-head cf-editor-head"><button onclick="closeMask()">×</button><h3>${heading}</h3>${old ? `<button class="cf-top-save" onclick="saveCfItem('${kind}','${old.id}')">保存</button>` : "<span></span>"}</div><div class="cf-editor">
     <label>名称<input id="cfName" value="${esc(old ? old.name : title)}" placeholder="输入名称"></label>
-    <label>金额<div class="cf-amount"><select id="cfFreq" onchange="syncCfAnnualHint('${kind}')"><option value="year" ${(old?.freq||"month")==="year"?"selected":""}>每年</option><option value="quarter" ${old?.freq==="quarter"?"selected":""}>每季</option><option value="month" ${(old?.freq||"month")==="month"?"selected":""}>每月</option></select><input id="cfAmount" type="number" inputmode="decimal" value="${old ? old.amount : ""}" placeholder="0" oninput="syncCfAnnualHint('${kind}')"><span>元</span></div><small class="cf-annual-hint" id="cfAnnualHint">${old ? `年度${kind === "income" ? "收入" : "支出"}金额为 ${num(cfAnnual(old))} 元` : ""}</small></label>
+    <label>金额<div class="cf-amount"><select id="cfFreq" onchange="syncCfAnnualHint('${kind}')"><option value="year" ${(old?.freq||"month")==="year"?"selected":""}>每年</option><option value="quarter" ${old?.freq==="quarter"?"selected":""}>每季</option><option value="month" ${(old?.freq||"month")==="month"?"selected":""}>每月</option></select><span class="cf-amount-number"><span class="cf-amount-display" id="cfAmountDisp" aria-hidden="true"></span><input id="cfAmount" class="cf-amount-input" inputmode="decimal" autocomplete="off" value="${old ? esc(formatAmtDigits(old.amount)) : ""}" aria-label="金额" onfocus="onCfAmountInput('${kind}',true)" oninput="onCfAmountInput('${kind}',true)" onblur="paintAmt('cfAmount',false)" onclick="this.setSelectionRange(this.value.length,this.value.length)"></span><span>元</span></div><small class="cf-annual-hint" id="cfAnnualHint">${old ? `年度${kind === "income" ? "收入" : "支出"}金额为 ${num(cfAnnual(old))} 元` : ""}</small></label>
     ${kind === "expense" ? `<label>类型<div class="cf-types">${[["stable","稳定支出"],["flexible","弹性支出"],["other","其他支出"]].map(([v,l])=>`<button class="${(old?.type||p.type||"other")===v?"on":""}" data-type="${v}" onclick="pickCfType(this)">${l}</button>`).join("")}</div></label><p class="cf-type-help">稳定支出适合房租、房贷、保费等固定或刚性费用；弹性支出适合日常消费与兴趣安排。</p>` : ""}
     <div class="cf-editor-actions">${old ? `<button class="cf-delete" onclick="deleteCfItem('${kind}','${old.id}')" aria-label="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M9 4h6l1 3H8l1-3ZM7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></button>` : `<button class="cf-primary" onclick="saveCfItem('${kind}','')">添加</button>`}</div>
   </div>`);
-  setTimeout(()=>document.getElementById("cfAmount")?.focus(),0);
+  setTimeout(()=>{ document.getElementById("cfAmount")?.focus(); onCfAmountInput(kind,true); },0);
+}
+function onCfAmountInput(kind,focused) {
+  const input=document.getElementById("cfAmount");
+  if (!input) return;
+  const formatted=formatAmtDigits(input.value);
+  input.value=formatted;
+  input.setSelectionRange(formatted.length,formatted.length);
+  paintAmt("cfAmount",focused);
+  syncCfAnnualHint(kind);
 }
 function syncCfAnnualHint(kind) {
-  const amount=Number(document.getElementById("cfAmount")?.value)||0, freq=document.getElementById("cfFreq")?.value||"month", el=document.getElementById("cfAnnualHint");
+  const amount=amtNumber("cfAmount")||0, freq=document.getElementById("cfFreq")?.value||"month", el=document.getElementById("cfAnnualHint");
   if (el) el.textContent=amount ? `年度${kind === "income" ? "收入" : "支出"}金额为 ${num(amount*cfMultiplier(freq))} 元` : "";
 }
 function pickCfType(el) { el.parentElement.querySelectorAll("button").forEach((x)=>x.classList.remove("on")); el.classList.add("on"); }
 function saveCfItem(kind,id) {
-  const name = document.getElementById("cfName").value.trim(), amount = Number(document.getElementById("cfAmount").value), freq = document.getElementById("cfFreq").value;
+  const name = document.getElementById("cfName").value.trim(), amount = amtNumber("cfAmount"), freq = document.getElementById("cfFreq").value;
   if (!name || !(amount > 0)) { toast("请填写名称和金额"); return; }
   const list = kind === "income" ? S.cashflow.incomeItems : S.cashflow.expenseItems;
   const row = { id:id||uid(), name, amount, freq, kind };
@@ -1554,7 +1564,7 @@ function paintAmt(id, focused) {
   if (focused == null) focused = document.activeElement === input;
   const formatted = formatAmtDigits(input.value);
   let di = 0, html = "";
-  if (!formatted) html = `<span style="color:var(--faint)">0</span>`;
+  if (!formatted) html = input.dataset.emptyDisplay === "blank" ? "" : `<span style="color:var(--faint)">0</span>`;
   else {
     for (const ch of formatted) {
       if (ch === "," || ch === ".") html += `<span style="color:var(--muted)">${ch}</span>`;
@@ -1576,7 +1586,8 @@ function onAmtInput(id) {
 function amtNumber(id) {
   const el = document.getElementById(id);
   if (!el) return NaN;
-  return Number(String(el.value).replace(/,/g, ""));
+  const raw = String(el.value).replace(/,/g, "").trim();
+  return raw === "" ? NaN : Number(raw);
 }
 function amtField(id, value, cur) {
   const meta = curMeta(cur);
@@ -1585,7 +1596,7 @@ function amtField(id, value, cur) {
     <b class="amt-sym">${meta.symbol}</b>
     <span class="amt-box">
       <span class="amt-display" id="${id}Disp"></span>
-      <input id="${id}" class="amt-input" inputmode="decimal" autocomplete="off" value="${esc(shown)}" aria-label="金额"
+      <input id="${id}" class="amt-input" inputmode="decimal" autocomplete="off" value="${esc(shown)}" data-empty-display="blank" aria-label="金额"
         onfocus="onAmtInput('${id}')" oninput="onAmtInput('${id}')" onblur="paintAmt('${id}',false)" onclick="this.setSelectionRange(this.value.length,this.value.length)" />
     </span>
     <small class="amt-code">${cur || "CNY"}</small>
@@ -2410,7 +2421,7 @@ function openUpdate(id, opts) {
     </div>
     <div>
       <span class="modal-lab" style="display:flex;justify-content:space-between"><span>当前资产金额</span><span>${meta.name} · ${a.cur}</span></span>
-      ${amtField("newAmt", a.amount, a.cur)}
+      ${amtField("newAmt", "", a.cur)}
       <div class="modal-hint" aria-live="polite">
         <span id="updHint">现有市值 ${num(a.amount)} ${meta.symbol === "$" ? "美元" : meta.symbol === "HK$" ? "港元" : "元"}</span>
         <span>记账后 <b id="updAfter">${num(a.amount)}</b></span>

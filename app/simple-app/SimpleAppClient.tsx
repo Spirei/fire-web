@@ -56,13 +56,13 @@ export default function SimpleAppClient() {
         <div className="win-body" id="app" />
         <div className="dock" id="foot" />
         <div className="sk-full" id="skFull" />
+        <div className="mask" id="mask" onClick={(event) => {
+          if (event.target === event.currentTarget) window.closeMask?.();
+        }} />
         {(["nw", "n", "ne", "e", "w", "sw", "s", "se"] as const).map((direction) => (
           <i className={`handle ${direction}`} data-dir={direction} key={direction} />
         ))}
       </div>
-      <div className="mask" id="mask" onClick={(event) => {
-        if (event.target === event.currentTarget) window.closeMask?.();
-      }} />
       <div className="toast" id="toast" />
       <Script
         src="/simple-app-runtime.js"
