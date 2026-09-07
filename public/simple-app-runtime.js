@@ -1263,15 +1263,6 @@ function family() {
   const t = totals();
   const dA = t.prev ? t.assets - t.prev.assets : 0;
   const dD = t.prev ? t.debt - t.prev.debt : 0;
-  const p = t.prev || { cash: t.cash, fixed: t.fixed, inv: t.inv, rec: t.rec, debt: t.debt };
-  const deltas = [
-    ["流动资金", t.cash - (p.cash || 0)],
-    ["固定资产", t.fixed - (p.fixed || 0)],
-    ["投资理财", t.inv - (p.inv || 0)],
-    ["应收款", t.rec - (p.rec || 0)],
-    ["负债", t.debt - (p.debt || 0)]
-  ];
-  const maxD = Math.max(...deltas.map((x) => Math.abs(x[1])), 1);
   const cashPct = t.assets ? t.cash / t.assets * 100 : 0;
   const invPct = t.assets ? t.inv / t.assets * 100 : 0;
   const logs = groupedLogs();
@@ -1294,15 +1285,13 @@ function family() {
       <div class="k">净资产 <b style="color:var(--ink)">${num(t.net)}</b>　负债率 ${t.empty ? "—" : (S.hide ? "****" : t.ratio.toFixed(2) + "%")}</div>
       <div class="inner">
         <div class="split"><span>${compareLabel}</span><button class="faint" onclick="go('calendar')">资产月历 ›</button></div>
-        <div class="cmp">
-          <div style="display:flex;gap:8px;align-items:center"><span class="ico-asset" aria-hidden="true"></span><div><span class="k">总资产</span><div class="${dA ? tone(dA) : "muted"}">${dA ? "↑ " + num(Math.abs(dA)) : "没有变化"}</div></div></div>
-          <div style="display:flex;gap:8px;align-items:center"><span class="ico-debt" aria-hidden="true"></span><div><span class="k">总负债</span><div class="${dD ? tone(-dD) : "muted"}">${dD ? signedNum(dD) : "没有变化"}</div></div></div>
+        <div class="family-change-body">
+          <div class="spark">${sparkCols([], dA)}</div>
+          <div class="family-change-copy">
+            <div class="${dA ? tone(dA) : "muted"}">${dA ? `资产${dA > 0 ? "增加" : "减少"} <b>${S.hide ? "****" : num(Math.abs(dA))}</b> 元` : "资产没有变化"}</div>
+            <div class="${dD ? tone(-dD) : "muted"}">${dD ? `负债${dD > 0 ? "增加" : "减少"} <b>${S.hide ? "****" : num(Math.abs(dD))}</b> 元` : "负债没有变化"}</div>
+          </div>
         </div>
-        <div class="delta-bars">${deltas.map(([name, d]) => `<div>
-          <b class="${d ? tone(name === "负债" ? -d : d) : "faint"}">${!d ? "没有变化" : (S.hide ? "****" : ((d > 0 ? "↑" : "↓") + Math.round(Math.abs(d)).toLocaleString("zh-CN")))}</b>
-          <i class="${d ? "on" : ""}" style="height:${barH(d, maxD, 52)}px"></i>
-          <span>${name}</span>
-        </div>`).join("")}</div>
       </div>
     </div>
     <div class="card" style="margin:0 16px 12px;padding:16px;border-radius:18px">

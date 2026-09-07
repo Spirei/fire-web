@@ -354,6 +354,11 @@
     html.dark .spark i { background:#5c5488; }
     .cmp { display: flex; gap: 18px; margin: 12px 0; }
     .cmp .ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; background: var(--lav); flex: none; }
+    .family-change-body { display:grid; grid-template-columns:minmax(130px,.9fr) minmax(0,1.1fr); align-items:end; gap:22px; margin-top:12px; }
+    .family-change-body .spark { min-width:0; }
+    .family-change-copy { align-self:center; font-size:14px; line-height:1.45; }
+    .family-change-copy > div + div { margin-top:10px; }
+    .family-change-copy b { font-size:17px; font-variant-numeric:tabular-nums; }
     .delta-bars { display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; height: 72px; gap: 6px; margin-top: 4px; }
     .delta-bars > div { min-width: 0; text-align: center; }
     .delta-bars b { display: block; font-size: 10px; font-weight: 600; color: var(--faint); min-height: 14px; }
@@ -988,6 +993,9 @@
       .metric > * { min-width: 0; }
       .metric .k { gap:3px; font-size:11px; line-height:1.35; }
       .metric .q { margin-left:0; }
+      .family-change-body { grid-template-columns:minmax(118px,.95fr) minmax(0,1.05fr); gap:14px; }
+      .family-change-copy { font-size:12px; }
+      .family-change-copy b { font-size:14px; }
       .pills { overflow-x: auto; scrollbar-width: none; }
       .pills::-webkit-scrollbar { display: none; }
       .modal { border-radius: 24px; }
