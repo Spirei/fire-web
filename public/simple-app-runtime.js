@@ -1023,10 +1023,10 @@ function cfOverviewPage() {
   return `<section class="screen on cf-page cf-overview">
     <div class="cf-overview-title"><button class="back" onclick="go('home')" aria-label="返回">${chevLeft()}</button><div><h1>年度现金流</h1><button>${y} 年<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button></div><button class="cf-share" onclick="openCfShare()" aria-label="分享"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/></svg></button></div>
     <div class="cf-overview-card">
-      <div class="cf-overview-metrics"><div><span class="cf-balance-label">预估年度结余 ${hideBtn()}</span><strong>${num(t.surplus)}<em>元</em></strong><small>预估收入 <i class="money-wide">${num(t.income)}</i><i class="money-short">${cfShort(t.income)}</i></small></div><div><span>储蓄率</span><strong>${t.income ? Math.round(t.rate * 10) / 10 + "%" : "—"}</strong><small>预估支出 <i class="money-wide">${num(t.expenses)} 元</i><i class="money-short">${cfShort(t.expenses)}</i></small></div><button onclick="goCashflowStep('income')">编辑 ›</button></div>
-      <div class="cf-sankey-card">${cfSankeySvg("combined",false)}<button class="cf-expand" onclick="openCfSankey()" aria-label="展开桑基图">⌗</button></div>
+      <div class="cf-overview-metrics"><div><span class="cf-balance-label">预估年度结余 ${hideBtn()}</span><strong>${num(t.surplus)}<em>元</em></strong><small>预估收入 <i class="money-wide">${num(t.income)}</i><i class="money-short">${cfShort(t.income)}</i></small></div><div><div class="cf-rate-label"><span>储蓄率</span><button type="button" onclick="goCashflowStep('income')">编辑 ›</button></div><strong>${t.income ? Math.round(t.rate * 10) / 10 + "%" : "—"}</strong><small>预估支出 <i class="money-wide">${num(t.expenses)} 元</i><i class="money-short">${cfShort(t.expenses)}</i></small></div></div>
+      <div class="cf-sankey-card">${cfSankeySvg("combined",false)}<button class="cf-expand" onclick="openCfSankey()" aria-label="展开桑基图"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h6v6M11 19H5v-6"/></svg></button></div>
     </div>
-    <div class="cf-track-head"><div><h2>支出预算追踪</h2><p>${y} 年度支出 ${num(t.expenses)} 元</p></div><div class="invest-more"><button onclick="route.cfTrackMenu=!route.cfTrackMenu;render({resize:false,keepScroll:true})" aria-label="更多">⋯</button>${route.cfTrackMenu?`<div class="menu inv-menu"><button onclick="toggleCfSort()"><span class="menu-icon drag-icon">⠿</span>${route.cfSort?"保存排序":"支出排序"}</button></div>`:""}</div></div>
+    <div class="cf-track-head"><div><h2>支出预算追踪</h2><p>${y} 年度支出 ${num(t.expenses)} 元</p></div><button type="button" class="cf-track-sort ${route.cfSort ? "on" : ""}" onclick="toggleCfSort()" aria-label="${route.cfSort ? "保存排序" : "支出排序"}" title="${route.cfSort ? "保存排序" : "支出排序"}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h11M8 12h8M8 18h5"/><path d="M4 7l2-2 2 2M4 17l2 2 2-2"/></svg></button></div>
     <div class="cf-track-list">${(S.cashflow.expenseItems || []).map(x=>`<div class="${route.cfSort?"sortable-asset":""}" ${route.cfSort?`draggable="true" ondragstart="dragCfExpenseStart(event,'${x.id}')" ondragend="dragInvestEnd(event)" ondragover="event.preventDefault()" ondrop="dropCfExpense(event,'${x.id}')"`:""}>${cfTrackCard(x)}</div>`).join("") || `<div class="cf-track-empty">添加支出计划后，将在这里追踪每月预算</div>`}</div>
   </section>`;
 }
@@ -1236,15 +1236,11 @@ function trendCard() {
   </div>`;
 }
 function sparkCols(snaps, dA) {
-  const cols = snaps.length ? snaps.slice(-3) : [{ assets: 0 }, { assets: 0 }, { assets: 0 }];
-  while (cols.length < 3) cols.unshift({ assets: 0 });
-  const maxA = Math.max(...cols.map((s) => Math.abs(s.assets)), 1);
-  return cols.map((s, i) => {
-    const last = i === cols.length - 1;
-    const changed = last && dA;
-    const arr = changed ? (dA > 0 ? "↑" : "↓") : "→";
-    return `<div><span class="arr ${changed ? "hot" : ""}">${arr}</span><i class="${changed ? "up" : ""}" style="height:${barH(s.assets, maxA, 52)}px"></i></div>`;
-  }).join("");
+  const state = dA > 0 ? "up" : dA < 0 ? "down" : "flat";
+  const arrow = state === "up" ? "↑" : state === "down" ? "↓" : "→";
+  return `<div class="spark-edge"><span class="arr">→</span><i></i></div>
+    <div class="spark-current ${state}"><span class="arr">${arrow}</span><i></i></div>
+    <div class="spark-edge"><span class="arr">→</span><i></i></div>`;
 }
 function setCf(key, value) {
   S.cashflow[key] = value === "" ? 0 : Number(value) || 0;
