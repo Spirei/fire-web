@@ -1042,7 +1042,7 @@
     }
     @media (max-width: 380px) {
       .metric { grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; }
-      .metric .k { gap:2px; font-size:9px; }
+      .metric .k { gap:2px; font-size:9.5px; letter-spacing:-.02em; }
       .metric .q { width:12px; height:12px; flex-basis:12px; font-size:8px; }
       .metric b { font-size:13px; white-space:nowrap; }
       .cf-tabs { grid-template-columns:1fr 20px 1fr; }
