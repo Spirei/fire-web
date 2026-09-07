@@ -1,7 +1,12 @@
 // 在首帧绘制前恢复窗口宽度，避免先按默认 600px 渲染后再向右扩张。
     try {
       const savedWin = JSON.parse(localStorage.getItem("fire-simple-win") || "null");
-      if (savedWin && Number.isFinite(savedWin.w)) document.documentElement.style.setProperty("--saved-win-w", Math.max(360, savedWin.w) + "px");
+      const viewportW = window.innerWidth || document.documentElement.clientWidth;
+      const viewportChanged = savedWin && (!Number.isFinite(savedWin.vw) || Math.abs(savedWin.vw - viewportW) > 48);
+      const restoredW = viewportChanged && viewportW >= 1100
+        ? Math.min(1040, viewportW - 64)
+        : Math.min(Math.max(360, Number(savedWin?.w) || 680), Math.max(360, viewportW - 16));
+      document.documentElement.style.setProperty("--saved-win-w", restoredW + "px");
     } catch {}
 
 const KEY = "fire-simple-book-v3";
@@ -2811,26 +2816,42 @@ function toggleTheme() {
 }
 
 const WIN_KEY = "fire-simple-win";
-const DESKTOP_LAYOUT_KEY = "fire-simple-desktop-layout-v2";
 const winEl = document.getElementById("win");
 let winState = { x: 24, y: 24, w: 680, h: 0, fixed: false };
 try {
   const saved = JSON.parse(localStorage.getItem(WIN_KEY) || "null");
-  if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) winState = { ...winState, ...saved, h: Number.isFinite(saved.h) ? saved.h : 0 };
-  if (window.innerWidth >= 1100 && !localStorage.getItem(DESKTOP_LAYOUT_KEY)) {
+  if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+    winState = { ...winState, ...saved, h: Number.isFinite(saved.h) ? saved.h : 0 };
+    const viewportChanged = !Number.isFinite(saved.vw) || Math.abs(saved.vw - window.innerWidth) > 48;
+    if (viewportChanged) {
+      const enteringDesktop = window.innerWidth >= 1100 && (!Number.isFinite(saved.vw) || saved.vw < 1100);
+      const nextW = enteringDesktop ? Math.min(1040, window.innerWidth - 64) : Math.min(winState.w, Math.max(360, window.innerWidth - 16));
+      const savedW = Number.isFinite(saved.w) ? saved.w : winState.w;
+      const oldCenterRatio = Number.isFinite(saved.vw) && saved.vw > 0
+        ? Math.min(1, Math.max(0, (saved.x + savedW / 2) / saved.vw))
+        : .5;
+      const edge = window.innerWidth <= 376 ? 0 : 8;
+      winState.w = nextW;
+      winState.h = enteringDesktop ? 0 : winState.h;
+      winState.x = Math.max(edge, Math.min(window.innerWidth - nextW - edge, Math.round(window.innerWidth * oldCenterRatio - nextW / 2)));
+      winState.y = Math.max(8, Math.min(winState.y, window.innerHeight - 80));
+    }
+  } else if (window.innerWidth >= 1100) {
     winState.w = Math.min(1040, window.innerWidth - 64);
-    winState.h = 0;
-    winState.x = Math.max(24, Math.round((window.innerWidth - winState.w) / 2));
-    winState.y = 24;
-    localStorage.setItem(DESKTOP_LAYOUT_KEY, "1");
-    localStorage.setItem(WIN_KEY, JSON.stringify(winState));
-    document.documentElement.style.setProperty("--saved-win-w", winState.w + "px");
+    winState.x = Math.round((window.innerWidth - winState.w) / 2);
   }
+  saveWin();
+  document.documentElement.style.setProperty("--saved-win-w", winState.w + "px");
 } catch {}
 function pageMinW() { return 360; }
 function displayW() { return Math.max(winState.w, pageMinW()); }
 function saveWin() {
-  try { localStorage.setItem(WIN_KEY, JSON.stringify({ x: winState.x, y: winState.y, w: winState.w, h: winState.h, fixed: winState.fixed })); } catch {}
+  try {
+    localStorage.setItem(WIN_KEY, JSON.stringify({
+      x: winState.x, y: winState.y, w: winState.w, h: winState.h, fixed: winState.fixed,
+      vw: window.innerWidth, vh: window.innerHeight
+    }));
+  } catch {}
 }
 let _syncToken = 0;
 function syncScroll() {
