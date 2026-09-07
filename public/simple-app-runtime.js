@@ -841,7 +841,7 @@ function home() {
   const snaps = S.snaps.slice(0, 3).reverse();
   const maxA = Math.max(...snaps.map((s) => Math.abs(s.assets)), 1);
   const yearProfit = thisYearInvestProfit();
-  return `<section class="screen on">
+  return `<section class="screen on home-screen">
     <div class="pad" style="display:flex;align-items:center;gap:10px;padding-top:18px">
       <h1 style="margin:0;display:flex;align-items:center;gap:8px;flex:1">家庭财务总览 ${hideBtn()}</h1>
       <button class="weather" type="button" onclick="go('weather')">${weatherSvg()}财务晴雨表</button>
@@ -2811,11 +2811,21 @@ function toggleTheme() {
 }
 
 const WIN_KEY = "fire-simple-win";
+const DESKTOP_LAYOUT_KEY = "fire-simple-desktop-layout-v2";
 const winEl = document.getElementById("win");
 let winState = { x: 24, y: 24, w: 680, h: 0, fixed: false };
 try {
   const saved = JSON.parse(localStorage.getItem(WIN_KEY) || "null");
   if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) winState = { ...winState, ...saved, h: Number.isFinite(saved.h) ? saved.h : 0 };
+  if (window.innerWidth >= 1100 && !localStorage.getItem(DESKTOP_LAYOUT_KEY)) {
+    winState.w = Math.min(1040, window.innerWidth - 64);
+    winState.h = 0;
+    winState.x = Math.max(24, Math.round((window.innerWidth - winState.w) / 2));
+    winState.y = 24;
+    localStorage.setItem(DESKTOP_LAYOUT_KEY, "1");
+    localStorage.setItem(WIN_KEY, JSON.stringify(winState));
+    document.documentElement.style.setProperty("--saved-win-w", winState.w + "px");
+  }
 } catch {}
 function pageMinW() { return 360; }
 function displayW() { return Math.max(winState.w, pageMinW()); }

@@ -907,8 +907,26 @@
       .cf-mask:has(.cf-editor) .cf-amount { min-height:118px; }
       .cf-mask:has(.cf-editor) .cf-types button { height:58px; }
       .cf-mask:has(.cf-editor) .cf-type-help { font-size:14px; padding:16px 20px; }
-      .cf-overview-card { margin-left:auto; margin-right:auto; width:calc(100% - 60px); max-width:760px; }
-      .cf-track-head,.cf-track-list { width:calc(100% - 60px); max-width:760px; margin-left:auto; margin-right:auto; padding-left:0; padding-right:0; }
+      .cf-overview-card { margin-left:auto; margin-right:auto; width:calc(100% - 60px); max-width:900px; }
+      .cf-track-head,.cf-track-list { width:calc(100% - 60px); max-width:900px; margin-left:auto; margin-right:auto; padding-left:0; padding-right:0; }
+    }
+    @media (min-width: 900px) and (pointer:fine) {
+      .home-screen > .pad { padding:26px 30px 4px!important; }
+      .home-screen > .pad h1 { font-size:32px!important; }
+      .home-screen > .card.lav { min-height:274px; margin:18px 30px!important; padding:26px 28px!important; border-radius:26px; }
+      .home-screen > .card.lav .n { font-size:44px; }
+      .home-screen > .card.lav .spark { height:104px; }
+      .home-screen > .grid2 { gap:18px; padding:0 30px 30px; }
+      .home-screen > .grid2 .mini { min-height:220px; padding:24px; border-radius:24px; }
+      .home-screen .inv-home-returns { margin-top:24px; padding:16px 15px; }
+      .home-screen .cashflow-preview { margin-top:40px; }
+      .cf-overview-title { max-width:960px; margin:0 auto; width:calc(100% - 40px); padding-top:34px; }
+      .cf-overview-title h1 { font-size:36px; }
+      .cf-overview-metrics { padding:14px 30px 28px; }
+      .cf-overview-metrics strong { font-size:34px; }
+      .cf-sankey-card { min-height:330px; }
+      .cf-sankey { min-height:320px; }
+      .cf-track-head { margin-top:54px; }
     }
     @media (min-width: 501px) and (max-width: 760px) {
       .cf-sheet { width:calc(100% - 28px); height:min(880px,calc(100% - 18px)); max-height:calc(100% - 18px); border-radius:28px 28px 0 0; }
