@@ -2307,7 +2307,7 @@ function account() {
       <div class="split"><span class="k">资产 (${unit}) ${hideBtn()}</span><span class="faint">${daysAgo(a.updated)}</span></div>
       <div class="n">${num(a.amount)}</div>
       <div class="metric">
-        <div><div class="k">累计收益 (${unit})</div><b class="${tone(st.pnl)}">${num(st.pnl)}</b></div>
+        <div><div class="k">累计收益</div><b class="${tone(st.pnl)}">${compactSignedNum(st.pnl)}</b></div>
         <div><div class="k"><span>资金加权收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('mwr','${a.id}')" aria-label="了解资金加权收益率">?</button></div><b class="${st.mwr == null ? "faint" : tone(st.mwr)}">${st.mwr == null ? "暂无" : pct(st.mwr)}</b></div>
         <div><div class="k"><span>年化收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('annual','${a.id}')" aria-label="了解年化收益率">?</button></div><b class="${st.ytd == null ? "faint" : tone(st.ytd)}">${st.ytd == null ? "暂无" : pct(st.ytd)}</b></div>
       </div>
