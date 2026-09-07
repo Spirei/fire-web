@@ -384,9 +384,9 @@
     .pencil-btn.is-on { color: var(--blue); }
     .tree-link { display: block; width: 100%; height: 26px; margin: -2px 0; }
     .tree-link path { fill: none; stroke: var(--muted); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-    .fund-flow-grid { position:relative; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); grid-template-rows:repeat(3,96px); gap:34px 12px; width:100%; max-width:620px; margin:18px auto 4px; padding:0 2px; }
+    .fund-flow-grid { position:relative; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); grid-template-rows:repeat(3,112px); gap:42px 12px; width:100%; max-width:520px; margin:24px auto 8px; padding:0 2px; }
     .fund-flow-links { position:absolute; z-index:0; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
-    .fund-flow-links path { fill:none; stroke:#eeeeef; stroke-width:2; vector-effect:non-scaling-stroke; }
+    .fund-flow-links path { fill:none; stroke:#f0f0f1; stroke-width:2; vector-effect:non-scaling-stroke; }
     .fund-flow-card { position:relative; z-index:1; display:flex; min-width:0; min-height:0; flex-direction:column; justify-content:center; align-items:center; border:1px solid #ececee; border-radius:18px; padding:12px 10px; background:#fafafa; color:var(--ink); text-align:center; box-shadow:0 1px 2px rgba(0,0,0,.015); transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease; }
     .fund-flow-card:hover { transform:translateY(-1px); border-color:#dedee1; box-shadow:0 5px 14px rgba(0,0,0,.045); }
     .fund-flow-card--edit { cursor: pointer; }
