@@ -2170,11 +2170,10 @@ function compose(st, accountId, unit = "元") {
     <div class="split"><span class="ttl"><b>资产构成${canEdit ? `（${unit}）` : ""}</b>${canEdit ? `<button class="pencil-btn ${editing ? "is-on" : ""}" type="button" onclick="toggleInvestEdit()" title="${editing ? "退出编辑" : "编辑投入 / 转出"}" aria-label="编辑投入转出">${icoPencil()}</button>` : ""}</span><div class="range-select"><button type="button" class="ghost-btn" aria-expanded="${!!route.composeRangeOpen}" onclick="event.stopPropagation();route.composeRangeOpen=!route.composeRangeOpen;render({resize:false,keepScroll:true})">${composeRangeLabel}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.composeRangeOpen ? `<div class="dd-menu">${[["all","记账以来"],["ytd","今年"],["1y","近 1 年"]].map(([v,l]) => `<button type="button" class="dd-item ${composeRange === v ? "on" : ""}" onclick="event.stopPropagation();setComposeRange('${v}')"><span>${l}</span>${composeRange === v ? `<span class="tick">✓</span>` : ""}</button>`).join("")}</div>` : ""}</div></div>
     <div class="fund-flow-grid">
       <svg class="fund-flow-links" viewBox="0 0 600 390" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M200 102 C200 142 300 130 300 174"/>
-        <path d="M400 102 C400 142 300 130 300 174"/>
-        <path d="M100 270 C100 308 300 292 300 334"/>
-        <path d="M300 270 L300 334"/>
-        <path d="M500 270 C500 308 300 292 300 334"/>
+        <path d="M200 104 C200 130 300 119 300 136 M400 104 C400 130 300 119 300 136 M300 136 L300 143"/>
+        <path d="M100 247 C100 274 300 263 300 279"/>
+        <path d="M300 247 L300 286"/>
+        <path d="M500 247 C500 274 300 263 300 279"/>
       </svg>
       ${f("投入", compactSignedNum(st.inAmt), "2 / span 2", 1, { kind: "in", color: red })}
       ${f("转出", st.outAmt ? "-" + compactNum(st.outAmt) : "0.00", "4 / span 2", 1, { kind: "out", color: green })}

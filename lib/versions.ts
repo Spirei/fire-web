@@ -2572,7 +2572,20 @@ export const V0_1_23_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_23_ENTRY;
+export const V0_1_24_ENTRY: VersionEntry = {
+  version: "v0.1.24",
+  date: "2026-09-08",
+  summary: "继续精修简化版投资资产构成的资金汇聚曲线与节点连接。",
+  frontend: V0_1_23_ENTRY.frontend,
+  software: V0_1_23_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.24" } : item),
+  changes: [{
+    title: "资产构成汇聚曲线精确连接节点边框",
+    desc: "按参考图重新校准投入、转出、期初金额、净投入、收益与期末金额之间的曲线：左右支线使用缓弧向中心收拢，汇合后保留短垂直主干，并精确停在下一层卡片的上下边框中心，解决期末金额连线被卡片遮挡、看起来没有连接的问题。",
+    kind: "fix"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_24_ENTRY;
 
 // 完整历史数组已拆分到 lib/versions-history.ts（约 200KB 历史文案，仅供版本弹窗
 // 懒加载引用）；本文件保留类型 + 当前版本条目，让设置页 / 健康检查只引用轻量常量。
