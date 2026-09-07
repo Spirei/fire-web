@@ -384,30 +384,19 @@
     .pencil-btn.is-on { color: var(--blue); }
     .tree-link { display: block; width: 100%; height: 26px; margin: -2px 0; }
     .tree-link path { fill: none; stroke: var(--muted); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-    .fund-flow-grid { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(74px, auto)); gap: 12px 10px; width: 100%; margin-top: 8px; }
-    .fund-flow-bracket, .fund-flow-center-line { pointer-events: none; position: absolute; z-index: 0; color: var(--muted); }
-    .fund-flow-bracket { top: calc((100% - 24px)/6); bottom: calc((100% - 24px)/6); width: 6px; border-top: 1.35px solid currentColor; border-right: 1.35px solid currentColor; border-bottom: 1.35px solid currentColor; border-radius: 0 7px 7px 0; }
-    .fund-flow-bracket--left { left: calc(33.333333% - 8px); }
-    .fund-flow-bracket--right { left: calc(66.666667% - 4px); }
-    .fund-flow-center-line { top: 50%; width: 6px; border-top: 1.35px solid currentColor; }
-    .fund-flow-center-line--left { left: calc(33.333333% - 2px); }
-    .fund-flow-center-line--right { left: calc(66.666667% + 2px); }
-    .fund-flow-card { position: relative; z-index: 1; display: flex; min-width: 0; min-height: 74px; flex-direction: column; justify-content: center; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.02); transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
-    .fund-flow-card:hover { transform: translateY(-1px); border-color: var(--dash); box-shadow: 0 5px 14px rgba(0,0,0,.06); }
-    .fund-flow-card--flow { border-color: var(--add-head); background: var(--invest); }
-    .fund-flow-card--result { border-color: #399bf0; background: linear-gradient(145deg, #4ca7f6, #328fe7); color: #fff; box-shadow: 0 8px 22px rgba(44,139,224,.2); }
-    .fund-flow-card--result:hover { box-shadow: 0 10px 26px rgba(44,139,224,.25); }
+    .fund-flow-grid { position:relative; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); grid-template-rows:repeat(3,96px); gap:34px 12px; width:100%; max-width:620px; margin:18px auto 4px; padding:0 2px; }
+    .fund-flow-links { position:absolute; z-index:0; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+    .fund-flow-links path { fill:none; stroke:#eeeeef; stroke-width:2; vector-effect:non-scaling-stroke; }
+    .fund-flow-card { position:relative; z-index:1; display:flex; min-width:0; min-height:0; flex-direction:column; justify-content:center; align-items:center; border:1px solid #ececee; border-radius:18px; padding:12px 10px; background:#fafafa; color:var(--ink); text-align:center; box-shadow:0 1px 2px rgba(0,0,0,.015); transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease; }
+    .fund-flow-card:hover { transform:translateY(-1px); border-color:#dedee1; box-shadow:0 5px 14px rgba(0,0,0,.045); }
     .fund-flow-card--edit { cursor: pointer; }
-    .fund-flow-label { color: var(--muted); font-size: 12px; font-weight: 700; line-height: 1.35; white-space: nowrap; }
-    .fund-flow-value { margin-top: 6px; font-size: 14px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; letter-spacing: -.005em; white-space: nowrap; }
-    .fund-flow-card--result .fund-flow-label { color: rgba(255,255,255,.88); }
-    .fund-flow-card--result .fund-flow-value { color: #fff; }
-    html.dark .fund-flow-bracket, html.dark .fund-flow-center-line { color: var(--faint); }
+    .fund-flow-label { color:#5f6065; font-size:14px; font-weight:500; line-height:1.25; white-space:nowrap; }
+    .fund-flow-label small { color:#68696e; font-size:11px; font-weight:500; }
+    .fund-flow-value { margin-top:8px; max-width:100%; overflow:hidden; text-overflow:ellipsis; font-size:15px; font-weight:600; line-height:1.15; font-variant-numeric:tabular-nums; letter-spacing:-.01em; white-space:nowrap; }
+    html.dark .fund-flow-links path { stroke:#30323a; }
     html.dark .fund-flow-card { border-color: var(--line); background: var(--card); color: var(--ink); }
-    html.dark .fund-flow-card--flow { border-color: var(--line); background: var(--invest); }
-    html.dark .fund-flow-card--result { border-color: #4a9ff2; background: linear-gradient(145deg, #55a9f6, #3a92e5); color: #fff; box-shadow: 0 8px 24px rgba(27,110,193,.24); }
-    html.dark .fund-flow-label { color: var(--muted); }
-    html.dark .fund-flow-card--result .fund-flow-label { color: rgba(255,255,255,.9); }
+    html.dark .fund-flow-card { border-color:#30323a; background:#1c222d; }
+    html.dark .fund-flow-label,html.dark .fund-flow-label small { color:var(--muted); }
     .comp { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; }
     .comp > div { min-width: 0; background: var(--card); border-radius: 12px; padding: 10px 12px; box-shadow: 0 0 0 1px var(--line); color: var(--ink); }
     .exp {
@@ -1053,9 +1042,11 @@
       .cf-share-tags span,.cf-share-save { padding-left:10px; padding-right:10px; font-size:12px; }
       .cf-flow-meta { margin-left:22px; margin-right:22px; }
       .cf-estimate > .cf-chart { min-height:112px; }
-      .fund-flow-grid { gap:10px 7px; }
-      .fund-flow-card { padding:9px 8px; }
-      .fund-flow-value { overflow:hidden; text-overflow:ellipsis; font-size:13px; }
+      .fund-flow-grid { grid-template-rows:repeat(3,82px); gap:27px 7px; margin-top:14px; }
+      .fund-flow-card { border-radius:15px; padding:8px 5px; }
+      .fund-flow-label { font-size:12px; }
+      .fund-flow-label small { font-size:9px; }
+      .fund-flow-value { margin-top:6px; font-size:12px; }
       .table th,.table td { padding-right:5px; }
     }
     @media (max-width: 380px) {

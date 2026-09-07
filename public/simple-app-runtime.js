@@ -2155,7 +2155,7 @@ function compose(st, accountId, unit = "元") {
   const editing = canEdit && route.editFlow;
   const composeRange = route.composeRange || "all";
   const composeRangeLabel = { all:"记账以来", ytd:"今年", "1y":"近 1 年" }[composeRange];
-  const red = "#e55f5c", green = "#2eb789";
+  const red = "#ee6663", green = "#21b789";
   const vc = (n) => (n > 0 ? red : n < 0 ? green : "var(--muted)");
   const f = (label, val, col, row, o) => {
     o = o || {};
@@ -2169,16 +2169,19 @@ function compose(st, accountId, unit = "元") {
   return `<div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
     <div class="split"><span class="ttl"><b>资产构成${canEdit ? `（${unit}）` : ""}</b>${canEdit ? `<button class="pencil-btn ${editing ? "is-on" : ""}" type="button" onclick="toggleInvestEdit()" title="${editing ? "退出编辑" : "编辑投入 / 转出"}" aria-label="编辑投入转出">${icoPencil()}</button>` : ""}</span><div class="range-select"><button type="button" class="ghost-btn" aria-expanded="${!!route.composeRangeOpen}" onclick="event.stopPropagation();route.composeRangeOpen=!route.composeRangeOpen;render({resize:false,keepScroll:true})">${composeRangeLabel}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.composeRangeOpen ? `<div class="dd-menu">${[["all","记账以来"],["ytd","今年"],["1y","近 1 年"]].map(([v,l]) => `<button type="button" class="dd-item ${composeRange === v ? "on" : ""}" onclick="event.stopPropagation();setComposeRange('${v}')"><span>${l}</span>${composeRange === v ? `<span class="tick">✓</span>` : ""}</button>`).join("")}</div>` : ""}</div></div>
     <div class="fund-flow-grid">
-      <div aria-hidden="true" class="fund-flow-bracket fund-flow-bracket--left"></div>
-      <div aria-hidden="true" class="fund-flow-bracket fund-flow-bracket--right"></div>
-      <div aria-hidden="true" class="fund-flow-center-line fund-flow-center-line--left"></div>
-      <div aria-hidden="true" class="fund-flow-center-line fund-flow-center-line--right"></div>
-      ${f("投入", compactSignedNum(st.inAmt), 1, 1, { kind: "in", color: red })}
-      ${f("期初金额<br>(" + d1 + ")", "0.00", 2, 1, { tone: "flow", color: "var(--muted)" })}
-      ${f("转出", st.outAmt ? "-" + compactNum(st.outAmt) : "0.00", 1, 3, { kind: "out", color: green })}
-      ${f("净投入", compactSignedNum(st.net), 2, 2, { tone: "flow", color: vc(st.net) })}
-      ${f("期末金额<br>(" + d2 + ")", compactNum(st.amount), 3, 2, { tone: "result" })}
-      ${f("收益", compactSignedNum(st.pnl), 2, 3, { tone: "flow", color: vc(st.pnl) })}
+      <svg class="fund-flow-links" viewBox="0 0 600 390" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M200 102 C200 142 300 130 300 174"/>
+        <path d="M400 102 C400 142 300 130 300 174"/>
+        <path d="M100 270 C100 308 300 292 300 334"/>
+        <path d="M300 270 L300 334"/>
+        <path d="M500 270 C500 308 300 292 300 334"/>
+      </svg>
+      ${f("投入", compactSignedNum(st.inAmt), "2 / span 2", 1, { kind: "in", color: red })}
+      ${f("转出", st.outAmt ? "-" + compactNum(st.outAmt) : "0.00", "4 / span 2", 1, { kind: "out", color: green })}
+      ${f("期初金额<br><small>(" + d1 + ")</small>", "0.00", "1 / span 2", 2, { color: "var(--ink)" })}
+      ${f("净投入", compactSignedNum(st.net), "3 / span 2", 2, { color: vc(st.net) })}
+      ${f("收益", compactSignedNum(st.pnl), "5 / span 2", 2, { color: vc(st.pnl) })}
+      ${f("期末金额<br><small>(" + d2 + ")</small>", compactNum(st.amount), "3 / span 2", 3, {})}
     </div>
   </div>`;
 }
