@@ -1547,14 +1547,14 @@ function managePage() {
     </div>
   </section>`;
 }
-function modalShell(title, desc, body, foot) {
+function modalShell(title, desc, body, foot = "") {
   return `<div class="modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
     <div class="modal-head">
       <div><h3>${title}</h3>${desc ? `<p>${desc}</p>` : ""}</div>
       <button type="button" class="modal-x" onclick="closeMask()" aria-label="关闭">×</button>
     </div>
     <div class="modal-body">${body}</div>
-    <div class="modal-foot">${foot}</div>
+    ${foot ? `<div class="modal-foot">${foot}</div>` : ""}
   </div>`;
 }
 function showModal(html) {
@@ -2024,11 +2024,17 @@ function addInvestPage() {
   </section>`;
 }
 
-function chartBlock(hist, expected, unit = "元") {
+function chartBlock(hist, expected, unit = "元", currentPnl = null) {
   const kind = route.chartKind || "mwr";
   const range = route.chartRange || "all";
   const list = filterHist(hist, range);
-  const series = chartSeries(list, kind);
+  let series = chartSeries(list, kind);
+  // 手动修正累计投入 / 转出后，历史快照仍保留原始资金流。将累计收益曲线
+  // 整体平移到当前账面口径，确保末端值始终与顶部累计收益一致。
+  if (kind === "pnl" && series.length && Number.isFinite(Number(currentPnl))) {
+    const delta = Number(currentPnl) - series[series.length - 1];
+    series = series.map((value) => value + delta);
+  }
   const benchRows = kind === "mwr" ? filterHist(benchState.items.map((x) => ({ d:x.d, v:x.c })), range).filter((x) => (!list[0] || x.d >= list[0].d) && (!list.length || x.d <= list[list.length - 1].d)) : [];
   const benchStart = benchRows[0] ? Number(benchRows[0].v) : 0;
   const benchSeries = benchStart ? benchRows.map((x) => (Number(x.v) / benchStart - 1) * 100) : [];
@@ -2150,11 +2156,29 @@ function yearTable(hist, fallback) {
     <div class="faint" style="margin-top:8px;font-size:12px">收益率趋势图可切换主要市场基准指数。</div>
   </div>`;
 }
+function composeRangeStats(st, accountId, range) {
+  if (range === "all") return { ...st, opening: 0 };
+  const source = accountId ? S.invest.find((x) => x.id === accountId) : allInvestVirtual().virt;
+  const rows = (source && source.hist || []).slice().sort((a, b) => String(a.d).localeCompare(String(b.d)));
+  const now = new Date();
+  const from = range === "ytd"
+    ? `${now.getFullYear()}-01-01`
+    : iso(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
+  const before = rows.filter((h) => String(h.d).slice(0, 10) < from);
+  const within = rows.filter((h) => String(h.d).slice(0, 10) >= from);
+  const opening = before.length ? Number(before[before.length - 1].v) || 0 : 0;
+  const inAmt = within.reduce((sum, h) => sum + (Number(h.inn) || 0), 0);
+  const outAmt = within.reduce((sum, h) => sum + (Number(h.out) || 0), 0);
+  const amount = Number(st.amount) || 0;
+  const net = inAmt - outAmt;
+  return { ...st, opening, inAmt, outAmt, net, pnl: amount - opening - net, first: from, amount };
+}
 function compose(st, accountId, unit = "元") {
   const canEdit = !!accountId;
   const editing = canEdit && route.editFlow;
   const composeRange = route.composeRange || "all";
   const composeRangeLabel = { all:"记账以来", ytd:"今年", "1y":"近 1 年" }[composeRange];
+  const shown = composeRangeStats(st, accountId, composeRange);
   const red = "#ee6663", green = "#21b789";
   const vc = (n) => (n > 0 ? red : n < 0 ? green : "var(--muted)");
   const f = (label, val, col, row, o) => {
@@ -2164,10 +2188,10 @@ function compose(st, accountId, unit = "元") {
     if (o.kind) evt = editing ? `onclick="editInvestFlow('${accountId}','${o.kind}')" title="点击修改"` : `ondblclick="editInvestFlow('${accountId}','${o.kind}')" title="双击修改"`;
     return `<div class="${cls}" style="grid-column:${col};grid-row:${row}" ${evt}><span class="fund-flow-label">${label}</span><strong class="fund-flow-value" style="${o.color ? `color:${o.color}` : ""}">${val}</strong></div>`;
   };
-  const d1 = st.first ? pretty(st.first) : "--";
-  const d2 = st.last ? pretty(st.last) : "--";
+  const d1 = shown.first ? pretty(shown.first) : "--";
+  const d2 = shown.last ? pretty(shown.last) : "--";
   return `<div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
-    <div class="split"><span class="ttl"><b>资产构成${canEdit ? `（${unit}）` : ""}</b>${canEdit ? `<button class="pencil-btn ${editing ? "is-on" : ""}" type="button" onclick="toggleInvestEdit()" title="${editing ? "退出编辑" : "编辑投入 / 转出"}" aria-label="编辑投入转出">${icoPencil()}</button>` : ""}</span><div class="range-select"><button type="button" class="ghost-btn" aria-expanded="${!!route.composeRangeOpen}" onclick="event.stopPropagation();route.composeRangeOpen=!route.composeRangeOpen;render({resize:false,keepScroll:true})">${composeRangeLabel}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.composeRangeOpen ? `<div class="dd-menu">${[["all","记账以来"],["ytd","今年"],["1y","近 1 年"]].map(([v,l]) => `<button type="button" class="dd-item ${composeRange === v ? "on" : ""}" onclick="event.stopPropagation();setComposeRange('${v}')"><span>${l}</span>${composeRange === v ? `<span class="tick">✓</span>` : ""}</button>`).join("")}</div>` : ""}</div></div>
+    <div class="split"><span class="ttl"><b>资产构成${canEdit ? `（${unit}）` : ""}</b>${canEdit ? `<button class="pencil-btn ${editing ? "is-on" : ""}" type="button" onclick="toggleInvestEdit()" title="${editing ? "退出编辑" : "编辑投入 / 转出"}" aria-label="编辑投入转出">${icoPencil()}</button>` : ""}</span><div class="range-select dd"><button type="button" class="ghost-btn" aria-expanded="${!!route.composeRangeOpen}" onclick="event.stopPropagation();route.composeRangeOpen=!route.composeRangeOpen;render({resize:false,keepScroll:true})">${composeRangeLabel}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.composeRangeOpen ? `<div class="dd-menu">${[["all","记账以来"],["ytd","今年"],["1y","近 1 年"]].map(([v,l]) => `<button type="button" class="dd-item ${composeRange === v ? "on" : ""}" onclick="event.stopPropagation();setComposeRange('${v}')"><span>${l}</span>${composeRange === v ? `<span class="tick">✓</span>` : ""}</button>`).join("")}</div>` : ""}</div></div>
     <div class="fund-flow-grid">
       <svg class="fund-flow-links" viewBox="0 0 600 390" preserveAspectRatio="none" aria-hidden="true">
         <path d="M200 104 C200 130 300 119 300 136 M400 104 C400 130 300 119 300 136 M300 136 L300 143"/>
@@ -2175,12 +2199,12 @@ function compose(st, accountId, unit = "元") {
         <path d="M300 247 L300 286"/>
         <path d="M500 247 C500 274 300 263 300 279"/>
       </svg>
-      ${f("投入", compactSignedNum(st.inAmt), "2 / span 2", 1, { kind: "in", color: red })}
-      ${f("转出", st.outAmt ? "-" + compactNum(st.outAmt) : "0.00", "4 / span 2", 1, { kind: "out", color: green })}
-      ${f("期初金额<br><small>(" + d1 + ")</small>", "0.00", "1 / span 2", 2, { color: "var(--ink)" })}
-      ${f("净投入", compactSignedNum(st.net), "3 / span 2", 2, { color: vc(st.net) })}
-      ${f("收益", compactSignedNum(st.pnl), "5 / span 2", 2, { color: vc(st.pnl) })}
-      ${f("期末金额<br><small>(" + d2 + ")</small>", compactNum(st.amount), "3 / span 2", 3, {})}
+      ${f("投入", compactSignedNum(shown.inAmt), "2 / span 2", 1, { kind: "in", color: red })}
+      ${f("转出", shown.outAmt ? "-" + compactNum(shown.outAmt) : "0.00", "4 / span 2", 1, { kind: "out", color: green })}
+      ${f("期初金额<br><small>(" + d1 + ")</small>", compactNum(shown.opening), "1 / span 2", 2, { color: "var(--ink)" })}
+      ${f("净投入", compactSignedNum(shown.net), "3 / span 2", 2, { color: vc(shown.net) })}
+      ${f("收益", compactSignedNum(shown.pnl), "5 / span 2", 2, { color: vc(shown.pnl) })}
+      ${f("期末金额<br><small>(" + d2 + ")</small>", compactNum(shown.amount), "3 / span 2", 3, {})}
     </div>
   </div>`;
 }
@@ -2274,7 +2298,7 @@ function summary() {
         <div><div class="k"><span>资金加权收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('mwr')" aria-label="了解资金加权收益率">?</button></div><b class="${st.mwr == null ? "faint" : tone(st.mwr)}">${st.mwr == null ? "暂无" : pct(st.mwr)}</b></div>
         <div><div class="k"><span>年化收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('annual')" aria-label="了解年化收益率">?</button></div><b class="${st.ytd == null ? "faint" : tone(st.ytd)}">${st.ytd == null ? "暂无" : pct(st.ytd)}</b></div>
       </div>
-      ${chartBlock(virt.hist, S.expected)}
+      ${chartBlock(virt.hist, S.expected, "元", t.pnl)}
     </div>
     ${yearTable(virt.hist, st)}
     ${compose(st)}
@@ -2312,7 +2336,7 @@ function account() {
         <div><div class="k"><span>资金加权收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('mwr','${a.id}')" aria-label="了解资金加权收益率">?</button></div><b class="${st.mwr == null ? "faint" : tone(st.mwr)}">${st.mwr == null ? "暂无" : pct(st.mwr)}</b></div>
         <div><div class="k"><span>年化收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('annual','${a.id}')" aria-label="了解年化收益率">?</button></div><b class="${st.ytd == null ? "faint" : tone(st.ytd)}">${st.ytd == null ? "暂无" : pct(st.ytd)}</b></div>
       </div>
-      ${chartBlock(st.hist, a.expected || S.expected, unit)}
+      ${chartBlock(st.hist, a.expected || S.expected, unit, st.pnl)}
     </div>
     ${yearTable(st.hist, st)}
     ${compose(st, a.id, unit)}
