@@ -359,6 +359,7 @@
     .delta-bars span { display: block; font-size: 10px; color: var(--lab); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .q { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; flex: 0 0 14px; padding: 0; border-radius: 50%; border: 1px solid currentColor; font-size: 9px; line-height: 1; opacity: .55; margin-left: 3px; transform: translateY(-.5px); }
     .metric .k { display: flex; align-items: center; min-height: 16px; white-space: nowrap; }
+    .metric .k > span { min-width:0; }
     .chip-mini { display: inline-block; background: var(--invest); color: var(--blue); border-radius: 4px; padding: 1px 6px; font-size: 11px; line-height: 1.4; }
     .tree { display: flex; flex-direction: column; align-items: stretch; gap: 0; margin-top: 14px; }
     .tree-row { display: flex; gap: 10px; justify-content: center; width: 100%; }
@@ -976,6 +977,8 @@
       .mini { min-height: 148px; }
       .metric { gap: 8px; }
       .metric > * { min-width: 0; }
+      .metric .k { gap:3px; font-size:11px; line-height:1.35; }
+      .metric .q { margin-left:0; }
       .pills { overflow-x: auto; scrollbar-width: none; }
       .pills::-webkit-scrollbar { display: none; }
       .modal { border-radius: 24px; }
@@ -1032,8 +1035,15 @@
       .cf-share-tags span,.cf-share-save { padding-left:10px; padding-right:10px; font-size:12px; }
       .cf-flow-meta { margin-left:22px; margin-right:22px; }
       .cf-estimate > .cf-chart { min-height:112px; }
+      .fund-flow-grid { gap:10px 7px; }
+      .fund-flow-card { padding:9px 8px; }
+      .fund-flow-value { overflow:hidden; text-overflow:ellipsis; font-size:13px; }
+      .table th,.table td { padding-right:5px; }
     }
     @media (max-width: 380px) {
+      .metric { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .metric > div:first-child { grid-column:1/-1; }
+      .metric .k { font-size:12px; }
       .cf-tabs { grid-template-columns:1fr 20px 1fr; }
       .cf-tabs button { height:64px; font-size:18px; }
       .cf-total strong { font-size:39px; }

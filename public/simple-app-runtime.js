@@ -2,7 +2,7 @@
     try {
       const savedWin = JSON.parse(localStorage.getItem("fire-simple-win") || "null");
       const viewportW = window.innerWidth || document.documentElement.clientWidth;
-      const viewportChanged = savedWin && (!Number.isFinite(savedWin.vw) || Math.abs(savedWin.vw - viewportW) > 48);
+      const viewportChanged = savedWin && (savedWin.layoutVersion !== 3 || !Number.isFinite(savedWin.vw) || Math.abs(savedWin.vw - viewportW) > 48);
       const restoredW = viewportChanged && viewportW >= 1100
         ? Math.min(1040, viewportW - 64)
         : Math.min(Math.max(360, Number(savedWin?.w) || 680), Math.max(360, viewportW - 16));
@@ -254,6 +254,20 @@ function signedNum(n) {
   if (S.hide) return "****";
   const prefix = n > 0 ? "+" : "";
   return prefix + num(n);
+}
+function compactNum(n, d = 2) {
+  if (S.hide) return "****";
+  const value = Number(n) || 0;
+  const abs = Math.abs(value);
+  const units = [[1e12, "万亿"], [1e8, "亿"], [1e4, "万"]];
+  const unit = units.find(([base]) => abs >= base);
+  if (!unit) return num(value, d);
+  const shown = (value / unit[0]).toFixed(d).replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
+  return shown + unit[1];
+}
+function compactSignedNum(n, d = 2) {
+  if (S.hide) return "****";
+  return (Number(n) > 0 ? "+" : "") + compactNum(n, d);
 }
 function toast(t) {
   const n = document.getElementById("toast");
@@ -2157,12 +2171,12 @@ function compose(st, accountId) {
       <div aria-hidden="true" class="fund-flow-bracket fund-flow-bracket--right"></div>
       <div aria-hidden="true" class="fund-flow-center-line fund-flow-center-line--left"></div>
       <div aria-hidden="true" class="fund-flow-center-line fund-flow-center-line--right"></div>
-      ${f("投入", "+" + num(st.inAmt), 1, 1, { kind: "in", color: red })}
+      ${f("投入", compactSignedNum(st.inAmt), 1, 1, { kind: "in", color: red })}
       ${f("期初金额<br>(" + d1 + ")", "0.00", 2, 1, { tone: "flow", color: "var(--muted)" })}
-      ${f("转出", "-" + num(st.outAmt), 1, 3, { kind: "out", color: green })}
-      ${f("净投入", signedNum(st.net), 2, 2, { tone: "flow", color: vc(st.net) })}
-      ${f("期末金额<br>(" + d2 + ")", num(st.amount), 3, 2, { tone: "result" })}
-      ${f("收益", signedNum(st.pnl), 2, 3, { tone: "flow", color: vc(st.pnl) })}
+      ${f("转出", st.outAmt ? "-" + compactNum(st.outAmt) : "0.00", 1, 3, { kind: "out", color: green })}
+      ${f("净投入", compactSignedNum(st.net), 2, 2, { tone: "flow", color: vc(st.net) })}
+      ${f("期末金额<br>(" + d2 + ")", compactNum(st.amount), 3, 2, { tone: "result" })}
+      ${f("收益", compactSignedNum(st.pnl), 2, 3, { tone: "flow", color: vc(st.pnl) })}
     </div>
   </div>`;
 }
@@ -2252,8 +2266,8 @@ function summary() {
       <div class="n">${num(t.inv)}</div>
       <div class="metric">
         <div><div class="k">累计收益 (元)</div><b class="${tone(t.pnl)}">${num(t.pnl)}</b></div>
-        <div><div class="k">资金加权收益率 <button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('mwr')" aria-label="了解资金加权收益率">?</button></div><b class="${st.mwr == null ? "faint" : tone(st.mwr)}">${st.mwr == null ? "暂无" : pct(st.mwr)}</b></div>
-        <div><div class="k">年化收益率 <button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('annual')" aria-label="了解年化收益率">?</button></div><b class="${st.ytd == null ? "faint" : tone(st.ytd)}">${st.ytd == null ? "暂无" : pct(st.ytd)}</b></div>
+        <div><div class="k"><span>资金加权收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('mwr')" aria-label="了解资金加权收益率">?</button></div><b class="${st.mwr == null ? "faint" : tone(st.mwr)}">${st.mwr == null ? "暂无" : pct(st.mwr)}</b></div>
+        <div><div class="k"><span>年化收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('annual')" aria-label="了解年化收益率">?</button></div><b class="${st.ytd == null ? "faint" : tone(st.ytd)}">${st.ytd == null ? "暂无" : pct(st.ytd)}</b></div>
       </div>
       ${chartBlock(virt.hist, S.expected)}
     </div>
@@ -2289,8 +2303,8 @@ function account() {
       <div class="n">${num(a.amount * fxRate(a.cur))}</div>
       <div class="metric">
         <div><div class="k">累计收益 (元)</div><b class="${tone(st.pnl * fxRate(a.cur))}">${num(st.pnl * fxRate(a.cur))}</b></div>
-        <div><div class="k">资金加权收益率 <button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('mwr','${a.id}')" aria-label="了解资金加权收益率">?</button></div><b class="${st.mwr == null ? "faint" : tone(st.mwr)}">${st.mwr == null ? "暂无" : pct(st.mwr)}</b></div>
-        <div><div class="k">年化收益率 <button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('annual','${a.id}')" aria-label="了解年化收益率">?</button></div><b class="${st.ytd == null ? "faint" : tone(st.ytd)}">${st.ytd == null ? "暂无" : pct(st.ytd)}</b></div>
+        <div><div class="k"><span>资金加权收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('mwr','${a.id}')" aria-label="了解资金加权收益率">?</button></div><b class="${st.mwr == null ? "faint" : tone(st.mwr)}">${st.mwr == null ? "暂无" : pct(st.mwr)}</b></div>
+        <div><div class="k"><span>年化收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('annual','${a.id}')" aria-label="了解年化收益率">?</button></div><b class="${st.ytd == null ? "faint" : tone(st.ytd)}">${st.ytd == null ? "暂无" : pct(st.ytd)}</b></div>
       </div>
       ${chartBlock(st.hist, a.expected || S.expected)}
     </div>
@@ -2822,9 +2836,9 @@ try {
   const saved = JSON.parse(localStorage.getItem(WIN_KEY) || "null");
   if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
     winState = { ...winState, ...saved, h: Number.isFinite(saved.h) ? saved.h : 0 };
-    const viewportChanged = !Number.isFinite(saved.vw) || Math.abs(saved.vw - window.innerWidth) > 48;
+    const viewportChanged = saved.layoutVersion !== 3 || !Number.isFinite(saved.vw) || Math.abs(saved.vw - window.innerWidth) > 48;
     if (viewportChanged) {
-      const enteringDesktop = window.innerWidth >= 1100 && (!Number.isFinite(saved.vw) || saved.vw < 1100);
+      const enteringDesktop = window.innerWidth >= 1100 && (saved.layoutVersion !== 3 || !Number.isFinite(saved.vw) || saved.vw < 1100);
       const nextW = enteringDesktop ? Math.min(1040, window.innerWidth - 64) : Math.min(winState.w, Math.max(360, window.innerWidth - 16));
       const savedW = Number.isFinite(saved.w) ? saved.w : winState.w;
       const oldCenterRatio = Number.isFinite(saved.vw) && saved.vw > 0
@@ -2849,7 +2863,7 @@ function saveWin() {
   try {
     localStorage.setItem(WIN_KEY, JSON.stringify({
       x: winState.x, y: winState.y, w: winState.w, h: winState.h, fixed: winState.fixed,
-      vw: window.innerWidth, vh: window.innerHeight
+      vw: window.innerWidth, vh: window.innerHeight, layoutVersion: 3
     }));
   } catch {}
 }
