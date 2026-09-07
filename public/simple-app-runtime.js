@@ -272,6 +272,10 @@ function compactSignedNum(n, d = 2) {
   if (S.hide) return "****";
   return (Number(n) > 0 ? "+" : "") + compactNum(n, d);
 }
+function compactAmount(n, d = 2) {
+  if (S.hide) return "****";
+  return compactNum(n, d) + (Math.abs(Number(n) || 0) < 10000 ? " 元" : "");
+}
 function toast(t) {
   const n = document.getElementById("toast");
   n.textContent = t;
@@ -709,9 +713,9 @@ function thisYearInvestProfit() {
 function latestDate() {
   let best = "";
   const scan = (v) => { if (v && String(v).slice(0, 10) > best) best = String(v).slice(0, 10); };
-  for (const k of ["cash", "fixed", "receivable", "debt"]) for (const x of S[k]) scan(x.date);
-  for (const a of S.invest) { scan(a.updated); for (const h of a.hist || []) scan(h.d); }
-  for (const s of S.snaps) scan(s.at);
+  for (const k of ["cash", "fixed", "receivable", "debt"]) for (const x of vis(S[k])) scan(x.date);
+  for (const a of vis(S.invest)) { scan(a.updated); for (const h of a.hist || []) scan(h.d); }
+  if (!route.member || route.member === "全部") for (const s of S.snaps) scan(s.at);
   return best;
 }
 function relUpdate(s) {
@@ -760,11 +764,11 @@ function totals() {
   const net = assets + debt;
   const ratio = assets ? Math.abs(debt) / assets * 100 : 0;
   const pnl = invList.reduce((n, x) => n + investPnl(x) * fxRate(x.cur), 0);
-  const empty = isEmptyBook(S);
+  const empty = !vis(S.cash).length && !vis(S.fixed).length && !invList.length && !vis(S.receivable).length && !vis(S.debt).length;
   const buckets = { 活钱: cash, 稳健: 0, 长期: 0, 保障: 0 };
   for (const a of invList) buckets[a.bucket || "长期"] = (buckets[a.bucket || "长期"] || 0) + cny(a);
   const last = latestDate();
-  const prev = S.snaps.length > 1 ? S.snaps[1] : (S.snaps[0] && S.snaps[0].at !== today() ? S.snaps[0] : null);
+  const prev = route.member && route.member !== "全部" ? null : (S.snaps.length > 1 ? S.snaps[1] : (S.snaps[0] && S.snaps[0].at !== today() ? S.snaps[0] : null));
   return { cash, fixed, inv, rec, debt, assets, net, ratio, pnl, empty, buckets, last, prev };
 }
 function captureSnap() {
@@ -775,7 +779,7 @@ function captureSnap() {
   if (S.snaps.length > 48) S.snaps.length = 48;
 }
 function addLog(cat, item) {
-  S.logs.unshift({ at: today(), cat, id: item.id, name: item.name, amount: item.amount, cur: item.cur || "CNY" });
+  S.logs.unshift({ at: today(), cat, id: item.id, name: item.name, amount: item.amount, cur: item.cur || "CNY", owner: item.owner || currentOwner() });
   if (S.logs.length > 240) S.logs.length = 240;
 }
 function weatherState(t) {
@@ -1121,7 +1125,8 @@ function trendSeriesOn() {
 }
 function trendPoints() {
   const t = totals();
-  const snaps = (S.snaps || []).slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const memberScoped = route.member && route.member !== "全部";
+  const snaps = memberScoped ? [] : (S.snaps || []).slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
   const list = snaps.map((s) => ({ ...s, net: (Number(s.assets) || 0) + (Number(s.debt) || 0) }));
   const now = { at: today(), assets: t.assets, debt: t.debt, cash: t.cash, fixed: t.fixed, inv: t.inv, rec: t.rec, net: t.net };
   if (!list.length || list[list.length - 1].at !== now.at) list.push(now);
@@ -1175,7 +1180,7 @@ function trendSvg() {
   const first = pts[0] ? pretty(pts[0].at) : "";
   const last = pts.length ? pretty(pts[pts.length - 1].at) : "";
   grid += `<text x="${L}" y="${H - 6}" font-size="10" fill="var(--faint)">${first}</text>`;
-  grid += `<text x="${W - 88}" y="${H - 6}" font-size="10" fill="var(--faint)">${last}</text>`;
+  if (pts.length > 1) grid += `<text x="${W - 88}" y="${H - 6}" font-size="10" fill="var(--faint)">${last}</text>`;
   const colors = { net: "#2eb789", cash: "#c47a52", inv: "#6b5ea7", fixed: "#5aa7b8", rec: "#6b8cce", debt: "#8a8a8a" };
   let paths = "";
   const xs = pts.map((_, i) => xv(i));
@@ -1266,7 +1271,7 @@ function family() {
   const cashPct = t.assets ? t.cash / t.assets * 100 : 0;
   const invPct = t.assets ? t.inv / t.assets * 100 : 0;
   const logs = groupedLogs();
-  const compareLabel = t.prev ? "相比" + md(t.prev.at) : "相比上次";
+  const compareLabel = route.member && route.member !== "全部" ? `${route.member}当前资产` : (t.prev ? "相比" + md(t.prev.at) : "相比上次");
   return `<section class="screen on gray">
     ${navHead("go('home')", "家庭资产记账")}
     <div class="pills">
@@ -1300,24 +1305,33 @@ function family() {
       </button></div>
       <div class="sankey">${t.empty ? `<div class="sankey-empty">记下流动资金或投资后，这里会展开资金流向</div>` : sankeySvg(t)}</div>
       <div class="comp">
-        <div><span class="k" style="color:var(--cash-t)">流动资金 ${t.empty ? "—" : cashPct.toFixed(1) + "%"}</span><div>${num(t.cash)} 元</div></div>
-        <div><span class="k" style="color:#8b86c8">投资理财 ${t.empty ? "—" : invPct.toFixed(1) + "%"}</span><div>${num(t.inv)} 元</div></div>
-        <div><span class="k">负债</span><div>${num(t.debt)}</div></div>
-        <div><span class="k">固定资产</span><div>${num(t.fixed)}</div></div>
-        <div><span class="k">应收款</span><div>${num(t.rec)}</div></div>
+        <div><span class="k" style="color:var(--cash-t)">流动资金 ${t.empty ? "—" : cashPct.toFixed(1) + "%"}</span><div>${compactAmount(t.cash)}</div></div>
+        <div><span class="k" style="color:#8b86c8">投资理财 ${t.empty ? "—" : invPct.toFixed(1) + "%"}</span><div>${compactAmount(t.inv)}</div></div>
+        <div><span class="k">负债</span><div>${compactAmount(t.debt)}</div></div>
+        <div><span class="k">固定资产${S.excludeFixed ? " · 已排除" : ""}</span><div>${compactAmount(t.fixed)}</div></div>
+        <div><span class="k">应收款</span><div>${compactAmount(t.rec)}</div></div>
       </div>
     </div>
     ${trendCard()}
     <div class="card" style="margin:0 16px 12px;padding:16px;border-radius:18px">
       <b>更新记录</b>
       ${logs.length ? `<div class="tl" style="margin-top:12px">${logs.map((g) => `<h4>${md(g.at)}</h4>${g.items.map((it) => `<div class="row-card split"><span>${esc(it.name)}</span><b class="nowrap">${money(it.amount, it.cur)}</b></div>`).join("")}`).join("")}
-        ${S.logs.length > 8 && !route.showAll ? `<button class="faint" style="display:block;width:100%;padding:8px" onclick="route.showAll=true;render()">查看更多</button>` : ""}
+        ${visibleFamilyLogs().length > 8 && !route.showAll ? `<button class="faint" style="display:block;width:100%;padding:8px" onclick="route.showAll=true;render()">查看更多</button>` : ""}
       </div>` : `<div class="faint" style="text-align:center;padding:28px 8px">暂无更新记录</div>`}
     </div>
   </section>`;
 }
+function visibleFamilyLogs() {
+  if (!route.member || route.member === "全部") return S.logs;
+  return S.logs.filter((it) => {
+    const source = listByCat(it.cat).find((row) => row.id === it.id);
+    const owner = it.owner || source?.owner;
+    return !owner || owner === route.member;
+  });
+}
 function groupedLogs() {
-  const rows = route.showAll ? S.logs : S.logs.slice(0, 8);
+  const visible = visibleFamilyLogs();
+  const rows = route.showAll ? visible : visible.slice(0, 8);
   const map = [];
   for (const it of rows) {
     const at = String(it.at).slice(0, 10);
@@ -1411,7 +1425,7 @@ function drawSankeyFull() {
   const groups = [
     { label: "流动资金", color: "#c47a52", fill: "rgba(196,122,82,.62)", items: vis(S.cash) },
     { label: "投资理财", color: "#6b5ea7", fill: "rgba(92,84,136,.82)", items: vis(S.invest) },
-    { label: "固定资产", color: "#8a8a8a", fill: "rgba(140,140,140,.5)", items: vis(S.fixed) },
+    { label: "固定资产", color: "#8a8a8a", fill: "rgba(140,140,140,.5)", items: S.excludeFixed ? [] : vis(S.fixed) },
     { label: "应收款", color: "#7a90a8", fill: "rgba(122,144,168,.5)", items: vis(S.receivable) }
   ].map((g) => {
     const items = g.items.map((x) => ({ name: x.name, v: Math.abs(cny(x)) })).filter((x) => x.v || g.items.length);
