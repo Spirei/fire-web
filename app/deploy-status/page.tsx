@@ -153,31 +153,6 @@ function dayKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function monthBlock(year: number, month: number, today: Date, counts: Map<string, number>): HeatCell[] {
-  const first = new Date(year, month, 1);
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const leading = first.getDay();
-  const weeks = Math.ceil((leading + daysInMonth) / 7);
-  return Array.from({ length: weeks * 7 }, (_, index) => {
-    const day = index - leading + 1;
-    if (day < 1 || day > daysInMonth) {
-      return { key: `${year}-${month + 1}-pad-${index}`, label: "", count: 0, empty: true };
-    }
-    const date = new Date(year, month, day);
-    const future = date > today;
-    const key = dayKey(date);
-    return {
-      key,
-      label: `${month + 1}月${day}日`,
-      count: future ? 0 : counts.get(key) || 0,
-      date,
-      weekKey: `week-${year}-${month + 1}-${Math.floor(index / 7)}`,
-      monthKey: `month-${year}-${month + 1}`,
-      empty: future
-    };
-  });
-}
-
 function UpdateHeatmap({ runs }: { runs: Run[] }) {
   const [view, setView] = useState<HeatView>("day");
   const [selected, setSelected] = useState<HeatCell | null>(null);
@@ -195,11 +170,41 @@ function UpdateHeatmap({ runs }: { runs: Run[] }) {
     });
     return map;
   }, [runs]);
-  const months = useMemo(() => Array.from({ length: 12 }, (_, month) => {
-    const year = month > today.getMonth() ? today.getFullYear() - 1 : today.getFullYear();
-    return { month, year, cells: monthBlock(year, month, today, counts) };
-  }), [counts, today]);
-  const dayCells = months.flatMap((block) => block.cells.filter((cell) => cell.date));
+  const { cells, monthLabels, weekCount } = useMemo(() => {
+    const rangeStart = new Date(today.getFullYear(), 0, 1);
+    const rangeEnd = new Date(today.getFullYear(), 11, 31);
+    const gridStart = new Date(rangeStart);
+    gridStart.setDate(gridStart.getDate() - gridStart.getDay());
+    const gridEnd = new Date(rangeEnd);
+    gridEnd.setDate(gridEnd.getDate() + (6 - gridEnd.getDay()));
+    const result: HeatCell[] = [];
+    const labels: { key: string; label: string; column: number }[] = [];
+    let previousMonth = "";
+    for (let date = new Date(gridStart), index = 0; date <= gridEnd; date.setDate(date.getDate() + 1), index += 1) {
+      const current = new Date(date);
+      const inYear = current >= rangeStart && current <= rangeEnd;
+      const hasOccurred = inYear && current <= today;
+      const key = dayKey(current);
+      const monthKey = `${current.getFullYear()}-${current.getMonth() + 1}`;
+      if (inYear && monthKey !== previousMonth) {
+        labels.push({ key: monthKey, label: `${current.getMonth() + 1}月`, column: Math.floor(index / 7) });
+        previousMonth = monthKey;
+      }
+      const weekStart = new Date(current);
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      result.push({
+        key: inYear ? key : `pad-${key}`,
+        label: inYear ? `${current.getMonth() + 1}月${current.getDate()}日` : "",
+        count: hasOccurred ? counts.get(key) || 0 : 0,
+        date: inYear ? current : undefined,
+        weekKey: `week-${dayKey(weekStart)}`,
+        monthKey: `month-${monthKey}`,
+        empty: !inYear
+      });
+    }
+    return { cells: result, monthLabels: labels, weekCount: result.length / 7 };
+  }, [counts, today]);
+  const dayCells = cells.filter((cell) => cell.date);
   const max = Math.max(1, ...dayCells.map((cell) => cell.count));
   const tone = (count: number) => count === 0 ? "rgba(100,116,139,.14)" : `rgba(16,185,129,${(0.22 + 0.7 * Math.min(1, count / max)).toFixed(2)})`;
   const tabs: [HeatView, string][] = [["day", "每日"], ["week", "每周"], ["month", "每月"], ["total", "累计"]];
@@ -216,12 +221,12 @@ function UpdateHeatmap({ runs }: { runs: Run[] }) {
           ))}
         </div>
       </div>
-      <div className="deploy-heatmap-months grid w-full grid-cols-12 gap-x-1 sm:gap-x-1.5">
-        {months.map((block) => (
-          <div key={block.month} className="min-w-0">
-            <div className="mb-1 overflow-hidden text-center text-[10px] leading-4 text-slate-500" style={{ whiteSpace: "nowrap" }}>{block.month + 1}月</div>
-            <div className="deploy-heatmap-grid grid w-full grid-flow-col grid-rows-7 gap-[2px]" style={{ gridTemplateColumns: `repeat(${block.cells.length / 7}, minmax(0, 1fr))` }}>
-              {block.cells.map((cell) => {
+      <div className="deploy-heatmap-continuous min-w-0">
+        <div className="deploy-heatmap-labels" style={{ gridTemplateColumns: `repeat(${weekCount}, minmax(0, 1fr))` }}>
+          {monthLabels.map((month) => <span key={month.key} style={{ gridColumnStart: month.column + 1 }}>{month.label}</span>)}
+        </div>
+        <div className="deploy-heatmap-grid grid w-full grid-flow-col grid-rows-7 gap-[2px]" style={{ gridTemplateColumns: `repeat(${weekCount}, minmax(0, 1fr))` }}>
+              {cells.map((cell) => {
                 if (!cell.date) return <span key={cell.key} className="min-w-0 rounded-[2px]" style={{ aspectRatio: "1 / 1" }} />;
                 const groupKey = view === "week" ? cell.weekKey : view === "month" ? cell.monthKey : null;
                 const highlighted = Boolean(groupKey && selected?.[view === "week" ? "weekKey" : "monthKey"] === groupKey);
@@ -238,9 +243,7 @@ function UpdateHeatmap({ runs }: { runs: Run[] }) {
                   />
                 );
               })}
-            </div>
-          </div>
-        ))}
+        </div>
       </div>
       {selected && (
         <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700 dark:bg-white/[.06] dark:text-slate-200">
