@@ -44,6 +44,9 @@ const CURS = [
   { code: "HKD", name: "港元", unit: "港元" },
   { code: "USD", name: "美元", unit: "美元" }
 ];
+function currencyUnit(code) {
+  return (CURS.find((item) => item.code === code) || CURS[0]).unit;
+}
 const MARKETS = [
   { id: "US", label: "美股", cur: "USD" },
   { id: "HK", label: "港股", cur: "HKD" },
@@ -388,7 +391,7 @@ function paintTrendHover(clientX, svg) {
   const bdot = cache.bdot;
   if (bi >= 0) { bdot.setAttribute('cx', m.xAt(bi, m.bench.length)); bdot.setAttribute('cy', m.yAt(m.bench[bi])); bdot.style.display = ''; } else bdot.style.display = 'none';
   const tip = cache.tip;
-  const mainValue = m.kind === 'pnl' ? num(m.main[i]) + ' 元' : pct(m.main[i]);
+  const mainValue = m.kind === 'pnl' ? num(m.main[i]) + ' ' + m.unit : pct(m.main[i]);
   cache.date.textContent = m.dates[i] || '';
   cache.mainValue.textContent = mainValue;
   if (cache.benchValue && bi >= 0) cache.benchValue.textContent = pct(m.bench[bi]);
@@ -2022,7 +2025,7 @@ function addInvestPage() {
   </section>`;
 }
 
-function chartBlock(hist, expected) {
+function chartBlock(hist, expected, unit = "元") {
   const kind = route.chartKind || "mwr";
   const range = route.chartRange || "all";
   const list = filterHist(hist, range);
@@ -2055,7 +2058,7 @@ function chartBlock(hist, expected) {
   const lineColor = kind === "mwr" ? "#ef5b19" : "#3297f6";
   const label = kind === "mwr" ? "资金加权收益率" : "累计收益";
   const bench = benchMeta();
-  trendHoverModel = { kind, main:series, bench:benchSeries, dates:list.map((x) => x.d), label, benchLabel:bench.label, color:lineColor, xAt, yAt };
+  trendHoverModel = { kind, main:series, bench:benchSeries, dates:list.map((x) => x.d), label, benchLabel:bench.label, color:lineColor, unit, xAt, yAt };
   return `<div class="trend-tabs">
       <button type="button" class="${kind === "mwr" ? "on" : ""}" onclick="event.stopPropagation();setChartKind('mwr')">收益率曲线</button>
       <button type="button" class="${kind === "pnl" ? "on" : ""}" onclick="event.stopPropagation();setChartKind('pnl')">累计收益曲线</button>
@@ -2074,7 +2077,7 @@ function chartBlock(hist, expected) {
         <line data-hover-line x1="18" x2="18" y1="24" y2="154" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
         <circle data-hover-main cx="0" cy="0" r="4" fill="var(--card)" stroke="${lineColor}" stroke-width="2" style="display:none;pointer-events:none"/>
         <circle data-hover-bench cx="0" cy="0" r="3.5" fill="var(--card)" stroke="#4a90d9" stroke-width="2" style="display:none;pointer-events:none"/>
-        ${series.map((v,i) => `<circle cx="${xAt(i,series.length)}" cy="${yAt(v)}" r="7" fill="transparent" tabindex="0" onclick="toast('${list[Math.min(i,list.length-1)]?.d || ""}　${kind === "pnl" ? num(v) + " 元" : pct(v)}')"><title>${list[Math.min(i,list.length-1)]?.d || ""} ${kind === "pnl" ? num(v) + " 元" : pct(v)}</title></circle>`).join("")}
+        ${series.map((v,i) => `<circle cx="${xAt(i,series.length)}" cy="${yAt(v)}" r="7" fill="transparent" tabindex="0" onclick="toast('${list[Math.min(i,list.length-1)]?.d || ""}　${kind === "pnl" ? num(v) + " " + unit : pct(v)}')"><title>${list[Math.min(i,list.length-1)]?.d || ""} ${kind === "pnl" ? num(v) + " " + unit : pct(v)}</title></circle>`).join("")}
         <text x="18" y="168" font-size="10" fill="var(--faint)">${first}</text><text x="286" y="168" font-size="10" fill="var(--faint)">${last}</text>
         <text x="346" y="29" text-anchor="end" font-size="9" fill="var(--faint)">${kind === "pnl" ? num(scaleMax) : scaleMax.toFixed(1) + "%"}</text><text x="346" y="154" text-anchor="end" font-size="9" fill="var(--faint)">${kind === "pnl" ? num(scaleMin) : scaleMin.toFixed(1) + "%"}</text>
       </svg>
@@ -2148,7 +2151,7 @@ function yearTable(hist, fallback) {
     <div class="faint" style="margin-top:8px;font-size:12px">收益率趋势图可切换主要市场基准指数。</div>
   </div>`;
 }
-function compose(st, accountId) {
+function compose(st, accountId, unit = "元") {
   const canEdit = !!accountId;
   const editing = canEdit && route.editFlow;
   const composeRange = route.composeRange || "all";
@@ -2165,7 +2168,7 @@ function compose(st, accountId) {
   const d1 = st.first ? pretty(st.first) : "--";
   const d2 = st.last ? pretty(st.last) : "--";
   return `<div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
-    <div class="split"><span class="ttl"><b>资产构成</b>${canEdit ? `<button class="pencil-btn ${editing ? "is-on" : ""}" type="button" onclick="toggleInvestEdit()" title="${editing ? "退出编辑" : "编辑投入 / 转出"}" aria-label="编辑投入转出">${icoPencil()}</button>` : ""}</span><div class="range-select"><button type="button" class="ghost-btn" aria-expanded="${!!route.composeRangeOpen}" onclick="event.stopPropagation();route.composeRangeOpen=!route.composeRangeOpen;render({resize:false,keepScroll:true})">${composeRangeLabel}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.composeRangeOpen ? `<div class="dd-menu">${[["all","记账以来"],["ytd","今年"],["1y","近 1 年"]].map(([v,l]) => `<button type="button" class="dd-item ${composeRange === v ? "on" : ""}" onclick="event.stopPropagation();setComposeRange('${v}')"><span>${l}</span>${composeRange === v ? `<span class="tick">✓</span>` : ""}</button>`).join("")}</div>` : ""}</div></div>
+    <div class="split"><span class="ttl"><b>资产构成${canEdit ? `（${unit}）` : ""}</b>${canEdit ? `<button class="pencil-btn ${editing ? "is-on" : ""}" type="button" onclick="toggleInvestEdit()" title="${editing ? "退出编辑" : "编辑投入 / 转出"}" aria-label="编辑投入转出">${icoPencil()}</button>` : ""}</span><div class="range-select"><button type="button" class="ghost-btn" aria-expanded="${!!route.composeRangeOpen}" onclick="event.stopPropagation();route.composeRangeOpen=!route.composeRangeOpen;render({resize:false,keepScroll:true})">${composeRangeLabel}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.composeRangeOpen ? `<div class="dd-menu">${[["all","记账以来"],["ytd","今年"],["1y","近 1 年"]].map(([v,l]) => `<button type="button" class="dd-item ${composeRange === v ? "on" : ""}" onclick="event.stopPropagation();setComposeRange('${v}')"><span>${l}</span>${composeRange === v ? `<span class="tick">✓</span>` : ""}</button>`).join("")}</div>` : ""}</div></div>
     <div class="fund-flow-grid">
       <div aria-hidden="true" class="fund-flow-bracket fund-flow-bracket--left"></div>
       <div aria-hidden="true" class="fund-flow-bracket fund-flow-bracket--right"></div>
@@ -2190,7 +2193,8 @@ function toggleInvestEdit() {
 function editInvestFlow(id, kind) {
   const a = S.invest.find((x) => x.id === id);
   if (!a) return;
-  const lbl = kind === "in" ? "累计投入（正数）" : "累计转出（正数）";
+  const unit = currencyUnit(a.cur);
+  const lbl = kind === "in" ? `累计投入（${unit}，正数）` : `累计转出（${unit}，正数）`;
   const cur = kind === "in" ? (Number(a.inAmt) || 0) : (Number(a.outAmt) || 0);
   showModal(modalShell(lbl, "这是记录，按券商收益手动修正该账户的累计投入 / 转出即可，收益会自动更新。", `
     <input id="flowVal" class="modal-input" type="number" value="${cur}" />
@@ -2291,6 +2295,7 @@ function account() {
   }
   const st = investStats(a);
   st.amount = a.amount;
+  const unit = currencyUnit(a.cur);
   const hist = route.showAll ? st.hist.slice().reverse() : st.hist.slice().reverse().slice(0, 3);
   return `<section class="screen on gray">
     <div class="account-head">
@@ -2299,21 +2304,21 @@ function account() {
       <div class="right"><button class="bar-ico" type="button" onclick="go('settings',{account:'${a.id}'})" aria-label="设置">${icoGear()}</button><button class="bar-ico" type="button" onclick="copySummary('${a.id}')" aria-label="复制摘要">${icoShare()}</button></div>
     </div>
     <div class="card invest-chart-card" style="margin:0 16px;padding:16px;border-radius:16px">
-      <div class="split"><span class="k">资产 (元) ${hideBtn()}</span><span class="faint">${daysAgo(a.updated)}</span></div>
-      <div class="n">${num(a.amount * fxRate(a.cur))}</div>
+      <div class="split"><span class="k">资产 (${unit}) ${hideBtn()}</span><span class="faint">${daysAgo(a.updated)}</span></div>
+      <div class="n">${num(a.amount)}</div>
       <div class="metric">
-        <div><div class="k">累计收益 (元)</div><b class="${tone(st.pnl * fxRate(a.cur))}">${num(st.pnl * fxRate(a.cur))}</b></div>
+        <div><div class="k">累计收益 (${unit})</div><b class="${tone(st.pnl)}">${num(st.pnl)}</b></div>
         <div><div class="k"><span>资金加权收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('mwr','${a.id}')" aria-label="了解资金加权收益率">?</button></div><b class="${st.mwr == null ? "faint" : tone(st.mwr)}">${st.mwr == null ? "暂无" : pct(st.mwr)}</b></div>
         <div><div class="k"><span>年化收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('annual','${a.id}')" aria-label="了解年化收益率">?</button></div><b class="${st.ytd == null ? "faint" : tone(st.ytd)}">${st.ytd == null ? "暂无" : pct(st.ytd)}</b></div>
       </div>
-      ${chartBlock(st.hist, a.expected || S.expected)}
+      ${chartBlock(st.hist, a.expected || S.expected, unit)}
     </div>
     ${yearTable(st.hist, st)}
-    ${compose(st, a.id)}
+    ${compose(st, a.id, unit)}
     <div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
       <b>更新记录</b>
       <div class="tl" style="margin-top:12px">
-        ${hist.length ? hist.map((h) => `<h4>${zhDate(h.d)}</h4><div class="row-card split"><span>当天资产金额</span><b>${Number(h.v).toLocaleString("zh-CN")}</b></div>${h.inn || h.out ? `<div class="k" style="margin:-4px 0 10px 8px">投入 ${num(h.inn || 0)}　转出 ${num(h.out || 0)}</div>` : ""}`).join("") : `<div class="faint" style="text-align:center;padding:20px">暂无更新记录</div>`}
+        ${hist.length ? hist.map((h) => `<h4>${zhDate(h.d)}</h4><div class="row-card split"><span>当天资产金额</span><b>${Number(h.v).toLocaleString("zh-CN")} ${unit}</b></div>${h.inn || h.out ? `<div class="k" style="margin:-4px 0 10px 8px">投入 ${num(h.inn || 0)} ${unit}　转出 ${num(h.out || 0)} ${unit}</div>` : ""}`).join("") : `<div class="faint" style="text-align:center;padding:20px">暂无更新记录</div>`}
         ${st.hist.length > 3 && !route.showAll ? `<button class="faint" style="display:block;width:100%" onclick="route.showAll=true;render()">查看更多</button>` : ""}
       </div>
     </div>
@@ -2439,6 +2444,7 @@ function openUpdate(id, opts) {
   if (!opts || !opts.skipUrl) syncUrl(false);
   const when = a.updated ? md(a.updated) : "上次";
   const meta = curMeta(a.cur);
+  const unit = currencyUnit(a.cur);
   const flow = !!route.updateFlow;
   showModal(modalShell("更新收益", `上次更新（${when}）至今，记下市值变化；有资金进出时一并登记投入或转出。`, `
     <div>
@@ -2449,15 +2455,15 @@ function openUpdate(id, opts) {
       </div>
     </div>
     <div class="flow-grid" id="flowFields" style="display:${flow ? "grid" : "none"}">
-      <div><span class="modal-lab">投入</span><input id="inAmt" class="modal-input" inputmode="decimal" placeholder="可空" oninput="syncUpdateHint()" /></div>
-      <div><span class="modal-lab">转出</span><input id="outAmt" class="modal-input" inputmode="decimal" placeholder="可空" oninput="syncUpdateHint()" /></div>
+      <div><span class="modal-lab">投入（${unit}）</span><input id="inAmt" class="modal-input" inputmode="decimal" placeholder="可空" oninput="syncUpdateHint()" /></div>
+      <div><span class="modal-lab">转出（${unit}）</span><input id="outAmt" class="modal-input" inputmode="decimal" placeholder="可空" oninput="syncUpdateHint()" /></div>
     </div>
     <div>
       <span class="modal-lab" style="display:flex;justify-content:space-between"><span>当前资产金额</span><span>${meta.name} · ${a.cur}</span></span>
       ${amtField("newAmt", "", a.cur)}
       <div class="modal-hint" aria-live="polite">
-        <span id="updHint">现有市值 ${num(a.amount)} ${meta.symbol === "$" ? "美元" : meta.symbol === "HK$" ? "港元" : "元"}</span>
-        <span>记账后 <b id="updAfter">${num(a.amount)}</b></span>
+        <span id="updHint">现有市值 ${num(a.amount)} ${unit}</span>
+        <span>记账后 <b id="updAfter">${num(a.amount)} ${unit}</b></span>
       </div>
     </div>
     <div>
@@ -2487,7 +2493,7 @@ function syncUpdateHint() {
   const valid = Number.isFinite(v);
   hint.textContent = valid ? "现有市值将更新为新金额" : "请输入当前资产金额";
   hint.style.color = valid ? "" : "var(--red)";
-  after.textContent = valid ? num(v) : "—";
+  after.textContent = valid ? num(v) + " " + currencyUnit(a.cur) : "—";
 }
 function commitUpdate() {
   const a = S.invest.find((x) => x.id === updateTarget);
@@ -2531,8 +2537,9 @@ function copySummary(id) {
   const t = totals();
   const st = a ? investStats(a) : allInvestVirtual().st;
   const name = a ? a.name : "默认汇总";
-  const amt = a ? a.amount * fxRate(a.cur) : t.inv;
-  const text = name + "\n资产 " + num(amt) + " 元\n累计收益 " + num(a ? st.pnl * fxRate(a.cur) : t.pnl) + " 元\n年化 " + (st.ytd == null ? "暂无" : pct(st.ytd));
+  const unit = a ? currencyUnit(a.cur) : "元";
+  const amt = a ? a.amount : t.inv;
+  const text = name + "\n资产 " + num(amt) + " " + unit + "\n累计收益 " + num(a ? st.pnl : t.pnl) + " " + unit + "\n年化 " + (st.ytd == null ? "暂无" : pct(st.ytd));
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast("已复制摘要")).catch(() => toast(text));
   else toast("已准备摘要");
 }
