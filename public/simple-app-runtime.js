@@ -364,26 +364,30 @@ function pickBenchmark(key) {
 let trendHoverModel = null;
 let trendHoverFrame = 0, trendHoverPending = null;
 function moveTrendHover(event, svg) {
-  trendHoverPending = { clientX:event.clientX, svg };
+  trendHoverPending = { clientX:event.clientX, clientY:event.clientY, svg };
   if (trendHoverFrame) return;
   trendHoverFrame = requestAnimationFrame(() => {
     trendHoverFrame = 0;
     const pending = trendHoverPending; trendHoverPending = null;
-    if (pending) paintTrendHover(pending.clientX, pending.svg);
+    if (pending) paintTrendHover(pending.clientX, pending.clientY, pending.svg);
   });
 }
-function paintTrendHover(clientX, svg) {
+function paintTrendHover(clientX, clientY, svg) {
   const m = trendHoverModel;
   if (!m || !m.main.length) return;
   const cache = svg._trendHover || (svg._trendHover = {
-    rect:svg.getBoundingClientRect(),
     line:svg.querySelector('[data-hover-line]'), dot:svg.querySelector('[data-hover-main]'),
     bdot:svg.querySelector('[data-hover-bench]'), tip:svg.parentElement.querySelector('.trend-hover-tip'),
     date:svg.parentElement.querySelector('[data-tip-date]'), mainValue:svg.parentElement.querySelector('[data-tip-main-value]'),
     benchValue:svg.parentElement.querySelector('[data-tip-bench-value]'), index:-1
   });
-  const rect = cache.rect;
-  const vx = (clientX - rect.left) * 360 / Math.max(rect.width, 1);
+  const rect = svg.getBoundingClientRect();
+  const matrix = svg.getScreenCTM();
+  const cursor = svg.createSVGPoint();
+  cursor.x = clientX;
+  cursor.y = Number.isFinite(clientY) ? clientY : rect.top + rect.height / 2;
+  const local = matrix ? cursor.matrixTransform(matrix.inverse()) : { x:(clientX - rect.left) * 360 / Math.max(rect.width, 1) };
+  const vx = local.x;
   const i = Math.max(0, Math.min(m.main.length - 1, Math.round((vx - 18) / 316 * Math.max(m.main.length - 1, 1))));
   if (i === cache.index) return;
   cache.index = i;
@@ -399,8 +403,16 @@ function paintTrendHover(clientX, svg) {
   cache.date.textContent = m.dates[i] || '';
   cache.mainValue.textContent = mainValue;
   if (cache.benchValue && bi >= 0) cache.benchValue.textContent = pct(m.bench[bi]);
-  const px = x / 360 * rect.width;
-  tip.style.setProperty('--tip-x', Math.max(6, Math.min(rect.width - 150, px + (px > rect.width * .58 ? -148 : 10))) + 'px');
+  const anchor = svg.createSVGPoint();
+  anchor.x = x; anchor.y = y;
+  const screen = matrix ? anchor.matrixTransform(matrix) : { x:rect.left + x / 360 * rect.width };
+  const wrap = svg.parentElement;
+  const wrapRect = wrap.getBoundingClientRect();
+  const px = screen.x - wrapRect.left;
+  const tipWidth = tip.offsetWidth || 150;
+  const wrapWidth = wrap.clientWidth || wrapRect.width;
+  const desired = px > wrapWidth * .62 ? px - tipWidth - 10 : px + 10;
+  tip.style.setProperty('--tip-x', Math.max(6, Math.min(wrapWidth - tipWidth - 6, desired)) + 'px');
   tip.classList.add('on');
 }
 function leaveTrendHover(svg) {
@@ -831,6 +843,7 @@ function filterHist(hist, range) {
 }
 function chartSeries(list, kind) {
   const pts = [];
+  const dates = [];
   if (!list.length) return pts;
   const start = Number(list[0].v) || 0, t0 = parseDay(list[0].d);
   for (let i = 0; i < list.length; i++) {
@@ -850,8 +863,12 @@ function chartSeries(list, kind) {
       Math.abs(v - prevV) < .000001 || Math.abs(v - (prevV + ownFlow)) < .000001
     );
     // 只有资金流、没有资产估值的日期仅参与计算，不作为曲线采样点，避免出现人为尖峰。
-    if (!flowOnly) pts.push(kind === "pnl" ? pnl : (denominator ? pnl / denominator * 100 : 0));
+    if (!flowOnly) {
+      pts.push(kind === "pnl" ? pnl : (denominator ? pnl / denominator * 100 : 0));
+      dates.push(list[i].d);
+    }
   }
+  pts.dates = dates;
   return pts;
 }
 
@@ -2029,6 +2046,7 @@ function chartBlock(hist, expected, unit = "元", currentPnl = null) {
   const range = route.chartRange || "all";
   const list = filterHist(hist, range);
   let series = chartSeries(list, kind);
+  const seriesDates = series.dates || list.map((x) => x.d);
   // 手动修正累计投入 / 转出后，历史快照仍保留原始资金流。将累计收益曲线
   // 整体平移到当前账面口径，确保末端值始终与顶部累计收益一致。
   if (kind === "pnl" && series.length && Number.isFinite(Number(currentPnl))) {
@@ -2063,7 +2081,7 @@ function chartBlock(hist, expected, unit = "元", currentPnl = null) {
   const lineColor = kind === "mwr" ? "#ef5b19" : "#3297f6";
   const label = kind === "mwr" ? "资金加权收益率" : "累计收益";
   const bench = benchMeta();
-  trendHoverModel = { kind, main:series, bench:benchSeries, dates:list.map((x) => x.d), label, benchLabel:bench.label, color:lineColor, unit, xAt, yAt };
+  trendHoverModel = { kind, main:series, bench:benchSeries, dates:seriesDates, label, benchLabel:bench.label, color:lineColor, unit, xAt, yAt };
   return `<div class="trend-tabs">
       <button type="button" class="${kind === "mwr" ? "on" : ""}" onclick="event.stopPropagation();setChartKind('mwr')">收益率曲线</button>
       <button type="button" class="${kind === "pnl" ? "on" : ""}" onclick="event.stopPropagation();setChartKind('pnl')">累计收益曲线</button>
@@ -2082,7 +2100,7 @@ function chartBlock(hist, expected, unit = "元", currentPnl = null) {
         <line data-hover-line x1="18" x2="18" y1="24" y2="154" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
         <circle data-hover-main cx="0" cy="0" r="4" fill="var(--card)" stroke="${lineColor}" stroke-width="2" style="display:none;pointer-events:none"/>
         <circle data-hover-bench cx="0" cy="0" r="3.5" fill="var(--card)" stroke="#4a90d9" stroke-width="2" style="display:none;pointer-events:none"/>
-        ${series.map((v,i) => `<circle cx="${xAt(i,series.length)}" cy="${yAt(v)}" r="7" fill="transparent" tabindex="0" onclick="toast('${list[Math.min(i,list.length-1)]?.d || ""}　${kind === "pnl" ? num(v) + " " + unit : pct(v)}')"><title>${list[Math.min(i,list.length-1)]?.d || ""} ${kind === "pnl" ? num(v) + " " + unit : pct(v)}</title></circle>`).join("")}
+        ${series.map((v,i) => `<circle cx="${xAt(i,series.length)}" cy="${yAt(v)}" r="7" fill="transparent" tabindex="0" onclick="toast('${seriesDates[i] || ""}　${kind === "pnl" ? num(v) + " " + unit : pct(v)}')"><title>${seriesDates[i] || ""} ${kind === "pnl" ? num(v) + " " + unit : pct(v)}</title></circle>`).join("")}
         <text x="18" y="168" font-size="10" fill="var(--faint)">${first}</text><text x="286" y="168" font-size="10" fill="var(--faint)">${last}</text>
         <text x="346" y="29" text-anchor="end" font-size="9" fill="var(--faint)">${kind === "pnl" ? num(scaleMax) : scaleMax.toFixed(1) + "%"}</text><text x="346" y="154" text-anchor="end" font-size="9" fill="var(--faint)">${kind === "pnl" ? num(scaleMin) : scaleMin.toFixed(1) + "%"}</text>
       </svg>
