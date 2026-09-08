@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # 香港时间每天 00:07（UTC 前一日 16:07）发布；避开 GitHub Actions 整点调度高峰。
+    # 香港时间每天 00:07（UTC 前一日 16:07）检查；有新提交才发布，避开整点调度高峰。
     - cron: "7 16 * * *"
   workflow_dispatch:
 
@@ -60,11 +60,6 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           CURRENT_SHA: ${{ github.sha }}
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "每日定时发布：即使 main 提交未变化，也重新生成当天镜像。"
-            exit 0
-          fi
           last_sha=$(gh api "repos/${REPOSITORY}/actions/workflows/docker-publish.yml/runs?status=success&per_page=30" --jq '[.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch")][0].head_sha // ""')
           if [ "$last_sha" = "$CURRENT_SHA" ]; then
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
@@ -77,7 +72,7 @@ jobs:
   publish:
     name: Publish linux/amd64 image
     needs: [test, scheduled-change-gate]
-    # 提交/PR 只检查；定时任务每日发布，手动任务仍避免重复构建同一提交。
+    # 提交/PR 只检查；定时和手动任务仅在当前 main 尚无镜像时发布。
     if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && needs.scheduled-change-gate.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     permissions:
