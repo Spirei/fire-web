@@ -183,39 +183,44 @@ function saveLocal() { try { localStorage.setItem(KEY, JSON.stringify(S)); } cat
 function save() {
   saveLocal();
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(pushRemote, 450);
+  saveTimer = setTimeout(() => {
+    saveTimer = 0;
+    void pushRemote();
+  }, 450);
 }
 function bookEmpty(b) { return isEmptyBook(b || S); }
 async function hydrate() {
   try {
-    const r = await fetch("/api/v1/simple-ledger", { credentials: "same-origin" });
-    if (!r.ok) return;
+    const r = await fetch("/api/v1/simple-ledger", { credentials: "same-origin", cache: "no-store" });
+    if (!r.ok) return false;
     loggedIn = true;
     const j = await r.json();
     const remote = normalize(j.data || j);
     // 登录用户以服务端数据为准，避免共享浏览器上的本地缓存串入其他账号。
     S = remote;
     saveLocal();
+    await pullRates();
     render({ skipUrl: true });
     restoreDlg();
-    pullRates();
-  } catch {}
+    return true;
+  } catch { return false; }
 }
 async function pushRemote() {
   if (!loggedIn) {
     try {
       const r = await fetch("/api/v1/simple-ledger", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(S) });
       loggedIn = r.ok;
-    } catch {}
-    return;
+      return r.ok;
+    } catch { return false; }
   }
   try {
-    await fetch("/api/v1/simple-ledger", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(S) });
-  } catch {}
+    const r = await fetch("/api/v1/simple-ledger", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(S) });
+    return r.ok;
+  } catch { return false; }
 }
 async function pullRates() {
   try {
-    const r = await fetch("/api/rates", { credentials: "same-origin" });
+    const r = await fetch("/api/rates", { credentials: "same-origin", cache: "no-store" });
     if (!r.ok) return;
     const j = await r.json();
     const rates = j.rates || {};
@@ -3125,4 +3130,12 @@ window.remountSimpleApp = function remountSimpleApp() {
   document.documentElement.classList.add("simple-app-ready");
   restoreDlg();
   hydrate();
+};
+window.refreshSimpleApp = async function refreshSimpleApp() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = 0;
+    if (!await pushRemote()) return false;
+  }
+  return hydrate();
 };

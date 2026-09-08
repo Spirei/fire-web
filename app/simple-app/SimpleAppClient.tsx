@@ -1,12 +1,17 @@
 "use client";
 
 import Script from "next/script";
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { IconArrowDown, IconCheck, IconExclamationMark, IconLoader2 } from "@tabler/icons-react";
 import echarts from "@/lib/echarts";
 
 const WINDOW_KEY = "fire-simple-win";
 
 export default function SimpleAppClient() {
+  const [pullDistance, setPullDistance] = useState(0);
+  const [pullState, setPullState] = useState<"idle" | "pulling" | "ready" | "refreshing" | "success" | "error">("idle");
+  const pullRef = useRef({ active: false, refreshing: false, startX: 0, startY: 0, distance: 0 });
+
   useLayoutEffect(() => {
     try {
       document.documentElement.classList.toggle("dark", localStorage.getItem("fire-simple-theme") === "dark");
@@ -124,6 +129,90 @@ export default function SimpleAppClient() {
     };
   }, []);
 
+  useEffect(() => {
+    const scroller = document.getElementById("app");
+    if (!scroller) return;
+    const isMobile = () => window.matchMedia("(max-width: 760px) and (pointer: coarse)").matches;
+    const blocked = (target: EventTarget | null) => {
+      const element = target instanceof Element ? target : null;
+      return !isMobile() || pullRef.current.refreshing ||
+        Boolean(document.getElementById("mask")?.classList.contains("on")) ||
+        Boolean(document.getElementById("skFull")?.classList.contains("on")) ||
+        Boolean(element?.closest("input, textarea, select, [contenteditable='true'], .cf-sankey-stage, .sk-view"));
+    };
+    const start = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || scroller.scrollTop > 0 || blocked(event.target)) return;
+      const touch = event.touches[0];
+      pullRef.current = { active: true, refreshing: false, startX: touch.clientX, startY: touch.clientY, distance: 0 };
+    };
+    const move = (event: TouchEvent) => {
+      if (!pullRef.current.active || event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - pullRef.current.startX;
+      const deltaY = touch.clientY - pullRef.current.startY;
+      if (deltaY <= 0 || Math.abs(deltaX) > deltaY || scroller.scrollTop > 0) {
+        pullRef.current.active = false;
+        setPullDistance(0);
+        setPullState("idle");
+        return;
+      }
+      if (deltaY < 6) return;
+      event.preventDefault();
+      const distance = Math.min(92, Math.round(deltaY * .48));
+      pullRef.current.distance = distance;
+      setPullDistance(distance);
+      setPullState(distance >= 64 ? "ready" : "pulling");
+    };
+    const finish = async () => {
+      if (!pullRef.current.active) return;
+      pullRef.current.active = false;
+      if (pullRef.current.distance < 64) {
+        setPullDistance(0);
+        setPullState("idle");
+        return;
+      }
+      setPullDistance(50);
+      setPullState("refreshing");
+      pullRef.current.refreshing = true;
+      const startedAt = Date.now();
+      let ok = false;
+      try { ok = await window.refreshSimpleApp?.() !== false; } catch { ok = false; }
+      const remaining = Math.max(0, 520 - (Date.now() - startedAt));
+      if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+      pullRef.current.refreshing = false;
+      setPullState(ok ? "success" : "error");
+      setPullDistance(42);
+      window.setTimeout(() => {
+        setPullDistance(0);
+        setPullState("idle");
+      }, 620);
+    };
+    const cancel = () => {
+      pullRef.current.active = false;
+      pullRef.current.distance = 0;
+      setPullDistance(0);
+      setPullState("idle");
+    };
+    scroller.addEventListener("touchstart", start, { passive: true });
+    scroller.addEventListener("touchmove", move, { passive: false });
+    scroller.addEventListener("touchend", finish, { passive: true });
+    scroller.addEventListener("touchcancel", cancel, { passive: true });
+    return () => {
+      scroller.removeEventListener("touchstart", start);
+      scroller.removeEventListener("touchmove", move);
+      scroller.removeEventListener("touchend", finish);
+      scroller.removeEventListener("touchcancel", cancel);
+    };
+  }, []);
+
+  const pullLabel = pullState === "ready" ? "松开刷新" : pullState === "refreshing" ? "正在刷新" :
+    pullState === "success" ? "已更新" : pullState === "error" ? "刷新失败" : "下拉刷新";
+  const pullStyle = {
+    "--pull-distance": `${pullDistance}px`,
+    "--pull-opacity": Math.min(1, pullDistance / 28),
+    "--pull-scale": Math.min(1, .86 + pullDistance / 650),
+  } as React.CSSProperties;
+
   return (
     <>
       <div className="win" id="win">
@@ -140,7 +229,19 @@ export default function SimpleAppClient() {
             </span>
           </button>
         </div>
-        <div className="win-body" id="app" />
+        <div
+          className={`simple-pull-indicator is-${pullState}`}
+          style={pullStyle}
+          role="status"
+          aria-live="polite"
+          aria-hidden={pullState === "idle"}
+        >
+          <span className="simple-pull-icon" aria-hidden="true">
+            {pullState === "refreshing" ? <IconLoader2 size={16} stroke={2} /> : pullState === "success" ? <IconCheck size={16} stroke={2.2} /> : pullState === "error" ? <IconExclamationMark size={16} stroke={2.2} /> : <IconArrowDown size={16} stroke={2} />}
+          </span>
+          <span>{pullLabel}</span>
+        </div>
+        <div className="win-body" id="app" style={pullStyle} />
         <div className="dock" id="foot" />
         <div className="sk-full" id="skFull" />
         <div className="mask" id="mask" onClick={(event) => {
@@ -168,6 +269,7 @@ declare global {
     toggleTheme?: () => void;
     closeMask?: () => void;
     remountSimpleApp?: () => void;
+    refreshSimpleApp?: () => Promise<boolean>;
     getSimpleCashflowChartData?: () => CashflowChartPayload;
     mountSimpleCashflowCharts?: (payload: CashflowChartPayload) => void;
     downloadSimpleCashflowChart?: (filename?: string) => void;

@@ -148,6 +148,7 @@
       overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--dash) transparent;
       scrollbar-gutter: stable;
     }
+    .simple-pull-indicator { display:none; }
     .win-body::-webkit-scrollbar { width: 6px; }
     .win-body::-webkit-scrollbar-track { background: transparent; }
     .win-body::-webkit-scrollbar-thumb { background: var(--dash); border-radius: 6px; }
@@ -966,11 +967,40 @@
       }
       .win-bar { height: 44px; padding: env(safe-area-inset-top, 0px) 16px 0; }
       .handle, #pinBtn { display: none !important; }
-      .win-body { scrollbar-gutter: auto; }
+      .win-body {
+        scrollbar-gutter: auto;
+        transform:translateY(var(--pull-distance, 0px));
+        transition:transform .24s cubic-bezier(.22,.75,.2,1);
+        will-change:transform;
+      }
+      .simple-pull-indicator.is-pulling ~ .win-body,
+      .simple-pull-indicator.is-ready ~ .win-body { transition:none; }
+      .simple-pull-indicator {
+        position:absolute; z-index:21; top:44px; left:50%;
+        display:flex; align-items:center; gap:7px; height:32px; padding:0 12px;
+        border:1px solid var(--line); border-radius:999px; background:color-mix(in srgb,var(--card) 94%,transparent);
+        color:var(--muted); box-shadow:0 5px 18px rgba(25,31,43,.1); font-size:12px; font-weight:600;
+        opacity:var(--pull-opacity,0);
+        transform:translate(-50%,calc(var(--pull-distance, 0px) - 39px)) scale(var(--pull-scale,.86));
+        transition:transform .24s cubic-bezier(.22,.75,.2,1),opacity .18s ease;
+        pointer-events:none; white-space:nowrap;
+      }
+      .simple-pull-icon {
+        display:grid; width:17px; height:17px; place-items:center; color:var(--blue);
+        font-size:15px; line-height:1; transition:transform .18s ease;
+      }
+      .simple-pull-indicator.is-ready .simple-pull-icon { transform:rotate(180deg); }
+      .simple-pull-indicator.is-refreshing .simple-pull-icon { animation:simple-pull-spin .75s linear infinite; }
+      .simple-pull-indicator.is-success .simple-pull-icon { color:var(--green); }
+      .simple-pull-indicator.is-error .simple-pull-icon { color:var(--red); }
       .win-body::-webkit-scrollbar { width: 0; }
       .screen { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
       .dock { padding: 10px 20px calc(12px + env(safe-area-inset-bottom, 0px)); }
       .dock .cta { height: 52px; border-radius: 26px; }
+    }
+    @keyframes simple-pull-spin { to { transform:rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .win-body,.simple-pull-indicator,.simple-pull-icon { transition:none!important; animation-duration:.001ms!important; }
     }
     @media (max-width: 500px) and (pointer:fine) {
       .win { width:calc(100% - 16px) !important; max-width:calc(100% - 16px); }

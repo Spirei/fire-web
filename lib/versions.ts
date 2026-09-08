@@ -2575,7 +2575,7 @@ export const V0_1_23_ENTRY: VersionEntry = {
 export const V0_1_24_ENTRY: VersionEntry = {
   version: "v0.1.24",
   date: "2026-09-08",
-  summary: "继续精修简化版投资资产构成的资金汇聚曲线与节点连接。",
+  summary: "继续精修简化版交互、投资图表与发布状态体验。",
   frontend: V0_1_23_ENTRY.frontend,
   software: V0_1_23_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.24" } : item),
   changes: [{
@@ -2602,6 +2602,10 @@ export const V0_1_24_ENTRY: VersionEntry = {
     title: "每日镜像避开整点调度延迟",
     desc: "GitHub Actions 定时发布从香港时间 00:00 调整为 00:07，避开整点调度高峰导致任务常延迟到凌晨 2 点以后；定时运行不再因 main 提交未变化而跳过，确保每天重新生成镜像，手动发布仍保留同提交去重。",
     kind: "fix"
+  }, {
+    title: "简化版手机端支持下拉刷新",
+    desc: "在简化版页面顶部下拉并越过阈值后松开，可重新同步服务端账本和最新汇率，并显示下拉、松开、加载、成功或失败状态。刷新前先补写尚未同步的本地编辑，弹窗、输入控件、桑基图和全屏图表区域会阻止误触；汇率拉取完成后再统一重绘当前页面。",
+    kind: "feature"
   }]
 };
 
