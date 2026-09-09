@@ -185,6 +185,21 @@ const fireCss = `
 .fire-scene-switch:hover { transform: translateY(-1px) scale(1.045); border-color: rgba(49,190,202,.72); box-shadow: 0 5px 16px rgba(11,180,180,.24); }
 .fire-scene-switch:hover svg { animation: fireSwitchWave .8s ease-in-out infinite alternate; }
 .fire-scene-switch:active { transform: translateY(0) scale(.94); transition-duration: .12s; }
+.fire-cursor-fish {
+  position:absolute; z-index:32; width:42px; height:26px; pointer-events:none;
+  opacity:0; transform-origin:50% 50%;
+  transition:left .18s cubic-bezier(.22,1,.36,1),top .18s cubic-bezier(.22,1,.36,1),opacity .28s ease,filter .25s ease;
+  filter:drop-shadow(0 4px 8px rgba(22,210,220,.2));
+}
+.fire-cursor-fish.is-visible { opacity:.78; }
+.fire-cursor-fish svg { width:100%; height:100%; overflow:visible; }
+.fire-cursor-fish-tail { transform-origin:10px 13px; animation:fireCursorTail .72s ease-in-out infinite alternate; }
+.fire-cursor-fish-bubble { animation:fireCursorBubble 1.8s ease-out infinite; transform-origin:center; }
+.fire-cursor-fish-bubble:nth-of-type(2) { animation-delay:-.9s; }
+@keyframes fireCursorTail { from { transform:rotate(-10deg); } to { transform:rotate(12deg); } }
+@keyframes fireCursorBubble { 0% { opacity:0; transform:translate(0,2px) scale(.55); } 25% { opacity:.65; } 100% { opacity:0; transform:translate(-8px,-12px) scale(1); } }
+@media (hover:none),(pointer:coarse) { .fire-cursor-fish { display:none; } }
+@media (prefers-reduced-motion:reduce) { .fire-cursor-fish { display:none; } }
 .fire-edit-button { transition: transform .42s cubic-bezier(.22,1,.36,1), box-shadow .42s ease, border-color .3s ease, background-color .3s ease, letter-spacing .35s ease; }
 .fire-edit-button:hover { transform: translateY(-1px) scale(1.025); border-color: rgba(107,114,128,.68); box-shadow: 0 6px 16px rgba(10,14,25,.11); letter-spacing: .02em; }
 .dark .fire-edit-button:hover { border-color: rgba(255,255,255,.28); box-shadow: 0 6px 18px rgba(0,0,0,.22); }
@@ -325,6 +340,12 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   // 首帧保持稳定占位，挂载后再显示真实配置，避免水合报错与 USD → 本地币种闪回。
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
+  const [cursorFish, setCursorFish] = useState({ x: 0, y: 0, angle: 0, visible: false });
+  const cursorFishLast = useRef({ x: 0, y: 0 });
+  const cursorFishFrame = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (cursorFishFrame.current !== null) cancelAnimationFrame(cursorFishFrame.current);
+  }, []);
   const [annualExpense, setAnnualExpense] = useState(() => Number(lsGet("fire:p-expense", "60000")) || 60000);
   const [withdrawalRate, setWithdrawalRate] = useState(() => Number(lsGet("fire:p-withdrawal", "4")) || 4); // %
   const [annualReturn, setAnnualReturn] = useState(() => Number(lsGet("fire:p-return", "7")) || 7); // %
@@ -673,8 +694,40 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   }
 
   return (
-    <div className="fire-page mx-auto max-w-[980px] px-4 py-8">
+    <div
+      className="fire-page relative mx-auto max-w-[980px] px-4 py-8"
+      onMouseMove={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        const x = event.clientX - rect.left + 18;
+        const y = event.clientY - rect.top + 14;
+        const previous = cursorFishLast.current;
+        const distance = Math.hypot(x - previous.x, y - previous.y);
+        const angle = distance > 2 ? Math.atan2(y - previous.y, x - previous.x) * 180 / Math.PI : cursorFish.angle;
+        cursorFishLast.current = { x, y };
+        if (cursorFishFrame.current !== null) cancelAnimationFrame(cursorFishFrame.current);
+        cursorFishFrame.current = requestAnimationFrame(() => {
+          setCursorFish({ x, y, angle, visible: true });
+          cursorFishFrame.current = null;
+        });
+      }}
+      onMouseLeave={() => setCursorFish((fish) => ({ ...fish, visible: false }))}
+    >
       <style>{fireCss}</style>
+      <span
+        aria-hidden="true"
+        className={`fire-cursor-fish ${cursorFish.visible ? "is-visible" : ""}`}
+        style={{ left: cursorFish.x, top: cursorFish.y, rotate: `${cursorFish.angle}deg` }}
+      >
+        <svg viewBox="0 0 42 26">
+          <path className="fire-cursor-fish-tail" d="M11 13 2 6.5v13Z" fill="#ff9678" opacity=".9" />
+          <path d="M9 13c4.5-8 20-10 29-1-7 11-23 10-29 1Z" fill="url(#cursorFishPaint)" />
+          <path d="M21 8c-2-3-5-4-8-3 1.5 2.7 3.6 4 6.4 4.6Z" fill="#54dbe1" opacity=".75" />
+          <circle cx="33.2" cy="11.1" r="1.35" fill="#091523" />
+          <circle className="fire-cursor-fish-bubble" cx="4" cy="6" r="1.5" fill="#72e8ee" />
+          <circle className="fire-cursor-fish-bubble" cx="1" cy="12" r="1" fill="#72e8ee" />
+          <defs><linearGradient id="cursorFishPaint" x1="9" y1="7" x2="36" y2="18"><stop stopColor="#22d7df" /><stop offset="1" stopColor="#3189f3" /></linearGradient></defs>
+        </svg>
+      </span>
       {/* 页头：整页 只读 ↔ 编辑 统一开关 */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-baseline gap-2">
