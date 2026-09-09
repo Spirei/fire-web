@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import MarketCodeBadge from "@/components/MarketCodeBadge";
 
 interface Props { market: string; code: string; name: string; iconUrl?: string }
 interface Profile {
@@ -76,7 +77,7 @@ export default function CompanyProfilePanel({ market, code, name, iconUrl }: Pro
     <div className="company-profile-intro">
       <div className="company-profile-brand">
         {iconUrl ? <img src={iconUrl} alt="" /> : <span>{name.slice(0, 1)}</span>}
-        <div><b>{name}</b><small>{profile.symbol || `${code}.${market}`}</small></div>
+        <div><b>{name}</b><small className="flex items-center gap-1.5"><MarketCodeBadge market={market} code={code} />{profile.symbol || `${code}.${market}`}</small></div>
       </div>
       <p ref={descriptionRef} className={expanded ? "is-expanded" : ""}>{profile.description}</p>
       {canExpand && <button type="button" onClick={() => setExpanded((value) => !value)}>{expanded ? "收起" : "…更多"}</button>}

@@ -7,6 +7,7 @@ import { showToast } from "@/lib/toast";
 import CelebsManageModal from "@/components/CelebsManageModal";
 import { CURRENCIES, useDisplayCurrency } from "@/lib/currencyPrefs";
 import CurrencyFlag from "@/components/CurrencyFlag";
+import MarketCodeBadge from "@/components/MarketCodeBadge";
 
 const UP = "text-up";
 const DOWN = "text-down";
@@ -1576,8 +1577,8 @@ export default function CelebsView({
                     <span className="flex min-w-0 items-center gap-2.5">
                       <StockIconUpload code={h.code} name={h.name} size={26} market={h.market} editable={isAdmin} />
                       <span className="min-w-0">
-                        <span className="block truncate font-semibold text-ink">{h.code}</span>
-                        <span className="block truncate text-[11px] text-faint">{h.name}</span>
+                        <span className="block truncate font-semibold text-ink">{h.name}</span>
+                        <span className="mt-0.5 flex min-w-0 items-center gap-1.5"><MarketCodeBadge market={h.market} code={h.code} /><span className="truncate text-[11px] text-faint">{h.code}</span></span>
                       </span>
                     </span>
                   );

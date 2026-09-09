@@ -13,6 +13,7 @@ import DeleteIcon from "@/components/DeleteIcon";
 import type { WatchGroup } from "@/lib/watchGroups";
 import type { CountryCatalogItem } from "@/lib/countryCatalog";
 import { defaultFlagUrl } from "@/lib/flagAssets";
+import MarketCodeBadge from "@/components/MarketCodeBadge";
 
 type TabKey = "stock" | "market" | "flag" | "broker" | "group" | "crypto" | "metal" | "icon";
 
@@ -1521,6 +1522,7 @@ export default function AssetLibraryView() {
                           <span className="flex min-w-0 items-center gap-2">
                             <MarketIcon market={c.market} size={18} />
                             <span className="truncate font-semibold text-ink">{c.name}</span>
+                            <MarketCodeBadge market={c.market} code={c.code} />
                             <span className="flex-none text-[11px] text-faint">{c.code}</span>
                             <span className="flex-none text-[11px] text-faint">{marketLabelOf(c.market)}</span>
                           </span>
@@ -1649,7 +1651,7 @@ export default function AssetLibraryView() {
                         />
                       <span className="min-w-0">
                         <span className="block truncate font-semibold text-ink">{displayName(item)}</span>
-                        <span className="block truncate text-[11px] text-faint">{item.code}</span>
+                        <span className="mt-0.5 flex min-w-0 items-center gap-1.5"><MarketCodeBadge market={item.market} code={item.code} /><span className="truncate text-[11px] text-faint">{item.code}</span></span>
                       </span>
                       </span>
                       <span className="text-right tabular-nums text-faint">{fmtUsd(usdCap(item.market, item.marketCap, rates)) || "—"}</span>
@@ -2444,6 +2446,7 @@ export default function AssetLibraryView() {
                                   </span>
                                 )}
                                 <span className="truncate font-semibold text-ink">{c.name}</span>
+                                <MarketCodeBadge market={c.market} code={c.code} />
                                 <span className="flex-none text-[11px] text-faint">{c.code}</span>
                               </span>
                               <button

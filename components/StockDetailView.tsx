@@ -16,6 +16,7 @@ import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import { isDoubleEtf } from "@/lib/relatedEtfs";
 import DividendTable, { fmtDividendAmount, yearOfDividend } from "@/components/DividendTable";
 import type { DividendRecord } from "@/lib/dividends";
+import MarketCodeBadge from "@/components/MarketCodeBadge";
 
 interface Props {
   market: string;
@@ -560,6 +561,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
         )}
         <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
           <h2 className="min-w-0 truncate text-xl font-bold text-ink" title={displayName}>{displayName}</h2>
+          <MarketCodeBadge market={market} code={code} />
           <span className="stock-detail-code flex-none text-sm text-muted">{code}</span>
         </div>
         <div className="ml-auto flex flex-none items-center gap-1.5">
@@ -813,7 +815,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
                           <b className="truncate text-[13px] text-ink">{item.name}</b>
                           <span className="flex-none rounded-full bg-bg-gray px-1.5 py-0.5 text-[10px] font-semibold text-muted">{item.badge}</span>
                         </span>
-                        <span className="mt-1 block text-[11px] font-medium text-muted">{item.code} · {mainStock ? "基础股票" : item.kind === "income" ? "期权收益策略" : item.kind === "long" ? "杠杆做多" : "反向做空"}</span>
+                        <span className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-muted"><MarketCodeBadge market="US" code={item.code} />{item.code} · {mainStock ? "基础股票" : item.kind === "income" ? "期权收益策略" : item.kind === "long" ? "杠杆做多" : "反向做空"}</span>
                       </span>
                       <span className="stock-etf-metric is-cap">
                         <small>市值</small>

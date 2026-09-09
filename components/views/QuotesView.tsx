@@ -18,6 +18,7 @@ import ImportSnapshotModal from "@/components/ImportSnapshotModal";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import { isDoubleEtf } from "@/lib/relatedEtfs";
 import RefreshButton from "@/components/RefreshButton";
+import MarketCodeBadge from "@/components/MarketCodeBadge";
 
 interface Props {
   /** 个股详情直达代码（如 US.GOOGL），来自 /watchlist/US.GOOGL 路径 */
@@ -891,7 +892,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                           )}
                           <span className="min-w-0">
                             <span className="block truncate font-semibold text-ink">{r.name}</span>
-                            <span className="block truncate text-[11px] text-faint">{r.code}</span>
+                            <span className="mt-0.5 flex min-w-0 items-center gap-1.5"><MarketCodeBadge market={r.market} code={r.code} /><span className="truncate text-[11px] text-faint">{r.code}</span></span>
                           </span>
                         </div>
                       </td>

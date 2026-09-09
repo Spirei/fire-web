@@ -8,6 +8,7 @@ import { useAssetIcons } from "@/lib/useAssetIcons";
 import CurrencySelect from "@/components/CurrencySelect";
 import { useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
 import { IconChartHistogram, IconMap2 } from "@tabler/icons-react";
+import MarketCodeBadge from "@/components/MarketCodeBadge";
 
 interface TopAsset {
   market: string;
@@ -351,7 +352,7 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
                           <AssetLogo item={it} custom={customLogo(it)} />
                           <span className="min-w-0 max-w-[126px]">
                             <span className="block truncate font-semibold text-ink">{zhName(it)}</span>
-                            <span className="block text-[11px] text-faint">{it.code}</span>
+                            <span className="mt-0.5 flex items-center gap-1.5"><MarketCodeBadge market={it.market} code={it.code} /><span className="text-[11px] text-faint">{it.code}</span></span>
                           </span>
                         </div>
                       </td>

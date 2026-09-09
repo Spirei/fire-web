@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import echarts, { type EChartsInstance } from "@/lib/echarts";
 import RainbowNumberInput from "@/components/RainbowNumberInput";
+import MarketCodeBadge from "@/components/MarketCodeBadge";
 
 interface KlineItem { d: string; o: number; h: number; l: number; c: number; v: number }
 interface IntradayPoint { time: string; price: number; volume?: number }
@@ -1253,7 +1254,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
                     return (
                       <button key={symbolKey} type="button" disabled={added || isCurrent} className={`chart-compare-item ${(added || isCurrent) ? "is-added" : ""}`} onClick={() => addCompare({ market: result.market, code: result.code, name: result.name })}>
                         <span className="chart-compare-item-name">
-                          <b>{result.code}{isCurrent ? " (本股)" : ""}</b>
+                          <b className="flex items-center gap-1.5"><MarketCodeBadge market={result.market} code={result.code} />{result.code}{isCurrent ? " (本股)" : ""}</b>
                           <small>{result.name} · {COMPARE_MARKET_LABEL[result.market.toUpperCase()] || result.market.toUpperCase()}(US)</small>
                         </span>
                         <span className="chart-compare-item-quote">
@@ -1283,7 +1284,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
                     return (
                       <button key={symbolKey} type="button" disabled={added} className={`chart-compare-item ${added ? "is-added" : ""}`} onClick={() => addCompare(candidate)}>
                         <span className="chart-compare-item-name">
-                          <b>{candidate.code}</b>
+                          <b className="flex items-center gap-1.5"><MarketCodeBadge market={candidate.market} code={candidate.code} />{candidate.code}</b>
                           <small>{candidate.name} · {COMPARE_MARKET_LABEL[candidate.market.toUpperCase()] || candidate.market.toUpperCase()}(US)</small>
                         </span>
                         <span className="chart-compare-item-quote">
@@ -1408,7 +1409,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
               <div key={symbolKey} className="stock-chart-compare-row">
                 <span className="stock-chart-compare-stock">
                   <i className="stock-chart-compare-dot" style={{ backgroundColor: item.color }} />
-                  <span className="stock-chart-compare-name">{item.code.toUpperCase()}<small>{item.name}</small></span>
+                  <span className="stock-chart-compare-name"><span className="flex items-center gap-1.5"><MarketCodeBadge market={item.market} code={item.code} />{item.code.toUpperCase()}</span><small>{item.name}</small></span>
                 </span>
                 <span className="is-right">{price != null ? (itMarket === "US" ? "$" : "") + fmtNumMarket(price, item.market) : "—"}</span>
                 <span className="is-right stock-chart-compare-chg" style={{ color: isUp ? "#e5484d" : "#0aa77d" }}>{chg >= 0 ? "+" : ""}{(chg ?? 0).toFixed(2)}<svg viewBox="0 0 12 12" fill="currentColor" className="stock-chart-compare-arrow" aria-hidden="true">{isUp ? <path d="M6 2.75 L9.72 9.25 L2.28 9.25 Z" /> : <path d="M6 9.25 L2.28 2.75 L9.72 2.75 Z" />}</svg></span>

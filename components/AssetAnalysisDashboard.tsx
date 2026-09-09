@@ -18,6 +18,7 @@ import QuickTradeDialog from "@/components/QuickTradeDialog";
 import HoldingDividendDialog from "@/components/HoldingDividendDialog";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import FundsPanel from "@/components/FundsPanel";
+import MarketCodeBadge from "@/components/MarketCodeBadge";
 
 type Period = "month" | "1m" | "6m" | "ytd" | "1y" | "all" | "custom";
 type ChartTab = "return" | "asset";
@@ -732,7 +733,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     const displayPnl = toDisplay(record, pnl);
     if (key === "identity") {
       const icon = stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
-      return <span className="flex min-w-[150px] items-center gap-2">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic">{record.name.slice(0, 1)}</i>}<span><b className="block">{record.name}</b><small className="text-muted">{record.code}</small></span></span>;
+      return <span className="flex min-w-[150px] items-center gap-2">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic">{record.name.slice(0, 1)}</i>}<span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} />{record.code}</small></span></span>;
     }
     if (key === "marketValue") return compactMoney(displayMarketValue);
     if (key === "cost") return fmtNumMarket(cost, record.market);
@@ -830,7 +831,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
               <span className="font-semibold tabular-nums">{String(index + 1).padStart(2, "0")}</span>
               <span className="flex min-w-0 items-center gap-2">
                 {icon ? <img src={icon} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" /> : <i className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-gray not-italic text-ink-2">{record.name.slice(0, 1)}</i>}
-                <span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 block truncate text-muted">{record.code}</small></span>
+                <span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span></small></span>
               </span>
               <span className={`text-right font-bold tabular-nums ${pnl >= 0 ? "text-up" : "text-down"}`}>{pnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(pnl))}</span>
             </div>;
