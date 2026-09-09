@@ -341,7 +341,8 @@ function CronRefreshButton() {
 function BackupTaskCard() {
   const [cfg, setCfg] = useState<BackupConfig | null>(null);
   const [backups, setBackups] = useState<{ name: string; size: number; mtime: number }[]>([]);
-  const [enabled, setEnabled] = useState(true);
+  // 备份配置独立于站点设置，首帧不能猜测开关状态；保持控件占位但不可见，待服务端快照到位后一次性显示。
+  const [enabled, setEnabled] = useState<boolean | null>(null);
   const [intervalHours, setIntervalHours] = useState(24);
   const [keep, setKeep] = useState(7);
   const [busy, setBusy] = useState(false);
@@ -410,7 +411,7 @@ function BackupTaskCard() {
   const intervalLabel = intervalHours === 1 ? "每小时" : intervalHours === 24 ? "每天" : intervalHours === 168 ? "每周" : intervalHours === 720 ? "每月" : `${intervalHours} 小时`;
 
   return (
-    <div className="settings-task-row settings-backup-row">
+    <div className={`settings-task-row settings-backup-row ${cfg ? "" : "invisible"}`}>
       <div className="flex flex-wrap items-center gap-3.5">
         <span className="flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-edge text-muted">
           <SubNavIcon name="database" className="h-[18px] w-[18px]" />
@@ -432,7 +433,7 @@ function BackupTaskCard() {
           <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] text-ink-2">
             <label className="flex cursor-pointer items-center gap-1.5">
               <span className="text-faint">开关</span>
-              <SettingsSwitch checked={enabled} onChange={() => setEnabled((v) => !v)} />
+              <SettingsSwitch checked={enabled === true} onChange={() => setEnabled((v) => v === null ? v : !v)} />
             </label>
             <label className="flex items-center gap-1.5">
               <span className="text-faint">间隔</span>
