@@ -114,6 +114,7 @@ export default function RecordsApp({
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
   const [navReady, setNavReady] = useState(true);
   const [settingsSub, setSettingsSub] = useState<string | null>(null);
+  const [settingsSubReady, setSettingsSubReady] = useState(initialTab !== "settings");
   const [groups, setGroups] = useState<GroupConfig[]>(initialSettings.groups);
   const [markets, setMarkets] = useState<Market[]>(initialSettings.markets);
   const [marketLabels, setMarketLabels] = useState<{ key: string; label: string; flag: string }[]>(initialSettings.marketLabels);
@@ -128,6 +129,7 @@ export default function RecordsApp({
   useLayoutEffect(() => {
     if (initialTab === "settings") {
       setSettingsSub(new URLSearchParams(window.location.search).get("sub"));
+      setSettingsSubReady(true);
     }
   }, [initialTab]);
 
@@ -624,7 +626,9 @@ export default function RecordsApp({
     return () => window.cancelAnimationFrame(frame);
   }, [activeTab, sidebarTabs.length]);
 
-  const settingsPanel = (
+  const settingsPanel = !settingsSubReady ? (
+    <div className="flex min-h-[360px] items-center justify-center rounded-2xl border border-edge bg-bg-gray/40 text-sm text-muted">正在加载设置…</div>
+  ) : (
     <SettingsView
       user={{
         username: user?.username ?? "",
