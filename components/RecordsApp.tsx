@@ -114,6 +114,7 @@ export default function RecordsApp({
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
   const [navReady, setNavReady] = useState(true);
   const [settingsSub, setSettingsSub] = useState<string | null>(null);
+  const [settingsSubReady, setSettingsSubReady] = useState(initialTab !== "settings");
   const [groups, setGroups] = useState<GroupConfig[]>(initialSettings.groups);
   const [markets, setMarkets] = useState<Market[]>(initialSettings.markets);
   const [marketLabels, setMarketLabels] = useState<{ key: string; label: string; flag: string }[]>(initialSettings.marketLabels);
@@ -128,6 +129,7 @@ export default function RecordsApp({
   useLayoutEffect(() => {
     if (initialTab === "settings") {
       setSettingsSub(new URLSearchParams(window.location.search).get("sub"));
+      setSettingsSubReady(true);
     }
   }, [initialTab]);
 
@@ -625,21 +627,23 @@ export default function RecordsApp({
   }, [activeTab, sidebarTabs.length]);
 
   const settingsPanel = (
-    <SettingsView
-      user={{
-        username: user?.username ?? "",
-        nickname: user?.nickname ?? "",
-        uid: user?.uid ?? "",
-        email: user?.email ?? "",
-        avatar: user?.avatar ?? "",
-        role: user?.role ?? "user"
-      }}
-      recordsCount={records.length}
-      onExport={exportJson}
-      onClearAll={clearAllRecords}
-      onTabsChange={setNavTabs}
-      initialSub={settingsSub ?? undefined}
-    />
+    <div className={settingsSubReady ? "" : "invisible"} aria-hidden={!settingsSubReady}>
+      <SettingsView
+        user={{
+          username: user?.username ?? "",
+          nickname: user?.nickname ?? "",
+          uid: user?.uid ?? "",
+          email: user?.email ?? "",
+          avatar: user?.avatar ?? "",
+          role: user?.role ?? "user"
+        }}
+        recordsCount={records.length}
+        onExport={exportJson}
+        onClearAll={clearAllRecords}
+        onTabsChange={setNavTabs}
+        initialSub={settingsSub ?? undefined}
+      />
+    </div>
   );
 
   return (
