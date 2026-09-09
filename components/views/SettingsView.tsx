@@ -742,6 +742,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     if (initialSub === "site" || initialSub === "features" || initialSub === "stocks" || initialSub === "api" || initialSub === "profile" || initialSub === "database" || initialSub === "cron" || initialSub === "about") {
       const next = initialSub as SubKey;
       setSub(isAdminUser || !ADMIN_SUB_KEYS.has(next) ? next : "profile");
+      const requestedAnchor = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("anchor") : null;
+      const nextAnchor = requestedAnchor && SETTINGS_SEARCH_INDEX.some((item) => item.sub === next && item.anchor === requestedAnchor)
+        ? requestedAnchor
+        : SETTINGS_SEARCH_INDEX.find((item) => item.sub === next)?.anchor;
+      if (nextAnchor) setActiveAnchor(nextAnchor);
     }
   }, [initialSub, isAdminUser]);
 
