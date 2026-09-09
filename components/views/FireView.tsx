@@ -297,8 +297,9 @@ const fireCss = `
 .fire-jump-fish-father { width:118px; height:86px; --fish-bg-size:194px 109px; --fish-bg-position:-3px -11px; }
 .fire-jump-fish-child { width:82px; height:60px; --fish-bg-size:208px 117px; --fish-bg-position:-128px -48px; animation-duration:.58s; }
 .fire-fish-body,.fire-fish-tail { position:absolute; inset:0; display:block; background-image:url('/images/fire/clownfish-family.png'); background-repeat:no-repeat; background-size:var(--fish-bg-size); background-position:var(--fish-bg-position); }
-.fire-fish-body { clip-path:polygon(25% 0,100% 0,100% 100%,25% 100%); }
-.fire-fish-tail { clip-path:polygon(0 4%,42% 5%,45% 96%,0 96%); transform-origin:36% 52%; animation:fireTailBeat .36s ease-in-out infinite; }
+.fire-fish-body { clip-path:polygon(29% 0,100% 0,100% 100%,29% 100%); }
+/* 尾鳍图层只裁出尾部，避免把腹鳍/胸鳍再次绘制并随尾部旋转形成重影。 */
+.fire-fish-tail { clip-path:polygon(0 17%,31% 27%,32% 73%,0 84%); transform-origin:29% 52%; animation:fireTailBeat .36s ease-in-out infinite; }
 .fire-family-child .fire-fish-tail { animation-duration:.28s; }
 .fire-fish-breath { position:absolute; left:88%; top:31%; width:34px; height:36px; }
 .fire-fish-breath i { position:absolute; left:0; bottom:0; width:5px; height:5px; border:1px solid rgba(159,240,247,.72); border-radius:50%; box-shadow:0 0 5px rgba(76,213,226,.38); animation:fireBreathBubble 1.9s ease-out infinite; }
