@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   MARKET_LIST,
@@ -97,9 +97,6 @@ export default function RecordsApp({
   initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible">;
   initialStockIcons: Record<string, string>;
 }) {
-  // 子页面首次渲染前先把 SSR 图标写入共享缓存，消除素材接口返回前的空白占位。
-  primeStockIconCache(initialStockIcons);
-  applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
   const router = useRouter();
   const [user] = useState<User>(initialUser);
   const [records, setRecords] = useState<StockRecord[]>(initialRecords);
@@ -121,6 +118,12 @@ export default function RecordsApp({
   const [markets, setMarkets] = useState<Market[]>(initialSettings.markets);
   const [marketLabels, setMarketLabels] = useState<{ key: string; label: string; flag: string }[]>(initialSettings.marketLabels);
   const { assetIcons } = useAssetIcons(["icon"], { stockIconCdn: initialSettings.stockIconCdn });
+
+  // 外部共享缓存只能在提交后更新；渲染期间通知订阅者会打断水合并触发跨组件 setState。
+  useLayoutEffect(() => {
+    primeStockIconCache(initialStockIcons);
+    applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
+  }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible, initialStockIcons]);
 
   useEffect(() => {
     if (initialTab === "settings") {

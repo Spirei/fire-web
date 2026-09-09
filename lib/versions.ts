@@ -2441,7 +2441,7 @@ export const V0_1_21_ENTRY: VersionEntry = {
 export const V0_1_22_ENTRY: VersionEntry = {
   version: "v0.1.22",
   date: "2026-09-06",
-  summary: "设置侧栏收为迷你像素关卡，展开浮层游玩，保留完整设置导航空间。",
+  summary: "简化版完成桌面与手机自适应打磨，并补齐正式页面、账本导入导出与收益计算。",
   frontend: [...V0_1_21_ENTRY.frontend, { name: "SheetJS(xlsx)", version: "0.18.5", desc: "简化版投资记账「有知有行」xlsx 导入导出" }],
   software: V0_1_21_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.22" } : item),
   changes: [{
@@ -2455,10 +2455,6 @@ export const V0_1_22_ENTRY: VersionEntry = {
   }, {
     title: "简化版完成桌面与手机自适应打磨",
     desc: "对照家庭资产与投资记账参考图重新梳理视觉层级：桌面总览拓宽并强化核心金额，卡片、标题、阴影与交互反馈统一；手机端自动铺满视口、隐藏桌面窗口控件、适配安全区和单列卡片，同时补齐键盘焦点与窄屏防溢出处理。",
-    kind: "feature"
-  }, {
-    title: "设置侧栏加入蘑菇王国互动彩蛋",
-    desc: "顶部徽标换为紧凑像素砖墙与问号砖（约 110px），人物选择和操作说明移入展开浮层，不挤占设置导航；点击角色跳跃并随机获得金币、蘑菇、星星或火焰花；管道往返地面与地下，精修六位像素角色并记住选择；支持左右键移动、上键或空格跳跃、下键钻管道，真实顶砖碰撞奖励，兼容深色及减少动态效果。",
     kind: "feature"
   }, {
     title: "简化版对照原版继续打磨交互与版式",

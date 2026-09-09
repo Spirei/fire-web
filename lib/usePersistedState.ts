@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const PERSISTED_STATE_EVENT = "fire:persisted-state";
 
@@ -21,7 +21,9 @@ function readPersisted<T>(key: string, fallback: T | (() => T)): T {
  * 用法与 useState 一致：const [v, setV] = usePersistedState("fire:xxx", 默认值)
  */
 export function usePersistedState<T>(key: string, initial: T | (() => T)): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [value, setValue] = useState<T>(() => readPersisted(key, initial));
+  const initialRef = useRef(initial);
+  // SSR 与客户端首帧必须使用同一个默认值；挂载后再恢复浏览器中的偏好，避免水合文本不一致。
+  const [value, setValue] = useState<T>(() => typeof initial === "function" ? (initial as () => T)() : initial);
   const setPersistedValue = useCallback<React.Dispatch<React.SetStateAction<T>>>((next) => {
     setValue((current) => {
       const resolved = typeof next === "function" ? (next as (previous: T) => T)(current) : next;
@@ -35,12 +37,13 @@ export function usePersistedState<T>(key: string, initial: T | (() => T)): [T, R
     });
   }, [key]);
   useEffect(() => {
+    setValue(readPersisted(key, initialRef.current));
     const sync = (event: Event) => {
       const detail = (event as CustomEvent<{ key?: string; value?: T }>).detail;
       if (detail?.key === key) setValue(detail.value as T);
     };
     const syncStorage = (event: StorageEvent) => {
-      if (event.key === key) setValue(readPersisted(key, initial));
+      if (event.key === key) setValue(readPersisted(key, initialRef.current));
     };
     window.addEventListener(PERSISTED_STATE_EVENT, sync);
     window.addEventListener("storage", syncStorage);
@@ -48,6 +51,6 @@ export function usePersistedState<T>(key: string, initial: T | (() => T)): [T, R
       window.removeEventListener(PERSISTED_STATE_EVENT, sync);
       window.removeEventListener("storage", syncStorage);
     };
-  }, [initial, key]);
+  }, [key]);
   return [value, setPersistedValue];
 }

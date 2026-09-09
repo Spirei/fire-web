@@ -7,7 +7,6 @@ import type { GroupConfig, SiteSettings, TabConfig, TickerConfig } from "@/lib/t
 import { showToast } from "@/lib/toast";
 import { copyText } from "@/lib/clipboard";
 import SettingsHeader, { SettingsSection, SubNavIcon } from "@/components/SettingsHeader";
-import SettingsPlayground from "@/components/SettingsPlayground";
 import { LOGO_FONT_LABELS, logoFontClass } from "@/lib/logoFont";
 import MarketIcon from "@/components/MarketIcon";
 import DeleteIcon from "@/components/DeleteIcon";
@@ -1716,7 +1715,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       )}
       {/* 紧凑侧栏（桌面客户端风格） */}
       <aside className="sw-sidebar relative hidden w-[184px] flex-none flex-col border-r p-2 md:flex">
-        <SettingsPlayground />
         {navGroups.map((g) => (
           <div key={g.label} className="sw-nav-group">
             <p className="sw-nav-group-title">{g.label}</p>
