@@ -27,7 +27,8 @@ export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
 };
 
 export const DISPLAY_CURRENCY_KEY = "fire:display-currency";
-export const DEFAULT_DISPLAY_CURRENCY: CurrencyCode = "USD";
+// 中文站默认以人民币展示；下拉列表顺序仍由 CURRENCIES 保持美元第一位。
+export const DEFAULT_DISPLAY_CURRENCY: CurrencyCode = "CNY";
 
 /** 金额单位偏好：auto 为同一页面统一启用或关闭智能缩写。 */
 export type CurrencyDisplayUnit = "auto" | "full" | "compact";
