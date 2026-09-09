@@ -18,6 +18,7 @@ import {
   type User
 } from "@/lib/types";
 import { showToast } from "@/lib/toast";
+import { applyMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import SettingsWindow from "@/components/SettingsWindow";
 import { primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
@@ -93,11 +94,12 @@ export default function RecordsApp({
   initialUser: User;
   initialRecords: StockRecord[];
   initialUserLogs: SystemLog[];
-  initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn">;
+  initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges">;
   initialStockIcons: Record<string, string>;
 }) {
   // 子页面首次渲染前先把 SSR 图标写入共享缓存，消除素材接口返回前的空白占位。
   primeStockIconCache(initialStockIcons);
+  applyMarketBadges(initialSettings.marketBadges);
   const router = useRouter();
   const [user] = useState<User>(initialUser);
   const [records, setRecords] = useState<StockRecord[]>(initialRecords);

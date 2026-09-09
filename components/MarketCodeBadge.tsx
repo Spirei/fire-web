@@ -1,4 +1,4 @@
-import { getMarketBadge } from "@/lib/marketBadge";
+import { useMarketBadge } from "@/lib/marketBadge";
 
 interface Props {
   market: string;
@@ -7,7 +7,7 @@ interface Props {
 }
 
 export default function MarketCodeBadge({ market, code, className = "" }: Props) {
-  const badge = getMarketBadge(market, code);
+  const badge = useMarketBadge(market, code);
   return (
     <span
       className={`inline-flex h-[18px] min-w-[30px] flex-none items-center justify-center rounded-[4px] px-1.5 text-[10px] font-bold leading-none tracking-[0.01em] ${className}`}

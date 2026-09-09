@@ -2621,7 +2621,7 @@ export const V0_1_25_ENTRY: VersionEntry = {
 export const V0_1_26_ENTRY: VersionEntry = {
   version: "v0.1.26",
   date: "2026-09-10",
-  summary: "修复资产分析页刷新闪动，并消除全站页签刷新时的加载中。",
+  summary: "修复刷新闪动，并新增全站市场色块设置。",
   frontend: V0_1_25_ENTRY.frontend,
   software: V0_1_25_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.26" } : item),
   changes: [{
@@ -2636,6 +2636,10 @@ export const V0_1_26_ENTRY: VersionEntry = {
     title: "全站排查并消除刷新闪「加载中」",
     desc: "后台所有页签不再用 next/dynamic 的 TabLoading：持仓、自选、FIRE、设置、全球预览、财报日历、名人持仓、交易广场、用户管理、素材库、附件、盈亏分析刷新时不再整页闪「加载中…」。登录表单去掉鉴权检查的加载中挡板（服务端已拦截已登录访问）。用户管理、全球市值榜绘制前恢复本地缓存；盈亏分析与财报日历的加载文案改为无文字骨架。tsc 无错误。",
     kind: "fix"
+  }, {
+    title: "设置-股票新增市场色块设置",
+    desc: "全站市场徽标颜色与文字改为可配置：设置 → 股票设置 → 市场色块设置，可改美股/港股/上证/深证/加密及其他市场的底色、文字色与缩写。保存后持仓、搜索、分享页、盈亏分析等处同步生效，缺省仍为原默认配色。tsc 无错误。",
+    kind: "feature"
   }]
 };
 

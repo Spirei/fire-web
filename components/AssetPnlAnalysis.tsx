@@ -7,7 +7,7 @@ import PnlTrendChart, { type PnlTrendPoint } from "@/components/PnlTrendChart";
 import MarketIcon from "@/components/MarketIcon";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { useAssetIcons } from "@/lib/useAssetIcons";
-import { getMarketBadge } from "@/lib/marketBadge";
+import { getMarketBadge, useMarketBadge } from "@/lib/marketBadge";
 import { showToast } from "@/lib/toast";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
@@ -125,7 +125,7 @@ function FilterIcon() {
 }
 
 function MarketBadge({ market, code }: { market: PnlRow["market"]; code: string }) {
-  const b = getMarketBadge(market, code);
+  const b = useMarketBadge(market, code);
   return (
     <span className="inline-flex h-[18px] w-[30px] flex-none items-center justify-center rounded-[4px] text-[10px] font-bold leading-none" style={{ background: b.bg, color: b.fg }}>
       {b.label}

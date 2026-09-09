@@ -96,6 +96,12 @@ export function marketMeta(market: string) {
   return MARKET_META[market as Market] ?? { label: market || "其他", currency: "", code: "", flag: "🌍" };
 }
 
+export interface MarketBadgeStyle {
+  label: string;
+  bg: string;
+  fg: string;
+}
+
 /**
  * 汇率兜底值：服务端汇率尚未返回时用于跨市场换算，
  * 避免港股 / A股 / 日股 / 韩股被按 1:1 误算成美元（导致总资产刷新闪变）。
@@ -228,6 +234,8 @@ export interface SiteSettings {
   homeNav: HomeNavItem[];
   markets: Market[];
   marketLabels: { key: string; label: string; flag: string }[];
+  /** 全站市场色块（持仓 / 搜索 / 分享页徽标），缺省走默认配色 */
+  marketBadges: Record<string, MarketBadgeStyle>;
   assetMarketOrder: string[];
   indicesOrder: string[];
   holdingColumns: import("./holdingColumns").HoldingColumnPreference[];

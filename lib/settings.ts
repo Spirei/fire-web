@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import type { HomeNavItem, Market, SiteSettings, TabConfig, TickerConfig } from "./types";
+import { DEFAULT_MARKET_BADGES, normalizeMarketBadges } from "./marketBadge";
 import { DEFAULT_HOLDING_COLUMNS, normalizeHoldingColumns } from "./holdingColumns";
 import fs from "fs";
 import path from "path";
@@ -48,6 +49,7 @@ const DEFAULTS: SiteSettings = {
   homeNav: DEFAULT_HOME_NAV,
   markets: [],
   marketLabels: [],
+  marketBadges: { ...DEFAULT_MARKET_BADGES },
   assetMarketOrder: [],
   indicesOrder: [],
   holdingColumns: DEFAULT_HOLDING_COLUMNS,
@@ -311,6 +313,11 @@ export function getSiteSettings(): SiteSettings {
       }
     } catch { /* 无效市场标签忽略 */ }
   }
+  if (typeof map.marketBadges === "string") {
+    try {
+      result.marketBadges = normalizeMarketBadges(JSON.parse(map.marketBadges));
+    } catch { /* 无效市场色块忽略 */ }
+  }
   if (typeof map.assetMarketOrder === "string") {
     try {
       const parsed = JSON.parse(map.assetMarketOrder);
@@ -485,6 +492,9 @@ export function updateSiteSettings(patch: Partial<SiteSettings>): SiteSettings {
       })
       .map((l) => ({ key: l.key, label: l.label.trim() || l.key, flag: (l.flag || "🌍").trim() || "🌍" }));
     upsert.run("marketLabels", JSON.stringify(valid));
+  }
+  if (patch.marketBadges && typeof patch.marketBadges === "object") {
+    upsert.run("marketBadges", JSON.stringify(normalizeMarketBadges(patch.marketBadges)));
   }
   if (Array.isArray(patch.assetMarketOrder)) {
     const seen = new Set<string>();

@@ -23,7 +23,8 @@ export async function GET(request: Request) {
       logoFont: s.logoFont,
       footerDesc: s.footerDesc,
       homeNav: s.homeNav,
-      allowRegister: s.allowRegister
+      allowRegister: s.allowRegister,
+      marketBadges: s.marketBadges
     }
   });
 }

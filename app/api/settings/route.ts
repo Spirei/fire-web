@@ -87,6 +87,7 @@ export async function PUT(request: Request) {
     groups: Array.isArray(body.groups) ? body.groups : undefined,
     markets: Array.isArray(body.markets) ? body.markets : undefined,
     marketLabels: Array.isArray(body.marketLabels) ? body.marketLabels : undefined,
+    marketBadges: body.marketBadges && typeof body.marketBadges === "object" ? body.marketBadges : undefined,
     assetMarketOrder: Array.isArray(body.assetMarketOrder) ? body.assetMarketOrder : undefined,
     indicesOrder: Array.isArray(body.indicesOrder) ? body.indicesOrder : undefined,
     holdingColumns: Array.isArray(body.holdingColumns) ? body.holdingColumns : undefined,

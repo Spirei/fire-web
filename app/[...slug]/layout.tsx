@@ -93,7 +93,8 @@ export default async function SlugLayout({
             groups: settings.groups,
             markets: settings.markets,
             marketLabels: settings.marketLabels,
-            stockIconCdn: settings.stockIconCdn
+            stockIconCdn: settings.stockIconCdn,
+            marketBadges: settings.marketBadges
           }}
         />
       </main>

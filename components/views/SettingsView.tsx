@@ -18,6 +18,7 @@ import SafeAssetImage from "@/components/SafeAssetImage";
 import type { BackupConfig } from "@/lib/backup";
 import { DEFAULT_HOLDING_COLUMNS } from "@/lib/holdingColumns";
 import { useCurrencyDisplayUnit, type CurrencyDisplayUnit } from "@/lib/currencyPrefs";
+import { applyMarketBadges, DEFAULT_MARKET_BADGES, MARKET_BADGE_ITEMS, normalizeMarketBadges } from "@/lib/marketBadge";
 
 // 版本历史弹窗按需懒加载：完整 VERSIONS 数组只在点开「版本」弹窗时下载，不进首屏包。
 const VersionModal = dynamic(() => import("@/components/VersionModal"), { ssr: false });
@@ -57,6 +58,7 @@ const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; group
   { sub: "site", anchor: "nav", label: "首页导航", groupLabel: "网站", keywords: "导航 菜单 首页 入口" },
   { sub: "features", anchor: "trading-square", label: "交易广场", groupLabel: "功能", keywords: "交易广场 特朗普 段永平 更新 刷新 频率 缓存" },
   { sub: "stocks", anchor: "groups", label: "券商分组", groupLabel: "股票", keywords: "券商 分组 别名 持仓" },
+  { sub: "stocks", anchor: "market-badges", label: "市场色块设置", groupLabel: "股票", keywords: "市场 色块 徽标 颜色 US HK A股 上证 深证 加密" },
   { sub: "stocks", anchor: "sources", label: "股票来源接口", groupLabel: "股票", keywords: "股票来源 接口 行情 财报 图标 url 数据源" },
   { sub: "stocks", anchor: "translation", label: "翻译配置", groupLabel: "股票", keywords: "翻译配置 DeepSeek 交易广场 中文" },
   { sub: "stocks", anchor: "trade", label: "交易 · 富途", groupLabel: "股票", keywords: "富途 futu opend 交易 行情源 主机 端口 腾讯 yahoo 备用" },
@@ -75,6 +77,7 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   nav: "home",
   "trading-square": "features",
   groups: "tag",
+  "market-badges": "tag",
   sources: "plug",
   trade: "trade",
   "currency-display": "stocks",
@@ -260,7 +263,7 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
   },
   {
     label: "股票",
-    items: [{ key: "stocks", label: "股票设置", desc: "券商管理与数据来源接口" }]
+    items: [{ key: "stocks", label: "股票设置", desc: "券商管理、市场色块与数据来源接口" }]
   },
   {
     label: "账号",
@@ -493,6 +496,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   homeNav: [],
   markets: [],
   marketLabels: [],
+  marketBadges: { ...DEFAULT_MARKET_BADGES },
   assetMarketOrder: [],
   indicesOrder: [],
   allowRegister: true,
@@ -742,11 +746,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.settings) {
-          setSite({ ...DEFAULT_SETTINGS, ...data.settings });
+          setSite({ ...DEFAULT_SETTINGS, ...data.settings, marketBadges: normalizeMarketBadges(data.settings.marketBadges) });
           captureSaved(data.settings);
           setTabs(data.settings.tabs ?? DEFAULT_TABS);
           setStockGroups(data.settings.groups ?? []);
           setGroupsLoaded(true);
+          applyMarketBadges(data.settings.marketBadges);
         }
       })
       .catch(() => {
@@ -852,6 +857,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       if (!res.ok) throw new Error(data?.error || "保存失败");
       setSite((s) => ({ ...s, ...data.settings, llmApiKey: s.llmApiKey }));
       captureSaved(data.settings);
+      if (data.settings?.marketBadges) applyMarketBadges(data.settings.marketBadges);
       setBlockMsg((m) => ({ ...m, [key]: { type: "ok", text: hint } }));
       showToast(hint);
       window.dispatchEvent(new Event("fire:settings-updated"));
@@ -1192,6 +1198,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingSiteInfo, setEditingSiteInfo] = useState(false);
   const [editingFutu, setEditingFutu] = useState(false);
+  const [editingMarketBadges, setEditingMarketBadges] = useState(false);
+  const [showAllMarketBadges, setShowAllMarketBadges] = useState(false);
   const [editingAppearance, setEditingAppearance] = useState(false);
   const [editingDb, setEditingDb] = useState(false);
   const activeEditState = activeAnchor === "trading-square" ? editingTradingSquare
@@ -1200,6 +1208,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       : activeAnchor === "ticker" ? editingTicker
         : activeAnchor === "nav" ? (editingHomeNav || editingTabs)
           : activeAnchor === "groups" ? editingStockGroups
+            : activeAnchor === "market-badges" ? editingMarketBadges
             : activeAnchor === "sources" || activeAnchor === "translation" ? editingSources
               : activeAnchor === "trade" ? editingFutu
                 : activeAnchor === "profile" ? editingProfile
@@ -1214,6 +1223,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     else if (activeAnchor === "ticker") setEditingTicker(true);
     else if (activeAnchor === "nav") { setEditingHomeNav(true); setEditingTabs(true); }
     else if (activeAnchor === "groups") setEditingStockGroups(true);
+    else if (activeAnchor === "market-badges") setEditingMarketBadges(true);
     else if (activeAnchor === "sources" || activeAnchor === "translation") setEditingSources(true);
     else if (activeAnchor === "trade") setEditingFutu(true);
     else if (activeAnchor === "profile") setEditingProfile(true);
@@ -1254,6 +1264,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         if (ok) { setEditingHomeNav(false); setEditingTabs(false); }
       } else if (activeAnchor === "groups") {
         await saveStockGroups();
+      } else if (activeAnchor === "market-badges") {
+        const nextBadges = normalizeMarketBadges(site.marketBadges);
+        const ok = await saveBlock("marketBadges", { marketBadges: nextBadges }, "市场色块已保存");
+        if (ok) {
+          applyMarketBadges(nextBadges);
+          setEditingMarketBadges(false);
+        }
       } else if (activeAnchor === "sources" || activeAnchor === "translation") {
         const ok = await saveStockSources();
         if (ok) setEditingSources(false);
@@ -2460,6 +2477,147 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   {groupMsg && (
                     <p className={`rounded-[10px] px-3.5 py-2.5 text-[13px] ${groupMsg.type === "ok" ? "bg-brand-light text-brand-deep" : "bg-up-bg text-up"}`}>
                       {groupMsg.text}
+                    </p>
+                  )}
+                </SettingsSection>
+
+                <SettingsSection
+                  icon="tag"
+                  title="市场色块设置"
+                  desc="全站持仓、搜索、分享页等处的市场徽标颜色与文字"
+                  id="market-badges"
+                  titleAction={!editingMarketBadges ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditingMarketBadges(true)}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink"
+                      title="编辑市场色块"
+                      aria-label="编辑市场色块"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                        <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                      </svg>
+                    </button>
+                  ) : undefined}
+                  action={
+                    editingMarketBadges ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSite((s) => ({ ...s, marketBadges: { ...DEFAULT_MARKET_BADGES } }));
+                          }}
+                          className="btn btn-ghost btn-sm"
+                        >
+                          恢复默认
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            fetch("/api/settings")
+                              .then((res) => (res.ok ? res.json() : null))
+                              .then((data) => {
+                                if (data?.settings?.marketBadges) {
+                                  setSite((s) => ({ ...s, marketBadges: normalizeMarketBadges(data.settings.marketBadges) }));
+                                }
+                              })
+                              .catch(() => undefined);
+                            setEditingMarketBadges(false);
+                          }}
+                          className="btn btn-ghost btn-sm"
+                        >
+                          取消
+                        </button>
+                        <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">
+                          保存
+                        </button>
+                      </div>
+                    ) : undefined
+                  }
+                >
+                  <div className="flex flex-col gap-2">
+                    {(showAllMarketBadges ? MARKET_BADGE_ITEMS : MARKET_BADGE_ITEMS.slice(0, 5)).map((item) => {
+                      const badge = normalizeMarketBadges(site.marketBadges)[item.key];
+                      return (
+                        <div key={item.key} className="flex flex-wrap items-center gap-2.5 rounded-[14px] border border-edge bg-white p-3 dark:bg-[#151a26]">
+                          <span
+                            className="inline-flex h-[22px] min-w-[36px] flex-none items-center justify-center rounded-[4px] px-1.5 text-[11px] font-bold leading-none"
+                            style={{ backgroundColor: badge.bg, color: badge.fg }}
+                          >
+                            {badge.label || item.key}
+                          </span>
+                          <strong className="min-w-[88px] flex-none text-sm font-semibold text-ink">{item.name}</strong>
+                          {editingMarketBadges ? (
+                            <>
+                              <input
+                                value={badge.label}
+                                onChange={(e) => setSite((s) => ({
+                                  ...s,
+                                  marketBadges: {
+                                    ...normalizeMarketBadges(s.marketBadges),
+                                    [item.key]: { ...badge, label: e.target.value.slice(0, 4) }
+                                  }
+                                }))}
+                                className="h-[34px] w-[72px] rounded-[8px] border border-edge bg-bg-gray/40 px-2 text-center text-xs font-bold outline-none focus:border-edge-strong focus:bg-white dark:focus:bg-[#151a26]"
+                                maxLength={4}
+                                aria-label={`${item.name}文字`}
+                              />
+                              <label className="inline-flex items-center gap-1.5 text-[11px] text-muted">
+                                底色
+                                <input
+                                  type="color"
+                                  value={badge.bg}
+                                  onChange={(e) => setSite((s) => ({
+                                    ...s,
+                                    marketBadges: {
+                                      ...normalizeMarketBadges(s.marketBadges),
+                                      [item.key]: { ...badge, bg: e.target.value }
+                                    }
+                                  }))}
+                                  className="h-8 w-8 cursor-pointer rounded border border-edge bg-transparent p-0"
+                                  aria-label={`${item.name}底色`}
+                                />
+                              </label>
+                              <label className="inline-flex items-center gap-1.5 text-[11px] text-muted">
+                                文字
+                                <input
+                                  type="color"
+                                  value={badge.fg}
+                                  onChange={(e) => setSite((s) => ({
+                                    ...s,
+                                    marketBadges: {
+                                      ...normalizeMarketBadges(s.marketBadges),
+                                      [item.key]: { ...badge, fg: e.target.value }
+                                    }
+                                  }))}
+                                  className="h-8 w-8 cursor-pointer rounded border border-edge bg-transparent p-0"
+                                  aria-label={`${item.name}文字色`}
+                                />
+                              </label>
+                            </>
+                          ) : (
+                            <span className="text-xs text-muted">{badge.bg.toUpperCase()}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {MARKET_BADGE_ITEMS.length > 5 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllMarketBadges((value) => !value)}
+                      className="mt-3 inline-flex self-start items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink"
+                      aria-expanded={showAllMarketBadges}
+                    >
+                      {showAllMarketBadges ? "收起" : `更多市场（${MARKET_BADGE_ITEMS.length - 5}）`}
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 transition-transform duration-200 ${showAllMarketBadges ? "rotate-180" : ""}`}>
+                        <path d="m5 7.5 5 5 5-5" />
+                      </svg>
+                    </button>
+                  )}
+                  {blockMsg.marketBadges && (
+                    <p className={`mt-3 rounded-[10px] px-3.5 py-2.5 text-[13px] ${blockMsg.marketBadges.type === "ok" ? "bg-brand-light text-brand-deep" : "bg-up-bg text-up"}`}>
+                      {blockMsg.marketBadges.text}
                     </p>
                   )}
                 </SettingsSection>
