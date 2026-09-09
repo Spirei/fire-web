@@ -2,14 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { IconClockHour4 } from "@tabler/icons-react";
+import { IconSend } from "@tabler/icons-react";
 import DoraemonTravel, { DORAEMON_IMAGE } from "./DoraemonTravel";
 
 export function TimeMachineLink({ to }: { to: "simple" | "full" }) {
   return <a href={to === "simple" ? "/simple-app" : "/records"} data-time-machine={to}
-    className="fire-time-link" title={`时光机 · 穿越至${to === "simple" ? "简化版" : "完整版"}`}>
-    <span className="fire-time-link-orbit"><IconClockHour4 size={18} stroke={1.65} /></span>
-    <span>{to === "simple" ? "简化版" : "完整版"}</span>
+    className="fire-time-link" aria-label={`穿越至${to === "simple" ? "简化版" : "完整版"}`} title={`时光机 · 穿越至${to === "simple" ? "简化版" : "完整版"}`}>
+    <span className="fire-time-link-orbit" aria-hidden="true"><IconSend size={19} stroke={1.65} /></span>
   </a>;
 }
 

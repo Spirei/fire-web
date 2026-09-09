@@ -2615,7 +2615,7 @@ export const V0_1_25_ENTRY: VersionEntry = {
   summary: "时光机连接简化版与完整版。",
   frontend: [...V0_1_24_ENTRY.frontend, { name: "WebGL", version: "浏览器原生", desc: "哆啦A梦时光机原图纵深与局部视差动效" }],
   software: V0_1_24_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.25" } : item),
-  changes: [{ title: "双向版本时光机", desc: "简化版工具栏与完整版页头新增版本穿越入口，点击即以用户提供的哆啦A梦时光机原图衔接页面切换，以 WebGL 对原图做柔和纵深与局部视差，保护人物区域，无额外流光或闪光，不支持 WebGL 时回退原图；支持深浅主题、手机小屏、减少动态效果，通过预取和应用内路由消除整页重载；隔离简化版样式并恢复返回后的窗口交互，离开前等待账本同步，失败时保留当前页面。", kind: "feature" }, { title: "移除简化版/完整版入口外链箭头", desc: "简化版与完整版页头「时光机」版本穿越按钮移除右上角外链箭头，仅保留时钟图标与切换文案，界面更简洁。", kind: "fix" }]
+  changes: [{ title: "双向版本时光机", desc: "简化版工具栏与完整版页头新增版本穿越入口，点击即以用户提供的哆啦A梦时光机原图衔接页面切换，以 WebGL 对原图做柔和纵深与局部视差，保护人物区域，无额外流光或闪光，不支持 WebGL 时回退原图；支持深浅主题、手机小屏、减少动态效果，通过预取和应用内路由消除整页重载；隔离简化版样式并恢复返回后的窗口交互，离开前等待账本同步，失败时保留当前页面。", kind: "feature" }, { title: "版本穿越入口改为纸飞机图标", desc: "简化版与完整版页头统一使用纸飞机图标入口，保留悬停提示和无障碍目标说明，点击沿用哆啦A梦穿越动效。", kind: "fix" }]
 };
 
 export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_25_ENTRY;

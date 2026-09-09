@@ -1,5 +1,5 @@
 /* Quiet version links; the transition uses the supplied Doraemon artwork. */
-.fire-time-link { display:inline-flex; align-items:center; justify-content:center; gap:7px; flex:none; white-space:nowrap; min-height:34px; padding:5px 10px; border:1px solid #e6e8ec; border-radius:12px; color:#626a76; background:#fff; font-size:12px; font-weight:500; text-decoration:none; cursor:pointer; transition:background .2s,transform .2s; }
+.fire-time-link { display:inline-flex; align-items:center; justify-content:center; gap:0; flex:none; white-space:nowrap; width:34px; height:34px; padding:6px; border:1px solid #e6e8ec; border-radius:12px; color:#626a76; background:#fff; font-size:12px; font-weight:500; text-decoration:none; cursor:pointer; transition:background .2s,transform .2s; }
 .fire-time-link:hover { background:#f0f2f5; transform:translateY(-1px); }
 .fire-time-link:active { transform:scale(.97); }
 .fire-time-link-orbit { display:grid; place-items:center; color:#4c9b97; transition:transform .5s; }
@@ -17,7 +17,7 @@
 .fire-time-error { position:fixed; bottom:90px; left:50%; transform:translateX(-50%); z-index:2147483001; padding:12px 20px; border-radius:12px; background:#303744; color:#fff; font-size:14px; width:max-content; max-width:90vw; }
 @keyframes fire-time-cover { from { opacity:0; } to { opacity:1; } }
 @keyframes fire-time-uncover { 0%,20% { opacity:1; } 100% { opacity:0; } }
-@media(max-width:420px) { .fire-time-link { padding:5px 8px; gap:5px; } .fire-time-link > svg { display:none; } }
+
 @media(prefers-reduced-motion:reduce) { .fire-time-scene,.fire-time-scene.is-arriving,.fire-time-picture { animation:none; } .fire-time-picture { transform:none !important; } .fire-time-link,.fire-time-link-orbit { transition:none; transform:none !important; } }
 
 
