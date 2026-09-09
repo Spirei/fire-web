@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { fmtPct } from "@/lib/format";
 import MarketIcon from "@/components/MarketIcon";
@@ -84,6 +84,16 @@ const klineCache = new Map<string, number[]>();
 const TOP_CACHE_KEY = "fire:topstocks:cache";
 const RANK_CACHE_KEY = "fire:topstocks:rank";
 const klineCacheKey = (code: string) => `fire:kline:${code}`;
+
+function readTopCache(): TopAsset[] {
+  try {
+    const raw = localStorage.getItem(TOP_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) as TopAsset[] : null;
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 function todayStr() {
   const d = new Date();
@@ -231,21 +241,15 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
   const [page, setPage] = useState(1);
   const { currency, rate, symbol } = useDisplayCurrency();
 
+  useLayoutEffect(() => {
+    const cached = readTopCache();
+    if (!cached.length) return;
+    setItems(cached);
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    // 先用本地缓存秒出列表，再后台拉取最新数据，避免每次加载空等
-    try {
-      const raw = localStorage.getItem(TOP_CACHE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as TopAsset[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setItems(parsed);
-          setLoading(false);
-        }
-      }
-    } catch {
-      /* 缓存无效忽略 */
-    }
     fetch("/api/top-stocks?market=ALL")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {

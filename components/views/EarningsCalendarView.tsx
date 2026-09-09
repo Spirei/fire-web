@@ -619,7 +619,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                   )
                 )}
               </div>
-              <p className="mt-3 text-center text-xs text-faint">财报数据加载中…</p>
+              <div className="mt-3 h-3 w-40 mx-auto animate-pulse rounded bg-bg-gray" aria-hidden />
             </>
           ) : emptyHint ? (
             <div className="py-16 text-center text-sm text-faint">{emptyHint}</div>

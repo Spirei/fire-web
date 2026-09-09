@@ -744,7 +744,7 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
 
   const updatedAt = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" });
   const dateRange = klineLoading
-    ? "正在汇总历史行情…"
+    ? ""
     : dailyAssetFiltered.length > 1
       ? `${dailyAssetFiltered[0].date.replace(/-/g, "/")} - ${dailyAssetFiltered[dailyAssetFiltered.length - 1].date.replace(/-/g, "/")}`
       : "暂无数据";
@@ -1060,9 +1060,8 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
                 {klineLoading && chartPoints.length < 2 ? (
                   <div className="mt-4 flex h-[330px] flex-col justify-center gap-4 rounded-2xl bg-bg-gray px-10">
                     {[92, 78, 64, 50].map((width, i) => (
-                      <div key={i} className="h-4 animate-pulse rounded bg-bg-gray" style={{ width: `${width}%` }} />
+                      <div key={i} className="h-4 animate-pulse rounded bg-white/50 dark:bg-white/10" style={{ width: `${width}%` }} />
                     ))}
-                    <p className="text-center text-sm text-muted">正在汇总历史行情…</p>
                   </div>
                 ) : (
                   <div className="mt-4">
@@ -1207,7 +1206,11 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
                 </div>
               </div>
               {klineLoading && calDays.every((c) => !c || c.pnl === 0) ? (
-                <div className="py-12 text-center text-sm text-muted">正在汇总每日盈亏…</div>
+                <div className="mt-4 grid grid-cols-7 gap-2" aria-hidden>
+                  {Array.from({ length: 28 }).map((_, i) => (
+                    <div key={i} className="h-16 animate-pulse rounded-xl bg-bg-gray" />
+                  ))}
+                </div>
               ) : (
                 <>
                   {calView === "year" ? (

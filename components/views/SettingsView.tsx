@@ -524,6 +524,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   llmApiKey: "",
   tradingSquareTrumpRefreshMinutes: 5,
   tradingSquareDuanRefreshMinutes: 5,
+  xueqiuCookie: "",
   translationEnabled: true,
   dbType: "sqlite",
   pgHost: "",
@@ -2295,6 +2296,19 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <div className="sw-row">
                       <div className="sw-row-label"><b>更新方式</b><span>页面始终先读取本地 JSON，不等待外部平台响应</span></div>
                       <div className="ctrl"><span className="inline-flex items-center gap-1.5 text-[12px] text-muted"><i className="h-1.5 w-1.5 rounded-full bg-emerald-500" />缓存优先 · 访问触发</span></div>
+                    </div>
+                    <div className="sw-row">
+                      <div className="sw-row-label"><b>雪球 Cookie</b><span>登录雪球后复制整段 Cookie；服务端带登录会话请求，绕过雪球 WAF 反爬（仅服务端使用）</span></div>
+                      <div className="ctrl">
+                        <input className="sw-row-input" type="password" autoComplete="off" readOnly={!editingTradingSquare}
+                          placeholder="xq_a_token=…; u=…; …"
+                          value={!site.xueqiuCookie && site.xueqiuCookieConfigured ? "********" : (site.xueqiuCookie || "")}
+                          onFocus={(e) => { if (e.currentTarget.value === "********") e.currentTarget.value = ""; }}
+                          onChange={(e) => setSite((s) => ({ ...s, xueqiuCookie: e.target.value }))}
+                          onBlur={(e) => { const v = e.currentTarget.value.trim(); if (v) fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ xueqiuCookie: v }) }).then(() => setSite((s) => ({ ...s, xueqiuCookie: v }))).catch(() => {}); }}
+                        />
+                        <span className={`ml-2 inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle ring-2 ring-white dark:ring-[#151b26] ${site.xueqiuCookieConfigured ? "bg-emerald-500" : "bg-slate-300"}`} title={site.xueqiuCookieConfigured ? "已配置" : "未配置"} />
+                      </div>
                     </div>
                   </div>
                   {blockMsg.tradingSquare && <p className={`settings-form-message ${blockMsg.tradingSquare.type === "ok" ? "is-ok" : "is-error"}`}>{blockMsg.tradingSquare.text}</p>}

@@ -3035,13 +3035,14 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .dark .session-menu button.is-unavailable small { color: #59626e; }
 .dark .chart-style-divider { background: rgba(255,255,255,.12); }
 .dark .stock-chart-state { background: rgba(19,23,30,.7); color: #929dab; }
-.asset-analysis-split { display: grid; gap: 16px; }
+.asset-analysis-page { width: 100%; min-width: 0; }
+.asset-analysis-split { display: grid; gap: 16px; width: 100%; max-width: 100%; min-width: 0; contain: inline-size; }
 /* 窄屏单列时子项可收缩：宽表格（持仓列 minWidth 1300px）走内部 overflow-x 滚动，不再把整页撑出视口 */
 .asset-analysis-split > * { min-width: 0; }
 .asset-analysis-resizer { display: none; }
 @media (min-width: 1280px) {
-  /* 左右列各自按内容高度排列，避免较矮的一列被拉伸后出现大段空白 */
-  .asset-analysis-split { grid-template-columns: minmax(340px,var(--asset-left-pct,29%)) 10px minmax(640px,1fr); gap: 8px; align-items: start; }
+  /* 用 fr 按保存比例分配，避免 minmax(340px, 29%) 把 29% 当成上限、首帧按内容撑开再收回 */
+  .asset-analysis-split { grid-template-columns: minmax(340px,var(--asset-left-fr,29fr)) 10px minmax(0,var(--asset-right-fr,71fr)); gap: 8px; align-items: start; }
   .asset-analysis-resizer { position: relative; display: flex; width: 10px; min-height: 100%; cursor: col-resize; touch-action: none; align-items: center; justify-content: center; color: #8a94a3; }
   .asset-analysis-resizer > span { position: absolute; inset-block: 4px; left: 50%; width: 1px; transform: translateX(-50%); border-radius: 999px; background: rgba(122,132,146,.24); transition: width .18s ease, background .18s ease, box-shadow .18s ease; }
   .asset-analysis-resizer > i { position: sticky; top: 45%; z-index: 1; display: grid; width: 18px; height: 42px; place-items: center; border: 1px solid rgba(201,206,216,.72); border-radius: 999px; background: rgba(255,255,255,.92); font-style: normal; font-weight: 900; box-shadow: 0 6px 18px rgba(22,30,42,.1); transition: transform .18s ease, color .18s ease, border-color .18s ease; }

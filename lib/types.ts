@@ -265,6 +265,8 @@ export interface SiteSettings {
   llmApiKeyConfigured?: boolean;
   tradingSquareTrumpRefreshMinutes: number;
   tradingSquareDuanRefreshMinutes: number;
+  xueqiuCookie: string;
+  xueqiuCookieConfigured?: boolean;
   dbType: "sqlite" | "postgres";
   pgHost: string;
   pgPort: string;

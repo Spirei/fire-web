@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import type { User } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
 import { showToast } from "@/lib/toast";
@@ -16,6 +16,32 @@ interface AdminUser extends User {
 /** 模块级短缓存：进入用户管理秒开（5s 内复用，避免每次切页都整页「加载中」） */
 let usersCache: { at: number; users: AdminUser[]; me: string } | null = null;
 const USERS_CACHE_TTL = 5000;
+const USERS_SESSION_KEY = "fire:users-cache-v1";
+
+function readUsersSession(): { users: AdminUser[]; me: string; fresh: boolean } | null {
+  if (usersCache && Date.now() - usersCache.at < USERS_CACHE_TTL) {
+    return { users: usersCache.users, me: usersCache.me, fresh: true };
+  }
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(USERS_SESSION_KEY) || "null") as { users?: AdminUser[]; me?: string } | null;
+    if (parsed && Array.isArray(parsed.users) && parsed.users.length > 0) {
+      return { users: parsed.users, me: parsed.me || "", fresh: false };
+    }
+  } catch {
+    /* 忽略损坏缓存 */
+  }
+  return null;
+}
+
+function writeUsersSession(users: AdminUser[], me: string) {
+  usersCache = { at: Date.now(), users, me };
+  try {
+    sessionStorage.setItem(USERS_SESSION_KEY, JSON.stringify({ users, me }));
+  } catch {
+    /* 忽略存储异常 */
+  }
+}
 
 function UserAvatar({ user, size = "md" }: { user: Pick<User, "username" | "avatar" | "role">; size?: "sm" | "md" }) {
   const cls = size === "sm" ? "h-7 w-7 text-[11px]" : "h-9 w-9 text-[13px]";
@@ -41,9 +67,17 @@ function UserAvatar({ user, size = "md" }: { user: Pick<User, "username" | "avat
 }
 
 export default function UsersView() {
-  const [users, setUsers] = useState<AdminUser[]>(() => usersCache?.users ?? []);
-  const [me, setMe] = useState<string>(() => usersCache?.me ?? "");
-  const [loading, setLoading] = useState<boolean>(!usersCache);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [me, setMe] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useLayoutEffect(() => {
+    const cached = readUsersSession();
+    if (!cached) return;
+    setUsers(cached.users);
+    setMe(cached.me);
+    setLoading(false);
+  }, []);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [resetUser, setResetUser] = useState<AdminUser | null>(null);
@@ -52,18 +86,20 @@ export default function UsersView() {
   const adminCount = users.filter((u) => u.role === "admin").length;
 
   async function load(opts?: { force?: boolean }) {
-    if (!opts?.force && usersCache && Date.now() - usersCache.at < USERS_CACHE_TTL) {
-      setUsers(usersCache.users);
-      setMe(usersCache.me);
+    const cached = readUsersSession();
+    if (cached) {
+      setUsers(cached.users);
+      setMe(cached.me);
       setLoading(false);
-      return;
+      if (!opts?.force && cached.fresh) return;
+    } else {
+      setLoading(true);
     }
-    setLoading(true);
     try {
       const res = await fetch("/api/users");
       if (!res.ok) throw new Error(res.status === 401 ? "登录已失效，请重新登录" : "用户列表加载失败");
       const data = await res.json();
-      usersCache = { at: Date.now(), users: data.users, me: data.me };
+      writeUsersSession(data.users, data.me);
       setUsers(data.users);
       setMe(data.me);
       if (opts?.force) setMsg({ type: "ok", text: "用户列表已刷新" });
@@ -172,9 +208,10 @@ export default function UsersView() {
 
       <div className="overflow-hidden rounded-[16px] border border-edge bg-white shadow-card dark:bg-[#151a26]">
         {loading && users.length === 0 ? (
-          <div className="flex items-center justify-center py-16 text-sm text-faint">
-            <svg viewBox="0 0 24 24" fill="none" className="mr-2 h-4 w-4 animate-spin text-brand"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.2" /><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg>
-            加载中…
+          <div className="space-y-2 p-4" aria-hidden>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-14 animate-pulse rounded-[12px] bg-bg-gray" />
+            ))}
           </div>
         ) : (
         <div>

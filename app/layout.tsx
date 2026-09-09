@@ -48,7 +48,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* 旧品牌本地缓存迁移 + 主题防闪兜底 */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var ls=localStorage,ks=Object.keys(ls),legacy='sto'+'cklog',legacyTheme=ls.getItem(legacy+'.theme');for(var i=0;i<ks.length;i++){var k=ks[i];if(k.slice(0,legacy.length)===legacy){var n='fire'+k.slice(legacy.length);if(ls.getItem(n)===null)ls.setItem(n,ls.getItem(k));ls.removeItem(k);}}var t=ls.getItem('fire.theme')||legacyTheme;if(t==='dark'){document.documentElement.classList.add('dark');document.documentElement.style.backgroundColor='#0a0e19';}}catch(e){}`
+            __html: `try{var ls=localStorage,ks=Object.keys(ls),legacy='sto'+'cklog',legacyTheme=ls.getItem(legacy+'.theme');for(var i=0;i<ks.length;i++){var k=ks[i];if(k.slice(0,legacy.length)===legacy){var n='fire'+k.slice(legacy.length);if(ls.getItem(n)===null)ls.setItem(n,ls.getItem(k));ls.removeItem(k);}}var t=ls.getItem('fire.theme')||legacyTheme;if(t==='dark'){document.documentElement.classList.add('dark');document.documentElement.style.backgroundColor='#0a0e19';}var sp=Number(ls.getItem('fire:asset-analysis:split-v1'));if(sp>=24&&sp<=52){var st=document.documentElement.style;st.setProperty('--asset-left-fr',sp+'fr');st.setProperty('--asset-right-fr',(100-sp)+'fr');}}catch(e){}`
           }}
         />
       </head>

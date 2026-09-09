@@ -14,7 +14,6 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(true);
   const [allowRegister, setAllowRegister] = useState(true);
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -26,8 +25,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
       })
       .catch(() => {
         // 超时 / 5xx 保持登录表单，不把瞬时失败当成已登录。
-      })
-      .finally(() => setChecking(false));
+      });
     fetch("/api/settings/public")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -67,10 +65,6 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
     } finally {
       setLoading(false);
     }
-  }
-
-  if (checking) {
-    return <div className="py-20 text-center text-sm text-faint">加载中…</div>;
   }
 
   const inputCls =

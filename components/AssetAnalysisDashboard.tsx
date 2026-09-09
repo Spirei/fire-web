@@ -39,6 +39,17 @@ interface CloseItem { d: string; c: number }
 interface HoldingSort { key: HoldingColumnKey; dir: "asc" | "desc" }
 interface DateRange { start: string; end: string }
 interface SimpleInvestmentEquity { market: string; cur: CurrencyCode; amount: number }
+const EMPTY_CURRENCY_BALANCES: Record<CurrencyCode, number> = { USD: 0, HKD: 0, CNY: 0, SGD: 0, JPY: 0, KRW: 0, EUR: 0 };
+
+function readEffectiveBalanceCache(key: string): Record<CurrencyCode, number> | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "null");
+    if (!value || typeof value !== "object") return null;
+    return { ...EMPTY_CURRENCY_BALANCES, ...value };
+  } catch {
+    return null;
+  }
+}
 
 interface Props {
   positions: StockRecord[];
@@ -68,8 +79,61 @@ const BENCHMARKS: { key: BenchKey; label: string; market: string; code: string; 
 ] as const;
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 const ASSET_SPLIT_STORAGE_KEY = "fire:asset-analysis:split-v1";
+const ASSET_SPLIT_MIN = 24;
+const ASSET_SPLIT_MAX = 52;
+const ASSET_SPLIT_DEFAULT = 29;
 const ASSET_TREND_CACHE_KEY = "fire:asset-analysis:trend-cache-v4";
 const HOLDINGS_PAGE_SIZE = 10;
+
+function clampSplitPct(value: number) {
+  if (!Number.isFinite(value)) return ASSET_SPLIT_DEFAULT;
+  return Math.min(ASSET_SPLIT_MAX, Math.max(ASSET_SPLIT_MIN, value));
+}
+
+function readSavedSplitPct() {
+  try {
+    const raw = localStorage.getItem(ASSET_SPLIT_STORAGE_KEY);
+    if (raw == null || raw === "") return ASSET_SPLIT_DEFAULT;
+    const saved = Number(raw);
+    if (!Number.isFinite(saved) || saved < ASSET_SPLIT_MIN || saved > ASSET_SPLIT_MAX) return ASSET_SPLIT_DEFAULT;
+    return saved;
+  } catch {
+    return ASSET_SPLIT_DEFAULT;
+  }
+}
+
+function splitPaneStyle(pct: number): React.CSSProperties {
+  const left = clampSplitPct(pct);
+  return {
+    "--asset-left-fr": `${left}fr`,
+    "--asset-right-fr": `${(100 - left).toFixed(2)}fr`
+  } as React.CSSProperties;
+}
+
+function trendSignature(positions: StockRecord[]) {
+  return positions
+    .filter((record) => ["US", "HK", "CN", "JP", "KR"].includes(record.market.toUpperCase()))
+    .map((record) => `${record.id}:${record.qty}:${record.cost}:${record.updatedAt}`)
+    .join("|");
+}
+
+function readTrendCache(signature: string, currency: CurrencyCode, benchKey: BenchKey): TrendCache | null {
+  try {
+    const raw = localStorage.getItem(ASSET_TREND_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as TrendCache;
+    if (
+      cached.signature === signature &&
+      cached.currency === currency &&
+      cached.benchKey === benchKey &&
+      Array.isArray(cached.points) &&
+      cached.points.length > 0
+    ) return cached;
+  } catch {
+    /* 缓存损坏时走正常加载 */
+  }
+  return null;
+}
 
 interface TrendCache {
   signature: string;
@@ -238,7 +302,9 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const { currency: displayCurrency, setCurrency: setDisplayCurrency } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
   const [assetsVisible, setAssetsVisible] = useState(true);
-  const [leftPanePct, setLeftPanePct] = useState(29);
+  const [leftPanePct, setLeftPanePct] = useState(ASSET_SPLIT_DEFAULT);
+  const [splitReady, setSplitReady] = useState(false);
+  const leftPanePctRef = useRef(ASSET_SPLIT_DEFAULT);
   const splitRef = useRef<HTMLDivElement>(null);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [trendLoading, setTrendLoading] = useState(true);
@@ -261,13 +327,21 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const [holdingSort, setHoldingSort] = usePersistedState<HoldingSort | null>("fire:asset-holdings-sort", null);
   const [columnManagerOpen, setColumnManagerOpen] = useState(false);
   const [dailyShareOpen, setDailyShareOpen] = useState(false);
-  const [fundBalances, setFundBalances] = useState<Record<CurrencyCode, number>>({ USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 });
+  const effectiveBalanceCacheKey = `fire:effective-fund-balances:${user?.username || "current"}`;
+  const [fundBalances, setFundBalances] = useState<Record<CurrencyCode, number>>(EMPTY_CURRENCY_BALANCES);
   const [fundBalancesReady, setFundBalancesReady] = useState(false);
+  const [cachedEffectiveBalances, setCachedEffectiveBalances] = useState<Record<CurrencyCode, number> | null>(null);
   const [simpleInvestmentEquities, setSimpleInvestmentEquities] = useState<SimpleInvestmentEquity[]>([]);
+  const [simpleLedgerReady, setSimpleLedgerReady] = useState(false);
+  const [simpleLedgerSucceeded, setSimpleLedgerSucceeded] = useState(false);
   const handleFundBalances = useCallback((balances: Record<CurrencyCode, number>) => {
     setFundBalances(balances);
     setFundBalancesReady(true);
   }, []);
+
+  useLayoutEffect(() => {
+    setCachedEffectiveBalances(readEffectiveBalanceCache(effectiveBalanceCacheKey));
+  }, [effectiveBalanceCacheKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -282,8 +356,10 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
           cur: String(row.cur || "USD").toUpperCase() as CurrencyCode,
           amount: Number(row.amount) || 0
         })).filter((row: SimpleInvestmentEquity) => row.market && row.amount > 0));
+        setSimpleLedgerSucceeded(true);
+        setSimpleLedgerReady(true);
       })
-      .catch(() => { if (!cancelled) setSimpleInvestmentEquities([]); });
+      .catch(() => { if (!cancelled) { setSimpleLedgerSucceeded(false); setSimpleLedgerReady(true); } });
     return () => { cancelled = true; };
   }, []);
   const [shareOpening, setShareOpening] = useState(false);
@@ -323,10 +399,30 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     }
   }, [displayCurrency]);
 
-  useEffect(() => {
-    const saved = Number(localStorage.getItem(ASSET_SPLIT_STORAGE_KEY));
-    if (Number.isFinite(saved) && saved >= 24 && saved <= 52) setLeftPanePct(saved);
+  // 绘制前恢复分栏，避免 SSR 默认 29% 先画出再跳到本地保存值。
+  // 首帧不写 inline 变量，让 <head> 同步脚本 / CSS 默认值先生效，避免刷新闪扩。
+  useLayoutEffect(() => {
+    const saved = readSavedSplitPct();
+    leftPanePctRef.current = saved;
+    setLeftPanePct(saved);
+    setSplitReady(true);
   }, []);
+
+  useLayoutEffect(() => {
+    const cached = readTrendCache(trendSignature(positions), displayCurrency, benchKey);
+    if (!cached) return;
+    trendRef.current = cached.points;
+    setTrend(cached.points);
+    if (cached.recordCloses && typeof cached.recordCloses === "object") setRecordCloses(cached.recordCloses);
+    setTrendLoading(false);
+  }, [positions, displayCurrency, benchKey]);
+
+  const applySplitPct = (value: number) => {
+    const next = Number(clampSplitPct(value).toFixed(2));
+    leftPanePctRef.current = next;
+    setLeftPanePct(next);
+    return next;
+  };
 
   const startResize = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (!splitRef.current || window.innerWidth < 1280) return;
@@ -334,17 +430,14 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     event.currentTarget.setPointerCapture(event.pointerId);
     const rect = splitRef.current.getBoundingClientRect();
     const move = (moveEvent: PointerEvent) => {
-      const next = Math.min(52, Math.max(24, ((moveEvent.clientX - rect.left) / rect.width) * 100));
-      setLeftPanePct(Number(next.toFixed(2)));
+      applySplitPct(((moveEvent.clientX - rect.left) / rect.width) * 100);
     };
     const stop = () => {
       document.removeEventListener("pointermove", move);
       document.removeEventListener("pointerup", stop);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
-      const current = splitRef.current?.style.getPropertyValue("--asset-left-pct");
-      const value = Number.parseFloat(current || "") || leftPanePct;
-      localStorage.setItem(ASSET_SPLIT_STORAGE_KEY, String(value));
+      localStorage.setItem(ASSET_SPLIT_STORAGE_KEY, String(leftPanePctRef.current));
       showToast("布局宽度已自动保存");
     };
     document.body.style.cursor = "col-resize";
@@ -354,8 +447,8 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   };
 
   const resetSplit = () => {
-    setLeftPanePct(29);
-    localStorage.setItem(ASSET_SPLIT_STORAGE_KEY, "29");
+    applySplitPct(ASSET_SPLIT_DEFAULT);
+    localStorage.setItem(ASSET_SPLIT_STORAGE_KEY, String(ASSET_SPLIT_DEFAULT));
     showToast("布局宽度已恢复默认");
   };
   const currencyFactor = rates[displayCurrency] || 1;
@@ -404,7 +497,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     if (!current || row.amount > current.amount) result[row.market] = row;
     return result;
   }, {} as Record<string, SimpleInvestmentEquity>), [simpleInvestmentEquities]);
-  const effectiveFundBalances = useMemo(() => {
+  const reconciledFundBalances = useMemo(() => {
     const next = { ...fundBalances };
     Object.entries(primaryEquityByMarket).forEach(([market, equity]) => {
       const holdings = nativeSummary[market]?.asset;
@@ -412,6 +505,12 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     });
     return next;
   }, [fundBalances, primaryEquityByMarket, nativeSummary]);
+  const effectiveFundBalances = (!fundBalancesReady || !simpleLedgerReady || !simpleLedgerSucceeded) && cachedEffectiveBalances ? cachedEffectiveBalances : reconciledFundBalances;
+  const effectiveBalancesReady = cachedEffectiveBalances !== null || (fundBalancesReady && simpleLedgerReady);
+  useEffect(() => {
+    if (!fundBalancesReady || !simpleLedgerSucceeded) return;
+    try { localStorage.setItem(effectiveBalanceCacheKey, JSON.stringify(reconciledFundBalances)); } catch { /* 缓存失败不影响最新数据 */ }
+  }, [effectiveBalanceCacheKey, reconciledFundBalances, fundBalancesReady, simpleLedgerSucceeded]);
   const cashTotal = useMemo(() => (Object.entries(effectiveFundBalances) as [CurrencyCode, number][]).reduce((total, [iso, value]) => total + value / (rates[iso] || 1) * currencyFactor, 0), [effectiveFundBalances, rates, currencyFactor]);
   // 只为当前已满足成交条件的买入委托预留现金；尚未触价的挂单不占用可用现金。
   const isCashReservedOrder = (order: TradeOrder, record: StockRecord) => {
@@ -459,32 +558,16 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   useEffect(() => {
     let cancelled = false;
     const eligible = positions.filter((p) => ["US", "HK", "CN", "JP", "KR"].includes(p.market.toUpperCase()));
-    const signature = eligible.map((record) => `${record.id}:${record.qty}:${record.cost}:${record.updatedAt}`).join("|");
-    let restored = false;
-    try {
-      const raw = localStorage.getItem(ASSET_TREND_CACHE_KEY);
-      if (raw) {
-        const cached = JSON.parse(raw) as TrendCache;
-        if (
-          cached.signature === signature &&
-          cached.currency === displayCurrency &&
-          cached.benchKey === benchKey &&
-          Array.isArray(cached.points) &&
-          cached.points.length > 0
-        ) {
-          restored = true;
-          trendRef.current = cached.points;
-          setTrend(cached.points);
-          if (cached.recordCloses && typeof cached.recordCloses === "object") {
-            setRecordCloses(cached.recordCloses);
-          }
-          setTrendLoading(false);
-        }
-      }
-    } catch {
-      /* 缓存损坏时走正常加载 */
+    const signature = trendSignature(positions);
+    const cached = readTrendCache(signature, displayCurrency, benchKey);
+    if (cached) {
+      trendRef.current = cached.points;
+      setTrend(cached.points);
+      if (cached.recordCloses && typeof cached.recordCloses === "object") setRecordCloses(cached.recordCloses);
+      setTrendLoading(false);
+    } else if (trendRef.current.length === 0) {
+      setTrendLoading(true);
     }
-    if (!restored) setTrendLoading(true);
     (async () => {
       const bench = BENCHMARKS.find((b) => b.key === benchKey) || BENCHMARKS[0];
       // 持仓日 K：有界并发 + 客户端缓存；基准：本次失败且同一基准时沿用上次成功数据
@@ -787,7 +870,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   }, [positions, pnlMarket, recordCloses, activeRange, period, rates, displayCurrency, livePrice]);
   const shownPnlPositions = pnlExpanded ? pnlPositions : pnlPositions.slice(0, 10);
   const maskMoney = (value: number, signed = false, withSymbol = false) => assetsVisible ? `${signed ? (value >= 0 ? "+" : "−") : ""}${compactMoney(Math.abs(value), withSymbol)}` : "******";
-  const maskCashMoney = (value: number, withSymbol = false) => !fundBalancesReady ? "—" : assetsVisible ? `${value < 0 ? "−" : ""}${compactMoney(Math.abs(value), withSymbol)}` : "******";
+  const maskCashMoney = (value: number, withSymbol = false) => !effectiveBalancesReady ? "—" : assetsVisible ? `${value < 0 ? "−" : ""}${compactMoney(Math.abs(value), withSymbol)}` : "******";
   const MarketPills = ({ value, onChange, includeAll = true }: { value: string; onChange: (key: string) => void; includeAll?: boolean }) => <div className="flex gap-2 overflow-x-auto px-0.5 pb-1 pt-1.5">
     {(includeAll ? ["ALL", ...marketKeys] : marketKeys).map((key) => <button key={key} type="button" onClick={() => onChange(key)} className={`flex-none rounded-full border px-4 py-1.5 text-xs font-bold transition-colors ${value === key ? "border-[#3297f6] bg-[#3297f6]/15 text-[#3297f6] shadow-sm" : "border-edge-strong bg-bg-gray text-muted hover:bg-brand-hover hover:text-ink"}`}>{key === "ALL" ? "全部" : marketMeta(key).label}</button>)}
   </div>;
@@ -840,8 +923,8 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
       <h2 className="text-lg font-extrabold">资产分析</h2>
     </div>
 
-    <div ref={splitRef} className="asset-analysis-split" style={{ "--asset-left-pct": `${leftPanePct}%` } as React.CSSProperties}>
-      <aside className="space-y-4">
+    <div ref={splitRef} className="asset-analysis-split" style={splitReady ? splitPaneStyle(leftPanePct) : undefined}>
+      <aside className="min-w-0 space-y-4">
         <section className="card p-5">
           <div className="mb-5 flex items-center justify-between"><h3 className="text-base font-bold">账户资产</h3><div className="flex items-center gap-1.5"><button type="button" disabled={shareOpening} onClick={async () => { if (shareOpening) return; setShareOpening(true); try { preloadDailyPnlTemplates(summary.day >= 0); await waitForDailyPnlTemplates(); setDailyShareOpen(true); } finally { setShareOpening(false); } }} title={shareOpening ? "正在准备分享图…" : "分享当日盈亏"} aria-label="分享当日盈亏" className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-[7px] border border-edge bg-white text-muted shadow-sm transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover hover:text-ink active:scale-[.97] disabled:opacity-50 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><circle cx="18" cy="5" r="2.2" /><circle cx="6" cy="12" r="2.2" /><circle cx="18" cy="19" r="2.2" /><path d="m8 11 8-5M8 13l8 5" /></svg></button><RefreshButton onClick={() => void handleRefresh("assets")} title="刷新账户资产" /></div></div>
           <div className="flex items-center gap-2"><CurrencyPicker context="asset" prefix="总资产" /></div>
@@ -904,7 +987,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
               )}
             </div>
           </div>}
-          {trendLoading ? <div className="flex h-[330px] items-center justify-center text-sm text-muted">正在汇总真实历史行情…</div> : filteredTrend.length > 1 ? <PnlTrendChart points={filteredTrend} tab={chartTab} weighting={weighting} benchLabel={benchLabel} /> : <div className="flex h-[330px] flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted"><span>历史行情不足，后续交易日会自动补全趋势</span><button type="button" onClick={() => setRetryTick((tick) => tick + 1)} className="rounded-full border border-edge px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover dark:border-white/20">重新获取</button></div>}
+          {trendLoading ? <div className="mx-4 mb-4 h-[330px] animate-pulse rounded-xl bg-bg-gray" aria-hidden /> : filteredTrend.length > 1 ? <PnlTrendChart points={filteredTrend} tab={chartTab} weighting={weighting} benchLabel={benchLabel} /> : <div className="flex h-[330px] flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted"><span>历史行情不足，后续交易日会自动补全趋势</span><button type="button" onClick={() => setRetryTick((tick) => tick + 1)} className="rounded-full border border-edge px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover dark:border-white/20">重新获取</button></div>}
         </section>
 
         <section className="card overflow-hidden">
@@ -928,16 +1011,16 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
           {pnlPositions.length > 10 && <button type="button" onClick={() => setPnlExpanded((expanded) => !expanded)} className="flex w-full items-center justify-center gap-1 border-t border-edge py-3 text-xs font-semibold text-muted transition-colors hover:bg-bg-gray hover:text-ink">{pnlExpanded ? "收起" : `显示更多（另 ${pnlPositions.length - 10} 只）`}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 transition-transform ${pnlExpanded ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg></button>}
         </section>
 
-        <FundsPanel holdingAssets={holdingAssetsByCurrency} balanceOverrides={effectiveFundBalances} cacheScope={user?.username} onBalancesChange={handleFundBalances} />
+        <FundsPanel holdingAssets={holdingAssetsByCurrency} balanceOverrides={effectiveFundBalances} onBalancesChange={handleFundBalances} />
       </aside>
 
       <button type="button" className="asset-analysis-resizer" onPointerDown={startResize} onDoubleClick={resetSplit} title="左右拖动调整布局宽度，双击恢复默认" aria-label="调整资产分析左右布局宽度"><span /><i>⋮</i></button>
 
-      <main className="space-y-4">
+      <main className="min-w-0 space-y-4">
         <section className="mobile-hide-duplicate-summary card p-5">
           <div className="mb-2"><h3 className="text-base font-bold">账户总览</h3></div>
           <MarketPills value={assetMarket} onChange={setAssetMarket} />
-          <div className="mt-5 grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{[["净资产", accountNetAsset], ["当日盈亏", accountSummary.day], ["持仓市值", accountSummary.asset], ["浮动盈亏", accountSummary.pnl], ["可用现金", accountAvailableCash], ["冻结现金", accountFrozenCash]].map(([label, value]) => <div key={String(label)} className="min-w-0"><span className="block truncate text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block min-w-0 text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}><AccountOverviewValue value={Number(value)} hidden={!assetsVisible} pending={(label === "净资产" || label === "可用现金") && !fundBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></strong></div>)}</div>
+          <div className="mt-5 grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{[["净资产", accountNetAsset], ["当日盈亏", accountSummary.day], ["持仓市值", accountSummary.asset], ["浮动盈亏", accountSummary.pnl], ["可用现金", accountAvailableCash], ["冻结现金", accountFrozenCash]].map(([label, value]) => <div key={String(label)} className="min-w-0"><span className="block truncate text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block min-w-0 text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}><AccountOverviewValue value={Number(value)} hidden={!assetsVisible} pending={(label === "净资产" || label === "可用现金") && !effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></strong></div>)}</div>
         </section>
 
         <section className="card overflow-hidden">

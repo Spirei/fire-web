@@ -62,18 +62,22 @@ function mergeSetCookie(existing: string, setCookies: string[]): string {
 }
 
 async function xueqiuFetch(pathAndQuery: string): Promise<unknown | null> {
+  // A configured (logged-in) Xueqiu cookie bypasses Aliyun WAF and authenticates
+  // api.xueqiu.com (which returns error 400016 without a login session).
+  const configured = getSiteSettings().xueqiuCookie;
   const headers: Record<string, string> = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     Referer: "https://xueqiu.com/u/slowisquick",
     Accept: "application/json"
   };
-  if (xueqiuCookie) headers.Cookie = xueqiuCookie;
+  const cookie = configured || xueqiuCookie;
+  if (cookie) headers.Cookie = cookie;
   const urls = [`https://xueqiu.com${pathAndQuery}`, `https://api.xueqiu.com${pathAndQuery}`];
   for (const url of urls) {
     try {
       const response = await proxyFetch(url, { headers, signal: AbortSignal.timeout(4000), cache: "no-store" });
       const setCookies = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
-      if (setCookies.length) {
+      if (setCookies.length && !configured) {
         xueqiuCookie = mergeSetCookie(xueqiuCookie, setCookies);
         headers.Cookie = xueqiuCookie;
       }
@@ -90,6 +94,7 @@ async function xueqiuFetch(pathAndQuery: string): Promise<unknown | null> {
 }
 
 async function warmXueqiuSession() {
+  if (getSiteSettings().xueqiuCookie) return; // configured session bypasses WAF
   if (xueqiuCookie) return;
   try {
     const response = await proxyFetch("https://xueqiu.com/u/slowisquick", {

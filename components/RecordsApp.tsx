@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
 import {
   MARKET_LIST,
   marketMeta,
@@ -18,51 +17,28 @@ import {
   type TabConfig,
   type User
 } from "@/lib/types";
-// 视图按需懒加载：仅激活页签才下载对应代码，显著减小后端首屏包体积。
-const TabLoading = () => (
-  <div className="flex items-center justify-center py-24 text-sm text-faint">加载中…</div>
-);
-
-// 首屏默认页已有服务端注入的 records/settings，直接 SSR，避免应用壳渲染后长时间停在“加载中”。
-const WatchlistView = dynamic(() => import("@/components/views/WatchlistView"), { ssr: true, loading: TabLoading });
-const HoldingsView = dynamic(() => import("@/components/views/HoldingsView"), { ssr: true, loading: TabLoading });
-const AssetAnalysisView = dynamic(() => import("@/components/views/AssetAnalysisView"), { ssr: true, loading: TabLoading });
-const FireView = dynamic(() => import("@/components/views/FireView"), { ssr: true, loading: TabLoading });
-const ActivitiesView = dynamic(() => import("@/components/views/ActivitiesView"), { ssr: false, loading: TabLoading });
-const EarningsCalendarView = dynamic(() => import("@/components/views/EarningsCalendarView"), { ssr: false, loading: TabLoading });
-const CelebsView = dynamic(() => import("@/components/views/CelebsView"), { ssr: false, loading: TabLoading });
-const TradingSquareView = dynamic(() => import("@/components/views/TradingSquareView"), { ssr: false, loading: TabLoading });
-const SettingsView = dynamic(() => import("@/components/views/SettingsView"), { ssr: false, loading: TabLoading });
-const UsersView = dynamic(() => import("@/components/views/UsersView"), { ssr: false, loading: TabLoading });
-const AssetLibraryView = dynamic(() => import("@/components/views/AssetLibraryView"), { ssr: false, loading: TabLoading });
-const AttachmentsView = dynamic(() => import("@/components/views/AttachmentsView"), { ssr: false, loading: TabLoading });
-const GlobalPreviewView = dynamic(() => import("@/components/views/GlobalPreviewView"), { ssr: false, loading: TabLoading });
-const AssetPnlAnalysisView = dynamic(() => import("@/components/AssetPnlAnalysis"), { ssr: false, loading: TabLoading });
-
-// 当前直达页与鉴权/记录请求并行加载，避免数据准备好后才开始下载视图组件，
-// 从而在首次进入 FIRE、持仓、自选股等页面时额外出现一轮「加载中…」。
-const VIEW_PRELOADERS: Record<string, () => Promise<unknown>> = {
-  watchlist: () => import("@/components/views/WatchlistView"),
-  holdings: () => import("@/components/views/HoldingsView"),
-  assets: () => import("@/components/views/AssetAnalysisView"),
-  fire: () => import("@/components/views/FireView"),
-  activities: () => import("@/components/views/ActivitiesView"),
-  global: () => import("@/components/views/GlobalPreviewView"),
-  earnings: () => import("@/components/views/EarningsCalendarView"),
-  celebs: () => import("@/components/views/CelebsView"),
-  trading: () => import("@/components/views/TradingSquareView"),
-  users: () => import("@/components/views/UsersView"),
-  attachments: () => import("@/components/views/AttachmentsView"),
-  library: () => import("@/components/views/AssetLibraryView"),
-  settings: () => import("@/components/views/SettingsView"),
-  pnl: () => import("@/components/AssetPnlAnalysis")
-};
 import { showToast } from "@/lib/toast";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import SettingsWindow from "@/components/SettingsWindow";
 import { primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
+import WatchlistView from "@/components/views/WatchlistView";
+import HoldingsView from "@/components/views/HoldingsView";
+import AssetAnalysisView from "@/components/views/AssetAnalysisView";
+import FireView from "@/components/views/FireView";
+import ActivitiesView from "@/components/views/ActivitiesView";
+import EarningsCalendarView from "@/components/views/EarningsCalendarView";
+import CelebsView from "@/components/views/CelebsView";
+import TradingSquareView from "@/components/views/TradingSquareView";
+import SettingsView from "@/components/views/SettingsView";
+import UsersView from "@/components/views/UsersView";
+import AssetLibraryView from "@/components/views/AssetLibraryView";
+import AttachmentsView from "@/components/views/AttachmentsView";
+import GlobalPreviewView from "@/components/views/GlobalPreviewView";
+import AssetPnlAnalysisView from "@/components/AssetPnlAnalysis";
+
+// 后台页签全部同步引入：next/dynamic 的 loading 会在刷新水合时盖住已 SSR 的内容，整页闪「加载中…」。
 
 type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "attachments" | "library" | "settings" | "pnl";
 
@@ -145,7 +121,6 @@ export default function RecordsApp({
   const { assetIcons } = useAssetIcons(["icon"], { stockIconCdn: initialSettings.stockIconCdn });
 
   useEffect(() => {
-    void VIEW_PRELOADERS[initialTab]?.();
     if (initialTab === "settings") {
       setSettingsSub(new URLSearchParams(window.location.search).get("sub"));
     }
@@ -325,16 +300,11 @@ export default function RecordsApp({
 
   const selectTab = useCallback(
     (key: TabKey) => {
-      void VIEW_PRELOADERS[key]?.();
       if (key === "settings") navigateTo(key, settingsSub);
       else navigateTo(key, null);
     },
     [navigateTo, settingsSub]
   );
-
-  const preloadTab = useCallback((key: TabKey) => {
-    void VIEW_PRELOADERS[key]?.();
-  }, []);
 
   /* ---------- 导航页签可拖动排序 + 自动保存 ---------- */
   const tabDragKeyRef = useRef<TabKey | null>(null);
@@ -678,9 +648,6 @@ export default function RecordsApp({
               key={t.key}
               type="button"
               onClick={() => selectTab(t.key)}
-              onMouseEnter={() => preloadTab(t.key)}
-              onFocus={() => preloadTab(t.key)}
-              onTouchStart={() => preloadTab(t.key)}
               draggable
               onDragStart={() => { tabDragKeyRef.current = t.key; }}
               onDragOver={(e) => e.preventDefault()}
@@ -710,9 +677,6 @@ export default function RecordsApp({
               data-nav-tab={t.key}
               type="button"
               onClick={() => selectTab(t.key)}
-              onMouseEnter={() => preloadTab(t.key)}
-              onFocus={() => preloadTab(t.key)}
-              onTouchStart={() => preloadTab(t.key)}
               className={`flex min-w-[76px] flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-xs transition-all duration-200 ${
                 activeTab === t.key ? "bg-white font-semibold text-ink shadow-[0_1px_4px_rgba(10,14,25,.08)]" : "text-muted"
               }`}

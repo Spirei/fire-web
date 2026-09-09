@@ -130,5 +130,5 @@ export default function PnlTrendChart({
       chart.dispose();
     };
   }, [points, tab, weighting]);
-  return <div ref={ref} className="h-[330px] w-full" />;
+  return <div ref={ref} className="h-[330px] w-full min-w-0 max-w-full overflow-hidden" />;
 }

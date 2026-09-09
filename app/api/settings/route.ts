@@ -15,7 +15,7 @@ export async function GET(request: Request) {
       settings: { ...settings, pgHost: "", pgPort: "", pgDatabase: "", pgUser: "", pgPassword: "" }
     });
   }
-  return NextResponse.json({ settings: { ...settings, llmApiKey: "", deepseekApiKey: "", llmApiKeyConfigured: Boolean(settings.llmApiKey || settings.deepseekApiKey) } });
+  return NextResponse.json({ settings: { ...settings, llmApiKey: "", deepseekApiKey: "", llmApiKeyConfigured: Boolean(settings.llmApiKey || settings.deepseekApiKey), xueqiuCookie: "", xueqiuCookieConfigured: Boolean(settings.xueqiuCookie) } });
 }
 
 export async function PUT(request: Request) {
@@ -81,6 +81,7 @@ export async function PUT(request: Request) {
     llmApiKey: body.llmApiKey !== undefined ? String(body.llmApiKey) : undefined,
     tradingSquareTrumpRefreshMinutes: Number.isFinite(Number(body.tradingSquareTrumpRefreshMinutes)) ? Number(body.tradingSquareTrumpRefreshMinutes) : undefined,
     tradingSquareDuanRefreshMinutes: Number.isFinite(Number(body.tradingSquareDuanRefreshMinutes)) ? Number(body.tradingSquareDuanRefreshMinutes) : undefined,
+    xueqiuCookie: body.xueqiuCookie !== undefined ? String(body.xueqiuCookie) : undefined,
     homeNav: Array.isArray(body.homeNav) ? body.homeNav : undefined,
     tabs: Array.isArray(body.tabs) ? body.tabs : undefined,
     groups: Array.isArray(body.groups) ? body.groups : undefined,

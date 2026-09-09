@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconReceipt, IconSearch, IconTrash } from "@tabler/icons-react";
 import { fmtMoney, fmtMoneyAdaptive } from "@/lib/format";
 import { showToast } from "@/lib/toast";
@@ -35,20 +35,8 @@ const EMPTY: Record<Currency, number> = { USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0
 const EMPTY_SUMMARY: Record<Currency, Summary> = Object.fromEntries(Object.keys(EMPTY).map((key) => [key, { openingAsset: 0, cashNetFlow: 0, stockNetFlow: 0, otherNetFlow: 0 }])) as Record<Currency, Summary>;
 const RECORD_PAGE_SIZE = 30;
 
-function readCachedBalances(key: string): Record<Currency, number> | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const parsed = JSON.parse(localStorage.getItem(key) || "null");
-    if (!parsed || typeof parsed !== "object") return null;
-    return { ...EMPTY, ...parsed };
-  } catch {
-    return null;
-  }
-}
-
-export default function FundsPanel({ holdingAssets, balanceOverrides, cacheScope, onBalancesChange }: { holdingAssets: Record<Currency, number>; balanceOverrides?: Partial<Record<Currency, number>>; cacheScope?: string; onBalancesChange: (balances: Record<Currency, number>) => void }) {
+export default function FundsPanel({ holdingAssets, balanceOverrides, onBalancesChange }: { holdingAssets: Record<Currency, number>; balanceOverrides?: Partial<Record<Currency, number>>; onBalancesChange: (balances: Record<Currency, number>) => void }) {
   const rates = useRates();
-  const balanceCacheKey = `fire:fund-balances:${cacheScope || "current"}`;
   const [currency, setCurrency] = usePersistedState<Currency>("fire:funds-display-currency", "USD");
   const [balances, setBalances] = useState<Record<Currency, number>>(EMPTY);
   const [transactions, setTransactions] = useState<Tx[]>([]);
@@ -74,9 +62,8 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, cacheScope
     if (!res.ok) return;
     recordsCache.current.clear();
     const next = { ...EMPTY, ...(json?.data?.balances || {}) };
-    try { localStorage.setItem(balanceCacheKey, JSON.stringify(next)); } catch { /* 缓存不可用时仍使用接口数据 */ }
     setBalances(next); setSummaries({ ...EMPTY_SUMMARY, ...(json?.data?.summaries || {}) }); onBalancesChange(next);
-  }, [balanceCacheKey, onBalancesChange]);
+  }, [onBalancesChange]);
   const loadRecords = useCallback(async (_nextCurrency: Currency, page: number, query = "") => {
     const normalizedQuery = query.trim();
     const key = `${page}:${normalizedQuery.toLocaleLowerCase("zh-CN")}`;
@@ -108,13 +95,6 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, cacheScope
       if (recordsRequest.current?.id === id) setRecordsLoading(false);
     }
   }, []);
-  useLayoutEffect(() => {
-    const cached = readCachedBalances(balanceCacheKey);
-    if (cached) {
-      setBalances(cached);
-      onBalancesChange(cached);
-    }
-  }, [balanceCacheKey, onBalancesChange]);
   useEffect(() => {
     void load();
     const refresh = () => void load();
@@ -124,7 +104,7 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, cacheScope
       window.removeEventListener("fire:orders-updated", refresh);
       window.removeEventListener("fire:records-updated", refresh);
     };
-  }, [load, onBalancesChange]);
+  }, [load]);
   useEffect(() => {
     if (recordsOpen) void loadRecords(currency, recordsPage, debouncedQuery);
   }, [currency, debouncedQuery, loadRecords, recordsOpen, recordsPage]);

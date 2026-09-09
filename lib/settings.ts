@@ -79,6 +79,7 @@ const DEFAULTS: SiteSettings = {
   llmApiUrl: "https://api.deepseek.com/chat/completions",
   llmModel: "deepseek-chat",
   llmApiKey: "",
+  xueqiuCookie: "",
   tradingSquareTrumpRefreshMinutes: 5,
   tradingSquareDuanRefreshMinutes: 5,
   dbType: "sqlite",
@@ -90,10 +91,10 @@ const DEFAULTS: SiteSettings = {
   ticker: DEFAULT_TICKER
 };
 
-const SIMPLE_KEYS: ("domain" | "title" | "ico" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "earningsApiUrl" | "cnEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword")[] = [
+const SIMPLE_KEYS: ("domain" | "title" | "ico" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "earningsApiUrl" | "cnEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "xueqiuCookie")[] = [
   "domain", "title", "ico", "homepageBg", "loginSideImage", "siteLogo", "logoText", "logoFont", "quoteSource", "futuHost", "futuPort", "footerDesc",
   "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl", "earningsApiUrl", "cnEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl", "translationProvider", "deepseekApiUrl", "deepseekModel", "deepseekApiKey", "llmProvider", "llmApiUrl", "llmModel", "llmApiKey",
-  "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword"
+  "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword", "xueqiuCookie"
 ];
 
 export const NAV_KEYS = ["holdings", "assets", "fire", "watchlist", "global", "trading", "earnings", "celebs", "users", "attachments", "library", "activities", "settings"] as const;
