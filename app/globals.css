@@ -1574,6 +1574,21 @@
   --sv-hover-bg: rgba(0, 0, 0, 0.05);
   --sv-title-font: inherit;
 }
+/* 首帧主题尚未从 localStorage 恢复时也使用深色底，避免刷新出现整块白屏。具体视觉版本挂载后再覆盖这些变量。 */
+.dark .sv-win-root {
+  --sv-shell: #151a24;
+  --sv-shell-hover: #1d2532;
+  --sv-bg: #151a24;
+  --sv-border: #2f394a;
+  --sv-text: #e6e8eb;
+  --sv-text-2: #a6afbf;
+  --sv-text-3: #778297;
+  --sv-accent: #8ec2ff;
+  --sv-card: #1c2330;
+  --sv-card-border: #344054;
+  --sv-input: #161d29;
+  --sv-hover-bg: rgba(255,255,255,.06);
+}
 
 /* V14 桌面客户端（浅色） */
 .sv-win-root.sv-v14 {
