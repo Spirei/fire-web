@@ -279,6 +279,23 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
   }
 ];
 
+function SettingsSwitch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      className={`relative h-6 w-11 flex-none rounded-full transition-colors duration-200 ${checked ? "bg-[#34c759]" : "bg-[#e9e9ea] dark:bg-[#3a3a3c]"}`}
+    >
+      <span
+        className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full shadow-sm transition-transform duration-200 ${checked ? "translate-x-5" : ""}`}
+        style={{ backgroundColor: "#ffffff" }}
+      />
+    </button>
+  );
+}
+
 const DEFAULT_TABS: TabConfig[] = [
   { key: "watchlist", label: "自选股", url: "/watchlist" },
   { key: "holdings", label: "账户资产", url: "/holdings", default: true },
@@ -413,20 +430,7 @@ function BackupTaskCard() {
           <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] text-ink-2">
             <label className="flex cursor-pointer items-center gap-1.5">
               <span className="text-faint">开关</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={enabled}
-                onClick={() => setEnabled((v) => !v)}
-                className={`relative h-[22px] w-[40px] rounded-full transition-colors duration-200 ${enabled ? "bg-[#34c759]" : "bg-[#e9e9ea] dark:bg-[#3a3a3c]"}`}
-              >
-                <span
-                  className={`absolute top-[2px] h-[18px] w-[18px] rounded-full shadow transition-all duration-200 ${
-                    enabled ? "left-[20px]" : "left-[2px]"
-                  }`}
-                  style={{ backgroundColor: "#ffffff" }}
-                />
-              </button>
+              <SettingsSwitch checked={enabled} onChange={() => setEnabled((v) => !v)} />
             </label>
             <label className="flex items-center gap-1.5">
               <span className="text-faint">间隔</span>
@@ -904,7 +908,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       futuPort: s.futuPort,
       quoteSource: s.quoteSource,
       ticker: JSON.stringify(s.ticker),
-      homeNav: JSON.stringify(s.homeNav)
+      homeNav: JSON.stringify(s.homeNav),
+      marketBadgesVisible: s.marketBadgesVisible !== false
     };
   }
 
@@ -1860,19 +1865,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                       <div className="sw-row">
                         <div className="sw-row-label"><b>允许新用户注册</b><span>关闭后仅管理员可创建账号</span></div>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={site.allowRegister}
-                          disabled={!editingSiteInfo}
-                          onClick={() => setSite((s) => ({ ...s, allowRegister: !s.allowRegister }))}
-                          className={`relative h-6 w-11 flex-none rounded-full transition-colors duration-200 disabled:cursor-default ${site.allowRegister ? "bg-[#34c759]" : "bg-[#e9e9ea] dark:bg-[#3a3a3c]"}`}
-                        >
-                          <span
-                            className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full shadow-sm transition-transform duration-200 ${site.allowRegister ? "translate-x-5" : ""}`}
-                            style={{ backgroundColor: "#ffffff" }}
-                          />
-                        </button>
+                        <SettingsSwitch
+                          checked={site.allowRegister}
+                          onChange={() => setSite((s) => ({ ...s, allowRegister: !s.allowRegister }))}
+                        />
                       </div>
                       <div className="sw-row">
                         <div className="sw-row-label"><b>页脚简介文字</b></div>
@@ -2543,22 +2539,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <b>默认显示</b>
                       <span>关闭后全站持仓、搜索、分享页不再展示市场色块</span>
                     </div>
-                    <div className="pills flex flex-nowrap gap-1.5">
-                      {([[true, "显示"], [false, "不显示"]] as const).map(([value, label]) => (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() => {
-                            setSite((current) => ({ ...current, marketBadgesVisible: value }));
-                            applyMarketBadges(site.marketBadges, value);
-                            void saveBlock("marketBadges", { marketBadges: normalizeMarketBadges(site.marketBadges), marketBadgesVisible: value }, value ? "市场色块已显示" : "市场色块已隐藏");
-                          }}
-                          className={`sw-pill ${site.marketBadgesVisible !== false === value ? "is-active" : ""}`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
+                    <SettingsSwitch
+                      checked={site.marketBadgesVisible !== false}
+                      onChange={() => {
+                        const next = site.marketBadgesVisible === false;
+                        setSite((current) => ({ ...current, marketBadgesVisible: next }));
+                        applyMarketBadges(site.marketBadges, next);
+                      }}
+                    />
                   </div>
                   <div className="flex flex-col gap-2">
                     {(showAllMarketBadges ? MARKET_BADGE_ITEMS : MARKET_BADGE_ITEMS.slice(0, 5)).map((item) => {
