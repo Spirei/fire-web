@@ -235,7 +235,11 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const [columnManagerOpen, setColumnManagerOpen] = useState(false);
   const [dailyShareOpen, setDailyShareOpen] = useState(false);
   const [fundBalances, setFundBalances] = useState<Record<CurrencyCode, number>>({ USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 });
-  const handleFundBalances = useCallback((balances: Record<CurrencyCode, number>) => setFundBalances(balances), []);
+  const [fundBalancesReady, setFundBalancesReady] = useState(false);
+  const handleFundBalances = useCallback((balances: Record<CurrencyCode, number>) => {
+    setFundBalances(balances);
+    setFundBalancesReady(true);
+  }, []);
   const [shareOpening, setShareOpening] = useState(false);
   // 快捷交易
   const [tradeTarget, setTradeTarget] = useState<{ record: StockRecord; side: "buy" | "sell"; qty?: number; intent?: "close" } | null>(null);
@@ -702,6 +706,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   }, [positions, pnlMarket, recordCloses, activeRange, period, rates, displayCurrency, livePrice]);
   const shownPnlPositions = pnlExpanded ? pnlPositions : pnlPositions.slice(0, 10);
   const maskMoney = (value: number, signed = false, withSymbol = false) => assetsVisible ? `${signed ? (value >= 0 ? "+" : "−") : ""}${compactMoney(Math.abs(value), withSymbol)}` : "******";
+  const maskCashMoney = (value: number, withSymbol = false) => !fundBalancesReady ? "—" : assetsVisible ? compactMoney(Math.abs(value), withSymbol) : "******";
   const MarketPills = ({ value, onChange, includeAll = true }: { value: string; onChange: (key: string) => void; includeAll?: boolean }) => <div className="flex gap-2 overflow-x-auto px-0.5 pb-1 pt-1.5">
     {(includeAll ? ["ALL", ...marketKeys] : marketKeys).map((key) => <button key={key} type="button" onClick={() => onChange(key)} className={`flex-none rounded-full border px-4 py-1.5 text-xs font-bold transition-colors ${value === key ? "border-[#3297f6] bg-[#3297f6]/15 text-[#3297f6] shadow-sm" : "border-edge-strong bg-bg-gray text-muted hover:bg-brand-hover hover:text-ink"}`}>{key === "ALL" ? "全部" : marketMeta(key).label}</button>)}
   </div>;
@@ -757,7 +762,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
         <section className="card p-5">
           <div className="mb-5 flex items-center justify-between"><h3 className="text-base font-bold">账户资产</h3><div className="flex items-center gap-1.5"><button type="button" disabled={shareOpening} onClick={async () => { if (shareOpening) return; setShareOpening(true); try { preloadDailyPnlTemplates(summary.day >= 0); await waitForDailyPnlTemplates(); setDailyShareOpen(true); } finally { setShareOpening(false); } }} title={shareOpening ? "正在准备分享图…" : "分享当日盈亏"} aria-label="分享当日盈亏" className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-[7px] border border-edge bg-white text-muted shadow-sm transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover hover:text-ink active:scale-[.97] disabled:opacity-50 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><circle cx="18" cy="5" r="2.2" /><circle cx="6" cy="12" r="2.2" /><circle cx="18" cy="19" r="2.2" /><path d="m8 11 8-5M8 13l8 5" /></svg></button><RefreshButton onClick={() => void handleRefresh("assets")} title="刷新账户资产" /></div></div>
           <div className="flex items-center gap-2"><CurrencyPicker context="asset" prefix="总资产" /></div>
-          <div className="mt-1 flex items-center gap-2"><strong className="block text-2xl font-extrabold tabular-nums">{maskMoney(totalAsset, false, true)}</strong><button type="button" onClick={() => setAssetsVisible((visible) => !visible)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg-gray hover:text-ink" title={assetsVisible ? "隐藏资产金额" : "显示资产金额"} aria-label={assetsVisible ? "隐藏资产金额" : "显示资产金额"}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />{assetsVisible ? <circle cx="12" cy="12" r="2.6" /> : <path d="m4 4 16 16" />}</svg></button></div>
+          <div className="mt-1 flex items-center gap-2"><strong className="block text-2xl font-extrabold tabular-nums">{maskCashMoney(totalAsset, true)}</strong><button type="button" onClick={() => setAssetsVisible((visible) => !visible)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg-gray hover:text-ink" title={assetsVisible ? "隐藏资产金额" : "显示资产金额"} aria-label={assetsVisible ? "隐藏资产金额" : "显示资产金额"}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />{assetsVisible ? <circle cx="12" cy="12" r="2.6" /> : <path d="m4 4 16 16" />}</svg></button></div>
           <div className="mt-5 grid grid-cols-3 gap-3">
             <div><span className="text-xs text-muted">当日盈亏</span><strong className={`mt-1 block text-sm tabular-nums ${summary.day >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.day, true)}</strong></div>
             <div><span className="text-xs text-muted">持仓市值</span><strong className="mt-1 block text-sm tabular-nums">{maskMoney(summary.asset)}</strong></div>
@@ -849,7 +854,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
         <section className="mobile-hide-duplicate-summary card p-5">
           <div className="mb-2"><h3 className="text-base font-bold">账户总盈亏</h3></div>
           <MarketPills value={assetMarket} onChange={setAssetMarket} />
-          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{[["净资产", accountNetAsset], ["当日盈亏", accountSummary.day], ["持仓市值", accountSummary.asset], ["浮动盈亏", accountSummary.pnl], ["余额", accountCash], ["可用现金", accountCash], ["冻结现金", 0]].map(([label, value]) => <div key={String(label)}><span className="text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}>{assetsVisible ? (pageUsesCompactMoney ? fmtMoneyCompact(Number(value), "") : fmtMoney(Number(value), "")) : "******"}</strong></div>)}</div>
+          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{[["净资产", accountNetAsset], ["当日盈亏", accountSummary.day], ["持仓市值", accountSummary.asset], ["浮动盈亏", accountSummary.pnl], ["余额", accountCash], ["可用现金", accountCash], ["冻结现金", 0]].map(([label, value]) => <div key={String(label)}><span className="text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}>{label === "净资产" || label === "余额" || label === "可用现金" ? maskCashMoney(Number(value)) : assetsVisible ? (pageUsesCompactMoney ? fmtMoneyCompact(Number(value), "") : fmtMoney(Number(value), "")) : "******"}</strong></div>)}</div>
         </section>
 
         <section className="card overflow-hidden">
