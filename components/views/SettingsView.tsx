@@ -881,7 +881,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     setSite((s) => ({ ...s, [key]: value }));
   }
 
-  /* ---------- 全局自动保存：修改即保存，失败通过 Toast 提示 ---------- */
+  /* ---------- 全局自动保存：修改即保存，成功/失败均通过胶囊 Toast 提示 ---------- */
   const savedRef = useRef<Record<string, unknown> | null>(null);
 
   function autoSaveSnapshot(s: SiteSettings) {
@@ -937,8 +937,16 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         if (!res.ok) throw new Error(data?.error || "保存失败");
         captureSaved(data.settings);
         window.dispatchEvent(new Event("fire:settings-updated"));
+        const keys = Object.keys(patch);
+        const savedMessage =
+          keys.length === 1 && keys[0] === "marketBadgesVisible"
+            ? patch.marketBadgesVisible ? "市场色块已显示" : "市场色块已隐藏"
+            : keys.length === 1 && keys[0] === "allowRegister"
+              ? patch.allowRegister ? "已允许新用户注册" : "已关闭新用户注册"
+              : "保存成功";
+        showToast(savedMessage);
       } catch (err) {
-        showToast(err instanceof Error ? err.message : "保存失败，请稍后重试");
+        showToast(err instanceof Error ? err.message : "保存失败，请稍后重试", "err");
       }
     }, 700);
     return () => clearTimeout(timer);
