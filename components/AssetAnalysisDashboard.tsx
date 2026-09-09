@@ -67,6 +67,7 @@ const BENCHMARKS: { key: BenchKey; label: string; market: string; code: string; 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 const ASSET_SPLIT_STORAGE_KEY = "fire:asset-analysis:split-v1";
 const ASSET_TREND_CACHE_KEY = "fire:asset-analysis:trend-cache-v4";
+const HOLDINGS_PAGE_SIZE = 10;
 
 interface TrendCache {
   signature: string;
@@ -231,6 +232,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const [pnlExpanded, setPnlExpanded] = useState(false);
   const [orders, setOrders] = useState<TradeOrder[]>([]);
   const [holdingSearch, setHoldingSearch] = useState("");
+  const [holdingPage, setHoldingPage] = useState(1);
   const [holdingSort, setHoldingSort] = usePersistedState<HoldingSort | null>("fire:asset-holdings-sort", null);
   const [columnManagerOpen, setColumnManagerOpen] = useState(false);
   const [dailyShareOpen, setDailyShareOpen] = useState(false);
@@ -664,6 +666,9 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     return result * (holdingSort.dir === "asc" ? 1 : -1);
   }) : searchedPositions;
   const enabledHoldingColumns = holdingColumns.filter((column) => column.visible);
+  const holdingPageCount = Math.max(1, Math.ceil(visiblePositions.length / HOLDINGS_PAGE_SIZE));
+  const safeHoldingPage = Math.min(holdingPage, holdingPageCount);
+  const pagedPositions = visiblePositions.slice((safeHoldingPage - 1) * HOLDINGS_PAGE_SIZE, safeHoldingPage * HOLDINGS_PAGE_SIZE);
   const marketEntries = Object.entries(summary.markets).sort((a, b) => b[1].asset - a[1].asset);
   const accountCurrency = displayCurrency;
   const accountSymbol = symbol;
@@ -718,10 +723,13 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     </div>;
   };
 
-  const toggleHoldingSort = (key: HoldingColumnKey) => setHoldingSort((current) => {
-    if (!current || current.key !== key) return { key, dir: key === "identity" ? "asc" : "desc" };
-    return { key, dir: current.dir === "desc" ? "asc" : "desc" };
-  });
+  const toggleHoldingSort = (key: HoldingColumnKey) => {
+    setHoldingPage(1);
+    setHoldingSort((current) => {
+      if (!current || current.key !== key) return { key, dir: key === "identity" ? "asc" : "desc" };
+      return { key, dir: current.dir === "desc" ? "asc" : "desc" };
+    });
+  };
 
   const holdingCell = (record: StockRecord, key: HoldingColumnKey) => {
     const price = livePrice(record);
@@ -861,18 +869,19 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
           <div className="border-b border-edge px-5 py-4">
             <h3 className="mb-3 text-base font-bold">持仓分布</h3>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0"><MarketPills value={holdingsMarket} onChange={(key) => { setHoldingsMarket(key); setHoldingSearch(""); }} /></div>
+              <div className="min-w-0"><MarketPills value={holdingsMarket} onChange={(key) => { setHoldingsMarket(key); setHoldingSearch(""); setHoldingPage(1); }} /></div>
               <div className="flex items-center gap-1.5">
                 <RefreshButton onClick={() => void handleRefresh("holdings")} title="刷新持仓" />
                 <label className="relative block">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>
-                  <input value={holdingSearch} onChange={(event) => setHoldingSearch(event.target.value)} className="h-8 w-[150px] rounded-full border border-edge-strong bg-white pl-8 pr-3 text-xs text-ink placeholder:text-faint dark:bg-[#1c222d]" placeholder="代码 / 名称" />
+                  <input value={holdingSearch} onChange={(event) => { setHoldingSearch(event.target.value); setHoldingPage(1); }} className="h-8 w-[150px] rounded-full border border-edge-strong bg-white pl-8 pr-3 text-xs text-ink placeholder:text-faint dark:bg-[#1c222d]" placeholder="代码 / 名称" />
                 </label>
                 <HoldingColumnsButton onClick={() => setColumnManagerOpen(true)} />
               </div>
             </div>
           </div>
-          <div className="overflow-x-auto"><table className="mobile-analysis-holdings w-full text-xs" style={{ minWidth: `${Math.max(760, enabledHoldingColumns.length * 130)}px` }}><thead><tr className="bg-bg-gray text-muted">{enabledHoldingColumns.map((column) => { const active = holdingSort?.key === column.key; return <th key={column.key} data-holding-column={column.key} className={`px-4 py-3 ${column.key === "identity" ? "text-left" : "text-right"}`}><button type="button" onClick={() => toggleHoldingSort(column.key)} className={`inline-flex items-center gap-1 whitespace-nowrap transition-colors hover:text-ink ${column.key === "identity" ? "" : "flex-row-reverse"} ${active ? "text-ink" : ""}`}>{HOLDING_COLUMN_LABELS[column.key]}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 ${active ? "opacity-100" : "opacity-25"}`}><path d={active && holdingSort?.dir === "asc" ? "m5 12 5-5 5 5" : "m5 8 5 5 5-5"} /></svg></button></th>; })}</tr></thead><tbody>{visiblePositions.map((record) => <tr key={record.id} className="cursor-pointer border-t border-edge transition-colors hover:bg-bg-gray/60 dark:hover:bg-[#1b2230]" onClick={(e) => setCtxMenu({ x: e.clientX, y: e.clientY, record })} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, record }); }}>{enabledHoldingColumns.map((column) => <td key={column.key} data-holding-column={column.key} className={`px-4 py-3 tabular-nums ${column.key === "identity" ? "text-left" : "text-right"}`}>{holdingCell(record, column.key)}</td>)}</tr>)}</tbody></table>{visiblePositions.length === 0 && <div className="py-14 text-center text-sm text-muted">{holdingSearch ? "没有匹配的持仓" : "当前市场暂无持仓"}</div>}</div>
+          <div className="overflow-x-auto"><table className="mobile-analysis-holdings w-full text-xs" style={{ minWidth: `${Math.max(760, enabledHoldingColumns.length * 130)}px` }}><thead><tr className="bg-bg-gray text-muted">{enabledHoldingColumns.map((column) => { const active = holdingSort?.key === column.key; return <th key={column.key} data-holding-column={column.key} className={`px-4 py-3 ${column.key === "identity" ? "text-left" : "text-right"}`}><button type="button" onClick={() => toggleHoldingSort(column.key)} className={`inline-flex items-center gap-1 whitespace-nowrap transition-colors hover:text-ink ${column.key === "identity" ? "" : "flex-row-reverse"} ${active ? "text-ink" : ""}`}>{HOLDING_COLUMN_LABELS[column.key]}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 ${active ? "opacity-100" : "opacity-25"}`}><path d={active && holdingSort?.dir === "asc" ? "m5 12 5-5 5 5" : "m5 8 5 5 5-5"} /></svg></button></th>; })}</tr></thead><tbody>{pagedPositions.map((record) => <tr key={record.id} className="cursor-pointer border-t border-edge transition-colors hover:bg-bg-gray/60 dark:hover:bg-[#1b2230]" onClick={(e) => setCtxMenu({ x: e.clientX, y: e.clientY, record })} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, record }); }}>{enabledHoldingColumns.map((column) => <td key={column.key} data-holding-column={column.key} className={`px-4 py-3 tabular-nums ${column.key === "identity" ? "text-left" : "text-right"}`}>{holdingCell(record, column.key)}</td>)}</tr>)}</tbody></table>{visiblePositions.length === 0 && <div className="py-14 text-center text-sm text-muted">{holdingSearch ? "没有匹配的持仓" : "当前市场暂无持仓"}</div>}</div>
+          {visiblePositions.length > HOLDINGS_PAGE_SIZE && <div className="flex items-center justify-between border-t border-edge px-5 py-3 text-xs text-muted"><span>第 {safeHoldingPage} / {holdingPageCount} 页，共 {visiblePositions.length} 项</span><div className="flex items-center gap-1.5"><button type="button" disabled={safeHoldingPage <= 1} onClick={() => setHoldingPage((page) => Math.max(1, page - 1))} className="rounded-lg border border-edge px-2.5 py-1.5 transition-colors hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-40">上一页</button><button type="button" disabled={safeHoldingPage >= holdingPageCount} onClick={() => setHoldingPage((page) => Math.min(holdingPageCount, page + 1))} className="rounded-lg border border-edge px-2.5 py-1.5 transition-colors hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-40">下一页</button></div></div>}
         </section>
 
         <TradeOrdersPanel
