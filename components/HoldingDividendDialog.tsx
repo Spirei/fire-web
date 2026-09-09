@@ -118,6 +118,7 @@ export default function HoldingDividendDialog({
       title={`${record.name} 股息`}
       desc={firstBuy ? `${record.code} · 自 ${firstBuy} 首次买入后入账` : `${record.code} · 尚未记录买入，历史派息不会入账`}
       size="md"
+      draggable
       onClose={onClose}
       headerActions={
         <button type="button" disabled={settling || !firstBuy} onClick={() => void settleMissing()} className="btn-line h-9 shrink-0 px-3 text-xs disabled:opacity-50">

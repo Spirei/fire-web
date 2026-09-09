@@ -19,7 +19,8 @@ export default function AppModal({
   children,
   headerActions,
   size = "sm",
-  className = ""
+  className = "",
+  draggable = false
 }: {
   title?: string;
   desc?: string;
@@ -28,10 +29,13 @@ export default function AppModal({
   headerActions?: React.ReactNode;
   size?: ModalSize;
   className?: string;
+  draggable?: boolean;
 }) {
   const [closing, setClosing] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; startX: number; startY: number; rect: DOMRect } | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -56,6 +60,34 @@ export default function AppModal({
     closeTimer.current = setTimeout(() => onClose(), 140);
   }
 
+  function startDrag(event: React.PointerEvent<HTMLDivElement>) {
+    if (!draggable || event.button !== 0 || (event.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, startX: offset.x, startY: offset.y, rect };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }
+
+  function moveDrag(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const margin = 8;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    const minDx = margin - drag.rect.left;
+    const maxDx = window.innerWidth - margin - drag.rect.right;
+    const minDy = margin - drag.rect.top;
+    const maxDy = window.innerHeight - margin - drag.rect.bottom;
+    setOffset({ x: drag.startX + Math.max(minDx, Math.min(maxDx, dx)), y: drag.startY + Math.max(minDy, Math.min(maxDy, dy)) });
+  }
+
+  function stopDrag(event: React.PointerEvent<HTMLDivElement>) {
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-8" role="dialog" aria-modal="true" aria-label={title || "弹窗"}>
       {/* 毛玻璃遮罩（iOS 风格），保持页面可读 */}
@@ -67,11 +99,12 @@ export default function AppModal({
         ref={panelRef}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
+        style={draggable ? { translate: `${offset.x}px ${offset.y}px` } : undefined}
         className={`modal-glass relative w-full ${SIZES[size]} ${className} max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[26px] border border-white/60 p-6 shadow-[0_24px_64px_rgba(0,0,0,.22)] outline-none dark:border-white/10 dark:shadow-[0_24px_64px_rgba(0,0,0,.5)] sm:rounded-[28px] sm:p-7 ${
           closing ? "modal-panel-closing" : "modal-panel"
         }`}
       >
-        <div className="mb-5 flex items-start justify-between gap-3">
+        <div className={`mb-5 flex items-start justify-between gap-3 ${draggable ? "cursor-move touch-none select-none" : ""}`} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={stopDrag} onPointerCancel={stopDrag}>
           <div className="min-w-0">
             {title && <h3 className="text-[19px] font-bold leading-snug text-ink">{title}</h3>}
             {desc && <p className="mt-1 text-[13px] text-muted">{desc}</p>}
