@@ -94,7 +94,7 @@ export default function RecordsApp({
   initialUser: User;
   initialRecords: StockRecord[];
   initialUserLogs: SystemLog[];
-  initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible">;
+  initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled">;
   initialStockIcons: Record<string, string>;
 }) {
   const router = useRouter();
@@ -642,6 +642,7 @@ export default function RecordsApp({
         onClearAll={clearAllRecords}
         onTabsChange={setNavTabs}
         initialSub={settingsSub ?? undefined}
+        initialSettings={initialSettings}
       />
     </div>
   );
@@ -759,7 +760,7 @@ export default function RecordsApp({
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} />}
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
           {activeTab === "attachments" && (user?.role === "admin" ? <AttachmentsView /> : <NoPermission />)}
-          {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView /> : <NoPermission />)}
+          {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView initialCdnEnabled={initialSettings.stockIconCdn} /> : <NoPermission />)}
           {activeTab === "settings" && (
             <SettingsWindow>{settingsPanel}</SettingsWindow>
           )}

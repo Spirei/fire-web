@@ -268,7 +268,7 @@ function Avatar({
   );
 }
 
-export default function AssetLibraryView() {
+export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnabled?: boolean } = {}) {
   const { assetIcons, stockIcons } = useAssetIcons(undefined, { fullCatalog: true });
   const rates = useRates();
   const [tab, setTab] = useState<TabKey>(() => {
@@ -311,7 +311,7 @@ export default function AssetLibraryView() {
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState("");
   const [marketOrder, setMarketOrder] = useState<string[]>([]);
-  const [cdnEnabled, setCdnEnabled] = useState(false);
+  const [cdnEnabled, setCdnEnabled] = useState(initialCdnEnabled ?? false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ running: boolean; total: number; done: number; current: string; error: string; lastSyncAt: string } | null>(null);
   const [checkingDelisted, setCheckingDelisted] = useState(false);

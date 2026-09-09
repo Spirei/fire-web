@@ -42,6 +42,8 @@ interface Props {
   onClearAll: (password: string) => Promise<boolean>;
   onTabsChange: (tabs: TabConfig[]) => void;
   initialSub?: string;
+  /** 服务端首帧设置快照，避免刷新时先渲染默认开关再回落到真实值 */
+  initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "groups" | "markets" | "marketLabels">;
 }
 
 type SubKey = "site" | "features" | "stocks" | "api" | "profile" | "database" | "cron" | "about";
@@ -638,7 +640,7 @@ const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
 // 连续点击则目标不断前移，弹簧持续追赶，产生连续顺滑的转动。
 // 临界阻尼（无过冲、无回弹）+ 弹簧自身正是“起步缓、中间快、收尾柔”的缘故，
 // 比直接给速度/摩擦更流畅，不会有速度突跳或生硬停下的卡顿感。
-export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub }: Props) {
+export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub, initialSettings }: Props) {
   const isAdminUser = user?.role === "admin";
   const { unit: currencyDisplayUnit, setUnit: setCurrencyDisplayUnit } = useCurrencyDisplayUnit();
   const { assets: libraryAssets, assetIcons } = useAssetIcons(["broker", "icon"]);
@@ -707,9 +709,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     return requested && SETTINGS_SEARCH_INDEX.some((x) => x.sub === valid && x.anchor === requested) ? requested : SETTINGS_SEARCH_INDEX.find((x) => x.sub === valid)?.anchor || "info";
   });
   const activeSubMeta = visibleGroups.flatMap((g) => g.items).find((item) => item.key === sub);
-  const [site, setSite] = useState<SiteSettings>(DEFAULT_SETTINGS);
-  const [tabs, setTabs] = useState<TabConfig[]>(DEFAULT_TABS);
-  const [stockGroups, setStockGroups] = useState<GroupConfig[]>([]);
+  const [site, setSite] = useState<SiteSettings>(() => initialSettings ? {
+    ...DEFAULT_SETTINGS,
+    ...initialSettings,
+    marketBadges: normalizeMarketBadges(initialSettings.marketBadges),
+    marketBadgesVisible: initialSettings.marketBadgesVisible !== false
+  } : DEFAULT_SETTINGS);
+  const [tabs, setTabs] = useState<TabConfig[]>(initialSettings?.tabs ?? DEFAULT_TABS);
+  const [stockGroups, setStockGroups] = useState<GroupConfig[]>(initialSettings?.groups ?? []);
   const [dbStatus, setDbStatus] = useState<DbStatus | null>(null);
   const [dbStatusLoading, setDbStatusLoading] = useState(false);
   const [dbStatusError, setDbStatusError] = useState("");
