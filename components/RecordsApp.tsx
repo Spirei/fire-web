@@ -125,7 +125,7 @@ export default function RecordsApp({
     applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
   }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible, initialStockIcons]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (initialTab === "settings") {
       setSettingsSub(new URLSearchParams(window.location.search).get("sub"));
     }
