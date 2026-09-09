@@ -77,6 +77,8 @@ let S = load();
 let route = { name: "home", cat: "cash", member: "全部", chartKind: "mwr", chartRange: "all", showAll: false, showArchived: false, investSort: "updated", sortMenu: false, impMenu: false, editFlow: false, groupMenu: null, accMenu: false };
 let updateTarget = null;
 let saveTimer = 0;
+let pendingLedgerWrite = Promise.resolve(true);
+let ledgerWriteFailed = false;
 let loggedIn = false;
 const PAGES = ["home","weather","cashflow","family","calendar","manage","update","addItem","editItem","help","invest","addInvest","summary","addSummary","account","settings"];
 const RAINBOW = ["#ff5f6d","#ff8a4c","#ffb84d","#b58aff","#8077ff","#4ca9f5","#37c7da","#2bc9a5"];
@@ -205,16 +207,25 @@ async function hydrate() {
     return true;
   } catch { return false; }
 }
-async function pushRemote() {
+function pushRemote() {
+  const payload = JSON.stringify(S);
+  pendingLedgerWrite = pendingLedgerWrite.then(async () => {
+    const ok = await writeRemote(payload);
+    ledgerWriteFailed = !ok;
+    return ok;
+  });
+  return pendingLedgerWrite;
+}
+async function writeRemote(payload) {
   if (!loggedIn) {
     try {
-      const r = await fetch("/api/v1/simple-ledger", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(S) });
+      const r = await fetch("/api/v1/simple-ledger", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: payload, signal: AbortSignal.timeout(10000) });
       loggedIn = r.ok;
       return r.ok;
     } catch { return false; }
   }
   try {
-    const r = await fetch("/api/v1/simple-ledger", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(S) });
+    const r = await fetch("/api/v1/simple-ledger", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: payload, signal: AbortSignal.timeout(10000) });
     return r.ok;
   } catch { return false; }
 }
@@ -1726,7 +1737,7 @@ function updateFamily() {
     ${route.menu ? `<div class="menu">
         <button onclick="exportBook();route.menu=false;render()">导出账本</button>
         <button onclick="importBook();route.menu=false">导入 JSON</button>
-        <button onclick="location.href='/records'">切换完整版</button>
+        <a href="/records" data-time-machine="full">时光机 · 完整版</a>
       </div>` : ""}
     <div class="cats">
       ${cats.map((c, i) => {
@@ -2885,7 +2896,8 @@ function toggleTheme() {
 }
 
 const WIN_KEY = "fire-simple-win";
-const winEl = document.getElementById("win");
+let winEl = document.getElementById("win");
+let scrollObserver = null;
 let winState = { x: 24, y: 24, w: 680, h: 0, fixed: false };
 try {
   const saved = JSON.parse(localStorage.getItem(WIN_KEY) || "null");
@@ -2933,6 +2945,7 @@ function syncScroll() {
   });
 }
 function applyWin() {
+  if (!winEl?.isConnected || !document.getElementById("win")) return;
   if (window.matchMedia("(max-width: 760px) and (pointer: coarse)").matches) {
     winEl.style.transform = "none";
     winEl.style.width = "100%";
@@ -2969,9 +2982,12 @@ function applyWin() {
 function togglePin() { winState.fixed = !winState.fixed; saveWin(); applyWin(); }
 
 let drag = null;
+function bindSimpleWindow() {
+  if (winEl.dataset.windowBound) return;
+  winEl.dataset.windowBound = "true";
 document.getElementById("winBar").addEventListener("pointerdown", (e) => {
   if (winState.fixed) return;
-  if (e.target.closest("button")) return;
+  if (e.target.closest("button, a")) return;
   e.preventDefault();
   drag = { kind: "move", x: e.clientX, y: e.clientY, bx: winState.x, by: winState.y };
   winEl.setPointerCapture(e.pointerId);
@@ -2985,6 +3001,8 @@ winEl.querySelectorAll(".handle").forEach((h) => {
     winEl.setPointerCapture(e.pointerId);
   });
 });
+}
+bindSimpleWindow();
 window.addEventListener("pointermove", (e) => {
   if (!drag) return;
   const dx = e.clientX - drag.x;
@@ -3043,6 +3061,7 @@ function setComposeRange(value) {
   render({ resize: false, keepScroll: true });
 }
 function render(opts) {
+  if (!document.getElementById("app")) return;
   opts = opts || {};
   // 每次渲染前自动打组 + 合并同一账本组里的重复账户（如 美股（ibkr）与 ibkr），合并后无重复、只发生一次
   if (applyLedgerRules()) save();
@@ -3084,6 +3103,7 @@ function render(opts) {
   if (!opts.skipUrl) syncUrl(!!opts.pushUrl);
 }
 window.addEventListener("popstate", () => {
+  if (location.pathname !== "/simple-app" || !document.getElementById("app")) return;
   urlLock = true;
   closeSankey();
   closeDrop();
@@ -3096,10 +3116,12 @@ window.addEventListener("popstate", () => {
   urlLock = false;
 });
 document.addEventListener("pointerdown", (e) => {
+  if (location.pathname !== "/simple-app") return;
   if (calState.open && !e.target.closest(".cal-pop") && !e.target.closest(".cal-btn")) closeCal();
   if (!e.target.closest(".dd")) closeDrop();
 }, true);
 document.addEventListener("keydown", (e) => {
+  if (location.pathname !== "/simple-app") return;
   if (e.key !== "Escape") return;
   if (calState.open) { closeCal(); return; }
   const openDd = document.querySelector(".dd-menu:not([hidden])");
@@ -3118,11 +3140,18 @@ applyWin();
 document.documentElement.classList.add("simple-app-ready");
 if (window.ResizeObserver) {
   const appEl = document.getElementById("app");
-  if (appEl) new ResizeObserver(() => syncScroll()).observe(appEl);
+  if (appEl) { scrollObserver = new ResizeObserver(() => syncScroll()); scrollObserver.observe(appEl); }
 }
 restoreDlg();
 hydrate();
 window.remountSimpleApp = function remountSimpleApp() {
+  winEl = document.getElementById("win");
+  if (!winEl) return;
+  drag = null;
+  bindSimpleWindow();
+  scrollObserver?.disconnect();
+  const appEl = document.getElementById("app");
+  if (appEl && window.ResizeObserver) { scrollObserver = new ResizeObserver(() => syncScroll()); scrollObserver.observe(appEl); }
   readUrl();
   loadMarketIcons();
   render({ skipUrl: true });
@@ -3138,4 +3167,15 @@ window.refreshSimpleApp = async function refreshSimpleApp() {
     if (!await pushRemote()) return false;
   }
   return hydrate();
+};
+
+// Finish debounced writes before version navigation; never hydrate over local edits here.
+window.flushSimpleApp = async function () {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = 0;
+    return pushRemote();
+  }
+  await pendingLedgerWrite;
+  return ledgerWriteFailed ? pushRemote() : true;
 };

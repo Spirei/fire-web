@@ -2609,7 +2609,16 @@ export const V0_1_24_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_24_ENTRY;
+export const V0_1_25_ENTRY: VersionEntry = {
+  version: "v0.1.25",
+  date: "2026-09-09",
+  summary: "时光机连接简化版与完整版。",
+  frontend: [...V0_1_24_ENTRY.frontend, { name: "WebGL", version: "浏览器原生", desc: "哆啦A梦时光机原图纵深与局部视差动效" }],
+  software: V0_1_24_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.25" } : item),
+  changes: [{ title: "双向版本时光机", desc: "简化版工具栏与完整版页头新增版本穿越入口，点击即以用户提供的哆啦A梦时光机原图衔接页面切换，以 WebGL 对原图做柔和纵深与局部视差，保护人物区域，无额外流光或闪光，不支持 WebGL 时回退原图；支持深浅主题、手机小屏、减少动态效果，通过预取和应用内路由消除整页重载；隔离简化版样式并恢复返回后的窗口交互，离开前等待账本同步，失败时保留当前页面。", kind: "feature" }, { title: "移除简化版/完整版入口外链箭头", desc: "简化版与完整版页头「时光机」版本穿越按钮移除右上角外链箭头，仅保留时钟图标与切换文案，界面更简洁。", kind: "fix" }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_25_ENTRY;
 
 // 完整历史数组已拆分到 lib/versions-history.ts（约 200KB 历史文案，仅供版本弹窗
 // 懒加载引用）；本文件保留类型 + 当前版本条目，让设置页 / 健康检查只引用轻量常量。

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "@/styles/time-machine.css";
+import TimeMachine from "@/components/TimeMachine";
 import "@/styles/responsive-base.css";
 import "@/styles/mobile.css";
 import "@/styles/tablet.css";
@@ -34,6 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       style={{ backgroundColor: dark ? "#0a0e19" : "#ffffff" }}
     >
       <head>
+        <script dangerouslySetInnerHTML={{ __html: `if(location.pathname==='/simple-app')document.documentElement.classList.add('simple-app-active');` }} />
         {/* PWA：可安装（Chrome「在应用中打开」/ Safari 添加到主屏幕） */}
         <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="theme-color" content={dark ? "#0a0e19" : "#ffffff"} />
@@ -51,6 +54,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="font-sans">
         <PwaRegister />
+        <TimeMachine />
         <SiteBg />
         <LoginModal />
         {children}

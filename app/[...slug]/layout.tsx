@@ -1,3 +1,4 @@
+import { TimeMachineLink } from "@/components/TimeMachine";
 import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import Link from "next/link";
@@ -74,6 +75,7 @@ export default async function SlugLayout({
           </Link>
           <div className="app-shell-ticker min-w-0 overflow-hidden"><IndexTicker /></div>
           <div className="ml-auto flex flex-none items-center gap-2.5">
+            <TimeMachineLink to="simple" />
             <UserMenu initialUser={user} />
           </div>
         </div>

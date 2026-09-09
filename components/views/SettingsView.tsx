@@ -3032,7 +3032,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>前端技术栈</b><span>交互与响应式界面</span></div>
-                    <span className="settings-detail-value">Next.js 15 · React 19 · TypeScript · Tailwind CSS</span>
+                    <span className="settings-detail-value">Next.js 15 · React 19 · TypeScript · Tailwind CSS · WebGL 原图动效</span>
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>数据与服务</b><span>本地优先，可切换企业数据库</span></div>

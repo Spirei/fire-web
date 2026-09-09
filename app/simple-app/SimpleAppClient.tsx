@@ -1,5 +1,6 @@
 "use client";
 
+import { TimeMachineLink } from "@/components/TimeMachine";
 import Script from "next/script";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconArrowDown, IconCheck, IconExclamationMark, IconLoader2 } from "@tabler/icons-react";
@@ -13,6 +14,8 @@ export default function SimpleAppClient() {
   const pullRef = useRef({ active: false, refreshing: false, startX: 0, startY: 0, distance: 0 });
 
   useLayoutEffect(() => {
+    const wasDark = document.documentElement.classList.contains("dark");
+    document.documentElement.classList.add("simple-app-active");
     try {
       document.documentElement.classList.toggle("dark", localStorage.getItem("fire-simple-theme") === "dark");
       const saved = JSON.parse(localStorage.getItem(WINDOW_KEY) || "null") as { w?: number } | null;
@@ -20,10 +23,19 @@ export default function SimpleAppClient() {
         document.documentElement.style.setProperty("--saved-win-w", `${Math.max(360, saved.w!)}px`);
       }
     } catch {}
+    window.remountSimpleApp?.();
+    return () => {
+      document.documentElement.classList.remove("simple-app-active", "simple-app-ready");
+      document.documentElement.classList.toggle("dark", wasDark);
+    };
   }, []);
 
   useEffect(() => {
+    const chartObservers = new Map<HTMLElement, ResizeObserver>();
     window.mountSimpleCashflowCharts = (payload) => {
+      chartObservers.forEach((observer, element) => {
+        if (!element.isConnected) { observer.disconnect(); echarts.getInstanceByDom(element)?.dispose(); chartObservers.delete(element); }
+      });
       document.querySelectorAll<HTMLElement>(".cf-echart").forEach((element) => {
         if (element.clientWidth < 40) {
           window.setTimeout(() => window.mountSimpleCashflowCharts?.(payload), 80);
@@ -86,8 +98,11 @@ export default function SimpleAppClient() {
         }
         const chart = echarts.getInstanceByDom(element) || echarts.init(element, null, { renderer:"svg" });
         chart.setOption({ animation:false, tooltip:{ show:false }, series:[{ type:"sankey", orient:"horizontal", left:compact?72:(veryNarrow?66:narrow?78:145), right:compact?72:(veryNarrow?106:narrow?88:145), top:compact?32:(narrow?62:46), bottom:compact?32:(narrow?54:46), nodeWidth:compact?9:14, nodeGap:compact?10:(narrow?12:16), nodeAlign:"justify", draggable:false, layoutIterations:0, data:nodes, links, lineStyle:{ curveness:.5, opacity:.9 }, itemStyle:{ borderWidth:0, borderRadius:2 }, label:{ color:"#66717d", fontSize:compact?9:(veryNarrow?9:narrow?11:13), fontWeight:650, distance:compact?5:(veryNarrow?4:narrow?6:9), formatter:(params:{data?:{displayLabel?:string}})=>params.data?.displayLabel||"" }, emphasis:{ focus:"adjacency" } }] }, true);
-        new ResizeObserver(() => chart.resize()).observe(element);
-        window.setTimeout(() => chart.resize(), 100);
+        if (!chartObservers.has(element)) {
+          const resizeObserver = new ResizeObserver(() => { if (!chart.isDisposed()) chart.resize(); });
+          resizeObserver.observe(element); chartObservers.set(element, resizeObserver);
+        }
+        window.setTimeout(() => { if (!chart.isDisposed()) chart.resize(); }, 100);
       });
     };
     window.downloadSimpleCashflowChart = (filename = "年度现金流") => {
@@ -105,7 +120,7 @@ export default function SimpleAppClient() {
       if (added) requestAnimationFrame(() => window.mountSimpleCashflowCharts?.(window.getSimpleCashflowChartData?.() || { income:[], expenses:[], incomeTotal:0, expensesTotal:0, surplus:0 }));
     });
     observer.observe(document.body, { childList:true, subtree:true });
-    return () => { observer.disconnect(); delete window.mountSimpleCashflowCharts; delete window.downloadSimpleCashflowChart; };
+    return () => { observer.disconnect(); chartObservers.forEach((resizeObserver, element) => { resizeObserver.disconnect(); echarts.getInstanceByDom(element)?.dispose(); }); chartObservers.clear(); delete window.mountSimpleCashflowCharts; delete window.downloadSimpleCashflowChart; };
   }, []);
 
   useEffect(() => {
@@ -217,6 +232,7 @@ export default function SimpleAppClient() {
     <>
       <div className="win" id="win">
         <div className="win-bar" id="winBar" title="按住拖动窗口">
+          <TimeMachineLink to="full" />
           <button type="button" id="pinBtn" title="固定窗口" aria-label="固定窗口" onClick={() => window.togglePin?.()}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 4v5l3 3v2H7v-2l3-3V4"/><path d="M9 4h6"/><path d="M12 14v6"/></svg>
           </button>
@@ -256,7 +272,7 @@ export default function SimpleAppClient() {
         src="/simple-app-runtime.js"
         strategy="afterInteractive"
         onReady={() => {
-          if (!document.getElementById("app")?.childElementCount) window.remountSimpleApp?.();
+          window.remountSimpleApp?.();
         }}
       />
     </>
