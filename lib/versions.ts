@@ -2641,6 +2641,10 @@ export const V0_1_26_ENTRY: VersionEntry = {
     desc: "全站市场徽标颜色与文字改为可配置：设置 → 股票设置 → 市场色块，可改美股/港股/上证/深证/加密及其他市场的底色、文字色与缩写，并提供默认显示/不显示开关。保存后持仓、搜索、分享页、盈亏分析等处同步生效，缺省仍为原默认配色且显示。股票来源接口移到股票类别末尾。tsc 无错误。",
     kind: "feature"
   }, {
+    title: "默认券商分组与图标纳入干净素材",
+    desc: "把已配置的九家券商（长桥、华泰、盈透、富途、同花顺、东方财富、老虎、罗宾汉、嘉信）写入默认设置，并与素材库 public/uploads/asset/broker 图标按名称/别名对应；新部署无需再手动添加券商，素材库券商图标随仓库同步。tsc 无错误。",
+    kind: "feature"
+  }, {
     title: "修复市场色块设置触发 SWC 插件报错",
     desc: "服务端 settings 误引入带 React Hook 的市场色块模块，开发编译出现 Plugin is not supported with current @swc/core。已把 Hook 拆到独立客户端模块，服务端只引用纯函数。tsc 无错误。",
     kind: "fix"

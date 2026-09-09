@@ -20,7 +20,7 @@
  *   - 客户端展示：icon 为空时回退名称首字母；名称以 name 字段为准
  */
 import { getSiteSettings, updateSiteSettings } from "@/lib/settings";
-import { getAssets } from "@/lib/assets";
+import { ensureBrokerAssets, getAssets } from "@/lib/assets";
 import { clearRecordGroup, renameRecordGroup } from "@/lib/store";
 import type { GroupConfig } from "@/lib/types";
 
@@ -34,6 +34,7 @@ export interface Broker {
 
 /** 券商列表：设置分组 + 素材库图标合并（按设置顺序），图标匹配大小写不敏感 */
 export function getBrokers(): Broker[] {
+  ensureBrokerAssets();
   const settings = getSiteSettings();
   const icons = new Map<string, string>();
   getAssets().forEach((a) => {

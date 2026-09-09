@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import type { HomeNavItem, Market, SiteSettings, TabConfig, TickerConfig } from "./types";
+import type { GroupConfig, HomeNavItem, Market, SiteSettings, TabConfig, TickerConfig } from "./types";
 import { DEFAULT_MARKET_BADGES, normalizeMarketBadges } from "./marketBadge";
 import { DEFAULT_HOLDING_COLUMNS, normalizeHoldingColumns } from "./holdingColumns";
 import fs from "fs";
@@ -9,6 +9,19 @@ export const DEFAULT_HOME_NAV: HomeNavItem[] = [
   { key: "preview", label: "产品预览", href: "#preview", enabled: true },
   { key: "features", label: "功能介绍", href: "#features", enabled: true },
   { key: "records", label: "自选记录", href: "/records", enabled: false }
+];
+
+/** 默认券商分组（干净素材自带）：与 public/uploads/asset/broker 图标按名称/别名对应 */
+export const DEFAULT_GROUPS: GroupConfig[] = [
+  { id: "longbridge", name: "长桥证劵", alias: "Longbridge" },
+  { id: "htsc", name: "华泰证劵", alias: "HTSC" },
+  { id: "ibkr", name: "盈透证券", alias: "IBKR" },
+  { id: "futu", name: "富途证券", alias: "Futu" },
+  { id: "ths", name: "同花顺", alias: "10jqka" },
+  { id: "eastmoney", name: "东方财富", alias: "东财" },
+  { id: "tiger", name: "老虎证券", alias: "Tiger" },
+  { id: "robinhood", name: "罗宾汉", alias: "Robinhood" },
+  { id: "schwab", name: "嘉信理财", alias: "Schwab" }
 ];
 
 export const DEFAULT_TICKER: TickerConfig = {
@@ -45,7 +58,7 @@ const DEFAULTS: SiteSettings = {
     { key: "activities", label: "日志", url: "/activities" },
     { key: "settings", label: "设置", url: "/settings" }
   ],
-  groups: [],
+  groups: DEFAULT_GROUPS,
   homeNav: DEFAULT_HOME_NAV,
   markets: [],
   marketLabels: [],
