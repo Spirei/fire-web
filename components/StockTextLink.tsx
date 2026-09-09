@@ -4,7 +4,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import { fmtCap, fmtNumMarket, fmtPct, fmtPrice, fmtQuoteTime } from "@/lib/format";
-import { useMarketBadge } from "@/lib/marketBadge";
+import { useMarketBadge } from "@/lib/useMarketBadge";
 import { marketMeta, type Quote } from "@/lib/types";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 

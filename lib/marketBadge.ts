@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import type { MarketBadgeStyle } from "@/lib/types";
 
 export type { MarketBadgeStyle };
@@ -111,16 +110,9 @@ export function getMarketBadge(market: string, code: string): MarketBadgeStyle {
   return { ...other, label: other.label || m || "US" };
 }
 
-export function useMarketBadge(market: string, code: string): MarketBadgeStyle {
-  const [, bump] = useState(0);
-  useEffect(() => {
-    const onChange = () => bump((value) => value + 1);
-    listeners.add(onChange);
-    if (typeof window !== "undefined") window.addEventListener("fire:market-badges-updated", onChange);
-    return () => {
-      listeners.delete(onChange);
-      if (typeof window !== "undefined") window.removeEventListener("fire:market-badges-updated", onChange);
-    };
-  }, []);
-  return getMarketBadge(market, code);
+export function subscribeMarketBadges(fn: () => void) {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
 }

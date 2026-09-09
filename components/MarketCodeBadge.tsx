@@ -1,4 +1,4 @@
-import { useMarketBadge } from "@/lib/marketBadge";
+import { useMarketBadge } from "@/lib/useMarketBadge";
 
 interface Props {
   market: string;

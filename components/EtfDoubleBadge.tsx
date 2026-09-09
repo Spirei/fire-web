@@ -1,6 +1,6 @@
 "use client";
 
-import { useMarketBadge } from "@/lib/marketBadge";
+import { useMarketBadge } from "@/lib/useMarketBadge";
 
 /** 2 倍杠杆 ETF 角标：颜色与市场色块一致（US 蓝 / HK 紫 / A股 粉红），文字固定 2x（x 小写） */
 export default function EtfDoubleBadge({

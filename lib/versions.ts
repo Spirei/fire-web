@@ -2640,6 +2640,10 @@ export const V0_1_26_ENTRY: VersionEntry = {
     title: "设置-股票新增市场色块设置",
     desc: "全站市场徽标颜色与文字改为可配置：设置 → 股票设置 → 市场色块设置，可改美股/港股/上证/深证/加密及其他市场的底色、文字色与缩写。保存后持仓、搜索、分享页、盈亏分析等处同步生效，缺省仍为原默认配色。tsc 无错误。",
     kind: "feature"
+  }, {
+    title: "修复市场色块设置触发 SWC 插件报错",
+    desc: "服务端 settings 误引入带 React Hook 的市场色块模块，开发编译出现 Plugin is not supported with current @swc/core。已把 Hook 拆到独立客户端模块，服务端只引用纯函数。tsc 无错误。",
+    kind: "fix"
   }]
 };
 
