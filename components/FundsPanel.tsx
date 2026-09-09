@@ -35,7 +35,7 @@ const EMPTY: Record<Currency, number> = { USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0
 const EMPTY_SUMMARY: Record<Currency, Summary> = Object.fromEntries(Object.keys(EMPTY).map((key) => [key, { openingAsset: 0, cashNetFlow: 0, stockNetFlow: 0, otherNetFlow: 0 }])) as Record<Currency, Summary>;
 const RECORD_PAGE_SIZE = 30;
 
-export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdingAssets: Record<Currency, number>; onBalancesChange: (balances: Record<Currency, number>) => void }) {
+export default function FundsPanel({ holdingAssets, balanceOverrides, onBalancesChange }: { holdingAssets: Record<Currency, number>; balanceOverrides?: Partial<Record<Currency, number>>; onBalancesChange: (balances: Record<Currency, number>) => void }) {
   const rates = useRates();
   const [currency, setCurrency] = usePersistedState<Currency>("fire:funds-display-currency", "USD");
   const [balances, setBalances] = useState<Record<Currency, number>>(EMPTY);
@@ -134,7 +134,8 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
     await load(); await loadRecords(currency, recordsPage, debouncedQuery);
   };
   const convert = useCallback((value: number, from: Currency) => value / (rates[from] || 1) * (rates[currency] || 1), [currency, rates]);
-  const cash = useMemo(() => (Object.entries(balances) as [Currency, number][]).reduce((sum, [iso, value]) => sum + convert(value, iso), 0), [balances, convert]);
+  const displayedBalances = useMemo(() => ({ ...balances, ...balanceOverrides }), [balances, balanceOverrides]);
+  const cash = useMemo(() => (Object.entries(displayedBalances) as [Currency, number][]).reduce((sum, [iso, value]) => sum + convert(value, iso), 0), [displayedBalances, convert]);
   const holdings = useMemo(() => (Object.entries(holdingAssets) as [Currency, number][]).reduce((sum, [iso, value]) => sum + convert(value, iso), 0), [holdingAssets, convert]);
   const currencyTransactions = transactions;
   const { openingAsset, cashNetFlow, stockNetFlow, otherNetFlow } = useMemo(() => (Object.entries(summaries) as [Currency, Summary][]).reduce((total, [iso, summary]) => ({
@@ -168,7 +169,7 @@ export default function FundsPanel({ holdingAssets, onBalancesChange }: { holdin
       </div>
       <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 买卖与股息属于账户内部现金流，不计入外部投入。</p><p>3. <button type="button" onClick={() => { setRecordsPage(0); setRecordsOpen(true); }} className="border-b border-dashed border-muted/60 pb-px font-semibold text-muted transition-colors hover:border-ink hover:text-ink">查看资金记录</button></p></div>
     </div>
-    {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={balances[currency] || 0} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
+    {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={displayedBalances[currency] || 0} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
     {recordsOpen && <AppModal title="资金记录" desc={`折算为 ${currency} · 共 ${recordsTotal} 笔 · 当前余额 ${fmtMoney(cash, CURRENCY_SYMBOLS[currency])}`} size="md" onClose={() => setRecordsOpen(false)} headerActions={<label className="relative block"><IconSearch size={14} stroke={1.8} className={`pointer-events-none absolute left-3 top-1/2 z-20 -translate-y-1/2 text-muted ${recordsLoading ? "animate-pulse" : ""}`} /><RainbowTextInput autoFocus value={recordsQuery} onChange={(event) => setRecordsQuery(event.target.value)} placeholder="名称、代码、拼音、买入/卖出" className="h-9 w-full rounded-xl border border-edge bg-bg-gray pl-8 pr-8 text-[11px] text-ink outline-none transition-colors focus-within:border-[#3297f6]/60 focus-within:bg-white dark:focus-within:bg-white/5" />{recordsQuery && <button type="button" onClick={() => setRecordsQuery("")} className="absolute right-1.5 top-1/2 z-20 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:bg-white hover:text-ink dark:hover:bg-white/10" aria-label="清空搜索">×</button>}</label>}>
       <div className="-mx-3 h-[min(520px,62vh)] overflow-y-auto px-1 sm:-mx-2">
         {recordsLoading && currencyTransactions.length === 0 ? <div className="space-y-2 px-2 py-1">{Array.from({ length: 6 }, (_, index) => <div key={index} className="flex animate-pulse items-center gap-3 rounded-[14px] px-3 py-2.5"><span className="flex-1"><i className="block h-3 w-2/5 rounded bg-bg-gray" /><i className="mt-2 block h-2.5 w-1/4 rounded bg-bg-gray" /></span><i className="h-3 w-20 rounded bg-bg-gray" /></div>)}</div> : currencyTransactions.length ? currencyTransactions.map((item) => {

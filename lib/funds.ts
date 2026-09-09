@@ -206,14 +206,13 @@ export function fundSummaries(userId: string) {
 }
 export function fundBalances(userId: string): Record<FundCurrency, number> {
   const result: Record<FundCurrency, number> = { USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 };
-  // 旧持仓/导入订单通常没有与之对应的期初入金。此时历史买入从 0 倒扣会产生
-  // 虚构的负现金。必须逐笔应用 0 下限：若只在所有流水求和后截断，早期未知本金
-  // 造成的负数会吞掉后来真实的卖出回款。系统尚未支持融资负债，因此每个币种
-  // 按发生时间维护“已知可用现金”；用户补录期初资金后仍会自然得到完整余额。
+  // 现金必须保留完整的有符号净额。融资买入会形成负现金（融资负债）；如果逐笔
+  // 截断到 0，早期融资会被抹掉，后续卖出回款却完整累加，从而系统性高估净资产。
+  // 缺少期初入金的旧账本应通过期初资金/余额调整补齐，不能在汇总阶段篡改流水。
   const rows = getDb().prepare("SELECT currency,amount,direction FROM fund_transactions WHERE user_id=? ORDER BY currency,occurred_at,created_at,id").all(userId) as { currency: FundCurrency; amount: number; direction: 1 | -1 }[];
   rows.forEach((row) => {
     const delta = (Number(row.amount) || 0) * Number(row.direction);
-    result[row.currency] = Math.max(0, result[row.currency] + delta);
+    result[row.currency] += delta;
   });
   return result;
 }
