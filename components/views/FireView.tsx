@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FALLBACK_RATES, type StockRecord, type Quote } from "@/lib/types";
 import { usdCap } from "@/lib/currency";
 import CurrencyFlag from "@/components/CurrencyFlag";
-import { CURRENCIES, type CurrencyCode, useDisplayCurrency } from "@/lib/currencyPrefs";
+import { CURRENCIES, type CurrencyCode } from "@/lib/currencyPrefs";
 import FireReefCurrent from "@/components/FireReefCurrent";
 import { fmtMoneyAdaptive } from "@/lib/format";
 
@@ -43,6 +43,12 @@ function lsGet(key: string, fallback: string) {
 }
 function lsSet(key: string, v: string) {
   try { localStorage.setItem(key, v); } catch { /* 忽略 */ }
+}
+
+function readFireBaseCurrency(): CurrencyCode {
+  if (typeof window === "undefined") return "CNY";
+  const saved = localStorage.getItem("fire:base-currency");
+  return CURRENCIES.some((currency) => currency.code === saved) ? saved as CurrencyCode : "CNY";
 }
 
 // 生成波浪液面路径：宽于绘图区（x1-x0 为周期 T 的整数倍），平移一个周期即可无缝循环（液体涌动）。
@@ -360,13 +366,10 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   }, [records, livePrice, rates]);
 
   // —— 货币：真实净资产 & FIRE 计划值统一到「显示币种」，进度比率保持稳定 ——
-  const { currency: displayCurrency, setCurrency: setDisplayCurrency } = useDisplayCurrency();
   // 默认/主货币：FIRE 计划数值以它录入，显示时再从它换算到「显示币种」
-  const [baseCurrency, setBaseCurrency] = useState<CurrencyCode>(() => {
-    if (typeof window === "undefined") return "CNY";
-    const saved = localStorage.getItem("fire:base-currency");
-    return CURRENCIES.some((c) => c.code === saved) ? (saved as CurrencyCode) : "CNY";
-  });
+  const [baseCurrency, setBaseCurrency] = useState<CurrencyCode>(readFireBaseCurrency);
+  // 当前显示币种仅作用于本次浏览；刷新始终回到星标的默认/主货币。
+  const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode>(readFireBaseCurrency);
   const [currencyMenuOpen, setCurrencyMenuOpen] = useState(false);
   const [oceanSceneEnabled, setOceanSceneEnabled] = useState(() => lsGet("fire:fire-ocean-scene", "1") !== "0");
   const [bubbleHover, setBubbleHover] = useState<{ x: number; y: number } | null>(null);
@@ -599,8 +602,11 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
             const thisYearTarget = Number(loadedRows.find((r) => r.year === currentYear)?.target);
             if (thisYearTarget > 0) setFireTargetBase(thisYearTarget);
           }
-          if (CURRENCIES.some((c) => c.code === f.displayCurrency)) setDisplayCurrency(f.displayCurrency as CurrencyCode);
-          if (CURRENCIES.some((c) => c.code === f.baseCurrency)) setBaseCurrency(f.baseCurrency as CurrencyCode);
+          if (CURRENCIES.some((c) => c.code === f.baseCurrency)) {
+            const loadedDefault = f.baseCurrency as CurrencyCode;
+            setBaseCurrency(loadedDefault);
+            setDisplayCurrency(loadedDefault);
+          }
         }
         setServerLoaded(true);
       })
@@ -724,6 +730,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
                         onClick={() => {
                           updateAnnualFireTarget(round2(fireTargetUsd * (rates[option.value] || 1)));
                           setBaseCurrency(option.value);
+                          setDisplayCurrency(option.value);
                           try { localStorage.setItem("fire:base-currency", option.value); } catch { /* 忽略 */ }
                           setCurrencyMenuOpen(false);
                         }}
