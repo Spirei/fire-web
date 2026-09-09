@@ -1,13 +1,20 @@
 /* Quiet version links; the transition uses the supplied Doraemon artwork. */
-.fire-time-link { display:inline-flex; align-items:center; justify-content:center; gap:0; flex:none; white-space:nowrap; width:34px; height:34px; padding:6px; border:1px solid #e6e8ec; border-radius:12px; color:#626a76; background:#fff; font-size:12px; font-weight:500; text-decoration:none; cursor:pointer; transition:background .2s,transform .2s; }
-.fire-time-link:hover { background:#f0f2f5; transform:translateY(-1px); }
-.fire-time-link:active { transform:scale(.97); }
-.fire-time-link-orbit { display:grid; place-items:center; color:#4c9b97; transition:transform .5s; }
-.fire-time-link:hover .fire-time-link-orbit { color:#22a3ff; }
-.win-bar .fire-time-link { margin-right:auto; touch-action:manipulation; }
-.dark .fire-time-link { background:#1c222d; border-color:#303744; color:#d0d6df; }
-.dark .fire-time-link:hover { background:#262c37; }
-.dark .fire-time-link-orbit { color:#8bc8c3; }
+.fire-time-link { display:flex; align-items:center; gap:10px; width:100%; min-height:44px; padding:10px 12px; border:0; border-radius:10px; color:#747d89; background:transparent; font-size:13px; text-decoration:none; cursor:pointer; white-space:nowrap; transition:background .2s,color .2s; }
+.fire-time-link:hover { color:#343e4c; background:#f2f3f5; }
+.fire-time-link-orbit { display:grid; place-items:center; flex:none; color:inherit; }
+.fire-time-link-label { font-weight:400; }
+.fire-time-link-destination { margin-left:auto; color:#9299a3; font-size:11px; }
+.dark .fire-time-link { color:#a6afbc; background:transparent; }
+.dark .fire-time-link:hover { color:#e0e5ed; background:#ffffff09; }
+.dark .fire-time-link-destination { color:#838d9d; }
+.fire-time-menu { position:relative; margin-right:auto; cursor:default; touch-action:manipulation; }
+.fire-time-menu summary { display:grid; place-items:center; width:30px; height:30px; list-style:none; color:#8c939e; border-radius:8px; cursor:pointer; }
+.fire-time-menu summary::-webkit-details-marker { display:none; }
+.fire-time-menu summary:hover { background:#f2f3f5; }
+.fire-time-menu-panel { position:absolute; left:0; top:36px; min-width:202px; padding:5px; border:1px solid #e8eaee; border-radius:13px; background:#fff; box-shadow:0 8px 28px #18223216; z-index:100; }
+.dark .fire-time-menu summary:hover { background:#ffffff09; }
+.dark .fire-time-menu-panel { background:#1c222d; border-color:#303744; box-shadow:0 8px 28px #0004; }
+html.simple-app-active .win-bar { overflow:visible; position:relative; z-index:30; }
 .fire-time-scene { position:fixed; inset:0; z-index:2147483000; overflow:hidden; background:#101c44; isolation:isolate; animation:fire-time-cover .12s ease-out both; }
 .fire-time-picture { display:block; width:100%; height:100%; object-fit:cover; object-position:50% 50%; transform-origin:50% 52%; animation:fire-time-drift 1.3s ease-out both; }
 .fire-time-scene::before { content:""; position:absolute; inset:0; z-index:-1; background:linear-gradient(135deg,#182654,#0d1735); }

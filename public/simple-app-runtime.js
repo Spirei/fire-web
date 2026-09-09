@@ -2987,7 +2987,7 @@ function bindSimpleWindow() {
   winEl.dataset.windowBound = "true";
 document.getElementById("winBar").addEventListener("pointerdown", (e) => {
   if (winState.fixed) return;
-  if (e.target.closest("button, a")) return;
+  if (e.target.closest("button, a, summary")) return;
   e.preventDefault();
   drag = { kind: "move", x: e.clientX, y: e.clientY, bx: winState.x, by: winState.y };
   winEl.setPointerCapture(e.pointerId);

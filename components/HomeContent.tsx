@@ -1,6 +1,5 @@
 "use client";
 
-import { TimeMachineLink } from "@/components/TimeMachine";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -772,10 +771,7 @@ export default function HomeContent({ settings, initialDark = false, initialUser
           <div className="home-header-actions ml-auto flex flex-none items-center gap-2.5 md:ml-0">
             {/* 登录后：B 站风格头像（点击跳转后台）；未登录才显示主题按钮 + 登录 */}
             {auth === "in" ? (
-              <>
-                <TimeMachineLink to="simple" />
-                <UserMenu goTo="/records" initialUser={initialUser} />
-              </>
+              <UserMenu goTo="/records" initialUser={initialUser} />
             ) : (
               <>
                 {/* 浅色 / 深色切换（未登录也可调） */}

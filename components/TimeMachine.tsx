@@ -2,14 +2,33 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { IconSend } from "@tabler/icons-react";
+import { IconBrandTelegram, IconDots } from "@tabler/icons-react";
 import DoraemonTravel, { DORAEMON_IMAGE } from "./DoraemonTravel";
 
 export function TimeMachineLink({ to }: { to: "simple" | "full" }) {
   return <a href={to === "simple" ? "/simple-app" : "/records"} data-time-machine={to}
     className="fire-time-link" aria-label={`穿越至${to === "simple" ? "简化版" : "完整版"}`} title={`时光机 · 穿越至${to === "simple" ? "简化版" : "完整版"}`}>
-    <span className="fire-time-link-orbit" aria-hidden="true"><IconSend size={19} stroke={1.65} /></span>
+    <span className="fire-time-link-orbit" aria-hidden="true"><IconBrandTelegram size={19} stroke={1.45} /></span>
+    <span className="fire-time-link-label">去另一面</span>
+    <span className="fire-time-link-destination">{to === "simple" ? "简化版" : "完整版"}</span>
   </a>;
+}
+
+export function TimeMachineMenu() {
+  const menu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = (event: PointerEvent) => {
+      if (event.target instanceof Node && !menu.current?.contains(event.target) && menu.current) menu.current.open = false;
+    };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape" && menu.current) menu.current.open = false; };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", escape); };
+  }, []);
+  return <details className="fire-time-menu" ref={menu}>
+    <summary aria-label="更多选项" title="更多选项"><IconDots size={18} stroke={1.6} /></summary>
+    <div className="fire-time-menu-panel"><TimeMachineLink to="full" /></div>
+  </details>;
 }
 
 export default function TimeMachine() {
