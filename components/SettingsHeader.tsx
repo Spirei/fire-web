@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const ICON_PATHS: Record<string, React.ReactNode> = {
   site: (
@@ -193,20 +193,23 @@ export function SettingsSection({
   storageKey?: string;
   summary?: string;
 }) {
-  const [open, setOpen] = useState(() => {
-    if (!collapsible) return true;
-    const key = `fire:collapse:${storageKey || title}`;
-    try {
-      const saved = localStorage.getItem(key);
-      if (saved !== null) return saved === "1";
-    } catch {
-      /* 忽略 */
-    }
-    return defaultOpen;
-  });
+  const [open, setOpen] = useState(defaultOpen);
+  const hydrated = useRef(false);
 
   useEffect(() => {
     if (!collapsible) return;
+    const key = `fire:collapse:${storageKey || title}`;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved !== null) setOpen(saved === "1");
+      hydrated.current = true;
+    } catch {
+      hydrated.current = true;
+    }
+  }, [collapsible, storageKey, title]);
+
+  useEffect(() => {
+    if (!collapsible || !hydrated.current) return;
     const key = `fire:collapse:${storageKey || title}`;
     try {
       localStorage.setItem(key, open ? "1" : "0");
