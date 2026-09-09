@@ -58,11 +58,11 @@ const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; group
   { sub: "site", anchor: "nav", label: "首页导航", groupLabel: "网站", keywords: "导航 菜单 首页 入口" },
   { sub: "features", anchor: "trading-square", label: "交易广场", groupLabel: "功能", keywords: "交易广场 特朗普 段永平 更新 刷新 频率 缓存" },
   { sub: "stocks", anchor: "groups", label: "券商分组", groupLabel: "股票", keywords: "券商 分组 别名 持仓" },
-  { sub: "stocks", anchor: "market-badges", label: "市场色块设置", groupLabel: "股票", keywords: "市场 色块 徽标 颜色 US HK A股 上证 深证 加密" },
-  { sub: "stocks", anchor: "sources", label: "股票来源接口", groupLabel: "股票", keywords: "股票来源 接口 行情 财报 图标 url 数据源" },
+  { sub: "stocks", anchor: "market-badges", label: "市场色块", groupLabel: "股票", keywords: "市场 色块 徽标 颜色 显示 US HK A股 上证 深证 加密" },
   { sub: "stocks", anchor: "translation", label: "翻译配置", groupLabel: "股票", keywords: "翻译配置 DeepSeek 交易广场 中文" },
   { sub: "stocks", anchor: "trade", label: "交易 · 富途", groupLabel: "股票", keywords: "富途 futu opend 交易 行情源 主机 端口 腾讯 yahoo 备用" },
   { sub: "stocks", anchor: "currency-display", label: "货币金额显示", groupLabel: "股票", keywords: "货币 单位 金额 万 百万 千万 亿 缩写" },
+  { sub: "stocks", anchor: "sources", label: "股票来源接口", groupLabel: "股票", keywords: "股票来源 接口 行情 财报 图标 url 数据源" },
   { sub: "profile", anchor: "profile", label: "个人信息", groupLabel: "账号", keywords: "头像 昵称 密码 邮箱 导出 清空 数据" },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
@@ -497,6 +497,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   markets: [],
   marketLabels: [],
   marketBadges: { ...DEFAULT_MARKET_BADGES },
+  marketBadgesVisible: true,
   assetMarketOrder: [],
   indicesOrder: [],
   allowRegister: true,
@@ -746,12 +747,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.settings) {
-          setSite({ ...DEFAULT_SETTINGS, ...data.settings, marketBadges: normalizeMarketBadges(data.settings.marketBadges) });
+          setSite({ ...DEFAULT_SETTINGS, ...data.settings, marketBadges: normalizeMarketBadges(data.settings.marketBadges), marketBadgesVisible: data.settings.marketBadgesVisible !== false });
           captureSaved(data.settings);
           setTabs(data.settings.tabs ?? DEFAULT_TABS);
           setStockGroups(data.settings.groups ?? []);
           setGroupsLoaded(true);
-          applyMarketBadges(data.settings.marketBadges);
+          applyMarketBadges(data.settings.marketBadges, data.settings.marketBadgesVisible !== false);
         }
       })
       .catch(() => {
@@ -857,7 +858,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       if (!res.ok) throw new Error(data?.error || "保存失败");
       setSite((s) => ({ ...s, ...data.settings, llmApiKey: s.llmApiKey }));
       captureSaved(data.settings);
-      if (data.settings?.marketBadges) applyMarketBadges(data.settings.marketBadges);
+      if (data.settings?.marketBadges || typeof data.settings?.marketBadgesVisible === "boolean") {
+        applyMarketBadges(data.settings.marketBadges, data.settings.marketBadgesVisible);
+      }
       setBlockMsg((m) => ({ ...m, [key]: { type: "ok", text: hint } }));
       showToast(hint);
       window.dispatchEvent(new Event("fire:settings-updated"));
@@ -1266,9 +1269,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         await saveStockGroups();
       } else if (activeAnchor === "market-badges") {
         const nextBadges = normalizeMarketBadges(site.marketBadges);
-        const ok = await saveBlock("marketBadges", { marketBadges: nextBadges }, "市场色块已保存");
+        const ok = await saveBlock("marketBadges", { marketBadges: nextBadges, marketBadgesVisible: site.marketBadgesVisible !== false }, "市场色块已保存");
         if (ok) {
-          applyMarketBadges(nextBadges);
+          applyMarketBadges(nextBadges, site.marketBadgesVisible !== false);
           setEditingMarketBadges(false);
         }
       } else if (activeAnchor === "sources" || activeAnchor === "translation") {
@@ -2483,7 +2486,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
                 <SettingsSection
                   icon="tag"
-                  title="市场色块设置"
+                  title="市场色块"
                   desc="全站持仓、搜索、分享页等处的市场徽标颜色与文字"
                   id="market-badges"
                   titleAction={!editingMarketBadges ? (
@@ -2505,7 +2508,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <button
                           type="button"
                           onClick={() => {
-                            setSite((s) => ({ ...s, marketBadges: { ...DEFAULT_MARKET_BADGES } }));
+                            setSite((s) => ({ ...s, marketBadges: { ...DEFAULT_MARKET_BADGES }, marketBadgesVisible: true }));
                           }}
                           className="btn btn-ghost btn-sm"
                         >
@@ -2517,9 +2520,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             fetch("/api/settings")
                               .then((res) => (res.ok ? res.json() : null))
                               .then((data) => {
-                                if (data?.settings?.marketBadges) {
-                                  setSite((s) => ({ ...s, marketBadges: normalizeMarketBadges(data.settings.marketBadges) }));
-                                }
+                                setSite((s) => ({
+                                  ...s,
+                                  marketBadges: normalizeMarketBadges(data?.settings?.marketBadges),
+                                  marketBadgesVisible: data?.settings?.marketBadgesVisible !== false
+                                }));
                               })
                               .catch(() => undefined);
                             setEditingMarketBadges(false);
@@ -2535,6 +2540,28 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     ) : undefined
                   }
                 >
+                  <div className="sw-row">
+                    <div className="sw-row-label">
+                      <b>默认显示</b>
+                      <span>关闭后全站持仓、搜索、分享页不再展示市场色块</span>
+                    </div>
+                    <div className="pills flex flex-nowrap gap-1.5">
+                      {([[true, "显示"], [false, "不显示"]] as const).map(([value, label]) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => {
+                            setSite((current) => ({ ...current, marketBadgesVisible: value }));
+                            applyMarketBadges(site.marketBadges, value);
+                            void saveBlock("marketBadges", { marketBadges: normalizeMarketBadges(site.marketBadges), marketBadgesVisible: value }, value ? "市场色块已显示" : "市场色块已隐藏");
+                          }}
+                          className={`sw-pill ${site.marketBadgesVisible !== false === value ? "is-active" : ""}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="flex flex-col gap-2">
                     {(showAllMarketBadges ? MARKET_BADGE_ITEMS : MARKET_BADGE_ITEMS.slice(0, 5)).map((item) => {
                       const badge = normalizeMarketBadges(site.marketBadges)[item.key];
@@ -2620,91 +2647,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       {blockMsg.marketBadges.text}
                     </p>
                   )}
-                </SettingsSection>
-
-                {/* 股票来源接口（自网站管理移入） */}
-                <SettingsSection
-                  icon="plug"
-                  title="股票来源接口"
-                  desc="行情、财报与图标外部数据源，可在不升级情况下调整"
-                  id="sources"
-                  collapsible
-                  defaultOpen={false}
-                  storageKey="stock-sources"
-                  titleAction={!editingSources ? (
-                    <button type="button" onClick={() => setEditingSources(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑股票来源接口" aria-label="编辑股票来源接口">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
-                    </button>
-                  ) : undefined}
-                  action={editingSources ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
-                >
-                  <div className="flex flex-col">
-                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场数据源", ["trumpArchiveApiUrl", "translationApiUrl"]]] as const).map(([label, keys]) => {
-                      const fields = SOURCE_FIELDS.filter((f) => (keys as readonly string[]).includes(f.key));
-                      if (!fields.length) return null;
-                      return (
-                        <div key={label}>
-                          <p className={`subhead ${label.startsWith("翻译服务") ? "mt-6 border-t border-edge pt-5 text-brand-deep" : ""}`}>{label}</p>
-                          {fields.map((f) => {
-                            const value = (site as unknown as Record<string, string>)[f.key] || f.placeholder;
-                            return (
-                              <div key={f.key} className="sw-row">
-                                <div className="sw-row-label"><b>{f.name}</b><span>{f.desc}</span></div>
-                                <div className="ctrl">
-                                  {editingSources ? (
-                                    <input
-                                      className="sw-row-input"
-                                      value={value}
-                                      title={value}
-                                      onChange={(e) => setSite((s) => ({ ...s, [f.key]: e.target.value }))}
-                                      placeholder={f.placeholder}
-                                    />
-                                  ) : (
-                                    <span
-                                      className="min-w-0 flex-1 truncate text-[12.5px] text-muted"
-                                      title={value || f.placeholder}
-                                    >
-                                      {value || f.placeholder}
-                                    </span>
-                                  )}
-                                  {/^https?:\/\//i.test(value) && (
-                                    <span className="settings-source-actions">
-                                      <button
-                                        type="button"
-                                        className="settings-source-link"
-                                        title={`复制${f.name}`}
-                                        aria-label={`复制${f.name}链接`}
-                                        onClick={async () => {
-                                          const copied = await copyText(value);
-                                          showToast(copied ? "链接已复制" : "复制失败", copied ? undefined : "err");
-                                        }}
-                                      >
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
-                                      </button>
-                                      <a
-                                        href={value}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="settings-source-link"
-                                        title={`打开${f.name}`}
-                                        aria-label={`在新窗口打开${f.name}`}
-                                      >
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M14 5h5v5" />
-                                          <path d="m19 5-9 9" />
-                                          <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
-                                        </svg>
-                                      </a>
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                  </div>
                 </SettingsSection>
 
                 <SettingsSection id="translation" icon="plug" title="翻译服务" desc="交易广场中文翻译与大模型配置（DeepSeek / OpenAI 兼容）" action={editingSources ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : <button type="button" onClick={() => setEditingSources(true)} className="btn btn-ghost btn-sm">编辑</button>}>
@@ -2814,6 +2756,91 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <option value="full">始终完整</option>
                       </select>
                     </div>
+                  </div>
+                </SettingsSection>
+
+                {/* 股票来源接口放在股票类别末尾 */}
+                <SettingsSection
+                  icon="plug"
+                  title="股票来源接口"
+                  desc="行情、财报与图标外部数据源，可在不升级情况下调整"
+                  id="sources"
+                  collapsible
+                  defaultOpen={false}
+                  storageKey="stock-sources"
+                  titleAction={!editingSources ? (
+                    <button type="button" onClick={() => setEditingSources(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑股票来源接口" aria-label="编辑股票来源接口">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
+                    </button>
+                  ) : undefined}
+                  action={editingSources ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
+                >
+                  <div className="flex flex-col">
+                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场数据源", ["trumpArchiveApiUrl", "translationApiUrl"]]] as const).map(([label, keys]) => {
+                      const fields = SOURCE_FIELDS.filter((f) => (keys as readonly string[]).includes(f.key));
+                      if (!fields.length) return null;
+                      return (
+                        <div key={label}>
+                          <p className={`subhead ${label.startsWith("翻译服务") ? "mt-6 border-t border-edge pt-5 text-brand-deep" : ""}`}>{label}</p>
+                          {fields.map((f) => {
+                            const value = (site as unknown as Record<string, string>)[f.key] || f.placeholder;
+                            return (
+                              <div key={f.key} className="sw-row">
+                                <div className="sw-row-label"><b>{f.name}</b><span>{f.desc}</span></div>
+                                <div className="ctrl">
+                                  {editingSources ? (
+                                    <input
+                                      className="sw-row-input"
+                                      value={value}
+                                      title={value}
+                                      onChange={(e) => setSite((s) => ({ ...s, [f.key]: e.target.value }))}
+                                      placeholder={f.placeholder}
+                                    />
+                                  ) : (
+                                    <span
+                                      className="min-w-0 flex-1 truncate text-[12.5px] text-muted"
+                                      title={value || f.placeholder}
+                                    >
+                                      {value || f.placeholder}
+                                    </span>
+                                  )}
+                                  {/^https?:\/\//i.test(value) && (
+                                    <span className="settings-source-actions">
+                                      <button
+                                        type="button"
+                                        className="settings-source-link"
+                                        title={`复制${f.name}`}
+                                        aria-label={`复制${f.name}链接`}
+                                        onClick={async () => {
+                                          const copied = await copyText(value);
+                                          showToast(copied ? "链接已复制" : "复制失败", copied ? undefined : "err");
+                                        }}
+                                      >
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
+                                      </button>
+                                      <a
+                                        href={value}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="settings-source-link"
+                                        title={`打开${f.name}`}
+                                        aria-label={`在新窗口打开${f.name}`}
+                                      >
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                          <path d="M14 5h5v5" />
+                                          <path d="m19 5-9 9" />
+                                          <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
+                                        </svg>
+                                      </a>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
                   </div>
                 </SettingsSection>
               </div>

@@ -4,7 +4,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import { fmtCap, fmtNumMarket, fmtPct, fmtPrice, fmtQuoteTime } from "@/lib/format";
-import { useMarketBadge } from "@/lib/useMarketBadge";
+import { useMarketBadge, useMarketBadgeVisible } from "@/lib/useMarketBadge";
 import { marketMeta, type Quote } from "@/lib/types";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 
@@ -78,6 +78,7 @@ function StockQuoteCard({
   const { stockIcons } = useAssetIcons(["stock"]);
   const icon = stockIcons[quoteId(market, code)];
   const badge = useMarketBadge(market, code);
+  const badgeVisible = useMarketBadgeVisible();
   const currency = marketMeta(market).currency;
   const fromQuote = quote?.name && quote.name.toUpperCase() !== code.toUpperCase() ? quote.name : "";
   const fromTag = name && name.toUpperCase() !== code.toUpperCase() ? name : "";
@@ -106,7 +107,7 @@ function StockQuoteCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <strong className="min-w-0 truncate text-[13px] text-ink dark:text-white">{displayName}</strong>
-              <span className="inline-flex h-[16px] shrink-0 items-center rounded px-1 text-[9px] font-bold leading-none" style={{ background: badge.bg, color: badge.fg }}>{badge.label}</span>
+              {badgeVisible && <span className="inline-flex h-[16px] shrink-0 items-center rounded px-1 text-[9px] font-bold leading-none" style={{ background: badge.bg, color: badge.fg }}>{badge.label}</span>}
             </div>
             <p className="mt-0.5 text-[11px] tabular-nums text-muted">{code}{session ? ` · ${session}` : ""}</p>
           </div>

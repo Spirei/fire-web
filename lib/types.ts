@@ -236,6 +236,8 @@ export interface SiteSettings {
   marketLabels: { key: string; label: string; flag: string }[];
   /** 全站市场色块（持仓 / 搜索 / 分享页徽标），缺省走默认配色 */
   marketBadges: Record<string, MarketBadgeStyle>;
+  /** 全站是否默认显示市场色块 */
+  marketBadgesVisible: boolean;
   assetMarketOrder: string[];
   indicesOrder: string[];
   holdingColumns: import("./holdingColumns").HoldingColumnPreference[];

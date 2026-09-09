@@ -24,7 +24,8 @@ export async function GET(request: Request) {
       footerDesc: s.footerDesc,
       homeNav: s.homeNav,
       allowRegister: s.allowRegister,
-      marketBadges: s.marketBadges
+      marketBadges: s.marketBadges,
+      marketBadgesVisible: s.marketBadgesVisible
     }
   });
 }

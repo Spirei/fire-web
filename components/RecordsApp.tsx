@@ -94,12 +94,12 @@ export default function RecordsApp({
   initialUser: User;
   initialRecords: StockRecord[];
   initialUserLogs: SystemLog[];
-  initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges">;
+  initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible">;
   initialStockIcons: Record<string, string>;
 }) {
   // 子页面首次渲染前先把 SSR 图标写入共享缓存，消除素材接口返回前的空白占位。
   primeStockIconCache(initialStockIcons);
-  applyMarketBadges(initialSettings.marketBadges);
+  applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
   const router = useRouter();
   const [user] = useState<User>(initialUser);
   const [records, setRecords] = useState<StockRecord[]>(initialRecords);

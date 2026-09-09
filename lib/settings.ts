@@ -50,6 +50,7 @@ const DEFAULTS: SiteSettings = {
   markets: [],
   marketLabels: [],
   marketBadges: { ...DEFAULT_MARKET_BADGES },
+  marketBadgesVisible: true,
   assetMarketOrder: [],
   indicesOrder: [],
   holdingColumns: DEFAULT_HOLDING_COLUMNS,
@@ -384,6 +385,7 @@ export function getSiteSettings(): SiteSettings {
   }
   result.allowRegister = map.allowRegister !== "0";
   result.stockIconCdn = map.stockIconCdn === "1";
+  result.marketBadgesVisible = map.marketBadgesVisible !== "0";
   result.tradingSquareTrumpRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareTrumpRefreshMinutes) || 5)));
   result.tradingSquareDuanRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareDuanRefreshMinutes) || 5)));
   settingsCache = result;
@@ -543,6 +545,9 @@ export function updateSiteSettings(patch: Partial<SiteSettings>): SiteSettings {
   }
   if (typeof patch.stockIconCdn === "boolean") {
     upsert.run("stockIconCdn", patch.stockIconCdn ? "1" : "0");
+  }
+  if (typeof patch.marketBadgesVisible === "boolean") {
+    upsert.run("marketBadgesVisible", patch.marketBadgesVisible ? "1" : "0");
   }
   if (typeof patch.tradingSquareTrumpRefreshMinutes === "number") {
     upsert.run("tradingSquareTrumpRefreshMinutes", String(Math.min(1440, Math.max(1, Math.round(patch.tradingSquareTrumpRefreshMinutes)))));

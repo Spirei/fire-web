@@ -78,14 +78,24 @@ export function normalizeMarketBadges(raw: unknown): Record<string, MarketBadgeS
 }
 
 let applied = normalizeMarketBadges(null);
+let appliedVisible = true;
 const listeners = new Set<() => void>();
 
-export function applyMarketBadges(raw?: unknown) {
-  applied = normalizeMarketBadges(raw);
+function notifyMarketBadges() {
   listeners.forEach((fn) => fn());
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("fire:market-badges-updated"));
   }
+}
+
+export function applyMarketBadges(raw?: unknown, visible?: boolean) {
+  applied = normalizeMarketBadges(raw);
+  if (typeof visible === "boolean") appliedVisible = visible;
+  notifyMarketBadges();
+}
+
+export function isMarketBadgeVisible() {
+  return appliedVisible;
 }
 
 function styleOf(key: string): MarketBadgeStyle {
