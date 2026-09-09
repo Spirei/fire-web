@@ -7,14 +7,10 @@
 .dark .fire-time-link { color:#a6afbc; background:transparent; }
 .dark .fire-time-link:hover { color:#e0e5ed; background:#ffffff09; }
 .dark .fire-time-link-destination { color:#838d9d; }
-.fire-time-menu { position:relative; margin-right:auto; cursor:default; touch-action:manipulation; }
-.fire-time-menu summary { display:grid; place-items:center; width:30px; height:30px; list-style:none; color:#8c939e; border-radius:8px; cursor:pointer; }
-.fire-time-menu summary::-webkit-details-marker { display:none; }
-.fire-time-menu summary:hover { background:#f2f3f5; }
-.fire-time-menu-panel { position:absolute; left:0; top:36px; min-width:202px; padding:5px; border:1px solid #e8eaee; border-radius:13px; background:#fff; box-shadow:0 8px 28px #18223216; z-index:100; }
-.dark .fire-time-menu summary:hover { background:#ffffff09; }
-.dark .fire-time-menu-panel { background:#1c222d; border-color:#303744; box-shadow:0 8px 28px #0004; }
-html.simple-app-active .win-bar { overflow:visible; position:relative; z-index:30; }
+.fire-time-link.is-icon { width:30px; min-height:30px; height:30px; padding:0; justify-content:center; border-radius:8px; color:#8c939e; touch-action:manipulation; }
+.fire-time-link.is-icon:hover { color:#4c9b97; }
+.dark .fire-time-link.is-icon { color:#a6afbc; }
+.dark .fire-time-link.is-icon:hover { color:#8bc8c3; }
 .fire-time-scene { position:fixed; inset:0; z-index:2147483000; overflow:hidden; background:#101c44; isolation:isolate; animation:fire-time-cover .12s ease-out both; }
 .fire-time-picture { display:block; width:100%; height:100%; object-fit:cover; object-position:50% 50%; transform-origin:50% 52%; animation:fire-time-drift 1.3s ease-out both; }
 .fire-time-scene::before { content:""; position:absolute; inset:0; z-index:-1; background:linear-gradient(135deg,#182654,#0d1735); }

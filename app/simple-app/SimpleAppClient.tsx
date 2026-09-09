@@ -1,6 +1,6 @@
 "use client";
 
-import { TimeMachineMenu } from "@/components/TimeMachine";
+import { TimeMachineLink } from "@/components/TimeMachine";
 import Script from "next/script";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconArrowDown, IconCheck, IconExclamationMark, IconLoader2 } from "@tabler/icons-react";
@@ -232,7 +232,7 @@ export default function SimpleAppClient() {
     <>
       <div className="win" id="win">
         <div className="win-bar" id="winBar" title="按住拖动窗口">
-          <TimeMachineMenu />
+          <TimeMachineLink to="full" iconOnly />
           <button type="button" id="pinBtn" title="固定窗口" aria-label="固定窗口" onClick={() => window.togglePin?.()}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 4v5l3 3v2H7v-2l3-3V4"/><path d="M9 4h6"/><path d="M12 14v6"/></svg>
           </button>
