@@ -2645,6 +2645,10 @@ export const V0_1_26_ENTRY: VersionEntry = {
     desc: "站点信息「允许新用户注册」、市场色块「默认显示」以及定时备份开关统一为同一款绿色圆点开关；只读浏览时不再禁用，拨动后自动保存并弹出胶囊提示。tsc 无错误。",
     kind: "fix"
   }, {
+    title: "设置页接入 Orca 设计语言",
+    desc: "设置窗口按 Orca 的设置语言重排：默认中性灰色板、248px 分组侧栏、侧栏内搜索（⌘K）、大标题+说明与圆角内容卡片、左文案右控件的行语法；开关仍保留绿色圆点。原有风格切换（富途橙 / Notion / Claude 等）可继续换肤。tsc 无错误。",
+    kind: "feature"
+  }, {
     title: "修复市场色块设置触发 SWC 插件报错",
     desc: "服务端 settings 误引入带 React Hook 的市场色块模块，开发编译出现 Plugin is not supported with current @swc/core。已把 Hook 拆到独立客户端模块，服务端只引用纯函数。tsc 无错误。",
     kind: "fix"

@@ -219,22 +219,22 @@ export function SettingsSection({
   }, [open, collapsible, storageKey, title]);
 
   return (
-    <section id={id} className={`settings-section-card rounded-[14px] border border-edge bg-bg-gray/40 p-4 sm:p-5 ${className || ""}`}>
+    <section id={id} className={`settings-section-card${collapsible ? " is-accordion" : ""} ${className || ""}`}>
       <div
-        className={`settings-section-top flex items-start justify-between gap-3 ${collapsible ? "cursor-pointer select-none" : ""}`}
+        className={`settings-section-top flex items-start justify-between gap-4 ${collapsible ? "cursor-pointer select-none" : ""}`}
         onClick={collapsible ? () => setOpen((o) => !o) : undefined}
       >
-        <div className="flex items-start gap-2.5">
-          <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg border border-edge text-muted">
+        <div className="flex min-w-0 items-start gap-3.5">
+          <span className="settings-section-icon flex h-8 w-8 flex-none items-center justify-center rounded-md">
             <SubNavIcon name={icon} className="h-4 w-4" />
           </span>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <h4 className="text-sm font-bold">{title}</h4>
+          <div className="min-w-0 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h4 className="leading-tight">{title}</h4>
               {titleAction && <span className="settings-section-title-action inline-flex" onClick={(e) => e.stopPropagation()}>{titleAction}</span>}
             </div>
-            {desc && <p className="mt-0.5 text-xs text-faint">{desc}</p>}
-            {summary && !open && <p className="mt-1.5 text-xs font-semibold text-brand-deep">{summary}</p>}
+            {desc && <p className="max-w-3xl leading-6">{desc}</p>}
+            {summary && !open && <p className="settings-section-summary">{summary}</p>}
           </div>
         </div>
         <div className="flex flex-none items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -245,31 +245,29 @@ export function SettingsSection({
               onClick={() => setOpen((o) => !o)}
               aria-label={open ? "折叠" : "展开"}
               title={open ? "折叠" : "展开"}
-              className={`inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-200 ${
-                open ? "bg-bg-gray text-ink" : "text-muted hover:bg-brand-hover hover:text-ink"
-              }`}
+              className="settings-section-chevron inline-flex h-8 w-8 items-center justify-center"
             >
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2.2"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className={`h-4 w-4 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
+                className={`h-[18px] w-[18px] transition-transform duration-200 ${open ? "rotate-90" : ""}`}
               >
-                <path d="m6 9 6 6 6-6" />
+                <path d="m9 6 6 6-6 6" />
               </svg>
             </button>
           )}
         </div>
       </div>
       {collapsible ? (
-        <div className={`mt-5 grid transition-all duration-300 ease-out ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+        <div className={`settings-section-body grid transition-[grid-template-rows,opacity] duration-200 ease-out ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
           <div className="min-h-0 overflow-hidden">{children}</div>
         </div>
       ) : (
-        <div className="mt-5">{children}</div>
+        <div className="settings-section-body">{children}</div>
       )}
     </section>
   );

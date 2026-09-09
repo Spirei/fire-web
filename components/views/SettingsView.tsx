@@ -1614,16 +1614,21 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     window.history.replaceState({}, "", url.toString());
   }
 
-  /* ---------- ⌘K 命令搜索 ---------- */
+  /* ---------- ⌘K / 侧栏搜索 ---------- */
   const cmdRef = useRef<HTMLInputElement | null>(null);
+  const sidebarSearchRef = useRef<HTMLInputElement | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [cmdQuery, setCmdQuery] = useState("");
   const [cmdIndex, setCmdIndex] = useState(0);
 
-  // 命令面板固定在设置窗口内右上角、紧贴搜索按钮下方（保持在窗口内以继承主题变量与深色适配）
   function openCmdPalette() {
     setCmdIndex(0);
+    if (typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches) {
+      sidebarSearchRef.current?.focus();
+      sidebarSearchRef.current?.select();
+      return;
+    }
     setCmdOpen(true);
     setTimeout(() => cmdRef.current?.focus(), 0);
   }
@@ -1644,7 +1649,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         openCmdPalette();
       } else if (e.key === "Escape") {
         setCmdOpen(false);
+        setCmdQuery("");
         cmdRef.current?.blur();
+        sidebarSearchRef.current?.blur();
       }
     }
     window.addEventListener("keydown", onKey);
@@ -1657,8 +1664,21 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     return () => window.removeEventListener("fire:settings-cmd-open", openCmdPalette);
   }, []);
 
+  const visibleNavGroups = useMemo(() => {
+    const q = cmdQuery.trim().toLowerCase();
+    if (!q) return navGroups;
+    const matched = new Set(
+      SETTINGS_SEARCH_INDEX.filter((item) => {
+        const hay = `${item.label} ${item.groupLabel} ${item.keywords}`.toLowerCase();
+        return hay.includes(q);
+      }).map((item) => item.sub + item.anchor)
+    );
+    return navGroups
+      .map((group) => ({ ...group, items: group.items.filter((item) => matched.has(item.sub + item.anchor)) }))
+      .filter((group) => group.items.length > 0);
+  }, [navGroups, cmdQuery]);
+
   function jumpTo(item: { sub: SubKey; anchor: string; label: string }) {
-    setCmdQuery("");
     setCmdOpen(false);
     changeSub(item.sub);
     setActiveAnchor(item.anchor);
@@ -1739,9 +1759,31 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         </div>,
         document.body
       )}
-      {/* 紧凑侧栏（桌面客户端风格） */}
-      <aside className="sw-sidebar relative hidden w-[184px] flex-none flex-col border-r p-2 md:flex">
-        {navGroups.map((g) => (
+      {/* 侧栏：搜索 + 分组导航，对齐 Orca 设置语言 */}
+      <aside className="sw-sidebar relative hidden w-[248px] flex-none flex-col border-r md:flex">
+        <div className="sw-search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="sw-search-icon" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            ref={sidebarSearchRef}
+            value={cmdQuery}
+            onChange={(e) => { setCmdQuery(e.target.value); setCmdIndex(0); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && visibleNavGroups[0]?.items[0]) {
+                e.preventDefault();
+                jumpTo(visibleNavGroups[0].items[0]);
+              }
+            }}
+            placeholder="搜索设置"
+            aria-label="搜索设置"
+            className="sw-search-input"
+          />
+          {cmdQuery === "" ? <span className="sw-search-kbd">⌘K</span> : null}
+        </div>
+        <div className="sw-sidebar-nav">
+        {visibleNavGroups.map((g) => (
           <div key={g.label} className="sw-nav-group">
             <p className="sw-nav-group-title">{g.label}</p>
             {g.items.map((item) => (
@@ -1751,8 +1793,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 onClick={() => jumpTo(item)}
                 className={`sw-nav-item ${sub === item.sub && activeAnchor === item.anchor ? "is-active" : ""}`}
               >
-                <SubNavIcon name={SETTINGS_ANCHOR_ICONS[item.anchor] || item.sub} className="h-[14px] w-[14px]" />
-                {item.label}
+                <SubNavIcon name={SETTINGS_ANCHOR_ICONS[item.anchor] || item.sub} className="h-4 w-4" />
+                <span className="truncate">{item.label}</span>
                 {item.sub === "api" && (
                   <span
                     role="link"
@@ -1767,6 +1809,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             ))}
           </div>
         ))}
+        {cmdQuery.trim() && visibleNavGroups.length === 0 ? (
+          <p className="sw-search-empty">没有匹配的设置项</p>
+        ) : null}
+        </div>
         <div className="sw-side-foot">
           <span className="sw-avatar-wrap">
             {user.avatar ? (
@@ -1840,14 +1886,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
       <div className="sw-content flex min-w-0 flex-1 flex-col">
         {/* 内容头部 */}
-        <div className="sw-page-head flex flex-none items-center justify-between gap-3 px-6 pb-3 pt-5">
+        <div className="sw-page-head flex flex-none items-center justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-[16px] font-bold tracking-[-0.01em] text-ink dark:text-[#e8e8e8]">设置</h2>
-            <p className="mt-0.5 truncate text-[11.5px] text-faint">{activePageMeta?.label || activeSubMeta?.label} · {activeEditState ? "正在编辑" : "只读浏览"}</p>
+            <p className="truncate">{activePageMeta?.label || activeSubMeta?.label} · {activeEditState ? "正在编辑" : "只读浏览"}</p>
           </div>
         </div>
 
-        <div ref={contentScrollRef} className="sw-content-scroll min-h-0 flex-1 overflow-y-auto px-6 pb-8">
+        <div ref={contentScrollRef} className="sw-content-scroll min-h-0 flex-1 overflow-y-auto">
           {/* 移动端横向分类 */}
           {subPills("md:hidden")}
           {mobileAnchorPills}

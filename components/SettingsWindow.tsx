@@ -5,6 +5,7 @@ import { CURRENT_VERSION } from "@/lib/versions";
 
 /** 设置页视觉版本（对应 public/mockups 预览稿）：调色盘下拉切换，选中后整体换肤 */
 const SETTINGS_VERSIONS: { key: string; label: string; swatches: string[] }[] = [
+  { key: "orca", label: "Orca 中性灰", swatches: ["#f5f5f5", "#ffffff", "#0a0a0a"] },
   { key: "v1", label: "V1 富途橙", swatches: ["#171c26", "#ffffff", "#ff9828"] },
   { key: "v5", label: "V5 Notion", swatches: ["#f7f6f3", "#ffffff", "#37352f"] },
   { key: "v7", label: "V7 Claude", swatches: ["#211f1b", "#f5f4ef", "#d97757"] },
@@ -17,11 +18,11 @@ const SETTINGS_VERSIONS: { key: string; label: string; swatches: string[] }[] = 
 
 /**
  * 设置桌面窗口（页面内嵌形态）：无遮罩、不悬浮，
- * 固定 800px 宽、默认靠左，按住标题栏可拖动，位置自动保存。
+ * 默认 960px 宽、靠左，按住标题栏可拖动，位置自动保存。默认皮肤为 Orca 中性灰。
  */
 export default function SettingsWindow({ children }: { children: ReactNode }) {
   const [futuOnline, setFutuOnline] = useState<boolean | null>(null);
-  const [variant, setVariant] = useState<string>("v14");
+  const [variant, setVariant] = useState<string>("orca");
   const [variantOpen, setVariantOpen] = useState(false);
   const [fixed, setFixed] = useState<boolean>(false);
   const [editing, setEditing] = useState(false);
@@ -156,8 +157,8 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className={`sv-win-root sv-${variant} w-full max-w-[800px]`} style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}>
-      <div className="sw-window flex h-[min(720px,calc(100vh-140px))] flex-col overflow-hidden rounded-[14px] border shadow-[0_12px_40px_rgba(0,0,0,.12)]">
+    <div className={`sv-win-root sv-${variant} w-full max-w-[960px]`} style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}>
+      <div className="sw-window flex h-[min(780px,calc(100vh-120px))] flex-col overflow-hidden rounded-[10px] border shadow-[0_12px_40px_rgba(0,0,0,.12)]">
         {/* 窗口标题栏 */}
         <div
           onMouseDown={onTitleMouseDown}
