@@ -315,6 +315,10 @@ const fireCss = `
 `;
 
 export default function FireView({ records, quotes, livePrice }: FireViewProps) {
+  // FIRE 页面有用户本地化配置（币种、计划值等），服务端无法读取 localStorage。
+  // 首帧保持稳定占位，挂载后再显示真实配置，避免水合报错与 USD → 本地币种闪回。
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const [annualExpense, setAnnualExpense] = useState(() => Number(lsGet("fire:p-expense", "60000")) || 60000);
   const [withdrawalRate, setWithdrawalRate] = useState(() => Number(lsGet("fire:p-withdrawal", "4")) || 4); // %
   const [annualReturn, setAnnualReturn] = useState(() => Number(lsGet("fire:p-return", "7")) || 7); // %
@@ -657,6 +661,10 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
     "px-3 py-2.5 text-sm tabular-nums text-ink-2 dark:text-white whitespace-nowrap";
   const cellCls =
     "w-[130px] rounded-md border border-edge bg-white/80 px-2 py-1 text-right text-sm tabular-nums text-ink-2 outline-none transition-colors focus:border-brand dark:border-edge-strong dark:bg-[#1c1c1e] dark:text-white";
+
+  if (!hydrated) {
+    return <div className="fire-page mx-auto min-h-[720px] max-w-[980px] px-4 py-8" aria-hidden="true" />;
+  }
 
   return (
     <div className="fire-page mx-auto max-w-[980px] px-4 py-8">
