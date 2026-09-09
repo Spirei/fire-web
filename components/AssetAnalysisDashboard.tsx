@@ -341,6 +341,19 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     return acc;
   }, { asset: 0, cost: 0, pnl: 0, day: 0, markets: {} as Record<string, { asset: number; cost: number; pnl: number; day: number }> }), [positions, quotes, rates, displayCurrency, livePrice]);
   const cashTotal = useMemo(() => (Object.entries(fundBalances) as [CurrencyCode, number][]).reduce((total, [iso, value]) => total + value / (rates[iso] || 1) * currencyFactor, 0), [fundBalances, rates, currencyFactor]);
+  // 只为当前已满足成交条件的买入委托预留现金；尚未触价的挂单不占用可用现金。
+  const isCashReservedOrder = (order: TradeOrder, record: StockRecord) => {
+    if (order.status !== "pending" || order.side !== "buy") return false;
+    const live = livePrice(record);
+    const trigger = Number(order.triggerPrice ?? order.price) || 0;
+    return order.orderType === "market"
+      || (order.orderType === "limit" || order.orderType === "trigger_buy" ? live > 0 && live <= trigger : order.orderType === "rebound_buy" ? live > 0 && live >= trigger : false);
+  };
+  const orderReservedAmount = (order: TradeOrder, record: StockRecord) => toDisplay(record, Math.max(0, Number(order.amount) || Number(order.qty) * Number(order.price)) + Math.max(0, Number(order.fees) || 0));
+  const frozenCashTotal = useMemo(() => orders.reduce((total, order) => {
+    const record = positions.find((item) => item.id === order.recordId);
+    return record && isCashReservedOrder(order, record) ? total + orderReservedAmount(order, record) : total;
+  }, 0), [orders, positions, livePrice, rates, displayCurrency]);
   const totalAsset = summary.asset + cashTotal;
 
   const portfolioLedger = useMemo(() => buildPortfolioLedger(positions, orders, livePrice), [positions, orders, livePrice]);
@@ -676,6 +689,11 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const accountSummary = assetMarket === "ALL" ? summary : (summary.markets[assetMarket] || { asset: 0, cost: 0, pnl: 0, day: 0 });
   const marketCurrency = ISO_BY_MARKET[assetMarket] as CurrencyCode | undefined;
   const accountCash = assetMarket === "ALL" ? cashTotal : marketCurrency ? (fundBalances[marketCurrency] || 0) / (rates[marketCurrency] || 1) * currencyFactor : 0;
+  const accountFrozenCash = assetMarket === "ALL" ? frozenCashTotal : orders.reduce((total, order) => {
+    const record = positions.find((item) => item.id === order.recordId);
+    return record?.market.toUpperCase() === assetMarket && record && isCashReservedOrder(order, record) ? total + orderReservedAmount(order, record) : total;
+  }, 0);
+  const accountAvailableCash = Math.max(0, accountCash - accountFrozenCash);
   const accountNetAsset = accountSummary.asset + accountCash;
   const pageUsesCompactMoney = useMemo(() => {
     const values = [
@@ -863,7 +881,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
         <section className="mobile-hide-duplicate-summary card p-5">
           <div className="mb-2"><h3 className="text-base font-bold">账户总览</h3></div>
           <MarketPills value={assetMarket} onChange={setAssetMarket} />
-          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{[["净资产", accountNetAsset], ["当日盈亏", accountSummary.day], ["持仓市值", accountSummary.asset], ["浮动盈亏", accountSummary.pnl], ["可用现金", accountCash], ["冻结现金", 0]].map(([label, value]) => <div key={String(label)}><span className="text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}>{label === "净资产" || label === "余额" || label === "可用现金" ? maskCashMoney(Number(value)) : assetsVisible ? (pageUsesCompactMoney ? fmtMoneyCompact(Number(value), "") : fmtMoney(Number(value), "")) : "******"}</strong></div>)}</div>
+          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{[["净资产", accountNetAsset], ["当日盈亏", accountSummary.day], ["持仓市值", accountSummary.asset], ["浮动盈亏", accountSummary.pnl], ["可用现金", accountAvailableCash], ["冻结现金", accountFrozenCash]].map(([label, value]) => <div key={String(label)}><span className="text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}>{label === "净资产" || label === "余额" || label === "可用现金" ? maskCashMoney(Number(value)) : assetsVisible ? (pageUsesCompactMoney ? fmtMoneyCompact(Number(value), "") : fmtMoney(Number(value), "")) : "******"}</strong></div>)}</div>
         </section>
 
         <section className="card overflow-hidden">
