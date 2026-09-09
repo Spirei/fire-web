@@ -859,7 +859,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
 
         <section className="card overflow-hidden">
           <div className="border-b border-edge px-5 py-4">
-            <h3 className="mb-3 text-base font-bold">持仓</h3>
+            <h3 className="mb-3 text-base font-bold">持仓分布</h3>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0"><MarketPills value={holdingsMarket} onChange={(key) => { setHoldingsMarket(key); setHoldingSearch(""); }} /></div>
               <div className="flex items-center gap-1.5">
