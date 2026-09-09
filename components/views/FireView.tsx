@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FALLBACK_RATES, type StockRecord, type Quote } from "@/lib/types";
 import { usdCap } from "@/lib/currency";
 import CurrencyFlag from "@/components/CurrencyFlag";
@@ -279,13 +279,15 @@ const fireCss = `
 @keyframes fireCrabWave { 0%,100% { transform:rotate(-13deg); } 50% { transform:rotate(25deg); } }
 @keyframes fireHomeCurrent { 0%,100% { transform:rotate(var(--home-rest,-7deg)) scaleY(.97); } 50% { transform:rotate(var(--home-sway,9deg)) scaleY(1.035); } }
 .fire-fish-family-stage { position:absolute; inset:0; z-index:2; pointer-events:none; overflow:hidden; perspective:900px; perspective-origin:72% 48%; }
-.fire-fish-mouse-layer { position:absolute; inset:0; pointer-events:none; transition:transform .68s cubic-bezier(.22,1,.36,1); will-change:transform; }
+.fire-fish-mouse-layer { position:absolute; inset:0; pointer-events:none; will-change:transform; }
 .fire-fish-mouse-father,.fire-fish-mouse-child { transform:none; }
-/* 鼠标进入海洋后，父子鱼脱离预设旅程，主动游到指针两侧；子鱼反应更快。 */
-.fire-fish-tracking .fire-family-father,.fire-fish-tracking .fire-family-child { left:0; top:0; opacity:1; animation:none; transform:scaleX(var(--fish-facing,1)); transform-origin:center; }
-.fire-fish-tracking .fire-fish-mouse-father { transform:translate3d(var(--fish-father-x),var(--fish-father-y),0); }
-.fire-fish-tracking .fire-fish-mouse-child { transform:translate3d(var(--fish-child-x),var(--fish-child-y),0); transition-duration:.46s; }
-.fire-fish-tracking .fire-jump-fish { filter:drop-shadow(0 10px 15px rgba(18,157,194,.38)); }
+/* 自主游动：鼠标只产生吸引力，位置由带惯性的群游模拟决定。 */
+.fire-fish-free .fire-family-father,.fire-fish-free .fire-family-child { left:0; top:0; opacity:1; animation:none; transform-origin:center; }
+.fire-fish-free .fire-family-father { transform:scaleX(var(--fish-father-facing,1)); }
+.fire-fish-free .fire-family-child { transform:scaleX(var(--fish-child-facing,1)); }
+.fire-fish-free .fire-fish-mouse-father { transform:translate3d(var(--fish-father-x,90px),var(--fish-father-y,100px),0); }
+.fire-fish-free .fire-fish-mouse-child { transform:translate3d(var(--fish-child-x,230px),var(--fish-child-y,175px),0); }
+.fire-fish-free .fire-jump-fish { filter:drop-shadow(0 10px 15px rgba(18,157,194,.32)); }
 .fire-glass-fish-lens { position:absolute; inset:0; z-index:9; overflow:hidden; pointer-events:none; background:rgba(70,162,183,.055); -webkit-mask-image:radial-gradient(circle 124px at 50% 50%,#000 0 91%,rgba(0,0,0,.92) 94%,rgba(0,0,0,.36) 98%,transparent 100%); mask-image:radial-gradient(circle 124px at 50% 50%,#000 0 91%,rgba(0,0,0,.92) 94%,rgba(0,0,0,.36) 98%,transparent 100%); backdrop-filter:blur(.35px) saturate(1.08); }
 .fire-fish-glass-stage { z-index:1; transform:scale(1.1); transform-origin:50% 50%; filter:saturate(1.06) contrast(1.02); }
 .fire-family-father,.fire-family-child { position:absolute; left:4%; top:4px; opacity:0; transform-style:preserve-3d; will-change:transform,opacity; }
@@ -336,8 +338,62 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   // 首帧保持稳定占位，挂载后再显示真实配置，避免水合报错与 USD → 本地币种闪回。
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
-  const [fishPointer, setFishPointer] = useState({ x: 0, y: 0, active: false, facing: 1 });
-  const fishPointerLastX = useRef<number | null>(null);
+  const [oceanSceneEnabled, setOceanSceneEnabled] = useState(() => lsGet("fire:fire-ocean-scene", "1") !== "0");
+  const fishStageRef = useRef<HTMLDivElement>(null);
+  const fishPointerRef = useRef({ x: 0, y: 0, active: false });
+  useEffect(() => {
+    if (!hydrated || !oceanSceneEnabled) return;
+    const stage = fishStageRef.current;
+    if (!stage) return;
+    const father = { x: 100, y: 105, vx: 1.15, vy: .22 };
+    const child = { x: 250, y: 175, vx: 1.45, vy: -.18 };
+    let raf = 0;
+    let previous = performance.now();
+    const stepFish = (fish: typeof father, targetX: number, targetY: number, personality: number, other: typeof father, width: number, height: number, time: number) => {
+      const dt = Math.min(2, Math.max(.45, (time - previous) / 16.67));
+      const dx = targetX - fish.x;
+      const dy = targetY - fish.y;
+      const attraction = fishPointerRef.current.active ? .0017 * personality : .00075;
+      fish.vx += dx * attraction * dt + Math.sin(time * .0011 + personality * 4.2) * .018;
+      fish.vy += dy * attraction * dt + Math.cos(time * .00135 + personality * 2.7) * .014;
+      const sepX = fish.x - other.x;
+      const sepY = fish.y - other.y;
+      const sep = Math.max(1, Math.hypot(sepX, sepY));
+      if (sep < 105) {
+        const push = (105 - sep) * .0007;
+        fish.vx += sepX / sep * push;
+        fish.vy += sepY / sep * push;
+      }
+      const maxSpeed = fishPointerRef.current.active ? 2.75 * personality : 1.75 * personality;
+      const speed = Math.hypot(fish.vx, fish.vy);
+      if (speed > maxSpeed) { fish.vx = fish.vx / speed * maxSpeed; fish.vy = fish.vy / speed * maxSpeed; }
+      fish.vx *= Math.pow(.982, dt); fish.vy *= Math.pow(.982, dt);
+      fish.x += fish.vx * dt; fish.y += fish.vy * dt;
+      if (fish.x < 16) fish.vx += .12; if (fish.x > width - 130) fish.vx -= .12;
+      if (fish.y < 8) fish.vy += .1; if (fish.y > height - 92) fish.vy -= .1;
+    };
+    const tick = (time: number) => {
+      const width = stage.clientWidth || 900;
+      const height = stage.clientHeight || 340;
+      const pointer = fishPointerRef.current;
+      const roamX = width * (.5 + Math.sin(time * .00019) * .34);
+      const roamY = height * (.48 + Math.cos(time * .00027) * .25);
+      const targetX = pointer.active ? pointer.x : roamX;
+      const targetY = pointer.active ? pointer.y : roamY;
+      stepFish(father, targetX - 64, targetY - 28, .82, child, width, height, time);
+      stepFish(child, targetX + 28, targetY + 34, 1.08, father, width, height, time);
+      previous = time;
+      stage.style.setProperty("--fish-father-x", `${father.x}px`);
+      stage.style.setProperty("--fish-father-y", `${father.y}px`);
+      stage.style.setProperty("--fish-child-x", `${child.x}px`);
+      stage.style.setProperty("--fish-child-y", `${child.y}px`);
+      stage.style.setProperty("--fish-father-facing", father.vx >= 0 ? "1" : "-1");
+      stage.style.setProperty("--fish-child-facing", child.vx >= 0 ? "1" : "-1");
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [hydrated, oceanSceneEnabled]);
   const [annualExpense, setAnnualExpense] = useState(() => Number(lsGet("fire:p-expense", "60000")) || 60000);
   const [withdrawalRate, setWithdrawalRate] = useState(() => Number(lsGet("fire:p-withdrawal", "4")) || 4); // %
   const [annualReturn, setAnnualReturn] = useState(() => Number(lsGet("fire:p-return", "7")) || 7); // %
@@ -384,7 +440,6 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   // 当前显示币种仅作用于本次浏览；刷新始终回到星标的默认/主货币。
   const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode>(readFireBaseCurrency);
   const [currencyMenuOpen, setCurrencyMenuOpen] = useState(false);
-  const [oceanSceneEnabled, setOceanSceneEnabled] = useState(() => lsGet("fire:fire-ocean-scene", "1") !== "0");
   const [bubbleHover, setBubbleHover] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => { lsSet("fire:fire-ocean-scene", oceanSceneEnabled ? "1" : "0"); }, [oceanSceneEnabled]);
   const curRate = rates[displayCurrency] || 1;
@@ -783,29 +838,14 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
       {/* 顶部圆气泡：Apple 风格玻璃水球，水位随 FIRE 进度升降、缓慢呼吸 */}
       <div className="mb-10 flex flex-col items-center">
         <div
-          className={`fire-bubble-scene relative flex w-full items-center justify-center ${fishPointer.active ? "fire-fish-tracking" : ""}`}
-          style={{
-            "--fish-father-x": `${fishPointer.x - 126}px`, "--fish-father-y": `${fishPointer.y - 46}px`,
-            "--fish-child-x": `${fishPointer.x + 12}px`, "--fish-child-y": `${fishPointer.y + 8}px`,
-            "--fish-facing": fishPointer.facing
-          } as CSSProperties}
+          ref={fishStageRef}
+          className="fire-bubble-scene fire-fish-free relative flex w-full items-center justify-center"
           onMouseMove={(event) => {
             const rect = event.currentTarget.getBoundingClientRect();
-            const x = Math.max(126, Math.min(rect.width - 100, event.clientX - rect.left));
-            const y = Math.max(48, Math.min(rect.height - 70, event.clientY - rect.top));
-            const previousX = fishPointerLastX.current;
-            const facing = previousX === null || Math.abs(x - previousX) < 2 ? fishPointer.facing : x > previousX ? 1 : -1;
-            fishPointerLastX.current = x;
-            setFishPointer({
-              x,
-              y,
-              active: true,
-              facing
-            });
+            fishPointerRef.current = { x: event.clientX - rect.left, y: event.clientY - rect.top, active: true };
           }}
           onMouseLeave={() => {
-            fishPointerLastX.current = null;
-            setFishPointer((current) => ({ ...current, active: false }));
+            fishPointerRef.current.active = false;
           }}
         >
           {oceanSceneEnabled && (
