@@ -272,7 +272,7 @@ const fireCss = `
 .fire-anemone i:nth-child(2n) { height: 82px; animation-duration: 5.1s; animation-delay: -1.8s; }.fire-anemone i:nth-child(3n) { height: 54px; width: 7px; animation-duration: 3.7s; animation-delay: -2.5s; }.fire-anemone i:nth-child(4n) { height: 73px; animation-delay: -3.3s; }.fire-anemone i:nth-child(5n) { height: 46px; animation-duration: 4.8s; animation-delay: -.8s; }
 @keyframes fireFishSwimBody { 0%,100% { transform: rotate(-1.8deg) scaleX(.975) scaleY(1.015); } 50% { transform: rotate(1.8deg) scaleX(1.018) scaleY(.985); } }
 @keyframes fireTailBeat { 0%,100% { transform:rotate(-8deg) scaleY(.92); } 50% { transform:rotate(10deg) scaleY(1.08); } }
-@keyframes fireFinBreathe { 0%,100% { transform:rotate(-7deg) scaleX(.82) scaleY(.94); } 46% { transform:rotate(5deg) scaleX(1.06) scaleY(1.04); } 68% { transform:rotate(1deg) scaleX(.96) scaleY(1); } }
+@keyframes fireFinBreathe { 0%,100% { opacity:.08; transform:scale(.88); } 46% { opacity:.34; transform:scale(1.08); } 68% { opacity:.18; transform:scale(.98); } }
 @keyframes fireBreathBubble { 0% { opacity:0; transform:translate3d(0,5px,0) scale(.55); } 18% { opacity:.68; } 100% { opacity:0; transform:translate3d(18px,-28px,0) scale(1.15); } }
 @keyframes fireJellyMeet { 0%,42%,72%,100% { opacity:0; transform:translate3d(0,18px,0) scale(.75); } 48% { opacity:.68; transform:translate3d(-3px,0,0) scale(.95); } 57% { opacity:.92; transform:translate3d(5px,-11px,0) scale(1.04); } 66% { opacity:.48; transform:translate3d(-2px,-20px,0) scale(.9); } }
 @keyframes fireJellyPulse { 0%,100% { transform:scaleX(1) scaleY(.88); } 50% { transform:scaleX(.88) scaleY(1.08); } }
@@ -295,7 +295,7 @@ const fireCss = `
 .fire-family-father { animation:fireFatherJourney 20s cubic-bezier(.36,.03,.28,1) infinite; }
 .fire-family-child { animation:fireChildJourney 20s cubic-bezier(.36,.03,.28,1) infinite; }
 .fire-jump-fish { position:relative; display:block; filter:drop-shadow(0 9px 12px rgba(8,72,117,.3)); transform-origin:64% 52%; animation:fireFishSwimBody .72s ease-in-out infinite; will-change:transform; }
-.fire-jump-fish::after { content:""; position:absolute; z-index:3; left:38%; top:47%; width:26%; height:31%; border-radius:72% 28% 68% 32%; transform-origin:88% 45%; background:radial-gradient(ellipse at 72% 45%,#ffac42 0 16%,#ff7429 57%,#d63c22 78%,#17202b 84% 90%,transparent 92%); filter:drop-shadow(0 2px 2px rgba(40,20,20,.22)); animation:fireFinBreathe 1.65s cubic-bezier(.45,.05,.35,1) infinite; }
+.fire-jump-fish::after { content:""; position:absolute; z-index:3; left:35%; top:42%; width:31%; height:38%; border-radius:50%; transform-origin:68% 48%; background:radial-gradient(ellipse at 58% 52%,rgba(255,207,128,.42) 0 13%,rgba(255,126,54,.14) 34%,transparent 67%); mix-blend-mode:screen; pointer-events:none; animation:fireFinBreathe 1.65s cubic-bezier(.45,.05,.35,1) infinite; }
 .fire-jump-fish-child::after { animation-duration:1.38s; animation-delay:-.42s; }
 .fire-jump-fish-father { width:118px; height:86px; --fish-bg-size:194px 109px; --fish-bg-position:-3px -11px; }
 .fire-jump-fish-child { width:82px; height:60px; --fish-bg-size:208px 117px; --fish-bg-position:-128px -48px; animation-duration:.58s; }
