@@ -736,7 +736,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     ...Object.values(summary.markets).flatMap((market) => [market.asset, market.pnl, market.day])
     ];
     const max = Math.max(0, ...values.filter(Number.isFinite).map(Math.abs));
-    return currencyDisplayUnit === "compact" || (currencyDisplayUnit === "auto" && max >= 1e7);
+    return currencyDisplayUnit === "compact" || (currencyDisplayUnit === "auto" && max >= 1e5);
   }, [totalAsset, summary, cashTotal, accountNetAsset, accountSummary, accountCash, currencyDisplayUnit]);
   const compactMoney = useCallback((value: number, withSymbol = false) => {
     const prefix = withSymbol ? symbol : "";
@@ -815,7 +815,6 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   return <div className="asset-analysis-page space-y-4">
     <div className="flex flex-wrap items-center gap-3">
       <h2 className="text-lg font-extrabold">资产分析</h2>
-      <span className="rounded-full border border-edge bg-bg-gray px-2.5 py-1 text-[10px] font-semibold text-muted">本页金额 · {displayCurrency}{pageUsesCompactMoney ? " · 智能缩写" : ""}</span>
     </div>
 
     <div ref={splitRef} className="asset-analysis-split" style={{ "--asset-left-pct": `${leftPanePct}%` } as React.CSSProperties}>
@@ -823,7 +822,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
         <section className="card p-5">
           <div className="mb-5 flex items-center justify-between"><h3 className="text-base font-bold">账户资产</h3><div className="flex items-center gap-1.5"><button type="button" disabled={shareOpening} onClick={async () => { if (shareOpening) return; setShareOpening(true); try { preloadDailyPnlTemplates(summary.day >= 0); await waitForDailyPnlTemplates(); setDailyShareOpen(true); } finally { setShareOpening(false); } }} title={shareOpening ? "正在准备分享图…" : "分享当日盈亏"} aria-label="分享当日盈亏" className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-[7px] border border-edge bg-white text-muted shadow-sm transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover hover:text-ink active:scale-[.97] disabled:opacity-50 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><circle cx="18" cy="5" r="2.2" /><circle cx="6" cy="12" r="2.2" /><circle cx="18" cy="19" r="2.2" /><path d="m8 11 8-5M8 13l8 5" /></svg></button><RefreshButton onClick={() => void handleRefresh("assets")} title="刷新账户资产" /></div></div>
           <div className="flex items-center gap-2"><CurrencyPicker context="asset" prefix="总资产" /></div>
-          <div className="mt-1 flex items-end justify-between gap-4"><div className="flex min-w-0 items-center gap-2"><strong className="block truncate text-2xl font-extrabold tabular-nums">{maskCashMoney(totalAsset, true)}</strong><button type="button" onClick={() => setAssetsVisible((visible) => !visible)} className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg-gray hover:text-ink" title={assetsVisible ? "隐藏资产金额" : "显示资产金额"} aria-label={assetsVisible ? "隐藏资产金额" : "显示资产金额"}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />{assetsVisible ? <circle cx="12" cy="12" r="2.6" /> : <path d="m4 4 16 16" />}</svg></button></div><div className="w-1/3 flex-none text-right"><span className="block text-xs text-muted">当日盈亏</span><strong className={`mt-1 block text-sm tabular-nums ${summary.day >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.day, true)}</strong></div></div>
+          <div className="mt-1 grid grid-cols-3 items-end gap-3"><div className="col-span-2 flex min-w-0 items-center gap-2"><strong className="block truncate text-2xl font-extrabold tabular-nums">{maskCashMoney(totalAsset, true)}</strong><button type="button" onClick={() => setAssetsVisible((visible) => !visible)} className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg-gray hover:text-ink" title={assetsVisible ? "隐藏资产金额" : "显示资产金额"} aria-label={assetsVisible ? "隐藏资产金额" : "显示资产金额"}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />{assetsVisible ? <circle cx="12" cy="12" r="2.6" /> : <path d="m4 4 16 16" />}</svg></button></div><div><span className="block text-xs text-muted">当日盈亏</span><strong className={`mt-1 block text-sm tabular-nums ${summary.day >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.day, true)}</strong></div></div>
           <div className="mt-5 grid grid-cols-3 gap-3">
             <div><span className="text-xs text-muted">持仓总市值</span><strong className="mt-1 block text-sm tabular-nums">{maskMoney(summary.asset)}</strong></div>
             <div

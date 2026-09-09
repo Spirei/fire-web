@@ -573,7 +573,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
           if (typeof f.annualReturn === "number") setAnnualReturn(Number(f.annualReturn) || annualReturn);
           if (typeof f.inflation === "number") setInflation(Number(f.inflation) || inflation);
           if (typeof f.savingsRate === "number") setSavingsRate(Number(f.savingsRate) || savingsRate);
-          const loadedBaseCurrency = ["USD", "HKD", "CNY", "JPY", "KRW", "EUR"].includes(String(f.baseCurrency))
+          const loadedBaseCurrency = CURRENCIES.some((currency) => currency.code === String(f.baseCurrency))
             ? String(f.baseCurrency)
             : baseCurrency;
           if (Number(f.fireTargetBase) > 0) {

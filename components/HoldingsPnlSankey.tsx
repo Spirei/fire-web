@@ -16,7 +16,7 @@ interface Props {
   rates: Record<string, number>;
 }
 
-const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", HKD: "HK$", CNY: "¥", SGD: "S$", JPY: "¥", KRW: "₩" };
+const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", HKD: "HK$", CNY: "¥", SGD: "S$", JPY: "¥", KRW: "₩", EUR: "€" };
 
 function formatCurrency(value: number, currency: string) {
   const digits = currency === "JPY" || currency === "KRW" ? 0 : 2;

@@ -4,16 +4,16 @@ import { useRates } from "./useRates";
 import { usePersistedState } from "./usePersistedState";
 
 /** 全站展示币种（7 种；FIRE 页除外） */
-export type CurrencyCode = "USD" | "EUR" | "HKD" | "CNY" | "JPY" | "KRW" | "SGD";
+export type CurrencyCode = "USD" | "HKD" | "CNY" | "SGD" | "JPY" | "KRW" | "EUR";
 
 export const CURRENCIES: { code: CurrencyCode; label: string; market: string; flag: string }[] = [
   { code: "USD", label: "美元", market: "US", flag: "🇺🇸" },
-  { code: "EUR", label: "欧元", market: "EU", flag: "🇪🇺" },
   { code: "HKD", label: "港元", market: "HK", flag: "🇭🇰" },
   { code: "CNY", label: "人民币", market: "CN", flag: "🇨🇳" },
+  { code: "SGD", label: "新加坡元", market: "SG", flag: "🇸🇬" },
   { code: "JPY", label: "日元", market: "JP", flag: "🇯🇵" },
   { code: "KRW", label: "韩元", market: "KR", flag: "🇰🇷" },
-  { code: "SGD", label: "新加坡元", market: "SG", flag: "🇸🇬" }
+  { code: "EUR", label: "欧元", market: "EU", flag: "🇪🇺" }
 ];
 
 export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
