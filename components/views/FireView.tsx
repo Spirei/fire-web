@@ -295,11 +295,12 @@ const fireCss = `
 .fire-family-father { animation:fireFatherJourney 20s cubic-bezier(.36,.03,.28,1) infinite; }
 .fire-family-child { animation:fireChildJourney 20s cubic-bezier(.36,.03,.28,1) infinite; }
 .fire-jump-fish { position:relative; display:block; filter:drop-shadow(0 9px 12px rgba(8,72,117,.3)); transform-origin:64% 52%; animation:fireFishSwimBody .72s ease-in-out infinite; will-change:transform; }
+.fire-jump-fish::before { content:""; position:absolute; inset:0; z-index:0; background-image:url('/images/fire/clownfish-family.png'); background-repeat:no-repeat; background-size:var(--fish-bg-size); background-position:var(--fish-bg-position); clip-path:polygon(20% 29%,32% 29%,32% 71%,20% 71%); }
 .fire-jump-fish::after { content:""; position:absolute; z-index:3; left:35%; top:42%; width:31%; height:38%; border-radius:50%; transform-origin:68% 48%; background:radial-gradient(ellipse at 58% 52%,rgba(255,207,128,.42) 0 13%,rgba(255,126,54,.14) 34%,transparent 67%); mix-blend-mode:screen; pointer-events:none; animation:fireFinBreathe 1.65s cubic-bezier(.45,.05,.35,1) infinite; }
 .fire-jump-fish-child::after { animation-duration:1.38s; animation-delay:-.42s; }
 .fire-jump-fish-father { width:118px; height:86px; --fish-bg-size:194px 109px; --fish-bg-position:-3px -11px; }
 .fire-jump-fish-child { width:82px; height:60px; --fish-bg-size:208px 117px; --fish-bg-position:-128px -48px; animation-duration:.58s; }
-.fire-fish-body,.fire-fish-tail { position:absolute; inset:0; display:block; background-image:url('/images/fire/clownfish-family.png'); background-repeat:no-repeat; background-size:var(--fish-bg-size); background-position:var(--fish-bg-position); }
+.fire-fish-body,.fire-fish-tail { position:absolute; inset:0; z-index:1; display:block; background-image:url('/images/fire/clownfish-family.png'); background-repeat:no-repeat; background-size:var(--fish-bg-size); background-position:var(--fish-bg-position); }
 .fire-fish-body { clip-path:polygon(24.5% 0,100% 0,100% 100%,24.5% 100%); }
 /* 尾鳍图层只裁出尾部，避免把腹鳍/胸鳍再次绘制并随尾部旋转形成重影。 */
 .fire-fish-tail { clip-path:polygon(0 17%,24.8% 31%,24.8% 69%,0 84%); transform-origin:24% 52%; animation:fireTailBeat .36s ease-in-out infinite; }
