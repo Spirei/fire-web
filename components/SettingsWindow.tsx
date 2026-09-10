@@ -189,23 +189,20 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
                 <path d="m21 21-4.3-4.3" />
               </svg>
             </button>
+            {/* 标题栏只负责「进入编辑」（永远铅笔，编辑中高亮）；保存只有一个入口 —— 分区头部那颗按钮，
+                避免同时出现 ✓ 和「保存」两个都能提交的按钮。站点信息是自动保存，不需要这个入口。 */}
             {!autoEdit && <button
               type="button"
-              onClick={() => window.dispatchEvent(new Event(editing ? "fire:settings-edit-complete" : "fire:settings-edit-active"))}
-              title={editing ? "保存当前设置" : "编辑当前设置"}
-              aria-label={editing ? "保存当前设置" : "编辑当前设置"}
-              className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-white/10"
+              disabled={editing}
+              onClick={() => window.dispatchEvent(new Event("fire:settings-edit-active"))}
+              title={editing ? "正在编辑，改完点分区里的「保存」" : "编辑当前设置"}
+              aria-label={editing ? "正在编辑" : "编辑当前设置"}
+              className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${editing ? "text-[#3297f6]" : "hover:bg-white/10"}`}
             >
-              {editing ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                  <path d="m4.5 12.5 5 5 10-11" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
-                </svg>
-              )}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+              </svg>
             </button>}
             <button
               type="button"
