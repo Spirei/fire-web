@@ -10,7 +10,7 @@ import SafeAssetImage from "@/components/SafeAssetImage";
 import StockDetailView from "@/components/StockDetailView";
 import StockTextLink from "@/components/StockTextLink";
 import { isLocalPostImageUrl } from "@/lib/tradingSquareImages";
-import { TRADING_SQUARE_AUTHOR_LIMIT, takeNewestByAuthor, trimFeed } from "@/lib/tradingSquareLimits";
+import { TRADING_SQUARE_AUTHOR_LIMIT, takeNewestByAuthor } from "@/lib/tradingSquareLimits";
 import { hasTranslatableText, normalizeCode, normalizeTradingText, parseSymbolToken, splitTradingText, type HoldingHint } from "@/lib/tradingSquareText";
 import type { StockRecord } from "@/lib/types";
 
@@ -63,7 +63,7 @@ function readLocalFeed(): { posts: Post[]; updatedAt: string | null; updatedByAu
     const raw = JSON.parse(localStorage.getItem(FEED_CACHE_KEY) || "null") as { posts?: Post[]; updatedAt?: string | null; updatedByAuthor?: AuthorTimes } | null;
     if (Array.isArray(raw?.posts) && raw.posts.length) {
       return {
-        posts: trimFeed(raw.posts),
+        posts: takeNewestByAuthor(raw.posts, TRADING_SQUARE_AUTHOR_LIMIT),
         updatedAt: raw.updatedAt ?? null,
         updatedByAuthor: raw.updatedByAuthor && typeof raw.updatedByAuthor === "object" ? raw.updatedByAuthor : emptyTimes()
       };
@@ -450,7 +450,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
         if (!active) return;
         const nextUpdated = data.updatedByAuthor ?? emptyTimes();
         setPosts((current) => {
-          const nextPosts = trimFeed(mergeFeedPosts(current, data.posts ?? []));
+          const nextPosts = takeNewestByAuthor(mergeFeedPosts(current, data.posts ?? []), TRADING_SQUARE_AUTHOR_LIMIT);
           writeLocalFeed(nextPosts, data.updatedAt ?? null, nextUpdated);
           return nextPosts;
         });
@@ -479,7 +479,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
           if (!data) return;
           const nextUpdated = data.updatedByAuthor ?? emptyTimes();
           setPosts((current) => {
-            const nextPosts = trimFeed(mergeFeedPosts(current, data.posts ?? []));
+            const nextPosts = takeNewestByAuthor(mergeFeedPosts(current, data.posts ?? []), TRADING_SQUARE_AUTHOR_LIMIT);
             writeLocalFeed(nextPosts, data.updatedAt ?? null, nextUpdated);
             return nextPosts;
           });
