@@ -3,7 +3,6 @@ import path from "node:path";
 
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const localCompose = read("docker-compose.yml");
 const ghcrCompose = read("docker-compose.ghcr.yml");
 const dockerfile = read("Dockerfile");
 const entrypoint = read("scripts/entrypoint.sh");
@@ -28,7 +27,6 @@ const sharedCompose = [
   "${UPLOADS_DIR:-./uploads}:/app/public/uploads",
   "http://127.0.0.1:3000/api/settings/public"
 ];
-requireText("本地 Compose", localCompose, sharedCompose);
 requireText("GHCR Compose", ghcrCompose, sharedCompose);
 requireText("GHCR 受限容器更新", ghcrCompose, [
   "containrrr/watchtower:1.7.1",
@@ -96,10 +94,8 @@ const earningsCount = fs.existsSync(earningsDir)
   : 0;
 if (earningsCount === 0) failures.push("财报日历公开缓存缺失");
 
-for (const [label, text] of [["本地 Compose", localCompose], ["GHCR Compose", ghcrCompose]]) {
-  if (/\/volume\d+\//.test(text)) failures.push(`${label} 含群晖个人绝对路径`);
-  if (/\b(?:16000|3001):3000\b/.test(text)) failures.push(`${label} 含写死的宿主机端口`);
-}
+if (/\/volume\d+\//.test(ghcrCompose)) failures.push("GHCR Compose 含群晖个人绝对路径");
+if (/\b(?:16000|3001):3000\b/.test(ghcrCompose)) failures.push("GHCR Compose 含写死的宿主机端口");
 
 if (failures.length) {
   console.error(`部署一致性审计失败（${failures.length} 项）：`);
@@ -107,4 +103,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("部署一致性审计通过：本地源码构建与 GHCR 共用端口、持久化目录、默认资源和富途运行时约定。");
+console.log("部署一致性审计通过：GHCR Compose、Dockerfile、默认资源和富途运行时约定一致。");

@@ -129,7 +129,8 @@ Review 自查清单（按项目实际走一遍）：
 - 美股扩展时段（盘前 / 盘后 / 夜盘）只能靠富途或 Yahoo：腾讯只给常规盘口径（涨跌停在上一交易日收盘）。Yahoo 在境内直连不稳定，lib/usExtendedQuote.ts 已加 60 秒熔断（双主机都失败即快速失败，避免整批 6 秒超时拖到十几秒）；**降级到腾讯时界面必须能看出来**（components/QuoteSourceBadge.tsx 的「美股·腾讯兜底」胶囊），不要出现「数值不动但毫无提示」。
 - 境外数据源（Yahoo / CoinGecko / SEC 等）统一走 `lib/net.ts` 的 `proxyFetch`，由 `STOCKLOG_PROXY` 控制（`off` 显式关闭）；**代理分支必须用 undici 包自己的 fetch**（`import { fetch as undiciFetch } from "undici"`）配合 `ProxyAgent` —— Node 自带的全局 fetch 与 npm 安装的 undici 不是同一份实现，把后者的 ProxyAgent 当 dispatcher 传给全局 fetch 会报 `invalid onRequestStart method (UND_ERR_INVALID_ARG)` 并静默回退直连（曾导致「配了代理仍然取不到 Yahoo 扩展行情」）。腾讯 / 新浪 / 东财等境内源保持直连，不要套代理。
 - **no_proxy：内网地址永不发往代理**。`proxyFetch` 会先判断目标地址，命中「内置私网 / 回环 / 链路本地 / CGNAT / `.local`」或 `NO_PROXY` / `no_proxy` 环境变量（支持 `*`、域名后缀、IPv4 与 `IPv4/掩码`）即直接直连（富途 OpenD、NAS 接口、体检探针等都在此列）。注意 Node 的 fetch **不读** http_proxy / https_proxy / no_proxy 环境变量（只有 curl / python / npm 这类工具才读），所以容器里那套 `*_proxy` 变量对本应用无效，代理必须靠 `STOCKLOG_PROXY` + `proxyFetch`；排查时用 `STOCKLOG_PROXY_DEBUG=1` 打印每条请求走代理还是直连。
-- 日股 / 韩股现价：腾讯前缀 `jp{code}`（去 .T）/ `kr{code}`（去 .KS/.KQ），仅素材库回填与行情脚本使用；自选股 / 持仓行情接口暂不支持 JP/KR。
+- 日股 / 韩股现价：腾讯前缀 `jp{code}`（去 .T）/ `kr{code}`（去 .KS/.KQ），`lib/quotes.ts` 的 `toTencentSymbol` / 分时查询与素材库回填脚本共用；自选股 / 持仓实时行情已覆盖 JP/KR。台股 / 新加坡 / 英德法 / 澳加 / 印度 / 巴西暂无可用源，界面显示「暂不支持实时行情」，不要留空白假装有价。
+- 富途 OpenD 免费额度同一时间只允许 1 个连接。生产容器按设置连接；本地 `next dev` 默认跳过（`STOCKLOG_FUTU=on` 可开启，`off` 则任何环境都不连），避免抢线上唯一槽位。设置页「测试连接」仍会真实打 OpenD。
 - 手动添加的美股 ETF（VOO / IVV / VTI / TLT）东财不返回市值（基金规模），如需要市值按公开净资产近似填写并注明；BRK.B 用东财 secid `106.BRK_B`（下划线）、DJT `105.DJT`、北交所 `0.{code}`。
 
 ## 个股详情交互规范（重要）

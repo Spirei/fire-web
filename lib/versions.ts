@@ -2680,6 +2680,10 @@ export const V0_1_26_ENTRY: VersionEntry = {
     title: "代理加 no_proxy 保护：内网地址永不发往代理",
     desc: "按「防止本地 / 内网地址被交给代理」的要求在 proxyFetch 里补 no_proxy 判定：命中「内置私网（10/8、172.16-31、192.168/16、127/8、169.254/16、100.64/10、.local / .lan / .internal / localhost / IPv6 回环与 ULA）」或 NO_PROXY / no_proxy 环境变量（支持 `*`、域名后缀、IPv4 与 IPv4/掩码）时直接直连，不看代理是否可用；这样富途 OpenD、NAS 接口、体检探针等内网请求不会泄露给第三方代理。另加 STOCKLOG_PROXY_DEBUG=1 开关，按请求打印「走代理 / 直连（内网 / NO_PROXY）/ 代理失败回退直连」，代理问题不再需要猜。实测：带代理时 127.0.0.1 与 192.168.28.5 判定直连、Yahoo 走代理返回 200。注意 Node 的 fetch 不读容器里的 http_proxy / https_proxy / no_proxy（那是给 curl / python / npm 的），因此本应用只认 STOCKLOG_PROXY + 这套 no_proxy 规则。tsc 无错误。",
     kind: "security"
+  }, {
+    title: "日韩实时行情 + OpenD 本地让路 + 行情提示补齐",
+    desc: "1) 自选股 / 持仓行情接口补上腾讯日股 jp{} / 韩股 kr{}，分时与搜索联想同步；台股 / 新加坡 / 欧澳加印巴等无源市场行内标明「暂不支持实时行情」。2) 本地 next dev 默认不连 OpenD（STOCKLOG_FUTU=on 可开），线上生产继续用唯一连接。3) 富途正常时单只 OTC 在 Web 行内与 iOS 列表显示「无扩展行情」，整批降级仍用「美股·腾讯兜底」。4) Yahoo 扩展行情可用 STOCKLOG_EXTENDED_QUOTE=off 关掉。5) 仓库只保留 docker-compose.ghcr.yml，审计不再读已删除的本地 compose。6) CI build 后跑公开短冒烟（含日韩现价），并提供 .githooks/pre-push。tsc 无错误。",
+    kind: "fix"
   }]
 };
 

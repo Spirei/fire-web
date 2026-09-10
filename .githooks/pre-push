@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# 本机 3000 端口已有实例时跑短冒烟；没开服务就跳过，不挡推送。
+# 启用：git config core.hooksPath .githooks
+set -euo pipefail
+if ! curl -sf --max-time 2 http://127.0.0.1:3000/api/auth/setup-status >/dev/null; then
+  echo "pre-push: 本地 3000 未就绪，跳过冒烟。"
+  exit 0
+fi
+echo "pre-push: 检测到本地实例，跑 CI 短冒烟…"
+BASE=http://127.0.0.1:3000 bash scripts/smoke-ci.sh

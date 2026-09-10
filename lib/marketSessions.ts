@@ -41,7 +41,11 @@ function previousWeekday(date: string) {
 /** 按交易所当地时间判断是否需要实时行情；节假日由行情源的最后交易时间兜底。 */
 export function marketSessionState(market: string, now = new Date()): MarketSessionState {
   const key = market.toUpperCase();
-  const timeZone = key === "US" ? "America/New_York" : "Asia/Shanghai";
+  const timeZone =
+    key === "US" ? "America/New_York"
+      : key === "JP" ? "Asia/Tokyo"
+        : key === "KR" ? "Asia/Seoul"
+          : "Asia/Shanghai";
   const p = localParts(now, timeZone);
   const weekday = p.weekday !== "Sat" && p.weekday !== "Sun";
   let session: MarketSession = "closed";
@@ -57,9 +61,17 @@ export function marketSessionState(market: string, now = new Date()): MarketSess
     if (p.minute >= 570 && p.minute < morningEnd) { session = "regular"; label = "交易中"; }
     else if (p.minute >= morningEnd && p.minute < 780) { session = "lunch"; label = "午间休市"; }
     else if (p.minute >= 780 && p.minute < afternoonEnd) { session = "regular"; label = "交易中"; }
+  } else if (weekday && key === "JP") {
+    // 东京：09:00-11:30 / 12:30-15:00（当地时间）
+    if (p.minute >= 540 && p.minute < 690) { session = "regular"; label = "交易中"; }
+    else if (p.minute >= 690 && p.minute < 750) { session = "lunch"; label = "午间休市"; }
+    else if (p.minute >= 750 && p.minute < 900) { session = "regular"; label = "交易中"; }
+  } else if (weekday && key === "KR") {
+    // 首尔：09:00-15:30（连续交易，无午休）
+    if (p.minute >= 540 && p.minute < 930) { session = "regular"; label = "交易中"; }
   }
-  const settlementMinute = key === "US" ? 1200 : key === "HK" ? 960 : 900;
-  const nextSessionMinute = key === "US" ? 240 : 570;
+  const settlementMinute = key === "US" ? 1200 : key === "HK" ? 960 : key === "JP" ? 900 : key === "KR" ? 930 : 900;
+  const nextSessionMinute = key === "US" ? 240 : key === "JP" || key === "KR" ? 540 : 570;
   // 结算状态跨过当地午夜保持到下一交易时段开始；周末保持最近交易日最终值。
   // 美股 20:00 为交易日分界：夜盘（20:00-04:00）属于新一天，当日盈亏 = 夜盘波动，
   // 只有周末才算已结算；港股/A股维持 收盘后结算到下一交易时段开始 的旧口径。
@@ -73,7 +85,12 @@ export function marketSessionState(market: string, now = new Date()): MarketSess
     label: pnlSettled ? "已结算" : label,
     localDate: p.date,
     pnlSettled,
-    settlementLabel: key === "US" ? "美东 20:00" : key === "HK" ? "港股 16:00" : "A股 15:00",
+    settlementLabel:
+      key === "US" ? "美东 20:00"
+        : key === "HK" ? "港股 16:00"
+          : key === "JP" ? "日股 15:00"
+            : key === "KR" ? "韩股 15:30"
+              : "A股 15:00",
     settlementDate
   };
 }

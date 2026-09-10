@@ -24,7 +24,6 @@ const forbiddenText = [
 ];
 
 const deploymentFiles = new Set([
-  "docker-compose.yml",
   "docker-compose.ghcr.yml",
   "Dockerfile",
   ".env.example"

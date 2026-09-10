@@ -41,6 +41,22 @@ jobs:
         run: npx tsc --noEmit
       - name: Production build check
         run: npm run build
+      - name: Start app and run public smoke
+        env:
+          NODE_ENV: production
+          STOCKLOG_FUTU: "off"
+        run: |
+          mkdir -p data
+          npx next start -H 127.0.0.1 -p 3000 &
+          echo $! > /tmp/fire-smoke.pid
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3000/api/auth/setup-status >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          bash scripts/smoke-ci.sh
+          kill "$(cat /tmp/fire-smoke.pid)" 2>/dev/null || true
 
   scheduled-change-gate:
     name: Check scheduled source changes

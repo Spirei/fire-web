@@ -218,7 +218,7 @@ function SubPill({
       onMouseEnter={() => setHovered(true)}
       onMouseMove={handleMove}
       onMouseLeave={handleLeave}
-      className={`pill-magnetic relative flex flex-none items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-semibold ${
+      className={`pill-magnetic settings-primary-pill relative flex min-h-10 flex-none items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-semibold ${
         active
           ? "bg-white text-ink-2 border border-edge-strong shadow-sm shadow-sm active:bg-bg-gray"
           : "text-muted hover:bg-brand-hover active:bg-bg-gray"
@@ -1337,6 +1337,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [srcMsg, setSrcMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [srcSaving, setSrcSaving] = useState(false);
   const [futuOnline, setFutuOnline] = useState<boolean | null>(null);
+  const [futuSkipped, setFutuSkipped] = useState(false);
   const [futuTest, setFutuTest] = useState<{ busy: boolean; ok?: boolean; msg?: string } | null>(null);
   const [futuQuota, setFutuQuota] = useState<{
     loading: boolean;
@@ -1422,7 +1423,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     fetch("/api/health")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!cancelled) setFutuOnline(Boolean(data?.data?.futuOpenD?.available));
+        if (!cancelled) {
+          setFutuOnline(Boolean(data?.data?.futuOpenD?.available));
+          setFutuSkipped(Boolean(data?.data?.futuOpenD?.skipped));
+        }
       })
       .catch(() => {});
     return () => {
@@ -1708,7 +1712,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }
 
   const subPills = (extra: string) => (
-    <div ref={mobileSubnavRef} className={`settings-subnav mb-5 flex flex-nowrap items-center gap-1.5 overflow-x-auto rounded-2xl border border-edge bg-white p-1.5 shadow-card [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${extra}`}>
+    <div ref={mobileSubnavRef} className={`settings-subnav settings-primary-subnav mb-5 flex flex-nowrap items-center gap-1.5 overflow-x-auto rounded-2xl border border-edge bg-white p-1.5 shadow-card [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${extra}`}>
       {visibleSubNav.map((s) => (
         <SubPill
           key={s.key}
@@ -2746,7 +2750,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <div className="ctrl">
                         <span className={`inline-flex items-center gap-1.5 text-[11.5px] ${futuOnline === null ? "text-faint" : futuOnline ? "text-[#0fa07b]" : "text-[#e5a13b]"}`}>
                           <i className={`h-1.5 w-1.5 rounded-full ${futuOnline === null ? "bg-[#d1d5db]" : futuOnline ? "bg-[#0fa07b]" : "bg-[#e5a13b]"}`} />
-                          {futuOnline === null ? "检测中…" : futuOnline ? "已连接" : "未连接"}
+                          {futuOnline === null ? "检测中…" : futuOnline ? "已连接" : futuSkipped ? "本地已跳过 OpenD" : "未连接"}
                         </span>
                         <button type="button" disabled={futuTest?.busy} onClick={testFutu} className="btn btn-line btn-sm disabled:opacity-60">
                           {futuTest?.busy ? "测试中…" : "测试连接"}

@@ -36,7 +36,16 @@ function checkPort(host: string, port: number, timeoutMs: number): Promise<boole
   });
 }
 
+function futuDisabledByEnv(): boolean {
+  const flag = process.env.STOCKLOG_FUTU?.trim().toLowerCase();
+  if (flag === "off" || flag === "0" || flag === "false") return true;
+  if (flag === "on" || flag === "1" || flag === "true") return false;
+  // 开发态默认不抢线上唯一的 OpenD 连接，行情回退腾讯 / Yahoo。
+  return process.env.NODE_ENV !== "production";
+}
+
 async function isFutuAvailable(): Promise<boolean> {
+  if (futuDisabledByEnv()) return false;
   const now = Date.now();
   const { futuHost, futuPort } = getSiteSettings();
   const host = normalizeFutuHost(futuHost || "127.0.0.1");
@@ -155,12 +164,13 @@ export async function searchFutu(keyword: string, limit = 8): Promise<SearchMatc
 }
 
 /** 供健康检查 / 设置页显示 OpenD 连接状态 */
-export async function getFutuStatus(): Promise<{ available: boolean; host: string; port: number }> {
+export async function getFutuStatus(): Promise<{ available: boolean; host: string; port: number; skipped: boolean }> {
   const { futuHost, futuPort } = getSiteSettings();
   const host = futuHost || "127.0.0.1";
   const port = Number(futuPort) || 11111;
-  const available = await isFutuAvailable();
-  return { available, host, port };
+  const skipped = futuDisabledByEnv();
+  const available = skipped ? false : await isFutuAvailable();
+  return { available, host, port, skipped };
 }
 
 /** 设置页「测试连接」：用指定 host/port 真实拉一次 AAPL 快照，验证 OpenD 可达且已登录。 */

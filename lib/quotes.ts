@@ -78,6 +78,12 @@ function toTencentSymbol(market: Market, code: string): string {
       if (/^[0-3]/.test(c)) return "sz" + c;
       return "bj" + c;
     }
+    // 日股 / 韩股：腾讯行情统一用 jp{4位代码} / kr{6位代码}（去交易所后缀），
+    // 原本只在素材库回填脚本里用过，这里接进实时行情链路，持仓 / 自选才有最新价与涨跌幅。
+    case "JP":
+      return "jp" + raw.replace(/\.T$/, "");
+    case "KR":
+      return "kr" + raw.replace(/\.(KS|KQ)$/, "");
     default:
       return "";
   }
@@ -123,7 +129,9 @@ export async function fetchBatch(symbols: string[]): Promise<Map<string, Quote>>
           const changePct = Number(f[32]) || 0;
           const volume = Number(f[36]) || 0;
           const amount = Number(f[37]) || 0;
-          if (volume === 0 && change === 0 && changePct === 0 && amount === 0) return;
+          // 日股 / 韩股字段口径与美港 A 不完全一致，有现价就收下，避免 0 成交量被当成幽灵行情丢掉。
+          const jpKr = parsed.symbol.startsWith("jp") || parsed.symbol.startsWith("kr");
+          if (!jpKr && volume === 0 && change === 0 && changePct === 0 && amount === 0) return;
           map.set(parsed.symbol, {
             name: f[1] || "",
             price,
@@ -261,6 +269,8 @@ export async function fetchQuotes(items: QuoteItem[]): Promise<Record<string, Qu
   Object.keys(result).forEach((id) => {
     const q = result[id];
     if (!q) return;
+    const item = items.find((row) => row.id === id);
+    if (item && (item.market === "JP" || item.market === "KR")) return;
     if ((q.volume ?? 0) === 0 && (q.amount ?? 0) === 0 && (q.change ?? 0) === 0 && (q.changePct ?? 0) === 0) {
       delete result[id];
     }
@@ -291,6 +301,8 @@ function hintToMatch(parts: string[]): { symbol: string; code: string; name: str
   }
   if (prefix === "hk") return { symbol: `hk${codeRaw}`, code, name, market: "HK" };
   if (prefix === "us") return { symbol: `us${code}`, code, name, market: "US" };
+  if (prefix === "jp") return { symbol: `jp${codeRaw}`, code, name, market: "JP" };
+  if (prefix === "kr") return { symbol: `kr${codeRaw}`, code, name, market: "KR" };
   return null;
 }
 
@@ -436,6 +448,10 @@ function minuteQueryCodes(item: QuoteItem): string[] {
       return [`hk${c.padStart(5, "0")}`];
     case "US":
       return [`us${c.replace(US_EXCHANGE_SUFFIX, "")}`, `us${c}.OQ`, `us${c}.N`];
+    case "JP":
+      return [`jp${c.replace(/\.T$/, "")}`];
+    case "KR":
+      return [`kr${c.replace(/\.(KS|KQ)$/, "")}`];
     default:
       return [];
   }

@@ -627,23 +627,32 @@ export default function RecordsApp({
   }, [activeTab, sidebarTabs.length]);
 
   const settingsPanel = (
-    <div className={settingsSubReady ? "" : "invisible"} aria-hidden={!settingsSubReady}>
-      <SettingsView
-        user={{
-          username: user?.username ?? "",
-          nickname: user?.nickname ?? "",
-          uid: user?.uid ?? "",
-          email: user?.email ?? "",
-          avatar: user?.avatar ?? "",
-          role: user?.role ?? "user"
-        }}
-        recordsCount={records.length}
-        onExport={exportJson}
-        onClearAll={clearAllRecords}
-        onTabsChange={setNavTabs}
-        initialSub={settingsSub ?? undefined}
-        initialSettings={initialSettings}
-      />
+    <div className="relative h-full min-h-0">
+      {!settingsSubReady && (
+        <div className="settings-first-frame" aria-hidden="true">
+          <div className="settings-first-frame-tabs"><i /><i /><i /><i /></div>
+          <div className="settings-first-frame-title"><i /><span /></div>
+          <div className="settings-first-frame-card"><i /><i /><i /><i /></div>
+        </div>
+      )}
+      <div className={settingsSubReady ? "h-full" : "invisible h-full"} aria-hidden={!settingsSubReady}>
+        <SettingsView
+          user={{
+            username: user?.username ?? "",
+            nickname: user?.nickname ?? "",
+            uid: user?.uid ?? "",
+            email: user?.email ?? "",
+            avatar: user?.avatar ?? "",
+            role: user?.role ?? "user"
+          }}
+          recordsCount={records.length}
+          onExport={exportJson}
+          onClearAll={clearAllRecords}
+          onTabsChange={setNavTabs}
+          initialSub={settingsSub ?? undefined}
+          initialSettings={initialSettings}
+        />
+      </div>
     </div>
   );
 

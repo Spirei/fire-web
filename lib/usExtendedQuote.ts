@@ -96,8 +96,14 @@ async function fetchYahoo(code: string): Promise<YahooResult> {
   throw lastError ?? new Error("yahoo unreachable");
 }
 
+function extendedQuoteEnabled(): boolean {
+  const flag = process.env.STOCKLOG_EXTENDED_QUOTE?.trim().toLowerCase();
+  return !(flag === "off" || flag === "0" || flag === "false" || flag === "none");
+}
+
 /** 当前美股扩展时段有效报价。闭市/常规盘返回 null，避免旧盘前价覆盖最新常规价。 */
 export async function fetchUsExtendedQuote(codeRaw: string): Promise<UsExtendedQuote | null> {
+  if (!extendedQuoteEnabled()) return null;
   const session = marketSessionState("US").session;
   const wanted: UsExtendedSession | "LATEST" | null = session === "pre" ? "PRE" : session === "post" ? "AFTER" : session === "overnight" ? "OVERNIGHT" : session === "closed" ? "LATEST" : null;
   if (!wanted) return null;

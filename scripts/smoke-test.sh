@@ -55,6 +55,11 @@ for API in /api/trading-square/feed /api/trading-square/duan /api/trading-square
 done
 check "行情接口（未登录可用）" 200 "$(code -X POST "$BASE/api/quotes" -H 'Content-Type: application/json' -d '{"items":[{"id":"US:AAPL","market":"US","code":"AAPL"}]}')"
 check "行情接口返回价格" 1 "$(curl -s --max-time 40 -X POST "$BASE/api/quotes" -H 'Content-Type: application/json' -d '{"items":[{"id":"US:AAPL","market":"US","code":"AAPL"}]}' | python3 -c 'import json,sys; q=(json.load(sys.stdin).get("quotes") or {}).get("US:AAPL") or {}; print(1 if isinstance(q.get("price"), (int,float)) and q["price"] > 0 else 0)')"
+JP_KR_BODY='{"items":[{"id":"JP:7203","market":"JP","code":"7203"},{"id":"KR:005930","market":"KR","code":"005930"}]}'
+check "日韩行情接口 HTTP" 200 "$(code --max-time 40 -X POST "$BASE/api/quotes" -H 'Content-Type: application/json' -d "$JP_KR_BODY")"
+JP_KR_JSON=$(curl -s --max-time 40 -X POST "$BASE/api/quotes" -H 'Content-Type: application/json' -d "$JP_KR_BODY")
+check "日股 7203 有现价" 1 "$(echo "$JP_KR_JSON" | python3 -c 'import json,sys; q=(json.load(sys.stdin).get("quotes") or {}).get("JP:7203") or {}; print(1 if isinstance(q.get("price"), (int,float)) and q["price"] > 0 else 0)')"
+check "韩股 005930 有现价" 1 "$(echo "$JP_KR_JSON" | python3 -c 'import json,sys; q=(json.load(sys.stdin).get("quotes") or {}).get("KR:005930") or {}; print(1 if isinstance(q.get("price"), (int,float)) and q["price"] > 0 else 0)')"
 check "美股五日分时接口" 200 "$(code --max-time 40 "$BASE/api/kline/five-day?code=AAPL&market=US")"
 check "个股详情接口" 200 "$(code --max-time 40 "$BASE/api/v1/stock-detail?market=US&code=AAPL")"
 check "汇率接口（登录后）" 200 "$(code -b "$JAR_DEMO" "$BASE/api/rates")"
