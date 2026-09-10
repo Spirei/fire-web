@@ -707,8 +707,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   });
   const [activeAnchor, setActiveAnchor] = useState<string>(() => {
     const valid = (initialSub === "site" || initialSub === "features" || initialSub === "stocks" || initialSub === "api" || initialSub === "profile" || initialSub === "database" || initialSub === "cron" || initialSub === "about") ? initialSub : (isAdminUser ? "site" : "profile");
-    const requested = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("anchor") : null;
-    return requested && SETTINGS_SEARCH_INDEX.some((x) => x.sub === valid && x.anchor === requested) ? requested : SETTINGS_SEARCH_INDEX.find((x) => x.sub === valid)?.anchor || "info";
+    // 首次渲染必须与服务端完全一致；URL 中的锚点在挂载后的同步 effect 再恢复。
+    return SETTINGS_SEARCH_INDEX.find((x) => x.sub === valid)?.anchor || "info";
   });
   const activeSubMeta = visibleGroups.flatMap((g) => g.items).find((item) => item.key === sub);
   const [site, setSite] = useState<SiteSettings>(() => initialSettings ? {
