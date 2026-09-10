@@ -109,7 +109,12 @@ def _market_snapshot(ctx, symbols, skipped, split_budget, ret_ok):
     返回可用的 DataFrame 列表（可多段），不支持的代码记入 skipped。"""
     if not symbols:
         return []
-    ret, data = ctx.get_market_snapshot(symbols)
+    try:
+        ret, data = ctx.get_market_snapshot(symbols)
+    except Exception as exc:
+        # 单次调用抛异常（网络抖动 / SDK 报错）也按「这批失败」处理，
+        # 走下面的剔除与二分重试，不让整批行情陪葬。
+        ret, data = -1, f"{type(exc).__name__}: {exc}"
     if ret == ret_ok:
         return [data]
     error = str(data)

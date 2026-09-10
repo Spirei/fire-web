@@ -16,6 +16,15 @@ export interface UsExtendedQuote {
 const YAHOO_HOSTS = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
 const SUCCESS_TTL = 60_000;
 const FAILURE_TTL = 20_000;
+/**
+ * Yahoo 双主机同时不可达时的短期熔断。
+ * 线上容器（境外源不通）实测：44 只持仓逐个等 6 秒超时会把一次行情请求拖到 17 秒，
+ * 页面长时间停在「计算中」。一旦双主机都失败，60 秒内直接判定不可用，
+ * 由腾讯常规盘行情兜底（配合「美股·腾讯兜底」提示），请求耗时回落到 1-2 秒。
+ * 只对「连不上 Yahoo」生效；某只标的没有扩展时段成交（数据为空）不会触发熔断。
+ */
+const YAHOO_DOWN_TTL = 60_000;
+let yahooDownUntil = 0;
 
 const cache = new Map<string, { at: number; value: UsExtendedQuote | null }>();
 
@@ -51,16 +60,24 @@ interface YahooRaw {
 
 async function fetchYahoo(code: string): Promise<YahooResult> {
   let lastError: unknown = null;
+  // 只有「服务级」失败（连不上 / 限流 / 非 200）才触发熔断；
+  // 某只标的本身在 Yahoo 查不到（200 但无 result，如下市 / OTC）不算服务不可用，
+  // 否则一只坏标的会把整批标的的 Yahoo 兜底一起关掉。
+  let serviceFailure = false;
   for (const host of YAHOO_HOSTS) {
     try {
       const response = await fetch(`https://${host}/v8/finance/chart/${encodeURIComponent(code)}?interval=1m&range=1d&includePrePost=true&events=div%2Csplits`, {
         headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
         signal: AbortSignal.timeout(6000)
       });
-      if (!response.ok) throw new Error(`yahoo ${response.status}`);
+      if (!response.ok) {
+        serviceFailure = true;
+        throw new Error(`yahoo ${response.status}`);
+      }
       const json = (await response.json()) as { chart?: { result?: YahooRaw[] } };
       const result = json.chart?.result?.[0];
       if (!result) throw new Error("empty yahoo result");
+      yahooDownUntil = 0;
       return {
         timestamp: Array.isArray(result.timestamp) ? result.timestamp : [],
         close: Array.isArray(result.indicators?.quote?.[0]?.close) ? result.indicators.quote[0].close : [],
@@ -68,9 +85,11 @@ async function fetchYahoo(code: string): Promise<YahooResult> {
       };
     } catch (error) {
       lastError = error;
+      if (!(error instanceof Error && error.message === "empty yahoo result")) serviceFailure = true;
       /* 当前主机失败，切下一个；双主机都失败则交给调用方 */
     }
   }
+  if (serviceFailure) yahooDownUntil = Date.now() + YAHOO_DOWN_TTL;
   throw lastError ?? new Error("yahoo unreachable");
 }
 
@@ -79,6 +98,8 @@ export async function fetchUsExtendedQuote(codeRaw: string): Promise<UsExtendedQ
   const session = marketSessionState("US").session;
   const wanted: UsExtendedSession | "LATEST" | null = session === "pre" ? "PRE" : session === "post" ? "AFTER" : session === "overnight" ? "OVERNIGHT" : session === "closed" ? "LATEST" : null;
   if (!wanted) return null;
+  // 熔断期内不再逐只发起请求（每只最多 2×6 秒），直接交给腾讯兜底。
+  if (Date.now() < yahooDownUntil) return null;
   const code = codeRaw.toUpperCase().replace(/\.(OQ|N|AM|PS|K)$/, "");
   const cacheKey = `${code}:${wanted}`;
   const cached = cache.get(cacheKey);

@@ -1337,6 +1337,14 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                         </span>
                         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{row.label || row.key}</span>
                         <span className="flex-none rounded-[7px] bg-bg-gray px-2 py-1 text-[11px] font-semibold text-faint">{row.key}</span>
+                        {!hasMarketRecords(row.key) && (
+                          <span
+                            className="flex-none rounded-[7px] border border-dashed border-edge-strong px-2 py-1 text-[11px] font-semibold text-faint"
+                            title="该市场暂无持仓 / 本页添加的记录，标签栏会自动隐藏；添加记录后标签自动出现（顺序沿用这里）"
+                          >
+                            无记录 · 自动隐藏
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={() => setEditingKey(row.key)}
