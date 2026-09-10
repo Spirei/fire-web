@@ -80,7 +80,6 @@ function StockQuoteCard({
   const up = (quote?.changePct ?? 0) >= 0;
   const tone = quote ? (up ? "text-up" : "text-down") : "text-faint";
   const board = marketBoardLabel(market);
-  const boardTone = board === "开盘中" ? "text-up" : board === "休市" ? "text-faint" : "text-muted";
 
   return (
     <div
@@ -106,7 +105,7 @@ function StockQuoteCard({
             </div>
             <p className="mt-0.5 text-[11px] tabular-nums text-muted">
               {code}
-              <span className={`ml-1.5 font-semibold ${boardTone}`}>{board}</span>
+              <span className="ml-1.5 font-semibold text-muted">{board}</span>
             </p>
           </div>
         </div>
