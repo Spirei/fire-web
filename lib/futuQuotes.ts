@@ -309,6 +309,31 @@ export async function fetchFutuDailyKline(
 }
 
 /** 富途 OpenAPI 额度（实时订阅 + 历史K线）；不可用 / 失败返回 null */
+/**
+ * 富途 1 分钟收盘序列（K_1M），用于「指数栏低频校对」——只在收盘后调用，
+ * 拿它和东财分时逐根比对，发现东财口径漂移（例如取到开盘价而不是收盘价）。
+ */
+export async function fetchFutuMinuteCloses(market: string, code: string, date: string): Promise<number[]> {
+  if (!(await isFutuAvailable())) return [];
+  const { futuHost, futuPort } = getSiteSettings();
+  try {
+    const parsed = await runBridge(
+      { cmd: "kline", items: [{ market, code }], ktype: "K_1M", start: date, end: date, maxCount: 500, autype: "qfq" },
+      futuHost,
+      Number(futuPort) || 11111
+    );
+    const rows = (parsed.rows as FutuKlineRow[] | undefined) || [];
+    const out: number[] = [];
+    for (const row of rows) {
+      const close = Number(row.close);
+      if (Number.isFinite(close) && close > 0) out.push(close);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchFutuQuota(host = "127.0.0.1", port = 11111): Promise<FutuQuota | null> {
   const h = normalizeFutuHost(host || "127.0.0.1");
   const p = Number(port) || 11111;

@@ -2,6 +2,7 @@
 
 import { getSiteSettings } from "./settings";
 import type { TickerConfig } from "./types";
+import { fetchFutuMinuteCloses } from "./futuQuotes";
 
 export interface TickerItem {
   key: string;
@@ -72,23 +73,93 @@ function wallClockMs(text: string): number {
  * 轮询间隔：还有指数在出新分时数据 → 60 秒；全部不再更新（收市）→ 5 分钟兜底。
  * 判断方式是「让数据自证」——比上一轮看最后一根的时间和点数有没有前进，
  * 不靠开市时间表，也不靠时区（东财给美股的时间戳是北京时间，按市场本地时间判断会算错）。
- * 首次拉取没有上轮数据，按开市处理，避免白天首访就落到 5 分钟。previous 参数便于测试注入。
+ * 停得越久退得越远（隔夜 15 分钟、跨夜/周末/长假 30 分钟），避免周末一直刷；
+ * 首次拉取没有上轮数据、或全部指数都取不到（上游故障）时都保持 60 秒，尽快恢复。
+ * previous / staleMs 参数便于测试注入。
  */
-export function tickerPollSec(
+export function tickerAdvanced(
   rows: Array<{ key: string; lastBarAt: number; points: number }>,
   previous: Map<string, { lastBarAt: number; points: number }>
-): number {
-  if (!rows.length) return 300;
-  if (!previous.size) return 60;
-  const live = rows.some((row) => {
+): boolean {
+  const usable = rows.filter((row) => row.points > 0);
+  if (!usable.length || !previous.size) return true;
+  return usable.some((row) => {
     const before = previous.get(row.key);
     if (!before) return true;
     return row.lastBarAt > before.lastBarAt || row.points > before.points;
   });
-  return live ? 60 : 300;
 }
 
-async function fetchTrend(secid: string): Promise<{ points: number[]; lastBarAt: number }> {
+export function tickerPollSec(
+  rows: Array<{ key: string; lastBarAt: number; points: number }>,
+  previous: Map<string, { lastBarAt: number; points: number }>,
+  staleMs = 0
+): number {
+  if (!rows.length || !rows.some((row) => row.points > 0)) return 60; // 全取不到：尽快重试，别当成收市
+  if (!previous.size) return 60;
+  if (tickerAdvanced(rows, previous)) return 60;
+  if (staleMs < 30 * 60_000) return 300;      // 刚收市 / 盘中短暂无更新
+  if (staleMs < 3 * 3600_000) return 900;     // 隔夜
+  return 1800;                                 // 跨夜、周末、长假：30 分钟兜底
+}
+
+/**
+ * 与富途逐根比对（低频校对）：两边按当日第 N 根对齐（两个源都是完整当日分时，
+ * 按时间戳对齐反而会踩时区差异），错位超过 20% 根数就判定口径漂移。
+ * 实测：东财取开盘价的旧写法与富途 331 根里只有 1 根相同（最大差 65.6 点）。
+ */
+export function compareIndexSeries(eastmoney: number[], futu: number[], tolerance = 0.5): { bars: number; mismatched: number; maxDiff: number; drift: boolean } {
+  const bars = Math.min(eastmoney.length, futu.length);
+  if (bars < 10) return { bars, mismatched: 0, maxDiff: 0, drift: false };
+  let mismatched = 0;
+  let maxDiff = 0;
+  for (let index = 0; index < bars; index++) {
+    const left = eastmoney[eastmoney.length - bars + index];
+    const right = futu[futu.length - bars + index];
+    if (!Number.isFinite(left) || !Number.isFinite(right)) continue;
+    const diff = Math.abs(left - right);
+    if (diff > maxDiff) maxDiff = diff;
+    if (diff > tolerance) mismatched += 1;
+  }
+  return { bars, mismatched, maxDiff, drift: mismatched > bars * 0.2 };
+}
+
+/** 已完成的校对结果（供 /api/health 与 /api/ticker 展示） */
+export function getTickerCrossCheck(): TickerCrossCheck[] {
+  return [...crossChecks.values()];
+}
+
+/**
+ * 收盘后与富途对一次账：只对富途 OpenAPI 支持的指数、每个交易日一次。
+ * 开市时不比（两边延迟不同会误报），等「10 分钟没出新数据」说明当日分时已定型再比。
+ */
+function scheduleCrossCheck(
+  pending: Array<{ key: string; label: string; secid: string; market: string; date: string; points: number[] }>
+) {
+  if (crossChecking || !pending.length) return;
+  crossChecking = true;
+  void (async () => {
+    try {
+      for (const row of pending) {
+        const futuCode = FUTU_INDEX_CODES[row.secid];
+        if (!futuCode) continue;
+        const futuSeries = await fetchFutuMinuteCloses(futuCode.market, futuCode.code, row.date);
+        if (futuSeries.length < 10) continue;
+        const result = compareIndexSeries(row.points, futuSeries);
+        crossChecks.set(row.key, { at: Date.now(), key: row.key, label: row.label, date: row.date, ...result });
+        if (result.drift) {
+          console.warn(`[ticker] 与富途对账发现口径漂移：${row.label} ${row.date}，${result.mismatched}/${result.bars} 根不一致，最大差 ${result.maxDiff.toFixed(2)}`);
+        }
+      }
+    } catch {
+      /* 校对失败不影响行情 */
+    } finally {
+      crossChecking = false;
+    }
+  })();
+}
+
+async function fetchTrend(secid: string): Promise<{ points: number[]; lastBarAt: number; date: string }> {
   for (const host of EM_TREND_HOSTS) {
     try {
       const url = `${host}/api/qt/stock/trends2/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays=1&iscr=0`;
@@ -109,28 +180,55 @@ async function fetchTrend(secid: string): Promise<{ points: number[]; lastBarAt:
           lastBarAt = wallClockMs(cols[0]);
         }
       }
-      if (points.length > 0) return { points, lastBarAt };
+      if (points.length > 0) return { points, lastBarAt, date: String(trends[trends.length - 1]).slice(0, 10) };
     } catch {
       /* 尝试下一个主机 */
     }
   }
-  return { points: [], lastBarAt: 0 };
+  return { points: [], lastBarAt: 0, date: "" };
 }
 
 const TTL = 60_000;
-/** 上一轮各指数的「最后一根分时时间 + 点数」，用于判断有没有市场还在出新数据 */
-let lastSeen = new Map<string, { lastBarAt: number; points: number }>();
-let cache: { at: number; data: TickerItem[]; config: string; pollSec: number } | null = null;
-let inflight: Promise<{ items: TickerItem[]; interval: number; pollSec: number }> | null = null;
+/**
+ * 东财 secid → 富途指数代码（只用于「低频校对」）。实测 OpenAPI 可用的只有这几个：
+ * 美股指数 OpenAPI 明确「暂不支持」、新加坡指数无权限、韩国市场 OpenAPI 根本没有。
+ */
+const FUTU_INDEX_CODES: Record<string, { market: string; code: string }> = {
+  "100.HSI": { market: "HK", code: "800000" },
+  "1.000001": { market: "SH", code: "000001" },
+  "0.399001": { market: "SZ", code: "399001" },
+  "100.N225": { market: "JP", code: ".N225" }
+};
 
-export async function fetchTicker(): Promise<{ items: TickerItem[]; interval: number; pollSec: number }> {
+export interface TickerCrossCheck {
+  at: number;
+  key: string;
+  label: string;
+  date: string;
+  bars: number;
+  mismatched: number;
+  maxDiff: number;
+  /** true = 与富途逐根比对后判定为口径漂移（不是延迟） */
+  drift: boolean;
+}
+
+/** 上一轮各指数的「最后一根分时时间 + 点数」，用于判断有没有市场还在出新数据 */
+let lastSeen = new Map<string, { lastBarAt: number; points: number; advancedAt: number; date: string }>();
+/** 最近一次「数据确实前进过」的时间：用来决定收市后要退避到哪一档 */
+let lastAdvanceAt = 0;
+const crossChecks = new Map<string, TickerCrossCheck>();
+let crossChecking = false;
+let cache: { at: number; data: TickerItem[]; config: string; pollSec: number } | null = null;
+let inflight: Promise<{ items: TickerItem[]; interval: number; pollSec: number; crossCheck: TickerCrossCheck[] }> | null = null;
+
+export async function fetchTicker(): Promise<{ items: TickerItem[]; interval: number; pollSec: number; crossCheck: TickerCrossCheck[] }> {
   const config: TickerConfig = getSiteSettings().ticker;
   const symbols = config.items.length > 0
     ? config.items.map((i) => ({ key: i.key, secid: i.secid, label: i.label, market: i.market }))
     : [];
   const interval = config.interval;
   const configKey = JSON.stringify(config);
-  if (cache && Date.now() - cache.at < TTL && cache.config === configKey) return { items: cache.data, interval, pollSec: cache.pollSec };
+  if (cache && Date.now() - cache.at < TTL && cache.config === configKey) return { items: cache.data, interval, pollSec: cache.pollSec, crossCheck: getTickerCrossCheck() };
   if (inflight) return inflight;
   inflight = (async () => {
     const quotes = await fetchQuotes(symbols);
@@ -138,7 +236,7 @@ export async function fetchTicker(): Promise<{ items: TickerItem[]; interval: nu
       symbols.map(async (s) => {
         const code = s.secid.split(".")[1];
         const q = quotes.get(code);
-        const trend = await fetchTrend(s.secid).catch(() => ({ points: [] as number[], lastBarAt: 0 }));
+        const trend = await fetchTrend(s.secid).catch(() => ({ points: [] as number[], lastBarAt: 0, date: "" }));
         const item: TickerItem = {
           key: s.key,
           label: s.label,
@@ -148,16 +246,35 @@ export async function fetchTicker(): Promise<{ items: TickerItem[]; interval: nu
           changePct: q?.changePct ?? null,
           points: trend.points
         };
-        return { item, lastBarAt: trend.lastBarAt };
+        return { item, lastBarAt: trend.lastBarAt, date: trend.date };
       })
     );
     const items = built.map((row) => row.item);
-    // 有任何市场在出新数据 → 60 秒；全部收市 → 5 分钟兜底（页面重新可见时客户端另外会立刻刷新一次）
+    // 有任何市场在出新数据 → 60 秒；收市按「停了多久」逐档退避（5 / 15 / 30 分钟）；
+    // 页面重新可见时客户端另外会立刻刷新一次
     const rows = built.map((row) => ({ key: row.item.key, lastBarAt: row.lastBarAt, points: row.item.points.length }));
-    const pollSec = tickerPollSec(rows, lastSeen);
-    lastSeen = new Map(rows.map((row) => [row.key, { lastBarAt: row.lastBarAt, points: row.points }]));
+    const now = Date.now();
+    if (tickerAdvanced(rows, lastSeen)) lastAdvanceAt = now;
+    const pollSec = tickerPollSec(rows, lastSeen, lastAdvanceAt ? now - lastAdvanceAt : 0);
+    // 逐个指数记「有没有前进 / 最后前进的时间 / 当日日期」，用于退避与收盘后对账
+    const nextSeen = new Map<string, { lastBarAt: number; points: number; advancedAt: number; date: string }>();
+    const pendingCrossCheck: Array<{ key: string; label: string; secid: string; market: string; date: string; points: number[] }> = [];
+    built.forEach((row) => {
+      const before = lastSeen.get(row.item.key);
+      const advanced = !before || row.lastBarAt > before.lastBarAt || row.item.points.length > before.points;
+      const advancedAt = advanced ? now : before?.advancedAt ?? 0;
+      nextSeen.set(row.item.key, { lastBarAt: row.lastBarAt, points: row.item.points.length, advancedAt, date: row.date });
+      // 收盘后（10 分钟没出新数据）且当天还没对过账 → 与富途比一次
+      const symbol = symbols.find((s) => s.key === row.item.key);
+      const checkedToday = crossChecks.get(row.item.key)?.date === row.date;
+      if (symbol && FUTU_INDEX_CODES[symbol.secid] && row.item.points.length >= 10 && row.date && !checkedToday && advancedAt && now - advancedAt >= 10 * 60_000) {
+        pendingCrossCheck.push({ key: row.item.key, label: row.item.label, secid: symbol.secid, market: row.item.market, date: row.date, points: row.item.points });
+      }
+    });
+    lastSeen = nextSeen;
+    scheduleCrossCheck(pendingCrossCheck);
     cache = { at: Date.now(), data: items, config: configKey, pollSec };
-    return { items, interval, pollSec };
+    return { items, interval, pollSec, crossCheck: getTickerCrossCheck() };
   })();
   try {
     return await inflight;

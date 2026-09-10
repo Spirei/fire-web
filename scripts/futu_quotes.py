@@ -55,6 +55,11 @@ def _to_futu_code(market, code):
         if c.startswith(("6", "9")):
             return "SH." + c
         return "SZ." + c
+    # 指数校对用：沪 / 深 / 日（日本指数代码形如 .N225，带前导点）
+    if market in ("SH", "SZ"):
+        return f"{market}." + raw.rjust(6, "0")
+    if market == "JP":
+        return "JP." + raw
     return ""
 
 
