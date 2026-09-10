@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { IconMinus, IconPin, IconPlus, IconWindmill } from "@tabler/icons-react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
@@ -10,6 +10,7 @@ import SafeAssetImage from "@/components/SafeAssetImage";
 import StockDetailView from "@/components/StockDetailView";
 import StockTextLink from "@/components/StockTextLink";
 import { isLocalPostImageUrl } from "@/lib/tradingSquareImages";
+import { TRADING_SQUARE_FEED_LIMIT, takeNewest } from "@/lib/tradingSquareLimits";
 import { hasTranslatableText, normalizeCode, parseSymbolToken, splitTradingText, type HoldingHint } from "@/lib/tradingSquareText";
 import type { StockRecord } from "@/lib/types";
 
@@ -31,6 +32,7 @@ const CATEGORY_OPTIONS: Array<{ id: "all" | DuanCategory; label: string }> = [
 const PAGE_SIZE = 10;
 const FEED_CACHE_KEY = "fire:trading-square-feed";
 const SEEN_CACHE_KEY = "fire:trading-square-seen";
+const FEED_FETCH_MS = 12_000;
 type AuthorTimes = Record<string, string | null>;
 type AuthorFlags = Record<string, boolean>;
 type FeedPayload = { posts?: Post[]; updatedAt?: string | null; updatedByAuthor?: AuthorTimes; refreshing?: boolean; refreshingByAuthor?: AuthorFlags };
@@ -61,7 +63,7 @@ function readLocalFeed(): { posts: Post[]; updatedAt: string | null; updatedByAu
     const raw = JSON.parse(localStorage.getItem(FEED_CACHE_KEY) || "null") as { posts?: Post[]; updatedAt?: string | null; updatedByAuthor?: AuthorTimes } | null;
     if (Array.isArray(raw?.posts) && raw.posts.length) {
       return {
-        posts: raw.posts,
+        posts: takeNewest(raw.posts, TRADING_SQUARE_FEED_LIMIT),
         updatedAt: raw.updatedAt ?? null,
         updatedByAuthor: raw.updatedByAuthor && typeof raw.updatedByAuthor === "object" ? raw.updatedByAuthor : emptyTimes()
       };
@@ -71,7 +73,7 @@ function readLocalFeed(): { posts: Post[]; updatedAt: string | null; updatedByAu
 }
 
 function writeLocalFeed(posts: Post[], updatedAt: string | null, updatedByAuthor: AuthorTimes) {
-  try { localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ posts, updatedAt, updatedByAuthor })); } catch { /* quota / private mode */ }
+  try { localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ posts: takeNewest(posts, TRADING_SQUARE_FEED_LIMIT), updatedAt, updatedByAuthor })); } catch { /* quota / private mode */ }
 }
 
 function readSeen(posts: Post[]): AuthorTimes {
@@ -312,18 +314,20 @@ function PostBody({ text, holdings, onStock, className = "mt-2 whitespace-pre-li
 }
 
 export default function TradingSquareView({ avatars, records = [] }: { avatars?: Record<string, string>; records?: StockRecord[] }) {
-  const [posts, setPosts] = useState<Post[]>(() => readLocalFeed()?.posts ?? []);
-  const [loading, setLoading] = useState(() => !readLocalFeed());
+  // 首帧必须与 SSR 一致（空列表 / 默认筛选）。浏览器缓存和 URL 参数在 useLayoutEffect 里恢复，避免水合报错。
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshingByAuthor, setRefreshingByAuthor] = useState<AuthorFlags>(emptyFlags);
-  const [updatedByAuthor, setUpdatedByAuthor] = useState<AuthorTimes>(() => readLocalFeed()?.updatedByAuthor ?? emptyTimes());
-  const [seen, setSeen] = useState<AuthorTimes>(() => readSeen(readLocalFeed()?.posts ?? []));
-  const [selected, setSelected] = useState<"all" | AuthorId>(() => readQuery().selected);
-  const [duanCategory, setDuanCategory] = useState<"all" | DuanCategory>(() => readQuery().duanCategory);
-  const [page, setPage] = useState(() => readQuery().page);
-  const [detail, setDetail] = useState<{ market: string; code: string; name: string } | null>(() => parseSymbol(readQuery().symbol));
+  const [updatedByAuthor, setUpdatedByAuthor] = useState<AuthorTimes>(emptyTimes);
+  const [seen, setSeen] = useState<AuthorTimes>(emptyTimes);
+  const [selected, setSelected] = useState<"all" | AuthorId>("all");
+  const [duanCategory, setDuanCategory] = useState<"all" | DuanCategory>("all");
+  const [page, setPage] = useState(1);
+  const [detail, setDetail] = useState<{ market: string; code: string; name: string } | null>(null);
   const [original, setOriginal] = useState<Record<string, boolean>>({});
   const [fixed, setFixed] = useState(false);
-  const fixedInitialized = useRef(false);
+  const [hydrated, setHydrated] = useState(false);
+  const restored = useRef(false);
   const pollLeft = useRef(0);
   const { pos, dragging, onTitleMouseDown } = useDraggableWindow("fire:trading-square-window-pos", fixed);
   const people = useMemo(
@@ -345,10 +349,26 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
   }, [records]);
   const openStock = (item: HoldingHint) => setDetail({ market: item.market, code: item.code, name: item.name });
 
-  useEffect(() => {
-    if (fixedInitialized.current) return;
+  useLayoutEffect(() => {
+    if (restored.current) return;
+    restored.current = true;
+    const query = readQuery();
+    setSelected(query.selected);
+    setDuanCategory(query.duanCategory);
+    setPage(query.page);
+    setDetail(parseSymbol(query.symbol));
     try { setFixed(localStorage.getItem("fire:trading-square-window-fixed") === "1"); } catch { /* ignore */ }
-    fixedInitialized.current = true;
+    const cached = readLocalFeed();
+    if (cached) {
+      setPosts(cached.posts);
+      setUpdatedByAuthor(cached.updatedByAuthor);
+      setSeen(readSeen(cached.posts));
+      setLoading(false);
+      writeLocalFeed(cached.posts, cached.updatedAt, cached.updatedByAuthor);
+    } else {
+      setSeen(readSeen([]));
+    }
+    setHydrated(true);
   }, []);
 
   const toggleFixed = () => setFixed((value) => {
@@ -361,13 +381,13 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
     let active = true;
     const load = async () => {
       try {
-        const response = await fetch("/api/trading-square/feed", { cache: "no-store", signal: AbortSignal.timeout(4000) });
+        const response = await fetch("/api/trading-square/feed", { cache: "no-store", signal: AbortSignal.timeout(FEED_FETCH_MS) });
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json() as FeedPayload;
         if (!active) return;
         const nextUpdated = data.updatedByAuthor ?? emptyTimes();
         setPosts((current) => {
-          const nextPosts = mergeFeedPosts(current, data.posts ?? []);
+          const nextPosts = takeNewest(mergeFeedPosts(current, data.posts ?? []), TRADING_SQUARE_FEED_LIMIT);
           writeLocalFeed(nextPosts, data.updatedAt ?? null, nextUpdated);
           return nextPosts;
         });
@@ -390,13 +410,13 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
     if (!refreshing || pollLeft.current <= 0) return;
     const timer = window.setTimeout(() => {
       pollLeft.current -= 1;
-      void fetch("/api/trading-square/feed", { cache: "no-store", signal: AbortSignal.timeout(4000) })
+      void fetch("/api/trading-square/feed", { cache: "no-store", signal: AbortSignal.timeout(FEED_FETCH_MS) })
         .then((response) => (response.ok ? response.json() : null))
         .then((data: FeedPayload | null) => {
           if (!data) return;
           const nextUpdated = data.updatedByAuthor ?? emptyTimes();
           setPosts((current) => {
-            const nextPosts = mergeFeedPosts(current, data.posts ?? []);
+            const nextPosts = takeNewest(mergeFeedPosts(current, data.posts ?? []), TRADING_SQUARE_FEED_LIMIT);
             writeLocalFeed(nextPosts, data.updatedAt ?? null, nextUpdated);
             return nextPosts;
           });
@@ -424,15 +444,16 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
   }), [people, posts]);
 
   const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
-  const safePage = Math.min(page, pages);
+  const safePage = visible.length === 0 ? Math.max(1, page) : Math.min(page, pages);
 
   useEffect(() => {
     if (selected !== "duan" && duanCategory !== "all") setDuanCategory("all");
   }, [duanCategory, selected]);
 
   useEffect(() => {
+    if (!hydrated) return;
     writeQuery(selected, duanCategory, safePage, detail ? `${detail.market}:${detail.code}` : "");
-  }, [detail, duanCategory, safePage, selected]);
+  }, [detail, duanCategory, hydrated, safePage, selected]);
 
   useEffect(() => {
     if (page !== safePage) setPage(safePage);
@@ -549,6 +570,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
             const showOriginal = original[post.id] === true;
             const author = people.find((person) => person.id === post.author) ?? people[0];
             const bodyText = showOriginal ? post.text : (post.textZh ?? post.text);
+            const displayText = (bodyText || "").trim();
             return (
               <article key={`${post.author}-${post.id}`} className="px-4 py-5 sm:px-5">
                 <div className="flex gap-3">
@@ -561,7 +583,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
                       <span className="text-faint">·</span>
                       <time className="text-muted" dateTime={post.date}>{formatPostTime(post.date)}</time>
                     </div>
-                    {bodyText.trim() ? <PostBody text={bodyText} holdings={holdings} onStock={openStock} /> : null}
+                    {displayText ? <PostBody text={displayText} holdings={holdings} onStock={openStock} /> : null}
                     <PostImages urls={post.images} />
                     {post.quote && (
                       <div className="mt-3 rounded-xl border border-edge bg-bg-gray/60 px-3 py-2.5 dark:border-white/10 dark:bg-white/[.04]">

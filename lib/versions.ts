@@ -2706,6 +2706,10 @@ export const V0_1_27_ENTRY: VersionEntry = {
     desc: "加了雪球登录 Cookie 后段永平仍停在 9 月 2 日。根因不是 Cookie 没带上，而是抓取走了 `/v4/statuses/user_timeline.json?type=0`：xueqiu.com 被 WAF 返回 HTML 挑战页，api.xueqiu.com 的 v4+type=0 只给较早的原创帖，新回复/转发不会出现，刷新却被当成成功并写回旧缓存。改为优先请求 api.xueqiu.com 的 `/statuses/user_timeline.json`（完整时间线，实测含 9 月 10 日新帖），拉长超时、按数字判断 error_code（避免字符串 \"0\" 被当成失败）。设置保存雪球 Cookie 时忽略空串和 ********，防止 GET 脱敏把已保存会话覆盖掉。tsc 无错误。",
     kind: "fix"
   }, {
+    title: "修复交易广场页水合报错（段永平全量时间线撑爆 feed）",
+    desc: "雪球完整时间线修好后段永平缓存从约 200 条涨到 700+ 条（本地 769 / 线上 776），/api/trading-square/feed 约 700KB+。交易广场首帧从 localStorage 读这份缓存，服务端只能渲空列表，React 19 水合对不上整页报错；4 秒超时也容易把大包打断。修复：列表接口与浏览器缓存只保留最近 200 条，段永平落盘同样截断；首帧用空列表对齐 SSR，缓存和 URL 筛选在 useLayoutEffect 恢复；拉接口超时改为 12 秒。tsc 无错误。",
+    kind: "fix"
+  }, {
     title: "修复刷新时闪现市场色块（设置里已关闭仍会闪一下）",
     desc: "现象：设置 → 股票设置 → 市场色块「默认显示」关掉后，刷新任意页面仍会先冒出几块市场色块再消失。根因：色块读的是 lib/marketBadge.ts 的模块级 store，初始值固定为「显示 + 默认配色」，而服务端设置只在 RecordsApp 的 useLayoutEffect 里应用 —— effect 只在水合之后跑，所以服务端渲染出的 HTML 里本来就有色块，浏览器先画出这版 HTML，等水合隐藏。修复：新增 primeMarketBadges()（渲染期写入模块状态、不通知订阅者，避免打断水合；值没变时空操作），RecordsApp 在渲染一开始就按服务端设置初始化，服务端与客户端首帧一致；applyMarketBadges() 改为仅在值变化时通知。附带收益：自定义配色的闪动也一并消失（同一机制）。验证：同一账号（色块关闭）对 /holdings 的服务端 HTML 做前后对比 —— 修复前含 1 处色块（色块专用 class + style 默认蓝 #3b82f6），修复后 0 处，其余内容一致；Node 里直接验证 store 初始（visible=true / US #3b82f6）与 prime 后（visible=false / 自定义色）。tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。",
     kind: "fix"

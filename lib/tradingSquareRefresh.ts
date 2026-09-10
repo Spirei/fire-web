@@ -5,6 +5,7 @@ import { sniffImageExt } from "@/lib/imageSecurity";
 import { isAllowedRemoteImageUrl, isLocalPostImageUrl } from "@/lib/tradingSquareImages";
 import { getSiteSettings } from "@/lib/settings";
 import { readJsonFile, writeJsonAtomic } from "@/lib/tradingSquareCache";
+import { DUAN_CACHE_LIMIT, takeNewest } from "@/lib/tradingSquareLimits";
 import { backfillTrumpTranslations, translateTrumpPostsNow } from "@/lib/tradingSquareTranslate";
 import { proxyFetch } from "@/lib/net";
 
@@ -495,7 +496,7 @@ async function fillMissingQuotes(posts: DuanPost[]): Promise<DuanPost[]> {
 export async function refreshDuanPosts(): Promise<DuanPost[]> {
   if (duanRunning) return readDuanPosts();
   duanRunning = true;
-  const existing = readDuanPosts();
+  const existing = takeNewest(readDuanPosts(), DUAN_CACHE_LIMIT);
   const known = new Set(existing.map((post) => post.id));
   const live: DuanPost[] = [];
   const maxPages = existing.length < 50 ? 15 : 8;
@@ -541,7 +542,7 @@ export async function refreshDuanPosts(): Promise<DuanPost[]> {
       if (next.quote && !quoteImages) delete next.quote.images;
       merged.set(item.id, next);
     });
-    const posts = Array.from(merged.values()).map((item) => withoutRemoteImages(item, localMap)).sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date));
+    const posts = takeNewest(Array.from(merged.values()).map((item) => withoutRemoteImages(item, localMap)), DUAN_CACHE_LIMIT);
     try { writeJsonAtomic(DUAN_FILE, posts); } catch { /* read-only deployment */ }
     return posts;
   } catch {
