@@ -11,6 +11,7 @@ import SiteLogo from "@/components/SiteLogo";
 import IndexTicker from "@/components/IndexTicker";
 import Toaster from "@/components/Toaster";
 import { getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
+import { CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/lib/currencyPrefs";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export default async function SlugLayout({
   const { slug } = await params;
   const path = "/" + (slug || []).join("/");
   const settings = getSiteSettings();
+  const currencyCookie = (await cookies()).get(DISPLAY_CURRENCY_COOKIE)?.value as CurrencyCode | undefined;
   // 资产盈亏分析：应用壳内隐藏页签（不进导航菜单），直接按路径进入
   const specialTab = path === "/asset-pnl-analysis" ? { key: "pnl" } : null;
   let tab = specialTab ?? settings.tabs.find((t) => (t.url || `/${t.key}`) === path);
@@ -80,6 +82,7 @@ export default async function SlugLayout({
       </header>
 
       <main className="app-shell-main py-14">
+        <CurrencyProvider initialCurrency={currencyCookie ?? null}>
         <RecordsApp
           initialTab={tab.key}
           initialSymbol={initialSymbol}
@@ -100,6 +103,7 @@ export default async function SlugLayout({
             translationEnabled: settings.translationEnabled
           }}
         />
+        </CurrencyProvider>
       </main>
 
       <footer className="app-shell-footer border-t border-edge bg-white px-6 pb-7 pt-10">
