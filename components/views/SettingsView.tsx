@@ -2401,7 +2401,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           value={!site.xueqiuCookie && site.xueqiuCookieConfigured ? "********" : (site.xueqiuCookie || "")}
                           onFocus={(e) => { if (e.currentTarget.value === "********") e.currentTarget.value = ""; }}
                           onChange={(e) => setSite((s) => ({ ...s, xueqiuCookie: e.target.value }))}
-                          onBlur={(e) => { const v = e.currentTarget.value.trim(); if (v) fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ xueqiuCookie: v }) }).then(() => setSite((s) => ({ ...s, xueqiuCookie: v }))).catch(() => {}); }}
+                          onBlur={(e) => {
+                            const v = e.currentTarget.value.trim();
+                            if (!v || v === "********") return;
+                            fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ xueqiuCookie: v }) })
+                              .then(() => setSite((s) => ({ ...s, xueqiuCookie: v, xueqiuCookieConfigured: true })))
+                              .catch(() => {});
+                          }}
                         />
                         <span className={`ml-2 inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle ring-2 ring-white dark:ring-[#151b26] ${site.xueqiuCookieConfigured ? "bg-emerald-500" : "bg-slate-300"}`} title={site.xueqiuCookieConfigured ? "已配置" : "未配置"} />
                       </div>

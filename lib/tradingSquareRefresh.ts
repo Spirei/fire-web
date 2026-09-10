@@ -61,21 +61,30 @@ function mergeSetCookie(existing: string, setCookies: string[]): string {
   return [...map.entries()].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 
+function xueqiuErrorCode(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 async function xueqiuFetch(pathAndQuery: string): Promise<unknown | null> {
-  // A configured (logged-in) Xueqiu cookie bypasses Aliyun WAF and authenticates
-  // api.xueqiu.com (which returns error 400016 without a login session).
+  // A configured (logged-in) Xueqiu cookie authenticates api.xueqiu.com
+  // (anonymous requests return error 400016). xueqiu.com HTML hosts are behind
+  // Aliyun WAF and often return a 200 challenge page instead of JSON, so API
+  // host is tried first.
   const configured = getSiteSettings().xueqiuCookie;
   const headers: Record<string, string> = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
     Referer: "https://xueqiu.com/u/slowisquick",
-    Accept: "application/json"
+    Origin: "https://xueqiu.com",
+    Accept: "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
   };
   const cookie = configured || xueqiuCookie;
   if (cookie) headers.Cookie = cookie;
-  const urls = [`https://xueqiu.com${pathAndQuery}`, `https://api.xueqiu.com${pathAndQuery}`];
+  const urls = [`https://api.xueqiu.com${pathAndQuery}`, `https://xueqiu.com${pathAndQuery}`];
   for (const url of urls) {
     try {
-      const response = await proxyFetch(url, { headers, signal: AbortSignal.timeout(4000), cache: "no-store" });
+      const response = await proxyFetch(url, { headers, signal: AbortSignal.timeout(12_000), cache: "no-store" });
       const setCookies = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
       if (setCookies.length && !configured) {
         xueqiuCookie = mergeSetCookie(xueqiuCookie, setCookies);
@@ -84,7 +93,8 @@ async function xueqiuFetch(pathAndQuery: string): Promise<unknown | null> {
       const contentType = response.headers.get("content-type") || "";
       if (!response.ok || !contentType.includes("json")) continue;
       const json = await response.json() as { error_code?: unknown };
-      if (json && typeof json === "object" && json.error_code) continue;
+      // Xueqiu uses error_code 0 or "0" for success; a truthy string "0" must not be treated as failure.
+      if (json && typeof json === "object" && xueqiuErrorCode(json.error_code) !== 0) continue;
       return json;
     } catch {
       /* try next host */
@@ -487,13 +497,14 @@ export async function refreshDuanPosts(): Promise<DuanPost[]> {
   duanRunning = true;
   const existing = readDuanPosts();
   const known = new Set(existing.map((post) => post.id));
-  const needsQuoteBackfill = existing.some((post) => !post.quote && /^\s*回复@/.test(post.text));
   const live: DuanPost[] = [];
-  const maxPages = existing.length < 200 || needsQuoteBackfill ? 40 : 5;
+  const maxPages = existing.length < 50 ? 15 : 8;
   try {
     await warmXueqiuSession();
     for (let page = 1; page <= maxPages; page += 1) {
-      const data = await xueqiuFetch(`/v4/statuses/user_timeline.json?user_id=${DUAN_USER}&page=${page}&count=20&type=0`) as { statuses?: XueqiuStatus[] } | null;
+      // /v4/...?type=0 只返回较早的原创帖，雪球上的新回复/转发不会出现。
+      // /statuses/user_timeline.json 才是完整时间线（实测含 2026-09-10 的新帖）。
+      const data = await xueqiuFetch(`/statuses/user_timeline.json?user_id=${DUAN_USER}&page=${page}&count=20`) as { statuses?: XueqiuStatus[] } | null;
       if (!data) break;
       const batch = (data.statuses || []).map(mapDuanStatus).filter((item): item is DuanPost => item !== null);
       if (!batch.length) break;
@@ -503,7 +514,8 @@ export async function refreshDuanPosts(): Promise<DuanPost[]> {
         else known.add(item.id);
         live.push(item);
       }
-      if (existing.length >= 200 && !needsQuoteBackfill && overlap >= 3) break;
+      // 已经接到本地缓存里的旧帖，后面翻页只会更旧。
+      if (overlap >= 3) break;
     }
     const quoted = await fillMissingQuotes(live);
     if (!quoted.length) return existing;
