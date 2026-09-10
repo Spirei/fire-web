@@ -248,6 +248,7 @@ function parseSymbol(raw: string): { market: string; code: string; name: string 
 }
 
 const LINK_CLASS = "inline bg-transparent p-0 font-semibold text-brand-deep hover:underline";
+const MENTION_CLASS = "inline font-semibold text-[#1d9bf0] underline decoration-dashed decoration-1 underline-offset-[5px] decoration-[#1d9bf0]";
 
 function PostImages({ urls }: { urls?: string[] }) {
   const list = localUrls(urls).slice(0, 4);
@@ -322,7 +323,7 @@ function PostBody({
           }
           if (part.type === "mention") {
             return (
-              <a key={`m-${part.name}-${index}`} href={mentionHref(author, part.name)} target="_blank" rel="noreferrer" className={LINK_CLASS}>
+              <a key={`m-${part.name}-${index}`} href={mentionHref(author, part.name)} target="_blank" rel="noreferrer" className={MENTION_CLASS}>
                 {part.value}
               </a>
             );

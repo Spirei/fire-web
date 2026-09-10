@@ -190,18 +190,16 @@ export default function StockTextLink({
   useEffect(() => () => clearTimers(), []);
 
   useEffect(() => {
-    if (!open) return;
     let active = true;
     const cached = readCachedQuote(market, code);
     if (cached !== undefined) setQuote(cached);
-    else setQuote(undefined);
     void loadQuote(market, code).then((next) => {
       if (active) setQuote(next);
     });
     return () => {
       active = false;
     };
-  }, [code, market, open]);
+  }, [code, market]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -236,7 +234,11 @@ export default function StockTextLink({
         onPointerLeave={scheduleHide}
         onFocus={() => scheduleShow("mouse")}
         onBlur={scheduleHide}
-        className="inline cursor-pointer whitespace-nowrap bg-transparent p-0 font-semibold text-brand-deep underline decoration-dashed decoration-1 underline-offset-[5px]"
+        className={`inline cursor-pointer whitespace-nowrap bg-transparent p-0 font-semibold underline decoration-dashed decoration-1 underline-offset-[5px] ${
+          quote && Number.isFinite(quote.changePct)
+            ? quote.changePct >= 0 ? "text-up decoration-up" : "text-down decoration-down"
+            : "text-brand-deep decoration-brand-deep"
+        }`}
       >
         {value}
       </button>
