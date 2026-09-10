@@ -10,8 +10,8 @@ import SafeAssetImage from "@/components/SafeAssetImage";
 import StockDetailView from "@/components/StockDetailView";
 import StockTextLink from "@/components/StockTextLink";
 import { isLocalPostImageUrl } from "@/lib/tradingSquareImages";
-import { TRADING_SQUARE_FEED_LIMIT, takeNewest } from "@/lib/tradingSquareLimits";
-import { hasTranslatableText, normalizeCode, parseSymbolToken, splitTradingText, type HoldingHint } from "@/lib/tradingSquareText";
+import { TRADING_SQUARE_AUTHOR_LIMIT, takeNewestByAuthor } from "@/lib/tradingSquareLimits";
+import { hasTranslatableText, normalizeCode, normalizeTradingText, parseSymbolToken, splitTradingText, type HoldingHint } from "@/lib/tradingSquareText";
 import type { StockRecord } from "@/lib/types";
 
 type AuthorId = "trump" | "duan";
@@ -63,7 +63,7 @@ function readLocalFeed(): { posts: Post[]; updatedAt: string | null; updatedByAu
     const raw = JSON.parse(localStorage.getItem(FEED_CACHE_KEY) || "null") as { posts?: Post[]; updatedAt?: string | null; updatedByAuthor?: AuthorTimes } | null;
     if (Array.isArray(raw?.posts) && raw.posts.length) {
       return {
-        posts: takeNewest(raw.posts, TRADING_SQUARE_FEED_LIMIT),
+        posts: takeNewestByAuthor(raw.posts, TRADING_SQUARE_AUTHOR_LIMIT),
         updatedAt: raw.updatedAt ?? null,
         updatedByAuthor: raw.updatedByAuthor && typeof raw.updatedByAuthor === "object" ? raw.updatedByAuthor : emptyTimes()
       };
@@ -73,7 +73,7 @@ function readLocalFeed(): { posts: Post[]; updatedAt: string | null; updatedByAu
 }
 
 function writeLocalFeed(posts: Post[], updatedAt: string | null, updatedByAuthor: AuthorTimes) {
-  try { localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ posts: takeNewest(posts, TRADING_SQUARE_FEED_LIMIT), updatedAt, updatedByAuthor })); } catch { /* quota / private mode */ }
+  try { localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ posts: takeNewestByAuthor(posts, TRADING_SQUARE_AUTHOR_LIMIT), updatedAt, updatedByAuthor })); } catch { /* quota / private mode */ }
 }
 
 function readSeen(posts: Post[]): AuthorTimes {
@@ -277,8 +277,7 @@ function PostImages({ urls }: { urls?: string[] }) {
               loading="lazy"
               referrerPolicy="no-referrer"
               onError={(event) => { event.currentTarget.style.display = "none"; }}
-              className={`w-full cursor-pointer overflow-hidden rounded-xl border border-edge bg-bg-gray object-cover dark:border-white/10 dark:bg-white/[.04] ${list.length === 1 ? "max-h-80" : "h-36"}`}
-              style={{ objectFit: "cover" }}
+              className={`w-full cursor-pointer overflow-hidden rounded-xl border border-edge bg-bg-gray dark:border-white/10 dark:bg-white/[.04] ${list.length === 1 ? "max-h-[32rem] object-contain" : "h-36 object-cover"}`}
             />
           </PhotoView>
         ))}
@@ -287,28 +286,67 @@ function PostImages({ urls }: { urls?: string[] }) {
   );
 }
 
-function PostBody({ text, holdings, onStock, className = "mt-2 whitespace-pre-line break-words text-[15px] leading-7 text-ink dark:text-slate-200" }: { text: string; holdings: HoldingHint[]; onStock: (item: HoldingHint) => void; className?: string }) {
-  const parts = useMemo(() => splitTradingText(text, holdings), [holdings, text]);
+function mentionHref(author: AuthorId | undefined, name: string) {
+  if (author === "trump") return `https://truthsocial.com/@${encodeURIComponent(name)}`;
+  return `https://xueqiu.com/n/${encodeURIComponent(name)}`;
+}
+
+function PostBody({
+  text,
+  holdings,
+  onStock,
+  author,
+  lines = 5,
+  className = "mt-2 whitespace-pre-line break-words text-[15px] leading-7 text-ink dark:text-slate-200"
+}: {
+  text: string;
+  holdings: HoldingHint[];
+  onStock: (item: HoldingHint) => void;
+  author?: AuthorId;
+  lines?: number;
+  className?: string;
+}) {
+  const display = useMemo(() => normalizeTradingText(text), [text]);
+  const parts = useMemo(() => splitTradingText(display, holdings), [display, holdings]);
+  const [open, setOpen] = useState(false);
+  const long = display.length > lines * 32;
   return (
-    <div className={className}>
-      {parts.map((part, index) => {
-        if (part.type === "url") {
-          return <a key={`${part.value}-${index}`} href={part.value} target="_blank" rel="noreferrer" className={`${LINK_CLASS} break-all`}>{part.value}</a>;
-        }
-        if (part.type === "stock") {
-          return (
-            <StockTextLink
-              key={`${part.market}-${part.code}-${index}`}
-              value={part.value}
-              market={part.market}
-              code={part.code}
-              name={part.name}
-              onClick={() => onStock({ market: part.market, code: part.code, name: part.name })}
-            />
-          );
-        }
-        return <span key={index}>{part.value}</span>;
-      })}
+    <div>
+      <div
+        className={className}
+        style={!open && long ? { display: "-webkit-box", WebkitLineClamp: lines, WebkitBoxOrient: "vertical", overflow: "hidden" } : undefined}
+      >
+        {parts.map((part, index) => {
+          if (part.type === "url") {
+            return <a key={`${part.value}-${index}`} href={part.value} target="_blank" rel="noreferrer" className={`${LINK_CLASS} break-all`}>{part.value}</a>;
+          }
+          if (part.type === "mention") {
+            return (
+              <a key={`m-${part.name}-${index}`} href={mentionHref(author, part.name)} target="_blank" rel="noreferrer" className={LINK_CLASS}>
+                {part.value}
+              </a>
+            );
+          }
+          if (part.type === "stock") {
+            return (
+              <StockTextLink
+                key={`${part.market}-${part.code}-${index}`}
+                value={part.value}
+                market={part.market}
+                code={part.code}
+                name={part.name}
+                onClick={() => onStock({ market: part.market, code: part.code, name: part.name })}
+              />
+            );
+          }
+          return <span key={index}>{part.value}</span>;
+        })}
+      </div>
+      {long ? (
+        <button type="button" onClick={() => setOpen((value) => !value)} className="mt-1 text-xs font-semibold text-brand-deep">
+          {open ? "收起" : "展开"}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -387,7 +425,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
         if (!active) return;
         const nextUpdated = data.updatedByAuthor ?? emptyTimes();
         setPosts((current) => {
-          const nextPosts = takeNewest(mergeFeedPosts(current, data.posts ?? []), TRADING_SQUARE_FEED_LIMIT);
+          const nextPosts = takeNewestByAuthor(mergeFeedPosts(current, data.posts ?? []), TRADING_SQUARE_AUTHOR_LIMIT);
           writeLocalFeed(nextPosts, data.updatedAt ?? null, nextUpdated);
           return nextPosts;
         });
@@ -416,7 +454,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
           if (!data) return;
           const nextUpdated = data.updatedByAuthor ?? emptyTimes();
           setPosts((current) => {
-            const nextPosts = takeNewest(mergeFeedPosts(current, data.posts ?? []), TRADING_SQUARE_FEED_LIMIT);
+            const nextPosts = takeNewestByAuthor(mergeFeedPosts(current, data.posts ?? []), TRADING_SQUARE_AUTHOR_LIMIT);
             writeLocalFeed(nextPosts, data.updatedAt ?? null, nextUpdated);
             return nextPosts;
           });
@@ -583,7 +621,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
                       <span className="text-faint">·</span>
                       <time className="text-muted" dateTime={post.date}>{formatPostTime(post.date)}</time>
                     </div>
-                    {displayText ? <PostBody text={displayText} holdings={holdings} onStock={openStock} /> : null}
+                    {displayText ? <PostBody text={displayText} holdings={holdings} onStock={openStock} author={post.author} /> : null}
                     <PostImages urls={post.images} />
                     {post.quote && (
                       <div className="mt-3 rounded-xl border border-edge bg-bg-gray/60 px-3 py-2.5 dark:border-white/10 dark:bg-white/[.04]">
@@ -592,6 +630,8 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
                           text={post.quote.text}
                           holdings={holdings}
                           onStock={openStock}
+                          author={post.author}
+                          lines={4}
                           className="mt-1 whitespace-pre-line break-words text-[13px] leading-6 text-ink-2 dark:text-slate-300"
                         />
                         <PostImages urls={post.quote.images} />

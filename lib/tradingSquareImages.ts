@@ -35,6 +35,11 @@ function isAllowedImageHost(host: string): boolean {
   return false;
 }
 
+/** 雪球 `!thumb.jpg` / `!custom.jpg` 是压缩图；去掉 `!` 后缀才是原图。 */
+export function originalRemoteImageUrl(url: string): string {
+  return url.replace(/!.*$/, "");
+}
+
 export function isAllowedRemoteImageUrl(url: string): boolean {
   try {
     const parsed = new URL(url);

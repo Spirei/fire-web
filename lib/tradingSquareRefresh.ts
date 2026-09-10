@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { sniffImageExt } from "@/lib/imageSecurity";
-import { isAllowedRemoteImageUrl, isLocalPostImageUrl } from "@/lib/tradingSquareImages";
+import { isAllowedRemoteImageUrl, isLocalPostImageUrl, originalRemoteImageUrl } from "@/lib/tradingSquareImages";
 import { getSiteSettings } from "@/lib/settings";
 import { readJsonFile, writeJsonAtomic } from "@/lib/tradingSquareCache";
-import { DUAN_CACHE_LIMIT, takeNewest } from "@/lib/tradingSquareLimits";
+import { normalizeTradingText } from "@/lib/tradingSquareText";
 import { backfillTrumpTranslations, translateTrumpPostsNow } from "@/lib/tradingSquareTranslate";
 import { proxyFetch } from "@/lib/net";
 
@@ -37,6 +37,8 @@ type XueqiuStatus = {
   bmiddle_pic?: unknown;
   thumbnail_pic?: unknown;
   cover_pic?: unknown;
+  firstImg?: string;
+  image_info_list?: Array<{ filename?: string; url?: string; original?: string }>;
   user?: { id?: number | string; screen_name?: string; name?: string };
   retweeted_status?: XueqiuStatus;
   retweet_status?: XueqiuStatus;
@@ -124,16 +126,7 @@ let trumpRunning = false;
 let duanRunning = false;
 
 function clean(value: string) {
-  return value
-    .replace(/<br\s*\/?\s*>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&#039;|&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/\s+\n/g, "\n")
-    .replace(/\n\s+/g, "\n")
-    .trim();
+  return normalizeTradingText(value);
 }
 
 export function postTimestamp(value: string): number {
@@ -183,11 +176,11 @@ function uniqueImages(urls: string[]): string[] | undefined {
   const seen = new Set<string>();
   const list: string[] = [];
   urls.forEach((url) => {
-    const cleanUrl = url.replace(/!.*$/, "");
-    if (seen.has(cleanUrl) || seen.has(url)) return;
-    seen.add(cleanUrl);
-    seen.add(url);
-    list.push(url);
+    const upgraded = originalRemoteImageUrl(url);
+    if (!isPostImage(upgraded) && !isPostImage(url)) return;
+    if (seen.has(upgraded)) return;
+    seen.add(upgraded);
+    list.push(upgraded);
   });
   return list.length ? list.slice(0, 9) : undefined;
 }
@@ -198,14 +191,19 @@ function imagesFromHtml(html: string): string[] {
 
 function extractXueqiuImages(item: XueqiuStatus): string[] | undefined {
   const urls: string[] = [];
-  collectUrls(item.pic, urls);
+  collectUrls(item.original_pic, urls);
+  collectUrls(item.image_info_list, urls);
+  (item.image_info_list || []).forEach((info) => {
+    if (info?.filename) collectUrls(`https://xqimg.imedao.com/${info.filename}`, urls);
+  });
+  imagesFromHtml(String(item.text || item.description || "")).forEach((url) => collectUrls(url, urls));
   collectUrls(item.pics, urls);
   collectUrls(item.pic_urls, urls);
-  collectUrls(item.original_pic, urls);
   collectUrls(item.bmiddle_pic, urls);
-  collectUrls(item.thumbnail_pic, urls);
   collectUrls(item.cover_pic, urls);
-  imagesFromHtml(String(item.text || item.description || "")).forEach((url) => collectUrls(url, urls));
+  collectUrls(item.pic, urls);
+  collectUrls(item.firstImg, urls);
+  collectUrls(item.thumbnail_pic, urls);
   return uniqueImages(urls);
 }
 
@@ -248,16 +246,25 @@ function rememberLocal(author: string, key: string, url: string) {
   folder.set(key, url);
 }
 
+function isTinyLocalImage(local: string): boolean {
+  try {
+    return fs.statSync(path.join(process.cwd(), "public", local.replace(/^\//, ""))).size < 20_000;
+  } catch {
+    return true;
+  }
+}
+
 async function downloadImage(author: string, url: string): Promise<string | undefined> {
   if (author !== "trump" && author !== "duan") return undefined;
   if (isLocalPostImageUrl(url)) return url;
-  if (!isAllowedRemoteImageUrl(url)) return undefined;
-  const key = sourceKey(url);
+  const fetchUrl = originalRemoteImageUrl(url);
+  if (!isAllowedRemoteImageUrl(fetchUrl)) return undefined;
+  const key = sourceKey(fetchUrl);
   const existing = lookupLocal(author, key);
-  if (existing && isLocalPostImageUrl(existing)) return existing;
+  if (existing && isLocalPostImageUrl(existing) && !isTinyLocalImage(existing)) return existing;
   try {
-    const referer = /xueqiu|imedao|xqimg/i.test(url) ? "https://xueqiu.com/" : "https://trumpstruth.org/";
-    const response = await proxyFetch(url, {
+    const referer = /xueqiu|imedao|xqimg/i.test(fetchUrl) ? "https://xueqiu.com/" : "https://trumpstruth.org/";
+    const response = await proxyFetch(fetchUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         Referer: referer,
@@ -268,7 +275,7 @@ async function downloadImage(author: string, url: string): Promise<string | unde
       redirect: "follow"
     });
     if (!response.ok) return undefined;
-    if (!isAllowedRemoteImageUrl(response.url || url)) return undefined;
+    if (!isAllowedRemoteImageUrl(response.url || fetchUrl)) return undefined;
     const buf = Buffer.from(await response.arrayBuffer());
     if (!buf.length || buf.length > MAX_IMAGE_BYTES) return undefined;
     const ext = sniffImageExt(buf);
@@ -496,7 +503,7 @@ async function fillMissingQuotes(posts: DuanPost[]): Promise<DuanPost[]> {
 export async function refreshDuanPosts(): Promise<DuanPost[]> {
   if (duanRunning) return readDuanPosts();
   duanRunning = true;
-  const existing = takeNewest(readDuanPosts(), DUAN_CACHE_LIMIT);
+  const existing = readDuanPosts();
   const known = new Set(existing.map((post) => post.id));
   const live: DuanPost[] = [];
   const maxPages = existing.length < 50 ? 15 : 8;
@@ -542,7 +549,7 @@ export async function refreshDuanPosts(): Promise<DuanPost[]> {
       if (next.quote && !quoteImages) delete next.quote.images;
       merged.set(item.id, next);
     });
-    const posts = takeNewest(Array.from(merged.values()).map((item) => withoutRemoteImages(item, localMap)), DUAN_CACHE_LIMIT);
+    const posts = Array.from(merged.values()).map((item) => withoutRemoteImages(item, localMap)).sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date));
     try { writeJsonAtomic(DUAN_FILE, posts); } catch { /* read-only deployment */ }
     return posts;
   } catch {

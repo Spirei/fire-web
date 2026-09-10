@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import { readJsonFile } from "@/lib/tradingSquareCache";
-import { TRADING_SQUARE_FEED_LIMIT } from "@/lib/tradingSquareLimits";
+import { TRADING_SQUARE_AUTHOR_LIMIT, takeNewestByAuthor } from "@/lib/tradingSquareLimits";
 import { getSiteSettings } from "@/lib/settings";
 import { backfillTrumpTranslations } from "@/lib/tradingSquareTranslate";
 import { isDuanRefreshing, isTrumpRefreshing, postTimestamp, readTrumpPosts, refreshDuanPosts, refreshTrumpPosts, withoutRemoteImages } from "@/lib/tradingSquareRefresh";
@@ -34,7 +34,7 @@ function assembleFeed() {
     return withoutRemoteImages(textZh ? { ...post, textZh, author: "trump" as const } : { ...post, author: "trump" as const });
   });
   const duan = readJsonFile<CachedPost[]>(DUAN, []).map((post) => withoutRemoteImages({ ...post, author: "duan" as const }));
-  const posts = [...trump, ...duan].sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date)).slice(0, TRADING_SQUARE_FEED_LIMIT);
+  const posts = takeNewestByAuthor([...trump, ...duan].sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date)), TRADING_SQUARE_AUTHOR_LIMIT);
   assembled = {
     key,
     posts,

@@ -1,7 +1,5 @@
-/** 列表接口与浏览器缓存只保留最近 N 条，避免段永平全量时间线把页面撑爆。 */
-export const TRADING_SQUARE_FEED_LIMIT = 200;
-/** 段永平本地 JSON 缓存上限（按时间新到旧）。 */
-export const DUAN_CACHE_LIMIT = 200;
+/** 列表接口每位作者最多返回最近 N 条；磁盘缓存仍保留完整历史供翻页重叠。 */
+export const TRADING_SQUARE_AUTHOR_LIMIT = 200;
 
 function postTime(value?: string): number {
   const time = Date.parse(value || "");
@@ -14,4 +12,17 @@ export function takeNewest<T extends { date?: string }>(posts: T[], limit: numbe
     .slice()
     .sort((a, b) => postTime(b.date) - postTime(a.date))
     .slice(0, limit);
+}
+
+export function takeNewestByAuthor<T extends { date?: string; author?: string }>(posts: T[], perAuthor: number): T[] {
+  const counts = new Map<string, number>();
+  const out: T[] = [];
+  for (const post of takeNewest(posts, posts.length)) {
+    const key = post.author || "_";
+    const n = counts.get(key) || 0;
+    if (n >= perAuthor) continue;
+    counts.set(key, n + 1);
+    out.push(post);
+  }
+  return out;
 }

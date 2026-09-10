@@ -13,7 +13,52 @@ export function hasTranslatableText(text?: string): boolean {
 export type TextPart =
   | { type: "text"; value: string }
   | { type: "url"; value: string }
+  | { type: "mention"; value: string; name: string }
   | { type: "stock"; value: string; market: string; code: string; name: string };
+
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: " ", amp: "&", quot: '"', lt: "<", gt: ">", apos: "'",
+  ldquo: "“", rdquo: "”", lsquo: "‘", rsquo: "’", mdash: "—", ndash: "–", hellip: "…"
+};
+
+function fromCodePoint(code: number): string | null {
+  if (!Number.isInteger(code) || code <= 0 || code > 0x10ffff) return null;
+  if (code >= 0xd800 && code <= 0xdfff) return null;
+  return String.fromCodePoint(code);
+}
+
+function decodeHtmlEntities(value: string): string {
+  let text = value;
+  for (let pass = 0; pass < 2; pass += 1) {
+    text = text
+      .replace(/&([a-z]+);/gi, (match, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? match)
+      .replace(/&#x([0-9a-f]+);/gi, (match, hex: string) => fromCodePoint(parseInt(hex, 16)) ?? match)
+      .replace(/&#(\d+);/g, (match, digits: string) => fromCodePoint(Number(digits)) ?? match);
+  }
+  return text;
+}
+
+function stripMarkdownLite(value: string): string {
+  return value
+    .replace(/^[ \t]*\*[ \t]+/gm, "• ")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*([^*\n]+)\*/g, "$1");
+}
+
+/** 解码 HTML 实体、去掉 Gemini/雪球残留的 markdown，已清洗的文本再跑一遍保持原样。 */
+export function normalizeTradingText(value: string): string {
+  if (!value) return "";
+  return stripMarkdownLite(decodeHtmlEntities(
+    value
+      .replace(/<br\s*\/?\s*>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+  ))
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 const GENERIC_NAMES = new Set([
   "公司", "集团", "科技", "中国", "控股", "股份", "国际", "投资", "银行", "证券",
@@ -142,6 +187,12 @@ function collectMatches(text: string, holdings: HoldingHint[]): Array<{ start: n
     if (!parsed) return null;
     return { type: "stock", value: match[0], ...parsed, name: parsed.code };
   });
+
+  push(/(?<![A-Za-z0-9._])@([A-Za-z0-9_\-\u4e00-\u9fff.]{1,32})/g, (match) => ({
+    type: "mention",
+    value: match[0],
+    name: match[1]
+  }));
 
   const unique = new Map<string, HoldingHint>();
   holdings.forEach((item) => {
