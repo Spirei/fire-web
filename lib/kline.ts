@@ -11,6 +11,7 @@
  */
 
 import { fetchFutuDailyKline } from "./futuQuotes";
+import { proxyFetch } from "./net";
 
 export interface KlineItem {
   d: string; // YYYY-MM-DD
@@ -89,7 +90,8 @@ async function fetchYahooDaily(code: string, limit: number, adjust: "qfq" | "non
   // query2 实测更稳（query1 对美股大 range 常 429 限流），优先 query2，其次 query1。
   for (const host of ["query2.finance.yahoo.com", "query1.finance.yahoo.com"]) {
     try {
-      const response = await fetch(
+      // Yahoo 日 K 属境外源：优先走可选代理（STOCKLOG_PROXY），失败自动回退直连
+      const response = await proxyFetch(
         `https://${host}/v8/finance/chart/${encodeURIComponent(code)}?interval=1d&range=${range}`,
         // Yahoo 对完整 Chrome UA（Chrome/126...）会 429 限流，简单 Mozilla UA 更稳。
         { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, signal: AbortSignal.timeout(16000) }

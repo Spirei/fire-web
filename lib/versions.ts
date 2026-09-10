@@ -2672,6 +2672,10 @@ export const V0_1_26_ENTRY: VersionEntry = {
     title: "台币接实时汇率 + 降级提示扩到自选股 + 冒烟补公开接口",
     desc: "1) 台币（TWD）过去只能一直用静态兜底汇率：汇率源富兰克福是 ECB 口径，不含台币（实测混在批量里被静默忽略、单独查 404），台湾市场换算偏差约 1–3%。现在 lib/rates.ts 对上游缺失的币种改用腾讯外汇补齐（whUSDTWD，与行情同主机、走设置里的 quoteApiUrl，无需 Referer、境内可直连），实测 TWD 由固定 0.031（≈32.3）变为实时 31.517；补齐失败仍回退上次成功值 / 静态兜底，不影响主流程。2) 行情降级提示判定放宽并接入自选股：有持仓的美股降级必报，只看自选股时至少两只走腾讯兜底才报（富途本就不提供美股 OTC 行情，单只 OTC 不再误报）。3) 冒烟测试补 9 项公开接口检查（交易广场 feed / 段永平 / 特朗普、行情、美股五日分时、个股详情、汇率含台币），测试项 101 → 110。4) 删除已被 app/api-docs/page.tsx 取代的 components/views/ApiDocsView.tsx（179 行死代码）。tsc 无错误、冒烟 110/110 全 PASS。",
     kind: "feature"
+  }, {
+    title: "修复出站代理一直失效（undici 与 Node fetch 不匹配）+ 全部 Yahoo 请求接入代理",
+    desc: "排查「配了 STOCKLOG_PROXY 线上仍取不到 Yahoo 扩展行情」：lib/net.ts 用 Node 自带的全局 fetch 承载 npm 安装的 undici ProxyAgent，两者不是同一份实现，请求必定抛 `invalid onRequestStart method (UND_ERR_INVALID_ARG)` 并被 catch 静默回退直连——所以代理看起来「开着」，其实从未生效。修复：代理分支改用 undici 包自己的 fetch（`import { fetch as undiciFetch } from \"undici\"`）与 ProxyAgent 配套，未启用代理或代理失败仍回退全局 fetch 直连。同时把仍走裸 fetch 的 Yahoo 调用全部接入 proxyFetch：lib/usExtendedQuote.ts（盘前 / 盘后 / 夜盘报价）、lib/quotes.ts（美股分时迷你图）、lib/kline.ts（美股日 K）、/api/kline/five-day、/api/kline/session-day、/api/v1/index-kline；境内源（腾讯 / 新浪 / 东财）保持直连。实测：带代理启动的隔离实例上 /api/kline/session-day 由 502 变为 200 并返回盘前点（AAPL 04:00 起），未经代理时仍直连不受影响；线上群晖 .env 的 STOCKLOG_PROXY 已由 off 改为 http://192.168.28.55:1088（下次重建容器生效）。AGENTS.md 记录该坑。tsc 无错误、构建通过。",
+    kind: "fix"
   }]
 };
 

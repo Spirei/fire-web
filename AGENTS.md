@@ -127,6 +127,7 @@ Review 自查清单（按项目实际走一遍）：
 - 腾讯行情接口（qt.gtimg.cn）**批量查询已失效**：每次请求只返回第一条记录，所有行情批量调用（fetchQuotes / 财报图标价 / 迷你走势）必须**逐条请求 + 并发限制**（lib/quotes.ts fetchBatch 已实现并发 6）；任何新增行情拉取逻辑禁止批量拼接，回填脚本 scripts/backfill-quotes.mjs 同样逐条。
 - 富途快照接口（`get_market_snapshot`）**整批一起返回**：只要批量里有一只不被支持的代码（典型是美股 OTC，如 `SFTBY` 软银 ADR，报错「暂不提供美股 OTC 市场行情」），整批都会失败 —— 曾导致全部美股拿不到富途行情、退回腾讯常规盘口径，**当日盈亏一整天冻结在上一交易日**。scripts/futu_quotes.py 的 `_market_snapshot` 已做容错（剔除报错点名的代码重试 → 二分定位 → 其余正常返回，不支持的记入 `skipped` 走兜底源）；**任何新增的富途批量调用都必须沿用这套容错**，禁止再用「一次拿不到就整批放弃」的写法。
 - 美股扩展时段（盘前 / 盘后 / 夜盘）只能靠富途或 Yahoo：腾讯只给常规盘口径（涨跌停在上一交易日收盘）。Yahoo 在境内直连不稳定，lib/usExtendedQuote.ts 已加 60 秒熔断（双主机都失败即快速失败，避免整批 6 秒超时拖到十几秒）；**降级到腾讯时界面必须能看出来**（components/QuoteSourceBadge.tsx 的「美股·腾讯兜底」胶囊），不要出现「数值不动但毫无提示」。
+- 境外数据源（Yahoo / CoinGecko / SEC 等）统一走 `lib/net.ts` 的 `proxyFetch`，由 `STOCKLOG_PROXY` 控制（`off` 显式关闭）；**代理分支必须用 undici 包自己的 fetch**（`import { fetch as undiciFetch } from "undici"`）配合 `ProxyAgent` —— Node 自带的全局 fetch 与 npm 安装的 undici 不是同一份实现，把后者的 ProxyAgent 当 dispatcher 传给全局 fetch 会报 `invalid onRequestStart method (UND_ERR_INVALID_ARG)` 并静默回退直连（曾导致「配了代理仍然取不到 Yahoo 扩展行情」）。腾讯 / 新浪 / 东财等境内源保持直连，不要套代理。
 - 日股 / 韩股现价：腾讯前缀 `jp{code}`（去 .T）/ `kr{code}`（去 .KS/.KQ），仅素材库回填与行情脚本使用；自选股 / 持仓行情接口暂不支持 JP/KR。
 - 手动添加的美股 ETF（VOO / IVV / VTI / TLT）东财不返回市值（基金规模），如需要市值按公开净资产近似填写并注明；BRK.B 用东财 secid `106.BRK_B`（下划线）、DJT `105.DJT`、北交所 `0.{code}`。
 

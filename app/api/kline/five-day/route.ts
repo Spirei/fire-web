@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
+import { proxyFetch } from "@/lib/net";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ function nyParts(timestamp: number) {
 }
 
 async function yahooFiveDay(code: string): Promise<Point[]> {
-  const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(code)}?interval=5m&range=5d&includePrePost=false`, { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, signal: AbortSignal.timeout(12000) });
+  const response = await proxyFetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(code)}?interval=5m&range=5d&includePrePost=false`, { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, signal: AbortSignal.timeout(12000) });
   if (!response.ok) return [];
   const result = (await response.json().catch(() => null))?.chart?.result?.[0];
   const timestamps: number[] = Array.isArray(result?.timestamp) ? result.timestamp : [];

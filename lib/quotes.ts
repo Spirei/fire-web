@@ -3,6 +3,7 @@ import { getSiteSettings } from "./settings";
 import { fetchUsExtendedQuote } from "./usExtendedQuote";
 import { fetchFutuQuotes, searchFutu } from "./futuQuotes";
 import { getCryptoQuote } from "./assetQuotes";
+import { proxyFetch } from "./net";
 
 const DEFAULT_QUOTE_URL = "https://qt.gtimg.cn/q=";
 const DEFAULT_SEARCH_URL = "https://smartbox.gtimg.cn/s3/?v=2&q={q}&t=all";
@@ -503,7 +504,8 @@ async function fetchYahooIntraday(item: QuoteItem): Promise<Intraday | null> {
   const cached = yahooIntradayCache.get(key);
   if (cached && Date.now() - cached.at < 30_000) return cached.data;
   for (const symbol of yahooMinuteSymbols(item)) try {
-    const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d&includePrePost=${item.market === "US" ? "true" : "false"}&events=div%2Csplits`, {
+    // Yahoo 属境外源：走可选代理（STOCKLOG_PROXY），代理不可达自动回退直连
+    const response = await proxyFetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d&includePrePost=${item.market === "US" ? "true" : "false"}&events=div%2Csplits`, {
       headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, signal: AbortSignal.timeout(12_000)
     });
     if (!response.ok) continue;

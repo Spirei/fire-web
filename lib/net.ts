@@ -10,7 +10,7 @@
  */
 
 import net from "node:net";
-import { ProxyAgent } from "undici";
+import { ProxyAgent, fetch as undiciFetch } from "undici";
 
 const PROBE_TTL_OK = 60 * 1000;
 const PROBE_TTL_FAIL = 10 * 1000;
@@ -66,11 +66,15 @@ function getAgent(url: string): ProxyAgent {
   return agent;
 }
 
-type FetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-type FetchWithDispatcher = {
-  (input: RequestInfo | URL, init?: RequestInit & { dispatcher?: unknown }): Promise<Response>;
-};
-const fetchImpl = fetch as FetchFn as FetchWithDispatcher;
+/**
+ * Node 自带的 fetch 与这里安装的 undici 包不是同一份实现：把 undici 包创建的
+ * ProxyAgent 当 dispatcher 传给全局 fetch 会报 `invalid onRequestStart method
+ * (UND_ERR_INVALID_ARG)`，代理请求永远失败并静默回退直连（线上表现就是「配了代理
+ * 也没用、Yahoo 扩展行情仍然取不到」）。因此代理分支必须用 undici 包自己的 fetch，
+ * 与 ProxyAgent 配套；未启用代理或代理失败时仍回退全局 fetch 直连。
+ */
+type UndiciFetchFn = (input: string | URL, init?: Record<string, unknown>) => Promise<unknown>;
+const fetchWithProxy = undiciFetch as unknown as UndiciFetchFn;
 
 /**
  * 优先走代理的 fetch：代理可达则用代理，否则（或代理请求失败）直连。
@@ -89,13 +93,16 @@ export async function proxyFetch(input: RequestInfo | URL, init?: RequestInit): 
       }
       decision = { ok, at: Date.now() };
     }
-    if (decision.ok) {
-      try {
-        return await fetchImpl(input, { ...init, dispatcher: getAgent(cfg.url) });
-      } catch {
-        /* 代理请求失败 → 回退直连 */
-      }
-    }
+        if (decision.ok) {
+            try {
+                return (await fetchWithProxy(String(input), {
+                    ...(init as Record<string, unknown>),
+                    dispatcher: getAgent(cfg.url)
+                })) as Response;
+            } catch {
+                /* 代理请求失败 → 回退直连 */
+            }
+        }
   }
   return fetch(input, init);
 }

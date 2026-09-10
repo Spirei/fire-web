@@ -1,6 +1,7 @@
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { fail, ok } from "@/lib/api";
 import { fetchFutuDailyKline } from "@/lib/futuQuotes";
+import { proxyFetch } from "@/lib/net";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ async function fetchEastmoneyMonthly(secid: string): Promise<MonthlySeries> {
   const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${encodeURIComponent(
     secid
   )}&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56,f57&klt=103&fqt=1&beg=20200101&end=20500101`;
-  const res = await fetch(url, {
+  const res = await proxyFetch(url, {
     headers: { "User-Agent": UA },
     signal: AbortSignal.timeout(10000)
   });

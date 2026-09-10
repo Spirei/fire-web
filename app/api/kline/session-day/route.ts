@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
+import { proxyFetch } from "@/lib/net";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
     let result: YahooRaw | null = null;
     for (const host of YAHOO_HOSTS) {
       try {
-        const response = await fetch(`https://${host}/v8/finance/chart/${encodeURIComponent(code)}?interval=1m&range=1d&includePrePost=true&events=div%2Csplits`, { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, signal: AbortSignal.timeout(7000) });
+        const response = await proxyFetch(`https://${host}/v8/finance/chart/${encodeURIComponent(code)}?interval=1m&range=1d&includePrePost=true&events=div%2Csplits`, { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, signal: AbortSignal.timeout(7000) });
         if (!response.ok) throw new Error("Yahoo response failed");
         result = (await response.json())?.chart?.result?.[0] ?? null;
         if (result) break;

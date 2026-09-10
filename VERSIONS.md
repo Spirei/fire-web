@@ -17,6 +17,8 @@
 
 ### 修复
 
+- 修复出站代理一直失效（undici 与 Node fetch 不匹配）+ 全部 Yahoo 请求接入代理：排查「配了 `STOCKLOG_PROXY` 线上仍取不到 Yahoo 扩展行情」发现，`lib/net.ts` 用 Node 自带的全局 fetch 承载 npm 安装的 undici `ProxyAgent`，两者不是同一份实现，请求必定抛 `invalid onRequestStart method (UND_ERR_INVALID_ARG)` 并被 catch 静默回退直连 —— 代理看起来「开着」，其实从未生效。修复：代理分支改用 undici 包自己的 fetch 与 `ProxyAgent` 配套，未启用代理或代理失败仍回退直连。同时把仍走裸 fetch 的 Yahoo 调用全部接入 `proxyFetch`：`lib/usExtendedQuote.ts`（盘前 / 盘后 / 夜盘报价）、`lib/quotes.ts`（美股分时迷你图）、`lib/kline.ts`（美股日 K）、`/api/kline/five-day`、`/api/kline/session-day`、`/api/v1/index-kline`；境内源（腾讯 / 新浪 / 东财）保持直连。实测：带代理启动的隔离实例上 `/api/kline/session-day` 由 502 变为 200 并返回盘前点（AAPL 04:00 起）；线上群晖 `.env` 的 `STOCKLOG_PROXY` 已由 `off` 改为 `http://192.168.28.55:1088`（下次重建容器生效）。`AGENTS.md` 记录该坑。tsc 无错误、构建通过。
+
 - 修复资产分析页刷新时左侧布局窗口先扩大再收回：首屏绘制前从本地读取分栏比例，桌面左右栏改用固定 fr 比例，不再等页面画出后才恢复，也不再被内容把左栏撑开。
 - 修复资产分析页刷新闪现「加载中…」：不再用动态加载的 loading 盖住已渲染内容；趋势图有缓存时绘制前恢复，无缓存改为无文字骨架。
 - 全站排查同类闪动：后台所有页签刷新不再整页「加载中…」；登录页不再先闪加载中再出表单；用户管理和全球市值榜绘制前恢复缓存；盈亏分析、财报日历的加载文案改为无文字骨架。

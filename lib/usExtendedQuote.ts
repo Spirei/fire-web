@@ -1,4 +1,5 @@
 import { marketSessionState } from "./marketSessions";
+import { proxyFetch } from "./net";
 
 export type UsExtendedSession = "PRE" | "AFTER" | "OVERNIGHT";
 
@@ -66,7 +67,9 @@ async function fetchYahoo(code: string): Promise<YahooResult> {
   let serviceFailure = false;
   for (const host of YAHOO_HOSTS) {
     try {
-      const response = await fetch(`https://${host}/v8/finance/chart/${encodeURIComponent(code)}?interval=1m&range=1d&includePrePost=true&events=div%2Csplits`, {
+      // 走可选代理（STOCKLOG_PROXY）：境外服务器 / 境内直连不稳定时，代理能让
+      // 盘前 / 盘后 / 夜盘行情正常返回；代理不可达会自动回退直连。
+      const response = await proxyFetch(`https://${host}/v8/finance/chart/${encodeURIComponent(code)}?interval=1m&range=1d&includePrePost=true&events=div%2Csplits`, {
         headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
         signal: AbortSignal.timeout(6000)
       });
