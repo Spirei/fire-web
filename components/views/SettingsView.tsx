@@ -2192,11 +2192,23 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
                                 <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
                               </svg>
-                              {editingHomeNav ? (
-                                <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-ink-2">
-                                  <input type="checkbox" checked={item.enabled} onChange={(e) => setNav(item.key, { enabled: e.target.checked })} className="h-4 w-4 cursor-pointer accent-[#3297f6]" />显示
-                                </label>
-                              ) : null}
+                              {/* 显示 / 隐藏用眼睛图标切换（右对齐同一列），不再用「勾选框 + 显示」文字 */}
+                              <button
+                                type="button"
+                                aria-pressed={item.enabled}
+                                title={item.enabled ? "已显示，点击隐藏" : "已隐藏，点击显示"}
+                                aria-label={item.enabled ? "隐藏这一项" : "显示这一项"}
+                                onClick={() => setNav(item.key, { enabled: !item.enabled })}
+                                className={`flex h-7 w-7 flex-none items-center justify-center rounded-md transition-colors hover:bg-brand-hover dark:hover:bg-white/10 ${item.enabled ? "text-ink-2" : "text-faint"}`}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                                  {item.enabled ? (
+                                    <><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" /><circle cx="12" cy="12" r="3" /></>
+                                  ) : (
+                                    <><path d="M3 3l18 18" /><path d="M10.6 10.6A3 3 0 0 0 13.4 13.4" /><path d="M9.9 5.1A10 10 0 0 1 12 5c5 0 9.3 3.1 11 7.5a11.7 11.7 0 0 1-4.2 4.8M6.1 6.1A11.7 11.7 0 0 0 1 12.5 10.8 10.8 0 0 0 12 19c1.1 0 2.2-.2 3.2-.5" /></>
+                                  )}
+                                </svg>
+                              </button>
                             </div>
                             <>
                               <input value={item.label} onChange={(e) => setNav(item.key, { label: e.target.value })} placeholder="名称" className="h-[34px] w-full rounded-[8px] border border-transparent bg-transparent px-2 text-sm font-semibold text-ink outline-none transition-all duration-200 hover:border-edge-strong hover:bg-white focus:border-edge-strong focus:bg-white focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)]" />
