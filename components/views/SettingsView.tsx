@@ -2043,8 +2043,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       className="xl:col-span-2"
                       id="ticker"
                       collapsible
-                      defaultOpen={false}
-                      storageKey="homepage-ticker"
+                      defaultOpen
+                      storageKey="homepage-ticker-v2"
+                      reveal={editingTicker}
                       titleAction={!editingTicker ? (
                         <button type="button" onClick={() => setEditingTicker(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑首页指数" aria-label="编辑首页指数">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
@@ -2158,8 +2159,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       className="xl:col-span-2"
                       id="nav"
                       collapsible
-                      defaultOpen={false}
-                      storageKey="home-nav"
+                      defaultOpen
+                      storageKey="home-nav-v2"
+                      reveal={editingHomeNav}
                       titleAction={!editingHomeNav ? (
                         <button type="button" onClick={() => setEditingHomeNav(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑首页导航" aria-label="编辑首页导航">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
@@ -2218,8 +2220,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   title="应用导航菜单"
                   desc="侧栏与移动端入口，可调整默认页、图标、名称和顺序"
                   collapsible
-                  defaultOpen={false}
-                  storageKey="nav-tabs"
+                  defaultOpen
+                  storageKey="nav-tabs-v2"
+                  reveal={editingTabs}
                   titleAction={!editingTabs ? (
                     <button type="button" onClick={() => setEditingTabs(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑应用导航" aria-label="编辑应用导航">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
@@ -2840,6 +2843,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   collapsible
                   defaultOpen={false}
                   storageKey="stock-sources"
+                  reveal={editingSources}
                   titleAction={!editingSources ? (
                     <button type="button" onClick={() => setEditingSources(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑股票来源接口" aria-label="编辑股票来源接口">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>

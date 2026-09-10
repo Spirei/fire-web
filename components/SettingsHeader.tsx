@@ -178,7 +178,8 @@ export function SettingsSection({
   collapsible = false,
   defaultOpen = true,
   storageKey,
-  summary
+  summary,
+  reveal = false
 }: {
   icon: string;
   title: string;
@@ -192,6 +193,8 @@ export function SettingsSection({
   defaultOpen?: boolean;
   storageKey?: string;
   summary?: string;
+  /** 为 true 时强制展开（用于「点了编辑却看不到内容」的场景） */
+  reveal?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const hydrated = useRef(false);
@@ -207,6 +210,11 @@ export function SettingsSection({
       hydrated.current = true;
     }
   }, [collapsible, storageKey, title]);
+
+  // 进入编辑态时把分区自动展开：否则用户点了「编辑」却因为折叠看不到任何内容
+  useEffect(() => {
+    if (reveal) setOpen(true);
+  }, [reveal]);
 
   useEffect(() => {
     if (!collapsible || !hydrated.current) return;
