@@ -41,6 +41,13 @@ check "demo 登录成功" 200 "$(echo "$LOGIN" | tail -1)"
 ME=$(curl -s -b "$JAR_DEMO" "$BASE/api/auth/me")
 check "me 返回 demo" demo "$(echo "$ME" | python3 -c 'import json,sys; print(json.load(sys.stdin)["user"]["username"])')"
 
+# 登录后页面巡检：逐页确认服务端渲染没有异常（曾出现 /trading 因 SSR 访问
+# localStorage 直接 500 而测试没发现的情况，这里把主要页面都跑一遍）
+echo "== 页面巡检（登录后） =="
+for PAGE in /holdings /watchlist /fire /global /trading /celebs /earnings /activities /attachments /users /library /settings /asset-analysis /api-docs /deploy-status /simple-app; do
+  check "GET ${PAGE}（登录后）" 200 "$(code -b "$JAR_DEMO" "$BASE$PAGE")"
+done
+
 # 备份真实设置，测试结束后恢复，避免覆盖用户配置
 BACKUP_FILE=$(mktemp)
 curl -s -b "$JAR_DEMO" "$BASE/api/settings" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["settings"]))' > "$BACKUP_FILE"

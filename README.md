@@ -10,7 +10,7 @@ Next.js 15 + React 19 + TypeScript + Tailwind + SQLite（better-sqlite3）全栈
 
 ```bash
 npm run dev              # 开发（固定监听 0.0.0.0:3000）
-./scripts/smoke-test.sh  # 冒烟测试（82 项）
+./scripts/smoke-test.sh  # 冒烟测试（101 项，含登录后全站页面巡检）
 npm run clean:dsstore    # 清理 .DS_Store
 ```
 

@@ -694,9 +694,12 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
     if (!serverLoaded || !records || records.length === 0) return;
     if (currentYear <= lastSettledRef.current) return;
     setTableRows((prev) => {
+      // 该年结束时的「当前资产」与上方卡片 / 水球 / 今年这一行同源：都取 effCurUsd
+      // （含用户手动覆盖），否则跨年后冻结下来的数值会和页面上显示的不一致。
+      const currentBase = effCurUsd * baseRate;
       const frozen = prev.map((r) => {
       if (r.year !== currentYear - 1) return r;
-      const netBase = currentAssets * baseRate;   // 主货币：该年结束时的当前资产
+      const netBase = currentBase;                // 主货币：该年结束时的当前资产
       const costBase = curCost;                   // 主货币：该年原始资产
       const profitBase = netBase - costBase;
       const rate = costBase > 0 ? (profitBase / costBase) * 100 : 0;
@@ -709,17 +712,17 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
       return [...frozen, {
         year: currentYear,
         original: String(round2(curCost)),
-        current: String(round2(currentAssets * baseRate)),
+        current: String(round2(currentBase)),
         extra: "",
-        profit: String(round2(currentAssets * baseRate - curCost)),
-        rate: curCost > 0 ? String(round2(((currentAssets * baseRate - curCost) / curCost) * 100)) : "0",
+        profit: String(round2(currentBase - curCost)),
+        rate: curCost > 0 ? String(round2(((currentBase - curCost) / curCost) * 100)) : "0",
         target: previousTarget,
-        progress: Number(previousTarget) > 0 ? String(round2((currentAssets * baseRate / Number(previousTarget)) * 100)) : "0"
+        progress: Number(previousTarget) > 0 ? String(round2((currentBase / Number(previousTarget)) * 100)) : "0"
       }];
     });
     lsSet("fire:fire-settled", String(currentYear - 1));
     lastSettledRef.current = currentYear - 1;
-  }, [serverLoaded, records, currentYear, currentAssets, costAssets, fireTargetUsd, baseRate, curCost]);
+  }, [serverLoaded, records, currentYear, effCurUsd, baseRate, fireTargetUsd, fireTargetBase, curCost]);
 
   // 防抖保存：任一配置变化后 600ms 写回服务端
   useEffect(() => {

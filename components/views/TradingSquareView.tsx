@@ -77,16 +77,22 @@ function writeLocalFeed(posts: Post[], updatedAt: string | null, updatedByAuthor
 function readSeen(posts: Post[]): AuthorTimes {
   const authors = new Set<string>(PEOPLE.map((person) => person.id));
   posts.forEach((post) => authors.add(post.author));
+  // 该函数在 useState 初始化时就会被调用（服务端渲染同样执行），
+  // 必须显式判断浏览器环境：此前 `if (!localStorage.getItem(...))` 没被 try 包住，
+  // 导致 /trading 服务端渲染直接 ReferenceError → 整页 500。
+  const storage = typeof window === "undefined" ? null : window.localStorage;
   let stored: AuthorTimes = {};
-  try {
-    const raw = JSON.parse(localStorage.getItem(SEEN_CACHE_KEY) || "null") as AuthorTimes | null;
-    if (raw && typeof raw === "object") stored = raw;
-  } catch { /* ignore */ }
+  if (storage) {
+    try {
+      const raw = JSON.parse(storage.getItem(SEEN_CACHE_KEY) || "null") as AuthorTimes | null;
+      if (raw && typeof raw === "object") stored = raw;
+    } catch { /* ignore */ }
+  }
   const seeded: AuthorTimes = {};
   authors.forEach((author) => {
     seeded[author] = stored[author] ?? latestPostTime(posts, author);
   });
-  if (!localStorage.getItem(SEEN_CACHE_KEY)) writeSeen(seeded);
+  if (storage && !storage.getItem(SEEN_CACHE_KEY)) writeSeen(seeded);
   return seeded;
 }
 

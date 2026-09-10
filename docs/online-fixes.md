@@ -66,7 +66,7 @@
 ```bash
 cd fire-web
 npx tsc --noEmit            # 类型检查（已 PASS）
-./scripts/smoke-test.sh     # 82 项冒烟（需起本地实例，会备份并还原设置）
+./scripts/smoke-test.sh     # 101 项冒烟（需起本地实例，会备份并还原设置）
 ```
 
 ---

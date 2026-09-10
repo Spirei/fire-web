@@ -2664,6 +2664,10 @@ export const V0_1_26_ENTRY: VersionEntry = {
     title: "美股行情兜底再加固（Yahoo 熔断 / OTC 单只隔离 / 空市场提示）",
     desc: "1) lib/usExtendedQuote.ts 新增 Yahoo 双主机熔断：出现服务级失败（连不上 / 403 限流 / 非 200）后 60 秒内直接判定不可用，不再逐只等超时 —— 含 44 只持仓的行情请求由 17.6 秒回落到 2.4 秒；只对服务级失败生效，单只标的在 Yahoo 查不到（200 无 result，如下市 / OTC）不触发熔断，避免一只坏标的关掉整批兜底（已用真实模块 + 打桩网络验证两种边界）。2) scripts/futu_quotes.py 的快照调用补异常容错：网络抖动 / SDK 抛错同样按「这批失败」处理，走剔除与二分重试。3) 我的持仓市场编辑面板对无记录市场标注「无记录 · 自动隐藏」，说明为何标签不显示。4) AGENTS.md 记录富途整批快照、美股扩展时段降级两条经验。tsc 无错误。",
     kind: "fix"
+  }, {
+    title: "全站 Review：修复交易广场 500 + FIRE 跨年口径不一致 + 冒烟补页面巡检",
+    desc: "1) 交易广场整页 500：TradingSquareView 的 readSeen() 在 useState 初始化时读取 localStorage 且该行没被 try 包住，服务端渲染直接 ReferenceError，登录后访问 /trading 返回 500（本地 dev 与生产构建都复现，线上同源同版本受影响，2026-09-03 引入）。已改为显式判断浏览器环境；并用 TypeScript 编译器 API 扫过全部 JSX 确认没有 <button> 嵌套按钮，其余初始化期浏览器 API 均有保护。2) FIRE 跨年落账口径不一致：年末快照的「当前资产」用 currentAssets（不含手动覆盖），而上方面板 / 水球 / 今年这一行用 effCurUsd（含手动覆盖），跨年后冻结值会与页面显示对不上——统一为 effCurUsd 并补齐依赖项。3) 冒烟测试新增登录后页面巡检（16 个页面逐一检查 200），这台机器上旧的 82 项检查覆盖不到页面渲染，正是 /trading 500 漏网的原因；测试项 82 → 101。tsc 无错误、npm run build 通过、冒烟 101/101 全 PASS。",
+    kind: "fix"
   }]
 };
 
