@@ -73,7 +73,12 @@ function readLocalFeed(): { posts: Post[]; updatedAt: string | null; updatedByAu
 }
 
 function writeLocalFeed(posts: Post[], updatedAt: string | null, updatedByAuthor: AuthorTimes) {
-  try { localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ posts: takeNewestByAuthor(posts, TRADING_SQUARE_AUTHOR_LIMIT), updatedAt, updatedByAuthor })); } catch { /* quota / private mode */ }
+  try {
+    localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ posts: takeNewestByAuthor(posts, TRADING_SQUARE_AUTHOR_LIMIT), updatedAt, updatedByAuthor }));
+  } catch (error) {
+    // 写失败（配额满 / 无痕模式）会让下次刷新先看到加载态，这里留个痕迹便于排查
+    console.warn("[trading-square] 本地缓存写入失败，刷新后将先显示加载态", error);
+  }
 }
 
 function readSeen(posts: Post[]): AuthorTimes {
@@ -124,7 +129,7 @@ function mergeFeedPosts(previous: Post[], incoming: Post[]): Post[] {
     const time = Date.parse(post.date);
     return Number.isFinite(time) && time > max ? time : max;
   }, 0);
-  return incoming.flatMap((post) => {
+  const merged = incoming.flatMap((post) => {
     const old = prevById.get(`${post.author}-${post.id}`);
     let next = hasTranslatableText(post.text) && !post.textZh && old?.textZh ? { ...post, textZh: old.textZh } : post;
     if (!hasTranslatableText(next.text) && next.textZh) {
@@ -150,6 +155,13 @@ function mergeFeedPosts(previous: Post[], incoming: Post[]): Post[] {
     }
     return [next];
   });
+  // 服务端列表可能比本地短（某位作者这次没抓到、源站分页变短、或新帖还没翻译被上面过滤掉），
+  // 这时不能把本地已有的帖子丢掉：否则一刷新就整片消失，而且缩水后的列表会被写回缓存，
+  // 等于把本地缓存也一起清空（用户反馈的「刷新把发文弄没」就是这么来的）。
+  // 这里保留「本地有、本次没返回」的帖子，顺序与条数交给 takeNewestByAuthor 按作者截取最新 N 条。
+  const seen = new Set(merged.map((post) => `${post.author}-${post.id}`));
+  const kept = previous.filter((post) => !seen.has(`${post.author}-${post.id}`));
+  return kept.length ? [...merged, ...kept] : merged;
 }
 const BADGE_SHAPE = "M8.82.521a1.596 1.596 0 012.36 0l.362.398c.42.46 1.07.635 1.664.445l.512-.163a1.596 1.596 0 012.043 1.18l.115.525a1.596 1.596 0 001.218 1.218l.525.115a1.596 1.596 0 011.18 2.043l-.163.513a1.596 1.596 0 00.446 1.663l.397.362a1.596 1.596 0 010 2.36l-.397.362c-.461.42-.635 1.07-.446 1.664l.163.512a1.59 1.59 0 01-1.18 2.043l-.525.115a1.596 1.596 0 00-1.218 1.218l-.115.525a1.596 1.596 0 01-2.043 1.18l-.512-.163a1.596 1.596 0 00-1.664.445l-.362.398a1.596 1.596 0 01-2.36 0l-.362-.398a1.596 1.596 0 00-1.663-.445l-.513.163a1.596 1.596 0 01-2.043-1.18l-.115-.525a1.59 1.59 0 00-1.218-1.218l-.525-.115a1.596 1.596 0 01-1.18-2.043l.164-.512a1.596 1.596 0 00-.446-1.664L.52 11.18a1.596 1.596 0 010-2.36l.398-.362c.46-.42.635-1.07.446-1.663L1.2 6.282a1.596 1.596 0 011.18-2.043l.525-.115a1.596 1.596 0 001.218-1.218l.115-.525A1.596 1.596 0 016.282 1.2l.513.163c.594.19 1.244.015 1.663-.445L8.821.52z";
 
