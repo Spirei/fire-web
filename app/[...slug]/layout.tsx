@@ -12,6 +12,8 @@ import IndexTicker from "@/components/IndexTicker";
 import Toaster from "@/components/Toaster";
 import { getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
 import { CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/lib/currencyPrefs";
+import { headers } from "next/headers";
+import { unstable_noStore } from "next/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +22,18 @@ export default async function SlugLayout({
 }: {
   params: Promise<{ slug?: string[] }>;
 }) {
+  unstable_noStore();
   const { slug } = await params;
   const path = "/" + (slug || []).join("/");
   const settings = getSiteSettings();
-  const currencyCookie = (await cookies()).get(DISPLAY_CURRENCY_COOKIE)?.value as CurrencyCode | undefined;
+  // 从原始 Cookie 头里取（API 路由里 cookies() 正常，但布局里读不到 —— 用 headers 统一走一条路）
+  const rawCookie = (await headers()).get("cookie") || "";
+  const CURRENCY_COOKIE_NAME = "fire-display-currency";
+  const currencyCookie = rawCookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(CURRENCY_COOKIE_NAME + "="))
+    ?.slice(CURRENCY_COOKIE_NAME.length + 1) as CurrencyCode | undefined;
   // 资产盈亏分析：应用壳内隐藏页签（不进导航菜单），直接按路径进入
   const specialTab = path === "/asset-pnl-analysis" ? { key: "pnl" } : null;
   let tab = specialTab ?? settings.tabs.find((t) => (t.url || `/${t.key}`) === path);

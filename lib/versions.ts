@@ -2762,6 +2762,10 @@ export const V0_1_27_ENTRY: VersionEntry = {
     desc: "现象：进入编辑态后标题栏的 ✓ 和分区头部的「保存」都能提交，两个都像保存按钮，容易点错也容易困惑。改为：标题栏那颗图标永远是铅笔（只表示「进入编辑」，不再变成 ✓），编辑中它高亮成蓝色且禁用，鼠标悬停提示「正在编辑，改完点分区里的『保存』」；全站唯一的保存入口就是分区头部那颗「保存」。站点信息是常驻可编辑 + 自动保存，本来就不需要这个入口，标题栏对它继续隐藏。验证：tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。",
     kind: "fix"
   }, {
+    title: "修好货币首屏：cookie 常量在布局里拿不到，改用字面量后 SSR 直接渲染所选货币",
+    desc: "上一版把货币偏好写进 cookie 并由布局注入，但实测无效：布局里从 @/lib/currencyPrefs 导入的 DISPLAY_CURRENCY_COOKIE 在服务端渲染时为 undefined，于是 `startsWith(undefined + 等号)` 永远匹配不到，cookie 读出来是空的（用调试标记逐层验证：原始 Cookie 头里确实有 fire-display-currency=CNY，但解析结果为空）。改为在布局里用字面量常量名后立即生效：带 fire-display-currency=CNY 请求 /global，服务端输出 显示货币：人民币 + flag/cn.svg（不带 cookie 时仍是美元）。至此货币刷新不再闪默认值；老用户第一次加载会由客户端补写一次 cookie，之后不再闪。验证：tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。",
+    kind: "fix"
+  }, {
     title: "修复刷新时闪现默认货币（货币偏好写入 cookie，服务端首屏就是所选货币）",
     desc: "现象：选了港元 / 人民币等展示货币，刷新时先闪一下美元（列表里第一个）再切回来。根因：货币走 localStorage + usePersistedState，设计上「服务端与客户端首帧一律用默认值、挂载后恢复」，所以首屏 HTML 里根本没有用户偏好 —— 浏览器先画出美元那版，水合后才切换（全站 13 个文件用这个 hook，所以是全局现象）。修复：偏好同时写一份 cookie（fire-display-currency，一年有效、samesite=lax），服务端布局读 cookie 并通过新的 CurrencyProvider 注入，useDisplayCurrency 的首帧值优先用它 —— 服务端和客户端首帧都是所选货币，刷新零闪；切换货币时自动写 cookie，老用户没有 cookie 仍按默认美元。已接入 /[…slug]（我的持仓、资产分析、盈亏分析等）与门户首页。验证：tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。",
     kind: "fix"
