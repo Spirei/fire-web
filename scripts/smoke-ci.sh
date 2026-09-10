@@ -19,7 +19,13 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 
 echo "== CI 短冒烟 ${BASE} =="
 check "GET /" 200 "$(code --max-time 20 "$BASE/")"
-check "GET /login" 200 "$(code --max-time 20 "$BASE/login")"
+# CI 空库首启：/login → /setup（307）；已初始化实例 /login 为 200。
+# 登录表单用 ?skipSetup=1 直连，避免空库把检查吃掉。
+LOGIN_CODE=$(code --max-time 20 "$BASE/login")
+check "GET /login（空库 307 / 已初始化 200）" 1 "$(printf '%s' "$LOGIN_CODE" | grep -cE '^(200|307)$')"
+check "GET /login?skipSetup=1" 200 "$(code --max-time 20 "$BASE/login?skipSetup=1")"
+SETUP_CODE=$(code --max-time 20 "$BASE/setup")
+check "GET /setup（空库 200 / 已初始化 307）" 1 "$(printf '%s' "$SETUP_CODE" | grep -cE '^(200|307)$')"
 check "GET /api/auth/setup-status" 200 "$(code --max-time 20 "$BASE/api/auth/setup-status")"
 check "GET /api/health" 200 "$(code --max-time 20 "$BASE/api/health")"
 check "GET /api/trading-square/feed" 200 "$(code --max-time 30 "$BASE/api/trading-square/feed")"
