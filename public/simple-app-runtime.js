@@ -919,6 +919,21 @@ const curveFallback = {
       if (next !== undefined) last = next;
       return last;
     });
+  },
+  sampleIndices(values, target) {
+    const count = (values || []).length;
+    if (!count) return [];
+    if (count <= target || target <= 2) return values.map((_, index) => index);
+    const stride = (count - 1) / (target - 1);
+    const picked = new Set([0, count - 1]);
+    for (let i = 0; i < target; i++) picked.add(Math.round(i * stride));
+    let lowest = 0, highest = 0;
+    for (let i = 1; i < count; i++) {
+      if (values[i] < values[lowest]) lowest = i;
+      if (values[i] > values[highest]) highest = i;
+    }
+    picked.add(lowest); picked.add(highest);
+    return [...picked].sort((a, b) => a - b);
   }
 };
 function filterHist(hist, range) {
@@ -2102,6 +2117,8 @@ function addInvestPage() {
   </section>`;
 }
 
+/** 手写 SVG 每点一个命中圆，按像素宽度抽稀的目标数量（曲线本身仍是全量点） */
+const TREND_HIT_TARGET = 180;
 function chartBlock(hist, expected, unit = "元", currentPnl = null) {
   const kind = route.chartKind || "mwr";
   const range = route.chartRange || "all";
@@ -2162,7 +2179,7 @@ function chartBlock(hist, expected, unit = "元", currentPnl = null) {
         <line data-hover-line x1="18" x2="18" y1="24" y2="154" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
         <circle data-hover-main cx="0" cy="0" r="4" fill="var(--card)" stroke="${lineColor}" stroke-width="2" style="display:none;pointer-events:none"/>
         <circle data-hover-bench cx="0" cy="0" r="3.5" fill="var(--card)" stroke="#4a90d9" stroke-width="2" style="display:none;pointer-events:none"/>
-        ${series.map((v,i) => `<circle cx="${xAt(i,series.length)}" cy="${yAt(v)}" r="7" fill="transparent" tabindex="0" onclick="toast('${seriesDates[i] || ""}　${kind === "pnl" ? num(v) + " " + unit : pct(v)}')"><title>${seriesDates[i] || ""} ${kind === "pnl" ? num(v) + " " + unit : pct(v)}</title></circle>`).join("")}
+        ${curveApiRef().sampleIndices(series, TREND_HIT_TARGET).map((i) => `<circle cx="${xAt(i,series.length)}" cy="${yAt(series[i])}" r="7" fill="transparent" tabindex="0" onclick="toast('${seriesDates[i] || ""}　${kind === "pnl" ? num(series[i]) + " " + unit : pct(series[i])}')"><title>${seriesDates[i] || ""} ${kind === "pnl" ? num(series[i]) + " " + unit : pct(series[i])}</title></circle>`).join("")}
         <text x="18" y="168" font-size="10" fill="var(--faint)">${first}</text><text x="286" y="168" font-size="10" fill="var(--faint)">${last}</text>
         <text x="346" y="29" text-anchor="end" font-size="9" fill="var(--faint)">${kind === "pnl" ? num(scaleMax) : scaleMax.toFixed(1) + "%"}</text><text x="346" y="154" text-anchor="end" font-size="9" fill="var(--faint)">${kind === "pnl" ? num(scaleMin) : scaleMin.toFixed(1) + "%"}</text>
       </svg>

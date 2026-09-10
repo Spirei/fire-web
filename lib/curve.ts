@@ -193,6 +193,31 @@ export function benchmarkOnDates(rows: CurveBenchRow[], dates: string[]): number
 }
 
 /**
+ * 交互命中点抽稀：按目标数量均匀取样，并保证首尾与最大值 / 最小值一定入选。
+ *
+ * 用于「每个数据点渲染一个 DOM 圆点」的场景（简化版账户页手写 SVG）：日线账本攒到
+ * 三五年后有上千个点，按像素宽度只保留百来个命中点，DOM 节点降一个量级；曲线本身
+ * 不受影响（路径仍是全量点），悬停仍是逐日精确值。
+ */
+export function sampleIndices(values: number[], target = 180): number[] {
+  const count = values.length;
+  if (!count) return [];
+  if (count <= target || target <= 2) return values.map((_, index) => index);
+  const stride = (count - 1) / (target - 1);
+  const picked = new Set<number>([0, count - 1]);
+  for (let i = 0; i < target; i++) picked.add(Math.round(i * stride));
+  let lowest = 0;
+  let highest = 0;
+  for (let i = 1; i < count; i++) {
+    if (values[i] < values[lowest]) lowest = i;
+    if (values[i] > values[highest]) highest = i;
+  }
+  picked.add(lowest);
+  picked.add(highest);
+  return [...picked].sort((a, b) => a - b);
+}
+
+/**
  * 简化版 runtime.js 的桥接载体（挂在 window.FireCurve 上）。
  * runtime 是静态 JS，无法直接 import TS 模块；两边共享同一份实现，避免口径漂移。
  */
@@ -202,5 +227,6 @@ export const curveApi = {
   sliceWithAnchor,
   ledgerSeries,
   normalizeToPercent,
-  benchmarkOnDates
+  benchmarkOnDates,
+  sampleIndices
 };
