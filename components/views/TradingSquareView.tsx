@@ -72,9 +72,21 @@ function readLocalFeed(): { posts: Post[]; updatedAt: string | null; updatedByAu
   return null;
 }
 
+/**
+ * 首屏缓存最多写这么多条/作者（列表本身不限条数，缓存只服务首次绘制）。
+ * 取消接口上限后历史会一直涨，缓存层单独收敛，避免 localStorage 写爆。
+ */
+const FEED_CACHE_PER_AUTHOR = 400;
+const FEED_CACHE_MAX_BYTES = 2_500_000;
+
 function writeLocalFeed(posts: Post[], updatedAt: string | null, updatedByAuthor: AuthorTimes) {
   try {
-    localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ posts: takeNewestByAuthor(posts, TRADING_SQUARE_AUTHOR_LIMIT), updatedAt, updatedByAuthor }));
+    const payload = JSON.stringify({ posts: takeNewestByAuthor(posts, FEED_CACHE_PER_AUTHOR), updatedAt, updatedByAuthor });
+    if (payload.length > FEED_CACHE_MAX_BYTES) {
+      console.warn(`[trading-square] 首屏缓存过大（${Math.round(payload.length / 1024)}KB），本次跳过写入；列表展示不受影响`);
+      return;
+    }
+    localStorage.setItem(FEED_CACHE_KEY, payload);
   } catch (error) {
     // 写失败（配额满 / 无痕模式）会让下次刷新先看到加载态，这里留个痕迹便于排查
     console.warn("[trading-square] 本地缓存写入失败，刷新后将先显示加载态", error);
