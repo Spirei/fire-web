@@ -2701,6 +2701,10 @@ export const V0_1_27_ENTRY: VersionEntry = {
     title: "修复金额「水合不一致」（首帧读本地汇率缓存导致 SSR 与客户端两份金额）",
     desc: "现象：资产分析页 / 我的持仓页刷新后 dev 弹 hydration 报错，持仓总市值、现金等服务端渲染 51,392.88、客户端首帧 52,546.83（差 2.2%）。根因：AssetAnalysisView.tsx 与 HoldingsView.tsx 的汇率 state 用 useState 初始化函数直接读 localStorage 的 fire:rates —— 服务端读不到、只能用 FALLBACK_RATES，客户端首帧读到实时汇率，跨币种金额必然不同；React 水合只比对首帧渲染，所以这颗雷一直在，只是金额每次都「差一点点」时才会弹。同类写法还有：持仓页的 ratesReady 与各市场盈利卡片顺序、盈亏分析页的日历市场 / 基准 / 加权 / 日历月份四个本地偏好、全球预览页的迷你 K 线缓存。修复：新增 lib/ratesCache.ts 统一读写汇率缓存（注释写明只能挂载后读）；上述所有读取改为「首帧用默认值 + useLayoutEffect 恢复」——useLayoutEffect 先于 paint，既不会水合报错，也看不到兜底值闪烁（原本为防闪烁才首帧读，方向对、位置错）。tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。",
     kind: "fix"
+  }, {
+    title: "修复刷新时闪现市场色块（设置里已关闭仍会闪一下）",
+    desc: "现象：设置 → 股票设置 → 市场色块「默认显示」关掉后，刷新任意页面仍会先冒出几块市场色块再消失。根因：色块读的是 lib/marketBadge.ts 的模块级 store，初始值固定为「显示 + 默认配色」，而服务端设置只在 RecordsApp 的 useLayoutEffect 里应用 —— effect 只在水合之后跑，所以服务端渲染出的 HTML 里本来就有色块，浏览器先画出这版 HTML，等水合隐藏。修复：新增 primeMarketBadges()（渲染期写入模块状态、不通知订阅者，避免打断水合；值没变时空操作），RecordsApp 在渲染一开始就按服务端设置初始化，服务端与客户端首帧一致；applyMarketBadges() 改为仅在值变化时通知。附带收益：自定义配色的闪动也一并消失（同一机制）。验证：同一账号（色块关闭）对 /holdings 的服务端 HTML 做前后对比 —— 修复前含 1 处色块（色块专用 class + style 默认蓝 #3b82f6），修复后 0 处，其余内容一致；Node 里直接验证 store 初始（visible=true / US #3b82f6）与 prime 后（visible=false / 自定义色）。tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。",
+    kind: "fix"
   }]
 };
 

@@ -79,6 +79,7 @@ export function normalizeMarketBadges(raw: unknown): Record<string, MarketBadgeS
 
 let applied = normalizeMarketBadges(null);
 let appliedVisible = true;
+let appliedSignature = "";
 const listeners = new Set<() => void>();
 
 function notifyMarketBadges() {
@@ -88,9 +89,30 @@ function notifyMarketBadges() {
   }
 }
 
+/** 写入模块状态，返回是否真的变了（色块定义 + 显隐） */
+function setMarketBadges(raw?: unknown, visible?: boolean) {
+  const next = normalizeMarketBadges(raw);
+  const nextVisible = typeof visible === "boolean" ? visible : appliedVisible;
+  const signature = `${nextVisible ? 1 : 0}|${JSON.stringify(next)}`;
+  const changed = signature !== appliedSignature;
+  applied = next;
+  appliedVisible = nextVisible;
+  appliedSignature = signature;
+  return changed;
+}
+
+/**
+ * 渲染期使用：只写入模块状态，**不通知订阅者**（渲染期间通知会打断水合、触发跨组件 setState）。
+ * 服务端与客户端首帧都要先走这一步，否则 SSR 会用默认值渲染出「显示」的色块 ——
+ * 浏览器先画出这版 HTML，等水合后才隐藏，就是「刷新时闪一下市场色块」的原因。
+ */
+export function primeMarketBadges(raw?: unknown, visible?: boolean) {
+  setMarketBadges(raw, visible);
+}
+
+/** 提交后使用：写入并通知订阅者（值没变时是空操作） */
 export function applyMarketBadges(raw?: unknown, visible?: boolean) {
-  applied = normalizeMarketBadges(raw);
-  if (typeof visible === "boolean") appliedVisible = visible;
+  if (!setMarketBadges(raw, visible)) return;
   notifyMarketBadges();
 }
 

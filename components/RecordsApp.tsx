@@ -18,7 +18,7 @@ import {
   type User
 } from "@/lib/types";
 import { showToast } from "@/lib/toast";
-import { applyMarketBadges } from "@/lib/marketBadge";
+import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import SettingsWindow from "@/components/SettingsWindow";
 import { primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
@@ -119,6 +119,11 @@ export default function RecordsApp({
   const [markets, setMarkets] = useState<Market[]>(initialSettings.markets);
   const [marketLabels, setMarketLabels] = useState<{ key: string; label: string; flag: string }[]>(initialSettings.marketLabels);
   const { assetIcons } = useAssetIcons(["icon"], { stockIconCdn: initialSettings.stockIconCdn });
+
+  // 市场色块是模块级 store（不是 React 状态）：必须在水合首帧之前按服务端设置初始化。
+  // 只在 effect 里 apply 的话，SSR 会用默认值（默认显示）渲染出色块，浏览器先画出这版 HTML，
+  // 等水合 + effect 才隐藏 —— 关了色块的人刷新时就会闪一下（服务端与首帧都走这里，值没变时是空操作）。
+  primeMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
 
   // 外部共享缓存只能在提交后更新；渲染期间通知订阅者会打断水合并触发跨组件 setState。
   useLayoutEffect(() => {
