@@ -2676,6 +2676,10 @@ export const V0_1_26_ENTRY: VersionEntry = {
     title: "修复出站代理一直失效（undici 与 Node fetch 不匹配）+ 全部 Yahoo 请求接入代理",
     desc: "排查「配了 STOCKLOG_PROXY 线上仍取不到 Yahoo 扩展行情」：lib/net.ts 用 Node 自带的全局 fetch 承载 npm 安装的 undici ProxyAgent，两者不是同一份实现，请求必定抛 `invalid onRequestStart method (UND_ERR_INVALID_ARG)` 并被 catch 静默回退直连——所以代理看起来「开着」，其实从未生效。修复：代理分支改用 undici 包自己的 fetch（`import { fetch as undiciFetch } from \"undici\"`）与 ProxyAgent 配套，未启用代理或代理失败仍回退全局 fetch 直连。同时把仍走裸 fetch 的 Yahoo 调用全部接入 proxyFetch：lib/usExtendedQuote.ts（盘前 / 盘后 / 夜盘报价）、lib/quotes.ts（美股分时迷你图）、lib/kline.ts（美股日 K）、/api/kline/five-day、/api/kline/session-day、/api/v1/index-kline；境内源（腾讯 / 新浪 / 东财）保持直连。实测：带代理启动的隔离实例上 /api/kline/session-day 由 502 变为 200 并返回盘前点（AAPL 04:00 起），未经代理时仍直连不受影响；线上群晖 .env 的 STOCKLOG_PROXY 已由 off 改为 http://192.168.28.55:1088（下次重建容器生效）。AGENTS.md 记录该坑。tsc 无错误、构建通过。",
     kind: "fix"
+  }, {
+    title: "代理加 no_proxy 保护：内网地址永不发往代理",
+    desc: "按「防止本地 / 内网地址被交给代理」的要求在 proxyFetch 里补 no_proxy 判定：命中「内置私网（10/8、172.16-31、192.168/16、127/8、169.254/16、100.64/10、.local / .lan / .internal / localhost / IPv6 回环与 ULA）」或 NO_PROXY / no_proxy 环境变量（支持 `*`、域名后缀、IPv4 与 IPv4/掩码）时直接直连，不看代理是否可用；这样富途 OpenD、NAS 接口、体检探针等内网请求不会泄露给第三方代理。另加 STOCKLOG_PROXY_DEBUG=1 开关，按请求打印「走代理 / 直连（内网 / NO_PROXY）/ 代理失败回退直连」，代理问题不再需要猜。实测：带代理时 127.0.0.1 与 192.168.28.5 判定直连、Yahoo 走代理返回 200。注意 Node 的 fetch 不读容器里的 http_proxy / https_proxy / no_proxy（那是给 curl / python / npm 的），因此本应用只认 STOCKLOG_PROXY + 这套 no_proxy 规则。tsc 无错误。",
+    kind: "security"
   }]
 };
 

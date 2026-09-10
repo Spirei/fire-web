@@ -83,6 +83,8 @@
 
 ### 安全修复
 
+- 代理加 no_proxy 保护：内网地址永不发往代理：按「防止本地 / 内网地址被交给代理」的要求，在 `proxyFetch` 里补 no_proxy 判定 —— 命中「内置私网（10/8、172.16-31、192.168/16、127/8、169.254/16、100.64/10、`.local` / `.lan` / `.internal` / localhost / IPv6 回环与 ULA）」或 `NO_PROXY` / `no_proxy` 环境变量（支持 `*`、域名后缀、IPv4 与 `IPv4/掩码`）时直接直连，不看代理是否可用；富途 OpenD、NAS 接口、体检探针等内网请求因此不会泄露给第三方代理。另加 `STOCKLOG_PROXY_DEBUG=1` 开关，按请求打印「走代理 / 直连（内网 / NO_PROXY）/ 代理失败回退直连」。实测：带代理时 `127.0.0.1` 与 `192.168.28.5` 判定直连、Yahoo 走代理返回 200。注意 Node 的 fetch **不读**容器里的 `http_proxy` / `https_proxy` / `no_proxy`（那是给 curl / python / npm 的），本应用只认 `STOCKLOG_PROXY` + 这套 no_proxy 规则。tsc 无错误。
+
 - 简化版 Excel 导入/导出接口增加独立登录校验，导入文件限制为 10MB，避免绕过页面调用及异常大文件占用服务资源。
 
 ---
