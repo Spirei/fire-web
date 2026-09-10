@@ -72,7 +72,9 @@ async function fetchTrend(secid: string): Promise<number[]> {
       if (!Array.isArray(trends) || trends.length === 0) continue;
       const points: number[] = [];
       for (const row of trends) {
-        const price = Number(String(row).split(",")[1]);
+        // 取每分钟「收盘价」（第 3 列）——与富途等券商分时一致；取第 2 列（开盘）会整体偏移，
+        // 实测恒指 331 根中与富途完全一致的只有 1 根、最大差 65.6 点，收盘口径 331/331 全同。
+        const price = Number(String(row).split(",")[2]);
         if (Number.isFinite(price) && price > 0) points.push(price);
       }
       if (points.length > 0) return points;
