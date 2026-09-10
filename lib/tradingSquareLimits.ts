@@ -1,10 +1,40 @@
 /**
- * 列表接口的每位作者条数上限。
- * 2026-09-11 按要求取消限制：接口返回该作者的全部历史（磁盘缓存本就是完整历史，不丢数据）。
- * 注意：无上限后 payload 与客户端 localStorage 缓存会随历史增长；将来若出现缓存写入失败，
- * 可以在「客户端缓存」这一层单独截断，不影响列表展示。
+ * 动态只保留「最近 N 天」：老帖是过去式，没有展示意义（2026-09-11 按用户要求）。
+ * 磁盘缓存不删数据，只是接口与列表不再返回更早的内容；后续新帖照常更新。
  */
-export const TRADING_SQUARE_AUTHOR_LIMIT = Number.POSITIVE_INFINITY;
+export const TRADING_SQUARE_RECENT_DAYS = 30;
+/** 兜底上限：即便某作者 30 天内刷了很多，也不会把列表撑爆 */
+export const TRADING_SQUARE_AUTHOR_LIMIT = 400;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 需要按「最近 N 天」收敛的作者（段永平保持全量，用户明确要求不动） */
+export const TRADING_SQUARE_RECENT_AUTHORS = ["trump"];
+
+/** 只保留指定作者的最近 N 天帖子；其他作者的帖子原样返回 */
+export function takeRecent<T extends { date?: string; author?: string }>(posts: T[], days = TRADING_SQUARE_RECENT_DAYS, now = Date.now()): T[] {
+  const cutoff = now - days * DAY_MS;
+  return posts.filter((post) => {
+    if (!post.author || !TRADING_SQUARE_RECENT_AUTHORS.includes(post.author)) return true;
+    const time = postTime(post.date);
+    return time === 0 || time >= cutoff;
+  });
+}
+
+/**
+ * 列表收敛（服务端与客户端共用，口径只有一处）：
+ * - 特朗普：只保留最近 N 天，并按 AUTHOR_LIMIT 兜底；
+ * - 其他作者（段永平）：原样保留，不动。
+ */
+export function trimFeed<T extends { date?: string; author?: string }>(posts: T[]): T[] {
+  const recent: T[] = [];
+  const others: T[] = [];
+  for (const post of posts) {
+    if (post.author && TRADING_SQUARE_RECENT_AUTHORS.includes(post.author)) recent.push(post);
+    else others.push(post);
+  }
+  return [...takeNewestByAuthor(recent, TRADING_SQUARE_AUTHOR_LIMIT), ...others];
+}
 
 function postTime(value?: string): number {
   const time = Date.parse(value || "");
