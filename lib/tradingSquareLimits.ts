@@ -1,5 +1,10 @@
-/** 列表接口每位作者最多返回最近 N 条；磁盘缓存仍保留完整历史供翻页重叠。 */
-export const TRADING_SQUARE_AUTHOR_LIMIT = 200;
+/**
+ * 列表接口的每位作者条数上限。
+ * 2026-09-11 按要求取消限制：接口返回该作者的全部历史（磁盘缓存本就是完整历史，不丢数据）。
+ * 注意：无上限后 payload 与客户端 localStorage 缓存会随历史增长；将来若出现缓存写入失败，
+ * 可以在「客户端缓存」这一层单独截断，不影响列表展示。
+ */
+export const TRADING_SQUARE_AUTHOR_LIMIT = Number.POSITIVE_INFINITY;
 
 function postTime(value?: string): number {
   const time = Date.parse(value || "");
@@ -17,7 +22,8 @@ export function takeNewest<T extends { date?: string }>(posts: T[], limit: numbe
 export function takeNewestByAuthor<T extends { date?: string; author?: string }>(posts: T[], perAuthor: number): T[] {
   const counts = new Map<string, number>();
   const out: T[] = [];
-  for (const post of takeNewest(posts, posts.length)) {
+  // 不截断时也要按时间倒序（原先靠 takeNewest 在截断时才排序，取消上限后必须显式排序）
+  for (const post of [...posts].sort((a, b) => postTime(b.date) - postTime(a.date))) {
     const key = post.author || "_";
     const n = counts.get(key) || 0;
     if (n >= perAuthor) continue;

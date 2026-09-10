@@ -2762,6 +2762,10 @@ export const V0_1_27_ENTRY: VersionEntry = {
     desc: "现象：进入编辑态后标题栏的 ✓ 和分区头部的「保存」都能提交，两个都像保存按钮，容易点错也容易困惑。改为：标题栏那颗图标永远是铅笔（只表示「进入编辑」，不再变成 ✓），编辑中它高亮成蓝色且禁用，鼠标悬停提示「正在编辑，改完点分区里的『保存』」；全站唯一的保存入口就是分区头部那颗「保存」。站点信息是常驻可编辑 + 自动保存，本来就不需要这个入口，标题栏对它继续隐藏。验证：tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。",
     kind: "fix"
   }, {
+    title: "交易广场取消每位作者 200 条上限（接口返回全部历史）",
+    desc: "此前列表接口每位作者最多返回 200 条（1faf84f 为修水合崩溃加的），没在界面上说明，用户不知情。按要求取消限制：TRADING_SQUARE_AUTHOR_LIMIT 设为不截断，接口改为返回全部历史；同时给 takeNewestByAuthor 补上显式时间倒序（原先只有截断时才会排序，取消上限后必须自己排，否则本地并集合并会把旧帖追加到末尾打乱顺序）。实测接口由 400 条变为 491 条（特朗普 291 + 段永平 200；段永平的 200 是上游/磁盘缓存本身的条数，不是展示限制）。无上限后 payload 与客户端 localStorage 缓存会随历史增长，将来若出现缓存写入失败，可在客户端缓存这一层单独截断。tsc 无错误。",
+    kind: "feature"
+  }, {
     title: "修好货币首屏：cookie 常量在布局里拿不到，改用字面量后 SSR 直接渲染所选货币",
     desc: "上一版把货币偏好写进 cookie 并由布局注入，但实测无效：布局里从 @/lib/currencyPrefs 导入的 DISPLAY_CURRENCY_COOKIE 在服务端渲染时为 undefined，于是 `startsWith(undefined + 等号)` 永远匹配不到，cookie 读出来是空的（用调试标记逐层验证：原始 Cookie 头里确实有 fire-display-currency=CNY，但解析结果为空）。改为在布局里用字面量常量名后立即生效：带 fire-display-currency=CNY 请求 /global，服务端输出 显示货币：人民币 + flag/cn.svg（不带 cookie 时仍是美元）。至此货币刷新不再闪默认值；老用户第一次加载会由客户端补写一次 cookie，之后不再闪。验证：tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。",
     kind: "fix"
