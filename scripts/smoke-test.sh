@@ -44,7 +44,7 @@ check "me 返回 demo" demo "$(echo "$ME" | python3 -c 'import json,sys; print(j
 # 登录后页面巡检：逐页确认服务端渲染没有异常（曾出现 /trading 因 SSR 访问
 # localStorage 直接 500 而测试没发现的情况，这里把主要页面都跑一遍）
 echo "== 页面巡检（登录后） =="
-for PAGE in /holdings /watchlist /fire /global /trading /celebs /earnings /activities /attachments /users /library /settings /asset-analysis /api-docs /deploy-status /simple-app; do
+for PAGE in /holdings /watchlist /fire /global /trading /celebs /earnings /activities /attachments /users /library /settings /asset-analysis /api-docs /deploy-status /simple-app /curve-compare; do
   check "GET ${PAGE}（登录后）" 200 "$(code -b "$JAR_DEMO" "$BASE$PAGE")"
 done
 

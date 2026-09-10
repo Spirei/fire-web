@@ -213,6 +213,7 @@ Review 自查清单（按项目实际走一遍）：
 - **渲染器可换，spec 不变**：口径算完输出 `CurveSpec`（`dates` / `series` / `domain` / `markers` / `hitIndices`），由 `buildCurveSpec`（通用）与 `ledgerCurveSpec`（账本入口）产出。适配器统一放 `lib/curve*.ts`：`lib/curveSvg.ts`（spec → SVG 字符串，纯字符串拼接、不依赖 DOM，浏览器与 Node 都能跑）、`components/PnlTrendChart.tsx`（spec → ECharts 配置）。要新增 canvas / 服务端出图，照 `curveSvg` 的形状再写一个即可：`domain` 与 `hitIndices` 是给自绘渲染器用的（ECharts 走自身刻度与采样）。
 - **SVG 适配器的两条硬约束**：1) 它是简化版页面与「服务端出图 / 分享图 / 报告」共用的同一份实现，改完必须做渲染对拍（见下）；2) 输出要同时是合法 HTML 与合法 XML —— 自定义属性必须写成 `data-hover-line=""` 这种带值形式（无值属性在 HTML 里合法、在 XML 里会被解析器拒绝），服务端出图前一律 `xmllint --noout` 过一遍。
 - **简化版桥接是硬依赖**：runtime.js 是 `public` 下的静态 JS，无法 import TS 模块，由 `app/simple-app/SimpleAppClient.tsx` 把 `curveApi` 挂到 `window.FireCurve`（模块级注入，先于 `afterInteractive` 脚本执行）。runtime 内**不再保留第二份实现**；桥接缺失时曲线区域显示「曲线组件未加载」并在控制台报一次错 —— 宁可显示提示，也不要第二份算法悄悄算出另一个数。
+- **真实数据前后对比页（诊断用）**：`/curve-compare`（服务端 `getAuthUser` 保护，真实金额只给登录用户看）用同一个真实账本 + 同一个时刻，并排渲染「改动前（ef550b6）/ 现在」，还能把旧实现的时钟切到 00:30 / 12:00 复现「窗口随时刻漂」的老问题。旧口径复刻在 `lib/legacyCurve.ts` —— **只允许这个页面引用，业务代码禁止 import**（全站口径仍然只有 `lib/curve.ts` 一份）；改口径后想说服自己「到底变了什么」，先看这一页。
 - **改动后的回归手段**：`lib/curve.ts` / `lib/curveSvg.ts` 都是纯函数，可直接用 `node --experimental-strip-types` 跑。改 `chartBlock` 或 `curveSvg` 后建议做渲染对拍：把改动前的 `public/simple-app-runtime.js`（`git show <改前 commit>:public/simple-app-runtime.js`）与现版各自的 `chartBlock` 抽进 `vm` 沙箱，喂同一批账本（含纯资金流日 / 0 资产 / 空账本 / 月末日期），逐字符比对输出的 SVG —— 小账本必须完全一致，大账本只允许命中圆点数量不同。
 
 ## 版本记录约定（重要）
