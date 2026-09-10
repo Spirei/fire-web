@@ -9,7 +9,8 @@ import MarketIcon from "@/components/MarketIcon";
 import StockKline from "@/components/StockKline";
 import FinancialPanel from "@/components/FinancialPanel";
 import CompanyProfilePanel from "@/components/CompanyProfilePanel";
-import { useAssetIcons } from "@/lib/useAssetIcons";
+import { ensureStockIcon, useAssetIcons } from "@/lib/useAssetIcons";
+import { pickStockIcon } from "@/lib/stockIconKey";
 import { MARKET_CURRENCY, MULTI_CURRENCIES, usdCap } from "@/lib/currency";
 import { relatedETFs, relatedStock, type RelatedETF } from "@/lib/relatedEtfs";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
@@ -138,6 +139,10 @@ function dividendStatus(item: DividendRecord) {
 
 export default function StockDetailView({ market, code, name, quote: propQuote, onBack, followed = false, onToggleFollow, initialTab = "overview", onTabChange }: Props) {
   const { assets, stockIcons } = useAssetIcons(["stock"]);
+  const stockIconUrl = pickStockIcon(stockIcons, market, code);
+  useEffect(() => {
+    void ensureStockIcon(market, code);
+  }, [market, code]);
   const [detailData, setDetailData] = useState<{
     quote: Quote | null;
     rates: Record<string, number>;
@@ -548,9 +553,9 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
             </svg>
           </button>
         )}
-        {stockIcons[`${market.toUpperCase()}:${code.toUpperCase()}`] ? (
+        {stockIconUrl ? (
           <img
-            src={stockIcons[`${market.toUpperCase()}:${code.toUpperCase()}`]}
+            src={stockIconUrl}
             alt=""
             className="stock-detail-logo h-9 w-9 flex-none rounded-full object-cover"
           />
@@ -908,7 +913,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
           ) : tab === "financial" ? (
             <FinancialPanel market={market} code={code} />
           ) : tab === "company" ? (
-            <CompanyProfilePanel market={market} code={code} name={displayName} iconUrl={stockIcons[`${market.toUpperCase()}:${code.toUpperCase()}`]} />
+            <CompanyProfilePanel market={market} code={code} name={displayName} iconUrl={stockIconUrl} />
           ) : (
             <div className="flex h-[300px] flex-col items-center justify-center gap-2 rounded-[12px] border border-dashed border-edge-strong text-sm text-faint">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-8 w-8 opacity-50">

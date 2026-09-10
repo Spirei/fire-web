@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { RELATED_ETF_MAIN_STOCK } from "@/lib/relatedEtfs";
+import { pickStockIcon, stockIconLookupCodes } from "@/lib/stockIconKey";
 
 export interface Asset {
   id: string;
@@ -48,6 +49,44 @@ let cdnRequested = false;
  * 用服务端首屏注入的紧凑图标表预热共享缓存。
  * at 保持 0，让完整素材库仍会在后台刷新；首帧则无需等待 /api/assets。
  */
+const iconInflight = new Map<string, Promise<void>>();
+
+function stockMapFromCache(): Record<string, string> {
+  const map: Record<string, string> = {};
+  (cache.get("stock")?.assets ?? []).forEach((asset) => {
+    map[`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`] = asset.url;
+  });
+  return map;
+}
+
+/** 个股详情 / 划过卡片按需补一张素材库图标，不拉 3000+ 全量。 */
+export function ensureStockIcon(market: string, code: string) {
+  if (pickStockIcon(stockMapFromCache(), market, code)) return;
+  const key = `${market.toUpperCase()}:${code.toUpperCase()}`;
+  const pending = iconInflight.get(key);
+  if (pending) return pending;
+  const task = fetch(`/api/assets?type=stock&market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`)
+    .then((response) => (response.ok ? response.json() : null))
+    .then((data) => {
+      const icons: Record<string, string> = {};
+      (Array.isArray(data?.assets) ? data.assets : []).forEach((asset: { type?: string; market?: string; code?: string; url?: string }) => {
+        if (asset?.type === "stock" && asset.market && asset.code && asset.url) {
+          icons[`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`] = asset.url;
+        }
+      });
+      if (Object.keys(icons).length) {
+        primeStockIconCache(icons);
+        notify();
+      }
+    })
+    .catch(() => { /* 保留已有首字母兜底 */ })
+    .finally(() => {
+      if (iconInflight.get(key) === task) iconInflight.delete(key);
+    });
+  iconInflight.set(key, task);
+  return task;
+}
+
 export function primeStockIconCache(icons: Record<string, string>) {
   const current = cache.get("stock");
   const byKey = new Map<string, Asset>();
@@ -262,7 +301,13 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
   const stockIcons = useMemo(() => {
     const map: Record<string, string> = {};
     assets.forEach((asset) => {
-      if (asset.type === "stock") map[`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`] = asset.url;
+      if (asset.type !== "stock") return;
+      const market = asset.market.toUpperCase();
+      const url = asset.url;
+      stockIconLookupCodes(market, asset.code).forEach((item) => {
+        const key = `${market}:${item}`;
+        if (!map[key]) map[key] = url;
+      });
     });
     Object.entries(RELATED_ETF_MAIN_STOCK).forEach(([etf, main]) => {
       const fallbackUrl = map[`US:${etf}`] || map[`US:${main}`];

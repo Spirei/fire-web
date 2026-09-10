@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
-import { deleteAsset, ensureBrokerAssets, ensureCategoryAssets, ensureIconAssets, ensureMarketAssets, ensureStockAssets, getAssets, upsertAsset, type AssetType } from "@/lib/assets";
+import { deleteAsset, ensureBrokerAssets, ensureCategoryAssets, ensureIconAssets, ensureMarketAssets, ensureStockAssets, getAssets, getStockIconMap, upsertAsset, type AssetType } from "@/lib/assets";
 import { enrichAssetQuotes, enrichStockAssetQuotes } from "@/lib/assetQuotes";
 import { getDb } from "@/lib/db";
 
@@ -14,6 +14,33 @@ export async function GET(request: Request) {
   if (type === "crypto" || type === "metal" || type === "flag") ensureCategoryAssets(type);
   if (type === "stock") ensureStockAssets();
   if (type === "broker") ensureBrokerAssets();
+  const market = searchParams.get("market");
+  const code = searchParams.get("code");
+  if (type === "stock" && market && code) {
+    const map = getStockIconMap([{ market, code }]);
+    const assets = Object.entries(map).map(([key, url]) => {
+      const separator = key.indexOf(":");
+      const itemMarket = key.slice(0, separator);
+      const itemCode = key.slice(separator + 1);
+      return {
+        id: `stock:${itemMarket}:${itemCode}`,
+        type: "stock" as const,
+        market: itemMarket,
+        code: itemCode,
+        name: itemCode,
+        url,
+        urlDark: "",
+        marketCap: 0,
+        price: null,
+        changePct: null,
+        source: "auto" as const,
+        lastCheckedAt: "",
+        board: "",
+        updatedAt: ""
+      };
+    });
+    return NextResponse.json({ assets });
+  }
   const assets =
     type === "stock" || type === "market" || type === "flag" || type === "crypto" || type === "metal" || type === "broker" || type === "group" || type === "icon"
       ? getAssets(type)

@@ -99,8 +99,8 @@ export function activeQuoteMarkets(markets: string[], now = new Date()) {
   return new Set(markets.filter((market) => marketSessionState(market, now).active));
 }
 
-/** 卡片用的三态：开盘中 / 未开盘 / 休市（休市一般只出现在周末）。 */
-export function marketBoardLabel(market: string, now = new Date()): "开盘中" | "未开盘" | "休市" {
+/** 卡片开盘状态，文案与个股详情页一致：盘前交易 / 盘中交易 / 盘后交易 / 夜盘交易，周末为休市。 */
+export function marketBoardLabel(market: string, now = new Date()): string {
   const key = market.toUpperCase();
   const timeZone =
     key === "US" ? "America/New_York"
@@ -109,5 +109,12 @@ export function marketBoardLabel(market: string, now = new Date()): "开盘中" 
           : "Asia/Shanghai";
   const weekday = localParts(now, timeZone).weekday;
   if (weekday === "Sat" || weekday === "Sun") return "休市";
-  return marketSessionState(market, now).session === "regular" ? "开盘中" : "未开盘";
+  const session = marketSessionState(market, now).session;
+  if (key === "US") {
+    if (session === "pre") return "盘前交易";
+    if (session === "regular") return "盘中交易";
+    if (session === "post") return "盘后交易";
+    if (session === "overnight") return "夜盘交易";
+  }
+  return session === "regular" ? "盘中交易" : "未开盘";
 }

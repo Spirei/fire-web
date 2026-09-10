@@ -7,7 +7,8 @@ import { fmtCap, fmtNumMarket, fmtPct, fmtPrice, fmtQuoteTime } from "@/lib/form
 import { useMarketBadge, useMarketBadgeVisible } from "@/lib/useMarketBadge";
 import { marketBoardLabel } from "@/lib/marketSessions";
 import { marketMeta, type Quote } from "@/lib/types";
-import { useAssetIcons } from "@/lib/useAssetIcons";
+import { ensureStockIcon, useAssetIcons } from "@/lib/useAssetIcons";
+import { pickStockIcon } from "@/lib/stockIconKey";
 
 const QUOTE_TTL = 30_000;
 const ENTER_MS = 160;
@@ -70,7 +71,10 @@ function StockQuoteCard({
   onOpen: () => void;
 }) {
   const { stockIcons } = useAssetIcons(["stock"]);
-  const icon = stockIcons[quoteId(market, code)];
+  const icon = pickStockIcon(stockIcons, market, code);
+  useEffect(() => {
+    void ensureStockIcon(market, code);
+  }, [market, code]);
   const badge = useMarketBadge(market, code);
   const badgeVisible = useMarketBadgeVisible();
   const currency = marketMeta(market).currency;

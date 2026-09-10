@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import { RELATED_ETF_MAIN_STOCK } from "./relatedEtfs";
 import { getSiteSettings } from "./settings";
+import { stockIconLookupCodes } from "./stockIconKey";
 
 const seeded = {
   icon: false,
@@ -193,10 +194,17 @@ export function getStockIconMap(pairs: Array<{ market: string; code: string }>):
   const stmt = db.prepare("SELECT market, code, url FROM assets WHERE type = 'stock' AND upper(market) = upper(?) AND upper(code) = upper(?) LIMIT 1");
   const out: Record<string, string> = {};
   pairs.forEach((pair) => {
-    const row = stmt.get(pair.market, pair.code) as { market?: string; code?: string; url?: string } | undefined;
-    const url = String(row?.url || "");
-    if (!url || !localAssetExists(url)) return;
-    out[`${String(row?.market).toUpperCase()}:${String(row?.code).toUpperCase()}`] = url;
+    const market = pair.market.toUpperCase();
+    for (const code of stockIconLookupCodes(market, pair.code)) {
+      const row = stmt.get(market, code) as { market?: string; code?: string; url?: string } | undefined;
+      const url = String(row?.url || "");
+      if (!url || !localAssetExists(url)) continue;
+      const storedMarket = String(row?.market).toUpperCase();
+      const storedCode = String(row?.code).toUpperCase();
+      out[`${storedMarket}:${storedCode}`] = url;
+      out[`${market}:${pair.code.toUpperCase()}`] = url;
+      break;
+    }
   });
   return out;
 }
