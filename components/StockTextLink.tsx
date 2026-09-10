@@ -3,8 +3,8 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import SafeAssetImage from "@/components/SafeAssetImage";
-import { fmtCap, fmtNumMarket, fmtPct, fmtPrice, fmtQuoteTime } from "@/lib/format";
-import { useMarketBadge, useMarketBadgeVisible } from "@/lib/useMarketBadge";
+import { fmtPct, fmtPrice, fmtQuoteTime } from "@/lib/format";
+import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { marketBoardLabel } from "@/lib/marketSessions";
 import { marketMeta, type Quote } from "@/lib/types";
 import { ensureStockIcon, useAssetIcons } from "@/lib/useAssetIcons";
@@ -75,8 +75,6 @@ function StockQuoteCard({
   useEffect(() => {
     void ensureStockIcon(market, code);
   }, [market, code]);
-  const badge = useMarketBadge(market, code);
-  const badgeVisible = useMarketBadgeVisible();
   const currency = marketMeta(market).currency;
   const fromQuote = quote?.name && quote.name.toUpperCase() !== code.toUpperCase() ? quote.name : "";
   const fromTag = name && name.toUpperCase() !== code.toUpperCase() ? name : "";
@@ -84,6 +82,8 @@ function StockQuoteCard({
   const up = (quote?.changePct ?? 0) >= 0;
   const tone = quote ? (up ? "text-up" : "text-down") : "text-faint";
   const board = marketBoardLabel(market);
+  const clock = quote?.time ? fmtQuoteTime(quote.time).slice(-5) : "";
+  const initial = displayName.slice(0, 1);
 
   return (
     <div
@@ -97,20 +97,17 @@ function StockQuoteCard({
               src={icon}
               alt=""
               className="h-8 w-8 shrink-0 rounded-full object-cover"
-              fallback={<span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted dark:bg-white/10">{displayName.slice(0, 1)}</span>}
+              fallback={<span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted dark:bg-white/10">{initial}</span>}
             />
           ) : (
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted dark:bg-white/10">{displayName.slice(0, 1)}</span>
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted dark:bg-white/10">{initial}</span>
           )}
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
+            <div className="flex min-w-0 items-center gap-1.5">
               <strong className="min-w-0 truncate text-[13px] text-ink dark:text-white">{displayName}</strong>
-              {badgeVisible && <span className="inline-flex h-[16px] shrink-0 items-center rounded px-1 text-[9px] font-bold leading-none" style={{ background: badge.bg, color: badge.fg }}>{badge.label}</span>}
+              <MarketCodeBadge market={market} code={code} />
             </div>
-            <p className="mt-0.5 text-[11px] tabular-nums text-muted">
-              {code}
-              <span className="ml-1.5 font-semibold text-muted">{board}</span>
-            </p>
+            <p className="mt-0.5 text-[11px] tabular-nums text-muted">{code}</p>
           </div>
         </div>
         {quote === undefined ? (
@@ -119,22 +116,20 @@ function StockQuoteCard({
           <p className="mt-3 text-[12px] text-faint">暂无实时行情</p>
         ) : (
           <>
-            <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className={`text-[22px] font-bold leading-none tabular-nums ${tone}`}>{fmtPrice(quote.price, currency, market)}</span>
-              <span className={`text-[12px] font-semibold tabular-nums ${tone}`}>
+              <span className={`inline-flex items-baseline gap-1 text-[12px] font-semibold tabular-nums ${tone}`}>
+                <svg viewBox="0 0 12 12" fill="currentColor" className="h-[11px] w-[11px] self-center" aria-hidden="true">
+                  {up ? <path d="M6 2.75 L9.72 9.25 L2.28 9.25 Z" /> : <path d="M6 9.25 L2.28 2.75 L9.72 2.75 Z" />}
+                </svg>
                 {up ? "+" : ""}{fmtPct(quote.changePct / 100)}
-                <span className="ml-1.5">{up ? "+" : ""}{fmtNumMarket(quote.change, market)}</span>
               </span>
             </div>
-            <p className="mt-2 text-[11px] tabular-nums text-muted">
-              {quote.prevClose != null && Number.isFinite(quote.prevClose) ? `昨收 ${fmtPrice(quote.prevClose, currency, market)}` : null}
-              {quote.prevClose != null && quote.marketCap ? " · " : null}
-              {quote.marketCap ? `市值 ${fmtCap(quote.marketCap)}` : null}
+            <p className="mt-1.5 text-[11px] font-medium text-muted">
+              {board}{clock ? ` · ${clock}` : ""}
             </p>
-            {quote.time ? <p className="mt-1 text-[10px] text-faint">{fmtQuoteTime(quote.time)}</p> : null}
           </>
         )}
-        <p className="mt-2.5 text-[10px] font-semibold text-brand-deep">点击查看详情</p>
       </button>
     </div>
   );

@@ -344,7 +344,7 @@ function PostBody({
             return (
               <StockTextLink
                 key={`${part.market}-${part.code}-${index}`}
-                value={part.value}
+                value={part.value.startsWith("$") && part.name ? part.name : part.value}
                 market={part.market}
                 code={part.code}
                 name={part.name}
@@ -530,8 +530,11 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
   }, [posts, selected]);
 
   const categoryCount = (category: DuanCategory) => posts.filter((post) => post.author === "duan" && post.categories?.includes(category)).length;
-  const windowStyle = { "--trading-x": `${pos.x}px`, "--trading-y": `${pos.y}px` } as CSSProperties;
-  const allFreshness = formatUpdatedAt(latestTime(updatedByAuthor)) || (refreshing ? "正在检查更新" : "尚未同步");
+  // 首屏位置由 app/layout.tsx 的 head 同步脚本写进 :root 的 CSS 变量（绘制前生效），
+  // 这里只在已知非零位置时才用 inline 覆盖，避免刷新时先画在默认位置再跳到保存位置。
+  const windowStyle = pos.x || pos.y ? ({ "--trading-x": `${pos.x}px`, "--trading-y": `${pos.y}px` } as CSSProperties) : undefined;
+  // 加载完成前不显示「尚未同步 / 0 条」这类文字：让人感觉是在原处等内容出现，而不是发文被清空了
+  const allFreshness = latestTime(updatedByAuthor) ? formatUpdatedAt(latestTime(updatedByAuthor)) : (refreshing ? "正在检查更新" : "");
   const personFreshness = selected === "all" ? "" : refreshingByAuthor[selected] ? "正在检查更新" : formatUpdatedAt(updatedByAuthor[selected] ?? null);
   const newCounts = useMemo(() => countUnseen(posts, seen), [posts, seen]);
   const followed = detail ? records.some((record) => {
@@ -541,7 +544,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
 
   if (detail) {
     return (
-      <main style={windowStyle} className={`mx-auto w-full max-w-[800px] overflow-hidden rounded-2xl border border-edge bg-white shadow-card dark:bg-[#10151d] md:[transform:translate(var(--trading-x),var(--trading-y))] ${dragging ? "select-none" : ""}`}>
+      <main style={windowStyle} className={`mx-auto w-full max-w-[800px] overflow-hidden rounded-2xl border border-edge bg-white shadow-card dark:bg-[#10151d] md:[transform:translate(var(--trading-x,0px),var(--trading-y,0px))] ${dragging ? "select-none" : ""}`}>
         <div style={{ animation: "fade-in .25s ease" }}>
           <StockDetailView market={detail.market} code={detail.code} name={detail.name} onBack={() => setDetail(null)} followed={followed} />
         </div>
@@ -550,13 +553,13 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
   }
 
   return (
-    <main style={windowStyle} className={`mx-auto grid w-full max-w-[800px] overflow-hidden rounded-2xl border border-edge bg-white shadow-card dark:bg-[#10151d] md:grid-cols-[200px_minmax(0,1fr)] md:[transform:translate(var(--trading-x),var(--trading-y))] ${dragging ? "select-none" : ""}`}>
+    <main style={windowStyle} className={`mx-auto grid w-full max-w-[800px] overflow-hidden rounded-2xl border border-edge bg-white shadow-card dark:bg-[#10151d] md:grid-cols-[200px_minmax(0,1fr)] md:[transform:translate(var(--trading-x,0px),var(--trading-y,0px))] ${dragging ? "select-none" : ""}`}>
       <aside className="flex gap-2 overflow-x-auto border-b border-edge p-3 dark:border-white/10 md:block md:overflow-visible md:border-b-0 md:border-r">
         <button type="button" aria-pressed={selected === "all"} onClick={() => changePerson("all")} className={`flex min-w-[142px] items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-bg-gray active:scale-[.98] dark:hover:bg-white/[.035] md:mb-1 md:w-full md:min-w-0 ${selected === "all" ? "bg-brand-light dark:bg-[#1a202a]" : ""}`}>
           <ActivityIcon />
           <div className="min-w-0">
             <strong className="block text-sm text-ink dark:text-white">全部动态</strong>
-            <span className="text-xs tabular-nums text-muted">{posts.length || "—"} 条</span>
+            <span className="text-xs tabular-nums text-muted">{posts.length ? `${posts.length} 条` : ""}</span>
           </div>
         </button>
         {orderedPeople.map((person) => (
@@ -578,7 +581,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
               {personFreshness ? <p className="mt-0.5 text-[11px] text-faint">{personFreshness}</p> : null}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs tabular-nums text-muted">{visible.length} 条</span>
+              <span className="text-xs tabular-nums text-muted">{loading ? "" : `${visible.length} 条`}</span>
               <button type="button" onClick={toggleFixed} title={fixed ? "已固定窗口（点击解锁拖动）" : "固定窗口（锁定当前位置）"} aria-label={fixed ? "取消固定交易广场" : "固定交易广场"} aria-pressed={fixed} className={`grid h-7 w-7 place-items-center rounded-md text-muted transition-colors hover:bg-bg-gray hover:text-ink active:scale-[.96] dark:hover:bg-white/10 dark:hover:text-white ${fixed ? "opacity-100" : "opacity-60"}`}>
                 <IconPin size={16} stroke={1.8} fill={fixed ? "currentColor" : "none"} />
               </button>
