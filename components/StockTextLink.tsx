@@ -89,6 +89,7 @@ function StockQuoteCard({
     <div
       role="tooltip"
       className="overflow-hidden rounded-xl border border-edge bg-white shadow-pop dark:border-white/10 dark:bg-[#16181d]"
+      aria-busy={quote === undefined}
     >
       <button type="button" onClick={onOpen} className="block w-full px-3.5 py-3 text-left">
         <div className="flex items-start gap-2.5">
@@ -114,7 +115,14 @@ function StockQuoteCard({
           </div>
         </div>
         {quote === undefined ? (
-          <p className="mt-3 text-[12px] text-faint">正在获取行情…</p>
+          <div className="mt-3 space-y-2" aria-hidden>
+            <div className="flex items-baseline gap-2">
+              <span className="h-7 w-[5.5rem] animate-pulse rounded-md bg-bg-gray dark:bg-white/10" />
+              <span className="h-3 w-12 animate-pulse rounded-md bg-bg-gray dark:bg-white/10" />
+            </div>
+            <div className="h-3 w-40 animate-pulse rounded-md bg-bg-gray dark:bg-white/10" />
+            <div className="h-2.5 w-16 animate-pulse rounded-md bg-bg-gray dark:bg-white/10" />
+          </div>
         ) : quote == null ? (
           <p className="mt-3 text-[12px] text-faint">暂无实时行情</p>
         ) : (
