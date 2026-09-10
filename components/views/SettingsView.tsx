@@ -213,11 +213,12 @@ function SubPill({
     <button
       ref={ref}
       type="button"
+      data-active={active ? "true" : undefined}
       onClick={handleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseMove={handleMove}
       onMouseLeave={handleLeave}
-      className={`pill-magnetic relative flex items-center gap-1.5 overflow-hidden rounded-full px-4 py-2 text-[13px] font-semibold ${
+      className={`pill-magnetic relative flex flex-none items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-semibold ${
         active
           ? "bg-white text-ink-2 border border-edge-strong shadow-sm shadow-sm active:bg-bg-gray"
           : "text-muted hover:bg-brand-hover active:bg-bg-gray"
@@ -1618,9 +1619,20 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const cmdRef = useRef<HTMLInputElement | null>(null);
   const sidebarSearchRef = useRef<HTMLInputElement | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
+  const mobileSubnavRef = useRef<HTMLDivElement | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [cmdQuery, setCmdQuery] = useState("");
   const [cmdIndex, setCmdIndex] = useState(0);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const nav = mobileSubnavRef.current;
+      const active = nav?.querySelector<HTMLElement>('[data-active="true"]');
+      if (!nav || !active) return;
+      nav.scrollLeft = Math.max(0, active.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [sub]);
 
   function openCmdPalette() {
     setCmdIndex(0);
@@ -1696,7 +1708,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }
 
   const subPills = (extra: string) => (
-    <div className={`settings-subnav mb-5 flex flex-wrap items-center gap-1.5 rounded-2xl border border-edge bg-white p-1.5 shadow-card ${extra}`}>
+    <div ref={mobileSubnavRef} className={`settings-subnav mb-5 flex flex-nowrap items-center gap-1.5 overflow-x-auto rounded-2xl border border-edge bg-white p-1.5 shadow-card [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${extra}`}>
       {visibleSubNav.map((s) => (
         <SubPill
           key={s.key}

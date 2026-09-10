@@ -4072,15 +4072,35 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .sv-win-root .sw-window .sw-pill.is-active { border-color:transparent; background:color-mix(in srgb, var(--sv-text) 9%, var(--sv-bg)); color:var(--sv-text); font-weight:500; box-shadow:none; }
 .sv-win-root .sw-window .subhead { padding:14px 2px 6px; color:var(--sv-text-3); }
 @media (max-width:760px) {
-  .sv-win-root .sw-window { height:min(760px,calc(100vh - 112px)); border-radius:10px; }
-  .sv-win-root .sw-page-head { padding:24px 16px 0; }
-  .sv-win-root .sw-content-scroll { padding:8px 16px 48px; }
+  .sv-win-root { width:100%; max-width:none; transform:none !important; }
+  .sv-win-root .sw-window { width:100%; height:clamp(420px,calc(100dvh - 210px),680px); min-height:0; border-radius:12px; }
+  .sv-win-root .settings-page,.sv-win-root .sw-content { width:100%; min-width:0; overflow:hidden; }
+  .sv-win-root .sw-sidebar { display:none !important; }
+  .sv-win-root .sw-titlebar { height:54px; min-height:54px; cursor:default; }
+  .sv-win-root .sw-titlebar > span { top:12px; right:12px; gap:5px; }
+  .sv-win-root .sw-titlebar > span > button,.sv-win-root .sw-titlebar .sv-variant > button { width:30px; height:30px; }
+  .sv-win-root .sw-page-head { min-height:58px; padding:17px 152px 0 16px; }
+  .sv-win-root .sw-page-head p { max-width:100%; font-size:11px; }
+  .sv-win-root .sw-content-scroll { overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding:8px 14px calc(54px + env(safe-area-inset-bottom)); }
+  .sv-win-root .tab-panel,.sv-win-root .tab-panel > div { width:100%; min-width:0; }
   .sv-win-root .sw-window .settings-section-card { padding:0; border-radius:0; }
-  .sv-win-root .sw-window .settings-section-body { padding:8px 16px; }
+  .sv-win-root .sw-window .settings-section-top { gap:10px; padding-bottom:14px; }
+  .sv-win-root .sw-window .settings-section-top h4 { font-size:18px; }
+  .sv-win-root .sw-window .settings-section-body,.sv-win-root .sw-window .settings-section-card > .settings-section-top + * { max-width:100%; padding:8px 12px; }
   .sv-win-root .sw-window .sw-row { flex-wrap:wrap; }
   .sv-win-root .sw-window .sw-row-label { flex:1 1 100%; }
   .sv-win-root .sw-window .sw-row .ctrl { width:100%; flex-wrap:wrap; }
   .sv-win-root .sw-window .sw-row-input,.sv-win-root .sw-window .sw-media-input,.sv-win-root .sw-window input[type="text"],.sv-win-root .sw-window input[type="password"] { width:100%; }
+  .sv-win-root .settings-code-value,.sv-win-root .settings-link-value { max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+  .sv-win-root .sw-statusbar { padding-inline:12px; }
+  .sv-win-root .sw-statusbar > span:nth-child(2),.sv-win-root .sw-statusbar > span:last-child { display:none; }
+}
+@media (max-width:420px) {
+  .sv-win-root .sw-window { border-radius:10px; }
+  .sv-win-root .sw-page-head { padding-left:12px; padding-right:140px; }
+  .sv-win-root .sw-content-scroll { padding-inline:10px; }
+  .sv-win-root .sw-titlebar > span { right:8px; }
+  .sv-win-root .sw-titlebar > span > button,.sv-win-root .sw-titlebar .sv-variant > button { width:28px; height:28px; }
 }
 @media (prefers-reduced-motion:reduce) {
   .sv-win-root .sw-titlebar > span > button,.sv-win-root .sw-titlebar .sv-variant > button,.sv-win-root .sw-nav-item { transition:none; }
