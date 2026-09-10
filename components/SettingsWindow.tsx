@@ -26,9 +26,15 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
   const [variantOpen, setVariantOpen] = useState(false);
   const [fixed, setFixed] = useState<boolean>(false);
   const [editing, setEditing] = useState(false);
+  // auto=true 表示当前分区是「常驻可编辑 + 自动保存」（如站点信息），标题栏不再显示铅笔/完成
+  const [autoEdit, setAutoEdit] = useState(false);
   // 监听内容区广播的编辑状态：编辑中标题栏铅笔切换为「✓ 完成」并高亮
   useEffect(() => {
-    const onEditState = (e: Event) => setEditing(Boolean((e as CustomEvent<{ editing?: boolean }>).detail?.editing));
+    const onEditState = (e: Event) => {
+      const detail = (e as CustomEvent<{ editing?: boolean; auto?: boolean }>).detail;
+      setEditing(Boolean(detail?.editing));
+      setAutoEdit(Boolean(detail?.auto));
+    };
     window.addEventListener("fire:settings-edit-state", onEditState);
     return () => window.removeEventListener("fire:settings-edit-state", onEditState);
   }, []);
@@ -183,7 +189,7 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
                 <path d="m21 21-4.3-4.3" />
               </svg>
             </button>
-            <button
+            {!autoEdit && <button
               type="button"
               onClick={() => window.dispatchEvent(new Event(editing ? "fire:settings-edit-complete" : "fire:settings-edit-active"))}
               title={editing ? "保存当前设置" : "编辑当前设置"}
@@ -200,7 +206,7 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
                   <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
                 </svg>
               )}
-            </button>
+            </button>}
             <button
               type="button"
               onClick={toggleFixed}

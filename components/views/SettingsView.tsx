@@ -1225,7 +1225,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [editingSources, setEditingSources] = useState(false);
   const [editingTradingSquare, setEditingTradingSquare] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
-  const [editingSiteInfo, setEditingSiteInfo] = useState(false);
+  // 站点信息：不再有「编辑 / 保存」两步 —— 字段常驻可编辑，改动由全局自动保存（700ms 防抖 + 胶囊提示）落库
+  const [editingSiteInfo] = useState(true);
   const [editingFutu, setEditingFutu] = useState(false);
   const [editingMarketBadges, setEditingMarketBadges] = useState(false);
   const [showAllMarketBadges, setShowAllMarketBadges] = useState(false);
@@ -1247,7 +1248,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   function beginActiveEdit() {
     if (activeAnchor === "trading-square") setEditingTradingSquare(true);
-    else if (activeAnchor === "info") setEditingSiteInfo(true);
+    // info 分区常驻可编辑（自动保存），无需进入编辑态
     else if (activeAnchor === "appearance") setEditingAppearance(true);
     else if (activeAnchor === "ticker") setEditingTicker(true);
     else if (activeAnchor === "nav") { setEditingHomeNav(true); setEditingTabs(true); }
@@ -1265,7 +1266,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }, [activeAnchor]);
   // 把「当前分区是否在编辑」广播给标题栏（铅笔 ↔ 完成图标切换）
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent("fire:settings-edit-state", { detail: { editing: activeEditState } }));
+    window.dispatchEvent(new CustomEvent("fire:settings-edit-state", { detail: { editing: activeEditState, auto: activeAnchor === "info" } }));
   }, [activeEditState]);
   const saveActiveEditRef = useRef<() => Promise<void>>(async () => {});
   const savingEditRef = useRef(false);
@@ -1281,7 +1282,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         if (ok) setEditingTradingSquare(false);
       } else if (activeAnchor === "info") {
         const ok = await saveBlock("siteInfo", { title: site.title, domain: site.domain, allowRegister: site.allowRegister, footerDesc: site.footerDesc }, "站点信息已保存");
-        if (ok) setEditingSiteInfo(false);
+        // 站点信息是常驻可编辑 + 自动保存，不再有「保存后转只读」这一步
       } else if (activeAnchor === "appearance") {
         const ok = await saveBlock("brand", { ico: site.ico, siteLogo: site.siteLogo, logoText: site.logoText, logoFont: site.logoFont, homepageBg: site.homepageBg, loginSideImage: site.loginSideImage }, "网站形象已保存");
         if (ok) setEditingAppearance(false);
@@ -1904,7 +1905,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         {/* 内容头部 */}
         <div className="sw-page-head flex flex-none items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate">{activePageMeta?.label || activeSubMeta?.label} · {activeEditState ? "正在编辑" : "只读浏览"}</p>
+            <p className="truncate">{activePageMeta?.label || activeSubMeta?.label} · {activeAnchor === "info" ? "修改自动保存" : activeEditState ? "正在编辑" : "只读浏览"}</p>
           </div>
         </div>
 
@@ -1929,12 +1930,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     title="站点信息"
                     desc="站点在浏览器标签页与首页展示的基础信息"
                     id="info"
-                    titleAction={!editingSiteInfo ? (
-                      <button type="button" onClick={() => setEditingSiteInfo(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑站点信息" aria-label="编辑站点信息">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                      </button>
-                    ) : undefined}
-                    action={editingSiteInfo ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
                   >
                     <div className="flex flex-col">
                       <div className="sw-row">
