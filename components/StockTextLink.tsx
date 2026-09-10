@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import { fmtCap, fmtNumMarket, fmtPct, fmtPrice, fmtQuoteTime } from "@/lib/format";
 import { useMarketBadge, useMarketBadgeVisible } from "@/lib/useMarketBadge";
+import { marketBoardLabel } from "@/lib/marketSessions";
 import { marketMeta, type Quote } from "@/lib/types";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 
@@ -55,13 +56,6 @@ function loadQuote(market: string, code: string): Promise<Quote | null> {
   return request;
 }
 
-function sessionLabel(session?: Quote["session"]) {
-  if (session === "PRE") return "盘前";
-  if (session === "AFTER") return "盘后";
-  if (session === "OVERNIGHT") return "夜盘";
-  return "";
-}
-
 function StockQuoteCard({
   market,
   code,
@@ -85,7 +79,8 @@ function StockQuoteCard({
   const displayName = fromQuote || fromTag || name || quote?.name || code;
   const up = (quote?.changePct ?? 0) >= 0;
   const tone = quote ? (up ? "text-up" : "text-down") : "text-faint";
-  const session = sessionLabel(quote?.session);
+  const board = marketBoardLabel(market);
+  const boardTone = board === "开盘中" ? "text-up" : board === "休市" ? "text-faint" : "text-muted";
 
   return (
     <div
@@ -109,7 +104,10 @@ function StockQuoteCard({
               <strong className="min-w-0 truncate text-[13px] text-ink dark:text-white">{displayName}</strong>
               {badgeVisible && <span className="inline-flex h-[16px] shrink-0 items-center rounded px-1 text-[9px] font-bold leading-none" style={{ background: badge.bg, color: badge.fg }}>{badge.label}</span>}
             </div>
-            <p className="mt-0.5 text-[11px] tabular-nums text-muted">{code}{session ? ` · ${session}` : ""}</p>
+            <p className="mt-0.5 text-[11px] tabular-nums text-muted">
+              {code}
+              <span className={`ml-1.5 font-semibold ${boardTone}`}>{board}</span>
+            </p>
           </div>
         </div>
         {quote === undefined ? (

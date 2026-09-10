@@ -98,3 +98,16 @@ export function marketSessionState(market: string, now = new Date()): MarketSess
 export function activeQuoteMarkets(markets: string[], now = new Date()) {
   return new Set(markets.filter((market) => marketSessionState(market, now).active));
 }
+
+/** 卡片用的三态：开盘中 / 未开盘 / 休市（休市一般只出现在周末）。 */
+export function marketBoardLabel(market: string, now = new Date()): "开盘中" | "未开盘" | "休市" {
+  const key = market.toUpperCase();
+  const timeZone =
+    key === "US" ? "America/New_York"
+      : key === "JP" ? "Asia/Tokyo"
+        : key === "KR" ? "Asia/Seoul"
+          : "Asia/Shanghai";
+  const weekday = localParts(now, timeZone).weekday;
+  if (weekday === "Sat" || weekday === "Sun") return "休市";
+  return marketSessionState(market, now).session === "regular" ? "开盘中" : "未开盘";
+}
