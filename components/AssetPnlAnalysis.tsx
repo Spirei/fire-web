@@ -11,8 +11,19 @@ import { getMarketBadge } from "@/lib/marketBadge";
 import { useMarketBadge, useMarketBadgeVisible } from "@/lib/useMarketBadge";
 import { showToast } from "@/lib/toast";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
+import { benchmarkOnDates, rangeStart, type CurveRange } from "@/lib/curve";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
 import { fmtMoney, fmtMoneyCompact } from "@/lib/format";
+
+/** 页面上用中文标签展示周期，计算口径统一映射到 lib/curve 的 CurveRange */
+const RANGE_BY_PERIOD: Record<string, CurveRange> = {
+  "本月": "month",
+  "近 1 月": "1m",
+  "近 6 月": "6m",
+  "本年": "ytd",
+  "近 1 年": "1y",
+  "全部": "all"
+};
 
 /** 成交日按市场时区归到 YYYY-MM-DD（与资产分析页同款，时间加权需要） */
 function marketDate(value: string, market: string) {
@@ -600,19 +611,8 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   const dailyAsset = useMemo(() => buildDailyAsset(positionsFiltered), [buildDailyAsset, positionsFiltered]);
   const calDailyAsset = useMemo(() => buildDailyAsset(calPositions), [buildDailyAsset, calPositions]);
 
-  // 周期筛选：按所选区间截取日资产序列
-  const periodStart = useMemo(() => {
-    const now = new Date();
-    const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    switch (period) {
-      case "本月": return iso(now).slice(0, 7) + "-01";
-      case "近 1 月": { const d = new Date(now); d.setMonth(d.getMonth() - 1); return iso(d); }
-      case "近 6 月": { const d = new Date(now); d.setMonth(d.getMonth() - 6); return iso(d); }
-      case "本年": return `${now.getFullYear()}-01-01`;
-      case "近 1 年": { const d = new Date(now); d.setFullYear(d.getFullYear() - 1); return iso(d); }
-      default: return "";
-    }
-  }, [period]);
+  // 周期筛选：按所选区间截取日资产序列（窗口定义统一走 lib/curve，与资产分析页一致）
+  const periodStart = useMemo(() => rangeStart(RANGE_BY_PERIOD[period] ?? "all"), [period]);
 
   const dailyAssetFiltered = useMemo(
     () => (periodStart ? dailyAsset.filter((p) => p.date >= periodStart) : dailyAsset),
@@ -620,15 +620,10 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   );
 
   const chartPoints = useMemo<PnlTrendPoint[]>(() => {
-    const benchMap = new Map(benchCloses.map((it) => [it.d, it.c]));
-    // 基准首值回填：基准数据起始日晚于组合首日时，首个点若为 0，
-    // PnlTrendChart 的 startBench 会回退成 1，把基准线算成几万%（如 600/1-1）。
-    let lastBench = benchCloses.length > 0 ? Number(benchCloses[0].c) || 0 : 0;
-    return dailyAssetFiltered.map(({ date, asset, timeIndex }) => {
-      const next = benchMap.get(date);
-      if (next !== undefined) lastBench = next;
-      return { date, asset, benchmark: lastBench, timeIndex };
-    });
+    // 基准对齐统一走 lib/curve：首个有效行情日前回填首值，之后顺延最近收盘价，
+    // 避免基准起始日晚于组合首日时被算成几万%（如 600/1-1）。
+    const benchmarks = benchmarkOnDates(benchCloses, dailyAssetFiltered.map((point) => point.date));
+    return dailyAssetFiltered.map(({ date, asset, timeIndex }, index) => ({ date, asset, benchmark: benchmarks[index] ?? 0, timeIndex }));
   }, [dailyAssetFiltered, benchCloses]);
 
   // 跑赢幅度 = 我的组合区间收益率 − 基准区间收益率（与资产分析页口径一致；时间加权用 timeIndex）

@@ -2684,6 +2684,14 @@ export const V0_1_26_ENTRY: VersionEntry = {
     title: "日韩实时行情 + OpenD 本地让路 + 行情提示补齐",
     desc: "1) 自选股 / 持仓行情接口补上腾讯日股 jp{} / 韩股 kr{}，分时与搜索联想同步；台股 / 新加坡 / 欧澳加印巴等无源市场行内标明「暂不支持实时行情」。2) 本地 next dev 默认不连 OpenD（STOCKLOG_FUTU=on 可开），线上生产继续用唯一连接。3) 富途正常时单只 OTC 在 Web 行内与 iOS 列表显示「无扩展行情」，整批降级仍用「美股·腾讯兜底」。4) Yahoo 扩展行情可用 STOCKLOG_EXTENDED_QUOTE=off 关掉。5) 仓库只保留 docker-compose.ghcr.yml，审计不再读已删除的本地 compose。6) CI build 后跑公开短冒烟（含日韩现价），并提供 .githooks/pre-push。tsc 无错误。",
     kind: "fix"
+  }, {
+    title: "打磨行情提示位置与整批降级判定",
+    desc: "行内「暂无实时行情 / 无扩展行情」收到股票代码同一行，资产分析持仓表与盈亏排行同步显示；整批「美股·腾讯兜底」把 Yahoo 扩展行情也视为在线，避免本地跳过 OpenD 后单只 OTC 误报整批降级。设置页补充 OpenD 本地跳过说明；东财搜索联想覆盖日股 / 韩股。tsc 无错误。",
+    kind: "fix"
+  }, {
+    title: "收益曲线口径统一为单一数据源（新增 lib/curve.ts）",
+    desc: "同一条收益 / 累计收益曲线此前有三处实现——资产分析（ECharts）、资产盈亏分析（ECharts）、简化版账户页（runtime.js 手写 SVG），周期窗口、资金加权算法、基准归一化各写一份，已经出现真实的口径分叉：1) 资产分析的「近 1 月 / 近 6 月 / 近 1 年」用 31 / 183 / 366 天近似，盈亏分析与简化版用日历回退；2) 简化版基准线在基准行情晚于组合首日时整条后移，点数与组合日期轴不对齐；3) 月末（如 3/31）JS 的 setMonth 回退会越界成 3/3，「近 1 月」窗口被吞掉近一个月。修复：新增纯函数模块 lib/curve.ts 作为唯一口径——周期窗口 rangeStart（日历回退 + 月末夹取）、账本曲线 ledgerSeries（Modified Dietz / 累计收益，含「只有资金流没有估值」的采样跳过）、归一化 normalizeToPercent、基准对齐 benchmarkOnDates（首日前回填首值、之后顺延最近收盘）；资产分析、盈亏分析、PnlTrendChart 全部改为引用，简化版 runtime 通过 window.FireCurve 桥接（SimpleAppClient 模块级注入，先于 afterInteractive 脚本执行）调用同一份实现，桥接缺失时才降级到 runtime 内置实现并打印警告。验证：用 git HEAD 版旧实现与新实现逐值比对（常规 / 纯资金流日 / 0 资产 / 空账本 / 乱序 / custom 锚点全部一致），桥接有 / 无两条路径分别验证；三处预期修正单独核对——3/31 的近 1 月起点由 3/2 恢复为 2/2，资产分析近 1 月 / 近 6 月 / 近 1 年改为日历回退（±1 天），简化版基准线与组合日期轴对齐。tsc 无错误。AGENTS.md 记录该约定。",
+    kind: "fix"
   }]
 };
 

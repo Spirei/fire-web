@@ -5,8 +5,14 @@ import Script from "next/script";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconArrowDown, IconCheck, IconExclamationMark, IconLoader2 } from "@tabler/icons-react";
 import echarts from "@/lib/echarts";
+import { curveApi } from "@/lib/curve";
 
 const WINDOW_KEY = "fire-simple-win";
+
+// 曲线口径桥接：runtime.js 是 public 下的原生 JS，无法 import TS 模块，这里把 lib/curve.ts
+// 的实现挂到 window.FireCurve。模块级赋值先于 <Script afterInteractive> 执行，runtime 渲染曲线时
+// 必然可用；万一取不到，runtime 会打印警告并降级到内置实现（口径仍以 lib/curve.ts 为准）。
+if (typeof window !== "undefined") window.FireCurve = curveApi;
 
 export default function SimpleAppClient() {
   const [pullDistance, setPullDistance] = useState(0);
@@ -16,6 +22,7 @@ export default function SimpleAppClient() {
   useLayoutEffect(() => {
     const wasDark = document.documentElement.classList.contains("dark");
     document.documentElement.classList.add("simple-app-active");
+    window.FireCurve = curveApi;
     try {
       document.documentElement.classList.toggle("dark", localStorage.getItem("fire-simple-theme") === "dark");
       const saved = JSON.parse(localStorage.getItem(WINDOW_KEY) || "null") as { w?: number } | null;
@@ -289,6 +296,8 @@ declare global {
     getSimpleCashflowChartData?: () => CashflowChartPayload;
     mountSimpleCashflowCharts?: (payload: CashflowChartPayload) => void;
     downloadSimpleCashflowChart?: (filename?: string) => void;
+    /** 曲线口径桥接（lib/curve.ts），供 public/simple-app-runtime.js 调用 */
+    FireCurve?: typeof curveApi;
   }
 }
 

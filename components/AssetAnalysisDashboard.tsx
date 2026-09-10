@@ -9,6 +9,7 @@ import { showToast } from "@/lib/toast";
 import { HoldingColumnManager, HoldingColumnsButton, useHoldingColumns } from "@/components/HoldingColumnManager";
 import { HOLDING_COLUMN_LABELS, type HoldingColumnKey } from "@/lib/holdingColumns";
 import { usePersistedState } from "@/lib/usePersistedState";
+import { benchmarkOnDates, rangeStart } from "@/lib/curve";
 import { CURRENCIES, CURRENCY_SYMBOLS, useCurrencyDisplayUnit, useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
 import TradeOrdersPanel from "@/components/TradeOrdersPanel";
 import RefreshButton from "@/components/RefreshButton";
@@ -20,7 +21,7 @@ import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import FundsPanel from "@/components/FundsPanel";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import Pagination from "@/components/Pagination";
-import QuoteSourceBadge from "@/components/QuoteSourceBadge";
+import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
 
 type Period = "month" | "1m" | "6m" | "ytd" | "1y" | "all" | "custom";
 type ChartTab = "return" | "asset";
@@ -245,12 +246,8 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 }
 
 function periodStart(period: Period) {
-  const now = new Date();
-  if (period === "all") return "0000-00-00";
-  if (period === "month") return isoDate(new Date(now.getFullYear(), now.getMonth(), 1));
-  if (period === "ytd") return isoDate(new Date(now.getFullYear(), 0, 1));
-  const days = period === "1m" ? 31 : period === "6m" ? 183 : 366;
-  return isoDate(new Date(now.getTime() - days * 864e5));
+  // 周期窗口统一由 lib/curve 定义（与盈亏分析、简化版账户页同源）；"全部" 沿用哨兵值保持字符串比较语义
+  return rangeStart(period) || "0000-00-00";
 }
 
 function CalendarMonth({ month, range, onPick }: { month: Date; range: DateRange; onPick: (date: string) => void }) {
@@ -610,10 +607,9 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
         const fallback = row.items[0]?.c || livePrice(row.record) || 0;
         return { record: row.record, first: fallback, map: new Map(row.items.map((item) => [item.d, item.c])) };
       }).filter((row) => row.first > 0);
-      const benchMap = new Map(effectiveBenchmark.map((item) => [item.d, item.c]));
       const last = new Map(maps.map((row) => [row.record.id, row.first]));
-      // 基准在首个行情日前必须回填首个有效点位，不能使用 1。否则 5000 点会显示为约 500000%。
-      let lastBench = effectiveBenchmark[0]?.c || 0;
+      // 基准对齐统一走 lib/curve：首个行情日前回填首个有效点位，不能使用 0 / 1。否则 5000 点会显示为约 500000%。
+      const benchmarkValues = benchmarkOnDates(effectiveBenchmark, dates);
 
       const recordsById = new Map(eligible.map((record) => [record.id, record]));
       const ordersByRecord = new Map<string, TradeOrder[]>();
@@ -688,7 +684,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
 
       let timeIndex = 100;
       let previousActualAsset = 0;
-      const points = dates.map((date) => {
+      const points = dates.map((date, index) => {
         let actualAsset = 0;
         let portfolioPnl = 0;
         let investedCapital = 0;
@@ -726,8 +722,6 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
           portfolioPnl += rawPnl - state.pnlOffset;
           investedCapital += toDisplay(record, state.grossInvested);
         });
-        const bench = benchMap.get(date);
-        if (bench && Number.isFinite(bench)) lastBench = bench;
         if (previousActualAsset > 0) {
           const cashFlow = (flowByDate.get(date) || 0) + openingFlow;
           const dailyReturn = (actualAsset - cashFlow) / previousActualAsset - 1;
@@ -735,7 +729,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
         }
         if (actualAsset > 0) previousActualAsset = actualAsset;
         const simpleIndex = investedCapital > 0 ? 100 * (1 + portfolioPnl / investedCapital) : 100;
-        return { date, asset: actualAsset, benchmark: lastBench, timeIndex, simpleIndex, pnl: portfolioPnl };
+        return { date, asset: actualAsset, benchmark: benchmarkValues[index] ?? 0, timeIndex, simpleIndex, pnl: portfolioPnl };
       }).filter((point) => point.asset > 0 && Number.isFinite(point.timeIndex) && Number.isFinite(point.simpleIndex));
       // 本次成功则更新；本次因源站/限流抖动取不到数据时保留上一次成功趋势，避免整图闪空
       if (points.length > 0) {
@@ -906,7 +900,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     const displayPnl = toDisplay(record, pnl);
     if (key === "identity") {
       const icon = stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
-      return <span className="flex min-w-[150px] items-center gap-2">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic">{record.name.slice(0, 1)}</i>}<span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} />{record.code}</small></span></span>;
+      return <span className="flex min-w-[150px] items-center gap-2">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic">{record.name.slice(0, 1)}</i>}<span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></small></span></span>;
     }
     if (key === "marketValue") return compactMoney(displayMarketValue);
     if (key === "cost") return fmtNumMarket(cost, record.market);
@@ -1003,7 +997,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
               <span className="font-semibold tabular-nums">{String(index + 1).padStart(2, "0")}</span>
               <span className="flex min-w-0 items-center gap-2">
                 {icon ? <img src={icon} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" /> : <i className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-gray not-italic text-ink-2">{record.name.slice(0, 1)}</i>}
-                <span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span></small></span>
+                <span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><QuoteRowHint market={record.market} quote={quotes[record.id]} quotes={quotes} /></small></span>
               </span>
               <span className={`text-right font-bold tabular-nums ${pnl >= 0 ? "text-up" : "text-down"}`}>{pnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(pnl))}</span>
             </div>;

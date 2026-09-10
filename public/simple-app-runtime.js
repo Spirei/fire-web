@@ -835,56 +835,101 @@ function poly(values, x0, x1, y0, y1) {
     return (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
   }).join(" ");
 }
-function filterHist(hist, range) {
-  const now = new Date();
-  const all = (hist || []).slice().sort((a, b) => String(a.d).localeCompare(String(b.d)));
-  const since = (cut) => {
+/* ---------------------------------------------------------------------------
+ * 曲线口径：优先用 window.FireCurve（lib/curve.ts —— 主站与简化版共用的唯一实现，
+ * 由 app/simple-app/SimpleAppClient.tsx 注入）。只有桥接缺失时才降级到 curveFallback；
+ * 任何算法调整都改 lib/curve.ts，不要只改这里，否则口径又会漂。
+ * ------------------------------------------------------------------------- */
+let curveBridgeWarned = false;
+function curveApiRef() {
+  const api = typeof window !== "undefined" ? window.FireCurve : null;
+  if (api && typeof api.ledgerSeries === "function") return api;
+  if (!curveBridgeWarned) {
+    curveBridgeWarned = true;
+    console.warn("[simple-app] window.FireCurve 未注入，收益曲线降级为内置实现（口径以 lib/curve.ts 为准）");
+  }
+  return curveFallback;
+}
+const curveFallback = {
+  rangeStart(range, options) {
+    if (range === "all") return "";
+    if (range === "custom") return (options && options.from ? String(options.from).slice(0, 10) : "");
+    const now = new Date();
+    if (range === "month") return iso(new Date(now.getFullYear(), now.getMonth(), 1));
+    if (range === "ytd") return now.getFullYear() + "-01-01";
+    // 日历回退 + 月末夹取（3/31 回退 1 个月 = 2/28），与 lib/curve.ts 同规则
+    const target = new Date(now.getFullYear(), now.getMonth() + (range === "1m" ? -1 : range === "6m" ? -6 : -12), 1);
+    target.setDate(Math.min(now.getDate(), new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()));
+    return iso(target);
+  },
+  sliceWithAnchor(rows, range, options) {
+    const all = (rows || []).slice().sort((a, b) => String(a.d).localeCompare(String(b.d)));
+    const start = this.rangeStart(range, options);
+    if (!start) return all;
+    const cut = parseDay(start);
     const inside = all.filter((h) => parseDay(h.d) >= cut);
     const before = all.filter((h) => parseDay(h.d) < cut);
-    return before.length ? [before[before.length - 1], ...inside] : inside;
-  };
-  if (range === "month") return since(new Date(now.getFullYear(), now.getMonth(), 1).getTime());
-  if (range === "1m" || range === "6m") {
-    const cut = new Date(now); cut.setMonth(now.getMonth() - (range === "1m" ? 1 : 6));
-    return since(cut.getTime());
+    const list = before.length ? [before[before.length - 1], ...inside] : inside;
+    const to = options && options.to ? String(options.to).slice(0, 10) : "";
+    return to ? list.filter((h) => String(h.d).slice(0, 10) <= to) : list;
+  },
+  ledgerSeries(list, kind) {
+    const values = [], dates = [];
+    const rows = (list || []).slice().sort((a, b) => String(a.d).localeCompare(String(b.d)));
+    if (!rows.length) return { dates, values };
+    const start = Number(rows[0].v) || 0, t0 = parseDay(rows[0].d);
+    for (let i = 0; i < rows.length; i++) {
+      const endDay = parseDay(rows[i].d), span = Math.max(0, endDay - t0);
+      let netFlow = 0, weightedFlow = 0;
+      for (let j = 1; j <= i; j++) {
+        const flow = (Number(rows[j].inn) || 0) - (Number(rows[j].out) || 0);
+        netFlow += flow;
+        if (span) weightedFlow += flow * Math.max(0, endDay - parseDay(rows[j].d)) / span;
+      }
+      const pnl = (Number(rows[i].v) || 0) - start - netFlow;
+      const denominator = start + weightedFlow;
+      const ownFlow = (Number(rows[i].inn) || 0) - (Number(rows[i].out) || 0);
+      const prevV = i ? Number(rows[i - 1].v) || 0 : 0;
+      const v = Number(rows[i].v) || 0;
+      const flowOnly = i > 0 && ownFlow && (
+        Math.abs(v - prevV) < .000001 || Math.abs(v - (prevV + ownFlow)) < .000001
+      );
+      // 只有资金流、没有资产估值的日期仅参与计算，不作为曲线采样点，避免出现人为尖峰。
+      if (!flowOnly) {
+        values.push(kind === "pnl" ? pnl : (denominator ? pnl / denominator * 100 : 0));
+        dates.push(rows[i].d);
+      }
+    }
+    return { dates, values };
+  },
+  normalizeToPercent(values) {
+    if (!values.length) return [];
+    const start = values[0] || 1;
+    return values.map((value) => (value / start - 1) * 100);
+  },
+  benchmarkOnDates(rows, dates) {
+    const clean = (rows || []).map((x) => ({ d: String(x.d || "").slice(0, 10), c: Number(x.c) }))
+      .filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.d) && Number.isFinite(x.c) && x.c > 0)
+      .sort((a, b) => a.d.localeCompare(b.d));
+    if (!clean.length || !dates.length) return [];
+    const map = new Map(clean.map((x) => [x.d, x.c]));
+    let last = clean[0].c;
+    return dates.map((date) => {
+      const next = map.get(String(date).slice(0, 10));
+      if (next !== undefined) last = next;
+      return last;
+    });
   }
-  if (range === "ytd") return since(new Date(now.getFullYear(), 0, 1).getTime());
-  if (range === "1y") {
-    const cut = new Date(now); cut.setFullYear(now.getFullYear() - 1);
-    return since(cut.getTime());
-  }
+};
+function filterHist(hist, range) {
+  const all = (hist || []).slice().sort((a, b) => String(a.d).localeCompare(String(b.d)));
   if (range === "future") return all.slice(-1);
-  if (range === "custom" && route.from && route.to) return since(parseDay(route.from)).filter((h) => h.d <= route.to);
-  return all;
+  return curveApiRef().sliceWithAnchor(all, range, { from: route.from || "", to: route.to || "" });
 }
 function chartSeries(list, kind) {
-  const pts = [];
-  const dates = [];
-  if (!list.length) return pts;
-  const start = Number(list[0].v) || 0, t0 = parseDay(list[0].d);
-  for (let i = 0; i < list.length; i++) {
-    const endDay = parseDay(list[i].d), span = Math.max(0, endDay - t0);
-    let netFlow = 0, weightedFlow = 0;
-    for (let j = 1; j <= i; j++) {
-      const flow = (Number(list[j].inn) || 0) - (Number(list[j].out) || 0);
-      netFlow += flow;
-      if (span) weightedFlow += flow * Math.max(0, endDay - parseDay(list[j].d)) / span;
-    }
-    const pnl = (Number(list[i].v) || 0) - start - netFlow;
-    const denominator = start + weightedFlow;
-    const ownFlow = (Number(list[i].inn) || 0) - (Number(list[i].out) || 0);
-    const prevV = i ? Number(list[i - 1].v) || 0 : 0;
-    const v = Number(list[i].v) || 0;
-    const flowOnly = i > 0 && ownFlow && (
-      Math.abs(v - prevV) < .000001 || Math.abs(v - (prevV + ownFlow)) < .000001
-    );
-    // 只有资金流、没有资产估值的日期仅参与计算，不作为曲线采样点，避免出现人为尖峰。
-    if (!flowOnly) {
-      pts.push(kind === "pnl" ? pnl : (denominator ? pnl / denominator * 100 : 0));
-      dates.push(list[i].d);
-    }
-  }
-  pts.dates = dates;
+  const series = curveApiRef().ledgerSeries(list, kind === "pnl" ? "pnl" : "mwr");
+  const pts = series.values.slice();
+  pts.dates = series.dates;
   return pts;
 }
 
@@ -2069,9 +2114,10 @@ function chartBlock(hist, expected, unit = "元", currentPnl = null) {
     const delta = Number(currentPnl) - series[series.length - 1];
     series = series.map((value) => value + delta);
   }
-  const benchRows = kind === "mwr" ? filterHist(benchState.items.map((x) => ({ d:x.d, v:x.c })), range).filter((x) => (!list[0] || x.d >= list[0].d) && (!list.length || x.d <= list[list.length - 1].d)) : [];
-  const benchStart = benchRows[0] ? Number(benchRows[0].v) : 0;
-  const benchSeries = benchStart ? benchRows.map((x) => (Number(x.v) / benchStart - 1) * 100) : [];
+  // 基准对齐与归一化统一走 lib/curve（与主站资产分析同一规则）：首日之前回填首值、之后顺延最近收盘
+  const benchSeries = kind === "mwr"
+    ? curveApiRef().normalizeToPercent(curveApiRef().benchmarkOnDates(benchState.items || [], seriesDates))
+    : [];
   const first = list[0] ? pretty(list[0].d) : "";
   const last = list.length ? pretty(list[list.length - 1].d) : "";
   const yMax = Math.max(...series, ...benchSeries, 0);

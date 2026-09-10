@@ -2737,7 +2737,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   <div className="flex flex-col">
                     <div className="flex flex-col">
                       <div className="sw-row">
-                        <div className="sw-row-label"><b>OpenD 主机</b><span>本机默认 127.0.0.1；远程部署填 OpenD 所在机器地址</span></div>
+                        <div className="sw-row-label"><b>OpenD 主机</b><span>生产环境填写 OpenD 所在机器；本地 next dev 默认不连，避免抢线上唯一连接</span></div>
                         <input className={`sw-row-input ${editingFutu ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} value={site.futuHost} readOnly={!editingFutu} onChange={(e) => setSiteField("futuHost", e.target.value)} placeholder="127.0.0.1" />
                       </div>
                       <div className="sw-row">
@@ -2752,6 +2752,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           <i className={`h-1.5 w-1.5 rounded-full ${futuOnline === null ? "bg-[#d1d5db]" : futuOnline ? "bg-[#0fa07b]" : "bg-[#e5a13b]"}`} />
                           {futuOnline === null ? "检测中…" : futuOnline ? "已连接" : futuSkipped ? "本地已跳过 OpenD" : "未连接"}
                         </span>
+                        {futuSkipped ? (
+                          <span className="max-w-[220px] text-[11px] leading-4 text-muted">行情走腾讯 / Yahoo。本机要连时设 STOCKLOG_FUTU=on 后重启。「测试连接」仍会打 OpenD。</span>
+                        ) : null}
                         <button type="button" disabled={futuTest?.busy} onClick={testFutu} className="btn btn-line btn-sm disabled:opacity-60">
                           {futuTest?.busy ? "测试中…" : "测试连接"}
                         </button>

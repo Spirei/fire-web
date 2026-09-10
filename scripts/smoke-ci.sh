@@ -25,8 +25,17 @@ check "GET /api/health" 200 "$(code --max-time 20 "$BASE/api/health")"
 check "GET /api/trading-square/feed" 200 "$(code --max-time 30 "$BASE/api/trading-square/feed")"
 
 QUOTE_BODY='{"items":[{"id":"US:AAPL","market":"US","code":"AAPL"},{"id":"JP:7203","market":"JP","code":"7203"},{"id":"KR:005930","market":"KR","code":"005930"}]}'
-check "行情接口 HTTP" 200 "$(code --max-time 40 -X POST "$BASE/api/quotes" -H 'Content-Type: application/json' -d "$QUOTE_BODY")"
-QUOTE_JSON=$(curl -s --max-time 40 -X POST "$BASE/api/quotes" -H 'Content-Type: application/json' -d "$QUOTE_BODY")
+QUOTE_JSON=""
+QUOTE_HTTP=""
+for _try in 1 2; do
+  QUOTE_HTTP=$(code --max-time 40 -X POST "$BASE/api/quotes" -H 'Content-Type: application/json' -d "$QUOTE_BODY")
+  QUOTE_JSON=$(curl -s --max-time 40 -X POST "$BASE/api/quotes" -H 'Content-Type: application/json' -d "$QUOTE_BODY")
+  if [ "$QUOTE_HTTP" = "200" ]; then
+    break
+  fi
+  sleep 2
+done
+check "行情接口 HTTP" 200 "$QUOTE_HTTP"
 priced() {
   local key="$1"
   printf '%s' "$QUOTE_JSON" | python3 -c 'import json,sys; q=(json.load(sys.stdin).get("quotes") or {}).get(sys.argv[1]) or {}; print(1 if isinstance(q.get("price"), (int,float)) and q["price"]>0 else 0)' "$key" 2>/dev/null || echo 0

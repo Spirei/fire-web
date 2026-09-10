@@ -393,6 +393,12 @@ async function searchEastMoney(q: string, limit = 8): Promise<SearchMatch[]> {
     } else if (st.includes("美")) {
       market = "US";
       symbol = `us${code.replace(US_EXCHANGE_SUFFIX, "")}`;
+    } else if (/日|东京/.test(st)) {
+      market = "JP";
+      symbol = `jp${code.replace(/\.T$/, "")}`;
+    } else if (/韩|韩国/.test(st)) {
+      market = "KR";
+      symbol = `kr${code.replace(/\.(KS|KQ)$/, "")}`;
     }
     if (!market || !code || !name) continue;
     hints.push({ symbol, code, name, market });

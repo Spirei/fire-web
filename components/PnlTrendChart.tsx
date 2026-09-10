@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import echarts from "@/lib/echarts";
+import { normalizeToPercent } from "@/lib/curve";
 
 export interface PnlTrendPoint {
   date: string;
@@ -37,11 +38,10 @@ export default function PnlTrendChart({
     const portfolioValues = weighting === "time"
       ? points.map((point) => point.timeIndex)
       : points.map((point) => point.simpleIndex ?? point.asset);
-    const startAsset = portfolioValues[0] || 1;
-    const startBench = points[0]?.benchmark || 1;
-    const assetData = tab === "return" ? portfolioValues.map((value) => (value / startAsset - 1) * 100) : points.map((p) => p.asset);
+    // 归一化口径统一走 lib/curve（与简化版账户页同源）
+    const assetData = tab === "return" ? normalizeToPercent(portfolioValues) : points.map((p) => p.asset);
     const hasBench = points.some((p) => p.benchmark > 0);
-    const benchmark = hasBench ? points.map((p) => (p.benchmark / startBench - 1) * 100) : [];
+    const benchmark = hasBench ? normalizeToPercent(points.map((p) => p.benchmark)) : [];
     const ink = dark ? "#d8dee9" : "#26303b";
     const muted = dark ? "#727d8d" : "#87909d";
     const grid = dark ? "rgba(255,255,255,.07)" : "rgba(34,46,60,.08)";
