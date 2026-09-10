@@ -3,7 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import SafeAssetImage from "@/components/SafeAssetImage";
-import { fmtPct, fmtPrice, fmtQuoteTime } from "@/lib/format";
+import { fmtCap, fmtPct, fmtPrice, fmtQuoteTime } from "@/lib/format";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { marketBoardLabel } from "@/lib/marketSessions";
 import { marketMeta, type Quote } from "@/lib/types";
@@ -83,6 +83,7 @@ function StockQuoteCard({
   const tone = quote ? (up ? "text-up" : "text-down") : "text-faint";
   const board = marketBoardLabel(market);
   const clock = quote?.time ? fmtQuoteTime(quote.time).slice(-5) : "";
+  const cap = quote?.marketCap && Number.isFinite(quote.marketCap) && quote.marketCap > 0 ? fmtCap(quote.marketCap) : "";
   const initial = displayName.slice(0, 1);
 
   return (
@@ -126,7 +127,7 @@ function StockQuoteCard({
               </span>
             </div>
             <p className="mt-1.5 text-[11px] font-medium text-muted">
-              {board}{clock ? ` · ${clock}` : ""}
+              {board}{clock ? ` · ${clock}` : ""}{cap ? ` · 市值 ${cap}` : ""}
             </p>
           </>
         )}
