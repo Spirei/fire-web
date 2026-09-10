@@ -87,10 +87,10 @@ function TickerChip({ item }: { item: TickerItem }) {
 
 const TICKER_CACHE_KEY = "fire:ticker";
 
-function readTickerCache(): { items: TickerItem[]; interval?: number } | null {
+function readTickerCache(): { items: TickerItem[]; interval?: number; pollSec?: number } | null {
   try {
-    const raw = JSON.parse(sessionStorage.getItem(TICKER_CACHE_KEY) || "null") as { items?: TickerItem[]; interval?: number } | null;
-    if (Array.isArray(raw?.items) && raw.items.length) return { items: raw.items, interval: raw.interval };
+    const raw = JSON.parse(sessionStorage.getItem(TICKER_CACHE_KEY) || "null") as { items?: TickerItem[]; interval?: number; pollSec?: number } | null;
+    if (Array.isArray(raw?.items) && raw.items.length) return { items: raw.items, interval: raw.interval, pollSec: raw.pollSec };
   } catch {
     /* ignore */
   }
@@ -100,6 +100,8 @@ function readTickerCache(): { items: TickerItem[]; interval?: number } | null {
 export default function IndexTicker() {
   const [items, setItems] = useState<TickerItem[]>([]);
   const [intervalSec, setIntervalSec] = useState(5);
+  // 轮询间隔由服务端按「是否有市场在交易」给出：开市 60 秒，全部收市 5 分钟兜底
+  const [pollSec, setPollSec] = useState(60);
   const [idx, setIdx] = useState(0);
 
   useLayoutEffect(() => {
@@ -107,6 +109,7 @@ export default function IndexTicker() {
     if (!cached) return;
     setItems(cached.items);
     if (typeof cached.interval === "number" && cached.interval >= 3) setIntervalSec(cached.interval);
+    if (typeof cached.pollSec === "number" && cached.pollSec >= 30) setPollSec(cached.pollSec);
   }, []);
 
   useEffect(() => {
@@ -119,7 +122,8 @@ export default function IndexTicker() {
         if (!cancelled && data?.items) {
           setItems(data.items);
           if (typeof data.interval === "number" && data.interval >= 3) setIntervalSec(data.interval);
-          try { sessionStorage.setItem(TICKER_CACHE_KEY, JSON.stringify({ items: data.items, interval: data.interval })); } catch { /* quota */ }
+          if (typeof data.pollSec === "number" && data.pollSec >= 30) setPollSec(data.pollSec);
+          try { sessionStorage.setItem(TICKER_CACHE_KEY, JSON.stringify({ items: data.items, interval: data.interval, pollSec: data.pollSec })); } catch { /* quota */ }
         }
       } catch {
         /* 静默失败，下轮重试 */
@@ -129,7 +133,7 @@ export default function IndexTicker() {
     const timer = window.setInterval(() => {
       // 页面不可见（切后台 / 睡眠）时暂停轮询，避免多标签页堆积请求拖慢服务
       if (!document.hidden) load();
-    }, 60_000);
+    }, pollSec * 1000);
     const onVis = () => {
       if (!document.hidden) load();
     };
@@ -142,7 +146,7 @@ export default function IndexTicker() {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("fire:settings-updated", onSettings);
     };
-  }, []);
+  }, [pollSec]);
 
   // 按设置的时间轮换一个指数
   useEffect(() => {
