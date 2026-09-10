@@ -28,6 +28,7 @@ import { useAssetIcons } from "@/lib/useAssetIcons";
 import HoldingsPnlSankey, { type PnlSankeyItem } from "@/components/HoldingsPnlSankey";
 import { marketSessionState } from "@/lib/marketSessions";
 import { useHoldingColumns } from "@/components/HoldingColumnManager";
+import QuoteSourceBadge from "@/components/QuoteSourceBadge";
 import { HOLDING_COLUMN_LABELS, type HoldingColumnKey } from "@/lib/holdingColumns";
 import TradeOrdersPanel from "@/components/TradeOrdersPanel";
 import RefreshButton from "@/components/RefreshButton";
@@ -154,17 +155,24 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     };
   }, []);
 
+  // 空市场标签自动隐藏：设置里的 markets 只负责市场顺序，标签只为「有持仓 / 本页
+  // 添加记录」的市场显示（与自选股「空分组自动隐藏」一致）；某市场有记录后标签自动出现。
+  const hasMarketRecords = useCallback(
+    (market: string) => holdingsPool.some((p) => p.market === market),
+    [holdingsPool]
+  );
+
   const baseTabs = useMemo(() => {
     const list: string[] = [];
     markets.forEach((m) => {
-      if (m && !list.includes(m)) list.push(m);
+      if (m && !list.includes(m) && hasMarketRecords(m)) list.push(m);
     });
     // 有持仓或本页添加记录的市场显示
     holdingsPool.forEach((p) => {
       if (p.market && !list.includes(p.market)) list.push(p.market);
     });
     return list;
-  }, [markets, holdingsPool]);
+  }, [markets, holdingsPool, hasMarketRecords]);
 
   const [tabOverride, setTabOverride] = useState<string[] | null>(null);
   const [labels, setLabels] = useState<Record<string, { label: string; flag: string }>>(() => {
@@ -177,7 +185,10 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const labelFor = (m: string) => m === "US" ? "美股" : labels[m]?.label || marketMeta(m).label;
   const flagFor = (m: string) => labels[m]?.flag || marketMeta(m).flag;
 
-  const displayedTabs = tabOverride ? [...tabOverride, ...baseTabs.filter((m) => !tabOverride.includes(m))] : baseTabs;
+  const displayedTabs = useMemo(() => {
+    const merged = tabOverride ? [...tabOverride, ...baseTabs.filter((m) => !tabOverride.includes(m))] : baseTabs;
+    return merged.filter((m) => hasMarketRecords(m));
+  }, [tabOverride, baseTabs, hasMarketRecords]);
   const [active, setActive] = useState<string>(() => {
     if (typeof window === "undefined") return baseTabs[0] ?? "US";
     // 默认显示总资产；URL 指定市场时跟随
@@ -204,7 +215,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   }, [active]);
 
   useEffect(() => {
-    if (active !== "TOTAL" && !displayedTabs.includes(active)) setActive(displayedTabs[0] ?? "US");
+    if (active !== "TOTAL" && !displayedTabs.includes(active)) setActive(displayedTabs[0] ?? "TOTAL");
   }, [displayedTabs, active]);
 
   const [page, setPage] = useState(1);
@@ -1012,6 +1023,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       <div className="mb-4 flex items-center gap-2.5">
         <h2 className="text-lg font-bold">账户资产</h2>
         <span className="rounded-full border border-edge bg-bg-gray px-2.5 py-1 text-[10px] font-semibold text-muted">本页金额 · {totalCur}{pageUsesCompactMoney ? " · 智能缩写" : ""}</span>
+        <QuoteSourceBadge records={records} quotes={quotes} />
         <RefreshButton onClick={() => void refreshAccount()} title="刷新账户资产" />
       </div>
 

@@ -86,6 +86,50 @@ def _to_app_symbol(market, code):
     return ""
 
 
+def _offending_symbols(error_text, symbols):
+    """从富途报错文案里找出「不被支持的代码」，例如：
+    「暂不提供美股 OTC 市场行情 SFTBY」→ ['US.SFTBY']。
+    富途按整批返回错误，定位到具体代码后即可剔除重试，避免一只坏代码拖垮整批行情。"""
+    text = str(error_text or "")
+    if not text:
+        return []
+    hits = [s for s in symbols if s in text]
+    if hits:
+        return hits
+    for symbol in symbols:
+        bare = symbol.split(".", 1)[-1]
+        # 裸代码按词边界匹配，避免 "N" / "V" 这类短代码误伤
+        if len(bare) >= 2 and re.search(rf"(?<![A-Za-z0-9.]){re.escape(bare)}(?![A-Za-z0-9])", text):
+            hits.append(symbol)
+    return hits
+
+
+def _market_snapshot(ctx, symbols, skipped, split_budget, ret_ok):
+    """批量快照：整批失败时先剔除报错点名的代码重试，仍失败再二分定位。
+    返回可用的 DataFrame 列表（可多段），不支持的代码记入 skipped。"""
+    if not symbols:
+        return []
+    ret, data = ctx.get_market_snapshot(symbols)
+    if ret == ret_ok:
+        return [data]
+    error = str(data)
+    if len(symbols) == 1:
+        skipped.append({"symbol": symbols[0], "error": error})
+        return []
+    offending = _offending_symbols(error, symbols)
+    if offending:
+        for symbol in offending:
+            skipped.append({"symbol": symbol, "error": error})
+        kept = [s for s in symbols if s not in offending]
+        return _market_snapshot(ctx, kept, skipped, split_budget, ret_ok)
+    if split_budget[0] <= 0:
+        skipped.extend({"symbol": s, "error": error} for s in symbols)
+        return []
+    split_budget[0] -= 1
+    mid = len(symbols) // 2
+    return _market_snapshot(ctx, symbols[:mid], skipped, split_budget, ret_ok) + _market_snapshot(ctx, symbols[mid:], skipped, split_budget, ret_ok)
+
+
 def main():
     _ensure_utf8_io()
     try:
@@ -265,13 +309,16 @@ def main():
             print(json.dumps({"ok": True, "quotes": {}}))
             return
 
-        ret, data = ctx.get_market_snapshot(list(symbol_map.keys()))
-        if ret != RET_OK:
-            print(json.dumps({"ok": False, "error": str(data)}))
-            return
+        # 富途快照是「整批一起返回」：只要其中一只不被支持（如美股 OTC 的 SFTBY），
+        # 整批都会失败 → 所有美股都拿不到行情，只能退回腾讯的常规盘口径
+        # （当日盈亏冻结在上一交易日）。这里自动剔除报错点名的代码并二分重试，
+        # 保证其余标的照常返回实时行情，不支持的代码由调用方继续走兜底源。
+        skipped = []
+        frames = _market_snapshot(ctx, list(symbol_map.keys()), skipped, [6], RET_OK)
+        rows_data = [row for frame in frames for _, row in frame.iterrows()]
 
         out = {}
-        for _, row in data.iterrows():
+        for row in rows_data:
             symbol = str(row.get("code", ""))
             items_for_symbol = symbol_map.get(symbol)
             if not items_for_symbol:
@@ -369,7 +416,7 @@ def main():
                     "dividendYieldTtm": _num(row.get("dividend_ratio_ttm")),
                     "secStatus": str(row.get("sec_status") or "")
                 }
-        print(json.dumps({"ok": True, "quotes": out}, ensure_ascii=False))
+        print(json.dumps({"ok": True, "quotes": out, "skipped": skipped}, ensure_ascii=False))
     except Exception as exc:
         print(json.dumps({"ok": False, "error": f"{type(exc).__name__}: {exc}"}))
     finally:
