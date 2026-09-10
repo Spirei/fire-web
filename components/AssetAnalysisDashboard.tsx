@@ -9,7 +9,6 @@ import { showToast } from "@/lib/toast";
 import { HoldingColumnManager, HoldingColumnsButton, useHoldingColumns } from "@/components/HoldingColumnManager";
 import { HOLDING_COLUMN_LABELS, type HoldingColumnKey } from "@/lib/holdingColumns";
 import { usePersistedState } from "@/lib/usePersistedState";
-import { benchmarkOnDates, rangeStart } from "@/lib/curve";
 import { CURRENCIES, CURRENCY_SYMBOLS, useCurrencyDisplayUnit, useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
 import TradeOrdersPanel from "@/components/TradeOrdersPanel";
 import RefreshButton from "@/components/RefreshButton";
@@ -246,8 +245,12 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 }
 
 function periodStart(period: Period) {
-  // 周期窗口统一由 lib/curve 定义（与盈亏分析、简化版账户页同源）；"全部" 沿用哨兵值保持字符串比较语义
-  return rangeStart(period) || "0000-00-00";
+  const now = new Date();
+  if (period === "all") return "0000-00-00";
+  if (period === "month") return isoDate(new Date(now.getFullYear(), now.getMonth(), 1));
+  if (period === "ytd") return isoDate(new Date(now.getFullYear(), 0, 1));
+  const days = period === "1m" ? 31 : period === "6m" ? 183 : 366;
+  return isoDate(new Date(now.getTime() - days * 864e5));
 }
 
 function CalendarMonth({ month, range, onPick }: { month: Date; range: DateRange; onPick: (date: string) => void }) {
@@ -607,9 +610,10 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
         const fallback = row.items[0]?.c || livePrice(row.record) || 0;
         return { record: row.record, first: fallback, map: new Map(row.items.map((item) => [item.d, item.c])) };
       }).filter((row) => row.first > 0);
+      const benchMap = new Map(effectiveBenchmark.map((item) => [item.d, item.c]));
       const last = new Map(maps.map((row) => [row.record.id, row.first]));
-      // 基准对齐统一走 lib/curve：首个行情日前回填首个有效点位，不能使用 0 / 1。否则 5000 点会显示为约 500000%。
-      const benchmarkValues = benchmarkOnDates(effectiveBenchmark, dates);
+      // 基准在首个行情日前必须回填首个有效点位，不能使用 1。否则 5000 点会显示为约 500000%。
+      let lastBench = effectiveBenchmark[0]?.c || 0;
 
       const recordsById = new Map(eligible.map((record) => [record.id, record]));
       const ordersByRecord = new Map<string, TradeOrder[]>();
@@ -684,7 +688,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
 
       let timeIndex = 100;
       let previousActualAsset = 0;
-      const points = dates.map((date, index) => {
+      const points = dates.map((date) => {
         let actualAsset = 0;
         let portfolioPnl = 0;
         let investedCapital = 0;
@@ -722,6 +726,8 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
           portfolioPnl += rawPnl - state.pnlOffset;
           investedCapital += toDisplay(record, state.grossInvested);
         });
+        const bench = benchMap.get(date);
+        if (bench && Number.isFinite(bench)) lastBench = bench;
         if (previousActualAsset > 0) {
           const cashFlow = (flowByDate.get(date) || 0) + openingFlow;
           const dailyReturn = (actualAsset - cashFlow) / previousActualAsset - 1;
@@ -729,7 +735,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
         }
         if (actualAsset > 0) previousActualAsset = actualAsset;
         const simpleIndex = investedCapital > 0 ? 100 * (1 + portfolioPnl / investedCapital) : 100;
-        return { date, asset: actualAsset, benchmark: benchmarkValues[index] ?? 0, timeIndex, simpleIndex, pnl: portfolioPnl };
+        return { date, asset: actualAsset, benchmark: lastBench, timeIndex, simpleIndex, pnl: portfolioPnl };
       }).filter((point) => point.asset > 0 && Number.isFinite(point.timeIndex) && Number.isFinite(point.simpleIndex));
       // 本次成功则更新；本次因源站/限流抖动取不到数据时保留上一次成功趋势，避免整图闪空
       if (points.length > 0) {

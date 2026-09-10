@@ -1884,10 +1884,6 @@ export const V0_1_18_ENTRY: VersionEntry = {
     title: "修复全站冒烟测试安全参数遗漏",
     desc: "冒烟测试此前清空记录和修改邮箱时未携带接口要求的当前密码，误报线上功能失败。现按真实前端安全协议补齐 password / currentPassword，并在 API 文档明确高风险操作的验证字段；全套测试恢复通过。",
     kind: "fix"
-  }, {
-    title: "简化版收益曲线命中点抽稀（上千 DOM 圆点降一个量级）",
-    desc: "简化版账户页的收益 / 累计收益曲线是手写 SVG，此前每个数据点都会渲染一个 r=7 的透明命中圆（各带 title 与 onclick toast），日线账本攒到三五年后切到「全部」会一次渲染上千个 DOM 节点，而整屏又是 innerHTML 全量重绘，开销随账本长度线性上涨；实际上一根 316 单位宽的绘图区根本分辨不出上千个命中点。修复：lib/curve.ts 新增 sampleIndices —— 按目标数量均匀取样，并强制包含首尾与最大 / 最小值（极值日仍可点选），runtime 只对命中圆抽稀到约 180 个；曲线路径与悬停仍是全量点，视觉与逐日精确悬停零变化。实测五年日线 1825 个点：命中圆 1825 → 182，路径长度不变。降级实现同步补齐该方法，桥接有 / 无两条路径输出一致。tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。",
-    kind: "fix"
   }]
 };
 
@@ -2692,27 +2688,19 @@ export const V0_1_26_ENTRY: VersionEntry = {
     title: "打磨行情提示位置与整批降级判定",
     desc: "行内「暂无实时行情 / 无扩展行情」收到股票代码同一行，资产分析持仓表与盈亏排行同步显示；整批「美股·腾讯兜底」把 Yahoo 扩展行情也视为在线，避免本地跳过 OpenD 后单只 OTC 误报整批降级。设置页补充 OpenD 本地跳过说明；东财搜索联想覆盖日股 / 韩股。tsc 无错误。",
     kind: "fix"
-  }, {
-    title: "收益曲线口径统一为单一数据源（新增 lib/curve.ts）",
-    desc: "同一条收益 / 累计收益曲线此前有三处实现——资产分析（ECharts）、资产盈亏分析（ECharts）、简化版账户页（runtime.js 手写 SVG），周期窗口、资金加权算法、基准归一化各写一份，已经出现真实的口径分叉：1) 资产分析的「近 1 月 / 近 6 月 / 近 1 年」用 31 / 183 / 366 天近似，盈亏分析与简化版用日历回退；2) 简化版基准线在基准行情晚于组合首日时整条后移，点数与组合日期轴不对齐；3) 月末（如 3/31）JS 的 setMonth 回退会越界成 3/3，「近 1 月」窗口被吞掉近一个月。修复：新增纯函数模块 lib/curve.ts 作为唯一口径——周期窗口 rangeStart（日历回退 + 月末夹取）、账本曲线 ledgerSeries（Modified Dietz / 累计收益，含「只有资金流没有估值」的采样跳过）、归一化 normalizeToPercent、基准对齐 benchmarkOnDates（首日前回填首值、之后顺延最近收盘）；资产分析、盈亏分析、PnlTrendChart 全部改为引用，简化版 runtime 通过 window.FireCurve 桥接（SimpleAppClient 模块级注入，先于 afterInteractive 脚本执行）调用同一份实现，桥接缺失时才降级到 runtime 内置实现并打印警告。验证：用 git HEAD 版旧实现与新实现逐值比对（常规 / 纯资金流日 / 0 资产 / 空账本 / 乱序 / custom 锚点全部一致），桥接有 / 无两条路径分别验证；三处预期修正单独核对——3/31 的近 1 月起点由 3/2 恢复为 2/2，资产分析近 1 月 / 近 6 月 / 近 1 年改为日历回退（±1 天），简化版基准线与组合日期轴对齐。tsc 无错误。AGENTS.md 记录该约定。",
-    kind: "fix"
   }]
 };
 
 export const V0_1_27_ENTRY: VersionEntry = {
   version: "v0.1.27",
   date: "2026-09-11",
-  summary: "收益曲线的口径与渲染解耦：CurveSpec 成为唯一契约，简化版手写 SVG 与主站 ECharts 吃同一份规格，将来换渲染器不再碰算法。",
+  summary: "修复金额「水合不一致」：汇率等本地缓存改为挂载后读取，服务端与客户端首帧数字一致。",
   frontend: V0_1_26_ENTRY.frontend,
   software: V0_1_26_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.27" } : item),
   changes: [{
-    title: "收益曲线渲染层解耦（CurveSpec 契约 + 换渲染器路径）",
-    desc: "上一版把曲线口径收进 lib/curve.ts，但两侧渲染层仍是「各调一堆函数」：想换渲染器（缩放 / 刷选 / 多图联动要靠 canvas 或 ECharts）就得把取数逻辑重写一遍，简化版 runtime 里还留着一份与 lib/curve.ts 平行的 curveFallback。这次补上第三层：1) 新增 CurveSpec —— dates / series（role、label、format、values）/ domain / markers / hitIndices / meta，由 buildCurveSpec（通用）与 ledgerCurveSpec（账本入口，内含周期裁剪、Modified Dietz、累计收益末端对齐、基准归一化、预期虚线与命中点抽稀）产出；2) 简化版 chartBlock 只剩「spec → SVG」——轴范围取 domain、极值线与命中点取 markers / hitIndices，取数全部来自 spec；3) 主站 PnlTrendChart 改为同一份 spec 取数（ECharts 用自身刻度与采样，因此忽略 domain / hitIndices，两者是给自绘渲染器用的）；4) 删掉 runtime 里的 curveFallback 第二份实现：桥接缺失时曲线区域显示「曲线组件未加载」并在控制台报一次错 —— 宁可明确显示提示，也不要第二份算法悄悄算出另一个数。验证：把改前的 chartBlock（1acf8d3）与改后版本各自抽进 vm 沙箱，喂同一批账本（90 天 / 600 天 × 收益率 / 累计收益两类）逐字符比对生成的 SVG —— 小账本完全一致（含命中圆点），大账本除命中圆点（抽稀后 182 个）外完全一致；桥接缺失路径不抛错、提示正确、只报一次错。tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。AGENTS.md 记录「spec → 适配器」的换渲染器约定与回归对拍方法。",
-    kind: "feature"
-  }, {
-    title: "SVG 适配器搬进 TypeScript（浏览器与服务端共用一份出图代码）",
-    desc: "曲线 SVG 此前写在简化版 runtime.js 的模板字符串里，只有浏览器能用。现在新增 lib/curveSvg.ts（spec → SVG 字符串，纯字符串拼接、不依赖 DOM）：几何（18~334 / 26~154 绘图区与 xAt / yAt）、网格、预期虚线、基准线、面积、主曲线、命中圆点、轴文案全部由它产出；runtime 的 chartBlock 只剩「生成 spec + 调用适配器 + 外围 tab / 图例 / 悬浮提示」，并改为通过桥接取几何给 hover 用。收益：1) 服务端 / 分享图 / 年度报告可以直接跑同一份出图代码（实测 Node 环境下无 DOM 生成 520 点曲线 SVG，xmllint 校验通过并成功光栅化）；2) 将来换 canvas / ECharts 时，curveSvg 就是「spec → 图形」适配器的参照实现。为兼容 XML 解析，hover 占位元素的自定义属性改写为带值形式（data-hover-line=\"\"，浏览器 [attr] 选择器行为不变）。验证：与改动前 chartBlock 做渲染对拍 —— 小账本（90 天）SVG 逐字符一致（含命中圆点与数字格式），大账本（600 天）除命中圆点数量（抽稀后 182）外逐字符一致；桥接契约「runtime 直调 3 个方法 + 管线 7 个函数」全部存在。tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。",
-    kind: "feature"
+    title: "修复金额「水合不一致」（首帧读本地汇率缓存导致 SSR 与客户端两份金额）",
+    desc: "现象：资产分析页 / 我的持仓页刷新后 dev 弹 hydration 报错，持仓总市值、现金等服务端渲染 51,392.88、客户端首帧 52,546.83（差 2.2%）。根因：AssetAnalysisView.tsx 与 HoldingsView.tsx 的汇率 state 用 useState 初始化函数直接读 localStorage 的 fire:rates —— 服务端读不到、只能用 FALLBACK_RATES，客户端首帧读到实时汇率，跨币种金额必然不同；React 水合只比对首帧渲染，所以这颗雷一直在，只是金额每次都「差一点点」时才会弹。同类写法还有：持仓页的 ratesReady 与各市场盈利卡片顺序、盈亏分析页的日历市场 / 基准 / 加权 / 日历月份四个本地偏好、全球预览页的迷你 K 线缓存。修复：新增 lib/ratesCache.ts 统一读写汇率缓存（注释写明只能挂载后读）；上述所有读取改为「首帧用默认值 + useLayoutEffect 恢复」——useLayoutEffect 先于 paint，既不会水合报错，也看不到兜底值闪烁（原本为防闪烁才首帧读，方向对、位置错）。tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。",
+    kind: "fix"
   }]
 };
 

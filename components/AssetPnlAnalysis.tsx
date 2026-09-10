@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FALLBACK_RATES, type Quote, type StockRecord, type TradeOrder } from "@/lib/types";
 import { MARKET_CURRENCY } from "@/lib/currency";
 import PnlTrendChart, { type PnlTrendPoint } from "@/components/PnlTrendChart";
@@ -11,19 +11,8 @@ import { getMarketBadge } from "@/lib/marketBadge";
 import { useMarketBadge, useMarketBadgeVisible } from "@/lib/useMarketBadge";
 import { showToast } from "@/lib/toast";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
-import { benchmarkOnDates, rangeStart, type CurveRange } from "@/lib/curve";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
 import { fmtMoney, fmtMoneyCompact } from "@/lib/format";
-
-/** 页面上用中文标签展示周期，计算口径统一映射到 lib/curve 的 CurveRange */
-const RANGE_BY_PERIOD: Record<string, CurveRange> = {
-  "本月": "month",
-  "近 1 月": "1m",
-  "近 6 月": "6m",
-  "本年": "ytd",
-  "近 1 年": "1y",
-  "全部": "all"
-};
 
 /** 成交日按市场时区归到 YYYY-MM-DD（与资产分析页同款，时间加权需要） */
 function marketDate(value: string, market: string) {
@@ -262,38 +251,17 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
 
   const [period, setPeriod] = useState("全部");
   const [market, setMarket] = useState("全部");
-  const [calMarket, setCalMarket] = useState<string>(() => {
-    if (typeof window === "undefined") return "全部";
-    try {
-      const saved = localStorage.getItem("fire:asset-pnl-cal-market");
-      return ["全部", "美股", "港股", "A股"].includes(saved ?? "") ? (saved as string) : "全部";
-    } catch {
-      return "全部";
-    }
-  });
+  // 本页偏好全部走「首帧用默认值 + 挂载后（绘制前）恢复本地偏好」，
+  // 原因：本页会被服务端渲染（/pnl 直接进），首帧读 localStorage 会造成水合不一致。
+  const [calMarket, setCalMarket] = useState<string>("全部");
   const [calMenuOpen, setCalMenuOpen] = useState(false);
   const [chartTab, setChartTab] = useState<"return" | "asset">("return");
   const [rankMode, setRankMode] = useState<"profit" | "loss">("profit");
   const [detailMode, setDetailMode] = useState<"profit" | "loss">("profit");
   // 盈亏总额卡片：货币（与资产分析页共用 key）、基准（多市场）、加权
   const { currency: displayCurrency, setCurrency: setDisplayCurrency } = useDisplayCurrency();
-  const [benchKey, setBenchKey] = useState<string>(() => {
-    if (typeof window === "undefined") return "spy";
-    try {
-      const saved = localStorage.getItem("fire:asset-pnl-bench");
-      return BENCHMARKS.some((b) => b.key === saved) ? (saved as string) : "spy";
-    } catch {
-      return "spy";
-    }
-  });
-  const [weighting, setWeighting] = useState<"simple" | "time">(() => {
-    if (typeof window === "undefined") return "simple";
-    try {
-      return localStorage.getItem("fire:asset-pnl-weighting") === "time" ? "time" : "simple";
-    } catch {
-      return "simple";
-    }
-  });
+  const [benchKey, setBenchKey] = useState<string>("spy");
+  const [weighting, setWeighting] = useState<"simple" | "time">("simple");
   const [currencyMenuOpen, setCurrencyMenuOpen] = useState(false);
   const [benchOpen, setBenchOpen] = useState(false);
   const [weightOpen, setWeightOpen] = useState(false);
@@ -313,18 +281,24 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   const [calView, setCalView] = useState<"year" | "month">("month");
   const [calMonth, setCalMonth] = useState<{ y: number; m: number }>(() => {
     const now = new Date();
-    try {
-      const saved = JSON.parse(localStorage.getItem("fire:asset-pnl-cal-month") || "null") as { y?: number; m?: number } | null;
-      const y = saved?.y;
-      const m = saved?.m;
-      if (typeof y === "number" && typeof m === "number" && Number.isInteger(y) && Number.isInteger(m) && m >= 1 && m <= 12) {
-        return { y, m };
-      }
-    } catch {
-      /* 忽略 */
-    }
     return { y: now.getFullYear(), m: now.getMonth() + 1 };
   });
+  useLayoutEffect(() => {
+    try {
+      const savedMarket = localStorage.getItem("fire:asset-pnl-cal-market");
+      if (["全部", "美股", "港股", "A股"].includes(savedMarket ?? "")) setCalMarket(savedMarket as string);
+      const savedBench = localStorage.getItem("fire:asset-pnl-bench");
+      if (BENCHMARKS.some((item) => item.key === savedBench)) setBenchKey(savedBench as string);
+      if (localStorage.getItem("fire:asset-pnl-weighting") === "time") setWeighting("time");
+      const savedMonth = JSON.parse(localStorage.getItem("fire:asset-pnl-cal-month") || "null") as { y?: number; m?: number } | null;
+      const { y, m } = savedMonth ?? {};
+      if (typeof y === "number" && typeof m === "number" && Number.isInteger(y) && Number.isInteger(m) && m >= 1 && m <= 12) {
+        setCalMonth({ y, m });
+      }
+    } catch {
+      /* 读取失败保留默认偏好 */
+    }
+  }, []);
   // 真实数据：持仓 + 行情 + 汇率 + 日K（含标普500基准）
   useEffect(() => {
     let cancelled = false;
@@ -611,8 +585,19 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   const dailyAsset = useMemo(() => buildDailyAsset(positionsFiltered), [buildDailyAsset, positionsFiltered]);
   const calDailyAsset = useMemo(() => buildDailyAsset(calPositions), [buildDailyAsset, calPositions]);
 
-  // 周期筛选：按所选区间截取日资产序列（窗口定义统一走 lib/curve，与资产分析页一致）
-  const periodStart = useMemo(() => rangeStart(RANGE_BY_PERIOD[period] ?? "all"), [period]);
+  // 周期筛选：按所选区间截取日资产序列
+  const periodStart = useMemo(() => {
+    const now = new Date();
+    const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    switch (period) {
+      case "本月": return iso(now).slice(0, 7) + "-01";
+      case "近 1 月": { const d = new Date(now); d.setMonth(d.getMonth() - 1); return iso(d); }
+      case "近 6 月": { const d = new Date(now); d.setMonth(d.getMonth() - 6); return iso(d); }
+      case "本年": return `${now.getFullYear()}-01-01`;
+      case "近 1 年": { const d = new Date(now); d.setFullYear(d.getFullYear() - 1); return iso(d); }
+      default: return "";
+    }
+  }, [period]);
 
   const dailyAssetFiltered = useMemo(
     () => (periodStart ? dailyAsset.filter((p) => p.date >= periodStart) : dailyAsset),
@@ -620,10 +605,15 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   );
 
   const chartPoints = useMemo<PnlTrendPoint[]>(() => {
-    // 基准对齐统一走 lib/curve：首个有效行情日前回填首值，之后顺延最近收盘价，
-    // 避免基准起始日晚于组合首日时被算成几万%（如 600/1-1）。
-    const benchmarks = benchmarkOnDates(benchCloses, dailyAssetFiltered.map((point) => point.date));
-    return dailyAssetFiltered.map(({ date, asset, timeIndex }, index) => ({ date, asset, benchmark: benchmarks[index] ?? 0, timeIndex }));
+    const benchMap = new Map(benchCloses.map((it) => [it.d, it.c]));
+    // 基准首值回填：基准数据起始日晚于组合首日时，首个点若为 0，
+    // PnlTrendChart 的 startBench 会回退成 1，把基准线算成几万%（如 600/1-1）。
+    let lastBench = benchCloses.length > 0 ? Number(benchCloses[0].c) || 0 : 0;
+    return dailyAssetFiltered.map(({ date, asset, timeIndex }) => {
+      const next = benchMap.get(date);
+      if (next !== undefined) lastBench = next;
+      return { date, asset, benchmark: lastBench, timeIndex };
+    });
   }, [dailyAssetFiltered, benchCloses]);
 
   // 跑赢幅度 = 我的组合区间收益率 − 基准区间收益率（与资产分析页口径一致；时间加权用 timeIndex）

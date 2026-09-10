@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { FALLBACK_RATES, type Quote, type StockRecord } from "@/lib/types";
 import AssetAnalysisDashboard from "@/components/AssetAnalysisDashboard";
 import { useAssetIcons } from "@/lib/useAssetIcons";
+import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
 
 interface Props {
   records: StockRecord[];
@@ -17,15 +18,12 @@ interface Props {
 /** 独立页签：资产分析（从我的持仓剥离），行情/汇率/记录刷新与持仓页共用链路 */
 export default function AssetAnalysisView({ records, quotes, livePrice, user, refreshQuotes, onOpenPnlAnalysis }: Props) {
   const { stockIcons } = useAssetIcons(["stock"]);
-  const [rates, setRates] = useState<Record<string, number>>(() => {
-    try {
-      const saved = localStorage.getItem("fire:rates");
-      const parsed = saved ? JSON.parse(saved) : null;
-      return { ...FALLBACK_RATES, ...(parsed && typeof parsed === "object" ? parsed : {}) };
-    } catch {
-      return { ...FALLBACK_RATES };
-    }
-  });
+  // 首帧必须与服务端一致：只用兜底汇率，挂载后（绘制前）再合并浏览器里缓存的实时汇率
+  const [rates, setRates] = useState<Record<string, number>>(() => ({ ...FALLBACK_RATES }));
+  useLayoutEffect(() => {
+    const cached = readCachedRates();
+    if (cached) setRates((prev) => ({ ...prev, ...cached }));
+  }, []);
 
   const loadRates = useCallback(async () => {
     try {
@@ -33,11 +31,7 @@ export default function AssetAnalysisView({ records, quotes, livePrice, user, re
       const data = res.ok ? await res.json() : null;
       if (data?.rates) {
         setRates((prev) => ({ ...prev, ...data.rates, USD: 1 }));
-        try {
-          localStorage.setItem("fire:rates", JSON.stringify(data.rates));
-        } catch {
-          /* 忽略存储异常 */
-        }
+        writeCachedRates(data.rates);
       }
     } catch {
       /* 汇率失败保留上次值 */

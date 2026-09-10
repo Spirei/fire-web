@@ -123,23 +123,31 @@ function saveDailyRank(date: string, rank: Record<string, number>) {
   }
 }
 
-const MiniKline = memo(function MiniKline({ item }: { item: TopAsset }) {
-  const [points, setPoints] = useState<number[] | null>(() => {
-    if (typeof window === "undefined") return klineCache.get(item.code) ?? null;
-    try {
-      const raw = localStorage.getItem(klineCacheKey(item.code));
-      if (raw) {
-        const arr = JSON.parse(raw) as number[];
-        if (Array.isArray(arr) && arr.length > 1) {
-          klineCache.set(item.code, arr);
-          return arr;
-        }
+/** 迷你 K 线的本地缓存：内存 + localStorage。只在浏览器挂载后读取（见 MiniKline） */
+function readCachedKline(code: string): number[] | null {
+  const memory = klineCache.get(code);
+  if (memory) return memory;
+  try {
+    const raw = localStorage.getItem(klineCacheKey(code));
+    if (raw) {
+      const parsed = JSON.parse(raw) as number[];
+      if (Array.isArray(parsed) && parsed.length > 1) {
+        klineCache.set(code, parsed);
+        return parsed;
       }
-    } catch {
-      /* 忽略 */
     }
-    return klineCache.get(item.code) ?? null;
-  });
+  } catch {
+    /* 忽略 */
+  }
+  return null;
+}
+
+const MiniKline = memo(function MiniKline({ item }: { item: TopAsset }) {
+  // 首帧不画（服务端也没有本地缓存）：挂载后、绘制前再恢复缓存，避免水合不一致
+  const [points, setPoints] = useState<number[] | null>(null);
+  useLayoutEffect(() => {
+    setPoints(readCachedKline(item.code));
+  }, [item.code]);
   const holderRef = useRef<HTMLSpanElement>(null);
   const [inView, setInView] = useState(false);
 

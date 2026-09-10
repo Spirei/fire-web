@@ -5,16 +5,8 @@ import Script from "next/script";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconArrowDown, IconCheck, IconExclamationMark, IconLoader2 } from "@tabler/icons-react";
 import echarts from "@/lib/echarts";
-import { curveApi } from "@/lib/curve";
-import { curveSvgApi } from "@/lib/curveSvg";
 
 const WINDOW_KEY = "fire-simple-win";
-
-// 曲线口径桥接：runtime.js 是 public 下的原生 JS，无法 import TS 模块，这里把 lib/curve.ts
-// 的口径实现 + lib/curveSvg.ts 的 SVG 适配器挂到 window.FireCurve。模块级赋值先于
-// <Script afterInteractive> 执行，runtime 渲染曲线时必然可用；万一取不到，runtime 会
-// 打印一次错误并显示「曲线组件未加载」（不保留第二份实现，避免口径漂移）。
-if (typeof window !== "undefined") window.FireCurve = { ...curveApi, ...curveSvgApi };
 
 export default function SimpleAppClient() {
   const [pullDistance, setPullDistance] = useState(0);
@@ -24,7 +16,6 @@ export default function SimpleAppClient() {
   useLayoutEffect(() => {
     const wasDark = document.documentElement.classList.contains("dark");
     document.documentElement.classList.add("simple-app-active");
-    window.FireCurve = { ...curveApi, ...curveSvgApi };
     try {
       document.documentElement.classList.toggle("dark", localStorage.getItem("fire-simple-theme") === "dark");
       const saved = JSON.parse(localStorage.getItem(WINDOW_KEY) || "null") as { w?: number } | null;
@@ -298,8 +289,6 @@ declare global {
     getSimpleCashflowChartData?: () => CashflowChartPayload;
     mountSimpleCashflowCharts?: (payload: CashflowChartPayload) => void;
     downloadSimpleCashflowChart?: (filename?: string) => void;
-    /** 曲线口径 + SVG 适配器桥接（lib/curve.ts + lib/curveSvg.ts），供 public/simple-app-runtime.js 调用 */
-    FireCurve?: typeof curveApi & typeof curveSvgApi;
   }
 }
 

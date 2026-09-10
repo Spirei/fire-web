@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fmtMoney, fmtMoneyCompact, fmtPct, fmtPrice, fmtQty } from "@/lib/format";
 import {
   MARKET_LIST,
@@ -15,6 +15,7 @@ import {
   type TradeOrder,
   type OrderSide
 } from "@/lib/types";
+import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
 import StockSearch from "@/components/StockSearch";
 import MarketIcon from "@/components/MarketIcon";
 import GroupSelect from "@/components/GroupSelect";
@@ -236,37 +237,30 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const [tradeSide, setTradeSide] = useState<OrderSide>("buy");
   const [tradeSaving, setTradeSaving] = useState(false);
   const [tradeForm, setTradeForm] = useState({ qty: "", price: "", fees: "0", tradedAt: "", note: "" });
-  // 汇率：初始用兜底值（避免刷新瞬间非美元市场被按 1:1 误算），
-  // 并优先读取上次保存到 localStorage 的汇率，服务端返回后再覆盖
-  const [rates, setRates] = useState<Record<string, number>>(() => {
-    try {
-      const saved = localStorage.getItem("fire:rates");
-      const parsed = saved ? JSON.parse(saved) : null;
-      return { ...FALLBACK_RATES, ...(parsed && typeof parsed === "object" ? parsed : {}) };
-    } catch {
-      return { ...FALLBACK_RATES };
-    }
-  });
+  // 汇率：初始用兜底值（避免刷新瞬间非美元市场被按 1:1 误算）。
+  // ⚠️ 缓存必须在挂载后才读：首帧读 localStorage 会让服务端与客户端渲染出不同金额（hydration 报错）。
+  const [rates, setRates] = useState<Record<string, number>>(() => ({ ...FALLBACK_RATES }));
   // 是否有「上一次成功」的汇率：有则秒开真实值；没有则不展示猜测值，等服务端返回
-  const [ratesReady, setRatesReady] = useState<boolean>(() => {
-    try {
-      return !!localStorage.getItem("fire:rates");
-    } catch {
-      return false;
-    }
-  });
+  const [ratesReady, setRatesReady] = useState(false);
   const [fundBalances, setFundBalances] = useState<Record<CurrencyCode, number>>({ USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 });
   const { currency: displayCur, setCurrency: setDisplayCur } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
   // 各市场盈利卡片拖动顺序（本地记忆）
-  const [pnlOrder, setPnlOrder] = useState<string[]>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("fire:holdings:pnl-order") || "null");
-      return Array.isArray(saved) ? saved : [];
-    } catch {
-      return [];
+  const [pnlOrder, setPnlOrder] = useState<string[]>([]);
+  // 浏览器缓存（汇率 + 各市场盈利卡片顺序）统一在挂载后、绘制前恢复，避免水合不一致与闪烁
+  useLayoutEffect(() => {
+    const cachedRates = readCachedRates();
+    if (cachedRates) {
+      setRates((prev) => ({ ...prev, ...cachedRates }));
+      setRatesReady(true);
     }
-  });
+    try {
+      const savedOrder = JSON.parse(localStorage.getItem("fire:holdings:pnl-order") || "null");
+      if (Array.isArray(savedOrder)) setPnlOrder(savedOrder);
+    } catch {
+      /* 忽略 */
+    }
+  }, []);
   const pnlDragIndex = useRef<number | null>(null);
 
   // 加载实时汇率（总资产跨市场换算用）；抽成函数供手动刷新复用
@@ -278,11 +272,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
         // 以当前（上一次成功）汇率为底，覆盖上游返回的币种，缺失币种保留上次值
         setRates((prev) => ({ ...prev, ...data.rates, USD: 1 }));
         setRatesReady(true);
-        try {
-          localStorage.setItem("fire:rates", JSON.stringify(data.rates));
-        } catch {
-          /* 忽略存储异常 */
-        }
+        writeCachedRates(data.rates);
       }
     } catch {
       /* 汇率失败保留上次值 */
