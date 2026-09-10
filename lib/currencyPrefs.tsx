@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { useRates } from "./useRates";
 import { usePersistedState } from "./usePersistedState";
 
@@ -75,6 +75,11 @@ export function useDisplayCurrency() {
     setCurrencyState(next);
     writeDisplayCurrencyCookie(next);
   };
+  // 老用户此前只有 localStorage（没有 cookie）：挂载后补写一次，下次刷新服务端就能直接读到。
+  // 第一次仍会闪一下（服务端无从得知 localStorage），之后不再闪。
+  useEffect(() => {
+    writeDisplayCurrencyCookie(currency);
+  }, [currency]);
   const rates = useRates();
   const rate = rates[currency] ?? (currency === "USD" ? 1 : 0);
   const symbol = CURRENCY_SYMBOLS[currency] ?? currency;
