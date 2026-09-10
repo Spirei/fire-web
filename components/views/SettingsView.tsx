@@ -897,6 +897,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   /* ---------- 全局自动保存：修改即保存，成功/失败均通过胶囊 Toast 提示 ---------- */
   const savedRef = useRef<Record<string, unknown> | null>(null);
+  // 上次保存成功的完整设置（取消用）；tabsRef 同步 tabs，避免闭包拿到旧值
+  const lastSavedRef = useRef<{ site: SiteSettings; tabs: TabConfig[] } | null>(null);
+  const tabsRef = useRef<TabConfig[]>(tabs);
+  tabsRef.current = tabs;
 
   function autoSaveSnapshot(s: SiteSettings) {
     return {
@@ -929,6 +933,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   function captureSaved(s: SiteSettings) {
     savedRef.current = autoSaveSnapshot(s);
+    // 「取消」要回滚的是「上次保存成功」的完整状态，所以这里额外存一份深拷贝（含 tabs 等独立状态）
+    try {
+      lastSavedRef.current = {
+        site: JSON.parse(JSON.stringify(s)) as SiteSettings,
+        tabs: JSON.parse(JSON.stringify((s as { tabs?: TabConfig[] }).tabs ?? tabsRef.current)) as TabConfig[]
+      };
+    } catch {
+      /* 深拷贝失败（循环引用等）时放弃本次快照，取消按钮会退化为仅退出编辑 */
+    }
   }
 
   useEffect(() => {
@@ -1317,6 +1330,30 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       savingEditRef.current = false;
     }
   }
+
+  /** 取消：回滚到上次保存成功的完整状态并退出编辑（主流做法里「取消 + 保存」成对出现） */
+  function exitActiveEdit() {
+    if (activeAnchor === "trading-square") setEditingTradingSquare(false);
+    else if (activeAnchor === "appearance") setEditingAppearance(false);
+    else if (activeAnchor === "ticker") setEditingTicker(false);
+    else if (activeAnchor === "nav") { setEditingHomeNav(false); setEditingTabs(false); }
+    else if (activeAnchor === "sources") setEditingSources(false);
+    else if (activeAnchor === "futu") setEditingFutu(false);
+    else if (activeAnchor === "market-badges") setEditingMarketBadges(false);
+  }
+  function cancelActiveEdit() {
+    const snapshot = lastSavedRef.current;
+    if (snapshot) {
+      setSite(snapshot.site);
+      setTabs(snapshot.tabs);
+      captureSaved(snapshot.site);
+    }
+    exitActiveEdit();
+    showToast("已取消未保存的修改");
+  }
+  const EDIT_CANCEL_BUTTON = (
+    <button type="button" onClick={cancelActiveEdit} className="btn btn-ghost btn-sm">取消</button>
+  );
 
   saveActiveEditRef.current = saveActiveEdit;
 
@@ -1961,6 +1998,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       id="appearance"
                       action={
                         <div className="flex items-center gap-2">
+                          {editingAppearance && EDIT_CANCEL_BUTTON}
                           {editingAppearance && (
                             <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button>
                           )}
@@ -2051,7 +2089,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
                         </button>
                       ) : undefined}
-                      action={editingTicker ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
+                      action={editingTicker ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                     >
                       <div className="settings-compact-list mb-3 flex flex-wrap items-center gap-3 rounded-[10px] bg-bg-gray/60 px-3 py-2.5">
                         <span className="text-[13px] font-semibold text-ink-2">轮换间隔</span>
@@ -2167,7 +2205,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
                         </button>
                       ) : undefined}
-                      action={editingHomeNav ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
+                      action={editingHomeNav ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                     >
                       <div className="settings-compact-list flex flex-col gap-2">
                         {(site.homeNav || []).slice(0, showAllHomeNav ? (site.homeNav || []).length : 5).map((item) => (
@@ -2733,7 +2771,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   )}
                 </SettingsSection>
 
-                <SettingsSection id="translation" icon="plug" title="翻译服务" desc="交易广场中文翻译与大模型配置（DeepSeek / OpenAI 兼容）" action={editingSources ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : <button type="button" onClick={() => setEditingSources(true)} className="btn btn-ghost btn-sm">编辑</button>}>
+                <SettingsSection id="translation" icon="plug" title="翻译服务" desc="交易广场中文翻译与大模型配置（DeepSeek / OpenAI 兼容）" action={editingSources ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : <button type="button" onClick={() => setEditingSources(true)} className="btn btn-ghost btn-sm">编辑</button>}>
                   {(["llmProvider", "llmApiUrl", "llmModel", "llmApiKey"] as const).map((key) => <div key={key} className="sw-row"><div className="sw-row-label"><b>{key === "llmProvider" ? "大模型提供商" : key === "llmApiUrl" ? "API 地址" : key === "llmModel" ? "模型名称" : <>API Key <span className={`ml-2 inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle ring-2 ring-white dark:ring-[#151b26] ${(site.llmApiKey || site.llmApiKeyConfigured) ? "bg-emerald-500" : "bg-slate-300"}`} title={(site.llmApiKey || site.llmApiKeyConfigured) ? "已配置" : "未配置"} /></>}</b></div><input className="sw-row-input" type={key === "llmApiKey" ? "password" : "text"} autoComplete="off" value={key === "llmApiKey" && !site.llmApiKey && site.llmApiKeyConfigured ? "********" : ((site as unknown as Record<string, string>)[key] || "")} onFocus={key === "llmApiKey" ? (e) => { if (e.currentTarget.value === "********") e.currentTarget.value = ""; } : undefined} onChange={(e) => setSite((s) => ({ ...s, [key]: e.target.value }))} onBlur={key === "llmApiKey" ? (e) => { const value = e.currentTarget.value.trim(); if (value) fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ llmApiKey: value }) }).then(() => setSite((s) => ({ ...s, llmApiKey: value }))).catch(() => {}); } : undefined} readOnly={!editingSources} placeholder={key === "llmModel" ? "deepseek-chat" : ""} /></div>)}
                 </SettingsSection>
 
@@ -2748,7 +2786,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                     </button>
                   ) : undefined}
-                  action={editingFutu ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
+                  action={editingFutu ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                 >
                   <div className="flex flex-col">
                     <div className="flex flex-col">
@@ -2861,7 +2899,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
                     </button>
                   ) : undefined}
-                  action={editingSources ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
+                  action={editingSources ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                 >
                   <div className="flex flex-col">
                     {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场数据源", ["trumpArchiveApiUrl", "translationApiUrl"]]] as const).map(([label, keys]) => {
@@ -3076,7 +3114,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                     </button>
                   ) : undefined}
-                  action={editingDb ? <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button> : undefined}
+                  action={editingDb ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                 >
                   <div className="subhead">数据库类型</div>
                   <div className="grid gap-3 sm:grid-cols-2">
