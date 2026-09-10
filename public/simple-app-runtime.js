@@ -2045,28 +2045,24 @@ function chartBlock(hist, expected, unit = "元", currentPnl = null) {
   const series = spec?.series.find((item) => item.role === "main")?.values || [];
   const seriesDates = spec?.dates || [];
   const benchSeries = spec?.series.find((item) => item.role === "bench")?.values || [];
-  const hitIndices = spec?.hitIndices || [];
-  const scaleMin = spec ? spec.domain.min : 0;
-  const scaleMax = spec ? spec.domain.max : 1;
-  const expEnd = spec?.markers.find((marker) => marker.kind === "expected")?.value || 0;
-  const hasExpected = !!(spec && spec.markers.some((marker) => marker.kind === "expected"));
-  const first = pretty(spec?.meta.windowStart || seriesDates[0] || "");
-  const last = pretty(spec?.meta.windowEnd || seriesDates[seriesDates.length - 1] || "");
-  const yAt = (v) => 154 - (v - scaleMin) / (scaleMax - scaleMin || 1) * 128;
-  const xAt = (i, n) => n <= 1 ? 180 : 18 + 316 * i / (n - 1);
-  let path = "";
-  if (series.length) {
-    path = series.map((v, i) => (i ? "L" : "M") + xAt(i, series.length).toFixed(1) + " " + yAt(v).toFixed(1)).join(" ");
-  }
-  const benchPath = benchSeries.map((v, i) => (i ? "L" : "M") + xAt(i, benchSeries.length).toFixed(1) + " " + yAt(v).toFixed(1)).join(" ");
-  const expPath = hasExpected
-    ? `M20 ${yAt(0).toFixed(1)} L350 ${yAt(expEnd).toFixed(1)}`
-    : "";
-  const area = kind === "pnl" && path ? `${path} L${xAt(series.length - 1, series.length).toFixed(1)} 154 L${xAt(0, series.length).toFixed(1)} 154 Z` : "";
+  const startLabel = pretty(spec?.meta.windowStart || seriesDates[0] || "");
+  const endLabel = pretty(spec?.meta.windowEnd || seriesDates[seriesDates.length - 1] || "");
+  // SVG 也由适配器生成（lib/curveSvg.ts，与将来服务端出图共用同一段几何）；
+  // 桥接缺失时只画一句提示 —— 这是错误态，不是第二份实现。
+  const svg = spec
+    ? api.curveSvg(spec, {
+      kind,
+      unit,
+      interactiveAttrs: 'onpointermove="moveTrendHover(event,this)" onpointerleave="leaveTrendHover(this)"',
+      startLabel,
+      endLabel
+    })
+    : `<svg class="chart" viewBox="0 0 360 170" preserveAspectRatio="xMidYMid meet"><text x="110" y="90" font-size="12" fill="var(--faint)">曲线组件未加载</text></svg>`;
+  const geometry = spec ? api.curveGeometry(spec) : { xAt: (i, n) => n <= 1 ? 180 : 18 + 316 * i / (n - 1), yAt: () => 0 };
   const lineColor = kind === "mwr" ? "#ef5b19" : "#3297f6";
   const label = kind === "mwr" ? "资金加权收益率" : "累计收益";
   const bench = benchMeta();
-  trendHoverModel = { kind, main:series, bench:benchSeries, dates:seriesDates, label, benchLabel:bench.label, color:lineColor, unit, xAt, yAt };
+  trendHoverModel = { kind, main:series, bench:benchSeries, dates:seriesDates, label, benchLabel:bench.label, color:lineColor, unit, xAt: geometry.xAt, yAt: geometry.yAt };
   return `<div class="trend-tabs">
       <button type="button" class="${kind === "mwr" ? "on" : ""}" onclick="event.stopPropagation();setChartKind('mwr')">收益率曲线</button>
       <button type="button" class="${kind === "pnl" ? "on" : ""}" onclick="event.stopPropagation();setChartKind('pnl')">累计收益曲线</button>
@@ -2076,19 +2072,7 @@ function chartBlock(hist, expected, unit = "元", currentPnl = null) {
     </div></div>
     <div class="trend-legend"><span><i style="background:${lineColor}"></i>${label}</span>${kind === "mwr" ? `<div class="bench-select"><button type="button" onclick="event.stopPropagation();route.benchOpen=!route.benchOpen;render({resize:false,keepScroll:true})"><i style="background:#4a90d9"></i><b>${esc(bench.label)}</b><svg class="bench-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.benchOpen ? `<div class="bench-menu">${SIMPLE_BENCHMARKS.map((x) => `<button type="button" class="${x.key === bench.key ? "on" : ""}" onclick="event.stopPropagation();pickBenchmark('${x.key}')"><span>${esc(x.label)}</span>${x.key === bench.key ? "✓" : ""}</button>`).join("")}</div>` : ""}</div><span><i class="dash"></i>预期收益率 ${expected ? expected + "%" : ""}</span>` : ""}</div>
     <div class="scroll-x trend-chart-wrap">
-      <svg class="chart" viewBox="0 0 360 170" preserveAspectRatio="xMidYMid meet" onpointermove="moveTrendHover(event,this)" onpointerleave="leaveTrendHover(this)">
-        <defs><linearGradient id="trendFill${kind}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${lineColor}" stop-opacity=".34"/><stop offset="1" stop-color="${lineColor}" stop-opacity=".02"/></linearGradient></defs>
-        <path d="M18 26H334 M18 68H334 M18 110H334 M18 154H334" fill="none" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>
-        ${expPath ? `<path d="${expPath}" fill="none" stroke="var(--dash)" stroke-width="1.4" stroke-dasharray="3 4"/>` : ""}
-        ${benchPath ? `<path d="${benchPath}" fill="none" stroke="#4a90d9" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>` : ""}
-        ${area ? `<path d="${area}" fill="url(#trendFill${kind})"/>` : ""}${path ? `<path d="${path}" fill="none" stroke="${lineColor}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" />` : `<text x="110" y="90" font-size="12" fill="var(--faint)">${api ? "当前区间暂无数据" : "曲线组件未加载"}</text>`}
-        <line data-hover-line x1="18" x2="18" y1="24" y2="154" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
-        <circle data-hover-main cx="0" cy="0" r="4" fill="var(--card)" stroke="${lineColor}" stroke-width="2" style="display:none;pointer-events:none"/>
-        <circle data-hover-bench cx="0" cy="0" r="3.5" fill="var(--card)" stroke="#4a90d9" stroke-width="2" style="display:none;pointer-events:none"/>
-        ${hitIndices.map((i) => `<circle cx="${xAt(i,series.length)}" cy="${yAt(series[i])}" r="7" fill="transparent" tabindex="0" onclick="toast('${seriesDates[i] || ""}　${kind === "pnl" ? num(series[i]) + " " + unit : pct(series[i])}')"><title>${seriesDates[i] || ""} ${kind === "pnl" ? num(series[i]) + " " + unit : pct(series[i])}</title></circle>`).join("")}
-        <text x="18" y="168" font-size="10" fill="var(--faint)">${first}</text><text x="286" y="168" font-size="10" fill="var(--faint)">${last}</text>
-        <text x="346" y="29" text-anchor="end" font-size="9" fill="var(--faint)">${kind === "pnl" ? num(scaleMax) : scaleMax.toFixed(1) + "%"}</text><text x="346" y="154" text-anchor="end" font-size="9" fill="var(--faint)">${kind === "pnl" ? num(scaleMin) : scaleMin.toFixed(1) + "%"}</text>
-      </svg>
+      ${svg}
       <div class="trend-hover-tip" role="status"><b data-tip-date></b><span><em><i style="background:${lineColor}"></i>${label}</em><strong data-tip-main-value></strong></span>${kind === "mwr" ? `<span><em><i style="background:#4a90d9"></i>${esc(bench.label)}</em><strong data-tip-bench-value></strong></span>` : ""}</div>
     </div>`;
 }

@@ -19,6 +19,8 @@
 
 - 收益曲线渲染层解耦（CurveSpec 契约 + 换渲染器路径）：口径算完统一产出 `CurveSpec`（`dates` / `series` / `domain` / `markers` / `hitIndices` / `meta`），简化版手写 SVG 只剩「spec → 图形」，主站 ECharts 也从同一份 spec 取数 —— 将来要上缩放 / 刷选 / 多图联动（换 canvas 或 ECharts）只需再写一个适配器，不用碰算法。同时删掉 runtime 里与 `lib/curve.ts` 平行的第二份实现：桥接缺失时曲线区域显示「曲线组件未加载」，宁可明确提示也不要两份算法算出两个数。验证用渲染对拍：改前 `chartBlock` 与改后喂同一批账本，小账本 SVG 逐字符一致，大账本除命中圆点（抽稀后 182 个）外一致；tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。
 
+- SVG 适配器搬进 TypeScript（`lib/curveSvg.ts`）：几何、网格、预期虚线、基准线、面积、主曲线、命中圆点、轴文案统一由它产出，runtime 只剩「生成 spec + 调适配器 + 外围 tab / 图例 / 悬浮提示」。服务端 / 分享图 / 报告因此可以直接复用同一份出图代码（实测 Node 无 DOM 环境生成 520 点曲线 SVG，`xmllint` 校验通过并成功光栅化）；hover 占位元素的自定义属性改写为带值形式（`data-hover-line=""`）以同时满足 HTML 与 XML。
+
 ---
 
 ## v0.1.26 · 2026-09-10
