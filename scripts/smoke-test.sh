@@ -48,6 +48,18 @@ for PAGE in /holdings /watchlist /fire /global /trading /celebs /earnings /activ
   check "GET ${PAGE}（登录后）" 200 "$(code -b "$JAR_DEMO" "$BASE$PAGE")"
 done
 
+# 公开数据接口：交易广场 / 行情 / 分时 / 汇率（交易广场页面曾整页 500，接口也要有兜底检查）
+echo "== 公开数据接口 =="
+for API in /api/trading-square/feed /api/trading-square/duan /api/trading-square/trump; do
+  check "GET ${API}" 200 "$(code "$BASE$API")"
+done
+check "行情接口（未登录可用）" 200 "$(code -X POST "$BASE/api/quotes" -H 'Content-Type: application/json' -d '{"items":[{"id":"US:AAPL","market":"US","code":"AAPL"}]}')"
+check "行情接口返回价格" 1 "$(curl -s --max-time 40 -X POST "$BASE/api/quotes" -H 'Content-Type: application/json' -d '{"items":[{"id":"US:AAPL","market":"US","code":"AAPL"}]}' | python3 -c 'import json,sys; q=(json.load(sys.stdin).get("quotes") or {}).get("US:AAPL") or {}; print(1 if isinstance(q.get("price"), (int,float)) and q["price"] > 0 else 0)')"
+check "美股五日分时接口" 200 "$(code --max-time 40 "$BASE/api/kline/five-day?code=AAPL&market=US")"
+check "个股详情接口" 200 "$(code --max-time 40 "$BASE/api/v1/stock-detail?market=US&code=AAPL")"
+check "汇率接口（登录后）" 200 "$(code -b "$JAR_DEMO" "$BASE/api/rates")"
+check "汇率含台币（腾讯外汇补齐）" 1 "$(curl -s -b "$JAR_DEMO" "$BASE/api/rates" | python3 -c 'import json,sys; r=json.load(sys.stdin).get("rates") or {}; print(1 if isinstance(r.get("TWD"), (int,float)) and r["TWD"] > 0 else 0)')"
+
 # 备份真实设置，测试结束后恢复，避免覆盖用户配置
 BACKUP_FILE=$(mktemp)
 curl -s -b "$JAR_DEMO" "$BASE/api/settings" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["settings"]))' > "$BACKUP_FILE"

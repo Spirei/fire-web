@@ -8,6 +8,9 @@ import type { Quote, StockRecord } from "@/lib/types";
  * 腾讯对美股只提供常规盘口径（盘前 / 盘后 / 夜盘仍停在上一交易日收盘的涨跌），
  * 此时「当日盈亏 / 最新价 / 涨跌幅」都不会随盘前盘后变动，用户很难分辨是行情源
  * 降级还是数据本身没变，因此这里给一个琥珀色提示；富途正常时组件不渲染。
+ *
+ * 两种判定：有持仓的美股降级（当日盈亏会失真）必报；只看自选股时，至少两只走
+ * 腾讯兜底才报 —— 富途对美股 OTC（如软银 ADR）本就不提供行情，单只 OTC 不该报警。
  */
 export default function QuoteSourceBadge({
   records,
@@ -16,9 +19,10 @@ export default function QuoteSourceBadge({
   records: StockRecord[];
   quotes: Record<string, Quote>;
 }) {
-  const fallback = records.some(
-    (record) => record.market === "US" && Number(record.qty) > 0 && quotes[record.id]?.source === "tencent"
+  const tencentRows = records.filter(
+    (record) => record.market === "US" && quotes[record.id]?.source === "tencent"
   );
+  const fallback = tencentRows.some((record) => Number(record.qty) > 0) || tencentRows.length >= 2;
   if (!fallback) return null;
   return (
     <span

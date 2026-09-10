@@ -2668,6 +2668,10 @@ export const V0_1_26_ENTRY: VersionEntry = {
     title: "全站 Review：修复交易广场 500 + FIRE 跨年口径不一致 + 冒烟补页面巡检",
     desc: "1) 交易广场整页 500：TradingSquareView 的 readSeen() 在 useState 初始化时读取 localStorage 且该行没被 try 包住，服务端渲染直接 ReferenceError，登录后访问 /trading 返回 500（本地 dev 与生产构建都复现，线上同源同版本受影响，2026-09-03 引入）。已改为显式判断浏览器环境；并用 TypeScript 编译器 API 扫过全部 JSX 确认没有 <button> 嵌套按钮，其余初始化期浏览器 API 均有保护。2) FIRE 跨年落账口径不一致：年末快照的「当前资产」用 currentAssets（不含手动覆盖），而上方面板 / 水球 / 今年这一行用 effCurUsd（含手动覆盖），跨年后冻结值会与页面显示对不上——统一为 effCurUsd 并补齐依赖项。3) 冒烟测试新增登录后页面巡检（16 个页面逐一检查 200），这台机器上旧的 82 项检查覆盖不到页面渲染，正是 /trading 500 漏网的原因；测试项 82 → 101。tsc 无错误、npm run build 通过、冒烟 101/101 全 PASS。",
     kind: "fix"
+  }, {
+    title: "台币接实时汇率 + 降级提示扩到自选股 + 冒烟补公开接口",
+    desc: "1) 台币（TWD）过去只能一直用静态兜底汇率：汇率源富兰克福是 ECB 口径，不含台币（实测混在批量里被静默忽略、单独查 404），台湾市场换算偏差约 1–3%。现在 lib/rates.ts 对上游缺失的币种改用腾讯外汇补齐（whUSDTWD，与行情同主机、走设置里的 quoteApiUrl，无需 Referer、境内可直连），实测 TWD 由固定 0.031（≈32.3）变为实时 31.517；补齐失败仍回退上次成功值 / 静态兜底，不影响主流程。2) 行情降级提示判定放宽并接入自选股：有持仓的美股降级必报，只看自选股时至少两只走腾讯兜底才报（富途本就不提供美股 OTC 行情，单只 OTC 不再误报）。3) 冒烟测试补 9 项公开接口检查（交易广场 feed / 段永平 / 特朗普、行情、美股五日分时、个股详情、汇率含台币），测试项 101 → 110。4) 删除已被 app/api-docs/page.tsx 取代的 components/views/ApiDocsView.tsx（179 行死代码）。tsc 无错误、冒烟 110/110 全 PASS。",
+    kind: "feature"
   }]
 };
 

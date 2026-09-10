@@ -19,6 +19,7 @@ import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import { isDoubleEtf } from "@/lib/relatedEtfs";
 import RefreshButton from "@/components/RefreshButton";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
+import QuoteSourceBadge from "@/components/QuoteSourceBadge";
 
 interface Props {
   /** 个股详情直达代码（如 US.GOOGL），来自 /watchlist/US.GOOGL 路径 */
@@ -687,6 +688,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
         <div className="quotes-control-title flex items-center gap-2">
           <h3 className="text-base font-bold">我的行情板</h3>
           <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold tabular-nums text-faint">{filtered.length}</span>
+          <QuoteSourceBadge records={filtered} quotes={quotes} />
         </div>
         <div className="quotes-control-actions flex flex-wrap items-center gap-2">
           <span
