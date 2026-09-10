@@ -836,116 +836,21 @@ function poly(values, x0, x1, y0, y1) {
   }).join(" ");
 }
 /* ---------------------------------------------------------------------------
- * 曲线口径：优先用 window.FireCurve（lib/curve.ts —— 主站与简化版共用的唯一实现，
- * 由 app/simple-app/SimpleAppClient.tsx 注入）。只有桥接缺失时才降级到 curveFallback；
- * 任何算法调整都改 lib/curve.ts，不要只改这里，否则口径又会漂。
+ * 曲线口径：全部走 window.FireCurve（lib/curve.ts —— 主站与简化版共用的唯一实现，
+ * 由 app/simple-app/SimpleAppClient.tsx 注入）。runtime 里不再保留第二份实现 ——
+ * 曲线算法 / 周期窗口 / 基准对齐 / 命中点抽稀都只有一份，同一个账户不会在主站与
+ * 简化版算出两个数。取不到桥接时曲线区域直接显示提示，不静默出错。
+ * 将来换渲染器（canvas / ECharts / 服务端出图）时 spec 不变，只加一个「spec → 图形」适配器。
  * ------------------------------------------------------------------------- */
 let curveBridgeWarned = false;
 function curveApiRef() {
   const api = typeof window !== "undefined" ? window.FireCurve : null;
-  if (api && typeof api.ledgerSeries === "function") return api;
+  if (api && typeof api.ledgerCurveSpec === "function") return api;
   if (!curveBridgeWarned) {
     curveBridgeWarned = true;
-    console.warn("[simple-app] window.FireCurve 未注入，收益曲线降级为内置实现（口径以 lib/curve.ts 为准）");
+    console.error("[simple-app] window.FireCurve 未注入：收益曲线无法绘制（实现见 lib/curve.ts，桥接见 SimpleAppClient.tsx）");
   }
-  return curveFallback;
-}
-const curveFallback = {
-  rangeStart(range, options) {
-    if (range === "all") return "";
-    if (range === "custom") return (options && options.from ? String(options.from).slice(0, 10) : "");
-    const now = new Date();
-    if (range === "month") return iso(new Date(now.getFullYear(), now.getMonth(), 1));
-    if (range === "ytd") return now.getFullYear() + "-01-01";
-    // 日历回退 + 月末夹取（3/31 回退 1 个月 = 2/28），与 lib/curve.ts 同规则
-    const target = new Date(now.getFullYear(), now.getMonth() + (range === "1m" ? -1 : range === "6m" ? -6 : -12), 1);
-    target.setDate(Math.min(now.getDate(), new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()));
-    return iso(target);
-  },
-  sliceWithAnchor(rows, range, options) {
-    const all = (rows || []).slice().sort((a, b) => String(a.d).localeCompare(String(b.d)));
-    const start = this.rangeStart(range, options);
-    if (!start) return all;
-    const cut = parseDay(start);
-    const inside = all.filter((h) => parseDay(h.d) >= cut);
-    const before = all.filter((h) => parseDay(h.d) < cut);
-    const list = before.length ? [before[before.length - 1], ...inside] : inside;
-    const to = options && options.to ? String(options.to).slice(0, 10) : "";
-    return to ? list.filter((h) => String(h.d).slice(0, 10) <= to) : list;
-  },
-  ledgerSeries(list, kind) {
-    const values = [], dates = [];
-    const rows = (list || []).slice().sort((a, b) => String(a.d).localeCompare(String(b.d)));
-    if (!rows.length) return { dates, values };
-    const start = Number(rows[0].v) || 0, t0 = parseDay(rows[0].d);
-    for (let i = 0; i < rows.length; i++) {
-      const endDay = parseDay(rows[i].d), span = Math.max(0, endDay - t0);
-      let netFlow = 0, weightedFlow = 0;
-      for (let j = 1; j <= i; j++) {
-        const flow = (Number(rows[j].inn) || 0) - (Number(rows[j].out) || 0);
-        netFlow += flow;
-        if (span) weightedFlow += flow * Math.max(0, endDay - parseDay(rows[j].d)) / span;
-      }
-      const pnl = (Number(rows[i].v) || 0) - start - netFlow;
-      const denominator = start + weightedFlow;
-      const ownFlow = (Number(rows[i].inn) || 0) - (Number(rows[i].out) || 0);
-      const prevV = i ? Number(rows[i - 1].v) || 0 : 0;
-      const v = Number(rows[i].v) || 0;
-      const flowOnly = i > 0 && ownFlow && (
-        Math.abs(v - prevV) < .000001 || Math.abs(v - (prevV + ownFlow)) < .000001
-      );
-      // 只有资金流、没有资产估值的日期仅参与计算，不作为曲线采样点，避免出现人为尖峰。
-      if (!flowOnly) {
-        values.push(kind === "pnl" ? pnl : (denominator ? pnl / denominator * 100 : 0));
-        dates.push(rows[i].d);
-      }
-    }
-    return { dates, values };
-  },
-  normalizeToPercent(values) {
-    if (!values.length) return [];
-    const start = values[0] || 1;
-    return values.map((value) => (value / start - 1) * 100);
-  },
-  benchmarkOnDates(rows, dates) {
-    const clean = (rows || []).map((x) => ({ d: String(x.d || "").slice(0, 10), c: Number(x.c) }))
-      .filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.d) && Number.isFinite(x.c) && x.c > 0)
-      .sort((a, b) => a.d.localeCompare(b.d));
-    if (!clean.length || !dates.length) return [];
-    const map = new Map(clean.map((x) => [x.d, x.c]));
-    let last = clean[0].c;
-    return dates.map((date) => {
-      const next = map.get(String(date).slice(0, 10));
-      if (next !== undefined) last = next;
-      return last;
-    });
-  },
-  sampleIndices(values, target) {
-    const count = (values || []).length;
-    if (!count) return [];
-    if (count <= target || target <= 2) return values.map((_, index) => index);
-    const stride = (count - 1) / (target - 1);
-    const picked = new Set([0, count - 1]);
-    for (let i = 0; i < target; i++) picked.add(Math.round(i * stride));
-    let lowest = 0, highest = 0;
-    for (let i = 1; i < count; i++) {
-      if (values[i] < values[lowest]) lowest = i;
-      if (values[i] > values[highest]) highest = i;
-    }
-    picked.add(lowest); picked.add(highest);
-    return [...picked].sort((a, b) => a - b);
-  }
-};
-function filterHist(hist, range) {
-  const all = (hist || []).slice().sort((a, b) => String(a.d).localeCompare(String(b.d)));
-  if (range === "future") return all.slice(-1);
-  return curveApiRef().sliceWithAnchor(all, range, { from: route.from || "", to: route.to || "" });
-}
-function chartSeries(list, kind) {
-  const series = curveApiRef().ledgerSeries(list, kind === "pnl" ? "pnl" : "mwr");
-  const pts = series.values.slice();
-  pts.dates = series.dates;
-  return pts;
+  return null;
 }
 
 function home() {
@@ -2122,30 +2027,31 @@ const TREND_HIT_TARGET = 180;
 function chartBlock(hist, expected, unit = "元", currentPnl = null) {
   const kind = route.chartKind || "mwr";
   const range = route.chartRange || "all";
-  const list = filterHist(hist, range);
-  let series = chartSeries(list, kind);
-  const seriesDates = series.dates || list.map((x) => x.d);
-  // 手动修正累计投入 / 转出后，历史快照仍保留原始资金流。将累计收益曲线
-  // 整体平移到当前账面口径，确保末端值始终与顶部累计收益一致。
-  if (kind === "pnl" && series.length && Number.isFinite(Number(currentPnl))) {
-    const delta = Number(currentPnl) - series[series.length - 1];
-    series = series.map((value) => value + delta);
-  }
-  // 基准对齐与归一化统一走 lib/curve（与主站资产分析同一规则）：首日之前回填首值、之后顺延最近收盘
-  const benchSeries = kind === "mwr"
-    ? curveApiRef().normalizeToPercent(curveApiRef().benchmarkOnDates(benchState.items || [], seriesDates))
-    : [];
-  const first = list[0] ? pretty(list[0].d) : "";
-  const last = list.length ? pretty(list[list.length - 1].d) : "";
-  const yMax = Math.max(...series, ...benchSeries, 0);
-  const yMin = Math.min(...series, ...benchSeries, 0);
-  let expEnd = 0;
-  if (expected && list.length >= 2 && kind === "mwr") {
-    const years = Math.max(0.05, (parseDay(list[list.length - 1].d) - parseDay(list[0].d)) / 365 / 86400000);
-    expEnd = Number(expected) * years;
-  }
-  const scaleMin = Math.min(yMin, 0, expected && kind === "mwr" ? 0 : 0);
-  const scaleMax = Math.max(yMax, expEnd, 1);
+  // 口径、周期窗口、基准对齐、轴范围、命中点抽稀都在 lib/curve（经 window.FireCurve 桥接）；
+  // 这里只负责把 spec 画成 SVG —— 换渲染器时这一段整体替换即可，spec 不变。
+  const api = curveApiRef();
+  const spec = api ? api.ledgerCurveSpec({
+    rows: hist,
+    range,
+    kind,
+    from: route.from,
+    to: route.to,
+    benchmark: kind === "mwr" ? { rows: benchState.items || [], label: benchMeta().label } : null,
+    expectedRate: kind === "mwr" ? expected : null,
+    alignEndValue: kind === "pnl" ? currentPnl : null,
+    unit,
+    hitTarget: TREND_HIT_TARGET
+  }) : null;
+  const series = spec?.series.find((item) => item.role === "main")?.values || [];
+  const seriesDates = spec?.dates || [];
+  const benchSeries = spec?.series.find((item) => item.role === "bench")?.values || [];
+  const hitIndices = spec?.hitIndices || [];
+  const scaleMin = spec ? spec.domain.min : 0;
+  const scaleMax = spec ? spec.domain.max : 1;
+  const expEnd = spec?.markers.find((marker) => marker.kind === "expected")?.value || 0;
+  const hasExpected = !!(spec && spec.markers.some((marker) => marker.kind === "expected"));
+  const first = pretty(spec?.meta.windowStart || seriesDates[0] || "");
+  const last = pretty(spec?.meta.windowEnd || seriesDates[seriesDates.length - 1] || "");
   const yAt = (v) => 154 - (v - scaleMin) / (scaleMax - scaleMin || 1) * 128;
   const xAt = (i, n) => n <= 1 ? 180 : 18 + 316 * i / (n - 1);
   let path = "";
@@ -2153,7 +2059,7 @@ function chartBlock(hist, expected, unit = "元", currentPnl = null) {
     path = series.map((v, i) => (i ? "L" : "M") + xAt(i, series.length).toFixed(1) + " " + yAt(v).toFixed(1)).join(" ");
   }
   const benchPath = benchSeries.map((v, i) => (i ? "L" : "M") + xAt(i, benchSeries.length).toFixed(1) + " " + yAt(v).toFixed(1)).join(" ");
-  const expPath = expected && list.length >= 2 && kind === "mwr"
+  const expPath = hasExpected
     ? `M20 ${yAt(0).toFixed(1)} L350 ${yAt(expEnd).toFixed(1)}`
     : "";
   const area = kind === "pnl" && path ? `${path} L${xAt(series.length - 1, series.length).toFixed(1)} 154 L${xAt(0, series.length).toFixed(1)} 154 Z` : "";
@@ -2175,11 +2081,11 @@ function chartBlock(hist, expected, unit = "元", currentPnl = null) {
         <path d="M18 26H334 M18 68H334 M18 110H334 M18 154H334" fill="none" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>
         ${expPath ? `<path d="${expPath}" fill="none" stroke="var(--dash)" stroke-width="1.4" stroke-dasharray="3 4"/>` : ""}
         ${benchPath ? `<path d="${benchPath}" fill="none" stroke="#4a90d9" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>` : ""}
-        ${area ? `<path d="${area}" fill="url(#trendFill${kind})"/>` : ""}${path ? `<path d="${path}" fill="none" stroke="${lineColor}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" />` : `<text x="110" y="90" font-size="12" fill="var(--faint)">当前区间暂无数据</text>`}
+        ${area ? `<path d="${area}" fill="url(#trendFill${kind})"/>` : ""}${path ? `<path d="${path}" fill="none" stroke="${lineColor}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" />` : `<text x="110" y="90" font-size="12" fill="var(--faint)">${api ? "当前区间暂无数据" : "曲线组件未加载"}</text>`}
         <line data-hover-line x1="18" x2="18" y1="24" y2="154" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
         <circle data-hover-main cx="0" cy="0" r="4" fill="var(--card)" stroke="${lineColor}" stroke-width="2" style="display:none;pointer-events:none"/>
         <circle data-hover-bench cx="0" cy="0" r="3.5" fill="var(--card)" stroke="#4a90d9" stroke-width="2" style="display:none;pointer-events:none"/>
-        ${curveApiRef().sampleIndices(series, TREND_HIT_TARGET).map((i) => `<circle cx="${xAt(i,series.length)}" cy="${yAt(series[i])}" r="7" fill="transparent" tabindex="0" onclick="toast('${seriesDates[i] || ""}　${kind === "pnl" ? num(series[i]) + " " + unit : pct(series[i])}')"><title>${seriesDates[i] || ""} ${kind === "pnl" ? num(series[i]) + " " + unit : pct(series[i])}</title></circle>`).join("")}
+        ${hitIndices.map((i) => `<circle cx="${xAt(i,series.length)}" cy="${yAt(series[i])}" r="7" fill="transparent" tabindex="0" onclick="toast('${seriesDates[i] || ""}　${kind === "pnl" ? num(series[i]) + " " + unit : pct(series[i])}')"><title>${seriesDates[i] || ""} ${kind === "pnl" ? num(series[i]) + " " + unit : pct(series[i])}</title></circle>`).join("")}
         <text x="18" y="168" font-size="10" fill="var(--faint)">${first}</text><text x="286" y="168" font-size="10" fill="var(--faint)">${last}</text>
         <text x="346" y="29" text-anchor="end" font-size="9" fill="var(--faint)">${kind === "pnl" ? num(scaleMax) : scaleMax.toFixed(1) + "%"}</text><text x="346" y="154" text-anchor="end" font-size="9" fill="var(--faint)">${kind === "pnl" ? num(scaleMin) : scaleMin.toFixed(1) + "%"}</text>
       </svg>

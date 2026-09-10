@@ -210,8 +210,9 @@ Review 自查清单（按项目实际走一遍）：
 
 - **唯一实现：`lib/curve.ts`**（纯函数，禁止 import DOM / React / echarts）。周期窗口 `rangeStart`（日历回退 + 月末夹取，禁止再用 31 / 183 / 366 天近似）、账本曲线 `ledgerSeries`（Modified Dietz 资金加权 / 累计收益，含「只有资金流没有估值」的采样跳过）、归一化 `normalizeToPercent`、基准对齐 `benchmarkOnDates`（首日前回填首值、之后顺延最近收盘）、命中点抽稀 `sampleIndices`（按绘图区宽度取样并保留首尾与极值，用于「每点一个 DOM 节点」的手写 SVG：曲线路径与悬停仍用全量点）。
 - **三处渲染层都必须引用它**：资产分析（`components/AssetAnalysisDashboard.tsx` + `components/PnlTrendChart.tsx`）、资产盈亏分析（`components/AssetPnlAnalysis.tsx`）、简化版账户页（`public/simple-app-runtime.js`）。新增周期、改口径、修算法一律先改 `lib/curve.ts`，禁止在渲染层再写一份。
-- **简化版桥接**：runtime.js 是 `public` 下的静态 JS，无法 import TS 模块，由 `app/simple-app/SimpleAppClient.tsx` 把 `curveApi` 挂到 `window.FireCurve`（模块级注入，先于 `afterInteractive` 脚本执行）。runtime 里的 `curveFallback` 只在桥接缺失时兜底并打印警告，口径仍以 `lib/curve.ts` 为准。
-- **改动后的回归手段**：`lib/curve.ts` 是纯函数，可直接用 `node --experimental-strip-types` 跑；对拍时把 runtime 里的 `curveFallback`（等价于抽取前的旧实现）与 `curveApi` 喂同一批账本数据（常规 / 纯资金流日 / 0 资产 / 空账本 / 乱序 / custom 锚点 / 月末日期）逐值比对，两者必须一致。
+- **渲染器可换，spec 不变**：口径算完输出 `CurveSpec`（`dates` / `series` / `domain` / `markers` / `hitIndices`），由 `buildCurveSpec`（通用）与 `ledgerCurveSpec`（账本入口）产出。现有两个适配器吃同一份 spec —— 手写 SVG（runtime 的 `chartBlock`）与 ECharts（`components/PnlTrendChart.tsx`）。要换成 canvas / ECharts / 服务端出图，只写一个「spec → 图形」适配器即可：`domain` 与 `hitIndices` 是给自绘渲染器用的（ECharts 走自身刻度与采样）。
+- **简化版桥接是硬依赖**：runtime.js 是 `public` 下的静态 JS，无法 import TS 模块，由 `app/simple-app/SimpleAppClient.tsx` 把 `curveApi` 挂到 `window.FireCurve`（模块级注入，先于 `afterInteractive` 脚本执行）。runtime 内**不再保留第二份实现**；桥接缺失时曲线区域显示「曲线组件未加载」并在控制台报一次错 —— 宁可显示提示，也不要第二份算法悄悄算出另一个数。
+- **改动后的回归手段**：`lib/curve.ts` 是纯函数，可直接用 `node --experimental-strip-types` 跑。改 `chartBlock` 后建议做渲染对拍：把改动前的 `public/simple-app-runtime.js`（`git show <改前 commit>:public/simple-app-runtime.js`）与现版各自的 `chartBlock` 抽进 `vm` 沙箱，喂同一批账本（含纯资金流日 / 0 资产 / 空账本 / 月末日期），逐字符比对输出的 SVG —— 小账本必须完全一致，大账本只允许命中圆点数量不同。
 
 ## 版本记录约定（重要）
 

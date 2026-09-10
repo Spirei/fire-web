@@ -2699,7 +2699,20 @@ export const V0_1_26_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_26_ENTRY;
+export const V0_1_27_ENTRY: VersionEntry = {
+  version: "v0.1.27",
+  date: "2026-09-11",
+  summary: "收益曲线的口径与渲染解耦：CurveSpec 成为唯一契约，简化版手写 SVG 与主站 ECharts 吃同一份规格，将来换渲染器不再碰算法。",
+  frontend: V0_1_26_ENTRY.frontend,
+  software: V0_1_26_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.27" } : item),
+  changes: [{
+    title: "收益曲线渲染层解耦（CurveSpec 契约 + 换渲染器路径）",
+    desc: "上一版把曲线口径收进 lib/curve.ts，但两侧渲染层仍是「各调一堆函数」：想换渲染器（缩放 / 刷选 / 多图联动要靠 canvas 或 ECharts）就得把取数逻辑重写一遍，简化版 runtime 里还留着一份与 lib/curve.ts 平行的 curveFallback。这次补上第三层：1) 新增 CurveSpec —— dates / series（role、label、format、values）/ domain / markers / hitIndices / meta，由 buildCurveSpec（通用）与 ledgerCurveSpec（账本入口，内含周期裁剪、Modified Dietz、累计收益末端对齐、基准归一化、预期虚线与命中点抽稀）产出；2) 简化版 chartBlock 只剩「spec → SVG」——轴范围取 domain、极值线与命中点取 markers / hitIndices，取数全部来自 spec；3) 主站 PnlTrendChart 改为同一份 spec 取数（ECharts 用自身刻度与采样，因此忽略 domain / hitIndices，两者是给自绘渲染器用的）；4) 删掉 runtime 里的 curveFallback 第二份实现：桥接缺失时曲线区域显示「曲线组件未加载」并在控制台报一次错 —— 宁可明确显示提示，也不要第二份算法悄悄算出另一个数。验证：把改前的 chartBlock（1acf8d3）与改后版本各自抽进 vm 沙箱，喂同一批账本（90 天 / 600 天 × 收益率 / 累计收益两类）逐字符比对生成的 SVG —— 小账本完全一致（含命中圆点），大账本除命中圆点（抽稀后 182 个）外完全一致；桥接缺失路径不抛错、提示正确、只报一次错。tsc 无错误、npm run build 通过、冒烟 113/113 全 PASS。AGENTS.md 记录「spec → 适配器」的换渲染器约定与回归对拍方法。",
+    kind: "feature"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_27_ENTRY;
 
 // 完整历史数组已拆分到 lib/versions-history.ts（约 200KB 历史文案，仅供版本弹窗
 // 懒加载引用）；本文件保留类型 + 当前版本条目，让设置页 / 健康检查只引用轻量常量。

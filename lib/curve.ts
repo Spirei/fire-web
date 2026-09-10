@@ -217,6 +217,160 @@ export function sampleIndices(values: number[], target = 180): number[] {
   return [...picked].sort((a, b) => a - b);
 }
 
+/** 曲线序列在图表里的角色（渲染器据此决定配色 / 面积 / 图例，spec 本身不带样式） */
+export type CurveSeriesRole = "main" | "bench" | "asset";
+export type CurveSeriesFormat = "percent" | "amount";
+
+export interface CurveSeriesSpec {
+  key: string;
+  label: string;
+  role: CurveSeriesRole;
+  format: CurveSeriesFormat;
+  values: number[];
+}
+
+export interface CurveMarkerSpec {
+  /** zero = 0 基准线；expected = 预期收益率虚线 */
+  kind: "zero" | "expected";
+  value: number;
+}
+
+/**
+ * 渲染器无关的曲线规格：算完口径后交给渲染层。
+ * 目前两个适配器吃同一份 spec —— 主站 ECharts 适配器（components/PnlTrendChart.tsx）
+ * 与简化版手写 SVG 适配器（public/simple-app-runtime.js 的 chartBlock）。
+ * 将来要换成 canvas / ECharts / 服务端出图，只需要再写一个「spec → 图形」的适配器。
+ */
+export interface CurveSpec {
+  /** x 轴采样点（渲染器按索引等距摆放，不是按时间比例） */
+  dates: string[];
+  series: CurveSeriesSpec[];
+  /** 纵轴范围：min(0, 全部值) ~ max(1, 全部值, 预期线终点)。SVG 要它自己画轴，ECharts 可只用参考 */
+  domain: { min: number; max: number };
+  markers: CurveMarkerSpec[];
+  /** 命中点抽样索引：每点一个 DOM 节点的渲染器（手写 SVG）用它；canvas / ECharts 可忽略 */
+  hitIndices: number[];
+  meta: {
+    points: number;
+    unit: string;
+    kind?: LedgerCurveKind;
+    range?: CurveRange;
+    /** 原始区间首尾日期（含基线点），用于轴标签与文案；可能早于 dates[0] */
+    windowStart?: string;
+    windowEnd?: string;
+  };
+}
+
+/** 纵轴范围（与手写 SVG 历史规则一致）：下界不超过 0，上界不低于 1，并覆盖预期线终点 */
+export function curveDomain(series: Array<number[]>, extras: number[] = []): { min: number; max: number } {
+  let min = 0;
+  let max = 1;
+  for (const values of series) {
+    for (const value of values) {
+      if (!Number.isFinite(value)) continue;
+      if (value < min) min = value;
+      if (value > max) max = value;
+    }
+  }
+  for (const value of extras) {
+    if (Number.isFinite(value) && value > max) max = value;
+  }
+  return { min, max };
+}
+
+export function buildCurveSpec(input: {
+  dates: string[];
+  series: CurveSeriesSpec[];
+  markers?: CurveMarkerSpec[];
+  unit?: string;
+  hitTarget?: number;
+  kind?: LedgerCurveKind;
+  range?: CurveRange;
+  windowStart?: string;
+  windowEnd?: string;
+}): CurveSpec {
+  const markers = input.markers ?? [];
+  const expected = markers.filter((marker) => marker.kind === "expected").map((marker) => marker.value);
+  const main = input.series.find((item) => item.role === "main") ?? input.series[0];
+  return {
+    dates: input.dates,
+    series: input.series,
+    domain: curveDomain(input.series.map((item) => item.values), expected),
+    markers,
+    hitIndices: main ? sampleIndices(main.values, input.hitTarget ?? 180) : [],
+    meta: {
+      points: input.dates.length,
+      unit: input.unit ?? "",
+      kind: input.kind,
+      range: input.range,
+      windowStart: input.windowStart,
+      windowEnd: input.windowEnd
+    }
+  };
+}
+
+export interface LedgerCurveInput {
+  rows: CurveLedgerRow[];
+  range: CurveRange;
+  kind: LedgerCurveKind;
+  from?: string;
+  to?: string;
+  now?: Date;
+  /** 基准日线 + 名称：仅收益曲线显示对照线 */
+  benchmark?: { rows: CurveBenchRow[]; label: string } | null;
+  /** 预期年化（%）：仅收益曲线画虚线 */
+  expectedRate?: number | null;
+  /** 累计收益曲线末端对齐值（手动修正投入 / 转出后与顶部累计收益保持一致） */
+  alignEndValue?: number | null;
+  unit?: string;
+  hitTarget?: number;
+}
+
+/** 账本 → 曲线规格（简化版账户页与将来的分享图 / 服务端出图共用） */
+export function ledgerCurveSpec(input: LedgerCurveInput): CurveSpec {
+  const list = sliceWithAnchor(input.rows, input.range, { from: input.from, to: input.to, now: input.now });
+  const series = ledgerSeries(list, input.kind);
+  let mainValues = series.values;
+  // 手动修正累计投入 / 转出后，历史快照仍保留原始资金流：把累计收益曲线整体平移到当前账面口径，
+  // 保证末端值始终与顶部累计收益一致。
+  if (input.kind === "pnl" && mainValues.length && Number.isFinite(Number(input.alignEndValue))) {
+    const delta = Number(input.alignEndValue) - mainValues[mainValues.length - 1];
+    mainValues = mainValues.map((value) => value + delta);
+  }
+  const spec: CurveSeriesSpec[] = [{
+    key: "main",
+    label: input.kind === "pnl" ? "累计收益" : "资金加权收益率",
+    role: "main",
+    format: input.kind === "pnl" ? "amount" : "percent",
+    values: mainValues
+  }];
+  if (input.kind === "mwr" && input.benchmark?.rows.length && series.dates.length) {
+    spec.push({
+      key: "bench",
+      label: input.benchmark.label,
+      role: "bench",
+      format: "percent",
+      values: normalizeToPercent(benchmarkOnDates(input.benchmark.rows, series.dates))
+    });
+  }
+  const markers: CurveMarkerSpec[] = [{ kind: "zero", value: 0 }];
+  if (input.kind === "mwr" && input.expectedRate && list.length >= 2) {
+    const years = Math.max(0.05, (dayOf(list[list.length - 1].d) - dayOf(list[0].d)) / 365 / 86400000);
+    markers.push({ kind: "expected", value: Number(input.expectedRate) * years });
+  }
+  return buildCurveSpec({
+    dates: series.dates,
+    series: spec,
+    markers,
+    unit: input.unit,
+    hitTarget: input.hitTarget,
+    kind: input.kind,
+    range: input.range,
+    windowStart: list.length ? String(list[0].d) : undefined,
+    windowEnd: list.length ? String(list[list.length - 1].d) : undefined
+  });
+}
+
 /**
  * 简化版 runtime.js 的桥接载体（挂在 window.FireCurve 上）。
  * runtime 是静态 JS，无法直接 import TS 模块；两边共享同一份实现，避免口径漂移。
@@ -228,5 +382,8 @@ export const curveApi = {
   ledgerSeries,
   normalizeToPercent,
   benchmarkOnDates,
-  sampleIndices
+  sampleIndices,
+  curveDomain,
+  buildCurveSpec,
+  ledgerCurveSpec
 };

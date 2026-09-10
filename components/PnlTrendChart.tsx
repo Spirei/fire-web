@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import echarts from "@/lib/echarts";
-import { normalizeToPercent } from "@/lib/curve";
+import { buildCurveSpec, normalizeToPercent } from "@/lib/curve";
 
 export interface PnlTrendPoint {
   date: string;
@@ -38,10 +38,32 @@ export default function PnlTrendChart({
     const portfolioValues = weighting === "time"
       ? points.map((point) => point.timeIndex)
       : points.map((point) => point.simpleIndex ?? point.asset);
-    // 归一化口径统一走 lib/curve（与简化版账户页同源）
-    const assetData = tab === "return" ? normalizeToPercent(portfolioValues) : points.map((p) => p.asset);
     const hasBench = points.some((p) => p.benchmark > 0);
-    const benchmark = hasBench ? normalizeToPercent(points.map((p) => p.benchmark)) : [];
+    // 曲线数据走与简化版账户页同一份 spec（归一化口径同源；这里用到 dates / series，
+    // 轴范围与命中点抽稀由各自渲染器决定 —— ECharts 自带刻度，不需要 domain / hitIndices）
+    const spec = buildCurveSpec({
+      dates: dates,
+      series: [
+        {
+          key: "main",
+          label: tab === "return" ? "我的持仓" : "总资产",
+          role: tab === "return" ? "main" : "asset",
+          format: tab === "return" ? "percent" : "amount",
+          values: tab === "return" ? normalizeToPercent(portfolioValues) : points.map((point) => point.asset)
+        },
+        ...(tab === "return" && hasBench
+          ? [{
+              key: "bench",
+              label: benchLabel,
+              role: "bench" as const,
+              format: "percent" as const,
+              values: normalizeToPercent(points.map((point) => point.benchmark))
+            }]
+          : [])
+      ]
+    });
+    const mainValues = spec.series[0].values;
+    const benchValues = spec.series[1]?.values ?? [];
     const ink = dark ? "#d8dee9" : "#26303b";
     const muted = dark ? "#727d8d" : "#87909d";
     const grid = dark ? "rgba(255,255,255,.07)" : "rgba(34,46,60,.08)";
@@ -85,7 +107,7 @@ export default function PnlTrendChart({
                 type: "line",
                 showSymbol: false,
                 smooth: false,
-                data: assetData,
+                data: mainValues,
                 lineStyle: { color: "#ef5b19", width: 2 },
                 areaStyle: {
                   color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -100,7 +122,7 @@ export default function PnlTrendChart({
                       name: benchLabel,
                       type: "line",
                       showSymbol: false,
-                      data: benchmark,
+                      data: benchValues,
                       lineStyle: { color: "#4a90d9", width: 1.6 },
                       emphasis: { focus: "series" }
                     }
@@ -112,7 +134,7 @@ export default function PnlTrendChart({
                 name: "总资产",
                 type: "line",
                 showSymbol: false,
-                data: assetData,
+                data: mainValues,
                 lineStyle: { color: "#3297f6", width: 2 },
                 areaStyle: {
                   color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
