@@ -213,7 +213,7 @@ function Fireo({
       alt=""
       loading="lazy"
       onError={() => setErr(true)}
-      className={`${className} rounded-full bg-bg-gray object-contain`}
+      className={`${className} rounded-full bg-bg-gray object-cover`}
     />
   );
 }
@@ -676,7 +676,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                       <div data-earnings-rows className="flex flex-col gap-[4px] pt-0.5">
                         {cell.rows.map((row) => (
                           <span data-earnings-row key={row.symbol} className="flex min-w-0 items-center gap-1 overflow-hidden text-[10px] font-medium leading-[1.3] text-ink-2 sm:text-[10.5px]">
-                            <span data-earnings-logo className="flex-none">
+                            <span data-earnings-logo className="flex h-3.5 w-3.5 flex-none overflow-hidden rounded-full">
                               <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="h-3.5 w-3.5 flex-none" />
                             </span>
                             <span data-earnings-name className="min-w-0 flex-1 truncate">{row.nameZh || row.name}</span>
