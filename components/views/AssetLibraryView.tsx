@@ -15,7 +15,6 @@ import type { CountryCatalogItem } from "@/lib/countryCatalog";
 import { defaultFlagUrl } from "@/lib/flagAssets";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { manifestCoverUrl } from "@/lib/cardAssets";
-import { usePersistedState } from "@/lib/usePersistedState";
 
 type TabKey = "stock" | "market" | "flag" | "broker" | "group" | "crypto" | "metal" | "icon" | "card";
 
@@ -54,6 +53,15 @@ const NON_TRADABLE_MARKETS = new Set(["SPX", "EU"]);
 const TOP_MARKETS = [...BASE_MARKETS, "ALL"];
 const UP = "text-up";
 const DOWN = "text-down";
+
+// 卡片素材分页按「排数」给（列表一行一张卡，网格是卡面墙）
+const CARD_LIST_ROWS = 6;
+const CARD_GRID_ROWS = 3;
+/** 当前宽度下卡片区一行放几个（与 grid-cols 的 sm / lg / xl 断点保持一致，分页才能按「排」算准） */
+function cardColumnsOf(view: "list" | "grid", width: number): number {
+  if (view === "grid") return width >= 1280 ? 5 : width >= 1024 ? 4 : width >= 640 ? 3 : 2;
+  return width >= 1280 ? 3 : width >= 640 ? 2 : 1;
+}
 
 // 内置资产图标（贵金属 / 加密货币），可上传自定义图标全局替换
 const BASE_ASSETS: { key: string; name: string; type: "crypto" | "metal" }[] = [
@@ -339,6 +347,24 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
     return Number.isFinite(p) && p >= 1 ? Math.floor(p) : 1;
   });
   const [listPage, setListPage] = useState(1);
+  /** 卡片类目单独分页（每页条数随列表 / 网格变化，不能共用 listPage） */
+  const [cardPage, setCardPage] = useState(1);
+  /** 卡片区当前一行几个（首帧给桌面默认值，挂载后按真实宽度校正；与 CSS 断点同源） */
+  const [cardCols, setCardCols] = useState(3);
+
+  /** 「卡片」类目：卡面素材单独拉（437 张，不进 useAssetIcons 的全局缓存，避免拖慢其他页面） */
+  const [cardAssets, setCardAssets] = useState<Asset[]>([]);
+  const [cardQuery, setCardQuery] = useState("");
+  const [cardLoading, setCardLoading] = useState(false);
+
+  /**
+   * 卡片素材的展示方式：列表（一行一张，看信息方便）/ 网格（卡面墙，挑图方便）。
+   * 属于「此刻看什么」的视图状态，按约定走 URL（?view=grid），刷新 / 前进后退 / 分享都保持。
+   */
+  const [cardView, setCardView] = useState<"list" | "grid">(() => {
+    if (typeof window === "undefined") return "list";
+    return new URLSearchParams(window.location.search).get("view") === "grid" ? "grid" : "list";
+  });
   const [names, setNames] = useState<Record<string, string>>({});
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
@@ -365,7 +391,9 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
     function syncFromUrl() {
       const sp = new URLSearchParams(window.location.search);
       const t = sp.get("tab");
-      if (t && (["stock", "market", "flag", "broker", "group", "crypto", "metal", "icon"] as string[]).includes(t)) setTab(t as TabKey);
+      if (t && (["stock", "market", "flag", "broker", "group", "crypto", "metal", "icon", "card"] as string[]).includes(t)) setTab(t as TabKey);
+      // 卡片类目的列表 / 网格也走 URL，前进后退要跟着切
+      setCardView(sp.get("view") === "grid" ? "grid" : "list");
       const m = sp.get("market");
       if (m) setSelected(m);
       const p = Number(sp.get("page"));
@@ -392,7 +420,29 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
 
   useEffect(() => {
     setListPage(1);
-  }, [tab, flagQuery, iconQuery, assetQuery]);
+  }, [tab, flagQuery, iconQuery, assetQuery, cardView]);
+
+  useEffect(() => {
+    setCardPage(1);
+  }, [cardQuery, cardView, tab, cardCols]);
+
+  // 跟随窗口宽度重算列数（与 grid-cols 的断点一一对应）
+  useEffect(() => {
+    const sync = () => setCardCols(cardColumnsOf(cardView, window.innerWidth));
+    sync();
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
+  }, [cardView]);
+
+  // 视图模式同步进 URL：list 是默认值，不写进地址栏，保持链接干净
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const current = sp.get("view");
+    if (cardView === "grid" ? current === "grid" : current === null) return;
+    if (cardView === "grid") sp.set("view", "grid");
+    else sp.delete("view");
+    window.history.replaceState(null, "", `?${sp.toString()}`);
+  }, [cardView]);
 
   useEffect(() => {
     if (tab !== "stock") return;
@@ -635,13 +685,6 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
       (r) => r.name.toLowerCase().includes(q) || r.code.toLowerCase().includes(q)
     );
   }, [iconRows, iconQuery]);
-
-  /** 「卡片」类目：卡面素材单独拉（437 张，不进 useAssetIcons 的全局缓存，避免拖慢其他页面） */
-  const [cardAssets, setCardAssets] = useState<Asset[]>([]);
-  const [cardQuery, setCardQuery] = useState("");
-  const [cardLoading, setCardLoading] = useState(false);
-  /** 卡片素材的展示方式：列表（一行一张，看信息方便）/ 网格（卡面墙，挑图方便）；偏好本地保存 */
-  const [cardView, setCardView] = usePersistedState<"list" | "grid">("fire:asset-card-view", "list");
 
   // 进入「卡片」类目时拉卡面素材（服务端会先把清单里的卡面补齐登记：幂等、不覆盖已换过图的卡）
   useEffect(() => {
@@ -1400,7 +1443,12 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
   const pageBrokerGroups = brokerGroups.slice(listStart, listStart + TOP_PAGE_SIZE);
   const pageGroupRows = groupRows.slice(listStart, listStart + TOP_PAGE_SIZE);
   const pageIconRows = filteredIconRows.slice(listStart, listStart + TOP_PAGE_SIZE);
-  const pageCardRows = filteredCardRows.slice(listStart, listStart + TOP_PAGE_SIZE);
+  // 卡片类目按行数分页：列表 6 排（3 列 × 6 = 18）、网格 3 排（5 列 × 3 = 15）
+  const cardPageSize = (cardView === "grid" ? CARD_GRID_ROWS : CARD_LIST_ROWS) * cardCols;
+  const cardTotalPages = Math.max(1, Math.ceil(filteredCardRows.length / cardPageSize));
+  const cardSafePage = Math.min(cardPage, cardTotalPages);
+  const cardStart = (cardSafePage - 1) * cardPageSize;
+  const pageCardRows = filteredCardRows.slice(cardStart, cardStart + cardPageSize);
   const pageAssetRows = filteredAssetRows.slice(listStart, listStart + TOP_PAGE_SIZE);
   return (
     <div className="asset-library-page flex flex-col gap-5">
@@ -2720,8 +2768,13 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
                           className="block w-full overflow-hidden rounded-lg border border-edge bg-bg-gray shadow-[0_1px_3px_rgba(10,14,25,.06)] dark:bg-white/5"
                         >
                           <img src={row.url} alt="" className="aspect-[1.586] w-full object-cover" />
-                          <span className="absolute inset-0 grid place-items-center rounded-lg bg-black/45 text-[11px] font-semibold text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                            {saving ? "上传中…" : "换图"}
+                          <span className={`absolute inset-0 grid place-items-center rounded-lg bg-black/25 transition-opacity duration-200 ${saving ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                            {saving && (
+                              <svg className="h-5 w-5 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.4" opacity="0.3" />
+                                <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                              </svg>
+                            )}
                           </span>
                         </button>
                         <input
@@ -2772,8 +2825,13 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
                         className="group relative h-[50px] w-[79px] flex-none overflow-hidden rounded-md border border-[#d3d9e4] bg-[#f3f5f9]"
                       >
                         <img src={row.url} alt="" className="h-full w-full object-cover" />
-                        <span className="absolute inset-0 grid place-items-center bg-black/45 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                          {saving ? "上传中…" : "换图"}
+                        <span className={`absolute inset-0 grid place-items-center bg-black/25 transition-opacity duration-200 ${saving ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                          {saving && (
+                            <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.4" opacity="0.3" />
+                              <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                            </svg>
+                          )}
                         </span>
                       </button>
                       <input
@@ -2807,9 +2865,9 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
                 })}
               </div>
             )}
-            {filteredCardRows.length > TOP_PAGE_SIZE && (
+            {filteredCardRows.length > cardPageSize && (
               <div className="border-t border-edge px-4 py-3">
-                <Pagination page={safeListPage} total={listTotalPages} onChange={setListPage} />
+                <Pagination page={cardSafePage} total={cardTotalPages} onChange={setCardPage} />
               </div>
             )}
           </div>
