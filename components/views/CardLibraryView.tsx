@@ -9,6 +9,7 @@ import { FALLBACK_RATES } from "@/lib/types";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
 import { REGION_CURRENCY, currencySymbol } from "@/lib/cardCurrencies";
+import { cardAssetId, manifestCoverUrl } from "@/lib/cardAssets";
 import {
   CURRENCY_SCOPE_LABEL,
   CURRENCY_SCOPE_ORDER,
@@ -368,6 +369,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const rootRef = useRef<HTMLDivElement | null>(null);
   /** 卡背信息（卡号 / 有效期 / 安全码 / 备注 / 币种）与卡包叠卡视图 */
   const [details, setDetails] = useState<Record<string, CardDetails>>(() => initial?.details ?? {});
+  /** 卡面覆盖表（素材库「卡片」类目里的图；没登记的卡回退清单原图） */
+  const [covers, setCovers] = useState<Record<string, string>>(() => initial?.covers ?? {});
   const [walletOpen, setWalletOpen] = useState(false);
 
   const { currency: displayCurrency } = useDisplayCurrency();
@@ -405,6 +408,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     tags?: unknown;
     holdings?: unknown;
     details?: unknown;
+    covers?: unknown;
   } | null) => {
     if (!data) return;
     setRegions(Array.isArray(data.regions) ? (data.regions as RegionEntry[]) : []);
@@ -424,6 +428,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     });
     setHoldings(held);
     setDetails(data.details && typeof data.details === "object" ? (data.details as Record<string, CardDetails>) : {});
+    setCovers(data.covers && typeof data.covers === "object" ? (data.covers as Record<string, string>) : {});
   };
 
   useEffect(() => {
@@ -677,7 +682,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             brand: card.brand || "",
             level: card.level || "",
             image: card.file,
-            cover: info?.image || `/uploads/cards/${card.file}`,
+            cover: covers[card.file] || manifestCoverUrl(card.file),
             amount: saved?.amount ?? 0,
             currency: saved?.currency || info?.currency || REGION_CURRENCY[regionLabel] || "CNY",
             hasAmount: !!saved,
@@ -689,7 +694,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             currencyScope: info?.currencyScope || ""
           };
         }),
-    [flat, holdings, amounts, details]
+    [flat, holdings, amounts, details, covers]
   );
 
   /** 卡包里改余额 / 卡背信息后，同步回卡面库（金额胶囊、总览条、卡片弹窗都读这里） */
@@ -710,12 +715,22 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     setDetails((prev) => ({ ...prev, [saved.cardKey]: { ...saved } }));
   }
 
-  /** 卡面实际展示地址：用户上传过自定义卡面就用它，否则回退清单原图 */
+  /** 卡面实际展示地址：素材库里换过图就用那条素材的 url，否则回退清单原图 */
   function cardCover(cardFile: string) {
-    return details[cardFile]?.image || `/uploads/cards/${cardFile}`;
+    return covers[cardFile] || manifestCoverUrl(cardFile);
   }
 
-  /** 上传自定义卡面：先传到素材目录（folder=card），再把地址写进卡片信息 */
+  /** 这张卡是不是换过图（判断依据是素材库里的 url 与清单原图不同） */
+  function hasCustomCover(cardFile: string) {
+    const url = covers[cardFile];
+    return Boolean(url && url !== manifestCoverUrl(cardFile));
+  }
+
+  /**
+   * 上传自定义卡面：文件先传到素材目录（folder=card），再写进**素材库的卡片素材**
+   * （`card:{卡面文件}`，即素材库 →「卡片」里那一条）。所以这里换的图和素材库里换的是同一份，
+   * 全站生效，不会出现「两处各管一份」。
+   */
   async function uploadCover(entry: CardEntry, file: File) {
     if (coverSaving) return;
     setCoverSaving(true);
@@ -734,18 +749,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         showToast(uploadData?.message || uploadData?.error || "上传失败，稍后再试", "err");
         return;
       }
-      const res = await fetch("/api/cards/wallet", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cardKey: entry.card.file, image: url })
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.details) {
-        showToast(data?.error || "卡面保存失败，稍后再试", "err");
-        return;
-      }
-      setDetails((prev) => ({ ...prev, [entry.card.file]: data.details as CardDetails }));
-      showToast("卡面已更新");
+      if (!(await saveCardAsset(entry, url))) return;
+      setCovers((prev) => ({ ...prev, [entry.card.file]: url }));
+      showToast("卡面已更新（素材库·卡片里也是这一张）");
     } catch {
       showToast("上传失败，稍后再试", "err");
     } finally {
@@ -753,22 +759,36 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     }
   }
 
-  /** 恢复清单原图 */
+  /** 写素材库里这张卡的素材（id 固定为 card:{卡面文件}），返回是否成功 */
+  async function saveCardAsset(entry: CardEntry, url: string) {
+    const res = await fetch("/api/assets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: cardAssetId(entry.card.file),
+        type: "card",
+        market: entry.region,
+        code: entry.card.file.split("/").pop()?.replace(/\.[^.]+$/, "") || entry.card.name,
+        name: entry.card.name,
+        url
+      })
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      showToast(data?.error || "卡面保存失败，稍后再试", "err");
+      return false;
+    }
+    return true;
+  }
+
+  /** 恢复清单原图（把素材库里的 url 改回清单地址） */
   async function resetCover(entry: CardEntry) {
     if (coverSaving) return;
     setCoverSaving(true);
     try {
-      const res = await fetch("/api/cards/wallet", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cardKey: entry.card.file, image: "" })
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.details) {
-        showToast(data?.error || "恢复失败，稍后再试", "err");
-        return;
-      }
-      setDetails((prev) => ({ ...prev, [entry.card.file]: data.details as CardDetails }));
+      const original = manifestCoverUrl(entry.card.file);
+      if (!(await saveCardAsset(entry, original))) return;
+      setCovers((prev) => ({ ...prev, [entry.card.file]: original }));
       showToast("已恢复清单原图");
     } catch {
       showToast("恢复失败，稍后再试", "err");
@@ -1467,7 +1487,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               <div className="mb-3 flex flex-wrap items-center gap-2 border-t border-edge pt-3">
                 <span className="text-[11px] font-semibold text-muted">卡面</span>
                 <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold text-muted dark:bg-white/5">
-                  {details[active.card.file]?.image ? "自定义照片" : "清单原图"}
+                  {hasCustomCover(active.card.file) ? "自定义照片" : "清单原图"}
                 </span>
                 <label
                   className={`inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover sm:h-8 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10 ${
@@ -1487,7 +1507,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     }}
                   />
                 </label>
-                {details[active.card.file]?.image && (
+                {hasCustomCover(active.card.file) && (
                   <button
                     type="button"
                     disabled={coverSaving}
@@ -1630,6 +1650,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           }}
           onAmountChange={applyWalletAmount}
           onDetailsSaved={applyWalletDetails}
+          onCoverChanged={(cardKey, url) => setCovers((prev) => ({ ...prev, [cardKey]: url }))}
         />
       )}
     </div>

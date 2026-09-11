@@ -25,16 +25,18 @@ export function localPathOf(url: string): string {
   return target;
 }
 
-/* 图片是否仍被引用（assets / 网站设置 / 用户头像 / 名人头像 / 自定义卡面） */
+/* 图片是否仍被引用（assets / 网站设置 / 用户头像 / 名人头像 / 卡面库） */
 export function urlReferenced(url: string): boolean {
   if (!isLocalUrl(url)) return false;
+  // 卡面清单原图（public/uploads/cards/**，由 scripts/fetch-card-assets.mjs 生成）永久保留：
+  // 它不在任何数据库字段里被引用（卡面库直接从 manifest.json 读），一旦被当孤立文件删掉，
+  // 素材库里「恢复原图」就会指向一个不存在的文件 —— 换一次卡面等于把原图弄丢了。
+  if (safeDecode(url).startsWith("/uploads/cards/")) return true;
   const db = getDb();
   const a = (db.prepare("SELECT COUNT(*) AS c FROM assets WHERE url = ?").get(url) as { c: number }).c;
   const s = (db.prepare("SELECT COUNT(*) AS c FROM site_settings WHERE value = ?").get(url) as { c: number }).c;
   const u = (db.prepare("SELECT COUNT(*) AS c FROM users WHERE avatar = ?").get(url) as { c: number }).c;
   const c = (db.prepare("SELECT COUNT(*) AS c FROM celebs WHERE avatar = ?").get(url) as { c: number }).c;
-  // 卡面库的自定义卡面（用户上传的卡片照片）
-  const k = (db.prepare("SELECT COUNT(*) AS c FROM card_details WHERE image = ?").get(url) as { c: number }).c;
   let celebJson = 0;
   try {
     const avatars = JSON.parse(fs.readFileSync(CELEB_AVATARS_FILE, "utf8")) as Record<string, string>;
@@ -42,7 +44,7 @@ export function urlReferenced(url: string): boolean {
   } catch {
     /* 无文件忽略 */
   }
-  return a + s + u + c + k + celebJson > 0;
+  return a + s + u + c + celebJson > 0;
 }
 
 /* 删除本地文件（仅当没有其他引用，避免误删共享图片） */
@@ -140,6 +142,9 @@ export function cleanupOrphanFiles(): { removed: number; failed: number } {
       const full = path.join(dir, ent.name);
       if (ent.isDirectory()) {
         if (ent.name === "trading-square" && path.basename(dir) === "uploads") continue;
+        // 卡面清单原图目录整棵跳过：卡面库直接从 manifest.json 读这些文件，
+        // 数据库里没有任何引用，扫下去会整目录被当孤立文件清掉
+        if (ent.name === "cards" && path.basename(dir) === "uploads") continue;
         walk(full);
         continue;
       }

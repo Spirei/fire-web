@@ -14,8 +14,10 @@ import type { WatchGroup } from "@/lib/watchGroups";
 import type { CountryCatalogItem } from "@/lib/countryCatalog";
 import { defaultFlagUrl } from "@/lib/flagAssets";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
+import { manifestCoverUrl } from "@/lib/cardAssets";
+import { usePersistedState } from "@/lib/usePersistedState";
 
-type TabKey = "stock" | "market" | "flag" | "broker" | "group" | "crypto" | "metal" | "icon";
+type TabKey = "stock" | "market" | "flag" | "broker" | "group" | "crypto" | "metal" | "icon" | "card";
 
 interface TopStock {
   market: string;
@@ -274,7 +276,7 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
   const [tab, setTab] = useState<TabKey>(() => {
     if (typeof window === "undefined") return "stock";
     const t = new URLSearchParams(window.location.search).get("tab");
-    return (["stock", "market", "flag", "broker", "group", "crypto", "metal", "icon"] as string[]).includes(t ?? "") ? (t as TabKey) : "stock";
+    return (["stock", "market", "flag", "broker", "group", "crypto", "metal", "icon", "card"] as string[]).includes(t ?? "") ? (t as TabKey) : "stock";
   });
   const [selected, setSelected] = useState(() => {
     if (typeof window === "undefined") return "ALL";
@@ -633,6 +635,92 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
       (r) => r.name.toLowerCase().includes(q) || r.code.toLowerCase().includes(q)
     );
   }, [iconRows, iconQuery]);
+
+  /** 「卡片」类目：卡面素材单独拉（437 张，不进 useAssetIcons 的全局缓存，避免拖慢其他页面） */
+  const [cardAssets, setCardAssets] = useState<Asset[]>([]);
+  const [cardQuery, setCardQuery] = useState("");
+  const [cardLoading, setCardLoading] = useState(false);
+  /** 卡片素材的展示方式：列表（一行一张，看信息方便）/ 网格（卡面墙，挑图方便）；偏好本地保存 */
+  const [cardView, setCardView] = usePersistedState<"list" | "grid">("fire:asset-card-view", "list");
+
+  // 进入「卡片」类目时拉卡面素材（服务端会先把清单里的卡面补齐登记：幂等、不覆盖已换过图的卡）
+  useEffect(() => {
+    if (tab !== "card") return;
+    let cancelled = false;
+    setCardLoading(true);
+    fetch("/api/assets?type=card", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("load"))))
+      .then((d) => {
+        if (!cancelled && Array.isArray(d?.assets)) setCardAssets(d.assets as Asset[]);
+      })
+      .catch(() => {
+        if (!cancelled) showToast("卡片素材加载失败", "err");
+      })
+      .finally(() => {
+        if (!cancelled) setCardLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
+
+  /** 上传 / 更换卡面：传图 → 写回素材库里这张卡的素材（url 即卡面地址，全局生效） */
+  async function uploadCardCover(row: Asset, file: File) {
+    const busyKey = `card:${row.id}`;
+    setBusy((b) => ({ ...b, [busyKey]: true }));
+    try {
+      const fd = new FormData();
+      fd.append("kind", "asset");
+      fd.append("folder", "card");
+      fd.append("file", file);
+      fd.append("name", row.name);
+      fd.append("code", row.market || "CARD");
+      const up = await fetch("/api/upload", { method: "POST", body: fd }).then((r) => r.json()).catch(() => null);
+      if (!up?.url) throw new Error(up?.error || "上传失败");
+      const saved = await saveCardAssetUrl(row, String(up.url));
+      if (saved) showToast("卡面已保存，卡面库与卡包同步生效");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "上传失败", "err");
+    } finally {
+      setBusy((b) => ({ ...b, [busyKey]: false }));
+    }
+  }
+
+  /** 恢复清单原图 */
+  async function resetCardCoverAsset(row: Asset, cardKey: string) {
+    const busyKey = `card:${row.id}`;
+    setBusy((b) => ({ ...b, [busyKey]: true }));
+    try {
+      const saved = await saveCardAssetUrl(row, manifestCoverUrl(cardKey));
+      if (saved) showToast("已恢复清单原图");
+    } finally {
+      setBusy((b) => ({ ...b, [busyKey]: false }));
+    }
+  }
+
+  /** 把 url 写进素材库里这张卡的素材，并同步本地列表 */
+  async function saveCardAssetUrl(row: Asset, url: string) {
+    const res = await fetch("/api/assets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: row.id, type: "card", market: row.market, code: row.code, name: row.name, url })
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      showToast(data?.error || "保存失败", "err");
+      return false;
+    }
+    setCardAssets((prev) => prev.map((item) => (item.id === row.id ? { ...item, url } : item)));
+    return true;
+  }
+
+  /** 卡片素材行：按地区 / 卡名排序，支持搜索 */
+  const filteredCardRows = useMemo(() => {
+    const q = cardQuery.trim().toLowerCase();
+    const rows = [...cardAssets].sort((a, b) => a.market.localeCompare(b.market, "zh-Hans-CN") || a.name.localeCompare(b.name, "zh-Hans-CN"));
+    if (!q) return rows;
+    return rows.filter((r) => r.name.toLowerCase().includes(q) || r.market.toLowerCase().includes(q) || r.code.toLowerCase().includes(q));
+  }, [cardAssets, cardQuery]);
 
   function marketLabelOf(key: string): string {
     if (key === "EU") return marketLabels.find((l) => l.key === "EU")?.label ?? "欧盟";
@@ -1301,6 +1389,7 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
       : tab === "broker" ? brokerGroups.length
         : tab === "group" ? groupRows.length
           : tab === "icon" ? filteredIconRows.length
+            : tab === "card" ? filteredCardRows.length
             : tab === "crypto" || tab === "metal" ? filteredAssetRows.length
               : 0;
   const listTotalPages = Math.max(1, Math.ceil(activeListCount / TOP_PAGE_SIZE));
@@ -1311,6 +1400,7 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
   const pageBrokerGroups = brokerGroups.slice(listStart, listStart + TOP_PAGE_SIZE);
   const pageGroupRows = groupRows.slice(listStart, listStart + TOP_PAGE_SIZE);
   const pageIconRows = filteredIconRows.slice(listStart, listStart + TOP_PAGE_SIZE);
+  const pageCardRows = filteredCardRows.slice(listStart, listStart + TOP_PAGE_SIZE);
   const pageAssetRows = filteredAssetRows.slice(listStart, listStart + TOP_PAGE_SIZE);
   return (
     <div className="asset-library-page flex flex-col gap-5">
@@ -1343,7 +1433,8 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
             { key: "flag" as TabKey, label: "国家/地区旗帜" },
             { key: "broker" as TabKey, label: "券商图标" },
             { key: "group" as TabKey, label: "分组图标" },
-            { key: "icon" as TabKey, label: "icon" }
+            { key: "icon" as TabKey, label: "icon" },
+            { key: "card" as TabKey, label: "卡片" }
           ]).map((t) => (
             <button
               key={t.key}
@@ -2549,6 +2640,162 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
             )}
             {activeListCount > TOP_PAGE_SIZE && (
               <div className="border-t border-edge px-4 py-3 dark:border-[#2a2f3a]">
+                <Pagination page={safeListPage} total={listTotalPages} onChange={setListPage} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 「卡片」类目：清单里的卡面全部在这里，点图片就能换成自己的卡片照片（全局生效，卡面库/卡包同步） */}
+        {tab === "card" && (
+          <div className="overflow-hidden rounded-xl border border-edge">
+            <div className="flex items-center justify-between gap-3 border-b border-edge px-4 py-2.5">
+              <span className="text-[11px] font-semibold text-faint">
+                卡片素材 · {filteredCardRows.length} 张{cardLoading ? "（加载中…）" : ""}
+              </span>
+              <span className="ml-auto flex items-center gap-2">
+                <input
+                  value={cardQuery}
+                  onChange={(e) => setCardQuery(e.target.value)}
+                  placeholder="搜索卡名 / 银行 / 地区"
+                  className="h-[34px] w-[200px] rounded-full border border-edge-strong bg-white px-3.5 text-xs outline-none transition-shadow focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] dark:bg-[#151a26] dark:text-[#e5e7eb]"
+                />
+                {/* 列表 / 网格切换 */}
+                <span className="flex flex-none rounded-full border border-edge-strong bg-bg-gray/60 p-0.5 dark:bg-white/5">
+                  {([
+                    { key: "list" as const, label: "列表", path: "M4 7h16M4 12h16M4 17h16" },
+                    { key: "grid" as const, label: "网格", path: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" }
+                  ]).map((v) => (
+                    <button
+                      key={v.key}
+                      type="button"
+                      onClick={() => setCardView(v.key)}
+                      title={v.key === "list" ? "列表显示" : "网格显示"}
+                      aria-pressed={cardView === v.key}
+                      className={`grid h-7 w-8 place-items-center rounded-full transition-colors duration-200 ${
+                        cardView === v.key ? "bg-white text-ink shadow-sm dark:bg-[#262c37] dark:text-white" : "text-muted hover:text-ink"
+                      }`}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                        <path d={v.path} />
+                      </svg>
+                    </button>
+                  ))}
+                </span>
+              </span>
+            </div>
+            {filteredCardRows.length === 0 ? (
+              <p className="py-10 text-center text-sm text-faint">
+                {cardLoading ? "卡片素材加载中…" : cardQuery.trim() ? `素材库中没有找到「${cardQuery.trim()}」` : "暂无卡片素材（先跑 node scripts/fetch-card-assets.mjs 抓卡面）"}
+              </p>
+            ) : cardView === "grid" ? (
+              /* 网格：卡面墙，一屏能看更多图，挑图方便 */
+              <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {pageCardRows.map((row) => {
+                  const cardKey = row.id.startsWith("card:") ? row.id.slice(5) : "";
+                  const busyKey = `card:${row.id}`;
+                  const saving = !!busy[busyKey];
+                  const customized = Boolean(cardKey) && row.url !== manifestCoverUrl(cardKey);
+                  return (
+                    <div key={row.id} className="group flex min-w-0 flex-col gap-1.5">
+                      <div className="relative w-full">
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={(e) => (e.currentTarget.parentElement?.querySelector('input[type="file"]') as HTMLInputElement | null)?.click()}
+                          title="点击上传 / 更换卡面（卡面库与卡包同步）"
+                          className="block w-full overflow-hidden rounded-lg border border-edge bg-bg-gray shadow-[0_1px_3px_rgba(10,14,25,.06)] dark:bg-white/5"
+                        >
+                          <img src={row.url} alt="" className="aspect-[1.586] w-full object-cover" />
+                          <span className="absolute inset-0 grid place-items-center rounded-lg bg-black/45 text-[11px] font-semibold text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                            {saving ? "上传中…" : "换图"}
+                          </span>
+                        </button>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) void uploadCardCover(row, f);
+                            e.target.value = "";
+                          }}
+                        />
+                      </div>
+                      <span className="min-w-0">
+                        <b className="block truncate text-[11px] font-semibold text-ink" title={row.name}>{row.name}</b>
+                        <small className="mt-0.5 block truncate text-[10px] text-muted">
+                          {row.market || "未分类"} · {customized ? "自定义照片" : "清单原图"}
+                        </small>
+                      </span>
+                      {customized && cardKey && (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void resetCardCoverAsset(row, cardKey)}
+                          className="self-start text-[10px] font-semibold text-muted transition-colors hover:text-ink disabled:opacity-50"
+                        >
+                          恢复原图
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3">
+                {pageCardRows.map((row) => {
+                  const cardKey = row.id.startsWith("card:") ? row.id.slice(5) : "";
+                  const busyKey = `card:${row.id}`;
+                  const saving = !!busy[busyKey];
+                  const customized = Boolean(cardKey) && row.url !== manifestCoverUrl(cardKey);
+                  return (
+                    <div key={row.id} className="flex items-center gap-3 rounded-xl border border-edge px-3 py-2.5 transition-colors hover:bg-brand-hover/40">
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={(e) => (e.currentTarget.parentElement?.querySelector('input[type="file"]') as HTMLInputElement | null)?.click()}
+                        title="点击上传 / 更换卡面（卡面库与卡包同步）"
+                        className="group relative h-[50px] w-[79px] flex-none overflow-hidden rounded-md border border-[#d3d9e4] bg-[#f3f5f9]"
+                      >
+                        <img src={row.url} alt="" className="h-full w-full object-cover" />
+                        <span className="absolute inset-0 grid place-items-center bg-black/45 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                          {saving ? "上传中…" : "换图"}
+                        </span>
+                      </button>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void uploadCardCover(row, f);
+                          e.target.value = "";
+                        }}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <b className="block truncate text-[13px] font-semibold text-ink">{row.name}</b>
+                        <small className="mt-0.5 block truncate text-[11px] text-muted">
+                          {row.market || "未分类"} · {customized ? "自定义照片" : "清单原图"}
+                        </small>
+                      </span>
+                      {customized && cardKey && (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void resetCardCoverAsset(row, cardKey)}
+                          className="h-8 flex-none rounded-full border border-edge px-3 text-[11px] font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink disabled:opacity-50"
+                        >
+                          恢复原图
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {filteredCardRows.length > TOP_PAGE_SIZE && (
+              <div className="border-t border-edge px-4 py-3">
                 <Pagination page={safeListPage} total={listTotalPages} onChange={setListPage} />
               </div>
             )}

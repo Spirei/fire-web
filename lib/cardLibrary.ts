@@ -2,8 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { listCardAmounts, listCardHoldings, listCardTags, type CardAmount } from "./cardAmounts";
 import { listCardDetails, type CardDetails } from "./cardWallet";
+import { cardAssetId, cardKeyOfAssetId, manifestCoverUrl } from "./cardAssets";
 import { REGION_CURRENCY } from "./cardCurrencies";
 import { hasSecurityCode } from "./cardSecurity";
+import { upsertAsset } from "./assets";
 import { getDb } from "./db";
 import { FALLBACK_RATES } from "./types";
 
@@ -24,6 +26,8 @@ export interface CardLibraryPayload extends CardManifest {
   holdings: string[];
   /** 卡背信息（卡号 / 有效期 / 安全码 / 备注 / 币种）：卡包与卡片详情首帧就要用 */
   details: Record<string, CardDetails>;
+  /** 卡面覆盖表（卡面文件 → 实际图片地址）：素材库换过图的卡走这里，没登记的卡回退清单原图 */
+  covers: Record<string, string>;
 }
 
 let cache: { data: CardManifest | null; at: number } | null = null;
@@ -67,7 +71,8 @@ export function cardLibraryForUser(userId: string): CardLibraryPayload {
     amounts: listCardAmounts(userId),
     tags: listCardTags(userId),
     holdings: listCardHoldings(userId),
-    details: listCardDetails(userId)
+    details: listCardDetails(userId),
+    covers: cardCoverMap()
   };
 }
 
@@ -166,4 +171,51 @@ export function sweepLegacyCardCvv(): number {
   db.transaction(() => stale.forEach((row) => clear.run(now, row.user_id, row.card_key)))();
   console.log(`[card] 已清理 ${stale.length} 张「无安全码」卡片上残留的 CVV（中国大陆借记卡）`);
   return stale.length;
+}
+
+/* ---------- 卡面素材（素材库 → 「卡片」类目） ---------- */
+
+/**
+ * 把清单里的卡面**全部登记进素材库**（`assets.type = "card"`），素材库就有了「卡片」类目。
+ * 幂等：只补缺失的行，已存在的一律不动 —— 用户可能已经在素材库把某张卡换成自己的照片了，
+ * 这里绝不能把 url 覆盖回清单原图。
+ */
+export function ensureCardAssets(): number {
+  const existing = new Set(
+    (getDb().prepare("SELECT id FROM assets WHERE type = 'card'").all() as { id: string }[]).map((row) => row.id)
+  );
+  let added = 0;
+  (readCardManifest()?.regions ?? []).forEach((region) => {
+    const label = String((region as { label?: unknown })?.label ?? "");
+    const banks = (region as { banks?: unknown })?.banks;
+    if (!Array.isArray(banks)) return;
+    banks.forEach((bank) => {
+      const cards = (bank as { cards?: unknown })?.cards;
+      if (!Array.isArray(cards)) return;
+      cards.forEach((card) => {
+        const item = card as { file?: unknown; name?: unknown };
+        if (typeof item?.file !== "string" || !item.file) return;
+        const id = cardAssetId(item.file);
+        if (existing.has(id)) return;
+        const name = typeof item.name === "string" && item.name ? item.name : item.file;
+        // code 只用于展示（upsertAsset 会转大写），真正的身份是 id 里的完整卡面路径
+        const stem = item.file.split("/").pop()?.replace(/\.[^.]+$/, "") || name;
+        upsertAsset({ id, type: "card", market: label || "OTHER", code: stem, name, url: manifestCoverUrl(item.file) });
+        existing.add(id);
+        added += 1;
+      });
+    });
+  });
+  return added;
+}
+
+/** 卡面覆盖表：卡面文件 → 当前图片地址（素材库里换过图的就是新地址） */
+export function cardCoverMap(): Record<string, string> {
+  const rows = getDb().prepare("SELECT id, url FROM assets WHERE type = 'card'").all() as { id: string; url: string }[];
+  const out: Record<string, string> = {};
+  rows.forEach((row) => {
+    const key = cardKeyOfAssetId(row.id);
+    if (key && row.url) out[key] = row.url;
+  });
+  return out;
 }

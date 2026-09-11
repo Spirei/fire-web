@@ -9,6 +9,7 @@ import { cardLast4, currencySymbol, fmtCardMoney, formatCardNumber } from "@/lib
 import { cardCurrencyChoicesFor, currencyName } from "@/lib/cardCurrency";
 import { isFundCurrency } from "@/lib/fundCurrencies";
 import { hasSecurityCode } from "@/lib/cardSecurity";
+import { cardAssetId } from "@/lib/cardAssets";
 
 /** 卡包里的一张卡：卡面 + 卡背信息 + 当前余额 */
 export interface WalletCard {
@@ -160,13 +161,16 @@ export default function CardWalletStack({
   onClose,
   onAddCards,
   onAmountChange,
-  onDetailsSaved
+  onDetailsSaved,
+  onCoverChanged
 }: {
   cards: WalletCard[];
   onClose: () => void;
   onAddCards: () => void;
   onAmountChange: (cardKey: string, amount: number, currency: string) => void;
   onDetailsSaved: (details: WalletCardDetails) => void;
+  /** 卡包里换了卡面后同步回卡面库（与素材库·卡片是同一张图） */
+  onCoverChanged: (cardKey: string, url: string) => void;
 }) {
   const [sort, setSort] = usePersistedState<SortKey>("fire:card-wallet-sort", "custom");
   const [sortOpen, setSortOpen] = useState(false);
@@ -631,6 +635,7 @@ export default function CardWalletStack({
           onBack={() => setDetailKey(null)}
           onAmountChange={onAmountChange}
           onDetailsSaved={onDetailsSaved}
+          onCoverChanged={onCoverChanged}
           onEntryAdded={(entry, balance) => {
             setEntriesByCard((prev) => ({
               ...prev,
@@ -708,6 +713,7 @@ function CardDetailPanel({
   onBack,
   onAmountChange,
   onDetailsSaved,
+  onCoverChanged,
   onEntryAdded,
   onEntryDeleted
 }: {
@@ -717,6 +723,7 @@ function CardDetailPanel({
   onBack: () => void;
   onAmountChange: (cardKey: string, amount: number, currency: string) => void;
   onDetailsSaved: (details: WalletCardDetails) => void;
+  onCoverChanged: (cardKey: string, url: string) => void;
   onEntryAdded: (entry: BalanceEntry, balance: number) => void;
   onEntryDeleted: () => void;
 }) {
@@ -729,6 +736,8 @@ function CardDetailPanel({
   const [occurredAt, setOccurredAt] = useState(() => localDateInput());
   /** 这笔钱的另一端在券商账户：勾上会同时记一笔资金流水，避免总现金被重复计算 */
   const [brokerLinked, setBrokerLinked] = useState(false);
+  /** 正在上传 / 保存卡面 */
+  const [coverSaving, setCoverSaving] = useState(false);
   const [draft, setDraft] = useState({ number: "", expiry: "", cvv: "", note: "", currency: "CNY" });
 
   useEffect(() => {
@@ -759,6 +768,53 @@ function CardDetailPanel({
       currency: currencyChoices.includes(card.currency) ? card.currency : currencyChoices[0] ?? "CNY"
     });
     setForm(kind);
+  }
+
+  /**
+   * 换卡面：传到素材目录（folder=card）后写进**素材库的卡片素材**（card:{卡面文件}），
+   * 与「素材库 → 卡片」里换的是同一条，卡面库同步生效。
+   */
+  async function uploadCover(file: File) {
+    if (coverSaving) return;
+    setCoverSaving(true);
+    try {
+      const form = new FormData();
+      form.append("kind", "asset");
+      form.append("folder", "card");
+      form.append("file", file);
+      form.append("name", `${card.bank}${card.name}`);
+      form.append("code", card.region || "CARD");
+      const uploadRes = await fetch("/api/v1/upload", { method: "POST", body: form });
+      const uploadData = await uploadRes.json().catch(() => null);
+      const url: string | undefined = uploadData?.data?.url ?? uploadData?.url;
+      if (!uploadRes.ok || !url) {
+        showToast(uploadData?.message || uploadData?.error || "上传失败，稍后再试", "err");
+        return;
+      }
+      const res = await fetch("/api/assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: cardAssetId(card.key),
+          type: "card",
+          market: card.region,
+          code: card.image.split("/").pop()?.replace(/\.[^.]+$/, "") || card.name,
+          name: card.name,
+          url
+        })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        showToast(data?.error || "卡面保存失败，稍后再试", "err");
+        return;
+      }
+      onCoverChanged(card.key, url);
+      showToast("卡面已更新");
+    } catch {
+      showToast("上传失败，稍后再试", "err");
+    } finally {
+      setCoverSaving(false);
+    }
   }
 
   async function submitEntry(kind: "deposit" | "withdraw" | "adjust") {
@@ -911,15 +967,34 @@ function CardDetailPanel({
           </div>
 
           <div className="mt-5 overflow-hidden rounded-2xl bg-[#131317]">
-            <div className="flex items-center justify-between px-4 py-2.5">
+            <div className="flex items-center justify-between gap-2 px-4 py-2.5">
               <span className="text-[11px] text-white/45">卡片信息</span>
-              <button
-                type="button"
-                onClick={() => setReveal((value) => !value)}
-                className="text-[11px] font-semibold text-white/60 transition-colors hover:text-white"
-              >
-                {showCvv ? (reveal ? "隐藏卡号 / 安全码" : "显示卡号 / 安全码") : reveal ? "隐藏卡号" : "显示卡号"}
-              </button>
+              <span className="flex items-center gap-2.5">
+                <label
+                  className={`cursor-pointer text-[11px] font-semibold text-white/60 transition-colors hover:text-white ${coverSaving ? "pointer-events-none opacity-50" : ""}`}
+                  title="换成自己的卡片照片（与素材库·卡片是同一张，卡面库同步生效）"
+                >
+                  {coverSaving ? "处理中…" : "换卡面"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (file) void uploadCover(file);
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setReveal((value) => !value)}
+                  className="text-[11px] font-semibold text-white/45 transition-colors hover:text-white/80"
+                  title="也可以点右下角的眼睛"
+                >
+                  {reveal ? "已显示" : "已隐藏"}
+                </button>
+              </span>
             </div>
             {rows.map(([label, value], rowIndex) => (
               <div key={label} className={`flex items-center gap-3 px-4 py-3 ${rowIndex > 0 ? "border-t border-white/[0.06]" : ""}`}>
@@ -1011,8 +1086,32 @@ function CardDetailPanel({
         </div>
       </div>
 
-      {/* 底部关闭按钮：和卡包列表同一个位置、同一个样子，详情里随时能退出来 */}
+      {/* 底部：中间关闭按钮（和卡包列表同一个位置、同一个样子），右下角一只眼睛切换卡号 / 安全码的显示 */}
       <div className="relative flex items-center justify-center pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2">
+        <button
+          type="button"
+          onClick={() => setReveal((value) => !value)}
+          aria-label={reveal ? "隐藏卡号与安全码" : "显示卡号与安全码"}
+          aria-pressed={reveal}
+          title={reveal ? (showCvv ? "隐藏卡号与安全码" : "隐藏卡号") : (showCvv ? "显示卡号与安全码" : "显示卡号")}
+          className={`absolute right-4 top-2 grid h-12 w-12 place-items-center rounded-full border transition-colors duration-200 sm:right-5 ${
+            reveal ? "border-white/25 bg-white/12 text-white" : "border-white/12 bg-white/[0.06] text-white/55 hover:bg-white/12 hover:text-white"
+          }`}
+        >
+          {reveal ? (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+              <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+              <circle cx="12" cy="12" r="3.2" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+              <path d="M4 4.5 20 19.5" />
+              <path d="M9.6 5.9A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-3.2 4" />
+              <path d="M6.4 7.8A17.2 17.2 0 0 0 2.5 12S6 18.5 12 18.5a9.9 9.9 0 0 0 3.6-.7" />
+              <path d="M10.2 10.4a3.2 3.2 0 0 0 4.3 4.4" />
+            </svg>
+          )}
+        </button>
         <button
           type="button"
           onClick={onBack}

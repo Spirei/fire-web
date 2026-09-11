@@ -15,7 +15,7 @@ const seeded = {
 };
 const existsCache = new Map<string, boolean>();
 
-export type AssetType = "stock" | "market" | "flag" | "crypto" | "metal" | "broker" | "group" | "icon";
+export type AssetType = "stock" | "market" | "flag" | "crypto" | "metal" | "broker" | "group" | "icon" | "card";
 
 export interface Asset {
   id: string;
@@ -61,6 +61,8 @@ export function assetId(type: AssetType, market: string, code = ""): string {
   if (type === "market") return `market:${market.trim().toUpperCase()}`;
   if (type === "flag" || type === "crypto" || type === "metal" || type === "icon") return `${type}:${code.trim().toUpperCase()}`;
   if (type === "broker") return `broker:${code.trim().toUpperCase()}`;
+  // 卡片素材：code 就是卡面文件路径，大小写敏感（含 ASCII 文件名的路径不能大写化）
+  if (type === "card") return `card:${code}`;
   return `stock:${market.trim().toUpperCase()}:${code.trim().toUpperCase()}`;
 }
 

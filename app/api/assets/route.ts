@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { deleteAsset, ensureBrokerAssets, ensureCategoryAssets, ensureIconAssets, ensureMarketAssets, ensureStockAssets, getAssets, getStockIconMap, upsertAsset, type AssetType } from "@/lib/assets";
+import { ensureCardAssets } from "@/lib/cardLibrary";
 import { enrichAssetQuotes, enrichStockAssetQuotes } from "@/lib/assetQuotes";
 import { getDb } from "@/lib/db";
 
@@ -14,6 +15,8 @@ export async function GET(request: Request) {
   if (type === "crypto" || type === "metal" || type === "flag") ensureCategoryAssets(type);
   if (type === "stock") ensureStockAssets();
   if (type === "broker") ensureBrokerAssets();
+  // 「卡片」类目：进入时把清单里的卡面全部登记进来（幂等，不覆盖已换过图的卡）
+  if (type === "card") ensureCardAssets();
   const market = searchParams.get("market");
   const code = searchParams.get("code");
   const keysParam = searchParams.get("keys");
@@ -50,7 +53,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ assets });
   }
   const assets =
-    type === "stock" || type === "market" || type === "flag" || type === "crypto" || type === "metal" || type === "broker" || type === "group" || type === "icon"
+    type === "stock" || type === "market" || type === "flag" || type === "crypto" || type === "metal" || type === "broker" || type === "group" || type === "icon" || type === "card"
       ? getAssets(type)
       : getAssets();
   // crypto / metal 行合并实时行情（CoinGecko + 贵金属），缺失字段补上市值 / 现价 / 涨跌幅
@@ -62,8 +65,8 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
   if (!isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
   const body = await request.json().catch(() => null);
-  if (!body || !["stock", "market", "flag", "crypto", "metal", "broker", "group", "icon"].includes(body.type)) {
-    return NextResponse.json({ error: "type 必须为 stock / market / flag / broker / crypto / metal / group / icon" }, { status: 400 });
+  if (!body || !["stock", "market", "flag", "crypto", "metal", "broker", "group", "icon", "card"].includes(body.type)) {
+    return NextResponse.json({ error: "type 必须为 stock / market / flag / broker / crypto / metal / group / icon / card" }, { status: 400 });
   }
   const type = body.type as AssetType;
   const market = type === "broker" ? "GROUP" : String(body.market ?? "").trim();
