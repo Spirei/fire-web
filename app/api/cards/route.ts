@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
+import { listCardAmounts } from "@/lib/cardAmounts";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,8 @@ export async function GET(request: Request) {
       regions: manifest.regions,
       typeOrder: Array.isArray(manifest.typeOrder) ? manifest.typeOrder : [],
       updatedAt: manifest.generatedAt ?? null,
-      source: manifest.source ?? ""
+      source: manifest.source ?? "",
+      amounts: listCardAmounts(user.id)
     },
     { headers: { "Cache-Control": "no-store" } }
   );

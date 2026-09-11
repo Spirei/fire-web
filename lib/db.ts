@@ -176,6 +176,18 @@ function migrate(database: Database.Database) {
       PRIMARY KEY (market, code)
     );
 
+    -- 卡面库：每张卡每位用户一条金额记录（卡面素材本身是本地文件，这里只存用户录入的数据）
+    CREATE TABLE IF NOT EXISTS card_amounts (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      card_key TEXT NOT NULL,
+      amount REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, card_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_card_amounts_user ON card_amounts(user_id);
+
     CREATE TABLE IF NOT EXISTS financial_report_files (
       id TEXT PRIMARY KEY,
       market TEXT NOT NULL,

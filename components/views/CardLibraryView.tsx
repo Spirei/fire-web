@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { showToast } from "@/lib/toast";
+import { cardTagsOf } from "@/lib/cardTags";
 
 interface CardItem {
   name: string;
@@ -25,13 +27,66 @@ interface RegionEntry {
   banks: BankEntry[];
 }
 
-interface CardUrl {
+interface CardAmount {
+  cardKey: string;
+  amount: number;
+  currency: string;
+  note: string;
+  updatedAt: string;
+}
+
+interface CardEntry {
   card: CardItem;
   bank: BankEntry;
   region: string;
+  tags: string[];
 }
 
 const ALL = "全部";
+
+/** 卡面库自己的币种表（覆盖素材里出现的国家地区，不走持仓的币种偏好） */
+const CARD_CURRENCIES: { code: string; symbol: string; label: string }[] = [
+  { code: "CNY", symbol: "¥", label: "人民币" },
+  { code: "USD", symbol: "$", label: "美元" },
+  { code: "HKD", symbol: "HK$", label: "港元" },
+  { code: "TWD", symbol: "NT$", label: "新台币" },
+  { code: "MOP", symbol: "MOP$", label: "澳门元" },
+  { code: "JPY", symbol: "¥", label: "日元" },
+  { code: "KRW", symbol: "₩", label: "韩元" },
+  { code: "SGD", symbol: "S$", label: "新加坡元" },
+  { code: "GBP", symbol: "£", label: "英镑" },
+  { code: "EUR", symbol: "€", label: "欧元" },
+  { code: "AUD", symbol: "A$", label: "澳元" },
+  { code: "CAD", symbol: "C$", label: "加元" },
+  { code: "RUB", symbol: "₽", label: "卢布" },
+  { code: "KZT", symbol: "₸", label: "坚戈" }
+];
+
+const REGION_CURRENCY: Record<string, string> = {
+  中国内地: "CNY",
+  中国香港: "HKD",
+  中国台湾: "TWD",
+  中国澳门: "MOP",
+  美国: "USD",
+  日本: "JPY",
+  韩国: "KRW",
+  新加坡: "SGD",
+  英国: "GBP",
+  德国: "EUR",
+  爱尔兰: "EUR",
+  澳大利亚: "AUD",
+  加拿大: "CAD",
+  俄罗斯: "RUB",
+  哈萨克斯坦: "KZT"
+};
+
+function currencySymbol(code: string): string {
+  return CARD_CURRENCIES.find((item) => item.code === code)?.symbol ?? (code ? `${code} ` : "");
+}
+
+function fmtAmount(amount: number, currency: string): string {
+  return `${currencySymbol(currency)}${amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
+}
 
 function Pill({ active, children, onClick }: { active: boolean; children: React.ReactNode; onClick: () => void }) {
   return (
@@ -47,16 +102,52 @@ function Pill({ active, children, onClick }: { active: boolean; children: React.
   );
 }
 
+function FilterGroup({
+  label,
+  options,
+  value,
+  onChange
+}: {
+  label: string;
+  options: { key: string; count?: number }[];
+  value: string;
+  onChange: (key: string) => void;
+}) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <span className="mr-0.5 text-[11px] font-semibold text-faint">{label}</span>
+      <div className="flex min-w-0 max-w-full flex-wrap gap-0.5 rounded-xl border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
+        {options.map((option) => (
+          <Pill key={option.key} active={value === option.key} onClick={() => onChange(option.key)}>
+            {option.key}
+            {option.count !== undefined && <span className="ml-1 text-faint">{option.count}</span>}
+          </Pill>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function CardLibraryView() {
   const [regions, setRegions] = useState<RegionEntry[]>([]);
   const [typeOrder, setTypeOrder] = useState<string[]>([]);
+  const [amounts, setAmounts] = useState<Record<string, CardAmount>>({});
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [hint, setHint] = useState("");
   const [loading, setLoading] = useState(true);
+
   const [region, setRegion] = useState(ALL);
   const [type, setType] = useState(ALL);
+  const [brand, setBrand] = useState(ALL);
+  const [level, setLevel] = useState(ALL);
+  const [tag, setTag] = useState(ALL);
+  const [onlyFilled, setOnlyFilled] = useState(false);
   const [query, setQuery] = useState("");
-  const [active, setActive] = useState<CardUrl | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const [active, setActive] = useState<CardEntry | null>(null);
+  const [draft, setDraft] = useState({ amount: "", currency: "CNY", note: "" });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,6 +159,11 @@ export default function CardLibraryView() {
         setTypeOrder(Array.isArray(data.typeOrder) ? data.typeOrder : []);
         setUpdatedAt(typeof data.updatedAt === "string" ? data.updatedAt : null);
         setHint(typeof data.error === "string" ? data.error : "");
+        const map: Record<string, CardAmount> = {};
+        (Array.isArray(data.amounts) ? data.amounts : []).forEach((item: CardAmount) => {
+          if (item?.cardKey) map[item.cardKey] = item;
+        });
+        setAmounts(map);
       })
       .catch(() => {
         if (!cancelled) setHint("卡面库加载失败，稍后重试");
@@ -81,42 +177,121 @@ export default function CardLibraryView() {
   }, []);
 
   const flat = useMemo(() => {
-    const list: CardUrl[] = [];
+    const list: CardEntry[] = [];
     regions.forEach((entry) => {
       entry.banks.forEach((bank) => {
-        bank.cards.forEach((card) => list.push({ card, bank, region: entry.label }));
+        bank.cards.forEach((card) => list.push({ card, bank, region: entry.label, tags: cardTagsOf(card.name) }));
       });
     });
     return list;
   }, [regions]);
 
-  /** 类型顺序：清单给的顺序优先，其余按出现次数补在后面 */
+  const uniqueOptions = (values: string[]) => {
+    const counts = new Map<string, number>();
+    values.filter(Boolean).forEach((value) => counts.set(value, (counts.get(value) ?? 0) + 1));
+    return [
+      { key: ALL, count: values.length },
+      ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, count }))
+    ];
+  };
+
   const typeOptions = useMemo(() => {
     const counts = new Map<string, number>();
     flat.forEach(({ card }) => counts.set(card.type || "其他", (counts.get(card.type || "其他") ?? 0) + 1));
     const ordered = [...typeOrder.filter((item) => counts.has(item)), ...[...counts.keys()].filter((item) => !typeOrder.includes(item))];
-    return [{ key: ALL, label: ALL, count: flat.length }, ...ordered.map((item) => ({ key: item, label: item, count: counts.get(item) ?? 0 }))];
+    return [{ key: ALL, count: flat.length }, ...ordered.map((item) => ({ key: item, count: counts.get(item) ?? 0 }))];
   }, [flat, typeOrder]);
 
   const regionOptions = useMemo(
-    () => [{ key: ALL, label: ALL, count: flat.length }, ...regions.map((entry) => ({ key: entry.label, label: entry.label, count: entry.banks.reduce((sum, bank) => sum + bank.cards.length, 0) }))],
+    () => [
+      { key: ALL, count: flat.length },
+      ...regions.map((entry) => ({
+        key: entry.label,
+        count: entry.banks.reduce((sum, bank) => sum + bank.cards.length, 0)
+      }))
+    ],
     [regions, flat.length]
   );
+  const brandOptions = useMemo(() => uniqueOptions(flat.map(({ card }) => (card.brand || "").trim())), [flat]);
+  const levelOptions = useMemo(() => uniqueOptions(flat.map(({ card }) => (card.level || "").trim())), [flat]);
+  const tagOptions = useMemo(() => uniqueOptions(flat.flatMap(({ tags }) => tags)), [flat]);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    return flat.filter(({ card, bank, region: regionLabel }) => {
+    return flat.filter(({ card, bank, region: regionLabel, tags }) => {
       if (region !== ALL && regionLabel !== region) return false;
       if (type !== ALL && (card.type || "其他") !== type) return false;
+      if (brand !== ALL && (card.brand || "").trim() !== brand) return false;
+      if (level !== ALL && (card.level || "").trim() !== level) return false;
+      if (tag !== ALL && !tags.includes(tag)) return false;
+      if (onlyFilled && !amounts[card.file]) return false;
       if (!keyword) return true;
       return (
         card.name.toLowerCase().includes(keyword) ||
         bank.name.toLowerCase().includes(keyword) ||
         (bank.englishName || "").toLowerCase().includes(keyword) ||
-        (card.brand || "").toLowerCase().includes(keyword)
+        (card.brand || "").toLowerCase().includes(keyword) ||
+        tags.some((item) => item.toLowerCase().includes(keyword))
       );
     });
-  }, [flat, region, type, query]);
+  }, [flat, region, type, brand, level, tag, onlyFilled, amounts, query]);
+
+  const filledCount = useMemo(() => flat.filter(({ card }) => amounts[card.file]).length, [flat, amounts]);
+
+  function openCard(entry: CardEntry) {
+    const saved = amounts[entry.card.file];
+    setDraft({
+      amount: saved ? String(saved.amount) : "",
+      currency: saved?.currency || REGION_CURRENCY[entry.region] || "CNY",
+      note: saved?.note || ""
+    });
+    setActive(entry);
+  }
+
+  async function saveAmount() {
+    if (!active) return;
+    const value = Number(draft.amount);
+    if (!Number.isFinite(value) || value < 0) {
+      showToast("请输入有效金额", "err");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/cards/amounts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardKey: active.card.file, amount: value, currency: draft.currency, note: draft.note })
+      });
+      const data = res.ok ? await res.json() : null;
+      if (!res.ok || !data?.amount) throw new Error("save failed");
+      setAmounts((prev) => ({ ...prev, [active.card.file]: data.amount as CardAmount }));
+      showToast("金额已保存");
+    } catch {
+      showToast("保存失败，稍后再试", "err");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function clearAmount() {
+    if (!active) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/cards/amounts?cardKey=${encodeURIComponent(active.card.file)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("delete failed");
+      setAmounts((prev) => {
+        const next = { ...prev };
+        delete next[active.card.file];
+        return next;
+      });
+      setDraft((prev) => ({ ...prev, amount: "", note: "" }));
+      showToast("已清除这张卡的金额");
+    } catch {
+      showToast("清除失败，稍后再试", "err");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -125,20 +300,33 @@ export default function CardLibraryView() {
           <h2 className="text-lg font-extrabold">卡面库</h2>
           <p className="mt-1 text-xs text-muted">
             {flat.length > 0 ? `共 ${flat.length} 张卡面 · ${regions.length} 个地区` : "还没有卡面素材"}
+            {filledCount > 0 ? ` · 已录入 ${filledCount} 张` : ""}
             {updatedAt ? ` · 更新于 ${new Date(updatedAt).toLocaleDateString("zh-CN")}` : ""}
           </p>
         </div>
-        <label className="relative block">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted">
-            <circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" />
-          </svg>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="卡名 / 银行 / 卡组织"
-            className="h-9 w-[220px] rounded-full border border-edge-strong bg-white pl-8 pr-3 text-xs text-ink placeholder:text-faint dark:bg-[#1c222d]"
-          />
-        </label>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setOnlyFilled((value) => !value)}
+            title="只看已录入金额的卡"
+            className={`h-9 rounded-full border px-3.5 text-xs font-semibold transition-colors duration-200 ${
+              onlyFilled ? "seg-active" : "border-edge-strong text-muted hover:bg-brand-hover hover:text-ink"
+            }`}
+          >
+            已录入 {filledCount}
+          </button>
+          <label className="relative block">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted">
+              <circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" />
+            </svg>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="卡名 / 银行 / 卡组织 / 主题"
+              className="h-9 w-[230px] rounded-full border border-edge-strong bg-white pl-8 pr-3 text-xs text-ink placeholder:text-faint dark:bg-[#1c222d]"
+            />
+          </label>
+        </div>
       </div>
 
       <div className="card p-3">
@@ -147,23 +335,41 @@ export default function CardLibraryView() {
           <div className="flex min-w-0 max-w-full flex-wrap gap-0.5 rounded-xl border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
             {regionOptions.map((option) => (
               <Pill key={option.key} active={region === option.key} onClick={() => setRegion(option.key)}>
-                {option.label}
+                {option.key}
                 <span className="ml-1 text-faint">{option.count}</span>
               </Pill>
             ))}
           </div>
         </div>
-        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
-          <span className="mr-0.5 text-[11px] font-semibold text-faint">类型</span>
-          <div className="flex min-w-0 max-w-full flex-wrap gap-0.5 rounded-xl border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
-            {typeOptions.map((option) => (
-              <Pill key={option.key} active={type === option.key} onClick={() => setType(option.key)}>
-                {option.label}
-                <span className="ml-1 text-faint">{option.count}</span>
-              </Pill>
-            ))}
-          </div>
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+          <FilterGroup label="类型" options={typeOptions} value={type} onChange={setType} />
+          <button
+            type="button"
+            onClick={() => setMoreOpen((open) => !open)}
+            className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors duration-200 ${
+              moreOpen ? "seg-active" : "border-edge-strong text-muted hover:bg-brand-hover hover:text-ink"
+            }`}
+          >
+            更多筛选
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 transition-transform ${moreOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg>
+          </button>
+          {(brand !== ALL || level !== ALL || tag !== ALL) && (
+            <button
+              type="button"
+              onClick={() => { setBrand(ALL); setLevel(ALL); setTag(ALL); }}
+              className="rounded-full px-2.5 py-1 text-[11px] font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink"
+            >
+              清空更多筛选
+            </button>
+          )}
         </div>
+        {moreOpen && (
+          <div className="mt-3 flex min-w-0 flex-col gap-2 border-t border-edge pt-3">
+            <FilterGroup label="卡组织" options={brandOptions} value={brand} onChange={setBrand} />
+            <FilterGroup label="等级" options={levelOptions} value={level} onChange={setLevel} />
+            <FilterGroup label="主题" options={tagOptions} value={tag} onChange={setTag} />
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -178,30 +384,52 @@ export default function CardLibraryView() {
         <div className="card py-16 text-center text-sm text-muted">没有符合条件的卡面</div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {filtered.map(({ card, bank, region: regionLabel }) => (
-            <button
-              key={`${bank.folder}-${card.file}`}
-              type="button"
-              onClick={() => setActive({ card, bank, region: regionLabel })}
-              className="group flex flex-col overflow-hidden rounded-2xl border border-edge bg-white text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop dark:bg-[#16181d]"
-            >
-              <span className="block w-full overflow-hidden bg-bg-gray">
-                <img
-                  src={`/uploads/cards/${card.file}`}
-                  alt={card.name}
-                  loading="lazy"
-                  className="aspect-[1.586] w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                />
-              </span>
-              <span className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">
-                <b className="truncate text-[13px] font-semibold text-ink">{card.name}</b>
-                <small className="truncate text-[11px] text-muted">
-                  {bank.name}
-                  {card.brand ? ` · ${card.brand}` : ""}
-                </small>
-              </span>
-            </button>
-          ))}
+          {filtered.map(({ card, bank, region: regionLabel, tags }) => {
+            const saved = amounts[card.file];
+            return (
+              <button
+                key={`${bank.folder}-${card.file}`}
+                type="button"
+                onClick={() => openCard({ card, bank, region: regionLabel, tags })}
+                className="group flex flex-col overflow-hidden rounded-2xl border border-edge bg-white text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop dark:bg-[#16181d]"
+              >
+                <span className="relative block w-full overflow-hidden bg-bg-gray">
+                  <img
+                    src={`/uploads/cards/${card.file}`}
+                    alt={card.name}
+                    loading="lazy"
+                    className="aspect-[1.586] w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                  />
+                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                  {saved && (
+                    <span className="absolute bottom-2 left-2 rounded-full bg-black/65 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+                      {fmtAmount(saved.amount, saved.currency)}
+                    </span>
+                  )}
+                  <span className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                    {card.type || "未分类"}
+                  </span>
+                </span>
+                <span className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">
+                  <b className="truncate text-[13px] font-semibold text-ink">{card.name}</b>
+                  <small className="truncate text-[11px] text-muted">
+                    {bank.name}
+                    {card.brand ? ` · ${card.brand}` : ""}
+                    {card.level ? ` · ${card.level}` : ""}
+                  </small>
+                  {tags.length > 0 && (
+                    <span className="mt-1 flex flex-wrap gap-1">
+                      {tags.slice(0, 3).map((item) => (
+                        <i key={item} className="rounded-full bg-brand-light px-1.5 py-[1px] text-[9px] font-semibold not-italic text-brand-deep dark:bg-white/10 dark:text-white/70">
+                          {item}
+                        </i>
+                      ))}
+                    </span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -218,6 +446,15 @@ export default function CardLibraryView() {
                   {active.region} · {active.bank.name}
                   {active.bank.englishName && active.bank.englishName !== active.bank.name ? `（${active.bank.englishName}）` : ""}
                 </p>
+                {active.tags.length > 0 && (
+                  <p className="mt-1.5 flex flex-wrap gap-1">
+                    {active.tags.map((item) => (
+                      <span key={item} className="rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-semibold text-brand-deep dark:bg-white/10 dark:text-white/70">
+                        {item}
+                      </span>
+                    ))}
+                  </p>
+                )}
               </div>
               <button type="button" onClick={() => setActive(null)} aria-label="关闭" className="grid h-8 w-8 flex-none place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="m6 6 12 12M18 6 6 18" /></svg>
@@ -232,18 +469,72 @@ export default function CardLibraryView() {
                 <span className="rounded-lg bg-white px-3 py-2 text-muted dark:bg-[#1c222d]">卡号前几位<b className="ml-1 text-ink">{active.card.bins?.length ? active.card.bins.join(" / ") : "—"}</b></span>
               </div>
             </div>
-            {/* 录入金额：本版只放界面占位，功能下一版接入 */}
-            <div className="flex flex-wrap items-center gap-2 border-t border-edge px-5 py-4">
-              <span className="text-xs font-semibold text-muted">录入金额</span>
-              <input
-                disabled
-                placeholder="下一版接入"
-                className="h-9 w-[180px] rounded-xl border border-edge bg-bg-gray px-3 text-xs text-ink placeholder:text-faint disabled:opacity-60 dark:bg-[#1c222d]"
-              />
-              <button type="button" disabled className="h-9 rounded-xl border border-edge-strong bg-white px-4 text-xs font-semibold text-ink-2 transition-colors duration-200 hover:bg-brand-hover disabled:opacity-50 dark:bg-[#1c1c1e] dark:text-white">
-                保存
-              </button>
-              <span className="text-[11px] text-faint">（金额录入功能下一版接入）</span>
+            <div className="border-t border-edge px-5 py-4">
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-muted">金额</span>
+                  <span className="flex items-center gap-1 rounded-xl border border-edge bg-white px-2 dark:bg-[#1c222d]">
+                    <span className="text-xs font-semibold text-muted">{currencySymbol(draft.currency)}</span>
+                    <input
+                      value={draft.amount}
+                      onChange={(event) => setDraft((prev) => ({ ...prev, amount: event.target.value.replace(/[^\d.]/g, "") }))}
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      className="h-9 w-[130px] bg-transparent text-sm tabular-nums text-ink outline-none placeholder:text-faint"
+                    />
+                  </span>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-muted">币种</span>
+                  <select
+                    value={draft.currency}
+                    onChange={(event) => setDraft((prev) => ({ ...prev, currency: event.target.value }))}
+                    className="h-9 rounded-xl border border-edge bg-white px-2 text-xs font-semibold text-ink dark:bg-[#1c222d]"
+                  >
+                    {CARD_CURRENCIES.map((item) => (
+                      <option key={item.code} value={item.code}>
+                        {item.code} · {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex min-w-[180px] flex-1 flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-muted">备注（可选）</span>
+                  <input
+                    value={draft.note}
+                    onChange={(event) => setDraft((prev) => ({ ...prev, note: event.target.value }))}
+                    maxLength={100}
+                    placeholder="额度 / 余额 / 其他说明"
+                    className="h-9 rounded-xl border border-edge bg-white px-3 text-xs text-ink placeholder:text-faint dark:bg-[#1c222d]"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void saveAmount()}
+                  className="h-9 rounded-xl border border-edge-strong bg-white px-4 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover active:scale-[.97] disabled:opacity-50 dark:bg-[#1c1c1e] dark:text-white"
+                >
+                  保存
+                </button>
+                {amounts[active.card.file] && (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void clearAmount()}
+                    className="h-9 rounded-xl px-3 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink disabled:opacity-50"
+                  >
+                    清除
+                  </button>
+                )}
+              </div>
+              {amounts[active.card.file] && (
+                <p className="mt-2 text-[11px] text-faint">
+                  已录入 {fmtAmount(amounts[active.card.file].amount, amounts[active.card.file].currency)}
+                  {amounts[active.card.file].note ? ` · ${amounts[active.card.file].note}` : ""}
+                  {" · "}
+                  {new Date(amounts[active.card.file].updatedAt).toLocaleString("zh-CN", { hour12: false })}
+                </p>
+              )}
             </div>
           </div>
         </div>
