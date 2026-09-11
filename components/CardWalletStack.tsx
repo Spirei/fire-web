@@ -45,9 +45,14 @@ interface BalanceEntry {
   balance: number;
   note: string;
   occurredAt: string;
+  /** 这笔钱的另一端在券商账户（同时联动记了一笔方向相反的资金流水） */
+  brokerLinked?: boolean;
 }
 
 type SortKey = "custom" | "bank" | "balance" | "name";
+
+/** 资金系统支持的币种：只有这些币种才能勾「券商账户」（联动记一笔资金流水） */
+const FUND_LEDGER_CURRENCIES = new Set(["USD", "EUR", "HKD", "CNY", "JPY", "KRW", "SGD"]);
 
 const SORT_LABEL: Record<SortKey, string> = { custom: "默认顺序", bank: "按银行", balance: "按余额", name: "按卡名" };
 const CARD_STEP = 30;
@@ -637,6 +642,8 @@ function CardDetailPanel({
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [occurredAt, setOccurredAt] = useState(() => localDateInput());
+  /** 这笔钱的另一端在券商账户：勾上会同时记一笔资金流水，避免总现金被重复计算 */
+  const [brokerLinked, setBrokerLinked] = useState(false);
   const [draft, setDraft] = useState({ number: "", expiry: "", cvv: "", note: "", currency: "CNY" });
 
   useEffect(() => {
@@ -647,6 +654,7 @@ function CardDetailPanel({
     setAmount(kind === "adjust" ? (card.hasAmount ? String(card.amount) : "") : "");
     setNote("");
     setOccurredAt(localDateInput());
+    setBrokerLinked(false);
     setDraft({
       number: card.number,
       expiry: card.expiry,
@@ -665,6 +673,7 @@ function CardDetailPanel({
     }
     setSaving(true);
     try {
+      const linkBroker = brokerLinked && kind !== "adjust" && FUND_LEDGER_CURRENCIES.has(card.currency);
       const res = await fetch("/api/cards/wallet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -674,13 +683,25 @@ function CardDetailPanel({
           amount: value,
           currentBalance: kind === "adjust" ? value : undefined,
           note,
-          occurredAt: occurredAt ? new Date(`${occurredAt}T12:00:00`).toISOString() : undefined
+          occurredAt: occurredAt ? new Date(`${occurredAt}T12:00:00`).toISOString() : undefined,
+          fundAccount: linkBroker ? "broker" : undefined,
+          fundNote: linkBroker ? `${card.bank} ${card.name}` : undefined
         })
       });
-      const data = res.ok ? await res.json() : null;
-      if (!res.ok || !data?.entry) throw new Error("save failed");
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.entry) {
+        // 服务端会说明为什么联动不了（如币种不在资金系统里），别吞掉
+        showToast(data?.error || "保存失败，稍后再试", "err");
+        return;
+      }
       onEntryAdded(data.entry as BalanceEntry, Number(data.balance) || 0);
-      showToast(kind === "deposit" ? "已记一笔存钱" : kind === "withdraw" ? "已记一笔取钱" : "余额已调整");
+      showToast(
+        kind === "deposit"
+          ? linkBroker ? "已记一笔存钱，并在资金记录里记了转出" : "已记一笔存钱"
+          : kind === "withdraw"
+            ? linkBroker ? "已记一笔取钱，并在资金记录里记了转入" : "已记一笔取钱"
+            : "余额已调整"
+      );
       setForm(null);
     } catch {
       showToast("保存失败，稍后再试", "err");
@@ -852,6 +873,11 @@ function CardDetailPanel({
                         {entry.delta >= 0 ? "+" : "-"}
                         {fmtCardMoney(Math.abs(entry.delta), card.currency)}
                       </b>
+                      {entry.brokerLinked && (
+                        <i className="rounded-full border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold not-italic text-white/60" title="这笔钱在券商账户里也记了一笔（资金记录里标为「自动」）">
+                          券商
+                        </i>
+                      )}
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] text-white/40">
                       {fmtEntryDate(entry.occurredAt)}
@@ -941,6 +967,36 @@ function CardDetailPanel({
               className={`h-10 rounded-xl border border-edge bg-white px-3 text-[13px] text-ink placeholder:text-faint dark:bg-[#1c222d] ${FOCUS_RING}`}
             />
           </label>
+          {/* 券商账户联动：钱本来就在券商账本里的话，卡里多一笔、券商就少一笔；
+              不勾的话两边各记一份，资产分析里的总现金会翻倍 */}
+          {form !== "adjust" && FUND_LEDGER_CURRENCIES.has(card.currency) && (
+            <div className="mt-3 flex items-start gap-3 rounded-xl border border-edge bg-bg-gray px-3 py-2.5 dark:border-white/10 dark:bg-white/5">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={brokerLinked}
+                onClick={() => setBrokerLinked((value) => !value)}
+                title={brokerLinked ? "点击改为外部资金" : "点击标记为券商账户往来"}
+                className={`relative mt-0.5 h-[20px] w-[36px] flex-none rounded-full transition-colors duration-300 ease-out ${
+                  brokerLinked ? "bg-[#34c759]" : "bg-[#e9e9eb] dark:bg-[#3a3a3c]"
+                }`}
+              >
+                <span
+                  className={`absolute left-0 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full shadow-[0_1px_3px_rgba(0,0,0,.25)] transition-transform duration-300 ${
+                    brokerLinked ? "translate-x-[18px]" : "translate-x-[2px]"
+                  }`}
+                  style={{ backgroundColor: "#ffffff", transitionTimingFunction: "cubic-bezier(.32,.72,0,1)" }}
+                />
+              </button>
+              <span className="min-w-0 flex-1 text-[12px] leading-5 text-ink-2">
+                {form === "deposit" ? "这笔钱是从券商账户转来的" : "这笔钱转回券商账户"}
+                <i className="mt-0.5 block not-italic text-[11px] text-muted">
+                  会同时在资金记录里记一笔 {card.currency}
+                  {form === "deposit" ? " 转出" : " 转入"}（标为自动），券商现金与卡余额不会重复计算
+                </i>
+              </span>
+            </div>
+          )}
           <div className="mt-5 flex justify-end gap-2">
             <button
               type="button"

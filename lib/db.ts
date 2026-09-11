@@ -315,6 +315,10 @@ function migrate(database: Database.Database) {
   if (!cardDetailCols.includes("note")) database.exec("ALTER TABLE card_details ADD COLUMN note TEXT NOT NULL DEFAULT ''");
   if (!cardDetailCols.includes("currency")) database.exec("ALTER TABLE card_details ADD COLUMN currency TEXT NOT NULL DEFAULT ''");
 
+  // 卡面库余额流水增量字段（兼容旧库）：券商账户联动生成的资金流水 id（空 = 外部资金）
+  const cardBalanceCols = (database.prepare("PRAGMA table_info(card_balance_history)").all() as { name: string }[]).map((c) => c.name);
+  if (!cardBalanceCols.includes("fund_tx_id")) database.exec("ALTER TABLE card_balance_history ADD COLUMN fund_tx_id TEXT NOT NULL DEFAULT ''");
+
   // celebs 表增量字段（兼容旧库）
   const celebCols = (database.prepare("PRAGMA table_info(celebs)").all() as { name: string }[]).map((c) => c.name);
   if (!celebCols.includes("stock_icons_json")) {

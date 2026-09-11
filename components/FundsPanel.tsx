@@ -17,16 +17,21 @@ interface Tx { id: string; currency: Currency; type: string; amount: number; dir
 interface Summary { openingAsset: number; cashNetFlow: number; stockNetFlow: number; otherNetFlow: number }
 const TYPE_LABEL: Record<string, string> = { opening: "期初资金", deposit: "转入", withdrawal: "转出", adjustment: "余额调整" };
 type RecordAction = "buy" | "sell" | "dividend";
-function recordView(item: Tx): { title: string; action: RecordAction | null; actionLabel: string; automatic: boolean } {
+/** 卡包「存钱 / 取钱」联动生成的流水前缀（与 lib/funds.ts 的 CARD_LINK_PREFIX 一致） */
+const CARD_LINK_PREFIX = "card-link-";
+function recordView(item: Tx): { title: string; action: RecordAction | null; actionLabel: string; automatic: boolean; showNote: boolean } {
+  const cardLinked = item.id.startsWith(CARD_LINK_PREFIX);
   if (!item.sourceOrderId) {
     const title = item.type === "deposit" || item.type === "withdrawal" ? item.direction > 0 ? "资金转入" : "资金转出" : TYPE_LABEL[item.type] || "资金变动";
-    return { title, action: null, actionLabel: "", automatic: false };
+    // 卡包联动流水也标为「自动」：它由卡包那笔余额变动驱动，不能在这里单独删，
+    // 但备注要露出来（写的是哪张卡），否则用户不知道这笔钱对应哪张卡
+    return { title, action: null, actionLabel: "", automatic: cardLinked, showNote: cardLinked };
   }
   const prefix = item.note.split(" · ")[0];
   const action: RecordAction | null = prefix.startsWith("买入") ? "buy" : prefix.startsWith("卖出") ? "sell" : prefix.startsWith("股息") ? "dividend" : null;
   const name = stripTrailingStockCode(item.stockName || prefix.replace(/^(买入|卖出|股息)\s*/, ""), item.stockCode);
   const actionLabel = action === "buy" ? "买入" : action === "sell" ? "卖出" : action === "dividend" ? "股息" : "";
-  return { title: name || actionLabel || prefix, action, actionLabel, automatic: true };
+  return { title: name || actionLabel || prefix, action, actionLabel, automatic: true, showNote: false };
 }
 function RecordChip({ tone, children }: { tone: RecordAction | "code" | "auto"; children: string }) {
   return <small className={`fund-record-chip fund-record-chip--${tone}`}>{children}</small>;
@@ -170,15 +175,15 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
         <div className="col-start-2 row-start-3">{metric("盈亏额", profit, "flow")}</div>
         <div className="col-start-3 row-start-2">{metric("期末总资产", endingAsset, "result")}</div>
       </div>
-      <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 买卖与股息属于账户内部现金流，不计入外部投入。</p><p>3. 卡面库「我的卡」里的借记卡 / 预付卡余额也算现金，已并入各币种余额与「其他净流入」；信用卡的金额是额度，不计入。若钱是从券商转到卡上，请同时在资金记录里记一笔转出，否则两边会重复计算。</p><p>4. <button type="button" onClick={() => { setRecordsPage(0); setRecordsOpen(true); }} className="border-b border-dashed border-muted/60 pb-px font-semibold text-muted transition-colors hover:border-ink hover:text-ink">查看资金记录</button></p></div>
+      <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 买卖与股息属于账户内部现金流，不计入外部投入。</p><p>3. 卡面库「我的卡」里的借记卡 / 预付卡余额也算现金，已并入各币种余额与「其他净流入」；信用卡的金额是额度，不计入。从券商转到卡上（或转回券商）时，在卡包「存钱 / 取钱」弹窗里打开「券商账户」开关，会自动记一笔反向流水，两边不会重复计算。</p><p>4. <button type="button" onClick={() => { setRecordsPage(0); setRecordsOpen(true); }} className="border-b border-dashed border-muted/60 pb-px font-semibold text-muted transition-colors hover:border-ink hover:text-ink">查看资金记录</button></p></div>
     </div>
     {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={displayedBalances[currency] || 0} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
     {recordsOpen && <AppModal title="资金记录" desc={`折算为 ${currency} · 共 ${recordsTotal} 笔 · 当前余额 ${fmtMoney(cash, CURRENCY_SYMBOLS[currency])}`} size="md" onClose={() => setRecordsOpen(false)} headerActions={<label className="relative block"><IconSearch size={14} stroke={1.8} className={`pointer-events-none absolute left-3 top-1/2 z-20 -translate-y-1/2 text-muted ${recordsLoading ? "animate-pulse" : ""}`} /><RainbowTextInput autoFocus value={recordsQuery} onChange={(event) => setRecordsQuery(event.target.value)} placeholder="名称、代码、拼音、买入/卖出" className="h-9 w-full rounded-xl border border-edge bg-bg-gray pl-8 pr-8 text-[11px] text-ink outline-none transition-colors focus-within:border-[#3297f6]/60 focus-within:bg-white dark:focus-within:bg-white/5" />{recordsQuery && <button type="button" onClick={() => setRecordsQuery("")} className="absolute right-1.5 top-1/2 z-20 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:bg-white hover:text-ink dark:hover:bg-white/10" aria-label="清空搜索">×</button>}</label>}>
       <div className="-mx-3 h-[min(520px,62vh)] overflow-y-auto px-1 sm:-mx-2">
         {recordsLoading && currencyTransactions.length === 0 ? <div className="space-y-2 px-2 py-1">{Array.from({ length: 6 }, (_, index) => <div key={index} className="flex animate-pulse items-center gap-3 rounded-[14px] px-3 py-2.5"><span className="flex-1"><i className="block h-3 w-2/5 rounded bg-bg-gray" /><i className="mt-2 block h-2.5 w-1/4 rounded bg-bg-gray" /></span><i className="h-3 w-20 rounded bg-bg-gray" /></div>)}</div> : currencyTransactions.length ? currencyTransactions.map((item) => {
-          const { title, action, actionLabel, automatic } = recordView(item);
+          const { title, action, actionLabel, automatic, showNote } = recordView(item);
           return <div key={item.id} className="group flex items-center gap-3 rounded-[14px] px-3 py-2.5 transition-colors hover:bg-bg-gray">
-            <span className="min-w-0 flex-1"><span className="flex min-w-0 items-center gap-2"><b className="min-w-0 truncate text-[13px] font-semibold tracking-tight text-ink">{title}</b><span className="flex shrink-0 items-center gap-1">{actionLabel && action && <RecordChip tone={action}>{actionLabel}</RecordChip>}{item.stockCode && <RecordChip tone="code">{item.stockCode}</RecordChip>}{automatic && <RecordChip tone="auto">自动</RecordChip>}</span></span><small className="mt-1 block truncate text-[10px] tabular-nums text-muted">{new Date(item.occurredAt).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}{item.note && !automatic ? ` · ${item.note}` : ""}</small></span>
+            <span className="min-w-0 flex-1"><span className="flex min-w-0 items-center gap-2"><b className="min-w-0 truncate text-[13px] font-semibold tracking-tight text-ink">{title}</b><span className="flex shrink-0 items-center gap-1">{actionLabel && action && <RecordChip tone={action}>{actionLabel}</RecordChip>}{item.stockCode && <RecordChip tone="code">{item.stockCode}</RecordChip>}{automatic && <RecordChip tone="auto">自动</RecordChip>}</span></span><small className="mt-1 block truncate text-[10px] tabular-nums text-muted">{new Date(item.occurredAt).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}{item.note && (!automatic || showNote) ? ` · ${item.note}` : ""}</small></span>
             <b className={`shrink-0 text-xs tabular-nums ${item.direction > 0 ? "text-up" : "text-down"}`} title={`原币金额 ${fmtMoney(item.amount, CURRENCY_SYMBOLS[item.currency])}`}>{item.direction > 0 ? "+" : "−"}{fmtMoneyAdaptive(convert(item.amount, item.currency), CURRENCY_SYMBOLS[currency], 1e5)}</b>
             {!automatic && <button type="button" onClick={() => void remove(item.id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted opacity-0 transition-all hover:bg-down/10 hover:text-down focus:opacity-100 group-hover:opacity-100" title="删除记录" aria-label="删除资金记录"><IconTrash size={15} stroke={1.7} /></button>}
           </div>;

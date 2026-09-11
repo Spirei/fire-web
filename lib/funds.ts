@@ -17,6 +17,12 @@ interface Row {
   stock_code?: string | null; stock_name?: string | null; stock_market?: string | null;
 }
 const AUTO_ORDER_PREFIX = "fund-order-";
+/**
+ * 卡包「存钱 / 取钱」联动生成的资金流水前缀（卡里的钱与券商现金是同一笔钱的两端）。
+ * 这类流水不能在资金记录里单独删 —— 删掉卡包那笔余额变动时会一起删，
+ * 单独删会让券商现金和卡余额各记一份、总现金被重复计算。
+ */
+export const CARD_LINK_PREFIX = "card-link-";
 const mapRow = (row: Row): FundTransaction => ({
   id: row.id, currency: row.currency, type: row.type, amount: Number(row.amount), direction: row.direction,
   note: row.note, occurredAt: row.occurred_at, createdAt: row.created_at,
@@ -217,13 +223,28 @@ export function fundBalances(userId: string): Record<FundCurrency, number> {
   return result;
 }
 export function createFundTransaction(input: { userId: string; currency: FundCurrency; type: FundType; amount: number; direction: 1 | -1; note?: string; occurredAt?: string }) {
-  const now = new Date().toISOString();
   const id = `fund-${randomBytes(12).toString("hex")}`;
-  getDb().prepare("INSERT INTO fund_transactions (id,user_id,currency,type,amount,direction,note,occurred_at,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
-    .run(id, input.userId, input.currency, input.type, input.amount, input.direction, input.note || "", input.occurredAt || now, now);
-  return listFundTransactions(input.userId, 1)[0];
+  writeFundTransaction({ ...input, id });
+  // 按 id 回读：按「最近一条」回读在补录旧日期时会拿到别的记录
+  return getFundTransaction(input.userId, id) ?? listFundTransactions(input.userId, 1)[0];
 }
+
+/** 按 id 写一笔资金流水（id 由调用方给，便于卡包联动时把两端对上） */
+export function writeFundTransaction(input: { id: string; userId: string; currency: FundCurrency; type: FundType; amount: number; direction: 1 | -1; note?: string; occurredAt?: string }) {
+  const now = new Date().toISOString();
+  getDb()
+    .prepare("INSERT OR REPLACE INTO fund_transactions (id,user_id,currency,type,amount,direction,note,occurred_at,created_at) VALUES (?,?,?,?,?,?,?,?,?)")
+    .run(input.id, input.userId, input.currency, input.type, input.amount, input.direction, (input.note || "").slice(0, 200), input.occurredAt || now, now);
+}
+
+/** 按 id 读一笔资金流水（含关联订单信息） */
+export function getFundTransaction(userId: string, id: string): FundTransaction | null {
+  const row = getDb().prepare(`${FUND_SELECT} WHERE f.user_id=? AND f.id=?`).get(AUTO_ORDER_PREFIX, userId, id) as Row | undefined;
+  return row ? mapRow(row) : null;
+}
+
 export function deleteFundTransaction(userId: string, id: string) {
-  if (id.startsWith(AUTO_ORDER_PREFIX)) return false;
+  // 订单自动记账与卡包联动记账都不能在资金记录里单独删（各自由订单 / 卡包那边驱动）
+  if (id.startsWith(AUTO_ORDER_PREFIX) || id.startsWith(CARD_LINK_PREFIX)) return false;
   return getDb().prepare("DELETE FROM fund_transactions WHERE id=? AND user_id=?").run(id, userId).changes > 0;
 }

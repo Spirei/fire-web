@@ -60,6 +60,19 @@ const FOCUS_RING =
 /** 常用标签建议（可自由输入，这里只是快捷入口） */
 const TAG_SUGGESTIONS = ["虚拟卡", "实体卡", "金属卡", "透明卡", "收藏", "主力卡", "已注销", "纪念版"];
 
+/**
+ * 卡片「金额」的含义按类型分档：借记卡 / 预付卡填的是**余额**（真钱，计入资产分析的现金），
+ * 信用卡填的是**额度**（可透支上限，不是钱）。两者不能加在一起 —— 额度合计与银行卡现金
+ * 对不上就是这个原因，所以总览里分开显示。
+ */
+const CASH_AMOUNT_TYPES = new Set(["借记卡", "预付卡"]);
+type AmountGroup = "balance" | "limit" | "other";
+function amountGroupOf(type: string): AmountGroup {
+  if (CASH_AMOUNT_TYPES.has(type)) return "balance";
+  if (type === "信用卡") return "limit";
+  return "other";
+}
+
 /** 地区按洲分组（下拉里用 optgroup 展示）；洲内把中国各地排最前，再按卡面数量排 */
 const CONTINENT_ORDER = ["亚洲", "欧洲", "北美洲", "大洋洲", "其他"] as const;
 const REGION_CONTINENT: Record<string, string> = {
@@ -576,7 +589,11 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     setDetails((prev) => ({ ...prev, [saved.cardKey]: { ...saved } }));
   }
 
-  /** 我的卡总览：持有张数 + 各类型张数 + 额度合计（只统计持有的卡；按币种分组折算成显示货币） */
+  /**
+   * 我的卡总览：持有张数 + 各类型张数 + 余额 / 额度 / 其他 三档合计（只统计持有的卡；
+   * 按币种折算成显示货币）。三档分开是因为「金额」的含义不同：借记卡 / 预付卡是余额
+   * （这一份才是资产分析里计入可用现金的「银行卡现金」），信用卡是额度，其余单列。
+   */
   const wallet = useMemo(() => {
     const heldEntries = flat.filter(({ card }) => holdings[card.file]);
     const byType = new Map<string, number>();
@@ -585,8 +602,11 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       byType.set(key, (byType.get(key) ?? 0) + 1);
     });
     const byCurrency = new Map<string, { total: number; count: number }>();
-    const missing: string[] = [];
-    let converted = 0;
+    const groups: Record<AmountGroup, { converted: number; filled: number; missing: string[] }> = {
+      balance: { converted: 0, filled: 0, missing: [] },
+      limit: { converted: 0, filled: 0, missing: [] },
+      other: { converted: 0, filled: 0, missing: [] }
+    };
     let filled = 0;
     const displayRate = rates[displayCurrency] || 1;
     heldEntries.forEach(({ card }) => {
@@ -599,17 +619,19 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       entry.total += item.amount;
       entry.count += 1;
       byCurrency.set(code, entry);
+      const bucket = groups[amountGroupOf(card.type || "")];
+      bucket.filled += 1;
       const usdRate = rates[code];
-      if (usdRate && usdRate > 0) converted += (item.amount / usdRate) * displayRate;
-      else if (!missing.includes(code)) missing.push(code);
+      if (usdRate && usdRate > 0) bucket.converted += (item.amount / usdRate) * displayRate;
+      else if (!bucket.missing.includes(code)) bucket.missing.push(code);
     });
     return {
       count: heldEntries.length,
       filled,
       byType: [...byType.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hans-CN")),
       byCurrency: [...byCurrency.entries()].sort((a, b) => b[1].total - a[1].total),
-      converted,
-      missing
+      groups,
+      missing: [...new Set([...groups.balance.missing, ...groups.limit.missing, ...groups.other.missing])]
     };
   }, [flat, holdings, amounts, rates, displayCurrency]);
 
@@ -814,16 +836,35 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 </span>
               ))}
             </span>
-            <span className="ml-auto flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold text-muted">额度合计</span>
-              {wallet.filled > 0 ? (
-                <span className="text-sm font-bold tabular-nums text-ink">
-                  ≈ {currencySymbol(displayCurrency)}
-                  {wallet.converted.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+              {wallet.groups.balance.filled > 0 && (
+                <span className="flex items-center gap-1.5" title="借记卡 / 预付卡的余额合计 —— 这一份就是资产分析里计入可用现金与净资产的「银行卡现金」">
+                  <span className="text-xs font-semibold text-muted">余额合计</span>
+                  <span className="text-sm font-bold tabular-nums text-ink">
+                    ≈ {currencySymbol(displayCurrency)}
+                    {wallet.groups.balance.converted.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </span>
-              ) : (
-                <span className="text-xs text-faint">未录入（打开卡片可录入金额）</span>
               )}
+              {wallet.groups.limit.filled > 0 && (
+                <span className="flex items-center gap-1.5" title="信用卡额度合计 —— 额度是可透支的上限，不是你的钱，不计入可用现金">
+                  <span className="text-xs font-semibold text-muted">额度合计</span>
+                  <span className="text-sm font-bold tabular-nums text-ink">
+                    ≈ {currencySymbol(displayCurrency)}
+                    {wallet.groups.limit.converted.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </span>
+              )}
+              {wallet.groups.other.filled > 0 && (
+                <span className="flex items-center gap-1.5" title="其他类型卡片录入的金额（既不是借记卡 / 预付卡余额，也不是信用卡额度），不计入现金">
+                  <span className="text-xs font-semibold text-muted">其他合计</span>
+                  <span className="text-sm font-bold tabular-nums text-ink">
+                    ≈ {currencySymbol(displayCurrency)}
+                    {wallet.groups.other.converted.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </span>
+              )}
+              {wallet.filled === 0 && <span className="text-xs text-faint">未录入（打开卡片可录入金额）</span>}
             </span>
           </div>
           {wallet.byCurrency.length > 0 && (

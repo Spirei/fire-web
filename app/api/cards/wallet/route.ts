@@ -97,15 +97,25 @@ export async function POST(request: Request) {
   }
   const note = String((body as { note?: unknown }).note ?? "").trim().slice(0, 100);
   const occurredAt = String((body as { occurredAt?: unknown }).occurredAt ?? "").trim();
-  const { entry, balance } = addCardBalanceEntry(user.id, {
-    cardKey,
-    amount,
-    kind,
-    note,
-    occurredAt: occurredAt || undefined,
-    currentBalance
-  });
-  return NextResponse.json({ entry, balance }, NO_STORE);
+  /** "broker" = 这笔钱的另一端在券商账户：同时记一笔方向相反的资金流水，避免总现金重复计算 */
+  const fundAccount = String((body as { fundAccount?: unknown }).fundAccount ?? "").trim() === "broker" ? ("broker" as const) : undefined;
+  const fundNote = String((body as { fundNote?: unknown }).fundNote ?? "").trim().slice(0, 60);
+  try {
+    const { entry, balance } = addCardBalanceEntry(user.id, {
+      cardKey,
+      amount,
+      kind,
+      note,
+      occurredAt: occurredAt || undefined,
+      currentBalance,
+      fundAccount,
+      fundNote: fundNote || undefined
+    });
+    return NextResponse.json({ entry, balance }, NO_STORE);
+  } catch (error) {
+    // 币种不在资金系统里（或这张卡还没填币种）时要说清原因，别静默少记一笔
+    return NextResponse.json({ error: error instanceof Error ? error.message : "保存失败" }, { status: 400 });
+  }
 }
 
 /** DELETE：删掉一笔余额流水，并按剩余流水重放余额 */

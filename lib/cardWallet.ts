@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "./db";
 import { setCardHeld, upsertCardAmount } from "./cardAmounts";
+import { CARD_LINK_PREFIX, writeFundTransaction, type FundCurrency } from "./funds";
+
+/** 资金系统支持的币种（卡包联动券商流水时只支持这些） */
+const FUND_LEDGER_CURRENCIES = new Set(["USD", "EUR", "HKD", "CNY", "JPY", "KRW", "SGD"]);
 
 export interface CardDetails {
   cardKey: string;
@@ -29,6 +33,8 @@ export interface CardBalanceEntry {
   balance: number;
   note: string;
   occurredAt: string;
+  /** 这笔钱的另一端在券商账户（联动记了一笔方向相反的资金流水），资金记录里显示为自动 */
+  brokerLinked: boolean;
 }
 
 interface DetailsRow {
@@ -49,6 +55,20 @@ interface BalanceRow {
   balance: number;
   note: string;
   occurred_at: string;
+  fund_tx_id?: string;
+}
+
+function toBalanceEntry(row: BalanceRow): CardBalanceEntry {
+  return {
+    id: row.id,
+    cardKey: row.card_key,
+    kind: (row.kind === "deposit" || row.kind === "withdraw" ? row.kind : "adjust") as CardBalanceKind,
+    delta: Number(row.delta) || 0,
+    balance: Number(row.balance) || 0,
+    note: row.note || "",
+    occurredAt: row.occurred_at,
+    brokerLinked: Boolean(row.fund_tx_id)
+  };
 }
 
 export function listCardDetails(userId: string): Record<string, CardDetails> {
@@ -121,7 +141,7 @@ export function saveCardDetails(
 export function listCardBalanceHistory(userId: string, limitPerCard = 50): Record<string, CardBalanceEntry[]> {
   const rows = getDb()
     .prepare(
-      `SELECT id, card_key, kind, delta, balance, note, occurred_at FROM (
+      `SELECT id, card_key, kind, delta, balance, note, occurred_at, fund_tx_id FROM (
          SELECT *, ROW_NUMBER() OVER (PARTITION BY card_key ORDER BY occurred_at DESC, created_at DESC) AS rn
          FROM card_balance_history WHERE user_id = ?
        ) WHERE rn <= ? ORDER BY occurred_at DESC`
@@ -130,15 +150,7 @@ export function listCardBalanceHistory(userId: string, limitPerCard = 50): Recor
   const out: Record<string, CardBalanceEntry[]> = {};
   rows.forEach((row) => {
     if (!out[row.card_key]) out[row.card_key] = [];
-    out[row.card_key].push({
-      id: row.id,
-      cardKey: row.card_key,
-      kind: (row.kind === "deposit" || row.kind === "withdraw" ? row.kind : "adjust") as CardBalanceKind,
-      delta: Number(row.delta) || 0,
-      balance: Number(row.balance) || 0,
-      note: row.note || "",
-      occurredAt: row.occurred_at
-    });
+    out[row.card_key].push(toBalanceEntry(row));
   });
   return out;
 }
@@ -147,20 +159,12 @@ export function listCardBalanceHistory(userId: string, limitPerCard = 50): Recor
 export function listCardBalanceHistoryForCard(userId: string, cardKey: string, limit = 100): CardBalanceEntry[] {
   const rows = getDb()
     .prepare(
-      `SELECT id, card_key, kind, delta, balance, note, occurred_at FROM card_balance_history
+      `SELECT id, card_key, kind, delta, balance, note, occurred_at, fund_tx_id FROM card_balance_history
        WHERE user_id = ? AND card_key = ?
        ORDER BY occurred_at DESC, created_at DESC LIMIT ?`
     )
     .all(userId, cardKey, limit) as BalanceRow[];
-  return rows.map((row) => ({
-    id: row.id,
-    cardKey: row.card_key,
-    kind: (row.kind === "deposit" || row.kind === "withdraw" ? row.kind : "adjust") as CardBalanceKind,
-    delta: Number(row.delta) || 0,
-    balance: Number(row.balance) || 0,
-    note: row.note || "",
-    occurredAt: row.occurred_at
-  }));
+  return rows.map(toBalanceEntry);
 }
 
 function currentAmount(userId: string, cardKey: string): { amount: number; currency: string; note: string } {
@@ -170,7 +174,23 @@ function currentAmount(userId: string, cardKey: string): { amount: number; curre
   return { amount: Number(row?.amount) || 0, currency: row?.currency || "", note: row?.note || "" };
 }
 
-/** 记一笔余额变动：写入流水，并把卡面库里的当前余额同步更新（资产分析的资金系统后续接这里） */
+/** 卡币种：金额上记的优先，其次卡背信息里填的（与卡包 / 卡面库的取值顺序一致） */
+function cardCurrency(userId: string, cardKey: string, amountCurrency: string): string {
+  if (amountCurrency) return amountCurrency.toUpperCase();
+  const row = getDb().prepare("SELECT currency FROM card_details WHERE user_id = ? AND card_key = ?").get(userId, cardKey) as
+    | { currency: string }
+    | undefined;
+  return (row?.currency || "").toUpperCase();
+}
+
+/**
+ * 记一笔余额变动：写入流水，并把卡面库里的当前余额同步更新。
+ *
+ * fundAccount = "broker" 表示这笔钱的另一端就在券商账户里（从券商转到卡上 / 从卡上转回券商）：
+ * 那就同时在资金账本记一笔**方向相反**的流水 —— 卡里多了钱，券商现金就少了同样的钱。
+ * 不这么做的话，卡余额会被算作现金、券商账本里的那笔钱也还在，总现金直接翻倍。
+ * 两笔记录在同一个数据库事务里写入，卡包那笔删掉时联动流水也会一起删。
+ */
 export function addCardBalanceEntry(
   userId: string,
   input: {
@@ -181,12 +201,17 @@ export function addCardBalanceEntry(
     occurredAt?: string;
     /** kind = adjust 时表示「调整后的余额」；其余情况忽略 */
     currentBalance?: number;
+    /** "broker" = 这笔钱在券商账户里也有一份（联动记账） */
+    fundAccount?: "broker";
+    /** 联动流水的备注（一般传「银行 卡名」），只用于资金记录的展示 */
+    fundNote?: string;
   }
 ): { entry: CardBalanceEntry; balance: number } {
   const db = getDb();
   const now = new Date().toISOString();
   const occurredAt = input.occurredAt && !Number.isNaN(Date.parse(input.occurredAt)) ? new Date(input.occurredAt).toISOString() : now;
   const existing = currentAmount(userId, input.cardKey);
+  const currency = cardCurrency(userId, input.cardKey, existing.currency);
   const base = existing.amount;
   const delta = input.kind === "withdraw" ? -Math.abs(input.amount) : Math.abs(input.amount);
   const balance =
@@ -195,6 +220,10 @@ export function addCardBalanceEntry(
         ? Number(input.currentBalance)
         : Math.abs(input.amount)
       : base + delta;
+  const linked = input.fundAccount === "broker" && input.kind !== "adjust";
+  if (linked && !FUND_LEDGER_CURRENCIES.has(currency)) {
+    throw new Error(currency ? `资金系统不支持 ${currency}，没法记券商流水` : "这张卡还没有币种，先把卡背信息的币种填上");
+  }
   const entry: CardBalanceEntry = {
     id: randomUUID(),
     cardKey: input.cardKey,
@@ -202,32 +231,42 @@ export function addCardBalanceEntry(
     delta: balance - base,
     balance,
     note: String(input.note || "").trim().slice(0, 100),
-    occurredAt
+    occurredAt,
+    brokerLinked: linked
   };
+  const fundTxId = linked ? `${CARD_LINK_PREFIX}${entry.id}` : "";
   const tx = db.transaction(() => {
     db.prepare(
-      "INSERT INTO card_balance_history (id, user_id, card_key, kind, delta, balance, note, occurred_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(entry.id, userId, entry.cardKey, entry.kind, entry.delta, entry.balance, entry.note, entry.occurredAt, now);
+      "INSERT INTO card_balance_history (id, user_id, card_key, kind, delta, balance, note, occurred_at, created_at, fund_tx_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(entry.id, userId, entry.cardKey, entry.kind, entry.delta, entry.balance, entry.note, entry.occurredAt, now, fundTxId);
+    if (linked) {
+      // 卡里存入 = 券商现金流出（转出）；卡里取出 = 券商现金流入（转入）
+      const money = Math.abs(Number(input.amount)) || 0;
+      writeFundTransaction({
+        id: fundTxId,
+        userId,
+        currency: currency as FundCurrency,
+        type: input.kind === "deposit" ? "withdrawal" : "deposit",
+        amount: money,
+        direction: input.kind === "deposit" ? -1 : 1,
+        note: `${input.kind === "deposit" ? "银行卡存钱" : "银行卡取钱"}${input.fundNote ? ` · ${input.fundNote}` : ""}`,
+        occurredAt
+      });
+    }
   });
   tx();
   // 当前余额同步到卡面库（概览条与卡片上的金额胶囊都读它）
-  const currency =
-    existing.currency ||
-    ((getDb().prepare("SELECT currency FROM card_details WHERE user_id = ? AND card_key = ?").get(userId, input.cardKey) as
-      | { currency: string }
-      | undefined)?.currency ??
-      "");
-  upsertCardAmount(userId, { cardKey: input.cardKey, amount: entry.balance, currency, note: existing.note });
+  upsertCardAmount(userId, { cardKey: input.cardKey, amount: entry.balance, currency: existing.currency || currency, note: existing.note });
   setCardHeld(userId, input.cardKey, true);
   return { entry, balance: entry.balance };
 }
 
-/** 删除一笔流水：按「最早一笔之前的余额」重放整条流水，后面的余额保持一致，并同步当前余额 */
+/** 删除一笔流水：按「最早一笔之前的余额」重放整条流水，并同步当前余额（联动流水一起删） */
 export function deleteCardBalanceEntry(userId: string, entryId: string): { cardKey: string; balance: number } | null {
   const db = getDb();
   const target = db
-    .prepare("SELECT card_key FROM card_balance_history WHERE id = ? AND user_id = ?")
-    .get(entryId, userId) as { card_key: string } | undefined;
+    .prepare("SELECT card_key, fund_tx_id FROM card_balance_history WHERE id = ? AND user_id = ?")
+    .get(entryId, userId) as { card_key: string; fund_tx_id?: string } | undefined;
   if (!target) return null;
   const cardKey = target.card_key;
   const ordered = db
@@ -242,6 +281,8 @@ export function deleteCardBalanceEntry(userId: string, entryId: string): { cardK
   let running = opening;
   db.transaction(() => {
     db.prepare("DELETE FROM card_balance_history WHERE id = ? AND user_id = ?").run(entryId, userId);
+    // 联动的那笔券商流水跟着一起删，否则券商现金与卡余额会各少一笔、账对不上
+    if (target.fund_tx_id) db.prepare("DELETE FROM fund_transactions WHERE id = ? AND user_id = ?").run(target.fund_tx_id, userId);
     remaining.forEach((row) => {
       running += Number(row.delta) || 0;
       update.run(running, row.id, userId);
