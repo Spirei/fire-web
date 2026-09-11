@@ -11,4 +11,10 @@
   .touch-always { opacity: 1 !important; }
   /* 触屏没有 hover：卡片右上角的操作 icon（加入/移出、上传卡面）必须一直可点 */
   .card-actions { opacity: 1 !important; pointer-events: auto !important; }
+  /* 触屏没有拖拽：上传区换成「从相册选」的说法，桌面文案隐藏 */
+  .touch-only { display: revert; }
+  .pointer-only { display: none; }
 }
+
+/* 触屏设备上默认不显示「仅触屏」文案，桌面显示「仅鼠标」文案 */
+.touch-only { display: none; }

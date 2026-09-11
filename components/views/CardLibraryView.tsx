@@ -1782,7 +1782,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 type="button"
                 onClick={() => setAddOpen(false)}
                 aria-label="关闭"
-                className="grid h-9 w-9 flex-none place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2 sm:h-8 sm:w-8"
+                className="grid h-10 w-10 flex-none place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2 sm:h-8 sm:w-8"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4">
                   <path d="m6 6 12 12M18 6 6 18" />
@@ -1837,7 +1837,16 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         <path d="M12 16V5M8 8.5 12 4.5l4 4M5 16v2.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V16" />
                       </svg>
                       <span className={`text-[12px] font-semibold ${dragActive ? "text-[#2f6fed]" : "text-ink-2"}`}>
-                        {newUploading ? "上传中…" : dragActive ? "松手放下这张卡面" : "点这里选，或把图片拖进来"}
+                        {newUploading ? (
+                          "上传中…"
+                        ) : dragActive ? (
+                          "松手放下这张卡面"
+                        ) : (
+                          <>
+                            <span className="pointer-only">点这里选，或把图片拖进来</span>
+                            <span className="touch-only">点这里从相册选一张卡面</span>
+                          </>
+                        )}
                       </span>
                       <span className="text-[11px] text-faint">建议 1.586:1 标准卡面比例，JPG / PNG / WEBP / SVG，最大 20MB</span>
                       <span className="text-[11px] text-faint">上传后会自动识别卡名 / 银行等信息（图片会发送给 DeepSeek）</span>
@@ -1857,6 +1866,26 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     }}
                   />
                 </span>
+              </label>
+
+              {/* 手机：直接调后置摄像头拍一张卡面 */}
+              <label className="mt-2 flex h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-edge bg-white text-[12px] font-semibold text-ink-2 transition-colors duration-200 hover:bg-brand-hover sm:hidden dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                  <path d="M4 8h2.6l1.5-2h7.8l1.5 2H20a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" />
+                  <circle cx="12" cy="13.5" r="3.2" />
+                </svg>
+                拍一张卡面
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void uploadNewImage(file);
+                  }}
+                />
               </label>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
@@ -1997,7 +2026,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   </p>
                 )}
               </div>
-              <button type="button" onClick={() => setActive(null)} aria-label="关闭" className="grid h-9 w-9 flex-none place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2 sm:h-8 sm:w-8">
+              <button type="button" onClick={() => setActive(null)} aria-label="关闭" className="grid h-10 w-10 flex-none place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2 sm:h-8 sm:w-8">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="m6 6 12 12M18 6 6 18" /></svg>
               </button>
             </div>
@@ -2062,7 +2091,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         type="button"
                         onClick={() => setFaceIndex(index)}
                         aria-label={item.label}
-                        className={`h-1.5 rounded-full transition-all duration-300 ${
+                        className={`relative h-1.5 rounded-full transition-all duration-300 after:absolute after:-inset-3 after:content-[''] ${
                           index === faceIndex ? "w-4 bg-ink dark:bg-white" : "w-1.5 bg-faint/60 hover:bg-faint"
                         }`}
                       />
@@ -2077,7 +2106,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     type="button"
                     onClick={() => void setHeld(active.card.file, !holdings[active.card.file])}
                     aria-label={holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
-                    className="group/tip relative grid h-9 w-9 place-items-center rounded-full bg-black/45 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95"
+                    className="group/tip relative grid h-10 w-10 place-items-center rounded-full bg-black/45 sm:h-9 sm:w-9 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95"
                   >
                     {holdings[active.card.file] ? (
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4 text-[#f87171]">
@@ -2097,7 +2126,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     </span>
                   </button>
                   <label
-                    className={`group/tip relative grid h-9 w-9 cursor-pointer place-items-center rounded-full bg-black/45 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95 ${
+                    className={`group/tip relative grid h-10 w-10 cursor-pointer place-items-center rounded-full bg-black/45 sm:h-9 sm:w-9 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95 ${
                       coverSaving ? "pointer-events-none opacity-60" : ""
                     }`}
                   >
@@ -2127,7 +2156,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       disabled={coverSaving}
                       onClick={() => void resetCover(active)}
                       aria-label="恢复清单原图"
-                      className="group/tip relative grid h-9 w-9 place-items-center rounded-full bg-black/45 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95 disabled:opacity-50"
+                      className="group/tip relative grid h-10 w-10 place-items-center rounded-full bg-black/45 sm:h-9 sm:w-9 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95 disabled:opacity-50"
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                         <path d="M4 12a8 8 0 1 0 2.6-5.9" />
@@ -2168,7 +2197,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       type="button"
                       disabled={saving}
                       onClick={() => void setScopeOverride(active.card.file, "")}
-                      className={`h-8 rounded-full border px-3 text-[11px] font-semibold transition-colors duration-200 disabled:opacity-50 max-sm:h-9 ${
+                      className={`h-8 rounded-full border px-3.5 text-[11px] font-semibold transition-colors duration-200 disabled:opacity-50 max-sm:h-10 ${
                         activeScope.overridden
                           ? "border-edge bg-white text-ink-2 hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
                           : "border-[#111] bg-[#111] text-white dark:border-white dark:bg-white dark:text-[#111]"
@@ -2182,7 +2211,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         type="button"
                         disabled={saving}
                         onClick={() => void setScopeOverride(active.card.file, value)}
-                        className={`h-8 rounded-full border px-3 text-[11px] font-semibold transition-colors duration-200 disabled:opacity-50 max-sm:h-9 ${
+                        className={`h-8 rounded-full border px-3.5 text-[11px] font-semibold transition-colors duration-200 disabled:opacity-50 max-sm:h-10 ${
                           activeScope.overridden && activeScope.scope === value
                             ? "border-[#111] bg-[#111] text-white dark:border-white dark:bg-white dark:text-[#111]"
                             : "border-edge bg-white text-ink-2 hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
