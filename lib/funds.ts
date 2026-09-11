@@ -2,8 +2,9 @@ import { randomBytes } from "node:crypto";
 import PinyinMatch from "pinyin-match";
 import { getDb } from "@/lib/db";
 import { stockTitle } from "@/lib/stockTitle";
+import { emptyFundBalances, FUND_CURRENCIES, type FundCurrency } from "@/lib/fundCurrencies";
 
-export type FundCurrency = "USD" | "EUR" | "HKD" | "CNY" | "JPY" | "KRW" | "SGD";
+export { FUND_CURRENCIES, isFundCurrency, type FundCurrency } from "@/lib/fundCurrencies";
 export type FundType = "opening" | "deposit" | "withdrawal" | "adjustment";
 export interface FundTransaction {
   id: string; currency: FundCurrency; type: FundType; amount: number; direction: 1 | -1;
@@ -200,7 +201,7 @@ export function countFundTransactions(userId: string, currency?: FundCurrency, q
 }
 export function fundSummaries(userId: string) {
   const empty = () => ({ openingAsset: 0, cashNetFlow: 0, stockNetFlow: 0, otherNetFlow: 0 });
-  const result: Record<FundCurrency, ReturnType<typeof empty>> = { USD: empty(), EUR: empty(), HKD: empty(), CNY: empty(), JPY: empty(), KRW: empty(), SGD: empty() };
+  const result = Object.fromEntries(FUND_CURRENCIES.map((code) => [code, empty()])) as Record<FundCurrency, ReturnType<typeof empty>>;
   const rows = getDb().prepare(`SELECT currency,
     SUM(CASE WHEN type='opening' THEN amount*direction ELSE 0 END) opening_asset,
     SUM(CASE WHEN type IN ('deposit','withdrawal') THEN amount*direction ELSE 0 END) cash_net_flow,
@@ -211,14 +212,15 @@ export function fundSummaries(userId: string) {
   return result;
 }
 export function fundBalances(userId: string): Record<FundCurrency, number> {
-  const result: Record<FundCurrency, number> = { USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 };
+  const result = emptyFundBalances();
   // 现金必须保留完整的有符号净额。融资买入会形成负现金（融资负债）；如果逐笔
   // 截断到 0，早期融资会被抹掉，后续卖出回款却完整累加，从而系统性高估净资产。
   // 缺少期初入金的旧账本应通过期初资金/余额调整补齐，不能在汇总阶段篡改流水。
   const rows = getDb().prepare("SELECT currency,amount,direction FROM fund_transactions WHERE user_id=? ORDER BY currency,occurred_at,created_at,id").all(userId) as { currency: FundCurrency; amount: number; direction: 1 | -1 }[];
   rows.forEach((row) => {
     const delta = (Number(row.amount) || 0) * Number(row.direction);
-    result[row.currency] += delta;
+    // 兜底 || 0：历史数据里若有清单外的币种，也不能让它把整个余额算成 NaN
+    result[row.currency] = (result[row.currency] || 0) + delta;
   });
   return result;
 }

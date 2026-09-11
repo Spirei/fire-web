@@ -6,6 +6,7 @@ import AppModal from "@/components/AppModal";
 import { showToast } from "@/lib/toast";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { CARD_CURRENCIES, cardLast4, currencySymbol, fmtCardMoney, formatCardNumber } from "@/lib/cardCurrencies";
+import { isFundCurrency } from "@/lib/fundCurrencies";
 
 /** 卡包里的一张卡：卡面 + 卡背信息 + 当前余额 */
 export interface WalletCard {
@@ -51,13 +52,13 @@ interface BalanceEntry {
 
 type SortKey = "custom" | "bank" | "balance" | "name";
 
-/** 资金系统支持的币种：只有这些币种才能勾「券商账户」（联动记一笔资金流水） */
-const FUND_LEDGER_CURRENCIES = new Set(["USD", "EUR", "HKD", "CNY", "JPY", "KRW", "SGD"]);
-
 const SORT_LABEL: Record<SortKey, string> = { custom: "默认顺序", bank: "按银行", balance: "按余额", name: "按卡名" };
 const CARD_STEP = 30;
 const CARD_SCALE_STEP = 0.055;
-const FLY_OUT = -300;
+/** 手指拖多远算「完整换一张」：拖动过程中前一张 / 后一张按这个比例跟手 */
+const SWIPE_DISTANCE = 340;
+/** 划走的卡飞出去的位置：要足够远，彻底离开这一叠（不然看着像没消失） */
+const FLY_OUT = -460;
 const FOCUS_RING =
   "focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.15)] focus:outline-none dark:focus:border-white/20 dark:focus:shadow-[0_0_0_3px_rgba(255,255,255,.10)]";
 
@@ -178,20 +179,49 @@ export default function CardWalletStack({
     };
   }, []);
 
-  /** 叠放位置：第 0 张在最上面，后面的依次下沉、缩小；划走的卡向上飞出 */
+  /**
+   * 叠放位置。这一叠卡片是一个整体，按手指位置连续变形：
+   * - 往上拖 = 往前翻（p 从 0 → 1）：前一张跟着手指飞走，后面整叠往上补位、逐张放大；
+   * - 往下拖 = 往回翻（q 从 0 → 1）：上一张从上方落回来（一开始就压在最上面），
+   *   手里这张往下沉、钻到它后面，后面整叠顺势下沉一级 —— 抽屉推回去的手感。
+   * p / q 都按 SWIPE_DISTANCE 归一化，所以跟手是连续的，松手只是从这里缓动到终点。
+   */
   const transformFor = useCallback((relative: number, drag: number) => {
+    const p = Math.max(0, Math.min(1, -drag / SWIPE_DISTANCE));
+    const q = Math.max(0, Math.min(1, drag / SWIPE_DISTANCE));
+
+    // 手里这张：1:1 跟手
     if (relative === 0) {
-      return { y: drag, scale: 1 - Math.min(Math.abs(drag) / 2600, 0.05), opacity: 1, z: 200 };
+      return {
+        y: drag,
+        scale: 1 - Math.min(Math.abs(drag) / 2600, 0.05),
+        opacity: 1,
+        // 往下拖时它要让位：回来的那张压在上面，这张钻到后面去
+        z: q > 0.001 ? 199 : 200
+      };
     }
+
+    // 已经划走的那几张：往回拖时按手指进度从上方落回来（只有最近的一张看得见）
     if (relative < 0) {
-      return { y: FLY_OUT + (relative + 1) * 46 + drag * 0.7, scale: 0.98, opacity: 0, z: 190 + relative };
+      const depth = -relative;
+      const near = depth === 1;
+      const arrive = 1 - q;
+      return {
+        y: FLY_OUT * arrive * (1 + (depth - 1) * 0.2),
+        scale: near ? 1 - 0.02 * arrive : 0.98,
+        opacity: near ? Math.max(0, Math.min(1, q * 2 - 0.3)) : 0,
+        z: near ? 200 : 190 - depth
+      };
     }
+
+    // 后面那几张：往前拖 = 整叠往上补位（depth - p），往回拖 = 整叠下沉一级（+ q）
     const depth = Math.min(relative, 5);
+    const shifted = Math.max(0, depth - p + q);
     return {
-      y: depth * CARD_STEP + drag * (depth === 1 ? 0.34 : 0.16 / depth),
-      scale: Math.pow(1 - CARD_SCALE_STEP, depth),
-      opacity: depth > 3 ? 0 : 1 - Math.max(0, depth - 2) * 0.4,
-      z: 200 - depth
+      y: shifted * CARD_STEP,
+      scale: Math.pow(1 - CARD_SCALE_STEP, shifted),
+      opacity: Math.max(0, Math.min(1, 1 - Math.max(0, shifted - 2) * 0.4)),
+      z: 199 - Math.ceil(shifted)
     };
   }, []);
 
@@ -221,10 +251,13 @@ export default function CardWalletStack({
           gsap.set(element, { ...vars, overwrite: true });
           return;
         }
+        // 离目标越远给的时间越长：落回来 / 飞出去都不会一顿一顿的
+        const from = Number(gsap.getProperty(element, "y")) || 0;
+        const distance = Math.abs(from - target.y);
         gsap.to(element, {
           ...vars,
-          duration: relative < 0 ? 0.4 : 0.58,
-          ease: relative < 0 ? "power2.in" : "power4.out",
+          duration: Math.max(0.44, Math.min(0.78, 0.44 + distance / 1500)),
+          ease: relative < 0 ? "power2.in" : "power3.out",
           overwrite: true
         });
       });
@@ -406,7 +439,8 @@ export default function CardWalletStack({
     <div ref={overlayRef} className="fixed inset-0 z-[9995] flex h-[100dvh] flex-col bg-[#06070a] text-white">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-[radial-gradient(120%_80%_at_50%_0%,rgba(82,116,182,.28),rgba(6,7,10,0))]" />
 
-      <div className="relative flex items-center gap-2.5 px-5 pb-1 pt-[max(1.25rem,env(safe-area-inset-top))]">
+      {/* z-20：划走的卡从标题栏后面飞出去，不会盖住这几个按钮 */}
+      <div className="relative z-20 flex items-center gap-2.5 px-5 pb-1 pt-[max(1.25rem,env(safe-area-inset-top))]">
         <h2 className="mr-auto text-[22px] font-extrabold tracking-tight">卡包</h2>
         <span className="grid h-9 w-9 place-items-center rounded-full border border-white/25 bg-white/12 text-white">
           <StackGlyph />
@@ -478,7 +512,7 @@ export default function CardWalletStack({
       ) : (
         <>
           <div
-            className="relative flex-1 touch-none select-none"
+            className="relative isolate flex-1 touch-none select-none"
             onPointerDown={onStagePointerDown}
             onWheel={onStageWheel}
           >
@@ -673,7 +707,7 @@ function CardDetailPanel({
     }
     setSaving(true);
     try {
-      const linkBroker = brokerLinked && kind !== "adjust" && FUND_LEDGER_CURRENCIES.has(card.currency);
+      const linkBroker = brokerLinked && kind !== "adjust" && isFundCurrency(card.currency);
       const res = await fetch("/api/cards/wallet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -969,7 +1003,7 @@ function CardDetailPanel({
           </label>
           {/* 券商账户联动：钱本来就在券商账本里的话，卡里多一笔、券商就少一笔；
               不勾的话两边各记一份，资产分析里的总现金会翻倍 */}
-          {form !== "adjust" && FUND_LEDGER_CURRENCIES.has(card.currency) && (
+          {form !== "adjust" && isFundCurrency(card.currency) && (
             <div className="mt-3 flex items-start gap-3 rounded-xl border border-edge bg-bg-gray px-3 py-2.5 dark:border-white/10 dark:bg-white/5">
               <button
                 type="button"

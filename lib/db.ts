@@ -79,7 +79,9 @@ function migrate(database: Database.Database) {
     CREATE TABLE IF NOT EXISTS fund_transactions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      currency TEXT NOT NULL CHECK(currency IN ('USD','EUR','HKD','CNY','JPY','KRW','SGD')),
+      -- 币种不硬编码列表（币种随汇率表演进，硬编码每加一个币种就要重建表）：
+      -- 只约束「三字母大写」，具体合法性由 API / 导入校验按 lib/fundCurrencies.ts 把关
+      currency TEXT NOT NULL CHECK(currency GLOB '[A-Z][A-Z][A-Z]'),
       type TEXT NOT NULL CHECK(type IN ('opening','deposit','withdrawal','adjustment')),
       amount REAL NOT NULL CHECK(amount > 0),
       direction INTEGER NOT NULL CHECK(direction IN (-1,1)),
@@ -277,10 +279,12 @@ function migrate(database: Database.Database) {
     );
   `);
 
-  // 资金账本货币与全站展示货币保持一致。旧表的 CHECK 仅允许三币种，需无损重建约束。
+  // 资金账本币种：CHECK 不再硬编码币种列表（旧库是 3 币种 → 7 币种 → 现在清单还会长），
+  // 改为「三字母大写」的通用约束，合法性交给 lib/fundCurrencies.ts + API 校验；
+  // 这样以后再扩币种不必再重建一次表。旧库（含历史 3 币种库）检测到硬编码 IN 列表就无损重建。
   const fundTableSql =
     (database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'fund_transactions'").get() as { sql?: string } | undefined)?.sql ?? "";
-  if (!fundTableSql.includes("'EUR'") || !fundTableSql.includes("'SGD'")) {
+  if (/currency\s+IN\s*\(/i.test(fundTableSql)) {
     const prevFk = database.pragma("foreign_keys", { simple: true }) === 1;
     if (prevFk) database.pragma("foreign_keys = OFF");
     try {
@@ -288,7 +292,7 @@ function migrate(database: Database.Database) {
         CREATE TABLE fund_transactions_new (
           id TEXT PRIMARY KEY,
           user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          currency TEXT NOT NULL CHECK(currency IN ('USD','EUR','HKD','CNY','JPY','KRW','SGD')),
+          currency TEXT NOT NULL CHECK(currency GLOB '[A-Z][A-Z][A-Z]'),
           type TEXT NOT NULL CHECK(type IN ('opening','deposit','withdrawal','adjustment')),
           amount REAL NOT NULL CHECK(amount > 0),
           direction INTEGER NOT NULL CHECK(direction IN (-1,1)),
@@ -301,6 +305,7 @@ function migrate(database: Database.Database) {
         DROP TABLE fund_transactions;
         ALTER TABLE fund_transactions_new RENAME TO fund_transactions;
         CREATE INDEX IF NOT EXISTS idx_fund_transactions_user_time ON fund_transactions(user_id, occurred_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_fund_transactions_user_currency_time ON fund_transactions(user_id, currency, occurred_at DESC, created_at DESC);
       `))();
     } finally {
       if (prevFk) database.pragma("foreign_keys = ON");

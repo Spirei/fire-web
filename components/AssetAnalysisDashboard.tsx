@@ -10,6 +10,7 @@ import { HoldingColumnManager, HoldingColumnsButton, useHoldingColumns } from "@
 import { HOLDING_COLUMN_LABELS, type HoldingColumnKey } from "@/lib/holdingColumns";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { CURRENCIES, CURRENCY_SYMBOLS, useCurrencyDisplayUnit, useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
+import { emptyFundBalances, type FundCurrency } from "@/lib/fundCurrencies";
 import TradeOrdersPanel from "@/components/TradeOrdersPanel";
 import RefreshButton from "@/components/RefreshButton";
 import DailyPnlShareModal, { preloadDailyPnlTemplates, waitForDailyPnlTemplates, type DailyPnlShareItem } from "@/components/DailyPnlShareModal";
@@ -48,9 +49,10 @@ interface CloseItem { d: string; c: number }
 interface HoldingSort { key: HoldingColumnKey; dir: "asc" | "desc" }
 interface DateRange { start: string; end: string }
 interface SimpleInvestmentEquity { market: string; cur: CurrencyCode; amount: number }
-const EMPTY_CURRENCY_BALANCES: Record<CurrencyCode, number> = { USD: 0, HKD: 0, CNY: 0, SGD: 0, JPY: 0, KRW: 0, EUR: 0 };
+/** 资金余额按资金系统的币种清单（比展示币种多：含卡面库里会出现的台币 / 英镑等） */
+const EMPTY_CURRENCY_BALANCES: Record<FundCurrency, number> = emptyFundBalances();
 
-function readEffectiveBalanceCache(key: string): Record<CurrencyCode, number> | null {
+function readEffectiveBalanceCache(key: string): Record<FundCurrency, number> | null {
   try {
     const value = JSON.parse(localStorage.getItem(key) || "null");
     if (!value || typeof value !== "object") return null;
@@ -345,15 +347,15 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const [columnManagerOpen, setColumnManagerOpen] = useState(false);
   const [dailyShareOpen, setDailyShareOpen] = useState(false);
   const effectiveBalanceCacheKey = `fire:effective-fund-balances:${user?.username || "current"}`;
-  const [fundBalances, setFundBalances] = useState<Record<CurrencyCode, number>>(EMPTY_CURRENCY_BALANCES);
+  const [fundBalances, setFundBalances] = useState<Record<FundCurrency, number>>(EMPTY_CURRENCY_BALANCES);
   const [fundBalancesReady, setFundBalancesReady] = useState(false);
   /** 银行卡现金（借记卡 / 预付卡余额，按卡币种）：用来解释可用现金里有多少来自银行卡 */
   const [cardCash, setCardCash] = useState<Record<string, number>>({});
-  const [cachedEffectiveBalances, setCachedEffectiveBalances] = useState<Record<CurrencyCode, number> | null>(null);
+  const [cachedEffectiveBalances, setCachedEffectiveBalances] = useState<Record<FundCurrency, number> | null>(null);
   const [simpleInvestmentEquities, setSimpleInvestmentEquities] = useState<SimpleInvestmentEquity[]>([]);
   const [simpleLedgerReady, setSimpleLedgerReady] = useState(false);
   const [simpleLedgerSucceeded, setSimpleLedgerSucceeded] = useState(false);
-  const handleFundBalances = useCallback((balances: Record<CurrencyCode, number>, nextCardCash: Record<string, number>) => {
+  const handleFundBalances = useCallback((balances: Record<FundCurrency, number>, nextCardCash: Record<string, number>) => {
     setFundBalances(balances);
     setCardCash(nextCardCash || {});
     setFundBalancesReady(true);
@@ -681,7 +683,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     if (!fundBalancesReady || !simpleLedgerSucceeded) return;
     try { localStorage.setItem(effectiveBalanceCacheKey, JSON.stringify(reconciledFundBalances)); } catch { /* 缓存失败不影响最新数据 */ }
   }, [effectiveBalanceCacheKey, reconciledFundBalances, fundBalancesReady, simpleLedgerSucceeded]);
-  const cashTotal = useMemo(() => (Object.entries(effectiveFundBalances) as [CurrencyCode, number][]).reduce((total, [iso, value]) => total + value / (rates[iso] || 1) * currencyFactor, 0), [effectiveFundBalances, rates, currencyFactor]);
+  const cashTotal = useMemo(() => (Object.entries(effectiveFundBalances) as [string, number][]).reduce((total, [iso, value]) => total + value / (rates[iso] || 1) * currencyFactor, 0), [effectiveFundBalances, rates, currencyFactor]);
   // 银行卡现金：服务端已把它并进 balances（所以 cashTotal / 可用现金 / 净资产都含它），
   // 这里单独折算出显示货币的金额，用来在「账户资产」里说明这部分来源
   const cardCashTotal = useMemo(() => Object.entries(cardCash).reduce((total, [iso, value]) => total + value / (rates[iso] || 1) * currencyFactor, 0), [cardCash, rates, currencyFactor]);
@@ -1027,7 +1029,8 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     const prefix = withSymbol ? symbol : "";
     return pageUsesCompactMoney ? fmtMoneyCompact(value, prefix) : fmtMoney(value, prefix);
   }, [pageUsesCompactMoney, symbol]);
-  const holdingAssetsByCurrency = useMemo<Record<CurrencyCode, number>>(() => ({ USD: nativeSummary.US?.asset || 0, EUR: 0, HKD: nativeSummary.HK?.asset || 0, CNY: nativeSummary.CN?.asset || 0, JPY: nativeSummary.JP?.asset || 0, KRW: nativeSummary.KR?.asset || 0, SGD: nativeSummary.SG?.asset || 0 }), [nativeSummary]);
+  // 各市场持仓按结算币种归类（资金系统的币种清单，其余币种留 0）
+  const holdingAssetsByCurrency = useMemo<Record<FundCurrency, number>>(() => ({ ...emptyFundBalances(), USD: nativeSummary.US?.asset || 0, HKD: nativeSummary.HK?.asset || 0, CNY: nativeSummary.CN?.asset || 0, JPY: nativeSummary.JP?.asset || 0, KRW: nativeSummary.KR?.asset || 0, SGD: nativeSummary.SG?.asset || 0 }), [nativeSummary]);
   const summaryMarketKeys = Object.keys(summary.markets);
   const marketKeys = ["US", "HK", "CN", ...summaryMarketKeys.filter((key) => !["US", "HK", "CN"].includes(key))]
     .filter((key, index, keys) => summary.markets[key] && keys.indexOf(key) === index);

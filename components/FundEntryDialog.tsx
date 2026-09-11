@@ -3,12 +3,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CurrencySelect from "@/components/CurrencySelect";
-import { CURRENCIES, CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/currencyPrefs";
+import { fundCurrencyOptions, fundCurrencySymbol, FUND_CURRENCY_META, type FundCurrency } from "@/lib/fundCurrencies";
 import { fmtMoneyAdaptive, localDateKey } from "@/lib/format";
 
 interface Props {
-  currency: CurrencyCode;
-  setCurrency: (value: CurrencyCode) => void;
+  currency: FundCurrency;
+  setCurrency: (value: FundCurrency) => void;
   direction: 1 | -1;
   setDirection: (value: 1 | -1) => void;
   type: string;
@@ -82,8 +82,8 @@ function FundDatePicker({ value, onChange, max }: { value: string; onChange: (va
 export default function FundEntryDialog(props: Props) {
   const [amountFocused, setAmountFocused] = useState(false);
   const amountInputRef = useRef<HTMLInputElement>(null);
-  const current = CURRENCIES.find((item) => item.code === props.currency) ?? CURRENCIES[0];
-  const symbol = CURRENCY_SYMBOLS[props.currency];
+  const current = FUND_CURRENCY_META[props.currency];
+  const symbol = fundCurrencySymbol(props.currency);
   const maxDate = localDateKey();
   const amountValue = Number(props.amount);
   const amountValid = Number.isFinite(amountValue) && amountValue > 0 && amountValue <= 1e12;
@@ -143,7 +143,7 @@ export default function FundEntryDialog(props: Props) {
           </div>
 
           <div className="block">
-            <span className="mb-2 flex items-center justify-between"><span className="text-[11px] font-semibold text-muted">金额</span><span className="flex items-center gap-2"><small className="font-semibold text-muted">{current.label} · {current.code}</small><CurrencySelect value={props.currency} align="right" onChange={props.setCurrency} /></span></span>
+            <span className="mb-2 flex items-center justify-between"><span className="text-[11px] font-semibold text-muted">金额</span><span className="flex items-center gap-2"><small className="font-semibold text-muted">{current.label} · {props.currency}</small><CurrencySelect value={props.currency} options={fundCurrencyOptions()} align="right" onChange={props.setCurrency} /></span></span>
             <span className="fund-amount-field flex h-16 items-center rounded-xl border border-edge bg-white px-4 dark:bg-[#151a23]">
               <b className="mr-2 text-lg text-muted">{symbol}</b>
               <span className="relative h-full min-w-0 flex-1 overflow-hidden">

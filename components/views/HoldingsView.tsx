@@ -24,6 +24,7 @@ import AppModal from "@/components/AppModal";
 import CurrencySelect from "@/components/CurrencySelect";
 import { CURRENCY_SYMBOLS, useCurrencyDisplayUnit, useDisplayCurrency } from "@/lib/currencyPrefs";
 import type { CurrencyCode } from "@/lib/currencyPrefs";
+import { emptyFundBalances } from "@/lib/fundCurrencies";
 import { showToast } from "@/lib/toast";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import HoldingsPnlSankey, { type PnlSankeyItem } from "@/components/HoldingsPnlSankey";
@@ -242,7 +243,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const [rates, setRates] = useState<Record<string, number>>(() => ({ ...FALLBACK_RATES }));
   // 是否有「上一次成功」的汇率：有则秒开真实值；没有则不展示猜测值，等服务端返回
   const [ratesReady, setRatesReady] = useState(false);
-  const [fundBalances, setFundBalances] = useState<Record<CurrencyCode, number>>({ USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0, KRW: 0, SGD: 0 });
+  const [fundBalances, setFundBalances] = useState<Record<string, number>>(emptyFundBalances());
   const { currency: displayCur, setCurrency: setDisplayCur } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
   // 各市场盈利卡片拖动顺序（本地记忆）
@@ -471,10 +472,10 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const totalCur = active === "TOTAL" ? displayCur : cur;
   // 总资产货币符号（ISO 码 → 符号；各市场盈利卡片仍用 USD$/HKD$/CNY¥ 规范标识）
   const totalCurLabel = CURRENCY_SYMBOLS[totalCur as keyof typeof CURRENCY_SYMBOLS] || totalCur;
-  const cashInUsd = useMemo(() => (Object.entries(fundBalances) as [CurrencyCode, number][]).reduce((sum, [iso, value]) => sum + value / (rates[iso] || 1), 0), [fundBalances, rates]);
+  const cashInUsd = useMemo(() => (Object.entries(fundBalances) as [string, number][]).reduce((sum, [iso, value]) => sum + value / (rates[iso] || 1), 0), [fundBalances, rates]);
   const displayedNetAsset = active === "TOTAL"
     ? (metrics.mv + cashInUsd) * totalFactor
-    : metrics.mv + (fundBalances[(Object.entries({ US: "USD", HK: "HKD", CN: "CNY", JP: "JPY", KR: "KRW", SG: "SGD" }).find(([market]) => market === active)?.[1] || "USD") as CurrencyCode] || 0);
+    : metrics.mv + (fundBalances[(Object.entries({ US: "USD", HK: "HKD", CN: "CNY", JP: "JPY", KR: "KRW", SG: "SGD" }).find(([market]) => market === active)?.[1] || "USD")] || 0);
   const pageUsesCompactMoney = useMemo(() => {
     const values = [
     displayedNetAsset,

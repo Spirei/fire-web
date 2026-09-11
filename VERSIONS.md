@@ -112,6 +112,13 @@
   - 顺带修 `createFundTransaction` 用「最近一条」回读导致补录旧日期时返回别的记录的问题，改为按 id 回读。
   - 验证：tsc 无错误、冒烟 114/114 全 PASS。
 
+- 资金系统**币种扩到全币种**：英镑 / 台币 / 澳门元 / 澳元 / 加元卡也能联动券商账户：
+  - 新增 `lib/fundCurrencies.ts`（客户端 / 服务端共用）：`FUND_CURRENCIES` 共 14 个 —— 7 个主币种 + 卡面素材里会出现的台币 / 澳门元 / 英镑 / 澳元 / 加元 + 有汇率但暂无卡面的印度卢比 / 巴西雷亚尔；口径是**能折算才收**（每个都在 `FALLBACK_RATES` 有汇率兜底），卢布 / 坚戈不进清单（进来会按 1:1 误算）。含符号 / 国旗二字码、`isFundCurrency()`、`emptyFundBalances()`。
+  - 数据库：`fund_transactions` 的 currency 约束由**硬编码币种列表**改为通用「三字母大写」约束（历史 3 → 7 → 还会继续长，硬编码意味着每加币种都要重建表），旧库检测到硬编码 IN 列表即无损重建（含索引），以后不必再动表。
+  - 后端：`fundBalances()` / `fundSummaries()` 按新清单初始化并给清单外历史脏币种加兜底（否则整个币种余额会变 NaN）；`/api/v1/funds` 校验改走 `isFundCurrency()`；数据导入导出的币种白名单同步。
+  - 前端：`CurrencySelect` 新增 `options`（默认仍是全站 7 个展示币种，删掉从未被使用的 `allowedCodes`），资金系统面板与「记一笔」弹窗改用 14 币种清单；资金余额类型由 `CurrencyCode`（展示币种）换成 `FundCurrency`，两个概念不再混用。
+  - 验证：tsc 无错误；实测 GBP 资金流水写入成功、RUB 被正确拒绝；把一张卡临时改成 GBP 做联动存钱返回 `brokerLinked: true` 且流水币种为 GBP，删流水 + 还原币种后数据完全回到初始状态（卡余额 10,719.50 CNY、无残留流水）。
+
 ---
 
 ## v0.1.27 · 2026-09-11

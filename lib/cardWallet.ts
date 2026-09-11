@@ -1,10 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "./db";
 import { setCardHeld, upsertCardAmount } from "./cardAmounts";
-import { CARD_LINK_PREFIX, writeFundTransaction, type FundCurrency } from "./funds";
-
-/** 资金系统支持的币种（卡包联动券商流水时只支持这些） */
-const FUND_LEDGER_CURRENCIES = new Set(["USD", "EUR", "HKD", "CNY", "JPY", "KRW", "SGD"]);
+import { CARD_LINK_PREFIX, writeFundTransaction } from "./funds";
+import { isFundCurrency, type FundCurrency } from "./fundCurrencies";
 
 export interface CardDetails {
   cardKey: string;
@@ -221,8 +219,8 @@ export function addCardBalanceEntry(
         : Math.abs(input.amount)
       : base + delta;
   const linked = input.fundAccount === "broker" && input.kind !== "adjust";
-  if (linked && !FUND_LEDGER_CURRENCIES.has(currency)) {
-    throw new Error(currency ? `资金系统不支持 ${currency}，没法记券商流水` : "这张卡还没有币种，先把卡背信息的币种填上");
+  if (linked && !isFundCurrency(currency)) {
+    throw new Error(currency ? `资金系统不支持 ${currency}（没有汇率），没法记券商流水` : "这张卡还没有币种，先把卡背信息的币种填上");
   }
   const entry: CardBalanceEntry = {
     id: randomUUID(),
