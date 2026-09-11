@@ -21,6 +21,8 @@ import FundsPanel from "@/components/FundsPanel";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import Pagination from "@/components/Pagination";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
+import PnlCalendar from "@/components/PnlCalendar";
+import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, type CalendarDayRow } from "@/lib/pnlCalendar";
 
 type Period = "month" | "1m" | "6m" | "ytd" | "1y" | "all" | "custom";
 type ChartTab = "return" | "asset";
@@ -85,6 +87,25 @@ const ASSET_SPLIT_MAX = 52;
 const ASSET_SPLIT_DEFAULT = 29;
 const ASSET_TREND_CACHE_KEY = "fire:asset-analysis:trend-cache-v4";
 const HOLDINGS_PAGE_SIZE = 10;
+
+/** 资产分析页模块 id 与默认顺序（左右两栏各一组）；自定义顺序存 site_settings.assetAnalysisOrder */
+const ASSET_MODULE_IDS = {
+  left: ["account", "trend", "pnlRank", "funds"],
+  right: ["overview", "holdings", "orders", "calendar"]
+} as const;
+const ASSET_MODULE_ORDER_DEFAULT = { left: [...ASSET_MODULE_IDS.left], right: [...ASSET_MODULE_IDS.right] };
+
+/** 服务端顺序与默认顺序合并：丢掉已不存在的模块，缺的按默认顺序补在末尾 */
+function mergeModuleOrder(saved: { left?: unknown; right?: unknown } | null | undefined) {
+  const merge = (column: "left" | "right") => {
+    const defaults = ASSET_MODULE_IDS[column] as readonly string[];
+    const list = Array.isArray(saved?.[column])
+      ? (saved?.[column] as unknown[]).filter((id): id is string => typeof id === "string" && defaults.includes(id))
+      : [];
+    return [...list, ...defaults.filter((id) => !list.includes(id))];
+  };
+  return { left: merge("left"), right: merge("right") };
+}
 
 function clampSplitPct(value: number) {
   if (!Number.isFinite(value)) return ASSET_SPLIT_DEFAULT;
@@ -323,6 +344,22 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const [pnlMarket, setPnlMarket] = usePersistedState("fire:asset-pnl-market", "ALL");
   const [pnlExpanded, setPnlExpanded] = useState(false);
   const [orders, setOrders] = useState<TradeOrder[]>([]);
+
+  // 模块顺序：拖动手柄调整后写回 site_settings.assetAnalysisOrder（左右两栏各一组）
+  const [moduleOrder, setModuleOrder] = useState<{ left: string[]; right: string[] }>(ASSET_MODULE_ORDER_DEFAULT);
+  const [dragModule, setDragModule] = useState<{ column: "left" | "right"; id: string } | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const moduleHandlePressed = useRef<string | null>(null);
+
+  // 收益日历（与资产盈亏分析共用 lib/pnlCalendar 口径）
+  const [calMonth, setCalMonth] = useState(() => {
+    const now = new Date();
+    return { y: now.getFullYear(), m: now.getMonth() + 1 };
+  });
+  const [calView, setCalView] = useState<"year" | "month">("month");
+  const [calMode, setCalMode] = useState<"收益" | "收益率">("收益");
+  const [calMarket, setCalMarket] = useState<string>("全部");
+  const [dayDetail, setDayDetail] = useState<{ date: string; rows: CalendarDayRow[] } | null>(null);
   const [holdingSearch, setHoldingSearch] = useState("");
   const [holdingPage, setHoldingPage] = useState(1);
   const [holdingSort, setHoldingSort] = usePersistedState<HoldingSort | null>("fire:asset-holdings-sort", null);
@@ -452,12 +489,159 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     localStorage.setItem(ASSET_SPLIT_STORAGE_KEY, String(ASSET_SPLIT_DEFAULT));
     showToast("布局宽度已恢复默认");
   };
+
+  /* ---------- 模块拖拽排序：手柄按住才可拖，落下即写回服务端 ---------- */
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/settings")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const saved = data?.settings?.assetAnalysisOrder;
+        if (saved) setModuleOrder(mergeModuleOrder(saved));
+      })
+      .catch(() => {
+        /* 读不到就沿用默认顺序 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const moduleOrderIndex = (column: "left" | "right", id: string) => {
+    const index = moduleOrder[column].indexOf(id);
+    return index < 0 ? moduleOrder[column].length : index;
+  };
+
+  const persistModuleOrder = async (next: { left: string[]; right: string[] }) => {
+    setModuleOrder(next);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assetAnalysisOrder: next })
+      });
+      if (!res.ok) throw new Error("save failed");
+      showToast("模块顺序已保存");
+      window.dispatchEvent(new Event("fire:settings-updated"));
+    } catch {
+      showToast("模块顺序保存失败，稍后再试", "err");
+    }
+  };
+
+  const moveModule = (column: "left" | "right", fromId: string, toId: string) => {
+    const list = [...moduleOrder[column]];
+    const from = list.indexOf(fromId);
+    const to = list.indexOf(toId);
+    if (from < 0 || to < 0 || from === to) return;
+    list.splice(from, 1);
+    list.splice(to, 0, fromId);
+    void persistModuleOrder({ ...moduleOrder, [column]: list });
+  };
+
+  const moduleDragProps = (column: "left" | "right", id: string) => ({
+    draggable: true,
+    onDragStart: (event: React.DragEvent<HTMLDivElement>) => {
+      // 只有从手柄按下才能拖，避免在卡片里选文字 / 拖输入框时误触发
+      if (moduleHandlePressed.current !== id) {
+        event.preventDefault();
+        return;
+      }
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", id);
+      setDragModule({ column, id });
+    },
+    onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
+      if (!dragModule || dragModule.column !== column || dragModule.id === id) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      setDragOverId(id);
+    },
+    onDragLeave: () => setDragOverId((current) => (current === id ? null : current)),
+    onDrop: (event: React.DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      if (dragModule && dragModule.column === column) moveModule(column, dragModule.id, id);
+      setDragModule(null);
+      setDragOverId(null);
+      moduleHandlePressed.current = null;
+    },
+    onDragEnd: () => {
+      setDragModule(null);
+      setDragOverId(null);
+      moduleHandlePressed.current = null;
+    }
+  });
+
+  const moduleWrapperClass = (column: "left" | "right", id: string) =>
+    `group relative rounded-card transition-shadow ${
+      dragOverId === id && dragModule && dragModule.id !== id ? "ring-2 ring-[#3297f6]/50" : ""
+    }`;
+
+  const renderModuleHandle = (_column: "left" | "right", id: string) => (
+    <span
+      role="button"
+      tabIndex={-1}
+      aria-label="按住拖动排序"
+      title="按住拖动排序"
+      onMouseDown={() => {
+        moduleHandlePressed.current = id;
+      }}
+      onMouseUp={() => {
+        moduleHandlePressed.current = null;
+      }}
+      onMouseLeave={() => {
+        if (!dragModule) moduleHandlePressed.current = null;
+      }}
+      className={`absolute -left-2.5 top-4 z-10 hidden h-7 w-5 cursor-grab items-center justify-center rounded-md border border-edge bg-white text-muted shadow-sm transition-opacity duration-200 group-hover:opacity-100 active:cursor-grabbing md:flex dark:border-white/10 dark:bg-[#1c222d] dark:text-white/60 ${
+        dragModule?.id === id ? "opacity-100" : "opacity-0"
+      }`}
+    >
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-3 w-3">
+        <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
+        <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
+        <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
+      </svg>
+    </span>
+  );
   const currencyFactor = rates[displayCurrency] || 1;
   const symbol = CURRENCY_SYMBOLS[displayCurrency] || displayCurrency;
   const toDisplay = (record: StockRecord, value: number) => {
     const iso = ISO_BY_MARKET[record.market] || "USD";
     const usd = value / (rates[iso] || 1);
     return usd * currencyFactor;
+  };
+
+  /* ---------- 收益日历：数据口径与资产盈亏分析页完全一致（lib/pnlCalendar） ---------- */
+  const calendarPositions = useMemo(
+    () =>
+      positions.map((record) => ({
+        id: record.id,
+        name: record.name,
+        code: record.code,
+        market: record.market,
+        qty: Number(record.qty) || 0
+      })),
+    [positions]
+  );
+  const calendarMarketCode = calMarket === "美股" ? "US" : calMarket === "港股" ? "HK" : calMarket === "A股" ? "CN" : "";
+  const calendarRows = useMemo(
+    () => (calendarMarketCode ? calendarPositions.filter((row) => row.market.toUpperCase() === calendarMarketCode) : calendarPositions),
+    [calendarPositions, calendarMarketCode]
+  );
+  const calendarSeries = useMemo(
+    () => buildDailyAssetSeries({ positions: calendarRows, closesMap: recordCloses, orders, rates }),
+    [calendarRows, recordCloses, orders, rates]
+  );
+  const calendarDays = useMemo(() => buildMonthCells(calendarSeries, calMonth.y, calMonth.m), [calendarSeries, calMonth]);
+  const calendarYear = useMemo(() => buildYearSummary(calendarSeries, calMonth.y, calMonth.m), [calendarSeries, calMonth]);
+  const calendarAmount = (usd: number) => {
+    const value = usd * currencyFactor;
+    const body = Math.abs(value) >= 1e7 ? fmtMoneyCompact(Math.abs(value), symbol) : fmtMoney(Math.abs(value), symbol);
+    return `${value >= 0 ? "+" : "−"}${body}`;
+  };
+  const calendarCompact = (usd: number) => {
+    const value = usd * currencyFactor;
+    return `${value < 0 ? "−" : "+"}${fmtMoneyCompact(Math.abs(value), symbol)}`;
   };
 
   const summary = useMemo(() => positions.reduce((acc, record) => {
@@ -925,130 +1109,176 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     </div>
 
     <div ref={splitRef} className="asset-analysis-split" style={splitReady ? splitPaneStyle(leftPanePct) : undefined}>
-      <aside className="min-w-0 space-y-4">
-        <section className="card p-5">
-          <div className="mb-5 flex items-center justify-between"><div className="flex min-w-0 items-center gap-2"><h3 className="text-base font-bold">账户资产</h3><QuoteSourceBadge records={positions} quotes={quotes} /></div><div className="flex items-center gap-1.5"><button type="button" disabled={shareOpening} onClick={async () => { if (shareOpening) return; setShareOpening(true); try { preloadDailyPnlTemplates(summary.day >= 0); await waitForDailyPnlTemplates(); setDailyShareOpen(true); } finally { setShareOpening(false); } }} title={shareOpening ? "正在准备分享图…" : "分享当日盈亏"} aria-label="分享当日盈亏" className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-[7px] border border-edge bg-white text-muted shadow-sm transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover hover:text-ink active:scale-[.97] disabled:opacity-50 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><circle cx="18" cy="5" r="2.2" /><circle cx="6" cy="12" r="2.2" /><circle cx="18" cy="19" r="2.2" /><path d="m8 11 8-5M8 13l8 5" /></svg></button><RefreshButton onClick={() => void handleRefresh("assets")} title="刷新账户资产" /></div></div>
-          <div className="flex items-center gap-2"><CurrencyPicker context="asset" prefix="总资产" /></div>
-          <div className="mt-1 grid grid-cols-3 items-end gap-3"><div className="col-span-2 flex min-w-0 items-center gap-2"><strong className="block truncate text-2xl font-extrabold tabular-nums">{maskCashMoney(totalAsset, true)}</strong><button type="button" onClick={() => setAssetsVisible((visible) => !visible)} className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg-gray hover:text-ink" title={assetsVisible ? "隐藏资产金额" : "显示资产金额"} aria-label={assetsVisible ? "隐藏资产金额" : "显示资产金额"}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />{assetsVisible ? <circle cx="12" cy="12" r="2.6" /> : <path d="m4 4 16 16" />}</svg></button></div><div><span className="block text-xs text-muted">当日盈亏</span><strong className={`mt-1 block text-sm tabular-nums ${summary.day >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.day, true)}</strong></div></div>
-          <div className="mt-5 grid grid-cols-3 gap-3">
-            <div><span className="text-xs text-muted">持仓总市值</span><strong className="mt-1 block text-sm tabular-nums">{maskMoney(summary.asset)}</strong></div>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={onOpenPnlAnalysis}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenPnlAnalysis?.(); } }}
-              title="查看资产盈亏分析"
-              className="group -mx-1 cursor-pointer rounded-[10px] px-1 transition-colors hover:bg-brand-hover/70 dark:hover:bg-white/5"
-            >
-              <span className="text-xs text-muted">
-                持仓总盈亏
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-1 inline-block h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100">
-                  <path d="m9 18 6-6-6-6" />
-                </svg>
-              </span>
-              <strong className={`mt-1 block text-sm tabular-nums ${summary.pnl >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.pnl, true)}</strong>
+      <aside className="flex min-w-0 flex-col gap-4">
+        <div {...moduleDragProps("left", "account")} className={moduleWrapperClass("left", "account")} style={{ order: moduleOrderIndex("left", "account") }}>
+          <section className="card p-5">
+            <div className="mb-5 flex items-center justify-between"><div className="flex min-w-0 items-center gap-2"><h3 className="text-base font-bold">账户资产</h3><QuoteSourceBadge records={positions} quotes={quotes} /></div><div className="flex items-center gap-1.5"><button type="button" disabled={shareOpening} onClick={async () => { if (shareOpening) return; setShareOpening(true); try { preloadDailyPnlTemplates(summary.day >= 0); await waitForDailyPnlTemplates(); setDailyShareOpen(true); } finally { setShareOpening(false); } }} title={shareOpening ? "正在准备分享图…" : "分享当日盈亏"} aria-label="分享当日盈亏" className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-[7px] border border-edge bg-white text-muted shadow-sm transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover hover:text-ink active:scale-[.97] disabled:opacity-50 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><circle cx="18" cy="5" r="2.2" /><circle cx="6" cy="12" r="2.2" /><circle cx="18" cy="19" r="2.2" /><path d="m8 11 8-5M8 13l8 5" /></svg></button><RefreshButton onClick={() => void handleRefresh("assets")} title="刷新账户资产" /></div></div>
+            <div className="flex items-center gap-2"><CurrencyPicker context="asset" prefix="总资产" /></div>
+            <div className="mt-1 grid grid-cols-3 items-end gap-3"><div className="col-span-2 flex min-w-0 items-center gap-2"><strong className="block truncate text-2xl font-extrabold tabular-nums">{maskCashMoney(totalAsset, true)}</strong><button type="button" onClick={() => setAssetsVisible((visible) => !visible)} className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg-gray hover:text-ink" title={assetsVisible ? "隐藏资产金额" : "显示资产金额"} aria-label={assetsVisible ? "隐藏资产金额" : "显示资产金额"}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />{assetsVisible ? <circle cx="12" cy="12" r="2.6" /> : <path d="m4 4 16 16" />}</svg></button></div><div><span className="block text-xs text-muted">当日盈亏</span><strong className={`mt-1 block text-sm tabular-nums ${summary.day >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.day, true)}</strong></div></div>
+            <div className="mt-5 grid grid-cols-3 gap-3">
+              <div><span className="text-xs text-muted">持仓总市值</span><strong className="mt-1 block text-sm tabular-nums">{maskMoney(summary.asset)}</strong></div>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={onOpenPnlAnalysis}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenPnlAnalysis?.(); } }}
+                title="查看资产盈亏分析"
+                className="group -mx-1 cursor-pointer rounded-[10px] px-1 transition-colors hover:bg-brand-hover/70 dark:hover:bg-white/5"
+              >
+                <span className="text-xs text-muted">
+                  持仓总盈亏
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-1 inline-block h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100">
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                </span>
+                <strong className={`mt-1 block text-sm tabular-nums ${summary.pnl >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.pnl, true)}</strong>
+              </div>
+              <div><span className="text-xs text-muted">现金</span><strong className="mt-1 block text-sm tabular-nums">{maskCashMoney(cashTotal)}</strong></div>
             </div>
-            <div><span className="text-xs text-muted">现金</span><strong className="mt-1 block text-sm tabular-nums">{maskCashMoney(cashTotal)}</strong></div>
-          </div>
-          <div className="mt-6"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold">资产分布</span><span className="text-[11px] text-muted">按市场</span></div><div className="flex h-2 overflow-hidden rounded-full bg-bg-gray">{marketEntries.map(([key, value], index) => <span key={key} style={{ width: `${summary.asset ? value.asset / summary.asset * 100 : 0}%`, background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />)}</div><div className="mt-3 grid grid-cols-2 gap-2">{marketEntries.map(([key, value], index) => <div key={key} className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-muted"><i className="h-2 w-2 rounded-full" style={{ background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />{marketMeta(key).label}</span><b>{summary.asset ? (value.asset / summary.asset * 100).toFixed(1) : "0.0"}%</b></div>)}</div></div>
-        </section>
+            <div className="mt-6"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold">资产分布</span><span className="text-[11px] text-muted">按市场</span></div><div className="flex h-2 overflow-hidden rounded-full bg-bg-gray">{marketEntries.map(([key, value], index) => <span key={key} style={{ width: `${summary.asset ? value.asset / summary.asset * 100 : 0}%`, background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />)}</div><div className="mt-3 grid grid-cols-2 gap-2">{marketEntries.map(([key, value], index) => <div key={key} className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-muted"><i className="h-2 w-2 rounded-full" style={{ background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />{marketMeta(key).label}</span><b>{summary.asset ? (value.asset / summary.asset * 100).toFixed(1) : "0.0"}%</b></div>)}</div></div>
+          </section>
+          {renderModuleHandle("left", "account")}
+        </div>
 
-        <section className="card relative overflow-visible">
-          <div className="flex items-end gap-6 border-b border-edge px-4 pt-3">{([['return', '收益率趋势图'], ['asset', '总资产趋势图']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setChartTab(key)} className={`relative px-0.5 pb-3 transition-colors ${chartTab === key ? "text-[15px] font-bold text-ink" : "text-sm font-medium text-muted hover:text-ink"}`}>{label}{chartTab === key && <i className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-[#3297f6]" />}</button>)}</div>
-          <div className="relative flex items-center gap-2 px-4 py-3"><div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{PERIODS.map(([key, label]) => <button key={key} type="button" onClick={() => { setPeriod(key); setDatePickerOpen(false); setPnlExpanded(false); }} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold ${period === key ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray"}`}>{label}</button>)}</div><button type="button" onClick={() => setDatePickerOpen((open) => !open)} className={`inline-flex h-8 w-10 flex-none items-center justify-center rounded-full border transition-colors ${period === "custom" || datePickerOpen ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray hover:text-ink"}`} title="选择日期区间" aria-label="选择日期区间"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M4 5h16M7 3v4m10-4v4M5 9h14v11H5z" /><path d="m9 14 2 2 4-5" /></svg></button>{datePickerOpen && <DateRangePicker range={customRange} onClose={() => setDatePickerOpen(false)} onApply={(range) => { setCustomRange(range); setPeriod("custom"); setDatePickerOpen(false); setPnlExpanded(false); }} />}</div>
-          {period === "custom" && <div className="px-4 pb-2 text-xs font-semibold text-muted">{formatRangeDate(customRange.start)} – {formatRangeDate(customRange.end)}</div>}
-          {chartTab === "return" && <div className="flex items-start justify-between gap-3 px-4"><div className="min-w-0 flex-1"><CurrencyPicker context="trend" prefix={pnlLabel} /><strong className={`mt-1 block max-w-[15rem] text-xl tabular-nums ${cumulative >= 0 ? "text-up" : "text-down"}`}><AccountOverviewValue value={cumulative} hidden={!assetsVisible} forceCompact={currencyDisplayUnit === "compact"} /></strong></div><div className="relative flex-none text-right"><button type="button" onClick={() => setWeightMenuOpen((open) => !open)} aria-expanded={weightMenuOpen} className="inline-flex items-center gap-1 rounded-lg px-1 py-1 text-xs font-semibold text-muted transition-colors hover:bg-bg-gray hover:text-ink">收益率·{weighting === "simple" ? "简单加权" : "时间加权"}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 transition-transform ${weightMenuOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg></button>{weightMenuOpen && <><div className="fixed inset-0 z-30" onClick={() => setWeightMenuOpen(false)} /><div className="absolute right-0 top-full z-40 mt-1 min-w-[160px] overflow-hidden rounded-xl border border-edge-strong bg-white p-1 shadow-xl dark:bg-[#1b2029]">{WEIGHT_OPTIONS.map(([key, label]) => <button key={key} type="button" onClick={() => { setWeighting(key); setWeightMenuOpen(false); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${weighting === key ? "bg-[#3297f6]/15 font-bold text-[#3297f6]" : "text-ink hover:bg-bg-gray"}`}><span>{label}</span>{weighting === key && <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>}</button>)}</div></>}<strong className={`mt-1 block text-base tabular-nums ${returnRate >= 0 ? "text-up" : "text-down"}`}>{assetsVisible ? fmtPct(returnRate) : "******"}</strong></div></div>}
-          {chartTab === "return" && historyIncomplete && (
-            <p className="mx-4 mt-2 text-[10.5px] leading-4 text-muted">
-              历史订单覆盖 {coveredHoldingCount}/{positions.length} 只持仓；未覆盖仓位从首个可确认日期起计，不再回填到年初。
-            </p>
-          )}
-          {chartTab === "return" && <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-lg bg-bg-gray px-3 py-2 text-xs">
-            <div className="relative">
-              <button type="button" onClick={() => setBenchOpen((open) => !open)} aria-expanded={benchOpen} className="inline-flex items-center gap-1.5 text-ink transition-colors hover:text-ink">
-                <i className="h-2 w-2 rounded-full bg-[#ef5b19]" />
-                <span>{cumulative > 0 ? "跑赢" : "跑输"}</span>
-                <i className="h-2 w-2 rounded-full bg-[#4a90d9]" />
-                <span className="font-semibold">{benchLabel}</span>
-                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 text-muted transition-transform ${benchOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg>
-                {assetsVisible ? (benchDiff !== null ? <b className={`tabular-nums ${benchDiff >= 0 ? "text-up" : "text-down"}`}>{fmtPct(benchDiff)}</b> : <span className="text-faint">—</span>) : <b className="text-faint">******</b>}
-              </button>
-              {benchOpen && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setBenchOpen(false)} />
-                  <div className="absolute left-0 top-full z-40 mt-1 min-w-[150px] overflow-hidden rounded-xl border border-edge-strong bg-white p-1 shadow-xl dark:bg-[#1b2029]">
-                    {BENCHMARKS.map((bench) => (
-                      <button key={bench.key} type="button" onClick={() => { setBenchKey(bench.key); setBenchOpen(false); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-xs transition-colors ${benchKey === bench.key ? "bg-[#1e3a8a] font-bold text-white" : "text-ink hover:bg-bg-gray"}`}>
-                        <span>{bench.label}</span>
-                        {benchKey === bench.key && <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
+        <div {...moduleDragProps("left", "trend")} className={moduleWrapperClass("left", "trend")} style={{ order: moduleOrderIndex("left", "trend") }}>
+          <section className="card relative overflow-visible">
+            <div className="flex items-end gap-6 border-b border-edge px-4 pt-3">{([['return', '收益率趋势图'], ['asset', '总资产趋势图']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setChartTab(key)} className={`relative px-0.5 pb-3 transition-colors ${chartTab === key ? "text-[15px] font-bold text-ink" : "text-sm font-medium text-muted hover:text-ink"}`}>{label}{chartTab === key && <i className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-[#3297f6]" />}</button>)}</div>
+            <div className="relative flex items-center gap-2 px-4 py-3"><div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{PERIODS.map(([key, label]) => <button key={key} type="button" onClick={() => { setPeriod(key); setDatePickerOpen(false); setPnlExpanded(false); }} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold ${period === key ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray"}`}>{label}</button>)}</div><button type="button" onClick={() => setDatePickerOpen((open) => !open)} className={`inline-flex h-8 w-10 flex-none items-center justify-center rounded-full border transition-colors ${period === "custom" || datePickerOpen ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray hover:text-ink"}`} title="选择日期区间" aria-label="选择日期区间"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M4 5h16M7 3v4m10-4v4M5 9h14v11H5z" /><path d="m9 14 2 2 4-5" /></svg></button>{datePickerOpen && <DateRangePicker range={customRange} onClose={() => setDatePickerOpen(false)} onApply={(range) => { setCustomRange(range); setPeriod("custom"); setDatePickerOpen(false); setPnlExpanded(false); }} />}</div>
+            {period === "custom" && <div className="px-4 pb-2 text-xs font-semibold text-muted">{formatRangeDate(customRange.start)} – {formatRangeDate(customRange.end)}</div>}
+            {chartTab === "return" && <div className="flex items-start justify-between gap-3 px-4"><div className="min-w-0 flex-1"><CurrencyPicker context="trend" prefix={pnlLabel} /><strong className={`mt-1 block max-w-[15rem] text-xl tabular-nums ${cumulative >= 0 ? "text-up" : "text-down"}`}><AccountOverviewValue value={cumulative} hidden={!assetsVisible} forceCompact={currencyDisplayUnit === "compact"} /></strong></div><div className="relative flex-none text-right"><button type="button" onClick={() => setWeightMenuOpen((open) => !open)} aria-expanded={weightMenuOpen} className="inline-flex items-center gap-1 rounded-lg px-1 py-1 text-xs font-semibold text-muted transition-colors hover:bg-bg-gray hover:text-ink">收益率·{weighting === "simple" ? "简单加权" : "时间加权"}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 transition-transform ${weightMenuOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg></button>{weightMenuOpen && <><div className="fixed inset-0 z-30" onClick={() => setWeightMenuOpen(false)} /><div className="absolute right-0 top-full z-40 mt-1 min-w-[160px] overflow-hidden rounded-xl border border-edge-strong bg-white p-1 shadow-xl dark:bg-[#1b2029]">{WEIGHT_OPTIONS.map(([key, label]) => <button key={key} type="button" onClick={() => { setWeighting(key); setWeightMenuOpen(false); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${weighting === key ? "bg-[#3297f6]/15 font-bold text-[#3297f6]" : "text-ink hover:bg-bg-gray"}`}><span>{label}</span>{weighting === key && <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>}</button>)}</div></>}<strong className={`mt-1 block text-base tabular-nums ${returnRate >= 0 ? "text-up" : "text-down"}`}>{assetsVisible ? fmtPct(returnRate) : "******"}</strong></div></div>}
+            {chartTab === "return" && historyIncomplete && (
+              <p className="mx-4 mt-2 text-[10.5px] leading-4 text-muted">
+                历史订单覆盖 {coveredHoldingCount}/{positions.length} 只持仓；未覆盖仓位从首个可确认日期起计，不再回填到年初。
+              </p>
+            )}
+            {chartTab === "return" && <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-lg bg-bg-gray px-3 py-2 text-xs">
+              <div className="relative">
+                <button type="button" onClick={() => setBenchOpen((open) => !open)} aria-expanded={benchOpen} className="inline-flex items-center gap-1.5 text-ink transition-colors hover:text-ink">
+                  <i className="h-2 w-2 rounded-full bg-[#ef5b19]" />
+                  <span>{cumulative > 0 ? "跑赢" : "跑输"}</span>
+                  <i className="h-2 w-2 rounded-full bg-[#4a90d9]" />
+                  <span className="font-semibold">{benchLabel}</span>
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 text-muted transition-transform ${benchOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg>
+                  {assetsVisible ? (benchDiff !== null ? <b className={`tabular-nums ${benchDiff >= 0 ? "text-up" : "text-down"}`}>{fmtPct(benchDiff)}</b> : <span className="text-faint">—</span>) : <b className="text-faint">******</b>}
+                </button>
+                {benchOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setBenchOpen(false)} />
+                    <div className="absolute left-0 top-full z-40 mt-1 min-w-[150px] overflow-hidden rounded-xl border border-edge-strong bg-white p-1 shadow-xl dark:bg-[#1b2029]">
+                      {BENCHMARKS.map((bench) => (
+                        <button key={bench.key} type="button" onClick={() => { setBenchKey(bench.key); setBenchOpen(false); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-xs transition-colors ${benchKey === bench.key ? "bg-[#1e3a8a] font-bold text-white" : "text-ink hover:bg-bg-gray"}`}>
+                          <span>{bench.label}</span>
+                          {benchKey === bench.key && <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>}
+            {trendLoading ? <div className="mx-4 mb-4 h-[330px] animate-pulse rounded-xl bg-bg-gray" aria-hidden /> : filteredTrend.length > 1 ? <PnlTrendChart points={filteredTrend} tab={chartTab} weighting={weighting} benchLabel={benchLabel} /> : <div className="flex h-[330px] flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted"><span>历史行情不足，后续交易日会自动补全趋势</span><button type="button" onClick={() => setRetryTick((tick) => tick + 1)} className="rounded-full border border-edge px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover dark:border-white/20">重新获取</button></div>}
+          </section>
+          {renderModuleHandle("left", "trend")}
+        </div>
+
+        <div {...moduleDragProps("left", "pnlRank")} className={moduleWrapperClass("left", "pnlRank")} style={{ order: moduleOrderIndex("left", "pnlRank") }}>
+          <section className="card overflow-hidden">
+            <div className="border-b border-edge px-4 py-4">
+              <div className="flex items-center justify-between gap-3"><h3 className="text-base font-bold">持仓盈亏排行</h3><span className="text-[11px] text-muted">更新至 {formatRangeDate(activeRange.end)}</span></div>
+              <div className="mt-2"><MarketPills value={pnlMarket} onChange={(key) => { setPnlMarket(key); setPnlExpanded(false); }} /></div>
             </div>
-          </div>}
-          {trendLoading ? <div className="mx-4 mb-4 h-[330px] animate-pulse rounded-xl bg-bg-gray" aria-hidden /> : filteredTrend.length > 1 ? <PnlTrendChart points={filteredTrend} tab={chartTab} weighting={weighting} benchLabel={benchLabel} /> : <div className="flex h-[330px] flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted"><span>历史行情不足，后续交易日会自动补全趋势</span><button type="button" onClick={() => setRetryTick((tick) => tick + 1)} className="rounded-full border border-edge px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover dark:border-white/20">重新获取</button></div>}
-        </section>
+            <div className="grid grid-cols-[48px_minmax(0,1fr)_110px] bg-bg-gray px-4 py-2.5 text-[11px] font-semibold text-muted"><span>序号</span><span>名称 / 代码</span><span className="text-right">盈亏 / 明细</span></div>
+            <div>{shownPnlPositions.map(({ record, pnl }, index) => {
+              const icon = stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
+              return <div key={record.id} className="grid grid-cols-[48px_minmax(0,1fr)_110px] items-center border-t border-edge px-4 py-3 text-xs transition-colors first:border-t-0 hover:bg-bg-gray/60 dark:hover:bg-[#1b2230]">
+                <span className="font-semibold tabular-nums">{String(index + 1).padStart(2, "0")}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  {icon ? <img src={icon} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" /> : <i className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-gray not-italic text-ink-2">{record.name.slice(0, 1)}</i>}
+                  <span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><QuoteRowHint market={record.market} quote={quotes[record.id]} quotes={quotes} /></small></span>
+                </span>
+                <span className={`text-right font-bold tabular-nums ${pnl >= 0 ? "text-up" : "text-down"}`}>{pnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(pnl))}</span>
+              </div>;
+            })}</div>
+            {shownPnlPositions.length === 0 && <div className="py-10 text-center text-xs text-muted">当前市场暂无可计算的持仓盈亏</div>}
+            {pnlPositions.length > 10 && <button type="button" onClick={() => setPnlExpanded((expanded) => !expanded)} className="flex w-full items-center justify-center gap-1 border-t border-edge py-3 text-xs font-semibold text-muted transition-colors hover:bg-bg-gray hover:text-ink">{pnlExpanded ? "收起" : `显示更多（另 ${pnlPositions.length - 10} 只）`}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 transition-transform ${pnlExpanded ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg></button>}
+          </section>
+          {renderModuleHandle("left", "pnlRank")}
+        </div>
 
-        <section className="card overflow-hidden">
-          <div className="border-b border-edge px-4 py-4">
-            <div className="flex items-center justify-between gap-3"><h3 className="text-base font-bold">持仓盈亏排行</h3><span className="text-[11px] text-muted">更新至 {formatRangeDate(activeRange.end)}</span></div>
-            <div className="mt-2"><MarketPills value={pnlMarket} onChange={(key) => { setPnlMarket(key); setPnlExpanded(false); }} /></div>
-          </div>
-          <div className="grid grid-cols-[48px_minmax(0,1fr)_110px] bg-bg-gray px-4 py-2.5 text-[11px] font-semibold text-muted"><span>序号</span><span>名称 / 代码</span><span className="text-right">盈亏 / 明细</span></div>
-          <div>{shownPnlPositions.map(({ record, pnl }, index) => {
-            const icon = stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
-            return <div key={record.id} className="grid grid-cols-[48px_minmax(0,1fr)_110px] items-center border-t border-edge px-4 py-3 text-xs transition-colors first:border-t-0 hover:bg-bg-gray/60 dark:hover:bg-[#1b2230]">
-              <span className="font-semibold tabular-nums">{String(index + 1).padStart(2, "0")}</span>
-              <span className="flex min-w-0 items-center gap-2">
-                {icon ? <img src={icon} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" /> : <i className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-gray not-italic text-ink-2">{record.name.slice(0, 1)}</i>}
-                <span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><QuoteRowHint market={record.market} quote={quotes[record.id]} quotes={quotes} /></small></span>
-              </span>
-              <span className={`text-right font-bold tabular-nums ${pnl >= 0 ? "text-up" : "text-down"}`}>{pnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(pnl))}</span>
-            </div>;
-          })}</div>
-          {shownPnlPositions.length === 0 && <div className="py-10 text-center text-xs text-muted">当前市场暂无可计算的持仓盈亏</div>}
-          {pnlPositions.length > 10 && <button type="button" onClick={() => setPnlExpanded((expanded) => !expanded)} className="flex w-full items-center justify-center gap-1 border-t border-edge py-3 text-xs font-semibold text-muted transition-colors hover:bg-bg-gray hover:text-ink">{pnlExpanded ? "收起" : `显示更多（另 ${pnlPositions.length - 10} 只）`}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 transition-transform ${pnlExpanded ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg></button>}
-        </section>
-
-        <FundsPanel holdingAssets={holdingAssetsByCurrency} balanceOverrides={effectiveFundBalances} onBalancesChange={handleFundBalances} />
+        <div {...moduleDragProps("left", "funds")} className={moduleWrapperClass("left", "funds")} style={{ order: moduleOrderIndex("left", "funds") }}>
+          <FundsPanel holdingAssets={holdingAssetsByCurrency} balanceOverrides={effectiveFundBalances} onBalancesChange={handleFundBalances} />
+          {renderModuleHandle("left", "funds")}
+        </div>
       </aside>
 
       <button type="button" className="asset-analysis-resizer" onPointerDown={startResize} onDoubleClick={resetSplit} title="左右拖动调整布局宽度，双击恢复默认" aria-label="调整资产分析左右布局宽度"><span /><i>⋮</i></button>
 
-      <main className="min-w-0 space-y-4">
-        <section className="mobile-hide-duplicate-summary card p-5">
-          <div className="mb-2"><h3 className="text-base font-bold">账户总览</h3></div>
-          <MarketPills value={assetMarket} onChange={setAssetMarket} />
-          <div className="mt-5 grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{[["净资产", accountNetAsset], ["当日盈亏", accountSummary.day], ["持仓市值", accountSummary.asset], ["浮动盈亏", accountSummary.pnl], ["可用现金", accountAvailableCash], ["冻结现金", accountFrozenCash]].map(([label, value]) => <div key={String(label)} className="min-w-0"><span className="block truncate text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block min-w-0 text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}><AccountOverviewValue value={Number(value)} hidden={!assetsVisible} pending={(label === "净资产" || label === "可用现金") && !effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></strong></div>)}</div>
-        </section>
+      <main className="flex min-w-0 flex-col gap-4">
+        <div {...moduleDragProps("right", "overview")} className={moduleWrapperClass("right", "overview")} style={{ order: moduleOrderIndex("right", "overview") }}>
+          <section className="mobile-hide-duplicate-summary card p-5">
+            <div className="mb-2"><h3 className="text-base font-bold">账户总览</h3></div>
+            <MarketPills value={assetMarket} onChange={setAssetMarket} />
+            <div className="mt-5 grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{[["净资产", accountNetAsset], ["当日盈亏", accountSummary.day], ["持仓市值", accountSummary.asset], ["浮动盈亏", accountSummary.pnl], ["可用现金", accountAvailableCash], ["冻结现金", accountFrozenCash]].map(([label, value]) => <div key={String(label)} className="min-w-0"><span className="block truncate text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block min-w-0 text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}><AccountOverviewValue value={Number(value)} hidden={!assetsVisible} pending={(label === "净资产" || label === "可用现金") && !effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></strong></div>)}</div>
+          </section>
+          {renderModuleHandle("right", "overview")}
+        </div>
 
-        <section className="card overflow-hidden">
-          <div className="border-b border-edge px-5 py-4">
-            <h3 className="mb-3 text-base font-bold">持仓分布</h3>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0"><MarketPills value={holdingsMarket} onChange={(key) => { setHoldingsMarket(key); setHoldingSearch(""); setHoldingPage(1); }} /></div>
-              <div className="flex items-center gap-1.5">
-                <RefreshButton onClick={() => void handleRefresh("holdings")} title="刷新持仓" />
-                <label className="relative block">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>
-                  <input value={holdingSearch} onChange={(event) => { setHoldingSearch(event.target.value); setHoldingPage(1); }} className="h-8 w-[150px] rounded-full border border-edge-strong bg-white pl-8 pr-3 text-xs text-ink placeholder:text-faint dark:bg-[#1c222d]" placeholder="代码 / 名称" />
-                </label>
-                <HoldingColumnsButton onClick={() => setColumnManagerOpen(true)} />
+        <div {...moduleDragProps("right", "holdings")} className={moduleWrapperClass("right", "holdings")} style={{ order: moduleOrderIndex("right", "holdings") }}>
+          <section className="card overflow-hidden">
+            <div className="border-b border-edge px-5 py-4">
+              <h3 className="mb-3 text-base font-bold">持仓分布</h3>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0"><MarketPills value={holdingsMarket} onChange={(key) => { setHoldingsMarket(key); setHoldingSearch(""); setHoldingPage(1); }} /></div>
+                <div className="flex items-center gap-1.5">
+                  <RefreshButton onClick={() => void handleRefresh("holdings")} title="刷新持仓" />
+                  <label className="relative block">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>
+                    <input value={holdingSearch} onChange={(event) => { setHoldingSearch(event.target.value); setHoldingPage(1); }} className="h-8 w-[150px] rounded-full border border-edge-strong bg-white pl-8 pr-3 text-xs text-ink placeholder:text-faint dark:bg-[#1c222d]" placeholder="代码 / 名称" />
+                  </label>
+                  <HoldingColumnsButton onClick={() => setColumnManagerOpen(true)} />
+                </div>
               </div>
             </div>
-          </div>
-          <div className="overflow-x-auto"><table className="mobile-analysis-holdings w-full text-xs" style={{ minWidth: `${Math.max(760, enabledHoldingColumns.length * 130)}px` }}><thead><tr className="bg-bg-gray text-muted">{enabledHoldingColumns.map((column) => { const active = holdingSort?.key === column.key; return <th key={column.key} data-holding-column={column.key} className={`px-4 py-3 ${column.key === "identity" ? "text-left" : "text-right"}`}><button type="button" onClick={() => toggleHoldingSort(column.key)} className={`inline-flex items-center gap-1 whitespace-nowrap transition-colors hover:text-ink ${column.key === "identity" ? "" : "flex-row-reverse"} ${active ? "text-ink" : ""}`}>{HOLDING_COLUMN_LABELS[column.key]}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 ${active ? "opacity-100" : "opacity-25"}`}><path d={active && holdingSort?.dir === "asc" ? "m5 12 5-5 5 5" : "m5 8 5 5 5-5"} /></svg></button></th>; })}</tr></thead><tbody>{pagedPositions.map((record) => <tr key={record.id} className="cursor-pointer border-t border-edge transition-colors hover:bg-bg-gray/60 dark:hover:bg-[#1b2230]" onClick={(e) => setCtxMenu({ x: e.clientX, y: e.clientY, record })} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, record }); }}>{enabledHoldingColumns.map((column) => <td key={column.key} data-holding-column={column.key} className={`px-4 py-3 tabular-nums ${column.key === "identity" ? "text-left" : "text-right"}`}>{holdingCell(record, column.key)}</td>)}</tr>)}</tbody></table>{visiblePositions.length === 0 && <div className="py-14 text-center text-sm text-muted">{holdingSearch ? "没有匹配的持仓" : "当前市场暂无持仓"}</div>}</div>
-          {holdingPageCount > 1 && <div className="border-t border-edge bg-bg-gray/50 px-4 py-3"><div className="text-left text-xs text-muted">共 {visiblePositions.length} 项 · 每页 {HOLDINGS_PAGE_SIZE} 项</div><Pagination page={safeHoldingPage} total={holdingPageCount} onChange={setHoldingPage} /></div>}
-        </section>
+            <div className="overflow-x-auto"><table className="mobile-analysis-holdings w-full text-xs" style={{ minWidth: `${Math.max(760, enabledHoldingColumns.length * 130)}px` }}><thead><tr className="bg-bg-gray text-muted">{enabledHoldingColumns.map((column) => { const active = holdingSort?.key === column.key; return <th key={column.key} data-holding-column={column.key} className={`px-4 py-3 ${column.key === "identity" ? "text-left" : "text-right"}`}><button type="button" onClick={() => toggleHoldingSort(column.key)} className={`inline-flex items-center gap-1 whitespace-nowrap transition-colors hover:text-ink ${column.key === "identity" ? "" : "flex-row-reverse"} ${active ? "text-ink" : ""}`}>{HOLDING_COLUMN_LABELS[column.key]}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 ${active ? "opacity-100" : "opacity-25"}`}><path d={active && holdingSort?.dir === "asc" ? "m5 12 5-5 5 5" : "m5 8 5 5 5-5"} /></svg></button></th>; })}</tr></thead><tbody>{pagedPositions.map((record) => <tr key={record.id} className="cursor-pointer border-t border-edge transition-colors hover:bg-bg-gray/60 dark:hover:bg-[#1b2230]" onClick={(e) => setCtxMenu({ x: e.clientX, y: e.clientY, record })} onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, record }); }}>{enabledHoldingColumns.map((column) => <td key={column.key} data-holding-column={column.key} className={`px-4 py-3 tabular-nums ${column.key === "identity" ? "text-left" : "text-right"}`}>{holdingCell(record, column.key)}</td>)}</tr>)}</tbody></table>{visiblePositions.length === 0 && <div className="py-14 text-center text-sm text-muted">{holdingSearch ? "没有匹配的持仓" : "当前市场暂无持仓"}</div>}</div>
+            {holdingPageCount > 1 && <div className="border-t border-edge bg-bg-gray/50 px-4 py-3"><div className="text-left text-xs text-muted">共 {visiblePositions.length} 项 · 每页 {HOLDINGS_PAGE_SIZE} 项</div><Pagination page={safeHoldingPage} total={holdingPageCount} onChange={setHoldingPage} /></div>}
+          </section>
+          {renderModuleHandle("right", "holdings")}
+        </div>
 
-        <TradeOrdersPanel
-          orders={orders}
-          stockIcons={stockIcons}
-          storageKey="fire:asset-order-tab"
-          onRefresh={() => handleRefresh("orders")}
-        />
+        <div {...moduleDragProps("right", "orders")} className={moduleWrapperClass("right", "orders")} style={{ order: moduleOrderIndex("right", "orders") }}>
+          <TradeOrdersPanel
+            orders={orders}
+            stockIcons={stockIcons}
+            storageKey="fire:asset-order-tab"
+            onRefresh={() => handleRefresh("orders")}
+          />
+          {renderModuleHandle("right", "orders")}
+        </div>
+        <div {...moduleDragProps("right", "calendar")} className={moduleWrapperClass("right", "calendar")} style={{ order: moduleOrderIndex("right", "calendar") }}>
+          <PnlCalendar
+            className="card p-5"
+            days={calendarDays}
+            yearSummary={calendarYear}
+            loading={trendLoading}
+            month={calMonth}
+            onMonthChange={setCalMonth}
+            view={calView}
+            onViewChange={setCalView}
+            mode={calMode}
+            onModeChange={setCalMode}
+            market={calMarket}
+            onMarketChange={setCalMarket}
+            formatAmount={calendarAmount}
+            formatCompact={calendarCompact}
+            onDayClick={(date) => {
+              const rows = buildDayDetailRows({ date, positions: calendarRows, closesMap: recordCloses, rates });
+              if (rows.length > 0) setDayDetail({ date, rows });
+            }}
+            dayDetail={dayDetail}
+            onDayDetailClose={() => setDayDetail(null)}
+          />
+          {renderModuleHandle("right", "calendar")}
+        </div>
       </main>
     </div>
     {columnManagerOpen && <HoldingColumnManager columns={holdingColumns} onSave={saveHoldingColumns} onClose={() => setColumnManagerOpen(false)} />}

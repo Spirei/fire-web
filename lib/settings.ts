@@ -65,6 +65,7 @@ const DEFAULTS: SiteSettings = {
   marketBadges: { ...DEFAULT_MARKET_BADGES },
   marketBadgesVisible: true,
   assetMarketOrder: [],
+  assetAnalysisOrder: { left: [], right: [] },
   indicesOrder: [],
   holdingColumns: DEFAULT_HOLDING_COLUMNS,
   allowRegister: true,
@@ -346,6 +347,21 @@ export function getSiteSettings(): SiteSettings {
       }
     } catch { /* 无效市场顺序忽略 */ }
   }
+  if (typeof map.assetAnalysisOrder === "string") {
+    try {
+      const parsed = JSON.parse(map.assetAnalysisOrder) as { left?: unknown; right?: unknown };
+      const clean = (value: unknown) => {
+        if (!Array.isArray(value)) return [];
+        const seen = new Set<string>();
+        return value.filter((item: unknown): item is string => {
+          if (typeof item !== "string" || item.trim().length === 0 || seen.has(item)) return false;
+          seen.add(item);
+          return true;
+        });
+      };
+      result.assetAnalysisOrder = { left: clean(parsed?.left), right: clean(parsed?.right) };
+    } catch { /* 无效模块顺序忽略 */ }
+  }
   if (typeof map.indicesOrder === "string") {
     try {
       const parsed = JSON.parse(map.indicesOrder);
@@ -525,6 +541,21 @@ export function updateSiteSettings(patch: Partial<SiteSettings>): SiteSettings {
       return true;
     });
     upsert.run("assetMarketOrder", JSON.stringify(valid));
+  }
+  if (patch.assetAnalysisOrder && typeof patch.assetAnalysisOrder === "object") {
+    const clean = (value: unknown) => {
+      if (!Array.isArray(value)) return [];
+      const seen = new Set<string>();
+      return value.filter((item: unknown): item is string => {
+        if (typeof item !== "string" || item.trim().length === 0 || seen.has(item)) return false;
+        seen.add(item);
+        return true;
+      });
+    };
+    upsert.run(
+      "assetAnalysisOrder",
+      JSON.stringify({ left: clean(patch.assetAnalysisOrder.left), right: clean(patch.assetAnalysisOrder.right) })
+    );
   }
   if (Array.isArray(patch.indicesOrder)) {
     const seen = new Set<string>();

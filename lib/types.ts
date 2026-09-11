@@ -239,6 +239,8 @@ export interface SiteSettings {
   /** 全站是否默认显示市场色块 */
   marketBadgesVisible: boolean;
   assetMarketOrder: string[];
+  /** 资产分析页各模块的自定义排序（左右两栏各一组模块 id） */
+  assetAnalysisOrder: { left: string[]; right: string[] };
   indicesOrder: string[];
   holdingColumns: import("./holdingColumns").HoldingColumnPreference[];
   allowRegister: boolean;

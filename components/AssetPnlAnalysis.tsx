@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { FALLBACK_RATES, type Quote, type StockRecord, type TradeOrder } from "@/lib/types";
 import { MARKET_CURRENCY } from "@/lib/currency";
 import PnlTrendChart, { type PnlTrendPoint } from "@/components/PnlTrendChart";
+import PnlCalendar from "@/components/PnlCalendar";
 import MarketIcon from "@/components/MarketIcon";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { useAssetIcons } from "@/lib/useAssetIcons";
@@ -13,21 +14,8 @@ import { showToast } from "@/lib/toast";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
 import { fmtMoney, fmtMoneyCompact, localDateKey } from "@/lib/format";
+import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, type CalendarDayRow } from "@/lib/pnlCalendar";
 
-/** 成交日按市场时区归到 YYYY-MM-DD（与资产分析页同款，时间加权需要） */
-function marketDate(value: string, market: string) {
-  const timeZone = market.toUpperCase() === "US" ? "America/New_York" : "Asia/Shanghai";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(date);
-  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "";
-  return `${get("year")}-${get("month")}-${get("day")}`;
-}
 
 /* 客户端 K 线缓存：日收盘序列 10 分钟内不重复请求（与资产分析页同款），
  * 避免每次挂载/切页都并发重拉全部持仓（30+ 只）K 线触发限流、趋势图空白。 */
@@ -69,14 +57,6 @@ type PnlRow = {
   complete?: boolean;
 };
 
-/** 收益日历某一天的每只股票盈亏（当日收盘 − 前收盘）× 数量 */
-interface DayStockRow {
-  id: string;
-  name: string;
-  code: string;
-  market: PnlRow["market"];
-  pnl: number;
-}
 
 interface CloseItem {
   d: string;
@@ -168,73 +148,6 @@ function AdaptivePnlIdentity({ row }: { row: PnlRow }) {
   );
 }
 
-/** 共用「选择日期」按钮：点击弹出年份/月份选择器，选中回调 */
-function DateSelectButton({
-  year,
-  month,
-  onSelect,
-  compact = false,
-  label = "选择日期"
-}: {
-  year: number;
-  month: number;
-  onSelect: (y: number, m: number) => void;
-  compact?: boolean;
-  label?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [pickerYear, setPickerYear] = useState(year);
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        title="选择日期"
-        aria-label="选择日期"
-        className={`inline-flex items-center gap-1 rounded-lg font-semibold transition ${compact ? "px-2 py-1 text-sm" : "px-2.5 py-1.5 text-sm"} ${open ? "bg-bg-gray" : "text-ink-2 hover:bg-bg-gray"}`}
-      >
-        {label}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-muted">
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
-      {open && (
-        <>
-          <div data-drag-skip className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div data-drag-skip className="absolute right-0 top-full z-40 mt-1 w-56 overflow-hidden rounded-xl border border-edge-strong bg-white p-3 shadow-pop">
-            <div className="flex items-center justify-between">
-              <button type="button" onClick={() => setPickerYear((y) => y - 1)} aria-label="上一年" className="grid h-7 w-7 place-items-center rounded-full text-muted hover:bg-bg-gray">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5"><path d="m15 18-6-6 6-6" /></svg>
-              </button>
-              <span className="text-sm font-bold">{pickerYear}</span>
-              <button type="button" onClick={() => setPickerYear((y) => y + 1)} aria-label="下一年" className="grid h-7 w-7 place-items-center rounded-full text-muted hover:bg-bg-gray">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5"><path d="m9 18 6-6-6-6" /></svg>
-              </button>
-            </div>
-            <div className="mt-2 grid grid-cols-3 gap-1">
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
-                const active = year === pickerYear && month === m;
-                return (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => {
-                      onSelect(pickerYear, m);
-                      setOpen(false);
-                    }}
-                    className={`rounded-lg py-2 text-sm font-semibold transition ${active ? "bg-[#3297f6] text-white" : "text-ink-2 hover:bg-bg-gray"}`}
-                  >
-                    {m}月
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   const { stockIcons } = useAssetIcons(["stock"]);
@@ -254,7 +167,6 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   // 本页偏好全部走「首帧用默认值 + 挂载后（绘制前）恢复本地偏好」，
   // 原因：本页会被服务端渲染（/pnl 直接进），首帧读 localStorage 会造成水合不一致。
   const [calMarket, setCalMarket] = useState<string>("全部");
-  const [calMenuOpen, setCalMenuOpen] = useState(false);
   const [chartTab, setChartTab] = useState<"return" | "asset">("return");
   const [rankMode, setRankMode] = useState<"profit" | "loss">("profit");
   const [detailMode, setDetailMode] = useState<"profit" | "loss">("profit");
@@ -275,8 +187,7 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   // 订单（时间加权：按订单轨迹跟踪持仓数量 + 每日现金流）
   const [orders, setOrders] = useState<TradeOrder[]>([]);
   // 收益日历-每日股票盈亏明细（点击日历某天弹出）
-  const [dayDetail, setDayDetail] = useState<{ date: string; rows: DayStockRow[] } | null>(null);
-  const [dayDetailMode, setDayDetailMode] = useState<"profit" | "loss">("profit");
+  const [dayDetail, setDayDetail] = useState<{ date: string; rows: CalendarDayRow[] } | null>(null);
   const [calendarMode, setCalendarMode] = useState<"收益" | "收益率">("收益");
   const [calView, setCalView] = useState<"year" | "month">("month");
   const [calMonth, setCalMonth] = useState<{ y: number; m: number }>(() => {
@@ -492,93 +403,13 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   // 同时按订单轨迹跟踪持仓数量与现金流，产出时间加权 timeIndex（与资产分析页口径一致）
   const buildDailyAsset = useCallback(
     (rows: PnlRow[]) => {
-    const byId = new Map(rows.map((p) => [p.id, p]));
-    const recordItems = Object.entries(closesMap)
-      .map(([id, items]) => ({
-        id,
-        first: items.length > 0 ? Number(items[0].c) || 0 : 0,
-        map: new Map(items.map((it) => [it.d, Number(it.c)]))
-      }))
-      .filter((row) => byId.has(row.id) && row.first > 0);
-    const dates = [...new Set(recordItems.flatMap((row) => [...row.map.keys()]))].sort();
-    // 每只持仓沿用「最近一个有效收盘价」：首日用各自首个有效收盘价回填（与资产分析页口径一致），
-    // 避免不同股票起始交易日不一致时前几日只计入少数股票、资产从很小的值起步，
-    // 把区间收益率算爆（如 80000%）且基准线被压成直线。
-    const last = new Map<string, number>();
-    recordItems.forEach(({ id, first }) => {
-      last.set(id, first);
-    });
-    // 订单 → 每只持仓数量轨迹 + 每日现金流（时间加权）
-    const ordersByRecord = new Map<string, TradeOrder[]>();
-    const flowByDate = new Map<string, number>();
-    orders.forEach((order) => {
-      if (order.status !== "filled") return;
-      const rec = byId.get(order.recordId);
-      if (!rec) return;
-      const list = ordersByRecord.get(order.recordId) || [];
-      list.push(order);
-      ordersByRecord.set(order.recordId, list);
-      const date = marketDate(order.tradedAt, order.market);
-      if (!date) return;
-      const gross = order.amount || order.price * order.qty;
-      const cashFlow = order.side === "buy" ? gross + order.fees : -(gross - order.fees);
-      const iso = MARKET_CURRENCY[rec.market] || "USD";
-      const rate = rates[iso] || (iso === "USD" ? 1 : 0);
-      flowByDate.set(date, (flowByDate.get(date) || 0) + cashFlow / (rate || 1));
-    });
-    ordersByRecord.forEach((list) => list.sort((a, b) => a.tradedAt.localeCompare(b.tradedAt)));
-    const quantityState = new Map<string, { qty: number; cursor: number; orders: TradeOrder[] }>();
-    recordItems.forEach(({ id }) => {
-      const recOrders = ordersByRecord.get(id) || [];
-      const qty = recOrders.length ? Number(recOrders[0].positionQtyBefore) || 0 : Number(byId.get(id)?.qty) || 0;
-      quantityState.set(id, { qty, cursor: 0, orders: recOrders });
-    });
-
-    let timeIndex = 100;
-    let previousActualAsset = 0;
-    // 现金流游标：非交易日（周末等）的成交现金流归入下一个交易日，避免被丢
-    const flowDates = [...flowByDate.keys()].sort();
-    let flowCursor = 0;
-    let pendingFlow = 0;
-    const out: { date: string; asset: number; actual: number; flow: number; timeIndex: number }[] = [];
-    dates.forEach((date) => {
-      // 本交易日应计入的现金流：非交易日（周末等）成交归入下一个交易日，避免被丢
-      let thisDayFlow = 0;
-      while (flowCursor < flowDates.length && flowDates[flowCursor] <= date) {
-        thisDayFlow += flowByDate.get(flowDates[flowCursor]) || 0;
-        flowCursor += 1;
-      }
-      pendingFlow += thisDayFlow;
-      let asset = 0;
-      let actualAsset = 0;
-      recordItems.forEach(({ id, map }) => {
-        const next = map.get(date);
-        if (next !== undefined) last.set(id, next);
-        const close = last.get(id);
-        if (close == null) return;
-        const rec = byId.get(id);
-        if (!rec) return;
-        const iso = MARKET_CURRENCY[rec.market] || "USD";
-        const rate = rates[iso] || (iso === "USD" ? 1 : 0);
-        asset += (close * Number(rec.qty || 0)) / (rate || 1);
-        // 时间加权：按订单轨迹推进实际持仓数量
-        const state = quantityState.get(id);
-        if (!state) return;
-        while (state.cursor < state.orders.length && marketDate(state.orders[state.cursor].tradedAt, state.orders[state.cursor].market) <= date) {
-          state.qty = Number(state.orders[state.cursor].positionQtyAfter) || 0;
-          state.cursor += 1;
-        }
-        actualAsset += (close * state.qty) / (rate || 1);
+      // 口径已抽到 lib/pnlCalendar：与资产分析页共用同一份日资产序列算法
+      return buildDailyAssetSeries({
+        positions: rows.map((row) => ({ id: row.id, name: row.name, code: row.code, market: row.market, qty: row.qty })),
+        closesMap,
+        orders,
+        rates
       });
-      if (previousActualAsset > 0) {
-        // 日收益率用「当日现金流」而非累计现金流：资产分析页同口径，避免累计扣减把曲线压成 -100% 假深坑
-        const dailyReturn = (actualAsset - thisDayFlow) / previousActualAsset - 1;
-        if (Number.isFinite(dailyReturn) && dailyReturn > -1) timeIndex *= 1 + dailyReturn;
-      }
-      if (actualAsset > 0) previousActualAsset = actualAsset;
-      if (asset > 0) out.push({ date, asset, actual: actualAsset, flow: pendingFlow, timeIndex });
-    });
-    return out;
     },
     [closesMap, rates, orders]
   );
@@ -653,80 +484,18 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   const periodPnl = periodMetrics.pnl;
   const periodRate = periodMetrics.rate;
 
-  const calDays = useMemo(() => {
-    const y = calMonth.y;
-    const m = calMonth.m;
-    const prefix = `${y}-${String(m).padStart(2, "0")}`;
-    const daysInMonth = new Date(y, m, 0).getDate();
-    const firstWeekday = new Date(y, m - 1, 1).getDay();
-    const prevAsset = new Map<string, number>();
-    calDailyAsset.forEach((p, i) => {
-      if (i > 0) prevAsset.set(p.date, calDailyAsset[i - 1].asset);
-    });
-    const cells: ({ day: number; pnl: number; pct: number | null } | null)[] = Array.from({ length: firstWeekday }, () => null);
-    for (let day = 1; day <= daysInMonth; day += 1) {
-      const date = `${prefix}-${String(day).padStart(2, "0")}`;
-      const asset = calDailyAsset.find((p) => p.date === date)?.asset;
-      const prev = prevAsset.get(date);
-      if (asset == null || prev == null) {
-        cells.push({ day, pnl: 0, pct: null });
-      } else {
-        const pnl = asset - prev;
-        cells.push({ day, pnl, pct: prev ? (pnl / prev) * 100 : null });
-      }
-    }
-    return cells;
-  }, [calMonth, calDailyAsset]);
+  const calDays = useMemo(() => buildMonthCells(calDailyAsset, calMonth.y, calMonth.m), [calMonth, calDailyAsset]);
 
   // 年视图：展示所选年份每个月的收益 / 收益率（收益=当月日盈亏合计，收益率=相对上月月末资产）
-  const yearSummary = useMemo(() => {
-    const y = calMonth.y;
-    return Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
-      const prefix = `${y}-${String(m).padStart(2, "0")}`;
-      const monthStart = `${prefix}-01`;
-      let base: number | null = null;
-      let prev: number | null = null;
-      let pnl = 0;
-      for (const p of calDailyAsset) {
-        if (p.date < monthStart) {
-          base = p.asset;
-          prev = p.asset;
-        } else if (p.date.startsWith(prefix)) {
-          if (prev != null) pnl += p.asset - prev;
-          prev = p.asset;
-        } else if (p.date > `${prefix}-31`) {
-          break;
-        }
-      }
-      const pct = base != null && base !== 0 ? (pnl / base) * 100 : null;
-      return { m, pnl, pct, active: calMonth.m === m };
-    });
-  }, [calMonth, calDailyAsset]);
+  const yearSummary = useMemo(
+    () => buildYearSummary(calDailyAsset, calMonth.y, calMonth.m),
+    [calMonth, calDailyAsset]
+  );
 
   // 收益日历某天 → 每只股票的当日盈亏（当日收盘 − 前一日收盘）× 数量，按日历市场筛选，USD
   const openDayDetail = (date: string) => {
-    const rows: DayStockRow[] = [];
-    calPositions.forEach((p) => {
-      const items = closesMap[p.id] || [];
-      let close: number | null = null;
-      let prevClose: number | null = null;
-      for (let i = 0; i < items.length; i += 1) {
-        if (items[i].d === date) {
-          close = Number(items[i].c);
-          prevClose = i > 0 ? Number(items[i - 1].c) : null;
-          break;
-        }
-        if (items[i].d > date) break;
-      }
-      if (close == null || prevClose == null) return;
-      const iso = MARKET_CURRENCY[p.market] || "USD";
-      const rate = rates[iso] || 1;
-      rows.push({ id: p.id, name: p.name, code: p.code, market: p.market, pnl: ((close - prevClose) * p.qty) / rate });
-    });
-    rows.sort((a, b) => b.pnl - a.pnl);
+    const rows = buildDayDetailRows({ date, positions: calPositions, closesMap, rates });
     if (rows.length === 0) return;
-    // 某天全盈利或全亏损时，默认打开有数据的页签
-    setDayDetailMode(rows.some((r) => r.pnl > 0) ? "profit" : "loss");
     setDayDetail({ date, rows });
   };
 
@@ -737,11 +506,6 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
       ? `${dailyAssetFiltered[0].date.replace(/-/g, "/")} - ${dailyAssetFiltered[dailyAssetFiltered.length - 1].date.replace(/-/g, "/")}`
       : "暂无数据";
 
-  const shiftMonth = (delta: number) =>
-    setCalMonth(({ y, m }) => {
-      const total = y * 12 + (m - 1) + delta;
-      return { y: Math.floor(total / 12), m: (total % 12) + 1 };
-    });
 
   // 分享截图：把第一块卡片（盈亏总额卡片）渲染成 PNG
   const renderShareCard = async () => {
@@ -1102,161 +866,40 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
               </article>
             </section>
 
-            <section className="mt-5 card p-5">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-base font-bold">收益日历</h2>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => shiftMonth(-1)} className="grid h-7 w-7 place-items-center rounded-full border border-edge text-muted hover:bg-bg-gray" aria-label="上个月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5"><path d="m15 18-6-6 6-6" /></svg></button>
-                    <button onClick={() => shiftMonth(1)} className="grid h-7 w-7 place-items-center rounded-full border border-edge text-muted hover:bg-bg-gray" aria-label="下个月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5"><path d="m9 18 6-6-6-6" /></svg></button>
-                    <DateSelectButton
-                      year={calMonth.y}
-                      month={calMonth.m}
-                      label={`${calMonth.y}/${String(calMonth.m).padStart(2, "0")}`}
-                      onSelect={(y, m) => {
-                        setCalMonth({ y, m });
-                        setCalMenuOpen(false);
-                        try {
-                          localStorage.setItem("fire:asset-pnl-cal-month", JSON.stringify({ y, m }));
-                        } catch {
-                          /* 忽略 */
-                        }
-                      }}
-                    />
-                    <div className="relative ml-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCalMenuOpen((open) => !open);
-                        }}
-                        title={`市场：${calMarket}`}
-                        aria-label="选择日历市场"
-                        className={`grid h-8 w-8 place-items-center rounded-full border transition ${calMenuOpen ? "border-edge-strong bg-bg-gray text-ink-2" : "border-edge text-muted hover:bg-bg-gray hover:text-ink-2"}`}
-                      >
-                        {calMarket === "全部" ? (
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
-                            <rect x="3.5" y="3.5" width="7" height="7" rx="1.8" />
-                            <rect x="13.5" y="3.5" width="7" height="7" rx="1.8" />
-                            <rect x="3.5" y="13.5" width="7" height="7" rx="1.8" />
-                            <rect x="13.5" y="13.5" width="7" height="7" rx="1.8" />
-                          </svg>
-                        ) : (
-                          <MarketIcon market={calMarket === "美股" ? "US" : calMarket === "港股" ? "HK" : "CN"} size={17} />
-                        )}
-                      </button>
-                      {calMenuOpen && (
-                        <>
-                          <div data-drag-skip className="fixed inset-0 z-30" onClick={() => setCalMenuOpen(false)} />
-                          <div data-drag-skip className="absolute right-0 top-full z-40 mt-1 w-32 overflow-hidden rounded-xl border border-edge-strong bg-white p-1 shadow-pop">
-                            {(["全部", "美股", "港股", "A股"] as const).map((item) => (
-                              <button
-                                key={item}
-                                type="button"
-                                onClick={() => {
-                                  setCalMarket(item);
-                                  try {
-                                    localStorage.setItem("fire:asset-pnl-cal-market", item);
-                                  } catch {
-                                    /* 忽略 */
-                                  }
-                                  setCalMenuOpen(false);
-                                }}
-                                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition ${calMarket === item ? "bg-bg-gray font-semibold text-ink" : "text-ink hover:bg-bg-gray"}`}
-                              >
-                                {item === "全部" ? (
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
-                                    <rect x="3.5" y="3.5" width="7" height="7" rx="1.8" />
-                                    <rect x="13.5" y="3.5" width="7" height="7" rx="1.8" />
-                                    <rect x="3.5" y="13.5" width="7" height="7" rx="1.8" />
-                                    <rect x="13.5" y="13.5" width="7" height="7" rx="1.8" />
-                                  </svg>
-                                ) : (
-                                  <MarketIcon market={item === "美股" ? "US" : item === "港股" ? "HK" : "CN"} size={16} />
-                                )}
-                                {item}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex rounded-full bg-bg-gray p-1 text-sm">
-                    <button onClick={() => setCalView("year")} className={`rounded-full px-5 py-2 font-semibold transition ${calView === "year" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>年</button>
-                    <button onClick={() => setCalView("month")} className={`rounded-full px-5 py-2 font-semibold transition ${calView === "month" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>月</button>
-                  </div>
-                  <div className="flex rounded-full bg-bg-gray p-1 text-sm">
-                    <button onClick={() => setCalendarMode("收益")} className={`rounded-full px-5 py-2 font-semibold transition ${calendarMode === "收益" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>收益</button>
-                    <button onClick={() => setCalendarMode("收益率")} className={`rounded-full px-5 py-2 font-semibold transition ${calendarMode === "收益率" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>收益率</button>
-                  </div>
-                </div>
-              </div>
-              {klineLoading && calDays.every((c) => !c || c.pnl === 0) ? (
-                <div className="mt-4 grid grid-cols-7 gap-2" aria-hidden>
-                  {Array.from({ length: 28 }).map((_, i) => (
-                    <div key={i} className="h-16 animate-pulse rounded-xl bg-bg-gray" />
-                  ))}
-                </div>
-              ) : (
-                <>
-                  {calView === "year" ? (
-                    <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {yearSummary.map(({ m, pnl, pct, active }) => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => {
-                            setCalMonth({ y: calMonth.y, m });
-                            setCalView("month");
-                            try {
-                              localStorage.setItem("fire:asset-pnl-cal-month", JSON.stringify({ y: calMonth.y, m }));
-                            } catch {
-                              /* 忽略 */
-                            }
-                          }}
-                          className={`flex min-h-20 flex-col items-center justify-center rounded-xl border transition ${active ? "border-up bg-up-bg" : "border-edge hover:border-edge-strong"} ${pnl > 0 ? "text-up" : pnl < 0 ? "text-down" : "text-muted"}`}
-                        >
-                          <b className="text-sm text-ink">{m}月</b>
-                          {pnl !== 0 && (
-                            <span className="mt-2 text-xs font-semibold sm:text-sm">
-                              {calendarMode === "收益" ? compactDisp(pnl) : pct != null ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` : "—"}
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="mt-4 grid grid-cols-7 text-center text-xs font-semibold text-muted">{["日", "一", "二", "三", "四", "五", "六"].map((day) => <span key={day}>{day}</span>)}</div>
-                      <div className="mt-3 grid grid-cols-7 gap-1 sm:gap-2">
-                        {calDays.map((cell, index) =>
-                          cell ? (
-                            <button
-                              key={index}
-                              type="button"
-                              onClick={() => openDayDetail(`${calMonth.y}-${String(calMonth.m).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`)}
-                              title="点击查看当日每只股票盈亏"
-                              className={`flex min-h-20 flex-col items-center justify-center rounded-xl transition hover:ring-1 hover:ring-edge-strong ${cell.pnl > 0 ? "bg-up-bg text-up" : cell.pnl < 0 ? "bg-down-bg text-down" : "text-muted hover:bg-bg-gray"}`}
-                            >
-                              <b className="text-sm text-ink">{String(cell.day).padStart(2, "0")}</b>
-                              {calendarMode === "收益" ? (
-                                cell.pnl !== 0 && <span className="mt-2 text-xs font-semibold sm:text-sm">{compactDisp(cell.pnl)}</span>
-                              ) : (
-                                cell.pct != null && cell.pnl !== 0 && <span className="mt-2 text-xs font-semibold sm:text-sm">{cell.pct >= 0 ? "+" : ""}{cell.pct.toFixed(2)}%</span>
-                              )}
-                            </button>
-                          ) : (
-                            <span key={index} />
-                          )
-                        )}
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </section>
+            <PnlCalendar
+              className="mt-5 card p-5"
+              days={calDays}
+              yearSummary={yearSummary}
+              loading={klineLoading}
+              month={calMonth}
+              onMonthChange={(next) => {
+                setCalMonth(next);
+                try {
+                  localStorage.setItem("fire:asset-pnl-cal-month", JSON.stringify(next));
+                } catch {
+                  /* 忽略 */
+                }
+              }}
+              view={calView}
+              onViewChange={setCalView}
+              mode={calendarMode}
+              onModeChange={setCalendarMode}
+              market={calMarket}
+              onMarketChange={(next) => {
+                setCalMarket(next);
+                try {
+                  localStorage.setItem("fire:asset-pnl-cal-market", next);
+                } catch {
+                  /* 忽略 */
+                }
+              }}
+              formatAmount={moneyDisp}
+              formatCompact={compactDisp}
+              onDayClick={openDayDetail}
+              dayDetail={dayDetail}
+              onDayDetailClose={() => setDayDetail(null)}
+              renderMarketBadge={(row) => <MarketBadge market={row.market as PnlRow["market"]} code={row.code} />}
+            />
 
             <section className="mt-5 card p-5">
               <div className="flex items-center justify-between"><h2 className="text-base font-bold">全部盈亏总结</h2><span className="text-xs text-muted">更新至 {updatedAt.slice(5).replace("/", ".")}</span></div>
@@ -1288,58 +931,6 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
             </section>
           </>
         )}
-
-        {/* 收益日历-每日股票盈亏明细弹窗（点击日历某天弹出，样式对齐全部盈亏排行榜） */}
-        {dayDetail && (() => {
-          const profitRows = dayDetail.rows.filter((r) => r.pnl > 0);
-          const lossRows = dayDetail.rows.filter((r) => r.pnl < 0).slice().sort((a, b) => a.pnl - b.pnl);
-          const shownRows = dayDetailMode === "profit" ? profitRows : lossRows;
-          const shownTotal = shownRows.reduce((sum, r) => sum + r.pnl, 0);
-          return (
-            <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/50 p-6">
-              <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-card border border-edge bg-white shadow-2xl">
-                <div className="flex items-center justify-between border-b border-edge px-5 py-4">
-                  <div>
-                    <h3 className="text-base font-bold">当日盈亏 · {dayDetail.date.replace(/-/g, "/")}</h3>
-                    <p className="mt-0.5 text-xs text-muted">{profitRows.length} / {lossRows.length}</p>
-                  </div>
-                  <button type="button" onClick={() => setDayDetail(null)} aria-label="关闭" className="grid h-8 w-8 place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="m6 6 12 12M18 6 6 18" /></svg>
-                  </button>
-                </div>
-                <div className="px-5 pt-4">
-                  <div className="grid grid-cols-2 rounded-full bg-bg-gray p-1">
-                    <button onClick={() => setDayDetailMode("profit")} className={`rounded-full py-2.5 font-semibold ${dayDetailMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利</button>
-                    <button onClick={() => setDayDetailMode("loss")} className={`rounded-full py-2.5 font-semibold ${dayDetailMode === "loss" ? "bg-white shadow-sm" : "text-muted"}`}>亏损</button>
-                  </div>
-                </div>
-                <div className="mt-3 flex-1 space-y-2 overflow-y-auto px-2 pb-2">
-                  {shownRows.length === 0 && <p className="py-10 text-center text-sm text-muted">当日暂无{dayDetailMode === "profit" ? "盈利" : "亏损"}持仓</p>}
-                  {(() => {
-                    const maxRank = Math.max(...shownRows.map((r) => Math.abs(r.pnl)), 1);
-                    return shownRows.map((row, index) => (
-                      <div key={row.id} className="relative flex min-h-16 items-center overflow-hidden rounded-xl px-4">
-                        <div className={`absolute inset-y-0 right-0 rounded-xl ${dayDetailMode === "profit" ? "bg-up-bg" : "bg-down-bg"}`} style={{ width: `${Math.max(20, Math.abs(row.pnl) / maxRank * 100)}%` }} />
-                        <span className="relative mr-3 w-6 flex-none text-xs text-muted">{String(index + 1).padStart(2, "0")}</span>
-                        <div className="relative flex min-w-0 flex-1 items-center gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold">{row.name}</p>
-                            <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted"><MarketBadge market={row.market} code={row.code} /><span className="truncate">{row.code}</span></p>
-                          </div>
-                        </div>
-                        <strong className={`relative text-xs tabular-nums ${row.pnl >= 0 ? "text-up" : "text-down"}`}>{moneyDisp(row.pnl)}</strong>
-                      </div>
-                    ));
-                  })()}
-                </div>
-                <div className="flex items-center justify-between border-t border-edge px-5 py-4">
-                  <span className="text-xs text-muted">{dayDetailMode === "profit" ? "盈利合计" : "亏损合计"}</span>
-                  <strong className={`text-sm font-bold tabular-nums ${shownTotal >= 0 ? "text-up" : "text-down"}`}>{moneyDisp(shownTotal)}</strong>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
 
         {/* 分享截图预览弹窗 */}
     {shareOpen && shareImage && (

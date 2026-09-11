@@ -91,6 +91,7 @@ export async function PUT(request: Request) {
     marketBadges: body.marketBadges && typeof body.marketBadges === "object" ? body.marketBadges : undefined,
     marketBadgesVisible: typeof body.marketBadgesVisible === "boolean" ? body.marketBadgesVisible : undefined,
     assetMarketOrder: Array.isArray(body.assetMarketOrder) ? body.assetMarketOrder : undefined,
+    assetAnalysisOrder: body.assetAnalysisOrder && typeof body.assetAnalysisOrder === "object" ? body.assetAnalysisOrder : undefined,
     indicesOrder: Array.isArray(body.indicesOrder) ? body.indicesOrder : undefined,
     holdingColumns: Array.isArray(body.holdingColumns) ? body.holdingColumns : undefined,
     ticker: body.ticker && typeof body.ticker === "object" ? body.ticker : undefined,

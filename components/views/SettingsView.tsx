@@ -506,6 +506,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   marketBadges: { ...DEFAULT_MARKET_BADGES },
   marketBadgesVisible: true,
   assetMarketOrder: [],
+  assetAnalysisOrder: { left: [], right: [] },
   indicesOrder: [],
   allowRegister: true,
   stockIconCdn: false,
