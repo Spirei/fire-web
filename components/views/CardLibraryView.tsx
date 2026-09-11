@@ -1428,12 +1428,12 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     aria-label={holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
                     title={holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
                     className={`grid h-9 w-9 place-items-center rounded-full backdrop-blur transition-colors duration-200 active:scale-95 ${
-                      // 已在我的卡 → 红色「−」（移出，破坏性操作用红）；不在 → 深色「＋」（加入）
-                      holdings[active.card.file] ? "bg-[#e5484d] text-white hover:brightness-110" : "bg-black/45 text-white hover:bg-black/60"
+                      // 已在我的卡 → 蓝色胶囊 + 红色「−」（只把减号标红，背景不变）；不在 → 深色「＋」
+                      holdings[active.card.file] ? "bg-[#3297f6] text-white hover:brightness-110" : "bg-black/45 text-white hover:bg-black/60"
                     }`}
                   >
                     {holdings[active.card.file] ? (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-4 w-4">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-4 w-4 text-[#ff4d4d]">
                         <path d="M6 12h12" />
                       </svg>
                     ) : (
