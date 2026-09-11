@@ -35,13 +35,14 @@ import TradingSquareView from "@/components/views/TradingSquareView";
 import SettingsView from "@/components/views/SettingsView";
 import UsersView from "@/components/views/UsersView";
 import AssetLibraryView from "@/components/views/AssetLibraryView";
+import CardLibraryView from "@/components/views/CardLibraryView";
 import AttachmentsView from "@/components/views/AttachmentsView";
 import GlobalPreviewView from "@/components/views/GlobalPreviewView";
 import AssetPnlAnalysisView from "@/components/AssetPnlAnalysis";
 
 // 后台页签全部同步引入：next/dynamic 的 loading 会在刷新水合时盖住已 SSR 的内容，整页闪「加载中…」。
 
-type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "attachments" | "library" | "settings" | "pnl";
+type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
 
 function NoPermission() {
   return (
@@ -65,6 +66,7 @@ const DEFAULT_TABS: TabConfig[] = [
   { key: "users", label: "用户管理", url: "/users" },
   { key: "attachments", label: "附件管理", url: "/attachments" },
   { key: "library", label: "素材库", url: "/library" },
+  { key: "cards", label: "卡面库", url: "/cards" },
   { key: "activities", label: "日志", url: "/activities" },
   { key: "settings", label: "设置", url: "/settings" }
 ];
@@ -781,6 +783,7 @@ export default function RecordsApp({
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
           {activeTab === "attachments" && (user?.role === "admin" ? <AttachmentsView /> : <NoPermission />)}
           {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView initialCdnEnabled={initialSettings.stockIconCdn} /> : <NoPermission />)}
+          {activeTab === "cards" && <CardLibraryView />}
           {activeTab === "settings" && (
             <SettingsWindow>{settingsPanel}</SettingsWindow>
           )}

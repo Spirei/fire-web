@@ -2882,6 +2882,10 @@ export const V0_1_28_ENTRY: VersionEntry = {
     title: "资产分析性能 P1：聚合接口上 ETag（命中 304 不重传）+ 订单刷新口径对齐",
     desc: "给 `/api/v1/portfolio-series` 加 ETag 条件请求：指纹只按内容算（closes 按 recordId 排序后再序列化 —— 它是并发取回的，键顺序每次都可能不同，不排序会导致 ETag 每次都变、304 永远不命中；订单只取影响序列结果的字段，避免无关字段抖动），响应改为 `Cache-Control: private, max-age=30, must-revalidate`；顺带发现 next.config.mjs 里 `/api/:path*` 的全局 `no-store` 会覆盖路由自身的缓存头，为这个接口加了一条更具体的例外。客户端 `fetchPortfolioBundle` 默认走浏览器 HTTP 缓存（只有强制刷新才 no-store）。实测：连续三次请求 ETag 稳定，带 If-None-Match 命中 **304、下载 0 字节**（此前每次重传约 58KB）。另外把「订单」模块的刷新从 limit=500 对齐到 5000，避免刷新后列表从 5000 缩到 500。tsc 无错误、冒烟 113/113 全 PASS。",
     kind: "feature"
+  }, {
+    title: "新增「卡面库」：按 国家地区 / 卡类型 / 银行 三层归档的卡面素材与浏览页",
+    desc: "导航新增「卡面库」（素材库下方、日志上方；写进 NAV_KEYS 与默认页签，老用户的导航会由 parseTabs 自动补位）。素材：`scripts/fetch-card-assets.mjs` 从 GitHub HarukaKinen/Cardentify 的 main 分支 Cards/ 抓取（该仓库默认分支已变成 DMCA，脚本固定用 main），107 家银行的 436 张卡面 → 统一转 WebP（最长边 1000px、质量 82），312MB 原图压到约 20MB，落地 `public/uploads/cards/<国家地区>/<卡类型>/<银行>/<卡名>.webp` 并生成 `manifest.json`（地区 → 银行 → 卡，含 类型 / 卡组织 / 等级 / 卡号前几位）；脚本可重复运行（默认跳过已存在，支持 --force / --limit / --bank），换图加卡只跑一次脚本。分类：按上游 `card.type` 分 借记卡 251 / 信用卡 172 / 预付卡 1 / 其他 10，映射表另预留签账卡 / 取现卡 / 交通卡 / 礼品卡 / 虚拟卡；同时在清单里记录了**卡组织**（银联 / Mastercard / Visa / AMEX / JCB / Mir）与**等级**（普卡 / 金卡 / 白金 / 世界 / 无限…），后续做筛选不必重抓。页面 `/cards`：地区 + 类型两级胶囊筛选（带数量）、搜索（卡名 / 银行 / 卡组织）、响应式卡面网格（图片懒加载），点击卡面弹出大图与元信息，**不含下载按钮**；弹窗底部预留「录入金额」输入框 + 保存按钮（本版置灰占位，功能下一版接入）。接口 `/api/cards` 登录后读取清单（60 秒内存缓存）；`public/uploads/cards/` 加进 .gitignore —— 卡面属于本地素材，不进仓库、不随镜像分发，换图只影响本地。冒烟测试新增 /cards 页面巡检：tsc 无错误、冒烟 114/114 全 PASS。",
+    kind: "feature"
   }]
 };
 

@@ -79,6 +79,14 @@ export const NAV_ICONS: Record<string, React.ReactNode> = {
       <path d="M12 12v9" />
     </svg>
   ),
+  cards: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
+      <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+      <path d="M2.5 9.5h19" />
+      <path d="M6 15h4" />
+      <path d="M16.5 15h1.5" />
+    </svg>
+  ),
   settings: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
       <circle cx="12" cy="12" r="3" />
