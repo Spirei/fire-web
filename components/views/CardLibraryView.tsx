@@ -1232,8 +1232,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       if (!res.ok || !data?.card) throw new Error("save failed");
       const card = data.card as CustomCard;
       setCustomCards((prev) => [...prev, card]);
-      setHoldings((prev) => ({ ...prev, [card.image]: true }));
-      showToast(`已新增卡片：${card.name}`);
+      // 新建的卡只进「全部卡面」，需要时再自己点「＋ 加入」收进我的卡
+      if (mode !== "all") setMode("all");
+      showToast(`已新增卡片：${card.name}——在「全部卡面」里，点「＋ 加入」可收进我的卡`);
       setAddOpen(false);
       setNewCard({ name: "", bank: "", region: "中国内地", type: "借记卡", brand: "", level: "", currencyScope: "single" });
       setNewImage("");
@@ -1704,7 +1705,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               <div className="min-w-0">
                 <h3 className="text-base font-bold text-ink">新增卡片</h3>
                 <p className="mt-0.5 text-xs text-muted">
-                  素材库里没有的卡：上传卡面 + 填卡片信息，保存后进「我的卡」，并同步到「素材库 → 卡片」
+                  素材库里没有的卡：上传卡面 + 填卡片信息，保存后进「全部卡面」，并同步到「素材库 → 卡片」
                 </p>
               </div>
               <button
@@ -1869,19 +1870,22 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 </label>
               </div>
               <p className="mt-2 text-[11px] text-faint">
-                保存后会直接进「我的卡」，并同步登记到「素材库 → 卡片」，之后卡号、余额历史、资产分析联动都和清单里的卡一样。
+                保存后会进「全部卡面」（不自动加入我的卡），同时登记到「素材库 → 卡片」；需要时在列表里点「＋ 加入」收进「我的卡」。
               </p>
             </div>
 
             <div className="border-t border-edge px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
-              <button
-                type="button"
-                disabled={newSaving || newUploading || !newImage || !newCard.name.trim() || !newCard.bank.trim()}
-                onClick={() => void submitNewCard()}
-                className="h-11 w-full rounded-xl bg-[#111] text-xs font-semibold text-white transition-transform duration-200 active:scale-[.99] disabled:opacity-40 dark:bg-white dark:text-[#111]"
-              >
-                {newSaving ? "保存中…" : "保存并加入我的卡"}
-              </button>
+              {/* 按钮按内容宽度居中，不再拉满整行 */}
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  disabled={newSaving || newUploading || !newImage || !newCard.name.trim() || !newCard.bank.trim()}
+                  onClick={() => void submitNewCard()}
+                  className="h-11 rounded-xl bg-[#111] px-7 text-xs font-semibold text-white transition-transform duration-200 active:scale-[.99] disabled:opacity-40 dark:bg-white dark:text-[#111]"
+                >
+                  {newSaving ? "保存中…" : "保存卡片"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

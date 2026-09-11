@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { createCustomCard, customCardImageOf, deleteCustomCard, listCustomCards } from "@/lib/cardCustom";
-import { setCardHeld } from "@/lib/cardAmounts";
 import { upsertAsset, deleteAsset } from "@/lib/assets";
 import { cardAssetId } from "@/lib/cardAssets";
 import { readCardManifest } from "@/lib/cardLibrary";
@@ -82,8 +81,6 @@ export async function POST(request: Request) {
     image,
     currencyScope
   });
-  // 自己新建的卡默认就在「我的卡」里
-  setCardHeld(user.id, card.image, true);
   // 同步登记到「素材库 → 卡片」：和清单里的卡面一样是一条 type=card 的素材，
   // 素材库里能替换 / 删除，卡面库与卡包读的也是这条素材的 url
   upsertAsset({
