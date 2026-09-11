@@ -59,32 +59,42 @@ function stockMapFromCache(): Record<string, string> {
   return map;
 }
 
-/** 个股详情 / 划过卡片按需补一张素材库图标，不拉 3000+ 全量。 */
-export function ensureStockIcon(market: string, code: string) {
-  if (pickStockIcon(stockMapFromCache(), market, code)) return;
-  const key = `${market.toUpperCase()}:${code.toUpperCase()}`;
-  const pending = iconInflight.get(key);
+function applyStockIconPayload(data: { assets?: Array<{ type?: string; market?: string; code?: string; url?: string }> } | null) {
+  const icons: Record<string, string> = {};
+  (Array.isArray(data?.assets) ? data.assets : []).forEach((asset) => {
+    if (asset?.type === "stock" && asset.market && asset.code && asset.url) {
+      icons[`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`] = asset.url;
+    }
+  });
+  if (Object.keys(icons).length) {
+    primeStockIconCache(icons);
+    notify();
+  }
+}
+
+/** 财报日历等一次补多张素材库图标，不拉 3000+ 全量。 */
+export function ensureStockIcons(pairs: Array<{ market: string; code: string }>) {
+  const cached = stockMapFromCache();
+  const missing = pairs.filter((pair) => pair.market && pair.code && !pickStockIcon(cached, pair.market, pair.code));
+  if (!missing.length) return;
+  const keys = [...new Set(missing.map((pair) => `${pair.market.toUpperCase()}:${pair.code.toUpperCase()}`))];
+  const batchKey = `batch:${keys.slice().sort().join(",")}`;
+  const pending = iconInflight.get(batchKey);
   if (pending) return pending;
-  const task = fetch(`/api/assets?type=stock&market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`)
+  const task = fetch(`/api/assets?type=stock&keys=${encodeURIComponent(keys.join(","))}`)
     .then((response) => (response.ok ? response.json() : null))
-    .then((data) => {
-      const icons: Record<string, string> = {};
-      (Array.isArray(data?.assets) ? data.assets : []).forEach((asset: { type?: string; market?: string; code?: string; url?: string }) => {
-        if (asset?.type === "stock" && asset.market && asset.code && asset.url) {
-          icons[`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`] = asset.url;
-        }
-      });
-      if (Object.keys(icons).length) {
-        primeStockIconCache(icons);
-        notify();
-      }
-    })
+    .then((data) => applyStockIconPayload(data))
     .catch(() => { /* 保留已有首字母兜底 */ })
     .finally(() => {
-      if (iconInflight.get(key) === task) iconInflight.delete(key);
+      if (iconInflight.get(batchKey) === task) iconInflight.delete(batchKey);
     });
-  iconInflight.set(key, task);
+  iconInflight.set(batchKey, task);
   return task;
+}
+
+/** 个股详情 / 划过卡片按需补一张素材库图标，不拉 3000+ 全量。 */
+export function ensureStockIcon(market: string, code: string) {
+  return ensureStockIcons([{ market, code }]);
 }
 
 export function primeStockIconCache(icons: Record<string, string>) {

@@ -16,8 +16,16 @@ export async function GET(request: Request) {
   if (type === "broker") ensureBrokerAssets();
   const market = searchParams.get("market");
   const code = searchParams.get("code");
-  if (type === "stock" && market && code) {
-    const map = getStockIconMap([{ market, code }]);
+  const keysParam = searchParams.get("keys");
+  if (type === "stock" && (keysParam || (market && code))) {
+    const pairs = keysParam
+      ? keysParam.split(",").slice(0, 200).flatMap((key) => {
+          const separator = key.indexOf(":");
+          if (separator <= 0) return [];
+          return [{ market: key.slice(0, separator), code: key.slice(separator + 1) }];
+        })
+      : [{ market: market || "", code: code || "" }];
+    const map = getStockIconMap(pairs);
     const assets = Object.entries(map).map(([key, url]) => {
       const separator = key.indexOf(":");
       const itemMarket = key.slice(0, separator);

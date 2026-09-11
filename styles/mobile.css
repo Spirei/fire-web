@@ -1,4 +1,8 @@
 /* Phone layout: viewport-driven, independent of device model or user agent. */
+/* 财报日历格子：桌面端最多展示 3 家 + 「+N 家」；手机端改为格内上下滑动查看全部 */
+.earnings-calendar-grid [data-earnings-rows] > [data-earnings-row]:nth-child(n+4) { display: none; }
+/* 日期卡片只在手机上弹出（桌面用格内悬浮卡片） */
+
 @media (max-width: 767px) {
   html, body { max-width: 100%; overflow-x: hidden; -webkit-text-size-adjust: 100%; }
 
@@ -141,16 +145,45 @@
   }
   .fire-year-actions { display: flex; }
 
+  /* 财报日历：格子里用股票图标，点开日期看名称；选中态不再用桌面悬浮层 */
   .earnings-calendar-page > p { font-size: 12px; }
   .earnings-calendar-grid { padding: 10px 7px; }
   .earnings-calendar-grid [class~="grid-cols-7"] { gap: 3px; }
   .earnings-calendar-grid [class~="grid-cols-7"] > button,
-  .earnings-calendar-grid [class~="grid-cols-7"] > div { min-height: 46px; border-radius: 9px; padding: 4px; }
-  .earnings-calendar-grid [class~="grid-cols-7"] > button > div { display: none; }
-  .earnings-calendar-grid [class~="grid-cols-7"] > button > span:first-child { width: 22px; height: 22px; font-size: 10px; }
+  .earnings-calendar-grid [class~="grid-cols-7"] > div { min-height: 58px; height: 58px; border-radius: 9px; padding: 4px; }
+  .earnings-calendar-grid [class~="grid-cols-7"] > button > span:first-child { width: 20px; height: 20px; font-size: 10px; }
+  .earnings-calendar-grid [data-earnings-pop] { display: none !important; }
+  .earnings-calendar-grid [data-earnings-rows] {
+    display: flex;
+    flex: 1 1 0%;
+    min-height: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 2px;
+    padding-top: 1px;
+    overflow: hidden;
+  }
+  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row] {
+    display: flex;
+    width: 16px;
+    min-width: 16px;
+    overflow: visible;
+    gap: 0;
+  }
+  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row]:nth-child(4) { display: flex; }
+  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row]:nth-child(n+5) { display: none; }
+  .earnings-calendar-grid [data-earnings-name],
+  .earnings-calendar-grid [data-earnings-dot] { display: none; }
+  .earnings-calendar-grid [data-earnings-logo],
+  .earnings-calendar-grid [data-earnings-logo] img,
+  .earnings-calendar-grid [data-earnings-logo] span {
+    width: 16px;
+    height: 16px;
+    font-size: 8px;
+  }
+  .earnings-calendar-grid [data-earnings-more] { width: 100%; font-size: 9px; line-height: 1.2; }
 
-  .watchlist-index-grid > :nth-child(n+3) { display: block; }
-  .celeb-summary-card { gap: 10px; padding: 16px !important; }
   .celeb-summary-ring { display: none; }
   .celeb-detail-summary { gap: 14px; padding: 16px !important; }
   .celeb-holdings-row { min-width: 700px; }
@@ -247,11 +280,22 @@
   .mobile-users-table td:nth-child(6) > div { justify-content: flex-start; flex-wrap: wrap; }
   .mobile-users-table td:nth-child(6) button { min-height: 36px; }
   .dark .mobile-users-table tr { border-color: rgba(255,255,255,.1); }
+
+  /* 窄屏：图标缩到 10px 把宽度让给名称；时段圆点让位给名称 */
 }
 
 /* Large phones and narrow split views keep complete modules and scroll wide tables internally. */
 @media (min-width: 421px) and (max-width: 767px) {
-  .mobile-hide-duplicate-summary { display: block; }
+    .earnings-calendar-grid { padding: 12px; }
+  .earnings-calendar-grid [class~="grid-cols-7"] { gap: 6px; }
+  .earnings-calendar-grid [class~="grid-cols-7"] > button,
+  .earnings-calendar-grid [class~="grid-cols-7"] > div { min-height: 72px; height: 72px; border-radius: 12px; padding: 6px; }
+  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row] { width: 18px; min-width: 18px; }
+  .earnings-calendar-grid [data-earnings-logo],
+  .earnings-calendar-grid [data-earnings-logo] img,
+  .earnings-calendar-grid [data-earnings-logo] span { width: 18px; height: 18px; }
+
+.mobile-hide-duplicate-summary { display: block; }
   .mobile-analysis-holdings { min-width: 760px !important; table-layout: auto; }
   .mobile-analysis-holdings [data-holding-column] { display: table-cell; width: auto; }
   .mobile-quotes-table { min-width: 860px !important; table-layout: auto; }
@@ -266,11 +310,6 @@
   .holdings-sankey-module,
   .watchlist-index-grid > :nth-child(n+3), .celeb-summary-ring { display: block; }
   .celeb-summary-card { padding-right: 28px !important; }
-  .earnings-calendar-grid { padding: 12px; }
-  .earnings-calendar-grid [class~="grid-cols-7"] { gap: 6px; }
-  .earnings-calendar-grid [class~="grid-cols-7"] > button,
-  .earnings-calendar-grid [class~="grid-cols-7"] > div { min-height: 88px; border-radius: 12px; padding: 8px; }
-  .earnings-calendar-grid [class~="grid-cols-7"] > button > div { display: flex; }
 }
 
 @media (min-width: 600px) and (max-width: 767px) {

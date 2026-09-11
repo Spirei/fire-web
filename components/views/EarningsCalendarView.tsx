@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { StockRecord } from "@/lib/types";
-import { useAssetIcons } from "@/lib/useAssetIcons";
+import { ensureStockIcons, useAssetIcons } from "@/lib/useAssetIcons";
+import { pickStockIcon } from "@/lib/stockIconKey";
 import MarketIcon from "@/components/MarketIcon";
 import { usePersistedState } from "@/lib/usePersistedState";
 
@@ -198,7 +199,7 @@ function Fireo({
   const [err, setErr] = useState(false);
   const { stockIcons } = useAssetIcons(["stock"]);
   const url = logoUrl(symbol, market, usBase, cnBase);
-  const custom = stockIcons[`${market.toUpperCase()}:${symbol.toUpperCase()}`];
+  const custom = pickStockIcon(stockIcons, market, symbol);
   if (err || (!custom && !url)) {
     return (
       <span className={`${className} flex items-center justify-center rounded-full bg-brand-light text-[11px] font-bold text-brand-deep`}>
@@ -277,6 +278,11 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
   const cursorKey = `${cursor.y}-${pad2(cursor.m + 1)}`;
   const dataKey = `${marketKey}:${cursorKey}`;
   const items = months[dataKey] ?? null;
+
+  useEffect(() => {
+    if (!items?.length) return;
+    void ensureStockIcons(items.map((row) => ({ market: row.market, code: row.symbol })));
+  }, [items]);
 
   useEffect(() => {
     let cancelled = false;
@@ -364,6 +370,10 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
     setSelectedDate(null);
     setCapKey("all");
   };
+
+  function toggleDate(key: string) {
+    setSelectedDate(selectedDate === key ? null : key);
+  }
 
   const orderedMarkets = useMemo(() => {
     const base = MARKETS.map((m) => m.key);
@@ -600,14 +610,13 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
               <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
                 {grid.map((cell, i) =>
                   cell.type === "blank" ? (
-                    <div key={`blank-${i}`} className="rounded-[14px]" style={{ minHeight: 88 }} />
+                    <div key={`blank-${i}`} className="min-h-[88px] rounded-[14px]" />
                   ) : (
                     <button
                       key={cell.key}
                       type="button"
                       aria-current={cell.isToday ? "date" : undefined}
-                      style={{ minHeight: 88 }}
-                      className={`flex cursor-default flex-col rounded-[14px] border bg-bg-gray/30 p-2.5 dark:bg-white/[0.04] ${
+                      className={`flex min-h-[88px] cursor-default flex-col rounded-[14px] border bg-bg-gray/30 p-2.5 dark:bg-white/[0.04] ${
                         cell.isToday
                           ? "border-2 border-white bg-[#eef0f3] shadow-[0_0_0_2px_rgba(17,24,39,0.22)] dark:bg-white/[0.08] dark:shadow-[0_0_0_2px_rgba(255,255,255,0.18)]"
                           : "border-transparent"
@@ -634,16 +643,16 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
               <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
                 {grid.map((cell, i) =>
                   cell.type === "blank" ? (
-                    <div key={`blank-${i}`} className="rounded-[14px]" style={{ minHeight: 88 }} />
+                    <div key={`blank-${i}`} className="min-h-[88px] rounded-[14px]" />
                   ) : (
                     <button
                       key={cell.key}
                       ref={cell.isToday ? todayCellRef : undefined}
                       type="button"
                       aria-current={cell.isToday ? "date" : undefined}
-                      onClick={() => setSelectedDate(selectedDate === cell.key ? null : cell.key)}
-                      style={{ minHeight: 88 }}
-                      className={`group relative flex cursor-pointer flex-col gap-1.5 overflow-hidden rounded-[14px] border p-2.5 text-left transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop ${
+                      onClick={() => toggleDate(cell.key)}
+                      data-open={selectedDate === cell.key ? "true" : undefined}
+                      className={`group relative flex min-h-[88px] cursor-pointer flex-col gap-1.5 overflow-hidden rounded-[14px] border p-2.5 text-left transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop ${
                         selectedDate === cell.key
                           ? "border-edge bg-white shadow-pop dark:bg-[#252c3a]"
                           : cell.rows.length > 0
@@ -664,22 +673,25 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                         </span>
                       )}
 
-                      <div className="flex flex-col gap-[4px] pt-0.5">
-                        {cell.rows.slice(0, 3).map((row) => (
-                          <span key={row.symbol} className="flex min-w-0 items-center gap-1 overflow-hidden text-[10px] font-medium leading-[1.3] text-ink-2 sm:text-[10.5px]">
-                            <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="h-3.5 w-3.5 flex-none" />
-                            <span className="min-w-0 flex-1 truncate">{row.nameZh || row.name}</span>
-                            <span className={`ml-auto h-1.5 w-1.5 flex-none rounded-full ${TIME_DOT[timeKind(row.time)]}`} />
+                      <div data-earnings-rows className="flex flex-col gap-[4px] pt-0.5">
+                        {cell.rows.map((row) => (
+                          <span data-earnings-row key={row.symbol} className="flex min-w-0 items-center gap-1 overflow-hidden text-[10px] font-medium leading-[1.3] text-ink-2 sm:text-[10.5px]">
+                            <span data-earnings-logo className="flex-none">
+                              <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="h-3.5 w-3.5 flex-none" />
+                            </span>
+                            <span data-earnings-name className="min-w-0 flex-1 truncate">{row.nameZh || row.name}</span>
+                            <span data-earnings-dot className={`ml-auto h-1.5 w-1.5 flex-none rounded-full ${TIME_DOT[timeKind(row.time)]}`} />
                           </span>
                         ))}
                         {cell.rows.length > 3 && (
-                          <span className="text-[10px] font-semibold text-muted">+{cell.rows.length - 3} 家</span>
+                          <span data-earnings-more className="text-[10px] font-semibold text-muted">+{cell.rows.length - 3} 家</span>
                         )}
                       </div>
 
                       {cell.rows.length > 0 && (
                         <div
-                          onClick={() => setSelectedDate(selectedDate === cell.key ? null : cell.key)}
+                          data-earnings-pop
+                          onClick={() => toggleDate(cell.key)}
                           className={`pointer-events-none absolute inset-0 z-20 flex flex-col overflow-hidden rounded-[14px] border border-edge-strong bg-white p-2 shadow-pop transition-all duration-300 ease-out ${selectedDate === cell.key ? "translate-y-0 scale-100 opacity-100 pointer-events-auto" : "-translate-y-1 scale-95 opacity-0 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-hover:pointer-events-auto"}`}
                         >
                           <div className="mb-1 flex items-center justify-between">
@@ -739,7 +751,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
               {selectedDate && selectedRows.length === 0 && (byDateAll.get(selectedDate)?.length ?? 0) === 0 && (
                 <p className="mb-3 px-1 text-xs text-faint">该日暂无财报</p>
               )}
-              <div className="flex flex-col gap-2">
+              <div data-day-detail-list className="flex flex-col gap-2">
                 {selectedRows.map((row) => {
                   const chg = row.changePct;
                   return (
