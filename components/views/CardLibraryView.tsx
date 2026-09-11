@@ -252,7 +252,7 @@ function MultiSelect({
         {open && (
           <>
             <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-            <div className="absolute left-0 top-full z-40 mt-1 max-h-[300px] w-full min-w-[220px] overflow-y-auto rounded-xl border border-edge-strong bg-white p-1 shadow-pop dark:border-white/10 dark:bg-[#1b2029]">
+            <div className="thin-scrollbar absolute left-0 top-full z-40 mt-1 max-h-[300px] w-full min-w-[220px] overflow-y-auto rounded-xl border border-edge-strong bg-white p-1 shadow-pop dark:border-white/10 dark:bg-[#1b2029]">
               <button
                 type="button"
                 onClick={() => onChange([])}

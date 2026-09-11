@@ -896,6 +896,32 @@
 .orders-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 110, 125, 0.7);
 }
+/* 下拉面板（卡面库多选等）：细滚动条，浅色细条，深色模式跟随 */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 130, 145, 0.45) transparent;
+}
+.thin-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(120, 130, 145, 0.45);
+  border-radius: 999px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 110, 125, 0.7);
+}
+.dark .thin-scrollbar {
+  scrollbar-color: rgba(255, 255, 255, 0.26) transparent;
+}
+.dark .thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.26);
+}
+
 /* 每日盈亏分享-持仓列表：竖直滚动条（浅色细条，深色模式跟随） */
 .share-list-scroll {
   overflow-y: auto;

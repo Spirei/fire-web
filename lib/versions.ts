@@ -2946,6 +2946,10 @@ export const V0_1_28_ENTRY: VersionEntry = {
     title: "卡面库地区下拉加国旗（取素材库旗帜）",
     desc: "地区多选面板里每个地区前面加上对应国旗：新增「地区 → ISO 二字码」映射（中国内地 CN / 中国香港 HK / 中国澳门 MO / 中国台湾 TW / 日本 JP / 新加坡 SG / 哈萨克斯坦 KZ / 英国 GB / 德国 DE / 爱尔兰 IE / 俄罗斯 RU / 美国 US / 加拿大 CA / 澳大利亚 AU），用现成的 `CurrencyFlag` 渲染 —— 它优先取素材库里用户上传的自定义旗帜、没有再回退内置的本地 SVG（`public/uploads/asset/flag/*.svg`，14 个码全部存在），不依赖任何远程 CDN。国旗同时出现在多选面板的每一行与选中后的按钮摘要里（选了一个地区时）。tsc 无错误、冒烟 114/114 全 PASS。",
     kind: "feature"
+  }, {
+    title: "下拉面板滚动条改细（全局 .thin-scrollbar）",
+    desc: "卡面库的多选面板（地区 / 银行 / 卡组织 / 等级 / 主题 / 我的标签）用的是浏览器默认滚动条，在深色背景下又宽又抢眼。新增全局工具类 `.thin-scrollbar`：滚动条宽 4px、轨道透明、滑块用 999px 圆角 + 半透明灰（hover 略深），`scrollbar-width: thin` 让 Firefox 同样细；深色模式滑块换成 26% 白色。多选面板套用该类，列表再长也是细细一条。tsc 无错误、冒烟 114/114 全 PASS。",
+    kind: "fix"
   }]
 };
 
