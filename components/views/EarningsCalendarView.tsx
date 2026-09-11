@@ -604,7 +604,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
   return (
     <div className="earnings-calendar-page">
       <h2 className="mb-1.5 text-lg font-bold">财报日历</h2>
-      <p className="mb-4 text-sm text-muted">美股 / A股财报 · 上月至未来 4 个月，点击日期查看当天财报详情。</p>
+      <p className="mb-4 text-sm text-muted">美股 / 港股 / A股财报 · 上月至未来 4 个月，点击日期查看当天财报详情。</p>
 
       <div className="card overflow-visible">
         {/* 头部：月份导航 + 统计 + 筛选 */}
@@ -911,7 +911,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
         </div>
 
         <div className="border-t border-edge bg-bg-gray/50 px-5 py-2.5 text-right text-xs text-faint">
-          美股数据来自 Nasdaq，A股数据来自东方财富预约披露，行情实时更新，仅供参考
+          美股数据来自 Nasdaq，港股数据来自雪球财报日历，A股数据来自东方财富预约披露，财报实时更新，仅供参考
         </div>
       </div>
     </div>
