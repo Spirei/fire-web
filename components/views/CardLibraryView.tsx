@@ -9,6 +9,15 @@ import { FALLBACK_RATES } from "@/lib/types";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
 import { CARD_CURRENCIES, REGION_CURRENCY, currencySymbol } from "@/lib/cardCurrencies";
+import {
+  CURRENCY_SCOPE_LABEL,
+  CURRENCY_SCOPE_ORDER,
+  cardCurrencyScope,
+  currencyScopeSummary,
+  isCurrencyScope,
+  type CurrencyScope,
+  type CurrencyScopeInfo
+} from "@/lib/cardCurrency";
 import type { CardLibraryPayload } from "@/lib/cardLibrary";
 import type { CardDetails } from "@/lib/cardWallet";
 
@@ -139,6 +148,14 @@ function Pill({ active, children, onClick }: { active: boolean; children: React.
     </button>
   );
 }
+
+/** 币种范围角标配色：单币中性、双币蓝、多币种紫、待确认琥珀 */
+const SCOPE_CHIP_CLASS: Record<CurrencyScope, string> = {
+  single: "bg-brand-light text-brand-deep dark:bg-white/10 dark:text-white/70",
+  dual: "bg-[#3297f6]/12 text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]",
+  multi: "bg-[#8b5cf6]/14 text-[#7c3aed] dark:bg-[#8b5cf6]/22 dark:text-[#c4b5fd]",
+  unknown: "bg-[#f59e0b]/16 text-[#b45309] dark:bg-[#f59e0b]/20 dark:text-[#fcd34d]"
+};
 
 /** 多选胶囊组：数值为空 = 全部；点「全部」清空选择 */
 function PillGroup({
@@ -326,12 +343,15 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
 
   // 各维度都是多选：空数组 = 全部；同一维度内 OR，跨维度 AND
   const [region, setRegion] = useState<string[]>([]);
-  const [type, setType] = useState<string[]>([]);
+  /** 类型筛选：单选（空 = 全部类型），和币种一样 */
+  const [type, setType] = useState("");
   const [bankFolder, setBankFolder] = useState<string[]>([]);
   const [brand, setBrand] = useState<string[]>([]);
   const [level, setLevel] = useState<string[]>([]);
   const [tag, setTag] = useState<string[]>([]);
   const [myTag, setMyTag] = useState<string[]>([]);
+  /** 币种范围筛选：单选（值是 CURRENCY_SCOPE_LABEL 里的中文，空 = 全部） */
+  const [scopeFilter, setScopeFilter] = useState("");
   const [onlyFilled, setOnlyFilled] = useState(false);
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -447,7 +467,22 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     });
   }, [regions]);
 
-  type Facet = "region" | "bank" | "type" | "brand" | "level" | "tag" | "myTag" | null;
+  /**
+   * 每张卡的币种范围：手动覆盖（卡片详情里改过）优先，否则用规则推断。
+   * 规则本身在 lib/cardCurrency.ts：卡名关键词 → 发行方产品 → 地区本币 → 卡组织。
+   */
+  const scopeByCard = useMemo(() => {
+    const map: Record<string, { scope: CurrencyScope; info: CurrencyScopeInfo; overridden: boolean }> = {};
+    flat.forEach(({ card, bank, region: regionLabel }) => {
+      const info = cardCurrencyScope({ name: card.name, brand: card.brand, bank: bank.name, region: regionLabel });
+      const override = details[card.file]?.currencyScope;
+      const scope = isCurrencyScope(override) ? override : info.scope;
+      map[card.file] = { scope, info, overridden: scope !== info.scope };
+    });
+    return map;
+  }, [flat, details]);
+
+  type Facet = "region" | "bank" | "type" | "brand" | "level" | "tag" | "myTag" | "scope" | null;
   const keyword = query.trim().toLowerCase();
 
   /** 分面匹配：skip 传入当前正在统计的维度时，该维度本身不参与过滤（标准 facet 行为） */
@@ -456,11 +491,15 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     if (mode === "mine" && !holdings[card.file]) return false;
     if (skip !== "region" && region.length > 0 && !region.includes(regionLabel)) return false;
     if (skip !== "bank" && bankFolder.length > 0 && !bankFolder.includes(bank.folder)) return false;
-    if (skip !== "type" && type.length > 0 && !type.includes(card.type || "其他")) return false;
+    if (skip !== "type" && type && (card.type || "其他") !== type) return false;
     if (skip !== "brand" && brand.length > 0 && !brand.includes((card.brand || "").trim())) return false;
     if (skip !== "level" && level.length > 0 && !level.includes((card.level || "").trim())) return false;
     if (skip !== "tag" && tag.length > 0 && !tag.some((item) => tags.includes(item))) return false;
     if (skip !== "myTag" && myTag.length > 0 && !myTag.some((item) => (userTags[card.file] ?? []).includes(item))) return false;
+    if (skip !== "scope") {
+      const scope = scopeByCard[card.file]?.scope ?? "unknown";
+      if (scopeFilter && CURRENCY_SCOPE_LABEL[scope] !== scopeFilter) return false;
+    }
     if (onlyFilled && !amounts[card.file]) return false;
     if (!keyword) return true;
     return (
@@ -557,10 +596,27 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     ];
   })();
 
+  /** 币种范围选项（其他维度筛选后重新统计，标准 facet 行为；值用中文标签，和「类型」一致） */
+  const scopeBase = filterBase("scope");
+  const scopeOptions = (() => {
+    const counts = new Map<CurrencyScope, number>();
+    scopeBase.forEach(({ card }) => {
+      const scope = scopeByCard[card.file]?.scope ?? "unknown";
+      counts.set(scope, (counts.get(scope) ?? 0) + 1);
+    });
+    return [
+      { key: ALL, count: scopeBase.length },
+      ...CURRENCY_SCOPE_ORDER.filter((scope) => counts.has(scope)).map((scope) => ({
+        key: CURRENCY_SCOPE_LABEL[scope],
+        count: counts.get(scope) ?? 0
+      }))
+    ];
+  })();
+
   /** 筛选条件变化时回到第一屏 */
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [region.join(","), bankFolder.join(","), type.join(","), brand.join(","), level.join(","), tag.join(","), myTag.join(","), onlyFilled, query]);
+  }, [region.join(","), bankFolder.join(","), type, brand.join(","), level.join(","), tag.join(","), myTag.join(","), scopeFilter, onlyFilled, query]);
 
   /** 卡片详情弹窗：手机上锁住背景滚动，Esc 关闭 */
   useEffect(() => {
@@ -587,6 +643,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
 
   const pageItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
   const activeUserTags = active ? userTags[active.card.file] ?? [] : [];
+  const activeScope = active ? scopeByCard[active.card.file] : undefined;
 
   /** 卡包叠卡视图的数据：只放「我的卡」，带卡背信息与当前余额 */
   const walletCards = useMemo<WalletCard[]>(
@@ -788,6 +845,27 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     void saveTagList(active.card.file, current.filter((item) => item !== value));
   }
 
+  /** 币种范围手动覆盖：传空字符串 = 恢复自动推断（存 card_details.currency_scope） */
+  async function setScopeOverride(cardKey: string, scope: string) {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/cards/wallet", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardKey, currencyScope: scope })
+      });
+      const data = res.ok ? await res.json() : null;
+      if (!res.ok || !data?.details) throw new Error("scope save failed");
+      setDetails((prev) => ({ ...prev, [cardKey]: data.details as CardDetails }));
+      showToast(scope ? `币种范围已标为「${CURRENCY_SCOPE_LABEL[scope as CurrencyScope]}」` : "币种范围已恢复自动判定");
+    } catch {
+      showToast("保存失败，稍后再试", "err");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div ref={rootRef} className="space-y-4">
       <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-3">
@@ -959,9 +1037,19 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           <PillGroup
             label="类型"
             options={typeOptions}
-            values={type}
-            onToggle={(key) => setType((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]))}
-            onClear={() => setType([])}
+            values={type ? [type] : []}
+            onToggle={(key) => setType((prev) => (prev === key ? "" : key))}
+            onClear={() => setType("")}
+          />
+        </div>
+        {/* 币种范围：单币 / 双币 / 多币种（规则推断 + 卡片详情里可手动覆盖） */}
+        <div className="ticker-scroll -mx-3 overflow-x-auto overscroll-x-contain px-3 sm:mx-0 sm:overflow-visible sm:px-0">
+          <PillGroup
+            label="币种"
+            options={scopeOptions}
+            values={scopeFilter ? [scopeFilter] : []}
+            onToggle={(key) => setScopeFilter((prev) => (prev === key ? "" : key))}
+            onClear={() => setScopeFilter("")}
           />
         </div>
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 xl:grid-cols-5">
@@ -1020,17 +1108,18 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             />
           )}
         </div>
-        {(type.length > 0 || region.length > 0 || bankFolder.length > 0 || brand.length > 0 || level.length > 0 || tag.length > 0 || myTag.length > 0 || onlyFilled || query.trim()) && (
+        {Boolean(type || region.length > 0 || bankFolder.length > 0 || brand.length > 0 || level.length > 0 || tag.length > 0 || myTag.length > 0 || scopeFilter || onlyFilled || query.trim()) && (
           <button
             type="button"
             onClick={() => {
-              setType([]);
+              setType("");
               setRegion([]);
               setBankFolder([]);
               setBrand([]);
               setLevel([]);
               setTag([]);
               setMyTag([]);
+              setScopeFilter("");
               setOnlyFilled(false);
               setQuery("");
             }}
@@ -1072,6 +1161,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             const mine = userTags[card.file] ?? [];
             const shownTags = [...mine, ...tags.filter((item) => !mine.includes(item))];
             const isHeld = !!holdings[card.file];
+            const scope = scopeByCard[card.file]?.scope ?? "unknown";
             return (
               <button
                 key={`${bank.folder}-${card.file}`}
@@ -1128,9 +1218,14 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     {card.brand ? ` · ${card.brand}` : ""}
                     {card.level ? ` · ${card.level}` : ""}
                   </small>
-                  {shownTags.length > 0 && (
-                    <span className="mt-1 flex flex-wrap gap-1">
-                      {shownTags.slice(0, 3).map((item) => (
+                  <span className="mt-1 flex flex-wrap gap-1">
+                    <i
+                      title={currencyScopeSummary(scopeByCard[card.file]?.info ?? { scope, currencies: [], reason: "", confidence: "low" })}
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold not-italic sm:py-[1px] sm:text-[9px] ${SCOPE_CHIP_CLASS[scope]}`}
+                    >
+                      {CURRENCY_SCOPE_LABEL[scope]}
+                    </i>
+                    {shownTags.slice(0, 3).map((item) => (
                         <i
                           key={item}
                           className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold not-italic sm:py-[1px] sm:text-[9px] ${
@@ -1142,8 +1237,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                           {item}
                         </i>
                       ))}
-                    </span>
-                  )}
+                  </span>
                 </span>
               </button>
             );
@@ -1206,6 +1300,51 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 <span className="rounded-lg bg-white px-3 py-2 text-muted dark:bg-[#1c222d]">等级<b className="ml-1 text-ink">{active.card.level || "—"}</b></span>
                 <span className="rounded-lg bg-white px-3 py-2 text-muted dark:bg-[#1c222d]">卡号前几位<b className="ml-1 text-ink">{active.card.bins?.length ? active.card.bins.join(" / ") : "—"}</b></span>
               </div>
+              {/* 币种范围：规则推断 + 手动覆盖（存 card_details.currency_scope） */}
+              {activeScope && (
+                <div className="mx-auto mt-2 max-w-[560px] rounded-xl bg-white px-3 py-2.5 dark:bg-[#1c222d]">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-[11px] font-semibold text-muted">币种范围</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${SCOPE_CHIP_CLASS[activeScope.scope]}`}>
+                      {CURRENCY_SCOPE_LABEL[activeScope.scope]}
+                    </span>
+                    <span className="min-w-0 flex-1 text-[11px] text-faint">
+                      {activeScope.overridden ? "手动标记" : "自动推断"}：{currencyScopeSummary(activeScope.info)}
+                      {activeScope.info.confidence === "high" ? "" : `（${activeScope.info.reason}）`}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] text-faint">改成</span>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => void setScopeOverride(active.card.file, "")}
+                      className={`h-8 rounded-full border px-3 text-[11px] font-semibold transition-colors duration-200 disabled:opacity-50 max-sm:h-9 ${
+                        activeScope.overridden
+                          ? "border-edge bg-white text-ink-2 hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
+                          : "border-[#111] bg-[#111] text-white dark:border-white dark:bg-white dark:text-[#111]"
+                      }`}
+                    >
+                      自动
+                    </button>
+                    {CURRENCY_SCOPE_ORDER.map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        disabled={saving}
+                        onClick={() => void setScopeOverride(active.card.file, value)}
+                        className={`h-8 rounded-full border px-3 text-[11px] font-semibold transition-colors duration-200 disabled:opacity-50 max-sm:h-9 ${
+                          activeScope.overridden && activeScope.scope === value
+                            ? "border-[#111] bg-[#111] text-white dark:border-white dark:bg-white dark:text-[#111]"
+                            : "border-edge bg-white text-ink-2 hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
+                        }`}
+                      >
+                        {CURRENCY_SCOPE_LABEL[value]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className="mx-auto mt-2 max-w-[560px] text-center text-[11px] text-faint">
                 原图 {fileExt(active.card.file)}
                 {active.card.bytes ? ` · ${fmtBytes(active.card.bytes)}` : ""}

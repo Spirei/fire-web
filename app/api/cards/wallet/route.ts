@@ -55,7 +55,7 @@ export async function PUT(request: Request) {
   if (!body || typeof body !== "object") return NextResponse.json({ error: "无效请求" }, { status: 400 });
   const cardKey = normalizeCardKey(String((body as { cardKey?: unknown }).cardKey ?? "").trim());
   if (!cardKey || cardKey.length > 600) return NextResponse.json({ error: "卡面标识无效" }, { status: 400 });
-  const raw = body as { number?: unknown; expiry?: unknown; cvv?: unknown; note?: unknown; currency?: unknown };
+  const raw = body as { number?: unknown; expiry?: unknown; cvv?: unknown; note?: unknown; currency?: unknown; currencyScope?: unknown };
   if (raw.number !== undefined && String(raw.number).replace(/[^\d ]/g, "").length > 30) {
     return NextResponse.json({ error: "卡号过长" }, { status: 400 });
   }
@@ -67,7 +67,8 @@ export async function PUT(request: Request) {
     expiry: raw.expiry === undefined ? undefined : String(raw.expiry),
     cvv: raw.cvv === undefined ? undefined : String(raw.cvv),
     note: raw.note === undefined ? undefined : String(raw.note),
-    currency: raw.currency === undefined ? undefined : String(raw.currency)
+    currency: raw.currency === undefined ? undefined : String(raw.currency),
+    currencyScope: raw.currencyScope === undefined ? undefined : String(raw.currencyScope)
   });
   return NextResponse.json({ details }, NO_STORE);
 }

@@ -218,6 +218,7 @@ function migrate(database: Database.Database) {
       cvv TEXT NOT NULL DEFAULT '',
       note TEXT NOT NULL DEFAULT '',
       currency TEXT NOT NULL DEFAULT '',
+      currency_scope TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL,
       PRIMARY KEY (user_id, card_key)
     );
@@ -319,6 +320,8 @@ function migrate(database: Database.Database) {
   const cardDetailCols = (database.prepare("PRAGMA table_info(card_details)").all() as { name: string }[]).map((c) => c.name);
   if (!cardDetailCols.includes("note")) database.exec("ALTER TABLE card_details ADD COLUMN note TEXT NOT NULL DEFAULT ''");
   if (!cardDetailCols.includes("currency")) database.exec("ALTER TABLE card_details ADD COLUMN currency TEXT NOT NULL DEFAULT ''");
+  // 币种范围（单币 / 双币 / 多币种）：空 = 用规则自动推断，非空 = 用户手动覆盖
+  if (!cardDetailCols.includes("currency_scope")) database.exec("ALTER TABLE card_details ADD COLUMN currency_scope TEXT NOT NULL DEFAULT ''");
 
   // 卡面库余额流水增量字段（兼容旧库）：券商账户联动生成的资金流水 id（空 = 外部资金）
   const cardBalanceCols = (database.prepare("PRAGMA table_info(card_balance_history)").all() as { name: string }[]).map((c) => c.name);

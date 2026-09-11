@@ -16,6 +16,8 @@ export interface CardDetails {
   note: string;
   /** 币种（如 HKD），余额与历史都按这个币种记账 */
   currency: string;
+  /** 币种范围手动覆盖：'' = 自动推断，single / dual / multi / unknown = 用户指定 */
+  currencyScope: string;
   updatedAt: string;
 }
 
@@ -42,6 +44,7 @@ interface DetailsRow {
   cvv: string;
   note: string;
   currency: string;
+  currency_scope: string;
   updated_at: string;
 }
 
@@ -71,7 +74,7 @@ function toBalanceEntry(row: BalanceRow): CardBalanceEntry {
 
 export function listCardDetails(userId: string): Record<string, CardDetails> {
   const rows = getDb()
-    .prepare("SELECT card_key, card_number, expiry, cvv, note, currency, updated_at FROM card_details WHERE user_id = ?")
+    .prepare("SELECT card_key, card_number, expiry, cvv, note, currency, currency_scope, updated_at FROM card_details WHERE user_id = ?")
     .all(userId) as DetailsRow[];
   const out: Record<string, CardDetails> = {};
   rows.forEach((row) => {
@@ -82,6 +85,7 @@ export function listCardDetails(userId: string): Record<string, CardDetails> {
       cvv: row.cvv || "",
       note: row.note || "",
       currency: row.currency || "",
+      currencyScope: row.currency_scope || "",
       updatedAt: row.updated_at
     };
   });
@@ -92,13 +96,15 @@ export function listCardDetails(userId: string): Record<string, CardDetails> {
 export function saveCardDetails(
   userId: string,
   cardKey: string,
-  input: { number?: string; expiry?: string; cvv?: string; note?: string; currency?: string }
+  input: { number?: string; expiry?: string; cvv?: string; note?: string; currency?: string; currencyScope?: string }
 ): CardDetails {
   const db = getDb();
   const now = new Date().toISOString();
   const existing = (
     db
-      .prepare("SELECT card_key, card_number, expiry, cvv, note, currency, updated_at FROM card_details WHERE user_id = ? AND card_key = ?")
+      .prepare(
+        "SELECT card_key, card_number, expiry, cvv, note, currency, currency_scope, updated_at FROM card_details WHERE user_id = ? AND card_key = ?"
+      )
       .get(userId, cardKey) as DetailsRow | undefined
   );
   const number =
@@ -110,19 +116,23 @@ export function saveCardDetails(
   const note = input.note === undefined ? existing?.note ?? "" : String(input.note).trim().slice(0, 60);
   const currency =
     input.currency === undefined ? existing?.currency ?? "" : String(input.currency).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 8);
+  // 只认四个合法值，其余（含空字符串）都当成「恢复自动推断」
+  const rawScope = input.currencyScope === undefined ? existing?.currency_scope ?? "" : String(input.currencyScope).trim().toLowerCase();
+  const currencyScope = ["single", "dual", "multi", "unknown"].includes(rawScope) ? rawScope : "";
   db
     .prepare(
-      `INSERT INTO card_details (user_id, card_key, card_number, expiry, cvv, note, currency, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO card_details (user_id, card_key, card_number, expiry, cvv, note, currency, currency_scope, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, card_key) DO UPDATE SET
          card_number = excluded.card_number,
          expiry = excluded.expiry,
          cvv = excluded.cvv,
          note = excluded.note,
          currency = excluded.currency,
+         currency_scope = excluded.currency_scope,
          updated_at = excluded.updated_at`
     )
-    .run(userId, cardKey, number, expiry, cvv, note, currency, now);
+    .run(userId, cardKey, number, expiry, cvv, note, currency, currencyScope, now);
   // 币种一并同步到金额记录（卡面库的金额胶囊与总览都读它）
   if (currency) {
     const amountRow = db.prepare("SELECT amount, note FROM card_amounts WHERE user_id = ? AND card_key = ?").get(userId, cardKey) as
@@ -132,7 +142,7 @@ export function saveCardDetails(
       db.prepare("UPDATE card_amounts SET currency = ?, updated_at = ? WHERE user_id = ? AND card_key = ?").run(currency, now, userId, cardKey);
     }
   }
-  return { cardKey, number, expiry, cvv, note, currency, updatedAt: now };
+  return { cardKey, number, expiry, cvv, note, currency, currencyScope, updatedAt: now };
 }
 
 /** 每张卡取最近 limit 条流水 */
