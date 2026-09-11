@@ -1174,9 +1174,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       showToast("只能上传图片文件（JPG / PNG / WEBP）", "err");
       return;
     }
-    // 服务端「素材」类上传上限 2MB，这里先拦一道，省得白传一次
-    if (file.size > 2 * 1024 * 1024) {
-      showToast(`这张图 ${(file.size / 1024 / 1024).toFixed(1)}MB，超过 2MB 上限，压缩一下再传`, "err");
+    // 服务端卡面上传上限 20MB，这里先拦一道，省得白传一次
+    if (file.size > 20 * 1024 * 1024) {
+      showToast(`这张图 ${(file.size / 1024 / 1024).toFixed(1)}MB，超过 20MB 上限`, "err");
       return;
     }
     setNewUploading(true);
@@ -1765,7 +1765,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       <span className={`text-[12px] font-semibold ${dragActive ? "text-[#2f6fed]" : "text-ink-2"}`}>
                         {newUploading ? "上传中…" : dragActive ? "松手放下这张卡面" : "点这里选，或把图片拖进来"}
                       </span>
-                      <span className="text-[11px] text-faint">建议 1.586:1 标准卡面比例，JPG / PNG / WEBP / SVG，最大 2MB</span>
+                      <span className="text-[11px] text-faint">建议 1.586:1 标准卡面比例，JPG / PNG / WEBP / SVG，最大 20MB</span>
                     </span>
                   )}
                   {newImage && !newUploading && (

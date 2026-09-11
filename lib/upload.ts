@@ -93,6 +93,9 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
   if (kind === "asset" && folder && !["market", "flag", "crypto", "metal", "stock", "broker", "group", "icon", "card"].includes(folder)) {
     throw new UploadError("无效的素材文件夹", 400);
   }
+  // 卡面（folder=card）单独放宽：手机拍的卡片原图动辄十几 MB，其它素材仍按类别限制
+  const maxBytes = folder === "card" ? 20 * 1024 * 1024 : config.maxBytes;
+  const sizeHint = folder === "card" ? `${config.hint.split("，最大")[0]}，最大尺寸 20MB` : config.hint;
   if (kind !== "avatar" && !isAdmin(user)) {
     throw new UploadError("需要管理员权限", 403);
   }
@@ -101,8 +104,8 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
     throw new UploadError("请选择要上传的文件", 400);
   }
   const ext = (file.name.split(".").pop() ?? "").toLowerCase();
-  if (!config.exts.includes(ext)) throw new UploadError(config.hint, 400);
-  if (file.size > config.maxBytes) throw new UploadError(`文件过大，${config.hint}`, 400);
+  if (!config.exts.includes(ext)) throw new UploadError(sizeHint, 400);
+  if (file.size > maxBytes) throw new UploadError(`文件过大，${sizeHint}`, 400);
   const buffer = Buffer.from(await file.arrayBuffer());
   const validatedExt = validateImageContent(buffer, ext);
   if (!validatedExt) {
