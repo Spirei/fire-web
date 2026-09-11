@@ -641,7 +641,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                       type="button"
                       aria-current={cell.isToday ? "date" : undefined}
                       onClick={() => setSelectedDate(selectedDate === cell.key ? null : cell.key)}
-                      className={`group relative flex min-h-[88px] cursor-pointer flex-col gap-1.5 overflow-hidden rounded-[14px] border p-2.5 text-left transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop sm:min-h-[104px] ${
+                      className={`group relative flex min-h-[88px] cursor-pointer flex-col gap-1 overflow-hidden rounded-[14px] border p-1.5 text-left sm:gap-1.5 sm:p-2.5 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop sm:min-h-[104px] ${
                         selectedDate === cell.key
                           ? "border-edge bg-white shadow-pop dark:bg-[#252c3a]"
                           : cell.rows.length > 0
@@ -664,14 +664,14 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
 
                       <div className="flex min-h-0 flex-1 flex-col gap-[4px] pt-0.5">
                         {cell.rows.slice(0, 3).map((row) => (
-                          <span key={row.symbol} className="flex items-center gap-1 overflow-hidden text-[10px] font-medium leading-[1.3] text-ink-2 sm:text-[10.5px]">
-                            <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="h-3.5 w-3.5" />
+                          <span key={row.symbol} className="flex items-center gap-1 overflow-hidden text-[9.5px] font-medium leading-[1.25] text-ink-2 sm:text-[10.5px]">
+                            <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="hidden h-3.5 w-3.5 flex-none sm:block" />
                             <span className="truncate">{row.nameZh || row.name}</span>
                             <span className={`ml-auto h-1.5 w-1.5 flex-none rounded-full ${TIME_DOT[timeKind(row.time)]}`} />
                           </span>
                         ))}
                         {cell.rows.length > 3 && (
-                          <span className="text-[10px] font-semibold text-muted">+{cell.rows.length - 3} 家</span>
+                          <span className="text-[9px] font-semibold text-muted sm:text-[10px]">+{cell.rows.length - 3} 家</span>
                         )}
                       </div>
 
