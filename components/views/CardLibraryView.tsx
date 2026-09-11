@@ -1485,8 +1485,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     type="button"
                     onClick={() => void setHeld(active.card.file, !holdings[active.card.file])}
                     aria-label={holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
-                    title={holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
-                    className="grid h-9 w-9 place-items-center rounded-full bg-black/45 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95"
+                    className="group/tip relative grid h-9 w-9 place-items-center rounded-full bg-black/45 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95"
                   >
                     {holdings[active.card.file] ? (
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4 text-[#f87171]">
@@ -1497,10 +1496,16 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         <path d="M12 6v12M6 12h12" />
                       </svg>
                     )}
+                    {/* 自绘提示：原生 title 要等一两秒才出来 */}
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute right-0 top-[calc(100%+7px)] z-10 whitespace-nowrap rounded-lg bg-[#1c222d]/95 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-pop ring-1 ring-white/10 transition-opacity duration-100 group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100"
+                    >
+                      {holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
+                    </span>
                   </button>
                   <label
-                    title="上传卡面：用自己的卡片照片替换清单原图（建议 1.586:1，JPG / PNG / WEBP，最大 2MB）"
-                    className={`grid h-9 w-9 cursor-pointer place-items-center rounded-full bg-black/45 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95 ${
+                    className={`group/tip relative grid h-9 w-9 cursor-pointer place-items-center rounded-full bg-black/45 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95 ${
                       coverSaving ? "pointer-events-none opacity-60" : ""
                     }`}
                   >
@@ -1517,6 +1522,12 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                       <path d="M12 15V4M8 7.5 12 3.5l4 4M5 15v3.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5V15" />
                     </svg>
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute right-0 top-[calc(100%+7px)] z-10 whitespace-nowrap rounded-lg bg-[#1c222d]/95 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-pop ring-1 ring-white/10 transition-opacity duration-100 group-hover/tip:opacity-100"
+                    >
+                      {coverSaving ? "上传中…" : "上传卡面"}
+                    </span>
                   </label>
                   {hasCustomCover(active.card.file) && (
                     <button
@@ -1524,13 +1535,18 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       disabled={coverSaving}
                       onClick={() => void resetCover(active)}
                       aria-label="恢复清单原图"
-                      title="恢复清单原图"
-                      className="grid h-9 w-9 place-items-center rounded-full bg-black/45 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95 disabled:opacity-50"
+                      className="group/tip relative grid h-9 w-9 place-items-center rounded-full bg-black/45 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95 disabled:opacity-50"
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                         <path d="M4 12a8 8 0 1 0 2.6-5.9" />
                         <path d="M4 4v4.5h4.5" />
                       </svg>
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute right-0 top-[calc(100%+7px)] z-10 whitespace-nowrap rounded-lg bg-[#1c222d]/95 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-pop ring-1 ring-white/10 transition-opacity duration-100 group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100"
+                      >
+                        恢复清单原图
+                      </span>
                     </button>
                   )}
                 </div>
