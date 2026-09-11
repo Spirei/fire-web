@@ -2663,22 +2663,35 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
                 {/* 列表 / 网格切换 */}
                 <span className="flex flex-none rounded-full border border-edge-strong bg-bg-gray/60 p-0.5 dark:bg-white/5">
                   {([
-                    { key: "list" as const, label: "列表", path: "M4 7h16M4 12h16M4 17h16" },
-                    { key: "grid" as const, label: "网格", path: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" }
+                    { key: "list" as const, label: "列表显示" },
+                    { key: "grid" as const, label: "网格显示" }
                   ]).map((v) => (
                     <button
                       key={v.key}
                       type="button"
                       onClick={() => setCardView(v.key)}
-                      title={v.key === "list" ? "列表显示" : "网格显示"}
+                      title={v.label}
+                      aria-label={v.label}
                       aria-pressed={cardView === v.key}
                       className={`grid h-7 w-8 place-items-center rounded-full transition-colors duration-200 ${
-                        cardView === v.key ? "bg-white text-ink shadow-sm dark:bg-[#262c37] dark:text-white" : "text-muted hover:text-ink"
+                        cardView === v.key ? "bg-white text-ink-2 shadow-sm dark:bg-[#262c37] dark:text-white/90" : "text-faint hover:text-ink-2"
                       }`}
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                        <path d={v.path} />
-                      </svg>
+                      {v.key === "list" ? (
+                        /* 列表：左侧圆点 + 三条粗细一致的行（比纯三条线更像「列表」） */
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]">
+                          <path d="M9 6.5h10.5M9 12h10.5M9 17.5h10.5" />
+                          <path d="M4.8 6.5h.01M4.8 12h.01M4.8 17.5h.01" strokeWidth="2" />
+                        </svg>
+                      ) : (
+                        /* 网格：2×2 圆角方格，留足间距、细描边，不再糊成一坨 */
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]">
+                          <rect x="4" y="4" width="6.6" height="6.6" rx="1.6" />
+                          <rect x="13.4" y="4" width="6.6" height="6.6" rx="1.6" />
+                          <rect x="4" y="13.4" width="6.6" height="6.6" rx="1.6" />
+                          <rect x="13.4" y="13.4" width="6.6" height="6.6" rx="1.6" />
+                        </svg>
+                      )}
                     </button>
                   ))}
                 </span>
