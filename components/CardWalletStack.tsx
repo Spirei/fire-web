@@ -66,8 +66,26 @@ const PULL_MAX = 92;
 /** 上下各渲染几张（再深的就收进叠里了） */
 const VISIBLE_ABOVE = 6;
 const VISIBLE_BELOW = 5;
+/** 叠得越深，每一张露出的高度越小：卡叠会自己压紧，不会一路顶到标题栏 */
+const FAN_COMPRESS = 0.05;
+/** 快甩判定：手指速度（px/ms）到这个值就算「一把甩出去」 */
+const FLICK_SPEED = 1.6;
 const FOCUS_RING =
   "focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.15)] focus:outline-none dark:focus:border-white/20 dark:focus:shadow-[0_0_0_3px_rgba(255,255,255,.10)]";
+
+/**
+ * 叠层里第 slot 层离正中多远（往下为正）。slot 可以是小数：拖动时每张卡都在连续换层。
+ * 超过两三层之后间距递减，整叠看着像被压紧的一摞卡，而不是一路平铺出去。
+ */
+function fanOffset(slot: number, step: number): number {
+  const compress = 1 / (1 + (FAN_COMPRESS * slot * (slot - 1)) / 2);
+  return step * slot * compress;
+}
+
+/** 拖动进度：前 30% 的手指位移先走完一半的叠层位移，反应更跟手，尾巴再慢慢收 */
+function easeProgress(t: number): number {
+  return 1 - Math.pow(1 - t, 1.45);
+}
 
 function StackGlyph({ className = "h-4 w-4" }: { className?: string }) {
   return (
@@ -196,15 +214,15 @@ export default function CardWalletStack({
    * p / q 按 SWIPE_DISTANCE 归一化，整叠是连续推进的，松手只是从这里缓动到终点。
    */
   const transformFor = useCallback((relative: number, drag: number) => {
-    const p = Math.max(0, Math.min(1, -drag / SWIPE_DISTANCE));
-    const q = Math.max(0, Math.min(1, drag / SWIPE_DISTANCE));
+    const p = easeProgress(Math.max(0, Math.min(1, -drag / SWIPE_DISTANCE)));
+    const q = easeProgress(Math.max(0, Math.min(1, drag / SWIPE_DISTANCE)));
 
-    // 手里这张：跟手，但拉出来一段之后就带阻尼，松手滑回叠层里的位置
+    // 手里这张：跟手，但拉出来一段之后就带阻尼；被抽出来时略微放大，像从卡叠里抬起来
     if (relative === 0) {
       const pulled = PULL_MAX * (1 - Math.exp(-Math.abs(drag) / PULL_MAX));
       return {
         y: drag >= 0 ? pulled : -pulled,
-        scale: 1 - Math.min(pulled / 2600, 0.05),
+        scale: 1 + Math.min(pulled / 1400, 0.035),
         opacity: 1,
         // 往下拖时它要让位：翻回来的那张压在上面，这张钻到后面去
         z: q > 0.001 ? 205 : 210
@@ -215,9 +233,9 @@ export default function CardWalletStack({
     if (relative < 0) {
       const slot = Math.max(0, -relative + p - q);
       return {
-        y: -ABOVE_STEP * slot,
+        y: -fanOffset(slot, ABOVE_STEP),
         scale: Math.pow(1 - ABOVE_SCALE_STEP, slot),
-        opacity: Math.max(0, Math.min(1, 1 - Math.max(0, slot - 1.5) * 0.25)),
+        opacity: Math.max(0, Math.min(1, 1 - Math.max(0, slot - 3) * 0.28)),
         z: 206 - Math.ceil(slot)
       };
     }
@@ -226,16 +244,19 @@ export default function CardWalletStack({
     const depth = Math.min(relative, 5);
     const shifted = Math.max(0, depth - p + q);
     return {
-      y: shifted * CARD_STEP,
+      y: fanOffset(shifted, CARD_STEP),
       scale: Math.pow(1 - CARD_SCALE_STEP, shifted),
-      opacity: Math.max(0, Math.min(1, 1 - Math.max(0, shifted - 2) * 0.4)),
+      opacity: Math.max(0, Math.min(1, 1 - Math.max(0, shifted - 2.5) * 0.35)),
       z: 200 - Math.ceil(shifted)
     };
   }, []);
 
-  /** 把当前 index / 拖动偏移画到 DOM 上；animate = true 时用缓动过渡 */
+  /**
+   * 把当前 index / 拖动偏移画到 DOM 上。
+   * animate = true 时用缓动过渡；speed 是松手时的甩动速度（px/ms），甩得越快收得越利落。
+   */
   const paint = useCallback(
-    (drag: number, animate: boolean) => {
+    (drag: number, animate: boolean, speed = 0) => {
       const list = sortedRef.current;
       const base = indexRef.current;
       const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -259,14 +280,19 @@ export default function CardWalletStack({
           gsap.set(element, { ...vars, overwrite: true });
           return;
         }
-        // 离目标越远给的时间越长：落回来 / 飞出去都不会一顿一顿的
+        // 离目标越远给的时间越长；甩得越快收得越急；整叠按层数错开一点点，
+        // 落位时是一层一层"啪"下来的，不是整块板子一起移动
         const from = Number(gsap.getProperty(element, "y")) || 0;
         const distance = Math.abs(from - target.y);
+        const flick = Math.max(0, Math.min(1, speed / FLICK_SPEED));
+        const level = Math.min(Math.abs(relative), 3);
         gsap.to(element, {
           ...vars,
-          duration: Math.max(0.44, Math.min(0.78, 0.44 + distance / 1500)),
-          ease: relative < 0 ? "power2.in" : "power3.out",
-          overwrite: true
+          duration: Math.max(0.3, Math.min(0.74, 0.44 + distance / 1600) * (1 - flick * 0.3)),
+          delay: level * 0.02 * (1 - flick * 0.6),
+          // 位移大的给一点回弹：像卡片"啪"地落进卡叠
+          ease: distance > 24 ? "back.out(1.15)" : "power3.out",
+          overwrite: "auto"
         });
       });
     },
@@ -294,16 +320,16 @@ export default function CardWalletStack({
   }, []);
 
   const step = useCallback(
-    (direction: number) => {
+    (direction: number, speed = 1.1) => {
       const max = Math.max(0, sortedRef.current.length - 1);
       const next = Math.max(0, Math.min(max, indexRef.current + direction));
       if (next === indexRef.current) {
-        paint(0, true);
+        paint(0, true, speed);
         return;
       }
       indexRef.current = next;
       setIndex(next);
-      paint(0, true);
+      paint(0, true, speed);
     },
     [paint]
   );
@@ -336,9 +362,10 @@ export default function CardWalletStack({
       const elapsed = Math.max(1, performance.now() - drag.startAt);
       const velocity = delta / elapsed;
       const threshold = 96;
-      if (delta < -threshold || (delta < -26 && velocity < -0.5)) step(1);
-      else if (delta > threshold || (delta > 26 && velocity > 0.5)) step(-1);
-      else paint(0, true);
+      const flick = Math.abs(velocity);
+      if (delta < -threshold || (delta < -26 && velocity < -0.5)) step(1, flick);
+      else if (delta > threshold || (delta > 26 && velocity > 0.5)) step(-1, flick);
+      else paint(0, true, flick);
       window.setTimeout(() => {
         movedRef.current = false;
       }, 0);
@@ -406,8 +433,9 @@ export default function CardWalletStack({
     const now = performance.now();
     if (now < wheelLockRef.current) return;
     if (Math.abs(event.deltaY) < 10) return;
-    wheelLockRef.current = now + 420;
-    step(event.deltaY > 0 ? 1 : -1);
+    wheelLockRef.current = now + 360;
+    // 滚轮冲得越猛越像"甩"：收尾更利落
+    step(event.deltaY > 0 ? 1 : -1, Math.min(1.6, Math.abs(event.deltaY) / 120));
   };
 
   const onCardClick = (position: number) => {
