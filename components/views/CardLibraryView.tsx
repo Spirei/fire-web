@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { showToast } from "@/lib/toast";
 import { cardTagsOf } from "@/lib/cardTags";
+import CurrencyFlag from "@/components/CurrencyFlag";
 import { FALLBACK_RATES } from "@/lib/types";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
@@ -111,6 +112,23 @@ const REGION_CONTINENT: Record<string, string> = {
   澳大利亚: "大洋洲"
 };
 const CHINA_REGIONS = new Set(["中国内地", "中国香港", "中国澳门", "中国台湾"]);
+/** 地区 → ISO 二字码（取素材库里的国旗） */
+const REGION_ISO: Record<string, string> = {
+  中国内地: "CN",
+  中国香港: "HK",
+  中国澳门: "MO",
+  中国台湾: "TW",
+  日本: "JP",
+  新加坡: "SG",
+  哈萨克斯坦: "KZ",
+  英国: "GB",
+  德国: "DE",
+  爱尔兰: "IE",
+  俄罗斯: "RU",
+  美国: "US",
+  加拿大: "CA",
+  澳大利亚: "AU"
+};
 
 function currencySymbol(code: string): string {
   return CARD_CURRENCIES.find((item) => item.code === code)?.symbol ?? (code ? `${code} ` : "");
@@ -192,16 +210,20 @@ function MultiSelect({
   allLabel,
   options,
   values,
-  onChange
+  onChange,
+  renderIcon
 }: {
   label: string;
   allLabel: string;
-  options: { value: string; label: string; group?: string }[];
+  options: { value: string; label: string; group?: string; icon?: React.ReactNode }[];
   values: string[];
   onChange: (next: string[]) => void;
+  /** 摘要按钮里显示的图标（按已选值取），用于地区国旗这类标识 */
+  renderIcon?: (value: string) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const labelOf = (value: string) => options.find((option) => option.value === value)?.label ?? value;
+  const iconOf = (value: string) => options.find((option) => option.value === value)?.icon ?? null;
   const summary = values.length === 0 ? allLabel : values.length === 1 ? labelOf(values[0]) : `${labelOf(values[0])} +${values.length - 1}`;
   const toggle = (value: string) => {
     onChange(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
@@ -219,7 +241,10 @@ function MultiSelect({
             open ? "border-edge-strong shadow-[0_0_0_3px_rgba(107,114,128,.15)]" : "border-edge"
           }`}
         >
-          <span className="min-w-0 truncate">{summary}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            {values.length === 1 ? (renderIcon ? renderIcon(values[0]) : iconOf(values[0])) : null}
+            <span className="min-w-0 truncate">{summary}</span>
+          </span>
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 flex-none text-muted transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
             <path d="m5 7 5 5 5-5" />
           </svg>
@@ -256,7 +281,10 @@ function MultiSelect({
                         active ? "bg-[#3297f6]/12 font-semibold text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]" : "text-ink hover:bg-brand-hover dark:text-white/80 dark:hover:bg-white/10"
                       }`}
                     >
-                      <span className="min-w-0 truncate">{option.label}</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        {option.icon}
+                        <span className="min-w-0 truncate">{option.label}</span>
+                      </span>
                       {active && (
                         <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 flex-none">
                           <path d="m2.4 6.4 2.5 2.5 4.7-5.8" />
@@ -806,7 +834,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               .map((option) => ({
                 value: option.key,
                 label: `${option.key}（${option.count}）`,
-                group: REGION_CONTINENT[option.key] ?? "其他"
+                group: REGION_CONTINENT[option.key] ?? "其他",
+                icon: REGION_ISO[option.key] ? <CurrencyFlag market={REGION_ISO[option.key]} size={16} /> : null
               }))}
             onChange={(next) => {
               setRegion(next);
