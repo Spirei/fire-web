@@ -7,6 +7,7 @@ import { showToast } from "@/lib/toast";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { CARD_CURRENCIES, cardLast4, currencySymbol, fmtCardMoney, formatCardNumber } from "@/lib/cardCurrencies";
 import { isFundCurrency } from "@/lib/fundCurrencies";
+import { hasSecurityCode } from "@/lib/cardSecurity";
 
 /** 卡包里的一张卡：卡面 + 卡背信息 + 当前余额 */
 export interface WalletCard {
@@ -35,6 +36,8 @@ export interface WalletCardDetails {
   cvv: string;
   note: string;
   currency: string;
+  /** 币种范围手动覆盖（'' = 自动推断），由卡面库那边维护，卡包只负责原样带回 */
+  currencyScope: string;
   updatedAt: string;
 }
 
@@ -138,18 +141,6 @@ function localDateInput(): string {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${now.getFullYear()}-${month}-${day}`;
-}
-
-/**
- * 卡背安全码（CVV / CVC）的显隐规则。
- *
- * 中国大陆的借记卡背面**没有**安全码（线上支付走密码 / 短信验证，卡号 + 有效期也刷不了），
- * 所以这类卡不画卡背那个白色方块，卡片信息里也不列「安全码」这一行、编辑弹窗不出现该字段。
- * 其他地区 / 卡种（如香港、海外的借记卡大多带 CVC）是否带安全码暂无结论，一律保持原样；
- * 以后要扩规则只改这一处。
- */
-function hasSecurityCode(card: Pick<WalletCard, "type" | "region">): boolean {
-  return !(card.region === "中国内地" && card.type === "借记卡");
 }
 
 /**

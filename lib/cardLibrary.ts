@@ -3,6 +3,8 @@ import path from "node:path";
 import { listCardAmounts, listCardHoldings, listCardTags, type CardAmount } from "./cardAmounts";
 import { listCardDetails, type CardDetails } from "./cardWallet";
 import { REGION_CURRENCY } from "./cardCurrencies";
+import { hasSecurityCode } from "./cardSecurity";
+import { getDb } from "./db";
 import { FALLBACK_RATES } from "./types";
 
 /** 卡面库清单（由 scripts/fetch-card-assets.mjs 生成） */
@@ -55,6 +57,7 @@ export function readCardManifest(): CardManifest | null {
 
 /** 首屏注入用：清单 + 当前用户的持有 / 金额 / 标签 */
 export function cardLibraryForUser(userId: string): CardLibraryPayload {
+  sweepLegacyCardCvv();
   const manifest = readCardManifest();
   return {
     regions: manifest?.regions ?? [],
@@ -130,4 +133,37 @@ export function cardCashByCurrency(userId: string): Record<string, number> {
     out[currency] = (out[currency] || 0) + value;
   });
   return out;
+}
+
+/* ---------- 一次性数据清洗 ---------- */
+
+let cvvSweepDone = false;
+
+/**
+ * 清掉「本来就没有安全码的卡」上残留的 cvv。
+ *
+ * 背景：卡包的编辑弹窗此前对**中国大陆的借记卡**也给安全码输入框，早期数据里可能留了值；
+ * 现在这类卡既不显示、也不能编辑该字段（见 lib/cardSecurity.ts），那些值就是脏数据。
+ *
+ * 幂等且只在每个进程第一次读卡面库时跑一次（本地与线上容器都会自动清）：
+ * 只 UPDATE cvv 非空的行，跑完之后再跑就没有匹配行；清单还没抓到（没跑过抓取脚本）时直接跳过、
+ * 等下次有清单再来，避免在拿不到卡类型的情况下乱清。
+ */
+export function sweepLegacyCardCvv(): number {
+  if (cvvSweepDone) return 0;
+  const meta = cardMetaMap();
+  if (meta.size === 0) return 0;
+  cvvSweepDone = true;
+  const rows = getDb().prepare("SELECT user_id, card_key FROM card_details WHERE cvv <> ''").all() as { user_id: string; card_key: string }[];
+  const stale = rows.filter((row) => {
+    const info = meta.get(row.card_key);
+    return info !== undefined && !hasSecurityCode(info);
+  });
+  if (stale.length === 0) return 0;
+  const db = getDb();
+  const clear = db.prepare("UPDATE card_details SET cvv = '', updated_at = ? WHERE user_id = ? AND card_key = ?");
+  const now = new Date().toISOString();
+  db.transaction(() => stale.forEach((row) => clear.run(now, row.user_id, row.card_key)))();
+  console.log(`[card] 已清理 ${stale.length} 张「无安全码」卡片上残留的 CVV（中国大陆借记卡）`);
+  return stale.length;
 }
