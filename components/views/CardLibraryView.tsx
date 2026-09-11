@@ -1228,7 +1228,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             <path d="m5 7 5 5 5-5" />
           </svg>
         </button>
-        <div className={`grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 xl:grid-cols-5 ${moreFiltersOpen ? "" : "max-sm:hidden"}`}>
+        {/* 7 个下拉：lg（1024px）往上刚好能排成一排（每格约 130px，最长的「全部卡组织」也放得下），
+            再窄就退成 4 列 / 2 列，避免挤到看不清 */}
+        <div className={`grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-4 lg:grid-cols-7 ${moreFiltersOpen ? "" : "max-sm:hidden"}`}>
           {/* 币种范围（单币 / 双币 / 多币种）放在下拉这一排：和地区、银行同级，
               不再和「类型」各占一排胶囊抢注意力 */}
           <MultiSelect
