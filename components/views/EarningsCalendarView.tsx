@@ -147,9 +147,9 @@ function PillGroup({
   onChange: (k: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible sm:pb-0">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <span className="mr-0.5 text-[11px] font-semibold text-faint">{label}</span>
-      <div className="flex flex-none rounded-full border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
+      <div className="flex max-w-full flex-wrap rounded-full border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
         {options.map((o) => (
           <button
             key={o.key}
@@ -546,10 +546,10 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
             <span className="rounded-full bg-bg-gray px-3 py-1.5 text-xs font-semibold text-muted">共 {filtered.length} 家</span>
           </div>
 
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible sm:pb-0">
+          <div className="flex min-w-0 flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <span className="mr-0.5 text-[11px] font-semibold text-faint">市场</span>
-              <div className="flex flex-none rounded-full border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
+              <div className="flex max-w-full flex-wrap rounded-full border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
                 {orderedMarkets.map((m, i) => (
                   <button
                     key={m}
