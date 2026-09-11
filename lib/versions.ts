@@ -2844,7 +2844,20 @@ export const V0_1_27_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_27_ENTRY;
+export const V0_1_28_ENTRY: VersionEntry = {
+  version: "v0.1.28",
+  date: "2026-09-12",
+  summary: "财报日历接入港股：数据取自雪球财报日历（已发布 / 盘前 / 盘后 / 当日分桶），市值与行情用东方财富补齐。",
+  frontend: V0_1_27_ENTRY.frontend,
+  software: V0_1_27_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.28" } : item),
+  changes: [{
+    title: "财报日历接入港股（雪球财报日历）",
+    desc: "港股此前只有「该市场财报数据源暂未接入」的占位。这次接通雪球财报日历：接口走了三轮排查才定位到 —— 雪球前端 bundle 里写的是 `/v5/stock/screener/earnings_calendar/hk/list.json`，必须带登录 Cookie（匿名请求直接 400），参数用 `begin_date` / `end_date` 取区间、并带上 `extend=all` 才会返回整段区间（不带时只回最近几天，传 `type` 等额外参数反而会返回空）。返回按天分组，组内再分「已发布 / 盘前 / 盘后 / 当日」四个桶，正好对上现有的时段口径。实现：`lib/earnings.ts` 新增 `fetchHkMonth()`（每月一次请求 → 按 symbol + 日期去重 → 用东方财富 push2 的 `116.` secid 批量补市值 / 现价 / 涨跌 / 简体名 → 按「单日市值前 5」收敛，与美股 / A 股同一套规则），`EarningsMarket` 增加 HK，`/api/earnings` 放行 `market=HK`；前端港股进入常驻市场（不再收在「更多」里），港股单独一套 HK$ 市值档位、「业绩类型」列显示「2026 中报」这类标签、已发布条目显示「已发布」而不是硬猜盘前 / 盘后，空档月给出港股业绩季说明；设置页新增「港股财报」接口地址（可换源），关于页数据源补上雪球。实测：2026-08 上游回 2093 条事件（已发布 2032 / 盘前 3 / 盘后 14 / 当日 44），按单日市值前 5 收敛后 111 条；2026-09 为 38 条，均带回市值与现价。tsc 无错误、冒烟 113/113 全 PASS。",
+    kind: "feature"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_28_ENTRY;
 
 // 完整历史数组已拆分到 lib/versions-history.ts（约 200KB 历史文案，仅供版本弹窗
 // 懒加载引用）；本文件保留类型 + 当前版本条目，让设置页 / 健康检查只引用轻量常量。

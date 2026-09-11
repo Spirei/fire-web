@@ -29,7 +29,7 @@ export async function PUT(request: Request) {
   // 数据源地址仅允许 http(s)，防止配置成 file:// 或内网探测地址（管理端接口）
   const URL_KEYS = [
     "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl",
-    "earningsApiUrl", "cnEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl"
+    "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl"
   ] as const;
   for (const k of URL_KEYS) {
     if (body[k] !== undefined) {
@@ -66,6 +66,7 @@ export async function PUT(request: Request) {
     currencyApiUrl: body.currencyApiUrl !== undefined ? String(body.currencyApiUrl) : undefined,
     earningsApiUrl: body.earningsApiUrl !== undefined ? String(body.earningsApiUrl) : undefined,
     cnEarningsApiUrl: body.cnEarningsApiUrl !== undefined ? String(body.cnEarningsApiUrl) : undefined,
+    hkEarningsApiUrl: body.hkEarningsApiUrl !== undefined ? String(body.hkEarningsApiUrl) : undefined,
     usLogoApiUrl: body.usLogoApiUrl !== undefined ? String(body.usLogoApiUrl) : undefined,
     cnLogoApiUrl: body.cnLogoApiUrl !== undefined ? String(body.cnLogoApiUrl) : undefined,
     trumpArchiveApiUrl: body.trumpArchiveApiUrl !== undefined ? String(body.trumpArchiveApiUrl) : undefined,

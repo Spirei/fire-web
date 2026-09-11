@@ -3,7 +3,7 @@ import { getSiteSettings } from "./settings";
 import fs from "fs";
 import path from "path";
 
-export type EarningsMarket = "US" | "CN";
+export type EarningsMarket = "US" | "CN" | "HK";
 
 export interface EarningsItem {
   symbol: string;
@@ -267,17 +267,18 @@ async function fetchCnAppointments(year: number, month: number): Promise<Earning
   return collected;
 }
 
-async function enrichCn(items: EarningsItem[]): Promise<void> {
+/** 用东方财富 push2 批量补市值 / 现价 / 涨跌 / 简体名（A 股 secid 前缀 1./0.，港股 116.）。 */
+async function enrichEastmoney(items: EarningsItem[], secidOf: (code: string) => string): Promise<void> {
   if (items.length === 0) return;
   const byCode = new Map(items.map((i) => [i.symbol, i]));
-  const secids = items.map((i) => cnSecid(i.symbol));
+  const secids = items.map((i) => secidOf(i.symbol));
   const CHUNK = 400;
   for (let i = 0; i < secids.length; i += CHUNK) {
     const chunk = secids.slice(i, i + CHUNK);
     let diff: Record<string, unknown>[] = [];
     for (const host of ["push2delay.eastmoney.com", "push2.eastmoney.com"]) {
       try {
-        const url = `https://${host}/api/qt/ulist.np/get?fltt=2&secids=${encodeURIComponent(chunk.join(","))}&fields=f2,f3,f12,f20`;
+        const url = `https://${host}/api/qt/ulist.np/get?fltt=2&secids=${encodeURIComponent(chunk.join(","))}&fields=f2,f3,f12,f14,f20`;
         const res = await fetch(url, { headers: EM_HEADERS, signal: AbortSignal.timeout(8000) });
         const data = await res.json().catch(() => null);
         const d = data?.data?.diff;
@@ -297,8 +298,14 @@ async function enrichCn(items: EarningsItem[]): Promise<void> {
       if (price > 0) item.price = price;
       const pct = Number(d.f3);
       if (Number.isFinite(pct) && d.f3 !== null && d.f3 !== undefined) item.changePct = pct;
+      const name = typeof d.f14 === "string" ? d.f14.trim() : "";
+      if (name) item.nameZh = name;
     });
   }
+}
+
+async function enrichCn(items: EarningsItem[]): Promise<void> {
+  await enrichEastmoney(items, cnSecid);
 }
 
 async function fetchCnMonth(year: number, month: number): Promise<EarningsItem[]> {
@@ -323,6 +330,114 @@ async function fetchCnMonth(year: number, month: number): Promise<EarningsItem[]
       list.slice(0, 5).forEach((it) => out.push(it));
     });
   return out.slice(0, 300);
+}
+
+/* ============================ 港股（雪球财报日历） ============================ */
+// 雪球财报日历接口：按 begin_date / end_date 取区间，extend=all 才会回整段区间
+// （不带时只回最近几天）。必须带登录 Cookie（设置 → 交易广场数据源 → 雪球 Cookie），
+// 匿名请求会直接 400。返回按「天」分组，组内再按 已发布 / 盘前 / 盘后 / 当日 分桶。
+const DEFAULT_HK_EARNINGS_URL = "https://stock.xueqiu.com/v5/stock/screener/earnings_calendar/hk/list.json";
+const XQ_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+  Referer: "https://xueqiu.com/snb/web/financial-report-calendar/home",
+  Origin: "https://xueqiu.com",
+  Accept: "application/json, text/plain, */*",
+  "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
+};
+const HK_DATE_FMT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Hong_Kong",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+});
+/** 雪球桶 → 本项目的时段口径；released = 已发布，不硬猜盘前/盘后 */
+const HK_SESSION_TIME: Record<string, string> = {
+  pre_hour: "time-pre-market",
+  after_hour: "time-after-hours",
+  intraday: "time-not-supplied",
+  released: "time-released"
+};
+
+async function fetchHkMonth(year: number, month: number): Promise<EarningsItem[]> {
+  const settings = getSiteSettings();
+  const cookie = settings.xueqiuCookie.trim();
+  if (!cookie) throw new Error("港股财报需要先在「设置 → 交易广场数据源」配置雪球 Cookie");
+  const begin = `${year}-${pad2(month + 1)}-01`;
+  const end = `${year}-${pad2(month + 1)}-${new Date(year, month + 1, 0).getDate()}`;
+  const base = settings.hkEarningsApiUrl || DEFAULT_HK_EARNINGS_URL;
+  const qs = new URLSearchParams({ begin_date: begin, end_date: end, extend: "all" });
+  const res = await fetch(`${base}?${qs}`, {
+    headers: { ...XQ_HEADERS, Cookie: cookie },
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!res.ok) throw new Error(`雪球返回 ${res.status}`);
+  const json = (await res.json().catch(() => null)) as
+    | { data?: { items?: unknown }; error_code?: unknown; error_description?: string }
+    | null;
+  if (!json || typeof json !== "object") throw new Error("雪球返回非 JSON（可能被 WAF 拦截）");
+  if (Number(json.error_code) !== 0) {
+    throw new Error(`雪球返回错误：${String(json.error_description || json.error_code)}`);
+  }
+  const groups = json.data?.items;
+  if (!Array.isArray(groups)) throw new Error("雪球返回结构异常");
+
+  const collected = new Map<string, EarningsItem>();
+  groups.forEach((group) => {
+    const buckets = group as Record<string, unknown>;
+    Object.keys(HK_SESSION_TIME).forEach((bucket) => {
+      const list = buckets[bucket];
+      if (!Array.isArray(list)) return;
+      list.forEach((raw) => {
+        const row = raw as Record<string, unknown>;
+        const symbol = String(row.symbol ?? "").trim();
+        const name = String(row.name ?? "").trim();
+        const stamp = Number(row.report_date);
+        if (!symbol || !name || !Number.isFinite(stamp)) return;
+        const date = HK_DATE_FMT.format(new Date(stamp));
+        const key = `${symbol}-${date}`;
+        if (collected.has(key)) return;
+        const year = String(row.fiscal_year ?? "").trim();
+        const type = String(row.report_type_name ?? "").trim();
+        collected.set(key, {
+          symbol: symbol.padStart(5, "0"),
+          name,
+          nameZh: name,
+          market: "HK",
+          date,
+          time: HK_SESSION_TIME[bucket],
+          quarter: [year, type].filter(Boolean).join(" "),
+          epsForecast: "",
+          ests: 0,
+          marketCap: 0,
+          price: null,
+          changePct: null
+        });
+      });
+    });
+  });
+
+  const items = [...collected.values()];
+  try {
+    await enrichEastmoney(items, (code) => "116." + code);
+  } catch {
+    /* 市值 / 行情补充失败不影响日历 */
+  }
+  // 与美股 / A 股一致：单日按市值取前 5，避免一天几百家把格子撑爆
+  const byDate = new Map<string, EarningsItem[]>();
+  items.forEach((it) => {
+    const list = byDate.get(it.date) || [];
+    list.push(it);
+    byDate.set(it.date, list);
+  });
+  const out: EarningsItem[] = [];
+  [...byDate.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .forEach(([, list]) => {
+      list.sort((a, b) => b.marketCap - a.marketCap);
+      list.slice(0, 5).forEach((it) => out.push(it));
+    });
+  return out.slice(0, 400);
 }
 
 export async function getEarningsMonth(
@@ -351,7 +466,12 @@ export async function getEarningsMonth(
   const refresh = () => {
     if (refreshInflight[key]) return refreshInflight[key];
     const task = (async () => {
-      const items = market === "CN" ? await fetchCnMonth(year, month) : await fetchUsMonth(year, month);
+      const items =
+        market === "CN"
+          ? await fetchCnMonth(year, month)
+          : market === "HK"
+            ? await fetchHkMonth(year, month)
+            : await fetchUsMonth(year, month);
       const now = Date.now();
       // 这一轮上游什么都没给（空档月 / 抽风）：磁盘上若已有当月好数据就留着，只记「刚问过一次」
       const previous = cache[key] ?? loadDiskCache(key);

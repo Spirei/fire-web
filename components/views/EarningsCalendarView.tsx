@@ -64,6 +64,15 @@ const CN_CAPS: { key: CapKeyCN; label: string; min?: number; max?: number }[] = 
   { key: "lt100y", label: "小盘 <¥100亿", max: 10e9 }
 ];
 
+// 港股市值用港元，档位与美股一致
+const HK_CAPS: { key: CapKey; label: string; min?: number; max?: number }[] = [
+  { key: "all", label: "全部市值" },
+  { key: "1000b", label: "超大盘 ≥HK$1000亿", min: 100e9 },
+  { key: "100b", label: "大盘 HK$100-1000亿", min: 10e9, max: 100e9 },
+  { key: "10b", label: "中盘 HK$10-100亿", min: 1e9, max: 10e9 },
+  { key: "lt10b", label: "小盘 <HK$10亿", max: 1e9 }
+];
+
 const MARKETS: { key: MarketKey; label: string }[] = [
   { key: "US", label: "美股" },
   { key: "HK", label: "港股" },
@@ -72,9 +81,9 @@ const MARKETS: { key: MarketKey; label: string }[] = [
   { key: "KR", label: "韩股" }
 ];
 
-/** 已接入财报数据源的市场：美股（Nasdaq）、A 股（东方财富预约披露）。
+/** 已接入财报数据源的市场：美股（Nasdaq）、A 股（东方财富预约披露）、港股（雪球财报日历，需配雪球 Cookie）。
  *  其余市场没有财报数据，收进「更多」里，避免常驻一个点进去只有「暂未接入」的死入口。 */
-const EARNINGS_MARKETS: MarketKey[] = ["US", "CN"];
+const EARNINGS_MARKETS: MarketKey[] = ["US", "CN", "HK"];
 
 const STOCK_TYPES: { key: StockKey; label: string }[] = [
   { key: "all", label: "全部股票" },
@@ -126,6 +135,11 @@ function fmtCapByMarket(n: number, market: string): string {
     if (n >= 1e12) return `¥${(n / 1e12).toFixed(2)}万亿`;
     if (n >= 1e8) return `¥${(n / 1e8).toFixed(0)}亿`;
     return `¥${(n / 1e4).toFixed(0)}万`;
+  }
+  if (market === "HK") {
+    if (n >= 1e12) return `HK$${(n / 1e12).toFixed(2)}万亿`;
+    if (n >= 1e8) return `HK$${(n / 1e8).toFixed(0)}亿`;
+    return `HK$${(n / 1e4).toFixed(0)}万`;
   }
   return fmtCap(n);
 }
@@ -328,7 +342,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
   }, []);
 
   useEffect(() => {
-    if (marketKey !== "US" && marketKey !== "CN") return; // 该市场暂无数据源
+    if (!EARNINGS_MARKETS.includes(marketKey)) return; // 该市场暂无数据源
     if (months[dataKey] || loadedKeys.current.has(dataKey)) return; // 已加载
     let cancelled = false;
     setFailed(false);
@@ -374,7 +388,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
     };
   }, [cursorKey, dataKey, marketKey, months]);
 
-  const caps = marketKey === "CN" ? CN_CAPS : US_CAPS;
+  const caps = marketKey === "CN" ? CN_CAPS : marketKey === "HK" ? HK_CAPS : US_CAPS;
 
   // 自动定位当前日期：财报数据就绪后，若正处于本月，滚动到今日格子
   useEffect(() => {
@@ -573,14 +587,16 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
   const sel = selectedDate ? parseKey(selectedDate) : null;
 
   let emptyHint = "";
-  if (marketKey === "HK" || marketKey === "JP" || marketKey === "KR") emptyHint = "该市场财报数据源暂未接入，敬请期待";
+  if (marketKey === "JP" || marketKey === "KR") emptyHint = "该市场财报数据源暂未接入，敬请期待";
   else if (items === null || items === undefined) emptyHint = failed ? "财报数据加载失败，请稍后重试" : "loading";
   else if (failed && items.length === 0) emptyHint = "财报数据加载失败，请稍后重试";
   else if (items.length === 0) {
     // A 股不是每个月都有预约披露：年报 / 一季报集中在 3-4 月、半年报 7-8 月、三季报 10 月，其余月份是空档
     emptyHint = marketKey === "CN"
       ? "A 股本月没有预约披露记录：财报集中在 3-4 月（年报 / 一季报）、7-8 月（半年报）、10 月（三季报），本月属于空档期。"
-      : "该月暂无财报数据";
+      : marketKey === "HK"
+        ? "港股本月没有业绩公布记录：港股全年业绩集中在 3-4 月、中期业绩集中在 8 月，本月属于空档期。"
+        : "该月暂无财报数据";
   }
   else if (stockKey === "special" && stockSets.special.size === 0) emptyHint = "暂未设置「特别关注」券商，可在 设置 → 股票设置 → 券商管理 中创建";
   else if (filtered.length === 0) emptyHint = "没有符合筛选条件的财报，试试放宽市值或时段筛选";
@@ -846,7 +862,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                     <span>公司</span>
                     <span className="hidden text-center lg:block">市值</span>
                     <span className="text-center">时段</span>
-                    <span className="text-center">{marketKey === "CN" ? "报告期" : "EPS 预期"}</span>
+                    <span className="text-center">{marketKey === "US" ? "EPS 预期" : marketKey === "CN" ? "报告期" : "业绩类型"}</span>
                     <span className="text-right">现价</span>
                   </div>
                   {selectedRows.map((row) => {
@@ -871,11 +887,11 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                           {fmtCapByMarket(row.marketCap, row.market) || "—"}
                         </span>
                         <span className={`flex-none justify-self-center rounded-full px-2.5 py-1 text-xs font-semibold ${row.market === "CN" ? "bg-bg-gray text-muted" : TIME_BADGE[timeKind(row.time)]}`}>
-                          {row.market === "CN" ? "财报" : timeLabel(row.time)}
+                          {row.time === "time-released" ? "已发布" : row.market === "CN" ? "财报" : timeLabel(row.time)}
                         </span>
                         <div className="hidden flex-col items-center leading-[1.35] md:flex">
-                          <span className="text-sm font-semibold tabular-nums text-ink">{row.market === "CN" ? (row.quarter || "—") : (row.epsForecast || "—")}</span>
-                          <span className="text-[11px] text-faint">{row.market === "CN" ? "" : row.ests > 0 ? `${row.ests} 家机构` : ""}</span>
+                          <span className="text-sm font-semibold tabular-nums text-ink">{row.market === "US" ? (row.epsForecast || "—") : (row.quarter || "—")}</span>
+                          <span className="text-[11px] text-faint">{row.market === "US" && row.ests > 0 ? `${row.ests} 家机构` : ""}</span>
                         </div>
                         <div className="flex flex-col items-end leading-[1.35]">
                           <span className="text-sm font-semibold tabular-nums text-ink">{fmtPriceByMarket(row.price, row.market)}</span>

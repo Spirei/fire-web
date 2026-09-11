@@ -259,6 +259,7 @@ export interface SiteSettings {
   currencyApiUrl: string;
   earningsApiUrl: string;
   cnEarningsApiUrl: string;
+  hkEarningsApiUrl: string;
   usLogoApiUrl: string;
   cnLogoApiUrl: string;
   trumpArchiveApiUrl: string;

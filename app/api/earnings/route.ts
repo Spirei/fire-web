@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const monthParam = searchParams.get("month");
     const marketParam = (searchParams.get("market") || "US").toUpperCase() as EarningsMarket;
-    if (marketParam !== "US" && marketParam !== "CN") {
+    if (marketParam !== "US" && marketParam !== "CN" && marketParam !== "HK") {
       return NextResponse.json({ items: [], error: "该市场财报数据源暂未接入" }, { status: 400 });
     }
     if (!monthParam) {

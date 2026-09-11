@@ -522,6 +522,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   currencyApiUrl: "",
   earningsApiUrl: "",
   cnEarningsApiUrl: "",
+  hkEarningsApiUrl: "",
   usLogoApiUrl: "",
   cnLogoApiUrl: "",
   trumpArchiveApiUrl: "",
@@ -558,11 +559,11 @@ interface DbStatus {
 
 // 股票来源接口的卡片元数据（顺序即展示顺序）
 const SOURCE_FIELDS: {
-  key: "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "earningsApiUrl" | "cnEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "translationProvider";
+  key: "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "translationProvider";
   name: string;
   desc: string;
   placeholder: string;
-  icon: "chart" | "search" | "wave" | "money" | "cal" | "cn" | "us" | "logo" | "trump" | "translate";
+  icon: "chart" | "search" | "wave" | "money" | "cal" | "cn" | "hk" | "us" | "logo" | "trump" | "translate";
 }[] = [
   { key: "quoteApiUrl", name: "实时行情", desc: "直接拼接股票代码，多个用逗号分隔", placeholder: "https://qt.gtimg.cn/q=", icon: "chart" },
   { key: "searchApiUrl", name: "搜索联想", desc: "用 {q} 代替查询词", placeholder: "https://smartbox.gtimg.cn/s3/?v=2&q={q}&t=all", icon: "search" },
@@ -570,6 +571,7 @@ const SOURCE_FIELDS: {
   { key: "currencyApiUrl", name: "汇率接口", desc: "每日 9:00 / 23:00 各刷新一次", placeholder: "https://api.frankfurter.dev/v1/latest", icon: "money" },
   { key: "earningsApiUrl", name: "美股财报", desc: "直接拼接日期 YYYY-MM-DD", placeholder: "https://api.nasdaq.com/api/calendar/earnings?date=", icon: "cal" },
   { key: "cnEarningsApiUrl", name: "A股财报", desc: "东方财富预约披露，自动拼接报表参数", placeholder: "https://datacenter.eastmoney.com/securities/api/data/v1/get", icon: "cn" },
+  { key: "hkEarningsApiUrl", name: "港股财报", desc: "雪球财报日历（需配置雪球 Cookie），按 begin_date / end_date 取整月", placeholder: "https://stock.xueqiu.com/v5/stock/screener/earnings_calendar/hk/list.json", icon: "hk" },
   { key: "usLogoApiUrl", name: "美股公司图标", desc: "直接拼接代码 .png", placeholder: "https://g.foolcdn.com/art/companylogos/square/", icon: "us" },
   { key: "cnLogoApiUrl", name: "A股公司图标", desc: "自动拼接 代码.SS / 代码.SZ", placeholder: "https://assets.parqet.com/logos/symbol/", icon: "logo" },
   { key: "trumpArchiveApiUrl", name: "特朗普平台归档", desc: "交易广场公开动态来源", placeholder: "https://trumpstruth.org/", icon: "trump" },
@@ -614,6 +616,13 @@ const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
       <path d="M8 2v4" />
       <path d="M16 2v4" />
       <path d="M3 9h18" />
+    </>
+  ),
+  hk: (
+    <>
+      <path d="M3 10 12 4l9 6" />
+      <path d="M5 10v9h14v-9" />
+      <path d="M10 19v-5h4v5" />
     </>
   ),
   cn: (
@@ -920,6 +929,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       currencyApiUrl: s.currencyApiUrl,
       earningsApiUrl: s.earningsApiUrl,
       cnEarningsApiUrl: s.cnEarningsApiUrl,
+      hkEarningsApiUrl: s.hkEarningsApiUrl,
       usLogoApiUrl: s.usLogoApiUrl,
       cnLogoApiUrl: s.cnLogoApiUrl,
       futuHost: s.futuHost,
@@ -1486,6 +1496,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           currencyApiUrl: site.currencyApiUrl,
           earningsApiUrl: site.earningsApiUrl,
           cnEarningsApiUrl: site.cnEarningsApiUrl,
+          hkEarningsApiUrl: site.hkEarningsApiUrl,
           usLogoApiUrl: site.usLogoApiUrl,
           cnLogoApiUrl: site.cnLogoApiUrl,
           translationProvider: site.translationProvider,
@@ -2902,7 +2913,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   action={editingSources ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                 >
                   <div className="flex flex-col">
-                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场数据源", ["trumpArchiveApiUrl", "translationApiUrl"]]] as const).map(([label, keys]) => {
+                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场数据源", ["trumpArchiveApiUrl", "translationApiUrl"]]] as const).map(([label, keys]) => {
                       const fields = SOURCE_FIELDS.filter((f) => (keys as readonly string[]).includes(f.key));
                       if (!fields.length) return null;
                       return (
@@ -3251,7 +3262,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       key: "earnings",
                       icon: "cal",
                       name: "财报日历缓存",
-                      desc: "缓存美股 / A股财报数据，减少外部接口请求",
+                      desc: "缓存美股 / A股 / 港股财报数据，减少外部接口请求",
                       schedule: "请求后缓存 30 分钟",
                       state: "已启用"
                     },
@@ -3369,7 +3380,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>外部数据源</b><span>行情、财报、汇率与公开披露</span></div>
-                    <span className="settings-detail-value">腾讯行情 · 东方财富 · SEC EDGAR · CompaniesMarketCap</span>
+                    <span className="settings-detail-value">腾讯行情 · 东方财富 · 雪球 · SEC EDGAR · CompaniesMarketCap</span>
                   </div>
                 </SettingsSection>
               </div>
