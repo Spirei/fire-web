@@ -1411,7 +1411,15 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             </div>
             <div className="overflow-y-auto overscroll-contain bg-bg-gray px-4 py-4 sm:px-5 sm:py-5 dark:bg-black/20">
               <div className="relative mx-auto w-full max-w-[560px]">
-                <img src={cardCover(active.card.file)} alt={active.card.name} className="w-full rounded-xl shadow-pop" />
+                {/* 鼠标划过和卡面库里的卡片一样：轻微放大 + 底部渐变浮出来 */}
+                <div className="group/card relative overflow-hidden rounded-xl shadow-pop">
+                  <img
+                    src={cardCover(active.card.file)}
+                    alt={active.card.name}
+                    className="w-full transition-transform duration-300 ease-out group-hover/card:scale-[1.04]"
+                  />
+                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100" />
+                </div>
                 {/* 卡片右上角：加入 / 移出我的卡、上传卡面（换过图的再给一颗恢复原图） */}
                 <div className="absolute right-2 top-2 flex items-center gap-1.5">
                   <button
@@ -1420,7 +1428,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     aria-label={holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
                     title={holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
                     className={`grid h-9 w-9 place-items-center rounded-full backdrop-blur transition-colors duration-200 active:scale-95 ${
-                      holdings[active.card.file] ? "bg-[#3297f6] text-white hover:brightness-110" : "bg-black/45 text-white hover:bg-black/60"
+                      // 已在我的卡 → 红色「−」（移出，破坏性操作用红）；不在 → 深色「＋」（加入）
+                      holdings[active.card.file] ? "bg-[#e5484d] text-white hover:brightness-110" : "bg-black/45 text-white hover:bg-black/60"
                     }`}
                   >
                     {holdings[active.card.file] ? (
