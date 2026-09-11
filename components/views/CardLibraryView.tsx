@@ -42,6 +42,8 @@ interface CardItem {
   customId?: string;
   /** 同一张卡的另一版卡面（旧卡面等）：详情页可以翻看 */
   faces?: CardFace[];
+  /** 自建卡的创建时间：用来算「NEW」角标还在不在 */
+  createdAt?: string;
 }
 
 interface BankEntry {
@@ -76,6 +78,15 @@ const ALL = "全部";
 const PAGE_SIZE = 60;
 /** 新增卡片表单的类型选项（与后端白名单一致） */
 const CARD_TYPE_OPTIONS = ["借记卡", "信用卡", "预付卡", "签账卡", "取现卡", "交通卡", "礼品卡", "虚拟卡", "其他"];
+/** 新建的卡 3 天内挂「NEW」角标 */
+const NEW_CARD_MS = 3 * 24 * 60 * 60 * 1000;
+
+/** 是不是刚新建的卡（只对自定义卡，按创建时间算；nowMs 为 0 表示还没到客户端，先不显示） */
+function isNewCard(card: { custom?: boolean; createdAt?: string }, nowMs: number): boolean {
+  if (!card.custom || !card.createdAt || nowMs <= 0) return false;
+  const created = Date.parse(card.createdAt);
+  return Number.isFinite(created) && nowMs - created < NEW_CARD_MS;
+}
 /** 聚焦反馈：全站同款中性灰柔光（去掉浏览器默认蓝框后仍能看出焦点在哪） */
 const FOCUS_RING =
   "focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.15)] focus:outline-none dark:focus:border-white/20 dark:focus:shadow-[0_0_0_3px_rgba(255,255,255,.10)]";
@@ -582,7 +593,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         brand: card.brand,
         level: card.level,
         custom: true,
-        customId: card.id
+        customId: card.id,
+        createdAt: card.createdAt
       });
     });
     return merged;
@@ -834,6 +846,16 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   useEffect(() => {
     setFaceIndex(0);
   }, [active?.card.file]);
+  /**
+   * 客户端时间戳：判断「NEW」角标是否还在 3 天有效期内。首帧（SSR）先用 0、挂载后再算，
+   * 避免服务端与客户端渲染不一致；之后每小时刷新一次，到点自动消失、不用手动刷新。
+   */
+  const [nowMs, setNowMs] = useState(0);
+  useEffect(() => {
+    setNowMs(Date.now());
+    const timer = window.setInterval(() => setNowMs(Date.now()), 60 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
   /** 币种下拉的选项：按这张卡的币种范围收窄（单币 1 个、双币 2 个、多币种给该地区常见币种） */
   const activeCurrencyOptions = active
     ? cardCurrencyChoicesFor({
@@ -1662,10 +1684,20 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     <span className="touch-always absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                       {card.type || "未分类"}
                     </span>
-                    {isHeld && (
-                      <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-[#3297f6] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>
-                        我的卡
+                    {(isHeld || isNewCard(card, nowMs)) && (
+                      <span className="absolute left-2 top-2 flex items-center gap-1">
+                        {isHeld && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#3297f6] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+                            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>
+                            我的卡
+                          </span>
+                        )}
+                        {/* 新建的卡 3 天内挂个 NEW，到点自己消失 */}
+                        {isNewCard(card, nowMs) && (
+                          <span className="rounded-full bg-[#f59e0b] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-sm">
+                            new
+                          </span>
+                        )}
                       </span>
                     )}
                     {mode === "all" && (
@@ -2017,6 +2049,11 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   </div>
                 )}
                 {/* 多版卡面：和卡包一样的小圆点 + 当前是哪一版 */}
+                {isNewCard(active.card, nowMs) && (
+                  <span className="pointer-events-none absolute left-2 top-2 z-10 rounded-full bg-[#f59e0b] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
+                    new
+                  </span>
+                )}
                 {activeFaces.length > 1 && (
                   <div className="mt-3 flex items-center justify-center gap-2">
                     {activeFaces.map((item, index) => (
