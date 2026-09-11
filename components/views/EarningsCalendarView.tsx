@@ -788,7 +788,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
           aria-hidden={!selectedDate}
         >
           <div className="overflow-hidden">
-            <div className="mx-3 mb-4 rounded-[16px] border border-edge bg-bg-gray/40 p-3 sm:mx-5 sm:p-4 dark:bg-[#10141d]">
+            <div className="mx-3 mb-4 rounded-[16px] border border-edge bg-bg-gray/40 p-3 sm:mx-5 sm:p-4 md:max-w-[880px] dark:bg-[#10141d]">
               {sel && (
                 <div className="mb-3 flex items-center gap-2 px-1">
                   <span className="text-sm font-bold text-ink">{sel.m + 1}月{sel.d}日</span>
@@ -806,9 +806,10 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
               )}
               {selectedRows.length > 0 && (
                 <div data-day-detail-list className="overflow-hidden rounded-[14px] border border-edge bg-white shadow-card dark:border-[#2a2f3a] dark:bg-[#16181d]">
-                  {/* 列头：桌面端与数据列同宽对齐，手机端三列布局用不到 */}
-                  <div className="hidden grid-cols-[minmax(0,1fr)_88px_132px_150px] items-center gap-4 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted md:grid dark:bg-white/5">
+                  {/* 列头：md 起与数据列同宽对齐；lg 起把市值单独成列。数据列一律固定窄宽、紧挨着排，不随屏幕拉伸 */}
+                  <div className="hidden grid-cols-[minmax(0,1fr)_80px_112px_112px] items-center gap-4 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted md:grid lg:grid-cols-[minmax(0,1fr)_96px_80px_112px_112px] dark:bg-white/5">
                     <span>公司</span>
+                    <span className="hidden text-center lg:block">市值</span>
                     <span className="text-center">时段</span>
                     <span className="text-center">{marketKey === "CN" ? "报告期" : "EPS 预期"}</span>
                     <span className="text-right">现价</span>
@@ -818,7 +819,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                     return (
                       <div
                         key={`${row.symbol}-${row.date}`}
-                        className="earnings-result-row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-edge px-4 py-2 transition-colors duration-200 last:border-b-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5 md:grid-cols-[minmax(0,1fr)_88px_132px_150px] md:gap-4"
+                        className="earnings-result-row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-edge px-4 py-2 transition-colors duration-200 last:border-b-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5 md:grid-cols-[minmax(0,1fr)_80px_112px_112px] md:gap-4 lg:grid-cols-[minmax(0,1fr)_96px_80px_112px_112px]"
                       >
                         <div className="flex min-w-0 items-center gap-3">
                           <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="h-9 w-9" />
@@ -827,10 +828,13 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                             <div className="text-xs text-muted">
                               {row.symbol}
                               {row.name && row.nameZh && <span className="ml-1.5">{row.name}</span>}
-                              {fmtCapByMarket(row.marketCap, row.market) && <span className="ml-1.5 text-faint">{fmtCapByMarket(row.marketCap, row.market)}</span>}
+                              {fmtCapByMarket(row.marketCap, row.market) && <span className="ml-1.5 text-faint lg:hidden">{fmtCapByMarket(row.marketCap, row.market)}</span>}
                             </div>
                           </div>
                         </div>
+                        <span className="hidden text-sm font-semibold tabular-nums text-muted lg:block lg:justify-self-center">
+                          {fmtCapByMarket(row.marketCap, row.market) || "—"}
+                        </span>
                         <span className={`flex-none justify-self-center rounded-full px-2.5 py-1 text-xs font-semibold ${row.market === "CN" ? "bg-bg-gray text-muted" : TIME_BADGE[timeKind(row.time)]}`}>
                           {row.market === "CN" ? "财报" : timeLabel(row.time)}
                         </span>
