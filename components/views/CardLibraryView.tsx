@@ -152,13 +152,25 @@ function Pill({ active, children, onClick }: { active: boolean; children: React.
   );
 }
 
-/** 币种范围角标配色：单币中性、双币蓝、多币种紫、待确认琥珀 */
+/** 币种范围角标配色：单币绿（只有一种）、双币蓝、多币种紫、待确认琥珀 —— 一眼能分出来 */
 const SCOPE_CHIP_CLASS: Record<CurrencyScope, string> = {
-  single: "bg-brand-light text-brand-deep dark:bg-white/10 dark:text-white/70",
+  single: "bg-[#10b981]/12 text-[#0f9d6b] dark:bg-[#10b981]/20 dark:text-[#6ee7b7]",
   dual: "bg-[#3297f6]/12 text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]",
   multi: "bg-[#8b5cf6]/14 text-[#7c3aed] dark:bg-[#8b5cf6]/22 dark:text-[#c4b5fd]",
   unknown: "bg-[#f59e0b]/16 text-[#b45309] dark:bg-[#f59e0b]/20 dark:text-[#fcd34d]"
 };
+
+/** 下拉选项里的小圆点：和角标同一套颜色，方便对照 */
+const SCOPE_DOT_CLASS: Record<CurrencyScope, string> = {
+  single: "bg-[#10b981]",
+  dual: "bg-[#3297f6]",
+  multi: "bg-[#8b5cf6]",
+  unknown: "bg-[#f59e0b]"
+};
+
+/** 币种范围的中文标签 → 枚举值（下拉选项里要按标签取颜色） */
+const scopeOfLabel = (label: string): CurrencyScope =>
+  CURRENCY_SCOPE_ORDER.find((scope) => CURRENCY_SCOPE_LABEL[scope] === label) ?? "unknown";
 
 /** 多选胶囊组：数值为空 = 全部；点「全部」清空选择 */
 function PillGroup({
@@ -1248,7 +1260,17 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             label="币种范围"
             allLabel="全部币种"
             values={scopeFilter ? [scopeFilter] : []}
-            options={scopeOptions.slice(1).map((option) => ({ value: option.key, label: `${option.key}（${option.count}）` }))}
+            options={scopeOptions.slice(1).map((option) => ({
+              value: option.key,
+              label: `${option.key}（${option.count}）`,
+              // 和卡片角标同色的小圆点：单币绿 / 双币蓝 / 多币种紫 / 待确认琥珀
+              icon: (
+                <span
+                  aria-hidden
+                  className={`h-2 w-2 flex-none rounded-full ${SCOPE_DOT_CLASS[scopeOfLabel(option.key)]}`}
+                />
+              )
+            }))}
             onChange={(next) => setScopeFilter(next[0] ?? "")}
           />
           <MultiSelect
