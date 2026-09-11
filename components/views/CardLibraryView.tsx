@@ -207,7 +207,8 @@ function MultiSelect({
   options,
   values,
   onChange,
-  renderIcon
+  renderIcon,
+  single = false
 }: {
   label: string;
   allLabel: string;
@@ -216,12 +217,19 @@ function MultiSelect({
   onChange: (next: string[]) => void;
   /** 摘要按钮里显示的图标（按已选值取），用于地区国旗这类标识 */
   renderIcon?: (value: string) => React.ReactNode;
+  /** 单选：点一项即选中并关闭面板（再点一次 = 取消），用于币种范围这种只有一个值的维度 */
+  single?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const labelOf = (value: string) => options.find((option) => option.value === value)?.label ?? value;
   const iconOf = (value: string) => options.find((option) => option.value === value)?.icon ?? null;
   const summary = values.length === 0 ? allLabel : values.length === 1 ? labelOf(values[0]) : `${labelOf(values[0])} +${values.length - 1}`;
   const toggle = (value: string) => {
+    if (single) {
+      onChange(values.includes(value) ? [] : [value]);
+      setOpen(false);
+      return;
+    }
     onChange(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
   };
   /** Esc 关掉面板（手机抽屉与桌面小面板都适用） */
@@ -273,7 +281,10 @@ function MultiSelect({
               </span>
               <button
                 type="button"
-                onClick={() => onChange([])}
+                onClick={() => {
+                  onChange([]);
+                  if (single) setOpen(false);
+                }}
                 className={`flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-[13px] font-semibold transition-colors sm:py-2 sm:text-xs ${
                   values.length === 0 ? "bg-bg-gray text-ink dark:bg-white/10" : "text-muted hover:bg-brand-hover hover:text-ink dark:hover:bg-white/10"
                 }`}
@@ -629,7 +640,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   })();
 
   /** 「更多筛选」里选中的维度数：手机收起时用角标提示"有筛选生效" */
-  const detailFilterCount = region.length + bankFolder.length + brand.length + level.length + tag.length + myTag.length;
+  const detailFilterCount =
+    region.length + bankFolder.length + brand.length + level.length + tag.length + myTag.length + (scopeFilter ? 1 : 0);
 
   /** 筛选条件变化时回到第一屏 */
   useEffect(() => {
@@ -1191,16 +1203,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             onClear={() => setType("")}
           />
         </div>
-        {/* 币种范围：单币 / 双币 / 多币种（规则推断 + 卡片详情里可手动覆盖） */}
-        <div className="ticker-scroll -mx-3 overflow-x-auto overscroll-x-contain px-3 sm:mx-0 sm:overflow-visible sm:px-0">
-          <PillGroup
-            label="币种"
-            options={scopeOptions}
-            values={scopeFilter ? [scopeFilter] : []}
-            onToggle={(key) => setScopeFilter((prev) => (prev === key ? "" : key))}
-            onClear={() => setScopeFilter("")}
-          />
-        </div>
         {/* 手机：地区 / 银行 / 卡组织 / 等级 / 主题 / 我的标签默认收起来，点一下展开 */}
         <button
           type="button"
@@ -1227,6 +1229,16 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           </svg>
         </button>
         <div className={`grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 xl:grid-cols-5 ${moreFiltersOpen ? "" : "max-sm:hidden"}`}>
+          {/* 币种范围（单币 / 双币 / 多币种）放在下拉这一排：和地区、银行同级，
+              不再和「类型」各占一排胶囊抢注意力 */}
+          <MultiSelect
+            single
+            label="币种范围"
+            allLabel="全部币种"
+            values={scopeFilter ? [scopeFilter] : []}
+            options={scopeOptions.slice(1).map((option) => ({ value: option.key, label: `${option.key}（${option.count}）` }))}
+            onChange={(next) => setScopeFilter(next[0] ?? "")}
+          />
           <MultiSelect
             label="地区"
             allLabel="全部地区"
