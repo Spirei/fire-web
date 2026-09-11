@@ -69,6 +69,15 @@
   input[type="submit"]:focus {
     outline: none;
   }
+  /* 文本输入 / 文本域 / 下拉同样不出现浏览器默认的蓝色聚焦框（复选框、单选框保留各自的焦点样式） */
+  input:not([type="checkbox"]):not([type="radio"]):focus,
+  input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+  textarea:focus,
+  textarea:focus-visible,
+  select:focus,
+  select:focus-visible {
+    outline: none;
+  }
   button:active,
   a:active,
   [role="button"]:active,

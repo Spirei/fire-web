@@ -49,6 +49,9 @@ interface CardEntry {
 
 const ALL = "全部";
 const PAGE_SIZE = 60;
+/** 聚焦反馈：全站同款中性灰柔光（去掉浏览器默认蓝框后仍能看出焦点在哪） */
+const FOCUS_RING =
+  "focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.15)] focus:outline-none dark:focus:border-white/20 dark:focus:shadow-[0_0_0_3px_rgba(255,255,255,.10)]";
 /** 常用标签建议（可自由输入，这里只是快捷入口） */
 const TAG_SUGGESTIONS = ["虚拟卡", "实体卡", "金属卡", "透明卡", "收藏", "主力卡", "已注销", "纪念版"];
 
@@ -196,7 +199,7 @@ function FilterSelect({
           value={value}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
-          className="h-10 w-full appearance-none rounded-xl border border-edge bg-white px-3 pr-8 text-sm font-semibold text-ink transition-colors duration-200 hover:border-edge-strong focus:border-edge-strong disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#1c222d] dark:text-white"
+          className={`h-10 w-full appearance-none rounded-xl border border-edge bg-white px-3 pr-8 text-sm font-semibold text-ink transition-all duration-200 hover:border-edge-strong disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#1c222d] dark:text-white ${FOCUS_RING}`}
         >
           {[...groups.entries()].map(([group, items]) =>
             group ? (
@@ -648,7 +651,7 @@ export default function CardLibraryView() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="搜索银行、卡片名称或关键词"
-          className="h-10 w-full rounded-xl border border-edge bg-white pl-10 pr-3 text-sm text-ink placeholder:text-faint transition-colors duration-200 hover:border-edge-strong focus:border-edge-strong dark:bg-[#1c222d]"
+          className={`h-10 w-full rounded-xl border border-edge bg-white pl-10 pr-3 text-sm text-ink placeholder:text-faint transition-all duration-200 hover:border-edge-strong dark:bg-[#1c222d] ${FOCUS_RING}`}
         />
       </label>
 
@@ -943,7 +946,7 @@ export default function CardLibraryView() {
               <div className="flex flex-wrap items-end gap-2">
                 <label className="flex flex-col gap-1">
                   <span className="text-[11px] font-semibold text-muted">金额</span>
-                  <span className="flex items-center gap-1 rounded-xl border border-edge bg-white px-2 dark:bg-[#1c222d]">
+                  <span className="flex items-center gap-1 rounded-xl border border-edge bg-white px-2 transition-all duration-200 focus-within:border-edge-strong focus-within:shadow-[0_0_0_3px_rgba(107,114,128,.15)] dark:bg-[#1c222d] dark:focus-within:border-white/20 dark:focus-within:shadow-[0_0_0_3px_rgba(255,255,255,.10)]">
                     <span className="text-xs font-semibold text-muted">{currencySymbol(draft.currency)}</span>
                     <input
                       value={draft.amount}
@@ -959,7 +962,7 @@ export default function CardLibraryView() {
                   <select
                     value={draft.currency}
                     onChange={(event) => setDraft((prev) => ({ ...prev, currency: event.target.value }))}
-                    className="h-9 rounded-xl border border-edge bg-white px-2 text-xs font-semibold text-ink dark:bg-[#1c222d]"
+                    className={`h-9 rounded-xl border border-edge bg-white px-2 text-xs font-semibold text-ink transition-all duration-200 dark:bg-[#1c222d] ${FOCUS_RING}`}
                   >
                     {CARD_CURRENCIES.map((item) => (
                       <option key={item.code} value={item.code}>
@@ -975,7 +978,7 @@ export default function CardLibraryView() {
                     onChange={(event) => setDraft((prev) => ({ ...prev, note: event.target.value }))}
                     maxLength={100}
                     placeholder="额度 / 余额 / 其他说明"
-                    className="h-9 rounded-xl border border-edge bg-white px-3 text-xs text-ink placeholder:text-faint dark:bg-[#1c222d]"
+                    className={`h-9 rounded-xl border border-edge bg-white px-3 text-xs text-ink placeholder:text-faint transition-all duration-200 dark:bg-[#1c222d] ${FOCUS_RING}`}
                   />
                 </label>
                 <button
@@ -1032,7 +1035,7 @@ export default function CardLibraryView() {
                   }}
                   maxLength={12}
                   placeholder="添加标签，回车"
-                  className="h-7 w-[130px] rounded-full border border-edge bg-white px-2.5 text-[11px] text-ink placeholder:text-faint dark:bg-[#1c222d]"
+                  className={`h-7 w-[130px] rounded-full border border-edge bg-white px-2.5 text-[11px] text-ink placeholder:text-faint transition-all duration-200 dark:bg-[#1c222d] ${FOCUS_RING}`}
                 />
                 {TAG_SUGGESTIONS.filter((item) => !activeUserTags.includes(item)).slice(0, 5).map((item) => (
                   <button
