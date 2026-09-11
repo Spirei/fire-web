@@ -643,7 +643,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                       aria-current={cell.isToday ? "date" : undefined}
                       onClick={() => setSelectedDate(selectedDate === cell.key ? null : cell.key)}
                       style={{ minHeight: 88 }}
-                      className={`group relative flex cursor-pointer flex-col gap-1 overflow-hidden rounded-[14px] border p-1.5 text-left sm:gap-1.5 sm:p-2.5 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop ${
+                      className={`group relative flex cursor-pointer flex-col gap-1.5 overflow-hidden rounded-[14px] border p-2.5 text-left transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop ${
                         selectedDate === cell.key
                           ? "border-edge bg-white shadow-pop dark:bg-[#252c3a]"
                           : cell.rows.length > 0
@@ -664,16 +664,16 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                         </span>
                       )}
 
-                      <div className="flex flex-col gap-[3px] pt-0.5">
+                      <div className="flex flex-col gap-[4px] pt-0.5">
                         {cell.rows.slice(0, 3).map((row) => (
-                          <span key={row.symbol} className="flex min-w-0 items-center gap-1 overflow-hidden text-[9.5px] font-medium leading-[1.25] text-ink-2 sm:text-[10.5px]">
-                            <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="hidden h-3.5 w-3.5 flex-none sm:block" />
+                          <span key={row.symbol} className="flex min-w-0 items-center gap-1 overflow-hidden text-[10px] font-medium leading-[1.3] text-ink-2 sm:text-[10.5px]">
+                            <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="h-3.5 w-3.5 flex-none" />
                             <span className="min-w-0 flex-1 truncate">{row.nameZh || row.name}</span>
                             <span className={`ml-auto h-1.5 w-1.5 flex-none rounded-full ${TIME_DOT[timeKind(row.time)]}`} />
                           </span>
                         ))}
                         {cell.rows.length > 3 && (
-                          <span className="text-[9px] font-semibold text-muted sm:text-[10px]">+{cell.rows.length - 3} 家</span>
+                          <span className="text-[10px] font-semibold text-muted">+{cell.rows.length - 3} 家</span>
                         )}
                       </div>
 
