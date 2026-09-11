@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
 import { cardTagsOf } from "@/lib/cardTags";
 import CurrencyFlag from "@/components/CurrencyFlag";
@@ -157,7 +157,7 @@ function PillGroup({
   const all = options[0];
   const allActive = values.length === 0;
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <div className="flex w-max min-w-0 items-center gap-2 sm:w-auto sm:flex-wrap">
       <span className="mr-0.5 text-[11px] font-semibold text-faint">{label}</span>
       {all && (
         <Pill active={allActive} onClick={onClear}>
@@ -204,6 +204,15 @@ function MultiSelect({
   const toggle = (value: string) => {
     onChange(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
   };
+  /** Esc 关掉面板（手机抽屉与桌面小面板都适用） */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
   let currentGroup: string | undefined;
   return (
     <div className="flex min-w-0 flex-col gap-1">
@@ -213,7 +222,8 @@ function MultiSelect({
           type="button"
           onClick={() => setOpen((value) => !value)}
           title={summary}
-          className={`flex h-10 w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 text-left text-sm font-semibold text-ink transition-all duration-200 hover:border-edge-strong dark:bg-[#1c222d] dark:text-white ${
+          aria-expanded={open}
+          className={`flex h-11 w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 text-left text-sm font-semibold text-ink transition-all duration-200 hover:border-edge-strong sm:h-10 dark:bg-[#1c222d] dark:text-white ${
             open ? "border-edge-strong shadow-[0_0_0_3px_rgba(107,114,128,.15)]" : "border-edge"
           }`}
         >
@@ -227,12 +237,24 @@ function MultiSelect({
         </button>
         {open && (
           <>
-            <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-            <div className="thin-scrollbar absolute left-0 top-full z-40 mt-1 max-h-[300px] w-full min-w-[220px] space-y-1 overflow-y-auto rounded-xl border border-edge-strong bg-white p-1 shadow-pop dark:border-white/10 dark:bg-[#1b2029]">
+            <div className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[1px] sm:bg-transparent sm:backdrop-blur-none" onClick={() => setOpen(false)} />
+            {/* 手机：从底部升起的抽屉（占满宽、行高够点）；≥sm 回到按钮下面的小面板 */}
+            <div className="thin-scrollbar fixed inset-x-0 bottom-0 z-[70] max-h-[72vh] space-y-1 overflow-y-auto overscroll-contain rounded-t-2xl border-t border-edge-strong bg-white px-1 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop dark:border-white/10 dark:bg-[#1b2029] sm:absolute sm:inset-x-auto sm:z-40 sm:bottom-auto sm:left-0 sm:top-full sm:mt-1 sm:max-h-[320px] sm:w-full sm:min-w-[220px] sm:rounded-xl sm:border sm:pb-1">
+              <span className="mx-auto mt-2 block h-1 w-10 rounded-full bg-edge-strong sm:hidden" />
+              <span className="flex items-center justify-between gap-2 px-3 py-1.5 sm:hidden">
+                <b className="text-[13px] font-bold text-ink dark:text-white">{label}</b>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="rounded-full px-2 py-1 text-[12px] font-semibold text-[#2f6fed]"
+                >
+                  完成
+                </button>
+              </span>
               <button
                 type="button"
                 onClick={() => onChange([])}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-semibold transition-colors ${
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-[13px] font-semibold transition-colors sm:py-2 sm:text-xs ${
                   values.length === 0 ? "bg-bg-gray text-ink dark:bg-white/10" : "text-muted hover:bg-brand-hover hover:text-ink dark:hover:bg-white/10"
                 }`}
               >
@@ -249,11 +271,11 @@ function MultiSelect({
                 const active = values.includes(option.value);
                 return (
                   <span key={option.value} className="block">
-                    {header && <span className="mt-1 block px-3 pb-1 pt-2 text-[10px] font-semibold text-faint">{header}</span>}
+                    {header && <span className="mt-1 block px-3 pb-1 pt-2.5 text-[11px] font-semibold text-faint sm:pt-2 sm:text-[10px]">{header}</span>}
                     <button
                       type="button"
                       onClick={() => toggle(option.value)}
-                      className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-left text-xs transition-colors ${
+                      className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-3 text-left text-[13px] transition-colors sm:py-1.5 sm:text-xs ${
                         active ? "bg-[#3297f6]/12 font-semibold text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]" : "text-ink hover:bg-brand-hover dark:text-white/80 dark:hover:bg-white/10"
                       }`}
                     >
@@ -319,6 +341,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [saving, setSaving] = useState(false);
   const [userTags, setUserTags] = useState<Record<string, string[]>>(() => initial?.tags ?? {});
   const [tagDraft, setTagDraft] = useState("");
+  const rootRef = useRef<HTMLDivElement | null>(null);
   /** 卡背信息（卡号 / 有效期 / 安全码 / 备注 / 币种）与卡包叠卡视图 */
   const [details, setDetails] = useState<Record<string, CardDetails>>(() => initial?.details ?? {});
   const [walletOpen, setWalletOpen] = useState(false);
@@ -539,6 +562,29 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     setVisibleCount(PAGE_SIZE);
   }, [region.join(","), bankFolder.join(","), type.join(","), brand.join(","), level.join(","), tag.join(","), myTag.join(","), onlyFilled, query]);
 
+  /** 卡片详情弹窗：手机上锁住背景滚动，Esc 关闭 */
+  useEffect(() => {
+    if (!active) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setActive(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [active]);
+
+  /** 切「我的卡 / 全部卡面」时，如果已经滑到列表深处，轻轻带回卡面库顶部 */
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return;
+    const top = node.getBoundingClientRect().top;
+    if (top < -140) window.scrollTo({ top: Math.max(0, window.scrollY + top - 12), behavior: "smooth" });
+  }, [mode]);
+
   const pageItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
   const activeUserTags = active ? userTags[active.card.file] ?? [] : [];
 
@@ -743,8 +789,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div ref={rootRef} className="space-y-4">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-3">
         <div>
           <h2 className="text-lg font-extrabold">卡面库</h2>
           <p className="mt-1 text-xs text-muted">
@@ -756,27 +802,17 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             {updatedAt ? ` · 更新于 ${new Date(updatedAt).toLocaleDateString("zh-CN")}` : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setWalletOpen(true)}
-            title="打开卡包：堆叠浏览卡片、翻到卡背看有效期与安全码、记录余额历史"
-            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-              <rect x="4" y="8" width="15" height="10" rx="2.4" />
-              <path d="M7.4 5.6h12.2a1.8 1.8 0 0 1 1.8 1.8v7.2" />
-            </svg>
-            卡包
-          </button>
-          <div className="flex gap-2 text-xs">
+        {/* 手机：模式切换独占一行（分段控件），卡包 / 已录入并排；≥sm 合并回一行靠右 */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex w-full items-center gap-1 rounded-full border border-edge bg-white p-1 sm:w-auto dark:border-white/10 dark:bg-[#1c222d]">
             <button
               type="button"
               onClick={() => setMode("mine")}
-              className={`rounded-full border px-4 py-2 font-semibold transition-all duration-200 ${
+              aria-pressed={mode === "mine"}
+              className={`h-9 flex-1 rounded-full px-3.5 text-xs font-semibold transition-colors duration-200 sm:flex-none sm:px-4 ${
                 mode === "mine"
-                  ? "border-[#111] bg-[#111] text-white shadow-sm dark:border-white dark:bg-white dark:text-[#111]"
-                  : "border-edge bg-white text-ink-2 hover:border-edge-strong hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
+                  ? "bg-[#111] text-white shadow-sm dark:bg-white dark:text-[#111]"
+                  : "text-ink-2 hover:bg-brand-hover dark:text-white/80 dark:hover:bg-white/10"
               }`}
             >
               我的卡 {heldCount}
@@ -784,32 +820,48 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             <button
               type="button"
               onClick={() => setMode("all")}
-              className={`rounded-full border px-4 py-2 font-semibold transition-all duration-200 ${
+              aria-pressed={mode === "all"}
+              className={`h-9 flex-1 rounded-full px-3.5 text-xs font-semibold transition-colors duration-200 sm:flex-none sm:px-4 ${
                 mode === "all"
-                  ? "border-[#111] bg-[#111] text-white shadow-sm dark:border-white dark:bg-white dark:text-[#111]"
-                  : "border-edge bg-white text-ink-2 hover:border-edge-strong hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
+                  ? "bg-[#111] text-white shadow-sm dark:bg-white dark:text-[#111]"
+                  : "text-ink-2 hover:bg-brand-hover dark:text-white/80 dark:hover:bg-white/10"
               }`}
             >
               全部卡面 {flat.length}
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setOnlyFilled((value) => !value)}
-            title="只看已录入金额的卡"
-            className={`h-9 rounded-full border px-3.5 text-xs font-semibold transition-all duration-200 ${
-              onlyFilled
-                ? "border-[#111] bg-[#111] text-white shadow-sm dark:border-white dark:bg-white dark:text-[#111]"
-                : "border-edge bg-white text-ink-2 hover:border-edge-strong hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
-            }`}
-          >
-            已录入 {filledCount}
-          </button>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+            <button
+              type="button"
+              onClick={() => setWalletOpen(true)}
+              title="打开卡包：堆叠浏览卡片、翻到卡背看有效期与安全码、记录余额历史"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover sm:h-9 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                <rect x="4" y="8" width="15" height="10" rx="2.4" />
+                <path d="M7.4 5.6h12.2a1.8 1.8 0 0 1 1.8 1.8v7.2" />
+              </svg>
+              卡包
+            </button>
+            <button
+              type="button"
+              onClick={() => setOnlyFilled((value) => !value)}
+              title="只看已录入金额的卡"
+              aria-pressed={onlyFilled}
+              className={`h-10 rounded-full border px-3.5 text-xs font-semibold transition-all duration-200 sm:h-9 ${
+                onlyFilled
+                  ? "border-[#111] bg-[#111] text-white shadow-sm dark:border-white dark:bg-white dark:text-[#111]"
+                  : "border-edge bg-white text-ink-2 hover:border-edge-strong hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
+              }`}
+            >
+              已录入 {filledCount}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* 搜索：参考卡的筛选条，搜索框独立一行 */}
-      <label className="relative block w-full max-w-[520px]">
+      {/* 搜索：独立一行；手机上高度给到 44px，输入后右侧出现清空按钮 */}
+      <div className="relative w-full max-w-[520px]">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted">
           <circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" />
         </svg>
@@ -817,9 +869,26 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="搜索银行、卡片名称或关键词"
-          className={`h-10 w-full rounded-xl border border-edge bg-white pl-10 pr-3 text-sm text-ink placeholder:text-faint transition-all duration-200 hover:border-edge-strong dark:bg-[#1c222d] ${FOCUS_RING}`}
+          aria-label="搜索卡面"
+          inputMode="search"
+          enterKeyHint="search"
+          autoComplete="off"
+          spellCheck={false}
+          className={`h-11 w-full rounded-xl border border-edge bg-white pl-10 pr-11 text-[15px] text-ink placeholder:text-faint transition-all duration-200 hover:border-edge-strong sm:h-10 sm:text-sm dark:bg-[#1c222d] ${FOCUS_RING}`}
         />
-      </label>
+        {query.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            aria-label="清空搜索"
+            className="absolute right-1.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full text-muted transition-colors duration-200 hover:bg-bg-gray hover:text-ink-2 dark:hover:bg-white/10"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+      </div>
 
       {/* 「我的卡」总览只属于我的卡包：切到「全部卡面」挑选时不再出现 */}
       {mode === "mine" && wallet.count > 0 && (
@@ -836,7 +905,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 </span>
               ))}
             </span>
-            <span className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+            <span className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 sm:ml-auto sm:w-auto sm:justify-end">
               {wallet.groups.balance.filled > 0 && (
                 <span className="flex items-center gap-1.5" title="借记卡 / 预付卡的余额合计 —— 这一份就是资产分析里计入可用现金与净资产的「银行卡现金」">
                   <span className="text-xs font-semibold text-muted">余额合计</span>
@@ -885,14 +954,17 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       )}
 
       <div className="card flex flex-col gap-3 p-3">
-        <PillGroup
-          label="类型"
-          options={typeOptions}
-          values={type}
-          onToggle={(key) => setType((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]))}
-          onClear={() => setType([])}
-        />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {/* 类型胶囊：手机上横向滑动一行，不再换行占掉三四行高度 */}
+        <div className="ticker-scroll -mx-3 overflow-x-auto overscroll-x-contain px-3 sm:mx-0 sm:overflow-visible sm:px-0">
+          <PillGroup
+            label="类型"
+            options={typeOptions}
+            values={type}
+            onToggle={(key) => setType((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]))}
+            onClear={() => setType([])}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 xl:grid-cols-5">
           <MultiSelect
             label="地区"
             allLabel="全部地区"
@@ -962,7 +1034,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               setOnlyFilled(false);
               setQuery("");
             }}
-            className="self-start rounded-full border border-edge px-3 py-1.5 text-[11px] font-semibold text-muted transition-colors duration-200 hover:border-edge-strong hover:bg-brand-hover hover:text-ink"
+            className="self-start rounded-full border border-edge px-3 py-1.5 text-[11px] font-semibold text-muted transition-colors duration-200 hover:border-edge-strong hover:bg-brand-hover hover:text-ink max-sm:px-4 max-sm:py-2 max-sm:text-[12px]"
           >
             清空全部筛选
           </button>
@@ -983,7 +1055,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           <button
             type="button"
             onClick={() => setMode("all")}
-            className="rounded-full border border-edge-strong bg-white px-4 py-2 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover dark:bg-[#1c1c1e] dark:text-white"
+            className="h-11 rounded-full border border-edge-strong bg-white px-5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover sm:h-9 sm:px-4 dark:bg-[#1c1c1e] dark:text-white"
           >
             去全部卡面挑一张
           </button>
@@ -1005,24 +1077,25 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 key={`${bank.folder}-${card.file}`}
                 type="button"
                 onClick={() => openCard({ card, bank, region: regionLabel, tags })}
-                className="group flex flex-col overflow-hidden rounded-2xl border border-edge bg-white text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop dark:bg-[#16181d]"
+                className="group flex flex-col overflow-hidden rounded-2xl border border-edge bg-white text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop active:scale-[.995] [contain-intrinsic-size:auto_190px] [content-visibility:auto] dark:bg-[#16181d]"
               >
                 {/* 卡片底托：留白 + 圆角裁切，让每张卡看起来都像一张实体卡（素材自带圆角的也保持一致） */}
                 <span className="block w-full bg-bg-gray/60 p-2.5 dark:bg-white/[0.04]">
-                  <span className="relative block overflow-hidden rounded-[10px] shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+                  <span className="relative block overflow-hidden rounded-[10px] bg-bg-gray shadow-sm ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10">
                     <img
                       src={`/uploads/cards/${card.file}`}
                       alt={card.name}
                       loading="lazy"
+                      decoding="async"
                       className="aspect-[1.586] w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
                     />
-                    <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                    <span className="touch-always pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                     {saved && (
                       <span className="absolute bottom-2 left-2 rounded-full bg-black/65 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
                         {fmtAmount(saved.amount, saved.currency)}
                       </span>
                     )}
-                    <span className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                    <span className="touch-always absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                       {card.type || "未分类"}
                     </span>
                     {isHeld && (
@@ -1039,7 +1112,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                           event.stopPropagation();
                           void setHeld(card.file, !isHeld);
                         }}
-                        className={`absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-sm transition-colors duration-200 ${
+                        className={`absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-sm transition-colors duration-200 after:absolute after:-inset-1 after:content-[''] active:scale-95 sm:bottom-2 sm:right-2 sm:px-2 sm:py-0.5 sm:text-[10px] ${
                           isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
                         }`}
                       >
@@ -1060,7 +1133,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       {shownTags.slice(0, 3).map((item) => (
                         <i
                           key={item}
-                          className={`rounded-full px-1.5 py-[1px] text-[9px] font-semibold not-italic ${
+                          className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold not-italic sm:py-[1px] sm:text-[9px] ${
                             mine.includes(item)
                               ? "bg-[#3297f6]/12 text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]"
                               : "bg-brand-light text-brand-deep dark:bg-white/10 dark:text-white/70"
@@ -1080,7 +1153,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           <button
             type="button"
             onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
-            className="card mx-auto flex w-full items-center justify-center gap-1.5 py-3 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink"
+            className="card mx-auto flex min-h-12 w-full items-center justify-center gap-1.5 py-3 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink"
           >
             加载更多（剩余 {filtered.length - pageItems.length} 张）
             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3"><path d="m5 7 5 5 5-5" /></svg>
@@ -1090,12 +1163,14 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       )}
 
       {active && (
-        <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/60 p-4" onClick={() => setActive(null)}>
+        <div className="fixed inset-0 z-[10002] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setActive(null)}>
           <div
-            className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-card border border-edge bg-white shadow-2xl dark:border-white/10 dark:bg-[#16181d]"
+            className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-edge bg-white shadow-2xl supports-[height:100dvh]:max-h-[92dvh] sm:rounded-card dark:border-white/10 dark:bg-[#16181d]"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3 border-b border-edge px-5 py-4">
+            {/* 手机：底部抽屉的抓手 */}
+            <span className="mx-auto mt-2.5 block h-1 w-10 flex-none rounded-full bg-edge-strong sm:hidden" />
+            <div className="flex items-start justify-between gap-3 border-b border-edge px-4 py-3.5 sm:px-5 sm:py-4">
               <div className="min-w-0">
                 <h3 className="truncate text-base font-bold text-ink">{active.card.name}</h3>
                 <p className="mt-0.5 truncate text-xs text-muted">
@@ -1119,11 +1194,11 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   </p>
                 )}
               </div>
-              <button type="button" onClick={() => setActive(null)} aria-label="关闭" className="grid h-8 w-8 flex-none place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2">
+              <button type="button" onClick={() => setActive(null)} aria-label="关闭" className="grid h-9 w-9 flex-none place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2 sm:h-8 sm:w-8">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="m6 6 12 12M18 6 6 18" /></svg>
               </button>
             </div>
-            <div className="overflow-y-auto bg-bg-gray px-5 py-5 dark:bg-black/20">
+            <div className="overflow-y-auto overscroll-contain bg-bg-gray px-4 py-4 sm:px-5 sm:py-5 dark:bg-black/20">
               <img src={`/uploads/cards/${active.card.file}`} alt={active.card.name} className="mx-auto w-full max-w-[560px] rounded-xl shadow-pop" />
               <div className="mx-auto mt-4 grid max-w-[560px] grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
                 <span className="rounded-lg bg-white px-3 py-2 text-muted dark:bg-[#1c222d]">类型<b className="ml-1 text-ink">{active.card.type || "—"}</b></span>
@@ -1137,7 +1212,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 {` · ${active.card.file.split("/").slice(0, 2).join(" / ").split("/").map((segment) => decodeURIComponent(segment)).join(" / ")}`}
               </p>
             </div>
-            <div className="border-t border-edge px-5 py-4">
+            <div className="border-t border-edge px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3.5 sm:px-5 sm:py-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[11px] text-muted">
                   {holdings[active.card.file] ? "这张卡已在「我的卡」里，回卡面库默认就能看到" : "加入「我的卡」后，卡面库默认列表里就会出现它"}
@@ -1145,7 +1220,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 <button
                   type="button"
                   onClick={() => void setHeld(active.card.file, !holdings[active.card.file])}
-                  className={`h-8 rounded-full border px-3.5 text-xs font-semibold transition-all duration-200 hover:-translate-y-px active:scale-[.97] ${
+                  className={`h-10 rounded-full border px-3.5 text-xs font-semibold transition-all duration-200 hover:-translate-y-px active:scale-[.97] sm:h-8 ${
                     holdings[active.card.file]
                       ? "border-edge-strong bg-white text-muted hover:bg-brand-hover hover:text-ink dark:bg-[#1c1c1e] dark:text-white/80"
                       : "border-[#3297f6] bg-[#3297f6] text-white hover:brightness-105"
@@ -1155,7 +1230,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 </button>
               </div>
               <div className="flex flex-wrap items-end gap-2">
-                <label className="flex flex-col gap-1">
+                <label className="flex flex-col gap-1 max-sm:flex-1">
                   <span className="text-[11px] font-semibold text-muted">金额</span>
                   <span className="flex items-center gap-1 rounded-xl border border-edge bg-white px-2 transition-all duration-200 focus-within:border-edge-strong focus-within:shadow-[0_0_0_3px_rgba(107,114,128,.15)] dark:bg-[#1c222d] dark:focus-within:border-white/20 dark:focus-within:shadow-[0_0_0_3px_rgba(255,255,255,.10)]">
                     <span className="text-xs font-semibold text-muted">{currencySymbol(draft.currency)}</span>
@@ -1164,7 +1239,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       onChange={(event) => setDraft((prev) => ({ ...prev, amount: event.target.value.replace(/[^\d.]/g, "") }))}
                       inputMode="decimal"
                       placeholder="0.00"
-                      className="h-9 w-[130px] bg-transparent text-sm tabular-nums text-ink outline-none placeholder:text-faint"
+                      className="h-11 w-full min-w-[96px] bg-transparent text-sm tabular-nums text-ink outline-none placeholder:text-faint sm:h-9 sm:w-[130px]"
                     />
                   </span>
                 </label>
@@ -1173,7 +1248,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   <select
                     value={draft.currency}
                     onChange={(event) => setDraft((prev) => ({ ...prev, currency: event.target.value }))}
-                    className={`h-9 rounded-xl border border-edge bg-white px-2 text-xs font-semibold text-ink transition-all duration-200 dark:bg-[#1c222d] ${FOCUS_RING}`}
+                    className={`h-11 rounded-xl border border-edge bg-white px-2 text-xs font-semibold text-ink transition-all duration-200 sm:h-9 dark:bg-[#1c222d] ${FOCUS_RING}`}
                   >
                     {CARD_CURRENCIES.map((item) => (
                       <option key={item.code} value={item.code}>
@@ -1189,14 +1264,14 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     onChange={(event) => setDraft((prev) => ({ ...prev, note: event.target.value }))}
                     maxLength={100}
                     placeholder="额度 / 余额 / 其他说明"
-                    className={`h-9 rounded-xl border border-edge bg-white px-3 text-xs text-ink placeholder:text-faint transition-all duration-200 dark:bg-[#1c222d] ${FOCUS_RING}`}
+                    className={`h-11 rounded-xl border border-edge bg-white px-3 text-xs text-ink placeholder:text-faint transition-all duration-200 sm:h-9 dark:bg-[#1c222d] ${FOCUS_RING}`}
                   />
                 </label>
                 <button
                   type="button"
                   disabled={saving}
                   onClick={() => void saveAmount()}
-                  className="h-9 rounded-xl border border-edge-strong bg-white px-4 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover active:scale-[.97] disabled:opacity-50 dark:bg-[#1c1c1e] dark:text-white"
+                  className="h-11 rounded-xl border border-edge-strong bg-white px-4 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover active:scale-[.97] disabled:opacity-50 sm:h-9 max-sm:flex-1 dark:bg-[#1c1c1e] dark:text-white"
                 >
                   保存
                 </button>
@@ -1205,7 +1280,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     type="button"
                     disabled={saving}
                     onClick={() => void clearAmount()}
-                    className="h-9 rounded-xl px-3 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink disabled:opacity-50"
+                    className="h-11 rounded-xl px-4 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink disabled:opacity-50 sm:h-9 sm:px-3"
                   >
                     清除
                   </button>
@@ -1223,13 +1298,13 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-edge pt-3">
                 <span className="text-[11px] font-semibold text-muted">我的标签</span>
                 {activeUserTags.map((item) => (
-                  <span key={item} className="inline-flex items-center gap-1 rounded-full bg-[#3297f6]/12 px-2 py-0.5 text-[11px] font-semibold text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]">
+                  <span key={item} className="inline-flex items-center gap-1 rounded-full bg-[#3297f6]/12 px-2.5 py-1 text-[12px] font-semibold text-[#2f6fed] sm:px-2 sm:py-0.5 sm:text-[11px] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]">
                     {item}
                     <button
                       type="button"
                       onClick={() => removeTag(item)}
                       aria-label={`移除标签 ${item}`}
-                      className="grid h-3.5 w-3.5 place-items-center rounded-full transition-colors hover:bg-black/10 dark:hover:bg-white/10"
+                      className="relative grid h-4 w-4 place-items-center rounded-full transition-colors after:absolute after:-inset-2.5 after:content-[''] hover:bg-black/10 sm:h-3.5 sm:w-3.5 dark:hover:bg-white/10"
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="h-2.5 w-2.5"><path d="m6 6 12 12M18 6 6 18" /></svg>
                     </button>
@@ -1246,14 +1321,14 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   }}
                   maxLength={12}
                   placeholder="添加标签，回车"
-                  className={`h-7 w-[130px] rounded-full border border-edge bg-white px-2.5 text-[11px] text-ink placeholder:text-faint transition-all duration-200 dark:bg-[#1c222d] ${FOCUS_RING}`}
+                  className={`h-9 w-[140px] rounded-full border border-edge bg-white px-2.5 text-[12px] text-ink placeholder:text-faint transition-all duration-200 sm:h-7 sm:w-[130px] sm:text-[11px] dark:bg-[#1c222d] ${FOCUS_RING}`}
                 />
                 {TAG_SUGGESTIONS.filter((item) => !activeUserTags.includes(item)).slice(0, 5).map((item) => (
                   <button
                     key={item}
                     type="button"
                     onClick={() => addTag(item)}
-                    className="rounded-full border border-dashed border-edge-strong px-2 py-0.5 text-[11px] font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink"
+                    className="rounded-full border border-dashed border-edge-strong px-2.5 py-1.5 text-[12px] font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink sm:px-2 sm:py-0.5 sm:text-[11px]"
                   >
                     + {item}
                   </button>

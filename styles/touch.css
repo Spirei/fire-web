@@ -1,9 +1,12 @@
 /* Capability-based interaction adjustments, independent of screen or user agent. */
 @media (hover: none) and (pointer: coarse) {
-  button, a, [role="button"] { -webkit-tap-highlight-color: transparent; }
+  /* touch-action: manipulation 去掉双击缩放带来的点击延迟（双击仍可缩页面，只是不在按钮上触发） */
+  button, a, [role="button"] { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .mobile-tab-nav > button { min-height: 44px; }
   .btn:not(.btn-icon) { min-height: 40px; }
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
   select,
   textarea { font-size: max(16px, 1em); }
+  /* 触屏没有 hover：桌面端靠悬停才露出来的信息（卡面类型、底部遮罩）在触屏上常驻 */
+  .touch-always { opacity: 1 !important; }
 }
