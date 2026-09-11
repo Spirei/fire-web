@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { listCardAmounts, listCardHoldings, listCardTags, type CardAmount } from "./cardAmounts";
+import { listCardDetails, type CardDetails } from "./cardWallet";
 
 /** 卡面库清单（由 scripts/fetch-card-assets.mjs 生成） */
 const CARDS_DIR = path.join(process.cwd(), "public", "uploads", "cards");
@@ -17,6 +18,8 @@ export interface CardLibraryPayload extends CardManifest {
   amounts: CardAmount[];
   tags: Record<string, string[]>;
   holdings: string[];
+  /** 卡背信息（卡号 / 有效期 / 安全码 / 备注 / 币种）：卡包与卡片详情首帧就要用 */
+  details: Record<string, CardDetails>;
 }
 
 let cache: { data: CardManifest | null; at: number } | null = null;
@@ -58,6 +61,7 @@ export function cardLibraryForUser(userId: string): CardLibraryPayload {
     source: manifest?.source ?? "",
     amounts: listCardAmounts(userId),
     tags: listCardTags(userId),
-    holdings: listCardHoldings(userId)
+    holdings: listCardHoldings(userId),
+    details: listCardDetails(userId)
   };
 }

@@ -207,6 +207,33 @@ function migrate(database: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_card_holdings_user ON card_holdings(user_id);
 
+    -- 卡面库：卡号 / 有效期 / 安全码（卡背信息，仅本地保存）
+    CREATE TABLE IF NOT EXISTS card_details (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      card_key TEXT NOT NULL,
+      card_number TEXT NOT NULL DEFAULT '',
+      expiry TEXT NOT NULL DEFAULT '',
+      cvv TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      currency TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, card_key)
+    );
+
+    -- 卡面库：余额流水（存钱 / 取钱 / 手动调整），balance 为本次变动后的余额
+    CREATE TABLE IF NOT EXISTS card_balance_history (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      card_key TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'adjust',
+      delta REAL NOT NULL DEFAULT 0,
+      balance REAL NOT NULL DEFAULT 0,
+      note TEXT NOT NULL DEFAULT '',
+      occurred_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_card_balance_history_card ON card_balance_history(user_id, card_key, occurred_at DESC);
+
     CREATE TABLE IF NOT EXISTS financial_report_files (
       id TEXT PRIMARY KEY,
       market TEXT NOT NULL,
@@ -282,6 +309,11 @@ function migrate(database: Database.Database) {
 
   const userSettingCols = (database.prepare("PRAGMA table_info(user_settings)").all() as { name: string }[]).map((c) => c.name);
   if (!userSettingCols.includes("simple")) database.exec("ALTER TABLE user_settings ADD COLUMN simple TEXT NOT NULL DEFAULT '{}'");
+
+  // 卡面库卡背信息增量字段（兼容旧库）：备注与币种后加
+  const cardDetailCols = (database.prepare("PRAGMA table_info(card_details)").all() as { name: string }[]).map((c) => c.name);
+  if (!cardDetailCols.includes("note")) database.exec("ALTER TABLE card_details ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+  if (!cardDetailCols.includes("currency")) database.exec("ALTER TABLE card_details ADD COLUMN currency TEXT NOT NULL DEFAULT ''");
 
   // celebs 表增量字段（兼容旧库）
   const celebCols = (database.prepare("PRAGMA table_info(celebs)").all() as { name: string }[]).map((c) => c.name);

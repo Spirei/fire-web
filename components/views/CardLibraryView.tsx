@@ -4,10 +4,13 @@ import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { showToast } from "@/lib/toast";
 import { cardTagsOf } from "@/lib/cardTags";
 import CurrencyFlag from "@/components/CurrencyFlag";
+import CardWalletStack, { type WalletCard, type WalletCardDetails } from "@/components/CardWalletStack";
 import { FALLBACK_RATES } from "@/lib/types";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
+import { CARD_CURRENCIES, REGION_CURRENCY, currencySymbol } from "@/lib/cardCurrencies";
 import type { CardLibraryPayload } from "@/lib/cardLibrary";
+import type { CardDetails } from "@/lib/cardWallet";
 
 interface CardItem {
   name: string;
@@ -57,42 +60,6 @@ const FOCUS_RING =
 /** 常用标签建议（可自由输入，这里只是快捷入口） */
 const TAG_SUGGESTIONS = ["虚拟卡", "实体卡", "金属卡", "透明卡", "收藏", "主力卡", "已注销", "纪念版"];
 
-/** 卡面库自己的币种表（覆盖素材里出现的国家地区，不走持仓的币种偏好） */
-const CARD_CURRENCIES: { code: string; symbol: string; label: string }[] = [
-  { code: "CNY", symbol: "¥", label: "人民币" },
-  { code: "USD", symbol: "$", label: "美元" },
-  { code: "HKD", symbol: "HK$", label: "港元" },
-  { code: "TWD", symbol: "NT$", label: "新台币" },
-  { code: "MOP", symbol: "MOP$", label: "澳门元" },
-  { code: "JPY", symbol: "¥", label: "日元" },
-  { code: "KRW", symbol: "₩", label: "韩元" },
-  { code: "SGD", symbol: "S$", label: "新加坡元" },
-  { code: "GBP", symbol: "£", label: "英镑" },
-  { code: "EUR", symbol: "€", label: "欧元" },
-  { code: "AUD", symbol: "A$", label: "澳元" },
-  { code: "CAD", symbol: "C$", label: "加元" },
-  { code: "RUB", symbol: "₽", label: "卢布" },
-  { code: "KZT", symbol: "₸", label: "坚戈" }
-];
-
-const REGION_CURRENCY: Record<string, string> = {
-  中国内地: "CNY",
-  中国香港: "HKD",
-  中国台湾: "TWD",
-  中国澳门: "MOP",
-  美国: "USD",
-  日本: "JPY",
-  韩国: "KRW",
-  新加坡: "SGD",
-  英国: "GBP",
-  德国: "EUR",
-  爱尔兰: "EUR",
-  澳大利亚: "AUD",
-  加拿大: "CAD",
-  俄罗斯: "RUB",
-  哈萨克斯坦: "KZT"
-};
-
 /** 地区按洲分组（下拉里用 optgroup 展示）；洲内把中国各地排最前，再按卡面数量排 */
 const CONTINENT_ORDER = ["亚洲", "欧洲", "北美洲", "大洋洲", "其他"] as const;
 const REGION_CONTINENT: Record<string, string> = {
@@ -129,10 +96,6 @@ const REGION_ISO: Record<string, string> = {
   加拿大: "CA",
   澳大利亚: "AU"
 };
-
-function currencySymbol(code: string): string {
-  return CARD_CURRENCIES.find((item) => item.code === code)?.symbol ?? (code ? `${code} ` : "");
-}
 
 function fmtAmount(amount: number, currency: string): string {
   return `${currencySymbol(currency)}${amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
@@ -252,7 +215,7 @@ function MultiSelect({
         {open && (
           <>
             <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-            <div className="thin-scrollbar absolute left-0 top-full z-40 mt-1 max-h-[300px] w-full min-w-[220px] overflow-y-auto rounded-xl border border-edge-strong bg-white p-1 shadow-pop dark:border-white/10 dark:bg-[#1b2029]">
+            <div className="thin-scrollbar absolute left-0 top-full z-40 mt-1 max-h-[300px] w-full min-w-[220px] space-y-1 overflow-y-auto rounded-xl border border-edge-strong bg-white p-1 shadow-pop dark:border-white/10 dark:bg-[#1b2029]">
               <button
                 type="button"
                 onClick={() => onChange([])}
@@ -343,6 +306,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [saving, setSaving] = useState(false);
   const [userTags, setUserTags] = useState<Record<string, string[]>>(() => initial?.tags ?? {});
   const [tagDraft, setTagDraft] = useState("");
+  /** 卡背信息（卡号 / 有效期 / 安全码 / 备注 / 币种）与卡包叠卡视图 */
+  const [details, setDetails] = useState<Record<string, CardDetails>>(() => initial?.details ?? {});
+  const [walletOpen, setWalletOpen] = useState(false);
 
   const { currency: displayCurrency } = useDisplayCurrency();
   const [rates, setRates] = useState<Record<string, number>>(() => ({ ...FALLBACK_RATES }));
@@ -378,6 +344,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     amounts?: unknown;
     tags?: unknown;
     holdings?: unknown;
+    details?: unknown;
   } | null) => {
     if (!data) return;
     setRegions(Array.isArray(data.regions) ? (data.regions as RegionEntry[]) : []);
@@ -396,6 +363,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       if (typeof key === "string" && key) held[key] = true;
     });
     setHoldings(held);
+    setDetails(data.details && typeof data.details === "object" ? (data.details as Record<string, CardDetails>) : {});
   };
 
   useEffect(() => {
@@ -561,6 +529,53 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const pageItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
   const activeUserTags = active ? userTags[active.card.file] ?? [] : [];
 
+  /** 卡包叠卡视图的数据：只放「我的卡」，带卡背信息与当前余额 */
+  const walletCards = useMemo<WalletCard[]>(
+    () =>
+      flat
+        .filter(({ card }) => holdings[card.file])
+        .map(({ card, bank, region: regionLabel }) => {
+          const saved = amounts[card.file];
+          const info = details[card.file];
+          return {
+            key: card.file,
+            name: card.name,
+            bank: bank.name,
+            region: regionLabel,
+            type: card.type || "",
+            brand: card.brand || "",
+            level: card.level || "",
+            image: card.file,
+            amount: saved?.amount ?? 0,
+            currency: saved?.currency || info?.currency || REGION_CURRENCY[regionLabel] || "CNY",
+            hasAmount: !!saved,
+            number: info?.number || "",
+            expiry: info?.expiry || "",
+            cvv: info?.cvv || "",
+            note: info?.note || ""
+          };
+        }),
+    [flat, holdings, amounts, details]
+  );
+
+  /** 卡包里改余额 / 卡背信息后，同步回卡面库（金额胶囊、总览条、卡片弹窗都读这里） */
+  function applyWalletAmount(cardKey: string, amount: number, currency: string) {
+    setAmounts((prev) => ({
+      ...prev,
+      [cardKey]: {
+        cardKey,
+        amount,
+        currency: currency || prev[cardKey]?.currency || "",
+        note: prev[cardKey]?.note ?? "",
+        updatedAt: new Date().toISOString()
+      }
+    }));
+  }
+
+  function applyWalletDetails(saved: WalletCardDetails) {
+    setDetails((prev) => ({ ...prev, [saved.cardKey]: { ...saved } }));
+  }
+
   /** 我的卡总览：持有张数 + 各类型张数 + 额度合计（只统计持有的卡；按币种分组折算成显示货币） */
   const wallet = useMemo(() => {
     const heldEntries = flat.filter(({ card }) => holdings[card.file]);
@@ -720,6 +735,18 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setWalletOpen(true)}
+            title="打开卡包：堆叠浏览卡片、翻到卡背看有效期与安全码、记录余额历史"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+              <rect x="4" y="8" width="15" height="10" rx="2.4" />
+              <path d="M7.4 5.6h12.2a1.8 1.8 0 0 1 1.8 1.8v7.2" />
+            </svg>
+            卡包
+          </button>
           <div className="flex gap-2 text-xs">
             <button
               type="button"
@@ -1194,6 +1221,20 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             </div>
           </div>
         </div>
+      )}
+
+      {walletOpen && (
+        <CardWalletStack
+          cards={walletCards}
+          onClose={() => setWalletOpen(false)}
+          onAddCards={() => {
+            setWalletOpen(false);
+            setMode("all");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          onAmountChange={applyWalletAmount}
+          onDetailsSaved={applyWalletDetails}
+        />
       )}
     </div>
   );
