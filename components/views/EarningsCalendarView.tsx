@@ -546,7 +546,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
             <span className="rounded-full bg-bg-gray px-3 py-1.5 text-xs font-semibold text-muted">共 {filtered.length} 家</span>
           </div>
 
-          <div className="flex min-w-0 flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5">
+          <div className="flex min-w-0 flex-col gap-2.5 rounded-2xl border border-edge bg-bg-gray/40 p-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5 sm:rounded-[14px] sm:px-3 sm:py-2.5 dark:bg-white/[0.03]">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <span className="mr-0.5 text-[11px] font-semibold text-faint">市场</span>
               <div className="flex max-w-full flex-wrap rounded-full border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
