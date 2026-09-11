@@ -288,7 +288,10 @@ function MultiSelect({
                   if (single) setOpen(false);
                 }}
                 className={`flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-[13px] font-semibold transition-colors sm:py-2 sm:text-xs ${
-                  values.length === 0 ? "bg-bg-gray text-ink dark:bg-white/10" : "text-muted hover:bg-brand-hover hover:text-ink dark:hover:bg-white/10"
+                  // 选中态统一用品牌蓝（和下面各选项一致），不再用和分组标题同色的灰底
+                  values.length === 0
+                    ? "bg-[#3297f6]/12 text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]"
+                    : "text-ink hover:bg-brand-hover dark:text-white/85 dark:hover:bg-white/10"
                 }`}
               >
                 {allLabel}
@@ -304,7 +307,12 @@ function MultiSelect({
                 const active = values.includes(option.value);
                 return (
                   <span key={option.value} className="block">
-                    {header && <span className="mt-1 block px-3 pb-1 pt-2.5 text-[11px] font-semibold text-faint sm:pt-2 sm:text-[10px]">{header}</span>}
+                    {/* 分组标题：小一号 + 字距 + 一条细分隔线，和可点的选项明显分层 */}
+                    {header && (
+                      <span className="mt-1 block border-t border-edge/70 px-3.5 pb-1 pt-2 text-[10px] font-semibold tracking-[0.08em] text-faint dark:border-white/10">
+                        {header}
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => toggle(option.value)}
@@ -317,7 +325,7 @@ function MultiSelect({
                         <span className="min-w-0 truncate">{option.label}</span>
                       </span>
                       {active && (
-                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 flex-none">
+                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 flex-none">
                           <path d="m2.4 6.4 2.5 2.5 4.7-5.8" />
                         </svg>
                       )}
