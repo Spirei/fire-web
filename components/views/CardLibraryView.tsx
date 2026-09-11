@@ -526,7 +526,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
    * 卡包、余额历史都走和清单卡完全一样的逻辑。
    */
   const mergedRegions = useMemo(() => {
-    if (customCards.length === 0) return regions;
     const merged: RegionEntry[] = regions.map((entry) => ({
       label: entry.label,
       // 与另一张完全重复的素材（同图不同格式）不展示；同一张卡的新旧卡面并成一条
@@ -557,6 +556,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           })
       }))
     }));
+    // 自建卡（素材库里没有的）并进同一个地区 / 银行
     customCards.forEach((card) => {
       const regionLabel = card.region || "未分类";
       let regionEntry = merged.find((entry) => entry.label === regionLabel);
