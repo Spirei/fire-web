@@ -1,9 +1,11 @@
 import { getAuthUser } from "@/lib/auth";
 import { fail, ok } from "@/lib/api";
-import { countFundTransactions, createFundTransaction, ensureOrderCashTransactions, fundBalances, fundSummaries, listFundTransactions, type FundCurrency, type FundType } from "@/lib/funds";
+import { fundState } from "@/lib/fundState";
+import { countFundTransactions, createFundTransaction, ensureOrderCashTransactions, listFundTransactions, type FundCurrency, type FundType } from "@/lib/funds";
 
 const currencies = new Set(["USD", "EUR", "HKD", "CNY", "JPY", "KRW", "SGD"]);
 const types = new Set(["opening", "deposit", "withdrawal", "adjustment"]);
+
 export async function GET(request: Request) {
   const user = getAuthUser(request); if (!user) return fail(40101, "未登录", 401);
   const params = new URL(request.url).searchParams;
@@ -17,7 +19,7 @@ export async function GET(request: Request) {
   const total = countFundTransactions(user.id, currency, query);
   const records = { transactions: listFundTransactions(user.id, limit, offset, currency, query), pagination: { limit, offset, total, hasMore: offset + limit < total } };
   if (recordsOnly) return ok(records);
-  return ok({ balances: fundBalances(user.id), summaries: fundSummaries(user.id), ...records });
+  return ok({ ...fundState(user.id), ...records });
 }
 export async function POST(request: Request) {
   const user = getAuthUser(request); if (!user) return fail(40101, "未登录", 401);
@@ -30,5 +32,5 @@ export async function POST(request: Request) {
   const occurredAt = body.occurredAt ? new Date(String(body.occurredAt)) : new Date();
   if (Number.isNaN(occurredAt.getTime()) || occurredAt.getTime() > Date.now() + 86400000) return fail(40001, "资金日期无效", 400);
   const transaction = createFundTransaction({ userId: user.id, currency, type, amount, direction: direction as 1 | -1, note, occurredAt: occurredAt.toISOString() });
-  return ok({ transaction, balances: fundBalances(user.id) });
+  return ok({ transaction, ...fundState(user.id) });
 }

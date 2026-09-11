@@ -35,7 +35,7 @@ const EMPTY: Record<Currency, number> = { USD: 0, EUR: 0, HKD: 0, CNY: 0, JPY: 0
 const EMPTY_SUMMARY: Record<Currency, Summary> = Object.fromEntries(Object.keys(EMPTY).map((key) => [key, { openingAsset: 0, cashNetFlow: 0, stockNetFlow: 0, otherNetFlow: 0 }])) as Record<Currency, Summary>;
 const RECORD_PAGE_SIZE = 30;
 
-export default function FundsPanel({ holdingAssets, balanceOverrides, onBalancesChange }: { holdingAssets: Record<Currency, number>; balanceOverrides?: Partial<Record<Currency, number>>; onBalancesChange: (balances: Record<Currency, number>) => void }) {
+export default function FundsPanel({ holdingAssets, balanceOverrides, onBalancesChange }: { holdingAssets: Record<Currency, number>; balanceOverrides?: Partial<Record<Currency, number>>; onBalancesChange: (balances: Record<Currency, number>, cardCash: Record<string, number>) => void }) {
   const rates = useRates();
   const [currency, setCurrency] = usePersistedState<Currency>("fire:funds-display-currency", "USD");
   const [balances, setBalances] = useState<Record<Currency, number>>(EMPTY);
@@ -62,7 +62,10 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
     if (!res.ok) return;
     recordsCache.current.clear();
     const next = { ...EMPTY, ...(json?.data?.balances || {}) };
-    setBalances(next); setSummaries({ ...EMPTY_SUMMARY, ...(json?.data?.summaries || {}) }); onBalancesChange(next);
+    // 借记卡 / 预付卡余额已由服务端并进 balances，这里额外把原始明细带上去，
+    // 资产分析要在「银行卡现金」那一行说明可用现金里有多少来自银行卡
+    const cardCash = (json?.data?.cardCash || {}) as Record<string, number>;
+    setBalances(next); setSummaries({ ...EMPTY_SUMMARY, ...(json?.data?.summaries || {}) }); onBalancesChange(next, cardCash);
   }, [onBalancesChange]);
   const loadRecords = useCallback(async (_nextCurrency: Currency, page: number, query = "") => {
     const normalizedQuery = query.trim();
@@ -167,7 +170,7 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
         <div className="col-start-2 row-start-3">{metric("盈亏额", profit, "flow")}</div>
         <div className="col-start-3 row-start-2">{metric("期末总资产", endingAsset, "result")}</div>
       </div>
-      <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 买卖与股息属于账户内部现金流，不计入外部投入。</p><p>3. <button type="button" onClick={() => { setRecordsPage(0); setRecordsOpen(true); }} className="border-b border-dashed border-muted/60 pb-px font-semibold text-muted transition-colors hover:border-ink hover:text-ink">查看资金记录</button></p></div>
+      <div className="mt-4 text-[10px] leading-4 text-muted"><b className="block text-xs text-ink">温馨提示</b><p>1. 盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>2. 买卖与股息属于账户内部现金流，不计入外部投入。</p><p>3. 卡面库「我的卡」里的借记卡 / 预付卡余额也算现金，已并入各币种余额与「其他净流入」；信用卡的金额是额度，不计入。若钱是从券商转到卡上，请同时在资金记录里记一笔转出，否则两边会重复计算。</p><p>4. <button type="button" onClick={() => { setRecordsPage(0); setRecordsOpen(true); }} className="border-b border-dashed border-muted/60 pb-px font-semibold text-muted transition-colors hover:border-ink hover:text-ink">查看资金记录</button></p></div>
     </div>
     {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={displayedBalances[currency] || 0} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
     {recordsOpen && <AppModal title="资金记录" desc={`折算为 ${currency} · 共 ${recordsTotal} 笔 · 当前余额 ${fmtMoney(cash, CURRENCY_SYMBOLS[currency])}`} size="md" onClose={() => setRecordsOpen(false)} headerActions={<label className="relative block"><IconSearch size={14} stroke={1.8} className={`pointer-events-none absolute left-3 top-1/2 z-20 -translate-y-1/2 text-muted ${recordsLoading ? "animate-pulse" : ""}`} /><RainbowTextInput autoFocus value={recordsQuery} onChange={(event) => setRecordsQuery(event.target.value)} placeholder="名称、代码、拼音、买入/卖出" className="h-9 w-full rounded-xl border border-edge bg-bg-gray pl-8 pr-8 text-[11px] text-ink outline-none transition-colors focus-within:border-[#3297f6]/60 focus-within:bg-white dark:focus-within:bg-white/5" />{recordsQuery && <button type="button" onClick={() => setRecordsQuery("")} className="absolute right-1.5 top-1/2 z-20 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:bg-white hover:text-ink dark:hover:bg-white/10" aria-label="清空搜索">×</button>}</label>}>
