@@ -125,11 +125,14 @@ export default function RecordsApp({
   // 等水合 + effect 才隐藏 —— 关了色块的人刷新时就会闪一下（服务端与首帧都走这里，值没变时是空操作）。
   primeMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
 
-  // 外部共享缓存只能在提交后更新；渲染期间通知订阅者会打断水合并触发跨组件 setState。
+  // 服务端注入的股票图标表必须在「渲染期」就地预热：primeStockIconCache 只写缓存、不通知订阅者，
+  // 不会打断水合；放到 useLayoutEffect 里就晚了 —— 子组件先渲染首帧（拿不到图标，画首字母），
+  // 之后 effect 才补上，刷新时就会看到「图标闪一下才出来」。服务端同一份渲染路径也会带上图标，
+  // 首屏 HTML 直接就是图标（layout 里还做了 preload）。
+  useMemo(() => primeStockIconCache(initialStockIcons), [initialStockIcons]);
   useLayoutEffect(() => {
-    primeStockIconCache(initialStockIcons);
     applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
-  }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible, initialStockIcons]);
+  }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible]);
 
   useLayoutEffect(() => {
     if (initialTab === "settings") {

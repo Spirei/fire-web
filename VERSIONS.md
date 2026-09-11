@@ -27,6 +27,8 @@
   - 盈亏日历直接复用资产盈亏分析的「收益日历」——数据口径抽到 `lib/pnlCalendar.ts`、UI 抽到 `components/PnlCalendar.tsx`，两个页面共用同一套算法（日资产序列、月/年视图、当天每股盈亏弹窗），该页代码净减约 450 行；
   - 左右两栏的模块都能拖（左侧 账户资产 / 收益率趋势图 / 持仓盈亏排行 / 资金系统，右侧 账户总览 / 持仓分布 / 订单 / 盈亏日历），悬停出现手柄、按住手柄才可拖，落下即写回 `site_settings.assetAnalysisOrder`，带「模块顺序已保存」提示；新增模块会自动补在末尾。
 
+- 修复全站股票图标刷新后闪现首字母：服务端注入的图标表原来只在 `RecordsApp` 的 `useLayoutEffect` 里预热，而子组件的首帧渲染早于它，所以刷新后先画首字母再切图标。改为**渲染期预热**（只写缓存、不通知订阅者，不打断水合，与市场色块 `primeMarketBadges` 同思路），并把 `useAssetIcons` 读 localStorage 缓存的时机从 `useEffect` 提到 `useLayoutEffect`（绘制前）。验证：`/asset-analysis` 首屏 HTML A/B —— 修复前 3 个 `<img>`、0 个股票图标；修复后 13 个 `<img>`、其中 10 个股票图标。
+
 ---
 
 ## v0.1.27 · 2026-09-11

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { RELATED_ETF_MAIN_STOCK } from "@/lib/relatedEtfs";
 import { pickStockIcon, stockIconLookupCodes } from "@/lib/stockIconKey";
 
@@ -270,15 +270,22 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
     };
   }, [options.loadCdnSetting, options.stockIconCdn]);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (options.fullCatalog) fullStockCatalog = true;
+  // 首帧就用本地缓存补齐：useLayoutEffect 在浏览器绘制前执行，避免「先画首字母、再切图标」的刷新闪现。
+  // 服务端渲染阶段没有 localStorage，这一步不生效；那条路径依赖服务端注入的图标表（见 RecordsApp）。
+  useLayoutEffect(() => {
     requestedTypes.forEach((type) => {
       subscribedTypes.add(type);
       if (cache.has(type)) return;
       const saved = loadLocalType(type);
       if (saved) cache.set(type, saved);
     });
+    setAssets(assetsFor(requestedTypes));
+  }, [requestedTypes, typeKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (options.fullCatalog) fullStockCatalog = true;
+    requestedTypes.forEach((type) => subscribedTypes.add(type));
     setAssets(assetsFor(requestedTypes));
 
     void refreshTypes(requestedTypes, Boolean(options.fullCatalog)).then(() => {

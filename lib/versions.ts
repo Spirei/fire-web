@@ -2866,6 +2866,10 @@ export const V0_1_28_ENTRY: VersionEntry = {
     title: "资产分析页新增「盈亏日历」模块，各模块支持拖拽排序（自动保存）",
     desc: "1) 盈亏日历搬过来：把资产盈亏分析页的「收益日历」抽成共享实现 —— 数据口径抽到 `lib/pnlCalendar.ts`（日资产序列 / 月格子 / 年汇总 / 单日每股盈亏，含按订单轨迹推进数量、现金流归入下一交易日、最近有效收盘价回填等既有算法），UI 抽到 `components/PnlCalendar.tsx`（月份切换 + 市场筛选 + 年 / 月 + 收益 / 收益率 + 当天盈亏弹窗），资产盈亏分析页改为引用同一份实现（该文件净减约 450 行），资产分析页右栏底部新增同款模块；两个页面共用一套算法，同一天的盈亏不会出现两个数字。2) 模块拖拽排序：左右两栏各自可拖（左侧 账户资产 / 收益率趋势图 / 持仓盈亏排行 / 资金系统；右侧 账户总览 / 持仓分布 / 订单 / 盈亏日历），鼠标悬停卡片左侧出现手柄，按住手柄才可拖动（避免选文字 / 拖输入框时误触发），落下即写回 `site_settings.assetAnalysisOrder`（左右各一组模块 id），成功 Toast「模块顺序已保存」并派发 `fire:settings-updated`，失败提示重试；服务端保存的顺序与默认顺序合并，之后新增模块自动补在末尾；两栏容器从 space-y 改为 flex + gap 以支持 order 排序。验证：tsc 无错误、冒烟 113/113 全 PASS，并实测 `/api/settings` 的 `assetAnalysisOrder` 存取正常（写入后读回一致，随后已还原）。",
     kind: "feature"
+  }, {
+    title: "修复全站股票图标刷新后闪现首字母（服务端注入的图标表改为渲染期预热）",
+    desc: "现象：刷新页面后，持仓 / 自选 / 资产分析等列表里的股票图标先显示首字母占位（S / T / 英 / 标 …），随后才切成真实图标，肉眼能看到「闪一下」。根因：layout 已经按当前记录算好并在服务端注入了图标表 `initialStockIcons`（还带了 preload），但 `RecordsApp` 只在 `useLayoutEffect` 里调 `primeStockIconCache` —— 子组件（AssetAnalysisView / HoldingsView 等）的首次渲染发生在父组件渲染阶段、早于父组件的 layout effect，那时共享缓存还是空的，于是首帧画的是首字母；等父组件 layout effect 与子组件挂载后的 passive effect 跑完才补上图标，浏览器早已把首字母画到屏幕上。修复：把预热提前到渲染期（`useMemo(() => primeStockIconCache(initialStockIcons), [initialStockIcons])`）——该函数只写缓存、不通知订阅者，不会打断水合，与市场色块的 `primeMarketBadges` 同一套思路；另外把 `useAssetIcons` 里「读 localStorage 缓存」从 `useEffect` 挪到 `useLayoutEffect`，浏览器绘制前就把本地缓存的图标并进首帧（服务端注入没覆盖到的图标同样不再闪）。验证：对 `/asset-analysis` 的首屏 HTML 做 A/B 对比 —— 修复前 3 个 `<img>`、0 个股票图标（整列首字母兜底），修复后 13 个 `<img>`、其中 10 个是股票图标，SSR 首屏直接就是图标。tsc 无错误、冒烟 113/113 全 PASS。",
+    kind: "fix"
   }]
 };
 
