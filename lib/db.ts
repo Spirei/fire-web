@@ -225,6 +225,22 @@ function migrate(database: Database.Database) {
       PRIMARY KEY (user_id, card_key)
     );
 
+    -- 自定义卡片：素材库里没有的卡（自己拍照上传卡面 + 填卡片信息），会并进卡面库显示
+    CREATE TABLE IF NOT EXISTS custom_cards (
+      id TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL DEFAULT '',
+      bank TEXT NOT NULL DEFAULT '',
+      region TEXT NOT NULL DEFAULT '',
+      type TEXT NOT NULL DEFAULT '',
+      brand TEXT NOT NULL DEFAULT '',
+      level TEXT NOT NULL DEFAULT '',
+      image TEXT NOT NULL DEFAULT '',
+      currency_scope TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, id)
+    );
+
     -- 卡面库：余额流水（存钱 / 取钱 / 手动调整），balance 为本次变动后的余额
     CREATE TABLE IF NOT EXISTS card_balance_history (
       id TEXT PRIMARY KEY,

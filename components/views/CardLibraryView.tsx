@@ -23,6 +23,7 @@ import {
 } from "@/lib/cardCurrency";
 import type { CardLibraryPayload } from "@/lib/cardLibrary";
 import type { CardDetails } from "@/lib/cardWallet";
+import type { CustomCard } from "@/lib/cardCustom";
 
 interface CardItem {
   name: string;
@@ -34,6 +35,9 @@ interface CardItem {
   bins?: number[];
   /** 原图字节数（脚本抓取时写入） */
   bytes?: number;
+  /** 用户自建的卡（素材库里没有），删除入口只对它开放 */
+  custom?: boolean;
+  customId?: string;
 }
 
 interface BankEntry {
@@ -68,6 +72,8 @@ const ALL = "全部";
 const PAGE_SIZE = 60;
 /** 新增卡片弹窗每次展示几张（弹窗里滚动着看，不用一次塞太多） */
 const ADD_PAGE = 24;
+/** 新增卡片表单的类型选项（与后端白名单一致） */
+const CARD_TYPE_OPTIONS = ["借记卡", "信用卡", "预付卡", "签账卡", "取现卡", "交通卡", "礼品卡", "虚拟卡", "其他"];
 /** 聚焦反馈：全站同款中性灰柔光（去掉浏览器默认蓝框后仍能看出焦点在哪） */
 const FOCUS_RING =
   "focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.15)] focus:outline-none dark:focus:border-white/20 dark:focus:shadow-[0_0_0_3px_rgba(255,255,255,.10)]";
@@ -401,6 +407,19 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [addQuery, setAddQuery] = useState("");
   const [addRegion, setAddRegion] = useState("");
   const [addLimit, setAddLimit] = useState(ADD_PAGE);
+  /** 新增卡片表单：卡面（上传后的地址）+ 卡片信息 */
+  const [newCard, setNewCard] = useState({
+    name: "",
+    bank: "",
+    region: "中国内地",
+    type: "借记卡",
+    brand: "",
+    level: "",
+    currencyScope: "single" as CurrencyScope
+  });
+  const [newImage, setNewImage] = useState("");
+  const [newUploading, setNewUploading] = useState(false);
+  const [newSaving, setNewSaving] = useState(false);
 
   const [active, setActive] = useState<CardEntry | null>(null);
   const [draft, setDraft] = useState({ amount: "", currency: "CNY", note: "" });
@@ -416,6 +435,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [details, setDetails] = useState<Record<string, CardDetails>>(() => initial?.details ?? {});
   /** 卡面覆盖表（素材库「卡片」类目里的图；没登记的卡回退清单原图） */
   const [covers, setCovers] = useState<Record<string, string>>(() => initial?.covers ?? {});
+  /** 用户自建的卡（素材库里没有的）：并进卡面库一起显示 */
+  const [customCards, setCustomCards] = useState<CustomCard[]>(() => initial?.customCards ?? []);
   const [walletOpen, setWalletOpen] = useState(false);
 
   const { currency: displayCurrency } = useDisplayCurrency();
@@ -454,6 +475,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     holdings?: unknown;
     details?: unknown;
     covers?: unknown;
+    customCards?: unknown;
   } | null) => {
     if (!data) return;
     setRegions(Array.isArray(data.regions) ? (data.regions as RegionEntry[]) : []);
@@ -474,6 +496,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     setHoldings(held);
     setDetails(data.details && typeof data.details === "object" ? (data.details as Record<string, CardDetails>) : {});
     setCovers(data.covers && typeof data.covers === "object" ? (data.covers as Record<string, string>) : {});
+    setCustomCards(Array.isArray(data.customCards) ? (data.customCards as CustomCard[]) : []);
   };
 
   useEffect(() => {
@@ -497,20 +520,57 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * 把用户自建的卡并进清单（同一个地区 / 银行下合并），之后所有筛选、卡片详情、
+   * 卡包、余额历史都走和清单卡完全一样的逻辑。
+   */
+  const mergedRegions = useMemo(() => {
+    if (customCards.length === 0) return regions;
+    const merged: RegionEntry[] = regions.map((entry) => ({
+      label: entry.label,
+      banks: entry.banks.map((bank) => ({ ...bank, cards: [...bank.cards] }))
+    }));
+    customCards.forEach((card) => {
+      const regionLabel = card.region || "未分类";
+      let regionEntry = merged.find((entry) => entry.label === regionLabel);
+      if (!regionEntry) {
+        regionEntry = { label: regionLabel, banks: [] };
+        merged.push(regionEntry);
+      }
+      const folder = `custom:${card.bank || "自定义银行"}`;
+      let bankEntry = regionEntry.banks.find((bank) => bank.folder === folder);
+      if (!bankEntry) {
+        bankEntry = { name: card.bank || "自定义银行", englishName: "", country: "", folder, cards: [] };
+        regionEntry.banks.push(bankEntry);
+      }
+      bankEntry.cards.push({
+        name: card.name,
+        type: card.type || "其他",
+        // 自建卡的卡面是上传后的地址（/uploads/...），直接当 file 用
+        file: card.image,
+        brand: card.brand,
+        level: card.level,
+        custom: true,
+        customId: card.id
+      });
+    });
+    return merged;
+  }, [regions, customCards]);
+
   const flat = useMemo(() => {
     const list: CardEntry[] = [];
-    regions.forEach((entry) => {
+    mergedRegions.forEach((entry) => {
       entry.banks.forEach((bank) => {
         bank.cards.forEach((card) => list.push({ card, bank, region: entry.label, tags: cardTagsOf(card.name) }));
       });
     });
     return list;
-  }, [regions]);
+  }, [mergedRegions]);
 
   /** 地区排序：先按洲，中国各地优先，再按卡面数量 */
   const sortedRegions = useMemo(() => {
     const cardCount = (entry: RegionEntry) => entry.banks.reduce((sum, bank) => sum + bank.cards.length, 0);
-    return [...regions].sort((a, b) => {
+    return [...mergedRegions].sort((a, b) => {
       const ca = CONTINENT_ORDER.indexOf((REGION_CONTINENT[a.label] ?? "其他") as (typeof CONTINENT_ORDER)[number]);
       const cb = CONTINENT_ORDER.indexOf((REGION_CONTINENT[b.label] ?? "其他") as (typeof CONTINENT_ORDER)[number]);
       if (ca !== cb) return ca - cb;
@@ -519,7 +579,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       if (chinaA !== chinaB) return chinaA - chinaB;
       return cardCount(b) - cardCount(a) || a.label.localeCompare(b.label, "zh-Hans-CN");
     });
-  }, [regions]);
+  }, [mergedRegions]);
 
   /**
    * 每张卡的币种范围：手动覆盖（卡片详情里改过）优先，否则用规则推断。
@@ -772,7 +832,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             brand: card.brand || "",
             level: card.level || "",
             image: card.file,
-            cover: covers[card.file] || manifestCoverUrl(card.file),
+            cover: card.file.startsWith("/") ? card.file : covers[card.file] || manifestCoverUrl(card.file),
             amount: saved?.amount ?? 0,
             currency: saved?.currency || info?.currency || REGION_CURRENCY[regionLabel] || "CNY",
             hasAmount: !!saved,
@@ -807,6 +867,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
 
   /** 卡面实际展示地址：素材库里换过图就用那条素材的 url，否则回退清单原图 */
   function cardCover(cardFile: string) {
+    // 自建卡的卡面是上传后的绝对地址（/uploads/...），直接用
+    if (cardFile.startsWith("/")) return cardFile;
     return covers[cardFile] || manifestCoverUrl(cardFile);
   }
 
@@ -1071,6 +1133,94 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     }
   }
 
+  /** 新增卡片：先把卡面传到素材目录（folder=card），拿到 /uploads/... 地址 */
+  async function uploadNewImage(file: File) {
+    if (newUploading) return;
+    setNewUploading(true);
+    try {
+      const form = new FormData();
+      form.append("kind", "asset");
+      form.append("folder", "card");
+      form.append("file", file);
+      form.append("name", newCard.name || file.name.replace(/\.[^.]+$/, "") || "自定义卡面");
+      form.append("code", newCard.region || "CARD");
+      const res = await fetch("/api/v1/upload", { method: "POST", body: form });
+      const data = await res.json().catch(() => null);
+      const url: string | undefined = data?.data?.url ?? data?.url;
+      if (!res.ok || !url) {
+        showToast(data?.message || data?.error || "上传失败，稍后再试", "err");
+        return;
+      }
+      setNewImage(url);
+    } catch {
+      showToast("上传失败，稍后再试", "err");
+    } finally {
+      setNewUploading(false);
+    }
+  }
+
+  /** 保存自建卡：写库 + 登记素材库 → 直接并进卡面库（自动进「我的卡」） */
+  async function submitNewCard() {
+    if (!newImage) {
+      showToast("请先上传卡面图片", "err");
+      return;
+    }
+    if (!newCard.name.trim() || !newCard.bank.trim()) {
+      showToast("请填写卡名和银行", "err");
+      return;
+    }
+    // 库里已经有的卡（同名 + 同银行）不用再建一张
+    const key = (value: string) => value.replace(/\s+/g, "").toLowerCase();
+    const duplicate = flat.find(
+      ({ card, bank }) => key(card.name) === key(newCard.name) && key(bank.name) === key(newCard.bank)
+    );
+    if (duplicate) {
+      showToast(`「${newCard.bank} ${newCard.name}」已经在卡面库里了`, "err");
+      return;
+    }
+    if (newSaving) return;
+    setNewSaving(true);
+    try {
+      const res = await fetch("/api/cards/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newCard, name: newCard.name.trim(), bank: newCard.bank.trim(), image: newImage })
+      });
+      const data = res.ok ? await res.json() : null;
+      if (!res.ok || !data?.card) throw new Error("save failed");
+      const card = data.card as CustomCard;
+      setCustomCards((prev) => [...prev, card]);
+      setHoldings((prev) => ({ ...prev, [card.image]: true }));
+      showToast(`已新增卡片：${card.name}`);
+      setAddOpen(false);
+      setNewCard({ name: "", bank: "", region: "中国内地", type: "借记卡", brand: "", level: "", currencyScope: "single" });
+      setNewImage("");
+    } catch {
+      showToast("保存失败，稍后再试", "err");
+    } finally {
+      setNewSaving(false);
+    }
+  }
+
+  /** 删除自建卡（卡片 + 素材库里那条卡面素材一起清掉） */
+  async function removeCustomCard(entry: CardEntry) {
+    const id = entry.card.customId;
+    if (!id || saving) return;
+    if (!window.confirm("删除这张自定义卡片？它上传的卡面素材也会从素材库里移除。")) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/cards/custom?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("delete failed");
+      setCustomCards((prev) => prev.filter((card) => card.id !== id));
+      showToast("已删除这张卡片");
+      setActive(null);
+    } catch {
+      showToast("删除失败，稍后再试", "err");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div ref={rootRef} className="space-y-4">
       <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-3">
@@ -1123,7 +1273,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 setAddLimit(ADD_PAGE);
                 setAddOpen(true);
               }}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full border border-[#3297f6] bg-[#3297f6] px-3.5 text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-px hover:brightness-105 active:scale-[.97] sm:h-9 dark:border-white/10"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover sm:h-9 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="h-3.5 w-3.5">
                 <path d="M12 5v14M5 12h14" />
@@ -1502,7 +1652,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         </>
       )}
 
-      {/* 新增卡片：弹窗里直接挑、直接加，不用回列表再点「＋ 加入」 */}
+      {/* 新增卡片：素材库里没有的卡，上传卡面 + 填信息新建（自动进我的卡 + 素材库） */}
       {addOpen && (
         <div className="fixed inset-0 z-[10002] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setAddOpen(false)}>
           <div
@@ -1529,109 +1679,135 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               </button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-3 sm:px-5">
-              <div className="relative min-w-[170px] flex-1">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted">
-                  <circle cx="11" cy="11" r="6" />
-                  <path d="m16 16 4 4" />
-                </svg>
-                <input
-                  value={addQuery}
-                  onChange={(event) => {
-                    setAddQuery(event.target.value);
-                    setAddLimit(ADD_PAGE);
-                  }}
-                  placeholder="搜索银行、卡片名称"
-                  aria-label="搜索要新增的卡面"
-                  inputMode="search"
-                  enterKeyHint="search"
-                  autoComplete="off"
-                  className={`h-11 w-full rounded-xl border border-edge bg-white pl-10 pr-3 text-[15px] text-ink placeholder:text-faint transition-all duration-200 sm:h-10 sm:text-sm dark:bg-[#1c222d] ${FOCUS_RING}`}
-                />
-              </div>
-              <select
-                value={addRegion}
-                onChange={(event) => {
-                  setAddRegion(event.target.value);
-                  setAddLimit(ADD_PAGE);
-                }}
-                aria-label="按地区筛选"
-                className={`h-11 rounded-xl border border-edge bg-white px-2.5 text-xs font-semibold text-ink transition-all duration-200 sm:h-10 dark:bg-[#1c222d] ${FOCUS_RING}`}
-              >
-                <option value="">全部地区</option>
-                {sortedRegions.map((entry) => (
-                  <option key={entry.label} value={entry.label}>
-                    {entry.label}
-                  </option>
-                ))}
-              </select>
-              <span className="text-[11px] text-faint">已加入 {heldCount} 张</span>
-            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+              {/* 卡面：点一下选图，上传后本地预览 */}
+              <label className="block cursor-pointer">
+                <span className="mb-1.5 block text-[11px] font-semibold text-muted">卡面（必填）</span>
+                <span className="relative block overflow-hidden rounded-xl border border-dashed border-edge-strong bg-bg-gray dark:bg-white/5">
+                  {newImage ? (
+                    <img src={newImage} alt="卡面预览" className="aspect-[1.586] w-full object-cover" />
+                  ) : (
+                    <span className="flex aspect-[1.586] w-full flex-col items-center justify-center gap-1.5 px-4 text-center">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 text-muted">
+                        <path d="M12 16V5M8 8.5 12 4.5l4 4M5 16v2.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V16" />
+                      </svg>
+                      <span className="text-[12px] font-semibold text-ink-2">{newUploading ? "上传中…" : "点这里选一张卡片照片"}</span>
+                      <span className="text-[11px] text-faint">建议 1.586:1 标准卡面比例，JPG / PNG / WEBP</span>
+                    </span>
+                  )}
+                  {newImage && !newUploading && (
+                    <span className="absolute bottom-2 right-2 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur">换一张</span>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (file) void uploadNewImage(file);
+                    }}
+                  />
+                </span>
+              </label>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-bg-gray px-4 py-4 sm:px-5 dark:bg-black/20">
-              {addCandidates.length === 0 ? (
-                <p className="py-14 text-center text-sm text-muted">没有符合条件的卡面</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  {addCandidates.map(({ card, bank, region: regionLabel }) => {
-                    const held = !!holdings[card.file];
-                    return (
-                      <button
-                        key={`add-${card.file}`}
-                        type="button"
-                        disabled={held}
-                        onClick={() => void setHeld(card.file, true)}
-                        className={`flex flex-col overflow-hidden rounded-2xl border bg-white p-2.5 text-left transition-all duration-200 dark:bg-[#16181d] ${
-                          held
-                            ? "border-edge opacity-60"
-                            : "border-edge hover:-translate-y-0.5 hover:border-[#3297f6] hover:shadow-pop active:scale-[.99]"
-                        }`}
-                      >
-                        <span className="relative block overflow-hidden rounded-[10px] bg-bg-gray ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10">
-                          <img
-                            src={cardCover(card.file)}
-                            alt={card.name}
-                            loading="lazy"
-                            decoding="async"
-                            className="aspect-[1.586] w-full object-cover"
-                          />
-                        </span>
-                        <span className="mt-2 block truncate text-[12px] font-semibold text-ink">{card.name}</span>
-                        <span className="block truncate text-[11px] text-muted">
-                          {bank.name} · {regionLabel}
-                        </span>
-                        <span
-                          className={`mt-1.5 inline-flex items-center gap-1 self-start rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            held
-                              ? "bg-bg-gray text-muted dark:bg-white/10"
-                              : "bg-[#3297f6]/12 text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]"
-                          }`}
-                        >
-                          {held ? "✓ 已加入" : "＋ 加入我的卡"}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              {addFiltered.length > addCandidates.length && (
-                <button
-                  type="button"
-                  onClick={() => setAddLimit((count) => count + ADD_PAGE)}
-                  className="mt-3 flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl border border-edge bg-white text-xs font-semibold text-muted transition-colors duration-200 hover:text-ink dark:border-white/10 dark:bg-[#1c222d]"
-                >
-                  加载更多（剩余 {addFiltered.length - addCandidates.length} 张）
-                </button>
-              )}
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <label className="col-span-2 flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-muted">卡名（必填）</span>
+                  <input
+                    value={newCard.name}
+                    onChange={(event) => setNewCard((prev) => ({ ...prev, name: event.target.value }))}
+                    maxLength={60}
+                    placeholder="例如：招商银行经典白金卡"
+                    className={`h-11 w-full rounded-xl border border-edge bg-white px-3 text-[15px] text-ink placeholder:text-faint transition-all duration-200 sm:h-10 sm:text-sm dark:bg-[#1c222d] ${FOCUS_RING}`}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-muted">银行（必填）</span>
+                  <input
+                    value={newCard.bank}
+                    onChange={(event) => setNewCard((prev) => ({ ...prev, bank: event.target.value }))}
+                    maxLength={60}
+                    placeholder="例如：招商银行"
+                    className={`h-11 w-full rounded-xl border border-edge bg-white px-3 text-[15px] text-ink placeholder:text-faint transition-all duration-200 sm:h-10 sm:text-sm dark:bg-[#1c222d] ${FOCUS_RING}`}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-muted">地区</span>
+                  <select
+                    value={newCard.region}
+                    onChange={(event) => setNewCard((prev) => ({ ...prev, region: event.target.value }))}
+                    className={`h-11 w-full rounded-xl border border-edge bg-white px-2.5 text-[13px] font-semibold text-ink transition-all duration-200 sm:h-10 dark:bg-[#1c222d] ${FOCUS_RING}`}
+                  >
+                    {Object.keys(REGION_CURRENCY).map((label) => (
+                      <option key={label} value={label}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-muted">类型</span>
+                  <select
+                    value={newCard.type}
+                    onChange={(event) => setNewCard((prev) => ({ ...prev, type: event.target.value }))}
+                    className={`h-11 w-full rounded-xl border border-edge bg-white px-2.5 text-[13px] font-semibold text-ink transition-all duration-200 sm:h-10 dark:bg-[#1c222d] ${FOCUS_RING}`}
+                  >
+                    {CARD_TYPE_OPTIONS.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-muted">卡组织</span>
+                  <input
+                    value={newCard.brand}
+                    onChange={(event) => setNewCard((prev) => ({ ...prev, brand: event.target.value }))}
+                    maxLength={24}
+                    placeholder="银联 / Visa / Mastercard"
+                    className={`h-11 w-full rounded-xl border border-edge bg-white px-3 text-[15px] text-ink placeholder:text-faint transition-all duration-200 sm:h-10 sm:text-sm dark:bg-[#1c222d] ${FOCUS_RING}`}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-muted">等级</span>
+                  <input
+                    value={newCard.level}
+                    onChange={(event) => setNewCard((prev) => ({ ...prev, level: event.target.value }))}
+                    maxLength={24}
+                    placeholder="普卡 / 金卡 / 白金"
+                    className={`h-11 w-full rounded-xl border border-edge bg-white px-3 text-[15px] text-ink placeholder:text-faint transition-all duration-200 sm:h-10 sm:text-sm dark:bg-[#1c222d] ${FOCUS_RING}`}
+                  />
+                </label>
+                <label className="col-span-2 flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-muted">币种范围</span>
+                  <select
+                    value={newCard.currencyScope}
+                    onChange={(event) => setNewCard((prev) => ({ ...prev, currencyScope: event.target.value as CurrencyScope }))}
+                    className={`h-11 w-full rounded-xl border border-edge bg-white px-2.5 text-[13px] font-semibold text-ink transition-all duration-200 sm:h-10 dark:bg-[#1c222d] ${FOCUS_RING}`}
+                  >
+                    {CURRENCY_SCOPE_ORDER.map((scope) => (
+                      <option key={scope} value={scope}>
+                        {CURRENCY_SCOPE_LABEL[scope]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="mt-2 text-[11px] text-faint">
+                保存后会直接进「我的卡」，并同步登记到「素材库 → 卡片」，之后卡号、余额历史、资产分析联动都和清单里的卡一样。
+              </p>
             </div>
 
             <div className="border-t border-edge px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
               <button
                 type="button"
-                onClick={() => setAddOpen(false)}
-                className="h-11 w-full rounded-xl bg-[#111] text-xs font-semibold text-white transition-transform duration-200 active:scale-[.99] dark:bg-white dark:text-[#111]"
+                disabled={newSaving || newUploading || !newImage || !newCard.name.trim() || !newCard.bank.trim()}
+                onClick={() => void submitNewCard()}
+                className="h-11 w-full rounded-xl bg-[#111] text-xs font-semibold text-white transition-transform duration-200 active:scale-[.99] disabled:opacity-40 dark:bg-white dark:text-[#111]"
               >
-                完成
+                {newSaving ? "保存中…" : "保存并加入我的卡"}
               </button>
             </div>
           </div>
@@ -1814,6 +1990,19 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 {active.card.bytes ? ` · ${fmtBytes(active.card.bytes)}` : ""}
                 {` · ${active.card.file.split("/").slice(0, 2).join(" / ").split("/").map((segment) => decodeURIComponent(segment)).join(" / ")}`}
               </p>
+              {/* 自建卡才有删除入口：卡片和它在素材库里登记的卡面一起删 */}
+              {active.card.custom && (
+                <div className="mx-auto mt-4 max-w-[560px] text-center">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void removeCustomCard(active)}
+                    className="text-[11px] font-semibold text-[#e5484d] transition-opacity duration-200 hover:opacity-80 disabled:opacity-40"
+                  >
+                    删除这张自定义卡片（会同时移除素材库里的卡面）
+                  </button>
+                </div>
+              )}
             </div>
             <div className="border-t border-edge px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3.5 sm:px-5 sm:py-4">
               <div className="flex flex-wrap items-end gap-2">
@@ -1985,10 +2174,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           onClose={() => setWalletOpen(false)}
           onAddCards={() => {
             setWalletOpen(false);
-            setAddQuery("");
-            setAddRegion("");
-            setAddLimit(ADD_PAGE);
-            setAddOpen(true);
+            setMode("all");
+            window.scrollTo({ top: 0, behavior: "smooth" });
           }}
           onAmountChange={applyWalletAmount}
           onDetailsSaved={applyWalletDetails}

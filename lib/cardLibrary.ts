@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { listCardAmounts, listCardHoldings, listCardTags, type CardAmount } from "./cardAmounts";
 import { listCardDetails, type CardDetails } from "./cardWallet";
+import { listCustomCards, type CustomCard } from "./cardCustom";
 import { cardAssetId, cardKeyOfAssetId, manifestCoverUrl } from "./cardAssets";
 import { REGION_CURRENCY } from "./cardCurrencies";
 import { hasSecurityCode } from "./cardSecurity";
@@ -28,6 +29,8 @@ export interface CardLibraryPayload extends CardManifest {
   details: Record<string, CardDetails>;
   /** 卡面覆盖表（卡面文件 → 实际图片地址）：素材库换过图的卡走这里，没登记的卡回退清单原图 */
   covers: Record<string, string>;
+  /** 用户自建卡（素材库里没有的卡）：并进卡面库一起展示 */
+  customCards: CustomCard[];
 }
 
 let cache: { data: CardManifest | null; at: number } | null = null;
@@ -72,7 +75,8 @@ export function cardLibraryForUser(userId: string): CardLibraryPayload {
     tags: listCardTags(userId),
     holdings: listCardHoldings(userId),
     details: listCardDetails(userId),
-    covers: cardCoverMap()
+    covers: cardCoverMap(),
+    customCards: listCustomCards(userId)
   };
 }
 
