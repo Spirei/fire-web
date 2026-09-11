@@ -145,28 +145,23 @@
   }
   .fire-year-actions { display: flex; }
 
-  /* 财报日历：只露出两排「圆图标+名称」，多的在格内上下滑 */
+  /* 财报日历：格子宽高与原来一致；格内按桌面端排「圆图标+名称」，只露两排，多的上下滑 */
   .earnings-calendar-page > p { font-size: 12px; }
-  .earnings-calendar-grid { padding: 10px 8px; }
-  .earnings-calendar-grid [class~="grid-cols-7"] { gap: 5px; }
+  .earnings-calendar-grid { padding: 10px 7px; }
+  .earnings-calendar-grid [class~="grid-cols-7"] { gap: 3px; }
   .earnings-calendar-grid [class~="grid-cols-7"] > button,
-  .earnings-calendar-grid [class~="grid-cols-7"] > div {
-    min-height: 92px;
-    height: 92px;
-    border-radius: 12px;
-    padding: 6px;
-  }
-  .earnings-calendar-grid [class~="grid-cols-7"] > button > span:first-child { width: 22px; height: 22px; font-size: 11px; }
+  .earnings-calendar-grid [class~="grid-cols-7"] > div { min-height: 46px; height: 46px; border-radius: 9px; padding: 4px; }
+  .earnings-calendar-grid [class~="grid-cols-7"] > button > span:first-child { width: 22px; height: 22px; font-size: 10px; }
   .earnings-calendar-grid [data-earnings-pop] { display: none !important; }
   .earnings-calendar-grid [data-earnings-rows] {
     display: flex;
-    flex: 1 1 auto;
+    flex: 1 1 0%;
     min-height: 0;
-    max-height: 48px;
+    max-height: 20px;
     flex-direction: column;
     flex-wrap: nowrap;
-    gap: 4px;
-    padding-top: 2px;
+    gap: 1px;
+    padding-top: 0;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -185,9 +180,9 @@
     display: flex;
     width: 100%;
     min-width: 0;
-    height: 22px;
+    height: 9px;
     overflow: hidden;
-    gap: 4px;
+    gap: 2px;
     align-items: center;
   }
   .earnings-calendar-grid [data-earnings-dot],
@@ -199,22 +194,23 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 10px;
-    line-height: 22px;
+    font-size: 8px;
+    line-height: 9px;
   }
   .earnings-calendar-grid [data-earnings-logo] {
-    width: 18px;
-    height: 18px;
+    width: 8px;
+    height: 8px;
     overflow: hidden;
     border-radius: 999px;
+    flex: none;
   }
   .earnings-calendar-grid [data-earnings-logo] img,
   .earnings-calendar-grid [data-earnings-logo] span {
-    width: 18px;
-    height: 18px;
+    width: 8px;
+    height: 8px;
     border-radius: 999px;
     object-fit: cover;
-    font-size: 8px;
+    font-size: 6px;
   }
 
   .celeb-summary-ring { display: none; }
@@ -322,14 +318,15 @@
     .earnings-calendar-grid { padding: 12px; }
   .earnings-calendar-grid [class~="grid-cols-7"] { gap: 6px; }
   .earnings-calendar-grid [class~="grid-cols-7"] > button,
-  .earnings-calendar-grid [class~="grid-cols-7"] > div { min-height: 100px; height: 100px; border-radius: 12px; padding: 8px; }
-  .earnings-calendar-grid [data-earnings-rows] { max-height: 52px; gap: 4px; }
+  .earnings-calendar-grid [class~="grid-cols-7"] > div { min-height: 88px; height: auto; border-radius: 12px; padding: 8px; }
+  .earnings-calendar-grid [class~="grid-cols-7"] > button > span:first-child { width: 24px; height: 24px; font-size: 12px; }
+  .earnings-calendar-grid [data-earnings-rows] { max-height: 36px; gap: 4px; }
   .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row],
-  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row]:nth-child(n+4) { height: 24px; }
-  .earnings-calendar-grid [data-earnings-name] { font-size: 11px; line-height: 24px; }
-  .earnings-calendar-grid [data-earnings-logo] { width: 20px; height: 20px; }
+  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row]:nth-child(n+4) { height: 16px; gap: 3px; }
+  .earnings-calendar-grid [data-earnings-name] { font-size: 10px; line-height: 16px; }
+  .earnings-calendar-grid [data-earnings-logo] { width: 14px; height: 14px; }
   .earnings-calendar-grid [data-earnings-logo] img,
-  .earnings-calendar-grid [data-earnings-logo] span { width: 20px; height: 20px; }
+  .earnings-calendar-grid [data-earnings-logo] span { width: 14px; height: 14px; }
 
 .mobile-hide-duplicate-summary { display: block; }
   .mobile-analysis-holdings { min-width: 760px !important; table-layout: auto; }
