@@ -66,6 +66,8 @@ interface CardEntry {
 
 const ALL = "全部";
 const PAGE_SIZE = 60;
+/** 新增卡片弹窗每次展示几张（弹窗里滚动着看，不用一次塞太多） */
+const ADD_PAGE = 24;
 /** 聚焦反馈：全站同款中性灰柔光（去掉浏览器默认蓝框后仍能看出焦点在哪） */
 const FOCUS_RING =
   "focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.15)] focus:outline-none dark:focus:border-white/20 dark:focus:shadow-[0_0_0_3px_rgba(255,255,255,.10)]";
@@ -394,6 +396,11 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   /** 手机端：滑到列表深处浮出「回到顶部」 */
   const [showTop, setShowTop] = useState(false);
+  /** 新增卡片弹窗：搜索 / 地区 / 每次展示条数 */
+  const [addOpen, setAddOpen] = useState(false);
+  const [addQuery, setAddQuery] = useState("");
+  const [addRegion, setAddRegion] = useState("");
+  const [addLimit, setAddLimit] = useState(ADD_PAGE);
 
   const [active, setActive] = useState<CardEntry | null>(null);
   const [draft, setDraft] = useState({ amount: "", currency: "CNY", note: "" });
@@ -670,18 +677,20 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
 
   /** 卡片详情弹窗：手机上锁住背景滚动，Esc 关闭 */
   useEffect(() => {
-    if (!active) return;
+    if (!active && !addOpen) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setActive(null);
+      if (event.key !== "Escape") return;
+      if (addOpen) setAddOpen(false);
+      else setActive(null);
     };
     window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = previous;
       window.removeEventListener("keydown", onKey);
     };
-  }, [active]);
+  }, [active, addOpen]);
 
   /** 切「我的卡 / 全部卡面」时，如果已经滑到列表深处，轻轻带回卡面库顶部 */
   useEffect(() => {
@@ -700,6 +709,22 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   }, []);
 
   const pageItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+
+  /** 新增卡片弹窗的候选：全库卡面，按关键词 + 地区过滤（已加入的显示为「已加入」） */
+  const addFiltered = useMemo(() => {
+    const key = addQuery.trim().toLowerCase();
+    return flat.filter(({ card, bank, region: regionLabel }) => {
+      if (addRegion && regionLabel !== addRegion) return false;
+      if (!key) return true;
+      return (
+        card.name.toLowerCase().includes(key) ||
+        bank.name.toLowerCase().includes(key) ||
+        (bank.englishName || "").toLowerCase().includes(key) ||
+        regionLabel.toLowerCase().includes(key)
+      );
+    });
+  }, [flat, addQuery, addRegion]);
+  const addCandidates = useMemo(() => addFiltered.slice(0, addLimit), [addFiltered, addLimit]);
 
   /** 手机端滑到「加载更多」附近自动续上下一屏（按钮仍然保留，点它也能加载） */
   const loadMoreRef = useRef<HTMLButtonElement | null>(null);
@@ -1087,30 +1112,24 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             >
               全部卡面 {flat.length}
             </button>
-            {/* 新增卡片：就放在这条分段控件的尾巴上（去全部卡面挑一张加入我的卡） */}
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+            {/* 新增卡片：紧挨在「全部卡面」右边，带文字；点开是弹窗，直接在弹窗里挑 */}
             <button
               type="button"
               onClick={() => {
-                if (mode !== "all") setMode("all");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-                showToast("在「全部卡面」里挑一张，点卡片右下角「＋ 加入」");
+                setAddQuery("");
+                setAddRegion("");
+                setAddLimit(ADD_PAGE);
+                setAddOpen(true);
               }}
-              aria-label="新增卡片"
-              className="group/tip relative grid h-9 w-9 flex-none place-items-center rounded-full text-ink-2 transition-colors duration-200 hover:bg-brand-hover hover:text-ink dark:text-white/80 dark:hover:bg-white/10"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full border border-[#3297f6] bg-[#3297f6] px-3.5 text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-px hover:brightness-105 active:scale-[.97] sm:h-9 dark:border-white/10"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                <rect x="3" y="6" width="13" height="9" rx="2.2" />
-                <path d="M18.5 12v6M15.5 15h6" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="h-3.5 w-3.5">
+                <path d="M12 5v14M5 12h14" />
               </svg>
-              <span
-                aria-hidden
-                className="pointer-events-none absolute right-0 top-[calc(100%+7px)] z-20 whitespace-nowrap rounded-lg bg-[#1c222d]/95 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-pop ring-1 ring-white/10 transition-opacity duration-100 group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100"
-              >
-                新增卡片
-              </span>
+              新增卡片
             </button>
-          </div>
-          <div className="sm:flex sm:items-center">
             <button
               type="button"
               onClick={() => setWalletOpen(true)}
@@ -1483,6 +1502,142 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         </>
       )}
 
+      {/* 新增卡片：弹窗里直接挑、直接加，不用回列表再点「＋ 加入」 */}
+      {addOpen && (
+        <div className="fixed inset-0 z-[10002] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setAddOpen(false)}>
+          <div
+            className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl border border-edge bg-white shadow-2xl supports-[height:100dvh]:max-h-[92dvh] sm:rounded-card dark:border-white/10 dark:bg-[#16181d]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="mx-auto mt-2.5 block h-1 w-10 flex-none rounded-full bg-edge-strong sm:hidden" />
+            <div className="flex items-start justify-between gap-3 border-b border-edge px-4 py-3.5 sm:px-5 sm:py-4">
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-ink">新增卡片</h3>
+                <p className="mt-0.5 text-xs text-muted">
+                  从素材库里挑一张加入「我的卡」——加入后就能在卡包里翻卡背、记余额
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAddOpen(false)}
+                aria-label="关闭"
+                className="grid h-9 w-9 flex-none place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2 sm:h-8 sm:w-8"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4">
+                  <path d="m6 6 12 12M18 6 6 18" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-3 sm:px-5">
+              <div className="relative min-w-[170px] flex-1">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted">
+                  <circle cx="11" cy="11" r="6" />
+                  <path d="m16 16 4 4" />
+                </svg>
+                <input
+                  value={addQuery}
+                  onChange={(event) => {
+                    setAddQuery(event.target.value);
+                    setAddLimit(ADD_PAGE);
+                  }}
+                  placeholder="搜索银行、卡片名称"
+                  aria-label="搜索要新增的卡面"
+                  inputMode="search"
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  className={`h-11 w-full rounded-xl border border-edge bg-white pl-10 pr-3 text-[15px] text-ink placeholder:text-faint transition-all duration-200 sm:h-10 sm:text-sm dark:bg-[#1c222d] ${FOCUS_RING}`}
+                />
+              </div>
+              <select
+                value={addRegion}
+                onChange={(event) => {
+                  setAddRegion(event.target.value);
+                  setAddLimit(ADD_PAGE);
+                }}
+                aria-label="按地区筛选"
+                className={`h-11 rounded-xl border border-edge bg-white px-2.5 text-xs font-semibold text-ink transition-all duration-200 sm:h-10 dark:bg-[#1c222d] ${FOCUS_RING}`}
+              >
+                <option value="">全部地区</option>
+                {sortedRegions.map((entry) => (
+                  <option key={entry.label} value={entry.label}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[11px] text-faint">已加入 {heldCount} 张</span>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-bg-gray px-4 py-4 sm:px-5 dark:bg-black/20">
+              {addCandidates.length === 0 ? (
+                <p className="py-14 text-center text-sm text-muted">没有符合条件的卡面</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {addCandidates.map(({ card, bank, region: regionLabel }) => {
+                    const held = !!holdings[card.file];
+                    return (
+                      <button
+                        key={`add-${card.file}`}
+                        type="button"
+                        disabled={held}
+                        onClick={() => void setHeld(card.file, true)}
+                        className={`flex flex-col overflow-hidden rounded-2xl border bg-white p-2.5 text-left transition-all duration-200 dark:bg-[#16181d] ${
+                          held
+                            ? "border-edge opacity-60"
+                            : "border-edge hover:-translate-y-0.5 hover:border-[#3297f6] hover:shadow-pop active:scale-[.99]"
+                        }`}
+                      >
+                        <span className="relative block overflow-hidden rounded-[10px] bg-bg-gray ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10">
+                          <img
+                            src={cardCover(card.file)}
+                            alt={card.name}
+                            loading="lazy"
+                            decoding="async"
+                            className="aspect-[1.586] w-full object-cover"
+                          />
+                        </span>
+                        <span className="mt-2 block truncate text-[12px] font-semibold text-ink">{card.name}</span>
+                        <span className="block truncate text-[11px] text-muted">
+                          {bank.name} · {regionLabel}
+                        </span>
+                        <span
+                          className={`mt-1.5 inline-flex items-center gap-1 self-start rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            held
+                              ? "bg-bg-gray text-muted dark:bg-white/10"
+                              : "bg-[#3297f6]/12 text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]"
+                          }`}
+                        >
+                          {held ? "✓ 已加入" : "＋ 加入我的卡"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {addFiltered.length > addCandidates.length && (
+                <button
+                  type="button"
+                  onClick={() => setAddLimit((count) => count + ADD_PAGE)}
+                  className="mt-3 flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl border border-edge bg-white text-xs font-semibold text-muted transition-colors duration-200 hover:text-ink dark:border-white/10 dark:bg-[#1c222d]"
+                >
+                  加载更多（剩余 {addFiltered.length - addCandidates.length} 张）
+                </button>
+              )}
+            </div>
+
+            <div className="border-t border-edge px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
+              <button
+                type="button"
+                onClick={() => setAddOpen(false)}
+                className="h-11 w-full rounded-xl bg-[#111] text-xs font-semibold text-white transition-transform duration-200 active:scale-[.99] dark:bg-white dark:text-[#111]"
+              >
+                完成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {active && (
         <div className="fixed inset-0 z-[10002] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setActive(null)}>
           <div
@@ -1830,8 +1985,10 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           onClose={() => setWalletOpen(false)}
           onAddCards={() => {
             setWalletOpen(false);
-            setMode("all");
-            window.scrollTo({ top: 0, behavior: "smooth" });
+            setAddQuery("");
+            setAddRegion("");
+            setAddLimit(ADD_PAGE);
+            setAddOpen(true);
           }}
           onAmountChange={applyWalletAmount}
           onDetailsSaved={applyWalletDetails}
