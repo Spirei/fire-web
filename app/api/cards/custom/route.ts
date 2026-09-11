@@ -5,6 +5,7 @@ import { setCardHeld } from "@/lib/cardAmounts";
 import { upsertAsset, deleteAsset } from "@/lib/assets";
 import { cardAssetId } from "@/lib/cardAssets";
 import { readCardManifest } from "@/lib/cardLibrary";
+import { searchKey } from "@/lib/hanConvert";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -17,14 +18,10 @@ function clean(value: unknown, max: number): string {
   return String(value ?? "").trim().slice(0, max);
 }
 
-/** 卡名 / 银行归一化：去空格、转小写，用于查重（「标准 白金卡」和「标准白金卡」算同一张） */
-function keyOf(value: string): string {
-  return value.replace(/\s+/g, "").toLowerCase();
-}
-
 /**
  * 库里已经有的卡（清单里的 436 张 + 自己新建的）：同名 + 同银行就算重复。
  * 清单里很多卡叫「标准普卡」但属于不同银行，所以必须连着银行一起比。
+ * 归一化走 searchKey：繁转简 + 去空格 + 小写（「滙豐萬事達」和「汇丰万事达」算同一张）。
  */
 function existingCardKeys(userId: string): Set<string> {
   const keys = new Set<string>();
@@ -32,14 +29,14 @@ function existingCardKeys(userId: string): Set<string> {
   const regions = (manifest?.regions ?? []) as { banks?: { name?: string; cards?: { name?: string }[] }[] }[];
   regions.forEach((region) => {
     (region.banks ?? []).forEach((bank) => {
-      const bankName = keyOf(String(bank?.name ?? ""));
+      const bankName = searchKey(String(bank?.name ?? ""));
       (bank.cards ?? []).forEach((card) => {
-        if (card?.name) keys.add(`${keyOf(String(card.name))}@${bankName}`);
+        if (card?.name) keys.add(`${searchKey(String(card.name))}@${bankName}`);
       });
     });
   });
   listCustomCards(userId).forEach((card) => {
-    keys.add(`${keyOf(card.name)}@${keyOf(card.bank)}`);
+    keys.add(`${searchKey(card.name)}@${searchKey(card.bank)}`);
   });
   return keys;
 }
@@ -71,7 +68,7 @@ export async function POST(request: Request) {
   if (!name) return NextResponse.json({ error: "请填写卡名" }, { status: 400 });
   if (!bank) return NextResponse.json({ error: "请填写银行" }, { status: 400 });
   if (!image.startsWith("/uploads/")) return NextResponse.json({ error: "请先上传卡面图片" }, { status: 400 });
-  if (existingCardKeys(user.id).has(`${keyOf(name)}@${keyOf(bank)}`)) {
+  if (existingCardKeys(user.id).has(`${searchKey(name)}@${searchKey(bank)}`)) {
     return NextResponse.json({ error: "卡面库里已经有这张卡了（同名 + 同银行）" }, { status: 409 });
   }
 

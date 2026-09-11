@@ -9,6 +9,7 @@ import { FALLBACK_RATES } from "@/lib/types";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
 import { REGION_CURRENCY, currencySymbol } from "@/lib/cardCurrencies";
+import { searchKey } from "@/lib/hanConvert";
 import { cardAssetId, manifestCoverUrl } from "@/lib/cardAssets";
 import {
   CURRENCY_SCOPE_LABEL,
@@ -70,8 +71,6 @@ interface CardEntry {
 
 const ALL = "全部";
 const PAGE_SIZE = 60;
-/** 新增卡片弹窗每次展示几张（弹窗里滚动着看，不用一次塞太多） */
-const ADD_PAGE = 24;
 /** 新增卡片表单的类型选项（与后端白名单一致） */
 const CARD_TYPE_OPTIONS = ["借记卡", "信用卡", "预付卡", "签账卡", "取现卡", "交通卡", "礼品卡", "虚拟卡", "其他"];
 /** 聚焦反馈：全站同款中性灰柔光（去掉浏览器默认蓝框后仍能看出焦点在哪） */
@@ -404,9 +403,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [showTop, setShowTop] = useState(false);
   /** 新增卡片弹窗：搜索 / 地区 / 每次展示条数 */
   const [addOpen, setAddOpen] = useState(false);
-  const [addQuery, setAddQuery] = useState("");
-  const [addRegion, setAddRegion] = useState("");
-  const [addLimit, setAddLimit] = useState(ADD_PAGE);
   /** 新增卡片表单：卡面（上传后的地址）+ 卡片信息 */
   const [newCard, setNewCard] = useState({
     name: "",
@@ -597,7 +593,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   }, [flat, details]);
 
   type Facet = "region" | "bank" | "type" | "brand" | "level" | "tag" | "myTag" | "scope" | null;
-  const keyword = query.trim().toLowerCase();
+  /** 搜索关键词：繁转简 + 去空格（港台卡名是繁体，输简体也要搜得到） */
+  const keyword = searchKey(query);
 
   /** 分面匹配：skip 传入当前正在统计的维度时，该维度本身不参与过滤（标准 facet 行为） */
   const matchesExcept = (entry: CardEntry, skip: Facet) => {
@@ -615,13 +612,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       if (scopeFilter && CURRENCY_SCOPE_LABEL[scope] !== scopeFilter) return false;
     }
     if (!keyword) return true;
-    return (
-      card.name.toLowerCase().includes(keyword) ||
-      bank.name.toLowerCase().includes(keyword) ||
-      (bank.englishName || "").toLowerCase().includes(keyword) ||
-      (card.brand || "").toLowerCase().includes(keyword) ||
-      tags.some((item) => item.toLowerCase().includes(keyword))
-    );
+    // 卡名 / 银行 / 卡组织 / 主题标签一起当搜索源，统一繁转简后再比对
+    const haystack = searchKey([card.name, bank.name, bank.englishName || "", card.brand || "", tags.join(" ")].join(" "));
+    return haystack.includes(keyword);
   };
 
   const filterBase = (skip: Facet) => flat.filter((entry) => matchesExcept(entry, skip));
@@ -770,21 +763,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
 
   const pageItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
 
-  /** 新增卡片弹窗的候选：全库卡面，按关键词 + 地区过滤（已加入的显示为「已加入」） */
-  const addFiltered = useMemo(() => {
-    const key = addQuery.trim().toLowerCase();
-    return flat.filter(({ card, bank, region: regionLabel }) => {
-      if (addRegion && regionLabel !== addRegion) return false;
-      if (!key) return true;
-      return (
-        card.name.toLowerCase().includes(key) ||
-        bank.name.toLowerCase().includes(key) ||
-        (bank.englishName || "").toLowerCase().includes(key) ||
-        regionLabel.toLowerCase().includes(key)
-      );
-    });
-  }, [flat, addQuery, addRegion]);
-  const addCandidates = useMemo(() => addFiltered.slice(0, addLimit), [addFiltered, addLimit]);
 
   /** 手机端滑到「加载更多」附近自动续上下一屏（按钮仍然保留，点它也能加载） */
   const loadMoreRef = useRef<HTMLButtonElement | null>(null);
@@ -1170,9 +1148,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       return;
     }
     // 库里已经有的卡（同名 + 同银行）不用再建一张
-    const key = (value: string) => value.replace(/\s+/g, "").toLowerCase();
     const duplicate = flat.find(
-      ({ card, bank }) => key(card.name) === key(newCard.name) && key(bank.name) === key(newCard.bank)
+      ({ card, bank }) => searchKey(card.name) === searchKey(newCard.name) && searchKey(bank.name) === searchKey(newCard.bank)
     );
     if (duplicate) {
       showToast(`「${newCard.bank} ${newCard.name}」已经在卡面库里了`, "err");
@@ -1268,9 +1245,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             <button
               type="button"
               onClick={() => {
-                setAddQuery("");
-                setAddRegion("");
-                setAddLimit(ADD_PAGE);
                 setAddOpen(true);
               }}
               className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover sm:h-9 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
