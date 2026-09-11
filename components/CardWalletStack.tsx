@@ -589,7 +589,7 @@ export default function CardWalletStack({
                       onClick={() => onCardClick(i)}
                       className="relative block w-full overflow-hidden rounded-[16px] shadow-[0_20px_46px_rgba(0,0,0,.62)] ring-1 ring-white/12 transition-shadow duration-200"
                     >
-                      <img src={card.cover} alt={card.name} draggable={false} className="aspect-[1.586] w-full object-cover" />
+                      <img src={card.cover} alt={card.name} draggable={false} translate="no" className="aspect-[1.586] w-full object-cover" />
                     </button>
                   </div>
                 </div>
@@ -598,7 +598,7 @@ export default function CardWalletStack({
           </div>
 
           <div className="relative flex flex-col items-center gap-1 px-6 pb-2 text-center">
-            <p className="text-[13px] font-semibold text-white/85">
+            <p translate="no" className="notranslate text-[13px] font-semibold text-white/85">
               {current?.bank}
               <span className="mx-1.5 text-white/25">·</span>
               <span className="text-white/60">{current?.name}</span>
@@ -697,7 +697,7 @@ function CardFaces({ card, side, onFlip, reveal }: { card: WalletCard; side: "fr
         style={{ transform: side === "back" ? "rotateY(180deg)" : "rotateY(0deg)" }}
       >
         <div className="absolute inset-0 overflow-hidden rounded-[16px] shadow-[0_18px_40px_rgba(0,0,0,.55)] ring-1 ring-white/12 [backface-visibility:hidden]">
-          <img src={card.cover} alt={card.name} draggable={false} className="h-full w-full object-cover" />
+          <img src={card.cover} alt={card.name} draggable={false} translate="no" className="h-full w-full object-cover" />
         </div>
         {back}
       </div>

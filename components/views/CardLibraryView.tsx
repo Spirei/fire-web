@@ -1577,8 +1577,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               <button
                 key={`${bank.folder}-${card.file}`}
                 type="button"
+                translate="no"
                 onClick={() => openCard({ card, bank, region: regionLabel, tags })}
-                className="group flex flex-col overflow-hidden rounded-2xl border border-edge bg-white text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop active:scale-[.995] [contain-intrinsic-size:auto_190px] [content-visibility:auto] dark:bg-[#16181d]"
+                className="notranslate group flex flex-col overflow-hidden rounded-2xl border border-edge bg-white text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop active:scale-[.995] [contain-intrinsic-size:auto_190px] [content-visibility:auto] dark:bg-[#16181d]"
               >
                 {/* 卡片底托：留白 + 圆角裁切，让每张卡看起来都像一张实体卡（素材自带圆角的也保持一致） */}
                 <span className="block w-full bg-bg-gray/60 p-2.5 dark:bg-white/[0.04]">
@@ -1840,8 +1841,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             <span className="mx-auto mt-2.5 block h-1 w-10 flex-none rounded-full bg-edge-strong sm:hidden" />
             <div className="flex items-start justify-between gap-3 border-b border-edge px-4 py-3.5 sm:px-5 sm:py-4">
               <div className="min-w-0">
-                <h3 className="truncate text-base font-bold text-ink">{active.card.name}</h3>
-                <p className="mt-0.5 truncate text-xs text-muted">
+                <h3 translate="no" className="notranslate truncate text-base font-bold text-ink">{active.card.name}</h3>
+                <p translate="no" className="notranslate mt-0.5 truncate text-xs text-muted">
                   {active.region} · {active.bank.name}
                   {active.bank.englishName && active.bank.englishName !== active.bank.name ? `（${active.bank.englishName}）` : ""}
                 </p>
