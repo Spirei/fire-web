@@ -29,11 +29,23 @@ type CapKeyCN = "all" | "5000y" | "1000y" | "100y" | "lt100y";
 type MarketKey = "US" | "CN" | "HK" | "JP" | "KR";
 type StockKey = "all" | "watch" | "hold" | "special";
 
-const TIMES: { key: TimeKey; label: string }[] = [
-  { key: "all", label: "全部" },
-  { key: "pre", label: "盘前" },
-  { key: "after", label: "盘后" },
-  { key: "intra", label: "盘中" }
+/** 时段圆点：按「一天的时间线」配色 —— 盘前琥珀（开盘前）、盘中蓝（交易中）、盘后紫（收盘后）；
+ *  三个色相互相拉开，并刻意避开涨红 #e23d3d / 跌绿 #0fa07b，不会被误读成涨跌方向。
+ *  日历格子里的小圆点、时段筛选里的小圆点共用这一份配色。 */
+const TIME_DOT: Record<TimeKey, string> = {
+  all: "bg-[#9aa1ab]",
+  pre: "bg-[#e6a23c]",
+  intra: "bg-[#3297f6]",
+  after: "bg-[#8b5cf6]"
+};
+
+/** 时段筛选：小圆点用上面的配色，文字用同色系深色（深色模式在 globals.css 里提亮）；
+ *  选中的那颗也要保持同色，所以用 ! 覆盖 .seg-active 的文字色。 */
+const TIMES: { key: TimeKey; label: string; dot: string; accent?: string; accentActive?: string }[] = [
+  { key: "all", label: "全部", dot: TIME_DOT.all },
+  { key: "pre", label: "盘前", dot: TIME_DOT.pre, accent: "text-[#b06a00]", accentActive: "!text-[#b06a00] dark:!text-[#e6b45c]" },
+  { key: "after", label: "盘后", dot: TIME_DOT.after, accent: "text-[#6a41d6]", accentActive: "!text-[#6a41d6] dark:!text-[#b79bf8]" },
+  { key: "intra", label: "盘中", dot: TIME_DOT.intra, accent: "text-[#1b6fc9]", accentActive: "!text-[#1b6fc9] dark:!text-[#6fb4f7]" }
 ];
 
 const US_CAPS: { key: CapKey; label: string; min?: number; max?: number }[] = [
@@ -118,20 +130,13 @@ function fmtCapByMarket(n: number, market: string): string {
   return fmtCap(n);
 }
 
-/** 时段圆点：按「一天的时间线」配色 —— 盘前琥珀（开盘前）、盘中蓝（交易中）、盘后紫（收盘后）；
- *  三个色相互相拉开，并刻意避开涨红 #e23d3d / 跌绿 #0fa07b，不会被误读成涨跌方向。 */
-const TIME_DOT: Record<TimeKey, string> = {
-  all: "bg-[#9aa1ab]",
-  pre: "bg-[#e6a23c]",
-  intra: "bg-[#3297f6]",
-  after: "bg-[#8b5cf6]"
-};
-
+/** 时段胶囊：底色取对应圆点同色系的浅色，文字用同色系的深色（深色模式在 globals.css 里提亮），
+ *  与细则列表 / 日历格子里的圆点一一对应。 */
 const TIME_BADGE: Record<TimeKey, string> = {
   all: "",
   pre: "bg-[#fff4e5] text-[#b06a00]",
-  after: "bg-brand-light text-brand-deep",
-  intra: "bg-bg-gray text-muted"
+  intra: "bg-[#e9f3fe] text-[#1b6fc9]",
+  after: "bg-[#f2ecfd] text-[#6a41d6]"
 };
 
 function pad2(n: number): string {
@@ -154,7 +159,7 @@ function PillGroup({
   onChange
 }: {
   label: string;
-  options: { key: string; label: string }[];
+  options: { key: string; label: string; dot?: string; accent?: string; accentActive?: string }[];
   value: string;
   onChange: (k: string) => void;
 }) {
@@ -167,10 +172,13 @@ function PillGroup({
             key={o.key}
             type="button"
             onClick={() => onChange(o.key)}
-            className={`whitespace-nowrap rounded-full px-2.5 py-1 transition-colors duration-200 ${
-              value === o.key ? "seg-active" : "text-muted hover:bg-brand-hover hover:text-ink"
+            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 transition-colors duration-200 ${
+              value === o.key
+                ? `seg-active ${o.accentActive ?? ""}`
+                : `${o.accent ?? "text-muted"} hover:bg-brand-hover ${o.accent ? "" : "hover:text-ink"}`
             }`}
           >
+            {o.dot && <span className={`h-1.5 w-1.5 flex-none rounded-full ${o.dot}`} />}
             {o.label}
           </button>
         ))}
@@ -790,7 +798,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
           aria-hidden={!selectedDate}
         >
           <div className="overflow-hidden">
-            <div className="mx-3 mb-4 rounded-[16px] border border-edge bg-bg-gray/40 p-3 sm:mx-5 sm:p-4 md:max-w-[880px] dark:bg-[#10141d]">
+            <div className="mx-3 mb-4 rounded-[16px] border border-edge bg-bg-gray/40 p-3 sm:mx-5 sm:p-4 dark:bg-[#10141d]">
               {sel && (
                 <div className="mb-3 flex items-center gap-2 px-1">
                   <span className="text-sm font-bold text-ink">{sel.m + 1}月{sel.d}日</span>
@@ -808,8 +816,9 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
               )}
               {selectedRows.length > 0 && (
                 <div data-day-detail-list className="overflow-hidden rounded-[14px] border border-edge bg-white shadow-card dark:border-[#2a2f3a] dark:bg-[#16181d]">
-                  {/* 列头：md 起与数据列同宽对齐；lg 起把市值单独成列。数据列一律固定窄宽、紧挨着排，不随屏幕拉伸 */}
-                  <div className="hidden grid-cols-[minmax(0,1fr)_80px_112px_112px] items-center gap-4 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted md:grid lg:grid-cols-[minmax(0,1fr)_96px_80px_112px_112px] dark:bg-white/5">
+                  {/* 列头：md 起与数据列同宽对齐；lg 起把市值单独成列。公司列封顶 420px、数据列固定窄宽紧挨着排，
+                      列不随屏幕拉伸；表格本身仍是满宽，右边缘与上方日历网格对齐 */}
+                  <div className="hidden grid-cols-[minmax(0,420px)_80px_112px_112px] items-center gap-4 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted md:grid lg:grid-cols-[minmax(0,420px)_96px_80px_112px_112px] dark:bg-white/5">
                     <span>公司</span>
                     <span className="hidden text-center lg:block">市值</span>
                     <span className="text-center">时段</span>
@@ -821,7 +830,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                     return (
                       <div
                         key={`${row.symbol}-${row.date}`}
-                        className="earnings-result-row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-edge px-4 py-2 transition-colors duration-200 last:border-b-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5 md:grid-cols-[minmax(0,1fr)_80px_112px_112px] md:gap-4 lg:grid-cols-[minmax(0,1fr)_96px_80px_112px_112px]"
+                        className="earnings-result-row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-edge px-4 py-2 transition-colors duration-200 last:border-b-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5 md:grid-cols-[minmax(0,420px)_80px_112px_112px] md:gap-4 lg:grid-cols-[minmax(0,420px)_96px_80px_112px_112px]"
                       >
                         <div className="flex min-w-0 items-center gap-3">
                           <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="h-9 w-9" />

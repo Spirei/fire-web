@@ -856,6 +856,12 @@
 .dark .bg-\[\#fff4e5\] {
   background-color: #2b2413;
 }
+.dark .bg-\[\#e9f3fe\] {
+  background-color: #10202f;
+}
+.dark .bg-\[\#f2ecfd\] {
+  background-color: #1f1836;
+}
 
 /* 订单宽表：横向滚动条始终可见（样式化后 macOS Chrome 不再用覆盖式滚动条），避免误以为列被切断 */
 .orders-scroll {
@@ -902,6 +908,12 @@
 }
 .dark .text-\[\#b06a00\] {
   color: #e6b45c;
+}
+.dark .text-\[\#1b6fc9\] {
+  color: #6fb4f7;
+}
+.dark .text-\[\#6a41d6\] {
+  color: #b79bf8;
 }
 .dark .bg-page {
   background: linear-gradient(180deg, rgba(16, 20, 29, 0.9) 0%, rgba(10, 14, 25, 0.95) 45%);
