@@ -1,56 +1,24 @@
-import fs from "node:fs";
-import path from "node:path";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
-import { listCardAmounts, listCardHoldings, listCardTags } from "@/lib/cardAmounts";
+import { cardLibraryForUser } from "@/lib/cardLibrary";
 
 export const dynamic = "force-dynamic";
 
-/** 卡面库清单：读取 public/uploads/cards/manifest.json（由 scripts/fetch-card-assets.mjs 生成） */
-const CARDS_DIR = path.join(process.cwd(), "public", "uploads", "cards");
-const MANIFEST = path.join(CARDS_DIR, "manifest.json");
-
-let cache: { data: unknown; at: number } | null = null;
-const CACHE_TTL = 60 * 1000;
-
-function readManifest() {
-  if (cache && Date.now() - cache.at < CACHE_TTL) return cache.data;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(MANIFEST, "utf8"));
-    cache = { data: parsed, at: Date.now() };
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
+/** 卡面库清单 + 当前用户的持有 / 金额 / 标签。
+ *  页面首屏已由布局直接注入同一份数据（见 app/[...slug]/layout.tsx），
+ *  这个接口留给挂载后的静默刷新，避免跨设备改动看不到。 */
 export async function GET(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
-  const manifest = readManifest() as
-    | { generatedAt?: string; source?: string; typeOrder?: string[]; regions?: unknown[] }
-    | null;
-  if (!manifest || !Array.isArray(manifest.regions)) {
+  const payload = cardLibraryForUser(user.id);
+  if (payload.regions.length === 0) {
     return NextResponse.json(
       {
-        regions: [],
-        typeOrder: [],
-        updatedAt: null,
+        ...payload,
         error: "还没有卡面素材：在项目根目录执行 node scripts/fetch-card-assets.mjs 抓取"
       },
       { headers: { "Cache-Control": "no-store" } }
     );
   }
-  return NextResponse.json(
-    {
-      regions: manifest.regions,
-      typeOrder: Array.isArray(manifest.typeOrder) ? manifest.typeOrder : [],
-      updatedAt: manifest.generatedAt ?? null,
-      source: manifest.source ?? "",
-      amounts: listCardAmounts(user.id),
-      tags: listCardTags(user.id),
-      holdings: listCardHoldings(user.id)
-    },
-    { headers: { "Cache-Control": "no-store" } }
-  );
+  return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
 }

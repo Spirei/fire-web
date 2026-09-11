@@ -35,6 +35,6 @@ export async function PUT(request: Request) {
   if (!body || typeof body !== "object") return NextResponse.json({ error: "无效请求" }, { status: 400 });
   const cardKey = normalizeCardKey(String((body as { cardKey?: unknown }).cardKey ?? "").trim());
   const held = (body as { held?: unknown }).held === true;
-  if (!cardKey || cardKey.length > 300) return NextResponse.json({ error: "卡面标识无效" }, { status: 400 });
+  if (!cardKey || cardKey.length > 600) return NextResponse.json({ error: "卡面标识无效" }, { status: 400 });
   return NextResponse.json({ cardKey, held: setCardHeld(user.id, cardKey, held) }, { headers: { "Cache-Control": "no-store" } });
 }

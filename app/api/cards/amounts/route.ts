@@ -38,7 +38,7 @@ export async function PUT(request: Request) {
   const amount = Number((body as { amount?: unknown }).amount);
   const currency = String((body as { currency?: unknown }).currency ?? "").trim().toUpperCase().slice(0, 8);
   const note = String((body as { note?: unknown }).note ?? "").trim().slice(0, 100);
-  if (!cardKey || cardKey.length > 300) return NextResponse.json({ error: "卡面标识无效" }, { status: 400 });
+  if (!cardKey || cardKey.length > 600) return NextResponse.json({ error: "卡面标识无效" }, { status: 400 });
   if (!Number.isFinite(amount) || amount < 0 || amount > 1e12) return NextResponse.json({ error: "金额无效" }, { status: 400 });
   const record = upsertCardAmount(user.id, { cardKey, amount, currency, note });
   // 录入金额的卡默认视为「持有」：卡面库默认列表只显示持有的卡，录了钱却看不到会很困惑
@@ -50,7 +50,7 @@ export async function DELETE(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const cardKey = normalizeCardKey(String(new URL(request.url).searchParams.get("cardKey") || "").trim());
-  if (!cardKey || cardKey.length > 300) return NextResponse.json({ error: "卡面标识无效" }, { status: 400 });
+  if (!cardKey || cardKey.length > 600) return NextResponse.json({ error: "卡面标识无效" }, { status: 400 });
   deleteCardAmount(user.id, cardKey);
   return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }

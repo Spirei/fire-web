@@ -6,6 +6,7 @@ import { cardTagsOf } from "@/lib/cardTags";
 import { FALLBACK_RATES } from "@/lib/types";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
+import type { CardLibraryPayload } from "@/lib/cardLibrary";
 
 interface CardItem {
   name: string;
@@ -273,16 +274,29 @@ function MultiSelect({
   );
 }
 
-export default function CardLibraryView() {
-  const [regions, setRegions] = useState<RegionEntry[]>([]);
-  const [typeOrder, setTypeOrder] = useState<string[]>([]);
-  const [amounts, setAmounts] = useState<Record<string, CardAmount>>({});
-  const [holdings, setHoldings] = useState<Record<string, boolean>>({});
+export default function CardLibraryView({ initial = null }: { initial?: CardLibraryPayload | null }) {
+  // 首帧直接用服务端注入的清单与个人数据（无注入时才回落到骨架屏 + 客户端请求）
+  const [regions, setRegions] = useState<RegionEntry[]>(() => (initial?.regions as RegionEntry[] | undefined) ?? []);
+  const [typeOrder, setTypeOrder] = useState<string[]>(() => initial?.typeOrder ?? []);
+  const [amounts, setAmounts] = useState<Record<string, CardAmount>>(() => {
+    const map: Record<string, CardAmount> = {};
+    (initial?.amounts ?? []).forEach((item) => {
+      if (item?.cardKey) map[item.cardKey] = item;
+    });
+    return map;
+  });
+  const [holdings, setHoldings] = useState<Record<string, boolean>>(() => {
+    const held: Record<string, boolean> = {};
+    (initial?.holdings ?? []).forEach((key) => {
+      if (key) held[key] = true;
+    });
+    return held;
+  });
   /** mine = 我的卡（默认）；all = 全量卡面库，用来挑卡加入 */
   const [mode, setMode] = useState<"mine" | "all">("mine");
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(() => initial?.updatedAt ?? null);
   const [hint, setHint] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initial);
 
   // 各维度都是多选：空数组 = 全部；同一维度内 OR，跨维度 AND
   const [region, setRegion] = useState<string[]>([]);
@@ -299,7 +313,7 @@ export default function CardLibraryView() {
   const [active, setActive] = useState<CardEntry | null>(null);
   const [draft, setDraft] = useState({ amount: "", currency: "CNY", note: "" });
   const [saving, setSaving] = useState(false);
-  const [userTags, setUserTags] = useState<Record<string, string[]>>({});
+  const [userTags, setUserTags] = useState<Record<string, string[]>>(() => initial?.tags ?? {});
   const [tagDraft, setTagDraft] = useState("");
 
   const { currency: displayCurrency } = useDisplayCurrency();
@@ -327,30 +341,45 @@ export default function CardLibraryView() {
     };
   }, []);
 
+  /** 同一份 payload 既用于服务端注入，也用于挂载后的静默刷新 */
+  const applyPayload = (data: {
+    regions?: unknown;
+    typeOrder?: unknown;
+    updatedAt?: unknown;
+    error?: unknown;
+    amounts?: unknown;
+    tags?: unknown;
+    holdings?: unknown;
+  } | null) => {
+    if (!data) return;
+    setRegions(Array.isArray(data.regions) ? (data.regions as RegionEntry[]) : []);
+    setTypeOrder(Array.isArray(data.typeOrder) ? (data.typeOrder as string[]) : []);
+    setUpdatedAt(typeof data.updatedAt === "string" ? data.updatedAt : null);
+    setHint(typeof data.error === "string" ? data.error : "");
+    const map: Record<string, CardAmount> = {};
+    (Array.isArray(data.amounts) ? data.amounts : []).forEach((item) => {
+      const amount = item as CardAmount;
+      if (amount?.cardKey) map[amount.cardKey] = amount;
+    });
+    setAmounts(map);
+    setUserTags(data.tags && typeof data.tags === "object" ? (data.tags as Record<string, string[]>) : {});
+    const held: Record<string, boolean> = {};
+    (Array.isArray(data.holdings) ? data.holdings : []).forEach((key) => {
+      if (typeof key === "string" && key) held[key] = true;
+    });
+    setHoldings(held);
+  };
+
   useEffect(() => {
     let cancelled = false;
     fetch("/api/cards")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (cancelled || !data) return;
-        setRegions(Array.isArray(data.regions) ? data.regions : []);
-        setTypeOrder(Array.isArray(data.typeOrder) ? data.typeOrder : []);
-        setUpdatedAt(typeof data.updatedAt === "string" ? data.updatedAt : null);
-        setHint(typeof data.error === "string" ? data.error : "");
-        const map: Record<string, CardAmount> = {};
-        (Array.isArray(data.amounts) ? data.amounts : []).forEach((item: CardAmount) => {
-          if (item?.cardKey) map[item.cardKey] = item;
-        });
-        setAmounts(map);
-        setUserTags(data.tags && typeof data.tags === "object" ? (data.tags as Record<string, string[]>) : {});
-        const held: Record<string, boolean> = {};
-        (Array.isArray(data.holdings) ? data.holdings : []).forEach((key: string) => {
-          if (key) held[key] = true;
-        });
-        setHoldings(held);
+        if (!cancelled) applyPayload(data);
       })
       .catch(() => {
-        if (!cancelled) setHint("卡面库加载失败，稍后重试");
+        // 有首屏注入时不打扰用户；没有注入才提示失败
+        if (!cancelled && !initial) setHint("卡面库加载失败，稍后重试");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -358,6 +387,8 @@ export default function CardLibraryView() {
     return () => {
       cancelled = true;
     };
+    // 只在挂载后刷新一次：注入数据变化由服务端重新渲染处理
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const flat = useMemo(() => {

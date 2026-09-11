@@ -11,6 +11,7 @@ import SiteLogo from "@/components/SiteLogo";
 import IndexTicker from "@/components/IndexTicker";
 import Toaster from "@/components/Toaster";
 import { getMarketIconMap, getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
+import { cardLibraryForUser } from "@/lib/cardLibrary";
 import { CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/lib/currencyPrefs";
 import { headers } from "next/headers";
 import { unstable_noStore } from "next/cache";
@@ -71,6 +72,9 @@ export default async function SlugLayout({
   const initialStockIcons = getStockIconMap(stockIconKeysForRecords(initialRecords));
   // 市场图标一并首屏下发：市场下拉 / 筛选首帧就是素材库图标，不再等客户端请求
   const initialMarketIcons = getMarketIconMap();
+  // 卡面库：只在访问该页时把清单 + 我的持有 / 金额 / 标签随首屏下发，
+  // 避免「HTML → JS → 水合 → 再请求」的串行等待（卡面图片本身随后按需加载）
+  const initialCardLibrary = tab.key === "cards" ? cardLibraryForUser(user.id) : null;
 
   return (
     <div className="min-h-screen bg-page">
@@ -105,6 +109,7 @@ export default async function SlugLayout({
           initialUserLogs={initialUserLogs}
           initialStockIcons={initialStockIcons}
           initialMarketIcons={initialMarketIcons}
+          initialCardLibrary={initialCardLibrary}
           initialSettings={{
             tabs: settings.tabs,
             groups: settings.groups,

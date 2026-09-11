@@ -89,7 +89,8 @@ export default function RecordsApp({
   initialUserLogs,
   initialSettings,
   initialStockIcons,
-  initialMarketIcons = {}
+  initialMarketIcons = {},
+  initialCardLibrary = null
 }: {
   initialTab: string;
   initialSymbol?: string;
@@ -100,6 +101,7 @@ export default function RecordsApp({
   initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled">;
   initialStockIcons: Record<string, string>;
   initialMarketIcons?: Record<string, string>;
+  initialCardLibrary?: import("@/lib/cardLibrary").CardLibraryPayload | null;
 }) {
   const router = useRouter();
   const [user] = useState<User>(initialUser);
@@ -783,7 +785,7 @@ export default function RecordsApp({
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
           {activeTab === "attachments" && (user?.role === "admin" ? <AttachmentsView /> : <NoPermission />)}
           {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView initialCdnEnabled={initialSettings.stockIconCdn} /> : <NoPermission />)}
-          {activeTab === "cards" && <CardLibraryView />}
+          {activeTab === "cards" && <CardLibraryView initial={initialCardLibrary} />}
           {activeTab === "settings" && (
             <SettingsWindow>{settingsPanel}</SettingsWindow>
           )}

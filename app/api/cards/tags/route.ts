@@ -35,7 +35,7 @@ export async function PUT(request: Request) {
   if (!body || typeof body !== "object") return NextResponse.json({ error: "无效请求" }, { status: 400 });
   const cardKey = normalizeCardKey(String((body as { cardKey?: unknown }).cardKey ?? "").trim());
   const rawTags = (body as { tags?: unknown }).tags;
-  if (!cardKey || cardKey.length > 300) return NextResponse.json({ error: "卡面标识无效" }, { status: 400 });
+  if (!cardKey || cardKey.length > 600) return NextResponse.json({ error: "卡面标识无效" }, { status: 400 });
   if (!Array.isArray(rawTags)) return NextResponse.json({ error: "标签格式无效" }, { status: 400 });
   const tags = saveCardTags(user.id, cardKey, rawTags.map((tag) => String(tag ?? "")));
   return NextResponse.json({ cardKey, tags }, { headers: { "Cache-Control": "no-store" } });
