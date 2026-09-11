@@ -36,6 +36,10 @@
   - **首屏让路**：聚合取数改为 `requestIdleCallback`（600ms 超时兜底）之后再发，首屏先画用已有行情就能出的账户资产 / 总览。
   - **图表按需加载**：echarts 趋势图改 `next/dynamic`（带骨架），顺带清掉两个页面里失效的逐只 kline 缓存代码。
 
+- 资产分析性能 P1：
+  - **聚合接口加 ETag**：指纹按内容稳定计算（closes 按 recordId 排序后序列化、订单只取影响结果的字段），响应 `private, max-age=30, must-revalidate`；实测带 `If-None-Match` 命中 **304 / 0 字节**（原来每次重传约 58KB）。注意 next.config.mjs 里 `/api/:path*` 的全局 `no-store` 会覆盖路由自身缓存头，已为这个接口单独加例外。
+  - 客户端只在强制刷新时用 `no-store`，其余走浏览器 HTTP 缓存；「订单」模块刷新上限从 500 对齐到 5000，避免刷新后列表缩水。
+
 ---
 
 ## v0.1.27 · 2026-09-11

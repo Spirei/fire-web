@@ -61,6 +61,12 @@ const nextConfig = {
         headers: [{ key: "Cache-Control", value: "no-store" }]
       },
       {
+        // 组合时间序列（几十 KB、内容按 30 秒粒度变化）：允许浏览器私有缓存 + ETag 条件请求，
+        // 刷新页面时命中 304 就不再重传正文；其余接口继续 no-store。
+        source: "/api/v1/portfolio-series",
+        headers: [{ key: "Cache-Control", value: "private, max-age=30, must-revalidate" }]
+      },
+      {
         // 世界地图约 3 MB（gzip 后约 1 MB），内容随版本发布而更新。
         // 浏览器可直接复用一天，之后一周内后台校验，避免每次打开地图都阻塞首屏。
         source: "/maps-world.json",

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { getAuthUser } from "@/lib/auth";
 import { fetchDailyKline } from "@/lib/kline";
 import { listOrders } from "@/lib/orders";
@@ -50,8 +51,35 @@ export async function GET(request: Request) {
 
   // 订单面板与时间加权共用同一份数据（服务端直接读库，省掉一次 HTTP）
   const orders = listOrders(user.id, "all", 5000);
-  return NextResponse.json(
-    { closes, orders, days, at: Date.now() },
-    { headers: { "Cache-Control": "no-store" } }
-  );
+  // ETag 只按「内容」算（不含 at），刷新页面时命中就回 304，不再重传几十 KB；
+  // 30 秒内浏览器可直接用本地副本，超过后走条件请求。
+  // 指纹必须稳定：closes 是并发取回的，键顺序每次都可能不同，所以按 id 排序后再序列化；
+  // 订单只取「会影响序列结果」的字段，避免无关字段（更新时间等）抖动导致 304 失效。
+  const fingerprint = JSON.stringify({
+    userId: user.id,
+    days,
+    closes: Object.keys(closes)
+      .sort()
+      .map((id) => [id, closes[id]]),
+    orders: orders.map((order) => [
+      order.id,
+      order.recordId,
+      order.market,
+      order.side,
+      order.qty,
+      order.price,
+      order.fees,
+      order.amount,
+      order.tradedAt,
+      order.status,
+      order.positionQtyBefore ?? null,
+      order.positionQtyAfter ?? null
+    ])
+  });
+  const etag = `W/"ps-${createHash("sha1").update(fingerprint).digest("hex").slice(0, 24)}"`;
+  const headers = { ETag: etag, "Cache-Control": "private, max-age=30, must-revalidate" };
+  if (request.headers.get("if-none-match") === etag) {
+    return new Response(null, { status: 304, headers });
+  }
+  return NextResponse.json({ closes, orders, days, at: Date.now() }, { headers });
 }

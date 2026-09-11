@@ -41,7 +41,9 @@ export async function fetchPortfolioBundle({
   let task!: Promise<PortfolioBundle | null>;
   task = (async () => {
     try {
-      const response = await fetch(`/api/v1/portfolio-series?${params}`, { cache: "no-store" });
+      // 默认走浏览器 HTTP 缓存：服务端带 ETag + max-age=30，刷新时命中就 304（不重传正文）；
+      // 强制刷新（交易后 / 手动刷新）才绕过缓存。
+      const response = await fetch(`/api/v1/portfolio-series?${params}`, force ? { cache: "no-store" } : undefined);
       if (!response.ok) throw new Error(`bundle ${response.status}`);
       const data = (await response.json()) as Partial<PortfolioBundle> | null;
       if (!data || typeof data.closes !== "object" || data.closes === null) throw new Error("bundle empty");

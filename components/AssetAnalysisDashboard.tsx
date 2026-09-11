@@ -393,7 +393,8 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     setRefreshing(kind);
     try {
       if (kind === "orders") {
-        const res = await fetch("/api/v1/orders?scope=all&limit=500", { cache: "no-store" });
+        // 与组合聚合接口保持同一口径（limit=5000），否则刷新后订单列表会从 5000 缩到 500
+        const res = await fetch("/api/v1/orders?scope=all&limit=5000", { cache: "no-store" });
         const data = await res.json().catch(() => null);
         if (!res.ok || data?.code !== 0) throw new Error(data?.message || "订单刷新失败");
         setOrders(Array.isArray(data?.data?.orders) ? data.data.orders : []);

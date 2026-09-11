@@ -2878,6 +2878,10 @@ export const V0_1_28_ENTRY: VersionEntry = {
     title: "资产分析页性能 P0：组合数据一次取回 + 首屏让路 + 图表按需加载",
     desc: "先量后改：SSR 热态 0.08–0.6s 并不慢，慢在水合之后 —— 页面一挂载就由浏览器按持仓逐只打 `/api/kline/full`（17 只 ≈ 17 次请求 / 约 520KB），外加订单 5000 全量、资金、汇率、行情，8 个模块全在等这批数据；`/api/kline/full` 虽有 10 分钟服务端缓存，但客户端每次刷新仍要重新拉几百 KB。三处改动：1) 新增 `GET /api/v1/portfolio-series?days=330` —— 服务端按持仓并发（6）取日K，一次返回「recordId → { d, c } 序列 + 订单」，浏览器从 N+3 个请求降到 1+1（基准单独一个小请求，切换基准不用重拉全部），同规模体积 5 只 153KB → 58KB（约 2.6× 小），服务端日K缓存命中时实测 **0.03s**；资产盈亏分析页同步改用这份聚合数据并共享浏览器缓存。2) 首屏让路：聚合取数放到 `requestIdleCallback`（超时 600ms，兜底 setTimeout 150ms）之后，首屏先渲染账户资产 / 总览这些用已有行情就能画的模块；有 localStorage 趋势缓存时本来就直接命中。3) echarts 趋势图改为 `next/dynamic` 按需加载（带骨架）。顺带删掉两个页面里已失效的逐只 kline 缓存与有界并发工具（约 2.6KB 死代码）。验证：tsc 无错误、冒烟 113/113 全 PASS；接口实测首调 1.37s、二次命中 0.03s。",
     kind: "feature"
+  }, {
+    title: "资产分析性能 P1：聚合接口上 ETag（命中 304 不重传）+ 订单刷新口径对齐",
+    desc: "给 `/api/v1/portfolio-series` 加 ETag 条件请求：指纹只按内容算（closes 按 recordId 排序后再序列化 —— 它是并发取回的，键顺序每次都可能不同，不排序会导致 ETag 每次都变、304 永远不命中；订单只取影响序列结果的字段，避免无关字段抖动），响应改为 `Cache-Control: private, max-age=30, must-revalidate`；顺带发现 next.config.mjs 里 `/api/:path*` 的全局 `no-store` 会覆盖路由自身的缓存头，为这个接口加了一条更具体的例外。客户端 `fetchPortfolioBundle` 默认走浏览器 HTTP 缓存（只有强制刷新才 no-store）。实测：连续三次请求 ETag 稳定，带 If-None-Match 命中 **304、下载 0 字节**（此前每次重传约 58KB）。另外把「订单」模块的刷新从 limit=500 对齐到 5000，避免刷新后列表从 5000 缩到 500。tsc 无错误、冒烟 113/113 全 PASS。",
+    kind: "feature"
   }]
 };
 
