@@ -600,13 +600,14 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
               <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
                 {grid.map((cell, i) =>
                   cell.type === "blank" ? (
-                    <div key={`blank-${i}`} className="min-h-[88px] rounded-[14px] sm:min-h-[104px]" />
+                    <div key={`blank-${i}`} className="rounded-[14px]" style={{ minHeight: 88 }} />
                   ) : (
                     <button
                       key={cell.key}
                       type="button"
                       aria-current={cell.isToday ? "date" : undefined}
-                      className={`flex min-h-[88px] cursor-default flex-col rounded-[14px] border bg-bg-gray/30 p-2.5 sm:min-h-[104px] dark:bg-white/[0.04] ${
+                      style={{ minHeight: 88 }}
+                      className={`flex cursor-default flex-col rounded-[14px] border bg-bg-gray/30 p-2.5 dark:bg-white/[0.04] ${
                         cell.isToday
                           ? "border-2 border-white bg-[#eef0f3] shadow-[0_0_0_2px_rgba(17,24,39,0.22)] dark:bg-white/[0.08] dark:shadow-[0_0_0_2px_rgba(255,255,255,0.18)]"
                           : "border-transparent"
@@ -633,7 +634,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
               <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
                 {grid.map((cell, i) =>
                   cell.type === "blank" ? (
-                    <div key={`blank-${i}`} className="min-h-[88px] rounded-[14px] sm:min-h-[104px]" />
+                    <div key={`blank-${i}`} className="rounded-[14px]" style={{ minHeight: 88 }} />
                   ) : (
                     <button
                       key={cell.key}
@@ -641,7 +642,8 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                       type="button"
                       aria-current={cell.isToday ? "date" : undefined}
                       onClick={() => setSelectedDate(selectedDate === cell.key ? null : cell.key)}
-                      className={`group relative flex min-h-[88px] cursor-pointer flex-col gap-1 overflow-hidden rounded-[14px] border p-1.5 text-left sm:min-h-[104px] sm:gap-1.5 sm:p-2.5 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop sm:min-h-[104px] ${
+                      style={{ minHeight: 88 }}
+                      className={`group relative flex cursor-pointer flex-col gap-1 overflow-hidden rounded-[14px] border p-1.5 text-left sm:gap-1.5 sm:p-2.5 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop ${
                         selectedDate === cell.key
                           ? "border-edge bg-white shadow-pop dark:bg-[#252c3a]"
                           : cell.rows.length > 0
