@@ -141,6 +141,18 @@ function localDateInput(): string {
 }
 
 /**
+ * 卡背安全码（CVV / CVC）的显隐规则。
+ *
+ * 中国大陆的借记卡背面**没有**安全码（线上支付走密码 / 短信验证，卡号 + 有效期也刷不了），
+ * 所以这类卡不画卡背那个白色方块，卡片信息里也不列「安全码」这一行、编辑弹窗不出现该字段。
+ * 其他地区 / 卡种（如香港、海外的借记卡大多带 CVC）是否带安全码暂无结论，一律保持原样；
+ * 以后要扩规则只改这一处。
+ */
+function hasSecurityCode(card: Pick<WalletCard, "type" | "region">): boolean {
+  return !(card.region === "中国内地" && card.type === "借记卡");
+}
+
+/**
  * 卡包：整屏堆叠卡片，上下滑动切换。
  * 拖动时卡片跟手，松手后按距离 + 速度判定，用 GSAP 缓动把整叠卡片推到下一个位置。
  */
@@ -639,6 +651,7 @@ export default function CardWalletStack({
 /** 单张卡：正面（卡面素材）/ 反面（磁条 + 签名栏 + 安全码 + 有效期）翻转 */
 function CardFaces({ card, side, onFlip, reveal }: { card: WalletCard; side: "front" | "back"; onFlip: () => void; reveal: boolean }) {
   const last4 = cardLast4(card.number);
+  const showCvv = hasSecurityCode(card);
   const back = (
     <div className="absolute inset-0 overflow-hidden rounded-[16px] border border-white/12 bg-[linear-gradient(152deg,#232832,#0b0d12_62%)] [backface-visibility:hidden] [transform:rotateY(180deg)]">
       <div className="flex items-start justify-between px-5 pt-4">
@@ -653,10 +666,13 @@ function CardFaces({ card, side, onFlip, reveal }: { card: WalletCard; side: "fr
         <div className="flex h-9 flex-1 items-center rounded-[4px] bg-[repeating-linear-gradient(180deg,#f6f6f7_0,#f6f6f7_7px,#e2e2e6_8px,#f6f6f7_9px)] px-3">
           <span className="truncate text-[10px] italic text-[#3f3f46]">{card.name}</span>
         </div>
-        <div className="min-w-[70px] rounded-[6px] bg-white px-3 py-1 text-center">
-          <span className="block text-[9px] font-semibold uppercase tracking-wider text-[#71717a]">CVV</span>
-          <b className="text-[15px] font-bold italic tabular-nums text-[#18181b]">{reveal ? card.cvv || "———" : "•••"}</b>
-        </div>
+        {/* 大陆借记卡背面没有安全码，这一格不画（签名栏顺势拉满） */}
+        {showCvv && (
+          <div className="min-w-[70px] rounded-[6px] bg-white px-3 py-1 text-center">
+            <span className="block text-[9px] font-semibold uppercase tracking-wider text-[#71717a]">CVV</span>
+            <b className="text-[15px] font-bold italic tabular-nums text-[#18181b]">{reveal ? card.cvv || "———" : "•••"}</b>
+          </div>
+        )}
       </div>
       <div className="mt-auto flex items-end justify-between px-5 pb-4 pt-5">
         <div>
@@ -790,7 +806,9 @@ function CardDetailPanel({
           cardKey: card.key,
           number: draft.number,
           expiry: draft.expiry,
-          cvv: draft.cvv,
+          // 没有安全码的卡（大陆借记卡）不提交这个字段：接口按「只覆盖传入字段」处理，
+          // 历史残留的值不会被写回、也不会被这次保存顺手改掉
+          ...(showCvv ? { cvv: draft.cvv } : {}),
           note: draft.note,
           currency: draft.currency
         })
@@ -825,6 +843,7 @@ function CardDetailPanel({
   }
 
   const last4 = cardLast4(card.number);
+  const showCvv = hasSecurityCode(card);
   const balanceText = card.hasAmount ? fmtCardMoney(card.amount, card.currency) : "—";
   const rows: [string, React.ReactNode][] = [
     ["当前余额", <b key="balance" className="text-[15px] font-semibold tabular-nums text-white">{balanceText}</b>],
@@ -832,7 +851,8 @@ function CardDetailPanel({
     ["尾号", last4 ? `•••• ${last4}` : "—"],
     ["卡号", reveal ? formatCardNumber(card.number) || "—" : "•••• •••• •••• ••••"],
     ["有效期", reveal ? card.expiry || "—" : "••/••"],
-    ["安全码", reveal ? card.cvv || "—" : "•••"],
+    // 大陆借记卡没有安全码，这一行不列
+    ...(showCvv ? ([["安全码", reveal ? card.cvv || "—" : "•••"]] as [string, React.ReactNode][]) : []),
     ["类型", card.type || "—"],
     ["货币", card.currency || "—"],
     ["备注", card.note || "—"]
@@ -888,7 +908,7 @@ function CardDetailPanel({
                 onClick={() => setReveal((value) => !value)}
                 className="text-[11px] font-semibold text-white/60 transition-colors hover:text-white"
               >
-                {reveal ? "隐藏卡号 / 安全码" : "显示卡号 / 安全码"}
+                {showCvv ? (reveal ? "隐藏卡号 / 安全码" : "显示卡号 / 安全码") : reveal ? "隐藏卡号" : "显示卡号"}
               </button>
             </div>
             {rows.map(([label, value], rowIndex) => (
@@ -974,8 +994,9 @@ function CardDetailPanel({
           </div>
 
           <p className="mt-4 text-center text-[11px] text-white/30">
-            卡号 / 有效期 / 安全码只存在你自己的数据库里，用来在卡背显示；余额历史与卡面库的金额是同一份数据。
+            {showCvv ? "卡号 / 有效期 / 安全码" : "卡号 / 有效期"}只存在你自己的数据库里，用来在卡背显示；余额历史与卡面库的金额是同一份数据。
             借记卡 / 预付卡余额同时算作现金，会计入资产分析的可用现金与净资产；信用卡的金额是额度，不计入。
+            {!showCvv ? "中国大陆的借记卡背面没有安全码，这类卡不显示该字段。" : ""}
           </p>
         </div>
       </div>
@@ -1109,16 +1130,19 @@ function CardDetailPanel({
                 className={`h-10 rounded-xl border border-edge bg-white px-3 text-[13px] tabular-nums text-ink placeholder:text-faint dark:bg-[#1c222d] ${FOCUS_RING}`}
               />
             </label>
-            <label className="flex flex-1 flex-col gap-1.5">
-              <span className="text-[12px] font-semibold text-muted">安全码</span>
-              <input
-                value={draft.cvv}
-                onChange={(event) => setDraft((prev) => ({ ...prev, cvv: event.target.value.replace(/\D/g, "").slice(0, 4) }))}
-                inputMode="numeric"
-                placeholder="327"
-                className={`h-10 rounded-xl border border-edge bg-white px-3 text-[13px] tabular-nums text-ink placeholder:text-faint dark:bg-[#1c222d] ${FOCUS_RING}`}
-              />
-            </label>
+            {/* 中国大陆的借记卡没有安全码，不给这个输入框（有效期独占一行） */}
+            {showCvv && (
+              <label className="flex flex-1 flex-col gap-1.5">
+                <span className="text-[12px] font-semibold text-muted">安全码</span>
+                <input
+                  value={draft.cvv}
+                  onChange={(event) => setDraft((prev) => ({ ...prev, cvv: event.target.value.replace(/\D/g, "").slice(0, 4) }))}
+                  inputMode="numeric"
+                  placeholder="327"
+                  className={`h-10 rounded-xl border border-edge bg-white px-3 text-[13px] tabular-nums text-ink placeholder:text-faint dark:bg-[#1c222d] ${FOCUS_RING}`}
+                />
+              </label>
+            )}
           </div>
           <label className="mt-3 flex flex-col gap-1.5">
             <span className="text-[12px] font-semibold text-muted">币种</span>
