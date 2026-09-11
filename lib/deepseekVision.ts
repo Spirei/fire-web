@@ -42,10 +42,12 @@ const USER_PROMPT = `你是股票持仓 / 行情截图 OCR 引擎。请识别图
  * 调用 DeepSeek 视觉模型识别截图，返回结构化文本行。
  * 未配置 Key / 图片为空 / 调用失败均返回 null（不抛错，交给上层回退）。
  */
-export async function recognizeImageWithDeepSeek(
+export async function askDeepSeekVision(
   imagePath: string,
-  mime: string
-): Promise<DeepSeekVisionResult | null> {
+  mime: string,
+  prompt: string,
+  maxTokens = 4000
+): Promise<string | null> {
   if (!deepseekVisionEnabled()) return null;
   const buffer = await fs.readFile(imagePath).catch(() => null);
   if (!buffer || buffer.length === 0) return null;
@@ -67,13 +69,13 @@ export async function recognizeImageWithDeepSeek(
           {
             role: "user",
             content: [
-              { type: "text", text: USER_PROMPT },
+              { type: "text", text: prompt },
               { type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } }
             ]
           }
         ],
         temperature: 0.1,
-        max_tokens: 4000
+        max_tokens: maxTokens
       }),
       signal: controller.signal
     });
@@ -86,17 +88,29 @@ export async function recognizeImageWithDeepSeek(
     };
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim()) return null;
-    const raw = content.trim();
-    const lines = raw
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-    if (lines.length === 0) return null;
-    return { lines, raw, provider: "deepseek" };
+    return content.trim();
   } catch (err) {
     console.warn("[deepseek-vision]", err instanceof Error ? err.message : err);
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * 调用 DeepSeek 视觉模型识别截图，返回结构化文本行。
+ * 未配置 Key / 图片为空 / 调用失败均返回 null（不抛错，交给上层回退）。
+ */
+export async function recognizeImageWithDeepSeek(
+  imagePath: string,
+  mime: string
+): Promise<DeepSeekVisionResult | null> {
+  const raw = await askDeepSeekVision(imagePath, mime, USER_PROMPT);
+  if (!raw) return null;
+  const lines = raw
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return null;
+  return { lines, raw, provider: "deepseek" };
 }

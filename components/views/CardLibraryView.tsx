@@ -421,6 +421,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [newSaving, setNewSaving] = useState(false);
   /** 卡面拖拽上传：拖到框里高亮提示 */
   const [dragActive, setDragActive] = useState(false);
+  /** 卡面识别中（上传完自动交给 DeepSeek 读字段） */
+  const [recognizing, setRecognizing] = useState(false);
   /** 卡片详情里翻看新旧卡面：0 = 当前卡面，1.. = 旧卡面 */
   const [faceIndex, setFaceIndex] = useState(0);
 
@@ -1195,10 +1197,46 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         return;
       }
       setNewImage(url);
+      void recognizeNewImage(url);
     } catch {
       showToast("上传失败，稍后再试", "err");
     } finally {
       setNewUploading(false);
+    }
+  }
+
+  /**
+   * 卡面识别：把刚上传的图片交给 DeepSeek 读卡名 / 银行 / 地区 / 类型 / 卡组织 / 等级，
+   * 只填空着的字段（用户已经填过的不覆盖）。没配 Key / 识别失败就静默跳过。
+   */
+  async function recognizeNewImage(url: string) {
+    setRecognizing(true);
+    try {
+      const res = await fetch("/api/cards/recognize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: url })
+      });
+      const data = res.ok ? await res.json() : null;
+      const card = data?.card as
+        | { name?: string; bank?: string; region?: string; type?: string; brand?: string; level?: string }
+        | null
+        | undefined;
+      if (!card) return;
+      const patch: Partial<typeof newCard> = {};
+      if (card.name && !newCard.name.trim()) patch.name = card.name;
+      if (card.bank && !newCard.bank.trim()) patch.bank = card.bank;
+      if (card.brand && !newCard.brand.trim()) patch.brand = card.brand;
+      if (card.level && !newCard.level.trim()) patch.level = card.level;
+      if (card.type && CARD_TYPE_OPTIONS.includes(card.type)) patch.type = card.type;
+      if (card.region && REGION_CURRENCY[card.region]) patch.region = card.region;
+      const filled = Object.keys(patch).length;
+      if (filled > 0) setNewCard((prev) => ({ ...prev, ...patch }));
+      showToast(filled > 0 ? `已识别并自动填入 ${filled} 项，请核对` : "识别完成，字段请手动补充");
+    } catch {
+      /* 识别失败不打扰用户，手填即可 */
+    } finally {
+      setRecognizing(false);
     }
   }
 
@@ -1723,7 +1761,10 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
               {/* 卡面：点一下选图，上传后本地预览 */}
               <label className="block cursor-pointer">
-                <span className="mb-1.5 block text-[11px] font-semibold text-muted">卡面（必填）</span>
+                <span className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold text-muted">
+                  卡面（必填）
+                  {recognizing && <span className="font-normal text-[#2f6fed]">正在识别卡面信息…</span>}
+                </span>
                 <span
                   onDragEnter={(event) => {
                     event.preventDefault();
@@ -1767,6 +1808,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         {newUploading ? "上传中…" : dragActive ? "松手放下这张卡面" : "点这里选，或把图片拖进来"}
                       </span>
                       <span className="text-[11px] text-faint">建议 1.586:1 标准卡面比例，JPG / PNG / WEBP / SVG，最大 20MB</span>
+                      <span className="text-[11px] text-faint">上传后会自动识别卡名 / 银行等信息（图片会发送给 DeepSeek）</span>
                     </span>
                   )}
                   {newImage && !newUploading && (
