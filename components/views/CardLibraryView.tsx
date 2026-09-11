@@ -25,6 +25,7 @@ import {
 import type { CardLibraryPayload } from "@/lib/cardLibrary";
 import type { CardDetails } from "@/lib/cardWallet";
 import type { CustomCard } from "@/lib/cardCustom";
+import { CARD_VARIANT_DROPPED, CARD_VARIANT_FACES, CARD_VARIANT_MERGE_KEYS, type CardFace } from "@/lib/cardVariants";
 
 interface CardItem {
   name: string;
@@ -39,6 +40,8 @@ interface CardItem {
   /** 用户自建的卡（素材库里没有），删除入口只对它开放 */
   custom?: boolean;
   customId?: string;
+  /** 同一张卡的另一版卡面（旧卡面等）：详情页可以翻看 */
+  faces?: CardFace[];
 }
 
 interface BankEntry {
@@ -416,6 +419,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [newImage, setNewImage] = useState("");
   const [newUploading, setNewUploading] = useState(false);
   const [newSaving, setNewSaving] = useState(false);
+  /** 卡片详情里翻看新旧卡面：0 = 当前卡面，1.. = 旧卡面 */
+  const [faceIndex, setFaceIndex] = useState(0);
 
   const [active, setActive] = useState<CardEntry | null>(null);
   const [draft, setDraft] = useState({ amount: "", currency: "CNY", note: "" });
@@ -524,7 +529,33 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     if (customCards.length === 0) return regions;
     const merged: RegionEntry[] = regions.map((entry) => ({
       label: entry.label,
-      banks: entry.banks.map((bank) => ({ ...bank, cards: [...bank.cards] }))
+      // 与另一张完全重复的素材（同图不同格式）不展示；同一张卡的新旧卡面并成一条
+      banks: entry.banks.map((bank) => ({
+        ...bank,
+        cards: bank.cards
+          .filter((card) => !CARD_VARIANT_DROPPED.has(card.file))
+          .map((card) => {
+            const others = CARD_VARIANT_FACES[card.file];
+            const mergeKeys = CARD_VARIANT_MERGE_KEYS[card.file];
+            if (!others && !mergeKeys) return card;
+            // 显示顺序固定：当前卡面在前、旧卡面在后（详情页翻面用）；
+            // 但「持有 / 金额 / 标签」的 key 可能记在任意一版上，所以单独挑一个有数据的当数据键，
+            // 免得合并之后变成"未加入我的卡"。
+            const keys = mergeKeys ?? [card.file];
+            const dataKey = keys.find((key) => holdings[key] || amounts[key]) ?? card.file;
+            const faces = [
+              { file: card.file, label: "当前卡面" },
+              ...(others ?? []).map((item) => ({ file: item.file, label: item.label }))
+            ];
+            return {
+              ...card,
+              // 名字里的 (新) / (Old) 这类版本标记不必再显示
+              name: card.name.replace(/\s*[（(]\s*(?:新|新卡|old|new)\s*[)）]\s*$/i, "").trim() || card.name,
+              file: dataKey,
+              faces
+            };
+          })
+      }))
     }));
     customCards.forEach((card) => {
       const regionLabel = card.region || "未分类";
@@ -551,7 +582,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       });
     });
     return merged;
-  }, [regions, customCards]);
+  }, [regions, customCards, holdings, amounts]);
 
   const flat = useMemo(() => {
     const list: CardEntry[] = [];
@@ -781,6 +812,12 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
 
   const activeUserTags = active ? userTags[active.card.file] ?? [] : [];
   const activeScope = active ? scopeByCard[active.card.file] : undefined;
+  /** 详情页可翻的卡面：当前卡面 + 同一张卡的旧卡面（来自 lib/cardVariants 的合并表） */
+  const activeFaces = active ? active.card.faces ?? [{ file: active.card.file, label: "当前卡面" }] : [];
+  const activeFace = activeFaces[Math.min(faceIndex, Math.max(0, activeFaces.length - 1))];
+  useEffect(() => {
+    setFaceIndex(0);
+  }, [active?.card.file]);
   /** 币种下拉的选项：按这张卡的币种范围收窄（单币 1 个、双币 2 个、多币种给该地区常见币种） */
   const activeCurrencyOptions = active
     ? cardCurrencyChoicesFor({
@@ -810,7 +847,12 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             brand: card.brand || "",
             level: card.level || "",
             image: card.file,
-            cover: card.file.startsWith("/") ? card.file : covers[card.file] || manifestCoverUrl(card.file),
+            cover: (() => {
+              // 有多版卡面时，卡包展示的是最新那一版
+              const shown = card.faces?.[0]?.file ?? card.file;
+              if (shown.startsWith("/")) return shown;
+              return covers[shown] || manifestCoverUrl(shown);
+            })(),
             amount: saved?.amount ?? 0,
             currency: saved?.currency || info?.currency || REGION_CURRENCY[regionLabel] || "CNY",
             hasAmount: !!saved,
@@ -1541,9 +1583,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 {/* 卡片底托：留白 + 圆角裁切，让每张卡看起来都像一张实体卡（素材自带圆角的也保持一致） */}
                 <span className="block w-full bg-bg-gray/60 p-2.5 dark:bg-white/[0.04]">
                   <span className="relative block overflow-hidden rounded-[10px] bg-bg-gray shadow-sm ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10">
-                    <img
-                      src={cardCover(card.file)}
-                      alt={card.name}
+                      <img
+                        src={cardCover(card.faces?.[0]?.file ?? card.file)}
+                        alt={card.name}
                       loading="lazy"
                       decoding="async"
                       className="aspect-[1.586] w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
@@ -1827,14 +1869,65 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             <div className="overflow-y-auto overscroll-contain bg-bg-gray px-4 py-4 sm:px-5 sm:py-5 dark:bg-black/20">
               <div className="group/card relative mx-auto w-full max-w-[560px]">
                 {/* 鼠标划过和卡面库里的卡片一样：轻微放大 + 底部渐变浮出来 */}
-                <div className="relative overflow-hidden rounded-xl shadow-pop">
-                  <img
-                    src={cardCover(active.card.file)}
-                    alt={active.card.name}
-                    className="w-full transition-transform duration-300 ease-out group-hover/card:scale-[1.04]"
-                  />
-                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100" />
-                </div>
+                {activeFaces.length > 1 ? (
+                  /* 一张卡有多版卡面（新 / 旧）：点卡片翻面，和卡包的卡背切换同一套手感 */
+                  <div className="relative overflow-hidden rounded-xl shadow-pop">
+                    <button
+                      type="button"
+                      onClick={() => setFaceIndex((index) => (index + 1) % activeFaces.length)}
+                      aria-label="翻看另一版卡面"
+                      title="点一下翻看另一版卡面"
+                      className="relative block w-full [perspective:1400px]"
+                    >
+                      <span
+                        className="relative block w-full transition-transform duration-[620ms] ease-[cubic-bezier(.22,.61,.36,1)] [transform-style:preserve-3d]"
+                        style={{ transform: `rotateY(${faceIndex * 180}deg)` }}
+                      >
+                        <img
+                          src={cardCover(activeFaces[0].file)}
+                          alt={active.card.name}
+                          className="w-full group-hover/card:scale-[1.02] [backface-visibility:hidden] transition-transform duration-300"
+                        />
+                        {activeFaces.slice(1).map((item, index) => (
+                          <img
+                            key={item.file}
+                            src={cardCover(item.file)}
+                            alt={`${active.card.name} · ${item.label}`}
+                            className="absolute inset-0 h-full w-full [backface-visibility:hidden]"
+                            style={{ transform: `rotateY(${(index + 1) * 180}deg)` }}
+                          />
+                        ))}
+                      </span>
+                    </button>
+                    <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100" />
+                  </div>
+                ) : (
+                  <div className="relative overflow-hidden rounded-xl shadow-pop">
+                    <img
+                      src={cardCover(active.card.file)}
+                      alt={active.card.name}
+                      className="w-full transition-transform duration-300 ease-out group-hover/card:scale-[1.04]"
+                    />
+                    <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100" />
+                  </div>
+                )}
+                {/* 多版卡面：和卡包一样的小圆点 + 当前是哪一版 */}
+                {activeFaces.length > 1 && (
+                  <div className="mt-3 flex items-center justify-center gap-2">
+                    {activeFaces.map((item, index) => (
+                      <button
+                        key={item.file}
+                        type="button"
+                        onClick={() => setFaceIndex(index)}
+                        aria-label={item.label}
+                        className={`h-1.5 rounded-full transition-all duration-300 ${
+                          index === faceIndex ? "w-4 bg-ink dark:bg-white" : "w-1.5 bg-faint/60 hover:bg-faint"
+                        }`}
+                      />
+                    ))}
+                    <span className="ml-1 text-[11px] font-semibold text-muted">{activeFace?.label}</span>
+                  </div>
+                )}
                 {/* 卡片右上角：加入 / 移出我的卡、上传卡面（换过图的再给一颗恢复原图） */}
                 {/* 默认藏起来，划过卡片（或键盘聚焦）才出现；触屏设备从 touch.css 里恢复常显 */}
                 <div className="card-actions absolute right-2 top-2 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/card:opacity-100 pointer-events-none focus-within:pointer-events-auto group-hover/card:pointer-events-auto">
