@@ -1174,6 +1174,11 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       showToast("只能上传图片文件（JPG / PNG / WEBP）", "err");
       return;
     }
+    // 服务端「素材」类上传上限 2MB，这里先拦一道，省得白传一次
+    if (file.size > 2 * 1024 * 1024) {
+      showToast(`这张图 ${(file.size / 1024 / 1024).toFixed(1)}MB，超过 2MB 上限，压缩一下再传`, "err");
+      return;
+    }
     setNewUploading(true);
     try {
       const form = new FormData();
@@ -1699,7 +1704,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               <div className="min-w-0">
                 <h3 className="text-base font-bold text-ink">新增卡片</h3>
                 <p className="mt-0.5 text-xs text-muted">
-                  从素材库里挑一张加入「我的卡」——加入后就能在卡包里翻卡背、记余额
+                  素材库里没有的卡：上传卡面 + 填卡片信息，保存后进「我的卡」，并同步到「素材库 → 卡片」
                 </p>
               </div>
               <button
@@ -1760,7 +1765,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       <span className={`text-[12px] font-semibold ${dragActive ? "text-[#2f6fed]" : "text-ink-2"}`}>
                         {newUploading ? "上传中…" : dragActive ? "松手放下这张卡面" : "点这里选，或把图片拖进来"}
                       </span>
-                      <span className="text-[11px] text-faint">建议 1.586:1 标准卡面比例，JPG / PNG / WEBP，最大 5MB</span>
+                      <span className="text-[11px] text-faint">建议 1.586:1 标准卡面比例，JPG / PNG / WEBP / SVG，最大 2MB</span>
                     </span>
                   )}
                   {newImage && !newUploading && (
