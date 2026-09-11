@@ -1408,7 +1408,66 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               </button>
             </div>
             <div className="overflow-y-auto overscroll-contain bg-bg-gray px-4 py-4 sm:px-5 sm:py-5 dark:bg-black/20">
-              <img src={cardCover(active.card.file)} alt={active.card.name} className="mx-auto w-full max-w-[560px] rounded-xl shadow-pop" />
+              <div className="relative mx-auto w-full max-w-[560px]">
+                <img src={cardCover(active.card.file)} alt={active.card.name} className="w-full rounded-xl shadow-pop" />
+                {/* 卡片右上角：加入 / 移出我的卡、上传卡面（换过图的再给一颗恢复原图） */}
+                <div className="absolute right-2 top-2 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void setHeld(active.card.file, !holdings[active.card.file])}
+                    aria-label={holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
+                    title={holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
+                    className={`grid h-9 w-9 place-items-center rounded-full backdrop-blur transition-colors duration-200 active:scale-95 ${
+                      holdings[active.card.file] ? "bg-[#3297f6] text-white hover:brightness-110" : "bg-black/45 text-white hover:bg-black/60"
+                    }`}
+                  >
+                    {holdings[active.card.file] ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-4 w-4">
+                        <path d="M6 12h12" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-4 w-4">
+                        <path d="M12 6v12M6 12h12" />
+                      </svg>
+                    )}
+                  </button>
+                  <label
+                    title="上传卡面：用自己的卡片照片替换清单原图（建议 1.586:1，JPG / PNG / WEBP，最大 2MB）"
+                    className={`grid h-9 w-9 cursor-pointer place-items-center rounded-full bg-black/45 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95 ${
+                      coverSaving ? "pointer-events-none opacity-60" : ""
+                    }`}
+                  >
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        if (file) void uploadCover(active, file);
+                      }}
+                    />
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                      <path d="M12 15V4M8 7.5 12 3.5l4 4M5 15v3.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5V15" />
+                    </svg>
+                  </label>
+                  {hasCustomCover(active.card.file) && (
+                    <button
+                      type="button"
+                      disabled={coverSaving}
+                      onClick={() => void resetCover(active)}
+                      aria-label="恢复清单原图"
+                      title="恢复清单原图"
+                      className="grid h-9 w-9 place-items-center rounded-full bg-black/45 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95 disabled:opacity-50"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                        <path d="M4 12a8 8 0 1 0 2.6-5.9" />
+                        <path d="M4 4v4.5h4.5" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="mx-auto mt-4 grid max-w-[560px] grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
                 <span className="rounded-lg bg-white px-3 py-2 text-muted dark:bg-[#1c222d]">类型<b className="ml-1 text-ink">{active.card.type || "—"}</b></span>
                 <span className="rounded-lg bg-white px-3 py-2 text-muted dark:bg-[#1c222d]">卡组织<b className="ml-1 text-ink">{active.card.brand || "—"}</b></span>
@@ -1467,57 +1526,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               </p>
             </div>
             <div className="border-t border-edge px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3.5 sm:px-5 sm:py-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] text-muted">
-                  {holdings[active.card.file] ? "这张卡已在「我的卡」里，回卡面库默认就能看到" : "加入「我的卡」后，卡面库默认列表里就会出现它"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void setHeld(active.card.file, !holdings[active.card.file])}
-                  className={`h-10 rounded-full border px-3.5 text-xs font-semibold transition-all duration-200 hover:-translate-y-px active:scale-[.97] sm:h-8 ${
-                    holdings[active.card.file]
-                      ? "border-edge-strong bg-white text-muted hover:bg-brand-hover hover:text-ink dark:bg-[#1c1c1e] dark:text-white/80"
-                      : "border-[#3297f6] bg-[#3297f6] text-white hover:brightness-105"
-                  }`}
-                >
-                  {holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
-                </button>
-              </div>
-              {/* 自定义卡面：清单原图不合意时上传自己的卡片照片（只影响自己这一份） */}
-              <div className="mb-3 flex flex-wrap items-center gap-2 border-t border-edge pt-3">
-                <span className="text-[11px] font-semibold text-muted">卡面</span>
-                <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold text-muted dark:bg-white/5">
-                  {hasCustomCover(active.card.file) ? "自定义照片" : "清单原图"}
-                </span>
-                <label
-                  className={`inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover sm:h-8 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10 ${
-                    coverSaving ? "pointer-events-none opacity-50" : ""
-                  }`}
-                  title="上传自己的卡片照片替换清单原图（建议用标准卡面比例 1.586:1；支持 JPG / PNG / WEBP，最大 2MB）"
-                >
-                  {coverSaving ? "处理中…" : "上传卡面"}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      event.target.value = "";
-                      if (file) void uploadCover(active, file);
-                    }}
-                  />
-                </label>
-                {hasCustomCover(active.card.file) && (
-                  <button
-                    type="button"
-                    disabled={coverSaving}
-                    onClick={() => void resetCover(active)}
-                    className="h-10 rounded-full px-3 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink disabled:opacity-50 sm:h-8"
-                  >
-                    恢复原图
-                  </button>
-                )}
-              </div>
               <div className="flex flex-wrap items-end gap-2">
                 <label className="flex flex-col gap-1">
                   <span className="text-[11px] font-semibold text-muted">币种</span>
