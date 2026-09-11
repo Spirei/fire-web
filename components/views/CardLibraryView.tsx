@@ -358,6 +358,10 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [onlyFilled, setOnlyFilled] = useState(false);
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  /** 手机端：默认只留「类型 / 币种」，地区、银行这些下拉收进「更多筛选」 */
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+  /** 手机端：滑到列表深处浮出「回到顶部」 */
+  const [showTop, setShowTop] = useState(false);
 
   const [active, setActive] = useState<CardEntry | null>(null);
   const [draft, setDraft] = useState({ amount: "", currency: "CNY", note: "" });
@@ -624,6 +628,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     ];
   })();
 
+  /** 「更多筛选」里选中的维度数：手机收起时用角标提示"有筛选生效" */
+  const detailFilterCount = region.length + bankFolder.length + brand.length + level.length + tag.length + myTag.length;
+
   /** 筛选条件变化时回到第一屏 */
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -652,7 +659,31 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     if (top < -140) window.scrollTo({ top: Math.max(0, window.scrollY + top - 12), behavior: "smooth" });
   }, [mode]);
 
+  /** 手机上滑过一屏之后浮出「回到顶部」 */
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > 480);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   const pageItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+
+  /** 手机端滑到「加载更多」附近自动续上下一屏（按钮仍然保留，点它也能加载） */
+  const loadMoreRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) setVisibleCount((count) => count + PAGE_SIZE);
+      },
+      { rootMargin: "240px 0px" }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [pageItems.length, filtered.length]);
+
   const activeUserTags = active ? userTags[active.card.file] ?? [] : [];
   const activeScope = active ? scopeByCard[active.card.file] : undefined;
   /** 币种下拉的选项：按这张卡的币种范围收窄（单币 1 个、双币 2 个、多币种给该地区常见币种） */
@@ -1100,7 +1131,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 </span>
               ))}
             </span>
-            <span className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 sm:ml-auto sm:w-auto sm:justify-end">
+            {/* 手机：三个合计排成两列，不再挤成一行再换行 */}
+            <span className="grid w-full grid-cols-2 gap-x-4 gap-y-1.5 sm:ml-auto sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
               {wallet.groups.balance.filled > 0 && (
                 <span className="flex items-center gap-1.5" title="借记卡 / 预付卡的余额合计 —— 这一份就是资产分析里计入可用现金与净资产的「银行卡现金」">
                   <span className="text-xs font-semibold text-muted">余额合计</span>
@@ -1132,7 +1164,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             </span>
           </div>
           {wallet.byCurrency.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 border-t border-edge pt-2">
+            <div className="ticker-scroll flex flex-wrap items-center gap-1.5 border-t border-edge pt-2 max-sm:flex-nowrap max-sm:overflow-x-auto">
               <span className="text-[11px] text-faint">已录入 {wallet.filled} 张</span>
               {wallet.byCurrency.map(([code, item]) => (
                 <span key={code} className="rounded-full bg-bg-gray px-2.5 py-1 text-[11px] font-semibold tabular-nums text-muted dark:bg-white/5">
@@ -1169,7 +1201,32 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             onClear={() => setScopeFilter("")}
           />
         </div>
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 xl:grid-cols-5">
+        {/* 手机：地区 / 银行 / 卡组织 / 等级 / 主题 / 我的标签默认收起来，点一下展开 */}
+        <button
+          type="button"
+          onClick={() => setMoreFiltersOpen((open) => !open)}
+          aria-expanded={moreFiltersOpen}
+          className="flex h-11 items-center justify-between gap-2 rounded-xl border border-dashed border-edge-strong px-3 text-[12px] font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink sm:hidden"
+        >
+          <span className="flex items-center gap-1.5">
+            更多筛选
+            {detailFilterCount > 0 && (
+              <span className="rounded-full bg-[#3297f6] px-1.5 py-0.5 text-[10px] font-bold text-white">{detailFilterCount}</span>
+            )}
+          </span>
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`h-3.5 w-3.5 transition-transform duration-200 ${moreFiltersOpen ? "rotate-180" : ""}`}
+          >
+            <path d="m5 7 5 5 5-5" />
+          </svg>
+        </button>
+        <div className={`grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 xl:grid-cols-5 ${moreFiltersOpen ? "" : "max-sm:hidden"}`}>
           <MultiSelect
             label="地区"
             allLabel="全部地区"
@@ -1362,6 +1419,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         </div>
         {filtered.length > pageItems.length && (
           <button
+            ref={loadMoreRef}
             type="button"
             onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
             className="card mx-auto flex min-h-12 w-full items-center justify-center gap-1.5 py-3 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink"
@@ -1681,6 +1739,21 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             </div>
           </div>
         </div>
+      )}
+
+      {/* 手机：滑到列表深处时右下角浮出「回到顶部」 */}
+      {showTop && (
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          aria-label="回到顶部"
+          title="回到顶部"
+          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-30 grid h-11 w-11 place-items-center rounded-full border border-edge bg-white/95 text-muted shadow-pop backdrop-blur transition-colors duration-200 hover:text-ink sm:hidden dark:border-white/10 dark:bg-[#1c222d]/95 dark:text-white/70"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+            <path d="M12 19V5M6 11l6-6 6 6" />
+          </svg>
+        </button>
       )}
 
       {walletOpen && (
