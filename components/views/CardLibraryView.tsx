@@ -388,7 +388,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [myTag, setMyTag] = useState<string[]>([]);
   /** 币种范围筛选：单选（值是 CURRENCY_SCOPE_LABEL 里的中文，空 = 全部） */
   const [scopeFilter, setScopeFilter] = useState("");
-  const [onlyFilled, setOnlyFilled] = useState(false);
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   /** 手机端：默认只留「类型 / 币种」，地区、银行这些下拉收进「更多筛选」 */
@@ -548,7 +547,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       const scope = scopeByCard[card.file]?.scope ?? "unknown";
       if (scopeFilter && CURRENCY_SCOPE_LABEL[scope] !== scopeFilter) return false;
     }
-    if (onlyFilled && !amounts[card.file]) return false;
     if (!keyword) return true;
     return (
       card.name.toLowerCase().includes(keyword) ||
@@ -668,7 +666,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   /** 筛选条件变化时回到第一屏 */
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [region.join(","), bankFolder.join(","), type, brand.join(","), level.join(","), tag.join(","), myTag.join(","), scopeFilter, onlyFilled, query]);
+  }, [region.join(","), bankFolder.join(","), type, brand.join(","), level.join(","), tag.join(","), myTag.join(","), scopeFilter, query]);
 
   /** 卡片详情弹窗：手机上锁住背景滚动，Esc 关闭 */
   useEffect(() => {
@@ -1089,32 +1087,41 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             >
               全部卡面 {flat.length}
             </button>
+            {/* 新增卡片：就放在这条分段控件的尾巴上（去全部卡面挑一张加入我的卡） */}
+            <button
+              type="button"
+              onClick={() => {
+                if (mode !== "all") setMode("all");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                showToast("在「全部卡面」里挑一张，点卡片右下角「＋ 加入」");
+              }}
+              aria-label="新增卡片"
+              className="group/tip relative grid h-9 w-9 flex-none place-items-center rounded-full text-ink-2 transition-colors duration-200 hover:bg-brand-hover hover:text-ink dark:text-white/80 dark:hover:bg-white/10"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                <rect x="3" y="6" width="13" height="9" rx="2.2" />
+                <path d="M18.5 12v6M15.5 15h6" />
+              </svg>
+              <span
+                aria-hidden
+                className="pointer-events-none absolute right-0 top-[calc(100%+7px)] z-20 whitespace-nowrap rounded-lg bg-[#1c222d]/95 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-pop ring-1 ring-white/10 transition-opacity duration-100 group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100"
+              >
+                新增卡片
+              </span>
+            </button>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+          <div className="sm:flex sm:items-center">
             <button
               type="button"
               onClick={() => setWalletOpen(true)}
               title="打开卡包：堆叠浏览卡片、翻到卡背看有效期与安全码、记录余额历史"
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover sm:h-9 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
+              className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover sm:h-9 sm:w-auto dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                 <rect x="4" y="8" width="15" height="10" rx="2.4" />
                 <path d="M7.4 5.6h12.2a1.8 1.8 0 0 1 1.8 1.8v7.2" />
               </svg>
               卡包
-            </button>
-            <button
-              type="button"
-              onClick={() => setOnlyFilled((value) => !value)}
-              title="只看已录入金额的卡"
-              aria-pressed={onlyFilled}
-              className={`h-10 rounded-full border px-3.5 text-xs font-semibold transition-all duration-200 sm:h-9 ${
-                onlyFilled
-                  ? "border-[#111] bg-[#111] text-white shadow-sm dark:border-white dark:bg-white dark:text-[#111]"
-                  : "border-edge bg-white text-ink-2 hover:border-edge-strong hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
-              }`}
-            >
-              已录入 {filledCount}
             </button>
           </div>
         </div>
@@ -1328,7 +1335,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             />
           )}
         </div>
-        {Boolean(type || region.length > 0 || bankFolder.length > 0 || brand.length > 0 || level.length > 0 || tag.length > 0 || myTag.length > 0 || scopeFilter || onlyFilled || query.trim()) && (
+        {Boolean(type || region.length > 0 || bankFolder.length > 0 || brand.length > 0 || level.length > 0 || tag.length > 0 || myTag.length > 0 || scopeFilter || query.trim()) && (
           <button
             type="button"
             onClick={() => {
@@ -1340,7 +1347,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               setTag([]);
               setMyTag([]);
               setScopeFilter("");
-              setOnlyFilled(false);
               setQuery("");
             }}
             className="self-start rounded-full border border-edge px-3 py-1.5 text-[11px] font-semibold text-muted transition-colors duration-200 hover:border-edge-strong hover:bg-brand-hover hover:text-ink max-sm:px-4 max-sm:py-2 max-sm:text-[12px]"
