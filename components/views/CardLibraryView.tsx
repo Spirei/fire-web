@@ -1974,7 +1974,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 {/* 鼠标划过和卡面库里的卡片一样：轻微放大 + 底部渐变浮出来 */}
                 {activeFaces.length > 1 ? (
                   /* 一张卡有多版卡面（新 / 旧）：点卡片翻面，和卡包的卡背切换同一套手感 */
-                  <div className="relative overflow-hidden rounded-xl shadow-pop">
+                  <div className="relative">
                     <button
                       type="button"
                       onClick={() => setFaceIndex((index) => (index + 1) % activeFaces.length)}
@@ -1986,23 +1986,25 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         className="relative block w-full transition-transform duration-[620ms] ease-[cubic-bezier(.22,.61,.36,1)] [transform-style:preserve-3d]"
                         style={{ transform: `rotateY(${faceIndex * 180}deg)` }}
                       >
-                        <img
-                          src={cardCover(activeFaces[0].file)}
-                          alt={active.card.name}
-                          className="w-full group-hover/card:scale-[1.02] [backface-visibility:hidden] transition-transform duration-300"
-                        />
-                        {activeFaces.slice(1).map((item, index) => (
-                          <img
+                        {/* 圆角 / 阴影 / 裁切放在每一面自己身上（外层 overflow 裁不住 3D 翻转的内容） */}
+                        {activeFaces.map((item, index) => (
+                          <span
                             key={item.file}
-                            src={cardCover(item.file)}
-                            alt={`${active.card.name} · ${item.label}`}
-                            className="absolute inset-0 h-full w-full [backface-visibility:hidden]"
-                            style={{ transform: `rotateY(${(index + 1) * 180}deg)` }}
-                          />
+                            className={`block overflow-hidden rounded-xl shadow-pop [backface-visibility:hidden] ${
+                              index === 0 ? "relative" : "absolute inset-0"
+                            }`}
+                            style={index === 0 ? undefined : { transform: `rotateY(${index * 180}deg)` }}
+                          >
+                            <img
+                              src={cardCover(item.file)}
+                              alt={index === 0 ? active.card.name : `${active.card.name} · ${item.label}`}
+                              className="block w-full transition-transform duration-300 ease-out group-hover/card:scale-[1.02]"
+                            />
+                          </span>
                         ))}
                       </span>
                     </button>
-                    <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100" />
+                    <span className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-t from-black/35 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100" />
                   </div>
                 ) : (
                   <div className="relative overflow-hidden rounded-xl shadow-pop">
