@@ -55,6 +55,72 @@ export function currencyName(code: string): string {
   return CARD_CURRENCIES.find((item) => item.code === code)?.label ?? code;
 }
 
+/**
+ * 多币种卡的可选币种：按地区给一组常见币种，剔掉跟这个地区没关系的
+ * （比如美国卡不会去记澳门元、台湾卡不会去记坚戈），比把 14 种全列出来清楚。
+ */
+const REGION_MULTI_CURRENCY: Record<string, string[]> = {
+  中国内地: ["CNY", "USD", "HKD", "EUR", "GBP", "JPY", "SGD", "AUD", "CAD"],
+  中国香港: ["HKD", "CNY", "USD", "GBP", "JPY", "EUR", "SGD", "AUD", "CAD", "TWD"],
+  中国澳门: ["MOP", "HKD", "CNY", "USD", "EUR", "GBP", "JPY"],
+  中国台湾: ["TWD", "CNY", "USD", "JPY", "HKD", "EUR", "GBP", "SGD", "AUD"],
+  日本: ["JPY", "USD", "CNY", "HKD", "EUR", "GBP", "SGD", "AUD"],
+  美国: ["USD", "CNY", "HKD", "EUR", "GBP", "JPY", "CAD", "AUD", "SGD"],
+  英国: ["GBP", "USD", "EUR", "CNY", "HKD", "JPY", "SGD", "AUD", "CAD"],
+  德国: ["EUR", "USD", "GBP", "CNY", "HKD", "JPY"],
+  爱尔兰: ["EUR", "USD", "GBP", "CNY", "HKD", "JPY"],
+  新加坡: ["SGD", "USD", "CNY", "HKD", "JPY", "EUR", "GBP", "AUD", "CAD"],
+  加拿大: ["CAD", "USD", "CNY", "HKD", "EUR", "GBP", "JPY", "AUD", "SGD"],
+  澳大利亚: ["AUD", "USD", "CNY", "HKD", "JPY", "EUR", "GBP", "SGD"],
+  俄罗斯: ["RUB", "USD", "CNY", "EUR", "HKD"],
+  哈萨克斯坦: ["KZT", "USD", "CNY", "RUB", "EUR"]
+};
+const FALLBACK_MULTI_CURRENCY = ["USD", "CNY", "HKD", "EUR", "GBP", "JPY"];
+const ALL_CURRENCIES = CARD_CURRENCIES.map((item) => item.code);
+
+/**
+ * 这张卡能记哪些币种 —— 金额 / 币种下拉用它收窄选项：
+ * 单币只给那一个币种，双币给两个，多币种给该地区的常见币种，待确认才放开全部。
+ * current 传当前记的币种：非单币时若它不在列表里会保留在列表里（老数据不至于变成非法值）。
+ */
+export function cardCurrencyChoices(opts: {
+  scope: CurrencyScope;
+  currencies?: string[];
+  region?: string;
+  current?: string;
+}): string[] {
+  const region = String(opts.region || "");
+  const local = REGION_CURRENCY[region] || "";
+  const inferred = (opts.currencies ?? []).filter((code) => ALL_CURRENCIES.includes(code));
+  const current = String(opts.current || "").toUpperCase();
+  let list: string[];
+  if (opts.scope === "single") {
+    list = inferred.length > 0 ? inferred.slice(0, 1) : local ? [local] : ALL_CURRENCIES.slice(0, 1);
+  } else if (opts.scope === "dual") {
+    list = inferred.length > 0 ? inferred.slice(0, 2) : [local, "USD"].filter(Boolean);
+  } else if (opts.scope === "multi") {
+    list = REGION_MULTI_CURRENCY[region] ?? FALLBACK_MULTI_CURRENCY;
+  } else {
+    list = ALL_CURRENCIES.slice();
+  }
+  if (opts.scope !== "single" && current && !list.includes(current)) list = [current, ...list];
+  return list.filter((code) => ALL_CURRENCIES.includes(code));
+}
+
+/** 一张卡可记的币种：手动覆盖的币种范围优先，否则按规则推断 */
+export function cardCurrencyChoicesFor(card: {
+  name?: string;
+  brand?: string;
+  bank?: string;
+  region?: string;
+  currencyScope?: string;
+  current?: string;
+}): string[] {
+  const info = cardCurrencyScope(card);
+  const scope = isCurrencyScope(card.currencyScope) ? card.currencyScope : info.scope;
+  return cardCurrencyChoices({ scope, currencies: info.currencies, region: card.region, current: card.current });
+}
+
 /** 「单币 · 人民币」/「多币种」这类一句话摘要 */
 export function currencyScopeSummary(info: CurrencyScopeInfo): string {
   const label = CURRENCY_SCOPE_LABEL[info.scope];

@@ -5,7 +5,8 @@ import { gsap } from "gsap";
 import AppModal from "@/components/AppModal";
 import { showToast } from "@/lib/toast";
 import { usePersistedState } from "@/lib/usePersistedState";
-import { CARD_CURRENCIES, cardLast4, currencySymbol, fmtCardMoney, formatCardNumber } from "@/lib/cardCurrencies";
+import { cardLast4, currencySymbol, fmtCardMoney, formatCardNumber } from "@/lib/cardCurrencies";
+import { cardCurrencyChoicesFor, currencyName } from "@/lib/cardCurrency";
 import { isFundCurrency } from "@/lib/fundCurrencies";
 import { hasSecurityCode } from "@/lib/cardSecurity";
 
@@ -30,6 +31,8 @@ export interface WalletCard {
   expiry: string;
   cvv: string;
   note: string;
+  /** 币种范围手动覆盖（'' = 自动推断）：卡包里改币种时按它收窄选项 */
+  currencyScope: string;
 }
 
 export interface WalletCardDetails {
@@ -732,6 +735,16 @@ function CardDetailPanel({
     setSide("front");
   }, [card.key]);
 
+  /** 这张卡能记的币种：单币卡只有一个，双币两个，多币种给该地区的常见币种 */
+  const currencyChoices = cardCurrencyChoicesFor({
+    name: card.name,
+    brand: card.brand,
+    bank: card.bank,
+    region: card.region,
+    currencyScope: card.currencyScope,
+    current: draft.currency
+  });
+
   function openForm(kind: "deposit" | "withdraw" | "adjust" | "edit") {
     setAmount(kind === "adjust" ? (card.hasAmount ? String(card.amount) : "") : "");
     setNote("");
@@ -742,7 +755,8 @@ function CardDetailPanel({
       expiry: card.expiry,
       cvv: card.cvv,
       note: card.note,
-      currency: card.currency || "CNY"
+      // 币种只在「这张卡能记的币种」里：单币卡就那一个
+      currency: currencyChoices.includes(card.currency) ? card.currency : currencyChoices[0] ?? "CNY"
     });
     setForm(kind);
   }
@@ -1142,17 +1156,27 @@ function CardDetailPanel({
           </div>
           <label className="mt-3 flex flex-col gap-1.5">
             <span className="text-[12px] font-semibold text-muted">币种</span>
-            <select
-              value={draft.currency}
-              onChange={(event) => setDraft((prev) => ({ ...prev, currency: event.target.value }))}
-              className={`h-10 rounded-xl border border-edge bg-white px-3 text-[13px] font-semibold text-ink dark:bg-[#1c222d] ${FOCUS_RING}`}
-            >
-              {CARD_CURRENCIES.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.code} · {item.label}
-                </option>
-              ))}
-            </select>
+            {currencyChoices.length > 1 ? (
+              <select
+                value={draft.currency}
+                onChange={(event) => setDraft((prev) => ({ ...prev, currency: event.target.value }))}
+                title="只列出这张卡能记的币种"
+                className={`h-10 rounded-xl border border-edge bg-white px-3 text-[13px] font-semibold text-ink dark:bg-[#1c222d] ${FOCUS_RING}`}
+              >
+                {currencyChoices.map((code) => (
+                  <option key={code} value={code}>
+                    {code} · {currencyName(code)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span
+                title="单币卡：这张卡只有这一个币种（可在卡面库的卡片详情里改币种范围）"
+                className="flex h-10 items-center rounded-xl border border-edge bg-bg-gray px-3 text-[13px] font-semibold text-ink-2 dark:border-white/10 dark:bg-white/5 dark:text-white/80"
+              >
+                {currencyChoices[0] ?? "—"} · {currencyName(currencyChoices[0] ?? "")}
+              </span>
+            )}
           </label>
           <label className="mt-3 flex flex-col gap-1.5">
             <span className="text-[12px] font-semibold text-muted">备注</span>

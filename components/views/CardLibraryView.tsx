@@ -8,12 +8,14 @@ import CardWalletStack, { type WalletCard, type WalletCardDetails } from "@/comp
 import { FALLBACK_RATES } from "@/lib/types";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
-import { CARD_CURRENCIES, REGION_CURRENCY, currencySymbol } from "@/lib/cardCurrencies";
+import { REGION_CURRENCY, currencySymbol } from "@/lib/cardCurrencies";
 import {
   CURRENCY_SCOPE_LABEL,
   CURRENCY_SCOPE_ORDER,
   cardCurrencyScope,
+  cardCurrencyChoicesFor,
   currencyScopeSummary,
+  currencyName,
   isCurrencyScope,
   type CurrencyScope,
   type CurrencyScopeInfo
@@ -646,6 +648,17 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const pageItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
   const activeUserTags = active ? userTags[active.card.file] ?? [] : [];
   const activeScope = active ? scopeByCard[active.card.file] : undefined;
+  /** 币种下拉的选项：按这张卡的币种范围收窄（单币 1 个、双币 2 个、多币种给该地区常见币种） */
+  const activeCurrencyOptions = active
+    ? cardCurrencyChoicesFor({
+        name: active.card.name,
+        brand: active.card.brand,
+        bank: active.bank.name,
+        region: active.region,
+        currencyScope: details[active.card.file]?.currencyScope,
+        current: draft.currency
+      })
+    : [];
 
   /** 卡包叠卡视图的数据：只放「我的卡」，带卡背信息与当前余额 */
   const walletCards = useMemo<WalletCard[]>(
@@ -671,7 +684,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             number: info?.number || "",
             expiry: info?.expiry || "",
             cvv: info?.cvv || "",
-            note: info?.note || ""
+            note: info?.note || "",
+            // 币种范围的手动覆盖：卡包里改币种时也要按同一份规则收窄选项
+            currencyScope: info?.currencyScope || ""
           };
         }),
     [flat, holdings, amounts, details]
@@ -810,9 +825,19 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
 
   function openCard(entry: CardEntry) {
     const saved = amounts[entry.card.file];
+    // 币种只在「这张卡能记的币种」里选：单币卡就那一个（老数据里币种不合法的顺手纠正）
+    const choices = cardCurrencyChoicesFor({
+      name: entry.card.name,
+      brand: entry.card.brand,
+      bank: entry.bank.name,
+      region: entry.region,
+      currencyScope: details[entry.card.file]?.currencyScope,
+      current: saved?.currency || details[entry.card.file]?.currency || ""
+    });
+    const preferred = saved?.currency || details[entry.card.file]?.currency || REGION_CURRENCY[entry.region] || "CNY";
     setDraft({
       amount: saved ? String(saved.amount) : "",
-      currency: saved?.currency || REGION_CURRENCY[entry.region] || "CNY",
+      currency: choices.includes(preferred) ? preferred : choices[0] ?? "CNY",
       note: saved?.note || ""
     });
     setActive(entry);
@@ -1474,6 +1499,31 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 )}
               </div>
               <div className="flex flex-wrap items-end gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-muted">币种</span>
+                  {activeCurrencyOptions.length > 1 ? (
+                    <select
+                      value={draft.currency}
+                      onChange={(event) => setDraft((prev) => ({ ...prev, currency: event.target.value }))}
+                      title="只列出这张卡能记的币种"
+                      className={`h-11 rounded-xl border border-edge bg-white px-2 text-xs font-semibold text-ink transition-all duration-200 sm:h-9 dark:bg-[#1c222d] ${FOCUS_RING}`}
+                    >
+                      {activeCurrencyOptions.map((code) => (
+                        <option key={code} value={code}>
+                          {code} · {currencyName(code)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    // 单币卡：币种是固定的，不再给一个只有一个选项的下拉
+                    <span
+                      title="单币卡：这张卡只有这一个币种（在下面的「币种范围」里可以改成双币 / 多币种）"
+                      className="flex h-11 items-center rounded-xl border border-edge bg-bg-gray px-3 text-xs font-semibold text-ink-2 sm:h-9 dark:border-white/10 dark:bg-white/5 dark:text-white/80"
+                    >
+                      {activeCurrencyOptions[0] ?? "—"} · {currencyName(activeCurrencyOptions[0] ?? "")}
+                    </span>
+                  )}
+                </label>
                 <label className="flex flex-col gap-1 max-sm:flex-1">
                   <span className="text-[11px] font-semibold text-muted">金额</span>
                   <span className="flex items-center gap-1 rounded-xl border border-edge bg-white px-2 transition-all duration-200 focus-within:border-edge-strong focus-within:shadow-[0_0_0_3px_rgba(107,114,128,.15)] dark:bg-[#1c222d] dark:focus-within:border-white/20 dark:focus-within:shadow-[0_0_0_3px_rgba(255,255,255,.10)]">
@@ -1486,20 +1536,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       className="h-11 w-full min-w-[96px] bg-transparent text-sm tabular-nums text-ink outline-none placeholder:text-faint sm:h-9 sm:w-[130px]"
                     />
                   </span>
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-[11px] font-semibold text-muted">币种</span>
-                  <select
-                    value={draft.currency}
-                    onChange={(event) => setDraft((prev) => ({ ...prev, currency: event.target.value }))}
-                    className={`h-11 rounded-xl border border-edge bg-white px-2 text-xs font-semibold text-ink transition-all duration-200 sm:h-9 dark:bg-[#1c222d] ${FOCUS_RING}`}
-                  >
-                    {CARD_CURRENCIES.map((item) => (
-                      <option key={item.code} value={item.code}>
-                        {item.code} · {item.label}
-                      </option>
-                    ))}
-                  </select>
                 </label>
                 <label className="flex min-w-[180px] flex-1 flex-col gap-1">
                   <span className="text-[11px] font-semibold text-muted">备注（可选）</span>
