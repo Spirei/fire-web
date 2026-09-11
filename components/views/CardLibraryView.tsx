@@ -1410,9 +1410,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               </button>
             </div>
             <div className="overflow-y-auto overscroll-contain bg-bg-gray px-4 py-4 sm:px-5 sm:py-5 dark:bg-black/20">
-              <div className="relative mx-auto w-full max-w-[560px]">
+              <div className="group/card relative mx-auto w-full max-w-[560px]">
                 {/* 鼠标划过和卡面库里的卡片一样：轻微放大 + 底部渐变浮出来 */}
-                <div className="group/card relative overflow-hidden rounded-xl shadow-pop">
+                <div className="relative overflow-hidden rounded-xl shadow-pop">
                   <img
                     src={cardCover(active.card.file)}
                     alt={active.card.name}
