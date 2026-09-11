@@ -60,6 +60,10 @@ const MARKETS: { key: MarketKey; label: string }[] = [
   { key: "KR", label: "韩股" }
 ];
 
+/** 已接入财报数据源的市场：美股（Nasdaq）、A 股（东方财富预约披露）。
+ *  其余市场没有财报数据，收进「更多」里，避免常驻一个点进去只有「暂未接入」的死入口。 */
+const EARNINGS_MARKETS: MarketKey[] = ["US", "CN"];
+
 const STOCK_TYPES: { key: StockKey; label: string }[] = [
   { key: "all", label: "全部股票" },
   { key: "watch", label: "自选" },
@@ -240,6 +244,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
     return s === "watchlist" || s === "holdings" || s === "star" ? (s as StockKey) : "all";
   });
   const [marketOrder, setMarketOrder] = useState<MarketKey[]>([]);
+  const [moreMarketsOpen, setMoreMarketsOpen] = useState(false);
   const [cursor, setCursor] = useState(() => {
     const n = new Date();
     return { y: n.getFullYear(), m: n.getMonth() };
@@ -385,6 +390,50 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
     return [...marketOrder, ...base.filter((k) => !marketOrder.includes(k))];
   }, [marketOrder]);
 
+  // 常驻只显示有财报数据的市场（美股 / A股），其余收进「更多」；当前选中的市场始终可见
+  const marketPills = useMemo(() => {
+    const base = orderedMarkets.filter((m) => EARNINGS_MARKETS.includes(m));
+    return base.includes(marketKey) ? base : [...base, marketKey];
+  }, [orderedMarkets, marketKey]);
+  const extraMarketPills = useMemo(
+    () => orderedMarkets.filter((m) => !marketPills.includes(m)),
+    [orderedMarkets, marketPills]
+  );
+
+  /** 市场筛选胶囊（可拖动排序）：索引取自完整顺序，收进「更多」的项也能拖 */
+  function marketPill(m: MarketKey) {
+    const dragIndex = orderedMarkets.indexOf(m);
+    return (
+      <button
+        key={m}
+        type="button"
+        draggable
+        onDragStart={(e) => {
+          dragMarketIndex.current = dragIndex;
+          e.dataTransfer.effectAllowed = "move";
+        }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={() => dropMarket(dragIndex)}
+        onDragEnd={() => {
+          dragMarketIndex.current = null;
+        }}
+        onClick={() => changeMarket(m)}
+        title="按住拖动排序"
+        className={`flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 transition-all duration-200 active:cursor-grabbing ${
+          marketKey === m ? "seg-active" : "text-muted hover:bg-brand-hover hover:text-ink"
+        }`}
+      >
+        <MarketIcon market={m} size={15} />
+        {MARKETS.find((x) => x.key === m)?.label}
+        <svg viewBox="0 0 24 24" fill="currentColor" className="h-2.5 w-2.5 flex-none opacity-30">
+          <circle cx="9" cy="6" r="1.1" /><circle cx="15" cy="6" r="1.1" />
+          <circle cx="9" cy="12" r="1.1" /><circle cx="15" cy="12" r="1.1" />
+          <circle cx="9" cy="18" r="1.1" /><circle cx="15" cy="18" r="1.1" />
+        </svg>
+      </button>
+    );
+  }
+
   function persistMarketOrder(next: MarketKey[]) {
     setMarketOrder(next);
     fetch("/api/settings", {
@@ -523,8 +572,8 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
       <div className="card overflow-visible">
         {/* 头部：月份导航 + 统计 + 筛选 */}
         <div className="flex flex-col gap-3 border-b border-edge px-4 py-3.5 sm:px-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
               <div className="flex items-center gap-1 rounded-full border border-edge-strong bg-bg-gray/60 p-1">
                 <button
                   type="button"
@@ -554,46 +603,45 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                 回到本月
               </button>
               <span className="hidden items-center gap-1.5 rounded-full bg-brand-light px-2.5 py-1 text-[11px] font-semibold text-brand-deep sm:flex">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#34c759]" />
                 实时
               </span>
+              <span className="rounded-full bg-bg-gray px-2.5 py-1 text-[11px] font-semibold tabular-nums text-muted">
+                共 {filtered.length} 家
+              </span>
             </div>
-            <span className="rounded-full bg-bg-gray px-3 py-1.5 text-xs font-semibold text-muted">共 {filtered.length} 家</span>
           </div>
 
           <div className="flex min-w-0 flex-col gap-2.5 rounded-2xl border border-edge bg-bg-gray/40 p-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5 sm:rounded-[14px] sm:px-3 sm:py-2.5 dark:bg-white/[0.03]">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <span className="mr-0.5 text-[11px] font-semibold text-faint">市场</span>
               <div className="flex min-w-0 max-w-full flex-wrap gap-0.5 rounded-xl border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
-                {orderedMarkets.map((m, i) => (
+                {marketPills.map((m) => marketPill(m))}
+                {moreMarketsOpen && extraMarketPills.map((m) => marketPill(m))}
+                {extraMarketPills.length > 0 && (
                   <button
-                    key={m}
                     type="button"
-                    draggable
-                    onDragStart={(e) => {
-                      dragMarketIndex.current = i;
-                      e.dataTransfer.effectAllowed = "move";
-                    }}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => dropMarket(i)}
-                    onDragEnd={() => {
-                      dragMarketIndex.current = null;
-                    }}
-                    onClick={() => changeMarket(m)}
-                    title="按住拖动排序"
-                    className={`flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 transition-all duration-200 active:cursor-grabbing ${
-                      marketKey === m ? "seg-active" : "text-muted hover:bg-brand-hover hover:text-ink"
+                    onClick={() => setMoreMarketsOpen((open) => !open)}
+                    aria-expanded={moreMarketsOpen}
+                    title="暂无财报数据的市场"
+                    className={`flex items-center gap-1 rounded-full px-2.5 py-1 transition-all duration-200 ${
+                      moreMarketsOpen ? "text-ink" : "text-muted hover:bg-brand-hover hover:text-ink"
                     }`}
                   >
-                    <MarketIcon market={m} size={15} />
-                    {MARKETS.find((x) => x.key === m)?.label}
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-2.5 w-2.5 flex-none opacity-30">
-                      <circle cx="9" cy="6" r="1.1" /><circle cx="15" cy="6" r="1.1" />
-                      <circle cx="9" cy="12" r="1.1" /><circle cx="15" cy="12" r="1.1" />
-                      <circle cx="9" cy="18" r="1.1" /><circle cx="15" cy="18" r="1.1" />
+                    更多
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className={`h-2.5 w-2.5 flex-none transition-transform duration-200 ${moreMarketsOpen ? "rotate-180" : ""}`}
+                    >
+                      <path d="m6 9 6 6 6-6" />
                     </svg>
                   </button>
-                ))}
+                )}
               </div>
             </div>
             <PillGroup label="市值" options={caps} value={capKey} onChange={(k) => setCapKey(k as CapKey | CapKeyCN)} />
