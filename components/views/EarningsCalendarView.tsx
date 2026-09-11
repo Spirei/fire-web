@@ -622,7 +622,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                           : "border-transparent"
                       }`}
                     >
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold tabular-nums ${cell.isToday ? "bg-white text-black shadow-sm" : "text-faint"}`}>
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold tabular-nums ${cell.isToday ? "bg-[#ffffff] text-[#111827] shadow-sm" : "text-faint"}`}>
                         {cell.day}
                       </span>
                     </button>
@@ -662,7 +662,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                     >
                       <span
                         className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold tabular-nums transition-colors duration-200 ${
-                          cell.isToday ? "bg-white text-black shadow-sm" : cell.rows.length > 0 ? "text-ink" : "text-faint"
+                          cell.isToday ? "bg-[#ffffff] text-[#111827] shadow-sm" : cell.rows.length > 0 ? "text-ink" : "text-faint"
                         }`}
                       >
                         {cell.day}
