@@ -320,6 +320,12 @@ export default function CardLibraryView() {
     return list;
   }, [regions]);
 
+  /** 当前模式的作用域：我的卡 = 只看持有的；全部卡面 = 全量。筛选计数都按它算，避免「我的卡」里显示全量数字 */
+  const scopeBase = useMemo(
+    () => (mode === "mine" ? flat.filter(({ card }) => holdings[card.file]) : flat),
+    [flat, mode, holdings]
+  );
+
   const uniqueOptions = (values: string[]) => {
     const counts = new Map<string, number>();
     values.filter(Boolean).forEach((value) => counts.set(value, (counts.get(value) ?? 0) + 1));
@@ -345,43 +351,48 @@ export default function CardLibraryView() {
 
   const typeOptions = useMemo(() => {
     const counts = new Map<string, number>();
-    flat.forEach(({ card }) => counts.set(card.type || "其他", (counts.get(card.type || "其他") ?? 0) + 1));
+    scopeBase.forEach(({ card }) => counts.set(card.type || "其他", (counts.get(card.type || "其他") ?? 0) + 1));
     const ordered = [...typeOrder.filter((item) => counts.has(item)), ...[...counts.keys()].filter((item) => !typeOrder.includes(item))];
-    return [{ key: ALL, count: flat.length }, ...ordered.map((item) => ({ key: item, count: counts.get(item) ?? 0 }))];
-  }, [flat, typeOrder]);
+    return [{ key: ALL, count: scopeBase.length }, ...ordered.map((item) => ({ key: item, count: counts.get(item) ?? 0 }))];
+  }, [scopeBase, typeOrder]);
 
-  const regionOptions = useMemo(
-    () => [
-      { key: ALL, count: flat.length },
-      ...sortedRegions.map((entry) => ({
-        key: entry.label,
-        count: entry.banks.reduce((sum, bank) => sum + bank.cards.length, 0)
-      }))
-    ],
-    [sortedRegions, flat.length]
-  );
-  const brandOptions = useMemo(() => uniqueOptions(flat.map(({ card }) => (card.brand || "").trim())), [flat]);
-  const levelOptions = useMemo(() => uniqueOptions(flat.map(({ card }) => (card.level || "").trim())), [flat]);
-  const tagOptions = useMemo(() => uniqueOptions(flat.flatMap(({ tags }) => tags)), [flat]);
+  const regionOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    scopeBase.forEach((entry) => counts.set(entry.region, (counts.get(entry.region) ?? 0) + 1));
+    return [
+      { key: ALL, count: scopeBase.length },
+      ...sortedRegions
+        .filter((entry) => counts.has(entry.label))
+        .map((entry) => ({ key: entry.label, count: counts.get(entry.label) ?? 0 }))
+    ];
+  }, [scopeBase, sortedRegions]);
+  const brandOptions = useMemo(() => uniqueOptions(scopeBase.map(({ card }) => (card.brand || "").trim())), [scopeBase]);
+  const levelOptions = useMemo(() => uniqueOptions(scopeBase.map(({ card }) => (card.level || "").trim())), [scopeBase]);
+  const tagOptions = useMemo(() => uniqueOptions(scopeBase.flatMap(({ tags }) => tags)), [scopeBase]);
 
   /** 银行下拉：跟随所选国家地区（含分组显示）；值为银行文件夹名（全局唯一） */
   const bankSelectOptions = useMemo(() => {
     const list: { value: string; label: string; group?: string }[] = [{ value: ALL, label: region === ALL ? "全部银行" : `全部银行（${region}）` }];
-    const scope = region === ALL ? sortedRegions : sortedRegions.filter((entry) => entry.label === region);
-    scope.forEach((entry) => {
-      entry.banks
-        .slice()
-        .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"))
-        .forEach((bank) => {
-          list.push({
-            value: bank.folder,
-            label: bank.englishName && bank.englishName !== bank.name ? `${bank.name} ${bank.englishName}` : bank.name,
-            group: region === ALL ? `${REGION_CONTINENT[entry.label] ?? "其他"} · ${entry.label}` : undefined
-          });
-        });
+    const scoped = region === ALL ? scopeBase : scopeBase.filter((entry) => entry.region === region);
+    const banks = new Map<string, { bank: BankEntry; region: string }>();
+    scoped.forEach((entry) => {
+      if (!banks.has(entry.bank.folder)) banks.set(entry.bank.folder, { bank: entry.bank, region: entry.region });
     });
+    const regionRank = (label: string) => {
+      const index = sortedRegions.findIndex((entry) => entry.label === label);
+      return index < 0 ? sortedRegions.length : index;
+    };
+    [...banks.values()]
+      .sort((a, b) => regionRank(a.region) - regionRank(b.region) || a.bank.name.localeCompare(b.bank.name, "zh-Hans-CN"))
+      .forEach(({ bank, region: regionLabel }) => {
+        list.push({
+          value: bank.folder,
+          label: bank.englishName && bank.englishName !== bank.name ? `${bank.name} ${bank.englishName}` : bank.name,
+          group: region === ALL ? `${REGION_CONTINENT[regionLabel] ?? "其他"} · ${regionLabel}` : undefined
+        });
+      });
     return list;
-  }, [sortedRegions, region]);
+  }, [scopeBase, sortedRegions, region]);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -412,7 +423,7 @@ export default function CardLibraryView() {
   /** 我的标签（用户自己打的，用于筛选） */
   const myTagOptions = useMemo(() => {
     const counts = new Map<string, number>();
-    flat.forEach(({ card }) => {
+    scopeBase.forEach(({ card }) => {
       (userTags[card.file] ?? []).forEach((item) => counts.set(item, (counts.get(item) ?? 0) + 1));
     });
     if (counts.size === 0) return [];
@@ -420,7 +431,7 @@ export default function CardLibraryView() {
       { key: ALL, count: [...counts.values()].reduce((sum, n) => sum + n, 0) },
       ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, count }))
     ];
-  }, [flat, userTags]);
+  }, [scopeBase, userTags]);
 
   /** 筛选条件变化时回到第一屏 */
   useEffect(() => {
@@ -430,15 +441,25 @@ export default function CardLibraryView() {
   const pageItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
   const activeUserTags = active ? userTags[active.card.file] ?? [] : [];
 
-  /** 金额汇总：按币种分组，并用当前汇率折算成显示货币（没有汇率的币种单独标注） */
-  const summary = useMemo(() => {
+  /** 我的卡总览：持有张数 + 各类型张数 + 额度合计（只统计持有的卡；按币种分组折算成显示货币） */
+  const wallet = useMemo(() => {
+    const heldEntries = flat.filter(({ card }) => holdings[card.file]);
+    const byType = new Map<string, number>();
+    heldEntries.forEach(({ card }) => {
+      const key = card.type || "其他";
+      byType.set(key, (byType.get(key) ?? 0) + 1);
+    });
     const byCurrency = new Map<string, { total: number; count: number }>();
     const missing: string[] = [];
     let converted = 0;
+    let filled = 0;
     const displayRate = rates[displayCurrency] || 1;
-    Object.values(amounts).forEach((item) => {
+    heldEntries.forEach(({ card }) => {
+      const item = amounts[card.file];
+      if (!item) return;
       const code = (item.currency || "").toUpperCase();
       if (!code) return;
+      filled += 1;
       const entry = byCurrency.get(code) ?? { total: 0, count: 0 };
       entry.total += item.amount;
       entry.count += 1;
@@ -448,11 +469,14 @@ export default function CardLibraryView() {
       else if (!missing.includes(code)) missing.push(code);
     });
     return {
+      count: heldEntries.length,
+      filled,
+      byType: [...byType.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hans-CN")),
       byCurrency: [...byCurrency.entries()].sort((a, b) => b[1].total - a[1].total),
       converted,
       missing
     };
-  }, [amounts, rates, displayCurrency]);
+  }, [flat, holdings, amounts, rates, displayCurrency]);
 
   function openCard(entry: CardEntry) {
     const saved = amounts[entry.card.file];
@@ -628,24 +652,45 @@ export default function CardLibraryView() {
         />
       </label>
 
-      {filledCount > 0 && (
-        <div className="card flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-          <span className="text-xs font-semibold text-muted">金额汇总</span>
-          <span className="text-sm font-bold tabular-nums text-ink">
-            ≈ {currencySymbol(displayCurrency)}
-            {summary.converted.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
-          <span className="text-[11px] text-faint">{displayCurrency} · 已录入 {filledCount} 张</span>
-          <span className="flex flex-wrap items-center gap-1.5">
-            {summary.byCurrency.map(([code, item]) => (
-              <span key={code} className="rounded-full bg-bg-gray px-2.5 py-1 text-[11px] font-semibold tabular-nums text-muted dark:bg-white/5">
-                {code} {item.total.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}
-                <i className="ml-1 not-italic text-faint">×{item.count}</i>
-              </span>
-            ))}
-          </span>
-          {summary.missing.length > 0 && (
-            <span className="text-[11px] text-faint">（{summary.missing.join(" / ")} 暂无汇率，未计入折算）</span>
+      {wallet.count > 0 && (
+        <div className="card flex flex-col gap-2 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-muted">我的卡</span>
+              <span className="text-sm font-bold tabular-nums text-ink">{wallet.count} 张</span>
+            </span>
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-muted">
+              {wallet.byType.map(([label, count]) => (
+                <span key={label}>
+                  {label} <b className="tabular-nums text-ink-2">{count}</b>
+                </span>
+              ))}
+            </span>
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-muted">额度合计</span>
+              {wallet.filled > 0 ? (
+                <span className="text-sm font-bold tabular-nums text-ink">
+                  ≈ {currencySymbol(displayCurrency)}
+                  {wallet.converted.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              ) : (
+                <span className="text-xs text-faint">未录入（打开卡片可录入金额）</span>
+              )}
+            </span>
+          </div>
+          {wallet.byCurrency.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-edge pt-2">
+              <span className="text-[11px] text-faint">已录入 {wallet.filled} 张</span>
+              {wallet.byCurrency.map(([code, item]) => (
+                <span key={code} className="rounded-full bg-bg-gray px-2.5 py-1 text-[11px] font-semibold tabular-nums text-muted dark:bg-white/5">
+                  {code} {item.total.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}
+                  <i className="ml-1 not-italic text-faint">×{item.count}</i>
+                </span>
+              ))}
+              {wallet.missing.length > 0 && (
+                <span className="text-[11px] text-faint">（{wallet.missing.join(" / ")} 暂无汇率，未计入折算）</span>
+              )}
+            </div>
           )}
         </div>
       )}
