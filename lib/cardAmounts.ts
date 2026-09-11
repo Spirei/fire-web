@@ -56,3 +56,30 @@ export function upsertCardAmount(
 export function deleteCardAmount(userId: string, cardKey: string): void {
   getDb().prepare("DELETE FROM card_amounts WHERE user_id = ? AND card_key = ?").run(userId, cardKey);
 }
+
+/** 用户自建卡面标签：cardKey → 标签数组 */
+export function listCardTags(userId: string): Record<string, string[]> {
+  const rows = getDb()
+    .prepare("SELECT card_key, tag FROM card_tags WHERE user_id = ? ORDER BY created_at ASC")
+    .all(userId) as { card_key: string; tag: string }[];
+  const out: Record<string, string[]> = {};
+  rows.forEach((row) => {
+    if (!out[row.card_key]) out[row.card_key] = [];
+    out[row.card_key].push(row.tag);
+  });
+  return out;
+}
+
+/** 覆盖式保存某张卡的标签（去重、限 10 个、每个限 12 字） */
+export function saveCardTags(userId: string, cardKey: string, tags: string[]): string[] {
+  const clean = [...new Set(tags.map((tag) => String(tag || "").trim().slice(0, 12)).filter(Boolean))].slice(0, 10);
+  const db = getDb();
+  const now = new Date().toISOString();
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM card_tags WHERE user_id = ? AND card_key = ?").run(userId, cardKey);
+    const insert = db.prepare("INSERT INTO card_tags (user_id, card_key, tag, created_at) VALUES (?, ?, ?, ?)");
+    clean.forEach((tag) => insert.run(userId, cardKey, tag, now));
+  });
+  tx();
+  return clean;
+}

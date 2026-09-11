@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { showToast } from "@/lib/toast";
 import { cardTagsOf } from "@/lib/cardTags";
+import { FALLBACK_RATES } from "@/lib/types";
+import { useDisplayCurrency } from "@/lib/currencyPrefs";
+import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
 
 interface CardItem {
   name: string;
@@ -43,6 +46,9 @@ interface CardEntry {
 }
 
 const ALL = "全部";
+const PAGE_SIZE = 60;
+/** 常用标签建议（可自由输入，这里只是快捷入口） */
+const TAG_SUGGESTIONS = ["虚拟卡", "实体卡", "金属卡", "透明卡", "收藏", "主力卡", "已注销", "纪念版"];
 
 /** 卡面库自己的币种表（覆盖素材里出现的国家地区，不走持仓的币种偏好） */
 const CARD_CURRENCIES: { code: string; symbol: string; label: string }[] = [
@@ -141,13 +147,42 @@ export default function CardLibraryView() {
   const [brand, setBrand] = useState(ALL);
   const [level, setLevel] = useState(ALL);
   const [tag, setTag] = useState(ALL);
+  const [myTag, setMyTag] = useState(ALL);
   const [onlyFilled, setOnlyFilled] = useState(false);
   const [query, setQuery] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const [active, setActive] = useState<CardEntry | null>(null);
   const [draft, setDraft] = useState({ amount: "", currency: "CNY", note: "" });
   const [saving, setSaving] = useState(false);
+  const [userTags, setUserTags] = useState<Record<string, string[]>>({});
+  const [tagDraft, setTagDraft] = useState("");
+
+  const { currency: displayCurrency } = useDisplayCurrency();
+  const [rates, setRates] = useState<Record<string, number>>(() => ({ ...FALLBACK_RATES }));
+
+  // 汇率：首帧用兜底值（与服务端一致），挂载前（useLayoutEffect）再合并本地缓存，随后拉一次最新
+  useLayoutEffect(() => {
+    const cached = readCachedRates();
+    if (cached) setRates((prev) => ({ ...prev, ...cached }));
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/rates")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.rates) return;
+        setRates((prev) => ({ ...prev, ...data.rates, USD: 1 }));
+        writeCachedRates(data.rates);
+      })
+      .catch(() => {
+        /* 汇率失败保留兜底值 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,6 +199,7 @@ export default function CardLibraryView() {
           if (item?.cardKey) map[item.cardKey] = item;
         });
         setAmounts(map);
+        setUserTags(data.tags && typeof data.tags === "object" ? (data.tags as Record<string, string[]>) : {});
       })
       .catch(() => {
         if (!cancelled) setHint("卡面库加载失败，稍后重试");
@@ -224,6 +260,7 @@ export default function CardLibraryView() {
       if (brand !== ALL && (card.brand || "").trim() !== brand) return false;
       if (level !== ALL && (card.level || "").trim() !== level) return false;
       if (tag !== ALL && !tags.includes(tag)) return false;
+      if (myTag !== ALL && !(userTags[card.file] ?? []).includes(myTag)) return false;
       if (onlyFilled && !amounts[card.file]) return false;
       if (!keyword) return true;
       return (
@@ -234,9 +271,54 @@ export default function CardLibraryView() {
         tags.some((item) => item.toLowerCase().includes(keyword))
       );
     });
-  }, [flat, region, type, brand, level, tag, onlyFilled, amounts, query]);
+  }, [flat, region, type, brand, level, tag, myTag, onlyFilled, amounts, userTags, query]);
 
   const filledCount = useMemo(() => flat.filter(({ card }) => amounts[card.file]).length, [flat, amounts]);
+
+  /** 我的标签（用户自己打的，用于筛选） */
+  const myTagOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    flat.forEach(({ card }) => {
+      (userTags[card.file] ?? []).forEach((item) => counts.set(item, (counts.get(item) ?? 0) + 1));
+    });
+    if (counts.size === 0) return [];
+    return [
+      { key: ALL, count: [...counts.values()].reduce((sum, n) => sum + n, 0) },
+      ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, count }))
+    ];
+  }, [flat, userTags]);
+
+  /** 筛选条件变化时回到第一屏 */
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [region, type, brand, level, tag, myTag, onlyFilled, query]);
+
+  const pageItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+  const activeUserTags = active ? userTags[active.card.file] ?? [] : [];
+
+  /** 金额汇总：按币种分组，并用当前汇率折算成显示货币（没有汇率的币种单独标注） */
+  const summary = useMemo(() => {
+    const byCurrency = new Map<string, { total: number; count: number }>();
+    const missing: string[] = [];
+    let converted = 0;
+    const displayRate = rates[displayCurrency] || 1;
+    Object.values(amounts).forEach((item) => {
+      const code = (item.currency || "").toUpperCase();
+      if (!code) return;
+      const entry = byCurrency.get(code) ?? { total: 0, count: 0 };
+      entry.total += item.amount;
+      entry.count += 1;
+      byCurrency.set(code, entry);
+      const usdRate = rates[code];
+      if (usdRate && usdRate > 0) converted += (item.amount / usdRate) * displayRate;
+      else if (!missing.includes(code)) missing.push(code);
+    });
+    return {
+      byCurrency: [...byCurrency.entries()].sort((a, b) => b[1].total - a[1].total),
+      converted,
+      missing
+    };
+  }, [amounts, rates, displayCurrency]);
 
   function openCard(entry: CardEntry) {
     const saved = amounts[entry.card.file];
@@ -293,6 +375,38 @@ export default function CardLibraryView() {
     }
   }
 
+  async function saveTagList(cardKey: string, next: string[]) {
+    try {
+      const res = await fetch("/api/cards/tags", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardKey, tags: next })
+      });
+      const data = res.ok ? await res.json() : null;
+      if (!res.ok || !Array.isArray(data?.tags)) throw new Error("tag save failed");
+      const saved = data.tags as string[];
+      setUserTags((prev) => ({ ...prev, [cardKey]: saved }));
+    } catch {
+      showToast("标签保存失败，稍后再试", "err");
+    }
+  }
+
+  function addTag(value: string) {
+    if (!active) return;
+    const clean = value.trim().slice(0, 12);
+    if (!clean) return;
+    const current = userTags[active.card.file] ?? [];
+    if (current.includes(clean) || current.length >= 10) return;
+    void saveTagList(active.card.file, [...current, clean]);
+    setTagDraft("");
+  }
+
+  function removeTag(value: string) {
+    if (!active) return;
+    const current = userTags[active.card.file] ?? [];
+    void saveTagList(active.card.file, current.filter((item) => item !== value));
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -328,6 +442,28 @@ export default function CardLibraryView() {
           </label>
         </div>
       </div>
+
+      {filledCount > 0 && (
+        <div className="card flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+          <span className="text-xs font-semibold text-muted">金额汇总</span>
+          <span className="text-sm font-bold tabular-nums text-ink">
+            ≈ {currencySymbol(displayCurrency)}
+            {summary.converted.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+          <span className="text-[11px] text-faint">{displayCurrency} · 已录入 {filledCount} 张</span>
+          <span className="flex flex-wrap items-center gap-1.5">
+            {summary.byCurrency.map(([code, item]) => (
+              <span key={code} className="rounded-full bg-bg-gray px-2.5 py-1 text-[11px] font-semibold tabular-nums text-muted dark:bg-white/5">
+                {code} {item.total.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}
+                <i className="ml-1 not-italic text-faint">×{item.count}</i>
+              </span>
+            ))}
+          </span>
+          {summary.missing.length > 0 && (
+            <span className="text-[11px] text-faint">（{summary.missing.join(" / ")} 暂无汇率，未计入折算）</span>
+          )}
+        </div>
+      )}
 
       <div className="card p-3">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -365,6 +501,7 @@ export default function CardLibraryView() {
         </div>
         {moreOpen && (
           <div className="mt-3 flex min-w-0 flex-col gap-2 border-t border-edge pt-3">
+            {myTagOptions.length > 0 && <FilterGroup label="我的标签" options={myTagOptions} value={myTag} onChange={setMyTag} />}
             <FilterGroup label="卡组织" options={brandOptions} value={brand} onChange={setBrand} />
             <FilterGroup label="等级" options={levelOptions} value={level} onChange={setLevel} />
             <FilterGroup label="主题" options={tagOptions} value={tag} onChange={setTag} />
@@ -383,9 +520,12 @@ export default function CardLibraryView() {
       ) : filtered.length === 0 ? (
         <div className="card py-16 text-center text-sm text-muted">没有符合条件的卡面</div>
       ) : (
+        <>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {filtered.map(({ card, bank, region: regionLabel, tags }) => {
+          {pageItems.map(({ card, bank, region: regionLabel, tags }) => {
             const saved = amounts[card.file];
+            const mine = userTags[card.file] ?? [];
+            const shownTags = [...mine, ...tags.filter((item) => !mine.includes(item))];
             return (
               <button
                 key={`${bank.folder}-${card.file}`}
@@ -417,10 +557,17 @@ export default function CardLibraryView() {
                     {card.brand ? ` · ${card.brand}` : ""}
                     {card.level ? ` · ${card.level}` : ""}
                   </small>
-                  {tags.length > 0 && (
+                  {shownTags.length > 0 && (
                     <span className="mt-1 flex flex-wrap gap-1">
-                      {tags.slice(0, 3).map((item) => (
-                        <i key={item} className="rounded-full bg-brand-light px-1.5 py-[1px] text-[9px] font-semibold not-italic text-brand-deep dark:bg-white/10 dark:text-white/70">
+                      {shownTags.slice(0, 3).map((item) => (
+                        <i
+                          key={item}
+                          className={`rounded-full px-1.5 py-[1px] text-[9px] font-semibold not-italic ${
+                            mine.includes(item)
+                              ? "bg-[#3297f6]/12 text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]"
+                              : "bg-brand-light text-brand-deep dark:bg-white/10 dark:text-white/70"
+                          }`}
+                        >
                           {item}
                         </i>
                       ))}
@@ -431,6 +578,17 @@ export default function CardLibraryView() {
             );
           })}
         </div>
+        {filtered.length > pageItems.length && (
+          <button
+            type="button"
+            onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+            className="card mx-auto flex w-full items-center justify-center gap-1.5 py-3 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink"
+          >
+            加载更多（剩余 {filtered.length - pageItems.length} 张）
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3"><path d="m5 7 5 5 5-5" /></svg>
+          </button>
+        )}
+        </>
       )}
 
       {active && (
@@ -446,10 +604,17 @@ export default function CardLibraryView() {
                   {active.region} · {active.bank.name}
                   {active.bank.englishName && active.bank.englishName !== active.bank.name ? `（${active.bank.englishName}）` : ""}
                 </p>
-                {active.tags.length > 0 && (
+                {[...activeUserTags, ...active.tags.filter((item) => !activeUserTags.includes(item))].length > 0 && (
                   <p className="mt-1.5 flex flex-wrap gap-1">
-                    {active.tags.map((item) => (
-                      <span key={item} className="rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-semibold text-brand-deep dark:bg-white/10 dark:text-white/70">
+                    {[...activeUserTags, ...active.tags.filter((item) => !activeUserTags.includes(item))].map((item) => (
+                      <span
+                        key={item}
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          activeUserTags.includes(item)
+                            ? "bg-[#3297f6]/12 text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]"
+                            : "bg-brand-light text-brand-deep dark:bg-white/10 dark:text-white/70"
+                        }`}
+                      >
                         {item}
                       </span>
                     ))}
@@ -535,6 +700,46 @@ export default function CardLibraryView() {
                   {new Date(amounts[active.card.file].updatedAt).toLocaleString("zh-CN", { hour12: false })}
                 </p>
               )}
+              {/* 我的标签：用户自己维护（虚拟卡 / 实体卡 / 材质 / 收藏 …），最多 10 个 */}
+              <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-edge pt-3">
+                <span className="text-[11px] font-semibold text-muted">我的标签</span>
+                {activeUserTags.map((item) => (
+                  <span key={item} className="inline-flex items-center gap-1 rounded-full bg-[#3297f6]/12 px-2 py-0.5 text-[11px] font-semibold text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]">
+                    {item}
+                    <button
+                      type="button"
+                      onClick={() => removeTag(item)}
+                      aria-label={`移除标签 ${item}`}
+                      className="grid h-3.5 w-3.5 place-items-center rounded-full transition-colors hover:bg-black/10 dark:hover:bg-white/10"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="h-2.5 w-2.5"><path d="m6 6 12 12M18 6 6 18" /></svg>
+                    </button>
+                  </span>
+                ))}
+                <input
+                  value={tagDraft}
+                  onChange={(event) => setTagDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addTag(tagDraft);
+                    }
+                  }}
+                  maxLength={12}
+                  placeholder="添加标签，回车"
+                  className="h-7 w-[130px] rounded-full border border-edge bg-white px-2.5 text-[11px] text-ink placeholder:text-faint dark:bg-[#1c222d]"
+                />
+                {TAG_SUGGESTIONS.filter((item) => !activeUserTags.includes(item)).slice(0, 5).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => addTag(item)}
+                    className="rounded-full border border-dashed border-edge-strong px-2 py-0.5 text-[11px] font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink"
+                  >
+                    + {item}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

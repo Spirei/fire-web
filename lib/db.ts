@@ -188,6 +188,16 @@ function migrate(database: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_card_amounts_user ON card_amounts(user_id);
 
+    -- 卡面库：用户自建标签（虚拟卡 / 实体卡 / 收藏 …），一张卡可有多个
+    CREATE TABLE IF NOT EXISTS card_tags (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      card_key TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, card_key, tag)
+    );
+    CREATE INDEX IF NOT EXISTS idx_card_tags_user ON card_tags(user_id);
+
     CREATE TABLE IF NOT EXISTS financial_report_files (
       id TEXT PRIMARY KEY,
       market TEXT NOT NULL,

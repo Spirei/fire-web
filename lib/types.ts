@@ -120,7 +120,9 @@ export const FALLBACK_RATES: Record<string, number> = {
   CAD: 0.73,
   INR: 0.012,
   TWD: 0.031,
-  BRL: 0.18
+  BRL: 0.18,
+  // 澳门元与港币挂钩（1 HKD ≈ 1.03 MOP），ECB 不发布 MOP，用锚定汇率兜底
+  MOP: 8.08
 };
 
 export interface MarketOption {
