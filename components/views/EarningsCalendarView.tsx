@@ -678,7 +678,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                       {cell.rows.length > 0 && (
                         <div
                           onClick={() => setSelectedDate(selectedDate === cell.key ? null : cell.key)}
-                          className="pointer-events-none absolute inset-0 z-20 flex flex-col rounded-[14px] border border-edge-strong bg-white p-2 opacity-0 shadow-pop transition-all duration-300 ease-out -translate-y-1 scale-95 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-hover:pointer-events-auto"
+                          className={`pointer-events-none absolute inset-0 z-20 flex flex-col rounded-[14px] border border-edge-strong bg-white p-2 shadow-pop transition-all duration-300 ease-out ${selectedDate === cell.key ? "translate-y-0 scale-100 opacity-100 pointer-events-auto" : "-translate-y-1 scale-95 opacity-0 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-hover:pointer-events-auto"}`}
                         >
                           <div className="mb-1 flex items-center justify-between">
                             <span className="text-[11px] font-bold text-ink">{cell.key.slice(5).replace("-", "月")}日</span>
