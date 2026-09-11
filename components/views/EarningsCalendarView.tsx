@@ -149,7 +149,7 @@ function PillGroup({
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <span className="mr-0.5 text-[11px] font-semibold text-faint">{label}</span>
-      <div className="flex max-w-full flex-wrap rounded-full border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
+      <div className="flex min-w-0 max-w-full flex-wrap gap-0.5 rounded-xl border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
         {options.map((o) => (
           <button
             key={o.key}
@@ -549,7 +549,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
           <div className="flex min-w-0 flex-col gap-2.5 rounded-2xl border border-edge bg-bg-gray/40 p-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5 sm:rounded-[14px] sm:px-3 sm:py-2.5 dark:bg-white/[0.03]">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <span className="mr-0.5 text-[11px] font-semibold text-faint">市场</span>
-              <div className="flex max-w-full flex-wrap rounded-full border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
+              <div className="flex min-w-0 max-w-full flex-wrap gap-0.5 rounded-xl border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
                 {orderedMarkets.map((m, i) => (
                   <button
                     key={m}
@@ -664,9 +664,9 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
 
                       <div className="flex min-h-0 flex-1 flex-col gap-[4px] pt-0.5">
                         {cell.rows.slice(0, 3).map((row) => (
-                          <span key={row.symbol} className="flex items-center gap-1 overflow-hidden text-[9.5px] font-medium leading-[1.25] text-ink-2 sm:text-[10.5px]">
+                          <span key={row.symbol} className="flex min-w-0 items-center gap-1 overflow-hidden text-[9.5px] font-medium leading-[1.25] text-ink-2 sm:text-[10.5px]">
                             <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="hidden h-3.5 w-3.5 flex-none sm:block" />
-                            <span className="truncate">{row.nameZh || row.name}</span>
+                            <span className="min-w-0 flex-1 truncate">{row.nameZh || row.name}</span>
                             <span className={`ml-auto h-1.5 w-1.5 flex-none rounded-full ${TIME_DOT[timeKind(row.time)]}`} />
                           </span>
                         ))}
