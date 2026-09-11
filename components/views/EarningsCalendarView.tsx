@@ -118,11 +118,13 @@ function fmtCapByMarket(n: number, market: string): string {
   return fmtCap(n);
 }
 
+/** 时段圆点：按「一天的时间线」配色 —— 盘前琥珀（开盘前）、盘中蓝（交易中）、盘后紫（收盘后）；
+ *  三个色相互相拉开，并刻意避开涨红 #e23d3d / 跌绿 #0fa07b，不会被误读成涨跌方向。 */
 const TIME_DOT: Record<TimeKey, string> = {
   all: "bg-[#9aa1ab]",
   pre: "bg-[#e6a23c]",
-  after: "bg-brand",
-  intra: "bg-[#9aa1ab]"
+  intra: "bg-[#3297f6]",
+  after: "bg-[#8b5cf6]"
 };
 
 const TIME_BADGE: Record<TimeKey, string> = {
