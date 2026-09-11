@@ -207,7 +207,7 @@ function MultiSelect({
   };
   let currentGroup: string | undefined;
   return (
-    <label className="flex min-w-0 flex-col gap-1">
+    <div className="flex min-w-0 flex-col gap-1">
       <span className="text-[11px] font-semibold text-muted">{label}</span>
       <span className="relative block">
         <button
@@ -269,7 +269,7 @@ function MultiSelect({
           </>
         )}
       </span>
-    </label>
+    </div>
   );
 }
 
