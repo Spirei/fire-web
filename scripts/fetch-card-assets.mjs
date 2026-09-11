@@ -5,11 +5,12 @@
  * 来源：GitHub HarukaKinen/Cardentify 的 Cards/ 目录（每个银行一个文件夹，含 data.json 元数据 + 卡面图片）。
  * 落地：public/uploads/cards/<国家地区>/<卡类型>/<银行>/<卡名>.webp + manifest.json（页面直接读这份清单）。
  * 说明：
- *  - 图片统一转 WebP、最长边压到 1000px（原图有单张 17MB 的 PNG，523 张合计 300MB+）；
+ *  - 默认「原图直存」（保留 PNG / JPG / SVG 原始字节与原扩展名，合计约 312MB）；
+ *    想换成轻量版加 --format=webp（统一转 WebP、最长边 1000px，约 20MB，网格更快）；
  *  - 已存在的文件默认跳过（--force 覆盖），所以再跑一次只会补新卡；
  *  - uploads 属于本地运行数据，不进 git（见 .gitignore）。
  *
- * 用法：node scripts/fetch-card-assets.mjs [--force] [--limit 20] [--bank "China Merchants Bank"]
+ * 用法：node scripts/fetch-card-assets.mjs [--force] [--limit 20] [--bank "China Merchants Bank"] [--format=webp]
  */
 
 import fs from "node:fs";
@@ -27,6 +28,12 @@ const IMAGE_EXT = /\.(png|jpe?g|webp|svg)$/i;
 
 const args = process.argv.slice(2);
 const FORCE = args.includes("--force");
+/** original = 原图直存（默认）；webp = 转换压缩 */
+const FORMAT = (() => {
+  const raw = args.find((item) => item.startsWith("--format="));
+  const value = raw ? raw.slice("--format=".length).trim().toLowerCase() : "original";
+  return value === "webp" ? "webp" : "original";
+})();
 const LIMIT = (() => {
   const i = args.indexOf("--limit");
   return i >= 0 ? Number(args[i + 1]) || 0 : 0;
@@ -186,13 +193,15 @@ async function main() {
       const cardName = base.trim();
       const meta4 = cardMeta.get(cardName);
       const typeLabel = typeLabelOf(meta4?.card?.type);
-      const relativeFile = `${safeName(typeLabel)}/${safeName(bankName)}/${safeName(cardName)}.webp`;
+      const rawExt = path.extname(relative).toLowerCase();
+      const ext = FORMAT === "webp" ? ".webp" : rawExt === ".jpeg" ? ".jpg" : rawExt || ".png";
+      const relativeFile = `${safeName(typeLabel)}/${safeName(bankName)}/${safeName(cardName)}${ext}`;
       const target = path.join(OUT_ROOT, safeName(regionLabel), relativeFile);
       const record = {
         name: cardName,
         type: typeLabel,
         file: path.posix.join(
-          ...[safeName(regionLabel), safeName(typeLabel), safeName(bankName), `${safeName(cardName)}.webp`].map(encodeURIComponent)
+          ...[safeName(regionLabel), safeName(typeLabel), safeName(bankName), `${safeName(cardName)}${ext}`].map(encodeURIComponent)
         ),
         sourceType: String(meta4?.card?.type || "").trim(),
         brand: String(meta4?.card?.brand || "").trim(),
@@ -204,6 +213,11 @@ async function main() {
       bankEntry.types.set(typeLabel, list);
 
       if (!FORCE && fs.existsSync(target)) {
+        try {
+          record.bytes = fs.statSync(target).size;
+        } catch {
+          /* 取不到大小不影响 */
+        }
         skipped += 1;
         budget -= 1;
         continue;
@@ -211,12 +225,16 @@ async function main() {
       try {
         const source = `${RAW}/${["Cards", folder, relative].map(encodeURIComponent).join("/")}`;
         const buffer = await fetchBinary(source);
-        const converted = await sharp(buffer, { density: 144 })
-          .resize({ width: 1000, height: 1000, fit: "inside", withoutEnlargement: true })
-          .webp({ quality: 82 })
-          .toBuffer();
+        const output =
+          FORMAT === "webp"
+            ? await sharp(buffer, { density: 144 })
+                .resize({ width: 1000, height: 1000, fit: "inside", withoutEnlargement: true })
+                .webp({ quality: 82 })
+                .toBuffer()
+            : buffer;
+        record.bytes = output.length;
         fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.writeFileSync(target, converted);
+        fs.writeFileSync(target, output);
         downloaded += 1;
         budget -= 1;
         if (downloaded % 25 === 0) console.log(`  已下载 ${downloaded} 张（跳过 ${skipped}，失败 ${failed}）`);
@@ -259,6 +277,7 @@ async function main() {
   const manifest = {
     generatedAt: new Date().toISOString(),
     source: `https://github.com/${REPO}/tree/${BRANCH}/Cards`,
+    format: FORMAT,
     typeOrder: TYPE_ORDER,
     regions: [...merged.values()]
       .map((region) => ({

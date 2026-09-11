@@ -15,6 +15,8 @@ interface CardItem {
   brand?: string;
   level?: string;
   bins?: number[];
+  /** 原图字节数（脚本抓取时写入） */
+  bytes?: number;
 }
 
 interface BankEntry {
@@ -92,6 +94,16 @@ function currencySymbol(code: string): string {
 
 function fmtAmount(amount: number, currency: string): string {
   return `${currencySymbol(currency)}${amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
+}
+
+function fmtBytes(bytes?: number): string {
+  if (!bytes || bytes <= 0) return "";
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function fileExt(file: string): string {
+  return (file.split(".").pop() || "").toUpperCase();
 }
 
 function Pill({ active, children, onClick }: { active: boolean; children: React.ReactNode; onClick: () => void }) {
@@ -633,6 +645,11 @@ export default function CardLibraryView() {
                 <span className="rounded-lg bg-white px-3 py-2 text-muted dark:bg-[#1c222d]">等级<b className="ml-1 text-ink">{active.card.level || "—"}</b></span>
                 <span className="rounded-lg bg-white px-3 py-2 text-muted dark:bg-[#1c222d]">卡号前几位<b className="ml-1 text-ink">{active.card.bins?.length ? active.card.bins.join(" / ") : "—"}</b></span>
               </div>
+              <p className="mx-auto mt-2 max-w-[560px] text-center text-[11px] text-faint">
+                原图 {fileExt(active.card.file)}
+                {active.card.bytes ? ` · ${fmtBytes(active.card.bytes)}` : ""}
+                {` · ${active.card.file.split("/").slice(0, 2).join(" / ").split("/").map((segment) => decodeURIComponent(segment)).join(" / ")}`}
+              </p>
             </div>
             <div className="border-t border-edge px-5 py-4">
               <div className="flex flex-wrap items-end gap-2">
