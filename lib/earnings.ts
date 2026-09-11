@@ -30,22 +30,46 @@ const NASDAQ_HEADERS = {
 
 // 财报日期每月基本固定：缓存拉长到 12 小时，并持久化到磁盘，刷新 / 重启后直接读缓存秒出
 const CACHE_TTL = 12 * 60 * 60 * 1000;
+// 空月份（上游确实没有安排，例如 A 股 9 月）只缓存 30 分钟：新财报季一发布预约日期就能很快显示出来，
+// 也避免上游偶发抽风时把「空」当成结论存满 12 小时
+const EMPTY_CACHE_TTL = 30 * 60 * 1000;
 // 可浏览范围：上月 ~ 未来 4 个月
 export const EARNINGS_MIN_MONTHS_AGO = 1;
 export const EARNINGS_MAX_MONTHS_AHEAD = 4;
 
+/**
+ * 每月的财报缓存。
+ * - items / at：最后一次**确实拿到数据**的内容与时间（`updatedAt` 用 at 展示）；
+ * - checkedAt / ttl：上次问上游的时间与这份记录的有效期，用来决定何时再问一次。
+ * 两者分开是因为上游偶发抽风或返回空时，我们只更新 checkedAt，不动磁盘上那份好数据
+ * —— 本地永远留着最后一次成功抓到的财报，不会因为一次空响应把整月清空。
+ */
+type EarningsCacheRecord = { items: EarningsItem[]; at: number; checkedAt: number; ttl: number };
+
 // 缓存：key = "US:2026-08" / "CN:2026-08"
-const cache: Record<string, { items: EarningsItem[]; at: number }> = {};
-const refreshInflight: Record<string, Promise<{ items: EarningsItem[]; at: number }> | undefined> = {};
+const cache: Record<string, EarningsCacheRecord> = {};
+const refreshInflight: Record<string, Promise<EarningsCacheRecord> | undefined> = {};
 const EARNINGS_CACHE_DIR = path.join(process.cwd(), "data", "earnings-cache");
 
-function loadDiskCache(key: string): { items: EarningsItem[]; at: number } | null {
+function loadDiskCache(key: string): EarningsCacheRecord | null {
   try {
     const file = path.join(EARNINGS_CACHE_DIR, `${key}.json`);
     if (!fs.existsSync(file)) return null;
-    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as { items?: unknown; at?: unknown };
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      items?: unknown;
+      at?: unknown;
+      ttl?: unknown;
+      checkedAt?: unknown;
+    };
     if (Array.isArray(parsed.items) && typeof parsed.at === "number") {
-      return { items: parsed.items as EarningsItem[], at: parsed.at };
+      const items = parsed.items as EarningsItem[];
+      return {
+        items,
+        at: parsed.at,
+        // 旧版本缓存没有这两个字段：按「刚抓过」补齐，行为与之前一致
+        checkedAt: typeof parsed.checkedAt === "number" ? parsed.checkedAt : parsed.at,
+        ttl: typeof parsed.ttl === "number" ? parsed.ttl : items.length > 0 ? CACHE_TTL : EMPTY_CACHE_TTL
+      };
     }
   } catch {
     /* 缓存损坏忽略 */
@@ -53,7 +77,7 @@ function loadDiskCache(key: string): { items: EarningsItem[]; at: number } | nul
   return null;
 }
 
-function saveDiskCache(key: string, data: { items: EarningsItem[]; at: number }) {
+function saveDiskCache(key: string, data: EarningsCacheRecord) {
   try {
     fs.mkdirSync(EARNINGS_CACHE_DIR, { recursive: true });
     fs.writeFileSync(path.join(EARNINGS_CACHE_DIR, `${key}.json`), JSON.stringify(data), "utf8");
@@ -109,7 +133,8 @@ async function fetchNasdaqDay(date: string): Promise<EarningsItem[]> {
   if (!res.ok) throw new Error(`Nasdaq 返回 ${res.status}`);
   const data = await res.json().catch(() => null);
   const rows = data?.data?.rows;
-  if (!Array.isArray(rows)) return [];
+  // 结构不对（HTML 挑战页 / 风控拦截 / 字段改名）一律当失败，不要静默当成「这天没有财报」
+  if (!Array.isArray(rows)) throw new Error("Nasdaq 返回结构异常");
   return rows
     .filter((r: Record<string, unknown>) => typeof r.symbol === "string" && r.symbol && typeof r.name === "string")
     .map((r: Record<string, unknown>): EarningsItem => ({
@@ -204,11 +229,19 @@ async function fetchCnAppointments(year: number, month: number): Promise<Earning
     const base = getSiteSettings().cnEarningsApiUrl || DEFAULT_EM_DATACENTER;
     const res = await fetch(`${base}?${qs}`, { headers: EM_HEADERS, signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error(`东方财富返回 ${res.status}`);
-    const data = await res.json().catch(() => null);
+    const data = (await res.json().catch(() => null)) as
+      | { result?: { data?: unknown; pages?: number }; success?: boolean; code?: number; message?: string }
+      | null;
+    if (!data || typeof data !== "object") throw new Error("东方财富返回非 JSON（可能被风控拦截）");
     const result = data?.result;
     const rows = result?.data;
-    if (!Array.isArray(rows) || rows.length === 0) break;
-    totalPages = result.pages || 1;
+    if (!Array.isArray(rows)) {
+      // 上游明确回「返回数据为空」(code 9201)：该月确实没有预约披露（例如 A 股 9 月是财报空档）
+      if (data.success === false && (data.code === 9201 || /为空/.test(String(data.message || "")))) break;
+      throw new Error(`东方财富返回结构异常：${String(data.message || data.code || "unknown")}`);
+    }
+    if (rows.length === 0) break;
+    totalPages = result?.pages || 1;
     rows.forEach((r: Record<string, unknown>) => {
       const code = typeof r.SECURITY_CODE === "string" ? r.SECURITY_CODE : "";
       const name = typeof r.SECURITY_NAME_ABBR === "string" ? r.SECURITY_NAME_ABBR.trim() : "";
@@ -298,25 +331,38 @@ export async function getEarningsMonth(
   market: EarningsMarket = "US"
 ): Promise<{ items: EarningsItem[]; updatedAt: string; month: string; market: EarningsMarket }> {
   const key = `${market}:${monthKey(year, month)}`;
+  const view = (record: EarningsCacheRecord) => ({
+    items: record.items,
+    updatedAt: new Date(record.at).toISOString(),
+    month: monthKey(year, month),
+    market
+  });
+  const fresh = (record: EarningsCacheRecord) => Date.now() - record.checkedAt < record.ttl;
+
   const cached = cache[key];
-  if (cached && Date.now() - cached.at < CACHE_TTL) {
-    return { items: cached.items, updatedAt: new Date(cached.at).toISOString(), month: monthKey(year, month), market };
-  }
+  if (cached && fresh(cached)) return view(cached);
   // 磁盘缓存：服务重启后仍可秒出
   const disk = loadDiskCache(key);
-  if (disk && Date.now() - disk.at < CACHE_TTL) {
+  if (disk && fresh(disk)) {
     cache[key] = disk;
-    return { items: disk.items, updatedAt: new Date(disk.at).toISOString(), month: monthKey(year, month), market };
+    return view(disk);
   }
 
   const refresh = () => {
     if (refreshInflight[key]) return refreshInflight[key];
     const task = (async () => {
       const items = market === "CN" ? await fetchCnMonth(year, month) : await fetchUsMonth(year, month);
-      const data = { items, at: Date.now() };
-      cache[key] = data;
-      saveDiskCache(key, data);
-      return data;
+      const now = Date.now();
+      // 这一轮上游什么都没给（空档月 / 抽风）：磁盘上若已有当月好数据就留着，只记「刚问过一次」
+      const previous = cache[key] ?? loadDiskCache(key);
+      const keepPrevious = !!previous && previous.items.length > 0 && items.length === 0;
+      const record: EarningsCacheRecord = keepPrevious && previous
+        ? { items: previous.items, at: previous.at, checkedAt: now, ttl: EMPTY_CACHE_TTL }
+        : { items, at: now, checkedAt: now, ttl: items.length > 0 ? CACHE_TTL : EMPTY_CACHE_TTL };
+      cache[key] = record;
+      // 保留旧数据时不覆盖磁盘文件，重启后依然能直接读到上次抓到的财报
+      if (!keepPrevious) saveDiskCache(key, record);
+      return record;
     })().finally(() => {
       if (refreshInflight[key] === task) delete refreshInflight[key];
     });
@@ -332,12 +378,12 @@ export async function getEarningsMonth(
     void refresh().catch(() => {
       /* 后台刷新失败继续保留旧缓存 */
     });
-    return { items: stale.items, updatedAt: new Date(stale.at).toISOString(), month: monthKey(year, month), market };
+    return view(stale);
   }
 
   try {
     const data = await refresh();
-    return { items: data.items, updatedAt: new Date(data.at).toISOString(), month: monthKey(year, month), market };
+    return view(data);
   } catch (err) {
     throw err;
   }

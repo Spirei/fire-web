@@ -332,12 +332,15 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
     if (months[dataKey] || loadedKeys.current.has(dataKey)) return; // 已加载
     let cancelled = false;
     setFailed(false);
+    // 本地已有当月数据：服务端这一轮若返回空（上游抽风 / 空档月），保留本地这份，不把整月清空
+    let localCache: EarnRow[] | null = null;
     // 本地缓存秒出（上次访问过的月份立即展示，再后台刷新）
     try {
       const raw = localStorage.getItem(`fire:earnings:${dataKey}`);
       if (raw) {
         const arr = JSON.parse(raw) as EarnRow[];
         if (Array.isArray(arr) && arr.length > 0) {
+          localCache = arr;
           setMonths((prev) => ({ ...prev, [dataKey]: arr }));
         }
       }
@@ -348,13 +351,16 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (cancelled) return;
-        if (data?.items) {
+        if (Array.isArray(data?.items)) {
+          const incoming = data.items as EarnRow[];
           loadedKeys.current.add(dataKey); // 请求成功后标记，避免 StrictMode 双挂载重复请求
-          setMonths((prev) => ({ ...prev, [dataKey]: data.items }));
-          try {
-            localStorage.setItem(`fire:earnings:${dataKey}`, JSON.stringify(data.items));
-          } catch {
-            /* 忽略 */
+          if (incoming.length > 0 || !localCache) {
+            setMonths((prev) => ({ ...prev, [dataKey]: incoming }));
+            try {
+              localStorage.setItem(`fire:earnings:${dataKey}`, JSON.stringify(incoming));
+            } catch {
+              /* 忽略 */
+            }
           }
         } else {
           setFailed(true);
@@ -570,7 +576,12 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
   if (marketKey === "HK" || marketKey === "JP" || marketKey === "KR") emptyHint = "该市场财报数据源暂未接入，敬请期待";
   else if (items === null || items === undefined) emptyHint = failed ? "财报数据加载失败，请稍后重试" : "loading";
   else if (failed && items.length === 0) emptyHint = "财报数据加载失败，请稍后重试";
-  else if (items.length === 0) emptyHint = "该月暂无财报数据";
+  else if (items.length === 0) {
+    // A 股不是每个月都有预约披露：年报 / 一季报集中在 3-4 月、半年报 7-8 月、三季报 10 月，其余月份是空档
+    emptyHint = marketKey === "CN"
+      ? "A 股本月没有预约披露记录：财报集中在 3-4 月（年报 / 一季报）、7-8 月（半年报）、10 月（三季报），本月属于空档期。"
+      : "该月暂无财报数据";
+  }
   else if (stockKey === "special" && stockSets.special.size === 0) emptyHint = "暂未设置「特别关注」券商，可在 设置 → 股票设置 → 券商管理 中创建";
   else if (filtered.length === 0) emptyHint = "没有符合筛选条件的财报，试试放宽市值或时段筛选";
 
@@ -695,7 +706,18 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
               <div className="mt-3 h-3 w-40 mx-auto animate-pulse rounded bg-bg-gray" aria-hidden />
             </>
           ) : emptyHint ? (
-            <div className="py-16 text-center text-sm text-faint">{emptyHint}</div>
+            <div className="py-16 text-center text-sm text-faint">
+              <p className="mx-auto max-w-[520px] leading-relaxed">{emptyHint}</p>
+              {marketKey === "CN" && items?.length === 0 && canPrev && (
+                <button
+                  type="button"
+                  onClick={() => moveMonth(-1)}
+                  className="mt-4 rounded-full border border-edge-strong bg-white px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors duration-200 hover:bg-brand-hover dark:bg-[#1c1c1e] dark:text-white dark:hover:bg-white/10"
+                >
+                  查看上月（{new Date(cursor.y, cursor.m - 1, 1).getMonth() + 1} 月）
+                </button>
+              )}
+            </div>
           ) : (
             <>
               <div className="mb-1.5 grid grid-cols-7 gap-1.5 sm:gap-2">
