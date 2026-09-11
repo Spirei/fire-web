@@ -145,83 +145,129 @@ function Pill({ active, children, onClick }: { active: boolean; children: React.
   );
 }
 
-function FilterGroup({
+/** 多选胶囊组：数值为空 = 全部；点「全部」清空选择 */
+function PillGroup({
   label,
   options,
-  value,
-  onChange
+  values,
+  onToggle,
+  onClear
 }: {
   label: string;
   options: { key: string; count?: number }[];
-  value: string;
-  onChange: (key: string) => void;
+  values: string[];
+  onToggle: (key: string) => void;
+  onClear: () => void;
 }) {
+  const all = options[0];
+  const allActive = values.length === 0;
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
       <span className="mr-0.5 text-[11px] font-semibold text-faint">{label}</span>
-      {options.map((option) => (
-        <Pill key={option.key} active={value === option.key} onClick={() => onChange(option.key)}>
-          {option.key}
-          {option.count !== undefined && (
-            <span className={`ml-1.5 ${value === option.key ? "text-white/60 dark:text-[#111]/50" : "text-faint"}`}>{option.count}</span>
-          )}
+      {all && (
+        <Pill active={allActive} onClick={onClear}>
+          {all.key}
+          {all.count !== undefined && <span className={`ml-1.5 ${allActive ? "text-white/60 dark:text-[#111]/50" : "text-faint"}`}>{all.count}</span>}
         </Pill>
-      ))}
+      )}
+      {options.slice(1).map((option) => {
+        const active = values.includes(option.key);
+        return (
+          <Pill key={option.key} active={active} onClick={() => onToggle(option.key)}>
+            {option.key}
+            {option.count !== undefined && (
+              <span className={`ml-1.5 ${active ? "text-white/60 dark:text-[#111]/50" : "text-faint"}`}>{option.count}</span>
+            )}
+          </Pill>
+        );
+      })}
     </div>
   );
 }
 
-/** 下拉筛选（参考卡的筛选条：浅色圆角 + 右侧箭头），支持 optgroup 分组 */
-function FilterSelect({
+/** 多选下拉：按钮显示已选摘要，面板里逐项勾选（支持分组标题与计数） */
+function MultiSelect({
   label,
-  value,
+  allLabel,
   options,
-  onChange,
-  disabled = false
+  values,
+  onChange
 }: {
   label: string;
-  value: string;
+  allLabel: string;
   options: { value: string; label: string; group?: string }[];
-  onChange: (value: string) => void;
-  disabled?: boolean;
+  values: string[];
+  onChange: (next: string[]) => void;
 }) {
-  const groups = new Map<string, { value: string; label: string }[]>();
-  options.forEach((option) => {
-    const key = option.group || "";
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push({ value: option.value, label: option.label });
-  });
+  const [open, setOpen] = useState(false);
+  const labelOf = (value: string) => options.find((option) => option.value === value)?.label ?? value;
+  const summary = values.length === 0 ? allLabel : values.length === 1 ? labelOf(values[0]) : `${labelOf(values[0])} +${values.length - 1}`;
+  const toggle = (value: string) => {
+    onChange(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
+  };
+  let currentGroup: string | undefined;
   return (
     <label className="flex min-w-0 flex-col gap-1">
       <span className="text-[11px] font-semibold text-muted">{label}</span>
       <span className="relative block">
-        <select
-          value={value}
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-          className={`h-10 w-full appearance-none rounded-xl border border-edge bg-white px-3 pr-8 text-sm font-semibold text-ink transition-all duration-200 hover:border-edge-strong disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#1c222d] dark:text-white ${FOCUS_RING}`}
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          title={summary}
+          className={`flex h-10 w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 text-left text-sm font-semibold text-ink transition-all duration-200 hover:border-edge-strong dark:bg-[#1c222d] dark:text-white ${
+            open ? "border-edge-strong shadow-[0_0_0_3px_rgba(107,114,128,.15)]" : "border-edge"
+          }`}
         >
-          {[...groups.entries()].map(([group, items]) =>
-            group ? (
-              <optgroup key={group} label={group}>
-                {items.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </optgroup>
-            ) : (
-              items.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))
-            )
-          )}
-        </select>
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted">
-          <path d="m5 7 5 5 5-5" />
-        </svg>
+          <span className="min-w-0 truncate">{summary}</span>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 flex-none text-muted transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
+            <path d="m5 7 5 5 5-5" />
+          </svg>
+        </button>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+            <div className="absolute left-0 top-full z-40 mt-1 max-h-[300px] w-full min-w-[220px] overflow-y-auto rounded-xl border border-edge-strong bg-white p-1 shadow-pop dark:border-white/10 dark:bg-[#1b2029]">
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-semibold transition-colors ${
+                  values.length === 0 ? "bg-bg-gray text-ink dark:bg-white/10" : "text-muted hover:bg-brand-hover hover:text-ink dark:hover:bg-white/10"
+                }`}
+              >
+                {allLabel}
+                {values.length === 0 && (
+                  <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
+                    <path d="m2.4 6.4 2.5 2.5 4.7-5.8" />
+                  </svg>
+                )}
+              </button>
+              {options.map((option) => {
+                const header = option.group && option.group !== currentGroup ? option.group : null;
+                currentGroup = option.group ?? currentGroup;
+                const active = values.includes(option.value);
+                return (
+                  <span key={option.value} className="block">
+                    {header && <span className="mt-1 block px-3 pb-1 pt-2 text-[10px] font-semibold text-faint">{header}</span>}
+                    <button
+                      type="button"
+                      onClick={() => toggle(option.value)}
+                      className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-left text-xs transition-colors ${
+                        active ? "bg-[#3297f6]/12 font-semibold text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]" : "text-ink hover:bg-brand-hover dark:text-white/80 dark:hover:bg-white/10"
+                      }`}
+                    >
+                      <span className="min-w-0 truncate">{option.label}</span>
+                      {active && (
+                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 flex-none">
+                          <path d="m2.4 6.4 2.5 2.5 4.7-5.8" />
+                        </svg>
+                      )}
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          </>
+        )}
       </span>
     </label>
   );
@@ -238,13 +284,14 @@ export default function CardLibraryView() {
   const [hint, setHint] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [region, setRegion] = useState(ALL);
-  const [type, setType] = useState(ALL);
-  const [bankFolder, setBankFolder] = useState(ALL);
-  const [brand, setBrand] = useState(ALL);
-  const [level, setLevel] = useState(ALL);
-  const [tag, setTag] = useState(ALL);
-  const [myTag, setMyTag] = useState(ALL);
+  // 各维度都是多选：空数组 = 全部；同一维度内 OR，跨维度 AND
+  const [region, setRegion] = useState<string[]>([]);
+  const [type, setType] = useState<string[]>([]);
+  const [bankFolder, setBankFolder] = useState<string[]>([]);
+  const [brand, setBrand] = useState<string[]>([]);
+  const [level, setLevel] = useState<string[]>([]);
+  const [tag, setTag] = useState<string[]>([]);
+  const [myTag, setMyTag] = useState<string[]>([]);
   const [onlyFilled, setOnlyFilled] = useState(false);
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -344,13 +391,13 @@ export default function CardLibraryView() {
   const matchesExcept = (entry: CardEntry, skip: Facet) => {
     const { card, bank, region: regionLabel, tags } = entry;
     if (mode === "mine" && !holdings[card.file]) return false;
-    if (skip !== "region" && region !== ALL && regionLabel !== region) return false;
-    if (skip !== "bank" && bankFolder !== ALL && bank.folder !== bankFolder) return false;
-    if (skip !== "type" && type !== ALL && (card.type || "其他") !== type) return false;
-    if (skip !== "brand" && brand !== ALL && (card.brand || "").trim() !== brand) return false;
-    if (skip !== "level" && level !== ALL && (card.level || "").trim() !== level) return false;
-    if (skip !== "tag" && tag !== ALL && !tags.includes(tag)) return false;
-    if (skip !== "myTag" && myTag !== ALL && !(userTags[card.file] ?? []).includes(myTag)) return false;
+    if (skip !== "region" && region.length > 0 && !region.includes(regionLabel)) return false;
+    if (skip !== "bank" && bankFolder.length > 0 && !bankFolder.includes(bank.folder)) return false;
+    if (skip !== "type" && type.length > 0 && !type.includes(card.type || "其他")) return false;
+    if (skip !== "brand" && brand.length > 0 && !brand.includes((card.brand || "").trim())) return false;
+    if (skip !== "level" && level.length > 0 && !level.includes((card.level || "").trim())) return false;
+    if (skip !== "tag" && tag.length > 0 && !tag.some((item) => tags.includes(item))) return false;
+    if (skip !== "myTag" && myTag.length > 0 && !myTag.some((item) => (userTags[card.file] ?? []).includes(item))) return false;
     if (onlyFilled && !amounts[card.file]) return false;
     if (!keyword) return true;
     return (
@@ -362,7 +409,6 @@ export default function CardLibraryView() {
     );
   };
 
-  // 每个维度统计时把「自己」排除在外，这样各筛选器的数字会随其他条件联动（搜「招商」→ 类型数字变成招商的分布）
   const filterBase = (skip: Facet) => flat.filter((entry) => matchesExcept(entry, skip));
   const typeBase = filterBase("type");
   const regionBase = filterBase("region");
@@ -408,7 +454,7 @@ export default function CardLibraryView() {
   /** 银行下拉：选项与计数跟随其他筛选（含所选国家地区），值为银行文件夹名（全局唯一） */
   const bankSelectOptions = (() => {
     const list: { value: string; label: string; group?: string }[] = [
-      { value: ALL, label: region === ALL ? "全部银行" : `全部银行（${region}）` }
+      { value: ALL, label: "全部银行" }
     ];
     const banks = new Map<string, { bank: BankEntry; region: string }>();
     bankBase.forEach((entry) => {
@@ -424,7 +470,8 @@ export default function CardLibraryView() {
         list.push({
           value: bank.folder,
           label: bank.englishName && bank.englishName !== bank.name ? `${bank.name} ${bank.englishName}` : bank.name,
-          group: region === ALL ? `${REGION_CONTINENT[regionLabel] ?? "其他"} · ${regionLabel}` : undefined
+          // 多选地区时：只有当铺满「全部地区」才需要靠分组区分同名银行，否则按当前选中的地区分组标注
+          group: region.length === 0 || region.length > 1 ? `${REGION_CONTINENT[regionLabel] ?? "其他"} · ${regionLabel}` : undefined
         });
       });
     return list;
@@ -450,7 +497,7 @@ export default function CardLibraryView() {
   /** 筛选条件变化时回到第一屏 */
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [region, bankFolder, type, brand, level, tag, myTag, onlyFilled, query]);
+  }, [region.join(","), bankFolder.join(","), type.join(","), brand.join(","), level.join(","), tag.join(","), myTag.join(","), onlyFilled, query]);
 
   const pageItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
   const activeUserTags = active ? userTags[active.card.file] ?? [] : [];
@@ -710,67 +757,88 @@ export default function CardLibraryView() {
         </div>
       )}
 
-      <div className="card p-3">
-        <FilterGroup label="类型" options={typeOptions} value={type} onChange={setType} />
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <FilterSelect
+      <div className="card flex flex-col gap-3 p-3">
+        <PillGroup
+          label="类型"
+          options={typeOptions}
+          values={type}
+          onToggle={(key) => setType((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]))}
+          onClear={() => setType([])}
+        />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <MultiSelect
             label="地区"
-            value={region}
-            options={[
-              { value: ALL, label: "全部地区" },
-              ...regionOptions
-                .slice(1)
-                .map((option) => ({
-                  value: option.key,
-                  label: `${option.key}（${option.count}）`,
-                  group: REGION_CONTINENT[option.key] ?? "其他"
-                }))
-            ]}
+            allLabel="全部地区"
+            values={region}
+            options={regionOptions
+              .slice(1)
+              .map((option) => ({
+                value: option.key,
+                label: `${option.key}（${option.count}）`,
+                group: REGION_CONTINENT[option.key] ?? "其他"
+              }))}
             onChange={(next) => {
               setRegion(next);
-              setBankFolder(ALL);
+              setBankFolder([]);
             }}
           />
-          <FilterSelect label="银行" value={bankFolder} options={bankSelectOptions} onChange={setBankFolder} />
-          <FilterSelect
+          <MultiSelect
+            label="银行"
+            allLabel="全部银行"
+            values={bankFolder}
+            options={bankSelectOptions.filter((option) => option.value !== ALL)}
+            onChange={setBankFolder}
+          />
+          <MultiSelect
             label="卡组织"
-            value={brand}
-            options={[
-              { value: ALL, label: "全部卡组织" },
-              ...brandOptions.slice(1).map((option) => ({ value: option.key, label: `${option.key}（${option.count}）` }))
-            ]}
+            allLabel="全部卡组织"
+            values={brand}
+            options={brandOptions.slice(1).map((option) => ({ value: option.key, label: `${option.key}（${option.count}）` }))}
             onChange={setBrand}
           />
-          <FilterSelect
+          <MultiSelect
             label="等级"
-            value={level}
-            options={[
-              { value: ALL, label: "全部等级" },
-              ...levelOptions.slice(1).map((option) => ({ value: option.key, label: `${option.key}（${option.count}）` }))
-            ]}
+            allLabel="全部等级"
+            values={level}
+            options={levelOptions.slice(1).map((option) => ({ value: option.key, label: `${option.key}（${option.count}）` }))}
             onChange={setLevel}
           />
-          <FilterSelect
+          <MultiSelect
             label="主题"
-            value={tag}
-            options={[
-              { value: ALL, label: "全部主题" },
-              ...tagOptions.slice(1).map((option) => ({ value: option.key, label: `${option.key}（${option.count}）` }))
-            ]}
+            allLabel="全部主题"
+            values={tag}
+            options={tagOptions.slice(1).map((option) => ({ value: option.key, label: `${option.key}（${option.count}）` }))}
             onChange={setTag}
           />
           {myTagOptions.length > 0 && (
-            <FilterSelect
+            <MultiSelect
               label="我的标签"
-              value={myTag}
-              options={[
-                { value: ALL, label: "全部我的标签" },
-                ...myTagOptions.slice(1).map((option) => ({ value: option.key, label: `${option.key}（${option.count}）` }))
-              ]}
+              allLabel="全部我的标签"
+              values={myTag}
+              options={myTagOptions.slice(1).map((option) => ({ value: option.key, label: `${option.key}（${option.count}）` }))}
               onChange={setMyTag}
             />
           )}
         </div>
+        {(type.length > 0 || region.length > 0 || bankFolder.length > 0 || brand.length > 0 || level.length > 0 || tag.length > 0 || myTag.length > 0 || onlyFilled || query.trim()) && (
+          <button
+            type="button"
+            onClick={() => {
+              setType([]);
+              setRegion([]);
+              setBankFolder([]);
+              setBrand([]);
+              setLevel([]);
+              setTag([]);
+              setMyTag([]);
+              setOnlyFilled(false);
+              setQuery("");
+            }}
+            className="self-start rounded-full border border-edge px-3 py-1.5 text-[11px] font-semibold text-muted transition-colors duration-200 hover:border-edge-strong hover:bg-brand-hover hover:text-ink"
+          >
+            清空全部筛选
+          </button>
+        )}
       </div>
 
       {loading ? (
