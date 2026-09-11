@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconReceipt, IconSearch, IconTrash } from "@tabler/icons-react";
-import { fmtMoney, fmtMoneyAdaptive } from "@/lib/format";
+import { fmtMoney, fmtMoneyAdaptive, localDateKey } from "@/lib/format";
 import { showToast } from "@/lib/toast";
 import CurrencySelect from "@/components/CurrencySelect";
 import FundEntryDialog from "@/components/FundEntryDialog";
@@ -52,7 +52,7 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
   const [direction, setDirection] = useState<1 | -1>(1);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [occurredAt, setOccurredAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [occurredAt, setOccurredAt] = useState(() => localDateKey());
   const [saving, setSaving] = useState(false);
   const recordsCache = useRef(new Map<string, { transactions: Tx[]; total: number }>());
   const recordsRequest = useRef<{ id: number; controller: AbortController } | null>(null);
@@ -125,7 +125,7 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
     const res = await fetch("/api/v1/funds", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currency, type: normalizedType, amount: value, direction, note, occurredAt }) });
     const json = await res.json().catch(() => null); setSaving(false);
     if (!res.ok) return showToast(json?.message || "保存失败", "err");
-    setOpen(false); setAmount(""); setNote(""); setOccurredAt(new Date().toISOString().slice(0, 10)); await load(); showToast("资金记录已保存");
+    setOpen(false); setAmount(""); setNote(""); setOccurredAt(localDateKey()); await load(); showToast("资金记录已保存");
   };
   const remove = async (id: string) => {
     const res = await fetch(`/api/v1/funds/${encodeURIComponent(id)}`, { method: "DELETE" });

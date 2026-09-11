@@ -791,7 +791,7 @@ export default function TradeOrdersPanel({
       const blob = await response.blob();
       const disposition = response.headers.get("Content-Disposition") || "";
       const match = /filename\*=UTF-8''([^;]+)/.exec(disposition);
-      const fileName = match ? decodeURIComponent(match[1]) : `订单导出-${tab === "today" ? "当日" : "历史"}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const fileName = match ? decodeURIComponent(match[1]) : `订单导出-${tab === "today" ? "当日" : "历史"}-${localIso(new Date())}.xlsx`;
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;

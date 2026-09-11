@@ -5,6 +5,7 @@ import echarts, { type EChartsInstance } from "@/lib/echarts";
 import MarketIcon from "@/components/MarketIcon";
 import AppModal from "@/components/AppModal";
 import { MULTI_CURRENCIES } from "@/lib/currency";
+import { localDateKey } from "@/lib/format";
 import { showToast } from "@/lib/toast";
 
 export interface PnlSankeyItem { name: string; code: string; market: string; pnl: number }
@@ -259,7 +260,7 @@ export default function HoldingsPnlSankey({ profit, loss, profitTotal, lossTotal
   function saveImage(url: string) {
     const link = document.createElement("a");
     link.href = url;
-    link.download = `持仓盈利图-${new Date().toISOString().slice(0, 10)}.png`;
+    link.download = `持仓盈利图-${localDateKey()}.png`;
     link.click();
     showToast("图片已保存");
     setPreviewUrl(null);

@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CurrencySelect from "@/components/CurrencySelect";
 import { CURRENCIES, CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/currencyPrefs";
-import { fmtMoneyAdaptive } from "@/lib/format";
+import { fmtMoneyAdaptive, localDateKey } from "@/lib/format";
 
 interface Props {
   currency: CurrencyCode;
@@ -48,7 +48,7 @@ function FundDatePicker({ value, onChange, max }: { value: string; onChange: (va
     return day >= 1 && day <= days ? day : null;
   });
   const iso = (day: number) => `${year}-${String(mon + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateKey();
   const atLatestMonth = `${year}-${String(mon + 1).padStart(2, "0")}` >= max.slice(0, 7);
   const display = selected.replaceAll("-", "/");
   return <div className="relative">
@@ -84,7 +84,7 @@ export default function FundEntryDialog(props: Props) {
   const amountInputRef = useRef<HTMLInputElement>(null);
   const current = CURRENCIES.find((item) => item.code === props.currency) ?? CURRENCIES[0];
   const symbol = CURRENCY_SYMBOLS[props.currency];
-  const maxDate = new Date().toISOString().slice(0, 10);
+  const maxDate = localDateKey();
   const amountValue = Number(props.amount);
   const amountValid = Number.isFinite(amountValue) && amountValue > 0 && amountValue <= 1e12;
   const displayAmount = props.amount ? amountValue.toLocaleString("en-US", { maximumFractionDigits: 0 }) : "";

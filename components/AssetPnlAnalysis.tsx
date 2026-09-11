@@ -12,7 +12,7 @@ import { useMarketBadge, useMarketBadgeVisible } from "@/lib/useMarketBadge";
 import { showToast } from "@/lib/toast";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
-import { fmtMoney, fmtMoneyCompact } from "@/lib/format";
+import { fmtMoney, fmtMoneyCompact, localDateKey } from "@/lib/format";
 
 /** 成交日按市场时区归到 YYYY-MM-DD（与资产分析页同款，时间加权需要） */
 function marketDate(value: string, market: string) {
@@ -804,7 +804,7 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
     try {
       const link = document.createElement("a");
       link.href = shareImage;
-      link.download = `盈亏总额-${new Date().toISOString().slice(0, 10)}.png`;
+      link.download = `盈亏总额-${localDateKey()}.png`;
       link.click();
       showToast("分享图已保存");
     } catch (error) {

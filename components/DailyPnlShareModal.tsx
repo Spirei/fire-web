@@ -8,7 +8,7 @@ import { useAssetIcons } from "@/lib/useAssetIcons";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { getMarketBadge, isMarketBadgeVisible } from "@/lib/marketBadge";
 import type { CurrencyCode } from "@/lib/currencyPrefs";
-import { fmtNumberCompactZh } from "@/lib/format";
+import { fmtNumberCompactZh, localDateKey } from "@/lib/format";
 
 export interface DailyPnlShareItem {
   id: string;
@@ -360,7 +360,7 @@ export default function DailyPnlShareModal({ dayPnl, totalPnl, totalAsset, curre
       const canvas = await renderCard();
       const link = document.createElement("a");
       link.href = canvas.toDataURL("image/png");
-      link.download = `当日盈亏-${new Date().toISOString().slice(0, 10)}.png`;
+      link.download = `当日盈亏-${localDateKey()}.png`;
       link.click();
       showToast("分享图已保存");
     } catch (error) {

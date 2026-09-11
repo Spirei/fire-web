@@ -69,6 +69,11 @@ const STOCK_TYPES: { key: StockKey; label: string }[] = [
 
 const WEEKDAY_ZH = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
+/** 周一为一周首日（与 WEEKDAY_ZH 顺序一致）：getDay() 以周日为 0，查表前必须先换算 */
+function weekdayZh(y: number, m: number, d: number): string {
+  return WEEKDAY_ZH[(new Date(y, m, d).getDay() + 6) % 7];
+}
+
 function timeKind(time: string): TimeKey {
   if (time.includes("pre")) return "pre";
   if (time.includes("after")) return "after";
@@ -739,7 +744,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
               {sel && (
                 <div className="mb-3 flex items-center gap-2 px-1">
                   <span className="text-sm font-bold text-ink">{sel.m + 1}月{sel.d}日</span>
-                  <span className="text-xs text-faint">{WEEKDAY_ZH[new Date(sel.y, sel.m, sel.d).getDay()]}</span>
+                  <span className="text-xs text-faint">{weekdayZh(sel.y, sel.m, sel.d)}</span>
                   <span className="rounded-full bg-bg-gray/60 px-2 py-0.5 text-[11px] font-semibold text-muted ring-1 ring-edge dark:bg-white/5 dark:text-[#e7ebf1] dark:ring-white/10">{selectedRows.length} 家财报</span>
                 </div>
               )}
