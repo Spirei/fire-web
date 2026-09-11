@@ -88,6 +88,26 @@ const REGION_CURRENCY: Record<string, string> = {
   哈萨克斯坦: "KZT"
 };
 
+/** 地区按洲分组（下拉里用 optgroup 展示）；洲内把中国各地排最前，再按卡面数量排 */
+const CONTINENT_ORDER = ["亚洲", "欧洲", "北美洲", "大洋洲", "其他"] as const;
+const REGION_CONTINENT: Record<string, string> = {
+  中国内地: "亚洲",
+  中国香港: "亚洲",
+  中国澳门: "亚洲",
+  中国台湾: "亚洲",
+  日本: "亚洲",
+  新加坡: "亚洲",
+  哈萨克斯坦: "亚洲",
+  英国: "欧洲",
+  德国: "欧洲",
+  爱尔兰: "欧洲",
+  俄罗斯: "欧洲",
+  美国: "北美洲",
+  加拿大: "北美洲",
+  澳大利亚: "大洋洲"
+};
+const CHINA_REGIONS = new Set(["中国内地", "中国香港", "中国澳门", "中国台湾"]);
+
 function currencySymbol(code: string): string {
   return CARD_CURRENCIES.find((item) => item.code === code)?.symbol ?? (code ? `${code} ` : "");
 }
@@ -309,6 +329,20 @@ export default function CardLibraryView() {
     ];
   };
 
+  /** 地区排序：先按洲，中国各地优先，再按卡面数量 */
+  const sortedRegions = useMemo(() => {
+    const cardCount = (entry: RegionEntry) => entry.banks.reduce((sum, bank) => sum + bank.cards.length, 0);
+    return [...regions].sort((a, b) => {
+      const ca = CONTINENT_ORDER.indexOf((REGION_CONTINENT[a.label] ?? "其他") as (typeof CONTINENT_ORDER)[number]);
+      const cb = CONTINENT_ORDER.indexOf((REGION_CONTINENT[b.label] ?? "其他") as (typeof CONTINENT_ORDER)[number]);
+      if (ca !== cb) return ca - cb;
+      const chinaA = CHINA_REGIONS.has(a.label) ? 0 : 1;
+      const chinaB = CHINA_REGIONS.has(b.label) ? 0 : 1;
+      if (chinaA !== chinaB) return chinaA - chinaB;
+      return cardCount(b) - cardCount(a) || a.label.localeCompare(b.label, "zh-Hans-CN");
+    });
+  }, [regions]);
+
   const typeOptions = useMemo(() => {
     const counts = new Map<string, number>();
     flat.forEach(({ card }) => counts.set(card.type || "其他", (counts.get(card.type || "其他") ?? 0) + 1));
@@ -319,12 +353,12 @@ export default function CardLibraryView() {
   const regionOptions = useMemo(
     () => [
       { key: ALL, count: flat.length },
-      ...regions.map((entry) => ({
+      ...sortedRegions.map((entry) => ({
         key: entry.label,
         count: entry.banks.reduce((sum, bank) => sum + bank.cards.length, 0)
       }))
     ],
-    [regions, flat.length]
+    [sortedRegions, flat.length]
   );
   const brandOptions = useMemo(() => uniqueOptions(flat.map(({ card }) => (card.brand || "").trim())), [flat]);
   const levelOptions = useMemo(() => uniqueOptions(flat.map(({ card }) => (card.level || "").trim())), [flat]);
@@ -333,7 +367,7 @@ export default function CardLibraryView() {
   /** 银行下拉：跟随所选国家地区（含分组显示）；值为银行文件夹名（全局唯一） */
   const bankSelectOptions = useMemo(() => {
     const list: { value: string; label: string; group?: string }[] = [{ value: ALL, label: region === ALL ? "全部银行" : `全部银行（${region}）` }];
-    const scope = region === ALL ? regions : regions.filter((entry) => entry.label === region);
+    const scope = region === ALL ? sortedRegions : sortedRegions.filter((entry) => entry.label === region);
     scope.forEach((entry) => {
       entry.banks
         .slice()
@@ -342,12 +376,12 @@ export default function CardLibraryView() {
           list.push({
             value: bank.folder,
             label: bank.englishName && bank.englishName !== bank.name ? `${bank.name} ${bank.englishName}` : bank.name,
-            group: region === ALL ? entry.label : undefined
+            group: region === ALL ? `${REGION_CONTINENT[entry.label] ?? "其他"} · ${entry.label}` : undefined
           });
         });
     });
     return list;
-  }, [regions, region]);
+  }, [sortedRegions, region]);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -624,7 +658,13 @@ export default function CardLibraryView() {
             value={region}
             options={[
               { value: ALL, label: "全部地区" },
-              ...regionOptions.slice(1).map((option) => ({ value: option.key, label: `${option.key}（${option.count}）` }))
+              ...regionOptions
+                .slice(1)
+                .map((option) => ({
+                  value: option.key,
+                  label: `${option.key}（${option.count}）`,
+                  group: REGION_CONTINENT[option.key] ?? "其他"
+                }))
             ]}
             onChange={(next) => {
               setRegion(next);
