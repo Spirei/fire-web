@@ -150,6 +150,9 @@ export default function CardLibraryView() {
   const [regions, setRegions] = useState<RegionEntry[]>([]);
   const [typeOrder, setTypeOrder] = useState<string[]>([]);
   const [amounts, setAmounts] = useState<Record<string, CardAmount>>({});
+  const [holdings, setHoldings] = useState<Record<string, boolean>>({});
+  /** mine = 我的卡（默认）；all = 全量卡面库，用来挑卡加入 */
+  const [mode, setMode] = useState<"mine" | "all">("mine");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [hint, setHint] = useState("");
   const [loading, setLoading] = useState(true);
@@ -212,6 +215,11 @@ export default function CardLibraryView() {
         });
         setAmounts(map);
         setUserTags(data.tags && typeof data.tags === "object" ? (data.tags as Record<string, string[]>) : {});
+        const held: Record<string, boolean> = {};
+        (Array.isArray(data.holdings) ? data.holdings : []).forEach((key: string) => {
+          if (key) held[key] = true;
+        });
+        setHoldings(held);
       })
       .catch(() => {
         if (!cancelled) setHint("卡面库加载失败，稍后重试");
@@ -267,6 +275,7 @@ export default function CardLibraryView() {
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     return flat.filter(({ card, bank, region: regionLabel, tags }) => {
+      if (mode === "mine" && !holdings[card.file]) return false;
       if (region !== ALL && regionLabel !== region) return false;
       if (type !== ALL && (card.type || "其他") !== type) return false;
       if (brand !== ALL && (card.brand || "").trim() !== brand) return false;
@@ -283,9 +292,10 @@ export default function CardLibraryView() {
         tags.some((item) => item.toLowerCase().includes(keyword))
       );
     });
-  }, [flat, region, type, brand, level, tag, myTag, onlyFilled, amounts, userTags, query]);
+  }, [flat, mode, holdings, region, type, brand, level, tag, myTag, onlyFilled, amounts, userTags, query]);
 
   const filledCount = useMemo(() => flat.filter(({ card }) => amounts[card.file]).length, [flat, amounts]);
+  const heldCount = useMemo(() => flat.filter(({ card }) => holdings[card.file]).length, [flat, holdings]);
 
   /** 我的标签（用户自己打的，用于筛选） */
   const myTagOptions = useMemo(() => {
@@ -403,6 +413,26 @@ export default function CardLibraryView() {
     }
   }
 
+  async function setHeld(cardKey: string, held: boolean) {
+    try {
+      const res = await fetch("/api/cards/holdings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardKey, held })
+      });
+      if (!res.ok) throw new Error("holding save failed");
+      setHoldings((prev) => {
+        const next = { ...prev };
+        if (held) next[cardKey] = true;
+        else delete next[cardKey];
+        return next;
+      });
+      showToast(held ? "已加入我的卡" : "已移出我的卡");
+    } catch {
+      showToast("操作失败，稍后再试", "err");
+    }
+  }
+
   function addTag(value: string) {
     if (!active) return;
     const clean = value.trim().slice(0, 12);
@@ -425,12 +455,31 @@ export default function CardLibraryView() {
         <div>
           <h2 className="text-lg font-extrabold">卡面库</h2>
           <p className="mt-1 text-xs text-muted">
-            {flat.length > 0 ? `共 ${flat.length} 张卡面 · ${regions.length} 个地区` : "还没有卡面素材"}
-            {filledCount > 0 ? ` · 已录入 ${filledCount} 张` : ""}
+            {flat.length === 0
+              ? "还没有卡面素材"
+              : mode === "mine"
+                ? `我的卡 ${heldCount} 张${filledCount > 0 ? ` · 已录入金额 ${filledCount} 张` : ""}`
+                : `全部卡面 ${flat.length} 张 · ${regions.length} 个地区`}
             {updatedAt ? ` · 更新于 ${new Date(updatedAt).toLocaleDateString("zh-CN")}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex rounded-full bg-bg-gray p-1 text-xs dark:bg-white/5">
+            <button
+              type="button"
+              onClick={() => setMode("mine")}
+              className={`rounded-full px-3 py-1.5 font-semibold transition-colors duration-200 ${mode === "mine" ? "bg-white shadow-sm text-ink dark:bg-[#252c3a] dark:text-white" : "text-muted hover:text-ink"}`}
+            >
+              我的卡 {heldCount}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("all")}
+              className={`rounded-full px-3 py-1.5 font-semibold transition-colors duration-200 ${mode === "all" ? "bg-white shadow-sm text-ink dark:bg-[#252c3a] dark:text-white" : "text-muted hover:text-ink"}`}
+            >
+              全部卡面 {flat.length}
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => setOnlyFilled((value) => !value)}
@@ -529,8 +578,21 @@ export default function CardLibraryView() {
         </div>
       ) : hint ? (
         <div className="card py-16 text-center text-sm text-muted">{hint}</div>
+      ) : mode === "mine" && heldCount === 0 ? (
+        <div className="card flex flex-col items-center gap-3 py-16 text-center">
+          <p className="text-sm text-muted">还没有添加卡片 —— 卡面库默认只显示你持有的卡</p>
+          <button
+            type="button"
+            onClick={() => setMode("all")}
+            className="rounded-full border border-edge-strong bg-white px-4 py-2 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover dark:bg-[#1c1c1e] dark:text-white"
+          >
+            去全部卡面挑一张
+          </button>
+        </div>
       ) : filtered.length === 0 ? (
-        <div className="card py-16 text-center text-sm text-muted">没有符合条件的卡面</div>
+        <div className="card py-16 text-center text-sm text-muted">
+          {mode === "mine" ? "持有的卡里没有符合条件的卡面" : "没有符合条件的卡面"}
+        </div>
       ) : (
         <>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -538,6 +600,7 @@ export default function CardLibraryView() {
             const saved = amounts[card.file];
             const mine = userTags[card.file] ?? [];
             const shownTags = [...mine, ...tags.filter((item) => !mine.includes(item))];
+            const isHeld = !!holdings[card.file];
             return (
               <button
                 key={`${bank.folder}-${card.file}`}
@@ -561,6 +624,27 @@ export default function CardLibraryView() {
                   <span className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                     {card.type || "未分类"}
                   </span>
+                  {isHeld && (
+                    <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-[#3297f6] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+                      <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>
+                      我的卡
+                    </span>
+                  )}
+                  {mode === "all" && (
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void setHeld(card.file, !isHeld);
+                      }}
+                      className={`absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-sm transition-colors duration-200 ${
+                        isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
+                      }`}
+                    >
+                      {isHeld ? "移出" : "+ 加入"}
+                    </span>
+                  )}
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">
                   <b className="truncate text-[13px] font-semibold text-ink">{card.name}</b>
@@ -652,6 +736,22 @@ export default function CardLibraryView() {
               </p>
             </div>
             <div className="border-t border-edge px-5 py-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] text-muted">
+                  {holdings[active.card.file] ? "这张卡已在「我的卡」里，回卡面库默认就能看到" : "加入「我的卡」后，卡面库默认列表里就会出现它"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void setHeld(active.card.file, !holdings[active.card.file])}
+                  className={`h-8 rounded-full border px-3.5 text-xs font-semibold transition-all duration-200 hover:-translate-y-px active:scale-[.97] ${
+                    holdings[active.card.file]
+                      ? "border-edge-strong bg-white text-muted hover:bg-brand-hover hover:text-ink dark:bg-[#1c1c1e] dark:text-white/80"
+                      : "border-[#3297f6] bg-[#3297f6] text-white hover:brightness-105"
+                  }`}
+                >
+                  {holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
+                </button>
+              </div>
               <div className="flex flex-wrap items-end gap-2">
                 <label className="flex flex-col gap-1">
                   <span className="text-[11px] font-semibold text-muted">金额</span>

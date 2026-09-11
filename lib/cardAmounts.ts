@@ -83,3 +83,23 @@ export function saveCardTags(userId: string, cardKey: string, tags: string[]): s
   tx();
   return clean;
 }
+
+/** 用户持有的卡（卡面库默认只展示这些） */
+export function listCardHoldings(userId: string): string[] {
+  const rows = getDb()
+    .prepare("SELECT card_key FROM card_holdings WHERE user_id = ? ORDER BY created_at ASC")
+    .all(userId) as { card_key: string }[];
+  return rows.map((row) => row.card_key);
+}
+
+export function setCardHeld(userId: string, cardKey: string, held: boolean): boolean {
+  const db = getDb();
+  if (held) {
+    db.prepare(
+      "INSERT INTO card_holdings (user_id, card_key, created_at) VALUES (?, ?, ?) ON CONFLICT(user_id, card_key) DO NOTHING"
+    ).run(userId, cardKey, new Date().toISOString());
+  } else {
+    db.prepare("DELETE FROM card_holdings WHERE user_id = ? AND card_key = ?").run(userId, cardKey);
+  }
+  return held;
+}

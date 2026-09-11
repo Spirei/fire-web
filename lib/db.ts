@@ -198,6 +198,15 @@ function migrate(database: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_card_tags_user ON card_tags(user_id);
 
+    -- 卡面库：用户「持有」的卡（默认只展示持有的卡，其余在全量库里挑选）
+    CREATE TABLE IF NOT EXISTS card_holdings (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      card_key TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, card_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_card_holdings_user ON card_holdings(user_id);
+
     CREATE TABLE IF NOT EXISTS financial_report_files (
       id TEXT PRIMARY KEY,
       market TEXT NOT NULL,

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
-import { listCardAmounts, listCardTags } from "@/lib/cardAmounts";
+import { listCardAmounts, listCardHoldings, listCardTags } from "@/lib/cardAmounts";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +48,8 @@ export async function GET(request: Request) {
       updatedAt: manifest.generatedAt ?? null,
       source: manifest.source ?? "",
       amounts: listCardAmounts(user.id),
-      tags: listCardTags(user.id)
+      tags: listCardTags(user.id),
+      holdings: listCardHoldings(user.id)
     },
     { headers: { "Cache-Control": "no-store" } }
   );

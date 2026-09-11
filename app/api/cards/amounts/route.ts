@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
-import { deleteCardAmount, listCardAmounts, upsertCardAmount } from "@/lib/cardAmounts";
+import { deleteCardAmount, listCardAmounts, setCardHeld, upsertCardAmount } from "@/lib/cardAmounts";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +41,8 @@ export async function PUT(request: Request) {
   if (!cardKey || cardKey.length > 300) return NextResponse.json({ error: "卡面标识无效" }, { status: 400 });
   if (!Number.isFinite(amount) || amount < 0 || amount > 1e12) return NextResponse.json({ error: "金额无效" }, { status: 400 });
   const record = upsertCardAmount(user.id, { cardKey, amount, currency, note });
+  // 录入金额的卡默认视为「持有」：卡面库默认列表只显示持有的卡，录了钱却看不到会很困惑
+  setCardHeld(user.id, cardKey, true);
   return NextResponse.json({ amount: record }, { headers: { "Cache-Control": "no-store" } });
 }
 
