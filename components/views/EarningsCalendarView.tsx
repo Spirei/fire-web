@@ -798,24 +798,26 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
           aria-hidden={!selectedDate}
         >
           <div className="overflow-hidden">
-            <div className="mx-3 mb-4 rounded-[16px] border border-edge bg-bg-gray/40 p-3 sm:mx-5 sm:p-4 dark:bg-[#10141d]">
-              {sel && (
-                <div className="mb-3 flex items-center gap-2 px-1">
-                  <span className="text-sm font-bold text-ink">{sel.m + 1}月{sel.d}日</span>
-                  <span className="text-xs text-faint">{weekdayZh(sel.y, sel.m, sel.d)}</span>
-                  <span className="rounded-full bg-bg-gray/60 px-2 py-0.5 text-[11px] font-semibold text-muted ring-1 ring-edge dark:bg-white/5 dark:text-[#e7ebf1] dark:ring-white/10">{selectedRows.length} 家财报</span>
-                </div>
-              )}
-              {selectedDate && selectedRows.length === 0 && (byDateAll.get(selectedDate)?.length ?? 0) > 0 && (
-                <p className="mb-3 rounded-[10px] border border-dashed border-edge-strong px-3 py-2.5 text-xs text-muted">
-                  当天有 {byDateAll.get(selectedDate)!.length} 家财报，但被当前「市值 / 时段 / 类型」筛选隐藏，可调整筛选条件查看
-                </p>
-              )}
-              {selectedDate && selectedRows.length === 0 && (byDateAll.get(selectedDate)?.length ?? 0) === 0 && (
-                <p className="mb-3 px-1 text-xs text-faint">该日暂无财报</p>
-              )}
+            <div className="mx-3 mb-4 overflow-hidden rounded-[16px] border border-edge bg-bg-gray/40 sm:mx-5 dark:bg-[#10141d]">
+              <div className="px-3 py-3 sm:px-4 sm:py-4">
+                {sel && (
+                  <div className="flex items-center gap-2 px-1">
+                    <span className="text-sm font-bold text-ink">{sel.m + 1}月{sel.d}日</span>
+                    <span className="text-xs text-faint">{weekdayZh(sel.y, sel.m, sel.d)}</span>
+                    <span className="rounded-full bg-bg-gray/60 px-2 py-0.5 text-[11px] font-semibold text-muted ring-1 ring-edge dark:bg-white/5 dark:text-[#e7ebf1] dark:ring-white/10">{selectedRows.length} 家财报</span>
+                  </div>
+                )}
+                {selectedDate && selectedRows.length === 0 && (byDateAll.get(selectedDate)?.length ?? 0) > 0 && (
+                  <p className="mt-3 rounded-[10px] border border-dashed border-edge-strong px-3 py-2.5 text-xs text-muted">
+                    当天有 {byDateAll.get(selectedDate)!.length} 家财报，但被当前「市值 / 时段 / 类型」筛选隐藏，可调整筛选条件查看
+                  </p>
+                )}
+                {selectedDate && selectedRows.length === 0 && (byDateAll.get(selectedDate)?.length ?? 0) === 0 && (
+                  <p className="mt-3 px-1 text-xs text-faint">该日暂无财报</p>
+                )}
+              </div>
               {selectedRows.length > 0 && (
-                <div data-day-detail-list className="overflow-hidden rounded-[14px] border border-edge bg-white shadow-card dark:border-[#2a2f3a] dark:bg-[#16181d]">
+                <div data-day-detail-list className="border-t border-edge bg-white dark:border-[#2a2f3a] dark:bg-[#16181d]">
                   {/* 列头：md 起与数据列同宽对齐；lg 起把市值单独成列。公司列封顶 420px、数据列固定窄宽紧挨着排，
                       列不随屏幕拉伸；表格本身仍是满宽，右边缘与上方日历网格对齐 */}
                   <div className="hidden grid-cols-[minmax(0,420px)_80px_112px_112px] items-center gap-4 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted md:grid lg:grid-cols-[minmax(0,420px)_96px_80px_112px_112px] dark:bg-white/5">
