@@ -145,44 +145,65 @@
   }
   .fire-year-actions { display: flex; }
 
-  /* 财报日历：格子里用股票图标，点开日期看名称；选中态不再用桌面悬浮层 */
+  /* 财报日历：格内两排「图标+名称」，超出在格内下拉；选中不再用桌面悬浮层 */
   .earnings-calendar-page > p { font-size: 12px; }
   .earnings-calendar-grid { padding: 10px 7px; }
   .earnings-calendar-grid [class~="grid-cols-7"] { gap: 3px; }
   .earnings-calendar-grid [class~="grid-cols-7"] > button,
-  .earnings-calendar-grid [class~="grid-cols-7"] > div { min-height: 58px; height: 58px; border-radius: 9px; padding: 4px; }
-  .earnings-calendar-grid [class~="grid-cols-7"] > button > span:first-child { width: 20px; height: 20px; font-size: 10px; }
+  .earnings-calendar-grid [class~="grid-cols-7"] > div { min-height: 64px; height: 64px; border-radius: 9px; padding: 4px; }
+  .earnings-calendar-grid [class~="grid-cols-7"] > button > span:first-child { width: 18px; height: 18px; font-size: 10px; }
   .earnings-calendar-grid [data-earnings-pop] { display: none !important; }
   .earnings-calendar-grid [data-earnings-rows] {
     display: flex;
-    flex: 1 1 0%;
+    flex: 1 1 auto;
     min-height: 0;
-    flex-direction: row;
-    flex-wrap: wrap;
+    max-height: 34px;
+    flex-direction: column;
+    flex-wrap: nowrap;
     align-content: flex-start;
     gap: 2px;
     padding-top: 1px;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.7) transparent;
   }
-  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row] {
+  .earnings-calendar-grid [data-earnings-rows]::-webkit-scrollbar { width: 3px; }
+  .earnings-calendar-grid [data-earnings-rows]::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.7);
+  }
+  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row],
+  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row]:nth-child(n+4) {
     display: flex;
-    width: 16px;
-    min-width: 16px;
-    overflow: visible;
-    gap: 0;
+    width: 100%;
+    min-width: 0;
+    height: 16px;
+    overflow: hidden;
+    gap: 3px;
   }
-  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row]:nth-child(4) { display: flex; }
-  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row]:nth-child(n+5) { display: none; }
-  .earnings-calendar-grid [data-earnings-name],
-  .earnings-calendar-grid [data-earnings-dot] { display: none; }
+  .earnings-calendar-grid [data-earnings-dot],
+  .earnings-calendar-grid [data-earnings-more] { display: none; }
+  .earnings-calendar-grid [data-earnings-name] {
+    display: block;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 9px;
+    line-height: 16px;
+  }
   .earnings-calendar-grid [data-earnings-logo],
   .earnings-calendar-grid [data-earnings-logo] img,
   .earnings-calendar-grid [data-earnings-logo] span {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     font-size: 8px;
   }
-  .earnings-calendar-grid [data-earnings-more] { width: 100%; font-size: 9px; line-height: 1.2; }
 
   .celeb-summary-ring { display: none; }
   .celeb-detail-summary { gap: 14px; padding: 16px !important; }
@@ -289,11 +310,14 @@
     .earnings-calendar-grid { padding: 12px; }
   .earnings-calendar-grid [class~="grid-cols-7"] { gap: 6px; }
   .earnings-calendar-grid [class~="grid-cols-7"] > button,
-  .earnings-calendar-grid [class~="grid-cols-7"] > div { min-height: 72px; height: 72px; border-radius: 12px; padding: 6px; }
-  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row] { width: 18px; min-width: 18px; }
+  .earnings-calendar-grid [class~="grid-cols-7"] > div { min-height: 76px; height: 76px; border-radius: 12px; padding: 6px; }
+  .earnings-calendar-grid [data-earnings-rows] { max-height: 40px; gap: 3px; }
+  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row],
+  .earnings-calendar-grid [data-earnings-rows] > [data-earnings-row]:nth-child(n+4) { height: 18px; }
+  .earnings-calendar-grid [data-earnings-name] { font-size: 10px; line-height: 18px; }
   .earnings-calendar-grid [data-earnings-logo],
   .earnings-calendar-grid [data-earnings-logo] img,
-  .earnings-calendar-grid [data-earnings-logo] span { width: 18px; height: 18px; }
+  .earnings-calendar-grid [data-earnings-logo] span { width: 16px; height: 16px; }
 
 .mobile-hide-duplicate-summary { display: block; }
   .mobile-analysis-holdings { min-width: 760px !important; table-layout: auto; }
