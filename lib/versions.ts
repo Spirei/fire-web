@@ -2870,6 +2870,10 @@ export const V0_1_28_ENTRY: VersionEntry = {
     title: "修复全站股票图标刷新后闪现首字母（服务端注入的图标表改为渲染期预热）",
     desc: "现象：刷新页面后，持仓 / 自选 / 资产分析等列表里的股票图标先显示首字母占位（S / T / 英 / 标 …），随后才切成真实图标，肉眼能看到「闪一下」。根因：layout 已经按当前记录算好并在服务端注入了图标表 `initialStockIcons`（还带了 preload），但 `RecordsApp` 只在 `useLayoutEffect` 里调 `primeStockIconCache` —— 子组件（AssetAnalysisView / HoldingsView 等）的首次渲染发生在父组件渲染阶段、早于父组件的 layout effect，那时共享缓存还是空的，于是首帧画的是首字母；等父组件 layout effect 与子组件挂载后的 passive effect 跑完才补上图标，浏览器早已把首字母画到屏幕上。修复：把预热提前到渲染期（`useMemo(() => primeStockIconCache(initialStockIcons), [initialStockIcons])`）——该函数只写缓存、不通知订阅者，不会打断水合，与市场色块的 `primeMarketBadges` 同一套思路；另外把 `useAssetIcons` 里「读 localStorage 缓存」从 `useEffect` 挪到 `useLayoutEffect`，浏览器绘制前就把本地缓存的图标并进首帧（服务端注入没覆盖到的图标同样不再闪）。验证：对 `/asset-analysis` 的首屏 HTML 做 A/B 对比 —— 修复前 3 个 `<img>`、0 个股票图标（整列首字母兜底），修复后 13 个 `<img>`、其中 10 个是股票图标，SSR 首屏直接就是图标。tsc 无错误、冒烟 113/113 全 PASS。",
     kind: "fix"
+  }, {
+    title: "收益日历偏好持久化 + 市场图标随首屏下发 + 当日盈亏明细加股票图标",
+    desc: "1) 收益日历的市场选择此前只在资产盈亏分析页做了持久化，资产分析页新增的日历模块是纯 `useState`，刷新就回到「全部」；现在把日历偏好（市场 / 月份 / 年视图 / 收益-收益率）抽成 `lib/pnlCalendar` 的 `readPnlCalendarPrefs` / `savePnlCalendarPref`，两个页面共用同一组 localStorage key（`fire:asset-pnl-cal-*`），资产分析页在 `useLayoutEffect` 里恢复、每次切换即保存，刷新与跨页都保持。2) 市场图标（素材库 type=market）改为随首屏 HTML 下发：新增 `getMarketIconMap()` 与 `primeMarketIconCache()`，layout 把 6 个市场图标一并放进 preload，`RecordsApp` / `HomeContent` 在渲染期预热共享缓存 —— 市场下拉与筛选按钮首帧就是真实图标，不再等客户端请求 `/api/assets` 才有（此前点开下拉要晚一拍才出现国旗）。3) 「当日盈亏」明细弹窗每一行加上股票图标（沿用全站 `stockIcons`，缓存未命中时回退首字母）。验证：tsc 无错误、冒烟 113/113 全 PASS；首屏 HTML 实测已带 6 个市场图标 preload 与 10 个股票图标 preload。",
+    kind: "fix"
   }]
 };
 

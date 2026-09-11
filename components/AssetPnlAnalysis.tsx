@@ -14,7 +14,7 @@ import { showToast } from "@/lib/toast";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
 import { fmtMoney, fmtMoneyCompact, localDateKey } from "@/lib/format";
-import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, type CalendarDayRow } from "@/lib/pnlCalendar";
+import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 
 
 /* 客户端 K 线缓存：日收盘序列 10 分钟内不重复请求（与资产分析页同款），
@@ -196,16 +196,14 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   });
   useLayoutEffect(() => {
     try {
-      const savedMarket = localStorage.getItem("fire:asset-pnl-cal-market");
-      if (["全部", "美股", "港股", "A股"].includes(savedMarket ?? "")) setCalMarket(savedMarket as string);
+      const prefs = readPnlCalendarPrefs();
+      if (prefs.market) setCalMarket(prefs.market);
+      if (prefs.month) setCalMonth(prefs.month);
+      if (prefs.view) setCalView(prefs.view);
+      if (prefs.mode) setCalendarMode(prefs.mode);
       const savedBench = localStorage.getItem("fire:asset-pnl-bench");
       if (BENCHMARKS.some((item) => item.key === savedBench)) setBenchKey(savedBench as string);
       if (localStorage.getItem("fire:asset-pnl-weighting") === "time") setWeighting("time");
-      const savedMonth = JSON.parse(localStorage.getItem("fire:asset-pnl-cal-month") || "null") as { y?: number; m?: number } | null;
-      const { y, m } = savedMonth ?? {};
-      if (typeof y === "number" && typeof m === "number" && Number.isInteger(y) && Number.isInteger(m) && m >= 1 && m <= 12) {
-        setCalMonth({ y, m });
-      }
     } catch {
       /* 读取失败保留默认偏好 */
     }
@@ -874,27 +872,26 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
               month={calMonth}
               onMonthChange={(next) => {
                 setCalMonth(next);
-                try {
-                  localStorage.setItem("fire:asset-pnl-cal-month", JSON.stringify(next));
-                } catch {
-                  /* 忽略 */
-                }
+                savePnlCalendarPref({ month: next });
               }}
               view={calView}
-              onViewChange={setCalView}
+              onViewChange={(next) => {
+                setCalView(next);
+                savePnlCalendarPref({ view: next });
+              }}
               mode={calendarMode}
-              onModeChange={setCalendarMode}
+              onModeChange={(next) => {
+                setCalendarMode(next);
+                savePnlCalendarPref({ mode: next });
+              }}
               market={calMarket}
               onMarketChange={(next) => {
                 setCalMarket(next);
-                try {
-                  localStorage.setItem("fire:asset-pnl-cal-market", next);
-                } catch {
-                  /* 忽略 */
-                }
+                savePnlCalendarPref({ market: next });
               }}
               formatAmount={moneyDisp}
               formatCompact={compactDisp}
+              stockIcons={stockIcons}
               onDayClick={openDayDetail}
               dayDetail={dayDetail}
               onDayDetailClose={() => setDayDetail(null)}

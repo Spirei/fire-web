@@ -29,6 +29,8 @@
 
 - 修复全站股票图标刷新后闪现首字母：服务端注入的图标表原来只在 `RecordsApp` 的 `useLayoutEffect` 里预热，而子组件的首帧渲染早于它，所以刷新后先画首字母再切图标。改为**渲染期预热**（只写缓存、不通知订阅者，不打断水合，与市场色块 `primeMarketBadges` 同思路），并把 `useAssetIcons` 读 localStorage 缓存的时机从 `useEffect` 提到 `useLayoutEffect`（绘制前）。验证：`/asset-analysis` 首屏 HTML A/B —— 修复前 3 个 `<img>`、0 个股票图标；修复后 13 个 `<img>`、其中 10 个股票图标。
 
+- 收益日历三项收口：① 日历偏好（市场 / 月份 / 年视图 / 收益-收益率）抽成 `readPnlCalendarPrefs` / `savePnlCalendarPref` 两个页面共用，修掉「资产分析页刷新后市场回到全部」；② 市场图标（素材库 type=market）随首屏 HTML 下发并 preload（`getMarketIconMap` + `primeMarketIconCache`），市场下拉不再晚一拍才出现国旗；③ 「当日盈亏」明细弹窗每行补上股票图标。
+
 ---
 
 ## v0.1.27 · 2026-09-11

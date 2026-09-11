@@ -21,7 +21,7 @@ import { showToast } from "@/lib/toast";
 import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import SettingsWindow from "@/components/SettingsWindow";
-import { primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
+import { primeMarketIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import WatchlistView from "@/components/views/WatchlistView";
@@ -86,7 +86,8 @@ export default function RecordsApp({
   initialRecords,
   initialUserLogs,
   initialSettings,
-  initialStockIcons
+  initialStockIcons,
+  initialMarketIcons = {}
 }: {
   initialTab: string;
   initialSymbol?: string;
@@ -96,6 +97,7 @@ export default function RecordsApp({
   initialUserLogs: SystemLog[];
   initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled">;
   initialStockIcons: Record<string, string>;
+  initialMarketIcons?: Record<string, string>;
 }) {
   const router = useRouter();
   const [user] = useState<User>(initialUser);
@@ -130,6 +132,7 @@ export default function RecordsApp({
   // 之后 effect 才补上，刷新时就会看到「图标闪一下才出来」。服务端同一份渲染路径也会带上图标，
   // 首屏 HTML 直接就是图标（layout 里还做了 preload）。
   useMemo(() => primeStockIconCache(initialStockIcons), [initialStockIcons]);
+  useMemo(() => primeMarketIconCache(initialMarketIcons), [initialMarketIcons]);
   useLayoutEffect(() => {
     applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
   }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible]);

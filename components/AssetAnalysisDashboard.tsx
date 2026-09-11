@@ -22,7 +22,7 @@ import MarketCodeBadge from "@/components/MarketCodeBadge";
 import Pagination from "@/components/Pagination";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
 import PnlCalendar from "@/components/PnlCalendar";
-import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, type CalendarDayRow } from "@/lib/pnlCalendar";
+import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 
 type Period = "month" | "1m" | "6m" | "ytd" | "1y" | "all" | "custom";
 type ChartTab = "return" | "asset";
@@ -360,6 +360,15 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const [calMode, setCalMode] = useState<"收益" | "收益率">("收益");
   const [calMarket, setCalMarket] = useState<string>("全部");
   const [dayDetail, setDayDetail] = useState<{ date: string; rows: CalendarDayRow[] } | null>(null);
+
+  // 日历偏好（市场 / 月份 / 年视图 / 指标）恢复：放到 useLayoutEffect 里，绘制前生效、且不破坏水合
+  useLayoutEffect(() => {
+    const prefs = readPnlCalendarPrefs();
+    if (prefs.market) setCalMarket(prefs.market);
+    if (prefs.view) setCalView(prefs.view);
+    if (prefs.mode) setCalMode(prefs.mode);
+    if (prefs.month) setCalMonth(prefs.month);
+  }, []);
   const [holdingSearch, setHoldingSearch] = useState("");
   const [holdingPage, setHoldingPage] = useState(1);
   const [holdingSort, setHoldingSort] = usePersistedState<HoldingSort | null>("fire:asset-holdings-sort", null);
@@ -1261,15 +1270,28 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
             yearSummary={calendarYear}
             loading={trendLoading}
             month={calMonth}
-            onMonthChange={setCalMonth}
+            onMonthChange={(next) => {
+              setCalMonth(next);
+              savePnlCalendarPref({ month: next });
+            }}
             view={calView}
-            onViewChange={setCalView}
+            onViewChange={(next) => {
+              setCalView(next);
+              savePnlCalendarPref({ view: next });
+            }}
             mode={calMode}
-            onModeChange={setCalMode}
+            onModeChange={(next) => {
+              setCalMode(next);
+              savePnlCalendarPref({ mode: next });
+            }}
             market={calMarket}
-            onMarketChange={setCalMarket}
+            onMarketChange={(next) => {
+              setCalMarket(next);
+              savePnlCalendarPref({ market: next });
+            }}
             formatAmount={calendarAmount}
             formatCompact={calendarCompact}
+            stockIcons={stockIcons}
             onDayClick={(date) => {
               const rows = buildDayDetailRows({ date, positions: calendarRows, closesMap: recordCloses, rates });
               if (rows.length > 0) setDayDetail({ date, rows });

@@ -93,6 +93,8 @@ export interface PnlCalendarProps {
   onDayClick: (date: string) => void;
   dayDetail: { date: string; rows: CalendarDayRow[] } | null;
   onDayDetailClose: () => void;
+  /** 当日明细行前面的股票图标（key 形态 `市场:代码`，与全站一致） */
+  stockIcons?: Record<string, string>;
   /** 明细行里的市场标识，默认用全站通用的 MarketCodeBadge */
   renderMarketBadge?: (row: CalendarDayRow) => ReactNode;
   className?: string;
@@ -116,6 +118,7 @@ export default function PnlCalendar({
   onDayClick,
   dayDetail,
   onDayDetailClose,
+  stockIcons,
   renderMarketBadge,
   className = "card p-5",
   title = "收益日历"
@@ -294,7 +297,17 @@ export default function PnlCalendar({
                     <div key={row.id} className="relative flex min-h-16 items-center overflow-hidden rounded-xl px-4">
                       <div className={`absolute inset-y-0 right-0 rounded-xl ${dayDetailMode === "profit" ? "bg-up-bg" : "bg-down-bg"}`} style={{ width: `${Math.max(20, Math.abs(row.pnl) / maxRank * 100)}%` }} />
                       <span className="relative mr-3 w-6 flex-none text-xs text-muted">{String(index + 1).padStart(2, "0")}</span>
-                      <div className="relative flex min-w-0 flex-1 items-center gap-2">
+                      <div className="relative flex min-w-0 flex-1 items-center gap-2.5">
+                        {(() => {
+                          const icon = stockIcons?.[`${row.market.toUpperCase()}:${row.code.toUpperCase()}`];
+                          return icon ? (
+                            <img src={icon} alt="" className="h-7 w-7 flex-none rounded-full bg-bg-gray object-cover" />
+                          ) : (
+                            <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-bg-gray text-[11px] font-bold text-ink-2">
+                              {(row.name || row.code).trim().slice(0, 1).toUpperCase()}
+                            </span>
+                          );
+                        })()}
                         <div className="min-w-0">
                           <p className="truncate text-xs font-semibold">{row.name}</p>
                           <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">

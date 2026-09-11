@@ -47,6 +47,60 @@ export interface CalendarDayRow {
   pnl: number;
 }
 
+/* ---------- 日历偏好（localStorage）：资产分析与资产盈亏分析共用同一组 key，刷新 / 切页都保持 ---------- */
+const CAL_PREF_KEYS = {
+  market: "fire:asset-pnl-cal-market",
+  month: "fire:asset-pnl-cal-month",
+  view: "fire:asset-pnl-cal-view",
+  mode: "fire:asset-pnl-cal-mode"
+} as const;
+
+export interface PnlCalendarPrefs {
+  market?: string;
+  view?: "year" | "month";
+  mode?: "收益" | "收益率";
+  month?: { y: number; m: number };
+}
+
+export function readPnlCalendarPrefs(): PnlCalendarPrefs {
+  if (typeof window === "undefined") return {};
+  const out: PnlCalendarPrefs = {};
+  try {
+    const market = localStorage.getItem(CAL_PREF_KEYS.market);
+    if (market && ["全部", "美股", "港股", "A股"].includes(market)) out.market = market;
+    const view = localStorage.getItem(CAL_PREF_KEYS.view);
+    if (view === "year" || view === "month") out.view = view;
+    const mode = localStorage.getItem(CAL_PREF_KEYS.mode);
+    if (mode === "收益" || mode === "收益率") out.mode = mode;
+    const saved = JSON.parse(localStorage.getItem(CAL_PREF_KEYS.month) || "null") as { y?: unknown; m?: unknown } | null;
+    if (
+      typeof saved?.y === "number" &&
+      typeof saved?.m === "number" &&
+      Number.isInteger(saved.y) &&
+      Number.isInteger(saved.m) &&
+      saved.m >= 1 &&
+      saved.m <= 12
+    ) {
+      out.month = { y: saved.y, m: saved.m };
+    }
+  } catch {
+    /* 读失败就用默认偏好 */
+  }
+  return out;
+}
+
+export function savePnlCalendarPref(patch: PnlCalendarPrefs) {
+  if (typeof window === "undefined") return;
+  try {
+    if (patch.market !== undefined) localStorage.setItem(CAL_PREF_KEYS.market, patch.market);
+    if (patch.view !== undefined) localStorage.setItem(CAL_PREF_KEYS.view, patch.view);
+    if (patch.mode !== undefined) localStorage.setItem(CAL_PREF_KEYS.mode, patch.mode);
+    if (patch.month) localStorage.setItem(CAL_PREF_KEYS.month, JSON.stringify(patch.month));
+  } catch {
+    /* 存不下忽略 */
+  }
+}
+
 /** 订单成交时间 → 市场当地日期（YYYY-MM-DD） */
 export function calendarMarketDate(value: string, market: string): string {
   const timeZone = market.toUpperCase() === "US" ? "America/New_York" : "Asia/Shanghai";

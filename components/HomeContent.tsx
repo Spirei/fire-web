@@ -8,7 +8,7 @@ import UserMenu from "@/components/UserMenu";
 import IndexTicker from "@/components/IndexTicker";
 import StockSearch from "@/components/StockSearch";
 import MarketIcon from "@/components/MarketIcon";
-import { primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
+import { primeMarketIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
 import { showToast } from "@/lib/toast";
 import { setThemeCookie } from "@/lib/theme";
 import { logoFontClass } from "@/lib/logoFont";
@@ -218,8 +218,9 @@ const NAV_FALLBACK: Record<string, { label: string; href: string }> = {
   records: { label: "自选记录", href: "/records" }
 };
 
-export default function HomeContent({ settings, initialDark = false, initialUser = null, initialStockIcons = {} }: { settings: SiteSettings; initialDark?: boolean; initialUser?: User | null; initialStockIcons?: Record<string, string> }) {
+export default function HomeContent({ settings, initialDark = false, initialUser = null, initialStockIcons = {}, initialMarketIcons = {} }: { settings: SiteSettings; initialDark?: boolean; initialUser?: User | null; initialStockIcons?: Record<string, string>; initialMarketIcons?: Record<string, string> }) {
   primeStockIconCache(initialStockIcons);
+  primeMarketIconCache(initialMarketIcons);
   // SSR 阶段直接使用服务端主题（Cookie），避免刷新时 hero 遮罩先按浅色渲染造成大片白色
   const [dark, setDark] = useState(initialDark);
   const [themeReady, setThemeReady] = useState(false);

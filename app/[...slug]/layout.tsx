@@ -10,7 +10,7 @@ import UserMenu from "@/components/UserMenu";
 import SiteLogo from "@/components/SiteLogo";
 import IndexTicker from "@/components/IndexTicker";
 import Toaster from "@/components/Toaster";
-import { getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
+import { getMarketIconMap, getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
 import { CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/lib/currencyPrefs";
 import { headers } from "next/headers";
 import { unstable_noStore } from "next/cache";
@@ -69,6 +69,8 @@ export default async function SlugLayout({
   // 当前账户涉及的股票图标随 HTML 首屏下发，不再等待客户端请求 3,000+ 条素材。
   // 杠杆 ETF 同时带上正股图标，兼容素材库的正股兜底规则。
   const initialStockIcons = getStockIconMap(stockIconKeysForRecords(initialRecords));
+  // 市场图标一并首屏下发：市场下拉 / 筛选首帧就是素材库图标，不再等客户端请求
+  const initialMarketIcons = getMarketIconMap();
 
   return (
     <div className="min-h-screen bg-page">
@@ -78,6 +80,7 @@ export default async function SlugLayout({
           .filter(Boolean)
           .map((u) => <link key={u} rel="preload" as="image" href={u} />)}
       {[...new Set(Object.values(initialStockIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
+      {[...new Set(Object.values(initialMarketIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
       <Toaster />
       <header className="app-shell-header site-header sticky top-0 z-50 h-[72px] border-b border-edge/80">
         <div className="mx-auto flex h-full max-w-[1140px] items-center gap-5 px-6">
@@ -101,6 +104,7 @@ export default async function SlugLayout({
           initialRecords={initialRecords}
           initialUserLogs={initialUserLogs}
           initialStockIcons={initialStockIcons}
+          initialMarketIcons={initialMarketIcons}
           initialSettings={{
             tabs: settings.tabs,
             groups: settings.groups,

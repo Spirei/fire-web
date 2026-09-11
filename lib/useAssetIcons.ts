@@ -128,6 +128,34 @@ export function primeStockIconCache(icons: Record<string, string>) {
   cache.set("stock", { assets: [...byKey.values()], at: current?.at ?? 0 });
 }
 
+/** 服务端首屏注入的市场图标表：渲染期预热，市场下拉 / 筛选首帧就是素材库图标（at 保持 0 让完整列表后台刷新） */
+export function primeMarketIconCache(icons: Record<string, string>) {
+  const current = cache.get("market");
+  const byKey = new Map<string, Asset>();
+  (current?.assets ?? []).forEach((asset) => byKey.set(asset.market.toUpperCase(), asset));
+  Object.entries(icons).forEach(([rawKey, url]) => {
+    if (!url) return;
+    const key = rawKey.trim().toUpperCase();
+    if (!key || byKey.has(key)) return;
+    byKey.set(key, {
+      id: `market:${key}`,
+      type: "market",
+      market: key,
+      code: key,
+      name: key,
+      url,
+      marketCap: 0,
+      price: null,
+      changePct: null,
+      source: "auto",
+      lastCheckedAt: "",
+      board: "",
+      updatedAt: ""
+    });
+  });
+  cache.set("market", { assets: [...byKey.values()], at: current?.at ?? 0 });
+}
+
 function cacheKey(type: AssetType) {
   return `fire:assets:cache:${type}`;
 }

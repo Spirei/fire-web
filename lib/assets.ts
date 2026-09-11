@@ -209,6 +209,27 @@ export function getStockIconMap(pairs: Array<{ market: string; code: string }>):
   return out;
 }
 
+/**
+ * 市场图标（素材库 type=market）随首屏 HTML 一起下发：市场下拉、市场筛选按钮首帧就是素材库图标，
+ * 不再等客户端拿完 /api/assets 才切成真实图标（此前刷新/首次打开下拉会晚一拍才出现）。
+ */
+export function getMarketIconMap(): Record<string, string> {
+  const db = getDb();
+  const rows = db.prepare("SELECT market, code, url FROM assets WHERE type = 'market'").all() as Array<{
+    market?: string;
+    code?: string;
+    url?: string;
+  }>;
+  const out: Record<string, string> = {};
+  rows.forEach((row) => {
+    const key = String(row.market || row.code || "").trim().toUpperCase();
+    const url = String(row.url || "");
+    if (!key || !url || !localAssetExists(url)) return;
+    out[key] = url;
+  });
+  return out;
+}
+
 /** 用镜像内置券商素材补齐当前券商配置；按券商名称/别名匹配，幂等且不覆盖用户图标。 */
 export function ensureBrokerAssets(): void {
   if (seeded.broker) return;
