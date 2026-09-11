@@ -9,4 +9,6 @@
   textarea { font-size: max(16px, 1em); }
   /* 触屏没有 hover：桌面端靠悬停才露出来的信息（卡面类型、底部遮罩）在触屏上常驻 */
   .touch-always { opacity: 1 !important; }
+  /* 触屏没有 hover：卡片右上角的操作 icon（加入/移出、上传卡面）必须一直可点 */
+  .card-actions { opacity: 1 !important; pointer-events: auto !important; }
 }

@@ -1421,7 +1421,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100" />
                 </div>
                 {/* 卡片右上角：加入 / 移出我的卡、上传卡面（换过图的再给一颗恢复原图） */}
-                <div className="absolute right-2 top-2 flex items-center gap-1.5">
+                {/* 默认藏起来，划过卡片（或键盘聚焦）才出现；触屏设备从 touch.css 里恢复常显 */}
+                <div className="card-actions absolute right-2 top-2 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/card:opacity-100 pointer-events-none focus-within:pointer-events-auto group-hover/card:pointer-events-auto">
                   <button
                     type="button"
                     onClick={() => void setHeld(active.card.file, !holdings[active.card.file])}
