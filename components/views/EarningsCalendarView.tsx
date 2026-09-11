@@ -123,23 +123,29 @@ function fmtPrice(n: number | null): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function fmtPriceByMarket(n: number | null, market: string): string {
+function fmtPriceByMarket(n: number | null, market: string, withSymbol = true): string {
   const num = fmtPrice(n);
   if (num === "—") return num;
-  return market === "CN" ? `¥${num}` : `$${num}`;
+  if (!withSymbol) return num;
+  if (market === "CN") return `¥${num}`;
+  if (market === "HK") return `HK$${num}`;
+  return `$${num}`;
 }
 
-function fmtCapByMarket(n: number, market: string): string {
+/** withSymbol=false 用于日历里的紧凑卡片：省掉币种符号，只留数字与单位 */
+function fmtCapByMarket(n: number, market: string, withSymbol = true): string {
   if (!n) return "";
+  const mark = withSymbol ? "HK$" : "";
   if (market === "CN") {
-    if (n >= 1e12) return `¥${(n / 1e12).toFixed(2)}万亿`;
-    if (n >= 1e8) return `¥${(n / 1e8).toFixed(0)}亿`;
-    return `¥${(n / 1e4).toFixed(0)}万`;
+    const cny = withSymbol ? "¥" : "";
+    if (n >= 1e12) return `${cny}${(n / 1e12).toFixed(2)}万亿`;
+    if (n >= 1e8) return `${cny}${(n / 1e8).toFixed(0)}亿`;
+    return `${cny}${(n / 1e4).toFixed(0)}万`;
   }
   if (market === "HK") {
-    if (n >= 1e12) return `HK$${(n / 1e12).toFixed(2)}万亿`;
-    if (n >= 1e8) return `HK$${(n / 1e8).toFixed(0)}亿`;
-    return `HK$${(n / 1e4).toFixed(0)}万`;
+    if (n >= 1e12) return `${mark}${(n / 1e12).toFixed(2)}万亿`;
+    if (n >= 1e8) return `${mark}${(n / 1e8).toFixed(0)}亿`;
+    return `${mark}${(n / 1e4).toFixed(0)}万`;
   }
   return fmtCap(n);
 }
@@ -807,12 +813,12 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                                   <div className="min-w-0 leading-[1.2]">
                                     <div className="truncate text-[10px] font-semibold text-ink">{row.nameZh || row.name}</div>
                                     <div className="truncate text-[9px] text-faint">
-                                      {row.symbol} · {fmtCapByMarket(row.marketCap, row.market) || "—"}
+                                      {row.symbol} · {fmtCapByMarket(row.marketCap, row.market, false) || "—"}
                                     </div>
                                   </div>
                                 </div>
                                 <div className="flex flex-none flex-col items-end leading-[1.2]">
-                                  <span className="text-[10px] font-semibold tabular-nums text-ink">{fmtPriceByMarket(row.price, row.market)}</span>
+                                  <span className="text-[10px] font-semibold tabular-nums text-ink">{fmtPriceByMarket(row.price, row.market, false)}</span>
                                   <span className={`text-[9px] font-semibold tabular-nums ${row.changePct !== null && row.changePct >= 0 ? "text-up" : row.changePct !== null ? "text-down" : "text-faint"}`}>
                                     {row.changePct !== null ? `${row.changePct >= 0 ? "+" : ""}${row.changePct.toFixed(2)}%` : "—"}
                                   </span>
@@ -858,19 +864,19 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                 <div data-day-detail-list className="border-t border-edge bg-white dark:border-[#2a2f3a] dark:bg-[#16181d]">
                   {/* 列头：md 起与数据列同宽对齐；lg 起把市值单独成列。公司列封顶 420px、数据列固定窄宽紧挨着排，
                       列不随屏幕拉伸；表格本身仍是满宽，右边缘与上方日历网格对齐 */}
-                  <div className="hidden grid-cols-[minmax(0,420px)_80px_112px_112px] items-center gap-4 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted md:grid lg:grid-cols-[minmax(0,420px)_96px_80px_112px_112px] dark:bg-white/5">
+                  <div className="hidden grid-cols-[minmax(0,420px)_112px_80px_112px] items-center gap-4 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted md:grid lg:grid-cols-[minmax(0,420px)_112px_80px_112px_112px] dark:bg-white/5">
                     <span>公司</span>
-                    <span className="hidden text-center lg:block">市值</span>
+                    <span className="text-right">现价</span>
                     <span className="text-center">时段</span>
                     <span className="text-center">{marketKey === "US" ? "EPS 预期" : marketKey === "CN" ? "报告期" : "业绩类型"}</span>
-                    <span className="text-right">现价</span>
+                    <span className="hidden text-right lg:block">市值</span>
                   </div>
                   {selectedRows.map((row) => {
                     const chg = row.changePct;
                     return (
                       <div
                         key={`${row.symbol}-${row.date}`}
-                        className="earnings-result-row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-edge px-4 py-2 transition-colors duration-200 last:border-b-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5 md:grid-cols-[minmax(0,420px)_80px_112px_112px] md:gap-4 lg:grid-cols-[minmax(0,420px)_96px_80px_112px_112px]"
+                        className="earnings-result-row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-edge px-4 py-2 transition-colors duration-200 last:border-b-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5 md:grid-cols-[minmax(0,420px)_112px_80px_112px] md:gap-4 lg:grid-cols-[minmax(0,420px)_112px_80px_112px_112px]"
                       >
                         <div className="flex min-w-0 items-center gap-3">
                           <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="h-9 w-9" />
@@ -883,16 +889,6 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                             </div>
                           </div>
                         </div>
-                        <span className="hidden text-sm font-semibold tabular-nums text-muted lg:block lg:justify-self-center">
-                          {fmtCapByMarket(row.marketCap, row.market) || "—"}
-                        </span>
-                        <span className={`flex-none justify-self-center rounded-full px-2.5 py-1 text-xs font-semibold ${row.market === "CN" ? "bg-bg-gray text-muted" : TIME_BADGE[timeKind(row.time)]}`}>
-                          {row.time === "time-released" ? "已发布" : row.market === "CN" ? "财报" : timeLabel(row.time)}
-                        </span>
-                        <div className="hidden flex-col items-center leading-[1.35] md:flex">
-                          <span className="text-sm font-semibold tabular-nums text-ink">{row.market === "US" ? (row.epsForecast || "—") : (row.quarter || "—")}</span>
-                          <span className="text-[11px] text-faint">{row.market === "US" && row.ests > 0 ? `${row.ests} 家机构` : ""}</span>
-                        </div>
                         <div className="flex flex-col items-end leading-[1.35]">
                           <span className="text-sm font-semibold tabular-nums text-ink">{fmtPriceByMarket(row.price, row.market)}</span>
                           {chg !== null ? (
@@ -901,6 +897,16 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                             <span className="text-faint">—</span>
                           )}
                         </div>
+                        <span className={`flex-none justify-self-center rounded-full px-2.5 py-1 text-xs font-semibold ${row.market === "CN" ? "bg-bg-gray text-muted" : TIME_BADGE[timeKind(row.time)]}`}>
+                          {row.time === "time-released" ? "已发布" : row.market === "CN" ? "财报" : timeLabel(row.time)}
+                        </span>
+                        <div className="hidden flex-col items-center leading-[1.35] md:flex">
+                          <span className="text-sm font-semibold tabular-nums text-ink">{row.market === "US" ? (row.epsForecast || "—") : (row.quarter || "—")}</span>
+                          <span className="text-[11px] text-faint">{row.market === "US" && row.ests > 0 ? `${row.ests} 家机构` : ""}</span>
+                        </div>
+                        <span className="hidden text-sm font-semibold tabular-nums text-muted lg:block lg:justify-self-end">
+                          {fmtCapByMarket(row.marketCap, row.market) || "—"}
+                        </span>
                       </div>
                     );
                   })}
