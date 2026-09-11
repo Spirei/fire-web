@@ -53,12 +53,19 @@ interface BalanceEntry {
 type SortKey = "custom" | "bank" | "balance" | "name";
 
 const SORT_LABEL: Record<SortKey, string> = { custom: "默认顺序", bank: "按银行", balance: "按余额", name: "按卡名" };
+/** 还没看到的卡：往下每一张露出的高度 */
 const CARD_STEP = 30;
 const CARD_SCALE_STEP = 0.055;
-/** 手指拖多远算「完整换一张」：拖动过程中前一张 / 后一张按这个比例跟手 */
-const SWIPE_DISTANCE = 340;
-/** 划走的卡飞出去的位置：要足够远，彻底离开这一叠（不然看着像没消失） */
-const FLY_OUT = -460;
+/** 已经翻过去的卡：往上每一张露出的高度（比下面多一点，翻过去的页看得见） */
+const ABOVE_STEP = 44;
+const ABOVE_SCALE_STEP = 0.05;
+/** 手指拖多远算「完整换一张」：决定整叠往前 / 往后推的进度 */
+const SWIPE_DISTANCE = 300;
+/** 手里这张最多被拉出来多少：超过就带阻尼，像从一叠卡里抽一张出来 */
+const PULL_MAX = 92;
+/** 上下各渲染几张（再深的就收进叠里了） */
+const VISIBLE_ABOVE = 6;
+const VISIBLE_BELOW = 5;
 const FOCUS_RING =
   "focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.15)] focus:outline-none dark:focus:border-white/20 dark:focus:shadow-[0_0_0_3px_rgba(255,255,255,.10)]";
 
@@ -180,48 +187,49 @@ export default function CardWalletStack({
   }, []);
 
   /**
-   * 叠放位置。这一叠卡片是一个整体，按手指位置连续变形：
-   * - 往上拖 = 往前翻（p 从 0 → 1）：前一张跟着手指飞走，后面整叠往上补位、逐张放大；
-   * - 往下拖 = 往回翻（q 从 0 → 1）：上一张从上方落回来（一开始就压在最上面），
-   *   手里这张往下沉、钻到它后面，后面整叠顺势下沉一级 —— 抽屉推回去的手感。
-   * p / q 都按 SWIPE_DISTANCE 归一化，所以跟手是连续的，松手只是从这里缓动到终点。
+   * 叠放位置。这一叠卡是一摞「翻过的卡 + 没翻的卡」，按手指位置连续变形：
+   * - 往上拖 = 往前翻（p 从 0 → 1）：手里这张被抽出来一段，翻过去之后摞到上面那摞；
+   *   下面整叠顺势往上补位，下一张顶上来。
+   * - 往下拖 = 往回翻（q 从 0 → 1）：上面那摞往下走一层，最近翻过的那张落回正中；
+   *   手里这张往下沉一级，钻进下面那摞。
+   * 翻过去的卡不会消失：它们就叠在卡片上方（越往上越小、越淡，像收进卡叠深处）。
+   * p / q 按 SWIPE_DISTANCE 归一化，整叠是连续推进的，松手只是从这里缓动到终点。
    */
   const transformFor = useCallback((relative: number, drag: number) => {
     const p = Math.max(0, Math.min(1, -drag / SWIPE_DISTANCE));
     const q = Math.max(0, Math.min(1, drag / SWIPE_DISTANCE));
 
-    // 手里这张：1:1 跟手
+    // 手里这张：跟手，但拉出来一段之后就带阻尼，松手滑回叠层里的位置
     if (relative === 0) {
+      const pulled = PULL_MAX * (1 - Math.exp(-Math.abs(drag) / PULL_MAX));
       return {
-        y: drag,
-        scale: 1 - Math.min(Math.abs(drag) / 2600, 0.05),
+        y: drag >= 0 ? pulled : -pulled,
+        scale: 1 - Math.min(pulled / 2600, 0.05),
         opacity: 1,
-        // 往下拖时它要让位：回来的那张压在上面，这张钻到后面去
-        z: q > 0.001 ? 199 : 200
+        // 往下拖时它要让位：翻回来的那张压在上面，这张钻到后面去
+        z: q > 0.001 ? 205 : 210
       };
     }
 
-    // 已经划走的那几张：往回拖时按手指进度从上方落回来（只有最近的一张看得见）
+    // 已经翻过去的卡：摞在卡片上方；往前翻再往上走一层，往回翻就落回来一层
     if (relative < 0) {
-      const depth = -relative;
-      const near = depth === 1;
-      const arrive = 1 - q;
+      const slot = Math.max(0, -relative + p - q);
       return {
-        y: FLY_OUT * arrive * (1 + (depth - 1) * 0.2),
-        scale: near ? 1 - 0.02 * arrive : 0.98,
-        opacity: near ? Math.max(0, Math.min(1, q * 2 - 0.3)) : 0,
-        z: near ? 200 : 190 - depth
+        y: -ABOVE_STEP * slot,
+        scale: Math.pow(1 - ABOVE_SCALE_STEP, slot),
+        opacity: Math.max(0, Math.min(1, 1 - Math.max(0, slot - 1.5) * 0.25)),
+        z: 206 - Math.ceil(slot)
       };
     }
 
-    // 后面那几张：往前拖 = 整叠往上补位（depth - p），往回拖 = 整叠下沉一级（+ q）
+    // 还没看到的卡：往前拖 = 整叠往上补位，往回拖 = 整叠往下沉一级
     const depth = Math.min(relative, 5);
     const shifted = Math.max(0, depth - p + q);
     return {
       y: shifted * CARD_STEP,
       scale: Math.pow(1 - CARD_SCALE_STEP, shifted),
       opacity: Math.max(0, Math.min(1, 1 - Math.max(0, shifted - 2) * 0.4)),
-      z: 199 - Math.ceil(shifted)
+      z: 200 - Math.ceil(shifted)
     };
   }, []);
 
@@ -235,7 +243,7 @@ export default function CardWalletStack({
         const element = itemRefs.current.get(card.key);
         if (!element) return;
         const relative = i - base;
-        if (relative < -1 || relative > 4) {
+        if (relative < -VISIBLE_ABOVE || relative > VISIBLE_BELOW) {
           gsap.set(element, { autoAlpha: 0 });
           return;
         }
@@ -518,7 +526,7 @@ export default function CardWalletStack({
           >
             {sorted.map((card, i) => {
               const relative = i - index;
-              if (relative < -1 || relative > 4) return null;
+              if (relative < -VISIBLE_ABOVE || relative > VISIBLE_BELOW) return null;
               return (
                 <div key={card.key} className="pointer-events-none absolute inset-0 grid place-items-center">
                   <div
