@@ -31,6 +31,11 @@
 
 - 收益日历三项收口：① 日历偏好（市场 / 月份 / 年视图 / 收益-收益率）抽成 `readPnlCalendarPrefs` / `savePnlCalendarPref` 两个页面共用，修掉「资产分析页刷新后市场回到全部」；② 市场图标（素材库 type=market）随首屏 HTML 下发并 preload（`getMarketIconMap` + `primeMarketIconCache`），市场下拉不再晚一拍才出现国旗；③ 「当日盈亏」明细弹窗每行补上股票图标。
 
+- 资产分析页性能 P0（先量后改）：
+  - **一次取回组合数据**：新增 `GET /api/v1/portfolio-series?days=330`，服务端按持仓并发（6）取日K并连同订单一次返回，浏览器从「N+3 个请求 / 约 520KB」降到「1+1 个请求 / 约 200KB」，接口二次命中 0.03s；资产盈亏分析页同步复用。
+  - **首屏让路**：聚合取数改为 `requestIdleCallback`（600ms 超时兜底）之后再发，首屏先画用已有行情就能出的账户资产 / 总览。
+  - **图表按需加载**：echarts 趋势图改 `next/dynamic`（带骨架），顺带清掉两个页面里失效的逐只 kline 缓存代码。
+
 ---
 
 ## v0.1.27 · 2026-09-11

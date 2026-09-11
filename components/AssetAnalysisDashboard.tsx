@@ -13,7 +13,12 @@ import { CURRENCIES, CURRENCY_SYMBOLS, useCurrencyDisplayUnit, useDisplayCurrenc
 import TradeOrdersPanel from "@/components/TradeOrdersPanel";
 import RefreshButton from "@/components/RefreshButton";
 import DailyPnlShareModal, { preloadDailyPnlTemplates, waitForDailyPnlTemplates, type DailyPnlShareItem } from "@/components/DailyPnlShareModal";
-import PnlTrendChart from "@/components/PnlTrendChart";
+import dynamic from "next/dynamic";
+// 图表按需加载：echarts 不小，等趋势卡片真正需要渲染时再拉这块 JS
+const PnlTrendChart = dynamic(() => import("@/components/PnlTrendChart"), {
+  ssr: false,
+  loading: () => <div className="mx-4 mb-4 h-[330px] animate-pulse rounded-xl bg-bg-gray" />
+});
 import QuickTradeDialog from "@/components/QuickTradeDialog";
 import HoldingDividendDialog from "@/components/HoldingDividendDialog";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
@@ -23,6 +28,7 @@ import Pagination from "@/components/Pagination";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
 import PnlCalendar from "@/components/PnlCalendar";
 import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
+import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses } from "@/lib/portfolioSeries";
 
 type Period = "month" | "1m" | "6m" | "ytd" | "1y" | "all" | "custom";
 type ChartTab = "return" | "asset";
@@ -227,42 +233,6 @@ function cleanCloses(items: CloseItem[]) {
     .map((item) => ({ d: String(item.d || ""), c: Number(item.c) }))
     .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.d) && Number.isFinite(item.c) && item.c > 0)
     .sort((a, b) => a.d.localeCompare(b.d));
-}
-
-/* 客户端 K 线缓存：日收盘序列 10 分钟内不重复请求（服务端同样有 10 分钟缓存），
- * 避免资产分析每次重算/刷新都并发请求全部持仓（30+ 只）触发限流导致趋势图偶发空白。 */
-const KLINE_CACHE_TTL = 10 * 60 * 1000;
-const klineCache = new Map<string, { items: CloseItem[]; at: number }>();
-
-async function fetchCachedKline(market: string, code: string, limit: number, index = false): Promise<CloseItem[]> {
-  const key = `${market}:${code}:${limit}:${index ? "1" : "0"}`;
-  const hit = klineCache.get(key);
-  if (hit && Date.now() - hit.at < KLINE_CACHE_TTL) return hit.items;
-  try {
-    const response = await fetch(`/api/kline/full?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}&limit=${limit}${index ? "&index=1" : ""}`, { cache: "no-store" });
-    if (!response.ok) throw new Error("kline");
-    const data = await response.json();
-    const items = cleanCloses(Array.isArray(data.items) ? data.items : []);
-    if (items.length > 0) klineCache.set(key, { items, at: Date.now() });
-    return items;
-  } catch {
-    // 源站/限流抖动时回退上一次成功缓存，避免整图被清空
-    return hit?.items ?? [];
-  }
-}
-
-/* 有界并发：避免一次重算并发打满全部持仓的 K 线请求 */
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (cursor < items.length) {
-      const index = cursor++;
-      results[index] = await fn(items[index]);
-    }
-  });
-  await Promise.all(workers);
-  return results;
 }
 
 function periodStart(period: Period) {
@@ -763,25 +733,29 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
       setTrendLoading(true);
     }
     (async () => {
+      // 首屏优先：重型取数让位给首屏渲染（浏览器空闲再开始；有 localStorage 缓存时本来就已经先画出来了）
+      await new Promise<void>((resolve) => {
+        const idleWindow = window as Window & {
+          requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+        };
+        if (typeof idleWindow.requestIdleCallback === "function") idleWindow.requestIdleCallback(() => resolve(), { timeout: 600 });
+        else window.setTimeout(resolve, 150);
+      });
+      if (cancelled) return;
       const bench = BENCHMARKS.find((b) => b.key === benchKey) || BENCHMARKS[0];
-      // 持仓日 K：有界并发 + 客户端缓存；基准：本次失败且同一基准时沿用上次成功数据
-      const [positionRows, benchmarkItems, fetchedOrdersAll] = await Promise.all([
-        mapLimit(eligible, 6, async (record) => ({
-          record,
-          items: await fetchCachedKline(record.market, record.code, 330)
-        })),
-        fetchCachedKline(bench.market, bench.code, 330, bench.index),
-        (async () => {
-          try {
-            const response = await fetch("/api/v1/orders?scope=all&limit=5000", { cache: "no-store" });
-            const data = response.ok ? await response.json() : null;
-            return Array.isArray(data?.data?.orders) ? data.data.orders as TradeOrder[] : [];
-          } catch {
-            return [];
-          }
-        })()
+      // 「持仓日K + 订单」走一次聚合请求（服务端并发取数），基准单独一个小请求：
+      // 不再由浏览器按持仓逐只打 /api/kline/full（17 只 ≈ 17 次请求 / 700KB）
+      const [bundle, benchItems] = await Promise.all([
+        fetchPortfolioBundle({ days: 330 }),
+        fetchBenchmarkKline(bench.market, bench.code, 330, bench.index)
       ]);
       if (cancelled) return;
+      const positionRows = eligible.map((record) => ({
+        record,
+        items: normalizeCloses(bundle?.closes?.[record.id])
+      }));
+      const benchmarkItems = benchItems;
+      const fetchedOrdersAll: TradeOrder[] = bundle?.orders ?? [];
       const benchmarkFallback =
         benchmarkItems.length === 0 && benchmarkRef.current.key === benchKey
           ? benchmarkRef.current.items

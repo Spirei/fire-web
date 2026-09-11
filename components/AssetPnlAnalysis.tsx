@@ -15,31 +15,8 @@ import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
 import { fmtMoney, fmtMoneyCompact, localDateKey } from "@/lib/format";
 import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
+import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses } from "@/lib/portfolioSeries";
 
-
-/* 客户端 K 线缓存：日收盘序列 10 分钟内不重复请求（与资产分析页同款），
- * 避免每次挂载/切页都并发重拉全部持仓（30+ 只）K 线触发限流、趋势图空白。 */
-const KLINE_CACHE_TTL = 10 * 60 * 1000;
-const klineCache = new Map<string, { items: CloseItem[]; at: number }>();
-
-async function fetchCachedKline(market: string, code: string, limit: number, index = false): Promise<CloseItem[]> {
-  const key = `${market}:${code}:${limit}:${index ? "1" : "0"}`;
-  const hit = klineCache.get(key);
-  if (hit && Date.now() - hit.at < KLINE_CACHE_TTL) return hit.items;
-  try {
-    const response = await fetch(`/api/kline/full?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}&limit=${limit}${index ? "&index=1" : ""}`, { cache: "no-store" });
-    if (!response.ok) throw new Error("kline");
-    const data = await response.json();
-    const items = Array.isArray(data.items)
-      ? (data.items as CloseItem[]).filter((it) => Number.isFinite(Number(it.c)) && typeof it.d === "string")
-      : [];
-    if (items.length > 0) klineCache.set(key, { items, at: Date.now() });
-    return items;
-  } catch {
-    // 源站/限流抖动时回退上一次成功缓存，避免趋势图被清空
-    return hit?.items ?? [];
-  }
-}
 
 type PnlRow = {
   id: string;
@@ -216,19 +193,17 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
       setKlineLoading(true);
       setLoadError("");
       try {
-        const [recs, ratesRes, ordersRes] = await Promise.all([
+        const [recs, ratesRes, bundle] = await Promise.all([
           fetch("/api/records").then(async (response) => {
             if (!response.ok) throw new Error(response.status === 401 ? "登录已失效，请重新登录" : "持仓数据加载失败");
             return response.json();
           }),
           fetch("/api/rates").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          fetch("/api/v1/orders?scope=all&limit=5000").then((r) => (r.ok ? r.json() : null)).catch(() => null)
+          fetchPortfolioBundle({ days: 250 })
         ]);
         if (cancelled) return;
         if (ratesRes?.rates) setRates((prev) => ({ ...prev, ...ratesRes.rates, USD: 1 }));
-        if (Array.isArray(ordersRes?.data?.orders)) {
-          setOrders(ordersRes.data.orders as TradeOrder[]);
-        }
+        if (bundle?.orders) setOrders(bundle.orders);
         const importedRecords = recs as StockRecord[];
         setAllRecords(importedRecords);
         const positions = importedRecords.filter((r) => Number(r.qty) > 0);
@@ -244,19 +219,12 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
         }
         // 持仓 / 行情 / 汇率已就绪，先渲染页面（总额、排行、明细立即可见）
         setLoading(false);
-        // 日K（有界并发 + force-cache）
-        const eligible = positions.filter((p) => SUPPORTED.has(p.market.toUpperCase()));
+        // 日K 直接来自聚合结果（服务端已按持仓并发取好），不再逐只请求 /api/kline/full
         const closes: Record<string, CloseItem[]> = {};
-        let cursor = 0;
-        const workers = Array.from({ length: 4 }, async () => {
-          while (cursor < eligible.length) {
-            const idx = cursor++;
-            const p = eligible[idx];
-            const items = await fetchCachedKline(p.market, p.code, 250);
-            if (items.length > 0) closes[p.id] = items;
-          }
+        positions.forEach((p) => {
+          const items = normalizeCloses(bundle?.closes?.[p.id]);
+          if (items.length > 0) closes[p.id] = items;
         });
-        await Promise.all(workers);
         if (!cancelled) {
           setClosesMap(closes);
           setKlineLoading(false);
@@ -280,7 +248,7 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
     let cancelled = false;
     const bench = BENCHMARKS.find((b) => b.key === benchKey) || BENCHMARKS[0];
     (async () => {
-      const items = await fetchCachedKline(bench.market, bench.code, 250, bench.index);
+      const items = await fetchBenchmarkKline(bench.market, bench.code, 250, bench.index);
       if (!cancelled) {
         setBenchCloses(items);
       }

@@ -2874,6 +2874,10 @@ export const V0_1_28_ENTRY: VersionEntry = {
     title: "收益日历偏好持久化 + 市场图标随首屏下发 + 当日盈亏明细加股票图标",
     desc: "1) 收益日历的市场选择此前只在资产盈亏分析页做了持久化，资产分析页新增的日历模块是纯 `useState`，刷新就回到「全部」；现在把日历偏好（市场 / 月份 / 年视图 / 收益-收益率）抽成 `lib/pnlCalendar` 的 `readPnlCalendarPrefs` / `savePnlCalendarPref`，两个页面共用同一组 localStorage key（`fire:asset-pnl-cal-*`），资产分析页在 `useLayoutEffect` 里恢复、每次切换即保存，刷新与跨页都保持。2) 市场图标（素材库 type=market）改为随首屏 HTML 下发：新增 `getMarketIconMap()` 与 `primeMarketIconCache()`，layout 把 6 个市场图标一并放进 preload，`RecordsApp` / `HomeContent` 在渲染期预热共享缓存 —— 市场下拉与筛选按钮首帧就是真实图标，不再等客户端请求 `/api/assets` 才有（此前点开下拉要晚一拍才出现国旗）。3) 「当日盈亏」明细弹窗每一行加上股票图标（沿用全站 `stockIcons`，缓存未命中时回退首字母）。验证：tsc 无错误、冒烟 113/113 全 PASS；首屏 HTML 实测已带 6 个市场图标 preload 与 10 个股票图标 preload。",
     kind: "fix"
+  }, {
+    title: "资产分析页性能 P0：组合数据一次取回 + 首屏让路 + 图表按需加载",
+    desc: "先量后改：SSR 热态 0.08–0.6s 并不慢，慢在水合之后 —— 页面一挂载就由浏览器按持仓逐只打 `/api/kline/full`（17 只 ≈ 17 次请求 / 约 520KB），外加订单 5000 全量、资金、汇率、行情，8 个模块全在等这批数据；`/api/kline/full` 虽有 10 分钟服务端缓存，但客户端每次刷新仍要重新拉几百 KB。三处改动：1) 新增 `GET /api/v1/portfolio-series?days=330` —— 服务端按持仓并发（6）取日K，一次返回「recordId → { d, c } 序列 + 订单」，浏览器从 N+3 个请求降到 1+1（基准单独一个小请求，切换基准不用重拉全部），同规模体积 5 只 153KB → 58KB（约 2.6× 小），服务端日K缓存命中时实测 **0.03s**；资产盈亏分析页同步改用这份聚合数据并共享浏览器缓存。2) 首屏让路：聚合取数放到 `requestIdleCallback`（超时 600ms，兜底 setTimeout 150ms）之后，首屏先渲染账户资产 / 总览这些用已有行情就能画的模块；有 localStorage 趋势缓存时本来就直接命中。3) echarts 趋势图改为 `next/dynamic` 按需加载（带骨架）。顺带删掉两个页面里已失效的逐只 kline 缓存与有界并发工具（约 2.6KB 死代码）。验证：tsc 无错误、冒烟 113/113 全 PASS；接口实测首调 1.37s、二次命中 0.03s。",
+    kind: "feature"
   }]
 };
 
