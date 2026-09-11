@@ -323,21 +323,6 @@ export default function CardLibraryView() {
     return list;
   }, [regions]);
 
-  /** 当前模式的作用域：我的卡 = 只看持有的；全部卡面 = 全量。筛选计数都按它算，避免「我的卡」里显示全量数字 */
-  const scopeBase = useMemo(
-    () => (mode === "mine" ? flat.filter(({ card }) => holdings[card.file]) : flat),
-    [flat, mode, holdings]
-  );
-
-  const uniqueOptions = (values: string[]) => {
-    const counts = new Map<string, number>();
-    values.filter(Boolean).forEach((value) => counts.set(value, (counts.get(value) ?? 0) + 1));
-    return [
-      { key: ALL, count: values.length },
-      ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, count }))
-    ];
-  };
-
   /** 地区排序：先按洲，中国各地优先，再按卡面数量 */
   const sortedRegions = useMemo(() => {
     const cardCount = (entry: RegionEntry) => entry.banks.reduce((sum, bank) => sum + bank.cards.length, 0);
@@ -352,33 +337,81 @@ export default function CardLibraryView() {
     });
   }, [regions]);
 
-  const typeOptions = useMemo(() => {
-    const counts = new Map<string, number>();
-    scopeBase.forEach(({ card }) => counts.set(card.type || "其他", (counts.get(card.type || "其他") ?? 0) + 1));
-    const ordered = [...typeOrder.filter((item) => counts.has(item)), ...[...counts.keys()].filter((item) => !typeOrder.includes(item))];
-    return [{ key: ALL, count: scopeBase.length }, ...ordered.map((item) => ({ key: item, count: counts.get(item) ?? 0 }))];
-  }, [scopeBase, typeOrder]);
+  type Facet = "region" | "bank" | "type" | "brand" | "level" | "tag" | "myTag" | null;
+  const keyword = query.trim().toLowerCase();
 
-  const regionOptions = useMemo(() => {
+  /** 分面匹配：skip 传入当前正在统计的维度时，该维度本身不参与过滤（标准 facet 行为） */
+  const matchesExcept = (entry: CardEntry, skip: Facet) => {
+    const { card, bank, region: regionLabel, tags } = entry;
+    if (mode === "mine" && !holdings[card.file]) return false;
+    if (skip !== "region" && region !== ALL && regionLabel !== region) return false;
+    if (skip !== "bank" && bankFolder !== ALL && bank.folder !== bankFolder) return false;
+    if (skip !== "type" && type !== ALL && (card.type || "其他") !== type) return false;
+    if (skip !== "brand" && brand !== ALL && (card.brand || "").trim() !== brand) return false;
+    if (skip !== "level" && level !== ALL && (card.level || "").trim() !== level) return false;
+    if (skip !== "tag" && tag !== ALL && !tags.includes(tag)) return false;
+    if (skip !== "myTag" && myTag !== ALL && !(userTags[card.file] ?? []).includes(myTag)) return false;
+    if (onlyFilled && !amounts[card.file]) return false;
+    if (!keyword) return true;
+    return (
+      card.name.toLowerCase().includes(keyword) ||
+      bank.name.toLowerCase().includes(keyword) ||
+      (bank.englishName || "").toLowerCase().includes(keyword) ||
+      (card.brand || "").toLowerCase().includes(keyword) ||
+      tags.some((item) => item.toLowerCase().includes(keyword))
+    );
+  };
+
+  // 每个维度统计时把「自己」排除在外，这样各筛选器的数字会随其他条件联动（搜「招商」→ 类型数字变成招商的分布）
+  const filterBase = (skip: Facet) => flat.filter((entry) => matchesExcept(entry, skip));
+  const typeBase = filterBase("type");
+  const regionBase = filterBase("region");
+  const bankBase = filterBase("bank");
+  const brandBase = filterBase("brand");
+  const levelBase = filterBase("level");
+  const tagBase = filterBase("tag");
+  const myTagBase = filterBase("myTag");
+  const filtered = filterBase(null);
+
+  const buildTypeOptions = () => {
     const counts = new Map<string, number>();
-    scopeBase.forEach((entry) => counts.set(entry.region, (counts.get(entry.region) ?? 0) + 1));
+    typeBase.forEach(({ card }) => counts.set(card.type || "其他", (counts.get(card.type || "其他") ?? 0) + 1));
+    const ordered = [...typeOrder.filter((item) => counts.has(item)), ...[...counts.keys()].filter((item) => !typeOrder.includes(item))];
+    return [{ key: ALL, count: typeBase.length }, ...ordered.map((item) => ({ key: item, count: counts.get(item) ?? 0 }))];
+  };
+  const typeOptions = buildTypeOptions();
+
+  const buildRegionOptions = () => {
+    const counts = new Map<string, number>();
+    regionBase.forEach((entry) => counts.set(entry.region, (counts.get(entry.region) ?? 0) + 1));
     return [
-      { key: ALL, count: scopeBase.length },
+      { key: ALL, count: regionBase.length },
       ...sortedRegions
         .filter((entry) => counts.has(entry.label))
         .map((entry) => ({ key: entry.label, count: counts.get(entry.label) ?? 0 }))
     ];
-  }, [scopeBase, sortedRegions]);
-  const brandOptions = useMemo(() => uniqueOptions(scopeBase.map(({ card }) => (card.brand || "").trim())), [scopeBase]);
-  const levelOptions = useMemo(() => uniqueOptions(scopeBase.map(({ card }) => (card.level || "").trim())), [scopeBase]);
-  const tagOptions = useMemo(() => uniqueOptions(scopeBase.flatMap(({ tags }) => tags)), [scopeBase]);
+  };
+  const regionOptions = buildRegionOptions();
 
-  /** 银行下拉：跟随所选国家地区（含分组显示）；值为银行文件夹名（全局唯一） */
-  const bankSelectOptions = useMemo(() => {
-    const list: { value: string; label: string; group?: string }[] = [{ value: ALL, label: region === ALL ? "全部银行" : `全部银行（${region}）` }];
-    const scoped = region === ALL ? scopeBase : scopeBase.filter((entry) => entry.region === region);
+  const buildUniqueOptions = (values: string[]) => {
+    const counts = new Map<string, number>();
+    values.filter(Boolean).forEach((value) => counts.set(value, (counts.get(value) ?? 0) + 1));
+    return [
+      { key: ALL, count: values.length },
+      ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, count }))
+    ];
+  };
+  const brandOptions = buildUniqueOptions(brandBase.map(({ card }) => (card.brand || "").trim()));
+  const levelOptions = buildUniqueOptions(levelBase.map(({ card }) => (card.level || "").trim()));
+  const tagOptions = buildUniqueOptions(tagBase.flatMap(({ tags }) => tags));
+
+  /** 银行下拉：选项与计数跟随其他筛选（含所选国家地区），值为银行文件夹名（全局唯一） */
+  const bankSelectOptions = (() => {
+    const list: { value: string; label: string; group?: string }[] = [
+      { value: ALL, label: region === ALL ? "全部银行" : `全部银行（${region}）` }
+    ];
     const banks = new Map<string, { bank: BankEntry; region: string }>();
-    scoped.forEach((entry) => {
+    bankBase.forEach((entry) => {
       if (!banks.has(entry.bank.folder)) banks.set(entry.bank.folder, { bank: entry.bank, region: entry.region });
     });
     const regionRank = (label: string) => {
@@ -395,38 +428,16 @@ export default function CardLibraryView() {
         });
       });
     return list;
-  }, [scopeBase, sortedRegions, region]);
-
-  const filtered = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
-    return flat.filter(({ card, bank, region: regionLabel, tags }) => {
-      if (mode === "mine" && !holdings[card.file]) return false;
-      if (region !== ALL && regionLabel !== region) return false;
-      if (bankFolder !== ALL && bank.folder !== bankFolder) return false;
-      if (type !== ALL && (card.type || "其他") !== type) return false;
-      if (brand !== ALL && (card.brand || "").trim() !== brand) return false;
-      if (level !== ALL && (card.level || "").trim() !== level) return false;
-      if (tag !== ALL && !tags.includes(tag)) return false;
-      if (myTag !== ALL && !(userTags[card.file] ?? []).includes(myTag)) return false;
-      if (onlyFilled && !amounts[card.file]) return false;
-      if (!keyword) return true;
-      return (
-        card.name.toLowerCase().includes(keyword) ||
-        bank.name.toLowerCase().includes(keyword) ||
-        (bank.englishName || "").toLowerCase().includes(keyword) ||
-        (card.brand || "").toLowerCase().includes(keyword) ||
-        tags.some((item) => item.toLowerCase().includes(keyword))
-      );
-    });
-  }, [flat, mode, holdings, region, bankFolder, type, brand, level, tag, myTag, onlyFilled, amounts, userTags, query]);
+  })();
 
   const filledCount = useMemo(() => flat.filter(({ card }) => amounts[card.file]).length, [flat, amounts]);
   const heldCount = useMemo(() => flat.filter(({ card }) => holdings[card.file]).length, [flat, holdings]);
 
   /** 我的标签（用户自己打的，用于筛选） */
-  const myTagOptions = useMemo(() => {
+  /** 我的标签：同样按其他筛选联动 */
+  const myTagOptions = (() => {
     const counts = new Map<string, number>();
-    scopeBase.forEach(({ card }) => {
+    myTagBase.forEach(({ card }) => {
       (userTags[card.file] ?? []).forEach((item) => counts.set(item, (counts.get(item) ?? 0) + 1));
     });
     if (counts.size === 0) return [];
@@ -434,7 +445,7 @@ export default function CardLibraryView() {
       { key: ALL, count: [...counts.values()].reduce((sum, n) => sum + n, 0) },
       ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, count }))
     ];
-  }, [scopeBase, userTags]);
+  })();
 
   /** 筛选条件变化时回到第一屏 */
   useEffect(() => {
