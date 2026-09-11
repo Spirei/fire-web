@@ -804,44 +804,53 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
               {selectedDate && selectedRows.length === 0 && (byDateAll.get(selectedDate)?.length ?? 0) === 0 && (
                 <p className="mb-3 px-1 text-xs text-faint">该日暂无财报</p>
               )}
-              <div data-day-detail-list className="flex flex-col gap-2">
-                {selectedRows.map((row) => {
-                  const chg = row.changePct;
-                  return (
-                    <div
-                      key={`${row.symbol}-${row.date}`}
-                      className="earnings-result-row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 rounded-[14px] border border-edge bg-white px-4 py-3 shadow-card transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong/35 hover:shadow-pop md:grid-cols-[1.8fr_auto_1fr_1.2fr_1fr]"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="h-9 w-9" />
-                        <div className="min-w-0 leading-[1.35]">
-                          <div className="truncate text-sm font-semibold text-ink">{row.nameZh || row.name}</div>
-                          <div className="text-xs text-muted">
-                            {row.symbol}
-                            {row.name && row.nameZh && <span className="ml-1.5">{row.name}</span>}
-                            {fmtCapByMarket(row.marketCap, row.market) && <span className="ml-1.5 text-faint">{fmtCapByMarket(row.marketCap, row.market)}</span>}
+              {selectedRows.length > 0 && (
+                <div data-day-detail-list className="overflow-hidden rounded-[14px] border border-edge bg-white shadow-card dark:border-[#2a2f3a] dark:bg-[#16181d]">
+                  {/* 列头：桌面端与数据列同宽对齐，手机端三列布局用不到 */}
+                  <div className="hidden grid-cols-[minmax(0,1fr)_88px_132px_150px] items-center gap-4 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted md:grid dark:bg-white/5">
+                    <span>公司</span>
+                    <span className="text-center">时段</span>
+                    <span className="text-center">{marketKey === "CN" ? "报告期" : "EPS 预期"}</span>
+                    <span className="text-right">现价</span>
+                  </div>
+                  {selectedRows.map((row) => {
+                    const chg = row.changePct;
+                    return (
+                      <div
+                        key={`${row.symbol}-${row.date}`}
+                        className="earnings-result-row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-edge px-4 py-2 transition-colors duration-200 last:border-b-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5 md:grid-cols-[minmax(0,1fr)_88px_132px_150px] md:gap-4"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <Fireo symbol={row.symbol} name={row.nameZh || row.name} market={row.market} usBase={logoBases?.us} cnBase={logoBases?.cn} className="h-9 w-9" />
+                          <div className="min-w-0 leading-[1.35]">
+                            <div className="truncate text-sm font-semibold text-ink">{row.nameZh || row.name}</div>
+                            <div className="text-xs text-muted">
+                              {row.symbol}
+                              {row.name && row.nameZh && <span className="ml-1.5">{row.name}</span>}
+                              {fmtCapByMarket(row.marketCap, row.market) && <span className="ml-1.5 text-faint">{fmtCapByMarket(row.marketCap, row.market)}</span>}
+                            </div>
                           </div>
                         </div>
+                        <span className={`flex-none justify-self-center rounded-full px-2.5 py-1 text-xs font-semibold ${row.market === "CN" ? "bg-bg-gray text-muted" : TIME_BADGE[timeKind(row.time)]}`}>
+                          {row.market === "CN" ? "财报" : timeLabel(row.time)}
+                        </span>
+                        <div className="hidden flex-col items-center leading-[1.35] md:flex">
+                          <span className="text-sm font-semibold tabular-nums text-ink">{row.market === "CN" ? (row.quarter || "—") : (row.epsForecast || "—")}</span>
+                          <span className="text-[11px] text-faint">{row.market === "CN" ? "" : row.ests > 0 ? `${row.ests} 家机构` : ""}</span>
+                        </div>
+                        <div className="flex flex-col items-end leading-[1.35]">
+                          <span className="text-sm font-semibold tabular-nums text-ink">{fmtPriceByMarket(row.price, row.market)}</span>
+                          {chg !== null ? (
+                            <span className={`text-xs font-semibold tabular-nums ${chg >= 0 ? "text-up" : "text-down"}`}>{chg >= 0 ? "+" : ""}{chg.toFixed(2)}%</span>
+                          ) : (
+                            <span className="text-faint">—</span>
+                          )}
+                        </div>
                       </div>
-                      <span className={`flex-none rounded-full px-2.5 py-1 text-xs font-semibold ${row.market === "CN" ? "bg-bg-gray text-muted" : TIME_BADGE[timeKind(row.time)]}`}>
-                        {row.market === "CN" ? "财报" : timeLabel(row.time)}
-                      </span>
-                      <div className="hidden flex-col items-center leading-[1.35] md:flex">
-                        <span className="text-sm font-semibold tabular-nums text-ink">{row.market === "CN" ? (row.quarter || "—") : (row.epsForecast || "—")}</span>
-                        <span className="text-[11px] text-faint">{row.market === "CN" ? "" : row.ests > 0 ? `${row.ests} 家机构` : ""}</span>
-                      </div>
-                      <div className="flex flex-col items-end leading-[1.35]">
-                        <span className="text-sm font-semibold tabular-nums text-ink">{fmtPriceByMarket(row.price, row.market)}</span>
-                        {chg !== null ? (
-                          <span className={`text-xs font-semibold tabular-nums ${chg >= 0 ? "text-up" : "text-down"}`}>{chg >= 0 ? "+" : ""}{chg.toFixed(2)}%</span>
-                        ) : (
-                          <span className="text-faint">—</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
