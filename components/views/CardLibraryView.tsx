@@ -364,6 +364,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [saving, setSaving] = useState(false);
   const [userTags, setUserTags] = useState<Record<string, string[]>>(() => initial?.tags ?? {});
   const [tagDraft, setTagDraft] = useState("");
+  /** 「+」点开后原地变成输入框（回车 / 失焦保存，Esc 取消） */
+  const [tagInputOpen, setTagInputOpen] = useState(false);
   /** 自定义卡面正在上传 / 保存 */
   const [coverSaving, setCoverSaving] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -1618,19 +1620,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     </button>
                   </span>
                 ))}
-                <input
-                  value={tagDraft}
-                  onChange={(event) => setTagDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      addTag(tagDraft);
-                    }
-                  }}
-                  maxLength={12}
-                  placeholder="添加标签，回车"
-                  className={`h-9 w-[140px] rounded-full border border-edge bg-white px-2.5 text-[12px] text-ink placeholder:text-faint transition-all duration-200 sm:h-7 sm:w-[130px] sm:text-[11px] dark:bg-[#1c222d] ${FOCUS_RING}`}
-                />
                 {TAG_SUGGESTIONS.filter((item) => !activeUserTags.includes(item)).slice(0, 5).map((item) => (
                   <button
                     key={item}
@@ -1641,6 +1630,46 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     + {item}
                   </button>
                 ))}
+                {/* 自定义标签：点末尾的「+」原地变输入框，回车 / 失焦保存，Esc 取消 */}
+                {tagInputOpen ? (
+                  <input
+                    autoFocus
+                    value={tagDraft}
+                    onChange={(event) => setTagDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        addTag(tagDraft);
+                        setTagInputOpen(false);
+                      } else if (event.key === "Escape") {
+                        event.preventDefault();
+                        setTagDraft("");
+                        setTagInputOpen(false);
+                      }
+                    }}
+                    onBlur={() => {
+                      addTag(tagDraft);
+                      setTagDraft("");
+                      setTagInputOpen(false);
+                    }}
+                    maxLength={12}
+                    placeholder="标签名"
+                    className={`h-9 w-[112px] rounded-full border border-edge bg-white px-2.5 text-[12px] text-ink placeholder:text-faint transition-all duration-200 sm:h-7 sm:w-[100px] sm:text-[11px] dark:bg-[#1c222d] ${FOCUS_RING}`}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setTagInputOpen(true)}
+                    disabled={activeUserTags.length >= 10}
+                    aria-label="添加自定义标签"
+                    title={activeUserTags.length >= 10 ? "最多 10 个标签" : "添加自定义标签"}
+                    className="grid h-9 w-9 place-items-center rounded-full border border-dashed border-edge-strong text-muted transition-colors hover:bg-brand-hover hover:text-ink disabled:opacity-40 sm:h-7 sm:w-7"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-3.5 w-3.5">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
           </div>
