@@ -13,6 +13,7 @@ import SiteBg from "@/components/SiteBg";
 import { THEME_COOKIE } from "@/lib/theme";
 import PwaRegister from "@/components/PwaRegister";
 import LoginModal from "@/components/LoginModal";
+import FileDropAnywhere from "@/components/FileDropAnywhere";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = getSiteSettings();
@@ -54,6 +55,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="font-sans">
         <PwaRegister />
+        {/* 全站拖拽上传：文件拖进页面就近落到最近的上传入口 */}
+        <FileDropAnywhere />
         <TimeMachine />
         <SiteBg />
         <LoginModal />
