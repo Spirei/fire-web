@@ -419,6 +419,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [newImage, setNewImage] = useState("");
   const [newUploading, setNewUploading] = useState(false);
   const [newSaving, setNewSaving] = useState(false);
+  /** 卡面拖拽上传：拖到框里高亮提示 */
+  const [dragActive, setDragActive] = useState(false);
   /** 卡片详情里翻看新旧卡面：0 = 当前卡面，1.. = 旧卡面 */
   const [faceIndex, setFaceIndex] = useState(0);
 
@@ -775,6 +777,18 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       window.removeEventListener("keydown", onKey);
     };
   }, [active, addOpen]);
+
+  /** 新增卡片弹窗打开时：图片拖到窗口任何位置都别让浏览器直接打开它（只有卡面框接住） */
+  useEffect(() => {
+    if (!addOpen) return;
+    const prevent = (event: DragEvent) => event.preventDefault();
+    window.addEventListener("dragover", prevent);
+    window.addEventListener("drop", prevent);
+    return () => {
+      window.removeEventListener("dragover", prevent);
+      window.removeEventListener("drop", prevent);
+    };
+  }, [addOpen]);
 
   /** 切「我的卡 / 全部卡面」时，如果已经滑到列表深处，轻轻带回卡面库顶部 */
   useEffect(() => {
@@ -1156,6 +1170,10 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   /** 新增卡片：先把卡面传到素材目录（folder=card），拿到 /uploads/... 地址 */
   async function uploadNewImage(file: File) {
     if (newUploading) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("只能上传图片文件（JPG / PNG / WEBP）", "err");
+      return;
+    }
     setNewUploading(true);
     try {
       const form = new FormData();
@@ -1700,16 +1718,49 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               {/* 卡面：点一下选图，上传后本地预览 */}
               <label className="block cursor-pointer">
                 <span className="mb-1.5 block text-[11px] font-semibold text-muted">卡面（必填）</span>
-                <span className="relative block overflow-hidden rounded-xl border border-dashed border-edge-strong bg-bg-gray dark:bg-white/5">
+                <span
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    if (!newUploading) setDragActive(true);
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    if (!newUploading) setDragActive(true);
+                  }}
+                  onDragLeave={(event) => {
+                    // 只有真正离开这块区域才取消高亮（移动到子元素上会触发 dragleave）
+                    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                    setDragActive(false);
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setDragActive(false);
+                    const file = event.dataTransfer.files?.[0];
+                    if (file) void uploadNewImage(file);
+                  }}
+                  className={`relative block overflow-hidden rounded-xl border border-dashed transition-colors duration-200 ${
+                    dragActive ? "border-[#3297f6] bg-[#3297f6]/[0.06]" : "border-edge-strong bg-bg-gray dark:bg-white/5"
+                  }`}
+                >
                   {newImage ? (
                     <img src={newImage} alt="卡面预览" className="aspect-[1.586] w-full object-cover" />
                   ) : (
                     <span className="flex aspect-[1.586] w-full flex-col items-center justify-center gap-1.5 px-4 text-center">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 text-muted">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className={`h-6 w-6 transition-colors duration-200 ${dragActive ? "text-[#2f6fed]" : "text-muted"}`}
+                      >
                         <path d="M12 16V5M8 8.5 12 4.5l4 4M5 16v2.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V16" />
                       </svg>
-                      <span className="text-[12px] font-semibold text-ink-2">{newUploading ? "上传中…" : "点这里选一张卡片照片"}</span>
-                      <span className="text-[11px] text-faint">建议 1.586:1 标准卡面比例，JPG / PNG / WEBP</span>
+                      <span className={`text-[12px] font-semibold ${dragActive ? "text-[#2f6fed]" : "text-ink-2"}`}>
+                        {newUploading ? "上传中…" : dragActive ? "松手放下这张卡面" : "点这里选，或把图片拖进来"}
+                      </span>
+                      <span className="text-[11px] text-faint">建议 1.586:1 标准卡面比例，JPG / PNG / WEBP，最大 5MB</span>
                     </span>
                   )}
                   {newImage && !newUploading && (
