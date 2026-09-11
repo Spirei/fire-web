@@ -666,7 +666,8 @@ export default function CardLibraryView() {
         />
       </label>
 
-      {wallet.count > 0 && (
+      {/* 「我的卡」总览只属于我的卡包：切到「全部卡面」挑选时不再出现 */}
+      {mode === "mine" && wallet.count > 0 && (
         <div className="card flex flex-col gap-2 px-4 py-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <span className="flex items-center gap-2">
@@ -810,43 +811,46 @@ export default function CardLibraryView() {
                 onClick={() => openCard({ card, bank, region: regionLabel, tags })}
                 className="group flex flex-col overflow-hidden rounded-2xl border border-edge bg-white text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop dark:bg-[#16181d]"
               >
-                <span className="relative block w-full overflow-hidden bg-bg-gray">
-                  <img
-                    src={`/uploads/cards/${card.file}`}
-                    alt={card.name}
-                    loading="lazy"
-                    className="aspect-[1.586] w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
-                  />
-                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                  {saved && (
-                    <span className="absolute bottom-2 left-2 rounded-full bg-black/65 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
-                      {fmtAmount(saved.amount, saved.currency)}
+                {/* 卡片底托：留白 + 圆角裁切，让每张卡看起来都像一张实体卡（素材自带圆角的也保持一致） */}
+                <span className="block w-full bg-bg-gray/60 p-2.5 dark:bg-white/[0.04]">
+                  <span className="relative block overflow-hidden rounded-[10px] shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+                    <img
+                      src={`/uploads/cards/${card.file}`}
+                      alt={card.name}
+                      loading="lazy"
+                      className="aspect-[1.586] w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                    />
+                    <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                    {saved && (
+                      <span className="absolute bottom-2 left-2 rounded-full bg-black/65 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+                        {fmtAmount(saved.amount, saved.currency)}
+                      </span>
+                    )}
+                    <span className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                      {card.type || "未分类"}
                     </span>
-                  )}
-                  <span className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                    {card.type || "未分类"}
+                    {isHeld && (
+                      <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-[#3297f6] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>
+                        我的卡
+                      </span>
+                    )}
+                    {mode === "all" && (
+                      <span
+                        role="button"
+                        tabIndex={-1}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void setHeld(card.file, !isHeld);
+                        }}
+                        className={`absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-sm transition-colors duration-200 ${
+                          isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
+                        }`}
+                      >
+                        {isHeld ? "移出" : "+ 加入"}
+                      </span>
+                    )}
                   </span>
-                  {isHeld && (
-                    <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-[#3297f6] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-                      <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>
-                      我的卡
-                    </span>
-                  )}
-                  {mode === "all" && (
-                    <span
-                      role="button"
-                      tabIndex={-1}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void setHeld(card.file, !isHeld);
-                      }}
-                      className={`absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-sm transition-colors duration-200 ${
-                        isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
-                      }`}
-                    >
-                      {isHeld ? "移出" : "+ 加入"}
-                    </span>
-                  )}
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">
                   <b className="truncate text-[13px] font-semibold text-ink">{card.name}</b>
