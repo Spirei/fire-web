@@ -267,7 +267,9 @@ function MultiSelect({
           <>
             <div className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[1px] sm:bg-transparent sm:backdrop-blur-none" onClick={() => setOpen(false)} />
             {/* 手机：从底部升起的抽屉（占满宽、行高够点）；≥sm 回到按钮下面的小面板 */}
-            <div className="thin-scrollbar fixed inset-x-0 bottom-0 z-[70] max-h-[72vh] space-y-1 overflow-y-auto overscroll-contain rounded-t-2xl border-t border-edge-strong bg-white px-1 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop dark:border-white/10 dark:bg-[#1b2029] sm:absolute sm:inset-x-auto sm:z-40 sm:bottom-auto sm:left-0 sm:top-full sm:mt-1 sm:max-h-[320px] sm:w-full sm:min-w-[220px] sm:rounded-xl sm:border sm:pb-1">
+            {/* 桌面端也要保持在遮罩之上（原来的 sm:z-40 会被 z-[60] 的遮罩盖住，
+                鼠标实际落在遮罩上 → 滑轮滚的是网页而不是列表） */}
+            <div className="thin-scrollbar fixed inset-x-0 bottom-0 z-[70] max-h-[72vh] space-y-1 overflow-y-auto overscroll-contain rounded-t-2xl border-t border-edge-strong bg-white px-1 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop dark:border-white/10 dark:bg-[#1b2029] sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-full sm:mt-1 sm:max-h-[320px] sm:w-full sm:min-w-[220px] sm:rounded-xl sm:border sm:pb-1">
               <span className="mx-auto mt-2 block h-1 w-10 rounded-full bg-edge-strong sm:hidden" />
               <span className="flex items-center justify-between gap-2 px-3 py-1.5 sm:hidden">
                 <b className="text-[13px] font-bold text-ink dark:text-white">{label}</b>
