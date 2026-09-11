@@ -588,7 +588,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
         </div>
 
         {/* 月历网格 */}
-        <div className="earnings-calendar-grid px-3 py-4 sm:px-5">
+        <div className="earnings-calendar-grid overflow-hidden px-3 py-4 sm:px-5">
           {emptyHint === "loading" ? (
             <>
               {/* 先渲染日历骨架，财报数据异步填充，避免日历迟迟不出 */}
@@ -641,7 +641,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                       type="button"
                       aria-current={cell.isToday ? "date" : undefined}
                       onClick={() => setSelectedDate(selectedDate === cell.key ? null : cell.key)}
-                      className={`group relative flex min-h-[88px] cursor-pointer flex-col gap-1 overflow-hidden rounded-[14px] border p-1.5 text-left sm:gap-1.5 sm:p-2.5 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop sm:min-h-[104px] ${
+                      className={`group relative flex min-h-[88px] max-h-[88px] cursor-pointer flex-col gap-1 overflow-hidden rounded-[14px] border p-1.5 text-left sm:min-h-[104px] sm:max-h-[104px] sm:gap-1.5 sm:p-2.5 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop sm:min-h-[104px] ${
                         selectedDate === cell.key
                           ? "border-edge bg-white shadow-pop dark:bg-[#252c3a]"
                           : cell.rows.length > 0
@@ -678,7 +678,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
                       {cell.rows.length > 0 && (
                         <div
                           onClick={() => setSelectedDate(selectedDate === cell.key ? null : cell.key)}
-                          className={`pointer-events-none absolute inset-0 z-20 flex flex-col rounded-[14px] border border-edge-strong bg-white p-2 shadow-pop transition-all duration-300 ease-out ${selectedDate === cell.key ? "translate-y-0 scale-100 opacity-100 pointer-events-auto" : "-translate-y-1 scale-95 opacity-0 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-hover:pointer-events-auto"}`}
+                          className={`pointer-events-none absolute inset-0 z-20 flex flex-col overflow-hidden rounded-[14px] border border-edge-strong bg-white p-2 shadow-pop transition-all duration-300 ease-out ${selectedDate === cell.key ? "translate-y-0 scale-100 opacity-100 pointer-events-auto" : "-translate-y-1 scale-95 opacity-0 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-hover:pointer-events-auto"}`}
                         >
                           <div className="mb-1 flex items-center justify-between">
                             <span className="text-[11px] font-bold text-ink">{cell.key.slice(5).replace("-", "月")}日</span>
