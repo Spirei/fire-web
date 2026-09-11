@@ -219,6 +219,8 @@ function migrate(database: Database.Database) {
       note TEXT NOT NULL DEFAULT '',
       currency TEXT NOT NULL DEFAULT '',
       currency_scope TEXT NOT NULL DEFAULT '',
+      -- 自定义卡面（用户上传的卡片照片）：空 = 用清单原图；非空 = /uploads/... 的本地地址
+      image TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL,
       PRIMARY KEY (user_id, card_key)
     );
@@ -322,6 +324,8 @@ function migrate(database: Database.Database) {
   if (!cardDetailCols.includes("currency")) database.exec("ALTER TABLE card_details ADD COLUMN currency TEXT NOT NULL DEFAULT ''");
   // 币种范围（单币 / 双币 / 多币种）：空 = 用规则自动推断，非空 = 用户手动覆盖
   if (!cardDetailCols.includes("currency_scope")) database.exec("ALTER TABLE card_details ADD COLUMN currency_scope TEXT NOT NULL DEFAULT ''");
+  // 自定义卡面（用户上传的卡片照片）地址
+  if (!cardDetailCols.includes("image")) database.exec("ALTER TABLE card_details ADD COLUMN image TEXT NOT NULL DEFAULT ''");
 
   // 卡面库余额流水增量字段（兼容旧库）：券商账户联动生成的资金流水 id（空 = 外部资金）
   const cardBalanceCols = (database.prepare("PRAGMA table_info(card_balance_history)").all() as { name: string }[]).map((c) => c.name);

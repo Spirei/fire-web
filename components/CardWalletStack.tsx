@@ -18,7 +18,10 @@ export interface WalletCard {
   type: string;
   brand: string;
   level: string;
+  /** 清单里的卡面文件（相对 /uploads/cards/ 的路径）—— 卡包只用它做 key 与回退 */
   image: string;
+  /** 实际展示用的卡面地址：用户上传过就是自定义卡面，否则是清单原图 */
+  cover: string;
   amount: number;
   currency: string;
   /** 是否录入过金额（没录入过时余额显示占位而不是 0） */
@@ -38,6 +41,8 @@ export interface WalletCardDetails {
   currency: string;
   /** 币种范围手动覆盖（'' = 自动推断），由卡面库那边维护，卡包只负责原样带回 */
   currencyScope: string;
+  /** 自定义卡面地址（'' = 用清单原图），同样由卡面库那边维护 */
+  image: string;
   updatedAt: string;
 }
 
@@ -577,7 +582,7 @@ export default function CardWalletStack({
                       onClick={() => onCardClick(i)}
                       className="relative block w-full overflow-hidden rounded-[16px] shadow-[0_20px_46px_rgba(0,0,0,.62)] ring-1 ring-white/12 transition-shadow duration-200"
                     >
-                      <img src={`/uploads/cards/${card.image}`} alt={card.name} draggable={false} className="aspect-[1.586] w-full object-cover" />
+                      <img src={card.cover} alt={card.name} draggable={false} className="aspect-[1.586] w-full object-cover" />
                     </button>
                   </div>
                 </div>
@@ -684,7 +689,7 @@ function CardFaces({ card, side, onFlip, reveal }: { card: WalletCard; side: "fr
         style={{ transform: side === "back" ? "rotateY(180deg)" : "rotateY(0deg)" }}
       >
         <div className="absolute inset-0 overflow-hidden rounded-[16px] shadow-[0_18px_40px_rgba(0,0,0,.55)] ring-1 ring-white/12 [backface-visibility:hidden]">
-          <img src={`/uploads/cards/${card.image}`} alt={card.name} draggable={false} className="h-full w-full object-cover" />
+          <img src={card.cover} alt={card.name} draggable={false} className="h-full w-full object-cover" />
         </div>
         {back}
       </div>

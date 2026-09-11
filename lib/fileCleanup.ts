@@ -25,7 +25,7 @@ export function localPathOf(url: string): string {
   return target;
 }
 
-/* 图片是否仍被引用（assets / 网站设置 / 用户头像 / 名人头像） */
+/* 图片是否仍被引用（assets / 网站设置 / 用户头像 / 名人头像 / 自定义卡面） */
 export function urlReferenced(url: string): boolean {
   if (!isLocalUrl(url)) return false;
   const db = getDb();
@@ -33,6 +33,8 @@ export function urlReferenced(url: string): boolean {
   const s = (db.prepare("SELECT COUNT(*) AS c FROM site_settings WHERE value = ?").get(url) as { c: number }).c;
   const u = (db.prepare("SELECT COUNT(*) AS c FROM users WHERE avatar = ?").get(url) as { c: number }).c;
   const c = (db.prepare("SELECT COUNT(*) AS c FROM celebs WHERE avatar = ?").get(url) as { c: number }).c;
+  // 卡面库的自定义卡面（用户上传的卡片照片）
+  const k = (db.prepare("SELECT COUNT(*) AS c FROM card_details WHERE image = ?").get(url) as { c: number }).c;
   let celebJson = 0;
   try {
     const avatars = JSON.parse(fs.readFileSync(CELEB_AVATARS_FILE, "utf8")) as Record<string, string>;
@@ -40,7 +42,7 @@ export function urlReferenced(url: string): boolean {
   } catch {
     /* 无文件忽略 */
   }
-  return a + s + u + c + celebJson > 0;
+  return a + s + u + c + k + celebJson > 0;
 }
 
 /* 删除本地文件（仅当没有其他引用，避免误删共享图片） */
@@ -112,6 +114,7 @@ export function cleanupOrphanFiles(): { removed: number; failed: number } {
   (db.prepare("SELECT url FROM assets").all() as { url: string }[]).forEach((r) => addRef(r.url));
   (db.prepare("SELECT avatar FROM users WHERE avatar <> ''").all() as { avatar: string }[]).forEach((r) => addRef(r.avatar));
   (db.prepare("SELECT avatar FROM celebs WHERE avatar <> ''").all() as { avatar: string }[]).forEach((r) => addRef(r.avatar));
+  (db.prepare("SELECT image FROM card_details WHERE image <> ''").all() as { image: string }[]).forEach((r) => addRef(r.image));
   (
     db.prepare("SELECT value FROM site_settings WHERE key IN ('ico','homepageBg','siteLogo')").all() as { value: string }[]
   ).forEach((r) => addRef(r.value));

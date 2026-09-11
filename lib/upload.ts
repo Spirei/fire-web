@@ -55,6 +55,7 @@ export class UploadError extends Error {
  *  - 市场图标：中文名+市场码（如 美股US.svg / 新加坡SG.svg）
  *  - 加密货币/贵金属：中文名+代码（如 比特币BTC.svg / 黄金GOLD.png）
  *  - 股票图标：中文名+股票代码（如 苹果AAPL.png，与素材库同步一致）
+ *  - 自定义卡面：银行名+卡名+地区码（如 中国银行长城借记卡CN.png；同一地区的卡名不会重复）
  */
 function assetFilename(
   form: FormData,
@@ -89,7 +90,7 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
   const config = KIND_CONFIG[kind];
   if (!config) throw new UploadError("不支持的上传类型", 400);
   const folder = String(form.get("folder") ?? "").trim();
-  if (kind === "asset" && folder && !["market", "flag", "crypto", "metal", "stock", "broker", "group", "icon"].includes(folder)) {
+  if (kind === "asset" && folder && !["market", "flag", "crypto", "metal", "stock", "broker", "group", "icon", "card"].includes(folder)) {
     throw new UploadError("无效的素材文件夹", 400);
   }
   if (kind !== "avatar" && !isAdmin(user)) {

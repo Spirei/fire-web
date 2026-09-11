@@ -361,6 +361,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [saving, setSaving] = useState(false);
   const [userTags, setUserTags] = useState<Record<string, string[]>>(() => initial?.tags ?? {});
   const [tagDraft, setTagDraft] = useState("");
+  /** 自定义卡面正在上传 / 保存 */
+  const [coverSaving, setCoverSaving] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   /** 卡背信息（卡号 / 有效期 / 安全码 / 备注 / 币种）与卡包叠卡视图 */
   const [details, setDetails] = useState<Record<string, CardDetails>>(() => initial?.details ?? {});
@@ -662,6 +664,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             brand: card.brand || "",
             level: card.level || "",
             image: card.file,
+            cover: info?.image || `/uploads/cards/${card.file}`,
             amount: saved?.amount ?? 0,
             currency: saved?.currency || info?.currency || REGION_CURRENCY[regionLabel] || "CNY",
             hasAmount: !!saved,
@@ -690,6 +693,73 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
 
   function applyWalletDetails(saved: WalletCardDetails) {
     setDetails((prev) => ({ ...prev, [saved.cardKey]: { ...saved } }));
+  }
+
+  /** 卡面实际展示地址：用户上传过自定义卡面就用它，否则回退清单原图 */
+  function cardCover(cardFile: string) {
+    return details[cardFile]?.image || `/uploads/cards/${cardFile}`;
+  }
+
+  /** 上传自定义卡面：先传到素材目录（folder=card），再把地址写进卡片信息 */
+  async function uploadCover(entry: CardEntry, file: File) {
+    if (coverSaving) return;
+    setCoverSaving(true);
+    try {
+      const form = new FormData();
+      form.append("kind", "asset");
+      form.append("folder", "card");
+      form.append("file", file);
+      // 命名规范：银行名 + 卡名 + 地区码（同一地区内卡名不重复）
+      form.append("name", `${entry.bank.name}${entry.card.name}`);
+      form.append("code", REGION_ISO[entry.region] || "XX");
+      const uploadRes = await fetch("/api/v1/upload", { method: "POST", body: form });
+      const uploadData = await uploadRes.json().catch(() => null);
+      const url = uploadData?.data?.url ?? uploadData?.url;
+      if (!uploadRes.ok || !url) {
+        showToast(uploadData?.message || uploadData?.error || "上传失败，稍后再试", "err");
+        return;
+      }
+      const res = await fetch("/api/cards/wallet", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardKey: entry.card.file, image: url })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.details) {
+        showToast(data?.error || "卡面保存失败，稍后再试", "err");
+        return;
+      }
+      setDetails((prev) => ({ ...prev, [entry.card.file]: data.details as CardDetails }));
+      showToast("卡面已更新");
+    } catch {
+      showToast("上传失败，稍后再试", "err");
+    } finally {
+      setCoverSaving(false);
+    }
+  }
+
+  /** 恢复清单原图 */
+  async function resetCover(entry: CardEntry) {
+    if (coverSaving) return;
+    setCoverSaving(true);
+    try {
+      const res = await fetch("/api/cards/wallet", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardKey: entry.card.file, image: "" })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.details) {
+        showToast(data?.error || "恢复失败，稍后再试", "err");
+        return;
+      }
+      setDetails((prev) => ({ ...prev, [entry.card.file]: data.details as CardDetails }));
+      showToast("已恢复清单原图");
+    } catch {
+      showToast("恢复失败，稍后再试", "err");
+    } finally {
+      setCoverSaving(false);
+    }
   }
 
   /**
@@ -1173,7 +1243,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 <span className="block w-full bg-bg-gray/60 p-2.5 dark:bg-white/[0.04]">
                   <span className="relative block overflow-hidden rounded-[10px] bg-bg-gray shadow-sm ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10">
                     <img
-                      src={`/uploads/cards/${card.file}`}
+                      src={cardCover(card.file)}
                       alt={card.name}
                       loading="lazy"
                       decoding="async"
@@ -1293,7 +1363,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               </button>
             </div>
             <div className="overflow-y-auto overscroll-contain bg-bg-gray px-4 py-4 sm:px-5 sm:py-5 dark:bg-black/20">
-              <img src={`/uploads/cards/${active.card.file}`} alt={active.card.name} className="mx-auto w-full max-w-[560px] rounded-xl shadow-pop" />
+              <img src={cardCover(active.card.file)} alt={active.card.name} className="mx-auto w-full max-w-[560px] rounded-xl shadow-pop" />
               <div className="mx-auto mt-4 grid max-w-[560px] grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
                 <span className="rounded-lg bg-white px-3 py-2 text-muted dark:bg-[#1c222d]">类型<b className="ml-1 text-ink">{active.card.type || "—"}</b></span>
                 <span className="rounded-lg bg-white px-3 py-2 text-muted dark:bg-[#1c222d]">卡组织<b className="ml-1 text-ink">{active.card.brand || "—"}</b></span>
@@ -1367,6 +1437,41 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 >
                   {holdings[active.card.file] ? "移出我的卡" : "加入我的卡"}
                 </button>
+              </div>
+              {/* 自定义卡面：清单原图不合意时上传自己的卡片照片（只影响自己这一份） */}
+              <div className="mb-3 flex flex-wrap items-center gap-2 border-t border-edge pt-3">
+                <span className="text-[11px] font-semibold text-muted">卡面</span>
+                <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold text-muted dark:bg-white/5">
+                  {details[active.card.file]?.image ? "自定义照片" : "清单原图"}
+                </span>
+                <label
+                  className={`inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover sm:h-8 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10 ${
+                    coverSaving ? "pointer-events-none opacity-50" : ""
+                  }`}
+                  title="上传自己的卡片照片替换清单原图（建议用标准卡面比例 1.586:1；支持 JPG / PNG / WEBP，最大 2MB）"
+                >
+                  {coverSaving ? "处理中…" : "上传卡面"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (file) void uploadCover(active, file);
+                    }}
+                  />
+                </label>
+                {details[active.card.file]?.image && (
+                  <button
+                    type="button"
+                    disabled={coverSaving}
+                    onClick={() => void resetCover(active)}
+                    className="h-10 rounded-full px-3 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink disabled:opacity-50 sm:h-8"
+                  >
+                    恢复原图
+                  </button>
+                )}
               </div>
               <div className="flex flex-wrap items-end gap-2">
                 <label className="flex flex-col gap-1 max-sm:flex-1">

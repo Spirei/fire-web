@@ -2978,6 +2978,10 @@ export const V0_1_28_ENTRY: VersionEntry = {
     title: "清掉「无安全码卡片」上残留的 CVV（一次性幂等清洗）",
     desc: "上一条把大陆借记卡的安全码字段藏起来之后，早期数据里已经填过的值既显示不出来、也改不掉，就变成了脏数据。新增 `sweepLegacyCardCvv()`（`lib/cardLibrary.ts`）：按 `hasSecurityCode()` 规则找出「本来就没有安全码」的卡（中国大陆借记卡），把它们 `card_details.cvv` 非空的行清空。它是**幂等**的（只 UPDATE 非空行，跑完再跑就没有匹配）且**每个进程只在第一次读卡面库时跑一次**（本地与线上容器都会自动清理，不需要手动执行脚本）；清单还没抓到（没跑过抓取脚本、拿不到卡类型）时直接跳过、等下次，绝不乱清。同时把「有没有安全码」的规则抽到新文件 `lib/cardSecurity.ts`，客户端展示与服务端清洗共用同一份判断，避免两边各写一份日后漂移。实测：demo 库里大陆借记卡的 `516` 已清空，香港借记卡（`327`）与信用卡（`812`）按规则保留。tsc 无错误。",
     kind: "fix"
+  }, {
+    title: "卡面库支持上传自定义卡面：给任意一张卡换上自己的卡片照片",
+    desc: "此前卡面图只来自抓取脚本生成的清单（`scripts/fetch-card-assets.mjs` → `public/uploads/cards/manifest.json`），上传接口也只放行 `market/flag/crypto/metal/stock/broker/group/icon` 七个素材分类 —— 清单里的图不合意（拍糊了、想用自己的实拍、想换成更好看的渲染图）就没有任何办法替换。现在补齐：1) 数据库 `card_details` 新增 `image` 字段（空 = 用清单原图，非空 = 自定义卡面地址）；2) 上传接口放行 `folder=card`，落盘到 `public/uploads/asset/card/`，命名按「银行名 + 卡名 + 地区码」（如 `中国银行长城借记卡CN.png`，同地区内卡名不重复，符合素材命名规范）；3) `/api/cards/wallet` 的 PUT 接受 `image`，并**只接受本站 `/uploads/` 下的地址**（空字符串 = 恢复原图）—— 外链 / `data:` / `javascript:` 一律 400 拒绝，不给 `<img src>` 注入的机会；4) 卡面库弹窗新增「卡面」一行：显示当前是「清单原图」还是「自定义照片」+「上传卡面」按钮（建议标准卡面比例 1.586:1、JPG/PNG/WEBP、最大 2MB）+ 已自定义时出现的「恢复原图」；5) 展示端统一走 `cardCover()`：卡面库网格、弹窗大图、**卡包堆叠视图与卡背正面**都会用自定义卡面（卡包 `WalletCard` 新增 `cover` 字段承载完整地址）。自定义卡面是**每用户每张卡**独立的覆盖，不影响清单里其他用户的同一张卡。顺带修一处会误删上传文件的隐患：`lib/fileCleanup.ts` 的「是否仍被引用」与孤立文件清理此前只认 assets / 网站设置 / 用户头像 / 名人头像，自定义卡面不在其中 —— 清理一次就会把刚上传的卡面当孤立文件删掉，现在两处都把 `card_details.image` 计入引用。验证：tsc 无错误；实测上传落盘为 `public/uploads/asset/card/中国银行长城借记卡CN.png`、经 `/uploads` 动态路由可访问（200）、PUT 后 `/api/cards` 的 details 带回该地址、外链地址被 400 拒绝、`card_details.image` 命中引用计数（受清理保护），随后恢复原图并删除测试文件、数据回到初始状态。",
+    kind: "feature"
   }]
 };
 

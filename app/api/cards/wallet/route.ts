@@ -55,12 +55,20 @@ export async function PUT(request: Request) {
   if (!body || typeof body !== "object") return NextResponse.json({ error: "无效请求" }, { status: 400 });
   const cardKey = normalizeCardKey(String((body as { cardKey?: unknown }).cardKey ?? "").trim());
   if (!cardKey || cardKey.length > 600) return NextResponse.json({ error: "卡面标识无效" }, { status: 400 });
-  const raw = body as { number?: unknown; expiry?: unknown; cvv?: unknown; note?: unknown; currency?: unknown; currencyScope?: unknown };
+  const raw = body as { number?: unknown; expiry?: unknown; cvv?: unknown; note?: unknown; currency?: unknown; currencyScope?: unknown; image?: unknown };
   if (raw.number !== undefined && String(raw.number).replace(/[^\d ]/g, "").length > 30) {
     return NextResponse.json({ error: "卡号过长" }, { status: 400 });
   }
   if (raw.note !== undefined && String(raw.note).length > 60) {
     return NextResponse.json({ error: "备注过长" }, { status: 400 });
+  }
+  // 自定义卡面只接受本站 /uploads/ 下的地址（空字符串 = 恢复清单原图），
+  // 挡掉外链 / data: / javascript: 之类会被塞进 <img src> 的内容
+  if (raw.image !== undefined) {
+    const candidate = String(raw.image).trim();
+    if (candidate !== "" && (!candidate.startsWith("/uploads/") || candidate.length > 500)) {
+      return NextResponse.json({ error: "卡面地址无效" }, { status: 400 });
+    }
   }
   const details = saveCardDetails(user.id, cardKey, {
     number: raw.number === undefined ? undefined : String(raw.number),
@@ -68,7 +76,8 @@ export async function PUT(request: Request) {
     cvv: raw.cvv === undefined ? undefined : String(raw.cvv),
     note: raw.note === undefined ? undefined : String(raw.note),
     currency: raw.currency === undefined ? undefined : String(raw.currency),
-    currencyScope: raw.currencyScope === undefined ? undefined : String(raw.currencyScope)
+    currencyScope: raw.currencyScope === undefined ? undefined : String(raw.currencyScope),
+    image: raw.image === undefined ? undefined : String(raw.image)
   });
   return NextResponse.json({ details }, NO_STORE);
 }
