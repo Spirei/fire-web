@@ -82,25 +82,12 @@ const CARD_TYPE_OPTIONS = ["借记卡", "信用卡", "预付卡", "签账卡", "
 /** 新建的卡 3 天内挂「NEW」角标 */
 const NEW_CARD_MS = 3 * 24 * 60 * 60 * 1000;
 
-type LibrarySort = "default" | "year" | "name" | "bank";
+type LibrarySort = "default" | "name" | "bank";
 const LIBRARY_SORT_LABEL: Record<LibrarySort, string> = {
   default: "默认顺序",
-  year: "按年份",
   name: "按卡名",
   bank: "按银行"
 };
-
-/**
- * 这张卡的「年份」：收进卡包的那一年（持有时写入的时间），自建卡用创建年份。
- * 没有时间记录的（清单里没收藏过的卡）返回 null，排序时排在最后。
- * 放在模块作用域：组件的 useMemo 里要用，别在组件内部定义（会踩 TDZ）。
- */
-function cardYearOf(file: string, heldAt: Record<string, string>, customCards: CustomCard[]): string | null {
-  const stamp = heldAt[file] || customCards.find((item) => item.image === file)?.createdAt || "";
-  if (!stamp) return null;
-  const date = new Date(stamp);
-  return Number.isNaN(date.getTime()) ? null : String(date.getFullYear());
-}
 
 /** 是不是刚新建的卡（只对自定义卡，按创建时间算；nowMs 为 0 表示还没到客户端，先不显示） */
 function isNewCard(card: { custom?: boolean; createdAt?: string }, nowMs: number): boolean {
@@ -431,12 +418,10 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   /** 币种范围筛选：单选（值是 CURRENCY_SCOPE_LABEL 里的中文，空 = 全部） */
   const [scopeFilter, setScopeFilter] = useState("");
   const [query, setQuery] = useState("");
-  /** 排序方式（记住选择）：默认顺序 / 按年份 / 按卡名 / 按银行 */
+  /** 排序方式（记住选择）：默认顺序 / 按卡名 / 按银行 */
   const [storedSort, setSort] = usePersistedState<LibrarySort>("fire:card-library-sort", "default");
-  /** 旧版本可能存过已删除的排序值（比如按热度），这里兜回默认，避免下拉与列表对不上 */
+  /** 旧版本可能存过已删除的排序值（比如按热度 / 按年份），这里兜回默认，避免下拉与列表对不上 */
   const sort: LibrarySort = storedSort in LIBRARY_SORT_LABEL ? storedSort : "default";
-  /** 卡面 → 收进「我的卡」的时间（按年份排序用） */
-  const [heldAt, setHeldAt] = useState<Record<string, string>>(() => initial?.heldAt ?? {});
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   /** 手机端：默认只留「类型 / 币种」，地区、银行这些下拉收进「更多筛选」 */
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
@@ -516,7 +501,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     amounts?: unknown;
     tags?: unknown;
     holdings?: unknown;
-    heldAt?: unknown;
     details?: unknown;
     covers?: unknown;
     customCards?: unknown;
@@ -538,7 +522,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       if (typeof key === "string" && key) held[key] = true;
     });
     setHoldings(held);
-    setHeldAt(data.heldAt && typeof data.heldAt === "object" ? (data.heldAt as Record<string, string>) : {});
     setDetails(data.details && typeof data.details === "object" ? (data.details as Record<string, CardDetails>) : {});
     setCovers(data.covers && typeof data.covers === "object" ? (data.covers as Record<string, string>) : {});
     setCustomCards(Array.isArray(data.customCards) ? (data.customCards as CustomCard[]) : []);
@@ -855,10 +838,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     if (sort === "default") return filtered;
     const list = filtered.map((entry, index) => ({ entry, index }));
     list.sort((a, b) => {
-      if (sort === "year") {
-        const diff = Number(cardYearOf(b.entry.card.file, heldAt, customCards) ?? 0) - Number(cardYearOf(a.entry.card.file, heldAt, customCards) ?? 0);
-        if (diff !== 0) return diff;
-      } else if (sort === "name") {
+      if (sort === "name") {
         const diff = a.entry.card.name.localeCompare(b.entry.card.name, "zh-Hans-CN");
         if (diff !== 0) return diff;
       } else {
@@ -870,7 +850,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       return a.index - b.index;
     });
     return list.map((item) => item.entry);
-  }, [filtered, sort, heldAt, customCards]);
+  }, [filtered, sort]);
 
   const pageItems = useMemo(() => sortedItems.slice(0, visibleCount), [sortedItems, visibleCount]);
 
@@ -1478,7 +1458,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             </button>
           )}
       </div>
-        {/* 排序：默认顺序 / 按年份 / 按卡名 / 按银行（记住选择） */}
+        {/* 排序：默认顺序 / 按卡名 / 按银行（记住选择） */}
         <label className="flex h-11 items-center gap-1.5 rounded-xl border border-edge bg-white px-3 transition-colors duration-200 hover:border-edge-strong sm:h-10 dark:bg-[#1c222d]">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 flex-none text-muted">
             <path d="M7 4v16M7 20l-3-3M17 20V4M17 4l3 3" />
@@ -1822,15 +1802,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                           <path d="M7 5h11a2 2 0 0 1 2 2v8" />
                         </svg>
                         {(card.faces?.length ?? 0) + 1} 版
-                      </i>
-                    )}
-                    {/* 按年份排序时把「哪年收进来的」亮出来 */}
-                    {sort === "year" && cardYearOf(card.file, heldAt, customCards) && (
-                      <i
-                        title={heldAt[card.file] ? `收进卡包的时间：${new Date(heldAt[card.file]).toLocaleDateString("zh-CN")}` : "自建卡片的创建年份"}
-                        className="inline-flex items-center gap-1 rounded-full bg-[#3297f6]/12 px-1.5 py-0.5 text-[10px] font-semibold not-italic text-[#2f6fed] sm:py-[1px] sm:text-[9px] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]"
-                      >
-                        {cardYearOf(card.file, heldAt, customCards)}
                       </i>
                     )}
                     {shownTags.slice(0, 3).map((item) => (
