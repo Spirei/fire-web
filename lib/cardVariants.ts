@@ -25,7 +25,8 @@ export const CARD_VARIANT_GROUPS: CardVariantGroup[] = [
   {
     primary: "%E4%B8%AD%E5%9B%BD%E9%A6%99%E6%B8%AF/%E5%80%9F%E8%AE%B0%E5%8D%A1/%E4%B8%AD%E5%9C%8B%E9%8A%80%E8%A1%8C%20(%E9%A6%99%E6%B8%AF)/%E4%B8%AD%E9%8A%80%E5%8D%A1.png",
     faces: [{ file: "%E4%B8%AD%E5%9B%BD%E9%A6%99%E6%B8%AF/%E5%80%9F%E8%AE%B0%E5%8D%A1/%E4%B8%AD%E5%9C%8B%E9%8A%80%E8%A1%8C%20(%E9%A6%99%E6%B8%AF)/%E4%B8%AD%E9%8A%80%E5%8D%A1.jpg", label: "旧卡面" }],
-    drop: []
+    // 「中銀卡（舊）.jpg」与上面那张旧卡面字节完全相同（上游重复收录），直接不显示
+    drop: ["%E4%B8%AD%E5%9B%BD%E9%A6%99%E6%B8%AF/%E5%80%9F%E8%AE%B0%E5%8D%A1/%E4%B8%AD%E5%9C%8B%E9%8A%80%E8%A1%8C%20(%E9%A6%99%E6%B8%AF)/%E4%B8%AD%E9%8A%80%E5%8D%A1%EF%BC%88%E8%88%8A%EF%BC%89.jpg"]
   },
   {
     primary: "%E4%B8%AD%E5%9B%BD%E9%A6%99%E6%B8%AF/%E5%80%9F%E8%AE%B0%E5%8D%A1/%E9%A6%99%E6%B8%AF%E4%B8%8A%E6%B5%B7%E6%BB%99%E8%B1%90%E9%8A%80%E8%A1%8C/HSBC%20Mastercard%20Debit%20%E6%BB%99%E8%B1%90%E8%90%AC%E4%BA%8B%E9%81%94%E5%8D%A1%E6%89%A3%E8%B3%AC%E5%8D%A1%20(%E6%96%B0).png",
@@ -51,6 +52,15 @@ export const CARD_VARIANT_GROUPS: CardVariantGroup[] = [
 
 /** 被合并掉的（不显示的）素材文件 */
 export const CARD_VARIANT_DROPPED = new Set(CARD_VARIANT_GROUPS.flatMap((group) => group.drop));
+
+/**
+ * 列表里不再单独出现的卡面文件：被合并掉的重复素材 + 已经并进主卡的旧卡面
+ * （旧卡面本身还在，只是改成在详情页翻面看，不再占一条卡片）。
+ */
+export const CARD_VARIANT_MERGED = new Set<string>([
+  ...CARD_VARIANT_DROPPED,
+  ...CARD_VARIANT_GROUPS.flatMap((group) => group.faces.map((face) => face.file))
+]);
 
 /** 主卡 → 它可以翻看的其它卡面 */
 export const CARD_VARIANT_FACES: Record<string, CardFace[]> = Object.fromEntries(

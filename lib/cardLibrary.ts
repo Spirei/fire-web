@@ -4,6 +4,7 @@ import { listCardAmounts, listCardHoldings, listCardTags, type CardAmount } from
 import { listCardDetails, type CardDetails } from "./cardWallet";
 import { listCustomCards, type CustomCard } from "./cardCustom";
 import { cardAssetId, cardKeyOfAssetId, manifestCoverUrl } from "./cardAssets";
+import { CARD_VARIANT_DROPPED } from "./cardVariants";
 import { REGION_CURRENCY } from "./cardCurrencies";
 import { hasSecurityCode } from "./cardSecurity";
 import { upsertAsset } from "./assets";
@@ -185,9 +186,15 @@ export function sweepLegacyCardCvv(): number {
  * 这里绝不能把 url 覆盖回清单原图。
  */
 export function ensureCardAssets(): number {
-  const existing = new Set(
-    (getDb().prepare("SELECT id FROM assets WHERE type = 'card'").all() as { id: string }[]).map((row) => row.id)
-  );
+  const db = getDb();
+  const existing = new Set((db.prepare("SELECT id FROM assets WHERE type = 'card'").all() as { id: string }[]).map((row) => row.id));
+  // 被合并掉的重复素材（同一张卡的同一张图多次收录）在素材库里也一并清掉
+  CARD_VARIANT_DROPPED.forEach((file) => {
+    const id = cardAssetId(file);
+    if (!existing.has(id)) return;
+    db.prepare("DELETE FROM assets WHERE id = ? AND type = 'card'").run(id);
+    existing.delete(id);
+  });
   let added = 0;
   (readCardManifest()?.regions ?? []).forEach((region) => {
     const label = String((region as { label?: unknown })?.label ?? "");
@@ -201,6 +208,7 @@ export function ensureCardAssets(): number {
         if (typeof item?.file !== "string" || !item.file) return;
         const id = cardAssetId(item.file);
         if (existing.has(id)) return;
+        if (CARD_VARIANT_DROPPED.has(item.file)) return;
         const name = typeof item.name === "string" && item.name ? item.name : item.file;
         // code 只用于展示（upsertAsset 会转大写），真正的身份是 id 里的完整卡面路径
         const stem = item.file.split("/").pop()?.replace(/\.[^.]+$/, "") || name;

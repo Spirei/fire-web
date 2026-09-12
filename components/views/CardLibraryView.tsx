@@ -25,7 +25,7 @@ import {
 import type { CardLibraryPayload } from "@/lib/cardLibrary";
 import type { CardDetails } from "@/lib/cardWallet";
 import type { CustomCard } from "@/lib/cardCustom";
-import { CARD_VARIANT_DROPPED, CARD_VARIANT_FACES, CARD_VARIANT_MERGE_KEYS, type CardFace } from "@/lib/cardVariants";
+import { CARD_VARIANT_FACES, CARD_VARIANT_MERGE_KEYS, CARD_VARIANT_MERGED, type CardFace } from "@/lib/cardVariants";
 
 interface CardItem {
   name: string;
@@ -547,7 +547,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       banks: entry.banks.map((bank) => ({
         ...bank,
         cards: bank.cards
-          .filter((card) => !CARD_VARIANT_DROPPED.has(card.file))
+          // 旧卡面 / 重复素材都不再单列：旧卡面改成在主卡详情里翻面看
+          .filter((card) => !CARD_VARIANT_MERGED.has(card.file))
           .map((card) => {
             const others = CARD_VARIANT_FACES[card.file];
             const mergeKeys = CARD_VARIANT_MERGE_KEYS[card.file];
