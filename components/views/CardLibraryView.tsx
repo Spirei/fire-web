@@ -11,7 +11,6 @@ import { usePersistedState } from "@/lib/usePersistedState";
 import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
 import { REGION_CURRENCY, currencySymbol } from "@/lib/cardCurrencies";
 import { searchKey } from "@/lib/hanConvert";
-import { CARD_POPULARITY } from "@/lib/cardPopularity";
 import { cardAssetId, manifestCoverUrl } from "@/lib/cardAssets";
 import {
   CURRENCY_SCOPE_LABEL,
@@ -83,38 +82,13 @@ const CARD_TYPE_OPTIONS = ["借记卡", "信用卡", "预付卡", "签账卡", "
 /** 新建的卡 3 天内挂「NEW」角标 */
 const NEW_CARD_MS = 3 * 24 * 60 * 60 * 1000;
 
-type LibrarySort = "default" | "hot" | "name" | "bank";
+type LibrarySort = "default" | "year" | "name" | "bank";
 const LIBRARY_SORT_LABEL: Record<LibrarySort, string> = {
   default: "默认顺序",
-  hot: "按热度",
+  year: "按年份",
   name: "按卡名",
   bank: "按银行"
 };
-
-/**
- * 「我的热度」：没有云端"多少人收藏"的数据，就用你自己的使用痕迹——
- * 持有（最重）、录过金额、填过卡背信息、打过我的标签、换过卡面、打开看过、最近动过。
- * 最终排序分 = 全网讨论热度 × 6 + 这里的分（见 heatByCard）。
- */
-function cardHeatScore(signal: {
-  held: boolean;
-  filled: boolean;
-  hasDetails: boolean;
-  tagCount: number;
-  customCover: boolean;
-  views: number;
-  touchedRecently: boolean;
-}): number {
-  return (
-    (signal.held ? 30 : 0) +
-    (signal.filled ? 25 : 0) +
-    (signal.hasDetails ? 15 : 0) +
-    Math.min(signal.tagCount * 8, 24) +
-    (signal.customCover ? 15 : 0) +
-    Math.min(signal.views * 4, 12) +
-    (signal.touchedRecently ? 10 : 0)
-  );
-}
 
 /** 是不是刚新建的卡（只对自定义卡，按创建时间算；nowMs 为 0 表示还没到客户端，先不显示） */
 function isNewCard(card: { custom?: boolean; createdAt?: string }, nowMs: number): boolean {
@@ -445,10 +419,10 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   /** 币种范围筛选：单选（值是 CURRENCY_SCOPE_LABEL 里的中文，空 = 全部） */
   const [scopeFilter, setScopeFilter] = useState("");
   const [query, setQuery] = useState("");
-  /** 排序方式（记住选择）：默认顺序 / 按热度 / 按卡名 / 按银行 */
+  /** 排序方式（记住选择）：默认顺序 / 按年份 / 按卡名 / 按银行 */
   const [sort, setSort] = usePersistedState<LibrarySort>("fire:card-library-sort", "default");
-  /** 打开过卡片的次数：没有云端数据，用"你自己常看哪张"当热度信号之一 */
-  const [viewCounts, setViewCounts] = usePersistedState<Record<string, number>>("fire:card-library-views", {});
+  /** 卡面 → 收进「我的卡」的时间（按年份排序用） */
+  const [heldAt, setHeldAt] = useState<Record<string, string>>(() => initial?.heldAt ?? {});
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   /** 手机端：默认只留「类型 / 币种」，地区、银行这些下拉收进「更多筛选」 */
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
@@ -528,6 +502,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     amounts?: unknown;
     tags?: unknown;
     holdings?: unknown;
+    heldAt?: unknown;
     details?: unknown;
     covers?: unknown;
     customCards?: unknown;
@@ -549,6 +524,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       if (typeof key === "string" && key) held[key] = true;
     });
     setHoldings(held);
+    setHeldAt(data.heldAt && typeof data.heldAt === "object" ? (data.heldAt as Record<string, string>) : {});
     setDetails(data.details && typeof data.details === "object" ? (data.details as Record<string, CardDetails>) : {});
     setCovers(data.covers && typeof data.covers === "object" ? (data.covers as Record<string, string>) : {});
     setCustomCards(Array.isArray(data.customCards) ? (data.customCards as CustomCard[]) : []);
@@ -649,35 +625,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     });
     return list;
   }, [mergedRegions]);
-
-  /**
-   * 每张卡的热度分（只用于「按热度」排序）。没有云端收藏数据，所以用你自己的使用痕迹：
-   * 持有 / 录过金额 / 填过卡背 / 打过标签 / 换过卡面 / 打开看过 / 近 30 天动过。
-   */
-  const heatByCard = useMemo(() => {
-    const recentCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    const map: Record<string, number> = {};
-    flat.forEach(({ card }) => {
-      const amount = amounts[card.file];
-      const detail = details[card.file];
-      const touched = Math.max(
-        amount?.updatedAt ? Date.parse(amount.updatedAt) : 0,
-        detail?.updatedAt ? Date.parse(detail.updatedAt) : 0
-      );
-      map[card.file] = cardHeatScore({
-        held: !!holdings[card.file],
-        filled: !!amount,
-        hasDetails: !!detail && Boolean(detail.number || detail.expiry || detail.cvv || detail.note),
-        tagCount: (userTags[card.file] ?? []).length,
-        customCover: Boolean(covers[card.file]),
-        views: viewCounts[card.file] ?? 0,
-        touchedRecently: touched > recentCutoff
-      }) +
-        // 全网讨论热度（模型打分 0-10）权重更高：×6 落在 0-60，和"我的热度"相加
-        (CARD_POPULARITY[card.file]?.score ?? 0) * 6;
-    });
-    return map;
-  }, [flat, holdings, amounts, details, userTags, covers, viewCounts]);
 
   /** 地区排序：先按洲，中国各地优先，再按卡面数量 */
   const sortedRegions = useMemo(() => {
@@ -894,8 +841,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     if (sort === "default") return filtered;
     const list = filtered.map((entry, index) => ({ entry, index }));
     list.sort((a, b) => {
-      if (sort === "hot") {
-        const diff = (heatByCard[b.entry.card.file] ?? 0) - (heatByCard[a.entry.card.file] ?? 0);
+      if (sort === "year") {
+        const diff = Number(yearOfCard(b.entry.card.file) ?? 0) - Number(yearOfCard(a.entry.card.file) ?? 0);
         if (diff !== 0) return diff;
       } else if (sort === "name") {
         const diff = a.entry.card.name.localeCompare(b.entry.card.name, "zh-Hans-CN");
@@ -909,7 +856,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       return a.index - b.index;
     });
     return list.map((item) => item.entry);
-  }, [filtered, sort, heatByCard]);
+  }, [filtered, sort, heldAt, customCards]);
 
   const pageItems = useMemo(() => sortedItems.slice(0, visibleCount), [sortedItems, visibleCount]);
 
@@ -930,6 +877,16 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   }, [pageItems.length, filtered.length]);
 
   const activeUserTags = active ? userTags[active.card.file] ?? [] : [];
+  /**
+   * 这张卡的「年份」：收进卡包的那一年（持有时写入的时间），自建卡用创建年份。
+   * 没有时间记录的（清单里没收藏过的卡）返回 null，排序时排在最后。
+   */
+  const yearOfCard = (file: string): string | null => {
+    const stamp = heldAt[file] || customCards.find((item) => item.image === file)?.createdAt || "";
+    if (!stamp) return null;
+    const date = new Date(stamp);
+    return Number.isNaN(date.getTime()) ? null : String(date.getFullYear());
+  };
   const activeScope = active ? scopeByCard[active.card.file] : undefined;
   /** 详情页可翻的卡面：当前卡面 + 同一张卡的旧卡面（来自 lib/cardVariants 的合并表） */
   const activeFaces = active ? active.card.faces ?? [{ file: active.card.file, label: "当前卡面" }] : [];
@@ -1162,8 +1119,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       note: saved?.note || ""
     });
     setActive(entry);
-    // 打开过就算一次关注，"我的热度"里会体现
-    setViewCounts((prev) => ({ ...prev, [entry.card.file]: (prev[entry.card.file] ?? 0) + 1 }));
   }
 
   async function saveAmount() {
@@ -1519,7 +1474,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             </button>
           )}
       </div>
-        {/* 排序：默认顺序 / 按热度 / 按卡名 / 按银行（记住选择） */}
+        {/* 排序：默认顺序 / 按年份 / 按卡名 / 按银行（记住选择） */}
         <label className="flex h-11 items-center gap-1.5 rounded-xl border border-edge bg-white px-3 transition-colors duration-200 hover:border-edge-strong sm:h-10 dark:bg-[#1c222d]">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 flex-none text-muted">
             <path d="M7 4v16M7 20l-3-3M17 20V4M17 4l3 3" />
@@ -1865,17 +1820,13 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         {(card.faces?.length ?? 0) + 1} 版
                       </i>
                     )}
-                    {/* 按热度排序时把「全网讨论热度」亮出来，顺带说明得分依据 */}
-                    {sort === "hot" && CARD_POPULARITY[card.file] && (
+                    {/* 按年份排序时把「哪年收进来的」亮出来 */}
+                    {sort === "year" && yearOfCard(card.file) && (
                       <i
-                        title={`全网讨论热度 ${CARD_POPULARITY[card.file].score}/10 · ${CARD_POPULARITY[card.file].why}（我的热度 ${heatByCard[card.file] ?? 0}）`}
-                        className="inline-flex items-center gap-1 rounded-full bg-[#f97316]/12 px-1.5 py-0.5 text-[10px] font-semibold not-italic text-[#c2410c] sm:py-[1px] sm:text-[9px] dark:bg-[#f97316]/20 dark:text-[#fdba74]"
+                        title={heldAt[card.file] ? `收进卡包的时间：${new Date(heldAt[card.file]).toLocaleDateString("zh-CN")}` : "自建卡片的创建年份"}
+                        className="inline-flex items-center gap-1 rounded-full bg-[#3297f6]/12 px-1.5 py-0.5 text-[10px] font-semibold not-italic text-[#2f6fed] sm:py-[1px] sm:text-[9px] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]"
                       >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5">
-                          <path d="M4 17l6-6 4 4 6-7" />
-                          <path d="M14 8h6v6" />
-                        </svg>
-                        全网 {CARD_POPULARITY[card.file].score}
+                        {yearOfCard(card.file)}
                       </i>
                     )}
                     {shownTags.slice(0, 3).map((item) => (

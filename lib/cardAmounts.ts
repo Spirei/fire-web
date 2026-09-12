@@ -92,6 +92,21 @@ export function listCardHoldings(userId: string): string[] {
   return rows.map((row) => row.card_key);
 }
 
+/**
+ * 「这张卡是哪天收进卡包的」：按年份排序用。
+ * 持有时写入 created_at，所以能还原你收藏每张卡的时间线。
+ */
+export function listCardHeldAt(userId: string): Record<string, string> {
+  const rows = getDb()
+    .prepare("SELECT card_key, created_at FROM card_holdings WHERE user_id = ?")
+    .all(userId) as { card_key: string; created_at: string }[];
+  const out: Record<string, string> = {};
+  rows.forEach((row) => {
+    if (row.card_key) out[row.card_key] = row.created_at;
+  });
+  return out;
+}
+
 export function setCardHeld(userId: string, cardKey: string, held: boolean): boolean {
   const db = getDb();
   if (held) {

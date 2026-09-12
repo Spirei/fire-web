@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { listCardAmounts, listCardHoldings, listCardTags, type CardAmount } from "./cardAmounts";
+import { listCardAmounts, listCardHeldAt, listCardHoldings, listCardTags, type CardAmount } from "./cardAmounts";
 import { listCardDetails, type CardDetails } from "./cardWallet";
 import { listCustomCards, type CustomCard } from "./cardCustom";
 import { cardAssetId, cardKeyOfAssetId, manifestCoverUrl } from "./cardAssets";
@@ -26,6 +26,8 @@ export interface CardLibraryPayload extends CardManifest {
   amounts: CardAmount[];
   tags: Record<string, string[]>;
   holdings: string[];
+  /** 卡面 → 收进「我的卡」的时间（按年份排序用） */
+  heldAt: Record<string, string>;
   /** 卡背信息（卡号 / 有效期 / 安全码 / 备注 / 币种）：卡包与卡片详情首帧就要用 */
   details: Record<string, CardDetails>;
   /** 卡面覆盖表（卡面文件 → 实际图片地址）：素材库换过图的卡走这里，没登记的卡回退清单原图 */
@@ -75,6 +77,7 @@ export function cardLibraryForUser(userId: string): CardLibraryPayload {
     amounts: listCardAmounts(userId),
     tags: listCardTags(userId),
     holdings: listCardHoldings(userId),
+    heldAt: listCardHeldAt(userId),
     details: listCardDetails(userId),
     covers: cardCoverMap(),
     customCards: listCustomCards(userId)
