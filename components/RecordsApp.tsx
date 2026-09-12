@@ -671,9 +671,12 @@ export default function RecordsApp({
     </div>
   );
 
+  // translate="no" + notranslate：整页禁止机器翻译。<html> 上已经声明过一次，这里在应用主体上再标一次——
+  // 翻译扩展通常按「最近的祖先」判断要不要翻。翻译器会在水合前改写 DOM（连 title 属性都会动：
+  // 实测把「繁體」改成了「繁体」），React 一比对就报 Hydration failed。站内的繁简 / 英文切换不受影响。
   return (
     <>
-    <div className="records-app flex items-start gap-6">
+    <div translate="no" className="records-app notranslate flex items-start gap-6">
       {/* 桌面侧边导航 */}
       <aside className="sticky top-[88px] hidden w-[220px] flex-none lg:block">
         <nav className="relative rounded-2xl bg-bg-gray p-2">
