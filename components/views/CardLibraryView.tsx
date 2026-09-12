@@ -90,6 +90,18 @@ const LIBRARY_SORT_LABEL: Record<LibrarySort, string> = {
   bank: "按银行"
 };
 
+/**
+ * 这张卡的「年份」：收进卡包的那一年（持有时写入的时间），自建卡用创建年份。
+ * 没有时间记录的（清单里没收藏过的卡）返回 null，排序时排在最后。
+ * 放在模块作用域：组件的 useMemo 里要用，别在组件内部定义（会踩 TDZ）。
+ */
+function cardYearOf(file: string, heldAt: Record<string, string>, customCards: CustomCard[]): string | null {
+  const stamp = heldAt[file] || customCards.find((item) => item.image === file)?.createdAt || "";
+  if (!stamp) return null;
+  const date = new Date(stamp);
+  return Number.isNaN(date.getTime()) ? null : String(date.getFullYear());
+}
+
 /** 是不是刚新建的卡（只对自定义卡，按创建时间算；nowMs 为 0 表示还没到客户端，先不显示） */
 function isNewCard(card: { custom?: boolean; createdAt?: string }, nowMs: number): boolean {
   if (!card.custom || !card.createdAt || nowMs <= 0) return false;
@@ -420,7 +432,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [scopeFilter, setScopeFilter] = useState("");
   const [query, setQuery] = useState("");
   /** 排序方式（记住选择）：默认顺序 / 按年份 / 按卡名 / 按银行 */
-  const [sort, setSort] = usePersistedState<LibrarySort>("fire:card-library-sort", "default");
+  const [storedSort, setSort] = usePersistedState<LibrarySort>("fire:card-library-sort", "default");
+  /** 旧版本可能存过已删除的排序值（比如按热度），这里兜回默认，避免下拉与列表对不上 */
+  const sort: LibrarySort = storedSort in LIBRARY_SORT_LABEL ? storedSort : "default";
   /** 卡面 → 收进「我的卡」的时间（按年份排序用） */
   const [heldAt, setHeldAt] = useState<Record<string, string>>(() => initial?.heldAt ?? {});
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -842,7 +856,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     const list = filtered.map((entry, index) => ({ entry, index }));
     list.sort((a, b) => {
       if (sort === "year") {
-        const diff = Number(yearOfCard(b.entry.card.file) ?? 0) - Number(yearOfCard(a.entry.card.file) ?? 0);
+        const diff = Number(cardYearOf(b.entry.card.file, heldAt, customCards) ?? 0) - Number(cardYearOf(a.entry.card.file, heldAt, customCards) ?? 0);
         if (diff !== 0) return diff;
       } else if (sort === "name") {
         const diff = a.entry.card.name.localeCompare(b.entry.card.name, "zh-Hans-CN");
@@ -877,16 +891,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   }, [pageItems.length, filtered.length]);
 
   const activeUserTags = active ? userTags[active.card.file] ?? [] : [];
-  /**
-   * 这张卡的「年份」：收进卡包的那一年（持有时写入的时间），自建卡用创建年份。
-   * 没有时间记录的（清单里没收藏过的卡）返回 null，排序时排在最后。
-   */
-  const yearOfCard = (file: string): string | null => {
-    const stamp = heldAt[file] || customCards.find((item) => item.image === file)?.createdAt || "";
-    if (!stamp) return null;
-    const date = new Date(stamp);
-    return Number.isNaN(date.getTime()) ? null : String(date.getFullYear());
-  };
   const activeScope = active ? scopeByCard[active.card.file] : undefined;
   /** 详情页可翻的卡面：当前卡面 + 同一张卡的旧卡面（来自 lib/cardVariants 的合并表） */
   const activeFaces = active ? active.card.faces ?? [{ file: active.card.file, label: "当前卡面" }] : [];
@@ -1821,12 +1825,12 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       </i>
                     )}
                     {/* 按年份排序时把「哪年收进来的」亮出来 */}
-                    {sort === "year" && yearOfCard(card.file) && (
+                    {sort === "year" && cardYearOf(card.file, heldAt, customCards) && (
                       <i
                         title={heldAt[card.file] ? `收进卡包的时间：${new Date(heldAt[card.file]).toLocaleDateString("zh-CN")}` : "自建卡片的创建年份"}
                         className="inline-flex items-center gap-1 rounded-full bg-[#3297f6]/12 px-1.5 py-0.5 text-[10px] font-semibold not-italic text-[#2f6fed] sm:py-[1px] sm:text-[9px] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]"
                       >
-                        {yearOfCard(card.file)}
+                        {cardYearOf(card.file, heldAt, customCards)}
                       </i>
                     )}
                     {shownTags.slice(0, 3).map((item) => (
