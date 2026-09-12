@@ -192,18 +192,23 @@ function Pill({ active, children, onClick }: { active: boolean; children: React.
 
 /** 币种范围角标配色：单币绿（只有一种）、双币蓝、多币种紫、待确认琥珀 —— 一眼能分出来 */
 const SCOPE_CHIP_CLASS: Record<CurrencyScope, string> = {
-  single: "bg-[#10b981]/12 text-[#0f9d6b] dark:bg-[#10b981]/20 dark:text-[#6ee7b7]",
-  dual: "bg-[#3297f6]/12 text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]",
-  multi: "bg-[#8b5cf6]/14 text-[#7c3aed] dark:bg-[#8b5cf6]/22 dark:text-[#c4b5fd]",
-  unknown: "bg-[#f59e0b]/16 text-[#b45309] dark:bg-[#f59e0b]/20 dark:text-[#fcd34d]"
+  /**
+   * 币种胶囊的配色：四个状态共用一套「极浅底色 + 同色细描边 + 同色文字」的画法，
+   * 明度对齐、只有色相不同 —— 摆在卡片上不会互相抢（原来是大块实心色，看着像糖果）。
+   * 绿 / 蓝 / 紫 是同一个冷色家族，按「币种数量」递进；琥珀只留给「待确认」这种需要补数据的状态。
+   */
+  single: "bg-[#10b981]/8 text-[#0f766e] ring-[#10b981]/35 dark:bg-[#10b981]/12 dark:text-[#6ee7b7] dark:ring-[#10b981]/45",
+  dual: "bg-[#3b82f6]/8 text-[#1d4ed8] ring-[#3b82f6]/32 dark:bg-[#3b82f6]/12 dark:text-[#93c5fd] dark:ring-[#3b82f6]/45",
+  multi: "bg-[#8b5cf6]/8 text-[#6d28d9] ring-[#8b5cf6]/32 dark:bg-[#8b5cf6]/12 dark:text-[#c4b5fd] dark:ring-[#8b5cf6]/45",
+  unknown: "bg-[#f59e0b]/10 text-[#b45309] ring-[#f59e0b]/40 dark:bg-[#f59e0b]/12 dark:text-[#fcd34d] dark:ring-[#f59e0b]/45"
 };
 
 /** 下拉选项里的小圆点：和角标同一套颜色，方便对照 */
 const SCOPE_DOT_CLASS: Record<CurrencyScope, string> = {
-  single: "bg-[#10b981]",
-  dual: "bg-[#3297f6]",
-  multi: "bg-[#8b5cf6]",
-  unknown: "bg-[#f59e0b]"
+  single: "bg-[#0f766e]",
+  dual: "bg-[#1d4ed8]",
+  multi: "bg-[#6d28d9]",
+  unknown: "bg-[#b45309]"
 };
 
 /** 币种范围的中文标签 → 枚举值（下拉选项里要按标签取颜色） */
@@ -1972,7 +1977,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   <span className="mt-1 flex flex-wrap gap-1">
                     <i
                       title={currencyScopeSummary(scopeByCard[card.file]?.info ?? { scope, currencies: [], reason: "", confidence: "low" })}
-                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold not-italic sm:py-[1px] sm:text-[9px] ${SCOPE_CHIP_CLASS[scope]}`}
+                      className={`inline-flex items-center rounded-full px-2 py-[3px] text-[10px] font-semibold not-italic ring-1 ring-inset sm:px-1.5 sm:py-[2px] sm:text-[9px] ${SCOPE_CHIP_CLASS[scope]}`}
                     >
                       {CURRENCY_SCOPE_LABEL[scope]}
                     </i>
@@ -1981,7 +1986,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     {(card.faces?.length ?? 0) > 1 && (
                       <i
                         title={`这张卡有 ${card.faces?.length ?? 0} 版卡面（新 / 旧），打开可以翻面看`}
-                        className="inline-flex items-center gap-1 rounded-full bg-ink/[0.06] px-1.5 py-0.5 text-[10px] font-semibold not-italic text-ink-2 ring-1 ring-inset ring-ink/5 sm:py-[1px] sm:text-[9px] dark:bg-white/10 dark:text-white/75 dark:ring-white/10"
+                        className="inline-flex items-center gap-1 rounded-full bg-ink/[0.06] px-2 py-[3px] text-[10px] font-semibold not-italic text-ink-2 ring-1 ring-inset ring-ink/5 sm:px-1.5 sm:py-[2px] sm:text-[9px] dark:bg-white/10 dark:text-white/75 dark:ring-white/10"
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5">
                           <rect x="3" y="8" width="13" height="9" rx="2" />
@@ -1993,10 +1998,10 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     {shownTags.slice(0, 3).map((item) => (
                         <i
                           key={item}
-                          className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold not-italic sm:py-[1px] sm:text-[9px] ${
+                          className={`inline-flex items-center rounded-full px-2 py-[3px] text-[10px] font-semibold not-italic ring-1 ring-inset sm:px-1.5 sm:py-[2px] sm:text-[9px] ${
                             mine.includes(item)
-                              ? "bg-[#3297f6]/12 text-[#2f6fed] dark:bg-[#3297f6]/20 dark:text-[#8fc0ff]"
-                              : "bg-brand-light text-brand-deep dark:bg-white/10 dark:text-white/70"
+                              ? "bg-[#3297f6]/8 text-[#1d4ed8] ring-[#3b82f6]/30 dark:bg-[#3b82f6]/12 dark:text-[#93c5fd] dark:ring-[#3b82f6]/45"
+                              : "bg-ink/[0.06] text-ink-2 ring-ink/5 dark:bg-white/10 dark:text-white/75 dark:ring-white/10"
                           }`}
                         >
                           {item}
@@ -2445,7 +2450,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 <div className="mx-auto mt-2 max-w-[560px] rounded-xl bg-white px-3 py-2.5 dark:bg-[#1c222d]">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="text-[11px] font-semibold text-muted">币种范围</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${SCOPE_CHIP_CLASS[activeScope.scope]}`}>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${SCOPE_CHIP_CLASS[activeScope.scope]}`}>
                       {CURRENCY_SCOPE_LABEL[activeScope.scope]}
                     </span>
                     <span className="min-w-0 flex-1 text-[11px] text-faint">
