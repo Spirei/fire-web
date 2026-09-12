@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 生成卡面库的中英对照表：data/card-names-en.json
+ * 生成卡面库的中英对照表：lib/card-names-en.json
  *
  * 素材里卡名中英混杂 —— 中文卡名（中银长城借记卡）和英文卡名（Chase Debit Card）都有，
  * 银行名也有一半是纯英文（Chase / DBS Bank），所以这张表是双向的：
@@ -19,7 +19,8 @@ import path from "node:path";
 
 const ROOT = process.cwd();
 const MANIFEST = path.join(ROOT, "public/uploads/cards/manifest.json");
-const OUT = path.join(ROOT, "data/card-names-en.json");
+// 放 lib 不放 data：data/ 是运行期数据目录（.dockerignore 会排除），放那儿镜像构建会读不到
+const OUT = path.join(ROOT, "lib/card-names-en.json");
 /** 每批数量：太多会被接口判超时，10 个一批最稳（失败会按批重试 3 次，仍失败就留到下轮） */
 const BATCH = 10;
 const FORCE = process.argv.includes("--force");

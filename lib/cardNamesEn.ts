@@ -6,13 +6,15 @@
  * 由 `scripts/gen-card-en.mjs` 用大模型一次性生成、落成静态 JSON，前端直接查表（不联网、不花钱）。
  * 素材库新增卡片后重跑一次脚本，只补缺的那几张。
  *
- * 数据文件：data/card-names-en.json
+ * 数据文件：lib/card-names-en.json
+ * （放 lib 不放 data：data/ 是运行期数据目录、被 .dockerignore 排除，
+ *   放那儿的 JSON 进不了镜像，`next build` 会直接报 Module not found。）
  *   cards   中文卡名 → 英文名
  *   cardsZh 英文卡名 → 中文名
  *   banksZh 英文银行名 → 中文名
  */
 
-import cardNamesEnData from "@/data/card-names-en.json";
+import cardNamesEnData from "@/lib/card-names-en.json";
 import { hanSimplified, hanTraditional } from "@/lib/hanConvert";
 
 /** 卡面库里卡名 / 银行名的显示方式 */
