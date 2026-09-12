@@ -77,10 +77,14 @@ interface CardEntry {
 }
 
 const ALL = "全部";
-/** 首屏先铺 32 张（手机两列 = 16 行），之后每次「加载更多」再加 16 张 */
+/** 首屏先铺 32 张（手机两列 = 16 行） */
 const PAGE_SIZE_FIRST = 32;
-/** 「加载更多」一次追加的张数 */
-const PAGE_SIZE_STEP = 16;
+/**
+ * 「加载更多」一次追加的张数：12 张是三种布局的「整行临界点」——
+ * 网格是 2 / 3 / 4 列（手机 / 平板 / 桌面），12 恰好都能铺满整行（6 / 4 / 3 行），
+ * 不会出现半截的一行；实测一屏能放 8 / 11 / 13 张，所以点一次差不多就是「补一屏」。
+ */
+const PAGE_SIZE_STEP = 12;
 /** 新增卡片表单的类型选项（与后端白名单一致） */
 const CARD_TYPE_OPTIONS = ["借记卡", "信用卡", "预付卡", "签账卡", "取现卡", "交通卡", "礼品卡", "虚拟卡", "其他"];
 /** 新建的卡 3 天内挂「NEW」角标 */
@@ -2044,29 +2048,14 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           })}
         </div>
         {filtered.length > pageItems.length && (
-          <div className="flex flex-col items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setVisibleCount((count) => count + PAGE_SIZE_STEP)}
-              title={`点一下再显示 ${PAGE_SIZE_STEP} 张`}
-              className="card mx-auto flex min-h-12 w-full items-center justify-center gap-1.5 py-3 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink"
-            >
-              加载更多（已显示 {pageItems.length} / {filtered.length} 张）
-              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3"><path d="m5 7 5 5 5-5" /></svg>
-            </button>
-            {/* 430 张按 16 张一批要点二十多次，留一个一次到底的入口 */}
-            <button
-              type="button"
-              onClick={() => setVisibleCount(filtered.length)}
-              className="rounded-full px-3 py-1 text-[11px] font-semibold text-faint transition-colors duration-200 hover:bg-brand-hover hover:text-ink-2 dark:hover:bg-white/10"
-            >
-              一次显示全部 {filtered.length} 张
-            </button>
-          </div>
-        )}
-        {/* 全部加载完给一句明确的收尾，省得怀疑「是不是少显示了」 */}
-        {filtered.length > PAGE_SIZE_FIRST && filtered.length <= pageItems.length && (
-          <p className="pb-1 text-center text-[11px] text-faint">已显示全部 {filtered.length} 张</p>
+          <button
+            type="button"
+            onClick={() => setVisibleCount((count) => count + PAGE_SIZE_STEP)}
+            title={`点一下再显示 ${PAGE_SIZE_STEP} 张`}
+            className="mx-auto flex h-11 min-w-[180px] items-center justify-center rounded-full bg-[#2f2f2f] px-8 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#3d3d3d] active:scale-[.98] dark:bg-white dark:text-[#111] dark:hover:bg-white/90"
+          >
+            加载更多
+          </button>
         )}
         </>
       )}
