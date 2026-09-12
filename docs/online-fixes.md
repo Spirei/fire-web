@@ -6,6 +6,20 @@
 
 ## 一、致命错误（线上暴露 → 已修复）
 
+### 反复出现的「Hydration failed」——先怀疑浏览器翻译
+控制台报 `Hydration failed because the server rendered text didn't match the client`，
+差异行看着一模一样时，**几乎都是翻译器在 React 水合前改写了服务端 HTML**（连 `title` 属性都会动：
+实测「繁體」被改成「繁体」）。排查顺序：
+
+1. 抓服务端真正吐出的 HTML，搜差异里的字（如 `繁體` / `繁体`）——代码里没有的写法出现在 HTML 里，就是被改了；
+2. 用**无痕窗口**（扩展默认禁用）打开同一页：不报错 → 实锤是翻译插件 / 浏览器翻译；
+3. 处理：Chrome 翻译选「始终不翻译此网站」，或在翻译插件里把 `localhost:3000`、`127.0.0.1:3000`、
+   线上 IP（如 `localhost:3000`）加进不翻译名单。
+
+代码侧已上四道防翻译标记：`<html translate="no">`、`<html class="notranslate">`、
+`<meta name="google" content="notranslate">`、应用主体 `<div translate="no" class="...(notranslate)">`。
+这类报错是 Recoverable Error，页面功能正常，只是控制台噪音；中文繁简 / 英文需求走站内按钮，不依赖机器翻译。
+
 | # | 问题现象 | 根因 | 修复位置 |
 |---|----------|------|----------|
 | 1 | amd64 / 群晖 `docker build` 失败 | `prod-deps` 阶段 `npm ci --omit=dev` 重装 `better-sqlite3` 需 node-gyp 源码编译，但该阶段缺 `python3/make/g++` | `Dockerfile`：给 `prod-deps` 补编译工具链 |
