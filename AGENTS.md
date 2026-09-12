@@ -39,6 +39,20 @@ Review 自查清单（按项目实际走一遍）：
 
 判断口诀：**能分享用 URL，只关自己用 localStorage，要同步用服务端**。URL 优先于 localStorage（视图类），localStorage 优先于 URL（偏好类，避免地址栏噪音）；不要把大/敏感数据放 URL 或 localStorage。
 
+### 首屏不许闪：偏好必须能"服务端预知"（重要，2026-09-13 起）
+
+只用 localStorage 存偏好时，服务端首帧只能画默认值，客户端挂载后才切回用户的选择 —— 刷新会**先闪一下默认值再跳回去**
+（历史上反复出现：展示货币先画美元、卡面库显示方式先画「原文」）。规矩：
+
+- **凡是"刷新后要保持、且首屏看得见"的偏好，一律走 `usePersistedState`**，它现在会自动把值镜像到 `fire_prefs` cookie，
+  根布局（`app/layout.tsx`）读出后用 `PrefsProvider` 注入，服务端与客户端首帧都是用户的选择，零闪烁。
+- **禁止**在组件里直接 `localStorage.getItem(...)` 去决定首屏 UI（排序、选中态、货币、折叠状态…）：
+  那既会闪默认值，严重时还会和 SSR 打架触发 `Hydration failed`。数据缓存（行情、K 线、快讯）可以直接用 localStorage，不受此限。
+- 需要新增的偏好只要用这个 hook，就自动获得"cookie 镜像 + 服务端注入"；**不要自己再造一套 cookie 方案**
+  （例外：主题 `fire.theme` 走根布局内联脚本、展示货币走 `CurrencyProvider`，都是既有实现，保持不动）。
+- 老用户迁移：cookie 里没有、localStorage 里有时，hook 会在挂载后补写一次 cookie（这一次仍会闪，之后不再闪）；
+  两侧不一致时以 localStorage 为准并回写 cookie，自愈。
+
 ## 自选股分组（方案 A：独立分组实体，2026-08-09 起）
 
 - 分组是服务端独立实体（`watch_groups` 表，见 `lib/watchGroupsStore.ts`），记录通过 `watch_group_id` 归属；券商仍走 `records.group_name`（持仓显示），**禁止再把券商名当分组名用**。

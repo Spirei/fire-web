@@ -5,6 +5,7 @@ import { FALLBACK_RATES, type StockRecord, type Quote } from "@/lib/types";
 import { usdCap } from "@/lib/currency";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { CURRENCIES, type CurrencyCode } from "@/lib/currencyPrefs";
+import { usePersistedState } from "@/lib/usePersistedState";
 import FireReefCurrent from "@/components/FireReefCurrent";
 import { fmtMoneyAdaptive } from "@/lib/format";
 
@@ -45,11 +46,8 @@ function lsSet(key: string, v: string) {
   try { localStorage.setItem(key, v); } catch { /* 忽略 */ }
 }
 
-function readFireBaseCurrency(): CurrencyCode {
-  if (typeof window === "undefined") return "CNY";
-  const saved = localStorage.getItem("fire:base-currency");
-  return CURRENCIES.some((currency) => currency.code === saved) ? saved as CurrencyCode : "CNY";
-}
+/** FIRE 页主货币的默认值（用户改过就以 usePersistedState 读到的为准，刷新不再先闪人民币） */
+const FIRE_BASE_CURRENCY_DEFAULT: CurrencyCode = "CNY";
 
 // 生成波浪液面路径：宽于绘图区（x1-x0 为周期 T 的整数倍），平移一个周期即可无缝循环（液体涌动）。
 function wavePath(waterY: number, opts?: { amp?: number; phase?: number; x0?: number; x1?: number }) {
@@ -441,9 +439,10 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
 
   // —— 货币：真实净资产 & FIRE 计划值统一到「显示币种」，进度比率保持稳定 ——
   // 默认/主货币：FIRE 计划数值以它录入，显示时再从它换算到「显示币种」
-  const [baseCurrency, setBaseCurrency] = useState<CurrencyCode>(readFireBaseCurrency);
+  // 主货币：走 usePersistedState（自动镜像到 fire_prefs cookie），服务端首帧就是用户选的那个
+  const [baseCurrency, setBaseCurrency] = usePersistedState<CurrencyCode>("fire:base-currency", FIRE_BASE_CURRENCY_DEFAULT);
   // 当前显示币种仅作用于本次浏览；刷新始终回到星标的默认/主货币。
-  const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode>(readFireBaseCurrency);
+  const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode>(baseCurrency);
   const [currencyMenuOpen, setCurrencyMenuOpen] = useState(false);
   const [bubbleHover, setBubbleHover] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => { lsSet("fire:fire-ocean-scene", oceanSceneEnabled ? "1" : "0"); }, [oceanSceneEnabled]);
@@ -807,7 +806,6 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
                           updateAnnualFireTarget(round2(fireTargetUsd * (rates[option.value] || 1)));
                           setBaseCurrency(option.value);
                           setDisplayCurrency(option.value);
-                          try { localStorage.setItem("fire:base-currency", option.value); } catch { /* 忽略 */ }
                           setCurrencyMenuOpen(false);
                         }}
                         className={`flex h-6 w-6 flex-none items-center justify-center rounded-full transition-colors ${baseCurrency === option.value ? "text-emerald-500" : "text-muted hover:text-emerald-500"}`}

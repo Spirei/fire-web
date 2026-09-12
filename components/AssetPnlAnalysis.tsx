@@ -10,6 +10,7 @@ import CurrencyFlag from "@/components/CurrencyFlag";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import { getMarketBadge } from "@/lib/marketBadge";
 import { useMarketBadge, useMarketBadgeVisible } from "@/lib/useMarketBadge";
+import { usePersistedState } from "@/lib/usePersistedState";
 import { showToast } from "@/lib/toast";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
@@ -149,8 +150,9 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   const [detailMode, setDetailMode] = useState<"profit" | "loss">("profit");
   // 盈亏总额卡片：货币（与资产分析页共用 key）、基准（多市场）、加权
   const { currency: displayCurrency, setCurrency: setDisplayCurrency } = useDisplayCurrency();
-  const [benchKey, setBenchKey] = useState<string>("spy");
-  const [weighting, setWeighting] = useState<"simple" | "time">("simple");
+  // 基准 / 加权方式：走 usePersistedState（自动镜像到 cookie），刷新首帧就是用户选的那个，不会先闪默认
+  const [benchKey, setBenchKey] = usePersistedState<string>("fire:asset-pnl-bench", "spy");
+  const [weighting, setWeighting] = usePersistedState<"simple" | "time">("fire:asset-pnl-weighting", "simple");
   const [currencyMenuOpen, setCurrencyMenuOpen] = useState(false);
   const [benchOpen, setBenchOpen] = useState(false);
   const [weightOpen, setWeightOpen] = useState(false);
@@ -178,9 +180,6 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
       if (prefs.month) setCalMonth(prefs.month);
       if (prefs.view) setCalView(prefs.view);
       if (prefs.mode) setCalendarMode(prefs.mode);
-      const savedBench = localStorage.getItem("fire:asset-pnl-bench");
-      if (BENCHMARKS.some((item) => item.key === savedBench)) setBenchKey(savedBench as string);
-      if (localStorage.getItem("fire:asset-pnl-weighting") === "time") setWeighting("time");
     } catch {
       /* 读取失败保留默认偏好 */
     }
@@ -726,7 +725,6 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
                               onClick={() => {
                                 setBenchKey(bench.key);
                                 setBenchOpen(false);
-                                try { localStorage.setItem("fire:asset-pnl-bench", bench.key); } catch { /* 忽略 */ }
                               }}
                               className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition ${benchKey === bench.key ? "bg-[#3297f6]/15 font-bold text-[#3297f6]" : "text-ink hover:bg-bg-gray"}`}
                             >
@@ -760,7 +758,6 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
                               onClick={() => {
                                 setWeighting(key);
                                 setWeightOpen(false);
-                                try { localStorage.setItem("fire:asset-pnl-weighting", key); } catch { /* 忽略 */ }
                               }}
                               className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition ${weighting === key ? "bg-[#3297f6]/15 font-bold text-[#3297f6]" : "text-ink hover:bg-bg-gray"}`}
                             >

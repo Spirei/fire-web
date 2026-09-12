@@ -14,6 +14,8 @@ import { THEME_COOKIE } from "@/lib/theme";
 import PwaRegister from "@/components/PwaRegister";
 import LoginModal from "@/components/LoginModal";
 import FileDropAnywhere from "@/components/FileDropAnywhere";
+import { PrefsProvider } from "@/lib/prefsContext";
+import { PREFS_COOKIE, parsePrefsCookie } from "@/lib/prefsCookie";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = getSiteSettings();
@@ -29,6 +31,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const cookieStore = await cookies();
   const legacyThemeCookie = "sto" + "cklog_theme";
   const dark = cookieStore.get(THEME_COOKIE)?.value === "dark" || cookieStore.get(legacyThemeCookie)?.value === "dark";
+  // 用户偏好（「原文 / 简体 / 繁體 / 英文」、卡包排序、图表周期 …）镜像在 cookie 里：
+  // 服务端首帧直接用它渲染，客户端首帧也是同一个值 —— 刷新不会再先闪默认值、再跳回用户的选择。
+  const prefs = parsePrefsCookie(cookieStore.get(PREFS_COOKIE)?.value);
   return (
     /* 禁止整页翻译：翻译器会在水合前改写服务端 HTML（连 title 属性都会改，比如把「繁體」改成「繁体」），
        客户端水合时读到的还是原文，于是报 "Hydration failed because the server rendered text didn't match the client"。
@@ -62,13 +67,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body className="font-sans">
-        <PwaRegister />
-        {/* 全站拖拽上传：文件拖进页面就近落到最近的上传入口 */}
-        <FileDropAnywhere />
-        <TimeMachine />
-        <SiteBg />
-        <LoginModal />
-        {children}
+        <PrefsProvider initialPrefs={prefs}>
+          <PwaRegister />
+          {/* 全站拖拽上传：文件拖进页面就近落到最近的上传入口 */}
+          <FileDropAnywhere />
+          <TimeMachine />
+          <SiteBg />
+          <LoginModal />
+          {children}
+        </PrefsProvider>
       </body>
     </html>
   );
