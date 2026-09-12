@@ -92,6 +92,18 @@ export function listCardHoldings(userId: string): string[] {
   return rows.map((row) => row.card_key);
 }
 
+/** 卡面 key → 加入「我的卡」的时间：卡面库用它把新加的卡排到最上面（和 NEW 角标同一套规则） */
+export function cardHoldingTimes(userId: string): Record<string, string> {
+  const rows = getDb()
+    .prepare("SELECT card_key, created_at FROM card_holdings WHERE user_id = ?")
+    .all(userId) as { card_key: string; created_at: string }[];
+  const map: Record<string, string> = {};
+  rows.forEach((row) => {
+    map[row.card_key] = row.created_at;
+  });
+  return map;
+}
+
 export function setCardHeld(userId: string, cardKey: string, held: boolean): boolean {
   const db = getDb();
   if (held) {

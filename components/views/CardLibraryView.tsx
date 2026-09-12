@@ -98,11 +98,29 @@ const SCRIPT_OPTIONS: { value: CardScript; label: string; hint: string }[] = [
   { value: "english", label: "英文", hint: "中文卡名换成英文名，本来就英文的保持英文（不联网）" }
 ];
 
-/** 是不是刚新建的卡（只对自定义卡，按创建时间算；nowMs 为 0 表示还没到客户端，先不显示） */
-function isNewCard(card: { custom?: boolean; createdAt?: string }, nowMs: number): boolean {
-  if (!card.custom || !card.createdAt || nowMs <= 0) return false;
-  const created = Date.parse(card.createdAt);
-  return Number.isFinite(created) && nowMs - created < NEW_CARD_MS;
+/**
+ * 「新加的卡」的时间戳：自建卡的创建时间，或刚加入「我的卡」的时间，取较晚的那个。
+ * 卡面库用它把新加的卡排到最上面（3 天内，和 NEW 角标同一个窗口）。
+ */
+function freshStampOf(
+  card: { custom?: boolean; createdAt?: string; file: string },
+  addedAt: Record<string, string>
+): number {
+  const created = card.custom && card.createdAt ? Date.parse(card.createdAt) : NaN;
+  const added = Date.parse(addedAt?.[card.file] ?? "");
+  const newest = Math.max(Number.isFinite(created) ? created : 0, Number.isFinite(added) ? added : 0);
+  return newest;
+}
+
+/** 是不是 3 天内新加的卡（自建 / 加入我的卡都算）：置顶 + 挂 NEW 角标用同一套判断 */
+function isFreshCard(
+  card: { custom?: boolean; createdAt?: string; file: string },
+  addedAt: Record<string, string>,
+  nowMs: number
+): boolean {
+  if (nowMs <= 0) return false;
+  const stamp = freshStampOf(card, addedAt);
+  return stamp > 0 && nowMs - stamp < NEW_CARD_MS;
 }
 /** 聚焦反馈：全站同款中性灰柔光（去掉浏览器默认蓝框后仍能看出焦点在哪） */
 const FOCUS_RING =
@@ -415,6 +433,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     });
     return held;
   });
+  /** 加入「我的卡」的时间（卡面 key → ISO）：新加的卡排到最上面，3 天后回到常规顺序 */
+  const [addedAt, setAddedAt] = useState<Record<string, string>>(() => initial?.addedAt ?? {});
   /** mine = 我的卡（默认）；all = 全量卡面库，用来挑卡加入 */
   const [mode, setMode] = useState<"mine" | "all">("mine");
   const [updatedAt, setUpdatedAt] = useState<string | null>(() => initial?.updatedAt ?? null);
@@ -522,6 +542,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     amounts?: unknown;
     tags?: unknown;
     holdings?: unknown;
+    addedAt?: unknown;
     details?: unknown;
     covers?: unknown;
     customCards?: unknown;
@@ -543,6 +564,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       if (typeof key === "string" && key) held[key] = true;
     });
     setHoldings(held);
+    setAddedAt(data.addedAt && typeof data.addedAt === "object" ? (data.addedAt as Record<string, string>) : {});
     setDetails(data.details && typeof data.details === "object" ? (data.details as Record<string, CardDetails>) : {});
     setCovers(data.covers && typeof data.covers === "object" ? (data.covers as Record<string, string>) : {});
     setCustomCards(Array.isArray(data.customCards) ? (data.customCards as CustomCard[]) : []);
@@ -905,9 +927,33 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  /**
+   * 客户端时间戳：判断 NEW 角标是否还在 3 天内、以及新加的卡要不要置顶。
+   * 首帧（SSR）先用 0，挂载后再算，避免服务端与客户端渲染不一致；之后每小时刷新一次，
+   * 到点自动消失 / 自动回到常规顺序，不用手动刷新。
+   * 注意：必须声明在 sortedItems 之前 —— 排序里读它，写在后面会踩 TDZ 报错。
+   */
+  const [nowMs, setNowMs] = useState(0);
+  useEffect(() => {
+    setNowMs(Date.now());
+    const timer = window.setInterval(() => setNowMs(Date.now()), 60 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   /** 按当前排序方式排好的列表（同分保持清单顺序，避免每次刷新乱跳） */
   const sortedItems = useMemo(() => {
-    if (sort === "default") return filtered;
+    if (sort === "default") {
+      // 默认顺序：新加的卡（3 天内自建 / 加入我的卡）排到最上面，其余保持清单顺序
+      const list = filtered.map((entry, index) => ({ entry, index, at: freshStampOf(entry.card, addedAt) }));
+      const pinned = list.filter((item) => nowMs > 0 && item.at > 0 && nowMs - item.at < NEW_CARD_MS);
+      if (pinned.length === 0) return filtered;
+      pinned.sort((a, b) => b.at - a.at || a.index - b.index);
+      const pinnedFiles = new Set(pinned.map((item) => item.entry.card.file));
+      return [
+        ...pinned.map((item) => item.entry),
+        ...list.filter((item) => !pinnedFiles.has(item.entry.card.file)).map((item) => item.entry)
+      ];
+    }
     const list = filtered.map((entry, index) => ({ entry, index }));
     list.sort((a, b) => {
       if (sort === "name") {
@@ -922,7 +968,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       return a.index - b.index;
     });
     return list.map((item) => item.entry);
-  }, [filtered, sort, script]);
+  }, [filtered, sort, script, nowMs, addedAt]);
 
   const pageItems = useMemo(() => sortedItems.slice(0, visibleCount), [sortedItems, visibleCount]);
 
@@ -950,16 +996,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   useEffect(() => {
     setFaceIndex(0);
   }, [active?.card.file]);
-  /**
-   * 客户端时间戳：判断「NEW」角标是否还在 3 天有效期内。首帧（SSR）先用 0、挂载后再算，
-   * 避免服务端与客户端渲染不一致；之后每小时刷新一次，到点自动消失、不用手动刷新。
-   */
-  const [nowMs, setNowMs] = useState(0);
-  useEffect(() => {
-    setNowMs(Date.now());
-    const timer = window.setInterval(() => setNowMs(Date.now()), 60 * 60 * 1000);
-    return () => window.clearInterval(timer);
-  }, []);
   /** 币种下拉的选项：按这张卡的币种范围收窄（单币 1 个、双币 2 个、多币种给该地区常见币种） */
   const activeCurrencyOptions = active
     ? cardCurrencyChoicesFor({
@@ -1929,7 +1965,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     <span className="touch-always absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                       {card.type || "未分类"}
                     </span>
-                    {(isHeld || isNewCard(card, nowMs)) && (
+                    {(isHeld || isFreshCard(card, addedAt, nowMs)) && (
                       <span className="absolute left-2 top-2 flex items-center gap-1">
                         {isHeld && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-[#3297f6] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
@@ -1937,8 +1973,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                             我的卡
                           </span>
                         )}
-                        {/* 新建的卡 3 天内挂个 NEW，到点自己消失 */}
-                        {isNewCard(card, nowMs) && (
+                        {/* 新加的卡（自建 / 刚加入我的卡）3 天内挂个 NEW：它同时也是置顶的那几张，到点自己消失 */}
+                        {isFreshCard(card, addedAt, nowMs) && (
                           <span className="rounded-full bg-[#f59e0b] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-sm">
                             new
                           </span>
@@ -2345,7 +2381,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   </div>
                 )}
                 {/* 多版卡面：和卡包一样的小圆点 + 当前是哪一版 */}
-                {isNewCard(active.card, nowMs) && (
+                {isFreshCard(active.card, addedAt, nowMs) && (
                   <span className="pointer-events-none absolute left-2 top-2 z-10 rounded-full bg-[#f59e0b] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
                     new
                   </span>
