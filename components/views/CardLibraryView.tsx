@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
 import { cardTagsOf } from "@/lib/cardTags";
 import CurrencyFlag from "@/components/CurrencyFlag";
@@ -10,7 +10,7 @@ import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
 import { REGION_CURRENCY, currencySymbol } from "@/lib/cardCurrencies";
-import { searchKey } from "@/lib/hanConvert";
+import { hanSimplified, hanTraditional, searchKey } from "@/lib/hanConvert";
 import { cardAssetId, manifestCoverUrl } from "@/lib/cardAssets";
 import {
   CURRENCY_SCOPE_LABEL,
@@ -88,6 +88,14 @@ const LIBRARY_SORT_LABEL: Record<LibrarySort, string> = {
   name: "按卡名",
   bank: "按银行"
 };
+
+/** 卡名 / 银行名的中文显示方式：原文 = 素材怎么写就怎么显示，简体 / 繁體 = 用内置繁简表转换（只影响显示，不改数据） */
+type CardScript = "original" | "simplified" | "traditional";
+const SCRIPT_OPTIONS: { value: CardScript; label: string; hint: string }[] = [
+  { value: "original", label: "原文", hint: "保留素材里的原始写法" },
+  { value: "simplified", label: "简体", hint: "港台繁体卡名一键转成简体（不联网）" },
+  { value: "traditional", label: "繁體", hint: "大陆简体卡名一键转成繁體（不联网）" }
+];
 
 /** 是不是刚新建的卡（只对自定义卡，按创建时间算；nowMs 为 0 表示还没到客户端，先不显示） */
 function isNewCard(card: { custom?: boolean; createdAt?: string }, nowMs: number): boolean {
@@ -422,6 +430,14 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [storedSort, setSort] = usePersistedState<LibrarySort>("fire:card-library-sort", "default");
   /** 旧版本可能存过已删除的排序值（比如按热度 / 按年份），这里兜回默认，避免下拉与列表对不上 */
   const sort: LibrarySort = storedSort in LIBRARY_SORT_LABEL ? storedSort : "default";
+  /** 中文显示方式：原文 / 简体 / 繁體（记住选择；历史遗留的非法值兜回原文） */
+  const [storedScript, setScript] = usePersistedState<CardScript>("fire:card-library-script", "original");
+  const script: CardScript = SCRIPT_OPTIONS.some((option) => option.value === storedScript) ? storedScript : "original";
+  /** 卡名 / 银行名的显示文案（走内置繁简表，不联网） */
+  const displayName = useCallback(
+    (value: string) => (script === "simplified" ? hanSimplified(value) : script === "traditional" ? hanTraditional(value) : value),
+    [script]
+  );
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   /** 手机端：默认只留「类型 / 币种」，地区、银行这些下拉收进「更多筛选」 */
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
@@ -839,18 +855,18 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     const list = filtered.map((entry, index) => ({ entry, index }));
     list.sort((a, b) => {
       if (sort === "name") {
-        const diff = a.entry.card.name.localeCompare(b.entry.card.name, "zh-Hans-CN");
+        const diff = displayName(a.entry.card.name).localeCompare(displayName(b.entry.card.name), "zh-Hans-CN");
         if (diff !== 0) return diff;
       } else {
         const diff =
-          a.entry.bank.name.localeCompare(b.entry.bank.name, "zh-Hans-CN") ||
-          a.entry.card.name.localeCompare(b.entry.card.name, "zh-Hans-CN");
+          displayName(a.entry.bank.name).localeCompare(displayName(b.entry.bank.name), "zh-Hans-CN") ||
+          displayName(a.entry.card.name).localeCompare(displayName(b.entry.card.name), "zh-Hans-CN");
         if (diff !== 0) return diff;
       }
       return a.index - b.index;
     });
     return list.map((item) => item.entry);
-  }, [filtered, sort]);
+  }, [filtered, sort, displayName]);
 
   const pageItems = useMemo(() => sortedItems.slice(0, visibleCount), [sortedItems, visibleCount]);
 
@@ -910,8 +926,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           const info = details[card.file];
           return {
             key: card.file,
-            name: card.name,
-            bank: bank.name,
+            name: displayName(card.name),
+            bank: displayName(bank.name),
             region: regionLabel,
             type: card.type || "",
             brand: card.brand || "",
@@ -934,7 +950,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             currencyScope: info?.currencyScope || ""
           };
         }),
-    [flat, holdings, amounts, details, covers]
+    [flat, holdings, amounts, details, covers, displayName]
   );
 
   /** 卡包里改余额 / 卡背信息后，同步回卡面库（金额胶囊、总览条、卡片弹窗都读这里） */
@@ -1479,6 +1495,42 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             ))}
           </select>
         </label>
+        {/* 中文显示：原文 / 简体 / 繁體（港台卡名多是繁体，大陆卡名是简体，一键切换看法；只影响显示，不改数据） */}
+        <div
+          role="group"
+          aria-label="卡名与银行名的中文显示方式"
+          className="flex h-11 flex-none items-center gap-0.5 rounded-xl border border-edge bg-white px-1 transition-colors duration-200 hover:border-edge-strong sm:h-10 dark:bg-[#1c222d]"
+        >
+          <span
+            title="切换中文显示：原文 / 简体 / 繁體（只影响显示，不改数据）"
+            className="grid h-9 w-6 flex-none place-items-center text-muted sm:h-8"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+              <path d="M2 5h12" />
+              <path d="M7 2h1" />
+              <path d="m5 8 6 6" />
+              <path d="m4 14 6-6 2-3" />
+              <path d="m22 22-5-10-5 10" />
+              <path d="M14 18h6" />
+            </svg>
+          </span>
+          {SCRIPT_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setScript(option.value)}
+              aria-pressed={script === option.value}
+              title={option.hint}
+              className={`h-9 rounded-lg px-2 text-[12px] font-semibold transition-colors duration-200 sm:h-8 ${
+                script === option.value
+                  ? "bg-[#111] text-white shadow-sm dark:bg-white dark:text-[#111]"
+                  : "text-ink-2 hover:bg-brand-hover dark:text-white/80 dark:hover:bg-white/10"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 「我的卡」总览只属于我的卡包：切到「全部卡面」挑选时不再出现 */}
@@ -1778,9 +1830,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   </span>
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">
-                  <b className="truncate text-[13px] font-semibold text-ink">{card.name}</b>
+                  <b className="truncate text-[13px] font-semibold text-ink">{displayName(card.name)}</b>
                   <small className="truncate text-[11px] text-muted">
-                    {bank.name}
+                    {displayName(bank.name)}
                     {card.brand ? ` · ${card.brand}` : ""}
                     {card.level ? ` · ${card.level}` : ""}
                   </small>
@@ -2078,9 +2130,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             <span className="mx-auto mt-2.5 block h-1 w-10 flex-none rounded-full bg-edge-strong sm:hidden" />
             <div className="flex items-start justify-between gap-3 border-b border-edge px-4 py-3.5 sm:px-5 sm:py-4">
               <div className="min-w-0">
-                <h3 translate="no" className="notranslate truncate text-base font-bold text-ink">{active.card.name}</h3>
+                <h3 translate="no" className="notranslate truncate text-base font-bold text-ink">{displayName(active.card.name)}</h3>
                 <p translate="no" className="notranslate mt-0.5 truncate text-xs text-muted">
-                  {active.region} · {active.bank.name}
+                  {active.region} · {displayName(active.bank.name)}
                   {active.bank.englishName && active.bank.englishName !== active.bank.name ? `（${active.bank.englishName}）` : ""}
                 </p>
                 {[...activeUserTags, ...active.tags.filter((item) => !activeUserTags.includes(item))].length > 0 && (

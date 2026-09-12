@@ -31,8 +31,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const dark = cookieStore.get(THEME_COOKIE)?.value === "dark" || cookieStore.get(legacyThemeCookie)?.value === "dark";
   return (
     /* translate="no"：禁止浏览器整页翻译。翻译器会在水合前改写服务端 HTML（尤其港台繁体卡名），
-       导致 "Hydration failed because the server rendered text didn't match the client"；
-       站内数据本来就是中文，不需要机器翻译。 */
+       导致 "Hydration failed because the server rendered text didn't match the client"。
+       中文繁简需求走站内按钮（卡面库「原文 / 简体 / 繁體」），不需要机器翻译。 */
     <html
       lang="zh-CN"
       suppressHydrationWarning
