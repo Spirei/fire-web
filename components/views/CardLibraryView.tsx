@@ -1470,26 +1470,44 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             </button>
           )}
       </div>
-        {/* 排序：默认顺序 / 按卡名 / 按银行（记住选择） */}
-        <label className="flex h-11 items-center gap-1.5 rounded-xl border border-edge bg-white px-3 transition-colors duration-200 hover:border-edge-strong sm:h-10 dark:bg-[#1c222d]">
+        {/* 排序：默认顺序 / 按卡名 / 按银行（记住选择）。
+            图标用「由长到短的横线 + 下箭头」，比原来的上下箭头干净；下拉箭头自绘，去掉浏览器默认那一枚 */}
+        <label className="flex h-11 items-center gap-1.5 rounded-xl border border-edge bg-white pl-3 pr-2.5 transition-colors duration-200 hover:border-edge-strong sm:h-10 dark:bg-[#1c222d]">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 flex-none text-muted">
-            <path d="M7 4v16M7 20l-3-3M17 20V4M17 4l3 3" />
+            <path d="m3 16 4 4 4-4" />
+            <path d="M7 20V4" />
+            <path d="M11 4h4" />
+            <path d="M11 8h7" />
+            <path d="M11 12h10" />
           </svg>
-          <select
-            value={sort}
-            onChange={(event) => {
-              setSort(event.target.value as LibrarySort);
-              setVisibleCount(PAGE_SIZE);
-            }}
-            aria-label="排序方式"
-            className="bg-transparent text-[13px] font-semibold text-ink outline-none dark:text-white"
-          >
-            {(Object.keys(LIBRARY_SORT_LABEL) as LibrarySort[]).map((key) => (
-              <option key={key} value={key}>
-                {LIBRARY_SORT_LABEL[key]}
-              </option>
-            ))}
-          </select>
+          <span className="relative flex items-center">
+            <select
+              value={sort}
+              onChange={(event) => {
+                setSort(event.target.value as LibrarySort);
+                setVisibleCount(PAGE_SIZE);
+              }}
+              aria-label="排序方式"
+              className="appearance-none bg-transparent pr-4 text-[13px] font-semibold text-ink outline-none dark:text-white"
+            >
+              {(Object.keys(LIBRARY_SORT_LABEL) as LibrarySort[]).map((key) => (
+                <option key={key} value={key}>
+                  {LIBRARY_SORT_LABEL[key]}
+                </option>
+              ))}
+            </select>
+            <svg
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="pointer-events-none absolute right-0 h-3.5 w-3.5 text-faint"
+            >
+              <path d="m5 7 5 5 5-5" />
+            </svg>
+          </span>
         </label>
         {/* 显示方式：原文 / 简体 / 繁體 / 英文（卡名素材中英混杂，一键切换看法；只影响显示，不改数据） */}
         <div
