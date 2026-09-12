@@ -973,21 +973,11 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const pageItems = useMemo(() => sortedItems.slice(0, visibleCount), [sortedItems, visibleCount]);
 
 
-  /** 手机端滑到「加载更多」附近自动续上下一屏（按钮仍然保留，点它也能加载） */
-  const loadMoreRef = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => {
-    const node = loadMoreRef.current;
-    if (!node || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) setVisibleCount((count) => count + PAGE_SIZE);
-      },
-      { rootMargin: "240px 0px" }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [pageItems.length, filtered.length]);
-
+  /**
+   * 分页是「点一下加载一批」：不做滑到底自动续加 ——
+   * 自动加载会把「加载更多」按钮一路往下推，用户滚到底只看到卡片自己冒出来，
+   * 反而以为列表没加载完 / 找不到加载入口。
+   */
   const activeUserTags = active ? userTags[active.card.file] ?? [] : [];
   const activeScope = active ? scopeByCard[active.card.file] : undefined;
   /** 详情页可翻的卡面：当前卡面 + 同一张卡的旧卡面（来自 lib/cardVariants 的合并表） */
@@ -2052,14 +2042,18 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         </div>
         {filtered.length > pageItems.length && (
           <button
-            ref={loadMoreRef}
             type="button"
             onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+            title="点一下再显示 60 张"
             className="card mx-auto flex min-h-12 w-full items-center justify-center gap-1.5 py-3 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink"
           >
-            加载更多（剩余 {filtered.length - pageItems.length} 张）
+            加载更多（已显示 {pageItems.length} / {filtered.length} 张）
             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3"><path d="m5 7 5 5 5-5" /></svg>
           </button>
+        )}
+        {/* 全部加载完给一句明确的收尾，省得怀疑「是不是少显示了」 */}
+        {filtered.length > PAGE_SIZE && filtered.length <= pageItems.length && (
+          <p className="pb-1 text-center text-[11px] text-faint">已显示全部 {filtered.length} 张</p>
         )}
         </>
       )}
