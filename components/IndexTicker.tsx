@@ -24,26 +24,39 @@ function fmtSigned(v: number | null, suffix = ""): string {
   return `${v > 0 ? "+" : ""}${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${suffix}`;
 }
 
-function Sparkline({ points, up }: { points: number[]; up: boolean }) {
+/**
+ * 迷你走势图 + 昨收基准线（对齐 Yahoo Finance 的写法：虚线画在昨收位置，
+ * 一眼看出现在是站在开盘基准线上方还是下方）。基准线取值 = 现价 − 涨跌额。
+ */
+function Sparkline({ points, up, baseline }: { points: number[]; up: boolean; baseline: number | null }) {
   const gid = useId().replace(/:/g, "");
   const svg = useMemo(() => {
     if (!points || points.length < 2) return null;
     const prices = points.filter((p) => Number.isFinite(p));
     if (prices.length < 2) return null;
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
+    // 基准线也要算进纵向范围：否则昨收落在当日区间之外时那条线会跑出画布
+    const base = baseline != null && Number.isFinite(baseline) ? baseline : null;
+    const min = Math.min(...prices, base ?? Number.POSITIVE_INFINITY);
+    const max = Math.max(...prices, base ?? Number.NEGATIVE_INFINITY);
     const range = max - min || 1;
     const W = 56;
     const H = 20;
+    const yOf = (p: number) => H - 1.5 - ((p - min) / range) * (H - 6);
     const coords = prices.map((p, i) => {
       const x = (i / (prices.length - 1)) * W;
-      const y = H - 1.5 - ((p - min) / range) * (H - 6);
+      const y = yOf(p);
       return [x, y] as const;
     });
     const line = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
     const area = `${line} L${W},${H} L0,${H} Z`;
-    return { line, area, color: up ? "#e23d3d" : "#0fa07b", lastY: coords[coords.length - 1][1] };
-  }, [points, up]);
+    return {
+      line,
+      area,
+      color: up ? "#e23d3d" : "#0fa07b",
+      lastY: coords[coords.length - 1][1],
+      baseY: base == null ? null : yOf(base)
+    };
+  }, [points, up, baseline]);
 
   if (!svg) return <span className="h-5 w-14 flex-none" />;
   return (
@@ -55,6 +68,20 @@ function Sparkline({ points, up }: { points: number[]; up: boolean }) {
         </linearGradient>
       </defs>
       <path d={svg.area} fill={`url(#tg-${gid})`} />
+      {/* 昨收基准线：浅色细虚线，压在色带之上、走势线之下 */}
+      {svg.baseY != null && (
+        <line
+          x1="0"
+          x2="56"
+          y1={svg.baseY.toFixed(1)}
+          y2={svg.baseY.toFixed(1)}
+          stroke="currentColor"
+          className="text-muted"
+          strokeWidth="0.8"
+          strokeDasharray="2 1.6"
+          opacity="0.65"
+        />
+      )}
       <path d={svg.line} fill="none" stroke={svg.color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
       <circle cx="56" cy={svg.lastY} r="1.8" fill={svg.color} />
     </svg>
@@ -64,6 +91,8 @@ function Sparkline({ points, up }: { points: number[]; up: boolean }) {
 function TickerChip({ item }: { item: TickerItem }) {
   const up = (item.change ?? 0) >= 0;
   const color = up ? "text-[#e23d3d]" : "text-[#0fa07b]";
+  // 昨收 = 现价 − 涨跌额（接口给的是今日涨跌额）；拿不到就不画基准线
+  const baseline = item.price != null && item.change != null ? item.price - item.change : null;
   return (
     <div className="ticker-item flex items-center gap-2.5 rounded-2xl px-3 py-2 transition-colors duration-200 hover:bg-brand-hover">
       <span className="group/icon relative flex-none">
@@ -77,7 +106,7 @@ function TickerChip({ item }: { item: TickerItem }) {
       <svg viewBox="0 0 24 24" fill="currentColor" className={`h-[10px] w-[10px] flex-none ${color}`} aria-hidden>
         {up ? <path d="M12 5 20 19H4Z" /> : <path d="M12 19 4 5h16Z" />}
       </svg>
-      <Sparkline points={item.points} up={up} />
+      <Sparkline points={item.points} up={up} baseline={baseline} />
       <span className={`whitespace-nowrap text-[12.5px] font-semibold tabular-nums ${color}`}>
         {fmtSigned(item.change)} {fmtSigned(item.changePct, "%")}
       </span>
