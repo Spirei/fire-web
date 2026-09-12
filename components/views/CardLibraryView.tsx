@@ -77,7 +77,10 @@ interface CardEntry {
 }
 
 const ALL = "全部";
-const PAGE_SIZE = 60;
+/** 首屏先铺 32 张（手机两列 = 16 行），之后每次「加载更多」再加 16 张 */
+const PAGE_SIZE_FIRST = 32;
+/** 「加载更多」一次追加的张数 */
+const PAGE_SIZE_STEP = 16;
 /** 新增卡片表单的类型选项（与后端白名单一致） */
 const CARD_TYPE_OPTIONS = ["借记卡", "信用卡", "预付卡", "签账卡", "取现卡", "交通卡", "礼品卡", "虚拟卡", "其他"];
 /** 新建的卡 3 天内挂「NEW」角标 */
@@ -461,7 +464,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [storedScript, setScript] = usePersistedState<CardScript>("fire:card-library-script", "original");
   const script: CardScript = SCRIPT_OPTIONS.some((option) => option.value === storedScript) ? storedScript : "original";
   const currentScript = SCRIPT_OPTIONS.find((option) => option.value === script) ?? SCRIPT_OPTIONS[0];
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE_FIRST);
   /** 详细筛选（币种范围 / 地区 / 银行 / 卡组织 / 等级 / 主题 / 我的标签）默认收起，点工具栏的「筛选」展开 */
   const [filtersOpen, setFiltersOpen] = useState(false);
   /** 显示方式（原文 / 简体 / 繁體 / 英文）：收成一枚按钮 + 小菜单，不再平铺四个档位 */
@@ -879,7 +882,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
 
   /** 筛选条件变化时回到第一屏 */
   useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
+    setVisibleCount(PAGE_SIZE_FIRST);
   }, [region.join(","), bankFolder.join(","), type, brand.join(","), level.join(","), tag.join(","), myTag.join(","), scopeFilter, query]);
 
   /** 卡片详情弹窗：手机上锁住背景滚动，Esc 关闭 */
@@ -1601,7 +1604,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               value={sort}
               onChange={(event) => {
                 setSort(event.target.value as LibrarySort);
-                setVisibleCount(PAGE_SIZE);
+                setVisibleCount(PAGE_SIZE_FIRST);
               }}
               aria-label="排序方式"
               className="appearance-none bg-transparent pr-4 text-[13px] font-semibold text-ink outline-none dark:text-white"
@@ -2041,18 +2044,28 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           })}
         </div>
         {filtered.length > pageItems.length && (
-          <button
-            type="button"
-            onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
-            title="点一下再显示 60 张"
-            className="card mx-auto flex min-h-12 w-full items-center justify-center gap-1.5 py-3 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink"
-          >
-            加载更多（已显示 {pageItems.length} / {filtered.length} 张）
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3"><path d="m5 7 5 5 5-5" /></svg>
-          </button>
+          <div className="flex flex-col items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((count) => count + PAGE_SIZE_STEP)}
+              title={`点一下再显示 ${PAGE_SIZE_STEP} 张`}
+              className="card mx-auto flex min-h-12 w-full items-center justify-center gap-1.5 py-3 text-xs font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink"
+            >
+              加载更多（已显示 {pageItems.length} / {filtered.length} 张）
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3"><path d="m5 7 5 5 5-5" /></svg>
+            </button>
+            {/* 430 张按 16 张一批要点二十多次，留一个一次到底的入口 */}
+            <button
+              type="button"
+              onClick={() => setVisibleCount(filtered.length)}
+              className="rounded-full px-3 py-1 text-[11px] font-semibold text-faint transition-colors duration-200 hover:bg-brand-hover hover:text-ink-2 dark:hover:bg-white/10"
+            >
+              一次显示全部 {filtered.length} 张
+            </button>
+          </div>
         )}
         {/* 全部加载完给一句明确的收尾，省得怀疑「是不是少显示了」 */}
-        {filtered.length > PAGE_SIZE && filtered.length <= pageItems.length && (
+        {filtered.length > PAGE_SIZE_FIRST && filtered.length <= pageItems.length && (
           <p className="pb-1 text-center text-[11px] text-faint">已显示全部 {filtered.length} 张</p>
         )}
         </>
