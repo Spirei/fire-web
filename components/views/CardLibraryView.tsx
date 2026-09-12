@@ -434,9 +434,12 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   /** 显示方式：原文 / 简体 / 繁體 / 英文（记住选择；历史遗留的非法值兜回原文） */
   const [storedScript, setScript] = usePersistedState<CardScript>("fire:card-library-script", "original");
   const script: CardScript = SCRIPT_OPTIONS.some((option) => option.value === storedScript) ? storedScript : "original";
+  const currentScript = SCRIPT_OPTIONS.find((option) => option.value === script) ?? SCRIPT_OPTIONS[0];
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  /** 手机端：默认只留「类型 / 币种」，地区、银行这些下拉收进「更多筛选」 */
-  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+  /** 详细筛选（币种范围 / 地区 / 银行 / 卡组织 / 等级 / 主题 / 我的标签）默认收起，点工具栏的「筛选」展开 */
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  /** 显示方式（原文 / 简体 / 繁體 / 英文）：收成一枚按钮 + 小菜单，不再平铺四个档位 */
+  const [scriptMenuOpen, setScriptMenuOpen] = useState(false);
   /** 手机端：滑到列表深处浮出「回到顶部」 */
   const [showTop, setShowTop] = useState(false);
   /** 新增卡片弹窗：搜索 / 地区 / 每次展示条数 */
@@ -794,6 +797,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   /** 「更多筛选」里选中的维度数：手机收起时用角标提示"有筛选生效" */
   const detailFilterCount =
     region.length + bankFolder.length + brand.length + level.length + tag.length + myTag.length + (scopeFilter ? 1 : 0);
+
+  /** 「筛选」按钮上的角标：生效的筛选维度数（类型也算一个） */
+  const activeFilterCount = detailFilterCount + (type ? 1 : 0);
 
   /** 筛选条件变化时回到第一屏 */
   useEffect(() => {
@@ -1382,9 +1388,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             {updatedAt ? ` · 更新于 ${new Date(updatedAt).toLocaleDateString("zh-CN")}` : ""}
           </p>
         </div>
-        {/* 手机：模式切换独占一行（分段控件），卡包 / 已录入并排；≥sm 合并回一行靠右 */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="flex w-full items-center gap-1 rounded-full border border-edge bg-white p-1 sm:w-auto dark:border-white/10 dark:bg-[#1c222d]">
+        {/* 模式切换（分段控件）是主角，新增卡片 / 卡包缩成两枚图标按钮跟在后面：一排放下，少两个大按钮 */}
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-edge bg-white p-1 sm:w-auto sm:flex-none dark:border-white/10 dark:bg-[#1c222d]">
             <button
               type="button"
               onClick={() => setMode("mine")}
@@ -1410,31 +1416,32 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               全部卡面 {flat.length}
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-            {/* 新增卡片：紧挨在「全部卡面」右边，带文字；点开是弹窗，直接在弹窗里挑 */}
+          <div className="flex flex-none items-center gap-2">
+            {/* 新增卡片：素材库里没有的卡自己传卡面加进来，点开是弹窗 */}
             <button
               type="button"
               onClick={() => {
                 setAddOpen(true);
               }}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover sm:h-9 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
+              title="新增卡片：素材库里没有的卡，可以自己传卡面加进来"
+              aria-label="新增卡片"
+              className="grid h-10 w-10 flex-none place-items-center rounded-full border border-edge bg-white text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover hover:text-ink dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="h-3.5 w-3.5">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-4 w-4">
                 <path d="M12 5v14M5 12h14" />
               </svg>
-              新增卡片
             </button>
             <button
               type="button"
               onClick={() => setWalletOpen(true)}
               title="打开卡包：堆叠浏览卡片、翻到卡背看有效期与安全码、记录余额历史"
-              className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover sm:h-9 sm:w-auto dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
+              aria-label="打开卡包"
+              className="grid h-10 w-10 flex-none place-items-center rounded-full border border-edge bg-white text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover hover:text-ink dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
                 <rect x="4" y="8" width="15" height="10" rx="2.4" />
                 <path d="M7.4 5.6h12.2a1.8 1.8 0 0 1 1.8 1.8v7.2" />
               </svg>
-              卡包
             </button>
           </div>
         </div>
@@ -1470,6 +1477,35 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             </button>
           )}
       </div>
+        {/* 筛选：币种范围 / 地区 / 银行 / 卡组织 / 等级 / 主题 / 我的标签都收在这一个按钮后面 */}
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((open) => !open)}
+          aria-expanded={filtersOpen}
+          title="筛选：币种范围 / 地区 / 银行 / 卡组织 / 等级 / 主题 / 我的标签"
+          className={`inline-flex h-11 flex-none items-center gap-1.5 rounded-xl border bg-white px-3 text-[13px] font-semibold transition-colors duration-200 sm:h-10 dark:bg-[#1c222d] ${
+            filtersOpen ? "border-edge-strong text-ink dark:text-white" : "border-edge text-ink-2 hover:border-edge-strong dark:text-white/80"
+          }`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 flex-none text-muted">
+            <path d="M4 5h16l-6.4 7.6v5.3L10.4 20v-7.4z" />
+          </svg>
+          筛选
+          {activeFilterCount > 0 && (
+            <span className="rounded-full bg-[#3297f6] px-1.5 py-0.5 text-[10px] font-bold text-white">{activeFilterCount}</span>
+          )}
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`h-3.5 w-3.5 flex-none text-faint transition-transform duration-200 ${filtersOpen ? "rotate-180" : ""}`}
+          >
+            <path d="m5 7 5 5 5-5" />
+          </svg>
+        </button>
         {/* 排序：默认顺序 / 按卡名 / 按银行（记住选择）。
             图标用「由长到短的横线 + 下箭头」，比原来的上下箭头干净；下拉箭头自绘，去掉浏览器默认那一枚 */}
         <label className="flex h-11 items-center gap-1.5 rounded-xl border border-edge bg-white pl-3 pr-2.5 transition-colors duration-200 hover:border-edge-strong sm:h-10 dark:bg-[#1c222d]">
@@ -1509,42 +1545,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             </svg>
           </span>
         </label>
-        {/* 显示方式：原文 / 简体 / 繁體 / 英文（卡名素材中英混杂，一键切换看法；只影响显示，不改数据） */}
-        <div
-          role="group"
-          aria-label="卡名与银行名的显示方式"
-          className="flex h-11 flex-none items-center gap-0.5 rounded-xl border border-edge bg-white px-1 transition-colors duration-200 hover:border-edge-strong sm:h-10 dark:bg-[#1c222d]"
-        >
-          <span
-            title="切换显示：原文 / 简体 / 繁體 / 英文（只影响显示，不改数据）"
-            className="grid h-9 w-6 flex-none place-items-center text-muted sm:h-8"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-              <path d="M2 5h12" />
-              <path d="M7 2h1" />
-              <path d="m5 8 6 6" />
-              <path d="m4 14 6-6 2-3" />
-              <path d="m22 22-5-10-5 10" />
-              <path d="M14 18h6" />
-            </svg>
-          </span>
-          {SCRIPT_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setScript(option.value)}
-              aria-pressed={script === option.value}
-              title={option.hint}
-              className={`h-9 rounded-lg px-2 text-[12px] font-semibold transition-colors duration-200 sm:h-8 ${
-                script === option.value
-                  ? "bg-[#111] text-white shadow-sm dark:bg-white dark:text-[#111]"
-                  : "text-ink-2 hover:bg-brand-hover dark:text-white/80 dark:hover:bg-white/10"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* 「我的卡」总览只属于我的卡包：切到「全部卡面」挑选时不再出现 */}
@@ -1612,44 +1612,94 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       )}
 
       <div className="card flex flex-col gap-3 p-3">
-        {/* 类型胶囊：手机上横向滑动一行，不再换行占掉三四行高度 */}
-        <div className="ticker-scroll -mx-3 overflow-x-auto overscroll-x-contain px-3 sm:mx-0 sm:overflow-visible sm:px-0">
-          <PillGroup
-            label="类型"
-            options={typeOptions}
-            values={type ? [type] : []}
-            onToggle={(key) => setType((prev) => (prev === key ? "" : key))}
-            onClear={() => setType("")}
-          />
-        </div>
-        {/* 手机：地区 / 银行 / 卡组织 / 等级 / 主题 / 我的标签默认收起来，点一下展开 */}
-        <button
-          type="button"
-          onClick={() => setMoreFiltersOpen((open) => !open)}
-          aria-expanded={moreFiltersOpen}
-          className="flex h-11 items-center justify-between gap-2 rounded-xl border border-dashed border-edge-strong px-3 text-[12px] font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink sm:hidden"
-        >
-          <span className="flex items-center gap-1.5">
-            更多筛选
-            {detailFilterCount > 0 && (
-              <span className="rounded-full bg-[#3297f6] px-1.5 py-0.5 text-[10px] font-bold text-white">{detailFilterCount}</span>
+        {/* 类型胶囊 + 显示方式同一行：胶囊横向滑动，显示方式钉在右边（这一行本来右边就是空的） */}
+        <div className="flex items-center gap-2">
+          <div className="ticker-scroll -mx-3 min-w-0 flex-1 overflow-x-auto overscroll-x-contain px-3 max-sm:[mask-image:linear-gradient(to_right,#000_92%,transparent)] sm:mx-0 sm:overflow-visible sm:px-0">
+            <PillGroup
+              label="类型"
+              options={typeOptions}
+              values={type ? [type] : []}
+              onToggle={(key) => setType((prev) => (prev === key ? "" : key))}
+              onClear={() => setType("")}
+            />
+          </div>
+          {/* 显示方式（原文 / 简体 / 繁體 / 英文）：四个档位收进这个小菜单，按钮上只显示当前档位 */}
+          <div className="relative flex-none">
+            <button
+              type="button"
+              onClick={() => setScriptMenuOpen((open) => !open)}
+              aria-expanded={scriptMenuOpen}
+              aria-haspopup="menu"
+              aria-label={`显示方式：当前「${currentScript.label}」`}
+              title="切换显示：原文 / 简体 / 繁體 / 英文（只影响显示，不改数据）"
+              className={`inline-flex h-10 items-center gap-1.5 rounded-full border bg-white px-3 text-[12px] font-semibold transition-colors duration-200 sm:h-9 dark:bg-[#1c222d] ${
+                scriptMenuOpen ? "border-edge-strong text-ink dark:text-white" : "border-edge text-ink-2 hover:border-edge-strong dark:text-white/80"
+              }`}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 flex-none text-muted">
+                <path d="M2 5h12" />
+                <path d="M7 2h1" />
+                <path d="m5 8 6 6" />
+                <path d="m4 14 6-6 2-3" />
+                <path d="m22 22-5-10-5 10" />
+                <path d="M14 18h6" />
+              </svg>
+              <span className="min-w-[2.6em] text-left">{currentScript.label}</span>
+              <svg
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`h-3.5 w-3.5 flex-none text-faint transition-transform duration-200 ${scriptMenuOpen ? "rotate-180" : ""}`}
+              >
+                <path d="m5 7 5 5 5-5" />
+              </svg>
+            </button>
+            {scriptMenuOpen && (
+              <>
+                {/* 点空白处关掉菜单（和筛选下拉同一套做法） */}
+                <div className="fixed inset-0 z-[60]" onClick={() => setScriptMenuOpen(false)} />
+                <div
+                  role="menu"
+                  aria-label="显示方式"
+                  className="absolute right-0 top-full z-[70] mt-1 w-44 overflow-hidden rounded-xl border border-edge-strong bg-white p-1 shadow-pop dark:border-white/10 dark:bg-[#1b2029]"
+                >
+                  {SCRIPT_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={script === option.value}
+                      onClick={() => {
+                        setScript(option.value);
+                        setScriptMenuOpen(false);
+                      }}
+                      title={option.hint}
+                      className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold transition-colors duration-150 ${
+                        script === option.value
+                          ? "bg-brand-hover text-ink dark:bg-white/10 dark:text-white"
+                          : "text-ink-2 hover:bg-brand-hover dark:text-white/80 dark:hover:bg-white/10"
+                      }`}
+                    >
+                      <span>{option.label}</span>
+                      {script === option.value && (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 flex-none text-[#2f6fed]">
+                          <path d="m5 13 4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
-          </span>
-          <svg
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={`h-3.5 w-3.5 transition-transform duration-200 ${moreFiltersOpen ? "rotate-180" : ""}`}
-          >
-            <path d="m5 7 5 5 5-5" />
-          </svg>
-        </button>
-        {/* 7 个下拉：lg（1024px）往上刚好能排成一排（每格约 130px，最长的「全部卡组织」也放得下），
+          </div>
+        </div>
+        {/* 7 个下拉：默认收起（工具栏的「筛选」按钮展开），lg（1024px）往上刚好能排成一排，
             再窄就退成 4 列 / 2 列，避免挤到看不清 */}
-        <div className={`grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-4 lg:grid-cols-7 ${moreFiltersOpen ? "" : "max-sm:hidden"}`}>
+        {filtersOpen && (
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-4 lg:grid-cols-7">
           {/* 币种范围（单币 / 双币 / 多币种）放在下拉这一排：和地区、银行同级，
               不再和「类型」各占一排胶囊抢注意力 */}
           <MultiSelect
@@ -1725,6 +1775,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             />
           )}
         </div>
+        )}
+        {/* 有筛选生效时：不管面板开着还是收着，都能一键清空（类型胶囊也一起清） */}
         {Boolean(type || region.length > 0 || bankFolder.length > 0 || brand.length > 0 || level.length > 0 || tag.length > 0 || myTag.length > 0 || scopeFilter || query.trim()) && (
           <button
             type="button"
