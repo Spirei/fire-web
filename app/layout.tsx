@@ -30,9 +30,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const legacyThemeCookie = "sto" + "cklog_theme";
   const dark = cookieStore.get(THEME_COOKIE)?.value === "dark" || cookieStore.get(legacyThemeCookie)?.value === "dark";
   return (
+    /* translate="no"：禁止浏览器整页翻译。翻译器会在水合前改写服务端 HTML（尤其港台繁体卡名），
+       导致 "Hydration failed because the server rendered text didn't match the client"；
+       站内数据本来就是中文，不需要机器翻译。 */
     <html
       lang="zh-CN"
       suppressHydrationWarning
+      translate="no"
       className={dark ? "dark" : ""}
       style={{ backgroundColor: dark ? "#0a0e19" : "#ffffff" }}
     >
