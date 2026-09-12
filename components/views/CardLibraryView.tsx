@@ -1792,16 +1792,17 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       {CURRENCY_SCOPE_LABEL[scope]}
                     </i>
                     {/* 多版卡面标识：叠卡图标 + 版数，鼠标悬停说明「打开可以翻面」 */}
-                    {(card.faces?.length ?? 0) > 0 && (
+                    {/* faces 本身包含当前卡面，所以 >1 才是「多版」 */}
+                    {(card.faces?.length ?? 0) > 1 && (
                       <i
-                        title={`这张卡有 ${(card.faces?.length ?? 0) + 1} 版卡面（新 / 旧），打开可以翻面看`}
+                        title={`这张卡有 ${card.faces?.length ?? 0} 版卡面（新 / 旧），打开可以翻面看`}
                         className="inline-flex items-center gap-1 rounded-full bg-ink/[0.06] px-1.5 py-0.5 text-[10px] font-semibold not-italic text-ink-2 ring-1 ring-inset ring-ink/5 sm:py-[1px] sm:text-[9px] dark:bg-white/10 dark:text-white/75 dark:ring-white/10"
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5">
                           <rect x="3" y="8" width="13" height="9" rx="2" />
                           <path d="M7 5h11a2 2 0 0 1 2 2v8" />
                         </svg>
-                        {(card.faces?.length ?? 0) + 1} 版
+                        {card.faces?.length ?? 0} 版
                       </i>
                     )}
                     {shownTags.slice(0, 3).map((item) => (
