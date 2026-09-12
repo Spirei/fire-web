@@ -801,6 +801,54 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   /** 「筛选」按钮上的角标：生效的筛选维度数（类型也算一个） */
   const activeFilterCount = detailFilterCount + (type ? 1 : 0);
 
+  /** 清空全部筛选（类型胶囊、下拉筛选、搜索词一起还原） */
+  const resetFilters = () => {
+    setType("");
+    setRegion([]);
+    setBankFolder([]);
+    setBrand([]);
+    setLevel([]);
+    setTag([]);
+    setMyTag([]);
+    setScopeFilter("");
+    setQuery("");
+  };
+
+  /**
+   * 已生效的筛选条件：工具栏下面用一排可点掉的胶囊列出来 ——
+   * 只看「筛选 3」这样的角标，用户没法知道到底是哪 3 个条件在起作用，也没法单独去掉某一个。
+   */
+  const activeFilters: { key: string; label: string; clear: () => void }[] = [];
+  if (query.trim()) activeFilters.push({ key: "query", label: `搜索「${query.trim()}」`, clear: () => setQuery("") });
+  if (type) activeFilters.push({ key: "type", label: `类型 ${type}`, clear: () => setType("") });
+  if (scopeFilter) activeFilters.push({ key: "scope", label: `币种 ${scopeFilter}`, clear: () => setScopeFilter("") });
+  region.forEach((value) =>
+    activeFilters.push({ key: `region:${value}`, label: `地区 ${value}`, clear: () => setRegion((prev) => prev.filter((item) => item !== value)) })
+  );
+  bankFolder.forEach((value) =>
+    activeFilters.push({
+      key: `bank:${value}`,
+      label: `银行 ${bankSelectOptions.find((option) => option.value === value)?.label.split(" ")[0] ?? value}`,
+      clear: () => setBankFolder((prev) => prev.filter((item) => item !== value))
+    })
+  );
+  brand.forEach((value) => activeFilters.push({ key: `brand:${value}`, label: `卡组织 ${value}`, clear: () => setBrand((prev) => prev.filter((item) => item !== value)) }));
+  level.forEach((value) => activeFilters.push({ key: `level:${value}`, label: `等级 ${value}`, clear: () => setLevel((prev) => prev.filter((item) => item !== value)) }));
+  tag.forEach((value) => activeFilters.push({ key: `tag:${value}`, label: `主题 ${value}`, clear: () => setTag((prev) => prev.filter((item) => item !== value)) }));
+  myTag.forEach((value) => activeFilters.push({ key: `myTag:${value}`, label: `我的标签 ${value}`, clear: () => setMyTag((prev) => prev.filter((item) => item !== value)) }));
+
+  /** Esc 关掉筛选面板与显示方式菜单：键盘操作时不用去点空白处 */
+  useEffect(() => {
+    if (!filtersOpen && !scriptMenuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setFiltersOpen(false);
+      setScriptMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [filtersOpen, scriptMenuOpen]);
+
   /** 筛选条件变化时回到第一屏 */
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -1547,6 +1595,34 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         </label>
       </div>
 
+      {/* 已生效的筛选：工具栏下面排一行，点胶囊单独去掉，右边一键全清 */}
+      {activeFilters.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-faint">已筛选</span>
+          {activeFilters.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={item.clear}
+              title="点一下去掉这个条件"
+              className="inline-flex items-center gap-1 rounded-full border border-edge bg-white px-2.5 py-1 text-[11px] font-semibold text-ink-2 transition-colors duration-200 hover:border-edge-strong hover:bg-brand-hover hover:text-ink dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
+            >
+              {item.label}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-3 w-3 flex-none text-faint">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="ml-0.5 rounded-full px-2 py-1 text-[11px] font-semibold text-[#2f6fed] transition-colors duration-200 hover:bg-brand-hover dark:hover:bg-white/10"
+          >
+            全部清空
+          </button>
+        </div>
+      )}
+
       {/* 「我的卡」总览只属于我的卡包：切到「全部卡面」挑选时不再出现 */}
       {mode === "mine" && wallet.count > 0 && (
         <div className="card flex flex-col gap-2 px-4 py-3">
@@ -1776,26 +1852,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           )}
         </div>
         )}
-        {/* 有筛选生效时：不管面板开着还是收着，都能一键清空（类型胶囊也一起清） */}
-        {Boolean(type || region.length > 0 || bankFolder.length > 0 || brand.length > 0 || level.length > 0 || tag.length > 0 || myTag.length > 0 || scopeFilter || query.trim()) && (
-          <button
-            type="button"
-            onClick={() => {
-              setType("");
-              setRegion([]);
-              setBankFolder([]);
-              setBrand([]);
-              setLevel([]);
-              setTag([]);
-              setMyTag([]);
-              setScopeFilter("");
-              setQuery("");
-            }}
-            className="self-start rounded-full border border-edge px-3 py-1.5 text-[11px] font-semibold text-muted transition-colors duration-200 hover:border-edge-strong hover:bg-brand-hover hover:text-ink max-sm:px-4 max-sm:py-2 max-sm:text-[12px]"
-          >
-            清空全部筛选
-          </button>
-        )}
       </div>
 
       {loading ? (
@@ -1818,8 +1874,18 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="card py-16 text-center text-sm text-muted">
-          {mode === "mine" ? "持有的卡里没有符合条件的卡面" : "没有符合条件的卡面"}
+        <div className="card flex flex-col items-center gap-3 py-16 text-center">
+          <p className="text-sm text-muted">{mode === "mine" ? "持有的卡里没有符合条件的卡面" : "没有符合条件的卡面"}</p>
+          {/* 条件挡住了卡片：直接给一个出口，不用自己去回想点过哪些筛选 */}
+          {activeFilters.length > 0 && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="h-11 rounded-full border border-edge-strong bg-white px-5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover sm:h-9 sm:px-4 dark:bg-[#1c1c1e] dark:text-white"
+            >
+              清空全部筛选
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -1885,7 +1951,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         aria-label={isHeld ? "移出我的卡" : "加入我的卡"}
                         // 手机：只留一颗小圆点（＋ / ✓），热区靠伪元素外扩到 44px；
                         // 桌面：恢复成带文字的胶囊
-                        className={`absolute bottom-1.5 right-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full text-[13px] font-bold shadow-sm transition-colors duration-200 after:absolute after:-inset-2 after:content-[''] active:scale-95 sm:bottom-2 sm:right-2 sm:h-auto sm:w-auto sm:gap-1 sm:px-2 sm:py-0.5 sm:text-[10px] sm:font-semibold ${
+                        // 桌面默认不显示，鼠标划过卡片才浮出来（和卡片详情右上角两个 icon 一致）；触屏（.touch-always）常显
+                        className={`touch-always absolute bottom-1.5 right-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full text-[13px] font-bold shadow-sm opacity-0 transition-all duration-200 after:absolute after:-inset-2 after:content-[''] group-hover:opacity-100 group-focus-visible:opacity-100 active:scale-95 sm:bottom-2 sm:right-2 sm:h-auto sm:w-auto sm:gap-1 sm:px-2 sm:py-0.5 sm:text-[10px] sm:font-semibold ${
                           isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
                         }`}
                       >
