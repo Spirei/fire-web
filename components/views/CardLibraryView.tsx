@@ -193,15 +193,15 @@ function Pill({ active, children, onClick }: { active: boolean; children: React.
 /** 币种范围角标配色：单币绿（只有一种）、双币蓝、多币种紫、待确认琥珀 —— 一眼能分出来 */
 const SCOPE_CHIP_CLASS: Record<CurrencyScope, string> = {
   /**
-   * 币种胶囊：不要描边，靠「淡底 + 深色字」区分 —— 卡片上已经有很多线条（卡面边框、卡片描边），
-   * 再给胶囊加一圈框会显得毛躁。字号小的时候，颜色深浅比边框更能读出结构。
+   * 币种胶囊：底色不再是彩色块，跟旁边的「版本 / 主题」标签一样用中性灰 ——
+   * 一排标签形状统一，彩色只留在文字上，卡片上就不会出现一块块抢眼的色斑。
    * 文字统一压深到 700~800 号色：绿 / 蓝 / 紫 是同一个冷色家族，按「币种数量」递进；
    * 琥珀只留给「待确认」这种需要补数据的状态，是整排唯一的暖色。
    */
-  single: "bg-[#0f766e]/10 text-[#115e59] dark:bg-[#10b981]/14 dark:text-[#6ee7b7]",
-  dual: "bg-[#3b82f6]/10 text-[#1e40af] dark:bg-[#3b82f6]/14 dark:text-[#93c5fd]",
-  multi: "bg-[#8b5cf6]/10 text-[#5b21b6] dark:bg-[#8b5cf6]/14 dark:text-[#c4b5fd]",
-  unknown: "bg-[#f59e0b]/12 text-[#92400e] dark:bg-[#f59e0b]/14 dark:text-[#fcd34d]"
+  single: "bg-ink/[0.06] text-[#115e59] dark:bg-white/10 dark:text-[#6ee7b7]",
+  dual: "bg-ink/[0.06] text-[#1e40af] dark:bg-white/10 dark:text-[#93c5fd]",
+  multi: "bg-ink/[0.06] text-[#5b21b6] dark:bg-white/10 dark:text-[#c4b5fd]",
+  unknown: "bg-ink/[0.06] text-[#92400e] dark:bg-white/10 dark:text-[#fcd34d]"
 };
 
 /** 下拉选项里的小圆点：和角标同一套颜色，方便对照 */
