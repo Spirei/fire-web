@@ -30,17 +30,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const legacyThemeCookie = "sto" + "cklog_theme";
   const dark = cookieStore.get(THEME_COOKIE)?.value === "dark" || cookieStore.get(legacyThemeCookie)?.value === "dark";
   return (
-    /* translate="no"：禁止浏览器整页翻译。翻译器会在水合前改写服务端 HTML（尤其港台繁体卡名），
-       导致 "Hydration failed because the server rendered text didn't match the client"。
-       中文繁简需求走站内按钮（卡面库「原文 / 简体 / 繁體」），不需要机器翻译。 */
+    /* 禁止整页翻译：翻译器会在水合前改写服务端 HTML（连 title 属性都会改，比如把「繁體」改成「繁体」），
+       客户端水合时读到的还是原文，于是报 "Hydration failed because the server rendered text didn't match the client"。
+       三道锁一起上：html 的 translate="no" + html 的 notranslate 类 + <meta name="google" content="notranslate">
+       —— 前两个是 Google 的约定，Chrome 自带的翻译会认。
+       中文繁简 / 英文需求走站内按钮（卡面库「原文 / 简体 / 繁體 / 英文」），不依赖机器翻译。 */
     <html
       lang="zh-CN"
       suppressHydrationWarning
       translate="no"
-      className={dark ? "dark" : ""}
+      className={dark ? "dark notranslate" : "notranslate"}
       style={{ backgroundColor: dark ? "#0a0e19" : "#ffffff" }}
     >
       <head>
+        {/* Google 翻译（含 Chrome 内置翻译）看到这一条就不再动这个页面 */}
+        <meta name="google" content="notranslate" />
         <script dangerouslySetInnerHTML={{ __html: `if(location.pathname==='/simple-app')document.documentElement.classList.add('simple-app-active');` }} />
         {/* PWA：可安装（Chrome「在应用中打开」/ Safari 添加到主屏幕） */}
         <link rel="manifest" href="/manifest.webmanifest" />
