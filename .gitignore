@@ -14,6 +14,7 @@ next-env.d.ts
 !.env.example
 # Runtime data and local deployment state
 data/*
+!data/card-names-en.json
 !data/duan-posts.json
 !data/trump-posts.json
 !data/trump-translations.json
