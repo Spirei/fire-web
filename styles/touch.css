@@ -7,14 +7,23 @@
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
   select,
   textarea { font-size: max(16px, 1em); }
-  /* 触屏没有 hover：桌面端靠悬停才露出来的信息（卡面类型、底部遮罩）在触屏上常驻 */
+}
+
+/*
+ * 悬停才出现的东西，在手机 / 触屏上必须常驻：
+ *   .touch-always —— 卡面类型角标、卡面底部遮罩等「桌面悬停才出现」的信息
+ *   .card-actions —— 卡片详情右上角的操作 icon（加入/移出、上传卡面）
+ *   .touch-only / .pointer-only —— 上传区的「从相册选」与「拖进来」文案二选一
+ *
+ * 判断用「能力 + 宽度」双条件：部分设备（尤其浏览器调试里的移动模拟、少数安卓平板）
+ * 会误报 hover: hover，只按能力判断就会出现「要先用手指点一下，图标才冒出来」。
+ */
+@media (hover: none) and (pointer: coarse), (max-width: 639px) {
   .touch-always { opacity: 1 !important; }
-  /* 触屏没有 hover：卡片右上角的操作 icon（加入/移出、上传卡面）必须一直可点 */
   .card-actions { opacity: 1 !important; pointer-events: auto !important; }
-  /* 触屏没有拖拽：上传区换成「从相册选」的说法，桌面文案隐藏 */
   .touch-only { display: revert; }
   .pointer-only { display: none; }
 }
 
-/* 触屏设备上默认不显示「仅触屏」文案，桌面显示「仅鼠标」文案 */
+/* 默认（桌面）：隐藏「仅触屏」文案，显示「仅鼠标」文案 */
 .touch-only { display: none; }
