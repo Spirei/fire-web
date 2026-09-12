@@ -22,6 +22,8 @@ public/uploads/*
 !public/uploads/login
 !public/uploads/logo
 !public/uploads/background
+# 卡面素材（313MB）：不进镜像，部署后手动放到宿主机 uploads 目录（compose 挂载到 /app/public/uploads）
+public/uploads/cards
 # 分组图标是用户自定义（自选股分组），不进镜像
 public/uploads/asset/group
 # 用户数据：头像、上传的财报附件，不进镜像

@@ -14,6 +14,18 @@
 用 SMB / WebDAV / Git 把整个 `fire-web/` 目录放到群晖指定共享文件夹（例如 `docker/fire`）。
 > 只拷源码，**不含** `node_modules`、`.next`、`data`、`public/uploads`（镜像内重建，数据走挂载）。
 
+### 1b. 手动放置卡面素材（重要）
+卡面素材（`public/uploads/cards/`，430 张卡、约 313MB）**不在 Git 仓库、也不在镜像里**，
+因为体积太大会拖慢仓库克隆与镜像构建。部署后需要手动放一次：
+
+1. 在宿主机（群晖）的 uploads 目录下建好 `cards/`，例如 `UPLOADS_DIR` 默认是 `./uploads`，
+   即 `/volume1/docker/fire/uploads/cards/`；容器内对应 `/app/public/uploads/cards/`。
+2. 把本机 `fire-web/public/uploads/cards/` 整个目录（含 `manifest.json` 与各地区子目录）
+   用 SMB / File Station / `scp -r` 传上去。
+3. 刷新「卡面库」即可看到素材；`manifest.json` 是索引，缺了它卡面库会显示为空。
+
+> 以后素材库新增卡片，同样在本地跑一次抓取脚本后重传这个目录即可，不需要重新构建镜像。
+
 ### 2. 准备生产环境变量
 在项目根目录创建 `.env`（复制 `.env.example` 后填写）：
 ```bash
