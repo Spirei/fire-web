@@ -1709,11 +1709,16 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                           event.stopPropagation();
                           void setHeld(card.file, !isHeld);
                         }}
-                        className={`absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-sm transition-colors duration-200 after:absolute after:-inset-1 after:content-[''] active:scale-95 sm:bottom-2 sm:right-2 sm:px-2 sm:py-0.5 sm:text-[10px] ${
+                        title={isHeld ? "移出我的卡" : "加入我的卡"}
+                        aria-label={isHeld ? "移出我的卡" : "加入我的卡"}
+                        // 手机：只留一颗小圆点（＋ / ✓），热区靠伪元素外扩到 44px；
+                        // 桌面：恢复成带文字的胶囊
+                        className={`absolute bottom-1.5 right-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full text-[13px] font-bold shadow-sm transition-colors duration-200 after:absolute after:-inset-2 after:content-[''] active:scale-95 sm:bottom-2 sm:right-2 sm:h-auto sm:w-auto sm:gap-1 sm:px-2 sm:py-0.5 sm:text-[10px] sm:font-semibold ${
                           isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
                         }`}
                       >
-                        {isHeld ? "移出" : "+ 加入"}
+                        <span className="sm:hidden">{isHeld ? "✓" : "＋"}</span>
+                        <span className="hidden sm:inline">{isHeld ? "移出" : "+ 加入"}</span>
                       </span>
                     )}
                   </span>
