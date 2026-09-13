@@ -3000,6 +3000,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: V0_1_28_ENTRY.frontend,
   software: V0_1_28_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.29" } : item),
   changes: [{
+    title: "相关 ETF 添加支持名称联想搜索",
+    desc: "手动添加相关 ETF 的代码与名称输入合并为证券联想搜索，可按代码、英文名或中文名查找；候选项展示图标、市场、名称、代码与行情，选择后自动填写规范代码和名称。搜索不到时仍可把输入内容作为代码添加，产品类型与默认正股关联保持不变。",
+    kind: "feature"
+  }, {
     title: "修复自选股刷新时分组短暂消失",
     desc: "自选股分组改为在浏览器绘制前恢复最后一次成功快照，不再因快照超过一分钟而先渲染只有“全部”的中间状态；服务端随后静默刷新，空响应或请求失败时继续保留已有分组。旧分组迁移后的结果也同步更新快照。",
     kind: "fix"

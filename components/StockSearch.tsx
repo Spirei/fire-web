@@ -26,6 +26,12 @@ function relatedEtfMeta(match: SearchMatch): { main: string } | null {
 
 interface Props {
   onSelect: (match: SearchMatch) => void;
+  /** 输入内容变化时回传，供允许“搜索不到仍按代码添加”的场景使用。 */
+  onQueryChange?: (query: string) => void;
+  /** 只展示指定市场的证券结果。 */
+  marketFilter?: string;
+  /** 排除加密货币等资产，只保留股票与 ETF。 */
+  securitiesOnly?: boolean;
   placeholder?: string;
   large?: boolean;
   autoFocus?: boolean;
@@ -41,7 +47,7 @@ interface Props {
   rainbow?: boolean;
 }
 
-export default function StockSearch({ onSelect, placeholder = "输入股票名称或代码搜索", large = false, autoFocus = false, followed, onToggleFollow, onCameraClick, cameraTitle = "上传持仓 / 行情截图，自动识别并同步", rainbow = false }: Props) {
+export default function StockSearch({ onSelect, onQueryChange, marketFilter, securitiesOnly = false, placeholder = "输入股票名称或代码搜索", large = false, autoFocus = false, followed, onToggleFollow, onCameraClick, cameraTitle = "上传持仓 / 行情截图，自动识别并同步", rainbow = false }: Props) {
   const { stockIcons, assetIcons } = useAssetIcons(["stock", "crypto"]);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchMatch[]>([]);
@@ -60,9 +66,14 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
       return;
     }
     const cacheKey = query.toLocaleLowerCase();
+    const filterMatches = (matches: SearchMatch[]) => matches.filter((match) => {
+      if (marketFilter && match.market.toUpperCase() !== marketFilter.toUpperCase()) return false;
+      if (securitiesOnly && (match.type === "crypto" || match.market === "ASSET")) return false;
+      return true;
+    });
     const cached = searchCache.get(cacheKey);
     if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL) {
-      setResults(cached.results);
+      setResults(filterMatches(cached.results));
       setOpen(true);
       setHighlight(-1);
       setLoading(false);
@@ -79,9 +90,10 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
           return;
         }
         const data = await res.json();
-        const next = Array.isArray(data.results) ? data.results as SearchMatch[] : [];
+        const all = Array.isArray(data.results) ? data.results as SearchMatch[] : [];
+        const next = filterMatches(all);
         searchCache.delete(cacheKey);
-        searchCache.set(cacheKey, { at: Date.now(), results: next });
+        searchCache.set(cacheKey, { at: Date.now(), results: all });
         while (searchCache.size > 100) {
           const oldest = searchCache.keys().next().value;
           if (!oldest) break;
@@ -101,7 +113,7 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
       clearTimeout(timer);
       controller.abort();
     };
-  }, [q]);
+  }, [q, marketFilter, securitiesOnly]);
 
   useEffect(() => {
     const pairs = results.flatMap((match) => {
@@ -164,9 +176,9 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
           <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
         </svg>
         {rainbow ? (
-          <RainbowTextInput value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKeyDown} onFocus={() => results.length > 0 && setOpen(true)} placeholder={placeholder} autoFocus={autoFocus} className="min-w-0 flex-1 text-sm" />
+          <RainbowTextInput value={q} onChange={(e) => { setQ(e.target.value); onQueryChange?.(e.target.value); }} onKeyDown={onKeyDown} onFocus={() => results.length > 0 && setOpen(true)} placeholder={placeholder} autoFocus={autoFocus} className="min-w-0 flex-1 text-sm" />
         ) : (
-          <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKeyDown} onFocus={() => results.length > 0 && setOpen(true)} placeholder={placeholder} autoFocus={autoFocus} className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none" />
+          <input value={q} onChange={(e) => { setQ(e.target.value); onQueryChange?.(e.target.value); }} onKeyDown={onKeyDown} onFocus={() => results.length > 0 && setOpen(true)} placeholder={placeholder} autoFocus={autoFocus} className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none" />
         )}
         {loading && (
           <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4 animate-spin text-faint">

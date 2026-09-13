@@ -17,6 +17,7 @@ import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import DividendTable, { fmtDividendAmount, yearOfDividend } from "@/components/DividendTable";
 import type { DividendRecord } from "@/lib/dividends";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
+import StockSearch from "@/components/StockSearch";
 import { dividendClientCacheKey, readDividendClientCache, writeDividendClientCache } from "@/lib/dividendClientCache";
 
 interface Props {
@@ -989,9 +990,15 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5"><circle cx="12" cy="12" r="8"/><path d="M8 12h8M12 8v8"/></svg>
                       </button>
                     ) : (
-                      <div className="grid w-full max-w-2xl grid-cols-1 gap-2 text-left sm:grid-cols-[110px_1fr_110px_140px_auto]">
-                        <input value={relatedDraft.code} onChange={(event) => setRelatedDraft((draft) => ({ ...draft, code: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") addCustomRelatedEtf(); }} placeholder="股票代码" autoFocus className="h-9 rounded-lg border border-edge-strong bg-white px-3 text-xs uppercase text-ink outline-none dark:bg-white/5" />
-                        <input value={relatedDraft.name} onChange={(event) => setRelatedDraft((draft) => ({ ...draft, name: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") addCustomRelatedEtf(); }} placeholder="名称（可选）" className="h-9 rounded-lg border border-edge-strong bg-white px-3 text-xs text-ink outline-none dark:bg-white/5" />
+                      <div className="grid w-full max-w-2xl grid-cols-1 gap-2 text-left sm:grid-cols-[minmax(240px,1fr)_110px_140px_auto]">
+                        <StockSearch
+                          autoFocus
+                          marketFilter={market}
+                          securitiesOnly
+                          placeholder={relatedDraft.name ? `已选择：${relatedDraft.name} · ${relatedDraft.code}` : "搜索 ETF 代码、名称或中文名"}
+                          onQueryChange={(query) => setRelatedDraft((draft) => ({ ...draft, code: query.trim().toUpperCase(), name: "" }))}
+                          onSelect={(match) => setRelatedDraft((draft) => ({ ...draft, code: match.code.trim().toUpperCase(), name: match.name.trim() }))}
+                        />
                         <select value={relatedDraft.kind} onChange={(event) => setRelatedDraft((draft) => ({ ...draft, kind: event.target.value as RelatedETF["kind"] }))} className="h-9 rounded-lg border border-edge-strong bg-white px-2 text-xs text-ink outline-none dark:bg-[#1c1c1e]">
                           <option value="long">做多</option><option value="short">做空</option><option value="income">收益策略</option>
                         </select>
