@@ -15,6 +15,7 @@ import { cardLibraryForUser } from "@/lib/cardLibrary";
 import { CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/lib/currencyPrefs";
 import { headers } from "next/headers";
 import { unstable_noStore } from "next/cache";
+import { fundState } from "@/lib/fundState";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,8 @@ export default async function SlugLayout({
   // /api/auth/me → records / activities / settings，首帧不再被全局转圈遮挡。
   const initialRecords = listRecords(user.id);
   const initialUserLogs = listSecurityLogs(200, user.id);
+  // 资金余额与持仓记录一起进入首屏，避免切到“我的持仓”时先按 0 现金计算、随后再跳到完整净资产。
+  const initialFundBalances = fundState(user.id).balances;
   // 当前账户涉及的股票图标随 HTML 首屏下发，不再等待客户端请求 3,000+ 条素材。
   // 杠杆 ETF 同时带上正股图标，兼容素材库的正股兜底规则。
   const initialStockIcons = getStockIconMap(stockIconKeysForRecords(initialRecords));
@@ -107,6 +110,7 @@ export default async function SlugLayout({
           initialUser={user}
           initialRecords={initialRecords}
           initialUserLogs={initialUserLogs}
+          initialFundBalances={initialFundBalances}
           initialStockIcons={initialStockIcons}
           initialMarketIcons={initialMarketIcons}
           initialCardLibrary={initialCardLibrary}

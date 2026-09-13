@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
 import {
   DEFAULT_HOLDING_COLUMNS,
@@ -21,9 +21,14 @@ function cachedColumns() {
 }
 
 export function useHoldingColumns() {
+  // 服务端与客户端首帧保持一致，再于绘制前恢复本地列设置，避免持仓表整体水合重建。
   const [columns, setColumns] = useState<HoldingColumnPreference[]>(() =>
-    typeof window === "undefined" ? DEFAULT_HOLDING_COLUMNS.map((item) => ({ ...item })) : cachedColumns()
+    DEFAULT_HOLDING_COLUMNS.map((item) => ({ ...item }))
   );
+
+  useLayoutEffect(() => {
+    setColumns(cachedColumns());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

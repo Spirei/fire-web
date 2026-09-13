@@ -52,6 +52,8 @@ interface Props {
   marketOptions: MarketOption[];
   onMarketsChange?: (markets: string[], labels: { key: string; label: string; flag: string }[]) => void;
   onOrdersChanged?: () => void;
+  initialFundBalances: Record<string, number>;
+  valuationReady: boolean;
 }
 
 const PAGE_SIZE = 6;
@@ -130,7 +132,7 @@ function SortTh({
   );
 }
 
-export default function HoldingsView({ records, quotes, livePrice, refreshQuotes, onAddMatch, onUpdate, onRemove, groups, markets, marketLabels, marketOptions, onMarketsChange, onOrdersChanged }: Props) {
+export default function HoldingsView({ records, quotes, livePrice, refreshQuotes, onAddMatch, onUpdate, onRemove, groups, markets, marketLabels, marketOptions, onMarketsChange, onOrdersChanged, initialFundBalances, valuationReady }: Props) {
   const { brokerIcons, stockIcons, assetIcons } = useAssetIcons(["broker", "stock", "crypto", "metal"]);
   const { columns: holdingColumns } = useHoldingColumns();
   const enabledHoldingColumns = holdingColumns.filter((column) => column.visible);
@@ -191,11 +193,12 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const merged = tabOverride ? [...tabOverride, ...baseTabs.filter((m) => !tabOverride.includes(m))] : baseTabs;
     return merged.filter((m) => hasMarketRecords(m));
   }, [tabOverride, baseTabs, hasMarketRecords]);
-  const [active, setActive] = useState<string>(() => {
-    if (typeof window === "undefined") return baseTabs[0] ?? "US";
-    // 默认显示总资产；URL 指定市场时跟随
-    return new URLSearchParams(window.location.search).get("market") || "TOTAL";
-  });
+  // 服务端与客户端首帧统一为总资产；URL 中的市场在绘制前恢复，避免刷新时先渲染
+  // 第一个市场并暂时隐藏“显示货币 / 市场盈亏”。
+  const [active, setActive] = useState<string>("TOTAL");
+  useLayoutEffect(() => {
+    setActive(new URLSearchParams(window.location.search).get("market") || "TOTAL");
+  }, []);
   const dragIndex = useRef<number | null>(null);
 
   // URL 同步市场标签：刷新保持当前市场
@@ -243,12 +246,12 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const [rates, setRates] = useState<Record<string, number>>(() => ({ ...FALLBACK_RATES }));
   // 是否有「上一次成功」的汇率：有则秒开真实值；没有则不展示猜测值，等服务端返回
   const [ratesReady, setRatesReady] = useState(false);
-  const [fundBalances, setFundBalances] = useState<Record<string, number>>(emptyFundBalances());
+  const [fundBalances, setFundBalances] = useState<Record<string, number>>(() => ({ ...emptyFundBalances(), ...initialFundBalances }));
   const { currency: displayCur, setCurrency: setDisplayCur } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
-  // 各市场盈利卡片拖动顺序（本地记忆）
+  // 市场盈亏卡片拖动顺序（本地记忆）
   const [pnlOrder, setPnlOrder] = useState<string[]>([]);
-  // 浏览器缓存（汇率 + 各市场盈利卡片顺序）统一在挂载后、绘制前恢复，避免水合不一致与闪烁
+  // 浏览器缓存（汇率 + 市场盈亏卡片顺序）统一在挂载后、绘制前恢复，避免水合不一致与闪烁
   useLayoutEffect(() => {
     const cachedRates = readCachedRates();
     if (cachedRates) {
@@ -391,10 +394,9 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     });
     return { mv, cost, pnl, day, rate: cost ? pnl / cost : null };
   }, [filtered, livePrice, quotes, active, rates]);
-  // 总资产视图依赖汇率换算：上一次汇率未就绪时不展示猜测值
-  // 已内置可靠兜底汇率，网络汇率未返回时也立即展示，避免“当日盈亏”一直计算中。
-  const metricsReady = true;
-  // 总资产视图：分市场盈利汇总
+  // 只有完整持仓行情快照恢复后才展示估值，禁止首屏把“仅现金”或数据库旧价当成总资产。
+  const metricsReady = valuationReady;
+  // 总资产视图：市场盈亏汇总
   const marketPnl = useMemo(() => {
     const map = new Map<string, { mv: number; cost: number; pnl: number; day: number }>();
     positions.forEach((r) => {
@@ -470,7 +472,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   // 总资产视图：显示货币换算系数（1 USD = rates[displayCur]）
   const totalFactor = active === "TOTAL" ? (rates[displayCur] ?? 1) : 1;
   const totalCur = active === "TOTAL" ? displayCur : cur;
-  // 总资产货币符号（ISO 码 → 符号；各市场盈利卡片仍用 USD$/HKD$/CNY¥ 规范标识）
+  // 总资产货币符号（ISO 码 → 符号；市场盈亏卡片仍用 USD$/HKD$/CNY¥ 规范标识）
   const totalCurLabel = CURRENCY_SYMBOLS[totalCur as keyof typeof CURRENCY_SYMBOLS] || totalCur;
   const cashInUsd = useMemo(() => (Object.entries(fundBalances) as [string, number][]).reduce((sum, [iso, value]) => sum + value / (rates[iso] || 1), 0), [fundBalances, rates]);
   const displayedNetAsset = active === "TOTAL"
@@ -1135,11 +1137,11 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
         </div>
       </div>
 
-      {/* 总资产视图：分市场盈利明细 */}
+      {/* 总资产视图：市场盈亏明细 */}
       {active === "TOTAL" && marketPnl.length > 0 && (
         <div className="mb-6">
           <div className="mb-3 flex items-center gap-2">
-            <h3 className="text-sm font-bold text-ink">各市场盈利</h3>
+            <h3 className="text-sm font-bold text-ink">市场盈亏</h3>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {orderedPnl.map(([m, e], i) => {
@@ -1177,18 +1179,18 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                     <div className="flex items-baseline justify-between">
                       <span className="text-xs text-[#73777f] dark:text-[#a3a8b2]">持仓盈利</span>
                       <strong className={`text-[15px] font-bold tabular-nums ${e.pnl >= 0 ? "text-up" : "text-down"}`}>
-                        {e.pnl >= 0 ? "+" : "-"}{compactMoney(Math.abs(e.pnl * marketFactor), totalCurLabel)}
+                        {metricsReady ? `${e.pnl >= 0 ? "+" : "-"}${compactMoney(Math.abs(e.pnl * marketFactor), totalCurLabel)}` : "…"}
                       </strong>
                     </div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-xs text-[#73777f] dark:text-[#a3a8b2]">盈亏率</span>
                       <strong className={`text-[15px] font-bold tabular-nums ${rate !== null && rate >= 0 ? "text-up" : rate !== null ? "text-down" : "text-faint"}`}>
-                        {rate !== null ? `${rate >= 0 ? "+" : ""}${fmtPct(rate)}` : "—"}
+                        {metricsReady ? (rate !== null ? `${rate >= 0 ? "+" : ""}${fmtPct(rate)}` : "—") : "…"}
                       </strong>
                     </div>
                     <div className="flex items-baseline justify-between border-t border-edge pt-2.5">
                       <span className="text-xs text-[#73777f] dark:text-[#a3a8b2]">持仓市值</span>
-                      <strong className="text-sm font-semibold tabular-nums text-ink">{compactMoney(e.mv * marketFactor, totalCurLabel)}</strong>
+                      <strong className="text-sm font-semibold tabular-nums text-ink">{metricsReady ? compactMoney(e.mv * marketFactor, totalCurLabel) : "…"}</strong>
                     </div>
                   </div>
                 </div>

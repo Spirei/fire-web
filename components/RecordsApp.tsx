@@ -87,6 +87,7 @@ export default function RecordsApp({
   initialUser,
   initialRecords,
   initialUserLogs,
+  initialFundBalances,
   initialSettings,
   initialStockIcons,
   initialMarketIcons = {},
@@ -98,6 +99,7 @@ export default function RecordsApp({
   initialUser: User;
   initialRecords: StockRecord[];
   initialUserLogs: SystemLog[];
+  initialFundBalances: Record<string, number>;
   initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled">;
   initialStockIcons: Record<string, string>;
   initialMarketIcons?: Record<string, string>;
@@ -107,6 +109,8 @@ export default function RecordsApp({
   const [user] = useState<User>(initialUser);
   const [records, setRecords] = useState<StockRecord[]>(initialRecords);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
+  const quotesRef = useRef<Record<string, Quote>>({});
+  const [valuationReady, setValuationReady] = useState(false);
   const [quoteAt, setQuoteAt] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const refreshingRef = useRef(false);
@@ -215,14 +219,19 @@ export default function RecordsApp({
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    // v3：行情快照只负责消除刷新闪屏；用户、持仓和设置已由服务端首帧注入。
+  useLayoutEffect(() => {
+    // 行情快照在浏览器绘制前恢复；用户、持仓、现金和设置已由服务端首帧注入。
     const quoteCacheKey = `fire:quotes:v4:${initialUser.id}`;
     quoteCacheKeyRef.current = quoteCacheKey;
     try {
       const cached = JSON.parse(localStorage.getItem(quoteCacheKey) || "null") as { updatedAt?: number; quotes?: Record<string, Quote> } | null;
-      if (cached?.quotes && Date.now() - Number(cached.updatedAt || 0) < 30 * 60 * 1000) {
+      // 完整成功快照不因时间过期而丢弃：它只承担刷新首帧兜底，挂载后仍会立即请求最新行情。
+      // 数据库里的录入价通常更旧，回退到它会让总资产先闪出完全错误的中间值。
+      if (cached?.quotes) {
+        quotesRef.current = cached.quotes;
         setQuotes(cached.quotes);
+        const positionIds = records.filter((record) => Number(record.qty) > 0).map((record) => record.id);
+        setValuationReady(positionIds.every((id) => Number.isFinite(Number(cached.quotes?.[id]?.price))));
       }
     } catch {
       /* 缓存损坏时由行情刷新覆盖 */
@@ -251,33 +260,31 @@ export default function RecordsApp({
       if (!res.ok) return;
       const data = await res.json();
       if (data.quotes) {
-        setQuotes((prev) => {
-          const merged = { ...prev };
-          Object.entries(data.quotes as Record<string, Quote>).forEach(([id, quote]) => {
-            merged[id] = quote;
-          });
-          // 本次请求了但未返回的标的：删除旧行情，资产估值回退 records.price，
-          // 当日盈亏回退为 0；未参与本次请求的休市标继续保留已有行情。
-          quoteRecords.forEach((r) => {
-            if (!data.quotes[r.id]) delete merged[r.id];
-          });
-          const positionIds = records
-            .filter((record) => Number(record.qty) > 0)
-            .map((record) => record.id);
-          const completeSnapshot = positionIds.every((id) => {
-            const quote = merged[id];
-            return Boolean(quote) && Number.isFinite(Number(quote.price));
-          });
-          try {
-            // 只缓存完整后端快照，避免下次刷新先恢复一份缺股的资产数据。
-            if (completeSnapshot && quoteCacheKeyRef.current) {
-              localStorage.setItem(quoteCacheKeyRef.current, JSON.stringify({ updatedAt: Date.now(), quotes: merged }));
-            }
-          } catch {
-            /* localStorage 不可用时不影响实时行情 */
-          }
-          return merged;
+        const merged = { ...quotesRef.current };
+        Object.entries(data.quotes as Record<string, Quote>).forEach(([id, quote]) => {
+          merged[id] = quote;
         });
+        // 本次请求了但未返回的标的：删除旧行情，资产估值回退 records.price，
+        // 当日盈亏回退为 0；未参与本次请求的休市标继续保留已有行情。
+        quoteRecords.forEach((r) => {
+          if (!data.quotes[r.id]) delete merged[r.id];
+        });
+        const positionIds = records.filter((record) => Number(record.qty) > 0).map((record) => record.id);
+        const completeSnapshot = positionIds.every((id) => {
+          const quote = merged[id];
+          return Boolean(quote) && Number.isFinite(Number(quote.price));
+        });
+        quotesRef.current = merged;
+        setQuotes(merged);
+        setValuationReady(completeSnapshot);
+        try {
+          // 只缓存完整后端快照，避免下次刷新先恢复一份缺股的资产数据。
+          if (completeSnapshot && quoteCacheKeyRef.current) {
+            localStorage.setItem(quoteCacheKeyRef.current, JSON.stringify({ updatedAt: Date.now(), quotes: merged }));
+          }
+        } catch {
+          /* localStorage 不可用时不影响实时行情 */
+        }
         Object.keys(data.quotes).forEach((id) => loadedQuoteIdsRef.current.add(id));
         setQuoteAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
         try {
@@ -293,7 +300,7 @@ export default function RecordsApp({
       refreshingRef.current = false;
       setRefreshing(false);
     }
-  }, [records, router]);
+  }, [records]);
 
   useEffect(() => {
     // 自选股页面由自身的刷新间隔控件管理定时器，避免这里的 30 秒兜底计时器覆盖用户选择。
@@ -526,6 +533,7 @@ export default function RecordsApp({
       setQuotes((prev) => {
         const next = { ...prev };
         delete next[r.id];
+        quotesRef.current = next;
         return next;
       });
       showToast(`已取消关注 ${r.name}`);
@@ -586,6 +594,7 @@ export default function RecordsApp({
     const res = await fetch("/api/records", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) });
     if (res.ok) {
       setRecords([]);
+      quotesRef.current = {};
       setQuotes({});
       showToast("已清空全部记录");
       window.dispatchEvent(new Event("fire:records-updated"));
@@ -756,6 +765,8 @@ export default function RecordsApp({
               marketOptions={marketOptions}
               onMarketsChange={applyMarkets}
               onOrdersChanged={reloadActivities}
+              initialFundBalances={initialFundBalances}
+              valuationReady={valuationReady}
             />
           )}
           {activeTab === "assets" && (
