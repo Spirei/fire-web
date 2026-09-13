@@ -10,6 +10,7 @@ import { usePersistedState } from "@/lib/usePersistedState";
 import { FlatCheckbox } from "@/components/HoldingColumnManager";
 import RefreshButton from "@/components/RefreshButton";
 import DeleteIcon from "@/components/DeleteIcon";
+import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 
 type OrderTab = "today" | "history";
 type StatusFilter = "all" | "filled" | "pending" | "cancelled" | "expired";
@@ -952,11 +953,10 @@ export default function TradeOrdersPanel({
         const icon = stockIcons[`${order.market.toUpperCase()}:${order.code.toUpperCase()}`];
         return (
           <span className="inline-flex min-w-0 max-w-full items-center gap-2">
-            {icon ? (
-              <img src={icon} alt="" className="h-6 w-6 flex-none rounded-full object-cover" />
-            ) : (
-              <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-bg-gray text-[11px] font-bold text-muted">{order.name.slice(0, 1)}</span>
-            )}
+            <span className="relative flex-none">
+              {icon ? <img src={icon} alt="" className="h-6 w-6 rounded-full object-cover" /> : <span className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-gray text-[11px] font-bold text-muted">{order.name.slice(0, 1)}</span>}
+              <EtfDoubleBadge market={order.market} code={order.code} name={order.name} />
+            </span>
             <span className="truncate font-medium text-ink" title={order.name}>{order.name}</span>
           </span>
         );
@@ -1823,11 +1823,10 @@ export default function TradeOrdersPanel({
                 <div>
                   <h3 className="text-base font-bold text-ink">{detail.side === "buy" ? "买入" : detail.side === "sell" ? "卖出" : "股息"}订单详情</h3>
                   <div className="mt-1.5 flex items-center gap-2">
-                    {icon ? (
-                      <img src={icon} alt="" className="h-7 w-7 flex-none rounded-full object-cover" />
-                    ) : (
-                      <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">{detail.name.slice(0, 1)}</span>
-                    )}
+                    <span className="relative flex-none">
+                      {icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <span className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">{detail.name.slice(0, 1)}</span>}
+                      <EtfDoubleBadge market={detail.market} code={detail.code} name={detail.name} />
+                    </span>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-ink">{detail.name}</p>
                       <p className="truncate text-[11px] text-faint">{detail.code} · {meta.label} · {currency}</p>

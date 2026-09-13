@@ -17,6 +17,7 @@ import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currency
 import { fmtMoney, fmtMoneyCompact, localDateKey } from "@/lib/format";
 import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses } from "@/lib/portfolioSeries";
+import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 
 
 type PnlRow = {
@@ -98,16 +99,15 @@ function ClosedBadge() {
   return <small className="flex-none whitespace-nowrap rounded-full bg-bg-gray px-1.5 py-0.5 text-[9px] font-semibold text-muted">已清仓</small>;
 }
 
-function PnlStockIcon({ src, name }: { src?: string; name: string }) {
+function PnlStockIcon({ src, name, market, code }: { src?: string; name: string; market: string; code: string }) {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => setFailed(false), [src]);
 
-  if (!src || failed) {
-    return <span className="grid h-8 w-8 flex-none place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted">{name.slice(0, 1) || "?"}</span>;
-  }
-
-  return <img src={src} alt="" onError={() => setFailed(true)} className="h-8 w-8 flex-none rounded-full object-cover" />;
+  return <span className="relative flex-none">
+    {!src || failed ? <span className="grid h-8 w-8 place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted">{name.slice(0, 1) || "?"}</span> : <img src={src} alt="" onError={() => setFailed(true)} className="h-8 w-8 rounded-full object-cover" />}
+    <EtfDoubleBadge market={market} code={code} name={name} />
+  </span>;
 }
 
 /** 盈亏榜股票信息：状态统一放在代码行，避免名称长度造成布局跳动。 */
@@ -820,7 +820,7 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
                   {rows.map((row, index) => (
                     <div key={row.id} className="flex items-center gap-4 py-3">
                       <span className="w-6 text-xs text-muted">{String(index + 1).padStart(2, "0")}</span>
-                      <PnlStockIcon src={stockIcons[`${row.market.toUpperCase()}:${row.code.toUpperCase()}`]} name={row.name} />
+                      <PnlStockIcon src={stockIcons[`${row.market.toUpperCase()}:${row.code.toUpperCase()}`]} name={row.name} market={row.market} code={row.code} />
                       <div className="min-w-0 flex-1"><AdaptivePnlIdentity row={row} /></div>
                       <strong className={`ml-2 max-w-[42%] flex-none text-right text-xs tabular-nums ${row.pnl >= 0 ? "text-up" : "text-down"}`}>{moneyDisp(row.pnl)}</strong>
                     </div>

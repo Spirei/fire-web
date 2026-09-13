@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import MarketIcon from "@/components/MarketIcon";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import type { CalendarDayCell, CalendarDayRow, CalendarYearCell } from "@/lib/pnlCalendar";
+import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 
 const CAL_MARKETS = ["全部", "美股", "港股", "A股"] as const;
 const CAL_MARKET_ICON: Record<string, string> = { 美股: "US", 港股: "HK", A股: "CN" };
@@ -300,13 +301,10 @@ export default function PnlCalendar({
                       <div className="relative flex min-w-0 flex-1 items-center gap-2.5">
                         {(() => {
                           const icon = stockIcons?.[`${row.market.toUpperCase()}:${row.code.toUpperCase()}`];
-                          return icon ? (
-                            <img src={icon} alt="" className="h-7 w-7 flex-none rounded-full bg-bg-gray object-cover" />
-                          ) : (
-                            <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-bg-gray text-[11px] font-bold text-ink-2">
-                              {(row.name || row.code).trim().slice(0, 1).toUpperCase()}
-                            </span>
-                          );
+                          return <span className="relative flex-none">
+                            {icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full bg-bg-gray object-cover" /> : <span className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray text-[11px] font-bold text-ink-2">{(row.name || row.code).trim().slice(0, 1).toUpperCase()}</span>}
+                            <EtfDoubleBadge market={row.market} code={row.code} name={row.name} />
+                          </span>;
                         })()}
                         <div className="min-w-0">
                           <p className="truncate text-xs font-semibold">{row.name}</p>

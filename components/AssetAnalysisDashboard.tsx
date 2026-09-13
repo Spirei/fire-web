@@ -28,6 +28,7 @@ import MarketCodeBadge from "@/components/MarketCodeBadge";
 import Pagination from "@/components/Pagination";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
 import PnlCalendar from "@/components/PnlCalendar";
+import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses } from "@/lib/portfolioSeries";
 
@@ -1087,7 +1088,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     const displayPnl = toDisplay(record, pnl);
     if (key === "identity") {
       const icon = stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
-      return <span className="flex min-w-[150px] items-center gap-2">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic">{record.name.slice(0, 1)}</i>}<span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></small></span></span>;
+      return <span className="flex min-w-[150px] items-center gap-2"><span className="relative flex-none">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic">{record.name.slice(0, 1)}</i>}<EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span><span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></small></span></span>;
     }
     if (key === "marketValue") return compactMoney(displayMarketValue);
     if (key === "cost") return fmtNumMarket(cost, record.market);
@@ -1190,7 +1191,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
               return <div key={record.id} className="grid grid-cols-[48px_minmax(0,1fr)_110px] items-center border-t border-edge px-4 py-3 text-xs transition-colors first:border-t-0 hover:bg-bg-gray/60 dark:hover:bg-[#1b2230]">
                 <span className="font-semibold tabular-nums">{String(index + 1).padStart(2, "0")}</span>
                 <span className="flex min-w-0 items-center gap-2">
-                  {icon ? <img src={icon} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" /> : <i className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-gray not-italic text-ink-2">{record.name.slice(0, 1)}</i>}
+                  <span className="relative flex-none">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic text-ink-2">{record.name.slice(0, 1)}</i>}<EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span>
                   <span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><QuoteRowHint market={record.market} quote={quotes[record.id]} quotes={quotes} /></small></span>
                 </span>
                 <span className={`text-right font-bold tabular-nums ${pnl >= 0 ? "text-up" : "text-down"}`}>{pnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(pnl))}</span>
