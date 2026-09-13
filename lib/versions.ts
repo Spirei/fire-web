@@ -3041,7 +3041,11 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     kind: "fix"
   }, {
     title: "恢复贵金属与缺失加密货币图标",
-    desc: "恢复黄金、白银、铂金和钯金在原行情源中的独立图标，移除 8 月 31 日为补齐镜像素材而加入的统一黑底金属锭 SVG；同时修正 companiesmarketcap 贵金属资源必须带 .XM 后缀的规则，避免 GOLD 等代码撞到同名上市公司图标。全量核对市场、加密货币和券商素材后，补回 BNB、DASH、DOGE、DOT、ETC、LTC、TRX、VET、XLM、XMR、XRP 共 11 个缺失的默认图标；初始化逻辑也会在数据库地址为空或文件丢失时恢复内置素材，不覆盖有效的用户上传图标。",
+    desc: "移除 8 月 31 日为补齐镜像素材而加入的统一黑底金属锭 SVG，并全量核对市场、加密货币和券商素材，补回 BNB、DASH、DOGE、DOT、ETC、LTC、TRX、VET、XLM、XMR、XRP 共 11 个缺失的默认图标；初始化逻辑也会在数据库地址为空或文件丢失时恢复内置素材，不覆盖有效的用户上传图标。",
+    kind: "fix"
+  }, {
+    title: "按 TradingView 修正四种贵金属图标",
+    desc: "逐一核对 TradingView 的 TVC:GOLD、TVC:SILVER、TVC:PLATINUM 和 TVC:PALLADIUM 页面，使用页面实际采用的官方 SVG 替换黄金、白银、铂金和钯金图标；贵金属行情回退数据中的图标地址也统一改为 TradingView 来源。",
     kind: "fix"
   }]
 };

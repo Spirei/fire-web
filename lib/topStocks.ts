@@ -84,6 +84,13 @@ function cmcLogo(code: string): string {
   return `${CMC_BASE}/img/company-logos/64/${code}.png`;
 }
 
+const TRADINGVIEW_METAL_LOGOS: Record<string, string> = {
+  GOLD: "https://s3-symbol-logo.tradingview.com/metal/gold--big.svg",
+  SILVER: "https://s3-symbol-logo.tradingview.com/metal/silver--big.svg",
+  PLAT: "https://s3-symbol-logo.tradingview.com/metal/platinum--big.svg",
+  PALLAD: "https://s3-symbol-logo.tradingview.com/metal/palladium--big.svg"
+};
+
 async function fetchEmTop(market: "US" | "HK" | "CN"): Promise<TopStock[]> {
   const qs = `pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f20&fs=${EM_FS[market]}&fields=f12,f14,f2,f3,f20`;
   let data: unknown = null;
@@ -160,8 +167,7 @@ async function fetchCmcPage(market: "JP" | "KR" | "ALL"): Promise<TopStock[]> {
             ? Number(priceRaw.replace(/,/g, ""))
             : null,
       changePct: pctRaw != null && pctRaw !== "" ? Number(pctRaw) / (market === "ALL" ? 100 : 1) : null,
-      // 贵金属在 CMC 使用 GOLD.XM / SILVER.XM 等资源名；省略 .XM 会撞到同代码公司 Logo。
-      logo: cmcLogo(type === "metal" ? `${code}.XM` : code),
+      logo: type === "metal" ? TRADINGVIEW_METAL_LOGOS[code] || "" : cmcLogo(code),
       type
     });
   }
