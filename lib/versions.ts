@@ -2993,7 +2993,7 @@ export const V0_1_28_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_29_ENTRY: VersionEntry = {
   version: "v0.1.29",
   date: "2026-09-13",
   summary: "卡面库 NEW 角标美化。",
@@ -3226,6 +3226,27 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   }, {
     title: "股息记录改为持久快照优先",
     desc: "全面统一股票详情缓存优先逻辑：概览 K 线、股息、财务、公司以及资产分析持仓股息弹窗都在绘制前恢复最后一次成功快照，进入和刷新时直接显示已有内容，再静默更新；后台请求返回空值、失败或上游暂时不可用时不再清空旧数据。修复日 K 等长周期已有缓存却仍被加载层遮住的问题，并在 URL 页签恢复前隐藏错误的概览内容。股息服务端 SQLite 缓存过期后也先返回历史快照，以单标的去重任务后台回源；近期记录每 3 天、纯历史记录每 30 天检查一次。",
+    kind: "fix"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_29_ENTRY,
+  version: "v0.1.30",
+  date: "2026-09-14",
+  summary: "新增股票缺图时优先从 TradingView 自动补齐。",
+  software: V0_1_29_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.30" } : item),
+  changes: [{
+    title: "新增股票优先从 TradingView 自动补图",
+    desc: "新增自选或持仓后，如果素材库没有该证券图标，会在后台查询对应 TradingView 标的页，读取页面实际使用的 s3-symbol-logo 官方 SVG，完成安全校验后保存到本地素材库并刷新全站图标；ASTS 对应 ast-spacemobile--big.svg。升级前已经加入且仍显示首字母的股票也会以双 worker 在后台逐只补齐。已有手动图标不会被覆盖，TradingView 不可用或无图时继续回退微牛与 Parqet，补图失败也不阻塞股票添加。美股、港股、A股、日股和韩股均支持；普通用户仅可触发缺图补全，素材库显式修改仍限管理员。",
+    kind: "feature"
+  }, {
+    title: "补齐导入返回入口并让分组胶囊按内容自适应",
+    desc: "导入股票弹窗新增“返回编辑分组”胶囊，点击关闭导入并恢复原编辑工作台，不再只能点关闭或取消。行情板默认只显示 5 个分组胶囊（含“全部”），其余收进紧随第五个胶囊的更多分组菜单；从菜单选择的分组会进入第五位，确保当前筛选始终可见。胶囊移除统一 125px 固定宽度并按图标、完整名称与数量自然撑开，轨道按内容收缩并受可用空间约束，避免截断或把菜单推到远端；更多菜单入口增加与胶囊一致的圆形轮廓、主题背景和交互反馈。",
+    kind: "fix"
+  }, {
+    title: "修复自选行情刷新间隔被标签页焦点绕过",
+    desc: "实测一分钟间隔连续两轮约每 60 秒更新，确认自选页定时器正常；不一致来自外层的 visibilitychange 监听，用户切回浏览器标签页时会无条件刷新，从而让“每 1 小时”等设定提前触发。现在自选页获得焦点时不再走这条全局刷新旁路，只由右侧间隔控件或手动刷新按钮触发行情更新；其他页面继续保留回到前台自动刷新。成功刷新同时记录毫秒时间戳，为后续刷新节奏与状态展示提供统一依据。",
     kind: "fix"
   }]
 };

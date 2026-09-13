@@ -203,10 +203,16 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       const group = watchGroups.find((g) => g.id === c.id);
       return group ? groupVisible(group, c.count) : true;
     });
+    const all = [{ id: "", label: "全部", count: records.length }, ...visibleGroups];
+    const defaultVisible = all.slice(0, 5);
+    const selected = all.find((chip) => chip.id === filterId);
+    const visible = selected && !defaultVisible.some((chip) => chip.id === selected.id)
+      ? [...defaultVisible.slice(0, 4), selected]
+      : defaultVisible;
     return {
-      all: [{ id: "", label: "全部", count: records.length }, ...visibleGroups],
-      visible: [{ id: "", label: "全部", count: records.length }, ...visibleGroups],
-      moreCount: Math.max(0, visibleGroups.length - 4)
+      all,
+      visible,
+      moreCount: Math.max(0, all.length - visible.length)
     };
   }, [filterId, records, watchGroups]);
 
@@ -702,7 +708,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
 
       {/* 分组筛选（全部 + 市场分组 + 自定义分组，末尾加号打开分组管理） */}
       <div className="quotes-control-groups flex min-w-0 items-center gap-2.5 !overflow-visible px-4 py-4">
-        <div ref={groupScrollRef} className="flex min-w-0 max-w-[665px] flex-1 items-center gap-2.5 overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div ref={groupScrollRef} className="flex min-w-0 w-fit max-w-[calc(100%-46px)] flex-none items-center gap-2.5 overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {groupChips.visible.map((chip) => {
           const selected = filterId === chip.id;
           const g = watchGroups.find((x) => x.id === chip.id);
@@ -713,7 +719,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
               ref={(node) => { groupChipRefs.current[chip.id || "__all"] = node; }}
               type="button"
               onClick={() => selectGroupChip(chip.id)}
-              className={`flex min-h-9 w-[125px] flex-none items-center justify-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold whitespace-nowrap transition-[transform,box-shadow] duration-200 ${
+              className={`flex min-h-9 w-auto flex-none items-center justify-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold whitespace-nowrap transition-[transform,box-shadow] duration-200 ${
                 selected
                   ? "border border-edge-strong bg-white text-ink-2 shadow-sm dark:bg-[#2a3342] dark:text-white"
                   : "border border-edge-strong bg-white text-muted hover:bg-brand-hover hover:text-ink active:bg-bg-gray dark:bg-[#1b2230]"
@@ -750,7 +756,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
               aria-expanded={showMoreGroups}
               aria-label="更多分组"
               title="更多分组"
-              className={`grid h-9 w-9 place-items-center rounded-full border transition-[transform,box-shadow] duration-200 ${showMoreGroups ? "border-edge-strong bg-white text-[#3297f6] shadow-sm dark:bg-[#2a3342]" : "border-transparent text-muted hover:border-edge hover:bg-brand-hover hover:text-ink"}`}
+              className={`grid h-9 w-9 place-items-center rounded-full border border-edge-strong bg-white transition-[transform,background-color,box-shadow,color] duration-200 dark:bg-[#1b2230] ${showMoreGroups ? "text-[#3297f6] shadow-sm dark:bg-[#2a3342]" : "text-muted hover:-translate-y-px hover:bg-brand-hover hover:text-ink active:scale-[.96]"}`}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-[18px] w-[18px]"><path d="M5 7h14M5 12h14M5 17h14" /></svg>
             </button>
@@ -908,7 +914,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
           }}
         />
       )}
-      {fileImportOpen && <WatchlistFileImportModal groups={watchGroups} initialGroupId={importGroupId} onClose={() => { setFileImportOpen(false); setImportGroupId(""); }} onImported={() => { window.dispatchEvent(new Event("fire:records-updated")); refreshQuotes(); }} />}
+      {fileImportOpen && <WatchlistFileImportModal groups={watchGroups} initialGroupId={importGroupId} onClose={() => { setFileImportOpen(false); setImportGroupId(""); }} onBack={() => { setFileImportOpen(false); setGroupSheetOpen(true); }} onImported={() => { window.dispatchEvent(new Event("fire:records-updated")); refreshQuotes(); }} />}
     </div>
   );
 }

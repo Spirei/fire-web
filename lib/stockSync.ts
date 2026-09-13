@@ -22,6 +22,13 @@ const WEBULL_SEARCH = "https://quotes-gw.webullfintech.com/api/search/pc/tickers
 const WEBULL_ICON = (tid: number) => `https://quotes-static.webullfintech.com/ticker-icon/${tid}.png`;
 const PARQET_ICON = (code: string) => `https://assets.parqet.com/logos/symbol/${code}`;
 const CMC_BASE = "https://companiesmarketcap.com";
+const TRADINGVIEW_EXCHANGES: Record<SyncMarket, string[]> = {
+  US: ["NASDAQ", "NYSE", "AMEX", "OTC"],
+  HK: ["HKEX"],
+  CN: ["SSE", "SZSE", "BSE"],
+  JP: ["TSE"],
+  KR: ["KRX"]
+};
 
 const EM_FS: Record<"US" | "HK" | "CN", string> = {
   US: "m:105,m:106,m:107",
@@ -246,11 +253,37 @@ async function downloadIcon(url: string, market: SyncMarket, code: string, name:
   }
 }
 
+/** 从 TradingView 标的页读取其官方 symbol logo；交易所不确定时按市场常用顺序尝试。 */
+async function resolveTradingViewIcon(market: SyncMarket, code: string): Promise<string | null> {
+  const symbol = code.toUpperCase().replace(/\.(OQ|N|AM|PS|K|HK|SS|SZ|T|KS|KQ)$/, "");
+  const matches = await Promise.all(TRADINGVIEW_EXCHANGES[market].map(async (exchange) => {
+    try {
+      const page = await fetch(`https://www.tradingview.com/symbols/${exchange}-${encodeURIComponent(symbol)}/`, {
+        headers: { "User-Agent": UA, Accept: "text/html" },
+        signal: AbortSignal.timeout(3500)
+      });
+      if (!page.ok) return null;
+      const html = await page.text();
+      const match = html.match(/https:\/\/s3-symbol-logo\.tradingview\.com\/[A-Za-z0-9_/%.-]+--big\.svg/);
+      return match?.[0] ?? null;
+    } catch {
+      return null;
+    }
+  }));
+  return matches.find(Boolean) ?? null;
+}
+
 /* 图片魔数识别：octet-stream 场景下确认内容确为图片并推断扩展名 */
 export { sniffImageExt } from "./imageSecurity";
 
 export async function resolveIcon(market: SyncMarket, code: string, name: string): Promise<string | null> {
   const norm = normCode(market, code);
+  // 新增股票缺图时优先采用 TradingView 标的页实际使用的官方图标，并保存为本地素材。
+  const tradingView = await resolveTradingViewIcon(market, norm);
+  if (tradingView) {
+    const local = await downloadIcon(tradingView, market, norm, name);
+    if (local) return local;
+  }
   if (market === "US" || market === "HK" || market === "CN") {
     let tid = await searchWebull(norm, WEBULL_REGION[market]);
     // 代码搜不到时用中文名兜底（如「五粮液」），命中列表第一个股票

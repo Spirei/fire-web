@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import { getAuthUser, isAdmin } from "@/lib/auth";
-import { upsertAsset } from "@/lib/assets";
+import { getStockIconMap, upsertAsset } from "@/lib/assets";
 import { resolveIcon, sanitizeName } from "@/lib/stockSync";
 import { isSafeSvg, sniffImageExt } from "@/lib/imageSecurity";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
@@ -74,7 +74,6 @@ async function downloadRemoteIcon(iconUrl: string, folder: "crypto" | "metal", c
 export async function POST(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
-  if (!isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
   if (!rateLimit(`assets-add:${clientIp(request)}`, 30, 60 * 1000)) {
     return NextResponse.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
   }
@@ -86,17 +85,24 @@ export async function POST(request: Request) {
   const code = String(body.code ?? "").trim().toUpperCase();
   const name = String(body.name ?? "").trim();
   const iconUrl = String(body.iconUrl ?? "").trim();
+  const onlyIfMissing = body.onlyIfMissing === true;
+  // 普通用户只能为刚加入的证券补齐缺失图标，素材库的显式增改仍限管理员。
+  if (!isAdmin(user) && !onlyIfMissing) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
   if (!["stock", "crypto", "metal"].includes(type)) {
     return NextResponse.json({ error: "type 必须为 stock / crypto / metal" }, { status: 400 });
   }
-  if (type === "stock" && !["US", "HK", "CN"].includes(market)) {
-    return NextResponse.json({ error: "股票搜索添加仅支持美股 / 港股 / A股" }, { status: 400 });
+  if (type === "stock" && !["US", "HK", "CN", "JP", "KR"].includes(market)) {
+    return NextResponse.json({ error: "股票搜索添加仅支持美股 / 港股 / A股 / 日股 / 韩股" }, { status: 400 });
   }
   if (!code || !name) {
     return NextResponse.json({ error: "缺少股票代码或名称" }, { status: 400 });
   }
 
   try {
+    if (type === "stock" && onlyIfMissing) {
+      const existingUrl = getStockIconMap([{ market, code }])[`${market}:${code}`];
+      if (existingUrl) return NextResponse.json({ skipped: true, url: existingUrl });
+    }
     let url: string | null = "";
     if (type === "stock") {
       // 图标尽力下载（复用同步/回填的微牛 + parqet 解析逻辑）；微牛限流时重试较久，
@@ -114,7 +120,7 @@ export async function POST(request: Request) {
       code,
       name,
       url: url ?? "",
-      source: "manual"
+      source: onlyIfMissing ? "auto" : "manual"
     });
     return NextResponse.json({ asset });
   } catch (err) {

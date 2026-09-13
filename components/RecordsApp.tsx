@@ -22,6 +22,7 @@ import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import SettingsWindow from "@/components/SettingsWindow";
 import { primeMarketIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
+import { pickStockIcon } from "@/lib/stockIconKey";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import WatchlistView from "@/components/views/WatchlistView";
@@ -131,7 +132,8 @@ export default function RecordsApp({
   const [groups, setGroups] = useState<GroupConfig[]>(initialSettings.groups);
   const [markets, setMarkets] = useState<Market[]>(initialSettings.markets);
   const [marketLabels, setMarketLabels] = useState<{ key: string; label: string; flag: string }[]>(initialSettings.marketLabels);
-  const { assetIcons } = useAssetIcons(["icon"], { stockIconCdn: initialSettings.stockIconCdn });
+  const { assetIcons, stockIcons } = useAssetIcons(["icon", "stock"], { stockIconCdn: initialSettings.stockIconCdn });
+  const attemptedIconBackfillRef = useRef(new Set<string>());
 
   // 市场色块是模块级 store（不是 React 状态）：必须在水合首帧之前按服务端设置初始化。
   // 只在 effect 里 apply 的话，SSR 会用默认值（默认显示）渲染出色块，浏览器先画出这版 HTML，
@@ -147,6 +149,36 @@ export default function RecordsApp({
   useLayoutEffect(() => {
     applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
   }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible]);
+
+  // 兼容升级前已经加入但仍为首字母占位的股票；每个标的本次会话只尝试一次，双 worker 后台补齐。
+  useEffect(() => {
+    const missing = records.filter((record) => {
+      const market = record.market.toUpperCase();
+      const key = `${market}:${record.code.toUpperCase()}`;
+      if (!["US", "HK", "CN", "JP", "KR"].includes(market) || attemptedIconBackfillRef.current.has(key)) return false;
+      return !pickStockIcon(stockIcons, market, record.code) && !pickStockIcon(initialStockIcons, market, record.code);
+    });
+    if (!missing.length) return;
+    missing.forEach((record) => attemptedIconBackfillRef.current.add(`${record.market.toUpperCase()}:${record.code.toUpperCase()}`));
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < missing.length) {
+        const record = missing[cursor++];
+        try {
+          const response = await fetch("/api/assets/add-by-search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "stock", market: record.market, code: record.code, name: record.name, onlyIfMissing: true })
+          });
+          const data = response.ok ? await response.json() : null;
+          if (data?.asset?.url) window.dispatchEvent(new Event("fire:assets-updated"));
+        } catch {
+          /* 单个补图失败不影响其余标的 */
+        }
+      }
+    };
+    void Promise.all([worker(), worker()]);
+  }, [initialStockIcons, records, stockIcons]);
 
   useLayoutEffect(() => {
     if (initialTab === "settings") {
@@ -291,7 +323,9 @@ export default function RecordsApp({
         Object.keys(data.quotes).forEach((id) => loadedQuoteIdsRef.current.add(id));
         setQuoteAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
         try {
-          localStorage.setItem("fire:last-quotes-refresh", new Date().toLocaleTimeString("zh-CN", { hour12: false }));
+          const refreshedAt = new Date();
+          localStorage.setItem("fire:last-quotes-refresh", refreshedAt.toLocaleTimeString("zh-CN", { hour12: false }));
+          localStorage.setItem("fire:last-quotes-refresh-at", String(refreshedAt.getTime()));
         } catch {
           /* 忽略存储不可用 */
         }
@@ -420,11 +454,12 @@ export default function RecordsApp({
 
   useEffect(() => {
     function onVisibility() {
-      if (!document.hidden) refreshQuotes();
+      // 自选页有独立的刷新间隔控件；切回标签页时不能绕过用户选择额外刷新。
+      if (!document.hidden && activeTab !== "watchlist") refreshQuotes();
     }
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [refreshQuotes]);
+  }, [activeTab, refreshQuotes]);
 
   useEffect(() => {
     function reloadRecords() {
@@ -459,6 +494,18 @@ export default function RecordsApp({
       setRecords((prev) => [data, ...prev]);
       showToast(`已添加 ${data.name}`);
       window.dispatchEvent(new Event("fire:records-updated"));
+      // 新增成功不等待外部图标源；后台仅在素材库缺图时解析 TradingView 并落盘。
+      if (["US", "HK", "CN", "JP", "KR"].includes(String(data.market).toUpperCase())) {
+        void fetch("/api/assets/add-by-search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "stock", market: data.market, code: data.code, name: data.name, onlyIfMissing: true })
+        }).then((iconRes) => iconRes.ok ? iconRes.json() : null)
+          .then((iconData) => {
+            if (iconData?.asset?.url) window.dispatchEvent(new Event("fire:assets-updated"));
+          })
+          .catch(() => { /* 补图失败不影响新增股票 */ });
+      }
       reloadActivities();
       return true;
     } catch (err) {
