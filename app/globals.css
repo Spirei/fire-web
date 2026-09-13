@@ -2843,6 +2843,7 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .stock-chart-range:hover,
 .stock-chart-style-trigger:hover { color: #20252d; background: rgba(236, 239, 243, 0.7); }
 .stock-chart-range.is-active { color: #20252d; background: #f0f2f5; box-shadow: inset 0 0 0 1px rgba(210, 215, 223, 0.45); }
+.stock-chart-all-day.is-active { color: #303741; background: rgba(95,99,104,.045); box-shadow: inset 0 0 0 1px rgba(143,151,163,.3); font-weight: 550; }
 .stock-chart-style-trigger { min-width: 60px; border: 1px solid rgba(201, 206, 216, 0.75); background: rgba(255,255,255,.66); }
 .stock-chart-action-group { display: flex; flex: none; align-items: center; gap: 6px; }
 .stock-chart-settings-trigger { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid rgba(201,206,216,.75); border-radius: 10px; color: #5f6368; background: rgba(255,255,255,.66); transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease; }
@@ -3158,6 +3159,7 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .dark .stock-chart-range:hover,
 .dark .stock-chart-style-trigger:hover,
 .dark .stock-chart-range.is-active { color: #f0f3f7; background: rgba(255,255,255,.08); }
+.dark .stock-chart-all-day.is-active { color: #d8dee7; background: rgba(255,255,255,.025); box-shadow: inset 0 0 0 1px rgba(255,255,255,.13); }
 .dark .stock-chart-style-trigger { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.04); }
 .dark .stock-chart-settings-trigger { border-color: rgba(255,255,255,.12); color: #9aa4b2; background: rgba(255,255,255,.04); }
 .dark .stock-chart-adjust-trigger { border-color: rgba(255,255,255,.12); color: #9aa4b2; background: rgba(255,255,255,.04); }

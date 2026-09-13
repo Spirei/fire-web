@@ -1186,7 +1186,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   return <div className="stock-chart-shell w-full">
     <div ref={toolbarRef} className="stock-chart-toolbar" aria-label="走势图控制栏">
       <div className="stock-chart-ranges">
-        <button type="button" className={`stock-chart-range ${range === "DAY" && session === "ALL" ? "is-active" : ""}`} onClick={() => { setRange("DAY"); setSession("ALL"); setSessionOpen(false); setPeriodOpen(false); setStyleOpen(false); }}>
+        <button type="button" className={`stock-chart-range stock-chart-all-day ${range === "DAY" && session === "ALL" ? "is-active" : ""}`} onClick={() => { setRange("DAY"); setSession("ALL"); setSessionOpen(false); setPeriodOpen(false); setStyleOpen(false); }}>
           全天
         </button>
         <div className="stock-chart-popover-wrap">
