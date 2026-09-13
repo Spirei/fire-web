@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FALLBACK_RATES, marketMeta } from "@/lib/types";
 import { fmtCap, fmtNum, fmtNumMarket, fmtPct, fmtPrice } from "@/lib/format";
 import { marketSessionState } from "@/lib/marketSessions";
@@ -43,6 +43,16 @@ type UsMarketPhase = "PRE" | "REGULAR" | "AFTER" | "OVERNIGHT" | "WEEKEND";
 const UP = "#e5484d";
 const DOWN = "#1aa07a";
 const NY_TIME_ZONE = "America/New_York";
+const RELATED_ETF_QUOTE_CACHE_KEY = "fire:related-etf-quotes:v1";
+
+function readRelatedEtfQuoteCache() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RELATED_ETF_QUOTE_CACHE_KEY) || "null") as Record<string, Quote> | null;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 function nyMarketClock(at = Date.now()) {
   const parts: Record<string, string> = {};
@@ -181,6 +191,19 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [market, code]);
 
+  // 首次绘制 ETF 页签前恢复最后一次成功行情；挂载后仍立即在后台请求最新值。
+  useLayoutEffect(() => {
+    if (tab !== "etf") return;
+    const mainStock = relatedStock(market, code);
+    const definitions = mainStock ? [mainStock] : relatedETFs(market, code);
+    const cache = readRelatedEtfQuoteCache();
+    const restored: Record<string, Quote | null> = {};
+    definitions.forEach((item) => {
+      restored[item.code] = cache[`${market.toUpperCase()}:${item.code}`] ?? null;
+    });
+    setEtfQuotes(restored);
+  }, [tab, market, code]);
+
   // 正股展示相关 ETF；ETF 反向展示正股。两者共用同一份关系映射。
   useEffect(() => {
     if (tab !== "etf") return;
@@ -205,14 +228,26 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
       .then((payload) => {
         if (controller.signal.aborted) return;
         const incoming = payload?.data?.quotes ?? {};
-        const next: Record<string, Quote | null> = {};
-        definitions.forEach((item) => {
-          next[item.code] = incoming[`${market.toUpperCase()}:${item.code}`] ?? null;
+        setEtfQuotes((current) => {
+          const next: Record<string, Quote | null> = {};
+          definitions.forEach((item) => {
+            next[item.code] = incoming[`${market.toUpperCase()}:${item.code}`] ?? current[item.code] ?? null;
+          });
+          return next;
         });
-        setEtfQuotes(next);
+        try {
+          const cache = readRelatedEtfQuoteCache();
+          Object.entries(incoming as Record<string, Quote>).forEach(([key, quote]) => {
+            if (quote && Number.isFinite(Number(quote.price))) cache[key] = quote;
+          });
+          localStorage.setItem(RELATED_ETF_QUOTE_CACHE_KEY, JSON.stringify(cache));
+        } catch {
+          /* 缓存写入失败不影响当前行情 */
+        }
       })
       .catch((error) => {
-        if ((error as Error)?.name !== "AbortError") setEtfQuotes({});
+        if ((error as Error)?.name === "AbortError") return;
+        // 更新失败保留最后一次成功快照。
       })
       .finally(() => {
         if (!controller.signal.aborted) setEtfLoading(false);
