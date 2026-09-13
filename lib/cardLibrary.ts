@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { cardHoldingTimes, listCardAmounts, listCardHoldings, listCardTags, type CardAmount } from "./cardAmounts";
+import { listCardAmounts, listCardHoldings, listCardTags, type CardAmount } from "./cardAmounts";
 import { listCardDetails, type CardDetails } from "./cardWallet";
 import { listCustomCards, type CustomCard } from "./cardCustom";
 import { cardAssetId, cardKeyOfAssetId, manifestCoverUrl } from "./cardAssets";
@@ -26,13 +26,16 @@ export interface CardLibraryPayload extends CardManifest {
   amounts: CardAmount[];
   tags: Record<string, string[]>;
   holdings: string[];
-  /** 加入「我的卡」的时间（卡面 key → ISO 时间）：新加的卡排到列表最上面 */
-  addedAt: Record<string, string>;
   /**
    * 服务端当前时间（毫秒）：首帧就要用 —— 「新加的卡置顶」和 NEW 角标都按 3 天窗口算，
    * 客户端自己取时间的话，服务端首帧只能画默认顺序，挂载后重排会让卡片"跳位置"。
    */
   nowMs: number;
+  /**
+   * 卡面首次入库时间（卡面 key → ISO）：新入库的卡（脚本导入的新卡 / 自己新建的卡）
+   * 3 天内置顶并挂 NEW。升级前的老素材不在表里 → 视为不是新卡。
+   */
+  firstSeen: Record<string, string>;
   /** 卡背信息（卡号 / 有效期 / 安全码 / 备注 / 币种）：卡包与卡片详情首帧就要用 */
   details: Record<string, CardDetails>;
   /** 卡面覆盖表（卡面文件 → 实际图片地址）：素材库换过图的卡走这里，没登记的卡回退清单原图 */
@@ -73,6 +76,9 @@ export function readCardManifest(): CardManifest | null {
 /** 首屏注入用：清单 + 当前用户的持有 / 金额 / 标签 */
 export function cardLibraryForUser(userId: string): CardLibraryPayload {
   sweepLegacyCardCvv();
+  // 先跟清单对一次账：脚本新导入的卡面在这里登记进素材库（顺手写下「首次入库时间」），
+  // 于是打开卡面库就能看到新卡置顶 + NEW，而不必先去一趟素材库页面。
+  ensureCardAssets();
   const manifest = readCardManifest();
   return {
     regions: manifest?.regions ?? [],
@@ -82,8 +88,8 @@ export function cardLibraryForUser(userId: string): CardLibraryPayload {
     amounts: listCardAmounts(userId),
     tags: listCardTags(userId),
     holdings: listCardHoldings(userId),
-    addedAt: cardHoldingTimes(userId),
     nowMs: Date.now(),
+    firstSeen: cardFirstSeenMap(),
     details: listCardDetails(userId),
     covers: cardCoverMap(),
     customCards: listCustomCards(userId)
@@ -237,6 +243,25 @@ export function cardCoverMap(): Record<string, string> {
   rows.forEach((row) => {
     const key = cardKeyOfAssetId(row.id);
     if (key && row.url) out[key] = row.url;
+  });
+  return out;
+}
+
+/**
+ * 卡面首次入库时间表：卡面文件 → 素材首次登记时间（ISO）。
+ *
+ * 卡面库用它判断「新入库的卡」—— 不管是**抓取脚本导入的新卡**（ensureCardAssets 登记）
+ * 还是**自己上传卡面新建的卡**（新增卡片时登记），都会在这里留下首次入库时间；
+ * 升级前就存在的老素材留空字符串，一律按「不是新素材」处理，不会误标。
+ */
+export function cardFirstSeenMap(): Record<string, string> {
+  const rows = getDb()
+    .prepare("SELECT id, created_at FROM assets WHERE type = 'card' AND created_at <> ''")
+    .all() as { id: string; created_at: string }[];
+  const out: Record<string, string> = {};
+  rows.forEach((row) => {
+    const key = cardKeyOfAssetId(row.id);
+    if (key && row.created_at) out[key] = row.created_at;
   });
   return out;
 }

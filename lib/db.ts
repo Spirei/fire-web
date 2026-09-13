@@ -159,6 +159,8 @@ function migrate(database: Database.Database) {
       source TEXT DEFAULT 'manual',
       last_checked_at TEXT DEFAULT '',
       board TEXT DEFAULT '',
+      -- 首次入库时间（空 = 升级前就存在的老素材）：卡面库用它判断「新入库的卡」
+      created_at TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
@@ -481,6 +483,9 @@ function migrate(database: Database.Database) {
   if (!assetCols.includes("source")) database.exec("ALTER TABLE assets ADD COLUMN source TEXT DEFAULT 'manual'");
   if (!assetCols.includes("last_checked_at")) database.exec("ALTER TABLE assets ADD COLUMN last_checked_at TEXT DEFAULT ''");
   if (!assetCols.includes("board")) database.exec("ALTER TABLE assets ADD COLUMN board TEXT DEFAULT ''");
+  // 首次入库时间（兼容旧库）：老素材留空 —— 空值一律按「不是新素材」处理，
+  // 避免升级后把几百张老卡面全部标成新入库
+  if (!assetCols.includes("created_at")) database.exec("ALTER TABLE assets ADD COLUMN created_at TEXT NOT NULL DEFAULT ''");
   if (!assetCols.includes("url_dark")) database.exec("ALTER TABLE assets ADD COLUMN url_dark TEXT DEFAULT ''");
 
   // users 表增量字段（兼容旧库）

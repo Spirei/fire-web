@@ -375,8 +375,8 @@ export function upsertAsset(input: {
   // 替换图标时删除旧本地文件，保留唯一（同一条素材多次上传不堆积）
   const oldRow = db.prepare("SELECT url, url_dark FROM assets WHERE id = ?").get(id) as { url?: string; url_dark?: string } | undefined;
   db.prepare(
-    `INSERT INTO assets (id, type, market, code, name, url, url_dark, market_cap, price, change_pct, source, last_checked_at, board, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO assets (id, type, market, code, name, url, url_dark, market_cap, price, change_pct, source, last_checked_at, board, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        type=excluded.type, market=excluded.market, code=excluded.code,
        name=CASE WHEN assets.source <> 'manual' OR excluded.source = 'manual' THEN excluded.name ELSE assets.name END,
@@ -388,8 +388,10 @@ export function upsertAsset(input: {
        source=CASE WHEN assets.source = 'manual' THEN assets.source ELSE excluded.source END,
        last_checked_at=excluded.last_checked_at,
        board=CASE WHEN assets.source <> 'manual' OR excluded.source = 'manual' THEN excluded.board ELSE assets.board END,
+       -- 首次入库时间只在「第一次插入」时写入：冲突时原样保留（老素材留空 = 不是新素材）
+       created_at=assets.created_at,
        updated_at=excluded.updated_at`
-  ).run(id, input.type, market, code, name, url, urlDark, marketCap, price, changePct, source, lastCheckedAt, board, updatedAt);
+  ).run(id, input.type, market, code, name, url, urlDark, marketCap, price, changePct, source, lastCheckedAt, board, updatedAt, updatedAt);
   if (url) existsCache.set(url, true);
   if (urlDark) existsCache.set(urlDark, true);
   if (oldRow?.url && isLocalUrl(oldRow.url) && oldRow.url !== url) {
