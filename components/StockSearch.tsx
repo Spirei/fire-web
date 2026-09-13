@@ -13,7 +13,7 @@ import { RELATED_ETF_MAIN_STOCK, US_RELATED_ETFS } from "@/lib/relatedEtfs";
 const SEARCH_CACHE_TTL = 60_000;
 const searchCache = new Map<string, { at: number; results: SearchMatch[] }>();
 
-function relatedEtfMeta(match: SearchMatch): { main: string; badge: string } | null {
+function relatedEtfMeta(match: SearchMatch): { main: string; badge: string; badgeTitle: string } | null {
   if (match.market !== "US") return null;
   const code = match.code.trim().toUpperCase().replace(/\.(?:AM|N|OQ|PS|K)$/i, "");
   const main = RELATED_ETF_MAIN_STOCK[code];
@@ -22,7 +22,8 @@ function relatedEtfMeta(match: SearchMatch): { main: string; badge: string } | n
   if (!relation) return null;
   return {
     main,
-    badge: relation.kind === "income" ? "收益" : relation.kind === "short" ? "反向" : /2X/i.test(relation.badge) ? "2x" : "做多"
+    badge: relation.kind === "income" ? "收" : relation.kind === "short" ? "反" : /2X/i.test(relation.badge) ? "2x" : "多",
+    badgeTitle: relation.kind === "income" ? "收益策略" : relation.kind === "short" ? "反向 ETF" : relation.badge
   };
 }
 
@@ -218,7 +219,11 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
                       fallback={<span className="grid h-9 w-9 place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted dark:bg-white/10">{m.name.slice(0, 1)}</span>}
                     />
                     {related && (
-                      <span className="absolute -bottom-1 -right-1 inline-flex min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-[#4b5563] px-1 py-[2px] text-[8px] font-bold leading-none text-white shadow-sm dark:border-[#161b25]">
+                      <span
+                        title={related.badgeTitle}
+                        aria-label={related.badgeTitle}
+                        className="absolute -bottom-2 -right-0.5 inline-flex h-[19px] w-[19px] items-center justify-center rounded-full border-[1.5px] border-white bg-[#4b5563] p-0 text-[8px] font-bold leading-none tracking-[-0.04em] text-white shadow-[0_1px_4px_rgba(0,0,0,.28)] dark:border-[#161b25]"
+                      >
                         {related.badge}
                       </span>
                     )}
