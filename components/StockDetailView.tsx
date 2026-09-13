@@ -793,10 +793,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
           ) : tab === "etf" ? (
             <section className="stock-detail-module stock-etf-module">
               <div className="stock-module-heading">
-                <div>
-                  <h3 className="text-sm font-semibold text-ink">{mainStock ? `${displayName} 正股` : `${displayName} 相关 ETF`}</h3>
-                  <p className="mt-1 text-[11px] text-muted">{mainStock ? "该 ETF 对应的基础股票，点击可返回正股详情。" : "做多、做空与期权收益产品统一归拢，点击行可查看 ETF 详情。"}</p>
-                </div>
+                <h3 className="text-sm font-semibold text-ink">{mainStock ? `${displayName} 正股` : `${displayName} 相关 ETF`}</h3>
                 <span className="stock-module-count">{related.length} 只</span>
               </div>
               {!mainStock && related.length > 0 && (
@@ -900,10 +897,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
           ) : tab === "dividend" ? (
             <section className="stock-detail-module stock-dividend-module">
               <div className="stock-module-heading">
-                <div>
-                  <h3 className="text-sm font-semibold text-ink">{displayName} 股息记录</h3>
-                  <p className="mt-1 text-[11px] text-muted">每股税前分配，按除息日倒序。</p>
-                </div>
+                <h3 className="text-sm font-semibold text-ink">{displayName} 股息记录</h3>
                 <span className="stock-module-count">{dividends.length} 期</span>
               </div>
               {dividendsLoading ? (

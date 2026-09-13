@@ -2818,8 +2818,11 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   min-width: 0;
   align-items: center;
   gap: 2px;
-  overflow: visible;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
 }
+.stock-chart-range-scroll::-webkit-scrollbar { display: none; }
 .stock-chart-range,
 .stock-chart-style-trigger {
   display: inline-flex;
@@ -2963,19 +2966,27 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   backdrop-filter: blur(18px);
 }
 .session-menu { left: 0; min-width: 172px; }
-.period-picker-trigger { min-width: 76px; padding-inline: 10px; color: #6f7681; }
+.period-picker-wrap { margin-left: 8px; padding-left: 8px; border-left: 1px solid rgba(201,206,216,.48); }
+.period-picker-trigger { min-width: 74px; padding-inline: 11px; border: 1px solid rgba(201,206,216,.68); color: #6f7681; background: rgba(255,255,255,.46); }
+.period-picker-trigger:hover,.period-picker-trigger.is-open,.period-picker-trigger.has-value { border-color: rgba(237,138,33,.5); color: #20252d; background: rgba(237,138,33,.08); }
 .period-picker-trigger > svg { width: 14px; height: 14px; color: #ed8a21; stroke-width: 2.15; }
-.period-menu { right: 0; width: min(360px, calc(100vw - 32px)); padding: 15px; gap: 13px; border-radius: 18px; }
+.period-menu { right: 0; width: min(410px, calc(100vw - 32px)); padding: 14px; gap: 11px; border-radius: 16px; }
 .period-menu-head { display: flex; align-items: center; min-height: 26px; color: #20252d; font-size: 16px; }
-.period-menu section { display: grid; gap: 8px; }
+.period-menu section { display: grid; gap: 7px; padding-top: 10px; border-top: 1px solid rgba(201,206,216,.42); }
 .period-menu h4 { margin: 0; color: #737c89; font-size: 12px; font-weight: 700; }
-.period-option-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
-.period-menu .period-option-grid button { display: flex; width: 100%; min-height: 40px; align-items: center; justify-content: center; padding: 0 6px; border: 1px solid transparent; border-radius: 10px; text-align: center; }
+.period-option-grid { display: grid; gap: 6px; }
+.period-option-grid.is-minutes { grid-template-columns: repeat(5,minmax(0,1fr)); }
+.period-option-grid.is-hours { grid-template-columns: repeat(4,minmax(0,1fr)); }
+.period-option-grid.is-long { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.period-menu .period-option-grid button { display: flex; width: 100%; min-height: 36px; align-items: center; justify-content: center; padding: 0 5px; border: 1px solid transparent; border-radius: 9px; text-align: center; }
 .period-menu .period-option-grid button.is-selected { border-color: transparent; color: #20252d; background: #f0f1f4; }
-.dark .period-picker-trigger { color: #8994a3; }
+.dark .period-picker-trigger { border-color: rgba(255,255,255,.13); color: #8994a3; background: rgba(255,255,255,.035); }
+.dark .period-picker-trigger:hover,.dark .period-picker-trigger.is-open,.dark .period-picker-trigger.has-value { border-color: rgba(255,156,56,.5); color: #f0f3f7; background: rgba(255,156,56,.09); }
 .dark .period-picker-trigger > svg { color: #ff9c38; }
 .dark .period-menu-head { color: #f0f3f7; }
 .dark .period-menu h4 { color: #8994a3; }
+.dark .period-menu section { border-color: rgba(255,255,255,.08); }
+.dark .period-picker-wrap { border-color: rgba(255,255,255,.1); }
 .dark .period-menu .period-option-grid button.is-selected { border-color: transparent; color: #f0f3f7; background: rgba(255,255,255,.08); }
 .stock-chart-menu button { min-height: 36px; border-radius: 9px; padding: 0 12px; color: #646c78; font-size: 13px; font-weight: 700; text-align: left; }
 .stock-chart-menu button:hover { color: #20252d; background: #f4f5f7; }
