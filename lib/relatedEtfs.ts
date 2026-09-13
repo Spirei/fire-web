@@ -203,6 +203,14 @@ export const RELATED_ETF_MAIN_STOCK: Record<string, string> = Object.entries(US_
   {} as Record<string, string>
 );
 
+const RELATED_ETF_BY_CODE: Record<string, RelatedETF> = Object.values(US_RELATED_ETFS).flat().reduce(
+  (map, etf) => {
+    if (!map[etf.code]) map[etf.code] = etf;
+    return map;
+  },
+  {} as Record<string, RelatedETF>
+);
+
 // 兼容旧数据：EchoStar 2026-06-24 由 SATS 改为 ECHO，2X ETF 由 SATG 改为 ECHX；
 // 仍存有 SATG 记录的旧自选/持仓，反向展示正股 ECHO。
 RELATED_ETF_MAIN_STOCK["SATG"] = "ECHO";
@@ -223,6 +231,25 @@ export function relatedStock(market: string, code: string): RelatedStock | null 
     kind: "long",
     badge: "正股"
   };
+}
+
+export interface RelatedEtfBadgeMeta {
+  label: "2x" | "反" | "收" | "多";
+  title: string;
+}
+
+/** 全站相关 ETF 图标角标：统一从关系目录派生，避免各组件自行判断和展示。 */
+export function relatedEtfBadge(market: string, code: string, name?: string): RelatedEtfBadgeMeta | null {
+  if (market.toUpperCase() === "US") {
+    const normalized = normalizedUsCode(code);
+    const relation = RELATED_ETF_BY_CODE[normalized];
+    if (relation) {
+      if (relation.kind === "income") return { label: "收", title: "收益策略" };
+      if (relation.kind === "short") return { label: "反", title: "反向 ETF" };
+      return /2X/i.test(relation.badge) ? { label: "2x", title: relation.badge } : { label: "多", title: relation.badge };
+    }
+  }
+  return isDoubleEtf(market, code, name) ? { label: "2x", title: "2X 做多" } : null;
 }
 
 /** 判断某只股票/ETF 是否为 2 倍杠杆产品（用于显示 2x 徽标）：

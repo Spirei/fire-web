@@ -6,6 +6,7 @@ import { fmtNum, fmtNumMarket, fmtPct } from "@/lib/format";
 import RainbowTextInput from "@/components/RainbowTextInput";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import SafeAssetImage from "@/components/SafeAssetImage";
+import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import { ensureStockIcons, useAssetIcons } from "@/lib/useAssetIcons";
 import { pickStockIcon } from "@/lib/stockIconKey";
 import { RELATED_ETF_MAIN_STOCK, US_RELATED_ETFS } from "@/lib/relatedEtfs";
@@ -13,18 +14,14 @@ import { RELATED_ETF_MAIN_STOCK, US_RELATED_ETFS } from "@/lib/relatedEtfs";
 const SEARCH_CACHE_TTL = 60_000;
 const searchCache = new Map<string, { at: number; results: SearchMatch[] }>();
 
-function relatedEtfMeta(match: SearchMatch): { main: string; badge: string; badgeTitle: string } | null {
+function relatedEtfMeta(match: SearchMatch): { main: string } | null {
   if (match.market !== "US") return null;
   const code = match.code.trim().toUpperCase().replace(/\.(?:AM|N|OQ|PS|K)$/i, "");
   const main = RELATED_ETF_MAIN_STOCK[code];
   if (!main) return null;
   const relation = US_RELATED_ETFS[main]?.find((item) => item.code === code);
   if (!relation) return null;
-  return {
-    main,
-    badge: relation.kind === "income" ? "收" : relation.kind === "short" ? "反" : /2X/i.test(relation.badge) ? "2x" : "多",
-    badgeTitle: relation.kind === "income" ? "收益策略" : relation.kind === "short" ? "反向 ETF" : relation.badge
-  };
+  return { main };
 }
 
 interface Props {
@@ -218,15 +215,7 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
                       className="h-9 w-9 rounded-full object-cover"
                       fallback={<span className="grid h-9 w-9 place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted dark:bg-white/10">{m.name.slice(0, 1)}</span>}
                     />
-                    {related && (
-                      <span
-                        title={related.badgeTitle}
-                        aria-label={related.badgeTitle}
-                        className="absolute -bottom-2 -right-0.5 inline-flex h-[19px] w-[19px] items-center justify-center rounded-full border-[1.5px] border-white bg-[#4b5563] p-0 text-[8px] font-bold leading-none tracking-[-0.04em] text-white shadow-[0_1px_4px_rgba(0,0,0,.28)] dark:border-[#161b25]"
-                      >
-                        {related.badge}
-                      </span>
-                    )}
+                    {related && <EtfDoubleBadge market={m.market} code={m.code} name={m.name} />}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block max-w-[min(46vw,260px)] truncate font-semibold">{m.name}</span>

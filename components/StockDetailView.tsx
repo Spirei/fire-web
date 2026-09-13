@@ -14,7 +14,6 @@ import { pickStockIcon } from "@/lib/stockIconKey";
 import { MARKET_CURRENCY, MULTI_CURRENCIES, usdCap } from "@/lib/currency";
 import { relatedETFs, relatedStock, type RelatedETF } from "@/lib/relatedEtfs";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
-import { isDoubleEtf } from "@/lib/relatedEtfs";
 import DividendTable, { fmtDividendAmount, yearOfDividend } from "@/components/DividendTable";
 import type { DividendRecord } from "@/lib/dividends";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
@@ -553,17 +552,14 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
             </svg>
           </button>
         )}
-        {stockIconUrl ? (
-          <img
-            src={stockIconUrl}
-            alt=""
-            className="stock-detail-logo h-9 w-9 flex-none rounded-full object-cover"
-          />
-        ) : (
-          <span className="stock-detail-logo flex h-9 w-9 flex-none items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">
-            {(name || "?").slice(0, 1)}
-          </span>
-        )}
+        <span className="relative flex-none">
+          {stockIconUrl ? (
+            <img src={stockIconUrl} alt="" className="stock-detail-logo h-9 w-9 rounded-full object-cover" />
+          ) : (
+            <span className="stock-detail-logo flex h-9 w-9 items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">{(name || "?").slice(0, 1)}</span>
+          )}
+          <EtfDoubleBadge market={market} code={code} name={name} />
+        </span>
         <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
           <h2 className="min-w-0 truncate text-xl font-bold text-ink" title={displayName}>{displayName}</h2>
           <MarketCodeBadge market={market} code={code} />
@@ -813,7 +809,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
                             <img src={stockIcons[`US:${item.code}`]} alt={`${item.name} 图标`} className="h-full w-full object-cover" />
                           ) : item.code.slice(0, 2)}
                         </span>
-                        {isDoubleEtf("US", item.code, item.name) && <EtfDoubleBadge market="US" code={item.code} className="absolute -right-1 -top-1" />}
+                        <EtfDoubleBadge market="US" code={item.code} name={item.name} />
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex min-w-0 items-center gap-2">

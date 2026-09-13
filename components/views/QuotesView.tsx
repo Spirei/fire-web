@@ -16,7 +16,6 @@ import { groupCount, groupVisible, migrateLegacyWatchGroups, type WatchGroup } f
 import DeleteIcon from "@/components/DeleteIcon";
 import ImportSnapshotModal from "@/components/ImportSnapshotModal";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
-import { isDoubleEtf } from "@/lib/relatedEtfs";
 import RefreshButton from "@/components/RefreshButton";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
@@ -872,14 +871,14 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                                 alt=""
                                 className="h-9 w-9 flex-none rounded-full object-cover"
                               />
-                              {isDoubleEtf(r.market, r.code, r.name) && <EtfDoubleBadge market={r.market} code={r.code} className="absolute -right-1 -top-1" />}
+                              <EtfDoubleBadge market={r.market} code={r.code} name={r.name} />
                             </span>
                           ) : (
                             <span className="relative flex-none">
                               <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">
                                 {(r.name || "?").slice(0, 1)}
                               </span>
-                              {isDoubleEtf(r.market, r.code, r.name) && <EtfDoubleBadge market={r.market} code={r.code} className="absolute -right-1 -top-1" />}
+                              <EtfDoubleBadge market={r.market} code={r.code} name={r.name} />
                             </span>
                           )}
                           <span className="min-w-0">
