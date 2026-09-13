@@ -279,15 +279,8 @@ function Avatar({
 
 export default function AssetLibraryView({ initialCdnEnabled, initialAssets = [], initialTotal = 0 }: { initialCdnEnabled?: boolean; initialAssets?: Asset[]; initialTotal?: number } = {}) {
   const rates = useRates();
-  const [tab, setTab] = useState<TabKey>(() => {
-    if (typeof window === "undefined") return "stock";
-    const t = new URLSearchParams(window.location.search).get("tab");
-    return (["stock", "market", "flag", "broker", "group", "crypto", "metal", "icon", "card"] as string[]).includes(t ?? "") ? (t as TabKey) : "stock";
-  });
-  const [selected, setSelected] = useState(() => {
-    if (typeof window === "undefined") return "ALL";
-    return new URLSearchParams(window.location.search).get("market") || "ALL";
-  });
+  const [tab, setTab] = useState<TabKey>("stock");
+  const [selected, setSelected] = useState("ALL");
   const [assets, setAssets] = useState<Asset[]>(initialAssets);
   const [assetTotal, setAssetTotal] = useState(initialTotal);
   const [assetsLoading, setAssetsLoading] = useState(initialAssets.length === 0);
@@ -325,26 +318,10 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
   const [syncStatus, setSyncStatus] = useState<{ running: boolean; total: number; done: number; current: string; error: string; lastSyncAt: string } | null>(null);
   const [checkingDelisted, setCheckingDelisted] = useState(false);
   const [cleaningFiles, setCleaningFiles] = useState(false);
-  const [sortKey, setSortKey] = useState<"rank" | "code" | "name" | "board" | "price" | "changePct" | "marketCap">(() => {
-    if (typeof window === "undefined") return "rank";
-    const s = new URLSearchParams(window.location.search).get("sort");
-    return (["rank", "code", "name", "board", "price", "changePct", "marketCap"] as const).includes(s as never)
-      ? (s as "rank" | "code" | "name" | "board" | "price" | "changePct" | "marketCap")
-      : "rank";
-  });
-  const [sortDir, setSortDir] = useState<"asc" | "desc">(() => {
-    if (typeof window === "undefined") return "desc";
-    return new URLSearchParams(window.location.search).get("dir") === "asc" ? "asc" : "desc";
-  });
-  const [query, setQuery] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return new URLSearchParams(window.location.search).get("q") ?? "";
-  });
-  const [topPage, setTopPage] = useState<number>(() => {
-    if (typeof window === "undefined") return 1;
-    const p = Number(new URLSearchParams(window.location.search).get("page"));
-    return Number.isFinite(p) && p >= 1 ? Math.floor(p) : 1;
-  });
+  const [sortKey, setSortKey] = useState<"rank" | "code" | "name" | "board" | "price" | "changePct" | "marketCap">("rank");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [query, setQuery] = useState<string>("");
+  const [topPage, setTopPage] = useState<number>(1);
   const [listPage, setListPage] = useState(1);
   /** 卡片类目单独分页（每页条数随列表 / 网格变化，不能共用 listPage） */
   const [cardPage, setCardPage] = useState(1);
@@ -360,10 +337,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
    * 卡片素材的展示方式：列表（一行一张，看信息方便）/ 网格（卡面墙，挑图方便）。
    * 属于「此刻看什么」的视图状态，按约定走 URL（?view=grid），刷新 / 前进后退 / 分享都保持。
    */
-  const [cardView, setCardView] = useState<"list" | "grid">(() => {
-    if (typeof window === "undefined") return "list";
-    return new URLSearchParams(window.location.search).get("view") === "grid" ? "grid" : "list";
-  });
+  const [cardView, setCardView] = useState<"list" | "grid">("list");
   const [names, setNames] = useState<Record<string, string>>({});
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
@@ -387,6 +361,21 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
   const assetRequestRef = useRef(0);
 
   const stockPageSignature = `${selected}|${topPage}|${sortKey}|${sortDir}|${query.trim()}`;
+
+  // SSR 与客户端首帧固定使用同一默认状态；水合完成前再恢复 URL，避免排序/分类属性不一致。
+  useLayoutEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const nextTab = sp.get("tab");
+    if (nextTab && (["stock", "market", "flag", "broker", "group", "crypto", "metal", "icon", "card"] as string[]).includes(nextTab)) setTab(nextTab as TabKey);
+    setSelected(sp.get("market") || "ALL");
+    const nextSort = sp.get("sort");
+    if (nextSort && (["rank", "code", "name", "board", "price", "changePct", "marketCap"] as string[]).includes(nextSort)) setSortKey(nextSort as typeof sortKey);
+    setSortDir(sp.get("dir") === "asc" ? "asc" : "desc");
+    setQuery(sp.get("q") ?? "");
+    const nextPage = Number(sp.get("page"));
+    setTopPage(Number.isFinite(nextPage) && nextPage >= 1 ? Math.floor(nextPage) : 1);
+    setCardView(sp.get("view") === "grid" ? "grid" : "list");
+  }, []);
 
   // 股票列表上一次成功结果持久化：刷新先恢复原表格，再在后台请求最新数据。
   useLayoutEffect(() => {
