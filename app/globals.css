@@ -897,6 +897,33 @@
   background: rgba(100, 110, 125, 0.7);
 }
 /* 下拉面板（卡面库多选等）：细滚动条，浅色细条，深色模式跟随 */
+/* 全站滚动条：统一成卡面库筛选面板那种细条（4px、圆角、半透明，深色模式自动换色）。
+   组件里显式隐藏或自定义过的滚动条（tab 横滑、订单表等）靠更具体的选择器覆盖，不受影响。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 130, 145, 0.45) transparent;
+}
+*::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(120, 130, 145, 0.45);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 110, 125, 0.7);
+}
+.dark * {
+  scrollbar-color: rgba(255, 255, 255, 0.26) transparent;
+}
+.dark *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.26);
+}
+
 .thin-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(120, 130, 145, 0.45) transparent;
