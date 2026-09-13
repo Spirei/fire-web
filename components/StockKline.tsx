@@ -967,6 +967,22 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       const priceSeries = isComparing
         ? [{ ...lineSeries, data: mainNorm, yAxisIndex: subCount + 1, areaStyle: undefined, showSymbol: true, showAllSymbol: true, symbol: "circle", symbolSize: 4, emphasis: { scale: true }, markLine: undefined }]
         : effectiveStyle === "hlc" ? hlcSeries : effectiveStyle === "baseline" ? baselineSeries : [candleMode ? candleSeries : lineSeries];
+      // 主价格序列关闭常驻节点时，使用透明折线承载 axis tooltip 的高亮圆点。
+      // 这样蜡烛柱和普通折线都只在十字线当前位置显示一个清晰交点。
+      const followPointSeries = !isComparing ? [{
+        name: "跟随点",
+        type: "line" as const,
+        data: data.values,
+        showSymbol: false,
+        symbol: "circle",
+        symbolSize: 9,
+        connectNulls: true,
+        lineStyle: { opacity: 0 },
+        itemStyle: { color: "#4f8cff", borderColor: "#fff", borderWidth: 2 },
+        emphasis: { scale: 1.25 },
+        tooltip: { show: false },
+        z: 20
+      }] : [];
       const showMA = !(allDayView && range === "DAY" && session === "ALL") && !isComparing && selectedIndicators.includes("MA");
       const enabledMAs = maConfigs.filter((item) => item.enabled);
       const maSeries = showMA && maLinesVisible ? enabledMAs.map((item) => ({
@@ -1021,6 +1037,12 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
         silent: true,
         style: { text: session === "PRE" ? "盘前" : "盘后", fill: muted, font: "600 12px -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif", textAlign: session === "AFTER" ? "right" : "left" }
       }] : [];
+      const tooltipPosition = (point: number[], _params: unknown, _dom: HTMLElement, _rect: unknown, size: { viewSize: number[]; contentSize: number[] }) => {
+        const gap = 10;
+        return point[0] < size.viewSize[0] / 2
+          ? [Math.max(gap, size.viewSize[0] - size.contentSize[0] - gap), gap]
+          : [gap, gap];
+      };
       chartInst.current.setOption({
         animationDuration: 280,
         backgroundColor: "transparent",
@@ -1040,7 +1062,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
           end: 100
         }],
         axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: muted, type: "dashed" }, label: { show: false } },
-        tooltip: isComparing ? { trigger: "axis", confine: true, enterable: false, axisPointer: { type: "cross", crossStyle: { color: muted, type: "dashed" } }, backgroundColor: "transparent", borderColor: "transparent", borderWidth: 0, padding: 0, extraCssText: "box-shadow:none;", formatter: (raw: unknown) => { const arr = raw as { dataIndex: number }[]; if (arr && arr.length > 0 && typeof arr[0].dataIndex === "number") { setHoverIndex(arr[0].dataIndex); } return ""; } } : { trigger: "axis", confine: true, enterable: true, axisPointer: { type: "cross", crossStyle: { color: muted, type: "dashed" } }, padding: [10, 12], backgroundColor: dark ? "#20252d" : "#fff", borderColor: dark ? "rgba(255,255,255,.16)" : "#d6dbe2", borderWidth: 1, extraCssText: "border-radius:4px;box-shadow:0 12px 30px rgba(18,25,38,.14)", textStyle: { color: ink }, formatter: (raw: unknown) => {
+        tooltip: isComparing ? { trigger: "axis", confine: true, enterable: false, axisPointer: { type: "cross", crossStyle: { color: muted, type: "dashed" } }, backgroundColor: "transparent", borderColor: "transparent", borderWidth: 0, padding: 0, extraCssText: "box-shadow:none;", formatter: (raw: unknown) => { const arr = raw as { dataIndex: number }[]; if (arr && arr.length > 0 && typeof arr[0].dataIndex === "number") { setHoverIndex(arr[0].dataIndex); } return ""; } } : { trigger: "axis", confine: true, enterable: false, position: tooltipPosition, axisPointer: { type: "cross", crossStyle: { color: muted, type: "dashed" } }, padding: range === "DAY" ? [8, 10] : [10, 12], backgroundColor: range === "DAY" ? (dark ? "rgba(32,37,45,.96)" : "rgba(255,255,255,.97)") : (dark ? "#20252d" : "#fff"), borderColor: dark ? "rgba(255,255,255,.14)" : "#d6dbe2", borderWidth: 1, extraCssText: range === "DAY" ? "border-radius:8px;box-shadow:0 8px 22px rgba(18,25,38,.13)" : "border-radius:4px;box-shadow:0 12px 30px rgba(18,25,38,.14)", textStyle: { color: ink }, formatter: (raw: unknown) => {
           const rows = raw as { seriesName: string; axisValue: string; dataIndex: number; data: number }[];
           const p = rows.find((row) => row.seriesName === (name || code)) || rows.find((row) => !["成交量", "成交额", "HLC低点", "HLC区间"].includes(row.seriesName));
           if (!p) return "";
@@ -1052,10 +1074,14 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
           const ohlc = data.ohlc[p.dataIndex] || [];
           const amount = amounts[p.dataIndex] || 0;
           const compact = typeof window !== "undefined" && window.innerWidth <= 767;
-          const line = (label: string, value: string, valueColor = ink) => `<div style="display:flex;justify-content:space-between;gap:${compact ? 14 : 26}px;margin-top:${compact ? 2 : 3}px"><span style="color:${muted}">${label}</span><b style="color:${valueColor};font-variant-numeric:tabular-nums">${value}</b></div>`;
-          const fullCore = `${ohlc.length ? line("开盘", Number(ohlc[0]).toFixed(3), Number(ohlc[0]) >= previous ? "#e5484d" : "#0aa77d") + line("最高", Number(ohlc[3]).toFixed(3), "#e5484d") + line("最低", Number(ohlc[2]).toFixed(3), "#0aa77d") + line("收盘", Number(ohlc[1]).toFixed(3), color) : line("价格", price.toFixed(3))}${line("涨跌额", `${change >= 0 ? "+" : ""}${change.toFixed(3)}`, color)}${line("涨跌幅", `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`, color)}${line("成交额", fmtAmount(amount))}${line("成交量", fmtVolume(data.volumes[p.dataIndex] || 0))}`;
-          const compactCore = `${line("收盘", price.toFixed(3), color)}${line("涨跌额", `${change >= 0 ? "+" : ""}${change.toFixed(3)}`, color)}${line("涨跌幅", `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`, color)}`;
-          return `<div style="min-width:${compact ? 132 : 174}px;font-size:${compact ? 11 : 12}px"><div style="font-weight:700;margin-bottom:${compact ? 3 : 5}px">${tooltipDate(p.axisValue, range === "DAY" || range === "5D", market)}</div>${compact ? compactCore : fullCore}</div>`;
+          let weightedPrice = 0; let totalVolume = 0;
+          for (let i = 0; i <= p.dataIndex; i += 1) { const volume = data.volumes[i] || 0; weightedPrice += (data.values[i] || 0) * volume; totalVolume += volume; }
+          const average = totalVolume > 0 ? weightedPrice / totalVolume : null;
+          const line = (label: string, value: string, valueColor = ink) => `<div style="display:flex;justify-content:space-between;gap:${compact ? 12 : 20}px;margin-top:2px"><span style="color:${muted}">${label}</span><b style="color:${valueColor};font-variant-numeric:tabular-nums">${value}</b></div>`;
+          const dayRows = `${line("价格", price.toFixed(3), color)}${line("估算均价", average == null ? "—" : average.toFixed(3), average == null ? muted : "#f59e0b")}${line("涨跌额", `${change >= 0 ? "+" : ""}${change.toFixed(3)}`, color)}${line("涨跌幅", `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`, color)}${line("成交量", fmtVolume(data.volumes[p.dataIndex] || 0))}${line("成交额", fmtAmount(amount))}`;
+          const fullRows = `${ohlc.length ? line("开盘", Number(ohlc[0]).toFixed(3), Number(ohlc[0]) >= previous ? "#e5484d" : "#0aa77d") + line("最高", Number(ohlc[3]).toFixed(3), "#e5484d") + line("最低", Number(ohlc[2]).toFixed(3), "#0aa77d") + line("收盘", Number(ohlc[1]).toFixed(3), color) : line("价格", price.toFixed(3), color)}${line("涨跌额", `${change >= 0 ? "+" : ""}${change.toFixed(3)}`, color)}${line("涨跌幅", `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`, color)}${line("成交额", fmtAmount(amount))}${line("成交量", fmtVolume(data.volumes[p.dataIndex] || 0))}`;
+          const isDayTooltip = range === "DAY";
+          return `<div style="min-width:${compact ? (isDayTooltip ? 128 : 132) : (isDayTooltip ? 150 : 174)}px;font-size:${compact ? 11 : 12}px"><div style="font-weight:700;margin-bottom:${isDayTooltip ? 4 : compact ? 3 : 5}px;white-space:nowrap">${tooltipDate(p.axisValue, range === "DAY" || range === "5D", market)}</div>${isDayTooltip ? dayRows : fullRows}</div>`;
         } },
         grid: [
           { left: gridLeft, right: gridRight, top: 16, height: subCount === 0 ? "82%" : subCount === 1 ? "66%" : "56%", containLabel: gridContain },
@@ -1104,7 +1130,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
             splitLine: { show: false }
           }] : [])
         ],
-        series: [...priceSeries, ...maSeries, ...emaSeries, ...bollSeries, ...subPanels.map((panel, i) => ({
+        series: [...priceSeries, ...followPointSeries, ...maSeries, ...emaSeries, ...bollSeries, ...subPanels.map((panel, i) => ({
           name: panel.name,
           type: "bar",
           xAxisIndex: i + 1,
