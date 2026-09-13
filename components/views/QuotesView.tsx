@@ -176,19 +176,39 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
     };
   }, []);
 
-  // 兼容旧 URL：?filter=M:US / G:名称 → 解析为分组 id
+  function writeFilterToUrl(id: string, mode: "push" | "replace" = "push") {
+    const sp = new URLSearchParams(window.location.search);
+    if (id) sp.set("filter", id);
+    else sp.delete("filter");
+    const query = sp.toString();
+    window.history[mode === "push" ? "pushState" : "replaceState"](
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}`
+    );
+  }
+
+  // 兼容旧 URL：?filter=M:US / G:名称 → 解析为分组 id；失效 id 自动回到全部。
   useEffect(() => {
-    if (!filterId || watchGroups.length === 0) return;
+    if (watchGroups.length === 0) return;
     const sp = new URLSearchParams(window.location.search);
     const raw = sp.get("filter") ?? "";
-    if (raw === filterId) return;
-    let resolved = "";
+    if (!raw) {
+      if (filterId) setFilterId("");
+      return;
+    }
+    let resolved = raw;
     if (raw.startsWith("M:")) {
       resolved = watchGroups.find((g) => g.kind === "market" && g.market === raw.slice(2))?.id ?? "";
     } else if (raw.startsWith("G:")) {
       resolved = watchGroups.find((g) => g.kind === "custom" && g.name === raw.slice(2))?.id ?? "";
+    } else if (!watchGroups.some((g) => g.id === raw)) {
+      resolved = "";
     }
-    if (resolved) setFilterId(resolved);
+    if (resolved !== filterId) setFilterId(resolved);
+    if (resolved !== raw) writeFilterToUrl(resolved, "replace");
+    // writeFilterToUrl 只依赖浏览器当前地址。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchGroups, filterId]);
 
   // 分组 chips：全部 + 可见分组
@@ -213,6 +233,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
 
   function selectGroupChip(id: string, fromMenu = false) {
     setFilterId(id);
+    writeFilterToUrl(id);
     setPage(1);
     if (fromMenu) setShowMoreGroups(false);
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
@@ -290,8 +311,8 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
     notifyDetail(next);
   };
 
-  // 后端详情：无感进入视图。个股代码即唯一标识，URL 用路径 /watchlist/US.GOOGL
-  // （不再使用 ?symbol= / ?filter=），刷新与前进后退都保持；?tab= 仍保留用于页签记忆。
+  // 后端详情：个股代码用路径 /watchlist/US.GOOGL；当前分组继续保留在 ?filter=，
+  // 返回列表、刷新与前进后退时均恢复原筛选；?tab= 保留详情页签记忆。
   const DETAIL_SEGMENT = /^([A-Za-z]{2,5})\.([A-Z0-9._-]+)$/;
 
   function codeFromPath(): { m: string; c: string } | null {
@@ -321,6 +342,9 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
 
   useEffect(() => {
     function syncFromPath() {
+      const nextFilterId = new URLSearchParams(window.location.search).get("filter") ?? "";
+      setFilterId(nextFilterId);
+      setPage(1);
       const hit = codeFromPath();
       if (hit) {
         openDetailFrom(hit.m, hit.c);
@@ -333,7 +357,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
           const c = match[2].toUpperCase();
           const sp = new URLSearchParams(window.location.search);
           sp.delete("symbol");
-          sp.delete("filter");
           const qs = sp.toString();
           const base = window.location.pathname.replace(/\/+$/, "");
           window.history.replaceState(null, "", `${base}/${m}.${c}${qs ? `?${qs}` : ""}`);
@@ -361,7 +384,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
   function openDetail(r: StockRecord) {
     updateDetail(r);
     const sp = new URLSearchParams(window.location.search);
-    sp.delete("filter");
     const qs = sp.toString();
     const base = window.location.pathname.replace(/\/+$/, "");
     window.history.pushState(null, "", `${base}/${r.market.toUpperCase()}.${r.code.toUpperCase()}${qs ? `?${qs}` : ""}`);
@@ -373,7 +395,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
     const base = "/" + segs.join("/");
     const sp = new URLSearchParams(window.location.search);
     sp.delete("tab");
-    sp.delete("filter");
     const qs = sp.toString();
     window.history.replaceState(null, "", base + (qs ? `?${qs}` : ""));
     updateDetail(null);
@@ -495,7 +516,10 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.message || "删除失败");
       setWatchGroups((prev) => prev.filter((g) => g.id !== id));
-      if (filterId === id) setFilterId("");
+      if (filterId === id) {
+        setFilterId("");
+        writeFilterToUrl("", "replace");
+      }
       showToast("分组已删除");
       return true;
     } catch (err) {
@@ -867,8 +891,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
           records={records}
           selectedId={filterId}
           onSelect={(id) => {
-            setFilterId(id);
-            setPage(1);
+            selectGroupChip(id);
             setGroupSheetOpen(false);
           }}
           onClose={() => setGroupSheetOpen(false)}
