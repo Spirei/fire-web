@@ -5,9 +5,26 @@ import { marketMeta, type SearchMatch } from "@/lib/types";
 import { fmtNum, fmtNumMarket, fmtPct } from "@/lib/format";
 import RainbowTextInput from "@/components/RainbowTextInput";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
+import SafeAssetImage from "@/components/SafeAssetImage";
+import { ensureStockIcons, useAssetIcons } from "@/lib/useAssetIcons";
+import { pickStockIcon } from "@/lib/stockIconKey";
+import { RELATED_ETF_MAIN_STOCK, US_RELATED_ETFS } from "@/lib/relatedEtfs";
 
 const SEARCH_CACHE_TTL = 60_000;
 const searchCache = new Map<string, { at: number; results: SearchMatch[] }>();
+
+function relatedEtfMeta(match: SearchMatch): { main: string; badge: string } | null {
+  if (match.market !== "US") return null;
+  const code = match.code.trim().toUpperCase().replace(/\.(?:AM|N|OQ|PS|K)$/i, "");
+  const main = RELATED_ETF_MAIN_STOCK[code];
+  if (!main) return null;
+  const relation = US_RELATED_ETFS[main]?.find((item) => item.code === code);
+  if (!relation) return null;
+  return {
+    main,
+    badge: relation.kind === "income" ? "收益" : relation.kind === "short" ? "反向" : /2X/i.test(relation.badge) ? "2x" : "做多"
+  };
+}
 
 interface Props {
   onSelect: (match: SearchMatch) => void;
@@ -27,6 +44,7 @@ interface Props {
 }
 
 export default function StockSearch({ onSelect, placeholder = "输入股票名称或代码搜索", large = false, autoFocus = false, followed, onToggleFollow, onCameraClick, cameraTitle = "上传持仓 / 行情截图，自动识别并同步", rainbow = false }: Props) {
+  const { stockIcons, assetIcons } = useAssetIcons(["stock", "crypto"]);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchMatch[]>([]);
   const [loading, setLoading] = useState(false);
@@ -86,6 +104,15 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
       controller.abort();
     };
   }, [q]);
+
+  useEffect(() => {
+    const pairs = results.flatMap((match) => {
+      if (match.type === "crypto" || match.market === "ASSET") return [];
+      const related = relatedEtfMeta(match);
+      return [{ market: match.market, code: match.code }, ...(related ? [{ market: "US", code: related.main }] : [])];
+    });
+    if (pairs.length > 0) void ensureStockIcons(pairs);
+  }, [results]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -167,7 +194,12 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
           {results.length === 0 ? (
             <div className="px-4 py-4 text-sm text-faint">未找到相关股票或加密货币，可直接手动填写</div>
           ) : (
-            results.map((m, i) => (
+            results.map((m, i) => {
+              const related = relatedEtfMeta(m);
+              const icon = m.type === "crypto" || m.market === "ASSET"
+                ? assetIcons[m.code.toUpperCase()]
+                : pickStockIcon(stockIcons, m.market, related?.main || m.code);
+              return (
               <div
                 key={m.symbol}
                 onMouseEnter={() => setHighlight(i)}
@@ -178,6 +210,19 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
                   onClick={() => choose(m)}
                   className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
                 >
+                  <span className="relative flex h-9 w-9 flex-none items-center justify-center">
+                    <SafeAssetImage
+                      src={icon}
+                      alt=""
+                      className="h-9 w-9 rounded-full object-cover"
+                      fallback={<span className="grid h-9 w-9 place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted dark:bg-white/10">{m.name.slice(0, 1)}</span>}
+                    />
+                    {related && (
+                      <span className="absolute -bottom-1 -right-1 inline-flex min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-[#4b5563] px-1 py-[2px] text-[8px] font-bold leading-none text-white shadow-sm dark:border-[#161b25]">
+                        {related.badge}
+                      </span>
+                    )}
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block max-w-[min(46vw,260px)] truncate font-semibold">{m.name}</span>
                     <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted">
@@ -219,7 +264,8 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
                   </button>
                 )}
               </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
