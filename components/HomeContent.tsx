@@ -8,7 +8,7 @@ import UserMenu from "@/components/UserMenu";
 import IndexTicker from "@/components/IndexTicker";
 import StockSearch from "@/components/StockSearch";
 import MarketIcon from "@/components/MarketIcon";
-import { primeFlagIconCache, primeMarketIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
+import { primeFlagIconCache, primeMarketIconCache, primeStockIconCache, useAssetIcons, usePrefetchFlagIcons } from "@/lib/useAssetIcons";
 import { showToast } from "@/lib/toast";
 import { setThemeCookie } from "@/lib/theme";
 import { logoFontClass } from "@/lib/logoFont";
@@ -191,6 +191,7 @@ export default function HomeContent({ settings, initialDark = false, initialUser
   primeStockIconCache(initialStockIcons);
   primeMarketIconCache(initialMarketIcons);
   primeFlagIconCache(initialFlagIcons);
+  usePrefetchFlagIcons(initialFlagIcons);
   // SSR 阶段直接使用服务端主题（Cookie），避免刷新时 hero 遮罩先按浅色渲染造成大片白色
   const [dark, setDark] = useState(initialDark);
   const [themeReady, setThemeReady] = useState(false);

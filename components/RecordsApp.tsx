@@ -21,7 +21,7 @@ import { showToast } from "@/lib/toast";
 import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import SettingsWindow from "@/components/SettingsWindow";
-import { primeFlagIconCache, primeMarketIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
+import { primeFlagIconCache, primeMarketIconCache, primeStockIconCache, useAssetIcons, usePrefetchFlagIcons } from "@/lib/useAssetIcons";
 import { pickStockIcon } from "@/lib/stockIconKey";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
@@ -149,6 +149,7 @@ export default function RecordsApp({
   useMemo(() => primeStockIconCache(initialStockIcons), [initialStockIcons]);
   useMemo(() => primeMarketIconCache(initialMarketIcons), [initialMarketIcons]);
   useMemo(() => primeFlagIconCache(initialFlagIcons), [initialFlagIcons]);
+  usePrefetchFlagIcons(initialFlagIcons);
   useLayoutEffect(() => {
     applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
   }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible]);

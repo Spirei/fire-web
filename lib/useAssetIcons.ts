@@ -170,6 +170,29 @@ export function primeFlagIconCache(icons: Record<string, string>) {
   cache.set("flag", { assets: [...byKey.values()], at: current?.at ?? 0 });
 }
 
+/** 首帧结束后把固定货币的小图标送入浏览器图片缓存，打开下拉时无需再等网络。 */
+export function usePrefetchFlagIcons(icons: Record<string, string>) {
+  useEffect(() => {
+    const urls = [...new Set(Object.values(icons).filter(Boolean))];
+    if (!urls.length) return;
+    const prefetch = () => urls.forEach((url) => {
+      const image = new Image();
+      image.decoding = "async";
+      image.src = url;
+    });
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      const id = idleWindow.requestIdleCallback(prefetch, { timeout: 1500 });
+      return () => idleWindow.cancelIdleCallback?.(id);
+    }
+    const id = setTimeout(prefetch, 200);
+    return () => clearTimeout(id);
+  }, [icons]);
+}
+
 const flagInflight = new Map<string, Promise<void>>();
 const subscribedFlagCodes = new Set<string>();
 
