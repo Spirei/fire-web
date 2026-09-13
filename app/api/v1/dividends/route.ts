@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 const MARKETS = ["US", "HK", "CN"];
 
-/** v1 股息记录（富途公司行动-分红派息，带缓存） */
+/** v1 股息记录（线上富途优先、本地公开源，带持久快照） */
 export async function GET(request: Request) {
   if (!rateLimit(`dividends:${clientIp(request)}`, 60, 60 * 1000) || !rateLimitGlobal("dividends", 300, 60 * 1000)) {
     return fail(42901, "请求过于频繁，请稍后再试", 429);
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   if (!MARKETS.includes(market)) return fail(40001, "暂不支持该市场", 400);
   if (!/^[A-Z0-9._-]{1,40}$/.test(code)) return fail(40001, "股票代码不合法", 400);
 
-  const { ok: sourceOk, dividends: raw } = await getDividends(market, code);
+  const { ok: sourceOk, dividends: raw, cached, stale, source } = await getDividends(market, code);
   const dividends = sourceOk ? await withPeriodYields(market, code, raw) : raw;
   const recordId = String(searchParams.get("recordId") ?? "").trim();
   let holding: ReturnType<typeof inspectHoldingDividends> | null = null;
@@ -31,7 +31,9 @@ export async function GET(request: Request) {
   return ok({
     market,
     code,
-    source: sourceOk ? (market === "CN" ? "eastmoney" : "futu") : "unavailable",
+    source,
+    cached,
+    stale,
     dividends,
     holding
   });

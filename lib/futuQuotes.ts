@@ -227,9 +227,9 @@ export interface FutuKlineRow {
   volume: number | null;
 }
 
-/** 富途分红派息（get_corporate_actions_dividends）；OpenD 不可用 / 失败返回 []。 */
+/** 富途分红派息（get_corporate_actions_dividends）；OpenD 不可用时抛错，避免把失败误存为空记录。 */
 export async function fetchFutuDividends(market: string, code: string): Promise<FutuDividendRaw[]> {
-  if (!(await isFutuAvailable())) return [];
+  if (!(await isFutuAvailable())) throw new Error("Futu OpenD unavailable");
   const { futuHost, futuPort } = getSiteSettings();
   const parsed = await runBridge(
     { cmd: "dividends", items: [{ market, code }] },

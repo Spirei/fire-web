@@ -1,16 +1,19 @@
 /**
- * 股息记录（富途公司行动-分红派息优先）。
+ * 股息记录（线上富途优先，本地使用公开数据源）。
  *
- * 数据源：富途 get_corporate_actions_dividends，覆盖美股 / 港股 / A股 / ETF 的
- * 派息与收益分配。解析「1股派息0.27USD」「末期息5.3港元」等声明文本得到
+ * 线上数据源优先使用富途 get_corporate_actions_dividends；本地开发态使用东方财富
+ * （A 股）与 Yahoo（美股 / 港股）公开数据。解析「1股派息0.27USD」等声明文本得到
  * 每股金额与币种；实物分派 / 优先发售等非现金方案标记为 special 展示。
- * 结果缓存 SQLite（dividend_cache）：成功 24h / 失败 6h，避免每次切页签都连 OpenD。
+ * 结果持久化到 SQLite：历史记录合并保留；近期/未来记录每日刷新，纯历史快照每周刷新；
+ * 上游不可用时继续返回最后一次成功数据，不再把失败显示成 0 期。
  */
 import { getDb } from "./db";
 import { fetchDailyKline } from "./kline";
 import { fetchFutuDividends, type FutuDividendRaw } from "./futuQuotes";
+import { proxyFetch } from "./net";
 
-const OK_TTL_MS = 24 * 60 * 60 * 1000;
+const ACTIVE_TTL_MS = 24 * 60 * 60 * 1000;
+const HISTORY_TTL_MS = 7 * ACTIVE_TTL_MS;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36";
 
 export type DividendKind = "cash" | "special";
@@ -37,6 +40,8 @@ export interface DividendRecord {
   /** 当期股息率：每股股息 / 除息日前收盘价 */
   yieldPct?: number | null;
 }
+
+export type DividendSource = "futu" | "eastmoney" | "yahoo" | "cache" | "cache-stale" | "unavailable";
 
 function normalizeDate(raw?: string): string | null {
   if (!raw) return null;
@@ -114,9 +119,98 @@ async function fetchCnDividends(code: string): Promise<DividendRecord[]> {
   return out;
 }
 
+/** Yahoo chart events：作为本地及富途不可用时的美股/港股公开历史股息源。 */
+async function fetchYahooDividends(market: string, code: string): Promise<DividendRecord[]> {
+  const clean = code.replace(/\.(US|HK|AM|N|OQ|PS|K)$/i, "");
+  const hkCode = /^\d+$/.test(clean) ? String(Number(clean)).padStart(4, "0") : clean;
+  const symbol = market === "HK" ? `${hkCode}.HK` : clean;
+  let payload: {
+    chart?: { result?: Array<{ meta?: { currency?: string }; events?: { dividends?: Record<string, { amount?: number; date?: number }> } }>; error?: unknown };
+  } | null = null;
+  let lastError: unknown = null;
+  for (const host of ["query2.finance.yahoo.com", "query1.finance.yahoo.com"]) {
+    const url = new URL(`https://${host}/v8/finance/chart/${encodeURIComponent(symbol)}`);
+    url.searchParams.set("period1", "0");
+    url.searchParams.set("period2", String(Math.floor(Date.now() / 1000) + 366 * 24 * 60 * 60));
+    url.searchParams.set("interval", "1d");
+    url.searchParams.set("events", "div");
+    try {
+      const res = await proxyFetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+        signal: AbortSignal.timeout(12000)
+      });
+      if (!res.ok) throw new Error(`yahoo ${res.status}`);
+      payload = await res.json().catch(() => null);
+      if (payload?.chart?.result?.[0] && !payload.chart.error) break;
+      throw new Error("yahoo invalid dividend response");
+    } catch (error) {
+      payload = null;
+      lastError = error;
+    }
+  }
+  const result = payload?.chart?.result?.[0];
+  if (!result || payload?.chart?.error) throw lastError ?? new Error("yahoo invalid dividend response");
+  const currency = String(result.meta?.currency || (market === "HK" ? "HKD" : "USD")).toUpperCase();
+  return Object.values(result.events?.dividends || {}).flatMap((item) => {
+    const amount = Number(item.amount);
+    const stamp = Number(item.date);
+    if (!(amount > 0) || !(stamp > 0)) return [];
+    const exDate = new Date(stamp * 1000).toISOString().slice(0, 10);
+    return [{
+      pubDate: null,
+      exDate,
+      recordDate: null,
+      payDate: null,
+      statement: `每股派息 ${amount} ${currency}`,
+      process: "历史派息",
+      fiscalYear: exDate.slice(0, 4),
+      amount,
+      currency,
+      kind: "cash" as const
+    }];
+  });
+}
+
+async function fetchFreshDividends(market: string, code: string): Promise<{ dividends: DividendRecord[]; source: DividendSource }> {
+  if (market === "CN") return { dividends: await fetchCnDividends(code), source: "eastmoney" };
+  try {
+    return { dividends: (await fetchFutuDividends(market, code)).map(normalize), source: "futu" };
+  } catch {
+    return { dividends: await fetchYahooDividends(market, code), source: "yahoo" };
+  }
+}
+
 interface CacheRow {
   payload: string;
   fetched_at: number;
+}
+
+function dividendDate(item: DividendRecord) {
+  return item.payDate || item.exDate || item.recordDate || item.pubDate || "";
+}
+
+function dividendKey(item: DividendRecord) {
+  return [item.exDate || item.recordDate || item.payDate || item.pubDate, item.payDate, item.kind, item.fiscalYear].join("|");
+}
+
+function sortDividends(items: DividendRecord[]) {
+  return [...items].sort((a, b) => dividendDate(b).localeCompare(dividendDate(a)));
+}
+
+/** 新数据覆盖同一期，旧接口不再返回的历史期仍永久保留。 */
+function mergeDividends(cached: DividendRecord[], fresh: DividendRecord[], today: string) {
+  const freshKeys = new Set(fresh.map(dividendKey));
+  const historical = cached.filter((item) => dividendDate(item) <= today && !freshKeys.has(dividendKey(item)));
+  return sortDividends([...fresh, ...historical]);
+}
+
+function hasActiveDividend(items: DividendRecord[], today: string) {
+  const recent = new Date(`${today}T00:00:00Z`).getTime() - 120 * 24 * 60 * 60 * 1000;
+  return items.some((item) => {
+    const value = dividendDate(item);
+    const time = value ? new Date(`${value}T00:00:00Z`).getTime() : 0;
+    return time >= recent;
+  });
 }
 
 /** 当期股息率：每股现金股息 / 除息日前最近收盘价。K 线失败时收益率留空，不影响股息列表。 */
@@ -146,31 +240,46 @@ export async function withPeriodYields(market: string, code: string, dividends: 
 }
 
 /**
- * 个股 / ETF 股息记录。ok=false 表示富途当前不可用（未缓存，恢复后自动可取）；
+ * 个股 / ETF 股息记录。ok=false 表示全部数据源当前不可用（未缓存，恢复后自动可取）；
  * ok=true 且 dividends 为空表示该标的确实没有（或暂无）派息记录（缓存 24h）。
  */
-export async function getDividends(market: string, code: string): Promise<{ ok: boolean; dividends: DividendRecord[] }> {
+export async function getDividends(market: string, code: string): Promise<{ ok: boolean; dividends: DividendRecord[]; cached: boolean; stale: boolean; source: DividendSource }> {
   const m = market.trim().toUpperCase();
   const c = code.trim().toUpperCase();
-  if (!m || !c) return { ok: true, dividends: [] };
+  if (!m || !c) return { ok: true, dividends: [], cached: false, stale: false, source: "unavailable" };
 
   const db = getDb();
   const row = db.prepare("SELECT payload, fetched_at FROM dividend_cache WHERE market = ? AND code = ?").get(m, c) as CacheRow | undefined;
   const now = Date.now();
+  let cachedDividends: DividendRecord[] = [];
+  let cacheVerified = false;
   if (row?.fetched_at) {
     const age = now - row.fetched_at;
-    const parsed = JSON.parse(row.payload) as { ok: boolean; dividends?: DividendRecord[] };
-    if (parsed.ok && age < OK_TTL_MS) return { ok: true, dividends: parsed.dividends ?? [] };
+    try {
+      const parsed = JSON.parse(row.payload) as { ok: boolean; verified?: boolean; dividends?: DividendRecord[] };
+      if (parsed.ok && Array.isArray(parsed.dividends)) {
+        cachedDividends = parsed.dividends;
+        cacheVerified = parsed.verified === true;
+      }
+    } catch { /* 损坏缓存忽略，重新回源 */ }
+    const today = new Date(now).toISOString().slice(0, 10);
+    const ttl = hasActiveDividend(cachedDividends, today) ? ACTIVE_TTL_MS : HISTORY_TTL_MS;
+    if (cachedDividends.length > 0 && age < ttl) return { ok: true, dividends: sortDividends(cachedDividends), cached: true, stale: false, source: "cache" };
+    if (cacheVerified && cachedDividends.length === 0 && age < ACTIVE_TTL_MS) return { ok: true, dividends: [], cached: true, stale: false, source: "cache" };
   }
 
   try {
-    const dividends = m === "CN" ? await fetchCnDividends(c) : (await fetchFutuDividends(m, c)).map(normalize);
+    const freshResult = await fetchFreshDividends(m, c);
+    const today = new Date(now).toISOString().slice(0, 10);
+    const dividends = mergeDividends(cachedDividends, freshResult.dividends, today);
     db.prepare(
       `INSERT INTO dividend_cache (market, code, payload, fetched_at) VALUES (?, ?, ?, ?)
        ON CONFLICT(market, code) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`
-    ).run(m, c, JSON.stringify({ ok: true, dividends }), now);
-    return { ok: true, dividends };
-  } catch {
-    return { ok: false, dividends: [] };
+    ).run(m, c, JSON.stringify({ ok: true, verified: true, dividends }), now);
+    return { ok: true, dividends, cached: false, stale: false, source: freshResult.source };
+  } catch (error) {
+    console.warn(`[dividends] refresh failed for ${m}.${c}:`, error instanceof Error ? error.message : error);
+    if (cachedDividends.length > 0) return { ok: true, dividends: sortDividends(cachedDividends), cached: true, stale: true, source: "cache-stale" };
+    return { ok: false, dividends: [], cached: false, stale: false, source: "unavailable" };
   }
 }
