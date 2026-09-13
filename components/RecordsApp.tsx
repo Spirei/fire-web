@@ -650,7 +650,7 @@ export default function RecordsApp({
           <div className="settings-first-frame-card"><i /><i /><i /><i /></div>
         </div>
       )}
-      <div className={settingsSubReady ? "h-full" : "invisible h-full"} aria-hidden={!settingsSubReady}>
+      <div className={settingsSubReady ? "h-full" : "hidden h-full"} aria-hidden={!settingsSubReady}>
         <SettingsView
           user={{
             username: user?.username ?? "",
