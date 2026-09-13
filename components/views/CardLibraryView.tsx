@@ -453,8 +453,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   });
   /** 卡面首次入库时间（卡面 key → ISO）：3 天内的置顶 + 挂 NEW */
   const [firstSeen, setFirstSeen] = useState<Record<string, string>>(() => initial?.firstSeen ?? {});
-  /** mine = 我的卡（默认）；all = 全量卡面库，用来挑卡加入 */
-  const [mode, setMode] = useState<"mine" | "all">("mine");
+  /** mine = 我的卡；all = 全量卡面库。记住上次选择，并通过 cookie 保证刷新首帧不闪回默认。 */
+  const [storedMode, setMode] = usePersistedState<"mine" | "all">("fire:card-library-mode", "mine");
+  const mode: "mine" | "all" = storedMode === "all" ? "all" : "mine";
   const [updatedAt, setUpdatedAt] = useState<string | null>(() => initial?.updatedAt ?? null);
   const [hint, setHint] = useState("");
   const [loading, setLoading] = useState(!initial);
