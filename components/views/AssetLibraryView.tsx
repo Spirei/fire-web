@@ -6,6 +6,7 @@ import { showToast } from "@/lib/toast";
 import MarketIcon from "@/components/MarketIcon";
 import SettingsHeader from "@/components/SettingsHeader";
 import type { Asset } from "@/lib/useAssetIcons";
+import { useAssetIcons } from "@/lib/useAssetIcons";
 import { useRates, usdCap, fmtUsd } from "@/lib/useRates";
 import Pagination from "@/components/Pagination";
 import DeleteIcon from "@/components/DeleteIcon";
@@ -278,6 +279,7 @@ function Avatar({
 }
 
 export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnabled?: boolean } = {}) {
+  const { assetIcons, stockIcons } = useAssetIcons(undefined, { fullCatalog: true });
   const rates = useRates();
   const [tab, setTab] = useState<TabKey>(() => {
     if (typeof window === "undefined") return "stock";
@@ -289,7 +291,6 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
     return new URLSearchParams(window.location.search).get("market") || "ALL";
   });
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [assetTotal, setAssetTotal] = useState(0);
   const [assetsLoading, setAssetsLoading] = useState(true);
   const [marketRows, setMarketRows] = useState<MarketRow[]>([]);
   const [countryRows, setCountryRows] = useState<CountryCatalogItem[]>([]);
@@ -384,7 +385,6 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
   const brokerDragIndex = useRef<number | null>(null);
   const customMarkets = useRef<Set<string>>(new Set());
   const topMountedRef = useRef(false);
-  const assetRequestRef = useRef(0);
 
   // URL 状态同步：刷新/分享/前进后退都能保持选中的分类和市场
   useEffect(() => {
@@ -545,26 +545,12 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
   }
 
   async function loadAssets(silent = false) {
-    const requestId = ++assetRequestRef.current;
     if (!silent) setAssetsLoading(true);
     try {
-      const params = new URLSearchParams({ type: tab });
-      if (tab === "stock") {
-        params.set("paged", "1");
-        params.set("page", String(topPage));
-        params.set("pageSize", "10");
-        params.set("market", selected);
-        params.set("sort", sortKey);
-        params.set("dir", sortDir);
-        if (query.trim()) params.set("q", query.trim());
-      }
-      const res = await fetch(`/api/assets?${params}`);
+      const res = await fetch("/api/assets");
       const data = await res.json().catch(() => null);
-      // 快速切换分类/市场/页码时，只接受最后一次请求，防止旧响应覆盖新页面。
-      if (requestId !== assetRequestRef.current) return;
       const list: Asset[] = data?.assets ?? [];
       setAssets(list);
-      setAssetTotal(Number(data?.total) || list.length);
       const markets = list
         .filter((a) => a.type === "market")
         .map((a) => ({ id: a.id, key: a.market, label: marketMeta(a.market).label, url: a.url }));
@@ -609,11 +595,12 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
     } catch {
       /* 忽略 */
     } finally {
-      if (requestId === assetRequestRef.current) setAssetsLoading(false);
+      setAssetsLoading(false);
     }
   }
 
   useEffect(() => {
+    loadAssets();
     fetch("/api/settings")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
@@ -621,28 +608,6 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
         if (Array.isArray(d?.settings?.marketLabels)) setMarketLabels(d.settings.marketLabels);
         if (Array.isArray(d?.settings?.groups)) setBrokerGroups(d.settings.groups);
         if (typeof d?.settings?.stockIconCdn === "boolean") setCdnEnabled(d.settings.stockIconCdn);
-      })
-      .catch(() => {});
-  }, []);
-
-  // 股票素材由服务端按当前页、市场、搜索和排序读取；其他小类只在进入时请求该分类。
-  useEffect(() => {
-    if (tab === "card") return;
-    const delay = tab === "stock" && query.trim() ? 180 : 0;
-    const timer = window.setTimeout(() => void loadAssets(), delay);
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, tab === "stock" ? selected : "", tab === "stock" ? topPage : 1, tab === "stock" ? sortKey : "", tab === "stock" ? sortDir : "", tab === "stock" ? query : ""]);
-
-  // 股票分类的市场筛选只需要十几条市场素材，独立加载，不再为此拉整个素材库。
-  useEffect(() => {
-    fetch("/api/assets?type=market")
-      .then((response) => response.ok ? response.json() : null)
-      .then((data) => {
-        const list = Array.isArray(data?.assets) ? data.assets as Asset[] : [];
-        const markets = list.map((a) => ({ id: a.id, key: a.market, label: marketMeta(a.market).label, url: a.url }));
-        setMarketRows(markets);
-        markets.forEach((m) => { if (!NON_TRADABLE_MARKETS.has(m.key)) customMarkets.current.add(m.key); });
       })
       .catch(() => {});
   }, []);
@@ -902,6 +867,7 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
       urls[key] ??
       custom?.url ??
       item.url ??
+      stockIcons[`${item.market.toUpperCase()}:${item.code.toUpperCase()}`] ??
       (cdnEnabled ? externalLogo(item.market, item.code) : "")
     );
   };
@@ -1427,15 +1393,39 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
     persistOrder(next);
   }
 
-  // 股票图标列表已由服务端按当前页完成筛选和排序。
+  // 股票图标列表：直接读本地素材库（type=stock），按市值排序，无外部请求
   const stockAssets = useMemo(() => {
-    return assets.filter((a) => a.type === "stock");
-  }, [assets]);
+    const list = assets.filter((a) => a.type === "stock");
+    const q = query.trim().toLowerCase();
+    const filtered = (selected === "ALL" ? list : list.filter((a) => a.market === selected)).filter(
+      (a) => !q || a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)
+    );
+    const dir = sortDir === "asc" ? 1 : -1;
+    const val = (a: Asset): number | string => {
+      if (sortKey === "code") return a.code.toUpperCase();
+      if (sortKey === "name") return (a.name || "").toLowerCase();
+      if (sortKey === "board") return (a.board || "").toLowerCase();
+      if (sortKey === "price") return a.price ?? -Infinity;
+      if (sortKey === "changePct") return a.changePct ?? -Infinity;
+      return a.marketCap;
+    };
+    return [...filtered].sort((a, b) => {
+      const va = val(a);
+      const vb = val(b);
+      if (typeof va === "number" && typeof vb === "number") {
+        if (va === vb) return 0;
+        if (va === -Infinity) return 1;
+        if (vb === -Infinity) return -1;
+        return (va - vb) * dir;
+      }
+      return String(va).localeCompare(String(vb), "zh-CN") * dir;
+    });
+  }, [assets, selected, sortKey, sortDir, query]);
   // 所有素材分类统一每页 10 条，保证信息密度与操作位置一致。
   const TOP_PAGE_SIZE = 10;
-  const totalPages = Math.max(1, Math.ceil(assetTotal / TOP_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(stockAssets.length / TOP_PAGE_SIZE));
   const safePage = Math.min(topPage, totalPages);
-  const pageStock = stockAssets;
+  const pageStock = stockAssets.slice((safePage - 1) * TOP_PAGE_SIZE, safePage * TOP_PAGE_SIZE);
   const allMarketKeys = [...BASE_MARKETS, ...marketRows.map((row) => row.key).filter((key) => !BASE_MARKETS.includes(key) && !NON_TRADABLE_MARKETS.has(key))];
   const activeListCount = tab === "flag" ? filteredCountryRows.length
     : tab === "market" ? allMarketKeys.length
@@ -1511,7 +1501,7 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
             <div>
               <div className="mb-1.5 flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-faint">市场（按住拖动排序）</span>
-                <span className="text-[11px] text-faint">{assetTotal > 0 ? `${assetTotal} 只` : ""}</span>
+                <span className="text-[11px] text-faint">{stockAssets.length > 0 ? `${stockAssets.length} 只` : ""}</span>
               </div>
               <div className="asset-library-market-tools relative flex flex-wrap items-center gap-1.5">
                 {(["ALL", ...orderedMarkets.slice(0, 5)] as string[]).map((m, i) => (
@@ -1821,7 +1811,7 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
             )}
 
             {/* 分页：智能页码 + 首页/末页/跳转 */}
-            {assetTotal > TOP_PAGE_SIZE && (
+            {stockAssets.length > TOP_PAGE_SIZE && (
               <Pagination page={safePage} total={totalPages} onChange={setTopPage} />
             )}
 

@@ -346,39 +346,6 @@ export function getAssets(type?: AssetType): Asset[] {
   return rows.map(rowToAsset);
 }
 
-export function getAssetsPage(input: {
-  type: AssetType;
-  market?: string;
-  query?: string;
-  sort?: "rank" | "code" | "name" | "board" | "price" | "changePct" | "marketCap";
-  dir?: "asc" | "desc";
-  page?: number;
-  pageSize?: number;
-}): { assets: Asset[]; total: number; page: number; pageSize: number } {
-  const db = getDb();
-  const pageSize = Math.min(100, Math.max(1, Math.floor(input.pageSize || 10)));
-  const page = Math.max(1, Math.floor(input.page || 1));
-  const where = ["type = ?"];
-  const params: Array<string | number> = [input.type];
-  if (input.market && input.market !== "ALL") {
-    where.push("market = ?");
-    params.push(input.market.toUpperCase());
-  }
-  const query = input.query?.trim();
-  if (query) {
-    where.push("(code LIKE ? OR name LIKE ?)");
-    params.push(`%${query}%`, `%${query}%`);
-  }
-  const columns = { rank: "market_cap", code: "code", name: "name", board: "board", price: "price", changePct: "change_pct", marketCap: "market_cap" } as const;
-  const column = columns[input.sort || "rank"] || columns.rank;
-  const dir = input.dir === "asc" ? "ASC" : "DESC";
-  const clause = where.join(" AND ");
-  const total = Number((db.prepare(`SELECT COUNT(*) AS n FROM assets WHERE ${clause}`).get(...params) as { n: number }).n) || 0;
-  const rows = db.prepare(`SELECT * FROM assets WHERE ${clause} ORDER BY ${column} ${dir}, code ASC LIMIT ? OFFSET ?`)
-    .all(...params, pageSize, (page - 1) * pageSize) as Record<string, unknown>[];
-  return { assets: rows.map(rowToAsset), total, page, pageSize };
-}
-
 export function upsertAsset(input: {
   type: AssetType;
   market: string;
