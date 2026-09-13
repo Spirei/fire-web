@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Client } from "pg";
+import { getSiteSettings } from "@/lib/settings";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 
 export async function POST(request: Request) {
@@ -14,7 +15,9 @@ export async function POST(request: Request) {
   const port = Number(body.port) || 5432;
   const database = String(body.database ?? "").trim();
   const pgUser = String(body.pgUser ?? "").trim();
-  const password = String(body.password ?? "");
+  const saved = getSiteSettings();
+  const sameConnection = host === saved.pgHost && port === Number(saved.pgPort) && database === saved.pgDatabase && pgUser === saved.pgUser;
+  const password = String(body.password || (sameConnection ? saved.pgPassword : ""));
 
   if (!host || !database || !pgUser) {
     return NextResponse.json({ error: "请填写主机、数据库名和用户名" }, { status: 400 });

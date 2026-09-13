@@ -34,11 +34,11 @@ export async function POST(request: Request) {
 
   if (rows.length === 0) return NextResponse.json({ error: "没有有效的导入记录" }, { status: 400 });
 
-  const result = applyImport(user.id, rows, groupId || undefined);
-  return NextResponse.json({
-    added: result.added,
-    updated: result.updated,
-    skipped: result.skipped,
-    total: rows.length
-  });
+  try {
+    const result = applyImport(user.id, rows, groupId || undefined);
+    return NextResponse.json({ added: result.added, updated: result.updated, skipped: result.skipped, total: rows.length });
+  } catch (error) {
+    const message = error instanceof Error && /^(股票 |请为 |导入)/.test(error.message) ? error.message : "导入失败，请检查股票代码和市场";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
 }

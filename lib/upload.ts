@@ -151,3 +151,37 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
   logSecurityEvent(request, user.id, "file_upload", `${kind}:${file.size}:${validatedExt}`);
   return { url, kind };
 }
+
+/** User-owned group icons have a separate write path; shared assets remain admin-only. */
+export async function saveWatchGroupIcon(request: Request, groupId: string) {
+  const user = getAuthUser(request);
+  if (!user) throw new UploadError("未登录", 401);
+  if (!/^[a-zA-Z0-9_-]+$/.test(groupId) || !/^[a-zA-Z0-9_-]+$/.test(user.id)) throw new UploadError("分组不存在", 404);
+  const { getOwnedWatchGroup, updateWatchGroup } = await import("./watchGroupsStore");
+  const group = getOwnedWatchGroup(user.id, groupId);
+  if (!group) throw new UploadError("分组不存在", 404);
+  if (group.kind !== "custom") throw new UploadError("市场分组不支持自定义图标", 400);
+  if (!rateLimit(`group-icon:${user.id}`, 30, 60 * 60 * 1000) || !rateLimitGlobal("group-icon", 300, 60 * 60 * 1000)) throw new UploadError("上传过于频繁", 429);
+  const config = KIND_CONFIG.asset;
+  if (Number(request.headers.get("content-length")) > config.maxBytes + 65536) throw new UploadError("文件过大，最大 2MB", 413);
+  const form = await request.formData().catch(() => null);
+  const file = form?.get("file");
+  if (!(file instanceof File) || !file.size) throw new UploadError("请选择要上传的文件");
+  if (file.size > config.maxBytes) throw new UploadError("文件过大，最大 2MB", 413);
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  if (!config.exts.includes(ext)) throw new UploadError(config.hint);
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const valid = validateImageContent(bytes, ext);
+  if (!valid) throw new UploadError("文件内容与图片格式不匹配或包含不安全内容");
+  const output = valid === "svg" ? sanitizeSvg(normalizeSvgAttribution(bytes)) : bytes;
+  const nameForm = new FormData(); nameForm.set("name", group.name);
+  const filename = assetFilename(nameForm, "group", `.${valid}`);
+  const dir = path.join(process.cwd(), "public", "uploads", "asset", "group", user.id, groupId);
+  const url = `/uploads/asset/group/${user.id}/${groupId}/${encodeURIComponent(filename)}`;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, filename), output);
+  const updated = updateWatchGroup(user.id, groupId, { icon: url });
+  if (group.icon && group.icon !== url) removeFileIfUnused(group.icon);
+  logSecurityEvent(request, user.id, "group_icon_upload", groupId);
+  return updated;
+}

@@ -273,27 +273,32 @@ export default function RecordsApp({
     }
   }, [initialUser.id]);
 
-  const refreshQuotes = useCallback(async (options?: { force?: boolean }) => {
-    // 手动刷新（force）绕过轮询互斥与后台标签页限制，保证点击必有效果
-    if ((!options?.force && refreshingRef.current) || records.length === 0 || (!options?.force && document.hidden)) return;
+  const refreshQuotes = useCallback(async (options?: { force?: boolean; missingOnly?: boolean; initialOnly?: boolean }) => {
+    // 手动刷新绕过休市过滤；所有请求共用互斥，避免慢请求相互覆盖。
+    if ((refreshingRef.current) || records.length === 0 || (!options?.force && document.hidden)) return;
+    if (options?.initialOnly && initialQuoteLoadRef.current) return;
     const activeMarkets = activeQuoteMarkets(records.map((record) => record.market));
     const quoteRecords = records.filter((record) =>
-      !initialQuoteLoadRef.current || !loadedQuoteIdsRef.current.has(record.id) || activeMarkets.has(record.market.toUpperCase())
+      options?.force || !initialQuoteLoadRef.current || !loadedQuoteIdsRef.current.has(record.id) || (!options?.missingOnly && activeMarkets.has(record.market.toUpperCase()))
     );
     // 首次进入拉取全部市场的收盘快照；后续仅轮询当前处于盘前/盘中/盘后的市场。
     if (quoteRecords.length === 0) return;
     refreshingRef.current = true;
     setRefreshing(true);
     try {
-      const res = await fetch("/api/quotes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: quoteRecords.map((r) => ({ id: r.id, market: r.market, code: r.code }))
-        })
-      });
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = { quotes: {} as Record<string, Quote> };
+      // The API accepts at most 100 symbols; imports may add up to 2000.
+      for (let offset = 0; offset < quoteRecords.length; offset += 100) {
+        const res = await fetch("/api/quotes", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: quoteRecords.slice(offset, offset + 100).map(r => ({ id: r.id, market: r.market, code: r.code })) })
+        });
+        if (!res.ok) continue;
+        const result = await res.json();
+        if (result.quotes) Object.assign(data.quotes, result.quotes);
+      }
+      // An empty response is not a successful price update.
+      if (!Object.keys(data.quotes).length) return;
       if (data.quotes) {
         const merged = { ...quotesRef.current };
         Object.entries(data.quotes as Record<string, Quote>).forEach(([id, quote]) => {
@@ -341,7 +346,8 @@ export default function RecordsApp({
 
   useEffect(() => {
     // 自选股页面由自身的刷新间隔控件管理定时器，避免这里的 30 秒兜底计时器覆盖用户选择。
-    if (records.length === 0 || activeTab === "watchlist") return;
+    if (records.length === 0) return;
+    if (activeTab === "watchlist") { void refreshQuotes({ missingOnly: true }); return; }
     refreshQuotes();
     // 交易时段 30 秒刷新；休市时回调只做本地会话判断，不发送行情请求。
     const timer = setInterval(refreshQuotes, 30000);
@@ -455,7 +461,7 @@ export default function RecordsApp({
   useEffect(() => {
     function onVisibility() {
       // 自选页有独立的刷新间隔控件；切回标签页时不能绕过用户选择额外刷新。
-      if (!document.hidden && activeTab !== "watchlist") refreshQuotes();
+      if (!document.hidden) void refreshQuotes(activeTab === "watchlist" ? { initialOnly: true } : undefined);
     }
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
@@ -842,7 +848,7 @@ export default function RecordsApp({
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
           {activeTab === "global" && <GlobalPreviewView />}
           {activeTab === "trading" && <TradingSquareView avatars={initialCelebAvatars} records={records} />}
-          {activeTab === "earnings" && <EarningsCalendarView records={records} />}
+          {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} />}
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
           {activeTab === "attachments" && (user?.role === "admin" ? <AttachmentsView /> : <NoPermission />)}

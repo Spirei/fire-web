@@ -31,7 +31,12 @@ const deploymentFiles = new Set([
 
 const findings = [];
 for (const file of tracked) {
-  const buffer = readFileSync(file);
+  let buffer;
+  try { buffer = readFileSync(file); }
+  catch (error) {
+    if (error.code === "ENOENT") continue; // Deleted tracked files are absent from this working tree.
+    throw error;
+  }
   if (buffer.includes(0)) continue;
   const text = buffer.toString("utf8");
 

@@ -58,7 +58,7 @@ Review 自查清单（按项目实际走一遍）：
 - 分组是服务端独立实体（`watch_groups` 表，见 `lib/watchGroupsStore.ts`），记录通过 `watch_group_id` 归属；券商仍走 `records.group_name`（持仓显示），**禁止再把券商名当分组名用**。
 - 接口统一走 v1：`GET/POST /api/v1/watch-groups`、`PUT/DELETE /api/v1/watch-groups/{id}`、`POST /api/v1/watch-groups/reorder`、`POST /api/v1/records/group-assign`；重命名 / 删除分组只改实体 + 一条 SQL 清空归属，**禁止循环逐条 PUT 记录**。
 - 市场分组（美股/港股/A股/新加坡/日股/韩股）是内置实体：不可删除、动态按 `records.market` 过滤（大前提逻辑，添加股票自动进入全部 + 对应市场）；自定义分组才是显式归属。
-- 分组图标走 `PUT /watch-groups/{id}` 的 `icon` 字段，同时注册素材库 `type=group`（`saveGroupAsset`，防文件清理丢失）；上传文件用 `kind=asset + folder=broker + name=分组名` 规范命名。
+- 分组图标走 `PUT /watch-groups/{id}` 的 `icon` 字段，同时注册素材库 `type=group`（`saveGroupAsset`，防文件清理丢失）；上传文件用 `POST /api/v1/watch-groups/{id}/icon`（multipart `file`），服务端校验所有者并以分组名称存入用户/分组独立目录；公共素材上传仍限管理员。
 - 显隐 `visible`：`-1` 自动（空分组隐藏）/ `0` 隐藏 / `1` 显示；全部分组网格不受显隐影响。
 - 筛选状态写入 URL `?filter=<分组id>`；兼容旧 `?filter=M:US` / `G:名称` 与 `?market=` 自动迁移；分组不存在自动回退「全部」。
 - 旧 localStorage 配置（`fire:watch-groups:v1`）首次加载一次性迁移到服务端并清除（`migrateLegacyWatchGroups`）。
@@ -249,3 +249,12 @@ Review 自查清单（按项目实际走一遍）：
   4. 弹窗内「前端版本 / 软件版本 / 新功能」三个分区内容保持齐全，软件版本号与当前条目一致；
   5. 同步更新 `VERSIONS.md` 对应章节（新功能 / 修复 / 安全修复 / 界面与规范）。
 - 版本弹窗（`components/VersionModal.tsx`）在未来多版本时自动展示顶部版本切换胶囊，维护时无需额外改动。
+
+
+## 全站审查回归（2026-09-14）
+
+- `npm run test:review` 在临时数据库验证设置脱敏、导入隔离、币种换算、刷新时钟、用户分组图标权限和版本完整性，不写真实用户数据。
+- 首次行情、手动刷新与定时轮询分开处理；后台回到前台只有到期才补轮询，首次尚未取得行情除外。
+- 行情板默认 5 个分组（含全部），宽度随内容，圆形更多紧邻第五个；四个操作（包括置顶）默认隐藏，鼠标经过才显示。
+- 导入界面在手机宽度必须可滚动到取消/导入；添加分组仍位于分组列表底部。
+- 设置字段下发走白名单；普通用户和管理员均不直接收到密钥。导入只按明确市场和代码匹配，歧义停止并回滚，不猜测覆盖持仓。

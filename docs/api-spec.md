@@ -86,7 +86,7 @@ Web 端继续使用 httpOnly Cookie 会话，两种方式等价，`GET /api/v1/a
 ### 6.2 资产 / 持仓
 | 方法 | 路径 | 说明 | 鉴权 |
 | --- | --- | --- | --- |
-| GET | `/api/v1/overview` | 资产总览（成本 / 市值 / 盈亏 / 市场分布） | 登录 |
+| GET | `/api/v1/overview` | 资产总览；`currency` 默认 USD，总额与市场分布均按该币种换算 | 登录 |
 | GET | `/api/v1/records` | 持仓记录列表（分页，支持 `market`/`group`） | 登录 |
 | POST | `/api/v1/records` | 创建持仓记录 | 登录 |
 | PUT | `/api/v1/records/{id}` | 更新持仓记录 | 登录 |
@@ -97,6 +97,7 @@ Web 端继续使用 httpOnly Cookie 会话，两种方式等价，`GET /api/v1/a
 | DELETE | `/api/v1/orders/{id}` | 删除历史成交订单并重放剩余账本、重新计算持仓 | 登录 |
 | GET | `/api/v1/watch-groups` | 自选股分组列表（自动播种市场分组 + 迁移旧数据） | 登录 |
 | POST | `/api/v1/watch-groups` | 新建自定义分组（body `{ name }`） | 登录 |
+| POST | `/api/v1/watch-groups/{id}/icon` | multipart `file` 上传并保存自有分组图标，最大 2MB | 分组所有者 |
 | PUT | `/api/v1/watch-groups/{id}` | 更新分组（`name` / `icon` / `visible`） | 登录 |
 | DELETE | `/api/v1/watch-groups/{id}` | 删除自定义分组（清空记录归属 + 图标素材） | 登录 |
 | POST | `/api/v1/watch-groups/reorder` | 分组整体排序（body `{ order: string[] }`） | 登录 |
@@ -473,7 +474,7 @@ Web“公司”页与 iOS App 共用同一份公司资料契约。
 **约定**
 - 全部接口需登录（`Authorization: Bearer <token>` 或会话 Cookie），未登录返回 `40101`；限流 `42901`。
 - 分组数量（count）由客户端用记录计算：市场分组 = `records.market` 匹配数，自定义分组 = `watch_group_id` 匹配数，接口不额外返回。
-- 分组图标上传：`/api/v1/upload`（`kind=asset` + `folder=group` + `name=分组名`）→ 拿 URL 后 `PUT /api/v1/watch-groups/{id}` 写 `icon`；服务端同步注册素材库 `type=group`，素材库「分组图标」分类与自选股分组双向可见。
+- 分组图标上传：`POST /api/v1/watch-groups/{id}/icon`（multipart `file`），返回 `{ code: 0, data: { group } }`。服务端校验登录、分组归属及图片内容，完成图标存储和素材注册；不需要再次 PUT。公共素材上传仍仅管理员可用。
 - 素材库「分组图标」分类只展示非券商自定义分组（有 `type=broker` 同名图标的券商分组走「券商图标」分类）。
 
 ### 行为约定
@@ -641,3 +642,10 @@ Authorization: Bearer <token>
 **Android（Retrofit + Gson）**：定义 `ApiResponse<T>` 泛型，`code == 0` 判成功；BaseUrl 指向 `/api/v1/`。
 
 旧版 `/api/**` 接口响应为裸数据（`{ error }` 或直接资源），v1 为唯一规范入口，新功能只进 v1。
+
+### 资产总览币种与估值口径
+
+`GET /api/v1/overview?currency=USD` 默认美元；支持汇率表内币种。
+`totalCost`、`totalMarket`、`totalPnl` 和 `byMarket` 内金额均使用响应 `currency`，不得再次按市场本币换算。
+优先实时行情，缺失时用记录价格；`valuation` 返回每条记录的 `id`、`source`（quote/record）和 `at`。
+无法换算的记录列入 `unconverted`，此时 `complete=false`，客户端应提示汇总不完整。

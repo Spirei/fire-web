@@ -1,0 +1,114 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const Module = require('node:module');
+const ts = require('typescript');
+const root = path.resolve(__dirname, '..');
+const resolve = Module._resolveFilename;
+Module._resolveFilename = function(id, parent, ...rest) { return resolve.call(this, id.startsWith('@/') ? path.join(root, id.slice(2)) : id, parent, ...rest); };
+require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
+const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'fire-regression-'));
+process.chdir(temp); // Real route/store integration tests, isolated from the user's database and uploads.
+process.env.STOCKLOG_FUTU = 'off';
+global.fetch = async () => { throw new Error('Network disabled in isolated regression'); };
+let passed = 0;
+async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
+(async () => {
+  const { parseStockFile } = require(path.join(root, 'lib/importFile.ts'));
+  const { importIdentity } = require(path.join(root, 'lib/importIdentity.ts'));
+  await test('ticker/prefix, CSV quotes, TSV blanks, JSON, oversized imports', () => {
+    for (const symbol of ['SHOP', 'USO', 'SHAK', 'SHEL', 'HKD', 'US', 'SGMO']) assert.equal(parseStockFile(symbol)[0].code, symbol);
+    assert.deepEqual(parseStockFile('HK.700 Tencent')[0], { code: '00700', market: 'HK', name: 'Tencent' });
+    assert.equal(parseStockFile('AAPL,"Apple, Inc.",US')[0].name, 'Apple, Inc.');
+    assert.equal(parseStockFile('AAPL,"Apple ""Inc""",US')[0].name, 'Apple "Inc"');
+    assert.equal(parseStockFile('7203\t\tJP')[0].market, 'JP');
+    assert.equal(parseStockFile('AAPL Apple Computer Inc US')[0].name, 'Apple Computer Inc');
+    assert.equal(parseStockFile('[{"symbol":"SHOP","market":"US"}]')[0].code, 'SHOP');
+    assert.throws(() => parseStockFile('AAPL\n'.repeat(2001)), /2000/);
+    assert.throws(() => importIdentity('HK.700', 'US'), /不一致/);
+  });
+  const { getDb } = require(path.join(root, 'lib/db.ts'));
+  const db = getDb();
+  const { createUser, createSession } = require(path.join(root, 'lib/auth.ts'));
+  const user = createUser('review_user', 'Review-test-123');
+  const other = createUser('review_other', 'Review-test-123');
+  const tokens = { user: createSession(user.id), other: createSession(other.id), admin: createSession('demo-user') };
+  const request = (role, body, method='GET') => new Request('http://localhost:3000/api/settings', { method, headers: { ...(role ? { cookie: `fire_session=${tokens[role]}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  const settings = require(path.join(root, 'lib/settings.ts'));
+  const settingsRoute = require(path.join(root, 'app/api/settings/route.ts'));
+  await test('settings secrets filtered for admin/user and anonymous rejected; saving preserves secrets', async () => {
+    settings.updateSiteSettings({ llmApiKey: 'TEST_ONLY_LLM', deepseekApiKey: 'TEST_ONLY_OLD', xueqiuCookie: 'TEST_ONLY_COOKIE', pgPassword: 'TEST_ONLY_DB' });
+    for (const role of ['admin','user']) {
+      const res = await settingsRoute.GET(request(role)); assert.equal(res.status, 200);
+      const body = await res.json(); assert(!JSON.stringify(body).includes('TEST_ONLY'));
+      if (role === 'admin') {
+        const saved = await settingsRoute.PUT(request(role, body.settings, 'PUT'));
+        assert.equal(saved.status,200); assert(!JSON.stringify(await saved.json()).includes('TEST_ONLY'));
+      }
+    }
+    assert.equal(settings.getSiteSettings().pgPassword, 'TEST_ONLY_DB');
+    assert.equal(settings.getSiteSettings().llmApiKey, 'TEST_ONLY_LLM');
+    assert.equal((await settingsRoute.GET(request())).status, 401);
+    assert.equal((await settingsRoute.PUT(request('user', {assetMarketOrder:['HK','US']},'PUT'))).status,403);
+  });
+  const { applyImport, buildImportPreview } = require(path.join(root, 'lib/importSnapshot.ts'));
+  const row = (code, market, extra={}) => ({code, market, name: code, price:null,cost:null,qty:null,...extra});
+  await test('real SQLite: same ticker across markets remains distinct; leading zeros deduplicate; ambiguity rolls back', () => {
+    applyImport(user.id,[row('1928','HK',{price:20,qty:10,cost:15})]);
+    let result = applyImport(user.id,[row('1928','JP')]); assert.equal(result.added,1); assert.equal(result.updated,0);
+    assert.equal(result.records.find(r=>r.market==='HK').qty,10);
+    result = applyImport(user.id,[row('01928','HK')]); assert.equal(result.added,0); assert.equal(result.updated,1);
+    applyImport(user.id,[row('ABC','US'),row('ABC','UK')]);
+    const before = db.prepare('SELECT COUNT(*) AS n FROM records WHERE user_id=?').get(user.id).n;
+    assert.throws(()=>applyImport(user.id,[row('ZZZ','US'),row('ABC','')]), /多条/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM records WHERE user_id=?').get(user.id).n,before);
+  });
+  await test('preview does not change explicit market; server preserves legal tickers and negative cost', () => {
+    assert.equal(buildImportPreview(user.id,[{code:'1928',market:'JP',name:'Japan'}])[0].market,'JP');
+    const result=applyImport(user.id,[row('SHOP','US',{cost:-3}),row('USO','US')]);
+    assert(result.records.some(r=>r.code==='SHOP'&&r.cost===-3)); assert(result.records.some(r=>r.code==='USO'));
+    assert.equal(buildImportPreview(user.id,[{code:'SHOP',market:'US',cost:'−3.50'}])[0].cost,-3.5);
+  });
+  const { buildOverview }=require(path.join(root,'lib/overview.ts'));
+  await test('mixed currencies, zero price, negative cost, unsupported currency',()=>{
+    const records=[{id:'a',market:'US',qty:1,cost:50,price:100},{id:'b',market:'HK',qty:1,cost:390,price:780}];
+    const rates={USD:1,HKD:7.8,CNY:7};
+    const usd=buildOverview(records,rates); assert.equal(usd.totalMarket,200); assert.equal(usd.totalCost,100);
+    const cny=buildOverview(records,rates,{},'CNY');assert.equal(cny.totalMarket,1400);assert.equal(cny.totalPnlPct,usd.totalPnlPct);
+    assert.equal(buildOverview([{id:'z',market:'US',qty:1,cost:-3,price:0}],rates).totalMarket,0);
+    assert.equal(buildOverview([{id:'x',market:'UNKNOWN',qty:1,cost:1,price:2}],rates).complete,false);
+  });
+  const { createQuoteSchedule }=require(path.join(root,'lib/quoteSchedule.ts'));
+  await test('refresh clock: manual resets deadline, hidden catchup once, early foreground no refresh, cleanup',()=>{
+    let time=0,hidden=false,fn; const calls=[];
+    const s=createQuoteSchedule({interval:60000,now:()=>time,hidden:()=>hidden,refresh:force=>calls.push({time,force}),setTimer:f=>{fn=f;return 1;},clearTimer:()=>{fn=null;}});
+    time=59000;s.foreground();assert.equal(calls.length,0);
+    time=60000;fn();assert.equal(calls.length,1);
+    time=70000;s.manual();assert.equal(calls[1].force,true);
+    time=120000;s.foreground();assert.equal(calls.length,2);
+    hidden=true;time=130000;fn();assert.equal(calls.length,2);
+    hidden=false;time=190000;s.foreground();s.foreground();assert.equal(calls.length,3);
+    s.stop();assert.equal(fn,null);
+  });
+  const { createWatchGroup }=require(path.join(root,'lib/watchGroupsStore.ts'));
+  const uploadRoute=require(path.join(root,'app/api/v1/watch-groups/[id]/icon/route.ts'));
+  await test('group icon owner upload works, other user rejected, same names isolated; public asset upload stays admin-only',async()=>{
+    const group=createWatchGroup(user.id,'My group'),group2=createWatchGroup(other.id,'My group');
+    const body=()=>{const f=new FormData();f.set('file',new File(['<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="8"/></svg>'],'icon.svg',{type:'image/svg+xml'}));return f;};
+    const req=(role)=>new Request('http://localhost:3000/api/v1/watch-groups/icon',{method:'POST',headers:{cookie:`fire_session=${tokens[role]}`},body:body()});
+    const call=(role,g)=>uploadRoute.POST(req(role),{params:Promise.resolve({id:g.id})});
+    assert.equal((await call('other',group)).status,404);
+    const a=await call('user',group);assert.equal(a.status,200);const icon=(await a.json()).data.group.icon;
+    const b=await call('other',group2);assert.equal(b.status,200);assert.notEqual(icon,(await b.json()).data.group.icon);
+    assert(fs.existsSync(path.join(temp,'public',decodeURIComponent(icon))));
+    const {saveUpload}=require(path.join(root,'lib/upload.ts'));const f=body();f.set('kind','asset');f.set('folder','stock');
+    await assert.rejects(()=>saveUpload(new Request('http://localhost:3000/api/upload',{method:'POST',headers:{cookie:`fire_session=${tokens.user}`},body:f})),e=>e.status===403);
+  });
+  await test('version list includes current version once and previous release',()=>{
+    const {VERSIONS}=require(path.join(root,'lib/versions-history.ts'));const {CURRENT_VERSION}=require(path.join(root,'lib/versions.ts'));
+    assert.equal(VERSIONS.filter(v=>v.version===CURRENT_VERSION.version).length,1);assert(VERSIONS.some(v=>v.version==='v0.1.29'));
+    assert.equal(new Set(VERSIONS.map(v=>v.version)).size,VERSIONS.length);
+  });
+  db.close();console.log(`${passed} regression suites passed (isolated database)`);
+})().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{ fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode || 0); });

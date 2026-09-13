@@ -145,6 +145,11 @@ function getOwned(userId: string, id: string): WatchGroupRow | null {
   return row ?? null;
 }
 
+export function getOwnedWatchGroup(userId: string, id: string): WatchGroupDto | null {
+  const row = getOwned(userId, id);
+  return row ? rowToDto(row) : null;
+}
+
 export function createWatchGroup(userId: string, name: string): WatchGroupDto {
   const db = getDb();
   const trimmed = name.trim();

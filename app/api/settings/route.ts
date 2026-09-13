@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import fs from "node:fs";
+import { clientSettings } from "@/lib/settingsClient";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getSiteSettings, normalizeFutuHost, updateSiteSettings } from "@/lib/settings";
 import { syncRecordGroups } from "@/lib/brokers";
@@ -9,13 +10,7 @@ export async function GET(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
   const settings = getSiteSettings();
-  if (!isAdmin(user)) {
-    // 非管理员隐藏数据库连接信息（密码等敏感配置）
-    return NextResponse.json({
-      settings: { ...settings, pgHost: "", pgPort: "", pgDatabase: "", pgUser: "", pgPassword: "" }
-    });
-  }
-  return NextResponse.json({ settings: { ...settings, llmApiKey: "", deepseekApiKey: "", llmApiKeyConfigured: Boolean(settings.llmApiKey || settings.deepseekApiKey), xueqiuCookie: "", xueqiuCookieConfigured: Boolean(settings.xueqiuCookie) } });
+  return NextResponse.json({ settings: clientSettings(settings, isAdmin(user)) }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function PUT(request: Request) {
@@ -126,5 +121,5 @@ export async function PUT(request: Request) {
       if (newExists) removeFileIfUnused(oldVal);
     }
   });
-  return NextResponse.json({ settings });
+  return NextResponse.json({ settings: clientSettings(settings, true) }, { headers: { "Cache-Control": "no-store" } });
 }

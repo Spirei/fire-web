@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { usePersistedState } from "@/lib/usePersistedState";
+import { createQuoteSchedule } from "@/lib/quoteSchedule";
 import { fmtPct, fmtPrice } from "@/lib/format";
 import { fmtUsd } from "@/lib/currency";
 import { marketMeta, MARKET_LIST, type GroupConfig, type Quote, type SearchMatch, type StockRecord } from "@/lib/types";
@@ -30,7 +32,7 @@ interface Props {
   quotes: Record<string, Quote>;
   quoteAt: string;
   refreshing: boolean;
-  refreshQuotes: () => void;
+  refreshQuotes: (options?: { force?: boolean; missingOnly?: boolean }) => void;
   onAddMatch: (match: SearchMatch) => Promise<boolean>;
   groups: GroupConfig[];
   /** 详情视图开合回调（供外层在个股详情打开时隐藏顶部指数卡片等） */
@@ -59,22 +61,15 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
   const [importGroupId, setImportGroupId] = useState("");
   const [fileImportOpen, setFileImportOpen] = useState(false);
   const [charts, setCharts] = useState<Record<string, Intraday>>({});
-  const [intervalMs, setIntervalMs] = useState(60000);
+  const [savedInterval, setIntervalMs] = usePersistedState("fire:watch-refresh-ms", 60000);
+  const intervalMs = INTERVALS.some(i => i.ms === savedInterval) ? savedInterval : 60000;
+  const scheduleRef = useRef<ReturnType<typeof createQuoteSchedule> | null>(null);
   const [lastRefreshAt, setLastRefreshAt] = useState("");
   const [showMoreGroups, setShowMoreGroups] = useState(false);
   const moreGroupsRef = useRef<HTMLDivElement>(null);
   const groupScrollRef = useRef<HTMLDivElement>(null);
   const groupChipRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
-  // 恢复上次选择的刷新间隔（默认每分钟；挂载后应用，避免 SSR hydration 不匹配）
-  useEffect(() => {
-    try {
-      const saved = Number(localStorage.getItem("fire:watch-refresh-ms"));
-      if (Number.isFinite(saved) && saved > 0) setIntervalMs(saved);
-    } catch {
-      /* 忽略存储不可用 */
-    }
-  }, []);
   useEffect(() => {
     if (quoteAt) return;
     try {
@@ -383,8 +378,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
     window.history.replaceState(null, "", base + (qs ? `?${qs}` : ""));
     updateDetail(null);
   }
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const refreshAllRef = useRef<() => void>(() => {});
+  const refreshAllRef = useRef<(force?: boolean) => void>(() => {});
   const chartFetchingRef = useRef(false);
 
   useEffect(() => {
@@ -430,19 +424,19 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
     }
   }, [pageRows]);
 
-  const refreshAll = useCallback(() => {
+  const refreshAll = useCallback((force = false) => {
     if (document.hidden) return;
-    refreshQuotes();
+    refreshQuotes({ force });
     fetchCharts();
   }, [refreshQuotes, fetchCharts]);
   refreshAllRef.current = refreshAll;
 
   useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => refreshAllRef.current(), intervalMs);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    const schedule = createQuoteSchedule({ interval: intervalMs, hidden: () => document.hidden, refresh: force => refreshAllRef.current(force) });
+    scheduleRef.current = schedule;
+    const onVisible = () => schedule.foreground();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { schedule.stop(); scheduleRef.current = null; document.removeEventListener("visibilitychange", onVisible); };
   }, [intervalMs]);
 
   // 挂载 / pageRows 变化时立即拉当日走势（不依赖定时器，保证一进页面就有图）
@@ -529,14 +523,15 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
   async function uploadGroupIcon(id: string, file: File): Promise<boolean> {
     try {
       const fd = new FormData();
-      fd.append("kind", "asset");
-      fd.append("folder", "group");
-      fd.append("name", watchGroups.find((g) => g.id === id)?.name ?? "分组");
       fd.append("file", file);
-      const up = await fetch("/api/upload", { method: "POST", body: fd });
+      const up = await fetch(`/api/v1/watch-groups/${encodeURIComponent(id)}/icon`, { method: "POST", body: fd });
       const upData = await up.json().catch(() => null);
-      if (!up.ok) throw new Error(upData?.error || "上传失败");
-      return updateGroup(id, { icon: upData.url });
+      if (!up.ok) throw new Error(upData?.message || "上传失败");
+      const group = upData?.data?.group;
+      if (!group) throw new Error("分组图标保存失败");
+      setWatchGroups(current => current.map(item => item.id === id ? group : item));
+      window.dispatchEvent(new Event("fire:assets-updated"));
+      return true;
     } catch (err) {
       showToast(err instanceof Error ? err.message : "上传图标失败", "err");
       return false;
@@ -683,17 +678,12 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
             <i className={`h-1.5 w-1.5 rounded-full ${refreshing ? "animate-pulse bg-[#3297f6]" : quoteAt ? "bg-down" : "bg-faint"}`} />
             {refreshing ? "刷新中…" : quoteAt ? `更新于 ${quoteAt}` : lastRefreshAt ? `上次刷新 ${lastRefreshAt}` : "等待行情"}
           </span>
-          <RefreshButton onClick={refreshQuotes} title="立即刷新行情" className="h-8 w-8 rounded-[9px]" />
+          <RefreshButton onClick={() => scheduleRef.current?.manual()} title="立即刷新行情" className="h-8 w-8 rounded-[9px]" />
           <select
             value={intervalMs}
             onChange={(e) => {
               const ms = Number(e.target.value);
               setIntervalMs(ms);
-              try {
-                localStorage.setItem("fire:watch-refresh-ms", String(ms));
-              } catch {
-                /* 忽略存储不可用 */
-              }
             }}
             className="h-8 rounded-[9px] border border-edge bg-bg-gray px-2.5 text-[11px] font-semibold text-muted outline-none transition-colors hover:border-edge-strong focus:border-edge-strong"
             aria-label="刷新间隔"

@@ -435,7 +435,7 @@ export function updateSiteSettings(patch: Partial<SiteSettings>): SiteSettings {
     const trimmed = v.trim();
     // 雪球 Cookie：GET 会把真实值藏成空串、输入框未改时显示 ********。
     // 这两种都不能写回，否则会把已保存的登录会话清掉。
-    if (k === "xueqiuCookie" && (!trimmed || trimmed === "********")) return;
+    if (["xueqiuCookie", "pgPassword", "llmApiKey", "deepseekApiKey"].includes(k) && (!trimmed || trimmed === "********")) return;
     upsert.run(k, trimmed);
   });
   if (patch.dbType === "sqlite" || patch.dbType === "postgres") {

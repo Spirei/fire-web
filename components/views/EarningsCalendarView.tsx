@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { showToast } from "@/lib/toast";
 import type { StockRecord } from "@/lib/types";
 import { ensureStockIcons, useAssetIcons } from "@/lib/useAssetIcons";
 import { pickStockIcon } from "@/lib/stockIconKey";
@@ -257,7 +258,7 @@ function Fireo({
   );
 }
 
-export default function EarningsCalendarView({ records = [] }: { records?: StockRecord[] }) {
+export default function EarningsCalendarView({ records = [], canManage = false }: { records?: StockRecord[]; canManage?: boolean }) {
   const [months, setMonths] = useState<Record<string, EarnRow[] | null>>({});
   const [failed, setFailed] = useState(false);
   const [logoBases, setLogoBases] = useState<{ us: string; cn: string } | null>(null);
@@ -273,6 +274,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
     const s = new URLSearchParams(window.location.search).get("type");
     return s === "watchlist" || s === "holdings" || s === "star" ? (s as StockKey) : "all";
   });
+  const [savingOrder, setSavingOrder] = useState(false);
   const [marketOrder, setMarketOrder] = useState<MarketKey[]>([]);
   const [moreMarketsOpen, setMoreMarketsOpen] = useState(false);
   const [cursor, setCursor] = useState(() => {
@@ -443,7 +445,7 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
       <button
         key={m}
         type="button"
-        draggable
+        draggable={canManage && !savingOrder}
         onDragStart={(e) => {
           dragMarketIndex.current = dragIndex;
           e.dataTransfer.effectAllowed = "move";
@@ -454,32 +456,40 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
           dragMarketIndex.current = null;
         }}
         onClick={() => changeMarket(m)}
-        title="按住拖动排序"
+        title={canManage ? "按住拖动排序（全站生效）" : "切换市场"}
         className={`flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 transition-all duration-200 active:cursor-grabbing ${
           marketKey === m ? "seg-active" : "text-muted hover:bg-brand-hover hover:text-ink"
         }`}
       >
         <MarketIcon market={m} size={15} />
         {MARKETS.find((x) => x.key === m)?.label}
-        <svg viewBox="0 0 24 24" fill="currentColor" className="h-2.5 w-2.5 flex-none opacity-30">
+        {canManage && <svg viewBox="0 0 24 24" fill="currentColor" className="h-2.5 w-2.5 flex-none opacity-30">
           <circle cx="9" cy="6" r="1.1" /><circle cx="15" cy="6" r="1.1" />
           <circle cx="9" cy="12" r="1.1" /><circle cx="15" cy="12" r="1.1" />
           <circle cx="9" cy="18" r="1.1" /><circle cx="15" cy="18" r="1.1" />
-        </svg>
+        </svg>}
       </button>
     );
   }
 
-  function persistMarketOrder(next: MarketKey[]) {
+  async function persistMarketOrder(next: MarketKey[]) {
+    if (!canManage || savingOrder) return;
+    const previous = marketOrder;
+    setSavingOrder(true);
     setMarketOrder(next);
-    fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assetMarketOrder: next })
-    }).catch(() => {});
+    try {
+      const res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assetMarketOrder: next }) });
+      if (!res.ok) throw new Error("保存市场排序失败");
+      showToast("市场排序已保存，全站生效", "ok");
+      window.dispatchEvent(new Event("fire:settings-updated"));
+    } catch {
+      setMarketOrder(previous);
+      showToast("保存市场排序失败，已恢复原顺序", "err");
+    } finally { setSavingOrder(false); }
   }
 
   function dropMarket(target: number) {
+    if (!canManage || savingOrder) return;
     const from = dragMarketIndex.current;
     dragMarketIndex.current = null;
     if (from === null || from === target) return;

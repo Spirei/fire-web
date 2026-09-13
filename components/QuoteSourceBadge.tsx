@@ -20,6 +20,7 @@ export default function QuoteSourceBadge({
   quotes: Record<string, Quote>;
 }) {
   const extendedAlive = records.some((record) => {
+    if (record.market !== "US") return false;
     const source = quotes[record.id]?.source;
     return source === "futu" || source === "yahoo";
   });
@@ -32,7 +33,7 @@ export default function QuoteSourceBadge({
   if (!fallback) return null;
   return (
     <span
-      title="美股行情当前走腾讯兜底（富途 OpenD 未返回该批次行情）：盘前 / 盘后 / 夜盘的最新价与当日盈亏可能停留在上一交易日收盘，稍后会自动重试。"
+      title="美股当前数据源为腾讯，仅提供常规交易时段行情；盘前、盘后及夜盘的最新价与当日盈亏可能仍为上一常规交易时段收盘值。"
       className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
@@ -74,7 +75,7 @@ export function QuoteRowHint({
   if (market.toUpperCase() !== "US" || quote?.source !== "tencent") return null;
   if (!hasExtendedQuotes(quotes)) return null;
   return (
-    <span className={`${hintClass} ${className}`} title="富途不提供该标的扩展行情（常见于 OTC ADR），现价为腾讯常规盘口径，盘前 / 盘后 / 夜盘可能停在上一交易日收盘。">
+    <span className={`${hintClass} ${className}`} title="该标的当前仅取得腾讯常规时段行情，未取得扩展时段报价；盘前、盘后及夜盘可能仍显示常规时段收盘值。">
       无扩展行情
     </span>
   );
