@@ -3,7 +3,7 @@ import HomeContent from "@/components/HomeContent";
 import { cookies } from "next/headers";
 import { THEME_COOKIE } from "@/lib/theme";
 import { LEGACY_SESSION_COOKIE, SESSION_COOKIE, getUserByToken } from "@/lib/auth";
-import { getFlagIconMap, getMarketIconMap, getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
+import { getInlineFlagIconMap, getMarketIconMap, getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
 import { CURRENCY_FLAG_CODES } from "@/lib/flagAssets";
 import { listRecords } from "@/lib/store";
 import { CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/lib/currencyPrefs";
@@ -19,6 +19,6 @@ export default async function HomePage() {
   const initialUser = getUserByToken(token);
   const initialStockIcons = initialUser ? getStockIconMap(stockIconKeysForRecords(listRecords(initialUser.id))) : {};
   const initialMarketIcons = getMarketIconMap();
-  const initialFlagIcons = getFlagIconMap(CURRENCY_FLAG_CODES);
+  const initialFlagIcons = getInlineFlagIconMap(CURRENCY_FLAG_CODES);
   return <CurrencyProvider initialCurrency={currencyCookie ?? null}><HomeContent settings={settings} initialDark={initialDark} initialUser={initialUser} initialStockIcons={initialStockIcons} initialMarketIcons={initialMarketIcons} initialFlagIcons={initialFlagIcons} /></CurrencyProvider>;
 }

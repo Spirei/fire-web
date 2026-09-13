@@ -173,7 +173,7 @@ export function primeFlagIconCache(icons: Record<string, string>) {
 /** 首帧结束后把固定货币的小图标送入浏览器图片缓存，打开下拉时无需再等网络。 */
 export function usePrefetchFlagIcons(icons: Record<string, string>) {
   useEffect(() => {
-    const urls = [...new Set(Object.values(icons).filter(Boolean))];
+    const urls = [...new Set(Object.values(icons).filter((url) => Boolean(url) && !url.startsWith("data:")))];
     if (!urls.length) return;
     const prefetch = () => urls.forEach((url) => {
       const image = new Image();

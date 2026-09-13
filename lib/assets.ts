@@ -361,6 +361,37 @@ export function getFlagIconMap(codes: readonly string[]): Record<string, string>
   return map;
 }
 
+function localUploadFile(url: string): string | null {
+  if (!url.startsWith("/uploads/")) return null;
+  let rel = url.slice("/uploads/".length);
+  try { rel = decodeURIComponent(rel); } catch { return null; }
+  for (const file of [path.join(process.cwd(), "public", "uploads", rel), path.join(process.cwd(), "resource-default", rel)]) {
+    try { if (fs.statSync(file).isFile()) return file; } catch { /* 继续检查镜像默认素材 */ }
+  }
+  return null;
+}
+
+/**
+ * 固定货币的首屏版本：仍按素材库记录找文件，但把几百字节的本地图标内联进 HTML，
+ * 浏览器第一次绘制无需再等待 /uploads 请求。远程自定义素材保留原 URL。
+ */
+export function getInlineFlagIconMap(codes: readonly string[]): Record<string, string> {
+  const urls = getFlagIconMap(codes);
+  const map: Record<string, string> = {};
+  Object.entries(urls).forEach(([code, url]) => {
+    const file = localUploadFile(url);
+    if (!file) {
+      map[code] = url;
+      return;
+    }
+    const ext = path.extname(file).toLowerCase();
+    const mime = ext === ".svg" ? "image/svg+xml" : ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "application/octet-stream";
+    try { map[code] = `data:${mime};base64,${fs.readFileSync(file).toString("base64")}`; }
+    catch { map[code] = url; }
+  });
+  return map;
+}
+
 /** 按代码批量读取股票素材，供搜索联想补充相关 ETF；返回顺序与 codes 一致。 */
 export function getStockAssetsByCodes(market: string, codes: string[]): Asset[] {
   const normalized = [...new Set(codes.map((code) => code.trim().toUpperCase()).filter(Boolean))];
