@@ -3000,6 +3000,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: V0_1_28_ENTRY.frontend,
   software: V0_1_28_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.29" } : item),
   changes: [{
+    title: "修复自选股刷新时分组短暂消失",
+    desc: "自选股分组改为在浏览器绘制前恢复最后一次成功快照，不再因快照超过一分钟而先渲染只有“全部”的中间状态；服务端随后静默刷新，空响应或请求失败时继续保留已有分组。旧分组迁移后的结果也同步更新快照。",
+    kind: "fix"
+  }, {
     title: "相关 ETF 支持手动添加兜底关系",
     desc: "相关 ETF 列表无论为空或已有产品，底部都显示圆形添加入口；支持填写股票代码、可选名称与做多、做空、收益策略类型，并默认关联当前正股。关系双向保存在本机，新 ETF 详情可反查正股并沿用正股图标。补齐英特尔的 LINT 做多与 INYY 收益策略产品，同时删除财报日历标题下方重复的市场范围与操作说明。",
     kind: "feature"

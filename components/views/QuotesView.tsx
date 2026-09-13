@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fmtPct, fmtPrice } from "@/lib/format";
 import { fmtUsd } from "@/lib/currency";
 import { marketMeta, MARKET_LIST, type GroupConfig, type Quote, type RecordInput, type SearchMatch, type StockRecord } from "@/lib/types";
@@ -20,6 +20,8 @@ import RefreshButton from "@/components/RefreshButton";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
 import MiniTrendChart from "@/components/MiniTrendChart";
+
+const WATCH_GROUP_CACHE_KEY = "fire:watch-groups";
 
 interface Props {
   /** 个股详情直达代码（如 US.GOOGL），来自 /watchlist/US.GOOGL 路径 */
@@ -110,13 +112,12 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
   );
 
   // 服务端分组：加载 + 旧 localStorage 配置一次性迁移
-  useEffect(() => {
+  useLayoutEffect(() => {
     let cancelled = false;
-    const GROUP_CACHE_KEY = "fire:watch-groups";
-    // 先用缓存秒出市场/分组标签，再后台刷新：避免每次进入自选股都要等接口返回
+    // 不限制快照年龄：分组是低频配置，旧快照也优先于刷新首帧只显示“全部”。
     try {
-      const cached = JSON.parse(localStorage.getItem(GROUP_CACHE_KEY) || "null") as { groups?: WatchGroup[]; at?: number } | null;
-      if (cached?.groups && Date.now() - Number(cached.at || 0) < 60_000) {
+      const cached = JSON.parse(localStorage.getItem(WATCH_GROUP_CACHE_KEY) || "null") as { groups?: WatchGroup[]; at?: number } | null;
+      if (Array.isArray(cached?.groups) && cached.groups.length > 0) {
         setWatchGroups(cached.groups);
       }
     } catch {
@@ -131,7 +132,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
         if (cancelled) return;
         setWatchGroups(list);
         try {
-          localStorage.setItem(GROUP_CACHE_KEY, JSON.stringify({ groups: list, at: Date.now() }));
+          if (list.length > 0) localStorage.setItem(WATCH_GROUP_CACHE_KEY, JSON.stringify({ groups: list, at: Date.now() }));
         } catch {
           /* 存储不可用忽略 */
         }
@@ -165,10 +166,16 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
         if (migrated) {
           const res2 = await fetch("/api/v1/watch-groups");
           const d2 = await res2.json().catch(() => null);
-          if (!cancelled) setWatchGroups(d2?.data?.groups ?? []);
+          const migratedGroups: WatchGroup[] = d2?.data?.groups ?? [];
+          if (!cancelled && migratedGroups.length > 0) {
+            setWatchGroups(migratedGroups);
+            try {
+              localStorage.setItem(WATCH_GROUP_CACHE_KEY, JSON.stringify({ groups: migratedGroups, at: Date.now() }));
+            } catch { /* 存储不可用时保留当前状态 */ }
+          }
         }
       } catch {
-        /* 加载失败保持空分组 */
+        /* 加载失败时保留已恢复的分组快照 */
   }
 }
     void load();
