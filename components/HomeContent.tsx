@@ -13,6 +13,7 @@ import { showToast } from "@/lib/toast";
 import { setThemeCookie } from "@/lib/theme";
 import { logoFontClass } from "@/lib/logoFont";
 import { fmtMoneyAdaptive } from "@/lib/format";
+import MiniTrendChart from "@/components/MiniTrendChart";
 
 interface Dict {
   navPreview: string;
@@ -89,14 +90,8 @@ function Logo({ logo, text, font, small = false }: { logo?: string; text?: strin
 }
 
 function Sparkline({ up }: { up: boolean }) {
-  const points = up
-    ? "0,20 12,18 24,21 36,14 48,16 60,10 72,12 84,6 90,7"
-    : "0,6 12,9 24,5 36,12 48,10 60,16 72,14 84,20 90,18";
-  return (
-    <svg viewBox="0 0 90 26" preserveAspectRatio="none" className="h-[26px] w-full">
-      <polyline points={points} fill="none" stroke={up ? "#e23d3d" : "#0fa07b"} strokeWidth="1.8" />
-    </svg>
-  );
+  const points = up ? [10, 10.4, 10.1, 10.8, 10.5, 11.2, 10.9, 11.6, 11.5] : [11.5, 11.1, 11.6, 10.9, 11.1, 10.5, 10.8, 10.1, 10.3];
+  return <MiniTrendChart points={points} baseline={points[0]} width={90} height={26} className="h-[26px] w-full" />;
 }
 
 const PREVIEW_ROWS = [
@@ -130,33 +125,6 @@ const GUEST_KEY = "fire:home:guest";
 const PREVIEW_PAGE_SIZE = 6;
 
 // 真实迷你走势（登录后展示后端同步数据）
-function RealSpark({ points, up }: { points: number[]; up: boolean }) {
-  if (!points || points.length < 2) return <span className="h-[26px] w-full flex-none" />;
-  const prices = points.filter((p) => Number.isFinite(p));
-  if (prices.length < 2) return <span className="h-[26px] w-full flex-none" />;
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const range = max - min || 1;
-  const W = 90;
-  const H = 26;
-  const coords = prices.map((p, i) => {
-    const x = (i / (prices.length - 1)) * W;
-    const y = H - 1.5 - ((p - min) / range) * (H - 6);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-[26px] w-full" aria-hidden>
-      <polyline
-        points={coords.join(" ")}
-        fill="none"
-        stroke={up ? "#e23d3d" : "#0fa07b"}
-        strokeWidth="1.8"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
-  );
-}
-
 interface LiveRow {
   id: string;
   name: string;
@@ -166,6 +134,7 @@ interface LiveRow {
   cost: number;
   price: number;
   changePct: number | null;
+  prevClose: number | null;
   profit: number | null;
 }
 
@@ -339,6 +308,7 @@ export default function HomeContent({ settings, initialDark = false, initialUser
   const [previewSort, setPreviewSort] = useState<{ key: "name" | "price" | "change" | "profit"; dir: "asc" | "desc" } | null>(null);
   const [liveRows, setLiveRows] = useState<LiveRow[] | null>(null);
   const [liveCharts, setLiveCharts] = useState<Record<string, number[]>>({});
+  const [staleCharts, setStaleCharts] = useState<Record<string, boolean>>({});
 
   function dropChip(to: number) {
     if (chipDragIndex.current === null) return;
@@ -442,7 +412,7 @@ export default function HomeContent({ settings, initialDark = false, initialUser
         fetchBatched("/api/charts", "charts")
       ]);
       const rows: LiveRow[] = all.map((r) => {
-        const q = quotes[r.id] as { price?: number; changePct?: number } | undefined;
+        const q = quotes[r.id] as { price?: number; changePct?: number; prevClose?: number } | undefined;
         const price = q?.price ?? Number(r.price);
         const cost = Number(r.cost) || 0;
         const qty = Number(r.qty) || 0;
@@ -455,6 +425,7 @@ export default function HomeContent({ settings, initialDark = false, initialUser
           cost,
           price,
           changePct: q?.changePct ?? null,
+          prevClose: q?.prevClose ?? null,
           profit: cost && qty ? (price - cost) * qty : null
         };
       });
@@ -468,17 +439,19 @@ export default function HomeContent({ settings, initialDark = false, initialUser
           if (pts.length > 0) pointsMap[id] = pts;
         }
       });
-        setLiveCharts(pointsMap);
-      try {
-        localStorage.setItem(
-          "fire:home:live",
-          JSON.stringify({ rows, charts: pointsMap, at: Date.now() })
-        );
-      } catch {
-        /* 缓存写入失败忽略 */
-      }
+      setLiveCharts((previous) => {
+        const next = { ...previous, ...pointsMap };
+        try { localStorage.setItem("fire:home:live", JSON.stringify({ rows, charts: next, at: Date.now() })); } catch { /* 缓存写入失败忽略 */ }
+        return next;
+      });
+      setStaleCharts((previous) => {
+        const next = { ...previous };
+        items.forEach((item) => { next[item.id] = !pointsMap[item.id] || Boolean((charts[item.id] as { stale?: boolean } | undefined)?.stale); });
+        return next;
+      });
     } catch {
       // 加载失败保留上一次数据（缓存 / 旧记录），避免误显示「暂无相关股票」空态
+      setStaleCharts((previous) => Object.fromEntries(Object.keys(previous).map((id) => [id, true])));
     }
   }, [auth]);
 
@@ -490,7 +463,10 @@ export default function HomeContent({ settings, initialDark = false, initialUser
         const parsed = JSON.parse(raw) as { rows?: LiveRow[]; charts?: Record<string, number[]> };
         if (Array.isArray(parsed?.rows)) {
           setLiveRows(parsed.rows);
-          if (parsed.charts) setLiveCharts(parsed.charts);
+          if (parsed.charts) {
+            setLiveCharts(parsed.charts);
+            setStaleCharts(Object.fromEntries(Object.keys(parsed.charts).map((id) => [id, true])));
+          }
         }
       }
     } catch {
@@ -506,7 +482,10 @@ export default function HomeContent({ settings, initialDark = false, initialUser
           const parsed = JSON.parse(raw) as { rows?: LiveRow[]; charts?: Record<string, number[]> };
           if (Array.isArray(parsed?.rows)) {
             setLiveRows(parsed.rows);
-            if (parsed.charts) setLiveCharts(parsed.charts);
+            if (parsed.charts) {
+              setLiveCharts(parsed.charts);
+              setStaleCharts(Object.fromEntries(Object.keys(parsed.charts).map((id) => [id, true])));
+            }
           }
         }
       } catch {
@@ -708,6 +687,8 @@ export default function HomeContent({ settings, initialDark = false, initialUser
       change: row.change,
       up: row.up,
       spark: [] as number[],
+      sparkStale: false,
+      baseline: null as number | null,
       profit: row.profit,
       profitUp: row.profit.startsWith("+"),
       live: false
@@ -724,6 +705,8 @@ export default function HomeContent({ settings, initialDark = false, initialUser
         change: r.changePct == null ? "--" : `${r.changePct >= 0 ? "+" : ""}${r.changePct.toFixed(2)}%`,
         up: (r.changePct ?? 0) >= 0,
         spark: liveCharts[r.id] ?? [],
+        sparkStale: staleCharts[r.id] ?? true,
+        baseline: r.prevClose,
         profit: r.profit == null ? "—" : fmtLiveProfit(r.profit, r.market),
         profitUp: (r.profit ?? 0) >= 0,
         live: true
@@ -1036,7 +1019,7 @@ export default function HomeContent({ settings, initialDark = false, initialUser
                             </span>
                             <span className="font-semibold tabular-nums text-ink">{row.price}</span>
                             <span className={`font-semibold tabular-nums ${row.up ? "text-up" : "text-down"}`}>{row.change}</span>
-                            {row.spark.length >= 2 ? <RealSpark points={row.spark} up={row.up} /> : <Sparkline up={row.up} />}
+                            {isLive ? <MiniTrendChart points={row.spark} baseline={row.baseline} stale={row.sparkStale} width={90} height={26} className="h-[26px] w-full" label={`${row.name} 当日走势`} /> : <Sparkline up={row.up} />}
                             {profitColumn && (
                               <span className={`text-right font-semibold tabular-nums ${row.profitUp ? "text-up" : "text-down"}`}>{row.profit}</span>
                             )}

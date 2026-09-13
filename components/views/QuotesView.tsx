@@ -20,6 +20,7 @@ import { isDoubleEtf } from "@/lib/relatedEtfs";
 import RefreshButton from "@/components/RefreshButton";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
+import MiniTrendChart from "@/components/MiniTrendChart";
 
 interface Props {
   /** 个股详情直达代码（如 US.GOOGL），来自 /watchlist/US.GOOGL 路径 */
@@ -51,39 +52,7 @@ const INTERVALS = [
   { label: "1日", ms: 86400000 }
 ];
 
-function MiniChart({ data, code }: { data?: Intraday; code: string }) {
-  const svg = useMemo(() => {
-    if (!data || data.points.length < 2) return null;
-    const pts = data.points;
-    const prices = pts.map((p) => p.price);
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    const range = max - min || 1;
-    const W = 100;
-    const H = 28;
-    const path = pts
-      .map((p, i) => {
-        const x = (i / (pts.length - 1)) * W;
-        const y = H - ((p.price - min) / range) * (H - 4) - 2;
-        return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-      })
-      .join(" ");
-    const up = pts[pts.length - 1].price >= pts[0].price;
-    return { path, color: up ? "#e23d3d" : "#0fa07b", last: pts[pts.length - 1], date: data.date };
-  }, [data]);
-
-  if (!svg) {
-    return <span className="block h-[28px] w-[100px] text-xs leading-[28px] text-faint">暂无走势</span>;
-  }
-
-  return (
-    <svg viewBox="0 0 100 28" preserveAspectRatio="none" className="block h-[28px] w-[100px]" role="img" aria-label={`${code} ${svg.date} 收于 ${svg.last.price}`}>
-      <title>{`${code} ${svg.date} 收于 ${svg.last.price}`}</title>
-      <path d={svg.path} fill="none" stroke={svg.color} strokeWidth="1.5" />
-      <circle cx="100" cy={Number(svg.path.split(" ").pop()!.split(",")[1])} r="1.8" fill={svg.color} />
-    </svg>
-  );
-}
+const CHART_CACHE_KEY = "fire:watchlist:charts";
 
 function QuotesCheckbox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
   return (
@@ -388,6 +357,15 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
   const refreshAllRef = useRef<() => void>(() => {});
   const chartFetchingRef = useRef(false);
 
+  useEffect(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(CHART_CACHE_KEY) || "{}") as Record<string, Intraday>;
+      setCharts(Object.fromEntries(Object.entries(cached).map(([id, chart]) => [id, { ...chart, stale: true }])));
+    } catch {
+      /* 缓存损坏时等待重新获取 */
+    }
+  }, []);
+
   const fetchCharts = useCallback(async () => {
     if (chartFetchingRef.current || pageRows.length === 0) return;
     chartFetchingRef.current = true;
@@ -400,11 +378,23 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
           sample: true
         })
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        setCharts((prev) => Object.fromEntries(Object.entries(prev).map(([id, chart]) => [id, pageRows.some((row) => row.id === id) ? { ...chart, stale: true } : chart])));
+        return;
+      }
       const data = await res.json();
-      if (data.charts) setCharts((prev) => ({ ...prev, ...data.charts }));
+      if (data.charts) setCharts((prev) => {
+        const next = { ...prev };
+        pageRows.forEach((row) => {
+          const fresh = data.charts[row.id] as Intraday | undefined;
+          if (fresh?.points?.length) next[row.id] = fresh;
+          else if (next[row.id]) next[row.id] = { ...next[row.id], stale: true };
+        });
+        try { localStorage.setItem(CHART_CACHE_KEY, JSON.stringify(next)); } catch { /* 存储不可用 */ }
+        return next;
+      });
     } catch {
-      /* 走势获取失败时保留旧数据 */
+      setCharts((prev) => Object.fromEntries(Object.entries(prev).map(([id, chart]) => [id, pageRows.some((row) => row.id === id) ? { ...chart, stale: true } : chart])));
     } finally {
       chartFetchingRef.current = false;
     }
@@ -904,7 +894,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                       <td className={`px-4 py-3.5 text-right font-semibold tabular-nums ${q && q.changePct >= 0 ? "text-up" : q ? "text-down" : "text-faint"}`}>
                         {q ? `${q.changePct >= 0 ? "+" : ""}${fmtPct(q.changePct / 100)}` : "—"}
                       </td>
-                      <td className="px-4 py-3.5"><MiniChart data={charts[r.id]} code={r.code} /></td>
+                      <td className="px-4 py-3.5"><MiniTrendChart points={charts[r.id]?.points.map((point) => point.price)} baseline={q?.prevClose} stale={!charts[r.id] || Boolean(charts[r.id]?.stale)} label={`${r.code} ${charts[r.id]?.date || ""} 当日走势`} /></td>
                       <td className="px-4 py-3.5 text-right tabular-nums">{q ? fmtPrice(q.high, marketMeta(r.market).currency, r.market) : "—"}</td>
                       <td className="px-4 py-3.5 text-right tabular-nums">{q ? fmtPrice(q.low, marketMeta(r.market).currency, r.market) : "—"}</td>
                       <td className="px-4 py-3.5 text-right tabular-nums">{(() => { const cap = q?.marketCap || (q?.totalShares && q?.price ? q.price * q.totalShares : 0); return cap ? fmtUsd(cap) : "—"; })()}</td>

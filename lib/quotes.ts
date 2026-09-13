@@ -423,21 +423,34 @@ export interface IntradayPoint {
 export interface Intraday {
   date: string;
   points: IntradayPoint[];
+  stale?: boolean;
 }
 
 const yahooIntradayCache = new Map<string, { at: number; data: Intraday }>();
 const tencentIntradayCache = new Map<string, { at: number; data: Intraday }>();
 
-/** 迷你走势抽样：只保留 target 个代表点（等距取，首尾必留），供批量迷你 sparkline 使用。 */
+/** 迷你走势抽样：每个区间保留高低点与首尾，避免等距抽样漏掉短暂尖峰。 */
 export function samplePoints(points: IntradayPoint[], target = 60): IntradayPoint[] {
   if (!Array.isArray(points)) return points;
   if (points.length <= target) return points;
-  const step = (points.length - 1) / (target - 1);
-  const out: IntradayPoint[] = [];
-  for (let i = 0; i < target; i++) {
-    const idx = Math.round(i * step);
-    out.push(points[Math.min(idx, points.length - 1)]);
+  const limit = Math.max(4, Math.floor(target));
+  const middleCount = points.length - 2;
+  const bucketCount = Math.max(1, Math.floor((limit - 2) / 2));
+  const out = [points[0]];
+  for (let bucket = 0; bucket < bucketCount; bucket++) {
+    const start = 1 + Math.floor((bucket * middleCount) / bucketCount);
+    const end = 1 + Math.floor(((bucket + 1) * middleCount) / bucketCount);
+    let minIndex = start;
+    let maxIndex = start;
+    for (let index = start + 1; index < end; index++) {
+      if (points[index].price < points[minIndex].price) minIndex = index;
+      if (points[index].price > points[maxIndex].price) maxIndex = index;
+    }
+    if (minIndex === maxIndex) out.push(points[minIndex]);
+    else if (minIndex < maxIndex) out.push(points[minIndex], points[maxIndex]);
+    else out.push(points[maxIndex], points[minIndex]);
   }
+  out.push(points[points.length - 1]);
   return out;
 }
 
@@ -484,26 +497,30 @@ function parseMinutePoints(raw: unknown[]): IntradayPoint[] {
 async function fetchIntradayForCode(code: string): Promise<Intraday | null> {
   const cached = tencentIntradayCache.get(code);
   if (cached && Date.now() - cached.at < 30_000) return cached.data;
-  const tpl = getSiteSettings().chartApiUrl || DEFAULT_CHART_URL;
-  const res = await fetch(
-    tpl.replace("{code}", encodeURIComponent(code)),
-    {
-      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
-      signal: AbortSignal.timeout(8000)
-    }
-  );
-  if (!res.ok) return null;
-  const json = await res.json().catch(() => null);
-  const node = json?.data?.[code]?.data;
-  if (!node || typeof node !== "object") return null;
-  const raw = Array.isArray(node.data) ? node.data : null;
-  const date = typeof node.date === "string" ? node.date : "";
-  if (!raw || raw.length === 0) return null;
-  const points = parseMinutePoints(raw);
-  if (points.length === 0) return null;
-  const data = { date, points };
-  tencentIntradayCache.set(code, { at: Date.now(), data });
-  return data;
+  try {
+    const tpl = getSiteSettings().chartApiUrl || DEFAULT_CHART_URL;
+    const res = await fetch(
+      tpl.replace("{code}", encodeURIComponent(code)),
+      {
+        headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+        signal: AbortSignal.timeout(8000)
+      }
+    );
+    if (!res.ok) throw new Error("chart source unavailable");
+    const json = await res.json().catch(() => null);
+    const node = json?.data?.[code]?.data;
+    if (!node || typeof node !== "object") throw new Error("empty chart");
+    const raw = Array.isArray(node.data) ? node.data : null;
+    const date = typeof node.date === "string" ? node.date : "";
+    if (!raw || raw.length === 0) throw new Error("empty chart");
+    const points = parseMinutePoints(raw);
+    if (points.length === 0) throw new Error("empty chart");
+    const data = { date, points };
+    tencentIntradayCache.set(code, { at: Date.now(), data });
+    return data;
+  } catch {
+    return cached ? { ...cached.data, stale: true } : null;
+  }
 }
 
 function yahooMinuteSymbols(item: QuoteItem) {
@@ -560,7 +577,7 @@ async function fetchYahooIntraday(item: QuoteItem): Promise<Intraday | null> {
   } catch {
     continue;
   }
-  return null;
+  return cached ? { ...cached.data, stale: true } : null;
 }
 
 export async function fetchIntraday(items: QuoteItem[]): Promise<Record<string, Intraday>> {
