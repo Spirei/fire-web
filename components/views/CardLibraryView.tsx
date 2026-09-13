@@ -1997,10 +1997,10 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       右下角一颗圆形胶囊同时承担「状态 + 操作」：
                         ✓ = 已经在我的卡里，＋ = 还没加入；点一下切换。
                       「全部卡面」：已加入的 ✓ 常显；未加入的 ＋ 仅悬停时显示。
-                      「我的卡」：不渲染此标记，悬停也不显示。
-                      所有尺寸下保持圆形，悬停不再展开文字。
+                      「我的卡」：默认隐藏，悬停显示减号用于移除，不显示加号或勾号。
+                      所有尺寸下保持圆形，按钮悬停即时显示操作提示；触屏常显操作入口。
                     */}
-                    {mode !== "mine" && <span
+                    <span
                       role="button"
                       tabIndex={-1}
                       onClick={(event) => {
@@ -2009,14 +2009,20 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       }}
                       aria-label={isHeld ? "移出我的卡" : "加入我的卡"}
                       /* 操作按钮保持 32px 圆形，伪元素把点击热区扩大到 44px。 */
-                      className={`absolute bottom-[7px] right-[7px] inline-flex h-8 w-8 items-center justify-center rounded-full text-[14px] font-bold shadow-sm transition-all duration-200 after:absolute after:-inset-1.5 after:content-[''] active:scale-95 ${
-                        !isHeld ? "invisible opacity-0 group-hover:visible group-hover:opacity-100" : ""
+                      className={`group/card-action card-library-action absolute bottom-[7px] right-[7px] inline-flex h-8 w-8 items-center justify-center rounded-full text-[14px] font-bold shadow-sm transition-all duration-200 after:absolute after:-inset-1.5 after:content-[''] active:scale-95 ${
+                        mode === "mine" || !isHeld ? "invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100" : ""
                       } ${
                         isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
                       }`}
                     >
-                      <span className="flex-none">{isHeld ? "✓" : "＋"}</span>
-                    </span>}
+                      <span aria-hidden="true" className="flex-none">{mode === "mine" ? "−" : isHeld ? "✓" : "＋"}</span>
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-[calc(100%+6px)] top-1/2 z-10 -translate-y-1/2 whitespace-nowrap rounded-lg bg-[#1c222d]/95 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-sm group-hover/card-action:opacity-100"
+                      >
+                        {isHeld ? "移出我的卡" : "加入我的卡"}
+                      </span>
+                    </span>
                   </span>
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">

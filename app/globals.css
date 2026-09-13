@@ -27,6 +27,14 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
 }
 
+/* 触屏没有悬停，保留可发现的加入／移除入口。 */
+@media (hover: none) {
+  .card-library-action[role="button"] {
+    visibility: visible;
+    opacity: 1;
+  }
+}
+
 /* 品牌字标字体：AWS Diatype Rounded Semi Mono（参考 kiro.dev 左上角字标所用字体，
    字体文件本地化到 public/fonts，深浅色模式共用，避免依赖外网字体服务） */
 @font-face {
