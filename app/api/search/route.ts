@@ -3,6 +3,7 @@ import { searchStocks } from "@/lib/quotes";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { proxyFetch } from "@/lib/net";
 import { getAssetsPage } from "@/lib/assets";
+import { isMainstreamCryptoCode, searchMainstreamCrypto } from "@/lib/mainstreamCrypto";
 
 type SearchResult = Awaited<ReturnType<typeof searchStocks>>[number];
 const SEARCH_CACHE_TTL = 30_000;
@@ -23,7 +24,7 @@ async function searchCrypto(q: string, signal: AbortSignal): Promise<SearchResul
     const res = await proxyFetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}`, { signal });
     if (!res.ok) return [];
     const data = (await res.json().catch(() => null)) as { coins?: { id?: string; symbol?: string; name?: string }[] } | null;
-    return (data?.coins ?? []).slice(0, 5).map((c) => ({
+    return (data?.coins ?? []).filter((c) => isMainstreamCryptoCode(String(c.symbol ?? ""))).slice(0, 5).map((c) => ({
       symbol: `CRYPTO:${String(c.id ?? c.symbol ?? "").toLowerCase()}`,
       code: String(c.symbol ?? "").toUpperCase(),
       name: String(c.name ?? "").trim(),
@@ -49,10 +50,6 @@ function localStockMatches(q: string): SearchResult[] {
   });
 }
 
-function isCryptoQuery(q: string): boolean {
-  return /^(btc|bitcoin|比特币|eth|ethereum|以太坊|usdt|tether|泰达币|sol|solana|xrp|doge|dogecoin|狗狗币)$/i.test(q.trim());
-}
-
 export async function GET(request: Request) {
   if (!rateLimit(`search:${clientIp(request)}`, 60, 60 * 1000) || !rateLimitGlobal("search", 300, 60 * 1000)) {
     return NextResponse.json({ error: "请求过于频繁，请稍后再试" }, { status: 429 });
@@ -68,21 +65,18 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 素材库覆盖常用股票，SQLite 本地命中可直接返回，省去两次外部行情往返。
-    const localResults = localStockMatches(q);
-    if (localResults.length > 0 && !isCryptoQuery(q)) {
-      rememberResults(cacheKey, localResults);
-      return NextResponse.json({ results: localResults });
+    // 主流币别名命中时只返回币本体，避免“比特币”混入 ETF、储备公司和策略基金。
+    const mainstreamCrypto = searchMainstreamCrypto(q);
+    if (mainstreamCrypto.length > 0) {
+      rememberResults(cacheKey, mainstreamCrypto);
+      return NextResponse.json({ results: mainstreamCrypto });
     }
 
-    if (isCryptoQuery(q)) {
-      const [stockResults, cryptoResults] = await Promise.all([
-        localResults.length > 0 ? Promise.resolve(localResults) : searchStocks(q),
-        searchCrypto(q, AbortSignal.timeout(2500))
-      ]);
-      const combined = [...stockResults, ...cryptoResults];
-      rememberResults(cacheKey, combined);
-      return NextResponse.json({ results: combined });
+    // 素材库覆盖常用股票，SQLite 本地命中可直接返回，省去两次外部行情往返。
+    const localResults = localStockMatches(q);
+    if (localResults.length > 0) {
+      rememberResults(cacheKey, localResults);
+      return NextResponse.json({ results: localResults });
     }
 
     // 股票与加密货币并行查询；股票已命中时立即返回，不再串行等待境外 CoinGecko。

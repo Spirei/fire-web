@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { proxyFetch } from "@/lib/net";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
+import { isMainstreamCryptoCode } from "@/lib/mainstreamCrypto";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,7 @@ export async function GET(request: Request) {
     const data = (await res.json().catch(() => null)) as { coins?: { symbol?: string; name?: string; thumb?: string }[] } | null;
     const coins = data?.coins ?? [];
     const candidates = coins
+      .filter((c) => isMainstreamCryptoCode(String(c.symbol ?? "")))
       .slice(0, 8)
       .map((c) => ({
         code: String(c.symbol ?? "").toUpperCase(),
