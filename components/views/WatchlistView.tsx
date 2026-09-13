@@ -128,11 +128,7 @@ export default function WatchlistView({ initialSymbol, records, quotes, quoteAt,
   const [indicesLoading, setIndicesLoading] = useState(true);
   const [indicesError, setIndicesError] = useState("");
   // 刷新时若 URL 已带个股详情路径（/watchlist/US.GOOGL），首帧即隐藏指数卡片，避免闪现
-  const [detailOpen, setDetailOpen] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      /^[A-Za-z]{2,5}\.[A-Z0-9._-]+$/.test((window.location.pathname.split("/").filter(Boolean).pop() || ""))
-  );
+  const [detailOpen, setDetailOpen] = useState(() => Boolean(initialSymbol));
   const INDICES_CACHE_KEY = "fire:indices:cache";
 
   useEffect(() => {

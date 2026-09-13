@@ -44,6 +44,7 @@ const UP = "#e5484d";
 const DOWN = "#1aa07a";
 const NY_TIME_ZONE = "America/New_York";
 const RELATED_ETF_QUOTE_CACHE_KEY = "fire:related-etf-quotes:v1";
+const STOCK_DETAIL_CACHE_PREFIX = "fire-web:stock-detail:v2";
 
 function readRelatedEtfQuoteCache() {
   try {
@@ -176,6 +177,23 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
   const [dividendsLoading, setDividendsLoading] = useState(false);
   const [dividendYear, setDividendYear] = useState<string | null>(null);
 
+  // URL 直达时在浏览器绘制前恢复页签，避免先闪现概览再切到目标页签。
+  useLayoutEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab") as Tab | null;
+    setTab(requested && ["overview", "etf", "dividend", "financial", "company"].includes(requested) ? requested : "overview");
+  }, [market, code]);
+
+  // 概览始终先展示最后一次成功快照；快照不因过期清空，最新数据在后台静默替换。
+  useLayoutEffect(() => {
+    const cacheKey = `${STOCK_DETAIL_CACHE_PREFIX}:${market.toUpperCase()}:${code.toUpperCase()}`;
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
+      if (cached?.data) setDetailData(cached.data);
+    } catch {
+      /* 缓存损坏时等待后台行情 */
+    }
+  }, [market, code]);
+
   // 切换股票时重置关注状态（不随 followed 属性变化回写，避免打断乐观更新）
   useEffect(() => {
     setFaved(!!followed);
@@ -187,7 +205,6 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
     setDividendsOk(true);
     setDividendsLoading(false);
     setDividendYear(null);
-    setTab(initialTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [market, code]);
 
@@ -403,20 +420,18 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
   // 详情页统一走 v1 个股详情契约（实时行情 + 六币种市值 + 汇率，iOS 同款接口）
   useEffect(() => {
     let cancelled = false;
-    const cacheKey = `fire-web:stock-detail:${market}:${code}`;
-    try {
-      const cached = JSON.parse(sessionStorage.getItem(cacheKey) || "null");
-      if (cached?.data && Date.now() - Number(cached.at) < 60_000) setDetailData(cached.data);
-      else setDetailData(null);
-    } catch { setDetailData(null); }
+    const cacheKey = `${STOCK_DETAIL_CACHE_PREFIX}:${market.toUpperCase()}:${code.toUpperCase()}`;
     // K 线由 StockKline 按周期加载；摘要请求不再重复等待大体积日线。
     // 公司资料仅在用户点击「公司」时加载，避免刷新首屏回源 SEC。
     fetch(`/api/v1/stock-detail?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}&includeKline=0`)
       .then((r) => r.json().catch(() => null))
       .then((d) => {
         if (!cancelled && d?.data) {
-          setDetailData(d.data);
-          try { sessionStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: d.data })); } catch {}
+          setDetailData((current) => {
+            const next = { ...current, ...d.data, quote: d.data.quote ?? current?.quote ?? null };
+            try { localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: next })); } catch {}
+            return next;
+          });
         }
       })
       .catch(() => {});

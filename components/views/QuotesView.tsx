@@ -255,7 +255,25 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
   const [editRecord, setEditRecord] = useState<StockRecord | null>(null);
   const [deleteRecord, setDeleteRecord] = useState<StockRecord | null>(null);
   const [editMode, setEditMode] = useState(false);
-  const [detail, setDetail] = useState<StockRecord | null>(null);
+  const [detail, setDetail] = useState<StockRecord | null>(() => {
+    if (!initialSymbol) return null;
+    const [market, code] = initialSymbol.split(".");
+    if (!market || !code) return null;
+    return records.find((item) => item.market.toUpperCase() === market && item.code.toUpperCase() === code) ?? {
+      id: `symbol:${market}:${code}`,
+      name: code,
+      code,
+      market,
+      price: "",
+      cost: "",
+      qty: "",
+      group: "",
+      watchGroupId: "",
+      note: "",
+      source: "market",
+      updatedAt: ""
+    };
+  });
   const notifyDetail = (next: StockRecord | null) => onDetailChange?.(!!next);
   const updateDetail = (next: StockRecord | null) => {
     setDetail(next);
@@ -612,11 +630,6 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
   // 后端个股详情：无感进入视图（不弹窗、不刷新，URL /watchlist/US.GOOGL 路径同步）
   if (detail) {
     const q = quotes[detail.id];
-    const tabParam = new URLSearchParams(window.location.search).get("tab");
-    const validTabs = ["overview", "etf", "dividend", "financial", "company"];
-    const initialTab = validTabs.includes(tabParam ?? "")
-      ? (tabParam as "overview" | "etf" | "dividend" | "financial" | "company")
-      : undefined;
     const followed = records.some(
       (record) => record.market.toUpperCase() === detail.market.toUpperCase() && record.code.toUpperCase() === detail.code.toUpperCase()
     );
@@ -630,7 +643,6 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
           onBack={backToList}
           followed={followed}
           onToggleFollow={(follow, resolvedName) => onToggleWatch({ ...detail, name: resolvedName || detail.name }, follow)}
-          initialTab={initialTab}
           onTabChange={(next) => {
             const sp = new URLSearchParams(window.location.search);
             sp.set("tab", next);

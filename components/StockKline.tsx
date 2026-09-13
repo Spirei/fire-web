@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import echarts, { type EChartsInstance } from "@/lib/echarts";
 import RainbowNumberInput from "@/components/RainbowNumberInput";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
@@ -120,7 +120,6 @@ const BASIC_STYLES: ChartStyle[] = ["area", "line", "marked", "step"];
 const ADVANCED_STYLES: ChartStyle[] = ["hlc", "baseline", "candle", "hollow", "ohlc"];
 const ALL_STYLES: ChartStyle[] = [...BASIC_STYLES, ...ADVANCED_STYLES];
 const chartCache = new Map<string, ChartCacheEntry>();
-const CHART_CACHE_TTL = 2 * 60 * 1000;
 const DEFAULT_MA_CONFIGS: MAConfig[] = [
   { enabled: true, period: 5, color: "#ff8a1f" }, { enabled: true, period: 10, color: "#19a9dd" },
   { enabled: true, period: 20, color: "#df63d2" }, { enabled: true, period: 30, color: "#2481e8" },
@@ -352,11 +351,12 @@ function tooltipDate(label: string, intradayMode: boolean, marketName: string) {
 }
 
 export default function StockKline({ market, code, name, height = 420 }: Props) {
-  const [initialView] = useState<KlineView | null>(readKlineView);
-  const [initialSettings] = useState<KlineSettings | null>(readKlineSettings);
-  const [range, setRange] = useState<Range>(initialView?.range ?? "DAILY");
+  // 服务端与浏览器首帧使用同一默认值；持久化偏好在 layout effect 中恢复，避免详情直达时 hydration 差异。
+  const [initialView] = useState<KlineView | null>(null);
+  const [initialSettings] = useState<KlineSettings | null>(null);
+  const [range, setRange] = useState<Range>("DAY");
   const [intradayMinutes, setIntradayMinutes] = useState(initialView?.minutes ?? 1);
-  const [session, setSession] = useState<Session>(initialView?.session ?? "ALL");
+  const [session, setSession] = useState<Session>("ALL");
   const [style, setStyle] = useState<ChartStyle>(initialSettings?.style ?? (readBasicStyleOrder()[0] || "area"));
   const [items, setItems] = useState<KlineItem[]>([]);
   /** 当前 items 对应的数据形态：daily=日K / week / month / quarter / year=富途周期K */
@@ -421,11 +421,11 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const rangeDragRef = useRef<{ pointerId: number; startX: number; startLeft: number; moved: boolean } | null>(null);
   const suppressRangeClickRef = useRef(false);
 
-  // 每次进入个股或切换股票，默认回到「全天」；其他时段仅由用户主动选择。
-  useEffect(() => {
+  // 每次进入个股或切换股票，概览默认展示全天分时 K 线；其他时段仅由用户主动选择。
+  useLayoutEffect(() => {
     const restored = readKlineView();
-    setRange(restored?.range ?? "DAILY");
-    setSession(restored?.session ?? "ALL");
+    setRange("DAY");
+    setSession("ALL");
     if (restored) setIntradayMinutes(restored.minutes);
     const restoredSettings = readKlineSettings();
     setStyle(restoredSettings?.style ?? (readBasicStyleOrder()[0] || "area"));
@@ -577,7 +577,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
     setStyleNotice("已加入常用区并自动保存");
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
     const key = `${market}:${code}`;
@@ -585,11 +585,11 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
     let cached = chartCache.get(key);
     if (!cached) {
       try {
-        const stored = JSON.parse(sessionStorage.getItem(storageKey) || "null") as ChartCacheEntry | null;
-        if (stored && Date.now() - stored.at < CHART_CACHE_TTL) cached = stored;
+        const stored = JSON.parse(localStorage.getItem(storageKey) || sessionStorage.getItem(storageKey) || "null") as ChartCacheEntry | null;
+        if (stored) cached = stored;
       } catch {}
     }
-    const fresh = cached && Date.now() - cached.at < CHART_CACHE_TTL ? cached : null;
+    const fresh = cached ?? null;
     if (fresh) {
       setItems(fresh.items); setIntraday(fresh.intraday); setFiveDay(fresh.fiveDay); setSessionDay(fresh.sessionDay);
       setLoading(false); setError("");
@@ -604,6 +604,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       const value = { ...snapshot };
       chartCache.set(key, value);
       try { sessionStorage.setItem(storageKey, JSON.stringify(value)); } catch {}
+      try { localStorage.setItem(storageKey, JSON.stringify(value)); } catch {}
     };
     const reveal = () => { hasVisibleData = true; if (!cancelled) { setLoading(false); setError(""); } };
     const getJson = async (url: string, init?: RequestInit) => {
@@ -615,19 +616,19 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
     const tasks = [
       getJson(`/api/kline/session-day?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`).then((data) => {
         const rows = Array.isArray(data?.points) ? data.points : [];
-        snapshot.sessionDay = rows; snapshot.at = Date.now(); persistSnapshot();
+        if (rows.length) { snapshot.sessionDay = rows; snapshot.at = Date.now(); persistSnapshot(); }
         if (!cancelled) setSessionDay(rows);
         if (rows.length) reveal();
       }),
       getJson("/api/charts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ id: "detail", market, code }] }) }).then((data) => {
         const rows = Array.isArray(data?.charts?.detail?.points) ? data.charts.detail.points : [];
-        snapshot.intraday = rows; snapshot.at = Date.now(); persistSnapshot();
+        if (rows.length) { snapshot.intraday = rows; snapshot.at = Date.now(); persistSnapshot(); }
         if (!cancelled) setIntraday(rows);
         if (rows.length) reveal();
       }),
       getJson(`/api/kline/five-day?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`).then((data) => {
         const rows = Array.isArray(data?.points) ? data.points : [];
-        snapshot.fiveDay = rows; snapshot.at = Date.now(); persistSnapshot();
+        if (rows.length) { snapshot.fiveDay = rows; snapshot.at = Date.now(); persistSnapshot(); }
         if (!cancelled) setFiveDay(rows);
         if (rows.length) reveal();
       })
@@ -669,6 +670,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
         const value = { ...cached, items: rows, at: Date.now() };
         chartCache.set(key, value);
         try { sessionStorage.setItem(`fire-web:stock-chart:${key}`, JSON.stringify(value)); } catch {}
+        try { localStorage.setItem(`fire-web:stock-chart:${key}`, JSON.stringify(value)); } catch {}
       })
       .catch((error) => { if (error?.name !== "AbortError") { setLongRangeLoading(false); setError("长周期数据加载失败"); } });
     return () => controller.abort();
@@ -1175,12 +1177,15 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   return <div className="stock-chart-shell w-full">
     <div ref={toolbarRef} className="stock-chart-toolbar" aria-label="走势图控制栏">
       <div className="stock-chart-ranges">
+        <button type="button" className={`stock-chart-range ${range === "DAY" && session === "ALL" ? "is-active" : ""}`} onClick={() => { setRange("DAY"); setSession("ALL"); setSessionOpen(false); setPeriodOpen(false); setStyleOpen(false); }}>
+          全天
+        </button>
         <div className="stock-chart-popover-wrap">
-          <button type="button" className={`stock-chart-range ${range === "DAY" ? "is-active" : ""}`} onClick={() => { setSessionOpen((v) => !v); setPeriodOpen(false); setStyleOpen(false); }} aria-expanded={sessionOpen}>
-            {sessionLabel}<Chevron open={sessionOpen} />
+          <button type="button" className={`stock-chart-range ${range === "DAY" && session !== "ALL" ? "is-active" : ""}`} onClick={() => { setSessionOpen((v) => !v); setPeriodOpen(false); setStyleOpen(false); }} aria-expanded={sessionOpen}>
+            {session === "ALL" ? "时段" : sessionLabel}<Chevron open={sessionOpen} />
           </button>
           {sessionOpen && <div className="stock-chart-menu session-menu" role="menu">
-            {SESSIONS.map((item) => <button key={item.value} type="button" disabled={item.available === false} className={`${session === item.value ? "is-selected" : ""} ${item.available === false ? "is-unavailable" : ""}`} title={item.available === false ? "当前行情源暂无夜盘数据" : undefined} onClick={() => { setSession(item.value); if (item.value !== "ALL") setRange("DAY"); setSessionOpen(false); }}>
+            {SESSIONS.filter((item) => item.value !== "ALL").map((item) => <button key={item.value} type="button" disabled={item.available === false} className={`${session === item.value ? "is-selected" : ""} ${item.available === false ? "is-unavailable" : ""}`} title={item.available === false ? "当前行情源暂无夜盘数据" : undefined} onClick={() => { setSession(item.value); setRange("DAY"); setSessionOpen(false); }}>
               <span>{item.label}</span>{item.time && <small>{item.time}</small>}
             </button>)}
           </div>}
