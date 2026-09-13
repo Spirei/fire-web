@@ -862,7 +862,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
                       {editMode && <td className="px-4 py-3.5">
                         <QuotesCheckbox checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} label={`选择 ${r.name}`} />
                       </td>}
-                      <td className="quotes-rank-cell px-3 py-3.5 text-center text-xs tabular-nums text-faint">{(safePage - 1) * PAGE_SIZE + i + 1}</td>
+                      <td className="quotes-rank-cell px-3 py-3.5 text-center text-xs tabular-nums text-ink">{(safePage - 1) * PAGE_SIZE + i + 1}</td>
                       <td className="quotes-identity-cell cursor-pointer px-4 py-3.5 transition-colors hover:bg-brand-hover/30 dark:hover:bg-[#202735]" onClick={() => openDetail(r)}>
                         <div className="flex items-center gap-2.5">
                           {(r.market.toUpperCase() === "ASSET" ? assetIcons[r.code.toUpperCase()] : stockIcons[`${r.market.toUpperCase()}:${r.code.toUpperCase()}`]) ? (
