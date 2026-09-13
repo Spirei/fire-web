@@ -3001,7 +3001,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   software: V0_1_28_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.29" } : item),
   changes: [{
     title: "卡面库 NEW 角标美化",
-    desc: "左上角新品标记改为紧凑的银白渐变铭牌，搭配细边框、星芒和深灰字，减少卡面遮挡；深色模式使用石墨灰底与浅色字，保留新入库三天内展示的规则。",
+    desc: "左上角新品标记改为直径 32px 的银白渐变圆形徽标，星芒与 NEW 上下居中排列，搭配细边框和深灰字；深色模式使用石墨灰底与浅色字，保留新入库三天内展示的规则。",
     kind: "fix"
   }]
 };

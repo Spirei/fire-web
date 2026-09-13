@@ -5,18 +5,21 @@
   left: 7px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 19px;
-  padding: 0 6px;
+  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.9);
-  border-radius: 5px;
+  border-radius: 50%;
   background: linear-gradient(145deg, #ffffff, #e9ebee);
   color: #3f4652;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 750;
   line-height: 1;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   pointer-events: none;
 }
 .dark .card-library-new-badge {
