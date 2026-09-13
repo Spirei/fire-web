@@ -362,6 +362,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const [intradayMinutes, setIntradayMinutes] = useState(initialView?.minutes ?? 1);
   const [session, setSession] = useState<Session>("ALL");
   const [style, setStyle] = useState<ChartStyle>(initialSettings?.style ?? "area");
+  const [settingsRestored, setSettingsRestored] = useState(false);
   const [items, setItems] = useState<KlineItem[]>([]);
   /** 当前 items 对应的数据形态：daily=日K / week / month / quarter / year=富途周期K */
   const [itemsKind, setItemsKind] = useState<"daily" | "week" | "month" | "quarter" | "year">("daily");
@@ -443,6 +444,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       setMaLinesVisible(restoredSettings.maLinesVisible);
       setShowMAValues(restoredSettings.showMAValues);
     }
+    setSettingsRestored(true);
     setSessionOpen(false);
     setViewRestored(true);
   }, [market, code]);
@@ -455,8 +457,9 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
 
   // 记住技术指标与图表设置（复权/样式/MA），刷新或切换股票后自动还原
   useEffect(() => {
+    if (!settingsRestored) return;
     saveKlineSettings({ indicators: selectedIndicators, maConfigs, adjust, style, maLinesVisible, showMAValues });
-  }, [selectedIndicators, maConfigs, adjust, style, maLinesVisible, showMAValues]);
+  }, [selectedIndicators, maConfigs, adjust, style, maLinesVisible, showMAValues, settingsRestored]);
 
   useEffect(() => {
     const order = readBasicStyleOrder();
@@ -1164,7 +1167,9 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
           if (index < 0 || index >= data.values.length || !Number.isFinite(data.values[index])) return;
           if (followPointIndexRef.current === index) return;
           followPointIndexRef.current = index;
-          const pixel = chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [data.labels[index], data.values[index]]) as number[];
+          const candle = data.ohlc[index];
+          const markerValue = candleMode && candle?.length >= 2 ? (Number(candle[0]) + Number(candle[1])) / 2 : data.values[index];
+          const pixel = chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [data.labels[index], markerValue]) as number[];
           if (!Array.isArray(pixel) || !Number.isFinite(pixel[0]) || !Number.isFinite(pixel[1])) return;
           chart.setOption({ graphic: [{ id: "follow-point", type: "circle", silent: true, z: 100, shape: { cx: pixel[0], cy: pixel[1], r: 4.5 }, style: { fill: "#4f8cff", stroke: "#fff", lineWidth: 2 } }] });
         };
