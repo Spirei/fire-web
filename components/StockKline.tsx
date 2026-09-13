@@ -44,6 +44,7 @@ interface KlineView {
   range: Range;
   session: Session;
   minutes: number;
+  allDay: boolean;
 }
 function readKlineView(): KlineView | null {
   try {
@@ -53,7 +54,8 @@ function readKlineView(): KlineView | null {
     return {
       range: v.range && RANGE_VALUES.includes(v.range) ? v.range : "DAILY",
       session: v.session && SESSION_VALUES.includes(v.session) ? v.session : "ALL",
-      minutes: typeof v.minutes === "number" && v.minutes > 0 ? v.minutes : 1
+      minutes: typeof v.minutes === "number" && v.minutes > 0 ? v.minutes : 1,
+      allDay: typeof v.allDay === "boolean" ? v.allDay : v.range === "DAY" && (!v.session || v.session === "ALL")
     };
   } catch {
     return null;
@@ -356,9 +358,10 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const [initialSettings] = useState<KlineSettings | null>(null);
   const [range, setRange] = useState<Range>("DAY");
   const [allDayView, setAllDayView] = useState(true);
+  const [viewRestored, setViewRestored] = useState(false);
   const [intradayMinutes, setIntradayMinutes] = useState(initialView?.minutes ?? 1);
   const [session, setSession] = useState<Session>("ALL");
-  const [style, setStyle] = useState<ChartStyle>(initialSettings?.style ?? (readBasicStyleOrder()[0] || "area"));
+  const [style, setStyle] = useState<ChartStyle>(initialSettings?.style ?? "area");
   const [items, setItems] = useState<KlineItem[]>([]);
   /** 当前 items 对应的数据形态：daily=日K / week / month / quarter / year=富途周期K */
   const [itemsKind, setItemsKind] = useState<"daily" | "week" | "month" | "quarter" | "year">("daily");
@@ -412,6 +415,9 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const [styleMenuPosition, setStyleMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInst = useRef<EChartsInstance | null>(null);
+  const followAxisHandlerRef = useRef<((event: unknown) => void) | null>(null);
+  const followOutHandlerRef = useRef<(() => void) | null>(null);
+  const followPointIndexRef = useRef(-1);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const styleTriggerRef = useRef<HTMLButtonElement>(null);
   const styleDragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
@@ -421,12 +427,12 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const rangeDragRef = useRef<{ pointerId: number; startX: number; startLeft: number; moved: boolean } | null>(null);
   const suppressRangeClickRef = useRef(false);
 
-  // 每次进入个股或切换股票，概览默认展示全天分时 K 线；其他时段仅由用户主动选择。
+  // 每次进入个股或切换股票时恢复用户最后选择的周期。
   useLayoutEffect(() => {
     const restored = readKlineView();
-    setRange("DAY");
-    setAllDayView(true);
-    setSession("ALL");
+    setRange(restored?.range ?? "DAY");
+    setAllDayView(restored?.allDay ?? true);
+    setSession(restored?.session ?? "ALL");
     if (restored) setIntradayMinutes(restored.minutes);
     const restoredSettings = readKlineSettings();
     setStyle(restoredSettings?.style ?? (readBasicStyleOrder()[0] || "area"));
@@ -438,12 +444,14 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       setShowMAValues(restoredSettings.showMAValues);
     }
     setSessionOpen(false);
+    setViewRestored(true);
   }, [market, code]);
 
   // 记住上次的周期/时段/分钟视图，刷新或切换股票后自动还原
   useEffect(() => {
-    saveKlineView({ range, session, minutes: intradayMinutes });
-  }, [range, session, intradayMinutes]);
+    if (!viewRestored) return;
+    saveKlineView({ range, session, minutes: intradayMinutes, allDay: allDayView });
+  }, [range, session, intradayMinutes, allDayView, viewRestored]);
 
   // 记住技术指标与图表设置（复权/样式/MA），刷新或切换股票后自动还原
   useEffect(() => {
@@ -967,22 +975,6 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       const priceSeries = isComparing
         ? [{ ...lineSeries, data: mainNorm, yAxisIndex: subCount + 1, areaStyle: undefined, showSymbol: true, showAllSymbol: true, symbol: "circle", symbolSize: 4, emphasis: { scale: true }, markLine: undefined }]
         : effectiveStyle === "hlc" ? hlcSeries : effectiveStyle === "baseline" ? baselineSeries : [candleMode ? candleSeries : lineSeries];
-      // 主价格序列关闭常驻节点时，使用透明折线承载 axis tooltip 的高亮圆点。
-      // 这样蜡烛柱和普通折线都只在十字线当前位置显示一个清晰交点。
-      const followPointSeries = !isComparing ? [{
-        name: "跟随点",
-        type: "line" as const,
-        data: data.values,
-        showSymbol: false,
-        symbol: "circle",
-        symbolSize: 9,
-        connectNulls: true,
-        lineStyle: { opacity: 0 },
-        itemStyle: { color: "#4f8cff", borderColor: "#fff", borderWidth: 2 },
-        emphasis: { scale: 1.25 },
-        tooltip: { show: false },
-        z: 20
-      }] : [];
       const showMA = !(allDayView && range === "DAY" && session === "ALL") && !isComparing && selectedIndicators.includes("MA");
       const enabledMAs = maConfigs.filter((item) => item.enabled);
       const maSeries = showMA && maLinesVisible ? enabledMAs.map((item) => ({
@@ -1130,7 +1122,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
             splitLine: { show: false }
           }] : [])
         ],
-        series: [...priceSeries, ...followPointSeries, ...maSeries, ...emaSeries, ...bollSeries, ...subPanels.map((panel, i) => ({
+        series: [...priceSeries, ...maSeries, ...emaSeries, ...bollSeries, ...subPanels.map((panel, i) => ({
           name: panel.name,
           type: "bar",
           xAxisIndex: i + 1,
@@ -1160,13 +1152,47 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
         }) : [])]
       }, { notMerge: true });
       chartInst.current.resize();
+      const chart = chartInst.current;
+      if (followAxisHandlerRef.current) chart.off("updateAxisPointer", followAxisHandlerRef.current);
+      if (followOutHandlerRef.current) chart.getZr().off("globalout", followOutHandlerRef.current);
+      if (!isComparing) {
+        const updateFollowPoint = (event: unknown) => {
+          const payload = event as { axesInfo?: Array<{ axisDim?: string; axisIndex?: number; value?: string | number }> };
+          const axis = payload.axesInfo?.find((item) => item.axisDim === "x" && (item.axisIndex ?? 0) === 0);
+          const raw = axis?.value;
+          const index = typeof raw === "number" ? Math.round(raw) : data.labels.indexOf(String(raw ?? ""));
+          if (index < 0 || index >= data.values.length || !Number.isFinite(data.values[index])) return;
+          if (followPointIndexRef.current === index) return;
+          followPointIndexRef.current = index;
+          const pixel = chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [data.labels[index], data.values[index]]) as number[];
+          if (!Array.isArray(pixel) || !Number.isFinite(pixel[0]) || !Number.isFinite(pixel[1])) return;
+          chart.setOption({ graphic: [{ id: "follow-point", type: "circle", silent: true, z: 100, shape: { cx: pixel[0], cy: pixel[1], r: 4.5 }, style: { fill: "#4f8cff", stroke: "#fff", lineWidth: 2 } }] });
+        };
+        const clearFollowPoint = () => {
+          if (followPointIndexRef.current < 0) return;
+          followPointIndexRef.current = -1;
+          chart.setOption({ graphic: [{ id: "follow-point", type: "circle", silent: true, shape: { cx: 0, cy: 0, r: 0 } }] });
+        };
+        followAxisHandlerRef.current = updateFollowPoint;
+        followOutHandlerRef.current = clearFollowPoint;
+        chart.on("updateAxisPointer", updateFollowPoint);
+        chart.getZr().on("globalout", clearFollowPoint);
+      }
     };
     render();
     const observer = new ResizeObserver(render);
     if (chartRef.current) observer.observe(chartRef.current);
     const theme = new MutationObserver(render);
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => { observer.disconnect(); theme.disconnect(); };
+    return () => {
+      observer.disconnect(); theme.disconnect();
+      const chart = chartInst.current;
+      if (chart && followAxisHandlerRef.current) chart.off("updateAxisPointer", followAxisHandlerRef.current);
+      if (chart && followOutHandlerRef.current) chart.getZr().off("globalout", followOutHandlerRef.current);
+      followAxisHandlerRef.current = null;
+      followOutHandlerRef.current = null;
+      followPointIndexRef.current = -1;
+    };
   }, [data, style, code, name, market, range, session, selectedIndicators, maConfigs, maLinesVisible, compareSeries, compareItems, allDayView]);
 
   useEffect(() => () => {
