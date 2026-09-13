@@ -1998,7 +1998,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     {/*
                       右下角一颗圆形胶囊同时承担「状态 + 操作」：
                         ✓ = 已经在我的卡里，＋ = 还没加入；点一下切换。
-                      默认只留图标（清爽、不遮卡面），鼠标划过卡片时展开成「✓ 移出 / ＋ 加入」，
+                      「全部卡面」里每张卡的状态不同 → ✓/＋ 常显，一眼能扫出哪些已经有了；
+                      「我的卡」里每张都是自己的，✓ 恒为真、没有信息量，所以鼠标端只划过才浮出
+                      （触屏没有 hover，仍然常显 —— 否则没法移除），展开成「✓ 移出 / ＋ 加入」，
                       所以不再需要原生 title —— 那个提示要等一秒多才出来，正是你说的「有延迟」。
                     */}
                     <span
@@ -2010,11 +2012,13 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       }}
                       aria-label={isHeld ? "移出我的卡" : "加入我的卡"}
                       className={`absolute bottom-1.5 right-1.5 inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full text-[13px] font-bold shadow-sm transition-all duration-200 after:absolute after:-inset-2 after:content-[''] active:scale-95 sm:bottom-2 sm:right-2 sm:px-2 sm:text-[11px] sm:font-semibold ${
+                        mode === "mine" ? "touch-always opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100" : ""
+                      } ${
                         isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
                       }`}
                     >
                       <span className="flex-none">{isHeld ? "✓" : "＋"}</span>
-                      <span className="pointer-only inline-block max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover/card:max-w-[3.4rem] group-hover/card:pl-1 group-hover/card:opacity-100">
+                      <span className="pointer-only inline-block max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover:max-w-[3.4rem] group-hover:pl-1 group-hover:opacity-100">
                         {isHeld ? "移出" : "加入"}
                       </span>
                     </span>
