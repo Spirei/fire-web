@@ -1026,8 +1026,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             cover: (() => {
               // 有多版卡面时，卡包展示的是最新那一版
               const shown = card.faces?.[0]?.file ?? card.file;
-              if (shown.startsWith("/")) return shown;
-              return covers[shown] || manifestCoverUrl(shown);
+              // 同 cardCover：覆盖表优先，自建卡也不要直接绕过
+              if (covers[shown]) return covers[shown];
+              return shown.startsWith("/") ? shown : manifestCoverUrl(shown);
             })(),
             amount: saved?.amount ?? 0,
             currency: saved?.currency || info?.currency || REGION_CURRENCY[regionLabel] || "CNY",
@@ -1063,14 +1064,20 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
 
   /** 卡面实际展示地址：素材库里换过图就用那条素材的 url，否则回退清单原图 */
   function cardCover(cardFile: string) {
-    // 自建卡的卡面是上传后的绝对地址（/uploads/...），直接用
-    if (cardFile.startsWith("/")) return cardFile;
-    return covers[cardFile] || manifestCoverUrl(cardFile);
+    // 换过图（素材库里那条 card:{卡面} 的 url）优先 —— 自建卡也一样：
+    // 它的卡面地址本身就是 /uploads/...，以前直接 return 会绕过覆盖表，
+    // 于是给自建卡重新上传卡面后界面还是旧图（"上传成功但不生效"就是这里）。
+    if (covers[cardFile]) return covers[cardFile];
+    // 自建卡没换过图时，卡面地址本身就是最终地址，直接用
+    return cardFile.startsWith("/") ? cardFile : manifestCoverUrl(cardFile);
   }
 
   /** 这张卡是不是换过图（判断依据是素材库里的 url 与清单原图不同） */
   function hasCustomCover(cardFile: string) {
     const url = covers[cardFile];
+    // 自建卡（卡面地址本身就是 /uploads/...）没有「清单原图」，
+    // 拿清单地址去比永远不相等，会一直显示「恢复原图」按钮 —— 它的原图就是创建时那张
+    if (cardFile.startsWith("/")) return Boolean(url && url !== cardFile);
     return Boolean(url && url !== manifestCoverUrl(cardFile));
   }
 
@@ -1129,15 +1136,18 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     return true;
   }
 
-  /** 恢复清单原图（把素材库里的 url 改回清单地址） */
+  /** 恢复原图：清单卡回到清单里的原图，自建卡回到创建这张卡时上传的那张 */
   async function resetCover(entry: CardEntry) {
     if (coverSaving) return;
     setCoverSaving(true);
     try {
-      const original = manifestCoverUrl(entry.card.file);
+      // 自建卡的 card.file 就是「创建时那张图」的地址（/uploads/...）；
+      // 之前这里一律套 manifestCoverUrl，等于拼出 /uploads/cards//uploads/... 这种不存在的地址，
+      // 于是恢复原图之后图片直接 404 变成裂图。
+      const original = entry.card.file.startsWith("/") ? entry.card.file : manifestCoverUrl(entry.card.file);
       if (!(await saveCardAsset(entry, original))) return;
       setCovers((prev) => ({ ...prev, [entry.card.file]: original }));
-      showToast("已恢复清单原图");
+      showToast(entry.card.file.startsWith("/") ? "已恢复这张卡最初上传的卡面" : "已恢复清单原图");
     } catch {
       showToast("恢复失败，稍后再试", "err");
     } finally {
@@ -2463,7 +2473,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       type="button"
                       disabled={coverSaving}
                       onClick={() => void resetCover(active)}
-                      aria-label="恢复清单原图"
+                      aria-label={active.card.file.startsWith("/") ? "恢复最初上传的卡面" : "恢复清单原图"}
                       className="group/tip relative grid h-10 w-10 place-items-center rounded-full bg-black/45 sm:h-9 sm:w-9 text-white backdrop-blur transition-colors duration-200 hover:bg-black/60 active:scale-95 disabled:opacity-50"
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
@@ -2474,7 +2484,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         aria-hidden
                         className="pointer-events-none absolute right-0 top-[calc(100%+7px)] z-10 whitespace-nowrap rounded-lg bg-[#1c222d]/95 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-pop ring-1 ring-white/10 transition-opacity duration-100 group-hover/tip:opacity-100 group-focus-visible/tip:opacity-100"
                       >
-                        恢复清单原图
+                        {active.card.file.startsWith("/") ? "恢复最初上传的卡面" : "恢复清单原图"}
                       </span>
                     </button>
                   )}

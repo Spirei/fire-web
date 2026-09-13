@@ -25,7 +25,9 @@ export default function Toaster() {
   }, []);
 
   return (
-    <div className="pointer-events-none fixed left-0 right-0 top-[84px] z-[10001] flex flex-col items-center gap-2 px-4">
+    /* z-index 必须高于全站最高的弹层（卡面详情 / 新增卡片 / 卡包是 z-[10002]）：
+       否则「卡面已更新」「已恢复原图」这些提示会被弹窗盖住，用户看不到操作结果 */
+    <div className="pointer-events-none fixed left-0 right-0 top-[84px] z-[10050] flex flex-col items-center gap-2 px-4">
       {items.map((t) => (
         <div
           key={t.id}
