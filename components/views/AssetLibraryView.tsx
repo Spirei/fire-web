@@ -384,6 +384,7 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
   const brokerDragIndex = useRef<number | null>(null);
   const customMarkets = useRef<Set<string>>(new Set());
   const topMountedRef = useRef(false);
+  const assetRequestRef = useRef(0);
 
   // URL 状态同步：刷新/分享/前进后退都能保持选中的分类和市场
   useEffect(() => {
@@ -544,6 +545,7 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
   }
 
   async function loadAssets(silent = false) {
+    const requestId = ++assetRequestRef.current;
     if (!silent) setAssetsLoading(true);
     try {
       const params = new URLSearchParams({ type: tab });
@@ -558,6 +560,8 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
       }
       const res = await fetch(`/api/assets?${params}`);
       const data = await res.json().catch(() => null);
+      // 快速切换分类/市场/页码时，只接受最后一次请求，防止旧响应覆盖新页面。
+      if (requestId !== assetRequestRef.current) return;
       const list: Asset[] = data?.assets ?? [];
       setAssets(list);
       setAssetTotal(Number(data?.total) || list.length);
@@ -605,7 +609,7 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
     } catch {
       /* 忽略 */
     } finally {
-      setAssetsLoading(false);
+      if (requestId === assetRequestRef.current) setAssetsLoading(false);
     }
   }
 
@@ -1748,7 +1752,7 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
                   </button>
                 </div>
                 {pageStock.map((item, index) => {
-                  const rank = stockAssets.indexOf(item) + 1;
+                  const rank = (safePage - 1) * TOP_PAGE_SIZE + index + 1;
                   const key = `${item.market}:${item.code}`;
                   const saving = busy[key];
                   const isUp = (item.changePct ?? 0) >= 0;
