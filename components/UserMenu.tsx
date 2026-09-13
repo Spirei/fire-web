@@ -13,7 +13,7 @@ interface StockStats {
   watchlist: number;
 }
 
-export default function UserMenu({ goTo, initialUser = null }: { goTo?: string; initialUser?: User | null }) {
+export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" }: { goTo?: string; initialUser?: User | null; initialAvatar?: string }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(initialUser);
   const [ready, setReady] = useState(Boolean(initialUser));
@@ -163,6 +163,7 @@ export default function UserMenu({ goTo, initialUser = null }: { goTo?: string; 
   }
 
   const displayName = user.nickname || user.username;
+  const avatarSrc = user.avatar === initialUser?.avatar && initialAvatar ? initialAvatar : user.avatar;
 
   return (
     <div className="relative" ref={rootRef} onMouseEnter={openSoon} onMouseLeave={closeSoon}>
@@ -183,8 +184,8 @@ export default function UserMenu({ goTo, initialUser = null }: { goTo?: string; 
         aria-expanded={open}
       >
         <span className="relative inline-flex">
-          {user.avatar ? (
-            <img src={user.avatar} alt={`${user.username} 头像`} className={`h-10 w-10 rounded-full object-cover shadow-[0_2px_10px_rgba(0,0,0,.2)] transition-shadow duration-300 ${open ? "ring-2 ring-white" : "ring-2 ring-white/80 group-hover:ring-white"}`} />
+          {avatarSrc ? (
+            <img src={avatarSrc} alt={`${user.username} 头像`} className={`h-10 w-10 rounded-full object-cover shadow-[0_2px_10px_rgba(0,0,0,.2)] transition-shadow duration-300 ${open ? "ring-2 ring-white" : "ring-2 ring-white/80 group-hover:ring-white"}`} />
           ) : (
             <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-light text-[13px] font-bold text-brand-deep shadow-[0_2px_10px_rgba(0,0,0,.2)] transition-shadow duration-300 dark:bg-[#2b313c] dark:text-white ${open ? "ring-2 ring-white" : "ring-2 ring-white/80 group-hover:ring-white"}`}>
               {displayName.slice(0, 1).toUpperCase()}

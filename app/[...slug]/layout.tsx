@@ -10,7 +10,7 @@ import UserMenu from "@/components/UserMenu";
 import SiteLogo from "@/components/SiteLogo";
 import IndexTicker from "@/components/IndexTicker";
 import Toaster from "@/components/Toaster";
-import { getInlineFlagIconMap, getMarketIconMap, getNavIconMap, getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
+import { getInlineFlagIconMap, getMarketIconMap, getNavIconMap, getStockIconMap, inlineLocalAssetUrl, stockIconKeysForRecords } from "@/lib/assets";
 import { CURRENCY_FLAG_CODES, displayCurrencyFlagCode } from "@/lib/flagAssets";
 import { cardLibraryForUser, heldCardCoverUrls } from "@/lib/cardLibrary";
 import { CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/lib/currencyPrefs";
@@ -81,6 +81,7 @@ export default async function SlugLayout({
   // 市场图标一并首屏下发：市场下拉 / 筛选首帧就是素材库图标，不再等客户端请求
   const initialMarketIcons = getMarketIconMap();
   const initialNavIcons = getNavIconMap(settings.tabs.map((item) => item.key));
+  const initialAvatar = inlineLocalAssetUrl(user.avatar);
   const initialFlagIcons = getInlineFlagIconMap(CURRENCY_FLAG_CODES);
   // 卡面库：只在访问该页时把清单 + 我的持有 / 金额 / 标签随首屏下发，
   // 避免「HTML → JS → 水合 → 再请求」的串行等待（卡面图片本身随后按需加载）
@@ -107,7 +108,7 @@ export default async function SlugLayout({
           </Link>
           <div className="app-shell-ticker min-w-0 overflow-hidden"><IndexTicker /></div>
           <div className="ml-auto flex flex-none items-center gap-2.5">
-            <UserMenu initialUser={user} />
+            <UserMenu initialUser={user} initialAvatar={initialAvatar} />
           </div>
         </div>
       </header>

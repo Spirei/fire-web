@@ -35,14 +35,14 @@ export default function SafeAssetImage({
   if (!src || failed) return <>{fallback}</>;
   return (
     <span className="inline-grid flex-none place-items-center" style={style} title={title}>
-      <span className={`col-start-1 row-start-1 transition-opacity duration-100 ${loaded ? "opacity-0" : "opacity-100"}`} aria-hidden={loaded}>
+      <span className={`col-start-1 row-start-1 ${loaded ? "opacity-0" : "opacity-100"}`} aria-hidden={loaded}>
         {fallback}
       </span>
       <img
         ref={imageRef}
         src={src}
         alt={alt}
-        className={`col-start-1 row-start-1 transition-opacity duration-100 ${loaded ? "opacity-100" : "opacity-0"} ${className}`}
+        className={`col-start-1 row-start-1 ${loaded ? "opacity-100" : "opacity-0"} ${className}`}
         style={style}
         onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}

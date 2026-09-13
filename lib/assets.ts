@@ -242,7 +242,7 @@ export function getNavIconMap(codes: readonly string[]): Record<string, string> 
     const row = stmt.get(code) as { code?: string; url?: string } | undefined;
     const url = String(row?.url || "");
     if (!url || !localAssetExists(url)) return;
-    out[code] = url;
+    out[code] = inlineLocalAssetUrl(url);
   });
   return out;
 }
@@ -386,6 +386,17 @@ function localUploadFile(url: string): string | null {
   return null;
 }
 
+/** 把服务端已知的本地小图片直接放进首屏 HTML，避免刷新时图片请求晚于文字布局。 */
+export function inlineLocalAssetUrl(url: string): string {
+  if (!url) return "";
+  const file = localUploadFile(url);
+  if (!file) return url;
+  const ext = path.extname(file).toLowerCase();
+  const mime = ext === ".svg" ? "image/svg+xml" : ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "application/octet-stream";
+  try { return `data:${mime};base64,${fs.readFileSync(file).toString("base64")}`; }
+  catch { return url; }
+}
+
 /**
  * 固定货币的首屏版本：仍按素材库记录找文件，但把几百字节的本地图标内联进 HTML，
  * 浏览器第一次绘制无需再等待 /uploads 请求。远程自定义素材保留原 URL。
@@ -394,15 +405,7 @@ export function getInlineFlagIconMap(codes: readonly string[]): Record<string, s
   const urls = getFlagIconMap(codes);
   const map: Record<string, string> = {};
   Object.entries(urls).forEach(([code, url]) => {
-    const file = localUploadFile(url);
-    if (!file) {
-      map[code] = url;
-      return;
-    }
-    const ext = path.extname(file).toLowerCase();
-    const mime = ext === ".svg" ? "image/svg+xml" : ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "application/octet-stream";
-    try { map[code] = `data:${mime};base64,${fs.readFileSync(file).toString("base64")}`; }
-    catch { map[code] = url; }
+    map[code] = inlineLocalAssetUrl(url);
   });
   return map;
 }
