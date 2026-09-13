@@ -1008,14 +1008,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const accountSymbol = symbol;
   const accountSummary = assetMarket === "ALL" ? summary : (summary.markets[assetMarket] || { asset: 0, cost: 0, pnl: 0, day: 0 });
   const marketCurrency = ISO_BY_MARKET[assetMarket] as CurrencyCode | undefined;
-  // 银行卡余额属于账户级现金，不隶属于某个股票市场。市场筛选时保留全部银行卡现金，
-  // 同时扣掉已包含在对应币种资金余额里的那一份，避免同币种银行卡重复计算。
-  const selectedCurrencyCardCash = marketCurrency ? (cardCash[marketCurrency] || 0) / (rates[marketCurrency] || 1) * currencyFactor : 0;
-  const accountCash = assetMarket === "ALL"
-    ? cashTotal
-    : marketCurrency
-      ? (effectiveFundBalances[marketCurrency] || 0) / (rates[marketCurrency] || 1) * currencyFactor + cardCashTotal - selectedCurrencyCardCash
-      : cardCashTotal;
+  const accountCash = assetMarket === "ALL" ? cashTotal : marketCurrency ? (effectiveFundBalances[marketCurrency] || 0) / (rates[marketCurrency] || 1) * currencyFactor : 0;
   const accountFrozenCash = assetMarket === "ALL" ? frozenCashTotal : orders.reduce((total, order) => {
     const record = positions.find((item) => item.id === order.recordId);
     return record?.market.toUpperCase() === assetMarket && record && isCashReservedOrder(order, record) ? total + orderReservedAmount(order, record) : total;
@@ -1024,6 +1017,11 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   // 只读展示：借记卡 / 预付卡余额（信用卡额度不算），口径与并进现金的那部分完全一致
   const accountCardCash = cardCashTotal;
   const accountNetAsset = accountSummary.asset + accountCash;
+  const accountOverviewItems: Array<[string, number]> = [
+    ["净资产", accountNetAsset], ["当日盈亏", accountSummary.day], ["持仓市值", accountSummary.asset],
+    ["浮动盈亏", accountSummary.pnl], ["可用现金", accountAvailableCash],
+    ...(assetMarket === "ALL" ? [["银行卡现金", accountCardCash], ["冻结现金", accountFrozenCash]] as Array<[string, number]> : [])
+  ];
   const pageUsesCompactMoney = useMemo(() => {
     const values = [
     totalAsset, summary.asset, summary.pnl, summary.day, cashTotal,
@@ -1223,7 +1221,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
           <section className="mobile-hide-duplicate-summary card p-5">
             <div className="mb-2"><h3 className="text-base font-bold">账户总览</h3></div>
             <MarketPills value={assetMarket} onChange={setAssetMarket} />
-            <div className="mt-5 grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">{[["净资产", accountNetAsset], ["当日盈亏", accountSummary.day], ["持仓市值", accountSummary.asset], ["浮动盈亏", accountSummary.pnl], ["可用现金", accountAvailableCash], ["银行卡现金", accountCardCash], ["冻结现金", accountFrozenCash]].map(([label, value]) => <div key={String(label)} className="min-w-0" title={label === "可用现金" ? "现金余额已含借记卡 / 预付卡余额（信用卡额度不计）" : label === "银行卡现金" ? "「我的卡」里借记卡 / 预付卡余额折算成显示货币；信用卡额度属于可透支额度，不计入现金" : undefined}><span className="block truncate text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block min-w-0 text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}><AccountOverviewValue value={Number(value)} hidden={!assetsVisible} pending={label === "银行卡现金" ? !fundBalancesReady : (label === "净资产" || label === "可用现金") && !effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></strong></div>)}</div>
+            <div className={`mt-5 grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 ${assetMarket === "ALL" ? "lg:grid-cols-7" : "lg:grid-cols-5"}`}>{accountOverviewItems.map(([label, value]) => <div key={label} className="min-w-0" title={label === "可用现金" ? "现金余额已含借记卡 / 预付卡余额（信用卡额度不计）" : label === "银行卡现金" ? "「我的卡」里借记卡 / 预付卡余额折算成显示货币；信用卡额度属于可透支额度，不计入现金" : undefined}><span className="block truncate text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block min-w-0 text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}><AccountOverviewValue value={Number(value)} hidden={!assetsVisible} pending={label === "银行卡现金" ? !fundBalancesReady : (label === "净资产" || label === "可用现金") && !effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></strong></div>)}</div>
           </section>
           {renderModuleHandle("right", "overview")}
         </div>
