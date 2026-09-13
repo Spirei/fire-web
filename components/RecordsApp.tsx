@@ -96,6 +96,7 @@ export default function RecordsApp({
   initialMarketIcons = {},
   initialNavIcons = {},
   initialFlagIcons = {},
+  initialAssetLibrary = null,
   initialCardLibrary = null
 }: {
   initialTab: string;
@@ -111,6 +112,7 @@ export default function RecordsApp({
   initialMarketIcons?: Record<string, string>;
   initialNavIcons?: Record<string, string>;
   initialFlagIcons?: Record<string, string>;
+  initialAssetLibrary?: { assets: import("@/lib/useAssetIcons").Asset[]; total: number } | null;
   initialCardLibrary?: import("@/lib/cardLibrary").CardLibraryPayload | null;
 }) {
   const router = useRouter();
@@ -863,7 +865,7 @@ export default function RecordsApp({
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} />}
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
           {activeTab === "attachments" && (user?.role === "admin" ? <AttachmentsView /> : <NoPermission />)}
-          {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView initialCdnEnabled={initialSettings.stockIconCdn} /> : <NoPermission />)}
+          {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView initialCdnEnabled={initialSettings.stockIconCdn} initialAssets={initialAssetLibrary?.assets} initialTotal={initialAssetLibrary?.total} /> : <NoPermission />)}
           {activeTab === "cards" && <CardLibraryView initial={initialCardLibrary} />}
           {activeTab === "settings" && (
             <SettingsWindow>{settingsPanel}</SettingsWindow>

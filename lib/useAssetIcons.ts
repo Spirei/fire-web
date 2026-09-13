@@ -5,7 +5,7 @@ import { applyRelatedEtfMainStockIcons, pickStockIcon, stockIconLookupCodes } fr
 
 export interface Asset {
   id: string;
-  type: "stock" | "market" | "flag" | "broker" | "crypto" | "metal" | "icon";
+  type: "stock" | "market" | "flag" | "broker" | "crypto" | "metal" | "group" | "icon" | "card";
   market: string;
   code: string;
   name: string;
@@ -20,7 +20,7 @@ export interface Asset {
   updatedAt: string;
 }
 
-type AssetType = Asset["type"];
+type AssetType = Exclude<Asset["type"], "group" | "card">;
 type HookOptions = {
   /** 服务端已经读取设置时直接注入，避免再次请求 /api/settings。 */
   stockIconCdn?: boolean;

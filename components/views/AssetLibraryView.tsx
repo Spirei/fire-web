@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MARKET_LIST, marketMeta } from "@/lib/types";
 import { showToast } from "@/lib/toast";
 import MarketIcon from "@/components/MarketIcon";
@@ -277,7 +277,7 @@ function Avatar({
   );
 }
 
-export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnabled?: boolean } = {}) {
+export default function AssetLibraryView({ initialCdnEnabled, initialAssets = [], initialTotal = 0 }: { initialCdnEnabled?: boolean; initialAssets?: Asset[]; initialTotal?: number } = {}) {
   const rates = useRates();
   const [tab, setTab] = useState<TabKey>(() => {
     if (typeof window === "undefined") return "stock";
@@ -288,9 +288,9 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
     if (typeof window === "undefined") return "ALL";
     return new URLSearchParams(window.location.search).get("market") || "ALL";
   });
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [assetTotal, setAssetTotal] = useState(0);
-  const [assetsLoading, setAssetsLoading] = useState(true);
+  const [assets, setAssets] = useState<Asset[]>(initialAssets);
+  const [assetTotal, setAssetTotal] = useState(initialTotal);
+  const [assetsLoading, setAssetsLoading] = useState(initialAssets.length === 0);
   const [marketRows, setMarketRows] = useState<MarketRow[]>([]);
   const [countryRows, setCountryRows] = useState<CountryCatalogItem[]>([]);
   const [flagQuery, setFlagQuery] = useState("");
@@ -385,6 +385,28 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
   const customMarkets = useRef<Set<string>>(new Set());
   const topMountedRef = useRef(false);
   const assetRequestRef = useRef(0);
+
+  const stockPageSignature = `${selected}|${topPage}|${sortKey}|${sortDir}|${query.trim()}`;
+
+  // 股票列表上一次成功结果持久化：刷新先恢复原表格，再在后台请求最新数据。
+  useLayoutEffect(() => {
+    if (tab !== "stock") return;
+    try {
+      const cached = JSON.parse(localStorage.getItem("fire:asset-library-stock-page:v1") || "null") as {
+        signature?: string;
+        assets?: Asset[];
+        total?: number;
+      } | null;
+      if (cached?.signature !== stockPageSignature || !Array.isArray(cached.assets) || cached.assets.length === 0) return;
+      setAssets(cached.assets);
+      setAssetTotal(Number(cached.total) || cached.assets.length);
+      setAssetsLoading(false);
+    } catch {
+      /* 缓存损坏时按正常接口加载 */
+    }
+    // 只恢复初始 URL 对应的上一页；后续筛选由内存旧数据承接。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // URL 状态同步：刷新/分享/前进后退都能保持选中的分类和市场
   useEffect(() => {
@@ -566,6 +588,17 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
       const list: Asset[] = data?.assets ?? [];
       setAssets(list);
       setAssetTotal(Number(data?.total) || list.length);
+      if (tab === "stock" && list.length > 0) {
+        try {
+          localStorage.setItem("fire:asset-library-stock-page:v1", JSON.stringify({
+            signature: stockPageSignature,
+            assets: list,
+            total: Number(data?.total) || list.length
+          }));
+        } catch {
+          /* 隐私模式或空间不足不影响列表 */
+        }
+      }
       if (tab === "stock" && Number.isFinite(data?.page) && data.page !== topPage) setTopPage(data.page);
       const markets = list
         .filter((a) => a.type === "market")
@@ -1053,11 +1086,11 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
   }
 
   const SortArrow = ({ k }: { k: typeof sortKey }) =>
-    sortKey === k ? (
-      <svg viewBox="0 0 24 24" fill="currentColor" className={`h-2.5 w-2.5 transition-transform ${sortDir === "asc" ? "rotate-180" : ""}`}>
+    (
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" className={`h-2.5 w-2.5 flex-none transition-transform ${sortKey !== k ? "invisible" : ""} ${sortDir === "asc" ? "rotate-180" : ""}`}>
         <path d="m6 9 6 6 6-6" />
       </svg>
-    ) : null;
+    );
 
   // 归属市场前端兜底（手动添加的股票没有同步字段时按代码规则判断）
   const boardFallback = (item: Asset) => {
@@ -1635,8 +1668,8 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
             </div>
 
             {/* 股票图标列表（微牛样式：白卡片 + 表头 + 行） */}
-            {assetsLoading ? (
-              <div className="asset-library-stock-list overflow-x-auto rounded-[14px] border border-edge bg-white shadow-card dark:bg-[#16181d]">
+            {assetsLoading && pageStock.length === 0 ? (
+              <div aria-busy={assetsLoading} className="asset-library-stock-list overflow-x-auto rounded-[14px] border border-edge bg-white shadow-card dark:bg-[#16181d]">
                 <div className="asset-library-stock-row grid min-w-[680px] grid-cols-[56px_minmax(190px,1fr)_90px_82px_82px_140px] items-center gap-2 border-b border-edge bg-[#f6f7f9] px-4 py-2 text-[11px] font-semibold text-muted dark:bg-white/5">
                   <span>序号</span>
                   <span>名称 / 代码</span>

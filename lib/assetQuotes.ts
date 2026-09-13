@@ -240,7 +240,14 @@ export function enrichAssetQuotes<T extends { type: string; code: string; price:
 export async function enrichStockAssetQuotes<T extends { type: string; market: string; code: string; price: number | null; changePct: number | null; marketCap: number }>(assets: T[]): Promise<T[]> {
   if (!assets.some((asset) => asset.type === "stock" && (asset.price == null || !asset.marketCap))) return assets;
   const markets = ["US", "HK", "CN", "JP", "KR"] as const;
-  const results = await Promise.allSettled(markets.map((market) => getTopStocks(market)));
+  const refresh = Promise.allSettled(markets.map((market) => getTopStocks(market)));
+  // 素材库展示的是持久化数据，不能因为某个市场缓存过期就把整张表阻塞十几秒。
+  // 给热缓存一个很短的命中窗口；冷缓存继续在后台更新，本次先返回数据库中的上次值。
+  const results = await Promise.race([
+    refresh,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 180))
+  ]);
+  if (!results) return assets;
   const quotes = new Map<string, AssetQuote>();
   results.forEach((result) => {
     if (result.status !== "fulfilled") return;
