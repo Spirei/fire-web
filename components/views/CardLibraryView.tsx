@@ -2001,8 +2001,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         ✓ = 已经在我的卡里，＋ = 还没加入；点一下切换。
                       「全部卡面」里每张卡的状态不同 → ✓/＋ 常显，一眼能扫出哪些已经有了；
                       「我的卡」里每张都是自己的，✓ 恒为真、没有信息量，所以鼠标端只划过才浮出
-                      （触屏没有 hover，仍然常显 —— 否则没法移除），展开成「✓ 移出 / ＋ 加入」，
-                      所以不再需要原生 title —— 那个提示要等一秒多才出来，正是你说的「有延迟」。
+                      （触屏没有 hover，仍然常显 —— 否则没法移除）。
+                      所有尺寸下保持圆形，悬停不再展开文字。
                     */}
                     <span
                       role="button"
@@ -2012,18 +2012,14 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         void setHeld(card.file, !isHeld);
                       }}
                       aria-label={isHeld ? "移出我的卡" : "加入我的卡"}
-                      /* 手机端可见直径 24px、热区靠 after 外扩到 44px（视觉更轻，手指仍然好点）；
-                         桌面端恢复成带文字的胶囊（默认只留 ✓/＋，划过卡片才展开文字） */
-                      className={`absolute bottom-1.5 right-1.5 inline-flex h-6 w-6 items-center justify-center overflow-hidden rounded-full text-[12px] font-bold shadow-sm transition-all duration-200 after:absolute after:-inset-2.5 after:content-[''] active:scale-95 sm:bottom-2 sm:right-2 sm:h-auto sm:w-auto sm:px-2 sm:text-[11px] sm:font-semibold ${
+                      /* 与 NEW 徽标统一为 32px 圆形，伪元素把点击热区扩大到 44px。 */
+                      className={`absolute bottom-[7px] right-[7px] inline-flex h-8 w-8 items-center justify-center rounded-full text-[14px] font-bold shadow-sm transition-all duration-200 after:absolute after:-inset-1.5 after:content-[''] active:scale-95 ${
                         mode === "mine" ? "touch-always opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100" : ""
                       } ${
                         isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
                       }`}
                     >
                       <span className="flex-none">{isHeld ? "✓" : "＋"}</span>
-                      <span className="pointer-only inline-block max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover:max-w-[3.4rem] group-hover:pl-1 group-hover:opacity-100">
-                        {isHeld ? "移出" : "加入"}
-                      </span>
                     </span>
                   </span>
                 </span>
