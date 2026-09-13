@@ -3039,6 +3039,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "自选行情板序号统一正文颜色",
     desc: "自选股的我的行情板中，序号列数字由浅灰色改为与股票名称一致的正文颜色，提升列表层级的一致性，并自动适配深浅色模式。",
     kind: "fix"
+  }, {
+    title: "恢复贵金属与缺失加密货币图标",
+    desc: "恢复黄金、白银、铂金和钯金在原行情源中的独立图标，移除 8 月 31 日为补齐镜像素材而加入的统一黑底金属锭 SVG；同时修正 companiesmarketcap 贵金属资源必须带 .XM 后缀的规则，避免 GOLD 等代码撞到同名上市公司图标。全量核对市场、加密货币和券商素材后，补回 BNB、DASH、DOGE、DOT、ETC、LTC、TRX、VET、XLM、XMR、XRP 共 11 个缺失的默认图标；初始化逻辑也会在数据库地址为空或文件丢失时恢复内置素材，不覆盖有效的用户上传图标。",
+    kind: "fix"
   }]
 };
 

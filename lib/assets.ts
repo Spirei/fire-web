@@ -268,7 +268,8 @@ export function ensureBrokerAssets(): void {
  * 从镜像打包的默认素材目录播种素材库（crypto / metal / flag）。
  * - crypto / metal：文件名「名称 + 代码」，末尾大写串为代码（AaveAAVE.svg / 白银SILVER.svg）；
  * - flag：文件名即国家代码（us.svg / cn.svg）。
- * 仅在素材库无该 type+code 条目时补种（幂等，不覆盖用户已上传/已同步的真实素材）。
+ * 素材库无条目时补种；已有条目的 URL 为空或本地文件丢失时恢复内置素材。
+ * 有效的用户上传/同步素材始终保留。
  */
 export function ensureCategoryAssets(type: "crypto" | "metal" | "flag"): void {
   if (seeded.category.has(type)) return;
@@ -299,7 +300,9 @@ export function ensureCategoryAssets(type: "crypto" | "metal" | "flag"): void {
     if (existing?.id) {
       // 默认素材升级时修复历史错误映射（例如 ETH 曾误指向 BTC 图标）。
       const expected = `/uploads/asset/${subdir}/${file}`;
-      if (existing.url !== expected && (!existing.url || /BTC|比特币/i.test(existing.url) && code === "ETH")) {
+      const currentUrl = existing.url || "";
+      const missingLocalAsset = !currentUrl || !localAssetExists(currentUrl);
+      if (currentUrl !== expected && (missingLocalAsset || /BTC|比特币/i.test(currentUrl) && code === "ETH")) {
         db.prepare("UPDATE assets SET url = ?, name = ?, updated_at = ? WHERE id = ?").run(expected, name, new Date().toISOString(), existing.id);
       }
       return;

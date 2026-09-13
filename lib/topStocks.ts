@@ -160,7 +160,8 @@ async function fetchCmcPage(market: "JP" | "KR" | "ALL"): Promise<TopStock[]> {
             ? Number(priceRaw.replace(/,/g, ""))
             : null,
       changePct: pctRaw != null && pctRaw !== "" ? Number(pctRaw) / (market === "ALL" ? 100 : 1) : null,
-      logo: cmcLogo(code),
+      // 贵金属在 CMC 使用 GOLD.XM / SILVER.XM 等资源名；省略 .XM 会撞到同代码公司 Logo。
+      logo: cmcLogo(type === "metal" ? `${code}.XM` : code),
       type
     });
   }
