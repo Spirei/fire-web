@@ -464,7 +464,14 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
 
   useEffect(() => {
     const close = (event: PointerEvent) => {
-      if (!toolbarRef.current?.contains(event.target as Node)) { setSessionOpen(false); setPeriodOpen(false); setStyleOpen(false); }
+      if (!toolbarRef.current?.contains(event.target as Node)) {
+        setSessionOpen(false);
+        setPeriodOpen(false);
+        setStyleOpen(false);
+        setAdjustOpen(false);
+        setCompareOpen(false);
+        setChartSettingsOpen(false);
+      }
     };
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
@@ -479,6 +486,9 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
 
   const toggleStyleMenu = () => {
     setPeriodOpen(false);
+    setAdjustOpen(false);
+    setCompareOpen(false);
+    setChartSettingsOpen(false);
     if (styleOpen) {
       setStyleOpen(false);
       return;
@@ -1209,7 +1219,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       </div>
       <div className="stock-chart-action-group">
       <div className="stock-chart-popover-wrap">
-        <button type="button" className="stock-chart-adjust-trigger" aria-label="复权" aria-expanded={adjustOpen} onClick={() => { setAdjustOpen((o) => !o); setCompareOpen(false); setStyleOpen(false); setSessionOpen(false); setPeriodOpen(false); }}>
+        <button type="button" className="stock-chart-adjust-trigger" aria-label="复权" aria-expanded={adjustOpen} onClick={() => { setAdjustOpen((o) => !o); setCompareOpen(false); setChartSettingsOpen(false); setStyleOpen(false); setSessionOpen(false); setPeriodOpen(false); }}>
           {adjust === "qfq" ? "前复权" : adjust === "hfq" ? "后复权" : "不复权"}
           <Chevron open={adjustOpen} />
         </button>
@@ -1222,7 +1232,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
         )}
       </div>
       <div className="stock-chart-popover-wrap">
-        <button type="button" className={`stock-chart-adjust-trigger ${compareItems.length > 0 ? "has-compare" : ""}`} aria-label="涨跌幅比较" aria-expanded={compareOpen} onClick={() => { setCompareOpen((o) => !o); setStyleOpen(false); setSessionOpen(false); setPeriodOpen(false); }}>
+        <button type="button" className={`stock-chart-adjust-trigger ${compareItems.length > 0 ? "has-compare" : ""}`} aria-label="涨跌幅比较" aria-expanded={compareOpen} onClick={() => { setCompareOpen((o) => !o); setAdjustOpen(false); setChartSettingsOpen(false); setStyleOpen(false); setSessionOpen(false); setPeriodOpen(false); }}>
           <svg viewBox="0 0 24 24" fill="currentColor" className="stock-chart-compare-trigger-icon" aria-hidden="true"><path d="M2,19.99l7.5-7.51l4,4l7.09-7.97L22,9.92l-8.5,9.56l-4-4l-6,6.01L2,19.99z M3.5,15.49l6-6.01l4,4L22,3.92l-1.41-1.41 l-7.09,7.97l-4-4L2,13.99L3.5,15.49z" /></svg>
           比较{compareItems.length > 0 ? ` · ${compareItems.length}` : ""}
           <Chevron open={compareOpen} />
@@ -1331,7 +1341,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
         </div>}
       </div>
       <div className="stock-chart-popover-wrap">
-        <button type="button" className="stock-chart-adjust-trigger" aria-label="技术指标" aria-expanded={chartSettingsOpen} onClick={() => { setChartSettingsOpen((open) => !open); setStyleOpen(false); setSessionOpen(false); setPeriodOpen(false); }}><MonitoringIcon />指标<Chevron open={chartSettingsOpen} /></button>
+        <button type="button" className="stock-chart-adjust-trigger" aria-label="技术指标" aria-expanded={chartSettingsOpen} onClick={() => { setChartSettingsOpen((open) => !open); setAdjustOpen(false); setCompareOpen(false); setStyleOpen(false); setSessionOpen(false); setPeriodOpen(false); }}><MonitoringIcon />指标<Chevron open={chartSettingsOpen} /></button>
         {chartSettingsOpen && <div className="stock-chart-menu chart-settings-menu" role="menu" aria-label="图表设置">
           <div className="chart-settings-title"><GearIcon /><b>图表设置</b></div>
           <section className="chart-settings-ma-section">

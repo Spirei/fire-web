@@ -2865,14 +2865,14 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 }
 .chart-settings-menu label input:checked,
 .ma-settings-row input[type="checkbox"]:checked {
-  background-color: #ed8a21; border-color: #ed8a21;
+  background-color: #667180; border-color: #667180;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='white' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round' d='M2.5 6.2 5 8.7l4.5-5'/%3E%3C/svg%3E");
   background-size: 10px 10px; background-position: center; background-repeat: no-repeat;
 }
 .dark .chart-settings-menu label input,
 .dark .ma-settings-row input[type="checkbox"] { border-color: rgba(255,255,255,.16); background-color: #1b2029; }
 .dark .chart-settings-menu label input:checked,
-.dark .ma-settings-row input[type="checkbox"]:checked { background-color: #ed8a21; border-color: #ed8a21; }
+.dark .ma-settings-row input[type="checkbox"]:checked { background-color: #667180; border-color: #7b8797; }
 .chart-settings-detail { border-radius: 9px; transition: color 160ms ease, background 160ms ease; }
 .chart-settings-detail:hover { color: #20252d; background: #f3f5f7; }
 .chart-settings-detail > span { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
@@ -3165,6 +3165,7 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .dark .stock-chart-settings-trigger:hover { color: #eef2f7; background: rgba(255,255,255,.08); }
 .dark .chart-settings-title { border-color: rgba(255,255,255,.1); color: #e3e8ef; }
 .dark .chart-settings-menu label,.dark .chart-settings-detail { color: #aeb7c3; }
+.dark .chart-settings-detail > span b { color: #e3e8ef; }
 .dark .chart-settings-detail:hover { color: #eef2f7; background: rgba(255,255,255,.05); }
 .dark .chart-settings-menu section { border-color: rgba(255,255,255,.09); }
 .dark .chart-indicator-manage-row:hover { background: rgba(255,255,255,.05); }
