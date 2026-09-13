@@ -14,6 +14,35 @@ export interface TickerItem {
   points: number[];
 }
 
+/**
+ * 顶部走势图只有 56px 宽：按区间保留局部高低点，并固定保留首尾点。
+ * 相比等距抽样，它不会漏掉短暂的日内尖峰；结果最多 target 个点。
+ */
+export function sampleTickerPoints(points: number[], target = 56): number[] {
+  if (!Array.isArray(points) || points.length <= target) return points;
+  const limit = Math.max(4, Math.floor(target));
+  const middleCount = points.length - 2;
+  const bucketCount = Math.max(1, Math.floor((limit - 2) / 2));
+  const sampled = [points[0]];
+
+  for (let bucket = 0; bucket < bucketCount; bucket++) {
+    const start = 1 + Math.floor((bucket * middleCount) / bucketCount);
+    const end = 1 + Math.floor(((bucket + 1) * middleCount) / bucketCount);
+    let minIndex = start;
+    let maxIndex = start;
+    for (let index = start + 1; index < end; index++) {
+      if (points[index] < points[minIndex]) minIndex = index;
+      if (points[index] > points[maxIndex]) maxIndex = index;
+    }
+    if (minIndex === maxIndex) sampled.push(points[minIndex]);
+    else if (minIndex < maxIndex) sampled.push(points[minIndex], points[maxIndex]);
+    else sampled.push(points[maxIndex], points[minIndex]);
+  }
+
+  sampled.push(points[points.length - 1]);
+  return sampled;
+}
+
 // 东方财富行情/分时主机：push2delay 为可用主机（2026-08 起 push2 / push2his 对指数返回空），
 // 保留原主机作为回退，避免单一主机失效导致首页指数消失。
 const EM_QUOTE_HOSTS = [
@@ -249,7 +278,8 @@ export async function fetchTicker(): Promise<{ items: TickerItem[]; interval: nu
         return { item, lastBarAt: trend.lastBarAt, date: trend.date };
       })
     );
-    const items = built.map((row) => row.item);
+    // 行情推进判断和富途对账继续使用 built 内的完整分钟序列；仅压缩返回前端绘图的数据。
+    const items = built.map((row) => ({ ...row.item, points: sampleTickerPoints(row.item.points) }));
     // 有任何市场在出新数据 → 60 秒；收市按「停了多久」逐档退避（5 / 15 / 30 分钟）；
     // 页面重新可见时客户端另外会立刻刷新一次
     const rows = built.map((row) => ({ key: row.item.key, lastBarAt: row.lastBarAt, points: row.item.points.length }));
