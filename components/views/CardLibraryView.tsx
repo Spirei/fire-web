@@ -2011,16 +2011,14 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       /* 操作按钮保持 32px 圆形，伪元素把点击热区扩大到 44px。 */
                       className={`group/card-action card-library-action absolute bottom-[7px] right-[7px] inline-flex h-8 w-8 items-center justify-center rounded-full text-[14px] font-bold shadow-sm transition-all duration-200 after:absolute after:-inset-1.5 after:content-[''] active:scale-95 ${
                         mode === "mine" || !isHeld ? "invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100" : ""
-                      } ${
-                        isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
                       }`}
                     >
                       <span aria-hidden="true" className="flex-none">{mode === "mine" ? "−" : isHeld ? "✓" : "＋"}</span>
                       <span
                         aria-hidden="true"
-                        className="pointer-events-none absolute right-[calc(100%+6px)] top-1/2 z-10 -translate-y-1/2 whitespace-nowrap rounded-lg bg-[#1c222d]/95 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-sm group-hover/card-action:opacity-100"
+                        className="card-library-action-tip pointer-events-none absolute right-[calc(100%+5px)] top-1/2 z-10 -translate-y-1/2 whitespace-nowrap opacity-0 group-hover/card-action:opacity-100"
                       >
-                        {isHeld ? "移出我的卡" : "加入我的卡"}
+                        {isHeld ? "移出" : "加入"}
                       </span>
                     </span>
                   </span>

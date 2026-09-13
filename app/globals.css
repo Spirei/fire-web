@@ -27,6 +27,33 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
 }
 
+.card-library-action {
+  background: #f5f6f8;
+  color: #3f4652;
+}
+.card-library-action-tip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid #e2e5e9;
+  border-radius: 7px;
+  background: #f5f6f8;
+  color: #3f4652;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+}
+.dark .card-library-action,
+.dark .card-library-action-tip {
+  background: #e2e5e9;
+  color: #343a44;
+}
+.dark .card-library-action-tip {
+  border-color: #cbd0d7;
+}
+
 /* 触屏没有悬停，保留可发现的加入／移除入口。 */
 @media (hover: none) {
   .card-library-action[role="button"] {
