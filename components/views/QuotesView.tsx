@@ -54,6 +54,23 @@ const INTERVALS = [
 
 const CHART_CACHE_KEY = "fire:watchlist:charts";
 
+function compactFilterToken(groups: WatchGroup[], id: string): string {
+  if (!id) return "";
+  const group = groups.find((item) => item.id === id);
+  if (!group) return "";
+  if (group.kind === "market") return group.market.toLowerCase();
+  const index = groups.filter((item) => item.kind === "custom").findIndex((item) => item.id === id);
+  return index >= 0 ? String(index + 1) : "";
+}
+
+function filterIdFromToken(groups: WatchGroup[], raw: string): string {
+  if (!raw) return "";
+  const market = groups.find((item) => item.kind === "market" && item.market.toLowerCase() === raw.toLowerCase());
+  if (market) return market.id;
+  if (/^[1-9]\d*$/.test(raw)) return groups.filter((item) => item.kind === "custom")[Number(raw) - 1]?.id ?? "";
+  return "";
+}
+
 export default function QuotesView({ initialSymbol, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, groups, onDetailChange, onToggleWatch }: Props) {
   const { brokerIcons, stockIcons, assetIcons } = useAssetIcons(["broker", "stock", "crypto", "metal"]);
   const [added, setAdded] = useState("");
@@ -178,7 +195,8 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
 
   function writeFilterToUrl(id: string, mode: "push" | "replace" = "push") {
     const sp = new URLSearchParams(window.location.search);
-    if (id) sp.set("filter", id);
+    const token = compactFilterToken(watchGroups, id);
+    if (token) sp.set("filter", token);
     else sp.delete("filter");
     const query = sp.toString();
     window.history[mode === "push" ? "pushState" : "replaceState"](
@@ -188,7 +206,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
     );
   }
 
-  // 兼容旧 URL：?filter=M:US / G:名称 → 解析为分组 id；失效 id 自动回到全部。
+  // 市场使用 us/cn/hk 等市场码，自定义分组按当前顺序使用 1/2/3；其他格式直接清理。
   useEffect(() => {
     if (watchGroups.length === 0) return;
     const sp = new URLSearchParams(window.location.search);
@@ -197,16 +215,13 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       if (filterId) setFilterId("");
       return;
     }
-    let resolved = raw;
-    if (raw.startsWith("M:")) {
-      resolved = watchGroups.find((g) => g.kind === "market" && g.market === raw.slice(2))?.id ?? "";
-    } else if (raw.startsWith("G:")) {
-      resolved = watchGroups.find((g) => g.kind === "custom" && g.name === raw.slice(2))?.id ?? "";
-    } else if (!watchGroups.some((g) => g.id === raw)) {
-      resolved = "";
-    }
+    // 重排分组时以当前已选中的实体为准，只更新它的新序号，不能切换到新的第 N 组。
+    const resolved = watchGroups.some((item) => item.id === filterId)
+      ? filterId
+      : filterIdFromToken(watchGroups, raw);
+    const canonical = compactFilterToken(watchGroups, resolved);
     if (resolved !== filterId) setFilterId(resolved);
-    if (resolved !== raw) writeFilterToUrl(resolved, "replace");
+    if (canonical !== raw) writeFilterToUrl(resolved, "replace");
     // writeFilterToUrl 只依赖浏览器当前地址。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchGroups, filterId]);
@@ -342,7 +357,8 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
 
   useEffect(() => {
     function syncFromPath() {
-      const nextFilterId = new URLSearchParams(window.location.search).get("filter") ?? "";
+      const rawFilter = new URLSearchParams(window.location.search).get("filter") ?? "";
+      const nextFilterId = filterIdFromToken(watchGroups, rawFilter);
       setFilterId(nextFilterId);
       setPage(1);
       const hit = codeFromPath();
