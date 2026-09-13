@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import echarts from "@/lib/echarts";
 
 type Point = { period: string; fiscalYear?: number; fiscalPeriod?: string; value: number };
@@ -10,6 +10,23 @@ const SECTIONS = ["财报", "财务评分", "关键指标", "利润表", "资产
 type Section = typeof SECTIONS[number];
 type ReportView = "摘要" | "收入明细" | "财报附件";
 type ReportFile = { id: string; market: string; exchange: string; companyCode: string; companyName: string; fiscalYear: number; fiscalPeriod: string; reportType: string; fileKind: "original" | "parsed" | "export" | "filing"; fileName: string; fileUrl: string; fileSize: number; createdAt: string };
+const FINANCIAL_CACHE_PREFIX = "fire:financials:v1";
+
+function financialCacheKey(market: string, code: string) {
+  return `${FINANCIAL_CACHE_PREFIX}:${market.trim().toUpperCase()}:${code.trim().toUpperCase()}`;
+}
+
+function readFinancialCache(market: string, code: string): Payload | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(financialCacheKey(market, code)) || "null") as { payload?: Payload } | null;
+    return value?.payload?.metrics ? value.payload : null;
+  } catch { return null; }
+}
+
+function writeFinancialCache(market: string, code: string, payload: Payload) {
+  if (!payload.metrics) return;
+  try { localStorage.setItem(financialCacheKey(market, code), JSON.stringify({ payload, savedAt: Date.now() })); } catch {}
+}
 
 function compact(value?: number, perShare = false) {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -152,19 +169,24 @@ export default function FinancialPanel({ market, code }: { market: string; code:
   const [payload, setPayload] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
+  useLayoutEffect(() => {
+    const cached = readFinancialCache(market, code);
+    setPayload(cached);
+    setLoading(!cached);
+  }, [market, code]);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setPayload(null);
+    const cached = readFinancialCache(market, code);
+    if (!cached) setLoading(true);
     fetch(`/api/financials?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const body = await response.json().catch(() => null);
         if (!response.ok) throw new Error(body?.error || "财务数据加载失败");
         return body;
       })
-      .then(setPayload)
+      .then((next) => { setPayload(next); writeFinancialCache(market, code, next); })
       .catch((error) => {
-        if ((error as Error)?.name !== "AbortError") setPayload({ error: error instanceof Error ? error.message : "财务数据加载失败" });
+        if ((error as Error)?.name !== "AbortError" && !cached) setPayload({ error: error instanceof Error ? error.message : "财务数据加载失败" });
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
@@ -209,7 +231,7 @@ export default function FinancialPanel({ market, code }: { market: string; code:
 
   return <div className="financial-panel">
     <div className="financial-subnav" role="tablist" aria-label="财务数据分类">{SECTIONS.map((item) => <button key={item} type="button" role="tab" aria-selected={section === item} onClick={() => setSection(item)} className={section === item ? "is-active" : ""}>{item}</button>)}</div>
-    {loading ? <div className="financial-state financial-loading" aria-live="polite"><span className="stock-module-spinner"/><b>正在整理财务数据</b><span>同步申报口径与最近报告期</span></div> : !metrics ? <div className="financial-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 19V5m0 14h16M8 16v-5m4 5V8m4 8v-3"/></svg><b>暂无可用财务数据</b><span>{payload?.error || "该市场数据源后续接入"}</span><button type="button" onClick={() => setReloadKey((key) => key + 1)}>重新加载</button></div> : <>
+    {loading && !metrics ? <div className="financial-state financial-loading" aria-live="polite"><span className="stock-module-spinner"/><b>正在整理财务数据</b><span>同步申报口径与最近报告期</span></div> : !metrics ? <div className="financial-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 19V5m0 14h16M8 16v-5m4 5V8m4 8v-3"/></svg><b>暂无可用财务数据</b><span>{payload?.error || "该市场数据源后续接入"}</span><button type="button" onClick={() => setReloadKey((key) => key + 1)}>重新加载</button></div> : <>
       <div className="financial-heading"><div><h3>{section}</h3><p>最新报告期 {last(metrics.revenue)?.period || "—"} · 币种 {payload?.currency}</p></div><span>{payload?.source}</span></div>
       {section === "财报" && <div className="financial-report-tabs">{(["摘要", "收入明细", "财报附件"] as ReportView[]).map((item) => <button key={item} className={reportView === item ? "is-active" : ""} onClick={() => setReportView(item)}>{item}</button>)}</div>}
       {section === "财报" && reportView === "收入明细" ? <RevenueBreakdown metrics={metrics} currency={payload?.currency} /> : section === "财报" && reportView === "财报附件" ? <FinancialReportFiles market={market} code={code} companyName={payload?.company} /> : <>

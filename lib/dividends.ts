@@ -4,7 +4,7 @@
  * 线上数据源优先使用富途 get_corporate_actions_dividends；本地开发态使用东方财富
  * （A 股）与 Yahoo（美股 / 港股）公开数据。解析「1股派息0.27USD」等声明文本得到
  * 每股金额与币种；实物分派 / 优先发售等非现金方案标记为 special 展示。
- * 结果持久化到 SQLite：历史记录合并保留；近期/未来记录每日刷新，纯历史快照每周刷新；
+ * 结果持久化到 SQLite：历史记录合并保留；近期/未来记录每 3 天刷新，纯历史快照每 30 天刷新；
  * 上游不可用时继续返回最后一次成功数据，不再把失败显示成 0 期。
  */
 import { getDb } from "./db";
@@ -12,8 +12,8 @@ import { fetchDailyKline } from "./kline";
 import { fetchFutuDividends, type FutuDividendRaw } from "./futuQuotes";
 import { proxyFetch } from "./net";
 
-const ACTIVE_TTL_MS = 24 * 60 * 60 * 1000;
-const HISTORY_TTL_MS = 7 * ACTIVE_TTL_MS;
+const ACTIVE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+const HISTORY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36";
 
 export type DividendKind = "cash" | "special";
@@ -185,6 +185,8 @@ interface CacheRow {
   fetched_at: number;
 }
 
+const refreshing = new Map<string, Promise<void>>();
+
 function dividendDate(item: DividendRecord) {
   return item.payDate || item.exDate || item.recordDate || item.pubDate || "";
 }
@@ -241,7 +243,7 @@ export async function withPeriodYields(market: string, code: string, dividends: 
 
 /**
  * 个股 / ETF 股息记录。ok=false 表示全部数据源当前不可用（未缓存，恢复后自动可取）；
- * ok=true 且 dividends 为空表示该标的确实没有（或暂无）派息记录（缓存 24h）。
+ * ok=true 且 dividends 为空表示该标的确实没有（或暂无）派息记录（缓存 3 天）。
  */
 export async function getDividends(market: string, code: string): Promise<{ ok: boolean; dividends: DividendRecord[]; cached: boolean; stale: boolean; source: DividendSource }> {
   const m = market.trim().toUpperCase();
@@ -268,15 +270,33 @@ export async function getDividends(market: string, code: string): Promise<{ ok: 
     if (cacheVerified && cachedDividends.length === 0 && age < ACTIVE_TTL_MS) return { ok: true, dividends: [], cached: true, stale: false, source: "cache" };
   }
 
-  try {
+  const refresh = async () => {
     const freshResult = await fetchFreshDividends(m, c);
     const today = new Date(now).toISOString().slice(0, 10);
-    const dividends = mergeDividends(cachedDividends, freshResult.dividends, today);
+    const dividends = await withPeriodYields(m, c, mergeDividends(cachedDividends, freshResult.dividends, today));
     db.prepare(
       `INSERT INTO dividend_cache (market, code, payload, fetched_at) VALUES (?, ?, ?, ?)
        ON CONFLICT(market, code) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`
     ).run(m, c, JSON.stringify({ ok: true, verified: true, dividends }), now);
-    return { ok: true, dividends, cached: false, stale: false, source: freshResult.source };
+    return { dividends, source: freshResult.source };
+  };
+
+  // 已有成功快照时永远先返回。过期只决定是否在后台更新，不再让页面等待上游。
+  if (cachedDividends.length > 0 || cacheVerified) {
+    const key = `${m}:${c}`;
+    if (!refreshing.has(key)) {
+      const task = refresh()
+        .then(() => undefined)
+        .catch((error) => console.warn(`[dividends] background refresh failed for ${m}.${c}:`, error instanceof Error ? error.message : error))
+        .finally(() => refreshing.delete(key));
+      refreshing.set(key, task);
+    }
+    return { ok: true, dividends: sortDividends(cachedDividends), cached: true, stale: true, source: "cache-stale" };
+  }
+
+  try {
+    const freshResult = await refresh();
+    return { ok: true, dividends: freshResult.dividends, cached: false, stale: false, source: freshResult.source };
   } catch (error) {
     console.warn(`[dividends] refresh failed for ${m}.${c}:`, error instanceof Error ? error.message : error);
     if (cachedDividends.length > 0) return { ok: true, dividends: sortDividends(cachedDividends), cached: true, stale: true, source: "cache-stale" };

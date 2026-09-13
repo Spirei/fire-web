@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import AppModal from "@/components/AppModal";
 import DividendTable, { fmtDividendAmount, yearOfDividend } from "@/components/DividendTable";
 import type { DividendLedgerRow, DividendPhase, DividendRecord } from "@/lib/dividends";
 import type { StockRecord } from "@/lib/types";
 import { showToast } from "@/lib/toast";
+import { dividendClientCacheKey, readDividendClientCache, writeDividendClientCache } from "@/lib/dividendClientCache";
 
 const PHASE_LABEL: Record<DividendPhase, string> = {
   booked: "已入账",
@@ -37,19 +38,46 @@ export default function HoldingDividendDialog({
   const [year, setYear] = useState<string | null>(null);
   const [settling, setSettling] = useState(false);
 
+  useLayoutEffect(() => {
+    const cached = readDividendClientCache(dividendClientCacheKey(record.market, record.code, record.id));
+    if (!cached) return;
+    setDividends(cached.dividends);
+    setLedger(cached.ledger ?? []);
+    setFirstBuy(cached.firstBuyDate ?? null);
+    setSourceOk(true);
+    setLoading(false);
+  }, [record.id, record.market, record.code]);
+
   async function load() {
-    setLoading(true);
+    const cacheKey = dividendClientCacheKey(record.market, record.code, record.id);
+    const cached = readDividendClientCache(cacheKey);
+    if (cached) {
+      setDividends(cached.dividends);
+      setLedger(cached.ledger ?? []);
+      setFirstBuy(cached.firstBuyDate ?? null);
+      setSourceOk(true);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
       const res = await fetch(`/api/v1/dividends?market=${encodeURIComponent(record.market)}&code=${encodeURIComponent(record.code)}&recordId=${encodeURIComponent(record.id)}`);
       const json = await res.json().catch(() => null);
-      setSourceOk(json?.data?.source !== "unavailable");
-      setDividends(Array.isArray(json?.data?.dividends) ? json.data.dividends : []);
-      setLedger(Array.isArray(json?.data?.holding?.rows) ? json.data.holding.rows : []);
-      setFirstBuy(json?.data?.holding?.firstBuyDate || null);
+      const sourceOk = res.ok && Boolean(json?.data?.source && json.data.source !== "unavailable");
+      const nextDividends = Array.isArray(json?.data?.dividends) ? json.data.dividends : [];
+      const nextLedger = Array.isArray(json?.data?.holding?.rows) ? json.data.holding.rows : [];
+      const nextFirstBuy = json?.data?.holding?.firstBuyDate || null;
+      if (sourceOk) {
+        setSourceOk(true);
+        setDividends(nextDividends);
+        setLedger(nextLedger);
+        setFirstBuy(nextFirstBuy);
+        writeDividendClientCache(cacheKey, { dividends: nextDividends, sourceOk: true, ledger: nextLedger, firstBuyDate: nextFirstBuy });
+      } else if (!cached) {
+        setSourceOk(false);
+      }
     } catch {
-      setSourceOk(false);
-      setDividends([]);
-      setLedger([]);
+      if (!cached) setSourceOk(false);
     } finally {
       setLoading(false);
     }

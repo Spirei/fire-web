@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 
 interface Props { market: string; code: string; name: string; iconUrl?: string }
@@ -11,18 +11,34 @@ interface Profile {
 
 const profileCache = new Map<string, Profile>();
 const profileRequests = new Map<string, Promise<Profile>>();
+const PROFILE_CACHE_PREFIX = "fire:company-profile:v1";
 
-function loadCompanyProfile(market: string, code: string) {
+function readProfileCache(key: string): Profile | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(`${PROFILE_CACHE_PREFIX}:${key}`) || "null") as { profile?: Profile } | null;
+    return value?.profile && !value.profile.error ? value.profile : null;
+  } catch { return null; }
+}
+
+function writeProfileCache(key: string, profile: Profile) {
+  if (profile.error) return;
+  try { localStorage.setItem(`${PROFILE_CACHE_PREFIX}:${key}`, JSON.stringify({ profile, savedAt: Date.now() })); } catch {}
+}
+
+function loadCompanyProfile(market: string, code: string, refresh = false) {
   const key = `${market.toUpperCase()}:${code.toUpperCase()}`;
   const cached = profileCache.get(key);
-  if (cached) return Promise.resolve(cached);
+  if (cached && !refresh) return Promise.resolve(cached);
   const pending = profileRequests.get(key);
   if (pending) return pending;
   const request = fetch(`/api/v1/company-profile?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`)
     .then((response) => response.json())
     .then((result) => {
       const profile = result?.data || { error: result?.message || "公司资料加载失败" };
-      profileCache.set(key, profile);
+      if (!profile.error) {
+        profileCache.set(key, profile);
+        writeProfileCache(key, profile);
+      }
       return profile;
     })
     .catch(() => ({ error: "公司资料加载失败" } as Profile))
@@ -42,12 +58,24 @@ export default function CompanyProfilePanel({ market, code, name, iconUrl }: Pro
   const [canExpand, setCanExpand] = useState(false);
   const descriptionRef = useRef<HTMLParagraphElement>(null);
 
+  useLayoutEffect(() => {
+    const cached = profileCache.get(cacheKey) || readProfileCache(cacheKey);
+    if (cached) {
+      profileCache.set(cacheKey, cached);
+      setProfile(cached);
+    }
+  }, [cacheKey]);
+
   useEffect(() => {
     let cancelled = false;
-    setProfile(null); setExpanded(false);
-    const cached = profileCache.get(`${market.toUpperCase()}:${code.toUpperCase()}`);
-    if (cached) { setProfile(cached); return () => { cancelled = true; }; }
-    loadCompanyProfile(market, code).then((data) => { if (!cancelled) setProfile(data); });
+    setExpanded(false);
+    const key = `${market.toUpperCase()}:${code.toUpperCase()}`;
+    const cached = profileCache.get(key) || readProfileCache(key);
+    if (cached) setProfile(cached);
+    else setProfile(null);
+    loadCompanyProfile(market, code, Boolean(cached)).then((data) => {
+      if (!cancelled && (!data.error || !cached)) setProfile(data);
+    });
     return () => { cancelled = true; };
   }, [market, code]);
 

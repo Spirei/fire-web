@@ -618,7 +618,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       setLoading(true); setError("");
     }
 
-    let hasVisibleData = !!fresh && (fresh.sessionDay.length > 0 || fresh.intraday.length > 0 || fresh.fiveDay.length > 0);
+    let hasVisibleData = !!fresh && (fresh.items.length > 0 || fresh.sessionDay.length > 0 || fresh.intraday.length > 0 || fresh.fiveDay.length > 0);
     const snapshot: ChartCacheEntry = fresh ? { ...fresh, at: Date.now() } : { at: Date.now(), items: [], intraday: [], fiveDay: [], sessionDay: [] };
     const persistSnapshot = () => {
       const value = { ...snapshot };
@@ -637,19 +637,19 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       getJson(`/api/kline/session-day?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`).then((data) => {
         const rows = Array.isArray(data?.points) ? data.points : [];
         if (rows.length) { snapshot.sessionDay = rows; snapshot.at = Date.now(); persistSnapshot(); }
-        if (!cancelled) setSessionDay(rows);
+        if (!cancelled && rows.length) setSessionDay(rows);
         if (rows.length) reveal();
       }),
       getJson("/api/charts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ id: "detail", market, code }] }) }).then((data) => {
         const rows = Array.isArray(data?.charts?.detail?.points) ? data.charts.detail.points : [];
         if (rows.length) { snapshot.intraday = rows; snapshot.at = Date.now(); persistSnapshot(); }
-        if (!cancelled) setIntraday(rows);
+        if (!cancelled && rows.length) setIntraday(rows);
         if (rows.length) reveal();
       }),
       getJson(`/api/kline/five-day?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`).then((data) => {
         const rows = Array.isArray(data?.points) ? data.points : [];
         if (rows.length) { snapshot.fiveDay = rows; snapshot.at = Date.now(); persistSnapshot(); }
-        if (!cancelled) setFiveDay(rows);
+        if (!cancelled && rows.length) setFiveDay(rows);
         if (rows.length) reveal();
       })
     ];

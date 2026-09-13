@@ -1,5 +1,5 @@
 import { getAuthUser } from "@/lib/auth";
-import { getDividends, withPeriodYields } from "@/lib/dividends";
+import { getDividends } from "@/lib/dividends";
 import { inspectHoldingDividends, settleRecordDividends } from "@/lib/dividendSettlement";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { fail, ok } from "@/lib/api";
@@ -19,8 +19,8 @@ export async function GET(request: Request) {
   if (!MARKETS.includes(market)) return fail(40001, "暂不支持该市场", 400);
   if (!/^[A-Z0-9._-]{1,40}$/.test(code)) return fail(40001, "股票代码不合法", 400);
 
-  const { ok: sourceOk, dividends: raw, cached, stale, source } = await getDividends(market, code);
-  const dividends = sourceOk ? await withPeriodYields(market, code, raw) : raw;
+  const { dividends: raw, cached, stale, source } = await getDividends(market, code);
+  const dividends = raw;
   const recordId = String(searchParams.get("recordId") ?? "").trim();
   let holding: ReturnType<typeof inspectHoldingDividends> | null = null;
   if (recordId) {

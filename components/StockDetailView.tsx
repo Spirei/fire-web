@@ -17,6 +17,7 @@ import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import DividendTable, { fmtDividendAmount, yearOfDividend } from "@/components/DividendTable";
 import type { DividendRecord } from "@/lib/dividends";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
+import { dividendClientCacheKey, readDividendClientCache, writeDividendClientCache } from "@/lib/dividendClientCache";
 
 interface Props {
   market: string;
@@ -165,6 +166,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
   const [showMore, setShowMore] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
   const [tab, setTab] = useState<Tab>(initialTab);
+  const [tabReady, setTabReady] = useState(false);
   const [extendedPrices, setExtendedPrices] = useState<{ pre: ExtendedPoint | null; after: ExtendedPoint | null; regular: ExtendedPoint | null }>({ pre: null, after: null, regular: null });
   const [marketClock, setMarketClock] = useState(() => Date.now());
   const quotePollingRef = useRef(false);
@@ -176,11 +178,21 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
   const [dividendsOk, setDividendsOk] = useState(true);
   const [dividendsLoading, setDividendsLoading] = useState(false);
   const [dividendYear, setDividendYear] = useState<string | null>(null);
+  const dividendCacheKey = dividendClientCacheKey(market, code);
+
+  // 股息是低频数据，绘制前先恢复最后一次成功快照，避免切入页签时闪现获取状态。
+  useLayoutEffect(() => {
+    const cached = readDividendClientCache(dividendClientCacheKey(market, code));
+    setDividends(cached?.dividends ?? []);
+    setDividendsOk(cached?.sourceOk ?? true);
+    setDividendsLoading(!cached);
+  }, [market, code]);
 
   // URL 直达时在浏览器绘制前恢复页签，避免先闪现概览再切到目标页签。
   useLayoutEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("tab") as Tab | null;
     setTab(requested && ["overview", "etf", "dividend", "financial", "company"].includes(requested) ? requested : "overview");
+    setTabReady(true);
   }, [market, code]);
 
   // 概览始终先展示最后一次成功快照；快照不因过期清空，最新数据在后台静默替换。
@@ -201,9 +213,6 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
     setShowMetrics(false);
     setSelectedRelatedETF(null);
     setEtfFilter("all");
-    setDividends([]);
-    setDividendsOk(true);
-    setDividendsLoading(false);
     setDividendYear(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [market, code]);
@@ -276,7 +285,13 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
   useEffect(() => {
     if (tab !== "dividend") return;
     const controller = new AbortController();
-    setDividendsLoading(true);
+    const cached = readDividendClientCache(dividendCacheKey);
+    if (cached) {
+      setDividends(cached.dividends);
+      setDividendsOk(true);
+    } else {
+      setDividendsLoading(true);
+    }
     fetch(`/api/v1/dividends?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`, {
       cache: "no-store",
       signal: controller.signal
@@ -284,20 +299,26 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
       .then((response) => response.json().catch(() => null))
       .then((payload) => {
         if (controller.signal.aborted) return;
-        setDividends(Array.isArray(payload?.data?.dividends) ? payload.data.dividends : []);
-        setDividendsOk(payload?.data?.source && payload.data.source !== "unavailable");
+        const next = Array.isArray(payload?.data?.dividends) ? payload.data.dividends : [];
+        const sourceOk = Boolean(payload?.data?.source && payload.data.source !== "unavailable");
+        if (sourceOk) {
+          setDividends(next);
+          setDividendsOk(true);
+          writeDividendClientCache(dividendCacheKey, { dividends: next, sourceOk: true });
+        } else if (!cached) {
+          setDividendsOk(false);
+        }
       })
       .catch((error) => {
         if ((error as Error)?.name !== "AbortError") {
-          setDividends([]);
-          setDividendsOk(false);
+          if (!cached) setDividendsOk(false);
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) setDividendsLoading(false);
       });
     return () => controller.abort();
-  }, [tab, market, code]);
+  }, [tab, market, code, dividendCacheKey]);
 
   // 美股扩展时段价格独立刷新：不阻塞主行情，盘前 / 盘后按一分钟行情的最新有效点展示。
   useEffect(() => {
@@ -785,7 +806,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
             </button>
           ))}
         </div>
-        <div className="mt-2">
+        <div className="mt-2" style={tabReady ? undefined : { visibility: "hidden" }}>
           {tab === "overview" ? (
             <>
               <StockKline market={market} code={code} name={displayName} height={400} />
@@ -900,7 +921,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
                 <h3 className="text-sm font-semibold text-ink">{displayName} 股息记录</h3>
                 <span className="stock-module-count">{dividends.length} 期</span>
               </div>
-              {dividendsLoading ? (
+              {dividendsLoading && dividends.length === 0 ? (
                 <div className="stock-module-loading mt-3" aria-live="polite">
                   <span className="stock-module-spinner" />
                   正在获取股息记录
