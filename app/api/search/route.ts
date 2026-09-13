@@ -2,6 +2,56 @@ import { NextResponse } from "next/server";
 import { searchStocks } from "@/lib/quotes";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { proxyFetch } from "@/lib/net";
+import { getAssetsPage } from "@/lib/assets";
+
+type SearchResult = Awaited<ReturnType<typeof searchStocks>>[number];
+const SEARCH_CACHE_TTL = 30_000;
+const searchCache = new Map<string, { expiresAt: number; results: SearchResult[] }>();
+
+function rememberResults(key: string, results: SearchResult[]): void {
+  searchCache.delete(key);
+  searchCache.set(key, { expiresAt: Date.now() + SEARCH_CACHE_TTL, results });
+  while (searchCache.size > 200) {
+    const oldest = searchCache.keys().next().value;
+    if (!oldest) break;
+    searchCache.delete(oldest);
+  }
+}
+
+async function searchCrypto(q: string, signal: AbortSignal): Promise<SearchResult[]> {
+  try {
+    const res = await proxyFetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}`, { signal });
+    if (!res.ok) return [];
+    const data = (await res.json().catch(() => null)) as { coins?: { id?: string; symbol?: string; name?: string }[] } | null;
+    return (data?.coins ?? []).slice(0, 5).map((c) => ({
+      symbol: `CRYPTO:${String(c.id ?? c.symbol ?? "").toLowerCase()}`,
+      code: String(c.symbol ?? "").toUpperCase(),
+      name: String(c.name ?? "").trim(),
+      market: "ASSET" as const,
+      price: null,
+      changePct: null,
+      type: "crypto" as const
+    })).filter((c) => c.code && c.name);
+  } catch {
+    return [];
+  }
+}
+
+function localStockMatches(q: string): SearchResult[] {
+  const assets = getAssetsPage({ type: "stock", query: q, sort: "marketCap", dir: "desc", pageSize: 8 }).assets;
+  return assets.map((asset) => {
+    const market = asset.market as SearchResult["market"];
+    const code = asset.code.toUpperCase();
+    const symbol = market === "CN"
+      ? `${/^(4|8|920)/.test(code) ? "bj" : /^[69]/.test(code) ? "sh" : "sz"}${code}`
+      : `${market.toLowerCase()}${market === "HK" ? code.padStart(5, "0") : code}`;
+    return { symbol, code, name: asset.name, market, price: asset.price, changePct: asset.changePct };
+  });
+}
+
+function isCryptoQuery(q: string): boolean {
+  return /^(btc|bitcoin|比特币|eth|ethereum|以太坊|usdt|tether|泰达币|sol|solana|xrp|doge|dogecoin|狗狗币)$/i.test(q.trim());
+}
 
 export async function GET(request: Request) {
   if (!rateLimit(`search:${clientIp(request)}`, 60, 60 * 1000) || !rateLimitGlobal("search", 300, 60 * 1000)) {
@@ -11,17 +61,40 @@ export async function GET(request: Request) {
   if (!q) return NextResponse.json({ results: [] });
   if (q.length > 50) return NextResponse.json({ error: "搜索关键词过长" }, { status: 400 });
 
+  const cacheKey = q.toLocaleLowerCase();
+  const cached = searchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return NextResponse.json({ results: cached.results });
+  }
+
   try {
+    // 素材库覆盖常用股票，SQLite 本地命中可直接返回，省去两次外部行情往返。
+    const localResults = localStockMatches(q);
+    if (localResults.length > 0 && !isCryptoQuery(q)) {
+      rememberResults(cacheKey, localResults);
+      return NextResponse.json({ results: localResults });
+    }
+
+    if (isCryptoQuery(q)) {
+      const [stockResults, cryptoResults] = await Promise.all([
+        localResults.length > 0 ? Promise.resolve(localResults) : searchStocks(q),
+        searchCrypto(q, AbortSignal.timeout(2500))
+      ]);
+      const combined = [...stockResults, ...cryptoResults];
+      rememberResults(cacheKey, combined);
+      return NextResponse.json({ results: combined });
+    }
+
+    // 股票与加密货币并行查询；股票已命中时立即返回，不再串行等待境外 CoinGecko。
+    const cryptoController = new AbortController();
+    const cryptoTimer = setTimeout(() => cryptoController.abort(), 2500);
+    const cryptoPromise = searchCrypto(q, cryptoController.signal);
     const results = await searchStocks(q);
-    let cryptoResults: unknown[] = [];
-    try {
-      const res = await proxyFetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(8000) });
-      if (res.ok) {
-        const data = (await res.json().catch(() => null)) as { coins?: { id?: string; symbol?: string; name?: string }[] } | null;
-        cryptoResults = (data?.coins ?? []).slice(0, 5).map((c) => ({ symbol: `CRYPTO:${String(c.id ?? c.symbol ?? "").toLowerCase()}`, code: String(c.symbol ?? "").toUpperCase(), name: String(c.name ?? "").trim(), market: "ASSET", price: null, changePct: null, type: "crypto" })).filter((c) => c.code && c.name);
-      }
-    } catch { /* crypto source is optional */ }
-    return NextResponse.json({ results: [...results, ...cryptoResults] });
+    const combined = results.length > 0 ? results : await cryptoPromise;
+    if (results.length > 0) cryptoController.abort();
+    clearTimeout(cryptoTimer);
+    rememberResults(cacheKey, combined);
+    return NextResponse.json({ results: combined });
   } catch (err) {
     return NextResponse.json({ error: "搜索失败，请稍后重试" }, { status: 502 });
   }

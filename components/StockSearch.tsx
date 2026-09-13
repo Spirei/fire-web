@@ -6,6 +6,9 @@ import { fmtNum, fmtNumMarket, fmtPct } from "@/lib/format";
 import RainbowTextInput from "@/components/RainbowTextInput";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 
+const SEARCH_CACHE_TTL = 60_000;
+const searchCache = new Map<string, { at: number; results: SearchMatch[] }>();
+
 interface Props {
   onSelect: (match: SearchMatch) => void;
   placeholder?: string;
@@ -30,37 +33,57 @@ export default function StockSearch({ onSelect, placeholder = "输入股票名�
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const [busy, setBusy] = useState<Set<string>>(new Set());
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
     const query = q.trim();
     if (!query) {
       setResults([]);
       setOpen(false);
+      setLoading(false);
       return;
     }
-    timer.current = setTimeout(async () => {
+    const cacheKey = query.toLocaleLowerCase();
+    const cached = searchCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL) {
+      setResults(cached.results);
+      setOpen(true);
+      setHighlight(-1);
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal });
         if (!res.ok) {
           setResults([]);
           return;
         }
         const data = await res.json();
-        setResults(Array.isArray(data.results) ? data.results : []);
+        const next = Array.isArray(data.results) ? data.results as SearchMatch[] : [];
+        searchCache.delete(cacheKey);
+        searchCache.set(cacheKey, { at: Date.now(), results: next });
+        while (searchCache.size > 100) {
+          const oldest = searchCache.keys().next().value;
+          if (!oldest) break;
+          searchCache.delete(oldest);
+        }
+        setResults(next);
         setOpen(true);
         setHighlight(-1);
-      } catch {
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
         setResults([]);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
-    }, 260);
+    }, 140);
     return () => {
-      if (timer.current) clearTimeout(timer.current);
+      clearTimeout(timer);
+      controller.abort();
     };
   }, [q]);
 
