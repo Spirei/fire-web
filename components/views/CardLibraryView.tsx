@@ -1988,11 +1988,12 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       {card.type || "未分类"}
                     </span>
                     {isFreshEntry(card, firstSeen, nowMs) && (
-                      <span className="absolute left-2 top-2 flex items-center gap-1">
+                      <span className="card-library-new-badge" aria-label="新入库卡面">
                         {/* 只有 3 天内新入库的卡挂 NEW（脚本导入的新卡 / 自己新建的卡）；刚加入我的卡不算 */}
-                        <span className="rounded-full bg-black/35 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#fbbf24] ring-1 ring-inset ring-white/20 backdrop-blur-sm">
-                          new
-                        </span>
+                        <svg aria-hidden="true" width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                          <path d="M8 1.5 9.8 6.2 14.5 8l-4.7 1.8L8 14.5 6.2 9.8 1.5 8l4.7-1.8L8 1.5Z" />
+                        </svg>
+                        NEW
                       </span>
                     )}
                     {/*

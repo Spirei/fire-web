@@ -12,8 +12,10 @@
  */
 import { V0_1_27_ENTRY, V0_1_26_ENTRY, V0_1_25_ENTRY, V0_1_24_ENTRY, V0_1_23_ENTRY, V0_1_22_ENTRY, V0_1_21_ENTRY, V0_1_20_ENTRY, V0_1_19_ENTRY, V0_1_18_ENTRY, V0_1_17_ENTRY, V0_1_16_ENTRY, V0_1_15_ENTRY, V0_1_14_ENTRY, V0_1_13_ENTRY, V0_1_12_ENTRY, V0_1_11_ENTRY, V0_1_10_ENTRY, V0_1_9_ENTRY } from "./versions";
 import type { VersionEntry } from "./versions";
+import { V0_1_28_ENTRY } from "./versions";
 
 export const VERSIONS: VersionEntry[] = [
+  V0_1_28_ENTRY,
   V0_1_27_ENTRY,
   V0_1_26_ENTRY,
   V0_1_25_ENTRY,

@@ -1,3 +1,31 @@
+/* 卡面库新品标签：不依赖卡面底色，保持紧凑、清晰的银白铭牌质感。 */
+.card-library-new-badge {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 19px;
+  padding: 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 5px;
+  background: linear-gradient(145deg, #ffffff, #e9ebee);
+  color: #3f4652;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
+.dark .card-library-new-badge {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: linear-gradient(145deg, #414650, #282c34);
+  color: #f1f3f5;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+}
+
 /* 品牌字标字体：AWS Diatype Rounded Semi Mono（参考 kiro.dev 左上角字标所用字体，
    字体文件本地化到 public/fonts，深浅色模式共用，避免依赖外网字体服务） */
 @font-face {

@@ -2993,7 +2993,18 @@ export const V0_1_28_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = V0_1_28_ENTRY;
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  version: "v0.1.29",
+  date: "2026-09-13",
+  summary: "卡面库 NEW 角标美化。",
+  frontend: V0_1_28_ENTRY.frontend,
+  software: V0_1_28_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.29" } : item),
+  changes: [{
+    title: "卡面库 NEW 角标美化",
+    desc: "左上角新品标记改为紧凑的银白渐变铭牌，搭配细边框、星芒和深灰字，减少卡面遮挡；深色模式使用石墨灰底与浅色字，保留新入库三天内展示的规则。",
+    kind: "fix"
+  }]
+};
 
 // 完整历史数组已拆分到 lib/versions-history.ts（约 200KB 历史文案，仅供版本弹窗
 // 懒加载引用）；本文件保留类型 + 当前版本条目，让设置页 / 健康检查只引用轻量常量。
