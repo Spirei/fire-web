@@ -3087,6 +3087,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "收敛加密货币搜索结果",
     desc: "参考 OKX 与 Binance 的高市值、高成交量市场范围，建立 21 种主流加密货币白名单及中英文名称、代码别名正则。命中比特币、BTC、以太坊、SOL 等查询时只显示加密货币本体，过滤同名 ETF、储备公司、策略基金与非主流币；素材库的加密货币搜索同步使用相同白名单。",
     kind: "fix"
+  }, {
+    title: "补全 RAM 新上市 ETF 搜索",
+    desc: "为尚未被腾讯联想和本地素材库收录的 RAM 增加受控别名映射；搜索 RAM、DRAM 2倍做多、2X DRAM 或 DRAM long 均直接返回“DRAM 2 倍做多 ETF（RAM）”。",
+    kind: "fix"
   }]
 };
 

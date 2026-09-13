@@ -50,6 +50,21 @@ function localStockMatches(q: string): SearchResult[] {
   });
 }
 
+function specialStockMatches(q: string): SearchResult[] {
+  const normalized = q.trim().toLocaleLowerCase().replace(/[\s_-]+/g, "");
+  const isRam = normalized === "ram"
+    || (/dram/.test(normalized) && (/(?:2x|2倍|两倍|二倍|2做多|long)/.test(normalized)));
+  if (!isRam) return [];
+  return [{
+    symbol: "usRAM",
+    code: "RAM",
+    name: "DRAM 2 倍做多 ETF",
+    market: "US",
+    price: null,
+    changePct: null
+  }];
+}
+
 export async function GET(request: Request) {
   if (!rateLimit(`search:${clientIp(request)}`, 60, 60 * 1000) || !rateLimitGlobal("search", 300, 60 * 1000)) {
     return NextResponse.json({ error: "请求过于频繁，请稍后再试" }, { status: 429 });
@@ -65,6 +80,13 @@ export async function GET(request: Request) {
   }
 
   try {
+    // 新上市产品可能尚未进入腾讯 smartbox / 本地素材库，用受控别名保证代码和常见描述可命中。
+    const specialStocks = specialStockMatches(q);
+    if (specialStocks.length > 0) {
+      rememberResults(cacheKey, specialStocks);
+      return NextResponse.json({ results: specialStocks });
+    }
+
     // 主流币别名命中时只返回币本体，避免“比特币”混入 ETF、储备公司和策略基金。
     const mainstreamCrypto = searchMainstreamCrypto(q);
     if (mainstreamCrypto.length > 0) {
