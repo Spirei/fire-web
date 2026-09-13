@@ -93,6 +93,20 @@ Review 自查清单（按项目实际走一遍）：
 - hover 统一为**明显浅灰背景**（`hover:bg-brand-hover`，浅色 ≈ #e9ebee；深色模式 globals.css 已补 `.dark .hover\:bg-brand-hover:hover` 为 #262c37），文字保持深色、边框颜色不变。
 - 动画：按钮带 `transition-all duration-200`，hover 轻微上浮 `hover:-translate-y-px` + 阴影，点击 `active:scale-[.97]`。
 - 选中态（tab / 分页当前页 / 胶囊）：`bg-white text-ink-2 shadow-sm border border-edge-strong`（白底浅灰边框 + 阴影），不再使用任何蓝色选中块。
+
+## 滚动条规范（全站统一，2026-09-13 起）
+
+- 全站滚动条统一成「卡面库筛选面板」那种细条：`app/globals.css` 顶部已有全局规则（`*` + `*::-webkit-scrollbar`，4px、圆角、半透明灰，深色模式自动换成白色 26%），**新组件不要再自己写一套滚动条样式**，也不要再给容器加 `.thin-scrollbar`（该类名保留只为兼容，效果已全局）。
+- 例外只有两种，都必须用**更具体的选择器**覆盖，不要改全局规则：
+  - **隐藏**滚动条：横向滑动的胶囊行 / tab 用 `scrollbar-width: none` + `::-webkit-scrollbar { display: none }`（如 `.ticker-scroll`、`.stock-detail-tabs`）；
+  - **特殊定制**：订单表、每日盈亏分享列表等自己有明确设计的地方（`.orders-scroll`、`.share-list-scroll`）保持各自样式。
+- 备注：Chrome 只要元素设了标准属性 `scrollbar-width`，就会忽略 `::-webkit-scrollbar` 的像素宽度、改用内置「thin」档；要精确控制 Chrome 宽度得用 `@supports not selector(::-webkit-scrollbar)` 把标准属性只留给 Firefox，改之前先确认清楚。
+
+## 弹层 / 整屏视图必须 portal 到 body（2026-09-13 起）
+
+- 所有 `fixed inset-0` 的弹层、抽屉、整屏视图（卡面详情、新增卡片、卡包等）**一律用 `createPortal(..., document.body)`**，不要直接挂在视图树里：祖先只要形成层叠上下文，弹层里写的 `z-[10002]` 也压不过吸顶页头（`z-50`），顶部会被页头盖掉（已踩过：卡面详情弹窗被遮、`rect.top` 实测是 16 而不是 0）。
+- 弹层顶部要给页头留位置（`pt-[72px]`，sm 以上 `sm:pt-[88px]`），高度控制在 `86vh` 上下 —— 整块落在页头下方居中，既不压页头、也不被页头遮挡。
+- 已 portal 的参考实现：`components/views/CardLibraryView.tsx`（详情 / 新增 / 卡包）、`components/AppModal.tsx`、`components/FundEntryDialog.tsx`、`components/DailyPnlShareModal.tsx`。新增弹层先抄这些，不要新开写法。
 - 品牌色板已整体改为中性灰：`brand.DEFAULT=#6b7280`、`brand.hover=#e9ebee`、`brand.light=#f1f3f5`、`brand.deep=#3f4652`；旧苹果蓝 `#0071e3` 及蓝色阴影/焦点光环已全量清除（焦点光环改中性灰）。
 - 新增按钮 / 色块一律遵循上述中性色标准，不再引入蓝色或彩色块状。
 
