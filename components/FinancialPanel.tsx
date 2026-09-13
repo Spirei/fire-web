@@ -8,8 +8,7 @@ type Metric = "revenue" | "grossProfit" | "operatingIncome" | "netIncome" | "eps
 type Payload = { supported?: boolean; company?: string; currency?: string; source?: string; error?: string; metrics?: Record<Metric, Point[]> };
 const SECTIONS = ["财报", "财务评分", "关键指标", "利润表", "资产负债表", "现金流表", "股东回报"] as const;
 type Section = typeof SECTIONS[number];
-type ReportView = "摘要" | "收入明细" | "财报附件";
-type ReportFile = { id: string; market: string; exchange: string; companyCode: string; companyName: string; fiscalYear: number; fiscalPeriod: string; reportType: string; fileKind: "original" | "parsed" | "export" | "filing"; fileName: string; fileUrl: string; fileSize: number; createdAt: string };
+type ReportView = "摘要" | "收入明细";
 const FINANCIAL_CACHE_PREFIX = "fire:financials:v1";
 
 function financialCacheKey(market: string, code: string) {
@@ -142,38 +141,6 @@ function RevenueBreakdown({ metrics, currency }: { metrics: Record<Metric, Point
   </>;
 }
 
-function FinancialReportFiles({ market, code, companyName }: { market: string; code: string; companyName?: string }) {
-  const filesCacheKey = `fire:financial-report-files:${market.toUpperCase()}:${code.toUpperCase()}`;
-  const [files, setFiles] = useState<ReportFile[]>([]); const [busy, setBusy] = useState(false); const [message, setMessage] = useState("");
-  const [exchange, setExchange] = useState(market === "US" ? "NASDAQ" : market === "HK" ? "HKEX" : "SSE");
-  const now = new Date(); const [year, setYear] = useState(now.getFullYear()); const [period, setPeriod] = useState("Q1");
-  const load = () => fetch(`/api/v1/financial-reports?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`).then((r) => r.json()).then((body) => {
-    if (!Array.isArray(body.data)) return;
-    setFiles(body.data);
-    try { localStorage.setItem(filesCacheKey, JSON.stringify(body.data)); } catch {}
-  }).catch(() => { /* 刷新失败时保留最后一次成功列表 */ });
-  useLayoutEffect(() => {
-    try {
-      const cached = JSON.parse(localStorage.getItem(filesCacheKey) || "[]");
-      if (Array.isArray(cached)) setFiles(cached);
-    } catch {}
-  }, [filesCacheKey]);
-  useEffect(() => { void load(); }, [market, code]);
-  const upload = async (file?: File) => {
-    if (!file) return; setBusy(true); setMessage(""); const form = new FormData();
-    Object.entries({ market, exchange, code, companyName: companyName || code, fiscalYear: String(year), fiscalPeriod: period, reportType: period === "FY" ? "年度报告" : "季度报告" }).forEach(([key, value]) => form.append(key, value)); form.append("file", file);
-    try { const response = await fetch("/api/v1/financial-reports", { method: "POST", body: form }); const body = await response.json(); if (!response.ok) throw new Error(body.message || "上传失败"); setMessage("财报已归档"); await load(); } catch (error) { setMessage(error instanceof Error ? error.message : "上传失败"); } finally { setBusy(false); }
-  };
-  const grouped = files.reduce<Record<string, ReportFile[]>>((all, file) => { const key = `${file.fiscalYear} ${file.fiscalPeriod}`; (all[key] ||= []).push(file); return all; }, {});
-  return <div className="financial-report-files">
-    <div className="report-archive-path"><span>{market}</span><b>›</b><span>{exchange}</span><b>›</b><span>{companyName || code} {code}</span></div>
-    <div className="report-upload-bar"><label>交易所<input value={exchange} onChange={(e) => setExchange(e.target.value.toUpperCase())} /></label><label>财年<input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} /></label><label>报告期<select value={period} onChange={(e) => setPeriod(e.target.value)}><option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option><option>FY</option></select></label><label className="report-file-button">{busy ? "上传中…" : "上传 PDF / JSON / CSV"}<input type="file" accept=".pdf,.json,.csv,application/pdf,application/json,text/csv" disabled={busy} onChange={(e) => upload(e.target.files?.[0])} /></label></div>
-    {message && <p className="report-upload-message">{message}</p>}
-    <div className="report-format-note"><b>推荐：PDF + JSON</b><span>PDF 保留原始凭证；JSON 作为 Web / iOS 主数据；CSV 仅用于单表导出和人工核对。</span></div>
-    {Object.keys(grouped).length ? <div className="report-file-list">{Object.entries(grouped).map(([key, rows]) => <section key={key}><h4>{key}</h4>{rows.map((file) => <a key={file.id} href={file.fileUrl} target="_blank" rel="noreferrer"><i>{file.fileKind === "original" ? "PDF" : file.fileKind === "parsed" ? "JSON" : file.fileKind === "filing" ? "SEC" : "CSV"}</i><span><b>{file.fileName}</b><small>{file.exchange} · {(file.fileSize / 1024 / 1024).toFixed(2)} MB</small></span><em>查看</em></a>)}</section>)}</div> : <div className="report-empty"><b>尚未归档财报</b><span>上传后将自动按“市场 / 交易所 / 公司 / 报告期”分类。</span></div>}
-  </div>;
-}
-
 export default function FinancialPanel({ market, code }: { market: string; code: string }) {
   const [section, setSection] = useState<Section>("财报");
   const [reportView, setReportView] = useState<ReportView>("摘要");
@@ -244,13 +211,13 @@ export default function FinancialPanel({ market, code }: { market: string; code:
     <div className="financial-subnav" role="tablist" aria-label="财务数据分类">{SECTIONS.map((item) => <button key={item} type="button" role="tab" aria-selected={section === item} onClick={() => setSection(item)} className={section === item ? "is-active" : ""}>{item}</button>)}</div>
     {loading && !metrics ? <div className="financial-state financial-loading" aria-live="polite"><span className="stock-module-spinner"/><b>正在整理财务数据</b><span>同步申报口径与最近报告期</span></div> : !metrics ? <div className="financial-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 19V5m0 14h16M8 16v-5m4 5V8m4 8v-3"/></svg><b>暂无可用财务数据</b><span>{payload?.error || "该市场数据源后续接入"}</span><button type="button" onClick={() => setReloadKey((key) => key + 1)}>重新加载</button></div> : <>
       <div className="financial-heading"><div><h3>{section}</h3><p>最新报告期 {last(metrics.revenue)?.period || "—"} · 币种 {payload?.currency}</p></div><span>{payload?.source}</span></div>
-      {section === "财报" && <div className="financial-report-tabs">{(["摘要", "收入明细", "财报附件"] as ReportView[]).map((item) => <button key={item} className={reportView === item ? "is-active" : ""} onClick={() => setReportView(item)}>{item}</button>)}</div>}
-      {section === "财报" && reportView === "收入明细" ? <RevenueBreakdown metrics={metrics} currency={payload?.currency} /> : section === "财报" && reportView === "财报附件" ? <FinancialReportFiles market={market} code={code} companyName={payload?.company} /> : <>
+      {section === "财报" && <div className="financial-report-tabs">{(["摘要", "收入明细"] as ReportView[]).map((item) => <button key={item} className={reportView === item ? "is-active" : ""} onClick={() => setReportView(item)}>{item}</button>)}</div>}
+      {section === "财报" && reportView === "收入明细" ? <RevenueBreakdown metrics={metrics} currency={payload?.currency} /> : <>
       {section === "财报" && <div className="financial-summary">{rows.slice(0, 4).map((row) => <div key={row.label}><span>{row.label}</span><b>{compact(row.point?.value, row.perShare)}</b><em className={(row.growth || 0) >= 0 ? "up" : "down"}>{row.growth == null ? "—" : `${row.growth >= 0 ? "▲" : "▼"} ${Math.abs(row.growth).toFixed(2)}%`}</em></div>)}</div>}
       {section === "财务评分" && <div className="financial-score-grid">{scoreRows.map((row) => <article key={row.label} className={row.tone.className}><header><div><b>{row.label}</b><span>{row.description}</span></div><em>{row.tone.label}</em></header><div className="financial-score-value"><strong>{row.score ?? "—"}</strong><small>/ 100</small><span>{compact(row.value)}</span></div><div className="financial-score-track"><i style={{ width: `${row.score ?? 0}%` }}/></div><footer><span>最近变化</span><b className={(row.rate || 0) >= 0 ? "up" : "down"}>{row.rate == null ? "数据不足" : `${row.rate >= 0 ? "+" : ""}${row.rate.toFixed(2)}%`}</b></footer></article>)}</div>}
       {(section === "财报" || section === "关键指标") && <div className="financial-chart-card"><TrendChart metrics={metrics} /></div>}
       {section !== "财务评分" && <div className="financial-table-card"><table><thead><tr><th>指标</th><th>最新值</th><th>同比/环比</th><th>报告期</th></tr></thead><tbody>{rows.map((row) => <tr key={row.label}><td data-label="指标">{row.label}</td><td data-label="最新值">{compact(row.point?.value, row.perShare)}</td><td data-label="同比/环比" className={(row.growth || 0) >= 0 ? "up" : "down"}>{row.growth == null ? "—" : `${row.growth >= 0 ? "+" : ""}${row.growth.toFixed(2)}%`}</td><td data-label="报告期">{row.point ? `${row.point.fiscalYear || ""} ${row.point.fiscalPeriod || ""}`.trim() : "—"}</td></tr>)}</tbody></table></div>}</>}
-      <p className="financial-source">{section === "财务评分" ? "评分依据最近两个报告期的方向与变化幅度生成，仅用于趋势对比，不代表信用评级或投资建议。" : section === "财报" && reportView === "收入明细" ? "收入明细优先使用已归档财报的结构化解析；标准化数据仅作缺省摘要。" : section === "财报" && reportView === "财报附件" ? "PDF 为原始凭证，JSON 为应用主数据，CSV 为可选导出格式。" : `数据来自 ${payload?.source}，原始申报口径未经调整，仅供参考。`}</p>
+      <p className="financial-source">{section === "财务评分" ? "评分依据最近两个报告期的方向与变化幅度生成，仅用于趋势对比，不代表信用评级或投资建议。" : section === "财报" && reportView === "收入明细" ? "收入明细优先使用已归档财报的结构化解析；标准化数据仅作缺省摘要。" : `数据来自 ${payload?.source}，原始申报口径未经调整，仅供参考。`}</p>
     </>}
   </div>;
 }

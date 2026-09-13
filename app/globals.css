@@ -2676,27 +2676,8 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .financial-report-tabs { display: flex; gap: 7px; margin: 0 0 12px; }
 .financial-report-tabs button { min-height: 34px; border: 1px solid #d8dde4; border-radius: 9px; padding: 0 14px; color: #747d89; font-size: 11px; font-weight: 750; }
 .financial-report-tabs button.is-active { border-color: #202733; color: #fff; background: #202733; }
-.financial-report-files { display: grid; gap: 12px; }
-.report-archive-path { display: flex; align-items: center; gap: 8px; min-height: 40px; border-radius: 10px; padding: 0 13px; color: #606a78; background: #f3f5f7; font-size: 11px; }
-.report-archive-path b { color: #a4acb7; }
-.report-upload-bar { display: grid; grid-template-columns: 1.1fr .75fr .75fr auto; gap: 8px; align-items: end; }
-.report-upload-bar label:not(.report-file-button) { display: grid; gap: 5px; color: #858e9b; font-size: 10px; }
-.report-upload-bar input,.report-upload-bar select { width: 100%; height: 36px; border: 1px solid #d9dee5; border-radius: 9px; padding: 0 10px; color: #222a35; background: #fff; font-size: 11px; outline: none; }
-.report-file-button { display: grid; place-items: center; height: 36px; border-radius: 9px; padding: 0 14px; color: #fff; background: #1d2530; font-size: 11px; font-weight: 750; cursor: pointer; }
-.report-file-button input { display: none; }
-.report-upload-message { color: #08a88a; font-size: 10px; }
 .report-format-note { display: flex; align-items: baseline; gap: 10px; border-left: 3px solid #5470ff; padding: 9px 12px; background: rgba(84,112,255,.06); font-size: 10px; }
 .report-format-note span { color: #7e8794; }
-.report-file-list { display: grid; gap: 10px; }
-.report-file-list section { overflow: hidden; border: 1px solid #dde2e8; border-radius: 11px; }
-.report-file-list h4 { padding: 9px 12px; color: #747e8b; background: #f7f8fa; font-size: 11px; }
-.report-file-list a { display: grid; grid-template-columns: 42px 1fr auto; gap: 10px; align-items: center; min-height: 52px; padding: 7px 12px; border-top: 1px solid #eef0f3; }
-.report-file-list a > i { display: grid; place-items: center; width: 36px; height: 28px; border-radius: 7px; color: #506cff; background: rgba(84,112,255,.1); font-size: 8px; font-style: normal; font-weight: 800; }
-.report-file-list a > span { display: grid; gap: 3px; min-width: 0; }
-.report-file-list a b { overflow: hidden; color: #27303c; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.report-file-list a small,.report-file-list a em { color: #929ba7; font-size: 9px; font-style: normal; }
-.report-empty { display: grid; place-items: center; gap: 5px; min-height: 150px; border: 1px dashed #ccd3dc; border-radius: 12px; color: #737d8a; }
-.report-empty span { color: #9aa3ae; font-size: 10px; }
 .financial-operation-title { margin: 22px 0 10px; color: #151b25; font-size: 17px; font-weight: 800; }
 .financial-indicator-tabs { display: flex; gap: 7px; overflow-x: auto; margin-bottom: 10px; scrollbar-width: none; }
 .financial-indicator-tabs::-webkit-scrollbar { display: none; }
@@ -2715,10 +2696,6 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .dark .financial-breakdown-toolbar button.is-active,.dark .financial-indicator-tabs button.is-active { border-color: #dbe1e8; color: #edf1f6; background: rgba(255,255,255,.08); }
 .dark .financial-report-tabs button { border-color: rgba(255,255,255,.13); color: #9ca7b5; }
 .dark .financial-report-tabs button.is-active { color: #111720; background: #edf1f6; }
-.dark .report-archive-path,.dark .report-file-list h4 { color: #a1aab7; background: rgba(255,255,255,.06); }
-.dark .report-upload-bar input,.dark .report-upload-bar select { border-color: rgba(255,255,255,.13); color: #e7ebf0; background: rgba(255,255,255,.05); }
-.dark .report-file-list section,.dark .report-file-list a,.dark .report-empty { border-color: rgba(255,255,255,.11); }
-.dark .report-file-list a b { color: #e5eaf0; }
 .dark .financial-operation-title { color: #edf1f6; }
 @media (max-width: 767px) {
   .stock-detail-tabs { gap:0; justify-content:space-between; }
@@ -2745,7 +2722,6 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   .financial-table-card td:first-child { grid-column:1/-1; border-bottom:1px solid var(--edge)!important; padding-bottom:7px!important; color:var(--ink); font-size:11px; font-weight:700; }
   .financial-table-card td:first-child::before { display:none; }
   .dark .financial-table-card tr { background:rgba(255,255,255,.035); }
-  .report-upload-bar { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .report-file-button { grid-column: 1/-1; }
   .report-format-note { align-items: flex-start; flex-direction: column; }
 }
