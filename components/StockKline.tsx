@@ -1143,7 +1143,6 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const sessionLabel = SESSIONS.find((x) => x.value === session)?.label || "全天";
   const intradayPeriodLabel = intradayMinutes < 60 ? `${intradayMinutes}分` : `${intradayMinutes / 60}小时`;
   const noSessionData = range === "DAY" && !loading && (sessionDay.length > 0 || intraday.length > 0 || fiveDay.length > 0) && data.values.length === 0;
-  const advancedStyles = range !== "DAY" && range !== "5D";
   const maLegend = maConfigs.filter((item) => item.enabled).map((item) => {
     const values = movingAverage(data.values, item.period);
     const latest = [...values].reverse().find((value) => value != null);
@@ -1330,9 +1329,9 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
         </button>
         {styleOpen && styleMenuPosition && <div className="stock-chart-menu style-menu is-draggable" role="menu" aria-label="可拖动的图表类型菜单" style={{ left: styleMenuPosition.x, top: styleMenuPosition.y }} onPointerDown={beginStyleDrag} onPointerMove={moveStyleMenu} onPointerUp={endStyleDrag} onPointerCancel={endStyleDrag}>
           {basicStyleOrder.map(renderBasicStyle)}
-          {(advancedStyles ? ALL_STYLES : BASIC_STYLES).some((item) => !basicStyleOrder.includes(item)) && <>
+          {ALL_STYLES.some((item) => !basicStyleOrder.includes(item)) && <>
             <div className="chart-style-divider" />
-            {(advancedStyles ? ALL_STYLES : BASIC_STYLES).filter((item) => !basicStyleOrder.includes(item)).map((item) => {
+            {ALL_STYLES.filter((item) => !basicStyleOrder.includes(item)).map((item) => {
               const labels: Record<ChartStyle, string> = { area: "面积图", line: "折线图", marked: "带标记线", step: "阶梯线", hlc: "HLC 区域", baseline: "基准线", candle: "实心 K 线", hollow: "空心 K 线", ohlc: "OHLC" };
               const icon = item === "area" ? <LineIcon area /> : item === "line" ? <LineIcon /> : item === "marked" ? <MarkedLineIcon /> : item === "step" ? <span className="chart-type-glyph step">⌜</span> : item === "hlc" ? <span className="chart-type-glyph hlc">≋</span> : item === "baseline" ? <BaselineIcon /> : <CandleIcon hollow={item === "hollow"} ohlc={item === "ohlc"} />;
               return <button key={item} type="button" className="style-add-option" onClick={() => addStyleToFavorites(item)} title="点击加入上方常用区">{icon}<span>{labels[item]}</span><span className="style-add-mark" aria-hidden="true">＋</span></button>;
