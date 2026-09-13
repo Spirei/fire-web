@@ -9,6 +9,7 @@ import { groupCount, groupVisible, type WatchGroup } from "@/lib/watchGroups";
 import { showToast } from "@/lib/toast";
 
 interface Props {
+  initialView?: "grid" | "manage";
   groups: WatchGroup[];
   records: StockRecord[];
   selectedId: string;
@@ -124,6 +125,7 @@ function ManageRow({ g, count, visible, icon, drag, onEye, onRename, onDelete }:
 }
 
 export default function WatchGroupSheet({
+  initialView = "grid",
   groups,
   records,
   selectedId,
@@ -136,7 +138,7 @@ export default function WatchGroupSheet({
   onUploadIcon,
   brokerIcons = {}
 }: Props) {
-  const [view, setView] = useState<"grid" | "manage">("grid");
+  const [view, setView] = useState<"grid" | "manage">(initialView);
   const [newName, setNewName] = useState("");
   const [rename, setRename] = useState<{ id: string; label: string } | null>(null);
   const [renameText, setRenameText] = useState("");

@@ -3000,6 +3000,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: V0_1_28_ENTRY.frontend,
   software: V0_1_28_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.29" } : item),
   changes: [{
+    title: "按富途逻辑重构自选分组入口",
+    desc: "顶部保留常用分组，原“更多”改为三横杠图标；菜单集中列出全部、市场与自定义分组，显示图标、数量和当前项勾选，底部固定蓝色“编辑分组”。点击编辑直接进入排序、显隐、重命名、新建和删除界面，并移除功能重复的独立加号入口。",
+    kind: "feature"
+  }, {
     title: "简化自选股移动分组",
     desc: "批量移动由“先点按钮、再操作第二个下拉框”合并为单个目标分组菜单，点击即可直接选择并执行，完成后自动清除选择状态。批量与单股菜单统一按“移入分组 / 其他”组织选项，“移出当前分组”固定放在末尾。",
     kind: "fix"

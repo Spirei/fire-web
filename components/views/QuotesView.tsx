@@ -805,30 +805,21 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
               type="button"
               onClick={() => setShowMoreGroups((v) => !v)}
               aria-expanded={showMoreGroups}
-              className={`flex min-h-9 items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold transition-all duration-200 ${groupChips.additional.some((chip) => chip.id === filterId) ? "border-edge-strong bg-white text-ink-2 shadow-sm dark:bg-[#2a3342] dark:text-white" : "border-transparent text-muted hover:border-edge hover:bg-brand-hover hover:text-ink"}`}
+              aria-label="更多分组"
+              title="更多分组"
+              className={`grid h-9 w-9 place-items-center rounded-full border transition-all duration-200 ${showMoreGroups ? "border-edge-strong bg-white text-[#3297f6] shadow-sm dark:bg-[#2a3342]" : "border-transparent text-muted hover:border-edge hover:bg-brand-hover hover:text-ink"}`}
             >
-              {(() => {
-                const active = groupChips.additional.find((chip) => chip.id === filterId);
-                if (!active) return <>更多</>;
-                const activeGroup = watchGroups.find((item) => item.id === active.id);
-                const activeIcon = activeGroup?.kind === "custom" ? activeGroup.icon || brokerIcons[activeGroup.name] || groupStockIcon[activeGroup.id] : undefined;
-                return <>
-                  {activeGroup?.kind === "market" ? <MarketIcon market={activeGroup.market} size={15} /> : activeIcon ? <img src={activeIcon} alt="" className="h-[15px] w-[15px] rounded-full object-cover" /> : <span className="grid h-[15px] w-[15px] place-items-center rounded bg-bg-gray text-[8px]">{active.label.slice(0, 1)}</span>}
-                  <span className="max-w-[100px] truncate">{active.label}</span>
-                  <span className="text-[11px] opacity-70">{active.count}</span>
-                </>;
-              })()}
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 transition-transform duration-200 ${showMoreGroups ? "rotate-180" : ""}`}><path d="m8 10 4 4 4-4" /></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-[18px] w-[18px]"><path d="M5 7h14M5 12h14M5 17h14" /></svg>
             </button>
             {showMoreGroups && (
-              <div className="absolute right-0 top-full z-40 mt-2 min-w-[230px] rounded-[14px] border border-edge bg-white p-2 shadow-pop dark:bg-[#1b2230]">
-                <div className="grid gap-1">
-                  {groupChips.additional.map((chip) => {
+              <div className="absolute right-0 top-full z-40 mt-2 min-w-[250px] rounded-[14px] border border-edge bg-white p-2 shadow-pop dark:bg-[#1b2230]">
+                <div className="max-h-[420px] overflow-y-auto">
+                  {groupChips.all.map((chip) => {
                     const g = watchGroups.find((item) => item.id === chip.id);
                     const customIcon = g?.kind === "custom" ? g.icon || brokerIcons[g.name] || groupStockIcon[g.id] : undefined;
                     return (
                       <button key={chip.id} type="button" onClick={() => { setFilterId(chip.id); setPage(1); setShowMoreGroups(false); }} className={`flex w-full items-center gap-2 rounded-[10px] px-3 py-2.5 text-left text-xs font-semibold transition-colors ${filterId === chip.id ? "bg-bg-gray text-ink" : "text-muted hover:bg-brand-hover hover:text-ink"}`}>
-                        {g?.kind === "market" ? <MarketIcon market={g.market} size={16} /> : customIcon ? <img src={customIcon} alt="" className="h-4 w-4 rounded-full object-cover" /> : <span className="grid h-4 w-4 place-items-center rounded bg-bg-gray text-[9px]">{chip.label.slice(0, 1)}</span>}
+                        {!g ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg> : g.kind === "market" ? <MarketIcon market={g.market} size={16} /> : customIcon ? <img src={customIcon} alt="" className="h-4 w-4 rounded-full object-cover" /> : <span className="grid h-4 w-4 place-items-center rounded bg-bg-gray text-[9px]">{chip.label.slice(0, 1)}</span>}
                         <span className="min-w-0 flex-1 truncate">{chip.label}</span>
                         <span className="text-[11px] tabular-nums text-faint">{chip.count}</span>
                         {filterId === chip.id && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-3.5 w-3.5 text-[#3297f6]"><path d="m5 12 4 4L19 6" /></svg>}
@@ -836,21 +827,16 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
                     );
                   })}
                 </div>
+                <div className="mt-2 border-t border-edge pt-2">
+                  <button type="button" onClick={() => { setShowMoreGroups(false); setGroupSheetOpen(true); }} className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#3297f6] px-3 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#2589e8]">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+                    编辑分组
+                  </button>
+                </div>
               </div>
             )}
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => setGroupSheetOpen(true)}
-          title="全部分组"
-          aria-label="全部分组"
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-edge-strong text-muted transition-all duration-200 hover:bg-brand-hover hover:text-ink active:scale-[.95]"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-        </button>
       </div>
       </section>
 
@@ -1077,6 +1063,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
 
       {groupSheetOpen && (
         <WatchGroupSheet
+          initialView="manage"
           groups={watchGroups}
           records={records}
           selectedId={filterId}
