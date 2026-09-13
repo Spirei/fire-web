@@ -3047,6 +3047,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "按 TradingView 修正四种贵金属图标",
     desc: "逐一核对 TradingView 的 TVC:GOLD、TVC:SILVER、TVC:PLATINUM 和 TVC:PALLADIUM 页面，使用页面实际采用的官方 SVG 替换黄金、白银、铂金和钯金图标；贵金属行情回退数据中的图标地址也统一改为 TradingView 来源。",
     kind: "fix"
+  }, {
+    title: "修复本地版页面反复重载与无法点击",
+    desc: "本地开发服务器不再监听行情、财报缓存和上传素材等运行时文件。后台刷新数据落盘时不会反复触发整页热重载，避免旧页面继续请求已失效的 JavaScript 分块而出现 ChunkLoadError、页面看得见却无法点击。",
+    kind: "fix"
   }]
 };
 

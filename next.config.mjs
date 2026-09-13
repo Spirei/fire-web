@@ -14,6 +14,22 @@ const nextConfig = {
   reactStrictMode: true,
   eslint: { ignoreDuringBuilds: true },
   poweredByHeader: false,
+  webpack(config, { dev }) {
+    if (dev) {
+      // 行情、财报等后台任务会持续写入这些运行时目录。若让 webpack 监听，
+      // 本地开发页会被反复整页刷新，旧页面随后请求到已失效的 chunk。
+      const runtimeData = ["**/data/**", "**/public/uploads/**"];
+      const ignored = config.watchOptions?.ignored;
+      config.watchOptions = {
+        ...config.watchOptions,
+        // Next 默认值是 RegExp，不能塞进字符串数组（webpack 会拒绝启动）。
+        ignored: ignored instanceof RegExp
+          ? new RegExp(`${ignored.source}|[\\/]data[\\/]|[\\/]public[\\/]uploads[\\/]`, ignored.flags)
+          : [...(Array.isArray(ignored) ? ignored : ignored ? [ignored] : []), ...runtimeData]
+      };
+    }
+    return config;
+  },
   // 局域网访问开发资源（避免 cross-origin 警告，Next 未来大版本将强制要求）
   allowedDevOrigins,
   async headers() {

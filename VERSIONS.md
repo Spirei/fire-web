@@ -17,6 +17,7 @@
 
 ### 界面与规范
 
+- 修复本地版页面反复重载与无法点击：Next.js 开发服务器不再监听行情、财报缓存和上传素材等运行时目录，后台刷新数据落盘时不再触发整页热重载，避免旧页面请求已失效的 JavaScript 分块并出现 `ChunkLoadError`。
 - 逐一核对 TradingView 的 TVC:GOLD、TVC:SILVER、TVC:PLATINUM 和 TVC:PALLADIUM 页面，改用页面实际采用的官方 SVG，修正黄金、白银、铂金和钯金图标；贵金属行情回退数据中的图标地址同步统一为 TradingView 来源。
 - 移除误加的统一黑底金属锭 SVG；全量核对其他素材后，补回 BNB、DASH、DOGE、DOT、ETC、LTC、TRX、VET、XLM、XMR、XRP 共 11 个缺失的默认图标；初始化时会自动修复地址为空或文件丢失的内置素材，同时保留有效的用户上传图标。
 - 自选股「我的行情板」序号列数字改为与股票名称一致的正文颜色，深浅色模式同步适配。
