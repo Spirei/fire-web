@@ -3284,6 +3284,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "导航图标首帧水合一致",
     desc: "修复我的持仓刷新后出现 Recoverable Error：服务端没有某个导航素材、客户端模块缓存却已有该素材时，SafeAssetImage 两端分别输出默认 SVG 与图片节点，触发 React hydration mismatch。导航图标现在在服务端 HTML 与客户端水合首帧统一使用服务端素材快照，本地缓存只在水合完成后补充。",
     kind: "fix"
+  }, {
+    title: "账户总览市场切换位置稳定",
+    desc: "账户总览的全部与单市场视图统一使用固定 7 列轨道。美股、港股、A 股的 5 项指标固定占据与全部视图相同的前 5 列，右侧两列留空；切回全部时只在后两列补出银行卡现金与冻结现金，已有指标不再重新均分宽度或横向跳动。",
+    kind: "fix"
   }]
 };
 
