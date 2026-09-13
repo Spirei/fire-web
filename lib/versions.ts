@@ -3000,6 +3000,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: V0_1_28_ENTRY.frontend,
   software: V0_1_28_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.29" } : item),
   changes: [{
+    title: "优化自选股更多分组交互",
+    desc: "“更多”改为不带数量的固定聚合按钮，点击后从按钮下方弹出其余分组，常用分组不再被替换，整排布局保持稳定。弹层显示分组图标、名称、数量及当前选中标记；选中后按钮显示当前分组，点击外部自动关闭，右侧加号继续只负责分组管理。",
+    kind: "feature"
+  }, {
     title: "彻底修复自选股刷新分组闪失",
     desc: "自选股分组现在与自选记录一起由服务端注入首屏 HTML，刷新首帧即可显示完整市场与自定义分组，不再依赖 localStorage 是否存在；客户端只负责静默校准最新配置。同时删除“我的行情板”标题旁与“全部”数量重复的总数徽标。",
     kind: "fix"

@@ -76,6 +76,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
   const [lastRefreshAt, setLastRefreshAt] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showMoreGroups, setShowMoreGroups] = useState(false);
+  const moreGroupsRef = useRef<HTMLDivElement>(null);
 
   // 恢复上次选择的刷新间隔（默认每分钟；挂载后应用，避免 SSR hydration 不匹配）
   useEffect(() => {
@@ -105,6 +106,15 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
   const [assignBusy, setAssignBusy] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 6;
+
+  useEffect(() => {
+    if (!showMoreGroups) return;
+    const close = (event: MouseEvent) => {
+      if (moreGroupsRef.current && !moreGroupsRef.current.contains(event.target as Node)) setShowMoreGroups(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [showMoreGroups]);
 
   // 个股行内移动只允许选择自定义分组；市场分组是按市场动态筛选，不保存到记录归属。
   const customWatchGroups = useMemo(
@@ -218,14 +228,15 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       all: [{ id: "", label: "全部", count: records.length }, ...markets, ...customs],
       visible: [
         { id: "", label: "全部", count: records.length },
-        ...(showMoreGroups ? additional : defaultVisible).filter((c) => {
+        ...defaultVisible.filter((c) => {
           const group = watchGroups.find((g) => g.id === c.id);
           return group ? groupVisible(group, c.count) : true;
         })
       ],
+      additional: visibleAdditional,
       moreCount: visibleAdditional.length
     };
-  }, [records, showMoreGroups, watchGroups]);
+  }, [records, watchGroups]);
 
   // 自定义分组默认图标：无自传图标、且非券商分组时，取组内市值最高的股票图标
   const groupStockIcon = useMemo(() => {
@@ -692,7 +703,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       </div>
 
       {/* 行情板控制面板：标题、刷新和分组筛选保持在同一层级 */}
-      <section className="quotes-control-panel mb-5 overflow-hidden">
+      <section className="quotes-control-panel mb-5 overflow-visible">
       <div className="quotes-control-header flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
         <div className="quotes-control-title flex items-center gap-2">
           <h3 className="text-base font-bold">我的行情板</h3>
@@ -792,13 +803,38 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
           );
         })}
         {groupChips.moreCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowMoreGroups((v) => !v)}
-            className="flex flex-none items-center rounded-full px-2.5 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink"
-          >
-            {showMoreGroups ? "收起" : `更多 ${groupChips.moreCount}`}
-          </button>
+          <div ref={moreGroupsRef} className="relative flex-none">
+            <button
+              type="button"
+              onClick={() => setShowMoreGroups((v) => !v)}
+              aria-expanded={showMoreGroups}
+              className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 ${groupChips.additional.some((chip) => chip.id === filterId) ? "border-edge-strong bg-white text-ink-2 shadow-sm dark:bg-[#2a3342] dark:text-white" : "border-transparent text-muted hover:border-edge hover:bg-brand-hover hover:text-ink"}`}
+            >
+              {(() => {
+                const active = groupChips.additional.find((chip) => chip.id === filterId);
+                return active ? <><span className="max-w-[100px] truncate">{active.label}</span><span className="text-[11px] opacity-70">{active.count}</span></> : <>更多</>;
+              })()}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 transition-transform duration-200 ${showMoreGroups ? "rotate-180" : ""}`}><path d="m8 10 4 4 4-4" /></svg>
+            </button>
+            {showMoreGroups && (
+              <div className="absolute right-0 top-full z-40 mt-2 min-w-[230px] rounded-[14px] border border-edge bg-white p-2 shadow-pop dark:bg-[#1b2230]">
+                <div className="grid gap-1">
+                  {groupChips.additional.map((chip) => {
+                    const g = watchGroups.find((item) => item.id === chip.id);
+                    const customIcon = g?.kind === "custom" ? g.icon || brokerIcons[g.name] || groupStockIcon[g.id] : undefined;
+                    return (
+                      <button key={chip.id} type="button" onClick={() => { setFilterId(chip.id); setPage(1); setShowMoreGroups(false); }} className={`flex w-full items-center gap-2 rounded-[10px] px-3 py-2.5 text-left text-xs font-semibold transition-colors ${filterId === chip.id ? "bg-bg-gray text-ink" : "text-muted hover:bg-brand-hover hover:text-ink"}`}>
+                        {g?.kind === "market" ? <MarketIcon market={g.market} size={16} /> : customIcon ? <img src={customIcon} alt="" className="h-4 w-4 rounded-full object-cover" /> : <span className="grid h-4 w-4 place-items-center rounded bg-bg-gray text-[9px]">{chip.label.slice(0, 1)}</span>}
+                        <span className="min-w-0 flex-1 truncate">{chip.label}</span>
+                        <span className="text-[11px] tabular-nums text-faint">{chip.count}</span>
+                        {filterId === chip.id && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-3.5 w-3.5 text-[#3297f6]"><path d="m5 12 4 4L19 6" /></svg>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         )}
         <button
           type="button"
