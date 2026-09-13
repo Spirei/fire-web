@@ -2065,9 +2065,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       {/* 弹层一律 portal 到 body：挂在应用树里会被祖先的层叠上下文困住，
           z-[10002] 也压不过吸顶页头（z-50），顶部会被页头盖掉。 */}
       {addOpen && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[10002] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setAddOpen(false)}>
+        <div className="fixed inset-0 z-[10002] flex items-end justify-center bg-black/60 px-0 pb-0 pt-[72px] sm:items-center sm:px-4 sm:pb-4 sm:pt-[88px]" onClick={() => setAddOpen(false)}>
           <div
-            className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl border border-edge bg-white shadow-2xl supports-[height:100dvh]:max-h-[92dvh] sm:rounded-card dark:border-white/10 dark:bg-[#16181d]"
+            className="flex max-h-[86vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl border border-edge bg-white shadow-2xl supports-[height:100dvh]:max-h-[86dvh] sm:rounded-card dark:border-white/10 dark:bg-[#16181d]"
             onClick={(event) => event.stopPropagation()}
           >
             <span className="mx-auto mt-2.5 block h-1 w-10 flex-none rounded-full bg-edge-strong sm:hidden" />
@@ -2296,9 +2296,10 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       )}
 
       {active && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[10002] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setActive(null)}>
+        // 顶部留出页头高度（72px）：弹层整体落在页头下方，既不压页头、也不会被页头盖住
+        <div className="fixed inset-0 z-[10002] flex items-end justify-center bg-black/60 px-0 pb-0 pt-[72px] sm:items-center sm:px-4 sm:pb-4 sm:pt-[88px]" onClick={() => setActive(null)}>
           <div
-            className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-edge bg-white shadow-2xl supports-[height:100dvh]:max-h-[92dvh] sm:rounded-card dark:border-white/10 dark:bg-[#16181d]"
+            className="flex max-h-[86vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-edge bg-white shadow-2xl supports-[height:100dvh]:max-h-[86dvh] sm:rounded-card dark:border-white/10 dark:bg-[#16181d]"
             onClick={(event) => event.stopPropagation()}
           >
             {/* 手机：底部抽屉的抓手 */}
