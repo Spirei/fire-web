@@ -28,6 +28,11 @@ export interface CardLibraryPayload extends CardManifest {
   holdings: string[];
   /** 加入「我的卡」的时间（卡面 key → ISO 时间）：新加的卡排到列表最上面 */
   addedAt: Record<string, string>;
+  /**
+   * 服务端当前时间（毫秒）：首帧就要用 —— 「新加的卡置顶」和 NEW 角标都按 3 天窗口算，
+   * 客户端自己取时间的话，服务端首帧只能画默认顺序，挂载后重排会让卡片"跳位置"。
+   */
+  nowMs: number;
   /** 卡背信息（卡号 / 有效期 / 安全码 / 备注 / 币种）：卡包与卡片详情首帧就要用 */
   details: Record<string, CardDetails>;
   /** 卡面覆盖表（卡面文件 → 实际图片地址）：素材库换过图的卡走这里，没登记的卡回退清单原图 */
@@ -78,6 +83,7 @@ export function cardLibraryForUser(userId: string): CardLibraryPayload {
     tags: listCardTags(userId),
     holdings: listCardHoldings(userId),
     addedAt: cardHoldingTimes(userId),
+    nowMs: Date.now(),
     details: listCardDetails(userId),
     covers: cardCoverMap(),
     customCards: listCustomCards(userId)

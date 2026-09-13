@@ -936,16 +936,19 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   }, []);
 
   /**
-   * 客户端时间戳：判断 NEW 角标是否还在 3 天内、以及新加的卡要不要置顶。
-   * 首帧（SSR）先用 0，挂载后再算，避免服务端与客户端渲染不一致；之后每小时刷新一次，
-   * 到点自动消失 / 自动回到常规顺序，不用手动刷新。
+   * 时间戳：判断 NEW 角标是否还在 3 天内、以及新加的卡要不要置顶。
+   * 首帧优先用**服务端注入的时间**（initial.nowMs）——判断依据两边一致，
+   * 服务端渲染出来就是最终顺序，刷新不会"先按默认顺序画一遍、挂载后卡片跳到最前"。
+   * 没有首屏注入时（如本地直连接口）挂载后补一次；之后每小时校准，角标到点自动消失。
    * 注意：必须声明在 sortedItems 之前 —— 排序里读它，写在后面会踩 TDZ 报错。
    */
-  const [nowMs, setNowMs] = useState(0);
+  const [nowMs, setNowMs] = useState<number>(() => initial?.nowMs ?? 0);
   useEffect(() => {
-    setNowMs(Date.now());
+    if (!initial?.nowMs) setNowMs(Date.now());
     const timer = window.setInterval(() => setNowMs(Date.now()), 60 * 60 * 1000);
     return () => window.clearInterval(timer);
+    // 只在挂载时跑一次：initial 是首屏注入的静态数据，不会变
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** 按当前排序方式排好的列表（同分保持清单顺序，避免每次刷新乱跳） */
