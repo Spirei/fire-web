@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
 import { cardTagsOf } from "@/lib/cardTags";
@@ -2061,7 +2062,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       )}
 
       {/* 新增卡片：素材库里没有的卡，上传卡面 + 填信息新建（自动进我的卡 + 素材库） */}
-      {addOpen && (
+      {/* 弹层一律 portal 到 body：挂在应用树里会被祖先的层叠上下文困住，
+          z-[10002] 也压不过吸顶页头（z-50），顶部会被页头盖掉。 */}
+      {addOpen && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[10002] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setAddOpen(false)}>
           <div
             className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl border border-edge bg-white shadow-2xl supports-[height:100dvh]:max-h-[92dvh] sm:rounded-card dark:border-white/10 dark:bg-[#16181d]"
@@ -2288,10 +2291,11 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {active && (
+      {active && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[10002] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setActive(null)}>
           <div
             className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-edge bg-white shadow-2xl supports-[height:100dvh]:max-h-[92dvh] sm:rounded-card dark:border-white/10 dark:bg-[#16181d]"
@@ -2350,7 +2354,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         {activeFaces.map((item, index) => (
                           <span
                             key={item.file}
-                            className={`block overflow-hidden rounded-xl shadow-pop [backface-visibility:hidden] ${
+                            /* 固定成银行卡标准比例：和网格里的卡片一致 ——
+                               恢复原图 / 换过自定义卡面时，图片比例不同也不会把详情页撑变形 */
+                            className={`block aspect-[1.586] overflow-hidden rounded-xl bg-bg-gray shadow-pop [backface-visibility:hidden] dark:bg-white/5 ${
                               index === 0 ? "relative" : "absolute inset-0"
                             }`}
                             style={index === 0 ? undefined : { transform: `rotateY(${index * 180}deg)` }}
@@ -2358,7 +2364,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                             <img
                               src={cardCover(item.file)}
                               alt={index === 0 ? active.card.name : `${active.card.name} · ${item.label}`}
-                              className="block w-full transition-transform duration-300 ease-out group-hover/card:scale-[1.02]"
+                              className="block h-full w-full object-cover transition-transform duration-300 ease-out group-hover/card:scale-[1.02]"
                             />
                           </span>
                         ))}
@@ -2367,11 +2373,12 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     <span className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-t from-black/35 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100" />
                   </div>
                 ) : (
-                  <div className="relative overflow-hidden rounded-xl shadow-pop">
+                  /* 同上：保持银行卡标准比例，原图与自定义卡面在详情页里尺寸一致 */
+                  <div className="relative aspect-[1.586] overflow-hidden rounded-xl bg-bg-gray shadow-pop dark:bg-white/5">
                     <img
                       src={cardCover(active.card.file)}
                       alt={active.card.name}
-                      className="w-full transition-transform duration-300 ease-out group-hover/card:scale-[1.04]"
+                      className="block h-full w-full object-cover transition-transform duration-300 ease-out group-hover/card:scale-[1.04]"
                     />
                     <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100" />
                   </div>
@@ -2688,7 +2695,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* 手机：滑到列表深处时右下角浮出「回到顶部」 */}
@@ -2706,7 +2714,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         </button>
       )}
 
-      {walletOpen && (
+      {/* 卡包也 portal：否则整屏视图的顶部同样会被吸顶页头盖住 */}
+      {walletOpen && typeof document !== "undefined" && createPortal(
         <CardWalletStack
           cards={walletCards}
           onClose={() => setWalletOpen(false)}
@@ -2718,7 +2727,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           onAmountChange={applyWalletAmount}
           onDetailsSaved={applyWalletDetails}
           onCoverChanged={(cardKey, url) => setCovers((prev) => ({ ...prev, [cardKey]: url }))}
-        />
+        />,
+        document.body
       )}
     </div>
   );
