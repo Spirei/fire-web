@@ -3019,6 +3019,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "卡面详情去除重复 NEW 标记",
     desc: "NEW 已在卡面库列表中展示，打开卡面详情后不再在大图左上角重复显示，避免遮挡卡面内容。",
     kind: "fix"
+  }, {
+    title: "提交标题增加自动格式检查",
+    desc: "GitHub Actions 新增提交标题检查，每次推送要求使用英文类型前缀、半角冒号和简明中文摘要；同一轮界面微调尽量合并后推送，交付回执单独报告自动检查状态，减少无效排队并让部署状态页更易读。",
+    kind: "fix"
   }]
 };
 

@@ -8,6 +8,7 @@
     "start": "next start -H 0.0.0.0 -p 3000",
     "audit:public": "node scripts/audit-public-repo.mjs",
     "audit:deploy": "node scripts/audit-deploy-parity.mjs",
+    "check:commit-title": "node scripts/check-commit-title.mjs",
     "smoke": "bash scripts/smoke-test.sh",
     "smoke:ci": "bash scripts/smoke-ci.sh",
     "clean:caches": "node scripts/clean-next-cache.mjs",

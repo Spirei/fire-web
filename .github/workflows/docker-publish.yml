@@ -26,11 +26,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Use Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - name: Check commit titles
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: npm run check:commit-title -- "${PR_BASE_SHA:-$BEFORE_SHA}" "$HEAD_SHA"
       - name: Install dependencies
         run: npm ci
       - name: Public repository safety audit
