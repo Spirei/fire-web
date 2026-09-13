@@ -3000,6 +3000,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: V0_1_28_ENTRY.frontend,
   software: V0_1_28_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.29" } : item),
   changes: [{
+    title: "简化自选股移动分组",
+    desc: "批量移动由“先点按钮、再操作第二个下拉框”合并为单个目标分组菜单，点击即可直接选择并执行，完成后自动清除选择状态。批量与单股菜单统一按“移入分组 / 其他”组织选项，“移出当前分组”固定放在末尾。",
+    kind: "fix"
+  }, {
     title: "补齐更多分组选中态图标",
     desc: "从“更多”弹层选择分组后，聚合按钮同步显示该分组的市场、自定义、券商或组内股票兜底图标，尺寸与弹层列表保持一致。适度增加分组栏上下留白、胶囊高度与间距，并同步放大管理加号，改善横向工具栏过扁的比例。",
     kind: "fix"

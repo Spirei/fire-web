@@ -102,7 +102,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
     return new URLSearchParams(window.location.search).get("filter") ?? "";
   });
   const [groupSheetOpen, setGroupSheetOpen] = useState(false);
-  const [assignOpen, setAssignOpen] = useState(false);
   const [assignBusy, setAssignBusy] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 6;
@@ -571,7 +570,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       return false;
     } finally {
       setAssignBusy(false);
-      setAssignOpen(false);
     }
   }
 
@@ -600,7 +598,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
     setEditMode((current) => !current);
     // 每次切换编辑态都从干净的选择状态开始，避免退出后残留批量操作上下文。
     setSelected(new Set());
-    setAssignOpen(false);
   }
 
   async function batchDelete() {
@@ -862,28 +859,28 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
           <div className="flex items-center gap-2">
             <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#3297f6] px-2 text-[11px] font-bold text-white">{selected.size}</span>
             <span className="text-xs font-semibold text-ink-2">已选择股票</span>
-            <button type="button" onClick={() => { setSelected(new Set()); setAssignOpen(false); }} className="text-[11px] font-medium text-muted transition-colors hover:text-ink">取消选择</button>
+            <button type="button" onClick={() => setSelected(new Set())} className="text-[11px] font-medium text-muted transition-colors hover:text-ink">取消选择</button>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" onClick={() => setAssignOpen((v) => !v)} disabled={assignBusy} className="btn btn-ghost btn-sm">
-              移动到分组
-            </button>
-            {assignOpen && (
-              <select
-                value=""
-                autoFocus
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v !== "") void assignGroup([...selected], v === "__none__" ? "" : v);
-                }}
-                className="quotes-move-select h-8 rounded-[9px] border border-edge-strong bg-white px-2.5 text-[11px] font-semibold text-muted outline-none transition-colors focus:border-edge-strong"
-                aria-label="移动到分组"
-              >
-                <option value="" disabled>选择分组…</option>
+            <select
+              value=""
+              disabled={assignBusy || customWatchGroups.length === 0}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value) void assignGroup([...selected], value === "__none__" ? "" : value);
+              }}
+              className="quotes-move-select h-8 cursor-pointer rounded-[9px] border border-edge-strong bg-white px-3 text-[11px] font-semibold text-muted outline-none transition-colors hover:bg-brand-hover focus:border-edge-strong disabled:cursor-not-allowed disabled:opacity-45"
+              aria-label="移动到分组"
+              title={customWatchGroups.length === 0 ? "请先新建自定义分组" : "选择目标分组"}
+            >
+              <option value="" disabled>移动到分组</option>
+              <optgroup label="移入分组">
                 {customWatchGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                <option value="__none__">移出分组（未分组）</option>
-              </select>
-            )}
+              </optgroup>
+              <optgroup label="其他">
+                <option value="__none__">移出当前分组</option>
+              </optgroup>
+            </select>
             <button type="button" onClick={batchDelete} className="btn btn-ghost btn-sm text-down hover:border-down/40 hover:bg-down/10 dark:border-white/20">
               <DeleteIcon size={15} />
               批量删除
@@ -976,10 +973,14 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
                             className="quotes-move-select quotes-action-btn h-8 w-[66px] cursor-pointer rounded-[9px] border border-edge bg-bg-gray px-1 text-center text-xs text-muted outline-none transition-colors hover:border-edge-strong hover:bg-brand-hover focus:border-edge-strong disabled:cursor-not-allowed disabled:opacity-45"
                           >
                             <option value="" disabled>移动</option>
-                            {customWatchGroups.map((g) => (
-                              <option key={g.id} value={g.id}>{g.name}</option>
-                            ))}
-                            <option value="__none__">移出分组</option>
+                            <optgroup label="移入分组">
+                              {customWatchGroups.map((g) => (
+                                <option key={g.id} value={g.id}>{g.name}</option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="其他">
+                              <option value="__none__">移出当前分组</option>
+                            </optgroup>
                           </select>
                           <button type="button" title="删除" onClick={() => setDeleteRecord(r)} className="quotes-action-btn quotes-action-delete inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-colors hover:border-down/40 hover:bg-down/10 hover:text-down">
                             <DeleteIcon size={15} />
