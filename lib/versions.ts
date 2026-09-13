@@ -3000,6 +3000,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: V0_1_28_ENTRY.frontend,
   software: V0_1_28_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.29" } : item),
   changes: [{
+    title: "统一全部分组图标",
+    desc: "“全部分组”面板中的“全部”由地球图标改为与“我的行情板”分组栏一致的四宫格图标，统一同一筛选项在两个入口中的视觉含义。",
+    kind: "fix"
+  }, {
     title: "优化自选股更多分组交互",
     desc: "“更多”改为不带数量的固定聚合按钮，点击后从按钮下方弹出其余分组，常用分组不再被替换，整排布局保持稳定。弹层显示分组图标、名称、数量及当前选中标记；选中后按钮显示当前分组，点击外部自动关闭，右侧加号继续只负责分组管理。",
     kind: "feature"

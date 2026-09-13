@@ -285,9 +285,11 @@ export default function WatchGroupSheet({
                   : "border border-transparent bg-bg-gray text-ink hover:bg-brand-hover"
               }`}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-[18px] w-[18px] flex-none text-muted">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px] flex-none text-muted">
+                <rect x="4" y="4" width="6" height="6" rx="1.5" />
+                <rect x="14" y="4" width="6" height="6" rx="1.5" />
+                <rect x="4" y="14" width="6" height="6" rx="1.5" />
+                <rect x="14" y="14" width="6" height="6" rx="1.5" />
               </svg>
               <span className="min-w-0 flex-1 truncate">全部</span>
               <span className={`text-xs tabular-nums ${selectedId === "" ? "text-muted" : "text-faint"}`}>{records.length}</span>
