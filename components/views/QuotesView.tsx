@@ -761,7 +761,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       </div>
 
       {/* 分组筛选（全部 + 市场分组 + 自定义分组，末尾加号打开分组管理） */}
-      <div className="quotes-control-groups flex min-w-0 items-center gap-2 px-4 py-3" style={showMoreGroups ? { overflow: "visible" } : undefined}>
+      <div className="quotes-control-groups flex min-w-0 items-center gap-2.5 px-4 py-4" style={showMoreGroups ? { overflow: "visible" } : undefined}>
         {groupChips.visible.map((chip) => {
           const selected = filterId === chip.id;
           const g = watchGroups.find((x) => x.id === chip.id);
@@ -774,7 +774,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
                 setFilterId(chip.id);
                 setPage(1);
               }}
-              className={`flex flex-none items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 ${
+              className={`flex min-h-9 flex-none items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 ${
                 selected
                   ? "border border-edge-strong bg-white text-ink-2 shadow-sm dark:bg-[#2a3342] dark:text-white"
                   : "border border-edge-strong bg-white text-muted hover:bg-brand-hover hover:text-ink active:bg-bg-gray dark:bg-[#1b2230]"
@@ -808,11 +808,18 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
               type="button"
               onClick={() => setShowMoreGroups((v) => !v)}
               aria-expanded={showMoreGroups}
-              className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 ${groupChips.additional.some((chip) => chip.id === filterId) ? "border-edge-strong bg-white text-ink-2 shadow-sm dark:bg-[#2a3342] dark:text-white" : "border-transparent text-muted hover:border-edge hover:bg-brand-hover hover:text-ink"}`}
+              className={`flex min-h-9 items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold transition-all duration-200 ${groupChips.additional.some((chip) => chip.id === filterId) ? "border-edge-strong bg-white text-ink-2 shadow-sm dark:bg-[#2a3342] dark:text-white" : "border-transparent text-muted hover:border-edge hover:bg-brand-hover hover:text-ink"}`}
             >
               {(() => {
                 const active = groupChips.additional.find((chip) => chip.id === filterId);
-                return active ? <><span className="max-w-[100px] truncate">{active.label}</span><span className="text-[11px] opacity-70">{active.count}</span></> : <>更多</>;
+                if (!active) return <>更多</>;
+                const activeGroup = watchGroups.find((item) => item.id === active.id);
+                const activeIcon = activeGroup?.kind === "custom" ? activeGroup.icon || brokerIcons[activeGroup.name] || groupStockIcon[activeGroup.id] : undefined;
+                return <>
+                  {activeGroup?.kind === "market" ? <MarketIcon market={activeGroup.market} size={15} /> : activeIcon ? <img src={activeIcon} alt="" className="h-[15px] w-[15px] rounded-full object-cover" /> : <span className="grid h-[15px] w-[15px] place-items-center rounded bg-bg-gray text-[8px]">{active.label.slice(0, 1)}</span>}
+                  <span className="max-w-[100px] truncate">{active.label}</span>
+                  <span className="text-[11px] opacity-70">{active.count}</span>
+                </>;
               })()}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 transition-transform duration-200 ${showMoreGroups ? "rotate-180" : ""}`}><path d="m8 10 4 4 4-4" /></svg>
             </button>
@@ -841,7 +848,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
           onClick={() => setGroupSheetOpen(true)}
           title="全部分组"
           aria-label="全部分组"
-          className="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-dashed border-edge-strong text-muted transition-all duration-200 hover:bg-brand-hover hover:text-ink active:scale-[.95]"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-edge-strong text-muted transition-all duration-200 hover:bg-brand-hover hover:text-ink active:scale-[.95]"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5">
             <path d="M12 5v14M5 12h14" />

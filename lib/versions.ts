@@ -3000,6 +3000,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: V0_1_28_ENTRY.frontend,
   software: V0_1_28_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.29" } : item),
   changes: [{
+    title: "补齐更多分组选中态图标",
+    desc: "从“更多”弹层选择分组后，聚合按钮同步显示该分组的市场、自定义、券商或组内股票兜底图标，尺寸与弹层列表保持一致。适度增加分组栏上下留白、胶囊高度与间距，并同步放大管理加号，改善横向工具栏过扁的比例。",
+    kind: "fix"
+  }, {
     title: "统一全部分组图标",
     desc: "“全部分组”面板中的“全部”由地球图标改为与“我的行情板”分组栏一致的四宫格图标，统一同一筛选项在两个入口中的视觉含义。",
     kind: "fix"
