@@ -1987,53 +1987,37 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     <span className="touch-always absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                       {card.type || "未分类"}
                     </span>
-                    {(isHeld || isFreshEntry(card, firstSeen, nowMs)) && (
+                    {isFreshEntry(card, firstSeen, nowMs) && (
                       <span className="absolute left-2 top-2 flex items-center gap-1">
-                        {/*
-                          「我的卡」在「全部卡面」里只留一颗白色小圆勾（不带文字）：
-                          扫一眼就知道哪些已经有了，又不抢卡面本身的画面。
-                          触屏设备上右下角的操作按钮本身就是「✓ / ＋」常显，再挂一颗就重复了，
-                          所以这颗只在鼠标端显示（.pointer-only）。
-                        */}
-                        {isHeld && mode === "all" && (
-                          <span
-                            title="已在我的卡里"
-                            className="pointer-only grid h-6 w-6 place-items-center rounded-full bg-white/90 text-[#2f6fed] shadow-sm ring-1 ring-inset ring-black/5 backdrop-blur-sm"
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                              <path d="m5 12.5 4.5 4.5L19 7" />
-                            </svg>
-                          </span>
-                        )}
                         {/* 只有 3 天内新入库的卡挂 NEW（脚本导入的新卡 / 自己新建的卡）；刚加入我的卡不算 */}
-                        {isFreshEntry(card, firstSeen, nowMs) && (
-                          <span className="rounded-full bg-black/35 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#fbbf24] ring-1 ring-inset ring-white/20 backdrop-blur-sm">
-                            new
-                          </span>
-                        )}
+                        <span className="rounded-full bg-black/35 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#fbbf24] ring-1 ring-inset ring-white/20 backdrop-blur-sm">
+                          new
+                        </span>
                       </span>
                     )}
-                    {mode === "all" && (
-                      <span
-                        role="button"
-                        tabIndex={-1}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void setHeld(card.file, !isHeld);
-                        }}
-                        title={isHeld ? "移出我的卡" : "加入我的卡"}
-                        aria-label={isHeld ? "移出我的卡" : "加入我的卡"}
-                        // 手机：只留一颗小圆点（＋ / ✓），热区靠伪元素外扩到 44px；
-                        // 桌面：恢复成带文字的胶囊
-                        // 桌面默认不显示，鼠标划过卡片才浮出来（和卡片详情右上角两个 icon 一致）；触屏（.touch-always）常显
-                        className={`touch-always absolute bottom-1.5 right-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full text-[13px] font-bold shadow-sm opacity-0 transition-all duration-200 after:absolute after:-inset-2 after:content-[''] group-hover:opacity-100 group-focus-visible:opacity-100 active:scale-95 sm:bottom-2 sm:right-2 sm:h-auto sm:w-auto sm:gap-1 sm:px-2 sm:py-0.5 sm:text-[10px] sm:font-semibold ${
-                          isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
-                        }`}
-                      >
-                        <span className="sm:hidden">{isHeld ? "✓" : "＋"}</span>
-                        <span className="hidden sm:inline">{isHeld ? "移出" : "+ 加入"}</span>
+                    {/*
+                      右下角一颗圆形胶囊同时承担「状态 + 操作」：
+                        ✓ = 已经在我的卡里，＋ = 还没加入；点一下切换。
+                      默认只留图标（清爽、不遮卡面），鼠标划过卡片时展开成「✓ 移出 / ＋ 加入」，
+                      所以不再需要原生 title —— 那个提示要等一秒多才出来，正是你说的「有延迟」。
+                    */}
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void setHeld(card.file, !isHeld);
+                      }}
+                      aria-label={isHeld ? "移出我的卡" : "加入我的卡"}
+                      className={`absolute bottom-1.5 right-1.5 inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full text-[13px] font-bold shadow-sm transition-all duration-200 after:absolute after:-inset-2 after:content-[''] active:scale-95 sm:bottom-2 sm:right-2 sm:px-2 sm:text-[11px] sm:font-semibold ${
+                        isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
+                      }`}
+                    >
+                      <span className="flex-none">{isHeld ? "✓" : "＋"}</span>
+                      <span className="pointer-only inline-block max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover/card:max-w-[3.4rem] group-hover/card:pl-1 group-hover/card:opacity-100">
+                        {isHeld ? "移出" : "加入"}
                       </span>
-                    )}
+                    </span>
                   </span>
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">
