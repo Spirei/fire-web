@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   }
   const rawRows: unknown[] = Array.isArray(body?.rows) ? body.rows : [];
   if (rawRows.length === 0) return NextResponse.json({ error: "没有可导入的记录" }, { status: 400 });
-  if (rawRows.length > 100) return NextResponse.json({ error: "单次最多导入 100 条" }, { status: 400 });
+  if (rawRows.length > 2000) return NextResponse.json({ error: "单次最多导入 2000 条" }, { status: 400 });
 
   const rows: ImportRow[] = rawRows
     .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")

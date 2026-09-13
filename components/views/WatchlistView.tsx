@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fmtNum, fmtPct, fmtQuoteTime } from "@/lib/format";
-import type { GroupConfig, Market, Quote, RecordInput, SearchMatch, StockRecord } from "@/lib/types";
+import type { GroupConfig, Market, Quote, SearchMatch, StockRecord } from "@/lib/types";
 import { showToast } from "@/lib/toast";
 import QuotesView from "@/components/views/QuotesView";
 import MarketIcon from "@/components/MarketIcon";
@@ -18,9 +18,6 @@ interface Props {
   refreshing: boolean;
   refreshQuotes: () => void;
   onAddMatch: (match: SearchMatch) => Promise<boolean>;
-  onUpdate: (id: string, input: RecordInput) => Promise<boolean>;
-  onRemove: (r: StockRecord) => void;
-  onBatchDelete: (ids: string[]) => Promise<boolean>;
   onToggleWatch: (r: StockRecord, follow: boolean) => Promise<boolean>;
   groups: GroupConfig[];
 }
@@ -125,7 +122,7 @@ function FearGreedGauge({ score }: { score: number }) {
   );
 }
 
-export default function WatchlistView({ initialSymbol, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onUpdate, onRemove, onBatchDelete, onToggleWatch, groups }: Props) {
+export default function WatchlistView({ initialSymbol, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onToggleWatch, groups }: Props) {
   const [indexGroups, setIndexGroups] = useState<MarketIndices[]>([]);
   const [indicesLoading, setIndicesLoading] = useState(true);
   const [indicesError, setIndicesError] = useState("");
@@ -340,7 +337,7 @@ export default function WatchlistView({ initialSymbol, records, initialWatchGrou
         </div>
       )}
 
-      {/* 股票添加全部功能（搜索 / 行情板 / 刷新间隔 / 批量删除 / 编辑） */}
+      {/* 股票添加与行情板（搜索 / 分组 / 刷新间隔） */}
       <QuotesView
         initialWatchGroups={initialWatchGroups}
         initialSymbol={initialSymbol}
@@ -350,9 +347,6 @@ export default function WatchlistView({ initialSymbol, records, initialWatchGrou
         refreshing={refreshing}
         refreshQuotes={refreshQuotes}
         onAddMatch={onAddMatch}
-        onBatchDelete={onBatchDelete}
-        onUpdate={onUpdate}
-        onRemove={onRemove}
         onToggleWatch={onToggleWatch}
         groups={groups}
         onDetailChange={setDetailOpen}

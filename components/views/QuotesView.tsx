@@ -3,18 +3,17 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fmtPct, fmtPrice } from "@/lib/format";
 import { fmtUsd } from "@/lib/currency";
-import { marketMeta, MARKET_LIST, type GroupConfig, type Quote, type RecordInput, type SearchMatch, type StockRecord } from "@/lib/types";
+import { marketMeta, MARKET_LIST, type GroupConfig, type Quote, type SearchMatch, type StockRecord } from "@/lib/types";
 import type { Intraday } from "@/lib/quotes";
 import StockSearch from "@/components/StockSearch";
 import MarketIcon from "@/components/MarketIcon";
-import AppModal from "@/components/AppModal";
 import StockDetailView from "@/components/StockDetailView";
 import WatchGroupSheet from "@/components/WatchGroupSheet";
 import { showToast } from "@/lib/toast";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import { groupCount, groupVisible, migrateLegacyWatchGroups, type WatchGroup } from "@/lib/watchGroups";
-import DeleteIcon from "@/components/DeleteIcon";
 import ImportSnapshotModal from "@/components/ImportSnapshotModal";
+import WatchlistFileImportModal from "@/components/WatchlistFileImportModal";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import RefreshButton from "@/components/RefreshButton";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
@@ -33,9 +32,6 @@ interface Props {
   refreshing: boolean;
   refreshQuotes: () => void;
   onAddMatch: (match: SearchMatch) => Promise<boolean>;
-  onBatchDelete: (ids: string[]) => Promise<boolean>;
-  onUpdate: (id: string, input: RecordInput) => Promise<boolean>;
-  onRemove: (r: StockRecord) => void;
   groups: GroupConfig[];
   /** 详情视图开合回调（供外层在个股详情打开时隐藏顶部指数卡片等） */
   onDetailChange?: (open: boolean) => void;
@@ -56,27 +52,19 @@ const INTERVALS = [
 
 const CHART_CACHE_KEY = "fire:watchlist:charts";
 
-function QuotesCheckbox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
-  return (
-    <label className="quotes-checkbox-wrap">
-      <input type="checkbox" checked={checked} onChange={onChange} className="quotes-checkbox" aria-label={label} />
-      <svg className="quotes-checkbox-mark" viewBox="0 0 16 16" aria-hidden="true">
-        <path d="M3.2 8.3 6.5 11.4 12.8 4.8" />
-      </svg>
-    </label>
-  );
-}
-
-export default function QuotesView({ initialSymbol, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onBatchDelete, onUpdate, onRemove, groups, onDetailChange, onToggleWatch }: Props) {
+export default function QuotesView({ initialSymbol, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, groups, onDetailChange, onToggleWatch }: Props) {
   const { brokerIcons, stockIcons, assetIcons } = useAssetIcons(["broker", "stock", "crypto", "metal"]);
   const [added, setAdded] = useState("");
   const [importOpen, setImportOpen] = useState(false);
+  const [importGroupId, setImportGroupId] = useState("");
+  const [fileImportOpen, setFileImportOpen] = useState(false);
   const [charts, setCharts] = useState<Record<string, Intraday>>({});
   const [intervalMs, setIntervalMs] = useState(60000);
   const [lastRefreshAt, setLastRefreshAt] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showMoreGroups, setShowMoreGroups] = useState(false);
   const moreGroupsRef = useRef<HTMLDivElement>(null);
+  const groupScrollRef = useRef<HTMLDivElement>(null);
+  const groupChipRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   // 恢复上次选择的刷新间隔（默认每分钟；挂载后应用，避免 SSR hydration 不匹配）
   useEffect(() => {
@@ -102,7 +90,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
     return new URLSearchParams(window.location.search).get("filter") ?? "";
   });
   const [groupSheetOpen, setGroupSheetOpen] = useState(false);
-  const [assignBusy, setAssignBusy] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 6;
 
@@ -211,31 +198,38 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
 
   // 分组 chips：全部 + 可见分组
   const groupChips = useMemo(() => {
-    const markets = watchGroups
-      .filter((g) => g.kind === "market")
-      .map((g) => ({ id: g.id, label: g.name, count: groupCount(g, records) }));
-    const customs = watchGroups
-      .filter((g) => g.kind === "custom")
-      .map((g) => ({ id: g.id, label: g.name, count: groupCount(g, records), g }));
-    const defaultVisible = markets.slice(0, 3);
-    const additional = [...markets.slice(3), ...customs];
-    const visibleAdditional = additional.filter((c) => {
+    const orderedGroups = watchGroups.map((g) => ({ id: g.id, label: g.name, count: groupCount(g, records), g }));
+    const visibleGroups = orderedGroups.filter((c) => {
       const group = watchGroups.find((g) => g.id === c.id);
       return group ? groupVisible(group, c.count) : true;
     });
     return {
-      all: [{ id: "", label: "全部", count: records.length }, ...markets, ...customs],
-      visible: [
-        { id: "", label: "全部", count: records.length },
-        ...defaultVisible.filter((c) => {
-          const group = watchGroups.find((g) => g.id === c.id);
-          return group ? groupVisible(group, c.count) : true;
-        })
-      ],
-      additional: visibleAdditional,
-      moreCount: visibleAdditional.length
+      all: [{ id: "", label: "全部", count: records.length }, ...visibleGroups],
+      visible: [{ id: "", label: "全部", count: records.length }, ...visibleGroups],
+      moreCount: Math.max(0, visibleGroups.length - 4)
     };
-  }, [records, watchGroups]);
+  }, [filterId, records, watchGroups]);
+
+  function selectGroupChip(id: string, fromMenu = false) {
+    setFilterId(id);
+    setPage(1);
+    if (fromMenu) setShowMoreGroups(false);
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const container = groupScrollRef.current;
+      const selected = groupChipRefs.current[id || "__all"];
+      if (!container || !selected) return;
+      const chips = Array.from(container.children).filter((node): node is HTMLElement => node instanceof HTMLElement);
+      const selectedIndex = chips.indexOf(selected);
+      if (selectedIndex < 0) return;
+      let firstVisible = selectedIndex;
+      while (firstVisible > 0 && selected.offsetLeft + selected.offsetWidth - chips[firstVisible - 1].offsetLeft <= container.clientWidth) {
+        firstVisible -= 1;
+      }
+      const containerLeft = container.getBoundingClientRect().left;
+      const chipLeft = chips[firstVisible].getBoundingClientRect().left;
+      container.scrollTo({ left: Math.max(0, container.scrollLeft + chipLeft - containerLeft), behavior: "smooth" });
+    }));
+  }
 
   // 自定义分组默认图标：无自传图标、且非券商分组时，取组内市值最高的股票图标
   const groupStockIcon = useMemo(() => {
@@ -270,9 +264,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
     () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
     [filtered, safePage]
   );
-  const [editRecord, setEditRecord] = useState<StockRecord | null>(null);
-  const [deleteRecord, setDeleteRecord] = useState<StockRecord | null>(null);
-  const [editMode, setEditMode] = useState(false);
   const [detail, setDetail] = useState<StockRecord | null>(() => {
     if (!initialSymbol) return null;
     const [market, code] = initialSymbol.split(".");
@@ -386,8 +377,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
     window.history.replaceState(null, "", base + (qs ? `?${qs}` : ""));
     updateDetail(null);
   }
-  const [editForm, setEditForm] = useState({ name: "", price: "", cost: "", qty: "", watchGroupId: "", note: "" });
-  const [editSaving, setEditSaving] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshAllRef = useRef<() => void>(() => {});
   const chartFetchingRef = useRef(false);
@@ -550,7 +539,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
 
   async function assignGroup(ids: string[], groupId: string): Promise<boolean> {
     if (ids.length === 0) return false;
-    setAssignBusy(true);
     try {
       const res = await fetch("/api/v1/records/group-assign", {
         method: "POST",
@@ -561,85 +549,59 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       if (!res.ok) throw new Error(data?.message || "分配失败");
       const g = watchGroups.find((x) => x.id === groupId);
       showToast(g ? `已移入「${g.name}」` : "已移出分组");
-      setSelected(new Set());
       // 通知 RecordsApp 重新拉取记录（行内操作 / 分组计数立即更新）
       window.dispatchEvent(new Event("fire:records-updated"));
       return true;
     } catch (err) {
       showToast(err instanceof Error ? err.message : "分配分组失败", "err");
       return false;
-    } finally {
-      setAssignBusy(false);
     }
   }
 
-  function moveSingleRecord(recordId: string, groupId: string) {
-    void assignGroup([recordId], groupId === "__none__" ? "" : groupId);
+  async function deleteWatchRecords(ids: string[]): Promise<boolean> {
+    if (ids.length === 0) return false;
+    try {
+      const res = await fetch("/api/records/batch-delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "删除失败");
+      window.dispatchEvent(new Event("fire:records-updated"));
+      showToast("已删除自选股");
+      return true;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "删除失败", "err");
+      return false;
+    }
   }
 
-  function toggleOne(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  async function reorderGroupRecords(groupId: string, ids: string[]): Promise<boolean> {
+    try {
+      const res = await fetch("/api/v1/records/group-reorder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ groupId, ids }) });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.message || "排序失败");
+      window.dispatchEvent(new Event("fire:records-updated"));
+      return true;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "排序失败", "err");
+      return false;
+    }
   }
 
-  function toggleAll() {
-    setSelected((prev) => {
-      const allSelected = filtered.length > 0 && filtered.every((r) => prev.has(r.id));
-      if (allSelected) return new Set();
-      return new Set(filtered.map((r) => r.id));
-    });
-  }
-
-  function toggleEditMode() {
-    setEditMode((current) => !current);
-    // 每次切换编辑态都从干净的选择状态开始，避免退出后残留批量操作上下文。
-    setSelected(new Set());
-  }
-
-  async function batchDelete() {
-    if (selected.size === 0) return;
-    if (!confirm(`确定删除选中的 ${selected.size} 条记录吗？`)) return;
-    const ok = await onBatchDelete([...selected]);
-    if (ok) setSelected(new Set());
-  }
-
-  function openEdit(r: StockRecord) {
-    setEditRecord(r);
-    setEditForm({
-      name: r.name,
-      price: String(r.price ?? ""),
-      cost: String(r.cost ?? ""),
-      qty: String(r.qty ?? ""),
-      watchGroupId: r.watchGroupId ?? "",
-      note: r.note ?? ""
-    });
-  }
-
-  async function saveEdit() {
-    if (!editRecord) return;
-    setEditSaving(true);
-    const toNum = (s: string) => (s.trim() === "" ? "" : Number(s.trim()));
-    const input: RecordInput = {
-      name: editForm.name.trim() || editRecord.name,
-      code: editRecord.code,
-      market: editRecord.market,
-      price: toNum(editForm.price),
-      cost: toNum(editForm.cost),
-      qty: toNum(editForm.qty),
-      // 自选股编辑不再改券商：保留原值（券商归属我的持仓，编辑入口在持仓页）
-      group: editRecord.group,
-      watchGroupId: editForm.watchGroupId,
-      note: editForm.note.trim()
-    };
-    const ok = await onUpdate(editRecord.id, input);
-    setEditSaving(false);
-    if (ok) {
-      setEditRecord(null);
-      showToast("保存成功");
+  async function addRecordToGroup(groupId: string, match: SearchMatch): Promise<boolean> {
+    try {
+      const res = await fetch("/api/records/import-apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: [{ code: match.code, name: match.name, market: match.market, price: match.price ?? "" }], groupId })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "添加失败");
+      const group = watchGroups.find((item) => item.id === groupId);
+      showToast(`已添加 ${match.name}${group ? ` 至「${group.name}」` : ""}`, "ok");
+      window.dispatchEvent(new Event("fire:records-updated"));
+      return true;
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "添加失败", "err");
+      return false;
     }
   }
 
@@ -715,25 +677,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
             <i className={`h-1.5 w-1.5 rounded-full ${refreshing ? "animate-pulse bg-[#3297f6]" : quoteAt ? "bg-down" : "bg-faint"}`} />
             {refreshing ? "刷新中…" : quoteAt ? `更新于 ${quoteAt}` : lastRefreshAt ? `上次刷新 ${lastRefreshAt}` : "等待行情"}
           </span>
-          <button
-            type="button"
-            onClick={toggleEditMode}
-            className={`quotes-edit-toggle inline-flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover hover:text-ink active:scale-[.97] ${editMode ? "is-active" : ""}`}
-            aria-label={editMode ? "取消编辑" : "编辑行情板"}
-            title={editMode ? "取消编辑" : "编辑行情板"}
-            aria-pressed={editMode}
-          >
-            {editMode ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="h-4 w-4" aria-hidden="true">
-                <path d="m7 7 10 10M17 7 7 17" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
-                <path d="M4 6h9M4 12h7M4 18h6" />
-                <path d="m14.5 17.5 1-.2 5.1-5.1a1.7 1.7 0 0 0-2.4-2.4l-5.1 5.1-.3 2.8Z" />
-              </svg>
-            )}
-          </button>
           <RefreshButton onClick={refreshQuotes} title="立即刷新行情" className="h-8 w-8 rounded-[9px]" />
           <select
             value={intervalMs}
@@ -758,7 +701,8 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       </div>
 
       {/* 分组筛选（全部 + 市场分组 + 自定义分组，末尾加号打开分组管理） */}
-      <div className="quotes-control-groups flex min-w-0 items-center gap-2.5 px-4 py-4" style={showMoreGroups ? { overflow: "visible" } : undefined}>
+      <div className="quotes-control-groups flex min-w-0 items-center gap-2.5 !overflow-visible px-4 py-4">
+        <div ref={groupScrollRef} className="flex min-w-0 max-w-[665px] flex-1 items-center gap-2.5 overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {groupChips.visible.map((chip) => {
           const selected = filterId === chip.id;
           const g = watchGroups.find((x) => x.id === chip.id);
@@ -766,12 +710,10 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
           return (
             <button
               key={chip.id}
+              ref={(node) => { groupChipRefs.current[chip.id || "__all"] = node; }}
               type="button"
-              onClick={() => {
-                setFilterId(chip.id);
-                setPage(1);
-              }}
-              className={`flex min-h-9 flex-none items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 ${
+              onClick={() => selectGroupChip(chip.id)}
+              className={`flex min-h-9 w-[125px] flex-none items-center justify-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold whitespace-nowrap transition-[transform,box-shadow] duration-200 ${
                 selected
                   ? "border border-edge-strong bg-white text-ink-2 shadow-sm dark:bg-[#2a3342] dark:text-white"
                   : "border border-edge-strong bg-white text-muted hover:bg-brand-hover hover:text-ink active:bg-bg-gray dark:bg-[#1b2230]"
@@ -799,6 +741,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
             </button>
           );
         })}
+        </div>
         {groupChips.moreCount > 0 && (
           <div ref={moreGroupsRef} className="relative flex-none">
             <button
@@ -807,7 +750,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
               aria-expanded={showMoreGroups}
               aria-label="更多分组"
               title="更多分组"
-              className={`grid h-9 w-9 place-items-center rounded-full border transition-all duration-200 ${showMoreGroups ? "border-edge-strong bg-white text-[#3297f6] shadow-sm dark:bg-[#2a3342]" : "border-transparent text-muted hover:border-edge hover:bg-brand-hover hover:text-ink"}`}
+              className={`grid h-9 w-9 place-items-center rounded-full border transition-[transform,box-shadow] duration-200 ${showMoreGroups ? "border-edge-strong bg-white text-[#3297f6] shadow-sm dark:bg-[#2a3342]" : "border-transparent text-muted hover:border-edge hover:bg-brand-hover hover:text-ink"}`}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-[18px] w-[18px]"><path d="M5 7h14M5 12h14M5 17h14" /></svg>
             </button>
@@ -818,7 +761,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
                     const g = watchGroups.find((item) => item.id === chip.id);
                     const customIcon = g?.kind === "custom" ? g.icon || brokerIcons[g.name] || groupStockIcon[g.id] : undefined;
                     return (
-                      <button key={chip.id} type="button" onClick={() => { setFilterId(chip.id); setPage(1); setShowMoreGroups(false); }} className={`flex w-full items-center gap-2 rounded-[10px] px-3 py-2.5 text-left text-xs font-semibold transition-colors ${filterId === chip.id ? "bg-bg-gray text-ink" : "text-muted hover:bg-brand-hover hover:text-ink"}`}>
+                      <button key={chip.id} type="button" onClick={() => selectGroupChip(chip.id, true)} className={`flex w-full items-center gap-2 rounded-[10px] px-3 py-2.5 text-left text-xs font-semibold transition-colors ${filterId === chip.id ? "bg-bg-gray text-ink" : "text-muted hover:bg-brand-hover hover:text-ink"}`}>
                         {!g ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg> : g.kind === "market" ? <MarketIcon market={g.market} size={16} /> : customIcon ? <img src={customIcon} alt="" className="h-4 w-4 rounded-full object-cover" /> : <span className="grid h-4 w-4 place-items-center rounded bg-bg-gray text-[9px]">{chip.label.slice(0, 1)}</span>}
                         <span className="min-w-0 flex-1 truncate">{chip.label}</span>
                         <span className="text-[11px] tabular-nums text-faint">{chip.count}</span>
@@ -828,7 +771,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
                   })}
                 </div>
                 <div className="mt-2 border-t border-edge pt-2">
-                  <button type="button" onClick={() => { setShowMoreGroups(false); setGroupSheetOpen(true); }} className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#3297f6] px-3 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#2589e8]">
+                  <button type="button" onClick={() => { setShowMoreGroups(false); setGroupSheetOpen(true); }} className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2.5 text-left text-xs font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
                     编辑分组
                   </button>
@@ -840,53 +783,15 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       </div>
       </section>
 
-      {editMode && selected.size > 0 && (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-edge bg-bg-gray/50 px-3 py-2" role="region" aria-label="批量编辑工具栏">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#3297f6] px-2 text-[11px] font-bold text-white">{selected.size}</span>
-            <span className="text-xs font-semibold text-ink-2">已选择股票</span>
-            <button type="button" onClick={() => setSelected(new Set())} className="text-[11px] font-medium text-muted transition-colors hover:text-ink">取消选择</button>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <select
-              value=""
-              disabled={assignBusy || customWatchGroups.length === 0}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (value) void assignGroup([...selected], value === "__none__" ? "" : value);
-              }}
-              className="quotes-move-select h-8 cursor-pointer rounded-[9px] border border-edge-strong bg-white px-3 text-[11px] font-semibold text-muted outline-none transition-colors hover:bg-brand-hover focus:border-edge-strong disabled:cursor-not-allowed disabled:opacity-45"
-              aria-label="移动到分组"
-              title={customWatchGroups.length === 0 ? "请先新建自定义分组" : "选择目标分组"}
-            >
-              <option value="" disabled>移动到分组</option>
-              <optgroup label="移入分组">
-                {customWatchGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </optgroup>
-              <optgroup label="其他">
-                <option value="__none__">移出当前分组</option>
-              </optgroup>
-            </select>
-            <button type="button" onClick={batchDelete} className="btn btn-ghost btn-sm text-down hover:border-down/40 hover:bg-down/10 dark:border-white/20">
-              <DeleteIcon size={15} />
-              批量删除
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 行情板表格 */}
       <div className="card overflow-hidden">
         {filtered.length === 0 ? (
           <div className="py-16 text-center text-sm text-faint">还没有自选股票，先用上方搜索添加吧。</div>
         ) : (
           <div className="data-table-scroll">
-            <table className={`mobile-quotes-table w-full min-w-[860px] text-sm ${editMode ? "min-w-[1120px]" : ""}`}>
+            <table className="mobile-quotes-table w-full min-w-[860px] text-sm">
               <thead>
                 <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-muted">
-                  {editMode && <th className="w-10 px-4 py-[13px]">
-                    <QuotesCheckbox checked={filtered.length > 0 && filtered.every((r) => selected.has(r.id))} onChange={toggleAll} label="全选" />
-                  </th>}
                   <th className="quotes-rank-cell px-3 py-[13px] text-center">序号</th>
                   <th className="quotes-identity-cell min-w-[210px] px-4 py-[13px] text-left">股票</th>
                   <th className="min-w-[100px] px-4 py-[13px] text-right">现价</th>
@@ -895,17 +800,13 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
                   <th className="px-4 py-[13px] text-right">最高</th>
                   <th className="px-4 py-[13px] text-right">最低</th>
                   <th className="min-w-[110px] px-4 py-[13px] text-right">市值</th>
-                  {editMode && <th className="quotes-actions-cell px-3 py-[13px] text-right">操作</th>}
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map((r, i) => {
                   const q = quotes[r.id];
                   return (
-                    <tr key={r.id} className={`quotes-row group whitespace-nowrap border-t border-edge transition-colors ${selected.has(r.id) ? "is-selected" : "hover:bg-[#fafbfc] dark:hover:bg-[#1a212e]"}`}>
-                      {editMode && <td className="px-4 py-3.5">
-                        <QuotesCheckbox checked={selected.has(r.id)} onChange={() => toggleOne(r.id)} label={`选择 ${r.name}`} />
-                      </td>}
+                    <tr key={r.id} className="quotes-row group whitespace-nowrap border-t border-edge transition-colors hover:bg-[#fafbfc] dark:hover:bg-[#1a212e]">
                       <td className="quotes-rank-cell px-3 py-3.5 text-center text-xs tabular-nums text-ink">{(safePage - 1) * PAGE_SIZE + i + 1}</td>
                       <td className="quotes-identity-cell cursor-pointer px-4 py-3.5 transition-colors hover:bg-brand-hover/30 dark:hover:bg-[#202735]" onClick={() => openDetail(r)}>
                         <div className="flex items-center gap-2.5">
@@ -942,37 +843,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
                       <td className="px-4 py-3.5 text-right tabular-nums">{q ? fmtPrice(q.high, marketMeta(r.market).currency, r.market) : "—"}</td>
                       <td className="px-4 py-3.5 text-right tabular-nums">{q ? fmtPrice(q.low, marketMeta(r.market).currency, r.market) : "—"}</td>
                       <td className="px-4 py-3.5 text-right tabular-nums">{(() => { const cap = q?.marketCap || (q?.totalShares && q?.price ? q.price * q.totalShares : 0); return cap ? fmtUsd(cap) : "—"; })()}</td>
-                      {editMode && <td className={`quotes-actions-cell px-3 py-3.5 ${selected.has(r.id) ? "is-selected" : ""}`}>
-                        <div className="quotes-row-actions flex justify-end gap-1">
-                          <button type="button" title="编辑" onClick={() => openEdit(r)} className="quotes-action-btn inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-colors hover:border-edge-strong hover:bg-brand-hover hover:text-ink">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>
-                          </button>
-                          <select
-                            value=""
-                            disabled={assignBusy || customWatchGroups.length === 0}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              if (value) moveSingleRecord(r.id, value);
-                            }}
-                            title={customWatchGroups.length === 0 ? "请先新建自定义分组" : "移动到分组"}
-                            aria-label={`移动 ${r.name} 到分组`}
-                            className="quotes-move-select quotes-action-btn h-8 w-[66px] cursor-pointer rounded-[9px] border border-edge bg-bg-gray px-1 text-center text-xs text-muted outline-none transition-colors hover:border-edge-strong hover:bg-brand-hover focus:border-edge-strong disabled:cursor-not-allowed disabled:opacity-45"
-                          >
-                            <option value="" disabled>移动</option>
-                            <optgroup label="移入分组">
-                              {customWatchGroups.map((g) => (
-                                <option key={g.id} value={g.id}>{g.name}</option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="其他">
-                              <option value="__none__">移出当前分组</option>
-                            </optgroup>
-                          </select>
-                          <button type="button" title="删除" onClick={() => setDeleteRecord(r)} className="quotes-action-btn quotes-action-delete inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-bg-gray text-muted transition-colors hover:border-down/40 hover:bg-down/10 hover:text-down">
-                            <DeleteIcon size={15} />
-                          </button>
-                        </div>
-                      </td>}
                     </tr>
                   );
                 })}
@@ -994,73 +864,6 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
         )}
       </div>
 
-      {/* 编辑弹窗 */}
-      {editRecord && (
-        <AppModal title="编辑股票" desc={`${editRecord.name} · ${editRecord.code} · ${marketMeta(editRecord.market).label}`} onClose={() => setEditRecord(null)} size="md">
-            <div className="grid grid-cols-2 gap-3.5">
-              <label className="col-span-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                股票名称
-                <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="field" />
-              </label>
-              <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                现价
-                <input type="number" step="0.001" value={editForm.price} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} className="field" />
-              </label>
-              <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                成本价
-                <input type="number" step="0.001" value={editForm.cost} onChange={(e) => setEditForm({ ...editForm, cost: e.target.value })} className="field" />
-              </label>
-              <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                数量
-                <input type="number" step="any" value={editForm.qty} onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })} className="field" />
-              </label>
-              <label className="col-span-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                分组
-                <select
-                  value={editForm.watchGroupId}
-                  onChange={(e) => setEditForm({ ...editForm, watchGroupId: e.target.value })}
-                  className="field"
-                >
-                  <option value="">未分组</option>
-                  {watchGroups.filter((g) => g.kind === "custom").map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="col-span-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                备注
-                <input value={editForm.note} onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} className="field" />
-              </label>
-            </div>
-            <div className="mt-5 flex justify-end gap-2.5">
-              <button type="button" onClick={() => setEditRecord(null)} className="btn btn-ghost btn-sm">取消</button>
-              <button type="button" disabled={editSaving} onClick={saveEdit} className="btn btn-line btn-sm disabled:opacity-60">
-                {editSaving ? "保存中…" : "保存"}
-              </button>
-            </div>
-        </AppModal>
-      )}
-      {deleteRecord && (
-        <AppModal title="删除股票" desc="从自选股中移除这只股票" onClose={() => setDeleteRecord(null)} size="sm">
-          <div className="space-y-4">
-            <div className="flex items-start gap-3 rounded-xl border border-down/20 bg-down/5 px-4 py-3.5">
-              <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-down/10 text-down" aria-hidden="true">
-                <DeleteIcon size={16} />
-              </span>
-              <div>
-                <p className="font-semibold text-ink">{deleteRecord.name}</p>
-                <p className="mt-1 text-xs text-muted">{deleteRecord.code} · {marketMeta(deleteRecord.market).label}</p>
-                <p className="mt-2 text-xs leading-5 text-muted">删除后不会影响历史订单或资金记录，但会从当前自选股列表中移除。</p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setDeleteRecord(null)} className="btn btn-ghost btn-sm">取消</button>
-              <button type="button" onClick={() => { const r = deleteRecord; setDeleteRecord(null); void onRemove(r); }} className="btn btn-sm bg-down text-white hover:bg-down/90">确认删除</button>
-            </div>
-          </div>
-        </AppModal>
-      )}
-
       {groupSheetOpen && (
         <WatchGroupSheet
           initialView="manage"
@@ -1078,7 +881,18 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
           onDelete={deleteGroup}
           onReorder={reorderGroups}
           onUploadIcon={uploadGroupIcon}
+          onAssignRecords={assignGroup}
+          onRemoveRecords={(ids) => assignGroup(ids, "")}
+          onDeleteRecords={deleteWatchRecords}
+          onReorderRecords={reorderGroupRecords}
+          onAddRecord={addRecordToGroup}
+          onImport={(groupId) => {
+            setImportGroupId(groupId);
+            setGroupSheetOpen(false);
+            setFileImportOpen(true);
+          }}
           brokerIcons={brokerIcons}
+          resolvedGroupIcons={groupStockIcon}
         />
       )}
 
@@ -1086,7 +900,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
         <ImportSnapshotModal
           mode="watchlist"
           watchGroups={customWatchGroups}
-          onClose={() => setImportOpen(false)}
+          onClose={() => { setImportOpen(false); setImportGroupId(""); }}
           onImported={() => {
             // 触发父层重拉记录 + 刷新行情，导入的自选股立即生效
             window.dispatchEvent(new Event("fire:records-updated"));
@@ -1094,6 +908,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
           }}
         />
       )}
+      {fileImportOpen && <WatchlistFileImportModal groups={watchGroups} initialGroupId={importGroupId} onClose={() => { setFileImportOpen(false); setImportGroupId(""); }} onImported={() => { window.dispatchEvent(new Event("fire:records-updated")); refreshQuotes(); }} />}
     </div>
   );
 }

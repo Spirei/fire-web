@@ -1,6 +1,8 @@
 /* ---------- 截图识别结果 → 持仓/自选 记录（规范化 + 素材库匹配 + 应用） ---------- */
 import { getAssets, type Asset } from "./assets";
-import { createRecord, listRecords, updateRecord } from "./store";
+import { randomBytes } from "crypto";
+import { getDb } from "./db";
+import { listRecords } from "./store";
 import type { StockRecord } from "./types";
 
 /** 识别引擎输出的原始行（引擎接入后转换为该结构） */
@@ -153,11 +155,28 @@ export interface ApplyResult {
 
 export function applyImport(userId: string, rows: ImportRow[], watchGroupId?: string): ApplyResult {
   const existing = listRecords(userId);
+  const db = getDb();
+  const byMarketCode = new Map(existing.map((record) => [codeKey(record.market, record.code), record]));
+  const byCode = new Map<string, StockRecord>();
+  for (const record of existing) {
+    const key = record.code.toUpperCase();
+    if (!byCode.has(key)) byCode.set(key, record);
+  }
+  const insert = db.prepare(`
+    INSERT INTO records (id, user_id, name, code, market, price, cost, qty, group_name, watch_group_id, note, source, updated_at)
+    VALUES (@id, @userId, @name, @code, @market, @price, @cost, @qty, @group, @watchGroupId, @note, 'snapshot', @updatedAt)
+  `);
+  const update = db.prepare(`
+    UPDATE records
+    SET name = @name, code = @code, market = @market, price = @price, cost = @cost, qty = @qty,
+        group_name = @group, watch_group_id = @watchGroupId, note = @note, source = 'snapshot', updated_at = @updatedAt
+    WHERE id = @id AND user_id = @userId
+  `);
   let added = 0;
   let updated = 0;
   let skipped = 0;
 
-  rows.slice(0, 100).forEach((row) => {
+  const applyRows = db.transaction(() => rows.slice(0, 2000).forEach((row) => {
     const code = normalizeCode(row.code);
     const name = (row.name || "").trim().slice(0, 100);
     const market = normalizeMarket(row.market);
@@ -169,39 +188,29 @@ export function applyImport(userId: string, rows: ImportRow[], watchGroupId?: st
     const cost = row.cost === null || row.cost === undefined ? "" : row.cost;
     const qty = row.qty === null || row.qty === undefined ? "" : row.qty;
 
-    const record = existing.find((r) => {
-      if (r.code.toUpperCase() !== code.toUpperCase()) return false;
-      return !market || r.market.toUpperCase() === market;
-    }) || (code ? existing.find((r) => r.code.toUpperCase() === code.toUpperCase()) : undefined);
-
-    const input = {
-      name,
-      code,
-      market: market || record?.market || "OTHER",
-      price: price as number | "",
-      cost: cost as number | "",
-      qty: qty as number | "",
-      group: record?.group ?? "",
-      watchGroupId: watchGroupId || undefined,
-      note: record?.note ?? "",
-      source: "snapshot"
-    };
+    const record = (market ? byMarketCode.get(codeKey(market, code)) : undefined) || byCode.get(code.toUpperCase());
+    const resolvedMarket = market || record?.market || "OTHER";
+    const updatedAt = new Date().toISOString();
 
     if (record) {
-      // 仅覆盖截图里有的字段，避免误清空已有成本/数量
-      const merged: typeof input = {
-        ...input,
-        qty: row.qty !== null && row.qty !== undefined ? (qty as number | "") : (record.qty ?? ""),
-        cost: row.cost !== null && row.cost !== undefined ? (cost as number | "") : (record.cost ?? ""),
-        price: row.price !== null && row.price !== undefined ? (price as number | "") : (record.price ?? "")
-      };
-      updateRecord(record.id, userId, merged);
+      update.run({
+        id: record.id, userId, name, code, market: resolvedMarket,
+        price: row.price !== null && row.price !== undefined ? price : record.price,
+        cost: row.cost !== null && row.cost !== undefined ? cost : (record.cost === "" ? null : record.cost),
+        qty: row.qty !== null && row.qty !== undefined ? qty : (record.qty === "" ? null : record.qty),
+        group: record.group, watchGroupId: watchGroupId || record.watchGroupId || "", note: record.note, updatedAt
+      });
       updated += 1;
     } else {
-      createRecord(userId, input);
+      const id = "r-" + randomBytes(8).toString("hex");
+      insert.run({ id, userId, name, code, market: resolvedMarket, price, cost: cost === "" ? null : cost, qty: qty === "" ? null : qty, group: "", watchGroupId: watchGroupId || "", note: "", updatedAt });
+      const created: StockRecord = { id, name, code, market: resolvedMarket as StockRecord["market"], price: price === "" ? 0 : price, cost, qty, group: "", watchGroupId: watchGroupId || "", watchGroupSort: 0, note: "", source: "snapshot", updatedAt };
+      byMarketCode.set(codeKey(resolvedMarket, code), created);
+      byCode.set(code.toUpperCase(), created);
       added += 1;
     }
-  });
+  }));
+  applyRows();
 
   return { added, updated, skipped, records: listRecords(userId) };
 }

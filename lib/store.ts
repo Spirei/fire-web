@@ -17,6 +17,7 @@ function rowToRecord(row: Record<string, unknown>): StockRecord {
     qty: row.qty === null ? "" : (row.qty as number),
     group: String(row.group_name ?? ""),
     watchGroupId: row.watch_group_id ? String(row.watch_group_id) : "",
+    watchGroupSort: Number(row.watch_group_sort) || 0,
     note: String(row.note ?? ""),
     source: row.source ? String(row.source) : undefined,
     updatedAt: String(row.updated_at)

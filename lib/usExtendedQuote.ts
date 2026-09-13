@@ -28,6 +28,19 @@ const YAHOO_DOWN_TTL = 60_000;
 let yahooDownUntil = 0;
 
 const cache = new Map<string, { at: number; value: UsExtendedQuote | null }>();
+const regularCache = new Map<string, { at: number; value: UsRegularQuote | null }>();
+
+export interface UsRegularQuote {
+  price: number;
+  previousClose: number;
+  change: number;
+  changePct: number;
+  high: number;
+  low: number;
+  volume?: number;
+  marketCap?: number;
+  time: string;
+}
 
 function nyParts(timestamp: number) {
   const values: Record<string, string> = {};
@@ -50,6 +63,10 @@ interface YahooResult {
     regularMarketPrice?: number;
     previousClose?: number;
     chartPreviousClose?: number;
+    regularMarketDayHigh?: number;
+    regularMarketDayLow?: number;
+    regularMarketVolume?: number;
+    marketCap?: number;
   };
 }
 
@@ -99,6 +116,38 @@ async function fetchYahoo(code: string): Promise<YahooResult> {
 function extendedQuoteEnabled(): boolean {
   const flag = process.env.STOCKLOG_EXTENDED_QUOTE?.trim().toLowerCase();
   return !(flag === "off" || flag === "0" || flag === "false" || flag === "none");
+}
+
+/** 腾讯缺少某只美股时的整行兜底，避免列表已有走势图却没有价格与高低值。 */
+export async function fetchUsRegularQuote(codeRaw: string): Promise<UsRegularQuote | null> {
+  if (!extendedQuoteEnabled() || Date.now() < yahooDownUntil) return null;
+  const code = codeRaw.toUpperCase().replace(/\.(OQ|N|AM|PS|K)$/, "");
+  const cached = regularCache.get(code);
+  if (cached && Date.now() - cached.at < (cached.value ? SUCCESS_TTL : FAILURE_TTL)) return cached.value;
+  try {
+    const { timestamp, meta } = await fetchYahoo(code);
+    const price = Number(meta.regularMarketPrice);
+    const previousClose = Number(meta.previousClose) || Number(meta.chartPreviousClose);
+    if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(previousClose) || previousClose <= 0) throw new Error("empty regular quote");
+    const change = price - previousClose;
+    const latestTimestamp = timestamp.at(-1);
+    const value: UsRegularQuote = {
+      price,
+      previousClose,
+      change,
+      changePct: change / previousClose * 100,
+      high: Number(meta.regularMarketDayHigh) || price,
+      low: Number(meta.regularMarketDayLow) || price,
+      volume: Number(meta.regularMarketVolume) || undefined,
+      marketCap: Number(meta.marketCap) || undefined,
+      time: latestTimestamp ? new Date(latestTimestamp * 1000).toISOString() : new Date().toISOString()
+    };
+    regularCache.set(code, { at: Date.now(), value });
+    return value;
+  } catch {
+    regularCache.set(code, { at: Date.now(), value: null });
+    return null;
+  }
 }
 
 /** 当前美股扩展时段有效报价。闭市/常规盘返回 null，避免旧盘前价覆盖最新常规价。 */

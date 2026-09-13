@@ -112,6 +112,40 @@
 @tailwind components;
 @tailwind utilities;
 
+.watch-checkbox {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  appearance: none;
+  border: 1.5px solid color-mix(in srgb, currentColor 38%, transparent);
+  border-radius: 5px;
+  background-color: transparent;
+  color: var(--ink-2, #555b66);
+  vertical-align: middle;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.watch-checkbox:hover {
+  border-color: color-mix(in srgb, currentColor 68%, transparent);
+}
+
+.watch-checkbox:checked {
+  border-color: #343944;
+  background-color: #343944;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3.4 8.2 2.7 2.7 6.3-6.3' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.watch-checkbox:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(80 87 101 / 18%);
+}
+
+.dark .watch-checkbox:checked {
+  border-color: #8d95a5;
+  background-color: #8d95a5;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
@@ -707,6 +741,22 @@
   background-color: rgba(0, 0, 0, 0.42);
 }
 
+/* 自选分组工作台使用不透明主题面，避免浅色半透明工具类在暗色弹窗中混色。 */
+.watch-group-sidebar,
+.watch-import-source {
+  background-color: #f7f8fa;
+}
+.watch-import-target {
+  background-color: #fafbfc;
+}
+html.dark .watch-group-sidebar,
+html.dark .watch-import-source {
+  background-color: #131822 !important;
+}
+html.dark .watch-import-target {
+  background-color: #11151e !important;
+}
+
 /* ReactBits AnnouncementModal 风格：缩放 0.96 + 上移 16px + easeOutExpo */
 @keyframes rb-modal-in {
   from {
@@ -829,8 +879,26 @@
 .dark .bg-bg-gray\/30 {
   background-color: rgba(16, 20, 29, 0.3);
 }
+.dark .bg-bg-gray\/25 {
+  background-color: rgba(16, 20, 29, 0.25);
+}
+.dark .bg-bg-gray\/35 {
+  background-color: rgba(16, 20, 29, 0.35);
+}
+.dark .bg-bg-gray\/45 {
+  background-color: rgba(16, 20, 29, 0.45);
+}
 .dark .bg-bg-gray\/60 {
   background-color: rgba(16, 20, 29, 0.6);
+}
+.dark .bg-bg-gray\/65 {
+  background-color: rgba(16, 20, 29, 0.65);
+}
+.dark .bg-bg-gray\/70 {
+  background-color: rgba(16, 20, 29, 0.7);
+}
+.dark .bg-bg-gray\/80 {
+  background-color: rgba(16, 20, 29, 0.8);
 }
 .dark .bg-\[\#f3f4f6\] {
   background-color: #1a202c;
@@ -2486,8 +2554,6 @@
 .dark .stock-etf-summary button,.dark .stock-etf-row,.dark .stock-dividend-summary > div { background:rgba(255,255,255,.035); }
 .dark .stock-etf-summary button:hover,.dark .stock-etf-summary button.is-active,.dark .stock-etf-row:hover { background:rgba(255,255,255,.075); }
 
-/* 自选股表格操作列：与其他数据列一起横向滚动。 */
-.quotes-actions-cell { width: 164px; min-width: 164px; border-left: 1px solid var(--edge); background: #fff; }
 .quotes-control-panel { display:grid; width:100%; max-width:100%; min-width:0; box-sizing:border-box; grid-template-columns:minmax(0,auto) minmax(0,1fr) minmax(0,auto); align-items:center; border:1px solid var(--edge); border-radius:16px; background:rgba(255,255,255,.86); box-shadow:0 8px 24px rgba(15,23,42,.045); }
 .quotes-control-header { display:contents; }
 .quotes-control-title { grid-column:1; grid-row:1; min-width:max-content; padding-left:24px; }
@@ -2509,14 +2575,8 @@
   .quotes-control-actions { grid-column:1; grid-row:2; min-width:0; }
   .quotes-control-groups { grid-column:1; grid-row:3; }
 }
-thead .quotes-actions-cell { background: var(--bg-gray); }
-tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
-.quotes-actions-cell.is-selected { background: #f7fbff; }
-.dark .quotes-actions-cell { background: #151a26; }
 .mobile-quotes-table thead tr { background-color: #f7f8fa; }
 .dark .mobile-quotes-table thead tr { background-color: #10141d; }
-.mobile-quotes-table thead .quotes-actions-cell { background-color: #f7f8fa; }
-.dark .mobile-quotes-table thead .quotes-actions-cell { background-color: #10141d; }
 .asset-library-tabs { scrollbar-width:none; }
 .asset-library-tabs::-webkit-scrollbar { display:none; }
 @media (max-width: 640px) {
@@ -2533,86 +2593,6 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   .dark .mobile-quotes-table thead .quotes-identity-cell { background:#10141d; }
   .dark .mobile-quotes-table tbody tr:hover .quotes-identity-cell { background:#1a212e; }
 }
-.dark tbody tr:hover .quotes-actions-cell { background: #1a212e; }
-.dark .quotes-actions-cell.is-selected { background: #172233; }
-.quotes-row.is-selected,
-.quotes-row.is-selected > td { background-color: #eef5ff; }
-.dark .quotes-row.is-selected,
-.dark .quotes-row.is-selected > td { background-color: #1a2a40; }
-.quotes-checkbox-wrap {
-  position: relative;
-  display: inline-flex;
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-  vertical-align: middle;
-}
-.quotes-checkbox {
-  display: block;
-  box-sizing: border-box;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  flex: none;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 1px solid #c9ced8;
-  border-radius: 3px;
-  background-color: #fff;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: 12px 12px;
-  transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
-}
-.dark .quotes-checkbox { border-color: #697386; background-color: #1b2230; }
-.quotes-checkbox:hover { border-color: #3297f6; }
-.quotes-checkbox:checked {
-  border-color: #3297f6;
-  background-color: #3297f6;
-}
-.dark .quotes-checkbox:checked { border-color: #3297f6; background-color: #3297f6; }
-.quotes-checkbox:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(50,151,246,.22); }
-.quotes-checkbox-mark {
-  position: absolute;
-  inset: 0;
-  width: 16px;
-  height: 16px;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .12s ease;
-}
-.quotes-checkbox-mark path {
-  fill: none;
-  stroke: #fff;
-  stroke-width: 2.1;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.quotes-checkbox:checked + .quotes-checkbox-mark { opacity: 1; }
-.quotes-action-btn { background: var(--bg-gray); color: var(--muted); }
-.dark .quotes-action-btn { background: #1b2230; border-color: #323a4b; color: #aab4c2; }
-.dark .quotes-action-btn:hover { background: #273142; border-color: #465269; color: #eef1f6; }
-.quotes-action-delete:hover { color: #e23d3d; }
-.dark .quotes-action-delete:hover { color: #ff8f8f; }
-.quotes-edit-toggle.is-active { border-color:#91c5f7; background:#e8f2ff; color:#1677d2; }
-.dark .quotes-edit-toggle.is-active { border-color:#315b86; background:#203b5a; color:#8ec8ff; }
-.quotes-row-actions { opacity: 1; transform: none; pointer-events: auto; }
-.quotes-row-actions button:focus-visible,
-.quotes-row-actions select:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.quotes-move-select {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 1.35rem !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right .35rem center;
-  background-size: .72rem;
-}
-.quotes-move-select:hover { box-shadow: 0 0 0 2px rgba(50,151,246,.08); }
-.quotes-move-select:focus-visible { box-shadow: 0 0 0 2px rgba(50,151,246,.2); }
-.dark .quotes-move-select { background-color: #1b2230; }
-
 /* Stock financials */
 .financial-panel { padding: 12px 0 4px; color: var(--ink); }
 .financial-subnav { display: flex; gap: 5px; overflow-x: auto; margin-bottom:12px; border-bottom:1px solid var(--edge); padding:0 2px 10px; scrollbar-width: none; }

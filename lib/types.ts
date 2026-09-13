@@ -11,6 +11,8 @@ export interface StockRecord {
   group: string;
   /** 自选股分组 id（方案 A 独立分组实体），空串 = 未分组 */
   watchGroupId?: string;
+  /** 自定义分组内排序，数值越小越靠前 */
+  watchGroupSort?: number;
   note: string;
   source?: string;
   updatedAt: string;

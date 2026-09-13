@@ -747,10 +747,7 @@ export default function RecordsApp({
               refreshing={refreshing}
               refreshQuotes={refreshQuotes}
               onAddMatch={(m) => addFromSearch(m, "watchlist")}
-              onUpdate={updateRecord}
-              onRemove={removeRecord}
               onToggleWatch={toggleWatch}
-              onBatchDelete={batchDeleteRecords}
               groups={groups}
             />
           )}

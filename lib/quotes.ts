@@ -1,6 +1,6 @@
 import { MARKET_META, type Market, type SearchMatch } from "./types";
 import { getSiteSettings } from "./settings";
-import { fetchUsExtendedQuote } from "./usExtendedQuote";
+import { fetchUsExtendedQuote, fetchUsRegularQuote } from "./usExtendedQuote";
 import { fetchFutuQuotes, searchFutu } from "./futuQuotes";
 import { getCryptoQuote } from "./assetQuotes";
 import { proxyFetch } from "./net";
@@ -183,12 +183,14 @@ export async function fetchQuotes(items: QuoteItem[]): Promise<Record<string, Qu
 
   // 美股主行情走富途 OpenAPI（盘前/盘后/夜盘口径统一，支持 24 小时行情）；
   // 港股/A股直接走腾讯（更成熟稳定，且避免与美股混批导致富途桥接超时拖垮整体）。
+  let futuReturnedAny = false;
   if (quoteSource !== "tencent" && usItems.length > 0) {
     try {
       const futuMap = await fetchFutuQuotes(usItems);
       futuMap.forEach((quote, id) => {
         result[id] = { ...quote, source: "futu" };
       });
+      futuReturnedAny = futuMap.size > 0;
     } catch {
       /* 富途失败按配置处理 */
     }
@@ -196,7 +198,9 @@ export async function fetchQuotes(items: QuoteItem[]): Promise<Record<string, Qu
 
   const missing = [...nonUsItems, ...usItems].filter((item) => !result[item.id]);
   // 强制富途：美股不回退腾讯/Yahoo（OpenD 不可用时美股返回空）；港股/A股仍走腾讯（更成熟稳定）
-  const tencentMissing = quoteSource === "futu" ? missing.filter((item) => item.market !== "US") : missing;
+  // 本地版没有 OpenD；即使配置从线上带回“仅富途”，整批为空时也要启用公开源。
+  const strictFutu = quoteSource === "futu" && futuReturnedAny;
+  const tencentMissing = strictFutu ? missing.filter((item) => item.market !== "US") : missing;
   const symbolMap = new Map<string, QuoteItem[]>();
 
   tencentMissing.forEach((item) => {
@@ -220,11 +224,36 @@ export async function fetchQuotes(items: QuoteItem[]): Promise<Record<string, Qu
       });
     });
   }
-  if (quoteSource === "futu") return result;
+  if (strictFutu) return result;
+
+  // 腾讯会漏掉新股、冷门 ETF 或特殊代码。逐只用 Yahoo 常规行情补齐整行。
+  const regularMissing = usItems.filter((item) => !result[item.id]);
+  const FALLBACK_CONCURRENCY = 4;
+  for (let i = 0; i < regularMissing.length; i += FALLBACK_CONCURRENCY) {
+    await Promise.all(regularMissing.slice(i, i + FALLBACK_CONCURRENCY).map(async (item) => {
+      const fallback = await fetchUsRegularQuote(item.code);
+      if (!fallback) return;
+      result[item.id] = {
+        name: item.code,
+        price: fallback.price,
+        change: fallback.change,
+        changePct: fallback.changePct,
+        open: fallback.price,
+        high: fallback.high,
+        low: fallback.low,
+        prevClose: fallback.previousClose,
+        session: "REGULAR",
+        volume: fallback.volume,
+        marketCap: fallback.marketCap,
+        time: fallback.time,
+        source: "yahoo"
+      };
+    }));
+  }
 
   // 美股盘前/盘后统一覆盖有效价与涨跌口径。失败时保留腾讯常规盘行情，不影响整批。
   // 按代码去重（同一只股可能同时出现在持仓与自选），并把并发从 6 降到 4，降低 Yahoo 限流概率。
-  const usMissing = missing.filter((item) => item.market === "US" && result[item.id]);
+  const usMissing = usItems.filter((item) => result[item.id]);
   if (usMissing.length > 0) {
     const byCode = new Map<string, typeof usMissing>();
     for (const item of usMissing) {

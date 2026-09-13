@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     ? [...new Set<string>((body.ids as unknown[]).filter((x: unknown): x is string => typeof x === "string" && x.length > 0 && x.length <= 100))]
     : [];
   if (ids.length === 0) return fail(40001, "缺少记录 id", 400);
-  if (ids.length > 200) return fail(40001, "单次最多分配 200 条记录", 400);
+  if (ids.length > 2000) return fail(40001, "单次最多分配 2000 条记录", 400);
   const groupId = String(body?.groupId ?? "").trim();
   try {
     const updated = assignRecordsGroup(user.id, ids, groupId);

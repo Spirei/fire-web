@@ -240,8 +240,39 @@ export function assignRecordsGroup(userId: string, ids: string[], groupId: strin
     if (!group || group.kind !== "custom") throw new Error("分组不存在或不可分配");
   }
   const marks = ids.map(() => "?").join(",");
-  const result = db
-    .prepare(`UPDATE records SET watch_group_id = ?, updated_at = ? WHERE user_id = ? AND id IN (${marks})`)
-    .run(groupId, new Date().toISOString(), userId, ...ids);
+  const maxSort = groupId ? Number((db.prepare("SELECT COALESCE(MAX(watch_group_sort), -1) AS s FROM records WHERE user_id = ? AND watch_group_id = ?").get(userId, groupId) as { s: number }).s) : -1;
+  const update = db.prepare("UPDATE records SET watch_group_id = ?, watch_group_sort = ?, updated_at = ? WHERE user_id = ? AND id = ?");
+  const run = db.transaction(() => ids.reduce((changes, id, index) => changes + update.run(groupId, groupId ? maxSort + index + 1 : 0, new Date().toISOString(), userId, id).changes, 0));
+  const changes = run();
+  const result = { changes };
   return result.changes;
+}
+
+export function reorderGroupRecords(userId: string, groupId: string, ids: string[]) {
+  if (groupId === "__all" || groupId.startsWith("market:")) {
+    const market = groupId.startsWith("market:") ? groupId.slice(7) : "";
+    const db = getDb();
+    const existing = (market
+      ? db.prepare("SELECT id FROM records WHERE user_id = ? AND market = ? ORDER BY updated_at DESC").all(userId, market)
+      : db.prepare("SELECT id FROM records WHERE user_id = ? ORDER BY updated_at DESC").all(userId)
+    ) as { id: string }[];
+    const existingIds = existing.map((row) => row.id);
+    if (ids.length !== existingIds.length || new Set(ids).size !== ids.length || ids.some((id) => !existingIds.includes(id))) throw new Error("列表成员已变化，请刷新后重试");
+    const update = db.prepare("UPDATE records SET updated_at = ? WHERE user_id = ? AND id = ?");
+    const base = Date.now();
+    db.transaction(() => ids.forEach((id, index) => update.run(new Date(base - index).toISOString(), userId, id)))();
+    return ids.length;
+  }
+  const group = getOwned(userId, groupId);
+  if (!group || group.kind !== "custom") throw new Error("分组不存在或不可排序");
+  const existing = dbRecordIds(userId, groupId);
+  if (ids.length !== existing.length || new Set(ids).size !== ids.length || ids.some((id) => !existing.includes(id))) throw new Error("分组成员已变化，请刷新后重试");
+  const db = getDb();
+  const update = db.prepare("UPDATE records SET watch_group_sort = ? WHERE user_id = ? AND watch_group_id = ? AND id = ?");
+  db.transaction(() => ids.forEach((id, index) => update.run(index, userId, groupId, id)))();
+  return ids.length;
+}
+
+function dbRecordIds(userId: string, groupId: string): string[] {
+  return (getDb().prepare("SELECT id FROM records WHERE user_id = ? AND watch_group_id = ? ORDER BY watch_group_sort, updated_at DESC").all(userId, groupId) as { id: string }[]).map((row) => row.id);
 }

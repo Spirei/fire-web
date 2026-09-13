@@ -70,6 +70,8 @@ function migrate(database: Database.Database) {
       cost REAL,
       qty REAL,
       group_name TEXT,
+      watch_group_id TEXT DEFAULT '',
+      watch_group_sort INTEGER NOT NULL DEFAULT 0,
       note TEXT,
       source TEXT DEFAULT '',
       updated_at TEXT NOT NULL
@@ -370,6 +372,7 @@ function migrate(database: Database.Database) {
   const recCols = (database.prepare("PRAGMA table_info(records)").all() as { name: string }[]).map((c) => c.name);
   if (!recCols.includes("source")) database.exec("ALTER TABLE records ADD COLUMN source TEXT DEFAULT ''");
   if (!recCols.includes("watch_group_id")) database.exec("ALTER TABLE records ADD COLUMN watch_group_id TEXT DEFAULT ''");
+  if (!recCols.includes("watch_group_sort")) database.exec("ALTER TABLE records ADD COLUMN watch_group_sort INTEGER NOT NULL DEFAULT 0");
 
   // 成交前快照用于可靠重放账本。旧订单按当时的平均成本规则反推一次，之后不再依赖
   // 容易被后续更正覆盖的 position_*_after 快照来猜测初始持仓。
