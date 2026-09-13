@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { RELATED_ETF_MAIN_STOCK } from "@/lib/relatedEtfs";
-import { pickStockIcon, stockIconLookupCodes } from "@/lib/stockIconKey";
+import { applyRelatedEtfMainStockIcons, pickStockIcon, stockIconLookupCodes } from "@/lib/stockIconKey";
 
 export interface Asset {
   id: string;
@@ -354,15 +353,7 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
         if (!map[key]) map[key] = url;
       });
     });
-    Object.entries(RELATED_ETF_MAIN_STOCK).forEach(([etf, main]) => {
-      const fallbackUrl = map[`US:${etf}`] || map[`US:${main}`];
-      if (!fallbackUrl) return;
-      ["", ".AM", ".N", ".OQ", ".PS", ".K"].forEach((suffix) => {
-        const key = `US:${etf}${suffix}`;
-        if (!map[key]) map[key] = fallbackUrl;
-      });
-    });
-    return map;
+    return applyRelatedEtfMainStockIcons(map);
   }, [assets]);
 
   const assetIcons = useMemo(() => {

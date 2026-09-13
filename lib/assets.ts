@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import { RELATED_ETF_MAIN_STOCK } from "./relatedEtfs";
 import { getSiteSettings } from "./settings";
-import { stockIconLookupCodes } from "./stockIconKey";
+import { applyRelatedEtfMainStockIcons, stockIconLookupCodes } from "./stockIconKey";
 
 const seeded = {
   icon: false,
@@ -208,7 +208,7 @@ export function getStockIconMap(pairs: Array<{ market: string; code: string }>):
       break;
     }
   });
-  return out;
+  return applyRelatedEtfMainStockIcons(out);
 }
 
 /**
