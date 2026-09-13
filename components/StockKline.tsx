@@ -89,7 +89,7 @@ function readKlineSettings(): KlineSettings | null {
       ? v.maConfigs.filter((c): c is MAConfig => !!c && typeof c.enabled === "boolean" && typeof c.period === "number" && typeof c.color === "string")
       : [];
     return {
-      indicators: indicators.length > 0 ? Array.from(new Set(indicators)) : ["MA", "VOL"],
+      indicators: Array.isArray(v.indicators) ? Array.from(new Set(indicators)) : ["MA", "VOL"],
       maConfigs: maConfigs.length > 0 ? maConfigs : DEFAULT_MA_CONFIGS,
       adjust: v.adjust === "none" ? "none" : v.adjust === "hfq" ? "hfq" : "qfq",
       style: v.style && ALL_STYLES.includes(v.style) ? v.style : (readBasicStyleOrder()[0] || "area"),
@@ -355,6 +355,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const [initialView] = useState<KlineView | null>(null);
   const [initialSettings] = useState<KlineSettings | null>(null);
   const [range, setRange] = useState<Range>("DAY");
+  const [allDayView, setAllDayView] = useState(true);
   const [intradayMinutes, setIntradayMinutes] = useState(initialView?.minutes ?? 1);
   const [session, setSession] = useState<Session>("ALL");
   const [style, setStyle] = useState<ChartStyle>(initialSettings?.style ?? (readBasicStyleOrder()[0] || "area"));
@@ -424,6 +425,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   useLayoutEffect(() => {
     const restored = readKlineView();
     setRange("DAY");
+    setAllDayView(true);
     setSession("ALL");
     if (restored) setIntradayMinutes(restored.minutes);
     const restoredSettings = readKlineSettings();
@@ -684,14 +686,17 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   }, [range, market, code, items.length, itemsKind, adjust, itemsAdjust]);
 
   const data = useMemo(() => {
-    const needsOhlc = style === "hlc" || style === "candle" || style === "hollow" || style === "ohlc";
+    const effectiveStyle = style;
+    const needsOhlc = effectiveStyle === "hlc" || effectiveStyle === "candle" || effectiveStyle === "hollow" || effectiveStyle === "ohlc";
     if (range === "DAY") {
       const latestDay = fiveDay[fiveDay.length - 1]?.date;
       const dayFallback = latestDay ? fiveDay.filter((point) => point.date === latestDay) : [];
       const source = sessionDay.length ? sessionDay : intraday.length ? intraday : dayFallback;
       const filtered = source.filter((point) => sessionMatch(point.time, session));
-      if (needsOhlc || intradayMinutes > 1) {
-        const buckets = aggregateIntraday(filtered, intradayMinutes);
+      // 全天是独立视图，不读写周期选择；仅蜡烛类图形在内部按 5 分钟聚合，避免整日 1 分钟 K 线被压到不足一个像素。
+      const minutes = allDayView ? (needsOhlc ? 5 : 1) : intradayMinutes;
+      if (needsOhlc || minutes > 1) {
+        const buckets = aggregateIntraday(filtered, minutes);
         return { labels: buckets.map((p) => p.label), values: buckets.map((p) => p.close), volumes: buckets.map((p) => p.volume), previous: buckets.map((p, i) => i ? buckets[i - 1].close : p.open), ohlc: buckets.map((p) => [p.open, p.close, p.low, p.high]) };
       }
       return { labels: filtered.map((p) => p.time), values: filtered.map((p) => p.price), volumes: filtered.map((p) => p.volume || 0), previous: filtered.map((_p, i) => i ? filtered[i - 1].price : filtered[0]?.price || 0), ohlc: [] as number[][] };
@@ -714,7 +719,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
     if (range === "QUARTER") filtered = itemsKind === "quarter" ? aggregateKline(items.filter((item) => item.d >= cutoffMonths(144)), range) : [];
     if (range === "YEAR") filtered = itemsKind === "year" ? aggregateKline(items, range) : [];
     return { labels: filtered.map((p) => p.d), values: filtered.map((p) => p.c), volumes: filtered.map((p) => p.v || 0), previous: filtered.map((p, i) => i ? filtered[i - 1].c : p.o), ohlc: filtered.map((p) => [p.o, p.c, p.l, p.h]) };
-  }, [range, session, style, items, intraday, fiveDay, sessionDay, intradayMinutes]);
+  }, [range, session, style, items, intraday, fiveDay, sessionDay, intradayMinutes, allDayView]);
 
   // 主图时点变化时，对比表格默认定位到最后一个（最新）时点；鼠标悬停时联动更新。
   useEffect(() => {
@@ -871,7 +876,8 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       const gridLeft = 30;
       const gridRight = 64;
       const gridContain = false;
-      const candleMode = style === "candle" || style === "hollow" || style === "ohlc";
+      const effectiveStyle = style;
+      const candleMode = effectiveStyle === "candle" || effectiveStyle === "hollow" || effectiveStyle === "ohlc";
       // 标注当前周期内的最低点：蜡烛用最低价(l)，折线用收盘价(c)。
       const lowVals = candleMode ? data.ohlc.map((v) => v[2]) : data.values;
       let lowIdx = -1; let lowVal = Infinity;
@@ -898,22 +904,22 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
         barMinWidth: 2,
         markPoint: extremaData.length ? { ...extremaMarkPoint, data: extremaData as { coord: (string | number)[]; value: string }[] } : undefined,
         itemStyle: {
-          color: style === "hollow" ? (dark ? "#171b22" : "#fff") : "#e5484d",
-          color0: style === "ohlc" ? "transparent" : "#0aa77d",
+          color: effectiveStyle === "hollow" ? (dark ? "#171b22" : "#fff") : "#e5484d",
+          color0: effectiveStyle === "ohlc" ? "transparent" : "#0aa77d",
           borderColor: "#e5484d",
           borderColor0: "#0aa77d",
-          borderWidth: style === "ohlc" ? 2 : 1
+          borderWidth: effectiveStyle === "ohlc" ? 2 : 1
         }
       };
       const lineSeries = {
         name: name || code, type: "line", data: data.values, smooth: false, showSymbol: style === "marked", connectNulls: true,
-        step: style === "step" ? "end" : false,
+        step: effectiveStyle === "step" ? "end" : false,
         // 带标记线即“折线 + 数据节点”；长周期点数过多时自动抽稀，避免整图变成实心圆带。
-        showAllSymbol: style === "marked" && data.values.length <= 220,
+        showAllSymbol: effectiveStyle === "marked" && data.values.length <= 220,
         symbol: "circle",
-        symbolSize: style === "marked" ? (data.values.length > 220 ? 3 : 5) : 0,
+        symbolSize: effectiveStyle === "marked" ? (data.values.length > 220 ? 3 : 5) : 0,
         lineStyle: { color: accent, width: 2 }, itemStyle: { color: accent },
-        areaStyle: style === "area" ? { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(11,180,180,.28)" }, { offset: 1, color: "rgba(11,180,180,.015)" }]) } : undefined,
+        areaStyle: effectiveStyle === "area" ? { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(73,145,234,.3)" }, { offset: 1, color: "rgba(73,145,234,.025)" }]) } : undefined,
         markPoint: extremaData.length ? { ...extremaMarkPoint, data: extremaData as { coord: (string | number)[]; value: string }[] } : undefined,
         // 普通图形显示最新价线；“基准线”样式才使用区间首价作为比较基准。
         // 只有最新价为有限数字才画（行情可能是字符串/空，传给 yAxis 会被当成轴名引用而报 yAxis not found）。
@@ -960,8 +966,8 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       // 比较模式：主图统一为折线 + 归一化 %；其余（HLC/基准线/蜡烛）仅非比较模式生效。
       const priceSeries = isComparing
         ? [{ ...lineSeries, data: mainNorm, yAxisIndex: subCount + 1, areaStyle: undefined, showSymbol: true, showAllSymbol: true, symbol: "circle", symbolSize: 4, emphasis: { scale: true }, markLine: undefined }]
-        : style === "hlc" ? hlcSeries : style === "baseline" ? baselineSeries : [candleMode ? candleSeries : lineSeries];
-      const showMA = !isComparing && selectedIndicators.includes("MA");
+        : effectiveStyle === "hlc" ? hlcSeries : effectiveStyle === "baseline" ? baselineSeries : [candleMode ? candleSeries : lineSeries];
+      const showMA = !(allDayView && range === "DAY" && session === "ALL") && !isComparing && selectedIndicators.includes("MA");
       const enabledMAs = maConfigs.filter((item) => item.enabled);
       const maSeries = showMA && maLinesVisible ? enabledMAs.map((item) => ({
         name: `MA${item.period}`,
@@ -1134,8 +1140,13 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
     if (chartRef.current) observer.observe(chartRef.current);
     const theme = new MutationObserver(render);
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => { observer.disconnect(); theme.disconnect(); chartInst.current?.dispose(); chartInst.current = null; };
-  }, [data, style, code, name, market, range, session, selectedIndicators, maConfigs, maLinesVisible, compareSeries, compareItems]);
+    return () => { observer.disconnect(); theme.disconnect(); };
+  }, [data, style, code, name, market, range, session, selectedIndicators, maConfigs, maLinesVisible, compareSeries, compareItems, allDayView]);
+
+  useEffect(() => () => {
+    chartInst.current?.dispose();
+    chartInst.current = null;
+  }, []);
 
   const sessionLabel = SESSIONS.find((x) => x.value === session)?.label || "全天";
   const intradayPeriodLabel = intradayMinutes < 60 ? `${intradayMinutes}分` : `${intradayMinutes / 60}小时`;
@@ -1164,14 +1175,16 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const endMADrag = (event: React.PointerEvent<HTMLDivElement>) => { if (maDragRef.current?.pointerId === event.pointerId) maDragRef.current = null; };
   const startRangeDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!rangeScrollRef.current) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
     rangeDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startLeft: rangeScrollRef.current.scrollLeft, moved: false };
   };
   const moveRangeDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = rangeDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId || !rangeScrollRef.current) return;
     const dx = event.clientX - drag.startX;
-    if (Math.abs(dx) > 4) drag.moved = true;
+    if (Math.abs(dx) > 4 && !drag.moved) {
+      drag.moved = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
     rangeScrollRef.current.scrollLeft = drag.startLeft - dx;
   };
   const endRangeDrag = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -1195,7 +1208,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   return <div className="stock-chart-shell w-full">
     <div ref={toolbarRef} className="stock-chart-toolbar" aria-label="走势图控制栏">
       <div className="stock-chart-ranges">
-        <button type="button" className={`stock-chart-range stock-chart-all-day ${range === "DAY" && session === "ALL" ? "is-active" : ""}`} onClick={() => { setRange("DAY"); setSession("ALL"); setSessionOpen(false); setPeriodOpen(false); setStyleOpen(false); }}>
+        <button type="button" className={`stock-chart-range stock-chart-all-day ${allDayView && range === "DAY" && session === "ALL" ? "is-active" : ""}`} onClick={() => { setAllDayView(true); setRange("DAY"); setSession("ALL"); setSessionOpen(false); setPeriodOpen(false); setStyleOpen(false); }}>
           全天
         </button>
         <div className="stock-chart-popover-wrap">
@@ -1203,25 +1216,25 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
             {session === "ALL" ? "时段" : sessionLabel}<Chevron open={sessionOpen} />
           </button>
           {sessionOpen && <div className="stock-chart-menu session-menu" role="menu">
-            {SESSIONS.filter((item) => item.value !== "ALL").map((item) => <button key={item.value} type="button" disabled={item.available === false} className={`${session === item.value ? "is-selected" : ""} ${item.available === false ? "is-unavailable" : ""}`} title={item.available === false ? "当前行情源暂无夜盘数据" : undefined} onClick={() => { setSession(item.value); setRange("DAY"); setSessionOpen(false); }}>
+            {SESSIONS.filter((item) => item.value !== "ALL").map((item) => <button key={item.value} type="button" disabled={item.available === false} className={`${session === item.value ? "is-selected" : ""} ${item.available === false ? "is-unavailable" : ""}`} title={item.available === false ? "当前行情源暂无夜盘数据" : undefined} onClick={() => { setAllDayView(false); setSession(item.value); setRange("DAY"); setSessionOpen(false); }}>
               <span>{item.label}</span>{item.time && <small>{item.time}</small>}
             </button>)}
           </div>}
         </div>
         <div ref={rangeScrollRef} className="stock-chart-range-scroll stock-chart-primary-ranges" style={{ "--range-index": Math.max(0, RANGES.findIndex((item) => item.value === range)), "--range-active": RANGES.some((item) => item.value === range) ? 1 : 0 } as CSSProperties} onPointerDown={startRangeDrag} onPointerMove={moveRangeDrag} onPointerUp={endRangeDrag} onPointerCancel={endRangeDrag}>
           <span className="stock-chart-range-indicator" aria-hidden="true" />
-          {RANGES.map((item) => <button key={item.value} type="button" data-range={item.value} className={`stock-chart-range ${range === item.value ? "is-active" : ""}`} onClick={() => { if (suppressRangeClickRef.current) { suppressRangeClickRef.current = false; return; } setRange(item.value); setSession("ALL"); setSessionOpen(false); setPeriodOpen(false); }}>{item.label}</button>)}
+          {RANGES.map((item) => <button key={item.value} type="button" data-range={item.value} className={`stock-chart-range ${range === item.value ? "is-active" : ""}`} onClick={() => { if (suppressRangeClickRef.current) { suppressRangeClickRef.current = false; return; } setAllDayView(false); setRange(item.value); setSession("ALL"); setSessionOpen(false); setPeriodOpen(false); }}>{item.label}</button>)}
         </div>
         <div className="stock-chart-popover-wrap period-picker-wrap">
-            <button type="button" className={`stock-chart-range period-picker-trigger ${periodOpen ? "is-open" : ""} ${range === "QUARTER" ? "has-value" : ""}`} aria-label="更多 K 线周期" aria-expanded={periodOpen} onClick={() => { setPeriodOpen((open) => !open); setSessionOpen(false); setStyleOpen(false); }}><span>{range === "QUARTER" ? "季K" : range === "DAY" ? intradayPeriodLabel : "周期"}</span><Chevron open={periodOpen} /></button>
+            <button type="button" className={`stock-chart-range period-picker-trigger ${periodOpen ? "is-open" : ""} ${range === "QUARTER" || (!allDayView && range === "DAY") ? "has-value" : ""}`} aria-label="更多 K 线周期" aria-expanded={periodOpen} onClick={() => { setPeriodOpen((open) => !open); setSessionOpen(false); setStyleOpen(false); }}><span>{range === "QUARTER" ? "季K" : !allDayView && range === "DAY" ? intradayPeriodLabel : "周期"}</span><Chevron open={periodOpen} /></button>
             {periodOpen && <div className="stock-chart-menu period-menu" role="menu" aria-label="K 线周期">
               <div className="period-menu-head"><b>K线周期</b></div>
-              <section><h4>分钟</h4><div className="period-option-grid is-minutes">{[1,2,3,5,10,15,20,30,45].map((minutes) => <button key={minutes} type="button" className={range === "DAY" && intradayMinutes === minutes ? "is-selected" : ""} onClick={() => { setIntradayMinutes(minutes); setRange("DAY"); setPeriodOpen(false); }}>{minutes}分</button>)}</div></section>
-              <section><h4>小时</h4><div className="period-option-grid is-hours">{[60,120,180,240].map((minutes) => <button key={minutes} type="button" className={range === "DAY" && intradayMinutes === minutes ? "is-selected" : ""} onClick={() => { setIntradayMinutes(minutes); setRange("DAY"); setPeriodOpen(false); }}>{minutes / 60}小时</button>)}</div></section>
+              <section><h4>分钟</h4><div className="period-option-grid is-minutes">{[1,2,3,5,10,15,20,30,45].map((minutes) => <button key={minutes} type="button" className={!allDayView && range === "DAY" && intradayMinutes === minutes ? "is-selected" : ""} onClick={() => { setAllDayView(false); setIntradayMinutes(minutes); setRange("DAY"); setPeriodOpen(false); }}>{minutes}分</button>)}</div></section>
+              <section><h4>小时</h4><div className="period-option-grid is-hours">{[60,120,180,240].map((minutes) => <button key={minutes} type="button" className={!allDayView && range === "DAY" && intradayMinutes === minutes ? "is-selected" : ""} onClick={() => { setAllDayView(false); setIntradayMinutes(minutes); setRange("DAY"); setPeriodOpen(false); }}>{minutes / 60}小时</button>)}</div></section>
               <section><h4>长周期</h4><div className="period-option-grid is-long">
-                <button type="button" className={range === "QUARTER" ? "is-selected" : ""} onClick={() => { setRange("QUARTER"); setSession("ALL"); setPeriodOpen(false); }}>季K</button>
-                <button type="button" className={range === "YEAR" ? "is-selected" : ""} onClick={() => { setRange("YEAR"); setSession("ALL"); setPeriodOpen(false); }}>年K</button>
-                <button type="button" className={range === "YTD" ? "is-selected" : ""} onClick={() => { setRange("YTD"); setSession("ALL"); setPeriodOpen(false); }}>今年以来</button>
+                <button type="button" className={range === "QUARTER" ? "is-selected" : ""} onClick={() => { setAllDayView(false); setRange("QUARTER"); setSession("ALL"); setPeriodOpen(false); }}>季K</button>
+                <button type="button" className={range === "YEAR" ? "is-selected" : ""} onClick={() => { setAllDayView(false); setRange("YEAR"); setSession("ALL"); setPeriodOpen(false); }}>年K</button>
+                <button type="button" className={range === "YTD" ? "is-selected" : ""} onClick={() => { setAllDayView(false); setRange("YTD"); setSession("ALL"); setPeriodOpen(false); }}>今年以来</button>
               </div></section>
             </div>}
         </div>
