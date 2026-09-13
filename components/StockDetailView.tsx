@@ -796,6 +796,8 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
                 {sortedVisibleRelated.map((item) => {
                   const itemQuote = etfQuotes[item.code];
                   const itemUp = (itemQuote?.changePct ?? 0) >= 0;
+                  // 相关 ETF 与搜索结果保持一致：ETF 复用对应正股圆形图标，避免 ETF 方形素材露出白底。
+                  const itemIcon = pickStockIcon(stockIcons, "US", mainStock ? item.code : code);
                   return (
                     <button
                       key={item.code}
@@ -804,9 +806,9 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
                       className="stock-etf-row group"
                     >
                       <span className="relative flex-none">
-                        <span className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-[10px] bg-bg-gray text-[11px] font-bold tracking-tight text-ink-2 transition-transform duration-200 group-hover:scale-105 dark:text-white">
-                          {stockIcons[`US:${item.code}`] ? (
-                            <img src={stockIcons[`US:${item.code}`]} alt={`${item.name} 图标`} className="h-full w-full object-cover" />
+                        <span className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full bg-bg-gray text-[11px] font-bold tracking-tight text-ink-2 transition-transform duration-200 group-hover:scale-105 dark:text-white">
+                          {itemIcon ? (
+                            <img src={itemIcon} alt={`${mainStock ? item.name : displayName} 图标`} className="h-full w-full object-cover" />
                           ) : item.code.slice(0, 2)}
                         </span>
                         <EtfDoubleBadge market="US" code={item.code} name={item.name} />
