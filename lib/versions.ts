@@ -3059,6 +3059,14 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "修复本地版页面反复重载与无法点击",
     desc: "本地开发服务器不再监听行情、财报缓存和上传素材等运行时文件。后台刷新数据落盘时不会反复触发整页热重载，避免旧页面继续请求已失效的 JavaScript 分块而出现 ChunkLoadError、页面看得见却无法点击。",
     kind: "fix"
+  }, {
+    title: "修复刷新时 Favicon 短暂显示地球",
+    desc: "新增浏览器可在刷新最早阶段直接读取的静态多尺寸 favicon.ico，避免等待页面 metadata 与约 492KB 的上传原图时先显示默认地球；后台配置的自定义网站图标继续保留，加载完成后仍按设置展示。",
+    kind: "fix"
+  }, {
+    title: "精简账户资产页标题栏",
+    desc: "按反馈移除账户资产标题旁的“本页金额 · USD / 智能缩写”胶囊，仅保留行情来源状态和刷新操作，减少重复信息。",
+    kind: "fix"
   }]
 };
 

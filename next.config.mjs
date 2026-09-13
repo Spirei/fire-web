@@ -77,6 +77,11 @@ const nextConfig = {
         headers: [{ key: "Cache-Control", value: "no-store" }]
       },
       {
+        // 浏览器刷新一开始即可复用静态站点图标，不退回通用地球占位。
+        source: "/favicon.ico",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }]
+      },
+      {
         // 组合时间序列（几十 KB、内容按 30 秒粒度变化）：允许浏览器私有缓存 + ETag 条件请求，
         // 刷新页面时命中 304 就不再重传正文；其余接口继续 no-store。
         source: "/api/v1/portfolio-series",

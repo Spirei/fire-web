@@ -1013,7 +1013,6 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       {/* 一级标题 */}
       <div className="mb-4 flex items-center gap-2.5">
         <h2 className="text-lg font-bold">账户资产</h2>
-        <span className="rounded-full border border-edge bg-bg-gray px-2.5 py-1 text-[10px] font-semibold text-muted">本页金额 · {totalCur}{pageUsesCompactMoney ? " · 智能缩写" : ""}</span>
         <QuoteSourceBadge records={records} quotes={quotes} />
         <RefreshButton onClick={() => void refreshAccount()} title="刷新账户资产" />
       </div>

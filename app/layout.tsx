@@ -22,7 +22,11 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: settings.title,
     description: "一个轻量的股票记录网站：记录自选与持仓，自动汇总盈亏，数据保存在服务端。",
-    icons: settings.ico ? { icon: settings.ico } : undefined
+    icons: {
+      // 静态 favicon.ico 是刷新最早期的稳定入口；配置图标加载完成后仍按后台设置展示。
+      icon: settings.ico || "/favicon.ico",
+      shortcut: "/favicon.ico"
+    }
   };
 }
 
