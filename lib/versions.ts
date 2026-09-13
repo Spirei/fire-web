@@ -3280,6 +3280,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "素材图标刷新首帧不再空白",
     desc: "修复通用 SafeAssetImage 在素材图片加载和解码完成前只输出空图片框的问题：现在先用内置 SVG 保持尺寸与可见内容，图片完成后再淡入替换；内联国旗直接在服务端和客户端首帧显示，当前导航的自定义图标也从素材库读取后随 HTML 下发并预载。我的持仓显示货币与左侧导航刷新时不再出现空圆、地球占位或图标追赶，市场图标、搜索结果等共用场景同步受益。",
     kind: "fix"
+  }, {
+    title: "导航图标首帧水合一致",
+    desc: "修复我的持仓刷新后出现 Recoverable Error：服务端没有某个导航素材、客户端模块缓存却已有该素材时，SafeAssetImage 两端分别输出默认 SVG 与图片节点，触发 React hydration mismatch。导航图标现在在服务端 HTML 与客户端水合首帧统一使用服务端素材快照，本地缓存只在水合完成后补充。",
+    kind: "fix"
   }]
 };
 

@@ -137,6 +137,7 @@ export default function RecordsApp({
   const [markets, setMarkets] = useState<Market[]>(initialSettings.markets);
   const [marketLabels, setMarketLabels] = useState<{ key: string; label: string; flag: string }[]>(initialSettings.marketLabels);
   const { assetIcons, stockIcons } = useAssetIcons(["icon", "stock"], { stockIconCdn: initialSettings.stockIconCdn });
+  const [navIconsHydrated, setNavIconsHydrated] = useState(false);
   const attemptedIconBackfillRef = useRef(new Set<string>());
 
   // 市场色块是模块级 store（不是 React 状态）：必须在水合首帧之前按服务端设置初始化。
@@ -153,6 +154,7 @@ export default function RecordsApp({
   useMemo(() => primeNavIconCache(initialNavIcons), [initialNavIcons]);
   useMemo(() => primeFlagIconCache(initialFlagIcons), [initialFlagIcons]);
   usePrefetchFlagIcons(initialFlagIcons);
+  useEffect(() => setNavIconsHydrated(true), []);
   useLayoutEffect(() => {
     applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
   }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible]);
@@ -686,7 +688,9 @@ export default function RecordsApp({
       navTabs
         .filter((t) => (user?.role === "admin") || (t.key !== "users" && t.key !== "attachments" && t.key !== "library"))
         .map((t) => {
-          const custom = assetIcons[t.key.toUpperCase()];
+          // SSR 与客户端水合首帧必须使用同一份服务端快照；本地缓存只在水合完成后补充。
+          const key = t.key.toUpperCase();
+          const custom = initialNavIcons[key] || (navIconsHydrated ? assetIcons[key] : undefined);
           return {
             key: t.key as TabKey,
             label: t.label,
@@ -699,7 +703,7 @@ export default function RecordsApp({
             )
           };
         }),
-    [navTabs, user, assetIcons]
+    [navTabs, user, assetIcons, initialNavIcons, navIconsHydrated]
   );
 
   useEffect(() => {
