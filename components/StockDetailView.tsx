@@ -12,7 +12,7 @@ import CompanyProfilePanel from "@/components/CompanyProfilePanel";
 import { ensureStockIcon, useAssetIcons } from "@/lib/useAssetIcons";
 import { pickStockIcon } from "@/lib/stockIconKey";
 import { MARKET_CURRENCY, MULTI_CURRENCIES, usdCap } from "@/lib/currency";
-import { relatedETFs, relatedStock, type RelatedETF } from "@/lib/relatedEtfs";
+import { relatedETFs, relatedStock, type RelatedETF, type RelatedStock } from "@/lib/relatedEtfs";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import DividendTable, { fmtDividendAmount, yearOfDividend } from "@/components/DividendTable";
 import type { DividendRecord } from "@/lib/dividends";
@@ -45,7 +45,10 @@ const UP = "#e5484d";
 const DOWN = "#1aa07a";
 const NY_TIME_ZONE = "America/New_York";
 const RELATED_ETF_QUOTE_CACHE_KEY = "fire:related-etf-quotes:v1";
+const CUSTOM_RELATED_ETF_CACHE_KEY = "fire:custom-related-etfs:v1";
 const STOCK_DETAIL_CACHE_PREFIX = "fire-web:stock-detail:v2";
+
+type CustomRelatedETF = RelatedETF & { stockName?: string };
 
 function readRelatedEtfQuoteCache() {
   try {
@@ -54,6 +57,46 @@ function readRelatedEtfQuoteCache() {
   } catch {
     return {};
   }
+}
+
+function customRelatedEtfKey(market: string, code: string) {
+  return `${market.trim().toUpperCase()}:${code.trim().toUpperCase()}`;
+}
+
+function readCustomRelatedEtfs(market: string, code: string): CustomRelatedETF[] {
+  try {
+    const all = JSON.parse(localStorage.getItem(CUSTOM_RELATED_ETF_CACHE_KEY) || "{}") as Record<string, CustomRelatedETF[]>;
+    const rows = all[customRelatedEtfKey(market, code)];
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+function readCustomRelatedStock(market: string, code: string): RelatedStock | null {
+  try {
+    const normalizedMarket = market.trim().toUpperCase();
+    const normalizedCode = code.trim().toUpperCase();
+    const all = JSON.parse(localStorage.getItem(CUSTOM_RELATED_ETF_CACHE_KEY) || "{}") as Record<string, CustomRelatedETF[]>;
+    for (const [key, rows] of Object.entries(all)) {
+      const separator = key.indexOf(":");
+      if (separator < 0 || key.slice(0, separator) !== normalizedMarket || !Array.isArray(rows)) continue;
+      const match = rows.find((item) => item.code.trim().toUpperCase() === normalizedCode);
+      if (match) {
+        const stockCode = key.slice(separator + 1);
+        return { code: stockCode, name: match.stockName?.trim() || stockCode, kind: "long", badge: "正股" };
+      }
+    }
+  } catch { /* 忽略损坏的本地关系 */ }
+  return null;
+}
+
+function writeCustomRelatedEtfs(market: string, code: string, rows: CustomRelatedETF[]) {
+  try {
+    const all = JSON.parse(localStorage.getItem(CUSTOM_RELATED_ETF_CACHE_KEY) || "{}") as Record<string, CustomRelatedETF[]>;
+    all[customRelatedEtfKey(market, code)] = rows;
+    localStorage.setItem(CUSTOM_RELATED_ETF_CACHE_KEY, JSON.stringify(all));
+  } catch { /* 本地存储不可用时只保留当前会话 */ }
 }
 
 function nyMarketClock(at = Date.now()) {
@@ -174,11 +217,16 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
   const [etfQuotes, setEtfQuotes] = useState<Record<string, Quote | null>>({});
   const [etfLoading, setEtfLoading] = useState(false);
   const [etfFilter, setEtfFilter] = useState<"all" | "long" | "short" | "income">("all");
+  const [customRelatedEtfs, setCustomRelatedEtfs] = useState<CustomRelatedETF[]>([]);
+  const [customMainStock, setCustomMainStock] = useState<RelatedStock | null>(null);
+  const [relatedEditorOpen, setRelatedEditorOpen] = useState(false);
+  const [relatedDraft, setRelatedDraft] = useState({ code: "", name: "", kind: "long" as RelatedETF["kind"] });
   const [dividends, setDividends] = useState<DividendRecord[]>([]);
   const [dividendsOk, setDividendsOk] = useState(true);
   const [dividendsLoading, setDividendsLoading] = useState(false);
   const [dividendYear, setDividendYear] = useState<string | null>(null);
   const dividendCacheKey = dividendClientCacheKey(market, code);
+  const mainStock = relatedStock(market, code) ?? customMainStock;
 
   // 股息是低频数据，绘制前先恢复最后一次成功快照，避免切入页签时闪现获取状态。
   useLayoutEffect(() => {
@@ -186,6 +234,13 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
     setDividends(cached?.dividends ?? []);
     setDividendsOk(cached?.sourceOk ?? true);
     setDividendsLoading(!cached);
+  }, [market, code]);
+
+  useLayoutEffect(() => {
+    setCustomRelatedEtfs(readCustomRelatedEtfs(market, code));
+    setCustomMainStock(readCustomRelatedStock(market, code));
+    setRelatedEditorOpen(false);
+    setRelatedDraft({ code: "", name: "", kind: "long" });
   }, [market, code]);
 
   // URL 直达时在浏览器绘制前恢复页签，避免先闪现概览再切到目标页签。
@@ -221,20 +276,20 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
   useLayoutEffect(() => {
     if (tab !== "etf") return;
     const mainStock = relatedStock(market, code);
-    const definitions = mainStock ? [mainStock] : relatedETFs(market, code);
+    const definitions = mainStock ? [mainStock] : [...relatedETFs(market, code), ...customRelatedEtfs];
     const cache = readRelatedEtfQuoteCache();
     const restored: Record<string, Quote | null> = {};
     definitions.forEach((item) => {
       restored[item.code] = cache[`${market.toUpperCase()}:${item.code}`] ?? null;
     });
     setEtfQuotes(restored);
-  }, [tab, market, code]);
+  }, [tab, market, code, customRelatedEtfs]);
 
   // 正股展示相关 ETF；ETF 反向展示正股。两者共用同一份关系映射。
   useEffect(() => {
     if (tab !== "etf") return;
     const mainStock = relatedStock(market, code);
-    const definitions = mainStock ? [mainStock] : relatedETFs(market, code);
+    const definitions = mainStock ? [mainStock] : [...relatedETFs(market, code), ...customRelatedEtfs];
     if (definitions.length === 0) {
       setEtfQuotes({});
       setEtfLoading(false);
@@ -279,7 +334,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
         if (!controller.signal.aborted) setEtfLoading(false);
       });
     return () => controller.abort();
-  }, [tab, market, code]);
+  }, [tab, market, code, customRelatedEtfs]);
 
   // 股息记录：富途公司行动-分红派息（带缓存），切到「股息」页签时拉取
   useEffect(() => {
@@ -531,7 +586,6 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
     return cur === localCur ? marketCap : usd * (r[cur] || 0);
   };
 
-  const mainStock = relatedStock(market, code);
   const tabs: { key: Tab; label: string }[] = [
     { key: "overview", label: "概览" },
     { key: "etf", label: mainStock ? "正股" : "ETF" },
@@ -540,7 +594,24 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
     { key: "company", label: "公司" }
   ];
 
-  const related = mainStock ? [mainStock] : relatedETFs(market, code);
+  const related = mainStock ? [mainStock] : [...relatedETFs(market, code), ...customRelatedEtfs]
+    .filter((item, index, rows) => rows.findIndex((candidate) => candidate.code.toUpperCase() === item.code.toUpperCase()) === index);
+  const addCustomRelatedEtf = () => {
+    const nextCode = relatedDraft.code.trim().toUpperCase();
+    if (!nextCode) return;
+    const nextItem: CustomRelatedETF = {
+      code: nextCode,
+      name: relatedDraft.name.trim() || nextCode,
+      kind: relatedDraft.kind,
+      badge: relatedDraft.kind === "income" ? "期权收益" : relatedDraft.kind === "short" ? "做空" : "做多",
+      stockName: displayName
+    };
+    const next = [...customRelatedEtfs.filter((item) => item.code.toUpperCase() !== nextCode), nextItem];
+    setCustomRelatedEtfs(next);
+    writeCustomRelatedEtfs(market, code, next);
+    setRelatedEditorOpen(false);
+    setRelatedDraft({ code: "", name: "", kind: "long" });
+  };
   const visibleRelated = mainStock || etfFilter === "all" ? related : related.filter((item) => item.kind === etfFilter);
   // 排名规则：做多一组、做空一组、收益策略一组（组内按市值降序，缺市值排组尾）
   const KIND_ORDER: Record<string, number> = { long: 0, short: 1, income: 2 };
@@ -624,8 +695,8 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
           </button>
         )}
         <span className="relative flex-none">
-          {stockIconUrl ? (
-            <img src={stockIconUrl} alt="" className="stock-detail-logo h-9 w-9 rounded-full object-cover" />
+          {(stockIconUrl || (mainStock && pickStockIcon(stockIcons, market, mainStock.code))) ? (
+            <img src={stockIconUrl || pickStockIcon(stockIcons, market, mainStock!.code)} alt="" className="stock-detail-logo h-9 w-9 rounded-full object-cover" />
           ) : (
             <span className="stock-detail-logo flex h-9 w-9 items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">{(name || "?").slice(0, 1)}</span>
           )}
@@ -905,13 +976,30 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
                 })}
                 {related.length === 0 && (
                   <div className="stock-module-empty">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="12" r="8"/><path d="M8 12h8M12 8v8"/></svg>
                     暂无已收录的相关 ETF 或正股关系
-                    <span className="mt-1 block text-[11px] text-faint">后续接入关系数据后会自动显示。</span>
                   </div>
                 )}
                 {related.length > 0 && visibleRelated.length === 0 && (
                   <div className="stock-module-empty">该筛选条件下暂无 ETF</div>
+                )}
+                {!mainStock && (
+                  <div className="flex justify-center pt-3">
+                    {!relatedEditorOpen ? (
+                      <button type="button" onClick={() => setRelatedEditorOpen(true)} aria-label="添加相关股票" className="grid h-9 w-9 place-items-center rounded-full border border-dashed border-edge-strong text-muted transition hover:bg-bg-gray hover:text-ink">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5"><circle cx="12" cy="12" r="8"/><path d="M8 12h8M12 8v8"/></svg>
+                      </button>
+                    ) : (
+                      <div className="grid w-full max-w-2xl grid-cols-1 gap-2 text-left sm:grid-cols-[110px_1fr_110px_140px_auto]">
+                        <input value={relatedDraft.code} onChange={(event) => setRelatedDraft((draft) => ({ ...draft, code: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") addCustomRelatedEtf(); }} placeholder="股票代码" autoFocus className="h-9 rounded-lg border border-edge-strong bg-white px-3 text-xs uppercase text-ink outline-none dark:bg-white/5" />
+                        <input value={relatedDraft.name} onChange={(event) => setRelatedDraft((draft) => ({ ...draft, name: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") addCustomRelatedEtf(); }} placeholder="名称（可选）" className="h-9 rounded-lg border border-edge-strong bg-white px-3 text-xs text-ink outline-none dark:bg-white/5" />
+                        <select value={relatedDraft.kind} onChange={(event) => setRelatedDraft((draft) => ({ ...draft, kind: event.target.value as RelatedETF["kind"] }))} className="h-9 rounded-lg border border-edge-strong bg-white px-2 text-xs text-ink outline-none dark:bg-[#1c1c1e]">
+                          <option value="long">做多</option><option value="short">做空</option><option value="income">收益策略</option>
+                        </select>
+                        <span className="flex h-9 min-w-0 items-center truncate rounded-lg border border-edge bg-bg-gray px-3 text-xs text-muted" title={`默认关联 ${displayName} ${code}`}>正股 · {displayName} {code}</span>
+                        <div className="flex gap-2"><button type="button" onClick={addCustomRelatedEtf} className="btn btn-dark btn-sm">添加</button><button type="button" onClick={() => setRelatedEditorOpen(false)} className="btn btn-line btn-sm">取消</button></div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </section>

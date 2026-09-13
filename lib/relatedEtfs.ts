@@ -133,7 +133,9 @@ export const US_RELATED_ETFS: Record<string, RelatedETF[]> = {
     { code: "ECHX", name: "Leverage Shares 2X Long ECHO Daily ETF", kind: "long", badge: "2X 做多" }
   ],
   INTC: [
-    { code: "INTW", name: "GraniteShares 2x Long INTC Daily ETF", kind: "long", badge: "2X 做多" }
+    { code: "INTW", name: "GraniteShares 2x Long INTC Daily ETF", kind: "long", badge: "2X 做多" },
+    { code: "LINT", name: "Direxion Daily INTC Bull 2X ETF", kind: "long", badge: "2X 做多" },
+    { code: "INYY", name: "YieldMax INTC Option Income Strategy ETF", kind: "income", badge: "期权收益" }
   ],
   NIO: [
     { code: "NIOG", name: "Leverage Shares 2X Long NIO Daily ETF", kind: "long", badge: "2X 做多" }

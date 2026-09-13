@@ -610,7 +610,6 @@ export default function EarningsCalendarView({ records = [] }: { records?: Stock
   return (
     <div className="earnings-calendar-page">
       <h2 className="mb-1.5 text-lg font-bold">财报日历</h2>
-      <p className="mb-4 text-sm text-muted">美股 / 港股 / A股财报 · 上月至未来 4 个月，点击日期查看当天财报详情。</p>
 
       <div className="card overflow-visible">
         {/* 头部：月份导航 + 统计 + 筛选 */}
