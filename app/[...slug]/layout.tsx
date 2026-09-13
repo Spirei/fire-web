@@ -10,7 +10,7 @@ import UserMenu from "@/components/UserMenu";
 import SiteLogo from "@/components/SiteLogo";
 import IndexTicker from "@/components/IndexTicker";
 import Toaster from "@/components/Toaster";
-import { getInlineFlagIconMap, getMarketIconMap, getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
+import { getInlineFlagIconMap, getMarketIconMap, getNavIconMap, getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
 import { CURRENCY_FLAG_CODES, displayCurrencyFlagCode } from "@/lib/flagAssets";
 import { cardLibraryForUser } from "@/lib/cardLibrary";
 import { CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/lib/currencyPrefs";
@@ -80,6 +80,7 @@ export default async function SlugLayout({
   const initialStockIcons = getStockIconMap(stockIconKeysForRecords(initialRecords));
   // 市场图标一并首屏下发：市场下拉 / 筛选首帧就是素材库图标，不再等客户端请求
   const initialMarketIcons = getMarketIconMap();
+  const initialNavIcons = getNavIconMap(settings.tabs.map((item) => item.key));
   const initialFlagIcons = getInlineFlagIconMap(CURRENCY_FLAG_CODES);
   // 卡面库：只在访问该页时把清单 + 我的持有 / 金额 / 标签随首屏下发，
   // 避免「HTML → JS → 水合 → 再请求」的串行等待（卡面图片本身随后按需加载）
@@ -94,6 +95,7 @@ export default async function SlugLayout({
           .map((u) => <link key={u} rel="preload" as="image" href={u} />)}
       {[...new Set(Object.values(initialStockIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
       {[...new Set(Object.values(initialMarketIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
+      {[...new Set(Object.values(initialNavIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
       {initialFlagIcons[currencyFlagCode] && !initialFlagIcons[currencyFlagCode].startsWith("data:") && <link rel="preload" as="image" href={initialFlagIcons[currencyFlagCode]} />}
       <Toaster />
       <header className="app-shell-header site-header sticky top-0 z-50 h-[72px] border-b border-edge/80">
@@ -121,6 +123,7 @@ export default async function SlugLayout({
           initialFundBalances={initialFundBalances}
           initialStockIcons={initialStockIcons}
           initialMarketIcons={initialMarketIcons}
+          initialNavIcons={initialNavIcons}
           initialFlagIcons={initialFlagIcons}
           initialCardLibrary={initialCardLibrary}
           initialSettings={{

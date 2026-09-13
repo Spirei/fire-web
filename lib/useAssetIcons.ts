@@ -170,6 +170,22 @@ export function primeFlagIconCache(icons: Record<string, string>) {
   cache.set("flag", { assets: [...byKey.values()], at: current?.at ?? 0 });
 }
 
+/** 服务端首屏注入的导航图标表，刷新时直接使用素材库里的自定义图标。 */
+export function primeNavIconCache(icons: Record<string, string>) {
+  const current = cache.get("icon");
+  const byKey = new Map<string, Asset>();
+  (current?.assets ?? []).forEach((asset) => byKey.set(asset.code.toUpperCase(), asset));
+  Object.entries(icons).forEach(([rawCode, url]) => {
+    const code = rawCode.trim().toUpperCase();
+    if (!code || !url) return;
+    byKey.set(code, {
+      id: `icon:${code}`, type: "icon", market: "", code, name: code, url,
+      marketCap: 0, price: null, changePct: null, source: "manual", lastCheckedAt: "", board: "", updatedAt: ""
+    });
+  });
+  cache.set("icon", { assets: [...byKey.values()], at: current?.at ?? 0 });
+}
+
 /** 首帧结束后把固定货币的小图标送入浏览器图片缓存，打开下拉时无需再等网络。 */
 export function usePrefetchFlagIcons(icons: Record<string, string>) {
   useEffect(() => {

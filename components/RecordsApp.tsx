@@ -21,7 +21,7 @@ import { showToast } from "@/lib/toast";
 import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import SettingsWindow from "@/components/SettingsWindow";
-import { primeFlagIconCache, primeMarketIconCache, primeStockIconCache, useAssetIcons, usePrefetchFlagIcons } from "@/lib/useAssetIcons";
+import { primeFlagIconCache, primeMarketIconCache, primeNavIconCache, primeStockIconCache, useAssetIcons, usePrefetchFlagIcons } from "@/lib/useAssetIcons";
 import { pickStockIcon } from "@/lib/stockIconKey";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
@@ -94,6 +94,7 @@ export default function RecordsApp({
   initialSettings,
   initialStockIcons,
   initialMarketIcons = {},
+  initialNavIcons = {},
   initialFlagIcons = {},
   initialCardLibrary = null
 }: {
@@ -108,6 +109,7 @@ export default function RecordsApp({
   initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled">;
   initialStockIcons: Record<string, string>;
   initialMarketIcons?: Record<string, string>;
+  initialNavIcons?: Record<string, string>;
   initialFlagIcons?: Record<string, string>;
   initialCardLibrary?: import("@/lib/cardLibrary").CardLibraryPayload | null;
 }) {
@@ -148,6 +150,7 @@ export default function RecordsApp({
   // 首屏 HTML 直接就是图标（layout 里还做了 preload）。
   useMemo(() => primeStockIconCache(initialStockIcons), [initialStockIcons]);
   useMemo(() => primeMarketIconCache(initialMarketIcons), [initialMarketIcons]);
+  useMemo(() => primeNavIconCache(initialNavIcons), [initialNavIcons]);
   useMemo(() => primeFlagIconCache(initialFlagIcons), [initialFlagIcons]);
   usePrefetchFlagIcons(initialFlagIcons);
   useLayoutEffect(() => {

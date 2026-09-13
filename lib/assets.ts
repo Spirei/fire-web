@@ -232,6 +232,21 @@ export function getMarketIconMap(): Record<string, string> {
   return out;
 }
 
+/** 当前导航所需的自定义图标随首屏下发，避免刷新后再等待完整 icon 素材接口。 */
+export function getNavIconMap(codes: readonly string[]): Record<string, string> {
+  const normalized = [...new Set(codes.map((code) => code.trim().toUpperCase()).filter(Boolean))];
+  if (!normalized.length) return {};
+  const stmt = getDb().prepare("SELECT code, url FROM assets WHERE type = 'icon' AND upper(code) = upper(?) LIMIT 1");
+  const out: Record<string, string> = {};
+  normalized.forEach((code) => {
+    const row = stmt.get(code) as { code?: string; url?: string } | undefined;
+    const url = String(row?.url || "");
+    if (!url || !localAssetExists(url)) return;
+    out[code] = url;
+  });
+  return out;
+}
+
 /** 用镜像内置券商素材补齐当前券商配置；按券商名称/别名匹配，幂等且不覆盖用户图标。 */
 export function ensureBrokerAssets(): void {
   if (seeded.broker) return;

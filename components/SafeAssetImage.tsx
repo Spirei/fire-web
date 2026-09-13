@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 /**
  * 素材库图标安全加载：图片加载失败（如容器内默认素材文件缺失，或用户上传后文件被清理）
@@ -22,15 +22,31 @@ export default function SafeAssetImage({
   alt?: string;
 }) {
   const [failed, setFailed] = useState(false);
+  // 服务端内联素材不需要等待网络；SSR 与客户端首帧都直接显示，避免先闪默认图标。
+  const [loaded, setLoaded] = useState(() => Boolean(src?.startsWith("data:")));
+  const imageRef = useRef<HTMLImageElement>(null);
+
+  useLayoutEffect(() => {
+    setFailed(false);
+    const image = imageRef.current;
+    setLoaded(Boolean(image?.complete && image.naturalWidth > 0));
+  }, [src]);
+
   if (!src || failed) return <>{fallback}</>;
   return (
-    <img
-      src={src}
-      alt={alt}
-      title={title}
-      className={className}
-      style={style}
-      onError={() => setFailed(true)}
-    />
+    <span className="inline-grid flex-none place-items-center" style={style} title={title}>
+      <span className={`col-start-1 row-start-1 transition-opacity duration-100 ${loaded ? "opacity-0" : "opacity-100"}`} aria-hidden={loaded}>
+        {fallback}
+      </span>
+      <img
+        ref={imageRef}
+        src={src}
+        alt={alt}
+        className={`col-start-1 row-start-1 transition-opacity duration-100 ${loaded ? "opacity-100" : "opacity-0"} ${className}`}
+        style={style}
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+      />
+    </span>
   );
 }
