@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { getDb } from "./db";
+import { importIdentity } from "./importIdentity";
 import type { Activity, Market, RecordInput, StockRecord } from "./types";
 
 function uid() {
@@ -34,6 +35,7 @@ export function listRecords(userId: string): StockRecord[] {
 export function createRecord(userId: string, input: RecordInput): StockRecord {
   const db = getDb();
   const id = uid();
+  const code = importIdentity(input.code, input.market).code || input.code.trim().toUpperCase();
   db.prepare(`
     INSERT INTO records (id, user_id, name, code, market, price, cost, qty, group_name, watch_group_id, note, source, updated_at)
     VALUES (@id, @userId, @name, @code, @market, @price, @cost, @qty, @group, @watchGroupId, @note, @source, @updatedAt)
@@ -41,7 +43,7 @@ export function createRecord(userId: string, input: RecordInput): StockRecord {
     id,
     userId,
     name: input.name,
-    code: input.code,
+    code,
     market: input.market,
     price: input.price,
     cost: input.cost === "" ? null : input.cost,
@@ -59,6 +61,7 @@ export function updateRecord(id: string, userId: string, input: RecordInput): St
   const db = getDb();
   const exists = db.prepare("SELECT id FROM records WHERE id = ? AND user_id = ?").get(id, userId);
   if (!exists) return null;
+  const code = importIdentity(input.code, input.market).code || input.code.trim().toUpperCase();
   db.prepare(`
     UPDATE records
     SET name = @name, code = @code, market = @market, price = @price,
@@ -68,7 +71,7 @@ export function updateRecord(id: string, userId: string, input: RecordInput): St
     id,
     userId,
     name: input.name,
-    code: input.code,
+    code,
     market: input.market,
     price: input.price,
     cost: input.cost === "" ? null : input.cost,

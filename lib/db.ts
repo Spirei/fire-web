@@ -512,6 +512,33 @@ function migrate(database: Database.Database) {
   migrateMissingBrokerGroups(database);
   migrateMissingAssetUrls(database);
   migrateEconomicRealizedPnl(database);
+  migrateSpchCanonicalCode(database);
+}
+
+/** SPCH 曾被腾讯 AMEX 搜索结果保存成 SPCH.AM；统一为交易所实际代码并合并空仓重复项。 */
+function migrateSpchCanonicalCode(database: Database.Database) {
+  const migrationKey = "migration.spch_canonical_code";
+  const targetVersion = "1";
+  const applied = database.prepare("SELECT value FROM site_settings WHERE key = ?").get(migrationKey) as { value: string } | undefined;
+  if (applied?.value === targetVersion) return;
+
+  database.transaction(() => {
+    const legacyRows = database.prepare("SELECT id,user_id,qty FROM records WHERE upper(market) = 'US' AND upper(code) = 'SPCH.AM'").all() as Array<{ id: string; user_id: string; qty: number | null }>;
+    for (const legacy of legacyRows) {
+      const duplicate = database.prepare("SELECT id,qty FROM records WHERE user_id = ? AND upper(market) = 'US' AND upper(code) = 'SPCH' AND id <> ? LIMIT 1")
+        .get(legacy.user_id, legacy.id) as { id: string; qty: number | null } | undefined;
+      const duplicateOrders = duplicate
+        ? Number((database.prepare("SELECT COUNT(*) AS n FROM trade_orders WHERE record_id = ?").get(duplicate.id) as { n: number }).n)
+        : 0;
+      if (duplicate && !duplicate.qty && duplicateOrders === 0) database.prepare("DELETE FROM records WHERE id = ?").run(duplicate.id);
+      database.prepare("UPDATE records SET code = 'SPCH' WHERE id = ?").run(legacy.id);
+    }
+    database.prepare("UPDATE trade_orders SET code = 'SPCH' WHERE upper(market) = 'US' AND upper(code) = 'SPCH.AM'").run();
+    database.prepare("UPDATE activities SET stock_code = 'SPCH' WHERE upper(stock_code) = 'SPCH.AM'").run();
+    database.prepare("DELETE FROM assets WHERE type = 'stock' AND upper(market) = 'US' AND upper(code) = 'SPCH.AM'").run();
+    database.prepare("INSERT INTO site_settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(migrationKey, targetVersion);
+  })();
 }
 
 /**

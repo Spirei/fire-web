@@ -23,6 +23,7 @@ export function importIdentity(raw: string, marketHint = "") {
   market ||= explicit;
   if (!/^[A-Z0-9][A-Z0-9._-]{0,39}$/.test(code)) return { code: "", market };
   if (market === "HK" && /^\d{1,5}$/.test(code)) code = code.padStart(5, "0");
+  if (market === "US") code = code.replace(/\.(AM|N|OQ|PS|K)$/i, "");
   if (market === "JP") code = code.replace(/\.T$/, "");
   if (market === "KR") code = code.replace(/\.(KS|KQ)$/, "");
   return { code, market };
