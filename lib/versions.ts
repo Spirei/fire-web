@@ -3047,6 +3047,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "按 TradingView 修正四种贵金属图标",
     desc: "逐一核对 TradingView 的 TVC:GOLD、TVC:SILVER、TVC:PLATINUM 和 TVC:PALLADIUM 页面，使用页面实际采用的官方 SVG 替换黄金、白银、铂金和钯金图标；贵金属行情回退数据中的图标地址也统一改为 TradingView 来源。",
     kind: "fix"
+  }, {
+    title: "素材库改为按分类按页加载",
+    desc: "修复素材库每次进入同时请求全站全部分类、重复拉取 3000 多条股票素材后才在浏览器分页的问题。股票图标改由服务端按当前页、市场、搜索和排序读取，每次只返回 10 条；其他分类仅在实际进入时加载，市场筛选单独读取十几条轻量数据，卡面继续独立加载，避免刷新和重新进入时等待多次全量请求。",
+    kind: "fix"
   }]
 };
 
