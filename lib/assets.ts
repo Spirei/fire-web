@@ -346,6 +346,20 @@ export function getAssets(type?: AssetType): Asset[] {
   return rows.map(rowToAsset);
 }
 
+/** 按代码批量读取股票素材，供搜索联想补充相关 ETF；返回顺序与 codes 一致。 */
+export function getStockAssetsByCodes(market: string, codes: string[]): Asset[] {
+  const normalized = [...new Set(codes.map((code) => code.trim().toUpperCase()).filter(Boolean))];
+  if (normalized.length === 0) return [];
+  const placeholders = normalized.map(() => "?").join(",");
+  const rows = getDb().prepare(`SELECT * FROM assets WHERE type = 'stock' AND market = ? AND code IN (${placeholders})`)
+    .all(market.trim().toUpperCase(), ...normalized) as Record<string, unknown>[];
+  const byCode = new Map(rows.map((row) => {
+    const asset = rowToAsset(row);
+    return [asset.code.toUpperCase(), asset] as const;
+  }));
+  return normalized.map((code) => byCode.get(code)).filter((asset): asset is Asset => Boolean(asset));
+}
+
 export function getAssetsPage(input: {
   type: AssetType;
   market?: string;

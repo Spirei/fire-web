@@ -3091,6 +3091,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "补全 RAM 新上市 ETF 搜索",
     desc: "为尚未被腾讯联想和本地素材库收录的 RAM 增加受控别名映射；搜索 RAM、DRAM 2倍做多、2X DRAM 或 DRAM long 均直接返回“DRAM 2 倍做多 ETF（RAM）”。",
     kind: "fix"
+  }, {
+    title: "搜索结果优先展示正股及相关 ETF",
+    desc: "搜索 AAPL、苹果、NVDA、英伟达等正股代码或名称时，第一条固定展示正股，随后按全站正股—ETF 关系表补充做多、做空与收益策略 ETF。相关 ETF 批量读取本地素材与行情，避免逐只查询；当前规则覆盖关系表内全部正股。",
+    kind: "fix"
   }]
 };
 

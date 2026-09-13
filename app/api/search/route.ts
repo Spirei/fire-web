@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { searchStocks } from "@/lib/quotes";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { proxyFetch } from "@/lib/net";
-import { getAssetsPage } from "@/lib/assets";
+import { getAssetsPage, getStockAssetsByCodes } from "@/lib/assets";
 import { isMainstreamCryptoCode, searchMainstreamCrypto } from "@/lib/mainstreamCrypto";
+import { US_RELATED_ETFS } from "@/lib/relatedEtfs";
 
 type SearchResult = Awaited<ReturnType<typeof searchStocks>>[number];
 const SEARCH_CACHE_TTL = 30_000;
@@ -40,7 +41,7 @@ async function searchCrypto(q: string, signal: AbortSignal): Promise<SearchResul
 
 function localStockMatches(q: string): SearchResult[] {
   const assets = getAssetsPage({ type: "stock", query: q, sort: "marketCap", dir: "desc", pageSize: 8 }).assets;
-  return assets.map((asset) => {
+  const matches = assets.map((asset) => {
     const market = asset.market as SearchResult["market"];
     const code = asset.code.toUpperCase();
     const symbol = market === "CN"
@@ -48,6 +49,25 @@ function localStockMatches(q: string): SearchResult[] {
       : `${market.toLowerCase()}${market === "HK" ? code.padStart(5, "0") : code}`;
     return { symbol, code, name: asset.name, market, price: asset.price, changePct: asset.changePct };
   });
+  const primary = matches.find((match) => match.market === "US" && US_RELATED_ETFS[match.code]);
+  if (!primary) return matches;
+
+  const related = US_RELATED_ETFS[primary.code];
+  const stored = new Map(getStockAssetsByCodes("US", related.map((item) => item.code)).map((asset) => [asset.code, asset]));
+  const relatedMatches: SearchResult[] = related.map((item) => {
+    const asset = stored.get(item.code);
+    const direction = item.kind === "long" ? "做多" : item.kind === "short" ? "做空" : "收益策略";
+    return {
+      symbol: `us${item.code}`,
+      code: item.code,
+      name: asset?.name || `${primary.name} ${item.badge.match(/2X/i) ? "2 倍" : ""}${direction} ETF`.replace(/\s+/g, " "),
+      market: "US",
+      price: asset?.price ?? null,
+      changePct: asset?.changePct ?? null
+    };
+  });
+  const relatedCodes = new Set(related.map((item) => item.code));
+  return [primary, ...relatedMatches, ...matches.filter((match) => match.code !== primary.code && !relatedCodes.has(match.code))].slice(0, 8);
 }
 
 function specialStockMatches(q: string): SearchResult[] {
