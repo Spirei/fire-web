@@ -1996,12 +1996,11 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     {/*
                       右下角一颗圆形胶囊同时承担「状态 + 操作」：
                         ✓ = 已经在我的卡里，＋ = 还没加入；点一下切换。
-                      「全部卡面」里每张卡的状态不同 → ✓/＋ 常显，一眼能扫出哪些已经有了；
-                      「我的卡」里每张都是自己的，✓ 恒为真、没有信息量，所以鼠标端只划过才浮出
-                      （触屏没有 hover，仍然常显 —— 否则没法移除）。
+                      「全部卡面」：已加入的 ✓ 常显；未加入的 ＋ 仅悬停时显示。
+                      「我的卡」：不渲染此标记，悬停也不显示。
                       所有尺寸下保持圆形，悬停不再展开文字。
                     */}
-                    <span
+                    {mode !== "mine" && <span
                       role="button"
                       tabIndex={-1}
                       onClick={(event) => {
@@ -2011,13 +2010,13 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       aria-label={isHeld ? "移出我的卡" : "加入我的卡"}
                       /* 操作按钮保持 32px 圆形，伪元素把点击热区扩大到 44px。 */
                       className={`absolute bottom-[7px] right-[7px] inline-flex h-8 w-8 items-center justify-center rounded-full text-[14px] font-bold shadow-sm transition-all duration-200 after:absolute after:-inset-1.5 after:content-[''] active:scale-95 ${
-                        mode === "mine" ? "touch-always opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100" : ""
+                        !isHeld ? "invisible opacity-0 group-hover:visible group-hover:opacity-100" : ""
                       } ${
                         isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
                       }`}
                     >
                       <span className="flex-none">{isHeld ? "✓" : "＋"}</span>
-                    </span>
+                    </span>}
                   </span>
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">
