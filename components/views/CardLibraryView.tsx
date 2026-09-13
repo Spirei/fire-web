@@ -2407,11 +2407,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   </div>
                 )}
                 {/* 多版卡面：和卡包一样的小圆点 + 当前是哪一版 */}
-                {isFreshEntry(active.card, firstSeen, nowMs) && (
-                  <span className="pointer-events-none absolute left-2 top-2 z-10 rounded-full bg-black/35 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#fbbf24] ring-1 ring-inset ring-white/20 backdrop-blur-sm">
-                    new
-                  </span>
-                )}
                 {activeFaces.length > 1 && (
                   <div className="mt-3 flex items-center justify-center gap-2">
                     {activeFaces.map((item, index) => (

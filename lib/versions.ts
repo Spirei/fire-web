@@ -3015,6 +3015,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "卡面库记住我的卡／全部卡面选择",
     desc: "卡面库模式改用统一偏好存储，选择我的卡或全部卡面后刷新、离开再返回都会恢复上次选择；偏好同步到 cookie，服务端与客户端首帧一致，避免先闪回默认模式。",
     kind: "fix"
+  }, {
+    title: "卡面详情去除重复 NEW 标记",
+    desc: "NEW 已在卡面库列表中展示，打开卡面详情后不再在大图左上角重复显示，避免遮挡卡面内容。",
+    kind: "fix"
   }]
 };
 
