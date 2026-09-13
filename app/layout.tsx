@@ -16,6 +16,7 @@ import LoginModal from "@/components/LoginModal";
 import FileDropAnywhere from "@/components/FileDropAnywhere";
 import { PrefsProvider } from "@/lib/prefsContext";
 import { PREFS_COOKIE, parsePrefsCookie } from "@/lib/prefsCookie";
+import SiteFavicon from "@/components/SiteFavicon";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = getSiteSettings();
@@ -23,8 +24,8 @@ export async function generateMetadata(): Promise<Metadata> {
     title: settings.title,
     description: "一个轻量的股票记录网站：记录自选与持仓，自动汇总盈亏，数据保存在服务端。",
     icons: {
-      // 静态 favicon.ico 是刷新最早期的稳定入口；配置图标加载完成后仍按后台设置展示。
-      icon: settings.ico || "/favicon.ico",
+      // 刷新首帧只声明轻量静态图标，避免浏览器等待后台上传原图时短暂显示默认地球。
+      icon: "/favicon.ico",
       shortcut: "/favicon.ico"
     }
   };
@@ -38,6 +39,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // 用户偏好（「原文 / 简体 / 繁體 / 英文」、卡包排序、图表周期 …）镜像在 cookie 里：
   // 服务端首帧直接用它渲染，客户端首帧也是同一个值 —— 刷新不会再先闪默认值、再跳回用户的选择。
   const prefs = parsePrefsCookie(cookieStore.get(PREFS_COOKIE)?.value);
+  const settings = getSiteSettings();
   return (
     /* 禁止整页翻译：翻译器会在水合前改写服务端 HTML（连 title 属性都会改，比如把「繁體」改成「繁体」），
        客户端水合时读到的还是原文，于是报 "Hydration failed because the server rendered text didn't match the client"。
@@ -72,6 +74,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="font-sans">
         <PrefsProvider initialPrefs={prefs}>
+          <SiteFavicon initialIcon={settings.ico} />
           <PwaRegister />
           {/* 全站拖拽上传：文件拖进页面就近落到最近的上传入口 */}
           <FileDropAnywhere />

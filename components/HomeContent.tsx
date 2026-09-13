@@ -596,16 +596,6 @@ export default function HomeContent({ settings, initialDark = false, initialUser
           const s = data?.settings;
           if (!s) return;
           if (s.title) document.title = s.title;
-          if (s.ico) {
-            let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-            if (!link) {
-              link = document.createElement("link");
-              link.rel = "icon";
-              document.head.appendChild(link);
-            }
-            link.onerror = () => { link!.onerror = null; link!.href = "/uploads/ico/pwa-192.png"; };
-            link.href = s.ico;
-          }
           if (s.homepageBg) setLiveBg(s.homepageBg);
           if (s.domain) setLiveDomain(s.domain);
           setLiveLogo(s.siteLogo ?? "");
