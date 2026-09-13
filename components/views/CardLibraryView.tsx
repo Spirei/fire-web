@@ -1990,9 +1990,6 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     {isFreshEntry(card, firstSeen, nowMs) && (
                       <span className="card-library-new-badge" aria-label="新入库卡面">
                         {/* 只有 3 天内新入库的卡挂 NEW（脚本导入的新卡 / 自己新建的卡）；刚加入我的卡不算 */}
-                        <svg aria-hidden="true" width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M8 1.5 9.8 6.2 14.5 8l-4.7 1.8L8 14.5 6.2 9.8 1.5 8l4.7-1.8L8 1.5Z" />
-                        </svg>
                         NEW
                       </span>
                     )}
@@ -2012,7 +2009,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         void setHeld(card.file, !isHeld);
                       }}
                       aria-label={isHeld ? "移出我的卡" : "加入我的卡"}
-                      /* 与 NEW 徽标统一为 32px 圆形，伪元素把点击热区扩大到 44px。 */
+                      /* 操作按钮保持 32px 圆形，伪元素把点击热区扩大到 44px。 */
                       className={`absolute bottom-[7px] right-[7px] inline-flex h-8 w-8 items-center justify-center rounded-full text-[14px] font-bold shadow-sm transition-all duration-200 after:absolute after:-inset-1.5 after:content-[''] active:scale-95 ${
                         mode === "mine" ? "touch-always opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100" : ""
                       } ${
