@@ -2823,6 +2823,11 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
   scrollbar-width: none;
 }
 .stock-chart-range-scroll::-webkit-scrollbar { display: none; }
+.stock-chart-primary-ranges { position: relative; gap: 2px; padding-inline: 2px; user-select: none; -webkit-user-select: none; cursor: grab; }
+.stock-chart-primary-ranges:active { cursor: grabbing; }
+.stock-chart-primary-ranges .stock-chart-range { position: relative; z-index: 1; width: 40px; padding-inline: 0; }
+.stock-chart-primary-ranges .stock-chart-range.is-active { background: transparent; box-shadow: none; }
+.stock-chart-range-indicator { position: absolute; left: 3px; top: 0; width: 38px; height: 38px; border-radius: 10px; opacity: var(--range-active); pointer-events: none; background: #f0f2f5; box-shadow: inset 0 0 0 1px rgba(210,215,223,.45); transform: translateX(calc(var(--range-index) * 42px)); transition: transform 220ms cubic-bezier(.22,.8,.3,1), opacity 140ms ease, background 160ms ease, box-shadow 160ms ease; }
 .stock-chart-range,
 .stock-chart-style-trigger {
   display: inline-flex;
@@ -2882,6 +2887,10 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .chart-settings-detail > svg { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .chart-settings-menu section { padding: 7px 0; border-bottom: 1px solid rgba(201,206,216,.45); }
 .chart-settings-menu section h4 { margin: 4px 8px 5px; color: #8a929e; font-size: 10px; font-weight: 750; letter-spacing: .08em; }
+.chart-settings-segmented { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; padding: 2px 6px 4px; }
+.chart-settings-segmented button { min-width: 0; min-height: 32px; border: 1px solid transparent; border-radius: 8px; padding: 0 5px; color: #7a8491; background: transparent; font-size: 11px; text-align: center; transition: color 160ms ease, border-color 160ms ease, background 160ms ease; }
+.chart-settings-segmented button:hover { color: #303844; background: #f3f5f7; }
+.chart-settings-segmented button.is-selected { border-color: rgba(143,151,163,.35); color: #303844; background: rgba(95,99,104,.07); }
 .chart-indicator-manage-row { display: flex; min-height: 37px; align-items: center; justify-content: space-between; gap: 8px; border-radius: 7px; }
 .chart-indicator-manage-row:hover { background: #f4f6f8; }
 .chart-indicator-toggle { display: flex; min-width: 0; flex: 1; align-items: center; gap: 7px; padding: 4px 7px; text-align: left; }
@@ -2992,7 +3001,6 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .stock-chart-menu button { min-height: 36px; border-radius: 9px; padding: 0 12px; color: #646c78; font-size: 13px; font-weight: 700; text-align: left; }
 .stock-chart-menu button:hover { color: #20252d; background: #f4f5f7; }
 .stock-chart-menu button.is-selected { color: #20252d; background: #eef0f3; }
-.chart-adjust-menu button { display: inline-flex; align-items: center; white-space: nowrap; min-width: 96px; }
 .session-menu button { display: grid; grid-template-columns: auto auto; align-items: center; justify-content: start; gap: 9px; padding-left: 11px; padding-right: 11px; }
 .session-menu button small { color: #9aa1ab; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .session-menu button.is-unavailable { color: #b6bcc5; background: transparent; cursor: not-allowed; }
@@ -3004,7 +3012,6 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .style-menu.is-draggable button { cursor: pointer; }
 .style-menu button { display: grid; grid-template-columns: 32px 1fr auto; min-height: 44px; align-items: center; gap: 10px; padding: 0 10px 0 12px; text-align: left; }
 .style-menu button > span:nth-child(2) { white-space: nowrap; }
-.chart-adjust-menu button { display: inline-flex; align-items: center; white-space: nowrap; min-width: 96px; }
 .style-menu button.is-sorting { opacity: .4; }
 .style-sort-grip { color: #b2b8c1; font-size: 12px; letter-spacing: -3px; opacity: 0; transition: opacity 160ms ease, color 160ms ease; }
 .style-item-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; min-width: 32px; }
@@ -3160,6 +3167,7 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .dark .stock-chart-style-trigger:hover,
 .dark .stock-chart-range.is-active { color: #f0f3f7; background: rgba(255,255,255,.08); }
 .dark .stock-chart-all-day.is-active { color: #d8dee7; background: rgba(255,255,255,.025); box-shadow: inset 0 0 0 1px rgba(255,255,255,.13); }
+.dark .stock-chart-range-indicator { background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1px rgba(255,255,255,.13); }
 .dark .stock-chart-style-trigger { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.04); }
 .dark .stock-chart-settings-trigger { border-color: rgba(255,255,255,.12); color: #9aa4b2; background: rgba(255,255,255,.04); }
 .dark .stock-chart-adjust-trigger { border-color: rgba(255,255,255,.12); color: #9aa4b2; background: rgba(255,255,255,.04); }
@@ -3170,6 +3178,9 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
 .dark .chart-settings-detail > span b { color: #e3e8ef; }
 .dark .chart-settings-detail:hover { color: #eef2f7; background: rgba(255,255,255,.05); }
 .dark .chart-settings-menu section { border-color: rgba(255,255,255,.09); }
+.dark .chart-settings-segmented button { color: #8f9aa8; }
+.dark .chart-settings-segmented button:hover { color: #e6ebf2; background: rgba(255,255,255,.05); }
+.dark .chart-settings-segmented button.is-selected { border-color: rgba(255,255,255,.13); color: #e6ebf2; background: rgba(255,255,255,.07); }
 .dark .chart-indicator-manage-row:hover { background: rgba(255,255,255,.05); }
 .dark .chart-indicator-toggle b { color: #e4e9ef; }
 .dark .chart-indicator-toggle small { color: #8994a2; }
@@ -3251,6 +3262,7 @@ tbody tr:hover .quotes-actions-cell { background: #fafbfc; }
     touch-action:pan-y;
   }
   .stock-chart-range { min-height: 34px; padding: 0 10px; font-size: 12px; }
+  .stock-chart-range-indicator { height:34px; }
   .stock-chart-style-trigger { min-width: 58px; min-height: 36px; }
   /* 手机 CSS 视口可能因设备缩放落在 420px 以上，统一在移动断点收紧绘图区。 */
   .stock-chart-canvas { height:clamp(220px,68vw,300px)!important; }

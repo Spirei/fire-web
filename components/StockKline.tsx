@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import echarts, { type EChartsInstance } from "@/lib/echarts";
 import RainbowNumberInput from "@/components/RainbowNumberInput";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
@@ -364,7 +364,6 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   /** 前复权 / 后复权 */
   const [adjust, setAdjust] = useState<"qfq" | "none" | "hfq">(initialSettings?.adjust ?? "qfq");
   const [itemsAdjust, setItemsAdjust] = useState<"qfq" | "none" | "hfq">("qfq");
-  const [adjustOpen, setAdjustOpen] = useState(false);
   const [intraday, setIntraday] = useState<IntradayPoint[]>([]);
   const [fiveDay, setFiveDay] = useState<FiveDayPoint[]>([]);
   const [sessionDay, setSessionDay] = useState<FiveDayPoint[]>([]);
@@ -468,7 +467,6 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
         setSessionOpen(false);
         setPeriodOpen(false);
         setStyleOpen(false);
-        setAdjustOpen(false);
         setCompareOpen(false);
         setChartSettingsOpen(false);
       }
@@ -486,7 +484,6 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
 
   const toggleStyleMenu = () => {
     setPeriodOpen(false);
-    setAdjustOpen(false);
     setCompareOpen(false);
     setChartSettingsOpen(false);
     if (styleOpen) {
@@ -1167,6 +1164,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const endMADrag = (event: React.PointerEvent<HTMLDivElement>) => { if (maDragRef.current?.pointerId === event.pointerId) maDragRef.current = null; };
   const startRangeDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!rangeScrollRef.current) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
     rangeDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startLeft: rangeScrollRef.current.scrollLeft, moved: false };
   };
   const moveRangeDrag = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -1181,7 +1179,18 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       if (rangeDragRef.current.moved) suppressRangeClickRef.current = true;
       rangeDragRef.current = null;
     }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
+
+  useLayoutEffect(() => {
+    const scroller = rangeScrollRef.current;
+    const activeIndex = RANGES.findIndex((item) => item.value === range);
+    if (!scroller || activeIndex < 0) return;
+    const itemStart = 2 + activeIndex * 42;
+    const itemEnd = itemStart + 40;
+    if (itemStart < scroller.scrollLeft) scroller.scrollLeft = Math.max(0, itemStart - 2);
+    else if (itemEnd > scroller.scrollLeft + scroller.clientWidth) scroller.scrollLeft = itemEnd - scroller.clientWidth + 2;
+  }, [range]);
 
   return <div className="stock-chart-shell w-full">
     <div ref={toolbarRef} className="stock-chart-toolbar" aria-label="走势图控制栏">
@@ -1199,8 +1208,9 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
             </button>)}
           </div>}
         </div>
-        <div ref={rangeScrollRef} className="stock-chart-range-scroll" onPointerDown={startRangeDrag} onPointerMove={moveRangeDrag} onPointerUp={endRangeDrag} onPointerCancel={endRangeDrag}>
-          {RANGES.map((item) => <button key={item.value} type="button" className={`stock-chart-range ${range === item.value ? "is-active" : ""}`} onClick={() => { if (suppressRangeClickRef.current) { suppressRangeClickRef.current = false; return; } setRange(item.value); setSession("ALL"); setSessionOpen(false); setPeriodOpen(false); }}>{item.label}</button>)}
+        <div ref={rangeScrollRef} className="stock-chart-range-scroll stock-chart-primary-ranges" style={{ "--range-index": Math.max(0, RANGES.findIndex((item) => item.value === range)), "--range-active": RANGES.some((item) => item.value === range) ? 1 : 0 } as CSSProperties} onPointerDown={startRangeDrag} onPointerMove={moveRangeDrag} onPointerUp={endRangeDrag} onPointerCancel={endRangeDrag}>
+          <span className="stock-chart-range-indicator" aria-hidden="true" />
+          {RANGES.map((item) => <button key={item.value} type="button" data-range={item.value} className={`stock-chart-range ${range === item.value ? "is-active" : ""}`} onClick={() => { if (suppressRangeClickRef.current) { suppressRangeClickRef.current = false; return; } setRange(item.value); setSession("ALL"); setSessionOpen(false); setPeriodOpen(false); }}>{item.label}</button>)}
         </div>
         <div className="stock-chart-popover-wrap period-picker-wrap">
             <button type="button" className={`stock-chart-range period-picker-trigger ${periodOpen ? "is-open" : ""} ${range === "QUARTER" ? "has-value" : ""}`} aria-label="更多 K 线周期" aria-expanded={periodOpen} onClick={() => { setPeriodOpen((open) => !open); setSessionOpen(false); setStyleOpen(false); }}><span>{range === "QUARTER" ? "季K" : range === "DAY" ? intradayPeriodLabel : "周期"}</span><Chevron open={periodOpen} /></button>
@@ -1218,20 +1228,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       </div>
       <div className="stock-chart-action-group">
       <div className="stock-chart-popover-wrap">
-        <button type="button" className="stock-chart-adjust-trigger" aria-label="复权" aria-expanded={adjustOpen} onClick={() => { setAdjustOpen((o) => !o); setCompareOpen(false); setChartSettingsOpen(false); setStyleOpen(false); setSessionOpen(false); setPeriodOpen(false); }}>
-          {adjust === "qfq" ? "前复权" : adjust === "hfq" ? "后复权" : "不复权"}
-          <Chevron open={adjustOpen} />
-        </button>
-        {adjustOpen && (
-          <div className="stock-chart-menu style-menu chart-adjust-menu" role="menu" aria-label="复权">
-            {([["qfq", "前复权"], ["none", "不复权"], ["hfq", "后复权"]] as const).map(([value, label]) => (
-              <button key={value} type="button" className={adjust === value ? "is-selected" : ""} onClick={() => { setAdjust(value); setAdjustOpen(false); }}>{label}</button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="stock-chart-popover-wrap">
-        <button type="button" className={`stock-chart-adjust-trigger ${compareItems.length > 0 ? "has-compare" : ""}`} aria-label="涨跌幅比较" aria-expanded={compareOpen} onClick={() => { setCompareOpen((o) => !o); setAdjustOpen(false); setChartSettingsOpen(false); setStyleOpen(false); setSessionOpen(false); setPeriodOpen(false); }}>
+        <button type="button" className={`stock-chart-adjust-trigger ${compareItems.length > 0 ? "has-compare" : ""}`} aria-label="涨跌幅比较" aria-expanded={compareOpen} onClick={() => { setCompareOpen((o) => !o); setChartSettingsOpen(false); setStyleOpen(false); setSessionOpen(false); setPeriodOpen(false); }}>
           <svg viewBox="0 0 24 24" fill="currentColor" className="stock-chart-compare-trigger-icon" aria-hidden="true"><path d="M2,19.99l7.5-7.51l4,4l7.09-7.97L22,9.92l-8.5,9.56l-4-4l-6,6.01L2,19.99z M3.5,15.49l6-6.01l4,4L22,3.92l-1.41-1.41 l-7.09,7.97l-4-4L2,13.99L3.5,15.49z" /></svg>
           比较{compareItems.length > 0 ? ` · ${compareItems.length}` : ""}
           <Chevron open={compareOpen} />
@@ -1340,9 +1337,15 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
         </div>}
       </div>
       <div className="stock-chart-popover-wrap">
-        <button type="button" className="stock-chart-adjust-trigger" aria-label="技术指标" aria-expanded={chartSettingsOpen} onClick={() => { setChartSettingsOpen((open) => !open); setAdjustOpen(false); setCompareOpen(false); setStyleOpen(false); setSessionOpen(false); setPeriodOpen(false); }}><MonitoringIcon />指标<Chevron open={chartSettingsOpen} /></button>
-        {chartSettingsOpen && <div className="stock-chart-menu chart-settings-menu" role="menu" aria-label="图表设置">
-          <div className="chart-settings-title"><GearIcon /><b>图表设置</b></div>
+        <button type="button" className="stock-chart-adjust-trigger" aria-label="指标与复权" aria-expanded={chartSettingsOpen} onClick={() => { setChartSettingsOpen((open) => !open); setCompareOpen(false); setStyleOpen(false); setSessionOpen(false); setPeriodOpen(false); }}><MonitoringIcon />指标<Chevron open={chartSettingsOpen} /></button>
+        {chartSettingsOpen && <div className="stock-chart-menu chart-settings-menu" role="menu" aria-label="指标与复权">
+          <div className="chart-settings-title"><b>指标与复权</b></div>
+          <section className="chart-settings-adjust-section">
+            <h4>复权方式</h4>
+            <div className="chart-settings-segmented">
+              {([["qfq", "前复权"], ["none", "不复权"], ["hfq", "后复权"]] as const).map(([value, label]) => <button key={value} type="button" className={adjust === value ? "is-selected" : ""} onClick={() => setAdjust(value)}>{label}</button>)}
+            </div>
+          </section>
           <section className="chart-settings-ma-section">
             <h4>均线设置</h4>
             <button type="button" className="chart-settings-detail" onClick={() => { setChartSettingsOpen(false); setMaSettingsOpen(true); }}>
