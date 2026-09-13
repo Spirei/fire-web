@@ -11,9 +11,9 @@ import SiteLogo from "@/components/SiteLogo";
 import IndexTicker from "@/components/IndexTicker";
 import Toaster from "@/components/Toaster";
 import { getFlagIconMap, getMarketIconMap, getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
-import { CURRENCY_FLAG_CODES } from "@/lib/flagAssets";
+import { CURRENCY_FLAG_CODES, displayCurrencyFlagCode } from "@/lib/flagAssets";
 import { cardLibraryForUser } from "@/lib/cardLibrary";
-import { CURRENCIES, CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/lib/currencyPrefs";
+import { CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/lib/currencyPrefs";
 import { headers } from "next/headers";
 import { unstable_noStore } from "next/cache";
 import { fundState } from "@/lib/fundState";
@@ -38,7 +38,7 @@ export default async function SlugLayout({
     .map((part) => part.trim())
     .find((part) => part.startsWith(CURRENCY_COOKIE_NAME + "="))
     ?.slice(CURRENCY_COOKIE_NAME.length + 1) as CurrencyCode | undefined;
-  const currencyFlagCode = CURRENCIES.find((item) => item.code === currencyCookie)?.market ?? "US";
+  const currencyFlagCode = displayCurrencyFlagCode(currencyCookie);
   // 资产盈亏分析：应用壳内隐藏页签（不进导航菜单），直接按路径进入
   const specialTab = path === "/asset-pnl-analysis" ? { key: "pnl" } : null;
   let tab = specialTab ?? settings.tabs.find((t) => (t.url || `/${t.key}`) === path);
