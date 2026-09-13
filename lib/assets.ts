@@ -357,7 +357,7 @@ export function getAssetsPage(input: {
 }): { assets: Asset[]; total: number; page: number; pageSize: number } {
   const db = getDb();
   const pageSize = Math.min(100, Math.max(1, Math.floor(input.pageSize || 10)));
-  const page = Math.max(1, Math.floor(input.page || 1));
+  const requestedPage = Math.max(1, Math.floor(input.page || 1));
   const where = ["type = ?"];
   const params: Array<string | number> = [input.type];
   if (input.market && input.market !== "ALL") {
@@ -374,6 +374,7 @@ export function getAssetsPage(input: {
   const dir = input.dir === "asc" ? "ASC" : "DESC";
   const clause = where.join(" AND ");
   const total = Number((db.prepare(`SELECT COUNT(*) AS n FROM assets WHERE ${clause}`).get(...params) as { n: number }).n) || 0;
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
   const rows = db.prepare(`SELECT * FROM assets WHERE ${clause} ORDER BY ${column} ${dir}, code ASC LIMIT ? OFFSET ?`)
     .all(...params, pageSize, (page - 1) * pageSize) as Record<string, unknown>[];
   return { assets: rows.map(rowToAsset), total, page, pageSize };

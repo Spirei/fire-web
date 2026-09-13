@@ -562,9 +562,11 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
       const data = await res.json().catch(() => null);
       // 快速切换分类/市场/页码时，只接受最后一次请求，防止旧响应覆盖新页面。
       if (requestId !== assetRequestRef.current) return;
+      if (!res.ok) throw new Error(data?.error || "素材加载失败");
       const list: Asset[] = data?.assets ?? [];
       setAssets(list);
       setAssetTotal(Number(data?.total) || list.length);
+      if (tab === "stock" && Number.isFinite(data?.page) && data.page !== topPage) setTopPage(data.page);
       const markets = list
         .filter((a) => a.type === "market")
         .map((a) => ({ id: a.id, key: a.market, label: marketMeta(a.market).label, url: a.url }));
@@ -606,8 +608,8 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
         }
       });
       setAssetRows(rows);
-    } catch {
-      /* 忽略 */
+    } catch (error) {
+      if (!silent) showToast(error instanceof Error ? error.message : "素材加载失败", "err");
     } finally {
       if (requestId === assetRequestRef.current) setAssetsLoading(false);
     }
@@ -1622,7 +1624,10 @@ export default function AssetLibraryView({ initialCdnEnabled }: { initialCdnEnab
                 )}
                 <input
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setTopPage(1);
+                  }}
                   placeholder="搜索名称 / 代码"
                   className="ml-auto h-[34px] w-[180px] rounded-full border border-edge-strong bg-white px-3.5 text-xs outline-none transition-shadow focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] dark:bg-[#151a26] dark:text-[#e5e7eb]"
                 />
