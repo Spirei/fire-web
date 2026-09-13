@@ -36,25 +36,35 @@ function Sparkline({ points, up, baseline }: { points: number[]; up: boolean; ba
     if (prices.length < 2) return null;
     // 基准线也要算进纵向范围：否则昨收落在当日区间之外时那条线会跑出画布
     const base = baseline != null && Number.isFinite(baseline) ? baseline : null;
-    const min = Math.min(...prices, base ?? Number.POSITIVE_INFINITY);
-    const max = Math.max(...prices, base ?? Number.NEGATIVE_INFINITY);
-    const range = max - min || 1;
+    const rawMin = Math.min(...prices, base ?? Number.POSITIVE_INFINITY);
+    const rawMax = Math.max(...prices, base ?? Number.NEGATIVE_INFINITY);
+    const rawRange = rawMax - rawMin;
+    // 上下各留约 10% 呼吸空间，基准线即使是当日极值也不会贴住画布边缘。
+    const pad = rawRange > 0 ? rawRange * 0.1 : Math.max(Math.abs(rawMin) * 0.0005, 1);
+    const min = rawMin - pad;
+    const max = rawMax + pad;
+    const range = max - min;
     const W = 56;
     const H = 20;
-    const yOf = (p: number) => H - 1.5 - ((p - min) / range) * (H - 6);
+    const X_PAD = 1.5;
+    const yOf = (p: number) => H - 1.5 - ((p - min) / range) * (H - 3);
     const coords = prices.map((p, i) => {
-      const x = (i / (prices.length - 1)) * W;
+      const x = X_PAD + (i / (prices.length - 1)) * (W - X_PAD * 2);
       const y = yOf(p);
       return [x, y] as const;
     });
     const line = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-    const area = `${line} L${W},${H} L0,${H} Z`;
+    const baseY = base == null ? null : yOf(base);
+    // 色带只填到昨收基准线；没有基准值时才沿用填到底部的兜底。
+    const fillY = baseY ?? H;
+    const area = `${line} L${coords[coords.length - 1][0].toFixed(1)},${fillY.toFixed(1)} L${coords[0][0].toFixed(1)},${fillY.toFixed(1)} Z`;
     return {
       line,
       area,
       color: up ? "#e23d3d" : "#0fa07b",
+      lastX: coords[coords.length - 1][0],
       lastY: coords[coords.length - 1][1],
-      baseY: base == null ? null : yOf(base)
+      baseY
     };
   }, [points, up, baseline]);
 
@@ -71,19 +81,19 @@ function Sparkline({ points, up, baseline }: { points: number[]; up: boolean; ba
       {/* 昨收基准线：浅色细虚线，压在色带之上、走势线之下 */}
       {svg.baseY != null && (
         <line
-          x1="0"
-          x2="56"
+          x1="1"
+          x2="55"
           y1={svg.baseY.toFixed(1)}
           y2={svg.baseY.toFixed(1)}
           stroke="currentColor"
           className="text-muted"
-          strokeWidth="0.8"
-          strokeDasharray="2 1.6"
-          opacity="0.65"
+          strokeWidth="0.65"
+          strokeDasharray="2.2 2"
+          opacity="0.5"
         />
       )}
       <path d={svg.line} fill="none" stroke={svg.color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx="56" cy={svg.lastY} r="1.8" fill={svg.color} />
+      <circle cx={svg.lastX} cy={svg.lastY} r="1.55" fill={svg.color} />
     </svg>
   );
 }
