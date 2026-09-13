@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
-import { deleteAsset, ensureBrokerAssets, ensureCategoryAssets, ensureIconAssets, ensureMarketAssets, ensureStockAssets, getAssets, getStockIconMap, upsertAsset, type AssetType } from "@/lib/assets";
+import { deleteAsset, ensureBrokerAssets, ensureCategoryAssets, ensureIconAssets, ensureMarketAssets, ensureStockAssets, getAssets, getAssetsPage, getStockIconMap, upsertAsset, type AssetType } from "@/lib/assets";
 import { ensureCardAssets } from "@/lib/cardLibrary";
 import { enrichAssetQuotes, enrichStockAssetQuotes } from "@/lib/assetQuotes";
 import { getDb } from "@/lib/db";
@@ -51,6 +51,18 @@ export async function GET(request: Request) {
       };
     });
     return NextResponse.json({ assets });
+  }
+  if (type && searchParams.get("paged") === "1") {
+    const result = getAssetsPage({
+      type,
+      market: market || undefined,
+      query: searchParams.get("q") || undefined,
+      sort: (searchParams.get("sort") || "rank") as "rank" | "code" | "name" | "board" | "price" | "changePct" | "marketCap",
+      dir: searchParams.get("dir") === "asc" ? "asc" : "desc",
+      page: Number(searchParams.get("page") || 1),
+      pageSize: Number(searchParams.get("pageSize") || 10)
+    });
+    return NextResponse.json({ ...result, assets: await enrichStockAssetQuotes(enrichAssetQuotes(result.assets)) });
   }
   const assets =
     type === "stock" || type === "market" || type === "flag" || type === "crypto" || type === "metal" || type === "broker" || type === "group" || type === "icon" || type === "card"

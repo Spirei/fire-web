@@ -3048,6 +3048,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     desc: "逐一核对 TradingView 的 TVC:GOLD、TVC:SILVER、TVC:PLATINUM 和 TVC:PALLADIUM 页面，使用页面实际采用的官方 SVG 替换黄金、白银、铂金和钯金图标；贵金属行情回退数据中的图标地址也统一改为 TradingView 来源。",
     kind: "fix"
   }, {
+    title: "素材库改为按分类按页加载",
+    desc: "修复素材库每次进入同时请求全站全部分类、重复拉取 3000 多条股票素材后才在浏览器分页的问题。股票图标改由服务端按当前页、市场、搜索和排序读取，每次只返回 10 条；其他分类仅在实际进入时加载，市场筛选单独读取十几条轻量数据，卡面继续独立加载，避免刷新和重新进入时等待多次全量请求。",
+    kind: "fix"
+  }, {
     title: "修复本地版页面反复重载与无法点击",
     desc: "本地开发服务器不再监听行情、财报缓存和上传素材等运行时文件。后台刷新数据落盘时不会反复触发整页热重载，避免旧页面继续请求已失效的 JavaScript 分块而出现 ChunkLoadError、页面看得见却无法点击。",
     kind: "fix"
