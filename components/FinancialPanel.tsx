@@ -143,11 +143,22 @@ function RevenueBreakdown({ metrics, currency }: { metrics: Record<Metric, Point
 }
 
 function FinancialReportFiles({ market, code, companyName }: { market: string; code: string; companyName?: string }) {
+  const filesCacheKey = `fire:financial-report-files:${market.toUpperCase()}:${code.toUpperCase()}`;
   const [files, setFiles] = useState<ReportFile[]>([]); const [busy, setBusy] = useState(false); const [message, setMessage] = useState("");
   const [exchange, setExchange] = useState(market === "US" ? "NASDAQ" : market === "HK" ? "HKEX" : "SSE");
   const now = new Date(); const [year, setYear] = useState(now.getFullYear()); const [period, setPeriod] = useState("Q1");
-  const load = () => fetch(`/api/v1/financial-reports?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`).then((r) => r.json()).then((body) => setFiles(Array.isArray(body.data) ? body.data : [])).catch(() => setFiles([]));
-  useEffect(() => { load(); }, [market, code]);
+  const load = () => fetch(`/api/v1/financial-reports?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`).then((r) => r.json()).then((body) => {
+    if (!Array.isArray(body.data)) return;
+    setFiles(body.data);
+    try { localStorage.setItem(filesCacheKey, JSON.stringify(body.data)); } catch {}
+  }).catch(() => { /* 刷新失败时保留最后一次成功列表 */ });
+  useLayoutEffect(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(filesCacheKey) || "[]");
+      if (Array.isArray(cached)) setFiles(cached);
+    } catch {}
+  }, [filesCacheKey]);
+  useEffect(() => { void load(); }, [market, code]);
   const upload = async (file?: File) => {
     if (!file) return; setBusy(true); setMessage(""); const form = new FormData();
     Object.entries({ market, exchange, code, companyName: companyName || code, fiscalYear: String(year), fiscalPeriod: period, reportType: period === "FY" ? "年度报告" : "季度报告" }).forEach(([key, value]) => form.append(key, value)); form.append("file", file);

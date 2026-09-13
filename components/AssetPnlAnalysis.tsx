@@ -42,6 +42,31 @@ interface CloseItem {
   c: number;
 }
 
+interface AssetPnlSnapshot {
+  allRecords: StockRecord[];
+  records: StockRecord[];
+  quotes: Record<string, Quote>;
+  rates: Record<string, number>;
+  closesMap: Record<string, CloseItem[]>;
+  orders: TradeOrder[];
+  savedAt: number;
+}
+
+const ASSET_PNL_SNAPSHOT_KEY = "fire:asset-pnl-snapshot:v1";
+
+function readAssetPnlSnapshot(): AssetPnlSnapshot | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(ASSET_PNL_SNAPSHOT_KEY) || "null") as AssetPnlSnapshot | null;
+    return value && Array.isArray(value.allRecords) && Array.isArray(value.records) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeAssetPnlSnapshot(snapshot: AssetPnlSnapshot) {
+  try { localStorage.setItem(ASSET_PNL_SNAPSHOT_KEY, JSON.stringify(snapshot)); } catch { /* 存储满或隐私模式不影响最新数据 */ }
+}
+
 const SUPPORTED = new Set(["US", "HK", "CN", "JP", "KR"]);
 
 // 基准对比（收益率趋势图）：主要市场指数（日 K 数据源：US/HK 用指数 ETF，CN 用指数代码）
@@ -184,12 +209,25 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
       /* 读取失败保留默认偏好 */
     }
   }, []);
+  useLayoutEffect(() => {
+    const cached = readAssetPnlSnapshot();
+    if (!cached) return;
+    setAllRecords(cached.allRecords);
+    setRecords(cached.records);
+    setQuotes(cached.quotes || {});
+    setRates((previous) => ({ ...previous, ...(cached.rates || {}), USD: 1 }));
+    setClosesMap(cached.closesMap || {});
+    setOrders(cached.orders || []);
+    setLoading(false);
+    setKlineLoading(false);
+  }, []);
   // 真实数据：持仓 + 行情 + 汇率 + 日K（含标普500基准）
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setLoading(true);
-      setKlineLoading(true);
+      const cached = readAssetPnlSnapshot();
+      setLoading(!cached);
+      setKlineLoading(!cached);
       setLoadError("");
       try {
         const [recs, ratesRes, bundle] = await Promise.all([
@@ -201,12 +239,15 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
           fetchPortfolioBundle({ days: 250 })
         ]);
         if (cancelled) return;
-        if (ratesRes?.rates) setRates((prev) => ({ ...prev, ...ratesRes.rates, USD: 1 }));
-        if (bundle?.orders) setOrders(bundle.orders);
+        const nextRates = ratesRes?.rates ? { ...FALLBACK_RATES, ...ratesRes.rates, USD: 1 } : cached?.rates || FALLBACK_RATES;
+        const nextOrders = bundle?.orders || cached?.orders || [];
+        setRates(nextRates);
+        setOrders(nextOrders);
         const importedRecords = recs as StockRecord[];
         setAllRecords(importedRecords);
         const positions = importedRecords.filter((r) => Number(r.qty) > 0);
         setRecords(positions);
+        let nextQuotes = cached?.quotes || {};
         if (positions.length > 0) {
           const qRes = await fetch("/api/quotes", {
             method: "POST",
@@ -214,7 +255,10 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
             body: JSON.stringify({ items: positions.map((p) => ({ id: p.id, market: p.market, code: p.code })) })
           }).catch(() => null);
           const qData = await qRes?.json().catch(() => null);
-          if (!cancelled && qData?.quotes) setQuotes(qData.quotes);
+          if (!cancelled && qData?.quotes) {
+            nextQuotes = { ...nextQuotes, ...qData.quotes };
+            setQuotes(nextQuotes);
+          }
         }
         // 持仓 / 行情 / 汇率已就绪，先渲染页面（总额、排行、明细立即可见）
         setLoading(false);
@@ -227,6 +271,15 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
         if (!cancelled) {
           setClosesMap(closes);
           setKlineLoading(false);
+          writeAssetPnlSnapshot({
+            allRecords: importedRecords,
+            records: positions,
+            quotes: nextQuotes,
+            rates: nextRates,
+            closesMap: Object.keys(closes).length > 0 ? closes : cached?.closesMap || {},
+            orders: nextOrders,
+            savedAt: Date.now()
+          });
         }
       } catch (error) {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : "资产盈亏数据加载失败");

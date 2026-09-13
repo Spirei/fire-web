@@ -3000,6 +3000,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: V0_1_28_ENTRY.frontend,
   software: V0_1_28_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.29" } : item),
   changes: [{
+    title: "补齐全站稳定数据快照优先加载",
+    desc: "复核资产分析、订单、财报日历、全球预览、名人持仓、用户、附件与素材相关页面的加载路径；已有快照或服务端首屏数据的页面继续静默刷新。为遗漏的资产盈亏分析补充持仓、行情、汇率、订单与历史收盘快照，刷新时不再整页显示骨架；财务归档附件也优先恢复本地列表，请求失败时不再清空已有内容。",
+    kind: "fix"
+  }, {
     title: "卡面库 NEW 角标美化",
     desc: "左上角新品标记改为直径 26px 的银白渐变圆形徽标，去掉星芒图标，仅保留居中的 NEW 文字，搭配细边框和深灰字；深色模式使用石墨灰底与浅色字，保留新入库三天内展示的规则。",
     kind: "fix"
