@@ -2011,7 +2011,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                         void setHeld(card.file, !isHeld);
                       }}
                       aria-label={isHeld ? "移出我的卡" : "加入我的卡"}
-                      className={`absolute bottom-1.5 right-1.5 inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full text-[13px] font-bold shadow-sm transition-all duration-200 after:absolute after:-inset-2 after:content-[''] active:scale-95 sm:bottom-2 sm:right-2 sm:px-2 sm:text-[11px] sm:font-semibold ${
+                      /* 手机端可见直径 24px、热区靠 after 外扩到 44px（视觉更轻，手指仍然好点）；
+                         桌面端恢复成带文字的胶囊（默认只留 ✓/＋，划过卡片才展开文字） */
+                      className={`absolute bottom-1.5 right-1.5 inline-flex h-6 w-6 items-center justify-center overflow-hidden rounded-full text-[12px] font-bold shadow-sm transition-all duration-200 after:absolute after:-inset-2.5 after:content-[''] active:scale-95 sm:bottom-2 sm:right-2 sm:h-auto sm:w-auto sm:px-2 sm:text-[11px] sm:font-semibold ${
                         mode === "mine" ? "touch-always opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100" : ""
                       } ${
                         isHeld ? "bg-white/90 text-[#2f6fed]" : "bg-white/90 text-ink-2 hover:bg-white"
