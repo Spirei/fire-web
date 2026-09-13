@@ -44,6 +44,26 @@ export interface CardLibraryPayload extends CardManifest {
   customCards: CustomCard[];
 }
 
+/** “我的卡”首屏卡面地址：服务端预载少量已持有卡，避免刷新后先画整片灰色卡槽。 */
+export function heldCardCoverUrls(payload: CardLibraryPayload, limit = 12): string[] {
+  const held = new Set(payload.holdings);
+  const urls: string[] = [];
+  const add = (cardKey: string, shownKey = cardKey) => {
+    if (!held.has(cardKey) || urls.length >= limit) return;
+    const url = payload.covers[shownKey] || (shownKey.startsWith("/") ? shownKey : manifestCoverUrl(shownKey));
+    if (url && !urls.includes(url)) urls.push(url);
+  };
+  (payload.regions as Array<{ banks?: Array<{ cards?: Array<{ file?: string; faces?: Array<{ file?: string }> }> }> }>).forEach((region) =>
+    region.banks?.forEach((bank) => bank.cards?.forEach((card) => {
+      const keys = [card.file, ...(card.faces ?? []).map((face) => face.file)].filter((key): key is string => Boolean(key));
+      const heldKey = keys.find((key) => held.has(key));
+      if (heldKey && card.file) add(heldKey, card.faces?.[0]?.file || card.file);
+    }))
+  );
+  payload.customCards.forEach((card) => add(card.image));
+  return urls.slice(0, limit);
+}
+
 let cache: { data: CardManifest | null; at: number } | null = null;
 const CACHE_TTL = 60 * 1000;
 

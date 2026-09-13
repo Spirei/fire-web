@@ -12,7 +12,7 @@ import IndexTicker from "@/components/IndexTicker";
 import Toaster from "@/components/Toaster";
 import { getInlineFlagIconMap, getMarketIconMap, getNavIconMap, getStockIconMap, stockIconKeysForRecords } from "@/lib/assets";
 import { CURRENCY_FLAG_CODES, displayCurrencyFlagCode } from "@/lib/flagAssets";
-import { cardLibraryForUser } from "@/lib/cardLibrary";
+import { cardLibraryForUser, heldCardCoverUrls } from "@/lib/cardLibrary";
 import { CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/lib/currencyPrefs";
 import { headers } from "next/headers";
 import { unstable_noStore } from "next/cache";
@@ -85,6 +85,7 @@ export default async function SlugLayout({
   // 卡面库：只在访问该页时把清单 + 我的持有 / 金额 / 标签随首屏下发，
   // 避免「HTML → JS → 水合 → 再请求」的串行等待（卡面图片本身随后按需加载）
   const initialCardLibrary = tab.key === "cards" ? cardLibraryForUser(user.id) : null;
+  const initialCardCovers = initialCardLibrary ? heldCardCoverUrls(initialCardLibrary) : [];
 
   return (
     <div className="min-h-screen bg-page">
@@ -97,6 +98,7 @@ export default async function SlugLayout({
       {[...new Set(Object.values(initialMarketIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
       {[...new Set(Object.values(initialNavIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
       {initialFlagIcons[currencyFlagCode] && !initialFlagIcons[currencyFlagCode].startsWith("data:") && <link rel="preload" as="image" href={initialFlagIcons[currencyFlagCode]} />}
+      {initialCardCovers.map((url) => <link key={url} rel="preload" as="image" href={url} />)}
       <Toaster />
       <header className="app-shell-header site-header sticky top-0 z-50 h-[72px] border-b border-edge/80">
         <div className="mx-auto flex h-full max-w-[1140px] items-center gap-5 px-6">

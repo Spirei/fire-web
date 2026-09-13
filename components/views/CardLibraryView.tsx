@@ -1955,7 +1955,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       ) : (
         <>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {pageItems.map(({ card, bank, region: regionLabel, tags }) => {
+          {pageItems.map(({ card, bank, region: regionLabel, tags }, index) => {
             const saved = amounts[card.file];
             const mine = userTags[card.file] ?? [];
             const shownTags = [...mine, ...tags.filter((item) => !mine.includes(item))];
@@ -1975,8 +1975,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       <img
                         src={cardCover(card.faces?.[0]?.file ?? card.file)}
                         alt={card.name}
-                      loading="lazy"
-                      decoding="async"
+                      loading={index < PAGE_SIZE_FIRST ? "eager" : "lazy"}
+                      fetchPriority={index < 8 ? "high" : "auto"}
+                      decoding={index < PAGE_SIZE_FIRST ? "sync" : "async"}
                       className="aspect-[1.586] w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
                     />
                     <span className="touch-always pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
