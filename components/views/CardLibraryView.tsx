@@ -120,15 +120,14 @@ function freshStampOf(
   return newest;
 }
 
-/** 是不是 3 天内新加的卡（自建 / 加入我的卡都算）：置顶 + 挂 NEW 角标用同一套判断 */
-function isFreshCard(
-  card: { custom?: boolean; createdAt?: string; file: string },
-  addedAt: Record<string, string>,
-  nowMs: number
-): boolean {
-  if (nowMs <= 0) return false;
-  const stamp = freshStampOf(card, addedAt);
-  return stamp > 0 && nowMs - stamp < NEW_CARD_MS;
+/**
+ * 要不要挂 NEW 角标：**只给 3 天内的自建卡**（自己上传卡面新建的）。
+ * 「刚加入我的卡」不算新卡 —— 那些本来就是素材库里的旧卡，挂 NEW 会让人以为是自己新上传的。
+ */
+function isNewBadgeCard(card: { custom?: boolean; createdAt?: string }, nowMs: number): boolean {
+  if (!card.custom || !card.createdAt || nowMs <= 0) return false;
+  const created = Date.parse(card.createdAt);
+  return Number.isFinite(created) && nowMs - created < NEW_CARD_MS;
 }
 /** 聚焦反馈：全站同款中性灰柔光（去掉浏览器默认蓝框后仍能看出焦点在哪） */
 const FOCUS_RING =
@@ -1976,7 +1975,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     <span className="touch-always absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                       {card.type || "未分类"}
                     </span>
-                    {(isHeld || isFreshCard(card, addedAt, nowMs)) && (
+                    {(isHeld || isNewBadgeCard(card, nowMs)) && (
                       <span className="absolute left-2 top-2 flex items-center gap-1">
                         {isHeld && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-[#3297f6] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
@@ -1984,8 +1983,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                             我的卡
                           </span>
                         )}
-                        {/* 新加的卡（自建 / 刚加入我的卡）3 天内挂个 NEW：它同时也是置顶的那几张，到点自己消失 */}
-                        {isFreshCard(card, addedAt, nowMs) && (
+                        {/* 只有 3 天内自建（自己上传卡面新建）的卡挂 NEW；刚加入我的卡不算 */}
+                        {isNewBadgeCard(card, nowMs) && (
                           <span className="rounded-full bg-[#f59e0b] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-sm">
                             new
                           </span>
@@ -2398,7 +2397,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   </div>
                 )}
                 {/* 多版卡面：和卡包一样的小圆点 + 当前是哪一版 */}
-                {isFreshCard(active.card, addedAt, nowMs) && (
+                {isNewBadgeCard(active.card, nowMs) && (
                   <span className="pointer-events-none absolute left-2 top-2 z-10 rounded-full bg-[#f59e0b] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
                     new
                   </span>
