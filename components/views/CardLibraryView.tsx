@@ -1989,15 +1989,25 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     </span>
                     {(isHeld || isFreshEntry(card, firstSeen, nowMs)) && (
                       <span className="absolute left-2 top-2 flex items-center gap-1">
-                        {isHeld && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#3297f6] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-                            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>
-                            我的卡
+                        {/*
+                          「我的卡」在「全部卡面」里只留一颗白色小圆勾（不带文字）：
+                          扫一眼就知道哪些已经有了，又不抢卡面本身的画面。
+                          触屏设备上右下角的操作按钮本身就是「✓ / ＋」常显，再挂一颗就重复了，
+                          所以这颗只在鼠标端显示（.pointer-only）。
+                        */}
+                        {isHeld && mode === "all" && (
+                          <span
+                            title="已在我的卡里"
+                            className="pointer-only grid h-6 w-6 place-items-center rounded-full bg-white/90 text-[#2f6fed] shadow-sm ring-1 ring-inset ring-black/5 backdrop-blur-sm"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                              <path d="m5 12.5 4.5 4.5L19 7" />
+                            </svg>
                           </span>
                         )}
                         {/* 只有 3 天内新入库的卡挂 NEW（脚本导入的新卡 / 自己新建的卡）；刚加入我的卡不算 */}
                         {isFreshEntry(card, firstSeen, nowMs) && (
-                          <span className="rounded-full bg-[#f59e0b] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-sm">
+                          <span className="rounded-full bg-black/35 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#fbbf24] ring-1 ring-inset ring-white/20 backdrop-blur-sm">
                             new
                           </span>
                         )}
@@ -2410,7 +2420,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 )}
                 {/* 多版卡面：和卡包一样的小圆点 + 当前是哪一版 */}
                 {isFreshEntry(active.card, firstSeen, nowMs) && (
-                  <span className="pointer-events-none absolute left-2 top-2 z-10 rounded-full bg-[#f59e0b] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
+                  <span className="pointer-events-none absolute left-2 top-2 z-10 rounded-full bg-black/35 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#fbbf24] ring-1 ring-inset ring-white/20 backdrop-blur-sm">
                     new
                   </span>
                 )}
