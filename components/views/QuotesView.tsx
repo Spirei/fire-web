@@ -703,7 +703,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       </div>
 
       {/* 行情板控制面板：标题、刷新和分组筛选保持在同一层级 */}
-      <section className="quotes-control-panel mb-5 overflow-visible">
+      <section className="quotes-control-panel relative z-20 mb-5 overflow-visible">
       <div className="quotes-control-header flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
         <div className="quotes-control-title flex items-center gap-2">
           <h3 className="text-base font-bold">我的行情板</h3>
@@ -761,7 +761,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       </div>
 
       {/* 分组筛选（全部 + 市场分组 + 自定义分组，末尾加号打开分组管理） */}
-      <div className="quotes-control-groups flex min-w-0 items-center gap-2 px-4 py-3">
+      <div className="quotes-control-groups flex min-w-0 items-center gap-2 px-4 py-3" style={showMoreGroups ? { overflow: "visible" } : undefined}>
         {groupChips.visible.map((chip) => {
           const selected = filterId === chip.id;
           const g = watchGroups.find((x) => x.id === chip.id);
