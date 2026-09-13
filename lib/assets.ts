@@ -346,6 +346,21 @@ export function getAssets(type?: AssetType): Asset[] {
   return rows.map(rowToAsset);
 }
 
+/** 服务端首屏按代码读取货币国旗，避免客户端为一个按钮等待完整国旗素材目录。 */
+export function getFlagIconMap(codes: readonly string[]): Record<string, string> {
+  ensureCategoryAssets("flag");
+  const normalized = [...new Set(codes.map((code) => code.trim().toUpperCase()).filter(Boolean))];
+  if (!normalized.length) return {};
+  const stmt = getDb().prepare("SELECT code, url FROM assets WHERE type = 'flag' AND upper(code) = upper(?) LIMIT 1");
+  const map: Record<string, string> = {};
+  normalized.forEach((code) => {
+    const row = stmt.get(code) as { code?: string; url?: string } | undefined;
+    const url = String(row?.url || "");
+    if (url && localAssetExists(url)) map[code] = url;
+  });
+  return map;
+}
+
 /** 按代码批量读取股票素材，供搜索联想补充相关 ETF；返回顺序与 codes 一致。 */
 export function getStockAssetsByCodes(market: string, codes: string[]): Asset[] {
   const normalized = [...new Set(codes.map((code) => code.trim().toUpperCase()).filter(Boolean))];

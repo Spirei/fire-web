@@ -155,6 +155,74 @@ export function primeMarketIconCache(icons: Record<string, string>) {
   cache.set("market", { assets: [...byKey.values()], at: current?.at ?? 0 });
 }
 
+export function primeFlagIconCache(icons: Record<string, string>) {
+  const current = cache.get("flag");
+  const byKey = new Map<string, Asset>();
+  (current?.assets ?? []).forEach((asset) => byKey.set(asset.code.toUpperCase(), asset));
+  Object.entries(icons).forEach(([rawCode, url]) => {
+    const code = rawCode.trim().toUpperCase();
+    if (!code || !url) return;
+    byKey.set(code, {
+      id: `flag:${code}`, type: "flag", market: "", code, name: code, url,
+      marketCap: 0, price: null, changePct: null, source: "auto", lastCheckedAt: "", board: "", updatedAt: ""
+    });
+  });
+  cache.set("flag", { assets: [...byKey.values()], at: current?.at ?? 0 });
+}
+
+const flagInflight = new Map<string, Promise<void>>();
+const subscribedFlagCodes = new Set<string>();
+
+/** 货币/地区组件按实际代码取素材库国旗，不再拉取全部 250 个条目。 */
+export function ensureFlagIcons(codes: readonly string[], force = false) {
+  const normalized = [...new Set(codes.map((code) => code.trim().toUpperCase()).filter((code) => /^[A-Z]{2}$/.test(code)))];
+  const existing = new Set((cache.get("flag")?.assets ?? []).map((asset) => asset.code.toUpperCase()));
+  const missing = force ? normalized : normalized.filter((code) => !existing.has(code));
+  if (!missing.length) return;
+  const key = `${force ? "force:" : ""}${missing.slice().sort().join(",")}`;
+  const pending = flagInflight.get(key);
+  if (pending) return pending;
+  const task = fetch(`/api/assets?type=flag&keys=${encodeURIComponent(missing.join(","))}`, force ? { cache: "no-store" } : undefined)
+    .then((response) => response.ok ? response.json() : null)
+    .then((data) => {
+      const icons: Record<string, string> = {};
+      (Array.isArray(data?.assets) ? data.assets : []).forEach((asset: Asset) => {
+        if (asset.type === "flag" && asset.code && asset.url) icons[asset.code.toUpperCase()] = asset.url;
+      });
+      if (Object.keys(icons).length) {
+        primeFlagIconCache(icons);
+        notify();
+      }
+    })
+    .catch(() => { /* 保留素材库内置路径兜底 */ })
+    .finally(() => flagInflight.delete(key));
+  flagInflight.set(key, task);
+  return task;
+}
+
+export function useFlagIcon(code: string): string | undefined {
+  const normalized = code.trim().toUpperCase();
+  const read = () => (cache.get("flag")?.assets ?? []).find((asset) => asset.code.toUpperCase() === normalized)?.url;
+  const [url, setUrl] = useState(read);
+  useLayoutEffect(() => {
+    if (!cache.has("flag")) {
+      const saved = loadLocalType("flag");
+      if (saved) cache.set("flag", saved);
+    }
+    setUrl(read());
+  }, [normalized]);
+  useEffect(() => {
+    const update = () => setUrl(read());
+    if (/^[A-Z]{2}$/.test(normalized)) subscribedFlagCodes.add(normalized);
+    listeners.add(update);
+    void ensureFlagIcons([normalized]);
+    return () => {
+      listeners.delete(update);
+    };
+  }, [normalized]);
+  return url;
+}
+
 function cacheKey(type: AssetType) {
   return `fire:assets:cache:${type}`;
 }
@@ -259,6 +327,7 @@ function ensureCdnSetting() {
 if (typeof window !== "undefined") {
   window.addEventListener("fire:assets-updated", () => {
     void refreshTypes([...subscribedTypes], true);
+    void ensureFlagIcons([...subscribedFlagCodes], true);
   });
   window.addEventListener("fire:settings-updated", () => {
     if (cdnRequested) {

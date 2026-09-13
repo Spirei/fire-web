@@ -1,6 +1,6 @@
 "use client";
 
-import { useAssetIcons } from "@/lib/useAssetIcons";
+import { useFlagIcon } from "@/lib/useAssetIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import { defaultFlagUrl } from "@/lib/flagAssets";
 
@@ -13,11 +13,11 @@ export default function CurrencyFlag({
   size?: number;
   className?: string;
 }) {
-  const { countryFlags } = useAssetIcons(["flag"]);
   const code = (market || "").trim().toLowerCase();
+  const customUrl = useFlagIcon(code);
   if (!/^[a-z]{2}$/.test(code)) return null;
-  // 素材库自定义旗帜优先（用户上传），否则回退本地圆形 SVG
-  const src = countryFlags[code.toUpperCase()] || defaultFlagUrl(code);
+  // 素材库首屏注入 / 按代码请求优先；内置素材路径仅作为缺项安全兜底。
+  const src = customUrl || defaultFlagUrl(code);
   return (
     <SafeAssetImage
       src={src}
