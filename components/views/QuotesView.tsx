@@ -27,6 +27,7 @@ interface Props {
   /** 个股详情直达代码（如 US.GOOGL），来自 /watchlist/US.GOOGL 路径 */
   initialSymbol?: string;
   records: StockRecord[];
+  initialWatchGroups?: WatchGroup[];
   quotes: Record<string, Quote>;
   quoteAt: string;
   refreshing: boolean;
@@ -66,7 +67,7 @@ function QuotesCheckbox({ checked, onChange, label }: { checked: boolean; onChan
   );
 }
 
-export default function QuotesView({ initialSymbol, records, quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onBatchDelete, onUpdate, onRemove, groups, onDetailChange, onToggleWatch }: Props) {
+export default function QuotesView({ initialSymbol, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onBatchDelete, onUpdate, onRemove, groups, onDetailChange, onToggleWatch }: Props) {
   const { brokerIcons, stockIcons, assetIcons } = useAssetIcons(["broker", "stock", "crypto", "metal"]);
   const [added, setAdded] = useState("");
   const [importOpen, setImportOpen] = useState(false);
@@ -94,7 +95,7 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
     }
   }, [quoteAt]);
   // 我的行情板：分组筛选（全部 / 市场分组 / 自定义分组，服务端实体，URL 同步）+ 每页 6 条分页
-  const [watchGroups, setWatchGroups] = useState<WatchGroup[]>([]);
+  const [watchGroups, setWatchGroups] = useState<WatchGroup[]>(initialWatchGroups);
   const [filterId, setFilterId] = useState(() => {
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("filter") ?? "";
@@ -695,7 +696,6 @@ export default function QuotesView({ initialSymbol, records, quotes, quoteAt, re
       <div className="quotes-control-header flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
         <div className="quotes-control-title flex items-center gap-2">
           <h3 className="text-base font-bold">我的行情板</h3>
-          <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[10px] font-semibold tabular-nums text-faint">{filtered.length}</span>
           <QuoteSourceBadge records={filtered} quotes={quotes} />
         </div>
         <div className="quotes-control-actions flex flex-wrap items-center gap-2">

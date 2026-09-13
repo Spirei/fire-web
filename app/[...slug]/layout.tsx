@@ -16,6 +16,7 @@ import { CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/
 import { headers } from "next/headers";
 import { unstable_noStore } from "next/cache";
 import { fundState } from "@/lib/fundState";
+import { listWatchGroups } from "@/lib/watchGroupsStore";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,8 @@ export default async function SlugLayout({
   // 后台首屏数据在服务端鉴权后直接读取。避免浏览器再次串行请求
   // /api/auth/me → records / activities / settings，首帧不再被全局转圈遮挡。
   const initialRecords = listRecords(user.id);
+  // 自选股分组随记录一并进入服务端首屏，避免刷新时客户端请求完成前只显示“全部”。
+  const initialWatchGroups = tab.key === "watchlist" ? listWatchGroups(user.id) : [];
   const initialUserLogs = listSecurityLogs(200, user.id);
   // 资金余额与持仓记录一起进入首屏，避免切到“我的持仓”时先按 0 现金计算、随后再跳到完整净资产。
   const initialFundBalances = fundState(user.id).balances;
@@ -109,6 +112,7 @@ export default async function SlugLayout({
           initialCelebAvatars={celebAvatars}
           initialUser={user}
           initialRecords={initialRecords}
+          initialWatchGroups={initialWatchGroups}
           initialUserLogs={initialUserLogs}
           initialFundBalances={initialFundBalances}
           initialStockIcons={initialStockIcons}

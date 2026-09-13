@@ -3000,6 +3000,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: V0_1_28_ENTRY.frontend,
   software: V0_1_28_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.29" } : item),
   changes: [{
+    title: "彻底修复自选股刷新分组闪失",
+    desc: "自选股分组现在与自选记录一起由服务端注入首屏 HTML，刷新首帧即可显示完整市场与自定义分组，不再依赖 localStorage 是否存在；客户端只负责静默校准最新配置。同时删除“我的行情板”标题旁与“全部”数量重复的总数徽标。",
+    kind: "fix"
+  }, {
     title: "相关 ETF 添加支持名称联想搜索",
     desc: "手动添加相关 ETF 的代码与名称输入合并为证券联想搜索，可按代码、英文名或中文名查找；候选项展示图标、市场、名称、代码与行情，选择后自动填写规范代码和名称。搜索不到时仍可把输入内容作为代码添加，产品类型与默认正股关联保持不变。",
     kind: "feature"

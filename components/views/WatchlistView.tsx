@@ -6,11 +6,13 @@ import type { GroupConfig, Market, Quote, RecordInput, SearchMatch, StockRecord 
 import { showToast } from "@/lib/toast";
 import QuotesView from "@/components/views/QuotesView";
 import MarketIcon from "@/components/MarketIcon";
+import type { WatchGroup } from "@/lib/watchGroups";
 
 interface Props {
   /** 个股详情直达代码（如 US.GOOGL），来自 /watchlist/US.GOOGL 路径 */
   initialSymbol?: string;
   records: StockRecord[];
+  initialWatchGroups?: WatchGroup[];
   quotes: Record<string, Quote>;
   quoteAt: string;
   refreshing: boolean;
@@ -123,7 +125,7 @@ function FearGreedGauge({ score }: { score: number }) {
   );
 }
 
-export default function WatchlistView({ initialSymbol, records, quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onUpdate, onRemove, onBatchDelete, onToggleWatch, groups }: Props) {
+export default function WatchlistView({ initialSymbol, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onUpdate, onRemove, onBatchDelete, onToggleWatch, groups }: Props) {
   const [indexGroups, setIndexGroups] = useState<MarketIndices[]>([]);
   const [indicesLoading, setIndicesLoading] = useState(true);
   const [indicesError, setIndicesError] = useState("");
@@ -340,6 +342,7 @@ export default function WatchlistView({ initialSymbol, records, quotes, quoteAt,
 
       {/* 股票添加全部功能（搜索 / 行情板 / 刷新间隔 / 批量删除 / 编辑） */}
       <QuotesView
+        initialWatchGroups={initialWatchGroups}
         initialSymbol={initialSymbol}
         records={records}
         quotes={quotes}

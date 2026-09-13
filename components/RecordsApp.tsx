@@ -25,6 +25,7 @@ import { primeMarketIconCache, primeStockIconCache, useAssetIcons } from "@/lib/
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import WatchlistView from "@/components/views/WatchlistView";
+import type { WatchGroup } from "@/lib/watchGroups";
 import HoldingsView from "@/components/views/HoldingsView";
 import AssetAnalysisView from "@/components/views/AssetAnalysisView";
 import FireView from "@/components/views/FireView";
@@ -86,6 +87,7 @@ export default function RecordsApp({
   initialCelebAvatars,
   initialUser,
   initialRecords,
+  initialWatchGroups = [],
   initialUserLogs,
   initialFundBalances,
   initialSettings,
@@ -98,6 +100,7 @@ export default function RecordsApp({
   initialCelebAvatars?: Record<string, string>;
   initialUser: User;
   initialRecords: StockRecord[];
+  initialWatchGroups?: WatchGroup[];
   initialUserLogs: SystemLog[];
   initialFundBalances: Record<string, number>;
   initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled">;
@@ -738,6 +741,7 @@ export default function RecordsApp({
             <WatchlistView
               initialSymbol={initialSymbol}
               records={records}
+              initialWatchGroups={initialWatchGroups}
               quotes={quotes}
               quoteAt={quoteAt}
               refreshing={refreshing}
