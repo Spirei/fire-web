@@ -541,7 +541,7 @@ export default function RecordsApp({
       reloadActivities();
       return true;
     } catch (err) {
-      alert(err instanceof Error ? err.message : "保存失败");
+      showToast(err instanceof Error ? err.message : "保存失败", "err");
       return false;
     }
   }
@@ -564,7 +564,7 @@ export default function RecordsApp({
       reloadActivities();
       return true;
     } catch (err) {
-      alert(err instanceof Error ? err.message : "保存失败");
+      showToast(err instanceof Error ? err.message : "保存失败", "err");
       return false;
     }
   }
@@ -577,7 +577,7 @@ export default function RecordsApp({
       window.dispatchEvent(new Event("fire:records-updated"));
       reloadActivities();
     } else {
-      alert("删除失败");
+      showToast("删除失败", "err");
     }
   }
 
@@ -647,7 +647,7 @@ export default function RecordsApp({
       reloadActivities();
       return true;
     } catch (err) {
-      alert(err instanceof Error ? err.message : "删除失败");
+      showToast(err instanceof Error ? err.message : "删除失败", "err");
       return false;
     }
   }
@@ -684,7 +684,7 @@ export default function RecordsApp({
       return true;
     }
     const data = await res.json().catch(() => null);
-    alert(data?.error || "清空失败");
+    showToast(data?.error || "清空失败", "err");
     return false;
   }
 

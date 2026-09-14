@@ -271,14 +271,14 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
 
   async function submit() {
     if (!record || submitting) return;
-    if (qtyN <= 0) { alert("请输入有效的数量"); return; }
+    if (qtyN <= 0) { showToast("请输入有效的数量", "err"); return; }
     const marketPx = currentQuote || priceN;
     const submitPrice = isClose ? marketPx : priceN;
-    if (submitPrice <= 0) { alert(isClose ? "暂无行情，无法市价平仓" : "请输入有效的价格"); return; }
-    if (!isClose && tradeMode === "order" && validity === "自定义有效期" && !expiryDate) { alert("请选择有效期"); return; }
+    if (submitPrice <= 0) { showToast(isClose ? "暂无行情，无法市价平仓" : "请输入有效的价格", "err"); return; }
+    if (!isClose && tradeMode === "order" && validity === "自定义有效期" && !expiryDate) { showToast("请选择有效期", "err"); return; }
     const tradedAtIso = tradeMode === "record" ? zonedInputToIso(tradedAt, marketTime.zone) || new Date().toISOString() : "";
     if (!isClose && tradeMode === "record" && (!tradedAtIso || Date.parse(tradedAtIso) > Date.now() + 60_000)) {
-      alert("请选择不晚于当前时间的有效成交时间");
+      showToast("请选择不晚于当前时间的有效成交时间", "err");
       return;
     }
     setSubmitting(true);
@@ -314,7 +314,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        alert(data?.error || data?.message || "下单失败");
+        showToast(data?.error || data?.message || "下单失败", "err");
         return;
       }
       showToast(isClose ? "已市价平仓" : tradeMode === "record" ? "历史成交已入账" : data?.data?.pending ? "已挂单，等待成交" : "委托已成交", "ok");
@@ -323,7 +323,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
       onDone?.();
       onClose();
     } catch {
-      alert("下单失败，请稍后重试");
+      showToast("下单失败，请稍后重试", "err");
     } finally {
       setSubmitting(false);
     }
@@ -430,7 +430,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
                 {ORDER_TYPES.map((t) => <MenuItem key={t} active={orderType === t} onClick={() => { setOrderType(t); setShowTypeMenu(false); }}>{t}</MenuItem>)}
               </Dropdown>
             </Field> : <Field label={`成交时间（${marketTime.label}）`}>
-              <input type="datetime-local" value={tradedAt} max={zonedInputValue(new Date(), marketTime.zone)} onChange={(e) => setTradedAt(e.target.value)} className={inputCls} />
+              <input type="text" inputMode="numeric" value={tradedAt} onChange={(e) => setTradedAt(e.target.value)} placeholder="YYYY-MM-DD HH:mm" className={inputCls} />
             </Field>}
             {!isClose && <Field label="方向">
               <div className={`flex h-9 overflow-hidden rounded-lg border ${fieldBorder}`}>

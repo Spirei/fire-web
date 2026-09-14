@@ -6,6 +6,8 @@ import { fmtDateTime } from "@/lib/format";
 import { showToast } from "@/lib/toast";
 import AppModal from "@/components/AppModal";
 import DeleteIcon from "@/components/DeleteIcon";
+import AppSelect from "@/components/AppSelect";
+import { appConfirm } from "@/lib/appDialog";
 
 interface AdminUser extends User {
   createdAt: string;
@@ -167,7 +169,7 @@ export default function UsersView() {
   }
 
   async function removeUser(u: AdminUser) {
-    if (!confirm(`确定删除用户「${u.username}」吗？该用户的记录、会话、操作日志会一并删除！`)) return;
+    if (!await appConfirm(`确定删除用户「${u.username}」吗？该用户的记录、会话、操作日志会一并删除！`, { title: "删除用户", danger: true })) return;
     setMsg(null);
     const res = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
     const data = await res.json().catch(() => null);
@@ -281,10 +283,8 @@ export default function UsersView() {
             </label>
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
               角色
-              <select name="role" defaultValue={editUser.role} className="field">
-                <option value="user">普通用户</option>
-                <option value="admin">管理员</option>
-              </select>
+              <input type="hidden" name="role" value={editUser.role} />
+              <AppSelect value={editUser.role} onChange={(role) => setEditUser((current) => current ? { ...current, role: role as "user" | "admin" } : current)} options={[{ value: "user", label: "普通用户" }, { value: "admin", label: "管理员" }]} className="field" ariaLabel="角色" />
             </label>
             <div className="mt-1 flex justify-end gap-2.5 border-t border-edge pt-4">
               <button type="button" onClick={() => setEditUser(null)} className="btn btn-ghost btn-sm">取消</button>

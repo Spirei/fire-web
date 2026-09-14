@@ -21,6 +21,7 @@ import MarketIcon from "@/components/MarketIcon";
 import GroupSelect from "@/components/GroupSelect";
 import MarketSelect from "@/components/MarketSelect";
 import AppModal from "@/components/AppModal";
+import { appConfirm } from "@/lib/appDialog";
 import CurrencySelect from "@/components/CurrencySelect";
 import { CURRENCY_SYMBOLS, useCurrencyDisplayUnit, useDisplayCurrency } from "@/lib/currencyPrefs";
 import type { CurrencyCode } from "@/lib/currencyPrefs";
@@ -748,7 +749,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
 
   async function deleteHoldingOrder(order: TradeOrder) {
     if (!selectedHolding) return;
-    if (!window.confirm(`确定删除 ${new Date(order.tradedAt).toLocaleString("zh-CN", { hour12: false })} 的这笔${order.side === "buy" ? "买入" : "卖出"}订单吗？\n\n删除后会自动重算该股票的持仓和后续订单，且无法撤销。`)) return;
+    if (!await appConfirm(`确定删除 ${new Date(order.tradedAt).toLocaleString("zh-CN", { hour12: false })} 的这笔${order.side === "buy" ? "买入" : "卖出"}订单吗？\n\n删除后会自动重算该股票的持仓和后续订单，且无法撤销。`, { title: "删除订单", danger: true })) return;
     setDeletingOrderId(order.id);
     try {
       const res = await fetch(`/api/v1/orders/${encodeURIComponent(order.id)}`, { method: "DELETE" });
@@ -1002,7 +1003,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
               <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">{tradeSide === "dividend" ? "持仓股数" : "成交数量"}<input type="number" min="0" step="any" value={tradeForm.qty} onChange={(e) => setTradeForm({ ...tradeForm, qty: e.target.value })} className="field" placeholder={tradeSide === "sell" ? `最多 ${fmtQty(tradeRecord.qty)}` : tradeSide === "dividend" ? `当前 ${fmtQty(tradeRecord.qty)}` : "0"} /></label>
               <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">{tradeSide === "dividend" ? "每股股息" : "成交价格"}<input type="number" min="0" step="0.001" value={tradeForm.price} onChange={(e) => setTradeForm({ ...tradeForm, price: e.target.value })} className="field" /></label>
               <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">交易费用<input type="number" min="0" step="0.01" value={tradeForm.fees} onChange={(e) => setTradeForm({ ...tradeForm, fees: e.target.value })} className="field" /></label>
-              <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">成交时间<input type="datetime-local" value={tradeForm.tradedAt} onChange={(e) => setTradeForm({ ...tradeForm, tradedAt: e.target.value })} className="field" /></label>
+              <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">成交时间<input type="text" inputMode="numeric" value={tradeForm.tradedAt} onChange={(e) => setTradeForm({ ...tradeForm, tradedAt: e.target.value })} className="field" placeholder="YYYY-MM-DD HH:mm" /></label>
               <label className="col-span-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">订单备注<input value={tradeForm.note} onChange={(e) => setTradeForm({ ...tradeForm, note: e.target.value })} className="field" placeholder="如：分批建仓、止盈、调仓" /></label>
             </div>
             <div className="mt-4 rounded-[12px] border border-edge bg-bg-gray/60 px-4 py-3 text-xs text-muted">股息总额：<strong className="text-ink">{fmtMoney((Number(tradeForm.qty) || 0) * (Number(tradeForm.price) || 0), marketMeta(tradeRecord.market).currency)}</strong>{tradeSide === "dividend" ? " · 按持仓股数 × 每股股息记为现金收入，计入已实现收益，不改变持仓数量与成本" : tradeSide === "buy" ? " · 买入后按含费用的加权成本更新" : " · 卖出回款冲减投入并摊薄剩余成本，费用计入已实现盈亏"}</div>

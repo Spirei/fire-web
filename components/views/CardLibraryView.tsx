@@ -3,6 +3,8 @@
 import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
+import { appConfirm } from "@/lib/appDialog";
+import AppSelect from "@/components/AppSelect";
 import { cardTagsOf } from "@/lib/cardTags";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import CardWalletStack, { type WalletCard, type WalletCardDetails } from "@/components/CardWalletStack";
@@ -1472,7 +1474,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   async function removeCustomCard(entry: CardEntry) {
     const id = entry.card.customId;
     if (!id || saving) return;
-    if (!window.confirm("删除这张自定义卡片？它上传的卡面素材也会从素材库里移除。")) return;
+    if (!await appConfirm("删除这张自定义卡片？它上传的卡面素材也会从素材库里移除。", { title: "删除自定义卡片", danger: true })) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/cards/custom?id=${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -1629,34 +1631,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             <path d="M11 8h7" />
             <path d="M11 12h10" />
           </svg>
-          <span className="relative flex items-center">
-            <select
-              value={sort}
-              onChange={(event) => {
-                setSort(event.target.value as LibrarySort);
-                setVisibleCount(PAGE_SIZE_FIRST);
-              }}
-              aria-label="排序方式"
-              className="appearance-none bg-transparent pr-4 text-[13px] font-semibold text-ink outline-none dark:text-white"
-            >
-              {(Object.keys(LIBRARY_SORT_LABEL) as LibrarySort[]).map((key) => (
-                <option key={key} value={key}>
-                  {LIBRARY_SORT_LABEL[key]}
-                </option>
-              ))}
-            </select>
-            <svg
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="pointer-events-none absolute right-0 h-3.5 w-3.5 text-faint"
-            >
-              <path d="m5 7 5 5 5-5" />
-            </svg>
-          </span>
+          <AppSelect value={sort} onChange={(value) => { setSort(value as LibrarySort); setVisibleCount(PAGE_SIZE_FIRST); }} options={(Object.keys(LIBRARY_SORT_LABEL) as LibrarySort[]).map((key) => ({ value: key, label: LIBRARY_SORT_LABEL[key] }))} ariaLabel="排序方式" className="bg-transparent text-[13px] font-semibold text-ink dark:text-white" />
         </label>
       </div>
 
@@ -2234,31 +2209,11 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 </label>
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[11px] font-semibold text-muted">地区</span>
-                  <select
-                    value={newCard.region}
-                    onChange={(event) => setNewCard((prev) => ({ ...prev, region: event.target.value }))}
-                    className={`h-11 w-full rounded-xl border border-edge bg-white px-2.5 text-[13px] font-semibold text-ink transition-all duration-200 sm:h-10 dark:bg-[#1c222d] ${FOCUS_RING}`}
-                  >
-                    {Object.keys(REGION_CURRENCY).map((label) => (
-                      <option key={label} value={label}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                  <AppSelect value={newCard.region} onChange={(value) => setNewCard((prev) => ({ ...prev, region: value }))} options={Object.keys(REGION_CURRENCY).map((value) => ({ value, label: value }))} className={`h-11 w-full rounded-xl border border-edge bg-white px-2.5 text-[13px] font-semibold text-ink sm:h-10 dark:bg-[#1c222d] ${FOCUS_RING}`} ariaLabel="地区" />
                 </label>
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[11px] font-semibold text-muted">类型</span>
-                  <select
-                    value={newCard.type}
-                    onChange={(event) => setNewCard((prev) => ({ ...prev, type: event.target.value }))}
-                    className={`h-11 w-full rounded-xl border border-edge bg-white px-2.5 text-[13px] font-semibold text-ink transition-all duration-200 sm:h-10 dark:bg-[#1c222d] ${FOCUS_RING}`}
-                  >
-                    {CARD_TYPE_OPTIONS.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
+                  <AppSelect value={newCard.type} onChange={(value) => setNewCard((prev) => ({ ...prev, type: value }))} options={CARD_TYPE_OPTIONS.map((value) => ({ value, label: value }))} className={`h-11 w-full rounded-xl border border-edge bg-white px-2.5 text-[13px] font-semibold text-ink sm:h-10 dark:bg-[#1c222d] ${FOCUS_RING}`} ariaLabel="类型" />
                 </label>
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[11px] font-semibold text-muted">卡组织</span>
@@ -2282,17 +2237,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 </label>
                 <label className="col-span-2 flex flex-col gap-1.5">
                   <span className="text-[11px] font-semibold text-muted">币种范围</span>
-                  <select
-                    value={newCard.currencyScope}
-                    onChange={(event) => setNewCard((prev) => ({ ...prev, currencyScope: event.target.value as CurrencyScope }))}
-                    className={`h-11 w-full rounded-xl border border-edge bg-white px-2.5 text-[13px] font-semibold text-ink transition-all duration-200 sm:h-10 dark:bg-[#1c222d] ${FOCUS_RING}`}
-                  >
-                    {CURRENCY_SCOPE_ORDER.map((scope) => (
-                      <option key={scope} value={scope}>
-                        {CURRENCY_SCOPE_LABEL[scope]}
-                      </option>
-                    ))}
-                  </select>
+                  <AppSelect value={newCard.currencyScope} onChange={(value) => setNewCard((prev) => ({ ...prev, currencyScope: value as CurrencyScope }))} options={CURRENCY_SCOPE_ORDER.map((value) => ({ value, label: CURRENCY_SCOPE_LABEL[value] }))} className={`h-11 w-full rounded-xl border border-edge bg-white px-2.5 text-[13px] font-semibold text-ink sm:h-10 dark:bg-[#1c222d] ${FOCUS_RING}`} ariaLabel="币种范围" />
                 </label>
               </div>
               <p className="mt-2 text-[11px] text-faint">
@@ -2573,18 +2518,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 <label className="flex flex-col gap-1">
                   <span className="text-[11px] font-semibold text-muted">币种</span>
                   {activeCurrencyOptions.length > 1 ? (
-                    <select
-                      value={draft.currency}
-                      onChange={(event) => setDraft((prev) => ({ ...prev, currency: event.target.value }))}
-                      title="只列出这张卡能记的币种"
-                      className={`h-11 rounded-xl border border-edge bg-white px-2 text-xs font-semibold text-ink transition-all duration-200 sm:h-9 dark:bg-[#1c222d] ${FOCUS_RING}`}
-                    >
-                      {activeCurrencyOptions.map((code) => (
-                        <option key={code} value={code}>
-                          {code} · {currencyName(code)}
-                        </option>
-                      ))}
-                    </select>
+                    <AppSelect value={draft.currency} onChange={(value) => setDraft((prev) => ({ ...prev, currency: value }))} options={activeCurrencyOptions.map((code) => ({ value: code, label: `${code} · ${currencyName(code)}` }))} className={`h-11 rounded-xl border border-edge bg-white px-2 text-xs font-semibold text-ink sm:h-9 dark:bg-[#1c222d] ${FOCUS_RING}`} ariaLabel="币种" />
                   ) : (
                     // 单币卡：币种是固定的，不再给一个只有一个选项的下拉
                     <span

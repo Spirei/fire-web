@@ -12,6 +12,8 @@ import DeleteIcon from "@/components/DeleteIcon";
 import type { WatchGroup } from "@/lib/watchGroups";
 import type { CountryCatalogItem } from "@/lib/countryCatalog";
 import { defaultFlagUrl } from "@/lib/flagAssets";
+import { appConfirm } from "@/lib/appDialog";
+import AppSelect from "@/components/AppSelect";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { manifestCoverUrl } from "@/lib/cardAssets";
 
@@ -991,7 +993,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
   async function removeStock(item: { market: string; code: string }) {
     const custom = customFor(item.market, item.code) || customForAny(item.code);
     if (!custom) return;
-    if (!confirm(`确定恢复「${item.code}」为默认显示吗？`)) return;
+    if (!await appConfirm(`确定恢复「${item.code}」为默认显示吗？`)) return;
     await fetch(`/api/assets?id=${encodeURIComponent(custom.id)}`, { method: "DELETE" });
     window.dispatchEvent(new Event("fire:assets-updated"));
     await loadAssets();
@@ -1270,7 +1272,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
 
   // 删除券商（同步清空对应持仓记录的券商并删除图标素材）
   async function removeBroker(g: { id: string; name: string }) {
-    if (!confirm(`确定删除券商「${g.name}」吗？将同时清空该券商名下持仓记录的券商并删除其图标。`)) return;
+    if (!await appConfirm(`确定删除券商「${g.name}」吗？将同时清空该券商名下持仓记录的券商并删除其图标。`, { title: "删除券商", danger: true })) return;
     setBusy((b) => ({ ...b, [`del-broker:${g.id}`]: true }));
     try {
       const res = await fetch(`/api/v1/brokers?id=${encodeURIComponent(g.id)}`, { method: "DELETE" });
@@ -1288,7 +1290,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
   }
 
   async function removeMarketIcon(row: MarketRow) {
-    if (!confirm(`确定恢复「${row.label}」为默认圆旗吗？`)) return;
+    if (!await appConfirm(`确定恢复「${row.label}」为默认圆旗吗？`)) return;
     await fetch(`/api/assets?id=${encodeURIComponent(row.id)}`, { method: "DELETE" });
     window.dispatchEvent(new Event("fire:assets-updated"));
     await loadAssets();
@@ -1324,7 +1326,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
 
   async function removeAssetIcon(row: AssetRow) {
     if (!row.id) return;
-    if (!confirm(`确定恢复「${row.name}」为默认图标吗？`)) return;
+    if (!await appConfirm(`确定恢复「${row.name}」为默认图标吗？`)) return;
     await fetch(`/api/assets?id=${encodeURIComponent(row.id)}`, { method: "DELETE" });
     window.dispatchEvent(new Event("fire:assets-updated"));
     await loadAssets();
@@ -1406,7 +1408,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
     const defaultIcon = ICON_ORDER.find((c) => c.toUpperCase() === asset.code);
     if (!defaultIcon) {
       // 非内置的新增图标：直接删除素材
-      if (!confirm(`确定删除图标「${asset.name || asset.code}」吗？`)) return;
+      if (!await appConfirm(`确定删除图标「${asset.name || asset.code}」吗？`, { title: "删除图标", danger: true })) return;
       const res = await fetch(`/api/assets?id=${encodeURIComponent(asset.id)}`, { method: "DELETE" });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
@@ -1418,7 +1420,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
       showToast("已删除图标");
       return;
     }
-    if (!confirm(`确定恢复「${asset.name || asset.code}」为默认图标吗？`)) return;
+    if (!await appConfirm(`确定恢复「${asset.name || asset.code}」为默认图标吗？`)) return;
     const ok = await saveIconAsset(asset, {
       url: `/uploads/asset/icon/${defaultIcon}.svg`,
       name: ICON_NAMES[defaultIcon] ?? defaultIcon,
@@ -1718,15 +1720,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
                     <div className="mt-3 rounded-[10px] border border-edge p-3">
                       <p className="mb-2 text-[11px] font-semibold text-faint">行情源未匹配到，可手动添加：</p>
                       <div className="flex flex-wrap items-center gap-2">
-                        <select
-                          value={manualAdd.market}
-                          onChange={(e) => setManualAdd({ ...manualAdd, market: e.target.value as "US" | "HK" | "CN" })}
-                          className={`${inputCls} h-8 w-[88px] px-2 text-xs`}
-                        >
-                          <option value="US">美股</option>
-                          <option value="HK">港股</option>
-                          <option value="CN">A股</option>
-                        </select>
+                        <AppSelect value={manualAdd.market} onChange={(value) => setManualAdd({ ...manualAdd, market: value as "US" | "HK" | "CN" })} options={[{ value: "US", label: "美股" }, { value: "HK", label: "港股" }, { value: "CN", label: "A股" }]} className={`${inputCls} h-8 w-[88px] px-2 text-xs`} ariaLabel="市场" />
                         <input
                           value={manualAdd.code}
                           onChange={(e) => setManualAdd({ ...manualAdd, code: e.target.value })}

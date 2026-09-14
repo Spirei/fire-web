@@ -18,6 +18,7 @@ import DividendTable, { fmtDividendAmount, yearOfDividend } from "@/components/D
 import type { DividendRecord } from "@/lib/dividends";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import StockSearch from "@/components/StockSearch";
+import AppSelect from "@/components/AppSelect";
 import { dividendClientCacheKey, readDividendClientCache, writeDividendClientCache } from "@/lib/dividendClientCache";
 
 interface Props {
@@ -999,9 +1000,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
                           onQueryChange={(query) => setRelatedDraft((draft) => ({ ...draft, code: query.trim().toUpperCase(), name: "" }))}
                           onSelect={(match) => setRelatedDraft((draft) => ({ ...draft, code: match.code.trim().toUpperCase(), name: match.name.trim() }))}
                         />
-                        <select value={relatedDraft.kind} onChange={(event) => setRelatedDraft((draft) => ({ ...draft, kind: event.target.value as RelatedETF["kind"] }))} className="h-9 rounded-lg border border-edge-strong bg-white px-2 text-xs text-ink outline-none dark:bg-[#1c1c1e]">
-                          <option value="long">做多</option><option value="short">做空</option><option value="income">收益策略</option>
-                        </select>
+                        <AppSelect value={relatedDraft.kind} onChange={(value) => setRelatedDraft((draft) => ({ ...draft, kind: value as RelatedETF["kind"] }))} options={[{ value: "long", label: "做多" }, { value: "short", label: "做空" }, { value: "income", label: "收益策略" }]} className="h-9 rounded-lg border border-edge-strong bg-white px-2 text-xs text-ink dark:bg-[#1c1c1e]" ariaLabel="关联类型" />
                         <span className="flex h-9 min-w-0 items-center truncate rounded-lg border border-edge bg-bg-gray px-3 text-xs text-muted" title={`默认关联 ${displayName} ${code}`}>正股 · {displayName} {code}</span>
                         <div className="flex gap-2"><button type="button" onClick={addCustomRelatedEtf} className="btn btn-dark btn-sm">添加</button><button type="button" onClick={() => setRelatedEditorOpen(false)} className="btn btn-line btn-sm">取消</button></div>
                       </div>

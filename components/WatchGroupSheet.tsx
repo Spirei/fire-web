@@ -9,6 +9,7 @@ import StockSearch from "@/components/StockSearch";
 import { groupCount, groupVisible, type WatchGroup } from "@/lib/watchGroups";
 import { showToast } from "@/lib/toast";
 import type { SearchMatch } from "@/lib/types";
+import { appConfirm } from "@/lib/appDialog";
 
 interface Props {
   initialView?: "grid" | "manage";
@@ -272,7 +273,7 @@ export default function WatchGroupSheet({
   }
 
   async function removeGroup(g: WatchGroup) {
-    if (!confirm(`删除分组「${g.name}」？该分组下股票的所属分组将被清空。`)) return;
+    if (!await appConfirm(`删除分组「${g.name}」？该分组下股票的所属分组将被清空。`, { title: "删除分组", danger: true })) return;
     const ok = await onDelete(g.id);
     if (ok && selectedId === g.id) onSelect("");
   }
@@ -379,7 +380,7 @@ export default function WatchGroupSheet({
 
   async function deleteMember(id: string) {
     const record = activeMembers.find((item) => item.id === id);
-    if (!record || !confirm(`从自选股中删除「${record.name}」？`)) return;
+    if (!record || !await appConfirm(`从自选股中删除「${record.name}」？`, { title: "移出自选股", danger: true })) return;
     setPendingMemberIds((prev) => new Set(prev).add(id));
     if (!(await onDeleteRecords([id]))) setPendingMemberIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
   }

@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { GroupConfig, ModelServiceConfig, SiteSettings, TabConfig, TickerConfig } from "@/lib/types";
 import { showToast } from "@/lib/toast";
+import { appConfirm, appPrompt } from "@/lib/appDialog";
+import AppSelect from "@/components/AppSelect";
 import { copyText } from "@/lib/clipboard";
 import SettingsHeader, { SettingsSection, SubNavIcon } from "@/components/SettingsHeader";
 import { LOGO_FONT_LABELS, logoFontClass } from "@/lib/logoFont";
@@ -440,29 +442,11 @@ function BackupTaskCard() {
             </label>
             <label className="flex items-center gap-1.5">
               <span className="text-faint">间隔</span>
-              <select
-                value={intervalHours}
-                onChange={(e) => setIntervalHours(Number(e.target.value))}
-                className="rounded-lg border border-edge bg-white px-2 py-1 text-[12px] font-medium text-ink outline-none focus:border-edge-strong dark:bg-white/5"
-              >
-                <option value={1}>每小时</option>
-                <option value={24}>每天</option>
-                <option value={168}>每周</option>
-                <option value={720}>每月</option>
-              </select>
+              <AppSelect value={intervalHours} onChange={(value) => setIntervalHours(Number(value))} options={[{ value: "1", label: "每小时" }, { value: "24", label: "每天" }, { value: "168", label: "每周" }, { value: "720", label: "每月" }]} className="rounded-lg border border-edge bg-white px-2 py-1 text-[12px] font-medium text-ink dark:bg-white/5" ariaLabel="备份间隔" />
             </label>
             <label className="flex items-center gap-1.5">
               <span className="text-faint">保留</span>
-              <select
-                value={keep}
-                onChange={(e) => setKeep(Number(e.target.value))}
-                className="rounded-lg border border-edge bg-white px-2 py-1 text-[12px] font-medium text-ink outline-none focus:border-edge-strong dark:bg-white/5"
-              >
-                <option value={3}>3 份</option>
-                <option value={7}>7 份</option>
-                <option value={14}>14 份</option>
-                <option value={30}>30 份</option>
-              </select>
+              <AppSelect value={keep} onChange={(value) => setKeep(Number(value))} options={[3, 7, 14, 30].map((value) => ({ value: String(value), label: `${value} 份` }))} className="rounded-lg border border-edge bg-white px-2 py-1 text-[12px] font-medium text-ink dark:bg-white/5" ariaLabel="备份保留份数" />
             </label>
             <span className="text-faint">
               上次 {last} · 共 {backups.length} 份 · {fmtSize(totalSize)}
@@ -1055,8 +1039,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [site]);
 
-  function resetBrand() {
-    if (!confirm("确定将网站形象恢复默认吗？将清空网站图标、Logo 图片、网站背景图与登录页左侧图，Logo 文字恢复为 Fire。")) return;
+  async function resetBrand() {
+    if (!await appConfirm("将清空网站图标、Logo 图片、网站背景图与登录页左侧图，Logo 文字恢复为 Fire。", { title: "恢复默认网站形象", danger: true })) return;
     saveBlock("brand", { ico: "", siteLogo: "", logoText: "Fire", logoFont: "diatype", homepageBg: "", loginSideImage: "" }, "网站形象已重置");
   }
 
@@ -1174,7 +1158,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }
 
   async function exportSiteBackup() {
-    if (!confirm("导出的 fire-backup-*.json 包含全部站点配置与用户数据（不含数据库连接串等环境专属设置），请妥善保管。继续导出？")) return;
+    if (!await appConfirm("备份包含全部站点配置与用户数据，请妥善保管。", { title: "导出网站数据" })) return;
     setBackupBusy("export");
     try {
       const res = await fetch("/api/v1/data/export");
@@ -1221,7 +1205,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         `版本：${payload?.appVersion ?? "未知"} · 导出：${(payload?.exportedAt ?? "").replace("T", " ").slice(0, 16)}`,
         `持仓 ${counts.records ?? 0}、订单 ${counts.tradeOrders ?? 0}、分组 ${counts.watchGroups ?? 0}、设置 ${counts.siteSettings ?? 0}、名人持仓 ${counts.celebs ?? 0}${counts.profile ? "、昵称" : ""}`
       ].join("\n");
-      if (!confirm(`导入网站数据？\n\n${summary}\n\n将按 id 与当前数据「存在则更新、不存在则插入」合并，不会删除现有数据；导入前自动备份当前数据库。确定继续？`)) return;
+      if (!await appConfirm(`${summary}\n\n数据将按 id 合并，导入前会自动备份当前数据库。`, { title: "导入网站数据" })) return;
       // 第二步：真正导入
       const res = await fetch("/api/v1/data/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json().catch(() => null);
@@ -1601,7 +1585,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   async function saveStockGroups() {
     // 防误清：券商列表为空且当前已有券商时，先二次确认（避免清空所有持仓记录的券商）
     if (stockGroups.length === 0 && (site.groups?.length ?? 0) > 0) {
-      if (!confirm("券商列表为空，保存将删除全部券商并清空所有持仓记录的券商，确定要清空吗？")) return;
+      if (!await appConfirm("保存后将删除全部券商，并清空所有持仓记录的券商。", { title: "清空券商列表", danger: true })) return;
     }
     setGroupSaving(true);
     setGroupMsg(null);
@@ -1722,8 +1706,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   const [clearing, setClearing] = useState(false);
   async function clearAll() {
-    if (!confirm(`确定清空全部 ${recordsCount} 条记录吗？该操作不可恢复！`)) return;
-    const password = prompt("安全验证：请输入当前密码");
+    if (!await appConfirm(`将清空全部 ${recordsCount} 条记录，此操作无法恢复。`, { title: "清空全部记录", danger: true })) return;
+    const password = await appPrompt("请输入当前密码以继续", { title: "安全验证", placeholder: "当前密码" });
     if (!password) return;
     setClearing(true);
     await onClearAll(password);
@@ -2516,9 +2500,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <div className="sw-row-label"><b>{name}</b><span>{desc}</span></div>
                         <div className="ctrl">
                           {editingTradingSquare ? (
-                            <select className="sw-row-input !w-[150px]" value={site[key]} onChange={(event) => setSite(current => ({ ...current, [key]: Number(event.target.value) }))}>
-                              {[1, 5, 10, 15, 30, 60, 180, 360, 720, 1440].map(minutes => <option key={minutes} value={minutes}>{minutes < 60 ? `${minutes} 分钟` : minutes === 60 ? "1 小时" : minutes === 1440 ? "24 小时" : `${minutes / 60} 小时`}</option>)}
-                            </select>
+                            <AppSelect className="sw-row-input !w-[150px]" value={site[key]} onChange={(value) => setSite(current => ({ ...current, [key]: Number(value) }))} options={[1, 5, 10, 15, 30, 60, 180, 360, 720, 1440].map((minutes) => ({ value: String(minutes), label: minutes < 60 ? `${minutes} 分钟` : minutes === 60 ? "1 小时" : minutes === 1440 ? "24 小时" : `${minutes / 60} 小时` }))} ariaLabel="更新间隔" />
                           ) : <span className="text-[12.5px] font-semibold text-ink">{site[key] < 60 ? `${site[key]} 分钟` : site[key] === 60 ? "1 小时" : site[key] === 1440 ? "24 小时" : `${site[key] / 60} 小时`}</span>}
                         </div>
                       </div>
@@ -2799,8 +2781,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                               />
                               <label className="inline-flex items-center gap-1.5 text-[11px] text-muted">
                                 底色
+                                <span className="h-5 w-5 rounded-md border border-edge" style={{ backgroundColor: badge.bg }} />
                                 <input
-                                  type="color"
+                                  type="text"
                                   value={badge.bg}
                                   onChange={(e) => setSite((s) => ({
                                     ...s,
@@ -2809,14 +2792,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                       [item.key]: { ...badge, bg: e.target.value }
                                     }
                                   }))}
-                                  className="h-8 w-8 cursor-pointer rounded border border-edge bg-transparent p-0"
+                                  className="h-8 w-[78px] rounded-lg border border-edge bg-bg-gray px-2 font-mono text-[11px] text-ink outline-none focus:border-edge-strong"
                                   aria-label={`${item.name}底色`}
                                 />
                               </label>
                               <label className="inline-flex items-center gap-1.5 text-[11px] text-muted">
                                 文字
+                                <span className="h-5 w-5 rounded-md border border-edge" style={{ backgroundColor: badge.fg }} />
                                 <input
-                                  type="color"
+                                  type="text"
                                   value={badge.fg}
                                   onChange={(e) => setSite((s) => ({
                                     ...s,
@@ -2825,7 +2809,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                       [item.key]: { ...badge, fg: e.target.value }
                                     }
                                   }))}
-                                  className="h-8 w-8 cursor-pointer rounded border border-edge bg-transparent p-0"
+                                  className="h-8 w-[78px] rounded-lg border border-edge bg-bg-gray px-2 font-mono text-[11px] text-ink outline-none focus:border-edge-strong"
                                   aria-label={`${item.name}文字色`}
                                 />
                               </label>
@@ -3086,11 +3070,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <span>同一页面统一启用智能缩写，再按数值选用万、亿或万亿</span>
                     </div>
                     <div className="ctrl">
-                      <select value={currencyDisplayUnit} onChange={(e) => setCurrencyDisplayUnit(e.target.value as CurrencyDisplayUnit)} className="sw-row-input" aria-label="货币金额显示单位">
-                        <option value="auto">按页面智能缩写（推荐）</option>
-                        <option value="compact">所有页面智能缩写</option>
-                        <option value="full">始终完整</option>
-                      </select>
+                      <AppSelect value={currencyDisplayUnit} onChange={(value) => setCurrencyDisplayUnit(value as CurrencyDisplayUnit)} options={[{ value: "auto", label: "按页面智能缩写（推荐）" }, { value: "compact", label: "所有页面智能缩写" }, { value: "full", label: "始终完整" }]} className="sw-row-input" ariaLabel="货币金额显示单位" />
                     </div>
                   </div>
                 </SettingsSection>

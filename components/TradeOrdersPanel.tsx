@@ -11,6 +11,7 @@ import { FlatCheckbox } from "@/components/HoldingColumnManager";
 import RefreshButton from "@/components/RefreshButton";
 import DeleteIcon from "@/components/DeleteIcon";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
+import { appConfirm } from "@/lib/appDialog";
 
 type OrderTab = "today" | "history";
 type StatusFilter = "all" | "filled" | "pending" | "cancelled" | "expired";
@@ -469,7 +470,7 @@ export default function TradeOrdersPanel({
   const totalColumnWidth = visibleColumns.reduce((sum, item) => sum + (ORDER_COLUMNS.find((column) => column.key === item.key)?.minWidth ?? 90), 0);
 
   async function handleCancel(order: TradeOrder) {
-    if (!window.confirm(`确认撤下这笔挂单？\n${order.name} · ${order.side === "buy" ? "买入" : "卖出"} ${order.qty} 股`)) return;
+    if (!await appConfirm(`确认撤下这笔挂单？\n${order.name} · ${order.side === "buy" ? "买入" : "卖出"} ${order.qty} 股`, { title: "撤下挂单", danger: true })) return;
     try {
       const res = await fetch(`/api/v1/orders/${order.id}`, { method: "PATCH" });
       const data = await res.json().catch(() => null);

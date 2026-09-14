@@ -89,7 +89,7 @@ export default function AppModal({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-8" role="dialog" aria-modal="true" aria-label={title || "弹窗"}>
+    <div className="fixed inset-0 z-[11000] flex items-center justify-center p-4 sm:p-8" role="dialog" aria-modal="true" aria-label={title || "弹窗"}>
       {/* 毛玻璃遮罩（iOS 风格），保持页面可读 */}
       <div
         className={`modal-scrim absolute inset-0 ${closing ? "modal-overlay-closing" : "modal-overlay"}`}

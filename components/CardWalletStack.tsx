@@ -5,6 +5,7 @@ import { gsap } from "gsap";
 import AppModal from "@/components/AppModal";
 import { showToast } from "@/lib/toast";
 import { usePersistedState } from "@/lib/usePersistedState";
+import AppSelect from "@/components/AppSelect";
 import { cardLast4, currencySymbol, fmtCardMoney, formatCardNumber } from "@/lib/cardCurrencies";
 import { cardCurrencyChoicesFor, currencyName } from "@/lib/cardCurrency";
 import { isFundCurrency } from "@/lib/fundCurrencies";
@@ -1151,7 +1152,9 @@ function CardDetailPanel({
           <label className="mt-3 flex flex-col gap-1.5">
             <span className="text-[12px] font-semibold text-muted">日期</span>
             <input
-              type="date"
+              type="text"
+              inputMode="numeric"
+              placeholder="YYYY-MM-DD"
               value={occurredAt}
               onChange={(event) => setOccurredAt(event.target.value)}
               className={`h-10 rounded-xl border border-edge bg-white px-3 text-[13px] text-ink dark:bg-[#1c222d] ${FOCUS_RING}`}
@@ -1256,18 +1259,7 @@ function CardDetailPanel({
           <label className="mt-3 flex flex-col gap-1.5">
             <span className="text-[12px] font-semibold text-muted">币种</span>
             {currencyChoices.length > 1 ? (
-              <select
-                value={draft.currency}
-                onChange={(event) => setDraft((prev) => ({ ...prev, currency: event.target.value }))}
-                title="只列出这张卡能记的币种"
-                className={`h-10 rounded-xl border border-edge bg-white px-3 text-[13px] font-semibold text-ink dark:bg-[#1c222d] ${FOCUS_RING}`}
-              >
-                {currencyChoices.map((code) => (
-                  <option key={code} value={code}>
-                    {code} · {currencyName(code)}
-                  </option>
-                ))}
-              </select>
+              <AppSelect value={draft.currency} onChange={(value) => setDraft((prev) => ({ ...prev, currency: value }))} options={currencyChoices.map((code) => ({ value: code, label: `${code} · ${currencyName(code)}` }))} className={`h-10 rounded-xl border border-edge bg-white px-3 text-[13px] font-semibold text-ink dark:bg-[#1c222d] ${FOCUS_RING}`} ariaLabel="币种" />
             ) : (
               <span
                 title="单币卡：这张卡只有这一个币种（可在卡面库的卡片详情里改币种范围）"

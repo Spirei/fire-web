@@ -17,6 +17,7 @@ import FileDropAnywhere from "@/components/FileDropAnywhere";
 import { PrefsProvider } from "@/lib/prefsContext";
 import { PREFS_COOKIE, parsePrefsCookie } from "@/lib/prefsCookie";
 import SiteFavicon from "@/components/SiteFavicon";
+import AppDialogHost from "@/components/AppDialogHost";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = getSiteSettings();
@@ -81,6 +82,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <TimeMachine />
           <SiteBg />
           <LoginModal />
+          <AppDialogHost />
           {children}
         </PrefsProvider>
       </body>

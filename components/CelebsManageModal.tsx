@@ -5,6 +5,7 @@ import { showToast } from "@/lib/toast";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import MarketIcon from "@/components/MarketIcon";
 import DeleteIcon from "@/components/DeleteIcon";
+import AppSelect from "@/components/AppSelect";
 
 interface ManageCeleb {
   id: string;
@@ -456,11 +457,7 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block">
                     <span className="mb-1 block text-[11px] font-semibold text-muted">来源类型</span>
-                    <select value={draft.sourceKind} onChange={(e) => patch({ sourceKind: e.target.value as Draft["sourceKind"] })} className={`${inputCls} w-full`}>
-                      {SOURCE_OPTIONS.map((o) => (
-                        <option key={o.key} value={o.key}>{o.label}</option>
-                      ))}
-                    </select>
+                    <AppSelect value={draft.sourceKind} onChange={(value) => patch({ sourceKind: value as Draft["sourceKind"] })} options={SOURCE_OPTIONS.map((option) => ({ value: option.key, label: option.label }))} className={`${inputCls} w-full`} ariaLabel="来源类型" />
                   </label>
                   <label className="block">
                     <span className="mb-1 block text-[11px] font-semibold text-muted">SEC CIK（10 位，可留空自动反查）</span>
@@ -570,11 +567,7 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
                       <input value={t.code} onChange={(e) => patchTrade(i, { code: e.target.value })} placeholder="代码" className={`${inputCls} w-full`} />
                       <input value={t.name} onChange={(e) => patchTrade(i, { name: e.target.value })} placeholder="名称" className={`${inputCls} w-full`} />
                       <input type="number" step="0.01" value={t.changePct || ""} onChange={(e) => patchTrade(i, { changePct: Number(e.target.value) })} placeholder="涨跌%" className={`${inputCls} w-full`} />
-                      <select value={t.action} onChange={(e) => patchTrade(i, { action: e.target.value })} className={`${inputCls} w-full`}>
-                        {["买入", "增仓", "建仓", "增持", "减仓", "卖出"].map((a) => (
-                          <option key={a} value={a}>{a}</option>
-                        ))}
-                      </select>
+                      <AppSelect value={t.action} onChange={(value) => patchTrade(i, { action: value })} options={["买入", "增仓", "建仓", "增持", "减仓", "卖出"].map((value) => ({ value, label: value }))} className={`${inputCls} w-full`} ariaLabel="交易动作" />
                       <button type="button" onClick={() => patch({ trades: draft.trades.filter((_, idx) => idx !== i) })} className="flex h-8 w-8 items-center justify-center rounded-[9px] text-muted transition-colors hover:bg-brand-hover hover:text-ink dark:hover:bg-white/10 dark:hover:text-white" title="删除">
                         <DeleteIcon size={14} />
                       </button>

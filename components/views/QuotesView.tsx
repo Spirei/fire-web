@@ -19,6 +19,7 @@ import ImportSnapshotModal from "@/components/ImportSnapshotModal";
 import WatchlistFileImportModal from "@/components/WatchlistFileImportModal";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import RefreshButton from "@/components/RefreshButton";
+import AppSelect from "@/components/AppSelect";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
 import MiniTrendChart from "@/components/MiniTrendChart";
@@ -746,20 +747,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
             {refreshing ? "刷新中…" : quoteAt ? `更新于 ${quoteAt}` : lastRefreshAt ? `上次刷新 ${lastRefreshAt}` : "等待行情"}
           </span>
           <RefreshButton onClick={() => scheduleRef.current?.manual()} title="立即刷新行情" className="h-8 w-8 rounded-[9px]" />
-          <select
-            value={intervalMs}
-            onChange={(e) => {
-              const ms = Number(e.target.value);
-              setIntervalMs(ms);
-            }}
-            className="h-8 rounded-[9px] border border-edge bg-bg-gray px-2.5 text-[11px] font-semibold text-muted outline-none transition-colors hover:border-edge-strong focus:border-edge-strong"
-            aria-label="刷新间隔"
-            title="刷新间隔"
-          >
-            {INTERVALS.map((it) => (
-              <option key={it.ms} value={it.ms}>每 {it.label}</option>
-            ))}
-          </select>
+          <AppSelect value={intervalMs} onChange={(value) => setIntervalMs(Number(value))} options={INTERVALS.map((item) => ({ value: String(item.ms), label: `每 ${item.label}` }))} className="h-8 rounded-[9px] border border-edge bg-bg-gray px-2.5 text-[11px] font-semibold text-muted transition-colors hover:border-edge-strong" ariaLabel="刷新间隔" />
         </div>
       </div>
 

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import AppModal from "@/components/AppModal";
+import AppSelect from "@/components/AppSelect";
 import { showToast } from "@/lib/toast";
 import type { WatchGroup } from "@/lib/watchGroups";
 
@@ -186,10 +187,7 @@ export default function ImportSnapshotModal({
                 <p className="text-xs font-semibold text-ink-2">批量导入分组</p>
                 <p className="mt-0.5 text-[11px] text-muted">可将本次识别的股票统一加入一个自定义分组</p>
               </div>
-              <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className="field h-9 min-w-[170px] rounded-lg px-2.5 text-xs font-semibold">
-                <option value="">不指定分组</option>
-                {watchGroups.filter((group) => group.kind === "custom").map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-              </select>
+              <AppSelect value={groupId} onChange={setGroupId} options={[{ value: "", label: "不指定分组" }, ...watchGroups.filter((group) => group.kind === "custom").map((group) => ({ value: group.id, label: group.name }))]} className="field h-9 min-w-[170px] rounded-lg px-2.5 text-xs font-semibold" ariaLabel="批量导入分组" />
             </div>
           )}
           <div className="max-h-[46vh] overflow-auto rounded-2xl border border-edge">

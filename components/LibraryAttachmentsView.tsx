@@ -7,6 +7,7 @@ import Pagination from "@/components/Pagination";
 import MarketIcon from "@/components/MarketIcon";
 import DeleteIcon from "@/components/DeleteIcon";
 import { useAssetIcons } from "@/lib/useAssetIcons";
+import { appConfirm } from "@/lib/appDialog";
 
 interface LibAsset {
   id: string;
@@ -167,7 +168,7 @@ export function FinancialAttachments({ standalone }: { standalone?: boolean }) {
   const byYear = view.year ? (byCompany || []).filter((f) => f.fiscalYear === view.year) : null;
   const rows = view.category ? (byYear || []).filter((f) => reportCategory(f) === view.category) : null;
 
-  const remove = async (file: FinancialAttachment) => { if (!confirm(`确定删除「${file.fileName}」吗？`)) return; const response = await fetch(`/api/v1/financial-reports/${encodeURIComponent(file.id)}`, { method: "DELETE" }); if (response.ok) { showToast("财报附件已删除"); load(); } else showToast("删除失败", "err"); };
+  const remove = async (file: FinancialAttachment) => { if (!await appConfirm(`确定删除「${file.fileName}」吗？`, { title: "删除附件", danger: true })) return; const response = await fetch(`/api/v1/financial-reports/${encodeURIComponent(file.id)}`, { method: "DELETE" }); if (response.ok) { showToast("财报附件已删除"); load(); } else showToast("删除失败", "err"); };
 
   /** 上传市场/指数自定义图标（folder=market，更新素材库 market 图标，全局生效） */
   const uploadMarketIcon = async (marketKey: string, file: File) => {
@@ -492,7 +493,7 @@ export default function LibraryAttachmentsView() {
   }
 
   async function removeAsset(a: LibAsset) {
-    if (!confirm(`确定删除「${a.name || a.code}」吗？素材库与附件管理将同步移除。`)) return;
+    if (!await appConfirm(`确定删除「${a.name || a.code}」吗？素材库与附件管理将同步移除。`, { title: "删除素材", danger: true })) return;
     setBusyId(a.id);
     try {
       const res = await fetch(`/api/assets?id=${encodeURIComponent(a.id)}`, { method: "DELETE" });

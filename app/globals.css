@@ -3353,7 +3353,9 @@ html.dark .watch-import-target {
 .ma-settings-row { display: grid; grid-template-columns: minmax(105px,1fr) 42px minmax(160px,1.35fr); align-items: center; gap: 12px; min-height: 58px; padding: 7px 14px; border-bottom: 1px solid #eceff2; }
 .ma-settings-row:last-child { border-bottom: 0; }
 .ma-settings-row label { display: flex; align-items: center; gap: 10px; font-weight: 700; }
-.ma-color-input { width: 36px; height: 36px; padding: 3px; border: 1px solid #d8dde4; border-radius: 9px; background: transparent; }
+.ma-color-input { display: flex; width: 104px; height: 36px; justify-content: flex-end; padding: 3px; border: 1px solid #d8dde4; border-radius: 9px; overflow: hidden; }
+.ma-color-input input { height: 100%; width: 72px; border: 0; border-radius: 6px; background: rgba(255,255,255,.92); padding: 0 7px; color: #25282d; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; outline: none; }
+.dark .ma-color-input input { background: rgba(25,25,27,.92); color: rgba(255,255,255,.88); }
 .ma-period-stepper { display: grid; grid-template-columns: 38px minmax(52px,1fr) 38px; height: 38px; overflow: hidden; border: 1px solid #d8dde4; border-radius: 9px; }
 .ma-period-stepper button { background: #f4f5f7; color: #697280; font-size: 18px; }
 .ma-period-stepper input { width: 100%; border: 0; background: transparent; color: inherit; text-align: center; font-weight: 700; -moz-appearance: textfield; }
