@@ -112,30 +112,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 账户助手作为独立的浅色工作面板，深色站点中也保持白底与长桥青层级。 */
-.dark section.assistant-panel {
-  color-scheme: light;
-  border-color: #e1e7e6;
-  background: #fff;
-}
-.dark .assistant-panel .text-ink { color: #0a0e19; }
-.dark .assistant-panel .text-muted { color: #6b7280; }
-.dark .assistant-panel .text-faint { color: #9aa1ab; }
-.dark .assistant-panel .border-edge { border-color: #dfe2e8; }
-.dark .assistant-panel .border-edge-strong { border-color: #c9ced8; }
-.dark .assistant-panel .bg-white { background-color: #fff; }
-.dark .assistant-panel .bg-white\/70 { background-color: rgba(255, 255, 255, 0.7); }
-.dark .assistant-panel .bg-white\/80 { background-color: rgba(255, 255, 255, 0.8); }
-.dark .assistant-panel .bg-bg-gray { background-color: #f7f8fa; }
-.dark .assistant-panel .bg-bg-gray\/60 { background-color: rgba(247, 248, 250, 0.6); }
-.dark .assistant-panel .hover\:bg-bg-gray:hover { background-color: #f0f3f3; }
-.dark .assistant-panel .hover\:bg-brand-hover:hover { background-color: #f1faf8; }
-.dark .assistant-panel textarea,
-.dark .assistant-panel textarea:focus {
-  color: #0a0e19;
-  background: transparent;
-}
-
 .assistant-send {
   position: relative;
   isolation: isolate;

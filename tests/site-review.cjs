@@ -187,6 +187,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   });
   await test('assistant launcher and panel positions are draggable, isolated and persistent',()=>{
     const source=fs.readFileSync(path.join(root,'components/ContextAssistant.tsx'),'utf8');
+    const globalStyles=fs.readFileSync(path.join(root,'app/globals.css'),'utf8');
     assert(source.includes('startFloatingDrag("launcher"'));
     assert(source.includes('startFloatingDrag("panel"'));
     assert(source.includes('fire:assistant:${target}-position:${userId}'));
@@ -196,13 +197,16 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(source.includes('Max-Age=31536000'));
   assert(source.includes('aria-pressed={pinned}'));
   assert(source.includes('onPointerDown={(event) => event.stopPropagation()}'));
-  assert(source.includes('所有会话都会保留在这里'));
+  assert(source.includes('你的对话会保留在这里'));
+  assert(source.includes('placeholder="搜索对话"'));
   assert(!source.includes('IconMinus'));
   assert(!source.includes('setMinimized'));
-  assert(source.includes('IconPinFilled'));
+  assert(source.includes('M14 4v5l3 3v2H7v-2l3-3V4'));
   assert(!source.includes('>新建对话</button>'));
   assert(source.includes('aria-pressed={open}'));
-  assert(source.includes('收起账户助手'));
+  assert(source.includes('收起智能助手'));
+  assert(source.includes('dark:bg-[#17191d]'));
+  assert(!globalStyles.includes('color-scheme: light;\n  border-color: #e1e7e6;\n  background: #fff;'));
     assert(source.includes("closest(\"button, input, textarea, a, [role='button']\")"));
   });
   const ledgerXlsx=require(path.join(root,'lib/simpleLedgerXlsx.ts'));
