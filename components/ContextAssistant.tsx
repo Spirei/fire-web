@@ -69,7 +69,7 @@ const MAX_SAVED_MESSAGES = 30;
 const ACTION_TTL_MS = 15 * 60 * 1000;
 const FLOATING_MARGIN = 12;
 const MAX_IMAGE_TOTAL_BYTES = 100 * 1024 * 1024;
-const ASSISTANT_MODEL_CHANGED_EVENT = "fire:assistant-default-model-changed";
+const ASSISTANT_MODEL_CHANGED_EVENT = "fire:assistant-selected-model-changed";
 
 type FloatingPosition = { x: number; y: number };
 type FloatingTarget = "launcher" | "panel";
@@ -234,7 +234,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   }, []);
   useEffect(() => {
     void fetch("/api/assistant/preferences").then(response => response.ok ? response.json() : null).then(data => {
-      if (data) { setMemoryEnabled(data.memoryEnabled === true); setMemory(typeof data.memory === "string" ? data.memory : ""); setSelectedModel(typeof data.defaultModel === "string" ? data.defaultModel : "auto"); }
+      if (data) { setMemoryEnabled(data.memoryEnabled === true); setMemory(typeof data.memory === "string" ? data.memory : ""); setSelectedModel(typeof data.selectedModel === "string" ? data.selectedModel : "auto"); }
     }).catch(() => undefined);
   }, []);
   useEffect(() => {
@@ -466,10 +466,10 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     await fetch("/api/assistant/preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memoryEnabled: nextEnabled, memory: nextMemory }) }).catch(() => undefined);
   }
 
-  function selectDefaultModel(value: string) {
+  function selectAssistantModel(value: string) {
     setSelectedModel(value);
     window.dispatchEvent(new CustomEvent<string>(ASSISTANT_MODEL_CHANGED_EVENT, { detail: value }));
-    void fetch("/api/assistant/preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ defaultModel: value }) }).catch(() => undefined);
+    void fetch("/api/assistant/preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ selectedModel: value }) }).catch(() => undefined);
   }
 
   async function addSpace() {
@@ -820,7 +820,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                     </>}
                     {!embedded && <button type="button" onClick={() => { onNavigate("/assistant"); setOpen(false); }} className="h-8 shrink-0 rounded-full px-2.5 text-[11px] font-medium text-muted transition-colors hover:bg-black/[.045] hover:text-ink dark:text-white/50 dark:hover:bg-white/[.07] dark:hover:text-white/80">完整工作台</button>}
                     <div className="ml-auto flex min-w-0 items-center gap-1.5">
-                      {embedded&&<div className="harness-menu-anchor harness-model-anchor"><button type="button" onClick={()=>setModelMenuOpen(v=>!v)} className="harness-model-button">{selectedModel==="auto"?"自动选择模型":availableModels.find(item=>`${item.serviceId}:${item.model}`===selectedModel)?.model||"自动选择模型"}<IconChevronDown size={15}/></button>{modelMenuOpen&&<div className="harness-popup-menu harness-model-menu"><div className="harness-menu-title">选择模型</div><button type="button" onClick={()=>{selectDefaultModel("auto");setModelMenuOpen(false);}}>{selectedModel==="auto"&&<IconCheck size={15}/>}<span>默认 · 推荐模型集</span></button>{availableModels.filter(item=>item.configured).map(item=><button type="button" key={`${item.serviceId}:${item.model}`} onClick={()=>{selectDefaultModel(`${item.serviceId}:${item.model}`);setModelMenuOpen(false);}}>{selectedModel===`${item.serviceId}:${item.model}`&&<IconCheck size={15}/>}<span>{item.model}</span></button>)}</div>}</div>}
+                      {embedded&&<div className="harness-menu-anchor harness-model-anchor"><button type="button" onClick={()=>setModelMenuOpen(v=>!v)} className="harness-model-button">{selectedModel==="auto"?"自动选择模型":availableModels.find(item=>`${item.serviceId}:${item.model}`===selectedModel)?.model||"自动选择模型"}<IconChevronDown size={15}/></button>{modelMenuOpen&&<div className="harness-popup-menu harness-model-menu"><div className="harness-menu-title">选择模型</div><button type="button" onClick={()=>{selectAssistantModel("auto");setModelMenuOpen(false);}}>{selectedModel==="auto"&&<IconCheck size={15}/>}<span>自动选择 · 推荐模型集</span></button>{availableModels.filter(item=>item.configured).map(item=><button type="button" key={`${item.serviceId}:${item.model}`} onClick={()=>{selectAssistantModel(`${item.serviceId}:${item.model}`);setModelMenuOpen(false);}}>{selectedModel===`${item.serviceId}:${item.model}`&&<IconCheck size={15}/>}<span>{item.model}</span></button>)}</div>}</div>}
                       <button type={loading && !input.trim() && pendingImages.length === 0 ? "button" : "submit"} disabled={!input.trim() && pendingImages.length === 0 && !loading} onClick={loading && !input.trim() && pendingImages.length === 0 ? stopGenerating : undefined} className={`assistant-send-button group flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 ${input.trim() || pendingImages.length || loading ? "is-active border-[#4caf58] bg-[#4caf58] text-white shadow-[0_4px_14px_rgba(76,175,88,.2)] hover:border-[#45a550] hover:bg-[#45a550]" : "border-[#bfe5c3] bg-[#e8f5e9] text-[#91c99a] dark:border-[#315d38] dark:bg-[#233b27] dark:text-[#659d6d]"}`} aria-label={loading && !input.trim() && pendingImages.length === 0 ? "停止生成" : "发送"}>{loading && !input.trim() && pendingImages.length === 0 ? <span className="h-3.5 w-3.5 rounded-[2px] bg-white" /> : <IconArrowUp size={20} stroke={2.1} className="transition-transform duration-200 group-hover:-translate-y-0.5" />}</button>
                     </div>
                   </div>
@@ -841,7 +841,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
         </div>
       </div>}
       {renameTarget&&<div className="assistant-rename-overlay" data-assistant-theme={appearance} role="dialog" aria-modal="true" aria-label="重命名会话"><button type="button" className="assistant-rename-mask" aria-label="取消重命名" onClick={()=>setRenameTarget(null)}/><form className="assistant-rename-dialog" onSubmit={event=>{event.preventDefault();if(renameDraft.trim())void updateConversation(renameTarget.id,{title:renameDraft.trim()});}}><h3>重命名会话</h3><input autoFocus value={renameDraft} maxLength={80} onChange={event=>setRenameDraft(event.target.value)} aria-label="会话名称"/><div><button type="button" onClick={()=>setRenameTarget(null)}>取消</button><button type="submit" disabled={!renameDraft.trim()}>保存</button></div></form></div>}
-      <AssistantHarnessSettings open={settingsOpen} section={settingsSection} appearance={appearance} fontSize={contentFontSize} density={density} models={availableModels} selectedModel={selectedModel} spaces={spaces} selectedSpace={selectedSpace} memoryEnabled={memoryEnabled} memory={memory} usage={usageSummary} onSelectModel={selectDefaultModel} onMoveSpace={value=>void moveCurrentConversation(value)} onAddSpace={()=>void addSpace()} onMemoryEnabled={value=>void saveMemory(value,memory)} onMemoryChange={setMemory} onMemorySave={()=>void saveMemory(memoryEnabled,memory)} onClearMemory={()=>{setMemory("");setMemoryEnabled(false);void fetch("/api/assistant/preferences",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({memoryEnabled:false,memory:""})});}} onClose={()=>setSettingsOpen(false)} onSection={setSettingsSection} onAppearance={setAppearance} onFontSize={setContentFontSize} onDensity={setDensity} onModelsSaved={()=>{void fetch("/api/assistant/models").then(response=>response.ok?response.json():null).then(data=>{if(Array.isArray(data?.services))setAvailableModels(data.services);}).catch(()=>undefined);}} />
+      <AssistantHarnessSettings open={settingsOpen} section={settingsSection} appearance={appearance} fontSize={contentFontSize} density={density} models={availableModels} selectedModel={selectedModel} spaces={spaces} selectedSpace={selectedSpace} memoryEnabled={memoryEnabled} memory={memory} usage={usageSummary} onSelectModel={selectAssistantModel} onMoveSpace={value=>void moveCurrentConversation(value)} onAddSpace={()=>void addSpace()} onMemoryEnabled={value=>void saveMemory(value,memory)} onMemoryChange={setMemory} onMemorySave={()=>void saveMemory(memoryEnabled,memory)} onClearMemory={()=>{setMemory("");setMemoryEnabled(false);void fetch("/api/assistant/preferences",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({memoryEnabled:false,memory:""})});}} onClose={()=>setSettingsOpen(false)} onSection={setSettingsSection} onAppearance={setAppearance} onFontSize={setContentFontSize} onDensity={setDensity} onModelsSaved={()=>{void fetch("/api/assistant/models").then(response=>response.ok?response.json():null).then(data=>{if(Array.isArray(data?.services))setAvailableModels(data.services);}).catch(()=>undefined);}} />
     </>
   );
   return embedded ? experience : createPortal(experience, document.body);
