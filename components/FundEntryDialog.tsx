@@ -126,7 +126,7 @@ export default function FundEntryDialog(props: Props) {
   }, [props.onClose]);
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") props.onClose(); }} onMouseDown={(event) => { if (event.target === event.currentTarget) props.onClose(); }}>
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") props.onClose(); }} onMouseDown={(event) => { if (event.target === event.currentTarget) props.onClose(); }}>
       <form onSubmit={(event) => { event.preventDefault(); if (!props.saving && amountValid) props.onSubmit(); }} role="dialog" aria-modal="true" aria-labelledby="fund-dialog-title" className="w-full max-w-[420px] overflow-visible rounded-[20px] border border-edge bg-white shadow-2xl dark:bg-[#1b2029]">
         <div className="flex items-start justify-between border-b border-edge px-5 py-4">
           <div><h3 id="fund-dialog-title" className="text-base font-bold">新增资金记录</h3><p className="mt-1 text-[11px] text-muted">记录后将同步更新现金余额与账户净资产</p></div>

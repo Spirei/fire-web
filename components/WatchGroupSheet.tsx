@@ -560,7 +560,7 @@ export default function WatchGroupSheet({
       )}
 
       {rename && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-[28px] bg-black/25 p-5 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="修改分组名称" onMouseDown={(e) => e.target === e.currentTarget && setRename(null)}>
+        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-[28px] bg-black/35 p-5" role="dialog" aria-modal="true" aria-label="修改分组名称" onMouseDown={(e) => e.target === e.currentTarget && setRename(null)}>
           <div className="w-full max-w-[380px] rounded-[22px] border border-white/70 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.24)] dark:border-white/10 dark:bg-[#1d232e] dark:shadow-[0_28px_80px_rgba(0,0,0,.55)]">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
@@ -589,7 +589,7 @@ export default function WatchGroupSheet({
       )}
 
       {addOpen && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-[28px] bg-black/25 p-5 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="添加分组" onMouseDown={(e) => e.target === e.currentTarget && setAddOpen(false)}>
+        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-[28px] bg-black/35 p-5" role="dialog" aria-modal="true" aria-label="添加分组" onMouseDown={(e) => e.target === e.currentTarget && setAddOpen(false)}>
           <div className="w-full max-w-[380px] rounded-[22px] border border-white/70 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.24)] dark:border-white/10 dark:bg-[#1d232e] dark:shadow-[0_28px_80px_rgba(0,0,0,.55)]">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div><h4 className="text-base font-bold text-ink">添加分组</h4><p className="mt-1 text-xs text-muted">创建一个新的自选分组</p></div>

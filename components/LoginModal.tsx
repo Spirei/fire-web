@@ -58,7 +58,7 @@ export default function LoginModal() {
   const fontCls = logoFontClass(logoFont);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/55 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/55 p-4">
       <div className="fixed inset-0" onClick={() => setOpen(false)} aria-hidden />
       <div
         role="dialog"

@@ -507,7 +507,7 @@ html.simple-app-active {
     html.simple-app-active .mask {
       position: absolute; inset: 0; z-index: 40; display: none;
       align-items: center; justify-content: center; padding: 20px;
-      background: rgba(0,0,0,.4); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+      background: rgba(0,0,0,.46);
     }
     html.simple-app-active .mask.on { display: flex; }
     html.simple-app-active .modal {

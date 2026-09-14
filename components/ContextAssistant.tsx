@@ -946,7 +946,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
           </section>
         </div>
       )}
-      {previewImage && <div className="fixed inset-0 z-[10020] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`图片预览：${previewImage.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewImage(null); }}>
+      {previewImage && <div className="fixed inset-0 z-[10020] flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-label={`图片预览：${previewImage.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewImage(null); }}>
         <div className="relative flex max-h-full max-w-full items-center justify-center">
           <img src={previewImage.dataUrl} alt={previewImage.name} className="max-h-[calc(100dvh-32px)] max-w-[calc(100vw-32px)] rounded-xl object-contain shadow-2xl" />
           <button type="button" onClick={() => setPreviewImage(null)} className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80" aria-label="关闭图片预览"><IconX size={20} /></button>

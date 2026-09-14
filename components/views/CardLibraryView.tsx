@@ -359,7 +359,7 @@ function MultiSelect({
         </button>
         {open && (
           <>
-            <div className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[1px] sm:bg-transparent sm:backdrop-blur-none" onClick={() => setOpen(false)} />
+            <div className="fixed inset-0 z-[60] bg-black/35 sm:bg-transparent" onClick={() => setOpen(false)} />
             {/* 手机：从底部升起的抽屉（占满宽、行高够点）；≥sm 回到按钮下面的小面板 */}
             {/* 桌面端也要保持在遮罩之上（原来的 sm:z-40 会被 z-[60] 的遮罩盖住，
                 鼠标实际落在遮罩上 → 滑轮滚的是网页而不是列表） */}
