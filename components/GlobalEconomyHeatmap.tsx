@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import echarts, { type EChartsInstance } from "@/lib/echarts";
 import { WORLD_ECONOMY_INDICATORS, type WorldEconomyCountry, type WorldEconomyIndicator } from "@/lib/worldEconomy";
-import { countryCatalogForMapNames, countryFlagEmoji, countryNameZh, type CountryCatalogItem } from "@/lib/countryCatalog";
+import { countryCatalogForMapNames, countryNameZh, type CountryCatalogItem } from "@/lib/countryCatalog";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import { defaultFlagUrl } from "@/lib/flagAssets";
 
@@ -174,22 +174,25 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char] ?? char);
 }
 
-function flagMarkup(country: Pick<CountryCatalogItem, "iso2" | "flag" | "flagCode">, customUrl?: string) {
-  const emoji = country.flag && country.flag !== "🌐" ? country.flag : countryFlagEmoji(country.iso2 || country.flagCode);
-  const fallback = `<span style="display:${country.flagCode ? "none" : "grid"};width:20px;height:20px;place-items:center;font-size:18px;line-height:20px">${escapeHtml(emoji)}</span>`;
+function flagFallbackMarkup(hidden = false) {
+  return `<span style="display:${hidden ? "none" : "grid"};width:20px;height:20px;place-items:center;border-radius:50%;background:#f1f3f5;color:#6b7280"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.45 3.6 5.45 3.6 9S14.4 18.55 12 21c-2.4-2.45-3.6-5.45-3.6-9S9.6 5.45 12 3Z"/></svg></span>`;
+}
+
+function flagMarkup(country: Pick<CountryCatalogItem, "iso2" | "flagCode">, customUrl?: string) {
+  const fallback = flagFallbackMarkup(!!country.flagCode);
   if (!country.flagCode) return fallback;
   // 默认本地素材库圆形 SVG（hatscripts/circle-flags，public/uploads/asset/flag/{iso2}.svg），自定义旗帜优先
   const src = customUrl || defaultFlagUrl(country.flagCode);
   return `<img src="${escapeHtml(src)}" alt="" style="display:block;width:20px;height:20px;object-fit:cover;border-radius:50%" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"/>${fallback}`;
 }
 
-function CountryFlag({ iso2, flag, customUrl }: { iso2: string; flag: string; customUrl?: string }) {
+function CountryFlag({ iso2, customUrl }: { iso2: string; flag?: string; customUrl?: string }) {
   const [failed, setFailed] = useState(false);
   const src = customUrl || (iso2 ? defaultFlagUrl(iso2) : "");
   useEffect(() => setFailed(false), [src]);
   return (
     <span className="economy-ranking-flag" aria-hidden="true">
-      {src && !failed ? <img src={src} alt="" className="h-full w-full rounded-full object-cover" onError={() => setFailed(true)} /> : flag && flag !== "🌐" ? flag : countryFlagEmoji(iso2)}
+      {src && !failed ? <img src={src} alt="" className="h-full w-full rounded-full object-cover" onError={() => setFailed(true)} /> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[62%] w-[62%] text-muted"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.4 2.45 3.6 5.45 3.6 9S14.4 18.55 12 21c-2.4-2.45-3.6-5.45-3.6-9S9.6 5.45 12 3Z" /></svg>}
     </span>
   );
 }
@@ -630,7 +633,7 @@ export default function GlobalEconomyHeatmap() {
           const item = lookup.get(params.name);
           const country = countryLookup.get(params.name);
           const iso2 = country?.iso2 || item?.flagCode.toUpperCase() || "";
-          const identity = country ?? { iso2, flag: item?.flag || "🌐", flagCode: item?.flagCode || "" };
+          const identity = country ?? { iso2, flagCode: item?.flagCode || "" };
           const flag = flagMarkup(identity, countryFlags[iso2]);
           const countryName = country?.name || countryNameZh(iso2, item?.name || params.name);
           const heading = `<div style="display:flex;align-items:center;gap:9px;font-size:15px;font-weight:600;line-height:20px"><span style="display:grid;width:20px;height:20px;flex:none;place-items:center;overflow:hidden;border-radius:50%">${flag}</span><span>${escapeHtml(countryName)}</span></div>`;

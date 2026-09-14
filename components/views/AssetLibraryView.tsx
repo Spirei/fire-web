@@ -1894,7 +1894,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
                           className="group relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)] dark:bg-[#1c1c1e]"
                           title="点击上传自定义旗帜"
                         >
-                          <span className="absolute inset-0 grid place-items-center text-xl">{country.flag}</span>
+                          <span className="absolute inset-[3px] grid place-items-center rounded-full bg-bg-gray text-muted"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.4 2.45 3.6 5.45 3.6 9S14.4 18.55 12 21c-2.4-2.45-3.6-5.45-3.6-9S9.6 5.45 12 3Z" /></svg></span>
                           <img src={src} alt="" className="relative h-full w-full rounded-full object-cover p-[3px]" onError={(event) => { event.currentTarget.style.display = "none"; }} />
                           <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                             {busy[busyKey] ? (

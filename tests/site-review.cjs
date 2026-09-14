@@ -117,6 +117,19 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(state.activeId,second);assert.equal(state.conversations.length,1);
     assert.equal(assistantHistory.getAssistantHistoryState(other.id).conversations.length,0);
   });
+  await test('market and country icon fallbacks never render emoji',()=>{
+    const marketIcon=fs.readFileSync(path.join(root,'components/MarketIcon.tsx'),'utf8');
+    const heatmap=fs.readFileSync(path.join(root,'components/GlobalEconomyHeatmap.tsx'),'utf8');
+    const assetLibrary=fs.readFileSync(path.join(root,'components/views/AssetLibraryView.tsx'),'utf8');
+    const holdings=fs.readFileSync(path.join(root,'components/views/HoldingsView.tsx'),'utf8');
+    for (const source of [marketIcon,heatmap,assetLibrary]) {
+      assert(!source.includes('countryFlagEmoji'));
+      assert(!/[\u{1F1E6}-\u{1F1FF}]{2}/u.test(source));
+    }
+    assert(!holdings.includes('国旗图标（emoji）'));
+    assert(!holdings.includes('国旗，如'));
+    assert(!holdings.includes('|| "🌍"'));
+  });
   const uploadRoute=require(path.join(root,'app/api/v1/watch-groups/[id]/icon/route.ts'));
   await test('group icon owner upload works, other user rejected, same names isolated; public asset upload stays admin-only',async()=>{
     const group=createWatchGroup(user.id,'My group'),group2=createWatchGroup(other.id,'My group');

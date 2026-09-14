@@ -638,7 +638,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   function addMarket() {
     const key = newMarket.key.trim();
     const label = newMarket.label.trim() || key;
-    const flag = newMarket.flag.trim() || "🌍";
+    const flag = "";
     if (!key) {
       showToast("请输入市场代码（如 SG / CA / GB）", "err");
       return;
@@ -649,7 +649,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     }
     setEditorRows((prev) => [...prev, { key, label, flag, active: true }]);
     setNewMarket({ key: "", label: "", flag: "" });
-    showToast(`已新增市场 ${flag} ${label}`);
+    showToast(`已新增市场 ${label}`);
   }
 
   async function saveMarketEditor() {
@@ -1289,7 +1289,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
 
       {/* 市场编辑弹窗 */}
       {editorOpen && (
-        <AppModal title="编辑市场" desc="名称与国旗图标均可编辑；勾选控制显示/隐藏，可新增任意市场，不受固定列表限制。" onClose={() => setEditorOpen(false)} size="lg">
+        <AppModal title="编辑市场" desc="名称可编辑；市场图标统一从素材库读取。勾选控制显示/隐藏，可新增任意市场。" onClose={() => setEditorOpen(false)} size="lg">
             <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
               {editorRows.map((row) => {
                 const editing = editingKey === row.key;
@@ -1304,13 +1304,9 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                     />
                     {editing ? (
                       <>
-                        <input
-                          value={row.flag}
-                          onChange={(e) => updateRow(row.key, { flag: e.target.value })}
-                          className="h-8 w-[72px] rounded-[8px] border border-edge-strong px-2 text-center text-base outline-none transition-shadow focus:border-edge-strong"
-                          placeholder="国旗"
-                          title="国旗图标（emoji）"
-                        />
+                        <span className="flex w-[72px] flex-none items-center justify-center">
+                          <MarketIcon market={row.key} size={20} />
+                        </span>
                         <input
                           value={row.label}
                           onChange={(e) => updateRow(row.key, { label: e.target.value })}
@@ -1345,7 +1341,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                           type="button"
                           onClick={() => setEditingKey(row.key)}
                           className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border border-edge text-muted transition-colors hover:bg-brand-light hover:text-brand-deep"
-                          title="编辑名称与国旗"
+                          title="编辑市场名称"
                         >
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>
                         </button>
@@ -1371,12 +1367,6 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                   onChange={(e) => setNewMarket({ ...newMarket, label: e.target.value })}
                   className="field w-[160px]"
                   placeholder="名称，如 新加坡"
-                />
-                <input
-                  value={newMarket.flag}
-                  onChange={(e) => setNewMarket({ ...newMarket, flag: e.target.value })}
-                  className="field w-[110px]"
-                  placeholder="国旗，如 🇸🇬"
                 />
                 <button type="button" onClick={addMarket} className="btn btn-ghost btn-sm">＋ 新增</button>
               </div>
