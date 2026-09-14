@@ -202,6 +202,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(source.includes('suppressLauncherClick.current'));
     assert(source.includes('clampFloatingPosition'));
     assert(source.includes('writePersistentPreference'));
+  assert(source.includes('writePersistentPreference(`fire:assistant:sidebar-width:${userId}`'));
+  assert(!source.includes('localStorage.setItem(`fire:assistant:sidebar-width:'));
     assert(source.includes('Max-Age=31536000'));
   assert(source.includes('aria-pressed={pinned}'));
   assert(source.includes('onPointerDown={(event) => event.stopPropagation()}'));
