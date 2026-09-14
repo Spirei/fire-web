@@ -41,6 +41,7 @@ import CardLibraryView from "@/components/views/CardLibraryView";
 import AttachmentsView from "@/components/views/AttachmentsView";
 import GlobalPreviewView from "@/components/views/GlobalPreviewView";
 import AssetPnlAnalysisView from "@/components/AssetPnlAnalysis";
+import ContextAssistant from "@/components/ContextAssistant";
 
 // 后台页签全部同步引入：next/dynamic 的 loading 会在刷新水合时盖住已 SSR 的内容，整页闪「加载中…」。
 
@@ -879,6 +880,7 @@ export default function RecordsApp({
         </div>
       </div>
     </div>
+    <ContextAssistant page={activeTab} symbol={initialSymbol} />
     </>
   );
 }

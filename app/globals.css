@@ -4877,3 +4877,19 @@ button.PhotoView-Slider__toolbarIcon {
   outline: none;
   box-shadow: none;
 }
+@keyframes assistant-thinking {
+  0%, 60%, 100% { opacity: .28; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+
+.assistant-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: assistant-thinking 1.1s ease-in-out infinite;
+}
+
+@media (max-width: 639px) {
+  .assistant-panel { border-radius: 22px 22px 0 0; }
+}
