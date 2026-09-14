@@ -3237,6 +3237,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "修复设置密钥泄露、跨市场导入覆盖、币种汇总与刷新，并完善移动端和普通用户权限。",
   software: V0_1_29_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.30" } : item),
   changes: [{
+    title: "智能助手图片支持点击预览",
+    desc: "待发送图片缩略图支持点击或键盘打开全屏原图预览，点击遮罩、关闭按钮或按 Escape 可退出；删除按钮继续独立工作，不会误触预览。预览层通过顶层 Portal 展示，适配手机端与深浅色页面。",
+    kind: "feature"
+  }, {
     title: "修复局域网环境粘贴图片报错",
     desc: "智能助手图片预览标识改为组件内本地序号，不再依赖仅在安全上下文提供的 crypto.randomUUID；通过局域网 HTTP 地址访问时，复制粘贴、拖拽和选择图片均可正常生成预览并发送。图片仍只随当次模型请求使用，不写入对话归档或附件目录，因此删除归档对话不会遗留附件文件。",
     kind: "fix"

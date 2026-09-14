@@ -219,6 +219,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   assert(source.includes('pendingImageBytesRef.current += reservedBytes'));
   assert(source.includes('pendingImageSequenceRef.current'));
   assert(!source.includes('crypto.randomUUID()'));
+  assert(source.includes('aria-label={`查看图片：${image.name}`}'));
+  assert(source.includes('aria-label={`图片预览：${previewImage.name}`}'));
+  assert(source.includes('if (previewImage) setPreviewImage(null)'));
   assert(!globalStyles.includes('color-scheme: light;\n  border-color: #e1e7e6;\n  background: #fff;'));
     assert(source.includes("closest(\"button, input, textarea, a, [role='button']\")"));
   });

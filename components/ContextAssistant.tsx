@@ -132,6 +132,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [pinned, setPinned] = useState(false);
   const [input, setInput] = useState("");
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const [previewImage, setPreviewImage] = useState<PendingImage | null>(null);
   const pendingImageBytesRef = useRef(0);
   const pendingImageSequenceRef = useRef(0);
   const [attachmentError, setAttachmentError] = useState("");
@@ -262,10 +263,10 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   }, [open]);
   useEffect(() => {
     if (!open) return;
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") { if (historyOpen) setHistoryOpen(false); else setOpen(false); } };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") { if (previewImage) setPreviewImage(null); else if (historyOpen) setHistoryOpen(false); else setOpen(false); } };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [open, historyOpen]);
+  }, [open, historyOpen, previewImage]);
 
   async function send(value: string, retryIndex?: number) {
     const selectedImages = typeof retryIndex === "number" ? [] : pendingImages;
@@ -608,7 +609,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
               </div>
               <form onSubmit={(event) => { event.preventDefault(); void send(input); }} onDragOver={(event) => { if ([...event.dataTransfer.items].some((item) => item.kind === "file" && item.type.startsWith("image/"))) event.preventDefault(); }} onDrop={(event) => { const files = [...event.dataTransfer.files]; if (!files.some((file) => file.type.startsWith("image/"))) return; event.preventDefault(); void addImages(files); }} className="border-t border-edge p-4 pb-[max(16px,env(safe-area-inset-bottom))] dark:border-white/10">
                 <div className="rounded-[20px] border border-edge-strong bg-bg-gray p-2 dark:border-white/12 dark:bg-white/[.045]">
-                  {pendingImages.length > 0 && <div className="flex gap-2 overflow-x-auto px-1 pb-2" aria-label="待发送图片">{pendingImages.map((image) => <div key={image.id} className="group/image relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-edge bg-white dark:border-white/10 dark:bg-white/5"><img src={image.dataUrl} alt={image.name} className="h-full w-full object-cover" /><button type="button" onClick={() => { pendingImageBytesRef.current = Math.max(0, pendingImageBytesRef.current - image.size); setPendingImages((current) => current.filter((item) => item.id !== image.id)); }} className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-90 shadow-sm transition hover:bg-black" aria-label={`移除图片：${image.name}`}><IconX size={12} /></button></div>)}</div>}
+                  {pendingImages.length > 0 && <div className="flex gap-2 overflow-x-auto px-1 pb-2" aria-label="待发送图片">{pendingImages.map((image) => <div key={image.id} role="button" tabIndex={0} onClick={() => setPreviewImage(image)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setPreviewImage(image); } }} className="group/image relative h-14 w-14 shrink-0 cursor-zoom-in overflow-hidden rounded-xl border border-edge bg-white dark:border-white/10 dark:bg-white/5" aria-label={`查看图片：${image.name}`}><img src={image.dataUrl} alt={image.name} className="h-full w-full object-cover transition-transform duration-200 group-hover/image:scale-105" /><button type="button" onClick={(event) => { event.stopPropagation(); pendingImageBytesRef.current = Math.max(0, pendingImageBytesRef.current - image.size); setPendingImages((current) => current.filter((item) => item.id !== image.id)); if (previewImage?.id === image.id) setPreviewImage(null); }} className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-90 shadow-sm transition hover:bg-black" aria-label={`移除图片：${image.name}`}><IconX size={12} /></button></div>)}</div>}
                   <div className="flex items-end gap-1.5">
                     <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(event) => { void addImages([...event.target.files || []]); event.currentTarget.value = ""; }} />
                     <button type="button" onClick={() => imageInputRef.current?.click()} className="flex h-10 w-9 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-white dark:text-white/45 dark:hover:bg-white/10" aria-label="添加图片" title="添加图片"><IconPaperclip size={18} /></button>
@@ -623,6 +624,12 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
           </section>
         </div>
       )}
+      {previewImage && <div className="fixed inset-0 z-[10020] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`图片预览：${previewImage.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewImage(null); }}>
+        <div className="relative flex max-h-full max-w-full items-center justify-center">
+          <img src={previewImage.dataUrl} alt={previewImage.name} className="max-h-[calc(100dvh-32px)] max-w-[calc(100vw-32px)] rounded-xl object-contain shadow-2xl" />
+          <button type="button" onClick={() => setPreviewImage(null)} className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80" aria-label="关闭图片预览"><IconX size={20} /></button>
+        </div>
+      </div>}
     </>, document.body
   );
 }
