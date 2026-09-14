@@ -674,16 +674,62 @@
 .records-app:has(.assistant-page) { gap:0; align-items:stretch; }
 .records-app:has(.assistant-page) > aside { top:88px; }
 
-/* Codex-inspired workspace navigation: quiet hierarchy, compact rows, and a single clear active state. */
-.fire-sidebar { color: var(--ink); }
+/* Codex-inspired workspace navigation: translucent shell, restrained selection, clear depth from content. */
+.fire-sidebar { color: var(--ink); perspective: 1000px; }
+.fire-sidebar-panel {
+  border: 1px solid rgba(255,255,255,.78);
+  background:
+    linear-gradient(150deg,rgba(255,255,255,.72),rgba(244,246,249,.82)),
+    rgba(246,247,249,.78);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.9),
+    inset -1px 0 0 rgba(30,41,59,.035),
+    0 14px 38px rgba(30,41,59,.065);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+  backdrop-filter: blur(18px) saturate(125%);
+}
+.fire-sidebar-panel::before {
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:
+    radial-gradient(100% 52% at 0 0,rgba(255,255,255,.42),transparent 62%),
+    linear-gradient(90deg,transparent 72%,rgba(30,41,59,.025));
+}
+.fire-sidebar-panel > * { position:relative; z-index:1; }
 .fire-sidebar-brand { min-height: 38px; }
 .fire-sidebar-chevron { color: #8c919b; font-size: 20px; line-height: 1; transform: translateY(-2px); }
 .fire-sidebar-section-label { color: #8f949d; font-size: 12px; font-weight: 600; letter-spacing: .02em; padding: 10px 12px 6px; }
 .fire-sidebar-section-label-spaced { margin-top: 12px; }
 .fire-sidebar-item { border: 1px solid transparent; }
-.fire-sidebar-item-active { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.04); }
-.dark .fire-sidebar-item-active { background: #3a3b3d; }
-.dark .fire-sidebar { box-shadow: inset -1px 0 rgba(255,255,255,.04); }
+.fire-sidebar-item > svg { opacity:.78; transition:opacity 160ms ease,color 160ms ease; }
+.fire-sidebar-item:hover > svg,.fire-sidebar-item-active > svg { opacity:1; }
+.fire-sidebar-item-active {
+  border-color: rgba(30,41,59,.045);
+  background: rgba(255,255,255,.68);
+  box-shadow: 0 1px 3px rgba(30,41,59,.055), inset 0 1px 0 rgba(255,255,255,.66);
+}
+.dark .fire-sidebar-panel {
+  border-color: rgba(255,255,255,.07);
+  background:
+    linear-gradient(150deg,rgba(45,47,50,.78),rgba(31,32,34,.88)),
+    rgba(32,33,35,.84);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.055),
+    inset -1px 0 0 rgba(255,255,255,.025),
+    0 18px 44px rgba(0,0,0,.18);
+}
+.dark .fire-sidebar-panel::before {
+  background:
+    radial-gradient(105% 56% at 0 0,rgba(255,255,255,.065),transparent 62%),
+    linear-gradient(90deg,transparent 70%,rgba(0,0,0,.08));
+}
+.dark .fire-sidebar-item-active {
+  border-color: rgba(255,255,255,.045);
+  background: rgba(255,255,255,.07);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035),0 1px 3px rgba(0,0,0,.12);
+}
 .assistant-page,.assistant-page-layer { width:100%; min-width:0; }
 
 /* DeepSeek Harness 工作台：布局、弹出菜单、输入坞与设置面板。 */

@@ -772,7 +772,7 @@ export default function RecordsApp({
     <div translate="no" className="records-app notranslate flex items-start gap-6">
       {/* 桌面侧边导航 */}
       <aside className="fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block">
-        <nav className="relative min-h-[calc(100vh-112px)] rounded-2xl bg-bg-gray px-2 pb-3 pt-3 dark:bg-[#232425]">
+        <nav className="fire-sidebar-panel relative min-h-[calc(100vh-112px)] overflow-hidden rounded-2xl px-2 pb-3 pt-3">
           <div className="fire-sidebar-brand mb-3 flex items-center justify-between px-3">
             <span className="text-[21px] font-semibold tracking-[-0.03em] text-ink dark:text-white">Fire</span>
             <span className="fire-sidebar-chevron" aria-hidden="true">⌄</span>
