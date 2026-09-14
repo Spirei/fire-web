@@ -277,7 +277,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   return createPortal(
     <>
       {!open && (
-        <button type="button" onClick={() => { setOpen(true); setMinimized(false); }} className="assistant-launcher fixed bottom-5 right-5 z-[90] flex h-12 w-12 items-center justify-center rounded-full border border-edge-strong bg-[#171b24] text-white shadow-[0_12px_36px_rgba(0,0,0,.22)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#252b36] active:scale-95 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label="打开账户助手" title="账户助手">
+        <button type="button" onClick={() => { setOpen(true); setMinimized(false); }} className="assistant-launcher fixed bottom-5 right-5 z-[90] flex h-12 w-12 items-center justify-center rounded-full border border-[#5eead4]/45 bg-gradient-to-br from-[#14b8a6] to-[#0f766e] text-white shadow-[0_12px_34px_rgba(13,148,136,.32)] transition-all duration-200 hover:-translate-y-0.5 hover:from-[#2dd4bf] hover:to-[#0d9488] hover:shadow-[0_14px_38px_rgba(13,148,136,.4)] active:scale-95 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label="打开账户助手" title="账户助手">
           <IconSparkles size={23} stroke={1.8} />
         </button>
       )}
