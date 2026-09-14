@@ -51,7 +51,7 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
     ["plugins", "插件", IconAdjustmentsHorizontal],
     ["preset", "助手预设", IconRobot],
   ] as const;
-  return <div className="harness-settings-overlay" role="dialog" aria-modal="true" aria-label="设置">
+  return <div className="harness-settings-overlay" data-assistant-theme={appearance} role="dialog" aria-modal="true" aria-label="设置">
     <button type="button" className="harness-settings-mask" aria-label="关闭设置" onClick={onClose} />
     <section className="harness-settings-panel">
       <aside className="harness-settings-nav">

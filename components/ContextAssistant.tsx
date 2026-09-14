@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { IconArrowUp, IconBrain, IconChartPie, IconCheck, IconChevronDown, IconCopy, IconDatabaseSearch, IconDownload, IconHistory, IconMessageCircle, IconPlus, IconRefresh, IconSearch, IconSettings, IconTrash, IconX } from "@tabler/icons-react";
+import { IconArchive, IconArrowUp, IconBrain, IconChartPie, IconCheck, IconChevronDown, IconCopy, IconDatabaseSearch, IconDots, IconDownload, IconHistory, IconMessageCircle, IconPencil, IconPlus, IconRefresh, IconSearch, IconSettings, IconTrash, IconX } from "@tabler/icons-react";
 import type { AssistantHistoryState, StoredAssistantConversation, StoredAssistantMessage } from "@/lib/assistantHistory";
 import AssistantTraceView, { type AssistantTrace } from "@/components/AssistantTraceView";
 import AssistantHarnessSettings, { type AssistantAppearance, type AssistantDensity } from "@/components/AssistantHarnessSettings";
@@ -155,12 +155,10 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [selectedModel, setSelectedModel] = useState("auto");
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-  const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [memory, setMemory] = useState("");
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [persistAttachments, setPersistAttachments] = useState(false);
-  const [insightsOpen, setInsightsOpen] = useState(false);
   const [spaces, setSpaces] = useState<AssistantSpace[]>([]);
   const [selectedSpace, setSelectedSpace] = useState("");
   const [spaceAssignments, setSpaceAssignments] = useState<Record<string,string>>({});
@@ -182,6 +180,11 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [historyRetry, setHistoryRetry] = useState(0);
   const [conversationId, setConversationId] = useState(initialConversation?.id || "");
   const [conversations, setConversations] = useState<StoredAssistantConversation[]>(initialHistory.conversations);
+  const [archivedConversations,setArchivedConversations]=useState<StoredAssistantConversation[]>(initialHistory.archivedConversations||[]);
+  const [conversationListMode,setConversationListMode]=useState<"active"|"archived">("active");
+  const [conversationMenuId,setConversationMenuId]=useState<string|null>(null);
+  const [renameTarget,setRenameTarget]=useState<StoredAssistantConversation|null>(null);
+  const [renameDraft,setRenameDraft]=useState("");
   const [messages, setMessages] = useState<Message[]>(() => (initialConversation?.messages || []) as Message[]);
   const historyReady = useRef(false);
   const saveQueue = useRef(Promise.resolve());
@@ -538,6 +541,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       const next = await response.json() as AssistantHistoryState;
       lastSavedHistory.current.delete(id);
       setConversations(next.conversations);
+      setArchivedConversations(next.archivedConversations||[]);
       if (id === conversationId) {
         const active = next.conversations.find((item) => item.id === next.activeId) || next.conversations[0];
         setConversationId(active?.id || newConversationId());
@@ -549,6 +553,20 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     } finally {
       deletedConversationIds.current.delete(id);
     }
+  }
+
+  async function updateConversation(id:string,patch:{title?:string;archived?:boolean}){
+    setHistoryError("");
+    setConversationMenuId(null);
+    try {
+      const response=await fetch("/api/assistant/history",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({conversationId:id,...patch})});
+      if(!response.ok)throw new Error();
+      const next=await response.json() as AssistantHistoryState;
+      setConversations(next.conversations);
+      setArchivedConversations(next.archivedConversations||[]);
+      if(patch.archived===true&&id===conversationId){const active=next.conversations[0];setConversationId(active?.id||newConversationId());setMessages((active?.messages||[]) as Message[]);}
+      setRenameTarget(null);
+    } catch { setHistoryError("会话更新失败，请稍后重试"); }
   }
 
   function updateMessage(index: number, patch: Partial<Message>) {
@@ -723,9 +741,9 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                 <label className="mt-2 flex h-9 items-center gap-2 rounded-xl border border-edge bg-white/70 px-3 text-muted focus-within:border-edge-strong dark:border-white/10 dark:bg-black/10 dark:text-white/45"><IconSearch size={15} /><input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-faint dark:text-white/85" placeholder="搜索对话" /></label>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-2">
-                <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[.12em] text-faint">对话</div>
-                {conversations.filter((conversation) => !historyQuery.trim() || conversation.title.toLowerCase().includes(historyQuery.trim().toLowerCase())).map((conversation) => <div key={conversation.id} role="button" tabIndex={actionBusy ? -1 : 0} onClick={() => { if (!actionBusy) selectConversation(conversation); }} onKeyDown={(event) => { if (!actionBusy && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); selectConversation(conversation); } }} className={`group/history mb-0.5 flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2.5 text-left ${conversation.id === conversationId ? "bg-black/[.065] dark:bg-white/[.09]" : "hover:bg-black/[.04] dark:hover:bg-white/[.055]"}`}><IconMessageCircle size={15} className="shrink-0 text-muted" /><span className="min-w-0 flex-1 truncate text-xs font-medium text-ink dark:text-white/80">{conversation.title}</span><button type="button" onClick={(event) => { event.stopPropagation(); void deleteConversation(conversation.id); }} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-faint opacity-0 hover:bg-white hover:text-[#c24a4a] group-hover/history:opacity-100 focus:opacity-100 dark:hover:bg-white/10" aria-label={`删除对话：${conversation.title}`}><IconTrash size={13} /></button></div>)}
-                {conversations.length === 0 && <p className="px-3 py-8 text-center text-xs text-faint">开始对话后会保存在这里</p>}
+                <div className="harness-conversation-tabs"><button type="button" className={conversationListMode==="active"?"active":""} onClick={()=>setConversationListMode("active")}>对话</button><button type="button" className={conversationListMode==="archived"?"active":""} onClick={()=>setConversationListMode("archived")}>已归档</button></div>
+                {(conversationListMode==="active"?conversations:archivedConversations).filter((conversation) => !historyQuery.trim() || conversation.title.toLowerCase().includes(historyQuery.trim().toLowerCase())).map(conversation=><AssistantConversationRow key={conversation.id} conversation={conversation} active={conversation.id===conversationId} archived={conversationListMode==="archived"} menuOpen={conversationMenuId===conversation.id} disabled={actionBusy} onSelect={()=>conversationListMode==="active"&&selectConversation(conversation)} onMenu={()=>setConversationMenuId(value=>value===conversation.id?null:conversation.id)} onRename={()=>{setRenameDraft(conversation.title);setRenameTarget(conversation);setConversationMenuId(null);}} onArchive={()=>void updateConversation(conversation.id,{archived:conversationListMode!=="archived"})} onDelete={()=>void deleteConversation(conversation.id)}/>) }
+                {(conversationListMode==="active"?conversations:archivedConversations).length === 0 && <p className="px-3 py-8 text-center text-xs text-faint">{conversationListMode==="active"?"开始对话后会保存在这里":"没有已归档会话"}</p>}
               </div>
               <div className="border-t border-edge p-3 text-xs dark:border-white/10">
                 <button type="button" onClick={()=>{setSettingsSection("general");setSettingsOpen(true);}} className="harness-sidebar-settings"><IconSettings size={17}/><span>设置</span></button>
@@ -739,13 +757,6 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                     <button type="button" onClick={() => setHistoryOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-bg-gray dark:text-white/55 dark:hover:bg-white/10" aria-label="关闭对话归档"><IconX size={17} /></button>
                   </div>
                   {conversations.length > 0 && <label className="mt-3 flex h-9 items-center gap-2 rounded-xl border border-edge bg-bg-gray/55 px-3 text-muted focus-within:border-edge-strong dark:border-white/10 dark:bg-white/[.045] dark:text-white/45 dark:focus-within:border-white/20"><IconSearch size={15} /><input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-faint dark:text-white/85 dark:placeholder:text-white/30" placeholder="搜索对话" /></label>}
-                  {embedded && <>
-                  <button type="button" onClick={() => setMemoryOpen(value => !value)} className="mt-2 flex h-9 w-full items-center gap-2 rounded-xl border border-edge bg-white px-3 text-left text-xs text-ink transition-colors hover:bg-bg-gray dark:border-white/10 dark:bg-white/[.035] dark:text-white/75 dark:hover:bg-white/[.07]"><IconBrain size={15} className="text-muted" /><span className="flex-1">记忆</span><span className="text-[10px] text-faint">{memoryEnabled ? "已开启" : "已关闭"}</span></button>
-                  {memoryOpen && <div className="mt-2 rounded-xl border border-edge bg-bg-gray/45 p-3 dark:border-white/10 dark:bg-white/[.035]"><label className="flex items-center justify-between text-xs font-medium text-ink dark:text-white/80"><span>跨对话使用记忆</span><input type="checkbox" checked={memoryEnabled} onChange={(event) => void saveMemory(event.target.checked, memory)} /></label><textarea value={memory} onChange={(event) => setMemory(event.target.value)} onBlur={() => void saveMemory(memoryEnabled, memory)} maxLength={2000} rows={3} placeholder="例如：偏好简洁回答、默认使用港币……" className="mt-2 w-full resize-none rounded-lg border border-edge bg-white p-2 text-xs text-ink placeholder:text-faint dark:border-white/10 dark:bg-black/10 dark:text-white/75" /><div className="mt-2 flex items-center justify-between text-[10px] text-faint"><span>{memory.length}/2000</span><button type="button" onClick={() => { setMemory(""); setMemoryEnabled(false); void fetch("/api/assistant/preferences", { method: "DELETE" }); }} className="hover:text-[#b84d4d]">清除记忆</button></div></div>}
-                  <div className="mt-2 flex gap-2"><select value={selectedSpace} onChange={(event)=>void moveCurrentConversation(event.target.value)} className="h-9 min-w-0 flex-1 rounded-xl border border-edge bg-white px-3 text-xs text-ink dark:border-white/10 dark:bg-white/[.035] dark:text-white/75" aria-label="当前对话空间"><option value="">未分类空间</option>{spaces.map(space=><option key={space.id} value={space.id}>{space.name}</option>)}</select><button type="button" onClick={()=>void addSpace()} className="h-9 rounded-xl border border-edge bg-white px-3 text-xs text-ink dark:border-white/10 dark:bg-white/[.035] dark:text-white/75">新建空间</button></div>
-                  <button type="button" onClick={()=>setInsightsOpen(value=>!value)} className="mt-2 flex h-9 w-full items-center justify-between rounded-xl border border-edge bg-white px-3 text-xs text-ink dark:border-white/10 dark:bg-white/[.035] dark:text-white/75"><span>模型调用</span><span className="text-[10px] text-faint">{usageSummary.calls} 次 · {usageSummary.errors} 次失败</span></button>
-                  {insightsOpen&&<div className="mt-2 grid grid-cols-3 gap-2 rounded-xl bg-bg-gray/50 p-3 text-center dark:bg-white/[.035]"><div><b className="block text-sm text-ink dark:text-white/80">{usageSummary.calls}</b><span className="text-[9px] text-faint">调用</span></div><div><b className="block text-sm text-ink dark:text-white/80">{usageSummary.tokens}</b><span className="text-[9px] text-faint">Token</span></div><div><b className="block text-sm text-ink dark:text-white/80">{usageSummary.cost>0?usageSummary.cost.toFixed(4):"—"}</b><span className="text-[9px] text-faint">估算费用</span></div></div>}
-                  </>}
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
                   {conversations.length === 0 ? <div className="flex h-full flex-col items-center justify-center px-8 pb-16 text-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-bg-gray text-muted dark:bg-white/[.06] dark:text-white/45"><IconMessageCircle size={22} /></span><div className="mt-4 text-sm font-semibold text-ink dark:text-white/85">还没有归档对话</div><p className="mt-1.5 text-xs leading-5 text-faint dark:text-white/35">开始一次对话后，它会自动保存并出现在这里。</p></div> : conversations.filter((conversation) => !historyQuery.trim() || conversation.title.toLowerCase().includes(historyQuery.trim().toLowerCase()) || conversation.id.toLowerCase().includes(historyQuery.trim().toLowerCase())).map((conversation) => <div key={conversation.id} role="button" tabIndex={actionBusy ? -1 : 0} aria-disabled={actionBusy} onClick={() => { if (!actionBusy) selectConversation(conversation); }} onKeyDown={(event) => { if (!actionBusy && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); selectConversation(conversation); } }} className={`group/history mb-1 flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${actionBusy ? "cursor-not-allowed opacity-40" : ""} ${conversation.id === conversationId ? "bg-[#f0f2f4] dark:bg-white/[.085]" : "hover:bg-bg-gray/80 dark:hover:bg-white/[.055]"}`}>
@@ -817,8 +828,13 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
           <button type="button" onClick={() => setPreviewImage(null)} className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80" aria-label="关闭图片预览"><IconX size={20} /></button>
         </div>
       </div>}
+      {renameTarget&&<div className="assistant-rename-overlay" data-assistant-theme={appearance} role="dialog" aria-modal="true" aria-label="重命名会话"><button type="button" className="assistant-rename-mask" aria-label="取消重命名" onClick={()=>setRenameTarget(null)}/><form className="assistant-rename-dialog" onSubmit={event=>{event.preventDefault();if(renameDraft.trim())void updateConversation(renameTarget.id,{title:renameDraft.trim()});}}><h3>重命名会话</h3><input autoFocus value={renameDraft} maxLength={80} onChange={event=>setRenameDraft(event.target.value)} aria-label="会话名称"/><div><button type="button" onClick={()=>setRenameTarget(null)}>取消</button><button type="submit" disabled={!renameDraft.trim()}>保存</button></div></form></div>}
       <AssistantHarnessSettings open={settingsOpen} section={settingsSection} appearance={appearance} fontSize={contentFontSize} density={density} models={availableModels} selectedModel={selectedModel} spaces={spaces} selectedSpace={selectedSpace} memoryEnabled={memoryEnabled} memory={memory} usage={usageSummary} onSelectModel={setSelectedModel} onMoveSpace={value=>void moveCurrentConversation(value)} onAddSpace={()=>void addSpace()} onMemoryEnabled={value=>void saveMemory(value,memory)} onMemoryChange={setMemory} onMemorySave={()=>void saveMemory(memoryEnabled,memory)} onClearMemory={()=>{setMemory("");setMemoryEnabled(false);void fetch("/api/assistant/preferences",{method:"DELETE"});}} onClose={()=>setSettingsOpen(false)} onSection={setSettingsSection} onAppearance={setAppearance} onFontSize={setContentFontSize} onDensity={setDensity} onModelsSaved={()=>{void fetch("/api/assistant/models").then(response=>response.ok?response.json():null).then(data=>{if(Array.isArray(data?.services))setAvailableModels(data.services);}).catch(()=>undefined);}} />
     </>
   );
   return embedded ? experience : createPortal(experience, document.body);
+}
+
+function AssistantConversationRow({conversation,active,archived,menuOpen,disabled,onSelect,onMenu,onRename,onArchive,onDelete}:{conversation:StoredAssistantConversation;active:boolean;archived:boolean;menuOpen:boolean;disabled:boolean;onSelect:()=>void;onMenu:()=>void;onRename:()=>void;onArchive:()=>void;onDelete:()=>void}){
+  return <div className={`assistant-conversation-row ${active?"active":""}`}><button type="button" disabled={disabled||archived} className="assistant-conversation-main" onClick={onSelect}><IconMessageCircle size={15}/><span>{conversation.title}</span></button><button type="button" className="assistant-conversation-more" onClick={onMenu} aria-expanded={menuOpen} aria-label={`更多操作：${conversation.title}`}><IconDots size={17}/></button>{menuOpen&&<><button type="button" className="assistant-conversation-menu-mask" aria-label="关闭会话菜单" onClick={onMenu}/><div className="assistant-conversation-menu"><button type="button" onClick={onRename}><IconPencil size={16}/><span>重命名</span></button><button type="button" onClick={onArchive}><IconArchive size={16}/><span>{archived?"移出归档":"归档会话"}</span></button><button type="button" className="danger" onClick={onDelete}><IconTrash size={16}/><span>删除会话</span></button></div></>}</div>;
 }

@@ -22,11 +22,13 @@ export interface StoredAssistantConversation {
   messages: StoredAssistantMessage[];
   createdAt: string;
   updatedAt: string;
+  archived?: boolean;
 }
 
 export interface AssistantHistoryState {
   activeId: string;
   conversations: StoredAssistantConversation[];
+  archivedConversations?: StoredAssistantConversation[];
 }
 
 const MAX_MESSAGES = 30;
@@ -151,7 +153,7 @@ function conversationTitle(messages: StoredAssistantMessage[]) {
   return firstQuestion ? firstQuestion.slice(0, 36) : "新对话";
 }
 
-function parseConversation(row: { conversation_id: string; title: string; messages: string; created_at: string; updated_at: string }): StoredAssistantConversation {
+function parseConversation(row: { conversation_id: string; title: string; messages: string; created_at: string; updated_at: string; archived?: number }): StoredAssistantConversation {
   let parsed: unknown = [];
   try { parsed = JSON.parse(row.messages); } catch { /* malformed history becomes empty */ }
   return {
@@ -159,7 +161,8 @@ function parseConversation(row: { conversation_id: string; title: string; messag
     title: text(row.title, 80) || "新对话",
     messages: sanitizeAssistantMessages(parsed),
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    archived: row.archived === 1
   };
 }
 
@@ -190,13 +193,14 @@ function migrateLegacyHistory(userId: string) {
 export function getAssistantHistoryState(userId: string): AssistantHistoryState {
   migrateLegacyHistory(userId);
   const rows = getDb().prepare(`
-    SELECT conversation_id, title, messages, created_at, updated_at
+    SELECT conversation_id, title, messages, created_at, updated_at, archived
     FROM assistant_conversation_threads
     WHERE user_id = ?
     ORDER BY updated_at DESC
-  `).all(userId) as Array<{ conversation_id: string; title: string; messages: string; created_at: string; updated_at: string }>;
-  const conversations = rows.map(parseConversation);
-  return { activeId: conversations[0]?.id || "", conversations };
+  `).all(userId) as Array<{ conversation_id: string; title: string; messages: string; created_at: string; updated_at: string; archived: number }>;
+  const all = rows.map(parseConversation);
+  const conversations = all.filter(item=>!item.archived), archivedConversations = all.filter(item=>item.archived);
+  return { activeId: conversations[0]?.id || "", conversations, archivedConversations };
 }
 
 export function getAssistantHistory(userId: string): StoredAssistantMessage[] {
@@ -210,7 +214,7 @@ export function saveAssistantHistory(userId: string, conversationId: unknown, va
   const database = getDb();
   const latest = database.prepare("SELECT updated_at FROM assistant_conversation_threads WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1").get(userId) as { updated_at: string } | undefined;
   const now = new Date(Math.max(Date.now(), (Date.parse(latest?.updated_at || "") || 0) + 1)).toISOString();
-  const existing = database.prepare("SELECT created_at FROM assistant_conversation_threads WHERE user_id = ? AND conversation_id = ?").get(userId, id) as { created_at: string } | undefined;
+  const existing = database.prepare("SELECT created_at, title FROM assistant_conversation_threads WHERE user_id = ? AND conversation_id = ?").get(userId, id) as { created_at: string; title:string } | undefined;
   database.transaction(() => {
     database.prepare(`
       INSERT INTO assistant_conversation_threads
@@ -220,8 +224,19 @@ export function saveAssistantHistory(userId: string, conversationId: unknown, va
         title = excluded.title,
         messages = excluded.messages,
         updated_at = excluded.updated_at
-    `).run(userId, id, conversationTitle(messages), JSON.stringify(messages), existing?.created_at || now, now);
+    `).run(userId, id, existing?.title || conversationTitle(messages), JSON.stringify(messages), existing?.created_at || now, now);
   })();
+  return getAssistantHistoryState(userId);
+}
+
+export function updateAssistantConversation(userId:string, conversationId:unknown, patch:{title?:unknown;archived?:unknown}):AssistantHistoryState {
+  const id=text(conversationId,40); if(!CONVERSATION_ID_RE.test(id))throw new Error("invalid conversation id");
+  const existing=getDb().prepare("SELECT title, archived FROM assistant_conversation_threads WHERE user_id = ? AND conversation_id = ?").get(userId,id) as {title:string;archived:number}|undefined;
+  if(!existing)throw new Error("conversation not found");
+  const title=patch.title===undefined?existing.title:text(patch.title,80).trim();
+  const archived=patch.archived===undefined?existing.archived:patch.archived===true?1:0;
+  if(!title)throw new Error("invalid title");
+  getDb().prepare("UPDATE assistant_conversation_threads SET title = ?, archived = ? WHERE user_id = ? AND conversation_id = ?").run(title,archived,userId,id);
   return getAssistantHistoryState(userId);
 }
 

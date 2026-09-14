@@ -166,6 +166,12 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     state=assistantHistory.saveAssistantHistory(user.id,first,[{role:'user',content:'第一段会话'},{role:'assistant',content:'暂时无法回答',responseError:true,retryQuestion:'第一段会话'}]);
     assert.equal(state.activeId,first);
     assert.equal(state.conversations[0].messages[1].responseError,true);assert.equal(state.conversations[0].messages[1].retryQuestion,'第一段会话');
+    state=assistantHistory.updateAssistantConversation(user.id,first,{title:'重命名会话'});
+    assert.equal(state.conversations[0].title,'重命名会话');
+    state=assistantHistory.updateAssistantConversation(user.id,first,{archived:true});
+    assert.equal(state.conversations.some(item=>item.id===first),false);assert.equal(state.archivedConversations[0].title,'重命名会话');
+    state=assistantHistory.updateAssistantConversation(user.id,first,{archived:false});
+    assert.equal(state.conversations.some(item=>item.id===first),true);assert.equal(state.archivedConversations.length,0);
     state=assistantHistory.clearAssistantHistory(user.id,first);
     assert.equal(state.activeId,second);assert.equal(state.conversations.length,1);
     assert.equal(assistantHistory.getAssistantHistoryState(other.id).conversations.length,0);

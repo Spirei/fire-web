@@ -1,5 +1,5 @@
 import { getAuthUser } from "@/lib/auth";
-import { clearAssistantHistory, getAssistantHistoryState, saveAssistantHistory } from "@/lib/assistantHistory";
+import { clearAssistantHistory, getAssistantHistoryState, saveAssistantHistory, updateAssistantConversation } from "@/lib/assistantHistory";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 
@@ -46,4 +46,11 @@ export async function DELETE(request: Request) {
   } catch {
     return Response.json({ error: "会话标识无效" }, { status: 400 });
   }
+}
+
+export async function PATCH(request:Request){
+  const user=getAuthUser(request); if(!user)return Response.json({error:"未登录"},{status:401});
+  if(!allowed(request,user.id))return Response.json({error:"请求过于频繁"},{status:429});
+  try{const body=await readLimitedJson<{conversationId?:unknown;title?:unknown;archived?:unknown}>(request,4096);return Response.json(updateAssistantConversation(user.id,body?.conversationId,{title:body?.title,archived:body?.archived}));}
+  catch{return Response.json({error:"会话更新失败"},{status:400});}
 }
