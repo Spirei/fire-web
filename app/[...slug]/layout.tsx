@@ -41,7 +41,11 @@ export default async function SlugLayout({
     ?.slice(CURRENCY_COOKIE_NAME.length + 1) as CurrencyCode | undefined;
   const currencyFlagCode = displayCurrencyFlagCode(currencyCookie);
   // 资产盈亏分析：应用壳内隐藏页签（不进导航菜单），直接按路径进入
-  const specialTab = path === "/asset-pnl-analysis" ? { key: "pnl" } : null;
+  const specialTab = path === "/asset-pnl-analysis"
+    ? { key: "pnl" }
+    : path === "/assistant"
+      ? (settings.tabs.find((item) => item.key === "assistant") ?? { key: "assistant" })
+      : null;
   let tab = specialTab ?? settings.tabs.find((t) => (t.url || `/${t.key}`) === path);
   // 个股详情直达：/watchlist/US.GOOGL —— 股票代码就是唯一标识，不再用 ?symbol= / ?filter=
   let initialSymbol: string | undefined;

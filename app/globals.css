@@ -669,9 +669,9 @@
   animation: tab-in 0.28s ease both;
 }
 
-/* 智能助手工作台沿用 Harness 的铺满式工作区，避免外层页面留白和卡片化边框。 */
-.app-shell-main:has(.assistant-page) { padding-top:0; padding-bottom:0; }
-.records-app:has(.assistant-page) { gap:0; align-items:stretch; }
+/* 智能助手保留完整工作区结构，同时留出与主站一致的呼吸边距。 */
+.app-shell-main:has(.assistant-page) { padding-top:16px; padding-bottom:16px; }
+.records-app:has(.assistant-page) { gap:16px; align-items:start; }
 .records-app:has(.assistant-page) > aside { top:88px; }
 
 @media (min-width:1024px) {
@@ -3010,7 +3010,7 @@ html.dark .watch-import-target {
   .app-shell-ticker { display:none; }
   .app-shell-main { padding-top:12px!important; padding-bottom:28px!important; }
   .app-shell-main:has(.assistant-page) { padding-top:0!important; padding-bottom:0!important; }
-  .assistant-workspace { height:calc(100dvh - 112px)!important; }
+  .assistant-workspace { height:calc(100dvh - 112px)!important; border-radius:14px; }
   .app-shell-footer { padding:22px 16px calc(22px + env(safe-area-inset-bottom))!important; }
   .app-shell-footer-detail { display:none; }
   .records-app { display:block; width:100%; padding-right:12px; padding-left:12px; }
