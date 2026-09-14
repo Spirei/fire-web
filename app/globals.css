@@ -669,6 +669,12 @@
   animation: tab-in 0.28s ease both;
 }
 
+/* 智能助手工作台沿用 Harness 的铺满式工作区，避免外层页面留白和卡片化边框。 */
+.app-shell-main:has(.assistant-page) { padding-top:0; padding-bottom:0; }
+.records-app:has(.assistant-page) { gap:0; align-items:stretch; }
+.records-app:has(.assistant-page) > aside { top:88px; }
+.assistant-page,.assistant-page-layer { width:100%; min-width:0; }
+
 /* 顶部全球指数栏：横向滚动但不显示滚动条 */
 .ticker-scroll {
   scrollbar-width: none;

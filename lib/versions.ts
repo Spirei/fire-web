@@ -3478,7 +3478,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     kind: "security"
   }, {
     title: "智能助手新增 Harness 风格模型轨迹",
-    desc: "复用 DeepSeek Harness 的轨迹信息架构和交互样式，将原统计卡片重构为“对话 / 轨迹”工作台：顶部提供时长、轮次折叠、详情收起、刷新和搜索；中部使用 Input / Model / Tools 三泳道时间线；下方按轮次排列高密度模型调用事件，点击后从右侧打开 Summary、Payload、Result、Timing 详情。功能适配现有模型服务、自动回退、图片和数据范围；不引入 Harness 的余额用量卡、插件或 Agent 设置。记录按用户和对话隔离，默认保留 30 天，删除对话同步清理，且不保存 API Key、请求头、账户摘要、问题正文、回答正文或图片内容。",
+    desc: "复用 DeepSeek Harness 的轨迹信息架构和交互样式，将原统计卡片重构为“对话 / 轨迹”工作台：独立页改为铺满可用高度的无外层卡片布局，会话栏宽度和主画布比例对齐 Harness；顶部提供时长、轮次折叠、详情收起、刷新和搜索；中部使用 Input / Model / Tools 三泳道时间线；下方按轮次排列高密度模型调用事件，点击后从右侧打开 Summary、Payload、Result、Timing 详情。功能适配现有模型服务、自动回退、图片和数据范围；保留本站全局导航，不引入 Harness 的余额用量卡、插件或 Agent 设置。记录按用户和对话隔离，默认保留 30 天，删除对话同步清理，且不保存 API Key、请求头、账户摘要、问题正文、回答正文或图片内容。",
     kind: "feature"
   }, {
     title: "新增智能助手独立工作台",
