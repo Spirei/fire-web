@@ -392,7 +392,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
   const [hydrated, setHydrated] = useState(false);
   const restored = useRef(false);
   const pollLeft = useRef(0);
-  const { pos, dragging, onTitleMouseDown } = useDraggableWindow("fire:trading-square-window-pos", fixed);
+  const { pos, dragging, onTitleMouseDown, windowRef } = useDraggableWindow("fire:trading-square-window-pos", fixed);
   const people = useMemo(
     () => PEOPLE.map((person) => ({ ...person, avatar: avatars?.[person.id] || person.avatar })),
     [avatars]
@@ -556,7 +556,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
 
   if (detail) {
     return (
-      <main style={windowStyle} className={`mx-auto w-full max-w-[800px] overflow-hidden rounded-2xl border border-edge bg-white shadow-card dark:bg-[#10151d] md:[transform:translate(var(--trading-x,0px),var(--trading-y,0px))] ${dragging ? "select-none" : ""}`}>
+      <main ref={windowRef} style={windowStyle} className={`mx-auto w-full max-w-[800px] overflow-hidden rounded-2xl border border-edge bg-white shadow-card dark:bg-[#10151d] md:[transform:translate(var(--trading-x,0px),var(--trading-y,0px))] ${dragging ? "select-none" : ""}`}>
         <div style={{ animation: "fade-in .25s ease" }}>
           <StockDetailView market={detail.market} code={detail.code} name={detail.name} onBack={() => setDetail(null)} followed={followed} />
         </div>
@@ -565,7 +565,7 @@ export default function TradingSquareView({ avatars, records = [] }: { avatars?:
   }
 
   return (
-    <main style={windowStyle} className={`mx-auto grid w-full max-w-[800px] overflow-hidden rounded-2xl border border-edge bg-white shadow-card dark:bg-[#10151d] md:grid-cols-[200px_minmax(0,1fr)] md:[transform:translate(var(--trading-x,0px),var(--trading-y,0px))] ${dragging ? "select-none" : ""}`}>
+    <main ref={windowRef} style={windowStyle} className={`mx-auto grid w-full max-w-[800px] overflow-hidden rounded-2xl border border-edge bg-white shadow-card dark:bg-[#10151d] md:grid-cols-[200px_minmax(0,1fr)] md:[transform:translate(var(--trading-x,0px),var(--trading-y,0px))] ${dragging ? "select-none" : ""}`}>
       <aside className="flex gap-2 overflow-x-auto border-b border-edge p-3 dark:border-white/10 md:block md:overflow-visible md:border-b-0 md:border-r">
         <button type="button" aria-pressed={selected === "all"} onClick={() => changePerson("all")} className={`flex min-w-[142px] items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-bg-gray active:scale-[.98] dark:hover:bg-white/[.035] md:mb-1 md:w-full md:min-w-0 ${selected === "all" ? "bg-brand-light dark:bg-[#1a202a]" : ""}`}>
           <ActivityIcon />

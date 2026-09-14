@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+
+const WINDOW_EDGE_GUTTER = 12;
 
 /**
  * 可拖动桌面窗口（与设置窗口同款）：按住标题栏拖动整个容器，
  * 位置自动保存到 localStorage；默认 (0,0) 靠左。
  */
 export default function useDraggableWindow(storageKey: string, locked = false) {
+  const windowRef = useRef<HTMLElement | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number; minX: number; maxX: number } | null>(null);
@@ -36,6 +39,31 @@ export default function useDraggableWindow(storageKey: string, locked = false) {
       /* 忽略损坏的本地位置 */
     }
   }, [storageKey]);
+
+  // 保存的位置可能来自较宽的窗口，或来自侧栏间距调整前。恢复后重新夹在
+  // 当前内容区内，并留出一圈安全间距，避免卡片边框贴住外层侧栏/视口。
+  useLayoutEffect(() => {
+    const panel = windowRef.current;
+    const boundary = panel?.parentElement;
+    if (!panel || !boundary) return;
+    const panelRect = panel.getBoundingClientRect();
+    const boundaryRect = boundary.getBoundingClientRect();
+    const availableGutter = Math.max(0, (boundaryRect.width - panelRect.width) / 2);
+    const gutter = Math.min(WINDOW_EDGE_GUTTER, availableGutter);
+    const leftDelta = boundaryRect.left + gutter - panelRect.left;
+    const rightDelta = boundaryRect.right - gutter - panelRect.right;
+    let nextX = posRef.current.x;
+    if (leftDelta > 0) nextX += leftDelta;
+    else if (rightDelta < 0) nextX += rightDelta;
+    if (nextX === posRef.current.x) return;
+    posRef.current = { ...posRef.current, x: nextX };
+    setPos(posRef.current);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(posRef.current));
+    } catch {
+      /* localStorage 不可用时仅修正本次布局 */
+    }
+  }, [storageKey, pos.x]);
 
   useEffect(() => {
     if (!dragging || !dragRef.current) return;
@@ -72,11 +100,14 @@ export default function useDraggableWindow(storageKey: string, locked = false) {
     const panelRect = panel?.getBoundingClientRect();
     const boundaryRect = panel?.parentElement?.getBoundingClientRect();
     const baseX = posRef.current.x;
-    const minX = panelRect && boundaryRect ? baseX + boundaryRect.left - panelRect.left : -window.innerWidth + 200;
-    const maxX = panelRect && boundaryRect ? baseX + boundaryRect.right - panelRect.right : window.innerWidth - 200;
+    const gutter = panelRect && boundaryRect
+      ? Math.min(WINDOW_EDGE_GUTTER, Math.max(0, (boundaryRect.width - panelRect.width) / 2))
+      : 0;
+    const minX = panelRect && boundaryRect ? baseX + boundaryRect.left + gutter - panelRect.left : -window.innerWidth + 200;
+    const maxX = panelRect && boundaryRect ? baseX + boundaryRect.right - gutter - panelRect.right : window.innerWidth - 200;
     dragRef.current = { startX: e.clientX, startY: e.clientY, baseX, baseY: posRef.current.y, minX, maxX };
     setDragging(true);
   }
 
-  return { pos, dragging, onTitleMouseDown };
+  return { pos, dragging, onTitleMouseDown, windowRef };
 }

@@ -675,9 +675,12 @@
 .records-app:has(.assistant-page) > aside { top:88px; }
 
 @media (min-width:1024px) {
-  .records-app { padding-inline:16px; }
+  .records-app { gap:28px; padding-inline:18px; }
   .records-app:has(.assistant-page) { padding-inline:16px; gap:16px; }
 }
+
+/* 主导航与每个业务工作区之间统一保留清晰的呼吸区。 */
+.records-content { min-width:0; isolation:isolate; }
 
 /* Codex-inspired workspace navigation: translucent shell, restrained selection, clear depth from content. */
 .fire-sidebar { color: var(--ink); perspective: 1000px; }
@@ -703,7 +706,7 @@
 .fire-sidebar-panel > * { position:relative; z-index:1; }
 .fire-sidebar-section-label { color: #8f949d; font-size: 12px; font-weight: 600; letter-spacing: .02em; padding: 10px 12px 6px; }
 .fire-sidebar-section-label-spaced { margin-top: 12px; }
-.fire-sidebar-item { margin-bottom:3px; border:1px solid transparent; }
+.fire-sidebar-item { margin-bottom:5px; border:1px solid transparent; }
 .fire-sidebar-item > svg { opacity:.78; transition:opacity 160ms ease,color 160ms ease; }
 .fire-sidebar-item:hover > svg,.fire-sidebar-item-active > svg { opacity:1; }
 .fire-sidebar-item-active {

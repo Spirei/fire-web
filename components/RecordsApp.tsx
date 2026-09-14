@@ -769,7 +769,7 @@ export default function RecordsApp({
   // 实测把「繁體」改成了「繁体」），React 一比对就报 Hydration failed。站内的繁简 / 英文切换不受影响。
   return (
     <>
-    <div translate="no" className="records-app notranslate flex items-start gap-6">
+    <div translate="no" className="records-app notranslate flex items-start">
       {/* 桌面侧边导航 */}
       <aside className="fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block">
         <nav className="fire-sidebar-panel relative min-h-[calc(100vh-112px)] overflow-hidden rounded-2xl px-2 pb-3 pt-3">
@@ -806,7 +806,7 @@ export default function RecordsApp({
       </aside>
 
       {/* 内容区 */}
-      <div className="min-w-0 flex-1">
+      <div className="records-content min-w-0 flex-1">
         {/* 移动端顶部标签 */}
         <div ref={mobileNavRef} className="mobile-tab-nav mb-6 flex overflow-x-auto rounded-2xl bg-bg-gray p-1 lg:hidden">
           {sidebarTabs.map((t) => (
