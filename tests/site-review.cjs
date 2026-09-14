@@ -79,6 +79,16 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const {modelAttempts}=require(path.join(root,'lib/modelServices.ts'));
     assert.deepEqual(modelAttempts(settings.getSiteSettings()).map(item=>`${item.service.name}:${item.model}`),['备用模型:backup-fast','主模型:deepseek-chat','主模型:deepseek-reasoner']);
   });
+  await test('model connection test uses server-side saved key without exposing it', async () => {
+    const modelTestRoute=require(path.join(root,'app/api/settings/model-test/route.ts'));
+    const offline=global.fetch;let observed;
+    global.fetch=async(url,init)=>{observed={url,auth:init.headers.Authorization,body:JSON.parse(init.body)};return new Response(JSON.stringify({choices:[{message:{content:'OK'}}]}),{status:200,headers:{'Content-Type':'application/json'}});};
+    try {
+      const req=new Request('http://localhost:3000/api/settings/model-test',{method:'POST',headers:{cookie:`fire_session=${tokens.admin}`,'Content-Type':'application/json'},body:JSON.stringify({serviceId:'backup',apiUrl:'https://models.example.com/v1/chat/completions',model:'backup-fast'})});
+      const res=await modelTestRoute.POST(req);const body=await res.json();assert.equal(res.status,200);assert.equal(body.ok,true);
+      assert.equal(observed.auth,'Bearer SECRET_BACKUP');assert.equal(observed.body.model,'backup-fast');
+    } finally { global.fetch=offline; }
+  });
   await test('model service navigation and provider icons stay explicit', () => {
     const source=fs.readFileSync(path.join(root,'components/views/SettingsView.tsx'),'utf8');
     assert(source.includes('label: "模型服务"'));

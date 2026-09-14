@@ -899,6 +899,23 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     return data.url as string;
   }
 
+  async function testModelService(service: ModelServiceConfig, model: string) {
+    const key = `${service.id}:${model}`;
+    setModelTestStates(current => ({ ...current, [key]: { state: "loading", text: "测试中" } }));
+    try {
+      const res = await fetch("/api/settings/model-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serviceId: service.id, apiUrl: service.apiUrl, apiKey: service.apiKey, model })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "测试失败");
+      setModelTestStates(current => ({ ...current, [key]: { state: "ok", text: `${data.latencyMs}ms` } }));
+    } catch (error) {
+      setModelTestStates(current => ({ ...current, [key]: { state: "error", text: error instanceof Error ? error.message : "测试失败" } }));
+    }
+  }
+
   async function uploadLoginImage(file: File): Promise<string> {
     try {
       const fd = new FormData();
@@ -1292,6 +1309,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [editingSources, setEditingSources] = useState(false);
   const [editingModel, setEditingModel] = useState(false);
   const modelDragIndexRef = useRef<number | null>(null);
+  const [modelTestStates, setModelTestStates] = useState<Record<string, { state: "loading" | "ok" | "error"; text: string }>>({});
   const [editingTradingSquare, setEditingTradingSquare] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   // 站点信息：不再有「编辑 / 保存」两步 —— 字段常驻可编辑，改动由全局自动保存（700ms 防抖 + 胶囊提示）落库
@@ -2912,7 +2930,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 <div className="model-service-editor">
                                   <div className="model-provider-grid">
                                     {MODEL_PROVIDERS.map(item => (
-                                      <button key={item.id} type="button" onClick={() => updateService(service.id, { provider: item.id, name: service.name === "自定义服务" || service.name === "新模型服务" ? item.name : service.name, apiUrl: item.url || service.apiUrl })} className={`model-provider-option ${service.provider === item.id ? "is-active" : ""}`}>
+                                      <button key={item.id} type="button" onClick={() => updateService(service.id, { provider: item.id, name: service.name === "新模型服务" || MODEL_PROVIDERS.some(candidate => candidate.name === service.name) ? item.name : service.name, apiUrl: item.url || service.apiUrl })} className={`model-provider-option ${service.provider === item.id ? "is-active" : ""}`}>
                                         <ModelProviderIcon provider={item.id} className="h-8 w-8" />
                                         <span><b>{item.name}</b><small>{item.hint}</small></span><i className="model-provider-check" />
                                       </button>
@@ -2920,11 +2938,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                   </div>
                                   <div className="model-identity-row">
                                     <label className="model-field"><span>服务名称<small>会显示在上方服务列表</small></span><input className="sw-row-input" value={service.name} maxLength={50} onChange={event => updateService(service.id, { name: event.target.value })} placeholder="例如：公司代理服务" /></label>
-                                    <label className="model-icon-upload">
-                                      <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={async event => { const file = event.target.files?.[0]; if (!file) return; try { updateService(service.id, { icon: await uploadModelIcon(file, service.name) }); showToast("模型服务图标已上传"); } catch (error) { showToast(error instanceof Error ? error.message : "图标上传失败", "err"); } event.currentTarget.value = ""; }} />
-                                      <ModelProviderIcon provider={service.provider} icon={service.icon} className="h-9 w-9" />
-                                      <span>{service.icon ? "更换图标" : "上传图标"}</span>
-                                    </label>
+                                    <div className="model-icon-controls">
+                                      <label className="model-icon-upload">
+                                        <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={async event => { const file = event.target.files?.[0]; if (!file) return; try { updateService(service.id, { icon: await uploadModelIcon(file, service.name) }); showToast("模型服务图标已上传"); } catch (error) { showToast(error instanceof Error ? error.message : "图标上传失败", "err"); } event.currentTarget.value = ""; }} />
+                                        <ModelProviderIcon provider={service.provider} icon={service.icon} className="h-9 w-9" />
+                                        <span>{service.icon ? "更换图标" : "上传图标"}</span>
+                                      </label>
+                                      {service.icon && <button type="button" onClick={() => updateService(service.id, { icon: "" })}>恢复默认</button>}
+                                    </div>
                                   </div>
                                   <label className="model-field"><span>API 地址<small>OpenAI 兼容的 Chat Completions 地址</small></span><input className="sw-row-input" value={service.apiUrl} onChange={event => updateService(service.id, { apiUrl: event.target.value })} placeholder="https://api.example.com/v1/chat/completions" autoComplete="off" /></label>
                                   <label className="model-field"><span>API 密钥<small>留空不会覆盖已保存密钥</small></span><div className="relative min-w-0 flex-1"><input className="sw-row-input !w-full pr-24" type="password" autoComplete="new-password" value={service.apiKey} onChange={event => updateService(service.id, { apiKey: event.target.value })} placeholder={service.apiKeyConfigured ? "已配置，输入新值可替换" : "输入 API Key"} /><span className={`model-key-state ${service.apiKey || service.apiKeyConfigured ? "is-ready" : ""}`}><i />{service.apiKey || service.apiKeyConfigured ? "已保护" : "未配置"}</span></div></label>
@@ -2935,9 +2956,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                         <div className="model-row" key={`${service.id}-${modelIndex}`}>
                                           <span className="model-priority">{modelIndex + 1}</span>
                                           <input className="sw-row-input" value={model} maxLength={160} onChange={event => updateService(service.id, { models: service.models.map((item, index) => index === modelIndex ? event.target.value : item) })} placeholder="模型 ID" />
+                                          <button type="button" className={`model-test-button is-${modelTestStates[`${service.id}:${model}`]?.state || "idle"}`} onClick={() => { void testModelService(service, model); }} disabled={!model || modelTestStates[`${service.id}:${model}`]?.state === "loading"} title={modelTestStates[`${service.id}:${model}`]?.text || "测试模型连接"}>{modelTestStates[`${service.id}:${model}`]?.state === "loading" ? "…" : modelTestStates[`${service.id}:${model}`]?.state === "ok" ? "✓" : modelTestStates[`${service.id}:${model}`]?.state === "error" ? "!" : "测试"}</button>
                                           <button type="button" onClick={() => { const next=[...service.models]; const [item]=next.splice(modelIndex,1); next.splice(modelIndex-1,0,item); updateService(service.id,{models:next}); }} disabled={modelIndex === 0} aria-label="模型上移">↑</button>
                                           <button type="button" onClick={() => { const next=[...service.models]; const [item]=next.splice(modelIndex,1); next.splice(modelIndex+1,0,item); updateService(service.id,{models:next}); }} disabled={modelIndex === service.models.length - 1} aria-label="模型下移">↓</button>
                                           <button type="button" onClick={() => updateService(service.id, { models: service.models.filter((_, index) => index !== modelIndex) })} disabled={service.models.length === 1} aria-label="删除模型"><DeleteIcon className="h-4 w-4" /></button>
+                                          {modelTestStates[`${service.id}:${model}`] && modelTestStates[`${service.id}:${model}`].state !== "loading" && <span className={`model-test-result is-${modelTestStates[`${service.id}:${model}`].state}`}>{modelTestStates[`${service.id}:${model}`].state === "ok" ? `连接成功 · ${modelTestStates[`${service.id}:${model}`].text}` : modelTestStates[`${service.id}:${model}`].text}</span>}
                                         </div>
                                       ))}
                                     </div>
