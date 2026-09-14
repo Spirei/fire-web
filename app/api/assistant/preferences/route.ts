@@ -19,7 +19,7 @@ export async function PUT(request: Request) {
   if (!user) return Response.json({ error: "未登录" }, { status: 401 });
   if (!allowed(request, user.id)) return Response.json({ error: "请求过于频繁" }, { status: 429 });
   try { return Response.json(saveAssistantPreferences(user.id, await readLimitedJson(request, 4 * 1024))); }
-  catch (error) { return Response.json({ error: error instanceof RequestBodyTooLargeError ? "记忆内容过大" : "保存失败" }, { status: error instanceof RequestBodyTooLargeError ? 413 : 400 }); }
+  catch (error) { return Response.json({ error: error instanceof RequestBodyTooLargeError ? "偏好内容过大" : "保存失败" }, { status: error instanceof RequestBodyTooLargeError ? 413 : 400 }); }
 }
 export async function DELETE(request: Request) {
   const user = getAuthUser(request);

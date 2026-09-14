@@ -65,6 +65,7 @@ function migrate(database: Database.Database) {
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       memory_enabled INTEGER NOT NULL DEFAULT 0,
       memory TEXT NOT NULL DEFAULT '',
+      default_model TEXT NOT NULL DEFAULT 'auto',
       updated_at TEXT NOT NULL
     );
 
@@ -427,6 +428,8 @@ function migrate(database: Database.Database) {
   if (!assistantUsageCols.includes("data_scope")) database.exec("ALTER TABLE assistant_usage ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'none'");
   const assistantThreadCols = (database.prepare("PRAGMA table_info(assistant_conversation_threads)").all() as { name: string }[]).map((c) => c.name);
   if (!assistantThreadCols.includes("archived")) database.exec("ALTER TABLE assistant_conversation_threads ADD COLUMN archived INTEGER NOT NULL DEFAULT 0");
+  const assistantPreferenceCols = (database.prepare("PRAGMA table_info(assistant_preferences)").all() as { name: string }[]).map((c) => c.name);
+  if (!assistantPreferenceCols.includes("default_model")) database.exec("ALTER TABLE assistant_preferences ADD COLUMN default_model TEXT NOT NULL DEFAULT 'auto'");
 
   // 卡面库卡背信息增量字段（兼容旧库）：备注与币种后加
   const cardDetailCols = (database.prepare("PRAGMA table_info(card_details)").all() as { name: string }[]).map((c) => c.name);
