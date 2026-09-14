@@ -16,7 +16,7 @@ import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
 import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCompact, localDateKey } from "@/lib/format";
 import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
-import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses } from "@/lib/portfolioSeries";
+import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses, peekPortfolioBundle } from "@/lib/portfolioSeries";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 
 
@@ -152,16 +152,35 @@ function AdaptivePnlIdentity({ row }: { row: PnlRow }) {
 }
 
 
-export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
+export default function AssetPnlAnalysis({
+  onBack,
+  initialRecords,
+  initialQuotes
+}: {
+  onBack?: () => void;
+  initialRecords?: StockRecord[];
+  initialQuotes?: Record<string, Quote>;
+}) {
   const { stockIcons } = useAssetIcons(["stock"]);
-  const [allRecords, setAllRecords] = useState<StockRecord[]>([]);
-  const [records, setRecords] = useState<StockRecord[]>([]);
-  const [quotes, setQuotes] = useState<Record<string, Quote>>({});
+  // 从资产分析页进入时固定复用点击当刻的数据，避免父层行情定时刷新触发整页历史重载。
+  const initialRecordsRef = useRef(initialRecords);
+  const initialQuotesRef = useRef(initialQuotes);
+  const initialBundleRef = useRef(peekPortfolioBundle(330));
+  const warmBundle = initialBundleRef.current;
+  const [allRecords, setAllRecords] = useState<StockRecord[]>(() => initialRecords || []);
+  const [records, setRecords] = useState<StockRecord[]>(() => (initialRecords || []).filter((record) => Number(record.qty) > 0));
+  const [quotes, setQuotes] = useState<Record<string, Quote>>(() => initialQuotes || {});
   const [rates, setRates] = useState<Record<string, number>>(FALLBACK_RATES);
-  const [closesMap, setClosesMap] = useState<Record<string, CloseItem[]>>({});
+  const [closesMap, setClosesMap] = useState<Record<string, CloseItem[]>>(() =>
+    Object.fromEntries(
+      (initialRecords || [])
+        .map((record) => [record.id, normalizeCloses(warmBundle?.closes?.[record.id])] as const)
+        .filter((entry) => entry[1].length > 0)
+    )
+  );
   const [benchCloses, setBenchCloses] = useState<CloseItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [klineLoading, setKlineLoading] = useState(true);
+  const [loading, setLoading] = useState(initialRecords === undefined);
+  const [klineLoading, setKlineLoading] = useState(!warmBundle);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -189,7 +208,7 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   const [shareImage, setShareImage] = useState<string | null>(null);
   const [shareBusy, setShareBusy] = useState<"render" | "copy" | "save" | null>(null);
   // 订单（时间加权：按订单轨迹跟踪持仓数量 + 每日现金流）
-  const [orders, setOrders] = useState<TradeOrder[]>([]);
+  const [orders, setOrders] = useState<TradeOrder[]>(() => warmBundle?.orders || []);
   // 收益日历-每日股票盈亏明细（点击日历某天弹出）
   const [dayDetail, setDayDetail] = useState<{ date: string; rows: CalendarDayRow[] } | null>(null);
   const [calendarMode, setCalendarMode] = useState<"收益" | "收益率">("收益");
@@ -212,31 +231,37 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
   useLayoutEffect(() => {
     const cached = readAssetPnlSnapshot();
     if (!cached) return;
-    setAllRecords(cached.allRecords);
-    setRecords(cached.records);
-    setQuotes(cached.quotes || {});
+    if (initialRecordsRef.current === undefined) {
+      setAllRecords(cached.allRecords);
+      setRecords(cached.records);
+    }
+    if (initialQuotesRef.current === undefined) setQuotes(cached.quotes || {});
     setRates((previous) => ({ ...previous, ...(cached.rates || {}), USD: 1 }));
-    setClosesMap(cached.closesMap || {});
-    setOrders(cached.orders || []);
+    if (!warmBundle) {
+      setClosesMap(cached.closesMap || {});
+      setOrders(cached.orders || []);
+    }
     setLoading(false);
     setKlineLoading(false);
-  }, []);
+  }, [warmBundle]);
   // 真实数据：持仓 + 行情 + 汇率 + 日K（含标普500基准）
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const cached = readAssetPnlSnapshot();
-      setLoading(!cached);
+      setLoading(!cached && initialRecordsRef.current === undefined);
       setKlineLoading(!cached);
       setLoadError("");
       try {
         const [recs, ratesRes, bundle] = await Promise.all([
-          fetch("/api/records").then(async (response) => {
-            if (!response.ok) throw new Error(response.status === 401 ? "登录已失效，请重新登录" : "持仓数据加载失败");
-            return response.json();
-          }),
+          initialRecordsRef.current
+            ? Promise.resolve(initialRecordsRef.current)
+            : fetch("/api/records").then(async (response) => {
+                if (!response.ok) throw new Error(response.status === 401 ? "登录已失效，请重新登录" : "持仓数据加载失败");
+                return response.json();
+              }),
           fetch("/api/rates").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          fetchPortfolioBundle({ days: 250 })
+          fetchPortfolioBundle({ days: 330 })
         ]);
         if (cancelled) return;
         const nextRates = ratesRes?.rates ? { ...FALLBACK_RATES, ...ratesRes.rates, USD: 1 } : cached?.rates || FALLBACK_RATES;
@@ -247,8 +272,8 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
         setAllRecords(importedRecords);
         const positions = importedRecords.filter((r) => Number(r.qty) > 0);
         setRecords(positions);
-        let nextQuotes = cached?.quotes || {};
-        if (positions.length > 0) {
+        let nextQuotes = { ...(cached?.quotes || {}), ...(initialQuotesRef.current || {}) };
+        if (positions.length > 0 && initialQuotesRef.current === undefined) {
           const qRes = await fetch("/api/quotes", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -300,7 +325,7 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
     let cancelled = false;
     const bench = BENCHMARKS.find((b) => b.key === benchKey) || BENCHMARKS[0];
     (async () => {
-      const items = await fetchBenchmarkKline(bench.market, bench.code, 250, bench.index);
+      const items = await fetchBenchmarkKline(bench.market, bench.code, 330, bench.index);
       if (!cancelled) {
         setBenchCloses(items);
       }

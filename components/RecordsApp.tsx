@@ -857,7 +857,13 @@ export default function RecordsApp({
               livePrice={livePrice}
             />
           )}
-          {activeTab === "pnl" && <AssetPnlAnalysisView onBack={() => selectTab("assets")} />}
+          {activeTab === "pnl" && (
+            <AssetPnlAnalysisView
+              onBack={() => selectTab("assets")}
+              initialRecords={records}
+              initialQuotes={quotes}
+            />
+          )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
           {activeTab === "global" && <GlobalPreviewView />}
           {activeTab === "trading" && <TradingSquareView avatars={initialCelebAvatars} records={records} />}

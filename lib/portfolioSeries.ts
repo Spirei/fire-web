@@ -17,7 +17,15 @@ export interface PortfolioBundle {
 
 const BUNDLE_TTL = 5 * 60 * 1000;
 const bundleCache = new Map<string, PortfolioBundle>();
+const bundleCachedAt = new Map<string, number>();
 const bundleInflight = new Map<string, Promise<PortfolioBundle | null>>();
+
+/** 同一页面树内同步读取已经完成的组合数据，供二级页首帧直接复用。 */
+export function peekPortfolioBundle(days = 330): PortfolioBundle | null {
+  const hit = bundleCache.get(String(days));
+  const cachedAt = bundleCachedAt.get(String(days)) || 0;
+  return hit && Date.now() - cachedAt < BUNDLE_TTL ? hit : null;
+}
 
 /**
  * 一次取回「持仓日K + 基准日K + 订单」。
@@ -33,7 +41,7 @@ export async function fetchPortfolioBundle({
 } = {}): Promise<PortfolioBundle | null> {
   const key = String(days);
   const hit = bundleCache.get(key);
-  if (!force && hit && Date.now() - hit.at < BUNDLE_TTL) return hit;
+  if (!force && hit && Date.now() - (bundleCachedAt.get(key) || 0) < BUNDLE_TTL) return hit;
   const pending = bundleInflight.get(key);
   if (pending && !force) return pending;
 
@@ -54,6 +62,7 @@ export async function fetchPortfolioBundle({
         at: Number(data.at) || Date.now()
       };
       bundleCache.set(key, bundle);
+      bundleCachedAt.set(key, Date.now());
       return bundle;
     } catch {
       // 源站 / 限流抖动时回退上一次成功结果，避免趋势图与日历被清空
