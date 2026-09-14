@@ -27,7 +27,6 @@ export interface AssistantHistoryState {
 
 const MAX_MESSAGES = 30;
 const MAX_BYTES = 64 * 1024;
-const MAX_CONVERSATIONS = 20;
 const CONVERSATION_ID_RE = /^ac-[a-f0-9]{24}$/;
 
 function text(value: unknown, max = 200) {
@@ -180,8 +179,7 @@ export function getAssistantHistoryState(userId: string): AssistantHistoryState 
     FROM assistant_conversation_threads
     WHERE user_id = ?
     ORDER BY updated_at DESC
-    LIMIT ?
-  `).all(userId, MAX_CONVERSATIONS) as Array<{ conversation_id: string; title: string; messages: string; created_at: string; updated_at: string }>;
+  `).all(userId) as Array<{ conversation_id: string; title: string; messages: string; created_at: string; updated_at: string }>;
   const conversations = rows.map(parseConversation);
   return { activeId: conversations[0]?.id || "", conversations };
 }
@@ -208,12 +206,6 @@ export function saveAssistantHistory(userId: string, conversationId: unknown, va
         messages = excluded.messages,
         updated_at = excluded.updated_at
     `).run(userId, id, conversationTitle(messages), JSON.stringify(messages), existing?.created_at || now, now);
-    const stale = database.prepare(`
-      SELECT conversation_id FROM assistant_conversation_threads
-      WHERE user_id = ? ORDER BY updated_at DESC LIMIT -1 OFFSET ?
-    `).all(userId, MAX_CONVERSATIONS) as Array<{ conversation_id: string }>;
-    const remove = database.prepare("DELETE FROM assistant_conversation_threads WHERE user_id = ? AND conversation_id = ?");
-    for (const row of stale) remove.run(userId, row.conversation_id);
   })();
   return getAssistantHistoryState(userId);
 }

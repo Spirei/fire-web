@@ -216,7 +216,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       const title = snapshot.find((message) => message.role === "user")?.content.trim().replace(/\s+/g, " ").slice(0, 36) || "新对话";
       const existing = current.find((item) => item.id === conversationId);
       const next: StoredAssistantConversation = { id: conversationId, title, messages: snapshot, createdAt: existing?.createdAt || now, updatedAt: now };
-      return [next, ...current.filter((item) => item.id !== conversationId)].slice(0, 20);
+      return [next, ...current.filter((item) => item.id !== conversationId)];
     });
     setHistoryStatus("saving");
     saveQueue.current = saveQueue.current.catch(() => undefined).then(async () => {
@@ -500,16 +500,16 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
             <header onPointerDown={(event) => startFloatingDrag("panel", event)} className="flex min-h-[68px] touch-none cursor-grab items-center gap-3 border-b border-edge px-5 active:cursor-grabbing">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_5px_16px_rgba(0,0,0,.18)]"><AssistantGlyph size={20} /></span>
               <div className="min-w-0 flex-1 text-sm font-semibold text-ink">账户助手</div>
-              {conversations.length > 0 && <button type="button" disabled={actionBusy} onClick={() => setHistoryOpen((value) => !value)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="历史对话" title="历史对话"><IconHistory size={18} /></button>}
-              {messages.length > 0 && <button type="button" disabled={actionBusy} onClick={startNewChat} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="开始新对话" title={actionBusy ? "操作完成后可开始新对话" : "开始新对话"}><IconPlus size={18} /></button>}
-              <button type="button" aria-pressed={pinned} onClick={() => setPinned((value) => { const next = !value; writePersistentPreference(`fire:assistant:pinned:${userId}`, next ? "1" : "0"); return next; })} className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-bg-gray" aria-label={pinned ? "取消置顶" : "置顶账户助手"} title={pinned ? "已置顶，点击取消" : "置顶面板"}><IconPin size={17} /></button>
+              <button type="button" disabled={actionBusy} onClick={() => setHistoryOpen((value) => !value)} className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="历史对话" title="历史对话"><IconHistory size={18} /></button>
+              <button type="button" disabled={actionBusy} onClick={startNewChat} className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="开始新对话" title={actionBusy ? "操作完成后可开始新对话" : "开始新对话"}><IconPlus size={18} /></button>
+              <button type="button" aria-pressed={pinned} onPointerDown={(event) => event.stopPropagation()} onClick={() => setPinned((value) => { const next = !value; writePersistentPreference(`fire:assistant:pinned:${userId}`, next ? "1" : "0"); return next; })} className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-bg-gray" aria-label={pinned ? "取消置顶" : "置顶账户助手"} title={pinned ? "已置顶，点击取消" : "置顶面板"}><IconPin size={17} /></button>
               <button type="button" onClick={() => setMinimized((value) => !value)} className="hidden h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray sm:flex" aria-label={minimized ? "展开" : "最小化"}><IconMinus size={18} /></button>
               <button type="button" onClick={() => setOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭"><IconX size={18} /></button>
             </header>
             {!minimized && historyOpen && <div className="absolute inset-x-0 bottom-0 top-[68px] z-20 flex justify-end bg-white/70 backdrop-blur-[2px]">
               <aside className="flex h-full w-[88%] flex-col border-l border-edge bg-white shadow-[-14px_0_36px_rgba(15,23,42,.08)]" aria-label="历史对话抽屉">
                 <div className="flex h-14 items-center justify-between border-b border-edge px-4">
-                  <div><div className="text-sm font-semibold text-ink">历史对话</div><div className="mt-0.5 text-[10px] text-faint">最多保留 20 个会话</div></div>
+                  <div><div className="text-sm font-semibold text-ink">对话归档</div><div className="mt-0.5 text-[10px] text-faint">所有会话都会保留在这里</div></div>
                   <button type="button" onClick={() => setHistoryOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭历史对话"><IconX size={17} /></button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-2.5">
