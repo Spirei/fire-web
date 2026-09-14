@@ -5,7 +5,7 @@
 //   row3: 空
 //   row4: 记录类型 | 记账时间 | 转入转出金额 | 总资产金额 | 投资日志 | 创建时间 | 明细
 //   row5+: 记总资产 / 转入转出 记录
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 export type XlsxHist = { d: string; v?: number | null; inn?: number; out?: number };
 export type XlsxInvest = {
@@ -89,7 +89,7 @@ function num(v: unknown): number | null {
 
 /** 把 simple-app 的投资账户数组生成为「有知有行投资记账」格式 workbook */
 export function buildYouzhiyouxingWorkbook(invest: XlsxInvest[]) {
-  const wb = XLSX.utils.book_new();
+  const wb = new ExcelJS.Workbook();
   (invest || []).forEach((a, idx) => {
     const rows: unknown[][] = [];
     rows.push(["账户名称", "账户目标", "预期年化收益率", "预计投资时间", "币种", "四笔钱"]);
@@ -111,27 +111,78 @@ export function buildYouzhiyouxingWorkbook(invest: XlsxInvest[]) {
       if (inn || out) rows.push(["转入转出", sd, inn - out, num(h.v), null, now, ""]);
     }
 
-    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const ws = wb.addWorksheet(sanitizeSheetName(a.name, idx));
+    ws.addRows(rows);
     for (let r = 5; r <= rows.length; r++) {
-      const b = ws[XLSX.utils.encode_cell({ r: r - 1, c: 1 })];
-      if (b) b.z = "yyyy-mm-dd";
-      const f = ws[XLSX.utils.encode_cell({ r: r - 1, c: 5 })];
-      if (f) f.z = "yyyy-mm-dd hh:mm:ss";
+      ws.getCell(r, 2).numFmt = "yyyy-mm-dd";
+      ws.getCell(r, 6).numFmt = "yyyy-mm-dd hh:mm:ss";
     }
-    XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(a.name, idx));
   });
   return wb;
 }
 
+function primitiveCell(value: ExcelJS.CellValue): unknown {
+  if (value instanceof Date) return dateToSerial(value.toISOString().slice(0, 10));
+  if (!value || typeof value !== "object") return value;
+  if ("result" in value) return primitiveCell((value as ExcelJS.CellFormulaValue).result as ExcelJS.CellValue);
+  if ("richText" in value) return (value as ExcelJS.CellRichTextValue).richText.map((item) => item.text).join("");
+  if ("text" in value) return String((value as { text?: unknown }).text ?? "");
+  return null;
+}
+
+function worksheetRows(ws: ExcelJS.Worksheet): unknown[][] {
+  const rows: unknown[][] = [];
+  for (let number = 1; number <= ws.rowCount; number++) {
+    const row = ws.getRow(number);
+    const values: unknown[] = [];
+    for (let column = 1; column <= Math.min(row.cellCount, 32); column++) values.push(primitiveCell(row.getCell(column).value));
+    rows.push(values);
+  }
+  return rows;
+}
+
+/** Reject malformed/encrypted/oversized XLSX archives before workbook decompression. */
+export function assertSafeXlsxArchive(input: ArrayBuffer | Buffer) {
+  const data = Buffer.isBuffer(input) ? input : Buffer.from(input);
+  if (data.length < 22 || data.readUInt32LE(0) !== 0x04034b50) throw new Error("无效的 xlsx 文件");
+  const searchStart = Math.max(0, data.length - 65_557);
+  let eocd = -1;
+  for (let index = data.length - 22; index >= searchStart; index--) {
+    if (data.readUInt32LE(index) === 0x06054b50) { eocd = index; break; }
+  }
+  if (eocd < 0) throw new Error("无效的 xlsx 文件");
+  const entries = data.readUInt16LE(eocd + 10);
+  const directorySize = data.readUInt32LE(eocd + 12);
+  const directoryOffset = data.readUInt32LE(eocd + 16);
+  if (!entries || entries > 2_000 || directoryOffset + directorySize > data.length) throw new Error("xlsx 文件结构过大");
+  let offset = directoryOffset, totalUncompressed = 0;
+  for (let count = 0; count < entries; count++) {
+    if (offset + 46 > data.length || data.readUInt32LE(offset) !== 0x02014b50) throw new Error("无效的 xlsx 文件");
+    const flags = data.readUInt16LE(offset + 8);
+    const compressed = data.readUInt32LE(offset + 20);
+    const uncompressed = data.readUInt32LE(offset + 24);
+    const nameLength = data.readUInt16LE(offset + 28), extraLength = data.readUInt16LE(offset + 30), commentLength = data.readUInt16LE(offset + 32);
+    if ((flags & 1) !== 0 || uncompressed > 20 * 1024 * 1024) throw new Error("xlsx 文件包含不安全内容");
+    totalUncompressed += uncompressed;
+    if (totalUncompressed > 50 * 1024 * 1024 || (compressed > 0 && uncompressed / compressed > 200)) throw new Error("xlsx 文件解压后过大");
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+}
+
 /** 把「有知有行」xlsx 解析为 simple-app 投资账户数组（未分配 id） */
-export function parseYouzhiyouxing(buffer: ArrayBuffer | Buffer): XlsxInvest[] {
-  const wb = XLSX.read(buffer as ArrayBuffer, { type: "array", cellDates: false });
+export async function parseYouzhiyouxing(buffer: ArrayBuffer | Buffer): Promise<XlsxInvest[]> {
+  assertSafeXlsxArchive(buffer);
+  const wb = new ExcelJS.Workbook();
+  const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  await wb.xlsx.load(bytes as unknown as Parameters<typeof wb.xlsx.load>[0]);
   const result: XlsxInvest[] = [];
 
-  for (const sheetName of wb.SheetNames) {
-    const ws = wb.Sheets[sheetName];
-    if (!ws) continue;
-    const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null }) as unknown[][];
+  if (wb.worksheets.length > 100) throw new Error("工作表过多");
+  let totalRows = 0;
+  for (const ws of wb.worksheets) {
+    totalRows += ws.rowCount;
+    if (ws.rowCount > 10_000 || totalRows > 50_000) throw new Error("工作表数据过多");
+    const rows = worksheetRows(ws);
     const header = rows[0];
     const acct = rows[1];
     if (!Array.isArray(header) || String(header[0] || "") !== "账户名称") continue;
@@ -201,7 +252,7 @@ export function parseYouzhiyouxing(buffer: ArrayBuffer | Buffer): XlsxInvest[] {
   return result;
 }
 
-export function xlsxBuffer(invest: XlsxInvest[]): Buffer {
+export async function xlsxBuffer(invest: XlsxInvest[]): Promise<Buffer> {
   const wb = buildYouzhiyouxingWorkbook(invest);
-  return XLSX.write(wb, { bookType: "xlsx", type: "buffer" }) as Buffer;
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }

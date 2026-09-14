@@ -4,6 +4,7 @@ import { runAssistantAction } from "@/lib/assistantActions";
 import { deleteOrder, placeOrder } from "@/lib/orders";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { assignRecordsGroup, createWatchGroup, deleteWatchGroup } from "@/lib/watchGroupsStore";
+import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 
 const ACTION_TTL_MS = 15 * 60 * 1000;
 
@@ -13,7 +14,13 @@ export async function POST(request: Request) {
   if (!rateLimit(`assistant-action:${clientIp(request)}:${user.id}`, 30, 60_000) || !rateLimitGlobal("assistant-action", 180, 60_000)) {
     return fail(42901, "操作过于频繁，请稍后再试", 429);
   }
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  let body: Record<string, unknown> | null;
+  try {
+    body = await readLimitedJson(request, 512 * 1024);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return fail(40002, "请求内容过大", 413);
+    throw error;
+  }
   if (!body) return fail(40002, "无效的请求体", 400);
   const actionId = String(body.actionId || "");
   const type = String(body.type || "");
@@ -39,7 +46,7 @@ export async function POST(request: Request) {
         ? [...new Set(body.recordIds.filter((item): item is string => typeof item === "string" && item.length > 0 && item.length <= 100))]
         : [];
       const groupId = String(body.groupId || "").trim();
-      if (!ids.length || ids.length > 2000 || !groupId) return fail(40001, "分组或股票列表无效", 400);
+      if (!ids.length || ids.length > 2000 || !groupId || groupId.length > 100) return fail(40001, "分组或股票列表无效", 400);
       const response = runAssistantAction({ userId: user.id, actionId, actionType: type, payload: { ids, groupId }, execute: () => ({ updated: assignRecordsGroup(user.id, ids, groupId), executedAt: new Date().toISOString() }) });
       return ok({ ...response.result, replayed: response.replayed });
     }
@@ -47,7 +54,8 @@ export async function POST(request: Request) {
       const recordId = String(body.recordId || "").trim();
       const side: "buy" | "sell" | null = body.side === "buy" || body.side === "sell" ? body.side : null;
       const qty = Number(body.qty), price = Number(body.price), fees = Number(body.fees ?? 0);
-      if (!recordId || !side || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price <= 0 || !Number.isFinite(fees) || fees < 0) {
+      const notional = qty * price;
+      if (!recordId || recordId.length > 100 || !side || !Number.isFinite(qty) || qty <= 0 || qty > 1e12 || !Number.isFinite(price) || price <= 0 || price > 1e12 || !Number.isFinite(fees) || fees < 0 || fees > 1e12 || !Number.isFinite(notional) || notional > 1e15) {
         return fail(40001, "请填写有效的方向、数量、价格和费用", 400);
       }
       const payload = { recordId, side, qty, price, fees };
@@ -59,7 +67,7 @@ export async function POST(request: Request) {
     }
     if (type === "undo_delete_group") {
       const groupId = String(body.groupId || "").trim();
-      if (!groupId) return fail(40001, "分组标识无效", 400);
+      if (!groupId || groupId.length > 100) return fail(40001, "分组标识无效", 400);
       const response = runAssistantAction({ userId: user.id, actionId, actionType: type, payload: { groupId }, execute: () => ({ deleted: deleteWatchGroup(user.id, groupId) }) });
       return ok({ ...response.result, replayed: response.replayed });
     }
@@ -81,13 +89,15 @@ export async function POST(request: Request) {
     }
     if (type === "undo_delete_order") {
       const orderId = String(body.orderId || "").trim();
-      if (!orderId) return fail(40001, "订单标识无效", 400);
+      if (!orderId || orderId.length > 100) return fail(40001, "订单标识无效", 400);
       const response = runAssistantAction({ userId: user.id, actionId, actionType: type, payload: { orderId }, execute: () => deleteOrder({ userId: user.id, orderId }) });
       return ok({ ...response.result, replayed: response.replayed });
     }
     return fail(40001, "不支持的助手操作", 400);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "操作失败";
-    return fail(message.includes("不存在") ? 40401 : 40001, message, message.includes("不存在") ? 404 : 400);
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("不存在")) return fail(40401, "目标记录不存在或无权访问", 404);
+    const allowed = /^(操作标识与原请求不一致|分组名称需为|分组已存在|市场分组不可删除|分组不存在或不可分配|列表成员已变化|可卖数量不足|订单号生成冲突)/;
+    return fail(40001, allowed.test(message) ? message : "操作失败，请检查数据后重试", 400);
   }
 }

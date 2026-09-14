@@ -10,6 +10,10 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 /** POST multipart（字段 file）→ 上传「有知有行」xlsx，返回解析后的投资账户数组 */
 export async function POST(request: NextRequest) {
   if (!getAuthUser(request)) return json({ ok: false, error: "未登录" }, 401);
+  const declaredBytes = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredBytes) && declaredBytes > MAX_FILE_BYTES + 256 * 1024) {
+    return json({ ok: false, error: "文件不能超过 10MB" }, 413);
+  }
   let form: FormData;
   try {
     form = await request.formData();
@@ -28,10 +32,10 @@ export async function POST(request: NextRequest) {
   const lower = name.toLowerCase();
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  if (lower.endsWith(".xlsx") || lower.endsWith(".xls") || (file.type as string).includes("spreadsheetml")) {
+  if (lower.endsWith(".xlsx") || (file.type as string).includes("spreadsheetml")) {
     let invest: XlsxInvest[];
     try {
-      invest = parseYouzhiyouxing(buffer);
+      invest = await parseYouzhiyouxing(buffer);
     } catch {
       return json({ ok: false, error: "无法解析该 xlsx 文件" }, 400);
     }

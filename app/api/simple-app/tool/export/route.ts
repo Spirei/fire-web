@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { xlsxBuffer, type XlsxInvest } from "@/lib/simpleLedgerXlsx";
+import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 
 export const runtime = "nodejs";
 
@@ -12,16 +13,22 @@ export async function POST(request: NextRequest) {
       headers: { "Content-Type": "application/json" },
     });
   }
-  const body = await request.json().catch(() => null);
+  let body: { invest?: unknown } | null;
+  try {
+    body = await readLimitedJson(request, 2 * 1024 * 1024);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return new Response(JSON.stringify({ ok: false, error: "导出数据过大" }), { status: 413, headers: { "Content-Type": "application/json" } });
+    throw error;
+  }
   const invest = Array.isArray(body?.invest) ? (body.invest as XlsxInvest[]) : [];
-  if (!invest.length) {
+  if (!invest.length || invest.length > 200) {
     return new Response(JSON.stringify({ ok: false, error: "没有可导出的投资账户" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  const buf = xlsxBuffer(invest);
+  const buf = await xlsxBuffer(invest);
   const today = new Date();
   const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const filename = `fire-simple-invest-${day}.xlsx`;

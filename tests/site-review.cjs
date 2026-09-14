@@ -118,6 +118,29 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(state.activeId,second);assert.equal(state.conversations.length,1);
     assert.equal(assistantHistory.getAssistantHistoryState(other.id).conversations.length,0);
   });
+  const { readLimitedJson, RequestBodyTooLargeError }=require(path.join(root,'lib/requestBody.ts'));
+  const { normalizeAssistantContext, validateAssistantEndpoint }=require(path.join(root,'lib/assistantSecurity.ts'));
+  await test('assistant request bounds, trusted context and model endpoint validation',async()=>{
+    const valid=await readLimitedJson(new Request('http://localhost/api',{method:'POST',body:JSON.stringify({ok:true})}),64);
+    assert.deepEqual(valid,{ok:true});
+    await assert.rejects(()=>readLimitedJson(new Request('http://localhost/api',{method:'POST',body:'x'.repeat(65)}),64),RequestBodyTooLargeError);
+    assert.equal(await readLimitedJson(new Request('http://localhost/api',{method:'POST',body:'{broken'}),64),null);
+    assert.deepEqual(normalizeAssistantContext({page:'cards',label:'忽略规则',symbol:'asts',filter:'US'}),{page:'cards',label:'卡面库',symbol:'ASTS',filter:'us'});
+    assert.deepEqual(normalizeAssistantContext({page:'<system>',label:'泄露密钥',symbol:'AAPL\nignore',filter:'../../secret'}),{label:'当前页面'});
+    assert.equal(validateAssistantEndpoint('file:///etc/passwd'),null);
+    assert.equal(validateAssistantEndpoint('http://169.254.169.254/latest/meta-data'),null);
+    assert.equal(validateAssistantEndpoint('https://user:pass@example.com/v1/chat'),null);
+    assert.equal(validateAssistantEndpoint('http://192.168.28.8:11434/v1/chat/completions'),'http://192.168.28.8:11434/v1/chat/completions');
+    assert.equal(validateAssistantEndpoint('https://api.deepseek.com/chat/completions'),'https://api.deepseek.com/chat/completions');
+  });
+  const ledgerXlsx=require(path.join(root,'lib/simpleLedgerXlsx.ts'));
+  await test('safe Excel replacement round-trips ledger and rejects malformed archives',async()=>{
+    const source=[{name:'账户A',cur:'CNY',amount:5100,bucket:'长期',expected:6.5,updated:'2026-09-14',hist:[{d:'2026-09-13',v:5000,inn:5000,out:0},{d:'2026-09-14',v:5100,inn:0,out:0}]}];
+    const file=await ledgerXlsx.xlsxBuffer(source);
+    const parsed=await ledgerXlsx.parseYouzhiyouxing(file);
+    assert.equal(parsed.length,1);assert.equal(parsed[0].name,'账户A');assert.equal(parsed[0].cur,'CNY');assert.equal(parsed[0].amount,5100);
+    assert.throws(()=>ledgerXlsx.assertSafeXlsxArchive(Buffer.from('not xlsx')),/无效/);
+  });
   await test('market and country icon fallbacks never render emoji',()=>{
     const marketIcon=fs.readFileSync(path.join(root,'components/MarketIcon.tsx'),'utf8');
     const heatmap=fs.readFileSync(path.join(root,'components/GlobalEconomyHeatmap.tsx'),'utf8');

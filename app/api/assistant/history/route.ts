@@ -1,6 +1,7 @@
 import { getAuthUser } from "@/lib/auth";
 import { clearAssistantHistory, getAssistantHistoryState, saveAssistantHistory } from "@/lib/assistantHistory";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
+import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,14 @@ export async function PUT(request: Request) {
   const user = getAuthUser(request);
   if (!user) return Response.json({ error: "未登录" }, { status: 401 });
   if (!allowed(request, user.id)) return Response.json({ error: "请求过于频繁" }, { status: 429 });
-  const body = await request.json().catch(() => null);
+  let body: { conversationId?: unknown; messages?: unknown } | null;
+  try {
+    body = await readLimitedJson(request, 96 * 1024);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return Response.json({ error: "请求内容过大" }, { status: 413 });
+    throw error;
+  }
+  if (!body) return Response.json({ error: "无效的请求体" }, { status: 400 });
   try {
     return Response.json(saveAssistantHistory(user.id, body?.conversationId, body?.messages));
   } catch {
