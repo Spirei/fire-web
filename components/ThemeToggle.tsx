@@ -1,18 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { setThemeCookie } from "@/lib/theme";
+import { applySiteTheme, THEME_CHANGE_EVENT, THEME_KEY, type SiteTheme } from "@/lib/theme";
+export { THEME_KEY } from "@/lib/theme";
 
-export const THEME_KEY = "fire.theme";
-
-function applyTheme(dark: boolean) {
-  document.documentElement.classList.toggle("dark", dark);
-  try {
-    localStorage.setItem(THEME_KEY, dark ? "dark" : "light");
-  } catch {
-    /* 忽略存储异常 */
-  }
-  setThemeCookie(dark);
+function applyTheme(dark: boolean, emit = true) {
+  applySiteTheme(dark ? "dark" : "light", emit);
 }
 
 export default function ThemeToggle() {
@@ -29,8 +22,14 @@ export default function ThemeToggle() {
   }, []);
 
   useEffect(() => {
+    const sync = (event: Event) => setDark((event as CustomEvent<{ theme: SiteTheme }>).detail?.theme === "dark");
+    window.addEventListener(THEME_CHANGE_EVENT, sync);
+    return () => window.removeEventListener(THEME_CHANGE_EVENT, sync);
+  }, []);
+
+  useEffect(() => {
     if (!ready) return;
-    applyTheme(dark);
+    applyTheme(dark, false);
   }, [dark, ready]);
 
   const toggleTheme = () => {

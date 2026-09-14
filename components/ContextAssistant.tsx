@@ -7,6 +7,7 @@ import type { AssistantHistoryState, StoredAssistantConversation, StoredAssistan
 import AssistantTraceView, { type AssistantTrace } from "@/components/AssistantTraceView";
 import AssistantHarnessSettings, { type AssistantAppearance, type AssistantDensity } from "@/components/AssistantHarnessSettings";
 import { usePersistedState } from "@/lib/usePersistedState";
+import { applySiteTheme, THEME_CHANGE_EVENT, type SiteTheme } from "@/lib/theme";
 
 type AssistantAction =
   | { type: "navigate"; label: string; path: string }
@@ -170,6 +171,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<"general"|"conversation"|"models"|"plugins"|"preset">("general");
   const [appearance, setAppearance] = usePersistedState<AssistantAppearance>("fire:assistant:appearance", "system");
+  const applyingAppearanceTheme = useRef(false);
   const [contentFontSize, setContentFontSize] = usePersistedState("fire:assistant:font-size", 14);
   const [density, setDensity] = usePersistedState<AssistantDensity>("fire:assistant:density", "compact");
   const [dataMenuOpen, setDataMenuOpen] = useState(false);
@@ -201,6 +203,30 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const deletedConversationIds = useRef(new Set<string>());
   const actionsInFlight = useRef(new Set<number>());
   const actionOperationInFlight = useRef(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      const resolved: SiteTheme = appearance === "system" ? (media.matches ? "dark" : "light") : appearance;
+      applyingAppearanceTheme.current = true;
+      applySiteTheme(resolved);
+      applyingAppearanceTheme.current = false;
+    };
+    apply();
+    if (appearance !== "system") return;
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [appearance]);
+
+  useEffect(() => {
+    const sync = (event: Event) => {
+      if (applyingAppearanceTheme.current) return;
+      const theme = (event as CustomEvent<{ theme?: SiteTheme }>).detail?.theme;
+      if (theme) setAppearance(theme);
+    };
+    window.addEventListener(THEME_CHANGE_EVENT, sync);
+    return () => window.removeEventListener(THEME_CHANGE_EVENT, sync);
+  }, [setAppearance]);
   const requestGeneration = useRef(0);
   const requestController = useRef<AbortController | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -785,7 +811,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       {open && (
         <div onMouseDown={(event) => { if (!embedded && !pinned && event.target === event.currentTarget) setOpen(false); }} className={embedded ? "assistant-page-layer" : "assistant-layer fixed inset-0 z-[100] flex items-end justify-end bg-black/20 sm:pointer-events-none sm:bg-transparent"}>
           <section ref={panelRef} role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-label="智能助手" data-assistant-theme={appearance} data-density={density} data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"} data-sidebar-resizing={sidebarResizing ? "true" : "false"} style={{...(!embedded && panelPosition ? { position: "fixed", left: panelPosition.x, top: panelPosition.y, right: "auto", bottom: "auto" } : {}), "--assistant-content-size": `${contentFontSize}px`, "--assistant-sidebar-width": `${sidebarCollapsed ? 68 : sidebarWidth}px`} as CSSProperties} className={embedded ? "assistant-workspace relative grid h-[calc(100dvh-72px)] min-h-[720px] w-full grid-cols-[minmax(0,1fr)] grid-rows-[64px_minmax(0,1fr)_auto] overflow-hidden border-x border-edge bg-white dark:border-white/10 dark:bg-[#17191d]" : "assistant-panel pointer-events-auto relative flex h-[72dvh] w-full flex-col overflow-hidden rounded-t-[22px] border border-[#e1e7e6] bg-white shadow-[0_24px_80px_rgba(15,23,42,.16)] dark:border-white/10 dark:bg-[#17191d] dark:shadow-[0_24px_80px_rgba(0,0,0,.45)] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]"}>
-            <header onPointerDown={embedded ? undefined : (event) => startFloatingDrag("panel", event)} className={`flex min-h-[64px] items-center gap-2 border-b border-edge px-4 sm:gap-2.5 sm:px-5 ${embedded ? "col-start-1 row-start-1 md:col-start-2" : "touch-none cursor-grab active:cursor-grabbing"}`}>
+            <header onPointerDown={embedded ? undefined : (event) => startFloatingDrag("panel", event)} className={`assistant-surface-header flex min-h-[64px] items-center gap-2 border-b border-edge px-4 sm:gap-2.5 sm:px-5 ${embedded ? "col-start-1 row-start-1 md:col-start-2" : "touch-none cursor-grab active:cursor-grabbing"}`}>
               {!embedded && <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_5px_16px_rgba(0,0,0,.18)]"><AssistantGlyph size={20} /></span>}
               <div className="min-w-0 flex-1 truncate text-sm font-semibold text-ink dark:text-white/90">{embedded ? conversations.find(item => item.id === conversationId)?.title || "新对话" : "智能助手"}</div>
               {embedded && <button type="button" onClick={() => setHistoryOpen(true)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray md:hidden" aria-label="打开对话列表"><IconHistory size={18} /></button>}

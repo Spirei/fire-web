@@ -5,8 +5,7 @@ import Link from "next/link";
 import { TimeMachineLink } from "@/components/TimeMachine";
 import { useRouter } from "next/navigation";
 import type { User } from "@/lib/types";
-import { THEME_KEY } from "@/components/ThemeToggle";
-import { setThemeCookie } from "@/lib/theme";
+import { applySiteTheme, THEME_CHANGE_EVENT, THEME_KEY, type SiteTheme } from "@/lib/theme";
 
 interface StockStats {
   holdings: number;
@@ -72,6 +71,12 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
     return () => window.removeEventListener("fire:user-updated", loadUser);
   }, []);
 
+  useEffect(() => {
+    const sync = (event: Event) => setDark((event as CustomEvent<{ theme: SiteTheme }>).detail?.theme === "dark");
+    window.addEventListener(THEME_CHANGE_EVENT, sync);
+    return () => window.removeEventListener(THEME_CHANGE_EVENT, sync);
+  }, []);
+
   // 统计持股 / 自选股数量（有成本价与数量视为持仓，其余为自选）
   useEffect(() => {
     function loadStats() {
@@ -114,13 +119,7 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
   function toggleTheme() {
     setDark((d) => {
       const next = !d;
-      document.documentElement.classList.toggle("dark", next);
-      try {
-        localStorage.setItem(THEME_KEY, next ? "dark" : "light");
-      } catch {
-        /* 忽略存储异常 */
-      }
-      setThemeCookie(next);
+      applySiteTheme(next ? "dark" : "light");
       return next;
     });
   }
