@@ -188,6 +188,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [conversationMenuId,setConversationMenuId]=useState<string|null>(null);
   const [workspaceMenuOpen,setWorkspaceMenuOpen]=useState(false);
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
+  const [sidebarWidth,setSidebarWidth]=useState(260);
   const [sidebarSearchOpen,setSidebarSearchOpen]=useState(false);
   const [renameTarget,setRenameTarget]=useState<StoredAssistantConversation|null>(null);
   const [renameDraft,setRenameDraft]=useState("");
@@ -216,6 +217,11 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const copy = PAGE_COPY[page] || { label: "当前页面", prompts: ["概览当前数据", "检查数据异常", "给我下一步建议"] };
 
   useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    if (!embedded) return;
+    const saved = Number(localStorage.getItem(`fire:assistant:sidebar-width:${userId}`));
+    if (Number.isFinite(saved) && saved >= 220 && saved <= 420) setSidebarWidth(saved);
+  }, [embedded, userId]);
   useEffect(() => {
     void fetch("/api/assistant/models").then(response => response.ok ? response.json() : null).then(data => {
       if (Array.isArray(data?.services)) setAvailableModels(data.services);
@@ -433,6 +439,30 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       if (requestGeneration.current === generation) setLoading(false);
       void fetch("/api/assistant/usage").then(response=>response.ok?response.json():null).then(data=>{if(data?.summary)setUsageSummary(data.summary);}).catch(()=>undefined);
     }
+  }
+
+  function startSidebarResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (!embedded || !panelRef.current || window.innerWidth < 768) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const rect = panelRef.current.getBoundingClientRect();
+    const move = (moveEvent: PointerEvent) => {
+      setSidebarCollapsed(false);
+      setSidebarWidth(Math.min(420, Math.max(220, moveEvent.clientX - rect.left)));
+    };
+    const stop = (upEvent: PointerEvent) => {
+      const width = Math.min(420, Math.max(220, upEvent.clientX - rect.left));
+      setSidebarWidth(width);
+      localStorage.setItem(`fire:assistant:sidebar-width:${userId}`, String(Math.round(width)));
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", stop);
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", stop, { once: true });
   }
 
   async function addImages(files: File[]) {
@@ -751,7 +781,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       </button>}
       {open && (
         <div onMouseDown={(event) => { if (!embedded && !pinned && event.target === event.currentTarget) setOpen(false); }} className={embedded ? "assistant-page-layer" : "assistant-layer fixed inset-0 z-[100] flex items-end justify-end bg-black/20 sm:pointer-events-none sm:bg-transparent"}>
-          <section ref={panelRef} role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-label="智能助手" data-assistant-theme={appearance} data-density={density} data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"} style={{...(!embedded && panelPosition ? { position: "fixed", left: panelPosition.x, top: panelPosition.y, right: "auto", bottom: "auto" } : {}), "--assistant-content-size": `${contentFontSize}px`} as CSSProperties} className={embedded ? `assistant-workspace relative grid h-[calc(100dvh-72px)] min-h-[720px] w-full grid-cols-[minmax(0,1fr)] grid-rows-[64px_minmax(0,1fr)_auto] overflow-hidden border-x border-edge bg-white dark:border-white/10 dark:bg-[#17191d] ${sidebarCollapsed ? "md:grid-cols-[68px_minmax(0,1fr)]" : "md:grid-cols-[260px_minmax(0,1fr)]"}` : "assistant-panel pointer-events-auto relative flex h-[72dvh] w-full flex-col overflow-hidden rounded-t-[22px] border border-[#e1e7e6] bg-white shadow-[0_24px_80px_rgba(15,23,42,.16)] dark:border-white/10 dark:bg-[#17191d] dark:shadow-[0_24px_80px_rgba(0,0,0,.45)] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]"}>
+          <section ref={panelRef} role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-label="智能助手" data-assistant-theme={appearance} data-density={density} data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"} style={{...(!embedded && panelPosition ? { position: "fixed", left: panelPosition.x, top: panelPosition.y, right: "auto", bottom: "auto" } : {}), "--assistant-content-size": `${contentFontSize}px`, "--assistant-sidebar-width": `${sidebarCollapsed ? 68 : sidebarWidth}px`} as CSSProperties} className={embedded ? "assistant-workspace relative grid h-[calc(100dvh-72px)] min-h-[720px] w-full grid-cols-[minmax(0,1fr)] grid-rows-[64px_minmax(0,1fr)_auto] overflow-hidden border-x border-edge bg-white dark:border-white/10 dark:bg-[#17191d]" : "assistant-panel pointer-events-auto relative flex h-[72dvh] w-full flex-col overflow-hidden rounded-t-[22px] border border-[#e1e7e6] bg-white shadow-[0_24px_80px_rgba(15,23,42,.16)] dark:border-white/10 dark:bg-[#17191d] dark:shadow-[0_24px_80px_rgba(0,0,0,.45)] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]"}>
             <header onPointerDown={embedded ? undefined : (event) => startFloatingDrag("panel", event)} className={`flex min-h-[64px] items-center gap-2 border-b border-edge px-4 sm:gap-2.5 sm:px-5 ${embedded ? "col-start-1 row-start-1 md:col-start-2" : "touch-none cursor-grab active:cursor-grabbing"}`}>
               {!embedded && <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_5px_16px_rgba(0,0,0,.18)]"><AssistantGlyph size={20} /></span>}
               <div className="min-w-0 flex-1 truncate text-sm font-semibold text-ink dark:text-white/90">{embedded ? conversations.find(item => item.id === conversationId)?.title || "新对话" : "智能助手"}</div>
@@ -769,6 +799,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
               </button>}
               {!embedded && <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setOpen(false)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭"><IconX size={18} /></button>}
             </header>
+            {embedded&&!sidebarCollapsed&&<button type="button" className="assistant-workspace-resizer" onPointerDown={startSidebarResize} onDoubleClick={()=>{setSidebarWidth(260);localStorage.setItem(`fire:assistant:sidebar-width:${userId}`,"260");}} title="左右拖动调整侧栏宽度，双击恢复默认" aria-label="调整智能助手侧栏宽度"><span/><i>⋮</i></button>}
             {embedded && <aside className={`${historyOpen ? "flex" : "hidden"} absolute inset-0 z-30 min-h-0 flex-col border-r border-edge bg-[#f7f7f6] dark:border-white/10 dark:bg-[#202124] md:static md:col-start-1 md:row-span-3 md:row-start-1 md:flex`} aria-label="智能助手侧栏">
               <div className="border-b border-edge p-3 dark:border-white/10">
                 <div className="flex h-10 items-center gap-2 px-2 text-sm font-semibold text-ink dark:text-white/90"><AssistantGlyph size={18} /><span className="assistant-sidebar-label">智能助手</span><button type="button" onClick={()=>setSidebarCollapsed(value=>!value)} className="ml-auto hidden h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-black/[.05] md:flex dark:hover:bg-white/[.07]" aria-label={sidebarCollapsed?"展开侧栏":"收窄侧栏"}><span className="assistant-sidebar-toggle"/></button><button type="button" onClick={() => setHistoryOpen(false)} className="ml-auto flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-black/[.05] md:hidden" aria-label="关闭对话列表"><IconX size={16} /></button></div>
