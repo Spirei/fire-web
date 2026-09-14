@@ -3,6 +3,7 @@ import type { GroupConfig, HomeNavItem, Market, SiteSettings, TabConfig, TickerC
 import { DEFAULT_MARKET_BADGES, normalizeMarketBadges } from "./marketBadge";
 import { DEFAULT_HOLDING_COLUMNS, normalizeHoldingColumns } from "./holdingColumns";
 import { normalizeModelServices } from "./modelServices";
+import { decryptSecret, encryptSecret } from "./secretStorage";
 import fs from "fs";
 import path from "path";
 
@@ -255,6 +256,9 @@ export function getSiteSettings(): SiteSettings {
   SIMPLE_KEYS.forEach((k) => {
     if (typeof map[k] === "string" && map[k] !== "") (result as unknown as Record<string, string>)[k] = map[k];
   });
+  (["xueqiuCookie", "pgPassword", "llmApiKey", "deepseekApiKey"] as const).forEach((key) => {
+    result[key] = decryptSecret(result[key]);
+  });
   // 用户可能在外部删除 uploads 文件，或从旧备份恢复了已过期路径。
   // 本地站点素材不存在时按空值下发，让首页/登录页正常显示内置兜底，而不是空白或破图。
   (["ico", "homepageBg", "siteLogo", "loginSideImage"] as const).forEach((key) => {
@@ -417,7 +421,7 @@ export function getSiteSettings(): SiteSettings {
     } catch { /* 无效指数配置忽略 */ }
   }
   if (typeof map.modelServices === "string") {
-    try { result.modelServices = normalizeModelServices(JSON.parse(map.modelServices)); }
+    try { result.modelServices = normalizeModelServices(JSON.parse(map.modelServices)).map(service => ({ ...service, apiKey: decryptSecret(service.apiKey) })); }
     catch { /* 无效模型服务配置忽略 */ }
   }
   result.allowRegister = map.allowRegister !== "0";
@@ -442,10 +446,10 @@ export function updateSiteSettings(patch: Partial<SiteSettings>): SiteSettings {
     // 雪球 Cookie：GET 会把真实值藏成空串、输入框未改时显示 ********。
     // 这两种都不能写回，否则会把已保存的登录会话清掉。
     if (["xueqiuCookie", "pgPassword", "llmApiKey", "deepseekApiKey"].includes(k) && (!trimmed || trimmed === "********")) return;
-    upsert.run(k, trimmed);
+    upsert.run(k, ["xueqiuCookie", "pgPassword", "llmApiKey", "deepseekApiKey"].includes(k) ? encryptSecret(trimmed) : trimmed);
   });
   if (Array.isArray(patch.modelServices)) {
-    upsert.run("modelServices", JSON.stringify(normalizeModelServices(patch.modelServices)));
+    upsert.run("modelServices", JSON.stringify(normalizeModelServices(patch.modelServices).map(service => ({ ...service, apiKey: encryptSecret(service.apiKey) }))));
   }
   if (patch.dbType === "sqlite" || patch.dbType === "postgres") {
     upsert.run("dbType", patch.dbType);

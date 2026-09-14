@@ -61,6 +61,13 @@ function migrate(database: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_assistant_threads_updated
       ON assistant_conversation_threads(user_id, updated_at DESC);
 
+    CREATE TABLE IF NOT EXISTS assistant_preferences (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      memory_enabled INTEGER NOT NULL DEFAULT 0,
+      memory TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS assistant_actions (
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       action_id TEXT NOT NULL,

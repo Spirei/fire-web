@@ -10,6 +10,8 @@ export interface StoredAssistantMessage {
   actionStatus?: "running" | "done" | "error" | "uncertain";
   undo?: Record<string, unknown>;
   undoStatus?: "running" | "error" | "uncertain";
+  model?: { serviceId: string; serviceName: string; model: string };
+  fallbackUsed?: boolean;
 }
 
 export interface StoredAssistantConversation {
@@ -125,6 +127,12 @@ export function sanitizeAssistantMessages(value: unknown): StoredAssistantMessag
     if (["running", "error", "uncertain"].includes(String(row.undoStatus))) {
       message.undoStatus = row.undoStatus === "running" ? "uncertain" : row.undoStatus as StoredAssistantMessage["undoStatus"];
     }
+    if (row.role === "assistant" && row.model && typeof row.model === "object") {
+      const modelRow = row.model as Record<string, unknown>;
+      const serviceId = text(modelRow.serviceId, 64), serviceName = text(modelRow.serviceName, 50), model = text(modelRow.model, 160);
+      if (serviceId && serviceName && model) message.model = { serviceId, serviceName, model };
+    }
+    if (row.role === "assistant" && row.fallbackUsed === true) message.fallbackUsed = true;
     return [message];
   }).slice(-MAX_MESSAGES);
   while (messages.length && Buffer.byteLength(JSON.stringify(messages), "utf8") > MAX_BYTES) messages.shift();

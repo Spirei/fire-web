@@ -4,6 +4,7 @@ import { getSiteSettings } from "@/lib/settings";
 import { validateAssistantEndpoint } from "@/lib/assistantSecurity";
 import { readLimitedJson, readLimitedResponseJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
+import { setModelHealth } from "@/lib/modelHealth";
 
 type TestBody = { serviceId?: string; apiUrl?: string; apiKey?: string; model?: string };
 
@@ -40,10 +41,13 @@ export async function POST(request: Request) {
       cache: "no-store"
     });
     const data = await readLimitedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(response, 256 * 1024).catch(() => null);
-    if (!response.ok) return NextResponse.json({ error: `连接失败（HTTP ${response.status}）` }, { status: 502 });
-    if (!data?.choices?.[0]?.message?.content) return NextResponse.json({ error: "接口已响应，但格式不兼容" }, { status: 502 });
-    return NextResponse.json({ ok: true, latencyMs: Date.now() - started });
+    if (!response.ok) { setModelHealth(serviceId, model, { ok: false, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: `HTTP ${response.status}` }); return NextResponse.json({ error: `连接失败（HTTP ${response.status}）` }, { status: 502 }); }
+    if (!data?.choices?.[0]?.message?.content) { setModelHealth(serviceId, model, { ok: false, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: "incompatible" }); return NextResponse.json({ error: "接口已响应，但格式不兼容" }, { status: 502 }); }
+    const latencyMs = Date.now() - started;
+    setModelHealth(serviceId, model, { ok: true, latencyMs, checkedAt: new Date().toISOString() });
+    return NextResponse.json({ ok: true, latencyMs });
   } catch (error) {
+    setModelHealth(serviceId, model, { ok: false, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: error instanceof Error && error.name === "TimeoutError" ? "timeout" : "request_failed" });
     return NextResponse.json({ error: error instanceof Error && error.name === "TimeoutError" ? "连接超时" : "无法连接模型服务" }, { status: 502 });
   }
 }
