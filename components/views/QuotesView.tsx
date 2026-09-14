@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { createQuoteSchedule } from "@/lib/quoteSchedule";
 import { fmtPct, fmtPrice } from "@/lib/format";
@@ -72,6 +73,7 @@ function filterIdFromToken(groups: WatchGroup[], raw: string): string {
 }
 
 export default function QuotesView({ initialSymbol, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, groups, onDetailChange, onToggleWatch }: Props) {
+  const searchParams = useSearchParams();
   const { brokerIcons, stockIcons, assetIcons } = useAssetIcons(["broker", "stock", "crypto", "metal"]);
   const [added, setAdded] = useState("");
   const [importOpen, setImportOpen] = useState(false);
@@ -97,10 +99,9 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
   }, [quoteAt]);
   // 我的行情板：分组筛选（全部 / 市场分组 / 自定义分组，服务端实体，URL 同步）+ 每页 6 条分页
   const [watchGroups, setWatchGroups] = useState<WatchGroup[]>(initialWatchGroups);
-  const [filterId, setFilterId] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return new URLSearchParams(window.location.search).get("filter") ?? "";
-  });
+  // useSearchParams 在 SSR 与水合阶段提供同一个地址快照，既保留首帧筛选，又避免直接读 window
+  // 造成 ?filter=us 刷新时 className 不一致和先闪出「全部」。
+  const [filterId, setFilterId] = useState(() => filterIdFromToken(initialWatchGroups, searchParams.get("filter") ?? ""));
   const [groupSheetOpen, setGroupSheetOpen] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 6;
@@ -193,6 +194,23 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const reload = async () => {
+      try {
+        const response = await fetch("/api/v1/watch-groups", { cache: "no-store" });
+        const data = await response.json().catch(() => null);
+        const list: WatchGroup[] = data?.data?.groups ?? [];
+        if (!cancelled && response.ok && list.length > 0) {
+          setWatchGroups(list);
+          localStorage.setItem(WATCH_GROUP_CACHE_KEY, JSON.stringify({ groups: list, at: Date.now() }));
+        }
+      } catch { /* 保留当前分组 */ }
+    };
+    window.addEventListener("fire:watch-groups-updated", reload);
+    return () => { cancelled = true; window.removeEventListener("fire:watch-groups-updated", reload); };
+  }, []);
+
   function writeFilterToUrl(id: string, mode: "push" | "replace" = "push") {
     const sp = new URLSearchParams(window.location.search);
     const token = compactFilterToken(watchGroups, id);
@@ -207,7 +225,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
   }
 
   // 市场使用 us/cn/hk 等市场码，自定义分组按当前顺序使用 1/2/3；其他格式直接清理。
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (watchGroups.length === 0) return;
     const sp = new URLSearchParams(window.location.search);
     const raw = sp.get("filter") ?? "";

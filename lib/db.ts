@@ -43,6 +43,12 @@ function migrate(database: Database.Database) {
       simple TEXT NOT NULL DEFAULT '{}'
     );
 
+    CREATE TABLE IF NOT EXISTS assistant_conversations (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      messages TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS rate_limit (
       key TEXT PRIMARY KEY,
       count INTEGER NOT NULL DEFAULT 0,

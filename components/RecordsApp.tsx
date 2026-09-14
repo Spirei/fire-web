@@ -91,6 +91,7 @@ export default function RecordsApp({
   initialRecords,
   initialWatchGroups = [],
   initialUserLogs,
+  initialAssistantHistory = [],
   initialFundBalances,
   initialSettings,
   initialStockIcons,
@@ -107,6 +108,7 @@ export default function RecordsApp({
   initialRecords: StockRecord[];
   initialWatchGroups?: WatchGroup[];
   initialUserLogs: SystemLog[];
+  initialAssistantHistory?: import("@/lib/assistantHistory").StoredAssistantMessage[];
   initialFundBalances: Record<string, number>;
   initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled">;
   initialStockIcons: Record<string, string>;
@@ -389,6 +391,16 @@ export default function RecordsApp({
     },
     [navigateTo, settingsSub]
   );
+
+  const navigateFromAssistant = useCallback((path: string) => {
+    const url = new URL(path, window.location.origin);
+    const target = url.pathname === "/asset-pnl-analysis"
+      ? "pnl"
+      : navTabs.find((tab) => (tab.url || `/${tab.key}`) === url.pathname)?.key;
+    if (!target) return;
+    setActiveTab(target as TabKey);
+    window.history.pushState({}, "", `${url.pathname}${url.search}`);
+  }, [navTabs]);
 
   /* ---------- 导航页签可拖动排序 + 自动保存 ---------- */
   const tabDragKeyRef = useRef<TabKey | null>(null);
@@ -880,7 +892,7 @@ export default function RecordsApp({
         </div>
       </div>
     </div>
-    <ContextAssistant page={activeTab} symbol={initialSymbol} userId={user.id} />
+    <ContextAssistant page={activeTab} symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />
     </>
   );
 }

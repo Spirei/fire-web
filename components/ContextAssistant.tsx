@@ -3,8 +3,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconMessageCircle, IconMinus, IconPlus, IconSparkles, IconX } from "@tabler/icons-react";
+import type { StoredAssistantMessage } from "@/lib/assistantHistory";
 
-type Message = { role: "user" | "assistant"; content: string };
+type AssistantAction =
+  | { type: "navigate"; label: string; path: string }
+  | { type: "create_group"; label: string; name: string }
+  | { type: "assign_group"; label: string; groupId: string; groupName: string; recordIds: string[]; symbols: string[]; previous: Array<{ id: string; groupId: string }> }
+  | { type: "trade"; label: string; recordId: string; code: string; name: string; side: "buy" | "sell"; qty: number; price: number; fees: number };
+type UndoAction = { type: "delete_group"; groupId: string } | { type: "restore_groups"; previous: Array<{ id: string; groupId: string }> } | { type: "delete_order"; orderId: string };
+type Message = { role: "user" | "assistant"; content: string; action?: AssistantAction; actionStatus?: "running" | "done" | "error"; undo?: UndoAction };
 
 const PAGE_COPY: Record<string, { label: string; prompts: string[] }> = {
   holdings: { label: "账户资产", prompts: ["概览我的持仓", "检查持仓数据异常", "我的持仓分布如何？"] },
@@ -27,39 +34,55 @@ function historyKey(userId: string) {
   return `fire:assistant:history:${userId}`;
 }
 
-export default function ContextAssistant({ page, symbol, userId }: { page: string; symbol?: string; userId: string }) {
+export default function ContextAssistant({ page, symbol, userId, initialHistory, onNavigate }: { page: string; symbol?: string; userId: string; initialHistory: StoredAssistantMessage[]; onNavigate: (path: string) => void }) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [historyReady, setHistoryReady] = useState(false);
+  const [messages, setMessages] = useState<Message[]>(() => initialHistory as Message[]);
+  const historyReady = useRef(false);
+  const saveQueue = useRef(Promise.resolve());
+  const lastSavedHistory = useRef(JSON.stringify(initialHistory));
+  const legacyHistoryPending = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
   const copy = PAGE_COPY[page] || { label: "当前页面", prompts: ["概览当前数据", "检查数据异常", "给我下一步建议"] };
   const contextLabel = useMemo(() => symbol ? `${copy.label} · ${symbol}` : copy.label, [copy.label, symbol]);
 
   useEffect(() => setMounted(true), []);
   useEffect(() => {
+    // 一次性迁移旧版浏览器历史到服务端，随后清除本地的账户对话数据。
     try {
       const saved = JSON.parse(localStorage.getItem(historyKey(userId)) || "[]") as Message[];
-      if (Array.isArray(saved)) {
+      if (messages.length === 0 && Array.isArray(saved) && saved.length > 0) {
+        legacyHistoryPending.current = true;
         setMessages(saved.filter((item) => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string").slice(-MAX_SAVED_MESSAGES));
+      } else {
+        localStorage.removeItem(historyKey(userId));
       }
     } catch {
       localStorage.removeItem(historyKey(userId));
     } finally {
-      setHistoryReady(true);
+      historyReady.current = true;
     }
+    // initialHistory 由服务端首帧注入，只在登录用户变化时重新初始化。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
   useEffect(() => {
-    if (!historyReady) return;
-    try {
-      localStorage.setItem(historyKey(userId), JSON.stringify(messages.slice(-MAX_SAVED_MESSAGES)));
-    } catch {
-      /* 存储空间不可用时仍保留当前会话 */
-    }
-  }, [historyReady, messages, userId]);
+    if (!historyReady.current) return;
+    const snapshot = messages.slice(-MAX_SAVED_MESSAGES);
+    const serialized = JSON.stringify(snapshot);
+    if (serialized === lastSavedHistory.current) return;
+    saveQueue.current = saveQueue.current.catch(() => undefined).then(async () => {
+      const response = await fetch("/api/assistant/history", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: snapshot }) });
+      if (!response.ok) return;
+      lastSavedHistory.current = serialized;
+      if (legacyHistoryPending.current) {
+        localStorage.removeItem(historyKey(userId));
+        legacyHistoryPending.current = false;
+      }
+    });
+  }, [messages, userId]);
   useEffect(() => { if (open) endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading, open]);
 
   async function send(value: string) {
@@ -76,9 +99,9 @@ export default function ContextAssistant({ page, symbol, userId }: { page: strin
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: next, context: { page, label: copy.label, symbol, filter } })
       });
-      const data = await response.json().catch(() => null) as { answer?: string; error?: string } | null;
+      const data = await response.json().catch(() => null) as { answer?: string; error?: string; action?: AssistantAction } | null;
       if (!response.ok) throw new Error(data?.error || "暂时无法回答");
-      setMessages((current) => [...current, { role: "assistant", content: data?.answer || "暂时没有结果" }]);
+      setMessages((current) => [...current, { role: "assistant", content: data?.answer || "暂时没有结果", action: data?.action }]);
     } catch (error) {
       setMessages((current) => [...current, { role: "assistant", content: error instanceof Error ? error.message : "连接失败，请稍后重试" }]);
     } finally {
@@ -89,7 +112,82 @@ export default function ContextAssistant({ page, symbol, userId }: { page: strin
   function startNewChat() {
     setMessages([]);
     setInput("");
-    try { localStorage.removeItem(historyKey(userId)); } catch { /* ignore */ }
+    void fetch("/api/assistant/history", { method: "DELETE" });
+  }
+
+  function updateMessage(index: number, patch: Partial<Message>) {
+    setMessages((current) => current.map((message, messageIndex) => messageIndex === index ? { ...message, ...patch } : message));
+  }
+
+  async function readApi(response: Response) {
+    const data = await response.json().catch(() => null) as { code?: number; message?: string; data?: Record<string, unknown> } | null;
+    if (!response.ok || (typeof data?.code === "number" && data.code !== 0)) throw new Error(data?.message || "操作失败");
+    return data?.data || {};
+  }
+
+  async function executeAction(action: AssistantAction, index: number) {
+    if (action.type === "navigate") {
+      updateMessage(index, { actionStatus: "done" });
+      onNavigate(action.path);
+      setOpen(false);
+      return;
+    }
+    updateMessage(index, { actionStatus: "running" });
+    try {
+      let undo: UndoAction | undefined;
+      if (action.type === "create_group") {
+        const data = await readApi(await fetch("/api/v1/watch-groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: action.name }) }));
+        const group = data.group as { id?: string } | undefined;
+        if (group?.id) undo = { type: "delete_group", groupId: group.id };
+        window.dispatchEvent(new Event("fire:watch-groups-updated"));
+      } else if (action.type === "assign_group") {
+        await readApi(await fetch("/api/v1/records/group-assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: action.recordIds, groupId: action.groupId }) }));
+        undo = { type: "restore_groups", previous: action.previous };
+        window.dispatchEvent(new Event("fire:records-updated"));
+        window.dispatchEvent(new Event("fire:watch-groups-updated"));
+      } else if (action.type === "trade") {
+        const data = await readApi(await fetch("/api/v1/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recordId: action.recordId, side: action.side, qty: action.qty, price: action.price, fees: action.fees, tradedAt: new Date().toISOString(), note: "由账户助手录入", mode: "record" }) }));
+        const order = (data.order || (data as { order?: { id?: string } }).order) as { id?: string } | undefined;
+        if (order?.id) undo = { type: "delete_order", orderId: order.id };
+        window.dispatchEvent(new Event("fire:records-updated"));
+        window.dispatchEvent(new Event("fire:orders-updated"));
+      }
+      updateMessage(index, { actionStatus: "done", undo });
+    } catch (error) {
+      updateMessage(index, { actionStatus: "error", content: `${messages[index]?.content || "操作"}\n\n${error instanceof Error ? error.message : "操作失败"}` });
+    }
+  }
+
+  async function undoAction(undo: UndoAction, index: number) {
+    updateMessage(index, { actionStatus: "running" });
+    try {
+      if (undo.type === "delete_group") {
+        await readApi(await fetch(`/api/v1/watch-groups/${encodeURIComponent(undo.groupId)}`, { method: "DELETE" }));
+        window.dispatchEvent(new Event("fire:watch-groups-updated"));
+      } else if (undo.type === "restore_groups") {
+        const grouped = new Map<string, string[]>();
+        undo.previous.forEach((item) => grouped.set(item.groupId, [...(grouped.get(item.groupId) || []), item.id]));
+        for (const [groupId, ids] of grouped) {
+          await readApi(await fetch("/api/v1/records/group-assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, groupId }) }));
+        }
+        window.dispatchEvent(new Event("fire:records-updated"));
+        window.dispatchEvent(new Event("fire:watch-groups-updated"));
+      } else {
+        await readApi(await fetch(`/api/v1/orders/${encodeURIComponent(undo.orderId)}`, { method: "DELETE" }));
+        window.dispatchEvent(new Event("fire:records-updated"));
+        window.dispatchEvent(new Event("fire:orders-updated"));
+      }
+      updateMessage(index, { actionStatus: undefined, action: undefined, undo: undefined, content: `${messages[index]?.content || "操作"}\n\n已撤销。` });
+    } catch (error) {
+      updateMessage(index, { actionStatus: "done", content: `${messages[index]?.content || "操作"}\n\n撤销失败：${error instanceof Error ? error.message : "请稍后重试"}` });
+    }
+  }
+
+  function actionSummary(action: AssistantAction) {
+    if (action.type === "trade") return `${action.name}（${action.code}） · ${action.side === "buy" ? "买入" : "卖出"} ${action.qty} 股 × ${action.price} · 预计 ${(action.qty * action.price + (action.side === "buy" ? action.fees : -action.fees)).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
+    if (action.type === "assign_group") return `${action.symbols.join("、")} → ${action.groupName}`;
+    if (action.type === "create_group") return `新分组：${action.name}`;
+    return action.label;
   }
 
   if (!mounted) return null;
@@ -127,7 +225,7 @@ export default function ContextAssistant({ page, symbol, userId }: { page: strin
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {messages.map((message, index) => <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-[#171b24] text-white dark:bg-white dark:text-[#11151d]" : "bg-bg-gray text-ink"}`}>{displayText(message.content)}</div></div>)}
+                    {messages.map((message, index) => <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-[#171b24] text-white dark:bg-white dark:text-[#11151d]" : "bg-bg-gray text-ink"}`}>{displayText(message.content)}{message.action && <div className="mt-3 rounded-xl border border-edge bg-white/80 p-3 dark:bg-white/[.05]"><div className="text-xs font-medium text-ink">{actionSummary(message.action)}</div><button type="button" disabled={message.actionStatus === "running" || message.actionStatus === "done"} onClick={() => void executeAction(message.action as AssistantAction, index)} className="mt-3 w-full rounded-xl border border-edge-strong bg-white px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover disabled:opacity-55 dark:bg-[#1c222d]">{message.actionStatus === "running" ? "处理中…" : message.actionStatus === "done" ? "已完成" : message.actionStatus === "error" ? "重试" : message.action.label}</button>{message.actionStatus === "done" && message.undo && <button type="button" onClick={() => void undoAction(message.undo as UndoAction, index)} className="mt-2 w-full text-center text-[11px] text-muted hover:text-ink">撤销操作</button>}</div>}</div></div>)}
                     {loading && <div className="flex justify-start"><div className="flex items-center gap-1 rounded-2xl bg-bg-gray px-4 py-3"><i className="assistant-dot" /><i className="assistant-dot [animation-delay:120ms]" /><i className="assistant-dot [animation-delay:240ms]" /></div></div>}
                     <div ref={endRef} />
                   </div>
@@ -138,6 +236,7 @@ export default function ContextAssistant({ page, symbol, userId }: { page: strin
                   <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} rows={1} maxLength={1200} placeholder={`问问${copy.label}…`} className="max-h-28 min-h-[38px] flex-1 resize-none bg-transparent py-2 text-sm text-ink placeholder:text-faint" />
                   <button type="submit" disabled={!input.trim() || loading} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#171b24] text-white transition-all disabled:opacity-30 dark:bg-white dark:text-[#11151d]" aria-label="发送"><IconArrowUp size={19} /></button>
                 </div>
+                <p className="mt-2 truncate text-center text-[10px] text-faint" title="示例：打开美股自选；创建科技分组；把 AAPL、NVDA 加入科技分组；买入 AAPL 10 股 200">可直接说：筛选市场、创建或整理分组、录入买卖</p>
                 <p className="mt-2 text-center text-[10px] text-faint">账户数据仅用于本次回答，请核对关键金额与行情时间</p>
               </form>
             </>}
