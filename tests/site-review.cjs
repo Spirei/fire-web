@@ -94,6 +94,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(source.includes('label: "模型服务"'));
     assert(source.includes('function ModelProviderIcon'));
     assert(!source.includes('label: "翻译配置"'));
+    assert(source.includes('const input = event.currentTarget'));
+    assert(source.includes('draggable={!editingModel && services.length > 1 && !blockSaving["model-order"]}'));
+    assert(!source.includes('rounded-[inherit] object-cover'));
   });
   const { applyImport, buildImportPreview } = require(path.join(root, 'lib/importSnapshot.ts'));
   const row = (code, market, extra={}) => ({code, market, name: code, price:null,cost:null,qty:null,...extra});

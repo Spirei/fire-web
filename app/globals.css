@@ -1711,7 +1711,11 @@ html.dark .watch-import-target {
   border-radius: 16px;
   background: var(--sv-card, rgba(255, 255, 255, 0.88));
 }
-.model-service-rank { display: inline-flex; width: 24px; height: 24px; flex: none; align-items: center; justify-content: center; border-radius: 8px; background: var(--sv-bg, #f3f5f8); color: var(--sv-text-3, #8b93a0); font-size: 10px; font-weight: 800; cursor: grab; }
+.model-service-panel.is-draggable { cursor: grab; transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease; }
+.model-service-panel.is-draggable:hover { border-color: var(--sv-border-strong, #a8b0bc); box-shadow: 0 8px 22px rgba(10,14,25,.06); }
+.model-service-panel.is-draggable:active { cursor: grabbing; transform: scale(.997); }
+.model-service-drag { display: grid; grid-template-columns: repeat(2, 3px); gap: 3px; width: 14px; flex: none; color: var(--sv-text-3, #8b93a0); opacity: .7; }
+.model-service-drag i { width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
 .model-order-actions { display: flex; flex: none; align-items: center; gap: 4px; }
 .model-order-actions button,.model-row button { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border: 1px solid var(--sv-border, #dde2e8); border-radius: 8px; color: var(--sv-text-2, #64748b); font-size: 12px; transition: 150ms ease; }
 .model-order-actions button:hover:not(:disabled),.model-row button:hover:not(:disabled) { border-color: var(--sv-border-strong, #a8b0bc); background: var(--sv-bg, #f3f5f8); color: var(--sv-text, #111827); }
@@ -1731,12 +1735,9 @@ html.dark .watch-import-target {
   flex: none;
   align-items: center;
   justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--model-color) 20%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--model-color) 9%, white);
   color: var(--model-color);
 }
-.model-provider-icon svg { width: 72%; height: 72%; }
+.model-provider-icon svg { width: 82%; height: 82%; }
 .model-provider-icon svg path:first-child:not([fill="none"]) { fill: currentColor; }
 .model-service-name { color: var(--sv-text, #111827); font-size: 15px; }
 .model-service-summary p { margin-top: 3px; color: var(--sv-text-3, #8b93a0); font-size: 12px; }
@@ -1812,7 +1813,6 @@ html.dark .watch-import-target {
 .model-add-service > b { font-size: 22px; font-weight: 400; }
 .model-add-service span { font-size: 12px; font-weight: 700; text-align: left; }
 .model-add-service small { display: block; margin-top: 2px; font-size: 10px; font-weight: 400; opacity: .75; }
-.dark .model-provider-icon { background: color-mix(in srgb, var(--model-color) 16%, #151a26); }
 .dark .model-service-status.is-ready,.dark .model-key-state.is-ready { color: #65d697; }
 
 @media (max-width: 767px) {

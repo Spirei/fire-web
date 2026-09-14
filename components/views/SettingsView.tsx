@@ -570,7 +570,7 @@ function ModelProviderIcon({ provider, icon, className = "h-10 w-10" }: { provid
   const meta = MODEL_PROVIDERS.find((item) => item.id === provider) || MODEL_PROVIDERS[2];
   return (
     <span className={`model-provider-icon ${className}`} style={{ "--model-color": meta.color } as React.CSSProperties} aria-hidden="true">
-      {icon ? <SafeAssetImage src={icon} alt="" className="h-full w-full rounded-[inherit] object-cover" fallback={null} /> : provider === "deepseek" ? (
+      {icon ? <SafeAssetImage src={icon} alt="" className="h-full w-full object-contain" fallback={null} /> : provider === "deepseek" ? (
         <svg viewBox="0 0 32 32"><path d="M5.2 17.2c3.7-1 5.4-3.8 5.8-8.1 2 3 4.8 4.7 8.7 4.9 2.4.1 4.5-.5 6.2-1.7-.6 5.9-4.9 10.7-11.1 11.4-4.5.5-8.1-1.4-9.6-6.5Z"/><path d="M20.2 10.6c1.8-2.2 4.3-2.8 7.1-1.7-1.2 2.7-3.5 4-6.9 3.7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
       ) : provider === "openai" ? (
         <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 5.2a6 6 0 0 1 10.2 4.3 6 6 0 0 1-.8 10.4A6 6 0 0 1 16 25.6a6 6 0 0 1-10.2-4.3 6 6 0 0 1 .8-10.4A6 6 0 0 1 16 5.2Z"/><path d="m10.7 9.2 10.6 6.1v7.1M21.4 9.4l-10.7 6.2v7M5.9 16h12.2"/></svg>
@@ -2867,12 +2867,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   }];
                   const updateServices = (next: ModelServiceConfig[]) => setSite(current => ({ ...current, modelServices: next }));
                   const updateService = (id: string, patch: Partial<ModelServiceConfig>) => updateServices(services.map(item => item.id === id ? { ...item, ...patch } : item));
-                  const moveService = (from: number, to: number) => {
+                  const reorderServices = (from: number, to: number) => {
                     if (to < 0 || to >= services.length || from === to) return;
                     const next = [...services];
                     const [item] = next.splice(from, 1);
                     next.splice(to, 0, item);
                     updateServices(next);
+                    void saveBlock("model-order", { modelServices: next }, "模型优先级已保存").then(ok => { if (!ok) updateServices(services); });
                   };
                   const addService = () => updateServices([...services, {
                     id: `model-service-${Date.now().toString(36)}`,
@@ -2899,15 +2900,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           return (
                             <article
                               key={service.id}
-                              className="model-service-panel"
-                              draggable={editingModel}
-                              onDragStart={() => { modelDragIndexRef.current = serviceIndex; }}
-                              onDragOver={event => { if (editingModel) event.preventDefault(); }}
-                              onDrop={() => { if (modelDragIndexRef.current !== null) moveService(modelDragIndexRef.current, serviceIndex); modelDragIndexRef.current = null; }}
+                              className={`model-service-panel ${!editingModel && services.length > 1 && !blockSaving["model-order"] ? "is-draggable" : ""}`}
+                              draggable={!editingModel && services.length > 1 && !blockSaving["model-order"]}
+                              onDragStart={event => { modelDragIndexRef.current = serviceIndex; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", service.id); }}
+                              onDragOver={event => { if (!editingModel) event.preventDefault(); }}
+                              onDrop={() => { if (!editingModel && modelDragIndexRef.current !== null) reorderServices(modelDragIndexRef.current, serviceIndex); modelDragIndexRef.current = null; }}
                             >
                               <div className="model-service-summary">
                                 <div className="flex min-w-0 items-center gap-3">
-                                  {editingModel && <span className="model-service-rank" title="拖动排序">{serviceIndex + 1}</span>}
+                                  {!editingModel && services.length > 1 && <span className="model-service-drag" title="拖动调整优先级" aria-hidden="true"><i /><i /><i /><i /><i /><i /></span>}
                                   <ModelProviderIcon provider={service.provider} icon={service.icon} />
                                   <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
@@ -2917,10 +2918,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                     <p className="truncate">{service.models.filter(Boolean).join(" → ") || "尚未添加模型"} · {meta.hint}</p>
                                   </div>
                                 </div>
-                                {!editingModel ? <span className="model-service-use">优先级 {serviceIndex + 1}</span> : (
+                                {!editingModel ? <span className="model-service-use">{blockSaving["model-order"] ? "保存排序…" : `优先级 ${serviceIndex + 1}`}</span> : (
                                   <div className="model-order-actions">
-                                    <button type="button" onClick={() => moveService(serviceIndex, serviceIndex - 1)} disabled={serviceIndex === 0} aria-label="提高优先级">↑</button>
-                                    <button type="button" onClick={() => moveService(serviceIndex, serviceIndex + 1)} disabled={serviceIndex === services.length - 1} aria-label="降低优先级">↓</button>
                                     <button type="button" className="is-danger" onClick={() => updateServices(services.filter(item => item.id !== service.id))} disabled={services.length === 1} aria-label="删除服务"><DeleteIcon className="h-4 w-4" /></button>
                                   </div>
                                 )}
@@ -2940,7 +2939,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                     <label className="model-field"><span>服务名称<small>会显示在上方服务列表</small></span><input className="sw-row-input" value={service.name} maxLength={50} onChange={event => updateService(service.id, { name: event.target.value })} placeholder="例如：公司代理服务" /></label>
                                     <div className="model-icon-controls">
                                       <label className="model-icon-upload">
-                                        <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={async event => { const file = event.target.files?.[0]; if (!file) return; try { updateService(service.id, { icon: await uploadModelIcon(file, service.name) }); showToast("模型服务图标已上传"); } catch (error) { showToast(error instanceof Error ? error.message : "图标上传失败", "err"); } event.currentTarget.value = ""; }} />
+                                        <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={async event => { const input = event.currentTarget; const file = input.files?.[0]; if (!file) return; try { updateService(service.id, { icon: await uploadModelIcon(file, service.name) }); showToast("模型服务图标已上传"); } catch (error) { showToast(error instanceof Error ? error.message : "图标上传失败", "err"); } finally { input.value = ""; } }} />
                                         <ModelProviderIcon provider={service.provider} icon={service.icon} className="h-9 w-9" />
                                         <span>{service.icon ? "更换图标" : "上传图标"}</span>
                                       </label>
