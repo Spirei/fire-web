@@ -49,6 +49,17 @@ function migrate(database: Database.Database) {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS assistant_actions (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      action_id TEXT NOT NULL,
+      action_type TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      response TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, action_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_assistant_actions_created ON assistant_actions(created_at);
+
     CREATE TABLE IF NOT EXISTS rate_limit (
       key TEXT PRIMARY KEY,
       count INTEGER NOT NULL DEFAULT 0,

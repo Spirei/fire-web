@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
+import { randomBytes } from "crypto";
 import { getSiteSettings } from "@/lib/settings";
 import { listRecords } from "@/lib/store";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
@@ -10,9 +11,9 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 type PageContext = { page?: string; label?: string; symbol?: string; filter?: string };
 type AssistantAction =
   | { type: "navigate"; label: string; path: string }
-  | { type: "create_group"; label: string; name: string; createdAt: string }
-  | { type: "assign_group"; label: string; groupId: string; groupName: string; recordIds: string[]; symbols: string[]; previous: Array<{ id: string; groupId: string }>; createdAt: string }
-  | { type: "trade"; label: string; recordId: string; code: string; name: string; market: string; side: "buy" | "sell"; qty: number; price: number; fees: number; createdAt: string };
+  | { type: "create_group"; label: string; name: string; createdAt: string; actionId: string }
+  | { type: "assign_group"; label: string; groupId: string; groupName: string; recordIds: string[]; symbols: string[]; previous: Array<{ id: string; groupId: string }>; createdAt: string; actionId: string }
+  | { type: "trade"; label: string; recordId: string; code: string; name: string; market: string; side: "buy" | "sell"; qty: number; price: number; fees: number; createdAt: string; actionId: string };
 
 const PAGE_LABELS: Record<string, string> = {
   holdings: "账户资产", assets: "资产分析", pnl: "资产总盈亏", fire: "FIRE",
@@ -118,6 +119,7 @@ function recordForToken(records: StockRecord[], token: string) {
 
 function parseAction(question: string, records: StockRecord[], userId: string): { answer: string; action?: AssistantAction } | null {
   const createdAt = new Date().toISOString();
+  const actionId = `aa-${randomBytes(12).toString("hex")}`;
   const trade = question.match(/(?:记录|录入|记一笔|我)?\s*(买入|卖出)\s*([A-Za-z0-9.:-]{1,20})\s*(\d+(?:\.\d+)?)\s*(?:股|只|份)?\s*(?:，|,|@|以|价格|单价|每股)?\s*(\d+(?:\.\d+)?)/i);
   if (trade) {
     const record = recordForToken(records, trade[2]);
@@ -133,14 +135,14 @@ function parseAction(question: string, records: StockRecord[], userId: string): 
     const side = trade[1] === "买入" ? "buy" : "sell";
     return {
       answer: `已生成${trade[1]}预览。请核对股票、数量、价格和预计金额，确认后才会写入订单与持仓。`,
-      action: { type: "trade", label: `确认${trade[1]}入账`, recordId: record.id, code: record.code, name: record.name, market: record.market.toUpperCase(), side, qty, price, fees: 0, createdAt }
+      action: { type: "trade", label: `确认${trade[1]}入账`, recordId: record.id, code: record.code, name: record.name, market: record.market.toUpperCase(), side, qty, price, fees: 0, createdAt, actionId }
     };
   }
 
   const create = question.match(/(?:创建|新建|添加)(?:一个|名为)?[“"']?(.{1,30}?)[”"']?(?:的)?(?:自选)?分组(?:吧|。|！|!)?$/);
   if (create) {
     const name = create[1].trim();
-    return { answer: `已准备创建自选分组“${name}”。确认后才会保存，你也可以继续修改名称。`, action: { type: "create_group", label: "确认创建分组", name, createdAt } };
+    return { answer: `已准备创建自选分组“${name}”。确认后才会保存，你也可以继续修改名称。`, action: { type: "create_group", label: "确认创建分组", name, createdAt, actionId } };
   }
 
   const assign = question.match(/(?:把|将)\s*([A-Za-z0-9.、,，\s:-]+?)\s*(?:移到|移动到|加入|放进)\s*[“"']?(.{1,30}?)[”"']?(?:分组)?(?:里|中|。|！|!)?$/i);
@@ -155,7 +157,7 @@ function parseAction(question: string, records: StockRecord[], userId: string): 
     if (!group) return { answer: `没有找到自选分组“${groupName}”。请先创建该分组，或检查名称后重试。` };
     if (selected.length && group) return {
       answer: `已找到 ${selected.map((item) => item.code).join("、")} 和分组“${group.name}”。确认后会移动，并提供撤销。`,
-      action: { type: "assign_group", label: `确认移入“${group.name}”`, groupId: group.id, groupName: group.name, recordIds: selected.map((item) => item.id), symbols: selected.map((item) => item.code), previous: selected.map((item) => ({ id: item.id, groupId: item.watchGroupId || "" })), createdAt }
+      action: { type: "assign_group", label: `确认移入“${group.name}”`, groupId: group.id, groupName: group.name, recordIds: selected.map((item) => item.id), symbols: selected.map((item) => item.code), previous: selected.map((item) => ({ id: item.id, groupId: item.watchGroupId || "" })), createdAt, actionId }
     };
   }
 

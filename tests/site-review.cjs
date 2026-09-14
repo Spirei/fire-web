@@ -92,6 +92,18 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     s.stop();assert.equal(fn,null);
   });
   const { createWatchGroup }=require(path.join(root,'lib/watchGroupsStore.ts'));
+  const { runAssistantAction }=require(path.join(root,'lib/assistantActions.ts'));
+  await test('assistant actions are idempotent and roll back atomically',()=>{
+    const actionId='aa-1234567890abcdef12345678';
+    const first=runAssistantAction({userId:user.id,actionId,actionType:'create_group',payload:{name:'Idempotent'},execute:()=>({group:createWatchGroup(user.id,'Idempotent')})});
+    assert.equal(first.replayed,false);
+    const second=runAssistantAction({userId:user.id,actionId,actionType:'create_group',payload:{name:'Idempotent'},execute:()=>{throw new Error('must not execute twice');}});
+    assert.equal(second.replayed,true);assert.equal(second.result.group.id,first.result.group.id);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM watch_groups WHERE user_id=? AND name='Idempotent'").get(user.id).n,1);
+    assert.throws(()=>runAssistantAction({userId:user.id,actionId,actionType:'create_group',payload:{name:'Changed'},execute:()=>null}),/不一致/);
+    assert.throws(()=>runAssistantAction({userId:user.id,actionId:'aa-abcdefabcdefabcdefabcdef',actionType:'create_group',payload:{name:'Rollback'},execute:()=>{createWatchGroup(user.id,'Rollback');throw new Error('fail');}}),/fail/);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM watch_groups WHERE user_id=? AND name='Rollback'").get(user.id).n,0);
+  });
   const uploadRoute=require(path.join(root,'app/api/v1/watch-groups/[id]/icon/route.ts'));
   await test('group icon owner upload works, other user rejected, same names isolated; public asset upload stays admin-only',async()=>{
     const group=createWatchGroup(user.id,'My group'),group2=createWatchGroup(other.id,'My group');
