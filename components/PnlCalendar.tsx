@@ -245,7 +245,7 @@ export default function PnlCalendar({
       ) : (
         <>
           <div className="mt-4 grid grid-cols-7 text-center text-xs font-semibold text-muted">{["日", "一", "二", "三", "四", "五", "六"].map((day) => <span key={day}>{day}</span>)}</div>
-          <div className="mt-3 grid grid-cols-7 gap-1 sm:gap-2">
+          <div className="mt-2 grid grid-cols-7 gap-[3px] sm:mt-3 sm:gap-2">
             {days.map((cell, index) =>
               cell ? (
                 <button
@@ -253,13 +253,13 @@ export default function PnlCalendar({
                   type="button"
                   onClick={() => onDayClick(`${month.y}-${String(month.m).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`)}
                   title="点击查看当日每只股票盈亏"
-                  className={`flex min-h-20 min-w-0 flex-col items-center justify-center overflow-hidden rounded-xl px-0.5 transition hover:ring-1 hover:ring-edge-strong ${cell.pnl > 0 ? "bg-up-bg text-up" : cell.pnl < 0 ? "bg-down-bg text-down" : "text-muted hover:bg-bg-gray"}`}
+                  className={`flex min-h-[52px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-lg px-0.5 transition hover:ring-1 hover:ring-edge-strong sm:min-h-20 sm:rounded-xl ${cell.pnl > 0 ? "bg-up-bg text-up" : cell.pnl < 0 ? "bg-down-bg text-down" : "text-muted hover:bg-bg-gray"}`}
                 >
                   <b className="text-sm text-ink">{String(cell.day).padStart(2, "0")}</b>
                   {mode === "收益" ? (
-                    cell.pnl !== 0 && <><span className="mt-2 max-w-full whitespace-nowrap text-[9px] font-semibold leading-none tracking-[-.03em] min-[390px]:text-[10px] sm:hidden">{formatNarrow(cell.pnl)}</span><span className="mt-2 hidden whitespace-nowrap text-sm font-semibold sm:inline">{formatCompact(cell.pnl)}</span></>
+                    cell.pnl !== 0 && <><span className="mt-1.5 max-w-full whitespace-nowrap text-[9px] font-semibold leading-none tracking-[-.03em] min-[390px]:text-[10px] sm:hidden">{formatNarrow(cell.pnl)}</span><span className="mt-2 hidden whitespace-nowrap text-sm font-semibold sm:inline">{formatCompact(cell.pnl)}</span></>
                   ) : (
-                    cell.pct != null && cell.pnl !== 0 && <><span className="mt-2 whitespace-nowrap text-[9px] font-semibold leading-none tracking-[-.03em] min-[390px]:text-[10px] sm:hidden">{cell.pct >= 0 ? "+" : ""}{cell.pct.toFixed(Math.abs(cell.pct) >= 100 ? 0 : Math.abs(cell.pct) >= 10 ? 1 : 2)}%</span><span className="mt-2 hidden whitespace-nowrap text-sm font-semibold sm:inline">{cell.pct >= 0 ? "+" : ""}{cell.pct.toFixed(2)}%</span></>
+                    cell.pct != null && cell.pnl !== 0 && <><span className="mt-1.5 whitespace-nowrap text-[9px] font-semibold leading-none tracking-[-.03em] min-[390px]:text-[10px] sm:hidden">{cell.pct >= 0 ? "+" : ""}{cell.pct.toFixed(Math.abs(cell.pct) >= 100 ? 0 : Math.abs(cell.pct) >= 10 ? 1 : 2)}%</span><span className="mt-2 hidden whitespace-nowrap text-sm font-semibold sm:inline">{cell.pct >= 0 ? "+" : ""}{cell.pct.toFixed(2)}%</span></>
                   )}
                 </button>
               ) : (
