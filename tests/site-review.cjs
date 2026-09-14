@@ -104,6 +104,19 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.throws(()=>runAssistantAction({userId:user.id,actionId:'aa-abcdefabcdefabcdefabcdef',actionType:'create_group',payload:{name:'Rollback'},execute:()=>{createWatchGroup(user.id,'Rollback');throw new Error('fail');}}),/fail/);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM watch_groups WHERE user_id=? AND name='Rollback'").get(user.id).n,0);
   });
+  const assistantHistory=require(path.join(root,'lib/assistantHistory.ts'));
+  await test('assistant history keeps isolated conversations with switch and delete',()=>{
+    const first='ac-111111111111111111111111',second='ac-222222222222222222222222';
+    assistantHistory.saveAssistantHistory(user.id,first,[{role:'user',content:'第一段会话'}]);
+    let state=assistantHistory.saveAssistantHistory(user.id,second,[{role:'user',content:'第二段会话'}]);
+    assert.equal(state.activeId,second);assert.equal(state.conversations.length,2);
+    assert.equal(state.conversations[0].title,'第二段会话');assert.equal(assistantHistory.getAssistantHistory(user.id)[0].content,'第二段会话');
+    state=assistantHistory.saveAssistantHistory(user.id,first,[{role:'user',content:'第一段会话'}]);
+    assert.equal(state.activeId,first);
+    state=assistantHistory.clearAssistantHistory(user.id,first);
+    assert.equal(state.activeId,second);assert.equal(state.conversations.length,1);
+    assert.equal(assistantHistory.getAssistantHistoryState(other.id).conversations.length,0);
+  });
   const uploadRoute=require(path.join(root,'app/api/v1/watch-groups/[id]/icon/route.ts'));
   await test('group icon owner upload works, other user rejected, same names isolated; public asset upload stays admin-only',async()=>{
     const group=createWatchGroup(user.id,'My group'),group2=createWatchGroup(other.id,'My group');

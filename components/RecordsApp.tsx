@@ -91,7 +91,7 @@ export default function RecordsApp({
   initialRecords,
   initialWatchGroups = [],
   initialUserLogs,
-  initialAssistantHistory = [],
+  initialAssistantHistory = { activeId: "", conversations: [] },
   initialFundBalances,
   initialSettings,
   initialStockIcons,
@@ -108,7 +108,7 @@ export default function RecordsApp({
   initialRecords: StockRecord[];
   initialWatchGroups?: WatchGroup[];
   initialUserLogs: SystemLog[];
-  initialAssistantHistory?: import("@/lib/assistantHistory").StoredAssistantMessage[];
+  initialAssistantHistory?: import("@/lib/assistantHistory").AssistantHistoryState;
   initialFundBalances: Record<string, number>;
   initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled">;
   initialStockIcons: Record<string, string>;

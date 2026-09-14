@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconMessageCircle, IconMinus, IconPlus, IconX } from "@tabler/icons-react";
-import type { StoredAssistantMessage } from "@/lib/assistantHistory";
+import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconHistory, IconMessageCircle, IconMinus, IconPlus, IconTrash, IconX } from "@tabler/icons-react";
+import type { AssistantHistoryState, StoredAssistantConversation, StoredAssistantMessage } from "@/lib/assistantHistory";
 
 type AssistantAction =
   | { type: "navigate"; label: string; path: string }
@@ -57,18 +57,31 @@ function historyKey(userId: string) {
   return `fire:assistant:history:${userId}`;
 }
 
-export default function ContextAssistant({ page, symbol, userId, initialHistory, onNavigate }: { page: string; symbol?: string; userId: string; initialHistory: StoredAssistantMessage[]; onNavigate: (path: string) => void }) {
+function newConversationId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  return `ac-${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function conversationTime(value: string) {
+  return value ? value.replace("T", " ").slice(5, 16) : "";
+}
+
+export default function ContextAssistant({ page, symbol, userId, initialHistory, onNavigate }: { page: string; symbol?: string; userId: string; initialHistory: AssistantHistoryState; onNavigate: (path: string) => void }) {
+  const initialConversation = initialHistory.conversations.find((item) => item.id === initialHistory.activeId) || initialHistory.conversations[0];
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [historyStatus, setHistoryStatus] = useState<"idle" | "saving" | "error">("idle");
   const [historyRetry, setHistoryRetry] = useState(0);
-  const [messages, setMessages] = useState<Message[]>(() => initialHistory as Message[]);
+  const [conversationId, setConversationId] = useState(initialConversation?.id || "");
+  const [conversations, setConversations] = useState<StoredAssistantConversation[]>(initialHistory.conversations);
+  const [messages, setMessages] = useState<Message[]>(() => (initialConversation?.messages || []) as Message[]);
   const historyReady = useRef(false);
   const saveQueue = useRef(Promise.resolve());
-  const lastSavedHistory = useRef(JSON.stringify(initialHistory));
+  const lastSavedHistory = useRef(new Map(initialHistory.conversations.map((item) => [item.id, JSON.stringify(item.messages)])));
   const legacyHistoryPending = useRef(false);
   const actionsInFlight = useRef(new Set<number>());
   const actionOperationInFlight = useRef(false);
@@ -78,15 +91,15 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const copy = PAGE_COPY[page] || { label: "当前页面", prompts: ["概览当前数据", "检查数据异常", "给我下一步建议"] };
-  const contextLabel = useMemo(() => symbol ? `${copy.label} · ${symbol}` : copy.label, [copy.label, symbol]);
 
   useEffect(() => setMounted(true), []);
   useEffect(() => {
     // 一次性迁移旧版浏览器历史到服务端，随后清除本地的账户对话数据。
     try {
       const saved = JSON.parse(localStorage.getItem(historyKey(userId)) || "[]") as Message[];
-      if (messages.length === 0 && Array.isArray(saved) && saved.length > 0) {
+      if (conversations.length === 0 && messages.length === 0 && Array.isArray(saved) && saved.length > 0) {
         legacyHistoryPending.current = true;
+        setConversationId(newConversationId());
         setMessages(saved.flatMap((item): Message[] => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string"
           ? [{ role: item.role, content: item.content.slice(0, 4000) }]
           : []).slice(-MAX_SAVED_MESSAGES));
@@ -103,16 +116,26 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   }, [userId]);
   useEffect(() => {
     if (!historyReady.current) return;
+    if (!conversationId || messages.length === 0) return;
     const snapshot = messages.slice(-MAX_SAVED_MESSAGES);
     const serialized = JSON.stringify(snapshot);
-    if (serialized === lastSavedHistory.current) return;
+    if (serialized === lastSavedHistory.current.get(conversationId)) return;
+    setConversations((current) => {
+      const now = new Date().toISOString();
+      const title = snapshot.find((message) => message.role === "user")?.content.trim().replace(/\s+/g, " ").slice(0, 36) || "新对话";
+      const existing = current.find((item) => item.id === conversationId);
+      const next: StoredAssistantConversation = { id: conversationId, title, messages: snapshot, createdAt: existing?.createdAt || now, updatedAt: now };
+      return [next, ...current.filter((item) => item.id !== conversationId)].slice(0, 20);
+    });
     setHistoryStatus("saving");
     saveQueue.current = saveQueue.current.catch(() => undefined).then(async () => {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-          const response = await fetch("/api/assistant/history", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: snapshot }) });
+          const response = await fetch("/api/assistant/history", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conversationId, messages: snapshot }) });
           if (!response.ok) throw new Error("history save failed");
-          lastSavedHistory.current = serialized;
+          const saved = await response.json().catch(() => null) as AssistantHistoryState | null;
+          lastSavedHistory.current.set(conversationId, serialized);
+          if (saved?.conversations) setConversations(saved.conversations);
           setHistoryStatus("idle");
           if (legacyHistoryPending.current) {
             localStorage.removeItem(historyKey(userId));
@@ -125,7 +148,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       }
       setHistoryStatus("error");
     });
-  }, [messages, userId, historyRetry]);
+  }, [conversationId, messages, userId, historyRetry]);
   useEffect(() => { if (open) endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading, open]);
   useEffect(() => {
     if (!open || minimized || !window.matchMedia("(min-width: 640px)").matches) return;
@@ -142,6 +165,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     const question = value.trim();
     if (!question || loading) return;
     const next = [...messages, { role: "user" as const, content: question }].slice(-MAX_SAVED_MESSAGES);
+    if (!conversationId) setConversationId(newConversationId());
     const generation = requestGeneration.current;
     const controller = new AbortController();
     requestController.current = controller;
@@ -177,9 +201,36 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     requestController.current?.abort();
     requestController.current = null;
     setLoading(false);
+    setConversationId(newConversationId());
     setMessages([]);
     setInput("");
-    void fetch("/api/assistant/history", { method: "DELETE" });
+    setHistoryOpen(false);
+  }
+
+  function selectConversation(conversation: StoredAssistantConversation) {
+    if (actionOperationInFlight.current) return;
+    requestGeneration.current += 1;
+    requestController.current?.abort();
+    requestController.current = null;
+    setLoading(false);
+    lastSavedHistory.current.delete(conversation.id);
+    setConversationId(conversation.id);
+    setMessages(conversation.messages as Message[]);
+    setHistoryOpen(false);
+  }
+
+  async function deleteConversation(id: string) {
+    if (actionOperationInFlight.current) return;
+    const response = await fetch(`/api/assistant/history?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!response.ok) return;
+    const next = await response.json() as AssistantHistoryState;
+    lastSavedHistory.current.delete(id);
+    setConversations(next.conversations);
+    if (id === conversationId) {
+      const active = next.conversations.find((item) => item.id === next.activeId) || next.conversations[0];
+      setConversationId(active?.id || newConversationId());
+      setMessages((active?.messages || []) as Message[]);
+    }
   }
 
   function updateMessage(index: number, patch: Partial<Message>) {
@@ -292,14 +343,30 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       )}
       {open && (
         <div onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }} className="assistant-layer fixed inset-0 z-[100] flex items-end justify-end bg-black/20 sm:pointer-events-none sm:bg-transparent">
-          <section role="dialog" aria-modal="true" aria-label="账户助手" className={`assistant-panel pointer-events-auto flex w-full flex-col overflow-hidden border border-[#dce8e5] bg-white shadow-[0_24px_80px_rgba(13,71,64,.16)] ${minimized ? "h-[68px] sm:w-[320px]" : "h-[72dvh] rounded-t-[22px] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]"}`}>
+          <section role="dialog" aria-modal="true" aria-label="账户助手" className={`assistant-panel pointer-events-auto relative flex w-full flex-col overflow-hidden border border-[#e1e7e6] bg-white shadow-[0_24px_80px_rgba(15,23,42,.16)] ${minimized ? "h-[68px] sm:w-[320px]" : "h-[72dvh] rounded-t-[22px] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]"}`}>
             <header className="flex min-h-[68px] items-center gap-3 border-b border-edge px-5">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_5px_16px_rgba(0,0,0,.18)]"><AssistantGlyph size={20} /></span>
-              <div className="min-w-0 flex-1"><div className="text-sm font-semibold text-ink">账户助手</div><div className="truncate text-[11px] text-muted">正在查看：{contextLabel}</div></div>
+              <div className="min-w-0 flex-1 text-sm font-semibold text-ink">账户助手</div>
+              {conversations.length > 0 && <button type="button" disabled={actionBusy} onClick={() => setHistoryOpen((value) => !value)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="历史对话" title="历史对话"><IconHistory size={18} /></button>}
               {messages.length > 0 && <button type="button" disabled={actionBusy} onClick={startNewChat} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="开始新对话" title={actionBusy ? "操作完成后可开始新对话" : "开始新对话"}><IconPlus size={18} /></button>}
               <button type="button" onClick={() => setMinimized((value) => !value)} className="hidden h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray sm:flex" aria-label={minimized ? "展开" : "最小化"}><IconMinus size={18} /></button>
               <button type="button" onClick={() => setOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭"><IconX size={18} /></button>
             </header>
+            {!minimized && historyOpen && <div className="absolute inset-x-0 bottom-0 top-[68px] z-20 flex justify-end bg-white/70 backdrop-blur-[2px]">
+              <aside className="flex h-full w-[88%] flex-col border-l border-edge bg-white shadow-[-14px_0_36px_rgba(15,23,42,.08)]" aria-label="历史对话抽屉">
+                <div className="flex h-14 items-center justify-between border-b border-edge px-4">
+                  <div><div className="text-sm font-semibold text-ink">历史对话</div><div className="mt-0.5 text-[10px] text-faint">最多保留 20 个会话</div></div>
+                  <button type="button" onClick={() => setHistoryOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭历史对话"><IconX size={17} /></button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2.5">
+                  {conversations.map((conversation) => <div key={conversation.id} role="button" tabIndex={actionBusy ? -1 : 0} aria-disabled={actionBusy} onClick={() => { if (!actionBusy) selectConversation(conversation); }} onKeyDown={(event) => { if (!actionBusy && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); selectConversation(conversation); } }} className={`group/history mb-1.5 flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-colors ${actionBusy ? "cursor-not-allowed opacity-40" : ""} ${conversation.id === conversationId ? "border-[#d7f1eb] bg-[#f4fbf9]" : "border-transparent hover:border-edge hover:bg-bg-gray/60"}`}>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-ink">{conversation.title}</span><span className="mt-1 flex items-center gap-2 text-[10px] text-faint"><span title={conversation.id}>#{conversation.id.slice(3, 11)}</span><span>{conversationTime(conversation.updatedAt)}</span></span></span>
+                    <button type="button" onClick={(event) => { event.stopPropagation(); void deleteConversation(conversation.id); }} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-faint opacity-60 transition hover:bg-white hover:text-[#d14343] group-hover/history:opacity-100" aria-label={`删除对话：${conversation.title}`} title="删除对话"><IconTrash size={16} /></button>
+                  </div>)}
+                </div>
+                <div className="border-t border-edge p-3"><button type="button" onClick={startNewChat} className="w-full rounded-xl border border-[#cfeee8] bg-[#f4fbf9] px-3 py-2.5 text-xs font-semibold text-[#0d7f74] transition-colors hover:bg-[#e8f8f4]">新建对话</button></div>
+              </aside>
+            </div>}
             {!minimized && <>
               <div className="flex-1 overflow-y-auto px-5 py-5">
                 {messages.length === 0 ? (
@@ -317,7 +384,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {messages.map((message, index) => <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "border border-[#bdece2] bg-[#e8fbf7] text-[#075e57] shadow-[0_5px_16px_rgba(15,159,143,.08)]" : "bg-bg-gray text-ink"}`}>{displayText(message.content)}{message.action && <div className="mt-3 rounded-xl border border-edge bg-white/80 p-3 dark:bg-white/[.05]"><div className="text-xs font-medium text-ink">{actionSummary(message.action)}</div><button type="button" disabled={actionBusy || message.actionStatus === "running" || message.actionStatus === "done" || actionExpired(message.action)} onClick={() => void executeAction(message.action as AssistantAction, index)} className="mt-3 w-full rounded-xl border border-edge-strong bg-white px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover disabled:opacity-55">{message.actionStatus === "running" ? "处理中…" : message.actionStatus === "done" ? "已完成" : message.actionStatus === "uncertain" ? "安全重试并核对" : actionExpired(message.action) ? "预览已过期，请重新输入" : message.actionStatus === "error" ? "重试" : message.action.label}</button>{message.actionStatus === "uncertain" && <p className="mt-2 text-[11px] leading-5 text-muted">页面曾在执行过程中中断。安全重试会复用原操作标识：已成功则只返回原结果，未成功才执行。</p>}{message.actionStatus === "done" && message.undo && <button type="button" disabled={actionBusy || message.undoStatus === "running" || isTimestampExpired(message.undo.createdAt)} onClick={() => void undoAction(message.undo as UndoAction, index)} className="mt-2 w-full text-center text-[11px] text-muted hover:text-ink disabled:opacity-35">{message.undoStatus === "running" ? "撤销中…" : isTimestampExpired(message.undo.createdAt) ? "撤销窗口已结束" : message.undoStatus === "uncertain" ? "安全重试撤销" : message.undoStatus === "error" ? "重试撤销" : "撤销操作"}</button>}{message.undoStatus === "uncertain" && !isTimestampExpired(message.undo?.createdAt || "") && <p className="mt-1 text-[11px] leading-5 text-muted">撤销响应曾中断，再次点击不会重复撤销。</p>}</div>}</div></div>)}
+                    {messages.map((message, index) => <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "border border-[#d7f1eb] bg-[#f4fbf9] text-[#334155] shadow-[0_4px_14px_rgba(15,23,42,.04)]" : "bg-bg-gray text-ink"}`}>{displayText(message.content)}{message.action && <div className="mt-3 rounded-xl border border-edge bg-white/80 p-3 dark:bg-white/[.05]"><div className="text-xs font-medium text-ink">{actionSummary(message.action)}</div><button type="button" disabled={actionBusy || message.actionStatus === "running" || message.actionStatus === "done" || actionExpired(message.action)} onClick={() => void executeAction(message.action as AssistantAction, index)} className="mt-3 w-full rounded-xl border border-edge-strong bg-white px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover disabled:opacity-55">{message.actionStatus === "running" ? "处理中…" : message.actionStatus === "done" ? "已完成" : message.actionStatus === "uncertain" ? "安全重试并核对" : actionExpired(message.action) ? "预览已过期，请重新输入" : message.actionStatus === "error" ? "重试" : message.action.label}</button>{message.actionStatus === "uncertain" && <p className="mt-2 text-[11px] leading-5 text-muted">页面曾在执行过程中中断。安全重试会复用原操作标识：已成功则只返回原结果，未成功才执行。</p>}{message.actionStatus === "done" && message.undo && <button type="button" disabled={actionBusy || message.undoStatus === "running" || isTimestampExpired(message.undo.createdAt)} onClick={() => void undoAction(message.undo as UndoAction, index)} className="mt-2 w-full text-center text-[11px] text-muted hover:text-ink disabled:opacity-35">{message.undoStatus === "running" ? "撤销中…" : isTimestampExpired(message.undo.createdAt) ? "撤销窗口已结束" : message.undoStatus === "uncertain" ? "安全重试撤销" : message.undoStatus === "error" ? "重试撤销" : "撤销操作"}</button>}{message.undoStatus === "uncertain" && !isTimestampExpired(message.undo?.createdAt || "") && <p className="mt-1 text-[11px] leading-5 text-muted">撤销响应曾中断，再次点击不会重复撤销。</p>}</div>}</div></div>)}
                     {loading && <div className="flex justify-start"><div className="flex items-center gap-1 rounded-2xl bg-bg-gray px-4 py-3 text-[#0d9488]"><i className="assistant-dot" /><i className="assistant-dot [animation-delay:120ms]" /><i className="assistant-dot [animation-delay:240ms]" /></div></div>}
                     <div ref={endRef} />
                   </div>
@@ -326,10 +393,9 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
               <form onSubmit={(event) => { event.preventDefault(); void send(input); }} className="border-t border-edge p-4 pb-[max(16px,env(safe-area-inset-bottom))]">
                 <div className="flex items-end gap-2 rounded-[20px] border border-edge-strong bg-bg-gray p-2 pl-4">
                   <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.nativeEvent.isComposing) return; if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} rows={1} maxLength={1200} placeholder={`问问${copy.label}…`} className="max-h-28 min-h-[38px] flex-1 resize-none bg-transparent py-2 text-sm text-ink placeholder:text-faint" />
-                  <button type="submit" disabled={!input.trim() || loading} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#0f9f8f] bg-[#0f9f8f] text-white shadow-[0_5px_16px_rgba(15,159,143,.2)] transition-all hover:border-[#087f73] hover:bg-[#087f73] active:scale-95 disabled:opacity-30" aria-label="发送"><IconArrowUp size={19} /></button>
+                  <button type="submit" disabled={!input.trim() || loading} className="assistant-send group flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#c5eee5] bg-[#e8faf6] text-[#0d9488] shadow-[0_4px_14px_rgba(15,159,143,.1)] transition-all hover:border-[#9ee3d5] hover:bg-[#d9f7f0] active:scale-95 disabled:opacity-30" aria-label="发送"><IconArrowUp size={19} className="transition-transform duration-200 group-hover:-translate-y-0.5" /></button>
                 </div>
-                <p className="mt-2 truncate text-center text-[10px] text-faint" title="示例：打开美股自选；创建科技分组；把 AAPL、NVDA 加入科技分组；买入 AAPL 10 股 200">可直接说：筛选市场、创建或整理分组、录入买卖</p>
-                {historyStatus === "error" ? <button type="button" onClick={() => setHistoryRetry((value) => value + 1)} className="mt-2 w-full text-center text-[10px] text-muted hover:text-ink">对话保存失败，点击重试</button> : <p className="mt-2 text-center text-[10px] text-faint">{historyStatus === "saving" ? "正在保存对话…" : "账户数据仅用于本次回答，请核对关键金额与行情时间"}</p>}
+                {historyStatus === "error" && <button type="button" onClick={() => setHistoryRetry((value) => value + 1)} className="mt-2 w-full text-center text-[10px] text-muted hover:text-ink">对话保存失败，点击重试</button>}
               </form>
             </>}
           </section>

@@ -115,7 +115,7 @@
 /* 账户助手作为独立的浅色工作面板，深色站点中也保持白底与长桥青层级。 */
 .dark section.assistant-panel {
   color-scheme: light;
-  border-color: #dce8e5;
+  border-color: #e1e7e6;
   background: #fff;
 }
 .dark .assistant-panel .text-ink { color: #0a0e19; }
@@ -123,14 +123,39 @@
 .dark .assistant-panel .text-faint { color: #9aa1ab; }
 .dark .assistant-panel .border-edge { border-color: #dfe2e8; }
 .dark .assistant-panel .border-edge-strong { border-color: #c9ced8; }
+.dark .assistant-panel .bg-white { background-color: #fff; }
+.dark .assistant-panel .bg-white\/70 { background-color: rgba(255, 255, 255, 0.7); }
+.dark .assistant-panel .bg-white\/80 { background-color: rgba(255, 255, 255, 0.8); }
 .dark .assistant-panel .bg-bg-gray { background-color: #f7f8fa; }
 .dark .assistant-panel .bg-bg-gray\/60 { background-color: rgba(247, 248, 250, 0.6); }
 .dark .assistant-panel .hover\:bg-bg-gray:hover { background-color: #f0f3f3; }
-.dark .assistant-panel .hover\:bg-brand-hover:hover { background-color: #e8fbf7; }
+.dark .assistant-panel .hover\:bg-brand-hover:hover { background-color: #f1faf8; }
 .dark .assistant-panel textarea,
 .dark .assistant-panel textarea:focus {
   color: #0a0e19;
   background: transparent;
+}
+
+.assistant-send {
+  position: relative;
+  isolation: isolate;
+}
+.assistant-send:not(:disabled)::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -3px;
+  border: 1px solid rgba(34, 230, 189, 0.42);
+  border-radius: 999px;
+  animation: assistant-send-ring 2.4s ease-out infinite;
+}
+@keyframes assistant-send-ring {
+  0%, 55% { opacity: 0; transform: scale(0.92); }
+  68% { opacity: 0.55; }
+  100% { opacity: 0; transform: scale(1.22); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-send::before { animation: none !important; }
 }
 
 .watch-checkbox {

@@ -49,6 +49,18 @@ function migrate(database: Database.Database) {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS assistant_conversation_threads (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      conversation_id TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '新对话',
+      messages TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, conversation_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_assistant_threads_updated
+      ON assistant_conversation_threads(user_id, updated_at DESC);
+
     CREATE TABLE IF NOT EXISTS assistant_actions (
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       action_id TEXT NOT NULL,
