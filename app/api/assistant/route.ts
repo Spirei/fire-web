@@ -1,14 +1,20 @@
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { randomBytes } from "crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { getSiteSettings } from "@/lib/settings";
 import { listRecords } from "@/lib/store";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { marketMeta, type StockRecord } from "@/lib/types";
 import { listWatchGroups } from "@/lib/watchGroupsStore";
+import { listCardAmounts, listCardHoldings } from "@/lib/cardAmounts";
+import { getUserFire } from "@/lib/fireStore";
+import { getAssets } from "@/lib/assets";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type PageContext = { page?: string; label?: string; symbol?: string; filter?: string };
+type PageSnapshot = Record<string, unknown> | null;
 type AssistantAction =
   | { type: "navigate"; label: string; path: string }
   | { type: "create_group"; label: string; name: string; createdAt: string; actionId: string }
@@ -74,9 +80,68 @@ function compactRecords(records: StockRecord[]) {
   };
 }
 
-function fallbackAnswer(question: string, records: StockRecord[], context: PageContext) {
+function compactPageSnapshot(userId: string, page?: string): PageSnapshot {
+  if (page === "cards") {
+    const held = new Set(listCardHoldings(userId));
+    const balances: Record<string, number> = {};
+    let cardsWithAmount = 0;
+    listCardAmounts(userId).forEach((item) => {
+      if (!held.has(item.cardKey)) return;
+      const currency = String(item.currency || "未设置币种").toUpperCase();
+      balances[currency] = (balances[currency] || 0) + (Number(item.amount) || 0);
+      cardsWithAmount += 1;
+    });
+    return { heldCards: held.size, cardsWithAmount, recordedAmountsByCurrency: balances, amountNote: "录入金额按原币分列，可能包含额度，不等同于净资产" };
+  }
+  if (page === "fire") {
+    const fire = getUserFire(userId);
+    if (!fire) return { configured: false };
+    const allowed = ["annualExpense", "withdrawalRate", "annualReturn", "inflation", "savingsRate", "fireTargetBase", "fireTargetUsd", "currentInput", "passiveInput", "yearsInput", "displayCurrency", "baseCurrency"];
+    const snapshot = Object.fromEntries(allowed.flatMap((key) => {
+      const value = fire[key];
+      return typeof value === "string" || (typeof value === "number" && Number.isFinite(value)) ? [[key, value]] : [];
+    }));
+    return { configured: true, ...snapshot };
+  }
+  if (page === "library") {
+    const assets = getAssets();
+    const byType: Record<string, number> = {};
+    const missingLocal: string[] = [];
+    assets.forEach((asset) => {
+      byType[asset.type] = (byType[asset.type] || 0) + 1;
+      if (!asset.url.startsWith("/uploads/")) return;
+      let relative = asset.url.slice("/uploads/".length);
+      try { relative = decodeURIComponent(relative); } catch { missingLocal.push(`${asset.type}:${asset.market || "-"}:${asset.code}`); return; }
+      const roots = [path.join(process.cwd(), "public", "uploads"), path.join(process.cwd(), "resource-default")];
+      const candidates = roots.map((root) => path.resolve(root, relative)).filter((file, index) => file.startsWith(`${roots[index]}${path.sep}`));
+      if (!candidates.some((file) => { try { return fs.statSync(file).isFile(); } catch { return false; } })) missingLocal.push(`${asset.type}:${asset.market || "-"}:${asset.code}`);
+    });
+    return { total: assets.length, byType, missingLocalCount: missingLocal.length, missingLocal: missingLocal.slice(0, 20) };
+  }
+  return null;
+}
+
+function fallbackAnswer(question: string, records: StockRecord[], context: PageContext, pageSnapshot: PageSnapshot) {
   const summary = compactRecords(records);
   const page = context.label || PAGE_LABELS[context.page || ""] || "当前页面";
+  if (context.page === "cards" && pageSnapshot) {
+    const heldCards = Number(pageSnapshot.heldCards) || 0;
+    const cardsWithAmount = Number(pageSnapshot.cardsWithAmount) || 0;
+    const balances = Object.entries((pageSnapshot.recordedAmountsByCurrency || {}) as Record<string, number>);
+    const amountText = balances.length ? balances.map(([currency, amount]) => `${currency} ${amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`).join("、") : "暂无录入金额";
+    return `结论\n- 我的卡共 ${heldCards} 张，其中 ${cardsWithAmount} 张录入了金额。\n- 按原币汇总：${amountText}。\n\n下一步\n- 金额可能包含信用卡额度，不能直接当作净资产；需要看可用现金时，以资产分析中的银行卡现金口径为准。`;
+  }
+  if (context.page === "fire" && pageSnapshot) {
+    if (!pageSnapshot.configured) return "结论\n- FIRE 参数尚未保存。\n\n下一步\n- 先填写年支出、提款率和预期年化回报，再让我检查目标与进度口径。";
+    const currency = String(pageSnapshot.baseCurrency || pageSnapshot.displayCurrency || "当前币种");
+    return `结论\n- 当前 FIRE 参数已保存。\n- 年支出：${pageSnapshot.annualExpense ?? "未设置"} ${currency}；提款率：${pageSnapshot.withdrawalRate ?? "未设置"}%；预期年化回报：${pageSnapshot.annualReturn ?? "未设置"}%。\n- FIRE 目标：${pageSnapshot.fireTargetBase ?? "未设置"} ${currency}。\n\n下一步\n- 建议核对通胀率、储蓄率和当前资产，再评估预计达成时间。`;
+  }
+  if (context.page === "library" && pageSnapshot) {
+    const missing = Number(pageSnapshot.missingLocalCount) || 0;
+    const typeLabels: Record<string, string> = { stock: "股票", market: "市场", flag: "国家/地区旗帜", broker: "券商", group: "分组", crypto: "加密货币", metal: "贵金属", icon: "通用图标", card: "卡片" };
+    const byType = Object.entries((pageSnapshot.byType || {}) as Record<string, number>).map(([type, count]) => `${typeLabels[type] || type} ${count}`).join("、");
+    return `结论\n- 素材库共有 ${pageSnapshot.total ?? 0} 条记录：${byType || "暂无分类"}。\n- 本地文件缺失 ${missing} 条${missing ? `（${((pageSnapshot.missingLocal || []) as string[]).join("、")}）` : "，未发现明显失效素材"}。\n\n下一步\n- 外部地址是否失效需要实际联网检查；本地缺失项应优先重新上传或恢复内置素材。`;
+  }
   if (/诊断|异常|问题|缺失|空白/.test(question)) {
     const findings = [];
     if (summary.diagnostics.incompleteCount) findings.push(`${summary.diagnostics.incompleteCount} 条基础资料不完整（${summary.diagnostics.incomplete.join("、")}）`);
@@ -191,10 +256,11 @@ export async function POST(request: Request) {
   const settings = getSiteSettings();
   const apiKey = (settings.llmApiKey || settings.deepseekApiKey || process.env.LLM_API_KEY || process.env.DEEPSEEK_API_KEY || "").trim();
   const apiUrl = (settings.llmApiUrl || settings.deepseekApiUrl || "").trim();
-  if (!apiKey || !apiUrl) return NextResponse.json({ answer: fallbackAnswer(question, records, context), mode: "local" });
+  const pageSnapshot = compactPageSnapshot(user.id, context.page);
+  if (!apiKey || !apiUrl) return NextResponse.json({ answer: fallbackAnswer(question, records, context, pageSnapshot), mode: "local" });
 
   const pageLabel = context.label || PAGE_LABELS[context.page || ""] || "未知页面";
-  const system = `你是 Fire 投资记实里的账户助手。用简体中文回答，先给结论，再给依据和下一步。只能依据给出的账户上下文，不得编造实时价格、收益或新闻；不同市场的原币金额不能直接相加。你可以做分析、筛选建议和数据诊断，但不能声称已经执行交易或修改数据。涉及买卖判断时说明关键变量和风险，不给绝对承诺。当前页面：${pageLabel}${context.symbol ? `；当前股票：${context.symbol}` : ""}${context.filter ? `；当前筛选：${context.filter}` : ""}。账户上下文：${JSON.stringify(compactRecords(records))}`;
+  const system = `你是 Fire 投资记实里的账户助手。用简体中文回答，先给结论，再给依据和下一步。只能依据给出的账户上下文，不得编造实时价格、收益或新闻；不同市场的原币金额不能直接相加。你可以做分析、筛选建议和数据诊断，但不能声称已经执行交易或修改数据。涉及买卖判断时说明关键变量和风险，不给绝对承诺。当前页面：${pageLabel}${context.symbol ? `；当前股票：${context.symbol}` : ""}${context.filter ? `；当前筛选：${context.filter}` : ""}。账户上下文：${JSON.stringify(compactRecords(records))}。当前页面专属数据：${JSON.stringify(pageSnapshot)}`;
   try {
     const response = await fetch(apiUrl, {
       method: "POST",

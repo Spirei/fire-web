@@ -4,6 +4,8 @@ import { randomBytes } from "crypto";
 export interface StoredAssistantMessage {
   role: "user" | "assistant";
   content: string;
+  responseError?: boolean;
+  retryQuestion?: string;
   action?: Record<string, unknown>;
   actionStatus?: "running" | "done" | "error" | "uncertain";
   undo?: Record<string, unknown>;
@@ -107,6 +109,11 @@ export function sanitizeAssistantMessages(value: unknown): StoredAssistantMessag
     const row = item as Record<string, unknown>;
     if ((row.role !== "user" && row.role !== "assistant") || typeof row.content !== "string") return [];
     const message: StoredAssistantMessage = { role: row.role, content: row.content.slice(0, 4000) };
+    if (row.role === "assistant" && row.responseError === true) {
+      message.responseError = true;
+      const retryQuestion = text(row.retryQuestion, 1200);
+      if (retryQuestion) message.retryQuestion = retryQuestion;
+    }
     const action = sanitizeAction(row.action);
     if (action) message.action = action;
     if (["running", "done", "error", "uncertain"].includes(String(row.actionStatus))) {
