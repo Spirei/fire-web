@@ -3237,6 +3237,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "修复设置密钥泄露、跨市场导入覆盖、币种汇总与刷新，并完善移动端和普通用户权限。",
   software: V0_1_29_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.30" } : item),
   changes: [{
+    title: "设置页重塑为模型服务",
+    desc: "将容易误解为单一翻译能力的“翻译配置”更名为“模型服务”，并独立归入智能服务。页面按 DeepSeek、OpenAI 和自定义 OpenAI 兼容服务展示品牌图标、配置状态、当前模型与使用范围；编辑态改为提供方选择卡、API 地址、模型 ID 和密钥保护状态，手机端自动改为单列。模型配置与股票数据源分开保存，服务端同时限制提供方、URL 协议及模型 ID 长度。",
+    kind: "feature"
+  }, {
     title: "全站审查安全与数据修复",
     desc: "设置接口统一按白名单返回，管理员和普通用户均不再收到 LLM、数据库密码或雪球 Cookie；保存空密码保留已配置值。文件和截图导入共用市场与代码规则，保留 SHOP/USO 等合法证券代码、识别 CSV 引号和显式市场；跨市场同代码不再覆盖原持仓，歧义返回明确错误并回滚。资产总览按统一汇率折算为美元或请求的币种，补充报价来源与估值时间。",
     kind: "security"

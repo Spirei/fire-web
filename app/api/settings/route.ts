@@ -34,6 +34,19 @@ export async function PUT(request: Request) {
       }
     }
   }
+  if (body.llmApiUrl !== undefined) {
+    const value = String(body.llmApiUrl).trim();
+    if (value.length > 2048 || (value && !/^https?:\/\/[^\s]+$/i.test(value))) {
+      return NextResponse.json({ error: "模型 API 地址必须是有效的 http(s) 地址" }, { status: 400 });
+    }
+  }
+  if (body.llmModel !== undefined && String(body.llmModel).trim().length > 160) {
+    return NextResponse.json({ error: "模型 ID 不能超过 160 个字符" }, { status: 400 });
+  }
+  const llmProvider = body.llmProvider === "openai-compatible" ? "custom" : body.llmProvider;
+  if (llmProvider !== undefined && !["deepseek", "openai", "custom"].includes(llmProvider)) {
+    return NextResponse.json({ error: "不支持的模型提供方" }, { status: 400 });
+  }
 
   const before = getSiteSettings();
   const settings = updateSiteSettings({
@@ -71,9 +84,9 @@ export async function PUT(request: Request) {
     deepseekApiUrl: body.deepseekApiUrl !== undefined ? String(body.deepseekApiUrl) : undefined,
     deepseekModel: body.deepseekModel !== undefined ? String(body.deepseekModel) : undefined,
     deepseekApiKey: body.deepseekApiKey !== undefined ? String(body.deepseekApiKey) : undefined,
-    llmProvider: body.llmProvider !== undefined ? String(body.llmProvider) : undefined,
-    llmApiUrl: body.llmApiUrl !== undefined ? String(body.llmApiUrl) : undefined,
-    llmModel: body.llmModel !== undefined ? String(body.llmModel) : undefined,
+    llmProvider: ["deepseek", "openai", "custom"].includes(llmProvider) ? llmProvider : undefined,
+    llmApiUrl: body.llmApiUrl !== undefined ? String(body.llmApiUrl).trim() : undefined,
+    llmModel: body.llmModel !== undefined ? String(body.llmModel).trim() : undefined,
     llmApiKey: body.llmApiKey !== undefined ? String(body.llmApiKey) : undefined,
     tradingSquareTrumpRefreshMinutes: Number.isFinite(Number(body.tradingSquareTrumpRefreshMinutes)) ? Number(body.tradingSquareTrumpRefreshMinutes) : undefined,
     tradingSquareDuanRefreshMinutes: Number.isFinite(Number(body.tradingSquareDuanRefreshMinutes)) ? Number(body.tradingSquareDuanRefreshMinutes) : undefined,

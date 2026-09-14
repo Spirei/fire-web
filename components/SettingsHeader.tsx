@@ -124,6 +124,12 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
       <path d="M15 7h5v5" />
       <path d="M3 21h18" />
     </>
+  ),
+  model: (
+    <>
+      <path d="M12 3.2 14.1 8l4.7 2.1-4.7 2.1L12 17l-2.1-4.8-4.7-2.1L9.9 8Z" />
+      <path d="M18.3 15.2 19.2 17l1.8.8-1.8.8-.9 1.9-.8-1.9-1.9-.8 1.9-.8Z" />
+    </>
   )
 };
 

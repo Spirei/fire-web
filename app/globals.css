@@ -1703,6 +1703,93 @@ html.dark .watch-import-target {
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* 模型服务：提供方先于技术字段，配置态与用途一眼可见。 */
+.model-service-panel {
+  overflow: hidden;
+  border: 1px solid var(--sv-border, rgba(201, 206, 216, 0.82));
+  border-radius: 16px;
+  background: var(--sv-card, rgba(255, 255, 255, 0.88));
+}
+.model-service-summary {
+  display: flex;
+  min-height: 82px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 18px;
+}
+.model-provider-icon {
+  --model-color: #64748b;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--model-color) 20%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--model-color) 9%, white);
+  color: var(--model-color);
+}
+.model-provider-icon svg { width: 72%; height: 72%; }
+.model-provider-icon svg path:first-child:not([fill="none"]) { fill: currentColor; }
+.model-service-name { color: var(--sv-text, #111827); font-size: 15px; }
+.model-service-summary p { margin-top: 3px; color: var(--sv-text-3, #8b93a0); font-size: 12px; }
+.model-service-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  padding: 3px 8px;
+  color: var(--sv-text-3, #8b93a0);
+  font-size: 10px;
+  font-weight: 700;
+}
+.model-service-status i,.model-key-state i { width: 6px; height: 6px; border-radius: 50%; background: #a5adba; }
+.model-service-status.is-ready { background: rgba(34, 197, 94, 0.1); color: #168447; }
+.model-service-status.is-ready i,.model-key-state.is-ready i { background: #22c55e; }
+.model-service-use { flex: none; color: var(--sv-text-3, #8b93a0); font-size: 11px; }
+.model-service-readonly {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(120px, .7fr) minmax(110px, .55fr);
+  gap: 1px;
+  border-top: 1px solid var(--sv-border, #e5e7eb);
+  background: var(--sv-border, #e5e7eb);
+}
+.model-service-readonly > div { min-width: 0; padding: 13px 18px; background: var(--sv-card, white); }
+.model-service-readonly span { display: block; margin-bottom: 4px; color: var(--sv-text-3, #8b93a0); font-size: 10px; }
+.model-service-readonly b { display: block; overflow: hidden; color: var(--sv-text-2, #475569); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.model-service-editor { display: flex; flex-direction: column; gap: 16px; border-top: 1px solid var(--sv-border, #e5e7eb); padding: 18px; background: color-mix(in srgb, var(--sv-card, white) 92%, var(--sv-bg, #f8fafc)); }
+.model-service-label { margin-bottom: 8px; color: var(--sv-text-2, #475569); font-size: 11px; font-weight: 700; }
+.model-provider-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.model-provider-option { position: relative; display: flex; min-width: 0; align-items: center; gap: 9px; border: 1px solid var(--sv-border, #dde2e8); border-radius: 12px; background: var(--sv-card, white); padding: 10px; text-align: left; transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease; }
+.model-provider-option:hover { border-color: var(--sv-border-strong, #a8b0bc); }
+.model-provider-option.is-active { border-color: color-mix(in srgb, var(--sv-accent, #16a085) 58%, var(--sv-border, #dde2e8)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sv-accent, #16a085) 9%, transparent); }
+.model-provider-option span { min-width: 0; }
+.model-provider-option b,.model-provider-option small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-provider-option b { color: var(--sv-text, #111827); font-size: 12px; }
+.model-provider-option small { margin-top: 2px; color: var(--sv-text-3, #8b93a0); font-size: 10px; }
+.model-provider-check { position: absolute; top: 9px; right: 9px; width: 7px; height: 7px; border-radius: 50%; background: transparent; }
+.model-provider-option.is-active .model-provider-check { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, .1); }
+.model-field { display: flex; align-items: center; gap: 18px; }
+.model-field > span { width: 155px; flex: none; color: var(--sv-text, #111827); font-size: 12px; font-weight: 700; }
+.model-field > span small { display: block; margin-top: 3px; color: var(--sv-text-3, #8b93a0); font-size: 10px; font-weight: 400; }
+.model-field > .sw-row-input,.model-field > div { min-width: 0; flex: 1; }
+.model-key-state { position: absolute; top: 50%; right: 12px; display: inline-flex; align-items: center; gap: 5px; transform: translateY(-50%); color: var(--sv-text-3, #8b93a0); font-size: 10px; font-weight: 700; }
+.model-key-state.is-ready { color: #168447; }
+.model-privacy-note { display: flex; align-items: center; gap: 8px; border-radius: 10px; background: color-mix(in srgb, var(--sv-accent, #16a085) 6%, transparent); padding: 9px 11px; color: var(--sv-text-2, #64748b); font-size: 10.5px; }
+.dark .model-provider-icon { background: color-mix(in srgb, var(--model-color) 16%, #151a26); }
+.dark .model-service-status.is-ready,.dark .model-key-state.is-ready { color: #65d697; }
+
+@media (max-width: 767px) {
+  .model-service-summary { min-height: 70px; padding: 13px; }
+  .model-service-use { display: none; }
+  .model-service-readonly { grid-template-columns: 1fr; }
+  .model-provider-grid { grid-template-columns: 1fr; }
+  .model-field { align-items: stretch; flex-direction: column; gap: 7px; }
+  .model-field > span { width: auto; }
+  .model-service-editor { padding: 14px; }
+}
+
 @media (max-width: 767px) {
   .settings-overview {
     border-radius: 20px;
@@ -4938,4 +5025,18 @@ button.PhotoView-Slider__toolbarIcon {
 
 @media (max-width: 639px) {
   .assistant-panel { border-radius: 22px 22px 0 0; }
+}
+
+/* 放在主题窗口规则之后，确保模型服务保留自己的卡片层级和标题图标。 */
+.sv-win-root .sw-window .settings-model-section .settings-section-icon {
+  display: inline-flex !important;
+}
+.sv-win-root .sw-window .settings-model-section > .settings-section-top + .model-service-panel {
+  margin-top: 10px;
+  overflow: hidden;
+  border: 1px solid var(--sv-border);
+  border-radius: 16px;
+  background: var(--sv-card);
+  padding: 0;
+  box-shadow: 0 2px 10px rgba(10, 14, 25, 0.035);
 }

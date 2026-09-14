@@ -60,7 +60,7 @@ const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; group
   { sub: "features", anchor: "trading-square", label: "交易广场", groupLabel: "功能", keywords: "交易广场 特朗普 段永平 更新 刷新 频率 缓存" },
   { sub: "stocks", anchor: "groups", label: "券商分组", groupLabel: "股票", keywords: "券商 分组 别名 持仓" },
   { sub: "stocks", anchor: "market-badges", label: "市场色块", groupLabel: "股票", keywords: "市场 色块 徽标 颜色 显示 US HK A股 上证 深证 加密" },
-  { sub: "stocks", anchor: "translation", label: "翻译配置", groupLabel: "股票", keywords: "翻译配置 DeepSeek 交易广场 中文" },
+  { sub: "stocks", anchor: "translation", label: "模型服务", groupLabel: "智能服务", keywords: "模型服务 AI 大模型 账户助手 翻译 DeepSeek OpenAI API" },
   { sub: "stocks", anchor: "trade", label: "交易 · 富途", groupLabel: "股票", keywords: "富途 futu opend 交易 行情源 主机 端口 腾讯 yahoo 备用" },
   { sub: "stocks", anchor: "currency-display", label: "货币金额显示", groupLabel: "股票", keywords: "货币 单位 金额 万 百万 千万 亿 缩写" },
   { sub: "stocks", anchor: "sources", label: "股票来源接口", groupLabel: "股票", keywords: "股票来源 接口 行情 财报 图标 url 数据源" },
@@ -79,6 +79,7 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   "trading-square": "features",
   groups: "tag",
   "market-badges": "tag",
+  translation: "model",
   sources: "plug",
   trade: "trade",
   "currency-display": "stocks",
@@ -549,6 +550,35 @@ const DEFAULT_SETTINGS: SiteSettings = {
   holdingColumns: DEFAULT_HOLDING_COLUMNS,
   ticker: DEFAULT_TICKER
 };
+
+type ModelProviderId = "deepseek" | "openai" | "custom";
+const MODEL_PROVIDERS: Array<{ id: ModelProviderId; name: string; hint: string; color: string; url: string }> = [
+  { id: "deepseek", name: "DeepSeek", hint: "官方 API", color: "#4d6bfe", url: "https://api.deepseek.com/chat/completions" },
+  { id: "openai", name: "OpenAI", hint: "官方 API", color: "#10a37f", url: "https://api.openai.com/v1/chat/completions" },
+  { id: "custom", name: "自定义服务", hint: "OpenAI 兼容", color: "#64748b", url: "" }
+];
+
+function normalizedModelProvider(value: string): ModelProviderId {
+  const provider = String(value || "").toLowerCase();
+  if (provider.includes("deepseek")) return "deepseek";
+  if (provider === "openai") return "openai";
+  return "custom";
+}
+
+function ModelProviderIcon({ provider, className = "h-10 w-10" }: { provider: ModelProviderId; className?: string }) {
+  const meta = MODEL_PROVIDERS.find((item) => item.id === provider) || MODEL_PROVIDERS[2];
+  return (
+    <span className={`model-provider-icon ${className}`} style={{ "--model-color": meta.color } as React.CSSProperties} aria-hidden="true">
+      {provider === "deepseek" ? (
+        <svg viewBox="0 0 32 32"><path d="M5.2 17.2c3.7-1 5.4-3.8 5.8-8.1 2 3 4.8 4.7 8.7 4.9 2.4.1 4.5-.5 6.2-1.7-.6 5.9-4.9 10.7-11.1 11.4-4.5.5-8.1-1.4-9.6-6.5Z"/><path d="M20.2 10.6c1.8-2.2 4.3-2.8 7.1-1.7-1.2 2.7-3.5 4-6.9 3.7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+      ) : provider === "openai" ? (
+        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 5.2a6 6 0 0 1 10.2 4.3 6 6 0 0 1-.8 10.4A6 6 0 0 1 16 25.6a6 6 0 0 1-10.2-4.3 6 6 0 0 1 .8-10.4A6 6 0 0 1 16 5.2Z"/><path d="m10.7 9.2 10.6 6.1v7.1M21.4 9.4l-10.7 6.2v7M5.9 16h12.2"/></svg>
+      ) : (
+        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2"><path d="m12 9-7 7 7 7M20 9l7 7-7 7M18.5 6l-5 20" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      )}
+    </span>
+  );
+}
 
 interface DbStatus {
   type: string;
@@ -1247,6 +1277,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [showAllHomeNav, setShowAllHomeNav] = useState(false);
   const [showAllTabs, setShowAllTabs] = useState(false);
   const [editingSources, setEditingSources] = useState(false);
+  const [editingModel, setEditingModel] = useState(false);
   const [editingTradingSquare, setEditingTradingSquare] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   // 站点信息：不再有「编辑 / 保存」两步 —— 字段常驻可编辑，改动由全局自动保存（700ms 防抖 + 胶囊提示）落库
@@ -1263,7 +1294,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         : activeAnchor === "nav" ? (editingHomeNav || editingTabs)
           : activeAnchor === "groups" ? editingStockGroups
             : activeAnchor === "market-badges" ? editingMarketBadges
-            : activeAnchor === "sources" || activeAnchor === "translation" ? editingSources
+            : activeAnchor === "sources" ? editingSources
+              : activeAnchor === "translation" ? editingModel
               : activeAnchor === "trade" ? editingFutu
                 : activeAnchor === "profile" ? editingProfile
                   : activeAnchor === "database" ? editingDb
@@ -1278,7 +1310,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     else if (activeAnchor === "nav") { setEditingHomeNav(true); setEditingTabs(true); }
     else if (activeAnchor === "groups") setEditingStockGroups(true);
     else if (activeAnchor === "market-badges") setEditingMarketBadges(true);
-    else if (activeAnchor === "sources" || activeAnchor === "translation") setEditingSources(true);
+    else if (activeAnchor === "sources") setEditingSources(true);
+    else if (activeAnchor === "translation") setEditingModel(true);
     else if (activeAnchor === "trade") setEditingFutu(true);
     else if (activeAnchor === "profile") setEditingProfile(true);
     else if (activeAnchor === "database") setEditingDb(true);
@@ -1325,9 +1358,18 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           applyMarketBadges(nextBadges, site.marketBadgesVisible !== false);
           setEditingMarketBadges(false);
         }
-      } else if (activeAnchor === "sources" || activeAnchor === "translation") {
+      } else if (activeAnchor === "sources") {
         const ok = await saveStockSources();
         if (ok) setEditingSources(false);
+      } else if (activeAnchor === "translation") {
+        const key = site.llmApiKey.trim();
+        const ok = await saveBlock("model", {
+          llmProvider: site.llmProvider,
+          llmApiUrl: site.llmApiUrl,
+          llmModel: site.llmModel,
+          ...(key && key !== "********" ? { llmApiKey: key } : {})
+        }, "模型服务已保存");
+        if (ok) setEditingModel(false);
       } else if (activeAnchor === "trade") {
         const ok = await saveBlock("futu", { futuHost: site.futuHost, futuPort: site.futuPort, quoteSource: site.quoteSource }, "交易与行情源设置已保存");
         if (ok) setEditingFutu(false);
@@ -1349,7 +1391,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     else if (activeAnchor === "ticker") setEditingTicker(false);
     else if (activeAnchor === "nav") { setEditingHomeNav(false); setEditingTabs(false); }
     else if (activeAnchor === "sources") setEditingSources(false);
-    else if (activeAnchor === "futu") setEditingFutu(false);
+    else if (activeAnchor === "translation") setEditingModel(false);
+    else if (activeAnchor === "trade") setEditingFutu(false);
     else if (activeAnchor === "market-badges") setEditingMarketBadges(false);
   }
   function cancelActiveEdit() {
@@ -1504,8 +1547,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           trumpArchiveApiUrl: site.trumpArchiveApiUrl,
           translationApiUrl: site.translationApiUrl,
           deepseekApiUrl: site.deepseekApiUrl,
-          deepseekModel: site.deepseekModel,
-          llmProvider: site.llmProvider, llmApiUrl: site.llmApiUrl, llmModel: site.llmModel, ...(site.llmApiKey ? { llmApiKey: site.llmApiKey } : {})
+          deepseekModel: site.deepseekModel
         })
       });
       const data = await res.json().catch(() => null);
@@ -2783,9 +2825,85 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   )}
                 </SettingsSection>
 
-                <SettingsSection id="translation" icon="plug" title="翻译服务" desc="交易广场中文翻译与大模型配置（DeepSeek / OpenAI 兼容）" action={editingSources ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : <button type="button" onClick={() => setEditingSources(true)} className="btn btn-ghost btn-sm">编辑</button>}>
-                  {(["llmProvider", "llmApiUrl", "llmModel", "llmApiKey"] as const).map((key) => <div key={key} className="sw-row"><div className="sw-row-label"><b>{key === "llmProvider" ? "大模型提供商" : key === "llmApiUrl" ? "API 地址" : key === "llmModel" ? "模型名称" : <>API Key <span className={`ml-2 inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle ring-2 ring-white dark:ring-[#151b26] ${(site.llmApiKey || site.llmApiKeyConfigured) ? "bg-emerald-500" : "bg-slate-300"}`} title={(site.llmApiKey || site.llmApiKeyConfigured) ? "已配置" : "未配置"} /></>}</b></div><input className="sw-row-input" type={key === "llmApiKey" ? "password" : "text"} autoComplete="off" value={key === "llmApiKey" && !site.llmApiKey && site.llmApiKeyConfigured ? "********" : ((site as unknown as Record<string, string>)[key] || "")} onFocus={key === "llmApiKey" ? (e) => { if (e.currentTarget.value === "********") e.currentTarget.value = ""; } : undefined} onChange={(e) => setSite((s) => ({ ...s, [key]: e.target.value }))} onBlur={key === "llmApiKey" ? (e) => { const value = e.currentTarget.value.trim(); if (value) fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ llmApiKey: value }) }).then(() => setSite((s) => ({ ...s, llmApiKey: value }))).catch(() => {}); } : undefined} readOnly={!editingSources} placeholder={key === "llmModel" ? "deepseek-chat" : ""} /></div>)}
-                </SettingsSection>
+                {(() => {
+                  const provider = normalizedModelProvider(site.llmProvider);
+                  const providerMeta = MODEL_PROVIDERS.find((item) => item.id === provider) || MODEL_PROVIDERS[2];
+                  const configured = Boolean(site.llmApiKey || site.llmApiKeyConfigured);
+                  const chooseProvider = (next: typeof MODEL_PROVIDERS[number]) => setSite((current) => ({
+                    ...current,
+                    llmProvider: next.id,
+                    llmApiUrl: next.url || (normalizedModelProvider(current.llmProvider) === "custom" ? current.llmApiUrl : ""),
+                    llmModel: next.id === "deepseek" ? "deepseek-chat" : next.id === "openai" ? "" : current.llmModel
+                  }));
+                  return (
+                    <SettingsSection
+                      id="translation"
+                      icon="model"
+                      title="模型服务"
+                      desc="统一为账户助手与交易广场翻译提供智能能力"
+                      className="settings-model-section"
+                      action={editingModel ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : <button type="button" onClick={() => setEditingModel(true)} className="btn btn-ghost btn-sm">编辑</button>}
+                    >
+                      <div className="model-service-panel">
+                        <div className="model-service-summary">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <ModelProviderIcon provider={provider} />
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <strong className="model-service-name">{providerMeta.name}</strong>
+                                <span className={`model-service-status ${configured ? "is-ready" : ""}`}><i />{configured ? "已配置" : "待配置"}</span>
+                              </div>
+                              <p className="truncate">{site.llmModel || "尚未选择模型"} · {providerMeta.hint}</p>
+                            </div>
+                          </div>
+                          {!editingModel && <span className="model-service-use">账户助手 · 内容翻译</span>}
+                        </div>
+
+                        {editingModel ? (
+                          <div className="model-service-editor">
+                            <div>
+                              <p className="model-service-label">选择提供方</p>
+                              <div className="model-provider-grid">
+                                {MODEL_PROVIDERS.map((item) => (
+                                  <button key={item.id} type="button" onClick={() => chooseProvider(item)} className={`model-provider-option ${provider === item.id ? "is-active" : ""}`}>
+                                    <ModelProviderIcon provider={item.id} className="h-8 w-8" />
+                                    <span><b>{item.name}</b><small>{item.hint}</small></span>
+                                    <i className="model-provider-check" />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <label className="model-field">
+                              <span>API 地址<small>仅允许 HTTP / HTTPS 的 OpenAI 兼容接口</small></span>
+                              <input className="sw-row-input" value={site.llmApiUrl} onChange={(event) => setSite((current) => ({ ...current, llmApiUrl: event.target.value }))} placeholder="https://api.example.com/v1/chat/completions" autoComplete="off" />
+                            </label>
+                            <label className="model-field">
+                              <span>模型 ID<small>填写提供方公布的模型标识</small></span>
+                              <input className="sw-row-input" value={site.llmModel} onChange={(event) => setSite((current) => ({ ...current, llmModel: event.target.value }))} placeholder={provider === "deepseek" ? "deepseek-chat" : "输入模型 ID"} autoComplete="off" />
+                            </label>
+                            <label className="model-field">
+                              <span>API 密钥<small>仅保存在服务端，留空不会覆盖已保存密钥</small></span>
+                              <div className="relative min-w-0 flex-1">
+                                <input className="sw-row-input !w-full pr-24" type="password" autoComplete="new-password" value={!site.llmApiKey && site.llmApiKeyConfigured ? "********" : site.llmApiKey} onFocus={(event) => { if (event.currentTarget.value === "********") setSite((current) => ({ ...current, llmApiKey: "" })); }} onChange={(event) => setSite((current) => ({ ...current, llmApiKey: event.target.value }))} placeholder={configured ? "已配置，输入新值可替换" : "输入 API Key"} />
+                                <span className={`model-key-state ${configured ? "is-ready" : ""}`}><i />{configured ? "已保护" : "未配置"}</span>
+                              </div>
+                            </label>
+                            <div className="model-privacy-note">
+                              <SubNavIcon name="key" className="h-4 w-4" />
+                              <span>密钥不会下发浏览器；提问时只向当前提供方发送受控账户摘要。</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="model-service-readonly">
+                            <div><span>API 地址</span><b title={site.llmApiUrl}>{site.llmApiUrl || "未设置"}</b></div>
+                            <div><span>模型 ID</span><b>{site.llmModel || "未设置"}</b></div>
+                            <div><span>密钥</span><b>{configured ? "已安全保存" : "未配置"}</b></div>
+                          </div>
+                        )}
+                      </div>
+                    </SettingsSection>
+                  );
+                })()}
 
                 {/* 交易：富途 OpenAPI 连接配置 + 行情源切换（两块分开，不揉在一起） */}
                 <SettingsSection
@@ -3373,7 +3491,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>数据与服务</b><span>本地优先，可切换企业数据库</span></div>
-                    <span className="settings-detail-value">Node.js · SQLite · PostgreSQL · SheetJS(xlsx)</span>
+                    <span className="settings-detail-value">Node.js · SQLite · PostgreSQL · ExcelJS</span>
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>部署运行</b><span>容器镜像与受限更新</span></div>

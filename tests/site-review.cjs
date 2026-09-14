@@ -52,6 +52,21 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal((await settingsRoute.GET(request())).status, 401);
     assert.equal((await settingsRoute.PUT(request('user', {assetMarketOrder:['HK','US']},'PUT'))).status,403);
   });
+  await test('model service validates provider, URL and model id', async () => {
+    assert.equal((await settingsRoute.PUT(request('admin', {llmApiUrl:'file:///etc/passwd'},'PUT'))).status,400);
+    assert.equal((await settingsRoute.PUT(request('admin', {llmModel:'x'.repeat(161)},'PUT'))).status,400);
+    assert.equal((await settingsRoute.PUT(request('admin', {llmProvider:'unknown'},'PUT'))).status,400);
+    const saved = await settingsRoute.PUT(request('admin', {llmProvider:'openai',llmApiUrl:'https://api.openai.com/v1/chat/completions',llmModel:'gpt-test'},'PUT'));
+    assert.equal(saved.status,200);
+    assert.equal(settings.getSiteSettings().llmProvider,'openai');
+    assert.equal(settings.getSiteSettings().llmModel,'gpt-test');
+  });
+  await test('model service navigation and provider icons stay explicit', () => {
+    const source=fs.readFileSync(path.join(root,'components/views/SettingsView.tsx'),'utf8');
+    assert(source.includes('label: "模型服务"'));
+    assert(source.includes('function ModelProviderIcon'));
+    assert(!source.includes('label: "翻译配置"'));
+  });
   const { applyImport, buildImportPreview } = require(path.join(root, 'lib/importSnapshot.ts'));
   const row = (code, market, extra={}) => ({code, market, name: code, price:null,cost:null,qty:null,...extra});
   await test('real SQLite: same ticker across markets remains distinct; leading zeros deduplicate; ambiguity rolls back', () => {
