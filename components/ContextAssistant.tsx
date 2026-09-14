@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconHistory, IconMessageCircle, IconMinus, IconPin, IconPinnedOff, IconPlus, IconRefresh, IconTrash, IconX } from "@tabler/icons-react";
+import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconHistory, IconMessageCircle, IconMinus, IconPin, IconPlus, IconRefresh, IconTrash, IconX } from "@tabler/icons-react";
 import type { AssistantHistoryState, StoredAssistantConversation, StoredAssistantMessage } from "@/lib/assistantHistory";
 
 type AssistantAction =
@@ -502,7 +502,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
               <div className="min-w-0 flex-1 text-sm font-semibold text-ink">账户助手</div>
               {conversations.length > 0 && <button type="button" disabled={actionBusy} onClick={() => setHistoryOpen((value) => !value)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="历史对话" title="历史对话"><IconHistory size={18} /></button>}
               {messages.length > 0 && <button type="button" disabled={actionBusy} onClick={startNewChat} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="开始新对话" title={actionBusy ? "操作完成后可开始新对话" : "开始新对话"}><IconPlus size={18} /></button>}
-              <button type="button" aria-pressed={pinned} onClick={() => setPinned((value) => { const next = !value; writePersistentPreference(`fire:assistant:pinned:${userId}`, next ? "1" : "0"); return next; })} className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${pinned ? "bg-[#e8faf6] text-[#0d9488]" : "text-muted hover:bg-bg-gray"}`} aria-label={pinned ? "取消置顶" : "置顶账户助手"} title={pinned ? "已置顶，点击取消" : "置顶面板"}>{pinned ? <IconPinnedOff size={17} /> : <IconPin size={17} />}</button>
+              <button type="button" aria-pressed={pinned} onClick={() => setPinned((value) => { const next = !value; writePersistentPreference(`fire:assistant:pinned:${userId}`, next ? "1" : "0"); return next; })} className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-bg-gray" aria-label={pinned ? "取消置顶" : "置顶账户助手"} title={pinned ? "已置顶，点击取消" : "置顶面板"}><IconPin size={17} /></button>
               <button type="button" onClick={() => setMinimized((value) => !value)} className="hidden h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray sm:flex" aria-label={minimized ? "展开" : "最小化"}><IconMinus size={18} /></button>
               <button type="button" onClick={() => setOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭"><IconX size={18} /></button>
             </header>

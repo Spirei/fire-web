@@ -3237,6 +3237,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "修复设置密钥泄露、跨市场导入覆盖、币种汇总与刷新，并完善移动端和普通用户权限。",
   software: V0_1_29_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.30" } : item),
   changes: [{
+    title: "收敛账户助手图钉颜色",
+    desc: "图钉按钮与最小化、关闭按钮统一使用中性灰色，移除置顶状态下的青色背景与高对比图标；置顶功能仍通过按钮提示和无障碍状态保留，不再抢标题栏视觉焦点。",
+    kind: "fix"
+  }, {
     title: "修复模型服务保存与图标隔离",
     desc: "模型服务允许先保存尚未填写 API 密钥的待完善配置，密钥继续只在真正调用时作为可用条件。上传的服务图标同步显示在当前提供方选择卡；切换到 DeepSeek、OpenAI 或自定义提供方时恢复各自正确默认图标，不再沿用上一个提供方的上传图。每次上传按服务与批次生成独立文件地址，避免其他服务误用 DeepSeek 图标或浏览器命中旧缓存。",
     kind: "fix"
