@@ -880,7 +880,7 @@ export default function RecordsApp({
         </div>
       </div>
     </div>
-    <ContextAssistant page={activeTab} symbol={initialSymbol} />
+    <ContextAssistant page={activeTab} symbol={initialSymbol} userId={user.id} />
     </>
   );
 }

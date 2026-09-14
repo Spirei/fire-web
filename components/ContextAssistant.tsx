@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconMessageCircle, IconMinus, IconSparkles, IconX } from "@tabler/icons-react";
+import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconMessageCircle, IconMinus, IconPlus, IconSparkles, IconX } from "@tabler/icons-react";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -21,18 +21,45 @@ function displayText(text: string) {
   return text.split("\n").map((line, index) => <span key={`${index}-${line}`} className="block min-h-[1.35em]">{line}</span>);
 }
 
-export default function ContextAssistant({ page, symbol }: { page: string; symbol?: string }) {
+const MAX_SAVED_MESSAGES = 30;
+
+function historyKey(userId: string) {
+  return `fire:assistant:history:${userId}`;
+}
+
+export default function ContextAssistant({ page, symbol, userId }: { page: string; symbol?: string; userId: string }) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [historyReady, setHistoryReady] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const copy = PAGE_COPY[page] || { label: "当前页面", prompts: ["概览当前数据", "检查数据异常", "给我下一步建议"] };
   const contextLabel = useMemo(() => symbol ? `${copy.label} · ${symbol}` : copy.label, [copy.label, symbol]);
 
   useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(historyKey(userId)) || "[]") as Message[];
+      if (Array.isArray(saved)) {
+        setMessages(saved.filter((item) => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string").slice(-MAX_SAVED_MESSAGES));
+      }
+    } catch {
+      localStorage.removeItem(historyKey(userId));
+    } finally {
+      setHistoryReady(true);
+    }
+  }, [userId]);
+  useEffect(() => {
+    if (!historyReady) return;
+    try {
+      localStorage.setItem(historyKey(userId), JSON.stringify(messages.slice(-MAX_SAVED_MESSAGES)));
+    } catch {
+      /* 存储空间不可用时仍保留当前会话 */
+    }
+  }, [historyReady, messages, userId]);
   useEffect(() => { if (open) endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading, open]);
 
   async function send(value: string) {
@@ -59,6 +86,12 @@ export default function ContextAssistant({ page, symbol }: { page: string; symbo
     }
   }
 
+  function startNewChat() {
+    setMessages([]);
+    setInput("");
+    try { localStorage.removeItem(historyKey(userId)); } catch { /* ignore */ }
+  }
+
   if (!mounted) return null;
   return createPortal(
     <>
@@ -73,6 +106,7 @@ export default function ContextAssistant({ page, symbol }: { page: string; symbo
             <header className="flex min-h-[68px] items-center gap-3 border-b border-edge px-5">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#171b24] text-white dark:bg-white dark:text-[#11151d]"><IconSparkles size={18} /></span>
               <div className="min-w-0 flex-1"><div className="text-sm font-semibold text-ink">账户助手</div><div className="truncate text-[11px] text-muted">正在查看：{contextLabel}</div></div>
+              {messages.length > 0 && <button type="button" onClick={startNewChat} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="开始新对话" title="开始新对话"><IconPlus size={18} /></button>}
               <button type="button" onClick={() => setMinimized((value) => !value)} className="hidden h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray sm:flex" aria-label={minimized ? "展开" : "最小化"}><IconMinus size={18} /></button>
               <button type="button" onClick={() => setOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭"><IconX size={18} /></button>
             </header>
