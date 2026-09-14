@@ -43,7 +43,6 @@ import GlobalPreviewView from "@/components/views/GlobalPreviewView";
 import AssetPnlAnalysisView from "@/components/AssetPnlAnalysis";
 import ContextAssistant from "@/components/ContextAssistant";
 import AssistantView from "@/components/views/AssistantView";
-import SidebarPet from "@/components/SidebarPet";
 
 // 后台页签全部同步引入：next/dynamic 的 loading 会在刷新水合时盖住已 SSR 的内容，整页闪「加载中…」。
 
@@ -774,9 +773,6 @@ export default function RecordsApp({
       {/* 桌面侧边导航 */}
       <aside className="fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block">
         <nav className="fire-sidebar-panel relative min-h-[calc(100vh-112px)] overflow-hidden rounded-2xl px-2 pb-3 pt-3">
-          <div className="fire-sidebar-brand mb-3 flex items-center px-3">
-            <SidebarPet userId={user.id} />
-          </div>
           <div className="fire-sidebar-section-label">工作区</div>
           {sidebarTabs.map((t, index) => {
             const isManagement = ["users", "attachments", "library", "cards", "activities", "settings"].includes(t.key);
