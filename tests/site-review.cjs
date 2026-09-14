@@ -61,6 +61,24 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(settings.getSiteSettings().llmProvider,'openai');
     assert.equal(settings.getSiteSettings().llmModel,'gpt-test');
   });
+  await test('ordered model services preserve secrets and expose only configured state', async () => {
+    const services=[
+      {id:'primary',name:'主模型',provider:'deepseek',icon:'',apiUrl:'https://api.deepseek.com/chat/completions',apiKey:'SECRET_PRIMARY',models:['deepseek-chat','deepseek-reasoner']},
+      {id:'backup',name:'备用模型',provider:'custom',icon:'',apiUrl:'https://models.example.com/v1/chat/completions',apiKey:'SECRET_BACKUP',models:['backup-fast']}
+    ];
+    assert.equal((await settingsRoute.PUT(request('admin',{modelServices:services},'PUT'))).status,200);
+    const client=await (await settingsRoute.GET(request('admin'))).json();
+    assert(!JSON.stringify(client).includes('SECRET_'));
+    assert.equal(client.settings.modelServices[0].apiKeyConfigured,true);
+    const reordered=[{...client.settings.modelServices[1]},{...client.settings.modelServices[0]}];
+    assert.equal((await settingsRoute.PUT(request('admin',{modelServices:reordered},'PUT'))).status,200);
+    const saved=settings.getSiteSettings().modelServices;
+    assert.deepEqual(saved.map(item=>item.id),['backup','primary']);
+    assert.deepEqual(saved.flatMap(item=>item.models),['backup-fast','deepseek-chat','deepseek-reasoner']);
+    assert.equal(saved[0].apiKey,'SECRET_BACKUP');
+    const {modelAttempts}=require(path.join(root,'lib/modelServices.ts'));
+    assert.deepEqual(modelAttempts(settings.getSiteSettings()).map(item=>`${item.service.name}:${item.model}`),['备用模型:backup-fast','主模型:deepseek-chat','主模型:deepseek-reasoner']);
+  });
   await test('model service navigation and provider icons stay explicit', () => {
     const source=fs.readFileSync(path.join(root,'components/views/SettingsView.tsx'),'utf8');
     assert(source.includes('label: "模型服务"'));

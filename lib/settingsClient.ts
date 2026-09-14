@@ -21,6 +21,11 @@ export function clientSettings(settings: SiteSettings, admin: boolean) {
     pgPassword: "", llmApiKey: "", deepseekApiKey: "", xueqiuCookie: "",
     pgPasswordConfigured: admin && Boolean(settings.pgPassword),
     llmApiKeyConfigured: admin && Boolean(settings.llmApiKey || settings.deepseekApiKey),
+    modelServices: admin ? settings.modelServices.map(service => ({
+      ...service,
+      apiKey: "",
+      apiKeyConfigured: Boolean(service.apiKey)
+    })) : [],
     xueqiuCookieConfigured: admin && Boolean(settings.xueqiuCookie)
   };
 }

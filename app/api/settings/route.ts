@@ -5,6 +5,8 @@ import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getSiteSettings, normalizeFutuHost, updateSiteSettings } from "@/lib/settings";
 import { syncRecordGroups } from "@/lib/brokers";
 import { localPathOf, removeFileIfUnused } from "@/lib/fileCleanup";
+import { normalizeModelServices } from "@/lib/modelServices";
+import { validateAssistantEndpoint } from "@/lib/assistantSecurity";
 
 export async function GET(request: Request) {
   const user = getAuthUser(request);
@@ -36,7 +38,7 @@ export async function PUT(request: Request) {
   }
   if (body.llmApiUrl !== undefined) {
     const value = String(body.llmApiUrl).trim();
-    if (value.length > 2048 || (value && !/^https?:\/\/[^\s]+$/i.test(value))) {
+    if (value.length > 2048 || (value && !validateAssistantEndpoint(value))) {
       return NextResponse.json({ error: "模型 API 地址必须是有效的 http(s) 地址" }, { status: 400 });
     }
   }
@@ -46,6 +48,28 @@ export async function PUT(request: Request) {
   const llmProvider = body.llmProvider === "openai-compatible" ? "custom" : body.llmProvider;
   if (llmProvider !== undefined && !["deepseek", "openai", "custom"].includes(llmProvider)) {
     return NextResponse.json({ error: "不支持的模型提供方" }, { status: 400 });
+  }
+
+  let modelServices = undefined;
+  if (body.modelServices !== undefined) {
+    if (!Array.isArray(body.modelServices)) return NextResponse.json({ error: "模型服务格式无效" }, { status: 400 });
+    if (body.modelServices.some((item: unknown) => !item || typeof item !== "object" || !["deepseek", "openai", "custom"].includes(String((item as { provider?: unknown }).provider)))) {
+      return NextResponse.json({ error: "模型服务提供方无效" }, { status: 400 });
+    }
+    const incoming = normalizeModelServices(body.modelServices);
+    if (incoming.length !== body.modelServices.length) return NextResponse.json({ error: "模型服务格式无效" }, { status: 400 });
+    const previousSettings = getSiteSettings();
+    const previous = new Map(previousSettings.modelServices.map(item => [item.id, item]));
+    modelServices = incoming.map(item => ({
+      ...item,
+      apiKey: item.apiKey || previous.get(item.id)?.apiKey || (item.id === "legacy-primary" ? previousSettings.llmApiKey || previousSettings.deepseekApiKey : "")
+    }));
+    for (const item of modelServices) {
+      if (!item.name || !item.models.length) return NextResponse.json({ error: "每个模型服务都需要名称和至少一个模型" }, { status: 400 });
+      if (!validateAssistantEndpoint(item.apiUrl)) return NextResponse.json({ error: `${item.name} 的 API 地址无效或不安全` }, { status: 400 });
+      if (!item.apiKey) return NextResponse.json({ error: `${item.name} 尚未配置 API 密钥` }, { status: 400 });
+      if (item.icon && !/^\/uploads\/(?:asset\/icon|logo)\//.test(item.icon)) return NextResponse.json({ error: `${item.name} 的图标路径无效` }, { status: 400 });
+    }
   }
 
   const before = getSiteSettings();
@@ -88,6 +112,7 @@ export async function PUT(request: Request) {
     llmApiUrl: body.llmApiUrl !== undefined ? String(body.llmApiUrl).trim() : undefined,
     llmModel: body.llmModel !== undefined ? String(body.llmModel).trim() : undefined,
     llmApiKey: body.llmApiKey !== undefined ? String(body.llmApiKey) : undefined,
+    modelServices,
     tradingSquareTrumpRefreshMinutes: Number.isFinite(Number(body.tradingSquareTrumpRefreshMinutes)) ? Number(body.tradingSquareTrumpRefreshMinutes) : undefined,
     tradingSquareDuanRefreshMinutes: Number.isFinite(Number(body.tradingSquareDuanRefreshMinutes)) ? Number(body.tradingSquareDuanRefreshMinutes) : undefined,
     xueqiuCookie: body.xueqiuCookie !== undefined ? String(body.xueqiuCookie) : undefined,
@@ -114,6 +139,10 @@ export async function PUT(request: Request) {
   });
   if (Array.isArray(body.groups)) {
     syncRecordGroups(before.groups, settings.groups);
+  }
+  if (modelServices) {
+    const activeIcons = new Set(settings.modelServices.map(item => item.icon).filter(Boolean));
+    before.modelServices.forEach(item => { if (item.icon && !activeIcons.has(item.icon)) removeFileIfUnused(item.icon); });
   }
   // 网站形象 / 站点 Logo 替换后删除旧本地文件，保留唯一（不堆积 ico / background / logo）
   ["ico", "homepageBg", "siteLogo"].forEach((k) => {

@@ -2,6 +2,7 @@ import { getDb } from "./db";
 import type { GroupConfig, HomeNavItem, Market, SiteSettings, TabConfig, TickerConfig } from "./types";
 import { DEFAULT_MARKET_BADGES, normalizeMarketBadges } from "./marketBadge";
 import { DEFAULT_HOLDING_COLUMNS, normalizeHoldingColumns } from "./holdingColumns";
+import { normalizeModelServices } from "./modelServices";
 import fs from "fs";
 import path from "path";
 
@@ -98,6 +99,7 @@ const DEFAULTS: SiteSettings = {
   llmApiUrl: "https://api.deepseek.com/chat/completions",
   llmModel: "deepseek-chat",
   llmApiKey: "",
+  modelServices: [],
   xueqiuCookie: "",
   tradingSquareTrumpRefreshMinutes: 5,
   tradingSquareDuanRefreshMinutes: 5,
@@ -414,6 +416,10 @@ export function getSiteSettings(): SiteSettings {
       }
     } catch { /* 无效指数配置忽略 */ }
   }
+  if (typeof map.modelServices === "string") {
+    try { result.modelServices = normalizeModelServices(JSON.parse(map.modelServices)); }
+    catch { /* 无效模型服务配置忽略 */ }
+  }
   result.allowRegister = map.allowRegister !== "0";
   result.stockIconCdn = map.stockIconCdn === "1";
   result.marketBadgesVisible = map.marketBadgesVisible !== "0";
@@ -438,6 +444,9 @@ export function updateSiteSettings(patch: Partial<SiteSettings>): SiteSettings {
     if (["xueqiuCookie", "pgPassword", "llmApiKey", "deepseekApiKey"].includes(k) && (!trimmed || trimmed === "********")) return;
     upsert.run(k, trimmed);
   });
+  if (Array.isArray(patch.modelServices)) {
+    upsert.run("modelServices", JSON.stringify(normalizeModelServices(patch.modelServices)));
+  }
   if (patch.dbType === "sqlite" || patch.dbType === "postgres") {
     upsert.run("dbType", patch.dbType);
   }

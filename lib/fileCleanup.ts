@@ -35,6 +35,12 @@ export function urlReferenced(url: string): boolean {
   const db = getDb();
   const a = (db.prepare("SELECT COUNT(*) AS c FROM assets WHERE url = ?").get(url) as { c: number }).c;
   const s = (db.prepare("SELECT COUNT(*) AS c FROM site_settings WHERE value = ?").get(url) as { c: number }).c;
+  const modelRow = db.prepare("SELECT value FROM site_settings WHERE key = 'modelServices'").get() as { value?: string } | undefined;
+  let modelServiceRef = 0;
+  try {
+    const services = JSON.parse(modelRow?.value || "[]") as Array<{ icon?: string }>;
+    if (services.some(item => item?.icon === url)) modelServiceRef = 1;
+  } catch { /* malformed settings do not count as references */ }
   const u = (db.prepare("SELECT COUNT(*) AS c FROM users WHERE avatar = ?").get(url) as { c: number }).c;
   const c = (db.prepare("SELECT COUNT(*) AS c FROM celebs WHERE avatar = ?").get(url) as { c: number }).c;
   let celebJson = 0;
@@ -44,7 +50,7 @@ export function urlReferenced(url: string): boolean {
   } catch {
     /* 无文件忽略 */
   }
-  return a + s + u + c + celebJson > 0;
+  return a + s + u + c + celebJson + modelServiceRef > 0;
 }
 
 /* 删除本地文件（仅当没有其他引用，避免误删共享图片） */
@@ -120,6 +126,10 @@ export function cleanupOrphanFiles(): { removed: number; failed: number } {
   (
     db.prepare("SELECT value FROM site_settings WHERE key IN ('ico','homepageBg','siteLogo')").all() as { value: string }[]
   ).forEach((r) => addRef(r.value));
+  try {
+    const row = db.prepare("SELECT value FROM site_settings WHERE key = 'modelServices'").get() as { value?: string } | undefined;
+    (JSON.parse(row?.value || "[]") as Array<{ icon?: string }>).forEach(item => addRef(item?.icon));
+  } catch { /* 无效模型服务配置忽略 */ }
   try {
     const avatars = JSON.parse(fs.readFileSync(CELEB_AVATARS_FILE, "utf8")) as Record<string, string>;
     Object.values(avatars).forEach((u) => addRef(u));

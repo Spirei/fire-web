@@ -280,6 +280,7 @@ export interface SiteSettings {
   llmModel: string;
   llmApiKey: string;
   llmApiKeyConfigured?: boolean;
+  modelServices: ModelServiceConfig[];
   tradingSquareTrumpRefreshMinutes: number;
   tradingSquareDuanRefreshMinutes: number;
   xueqiuCookie: string;
@@ -291,6 +292,17 @@ export interface SiteSettings {
   pgUser: string;
   pgPassword: string;
   ticker: TickerConfig;
+}
+
+export interface ModelServiceConfig {
+  id: string;
+  name: string;
+  provider: "deepseek" | "openai" | "custom";
+  icon: string;
+  apiUrl: string;
+  apiKey: string;
+  apiKeyConfigured?: boolean;
+  models: string[];
 }
 
 export interface TickerItemConfig {

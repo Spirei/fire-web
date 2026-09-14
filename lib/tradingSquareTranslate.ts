@@ -2,6 +2,7 @@ import path from "node:path";
 import { getSiteSettings } from "@/lib/settings";
 import { readJsonFile, writeJsonAtomic } from "@/lib/tradingSquareCache";
 import { hasTranslatableText } from "@/lib/tradingSquareText";
+import { modelAttempts } from "@/lib/modelServices";
 
 const TRANSLATIONS = path.join(process.cwd(), "data", "trump-translations.json");
 
@@ -26,37 +27,37 @@ const recentlyFailed = new Map<string, number>();
 let llmCooldownUntil = 0;
 let memoryCooldownUntil = 0;
 
-function llmKey(): string {
-  const settings = getSiteSettings();
-  return (settings.llmApiKey || settings.deepseekApiKey || process.env.DEEPSEEK_API_KEY || process.env.LLM_API_KEY || "").trim();
-}
-
 async function translateWithLlm(text: string): Promise<string | undefined> {
   if (Date.now() < llmCooldownUntil) return undefined;
-  const key = llmKey();
-  if (!key) return undefined;
   const settings = getSiteSettings();
-  const translation = await fetch(settings.llmApiUrl || settings.deepseekApiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model: settings.llmModel || settings.deepseekModel || "deepseek-chat",
-      temperature: 0.1,
-      messages: [
-        { role: "system", content: "将用户提供的英文社交媒体内容准确翻译为简体中文，只输出译文，不添加解释。" },
-        { role: "user", content: text.slice(0, 4000) }
-      ]
-    }),
-    signal: AbortSignal.timeout(12000),
-    cache: "no-store"
-  });
-  if (translation.status === 429) {
-    llmCooldownUntil = Date.now() + 10 * 60 * 1000;
-    return undefined;
+  const attempts = modelAttempts(settings);
+  if (!attempts.length) return undefined;
+  let rateLimited = true;
+  for (const attempt of attempts) {
+    try {
+      const translation = await fetch(attempt.apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${attempt.service.apiKey}` },
+        body: JSON.stringify({
+          model: attempt.model,
+          temperature: 0.1,
+          messages: [
+            { role: "system", content: "将用户提供的英文社交媒体内容准确翻译为简体中文，只输出译文，不添加解释。" },
+            { role: "user", content: text.slice(0, 4000) }
+          ]
+        }),
+        signal: AbortSignal.timeout(12000),
+        cache: "no-store"
+      });
+      rateLimited &&= translation.status === 429;
+      if (!translation.ok) continue;
+      const data = await translation.json() as { choices?: Array<{ message?: { content?: string } }> };
+      const translated = data.choices?.[0]?.message?.content?.trim();
+      if (translated) return translated;
+    } catch { rateLimited = false; }
   }
-  if (!translation.ok) return undefined;
-  const data = await translation.json() as { choices?: Array<{ message?: { content?: string } }> };
-  return data.choices?.[0]?.message?.content?.trim();
+  if (rateLimited) llmCooldownUntil = Date.now() + 10 * 60 * 1000;
+  return undefined;
 }
 
 async function translateWithMyMemory(text: string): Promise<string | undefined> {
