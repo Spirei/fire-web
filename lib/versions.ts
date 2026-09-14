@@ -3237,6 +3237,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "修复设置密钥泄露、跨市场导入覆盖、币种汇总与刷新，并完善移动端和普通用户权限。",
   software: V0_1_29_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.30" } : item),
   changes: [{
+    title: "智能助手与模型服务边界加固",
+    desc: "Review 修复多模态与模型代理的真实使用边界：连续粘贴或拖拽图片时原子预留容量，避免并发绕过 100MB 总量；图片读取失败给出可恢复提示；服务端精确核算原始图片字节并明确拒绝损坏或超限数据，不再静默丢图。停止生成会同步取消上游模型请求，模型回答与连通性测试响应增加硬性体积上限，设置写入也改为有界读取，避免异常服务或超大请求持续占用内存。",
+    kind: "security"
+  }, {
     title: "智能助手支持多模态图片提问",
     desc: "回答输入框支持粘贴图片、拖拽图片和文件选择，发送前展示可单独移除的缩略图；图片以 OpenAI 兼容的 image_url 内容随当次问题发送给多模态模型，不写入长期对话数据库。接受所有 image/* 格式，不限张数，单次提问的图片总量上限为 100MB。",
     kind: "feature"

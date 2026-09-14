@@ -13,7 +13,7 @@ import { getUserFire } from "@/lib/fireStore";
 import { getAssets } from "@/lib/assets";
 import { normalizeAssistantContext } from "@/lib/assistantSecurity";
 import { modelAttempts } from "@/lib/modelServices";
-import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
+import { readLimitedJson, readLimitedResponseJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type AssistantImage = { name: string; dataUrl: string };
@@ -256,15 +256,19 @@ export async function POST(request: Request) {
     throw error;
   }
   const messages = (Array.isArray(body?.messages) ? body.messages : []).filter((item) => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string").slice(-10);
-  let encodedImageBytes = 0;
+  if (messages.at(-1)?.role !== "user") return NextResponse.json({ error: "请输入问题" }, { status: 400 });
+  let imageBytes = 0;
+  let invalidImage = false;
   const images = (Array.isArray(body?.images) ? body.images : []).flatMap((image) => {
-    if (!image || typeof image !== "object" || typeof image.dataUrl !== "string") return [];
+    if (!image || typeof image !== "object" || typeof image.dataUrl !== "string") { invalidImage = true; return []; }
     const match = image.dataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/i);
-    if (!match) return [];
-    encodedImageBytes += match[2].length;
-    if (encodedImageBytes > Math.ceil(100 * 1024 * 1024 * 4 / 3) + 16) return [];
+    if (!match) { invalidImage = true; return []; }
+    const padding = match[2].endsWith("==") ? 2 : match[2].endsWith("=") ? 1 : 0;
+    imageBytes += Math.floor(match[2].length * 3 / 4) - padding;
     return [{ name: typeof image.name === "string" ? image.name.slice(0, 120) : "image", dataUrl: image.dataUrl }];
   });
+  if (invalidImage) return NextResponse.json({ error: "图片数据无效，请重新添加" }, { status: 400 });
+  if (imageBytes > 100 * 1024 * 1024) return NextResponse.json({ error: "单次提问的图片总大小不能超过 100MB" }, { status: 413 });
   const question = messages.at(-1)?.content.trim().slice(0, 1200) || "";
   if (!question) return NextResponse.json({ error: "请输入问题" }, { status: 400 });
 
@@ -282,6 +286,7 @@ export async function POST(request: Request) {
   let sawTimeout = false;
   for (const attempt of attempts) {
     try {
+      const timeoutSignal = AbortSignal.timeout(30_000);
       const response = await fetch(attempt.apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${attempt.service.apiKey}` },
@@ -290,15 +295,16 @@ export async function POST(request: Request) {
           temperature: 0.2,
           messages: [{ role: "system", content: system }, ...messages.map((item, index) => index === messages.length - 1 && item.role === "user" && images.length ? { role: "user", content: [{ type: "text", text: item.content.slice(0, 1200) }, ...images.map((image) => ({ type: "image_url", image_url: { url: image.dataUrl } }))] } : { role: item.role, content: item.content.slice(0, 1200) })]
         }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.any([request.signal, timeoutSignal]),
         redirect: "manual",
         cache: "no-store"
       });
-      const data = await response.json().catch(() => null) as { choices?: Array<{ message?: { content?: string } }> } | null;
+      const data = await readLimitedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(response, 2 * 1024 * 1024).catch(() => null);
       const answer = data?.choices?.[0]?.message?.content?.trim();
       if (response.ok && answer) return NextResponse.json({ answer: answer.slice(0, 4000), mode: "llm" });
       console.warn(`[assistant] ${attempt.service.name}/${attempt.model} returned HTTP ${response.status || "empty"}, trying fallback`);
     } catch (error) {
+      if (request.signal.aborted) return new Response(null, { status: 499 });
       sawTimeout ||= error instanceof Error && error.name === "TimeoutError";
       console.warn(`[assistant] ${attempt.service.name}/${attempt.model} failed, trying fallback`);
     }

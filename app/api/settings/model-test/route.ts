@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getSiteSettings } from "@/lib/settings";
 import { validateAssistantEndpoint } from "@/lib/assistantSecurity";
-import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
+import { readLimitedJson, readLimitedResponseJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 
 type TestBody = { serviceId?: string; apiUrl?: string; apiKey?: string; model?: string };
@@ -35,11 +35,11 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ model, temperature: 0, max_tokens: 8, messages: [{ role: "user", content: "只回复 OK" }] }),
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(12_000)]),
       redirect: "manual",
       cache: "no-store"
     });
-    const data = await response.json().catch(() => null) as { choices?: Array<{ message?: { content?: string } }> } | null;
+    const data = await readLimitedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(response, 256 * 1024).catch(() => null);
     if (!response.ok) return NextResponse.json({ error: `连接失败（HTTP ${response.status}）` }, { status: 502 });
     if (!data?.choices?.[0]?.message?.content) return NextResponse.json({ error: "接口已响应，但格式不兼容" }, { status: 502 });
     return NextResponse.json({ ok: true, latencyMs: Date.now() - started });

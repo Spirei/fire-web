@@ -132,6 +132,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [pinned, setPinned] = useState(false);
   const [input, setInput] = useState("");
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const pendingImageBytesRef = useRef(0);
   const [attachmentError, setAttachmentError] = useState("");
   const [loading, setLoading] = useState(false);
   const [historyStatus, setHistoryStatus] = useState<"idle" | "saving" | "error">("idle");
@@ -285,6 +286,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     setMessages(next);
     setInput("");
     setPendingImages([]);
+    pendingImageBytesRef.current = 0;
     setAttachmentError("");
     stickToBottom.current = true;
     setLoading(true);
@@ -315,19 +317,24 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     setAttachmentError("");
     const images = files.filter((file) => file.type.startsWith("image/"));
     if (images.length !== files.length) setAttachmentError("只能添加图片文件");
-    const existingBytes = pendingImages.reduce((sum, image) => sum + image.size, 0);
-    let totalBytes = existingBytes;
+    let totalBytes = pendingImageBytesRef.current;
     const withinTotal = images.filter((file) => {
       if (totalBytes + file.size > MAX_IMAGE_TOTAL_BYTES) { setAttachmentError("单次提问的图片总大小不能超过 100MB"); return false; }
       totalBytes += file.size;
       return true;
     });
-    const loaded = await Promise.all(withinTotal.map((file) => new Promise<PendingImage>((resolve, reject) => {
+    const reservedBytes = withinTotal.reduce((sum, file) => sum + file.size, 0);
+    pendingImageBytesRef.current += reservedBytes;
+    const settled = await Promise.allSettled(withinTotal.map((file) => new Promise<PendingImage>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve({ id: crypto.randomUUID(), name: file.name || "粘贴的图片", dataUrl: String(reader.result), size: file.size });
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
     })));
+    const loaded = settled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+    const failedBytes = reservedBytes - loaded.reduce((sum, image) => sum + image.size, 0);
+    pendingImageBytesRef.current -= failedBytes;
+    if (failedBytes) setAttachmentError("部分图片无法读取，请重新添加");
     setPendingImages((current) => [...current, ...loaded]);
   }
 
@@ -347,6 +354,8 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     setConversationId(newConversationId());
     setMessages([]);
     setInput("");
+    setPendingImages([]);
+    pendingImageBytesRef.current = 0;
     stickToBottom.current = true;
     setHistoryOpen(false);
   }
@@ -360,6 +369,9 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     lastSavedHistory.current.delete(conversation.id);
     setConversationId(conversation.id);
     setMessages(conversation.messages as Message[]);
+    setPendingImages([]);
+    pendingImageBytesRef.current = 0;
+    setAttachmentError("");
     stickToBottom.current = true;
     setHistoryOpen(false);
   }
@@ -595,7 +607,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
               </div>
               <form onSubmit={(event) => { event.preventDefault(); void send(input); }} onDragOver={(event) => { if ([...event.dataTransfer.items].some((item) => item.kind === "file" && item.type.startsWith("image/"))) event.preventDefault(); }} onDrop={(event) => { const files = [...event.dataTransfer.files]; if (!files.some((file) => file.type.startsWith("image/"))) return; event.preventDefault(); void addImages(files); }} className="border-t border-edge p-4 pb-[max(16px,env(safe-area-inset-bottom))] dark:border-white/10">
                 <div className="rounded-[20px] border border-edge-strong bg-bg-gray p-2 dark:border-white/12 dark:bg-white/[.045]">
-                  {pendingImages.length > 0 && <div className="flex gap-2 overflow-x-auto px-1 pb-2" aria-label="待发送图片">{pendingImages.map((image) => <div key={image.id} className="group/image relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-edge bg-white dark:border-white/10 dark:bg-white/5"><img src={image.dataUrl} alt={image.name} className="h-full w-full object-cover" /><button type="button" onClick={() => setPendingImages((current) => current.filter((item) => item.id !== image.id))} className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-90 shadow-sm transition hover:bg-black" aria-label={`移除图片：${image.name}`}><IconX size={12} /></button></div>)}</div>}
+                  {pendingImages.length > 0 && <div className="flex gap-2 overflow-x-auto px-1 pb-2" aria-label="待发送图片">{pendingImages.map((image) => <div key={image.id} className="group/image relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-edge bg-white dark:border-white/10 dark:bg-white/5"><img src={image.dataUrl} alt={image.name} className="h-full w-full object-cover" /><button type="button" onClick={() => { pendingImageBytesRef.current = Math.max(0, pendingImageBytesRef.current - image.size); setPendingImages((current) => current.filter((item) => item.id !== image.id)); }} className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-90 shadow-sm transition hover:bg-black" aria-label={`移除图片：${image.name}`}><IconX size={12} /></button></div>)}</div>}
                   <div className="flex items-end gap-1.5">
                     <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(event) => { void addImages([...event.target.files || []]); event.currentTarget.value = ""; }} />
                     <button type="button" onClick={() => imageInputRef.current?.click()} className="flex h-10 w-9 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-white dark:text-white/45 dark:hover:bg-white/10" aria-label="添加图片" title="添加图片"><IconPaperclip size={18} /></button>

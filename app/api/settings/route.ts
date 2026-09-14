@@ -7,6 +7,7 @@ import { syncRecordGroups } from "@/lib/brokers";
 import { localPathOf, removeFileIfUnused } from "@/lib/fileCleanup";
 import { normalizeModelServices } from "@/lib/modelServices";
 import { validateAssistantEndpoint } from "@/lib/assistantSecurity";
+import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 
 export async function GET(request: Request) {
   const user = getAuthUser(request);
@@ -20,7 +21,13 @@ export async function PUT(request: Request) {
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
   if (!isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
 
-  const body = await request.json().catch(() => null);
+  let body: Record<string, any> | null;
+  try {
+    body = await readLimitedJson<Record<string, any>>(request, 512 * 1024);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return NextResponse.json({ error: "请求内容过大" }, { status: 413 });
+    throw error;
+  }
   if (!body) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
 
   // 数据源地址仅允许 http(s)，防止配置成 file:// 或内网探测地址（管理端接口）
