@@ -31,7 +31,7 @@ type AssistantAction =
 const PAGE_LABELS: Record<string, string> = {
   holdings: "账户资产", assets: "资产分析", pnl: "资产总盈亏", fire: "FIRE",
   watchlist: "自选股", global: "全球经济", trading: "交易广场", earnings: "财报日历",
-  celebs: "名人持仓", cards: "卡面库", library: "素材库", settings: "设置"
+  assistant: "智能助手", celebs: "名人持仓", cards: "卡面库", library: "素材库", settings: "设置"
 };
 
 function streamAssistantResponse(response: Response, meta: { serviceId: string; serviceName: string; model: string }, fallbackUsed: boolean, startedAt: number, userId: string, conversationId: string) {

@@ -26,6 +26,7 @@ const PAGE_COPY: Record<string, { label: string; prompts: string[] }> = {
   watchlist: { label: "自选股", prompts: ["概览我的自选股", "如何整理这些分组？", "检查缺失行情"] },
   fire: { label: "FIRE", prompts: ["分析我的 FIRE 进度", "下一步应关注什么？", "检查计算口径"] },
   earnings: { label: "财报日历", prompts: ["整理近期财报关注点", "我的持仓有哪些财报？", "检查日历数据"] },
+  assistant: { label: "投资数据", prompts: ["概览我的账户", "检查数据异常", "分析当前持仓风险"] },
   cards: { label: "卡面库", prompts: ["检查卡面数据异常", "概览我的银行卡", "如何整理卡面？"] },
   library: { label: "素材库", prompts: ["检查失效素材", "概览素材状态", "给出整理建议"] }
 };
@@ -132,10 +133,10 @@ function baseQuestionForMessage(messages: Message[], assistantIndex: number) {
   return "";
 }
 
-export default function ContextAssistant({ page, symbol, userId, initialHistory, onNavigate }: { page: string; symbol?: string; userId: string; initialHistory: AssistantHistoryState; onNavigate: (path: string) => void }) {
+export default function ContextAssistant({ page, symbol, userId, initialHistory, onNavigate, embedded = false }: { page: string; symbol?: string; userId: string; initialHistory: AssistantHistoryState; onNavigate: (path: string) => void; embedded?: boolean }) {
   const initialConversation = initialHistory.conversations.find((item) => item.id === initialHistory.activeId) || initialHistory.conversations[0];
   const [mounted, setMounted] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(embedded);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
   const [pinned, setPinned] = useState(false);
@@ -147,7 +148,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [attachmentError, setAttachmentError] = useState("");
   const [loading, setLoading] = useState(false);
   const [temporary, setTemporary] = useState(false);
-  const [dataScope, setDataScope] = useState<"none" | "page" | "account">("page");
+  const [dataScope, setDataScope] = useState<"none" | "page" | "account">(embedded ? "account" : "page");
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [selectedModel, setSelectedModel] = useState("auto");
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -666,27 +667,27 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   }
 
   if (!mounted) return null;
-  return createPortal(
+  const experience = (
     <>
-      <button ref={launcherRef} type="button" aria-pressed={open} onPointerDown={(event) => startFloatingDrag("launcher", event)} onClick={() => { if (suppressLauncherClick.current) { suppressLauncherClick.current = false; return; } setOpen((value) => !value); }} style={launcherPosition ? { left: launcherPosition.x, top: launcherPosition.y, right: "auto", bottom: "auto" } : undefined} className="assistant-launcher fixed bottom-5 right-5 z-[110] flex h-12 w-12 touch-none cursor-grab items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_12px_34px_rgba(0,0,0,.3)] transition-[background-color,box-shadow,transform] duration-200 hover:bg-[#20252a] hover:shadow-[0_14px_38px_rgba(0,0,0,.36)] active:scale-95 active:cursor-grabbing data-[dragging=true]:scale-100 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label={open ? "收起智能助手" : "打开智能助手"} title={open ? "拖动可移动，点击收起智能助手" : "拖动可移动，点击打开智能助手"}>
+      {!embedded && <button ref={launcherRef} type="button" aria-pressed={open} onPointerDown={(event) => startFloatingDrag("launcher", event)} onClick={() => { if (suppressLauncherClick.current) { suppressLauncherClick.current = false; return; } setOpen((value) => !value); }} style={launcherPosition ? { left: launcherPosition.x, top: launcherPosition.y, right: "auto", bottom: "auto" } : undefined} className="assistant-launcher fixed bottom-5 right-5 z-[110] flex h-12 w-12 touch-none cursor-grab items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_12px_34px_rgba(0,0,0,.3)] transition-[background-color,box-shadow,transform] duration-200 hover:bg-[#20252a] hover:shadow-[0_14px_38px_rgba(0,0,0,.36)] active:scale-95 active:cursor-grabbing data-[dragging=true]:scale-100 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label={open ? "收起智能助手" : "打开智能助手"} title={open ? "拖动可移动，点击收起智能助手" : "拖动可移动，点击打开智能助手"}>
           <AssistantGlyph size={25} />
-      </button>
+      </button>}
       {open && (
-        <div onMouseDown={(event) => { if (!pinned && event.target === event.currentTarget) setOpen(false); }} className="assistant-layer fixed inset-0 z-[100] flex items-end justify-end bg-black/20 sm:pointer-events-none sm:bg-transparent">
-          <section ref={panelRef} role="dialog" aria-modal="true" aria-label="智能助手" style={panelPosition ? { position: "fixed", left: panelPosition.x, top: panelPosition.y, right: "auto", bottom: "auto" } : undefined} className="assistant-panel pointer-events-auto relative flex h-[72dvh] w-full flex-col overflow-hidden rounded-t-[22px] border border-[#e1e7e6] bg-white shadow-[0_24px_80px_rgba(15,23,42,.16)] dark:border-white/10 dark:bg-[#17191d] dark:shadow-[0_24px_80px_rgba(0,0,0,.45)] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]">
-            <header onPointerDown={(event) => startFloatingDrag("panel", event)} className="flex min-h-[68px] touch-none cursor-grab items-center gap-2 border-b border-edge px-4 active:cursor-grabbing sm:gap-2.5 sm:px-5">
+        <div onMouseDown={(event) => { if (!embedded && !pinned && event.target === event.currentTarget) setOpen(false); }} className={embedded ? "assistant-page-layer" : "assistant-layer fixed inset-0 z-[100] flex items-end justify-end bg-black/20 sm:pointer-events-none sm:bg-transparent"}>
+          <section ref={panelRef} role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-label="智能助手" style={!embedded && panelPosition ? { position: "fixed", left: panelPosition.x, top: panelPosition.y, right: "auto", bottom: "auto" } : undefined} className={embedded ? "assistant-workspace relative flex h-[min(760px,calc(100dvh-180px))] min-h-[560px] w-full flex-col overflow-hidden rounded-[24px] border border-edge bg-white shadow-card dark:border-white/10 dark:bg-[#17191d]" : "assistant-panel pointer-events-auto relative flex h-[72dvh] w-full flex-col overflow-hidden rounded-t-[22px] border border-[#e1e7e6] bg-white shadow-[0_24px_80px_rgba(15,23,42,.16)] dark:border-white/10 dark:bg-[#17191d] dark:shadow-[0_24px_80px_rgba(0,0,0,.45)] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]"}>
+            <header onPointerDown={embedded ? undefined : (event) => startFloatingDrag("panel", event)} className={`flex min-h-[68px] items-center gap-2 border-b border-edge px-4 sm:gap-2.5 sm:px-5 ${embedded ? "" : "touch-none cursor-grab active:cursor-grabbing"}`}>
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_5px_16px_rgba(0,0,0,.18)]"><AssistantGlyph size={20} /></span>
               <div className="min-w-0 flex-1 truncate text-sm font-semibold text-ink dark:text-white/90">智能助手</div>
               <button type="button" disabled={actionBusy} onPointerDown={(event) => event.stopPropagation()} onClick={() => setHistoryOpen((value) => !value)} className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="对话归档" title="对话归档"><IconHistory size={18} /></button>
               <button type="button" disabled={actionBusy} onPointerDown={(event) => event.stopPropagation()} onClick={() => { setTemporary(false); startNewChat(); }} className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="开始新对话" title={actionBusy ? "操作完成后可开始新对话" : "开始新对话"}><IconPlus size={18} /></button>
-              <button type="button" aria-pressed={pinned} onPointerDown={(event) => event.stopPropagation()} onClick={() => setPinned((value) => { const next = !value; writePersistentPreference(`fire:assistant:pinned:${userId}`, next ? "1" : "0"); return next; })} className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-bg-gray dark:text-white/60 dark:hover:bg-white/10 ${pinned ? "bg-bg-gray dark:bg-white/10" : ""}`} aria-label={pinned ? "取消置顶" : "置顶智能助手"} title={pinned ? "已置顶，点击取消" : "置顶面板"}>
+              {!embedded && <button type="button" aria-pressed={pinned} onPointerDown={(event) => event.stopPropagation()} onClick={() => setPinned((value) => { const next = !value; writePersistentPreference(`fire:assistant:pinned:${userId}`, next ? "1" : "0"); return next; })} className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-bg-gray dark:text-white/60 dark:hover:bg-white/10 ${pinned ? "bg-bg-gray dark:bg-white/10" : ""}`} aria-label={pinned ? "取消置顶" : "置顶智能助手"} title={pinned ? "已置顶，点击取消" : "置顶面板"}>
                 <svg viewBox="0 0 24 24" fill={pinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
                   <path d="M14 4v5l3 3v2H7v-2l3-3V4" />
                   <path d="M9 4h6" />
                   <path d="M12 14v6" />
                 </svg>
-              </button>
-              <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setOpen(false)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭"><IconX size={18} /></button>
+              </button>}
+              {!embedded && <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setOpen(false)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭"><IconX size={18} /></button>}
             </header>
             {historyOpen && <div className="absolute inset-x-0 bottom-0 top-[68px] z-20 bg-white dark:bg-[#17191d]">
               <aside className="flex h-full w-full flex-col" aria-label="历史对话抽屉">
@@ -696,11 +697,13 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                     <button type="button" onClick={() => setHistoryOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-bg-gray dark:text-white/55 dark:hover:bg-white/10" aria-label="关闭对话归档"><IconX size={17} /></button>
                   </div>
                   {conversations.length > 0 && <label className="mt-3 flex h-9 items-center gap-2 rounded-xl border border-edge bg-bg-gray/55 px-3 text-muted focus-within:border-edge-strong dark:border-white/10 dark:bg-white/[.045] dark:text-white/45 dark:focus-within:border-white/20"><IconSearch size={15} /><input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-faint dark:text-white/85 dark:placeholder:text-white/30" placeholder="搜索对话" /></label>}
+                  {embedded && <>
                   <button type="button" onClick={() => setMemoryOpen(value => !value)} className="mt-2 flex h-9 w-full items-center gap-2 rounded-xl border border-edge bg-white px-3 text-left text-xs text-ink transition-colors hover:bg-bg-gray dark:border-white/10 dark:bg-white/[.035] dark:text-white/75 dark:hover:bg-white/[.07]"><IconBrain size={15} className="text-muted" /><span className="flex-1">记忆</span><span className="text-[10px] text-faint">{memoryEnabled ? "已开启" : "已关闭"}</span></button>
                   {memoryOpen && <div className="mt-2 rounded-xl border border-edge bg-bg-gray/45 p-3 dark:border-white/10 dark:bg-white/[.035]"><label className="flex items-center justify-between text-xs font-medium text-ink dark:text-white/80"><span>跨对话使用记忆</span><input type="checkbox" checked={memoryEnabled} onChange={(event) => void saveMemory(event.target.checked, memory)} /></label><textarea value={memory} onChange={(event) => setMemory(event.target.value)} onBlur={() => void saveMemory(memoryEnabled, memory)} maxLength={2000} rows={3} placeholder="例如：偏好简洁回答、默认使用港币……" className="mt-2 w-full resize-none rounded-lg border border-edge bg-white p-2 text-xs text-ink placeholder:text-faint dark:border-white/10 dark:bg-black/10 dark:text-white/75" /><div className="mt-2 flex items-center justify-between text-[10px] text-faint"><span>{memory.length}/2000</span><button type="button" onClick={() => { setMemory(""); setMemoryEnabled(false); void fetch("/api/assistant/preferences", { method: "DELETE" }); }} className="hover:text-[#b84d4d]">清除记忆</button></div></div>}
                   <div className="mt-2 flex gap-2"><select value={selectedSpace} onChange={(event)=>void moveCurrentConversation(event.target.value)} className="h-9 min-w-0 flex-1 rounded-xl border border-edge bg-white px-3 text-xs text-ink dark:border-white/10 dark:bg-white/[.035] dark:text-white/75" aria-label="当前对话空间"><option value="">未分类空间</option>{spaces.map(space=><option key={space.id} value={space.id}>{space.name}</option>)}</select><button type="button" onClick={()=>void addSpace()} className="h-9 rounded-xl border border-edge bg-white px-3 text-xs text-ink dark:border-white/10 dark:bg-white/[.035] dark:text-white/75">新建空间</button></div>
                   <button type="button" onClick={()=>setInsightsOpen(value=>!value)} className="mt-2 flex h-9 w-full items-center justify-between rounded-xl border border-edge bg-white px-3 text-xs text-ink dark:border-white/10 dark:bg-white/[.035] dark:text-white/75"><span>模型调用</span><span className="text-[10px] text-faint">{usageSummary.calls} 次 · {usageSummary.errors} 次失败</span></button>
                   {insightsOpen&&<div className="mt-2 grid grid-cols-3 gap-2 rounded-xl bg-bg-gray/50 p-3 text-center dark:bg-white/[.035]"><div><b className="block text-sm text-ink dark:text-white/80">{usageSummary.calls}</b><span className="text-[9px] text-faint">调用</span></div><div><b className="block text-sm text-ink dark:text-white/80">{usageSummary.tokens}</b><span className="text-[9px] text-faint">Token</span></div><div><b className="block text-sm text-ink dark:text-white/80">{usageSummary.cost>0?usageSummary.cost.toFixed(4):"—"}</b><span className="text-[9px] text-faint">估算费用</span></div></div>}
+                  </>}
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
                   {conversations.length === 0 ? <div className="flex h-full flex-col items-center justify-center px-8 pb-16 text-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-bg-gray text-muted dark:bg-white/[.06] dark:text-white/45"><IconMessageCircle size={22} /></span><div className="mt-4 text-sm font-semibold text-ink dark:text-white/85">还没有归档对话</div><p className="mt-1.5 text-xs leading-5 text-faint dark:text-white/35">开始一次对话后，它会自动保存并出现在这里。</p></div> : conversations.filter((conversation) => !historyQuery.trim() || conversation.title.toLowerCase().includes(historyQuery.trim().toLowerCase()) || conversation.id.toLowerCase().includes(historyQuery.trim().toLowerCase())).map((conversation) => <div key={conversation.id} role="button" tabIndex={actionBusy ? -1 : 0} aria-disabled={actionBusy} onClick={() => { if (!actionBusy) selectConversation(conversation); }} onKeyDown={(event) => { if (!actionBusy && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); selectConversation(conversation); } }} className={`group/history mb-1 flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${actionBusy ? "cursor-not-allowed opacity-40" : ""} ${conversation.id === conversationId ? "bg-[#f0f2f4] dark:bg-white/[.085]" : "hover:bg-bg-gray/80 dark:hover:bg-white/[.055]"}`}>
@@ -714,7 +717,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
               </aside>
             </div>}
             <>
-              <div ref={messageListRef} onScroll={(event) => { const element = event.currentTarget; stickToBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 72; }} className="flex-1 overflow-y-auto px-5 py-5">
+              <div ref={messageListRef} onScroll={(event) => { const element = event.currentTarget; stickToBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 72; }} className={`flex-1 overflow-y-auto px-5 py-5 ${embedded ? "sm:px-10 sm:py-8" : ""}`}>
                 {messages.length === 0 ? (
                   <div>
                     <h2 className="text-xl font-semibold tracking-tight text-ink">想了解什么？</h2>
@@ -742,12 +745,15 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                     <option value="auto">自动选择模型</option>
                     {availableModels.filter(item => item.configured).map(item => <option key={`${item.serviceId}:${item.model}`} value={`${item.serviceId}:${item.model}`}>{item.serviceName} · {item.model}</option>)}
                   </select>
+                  {!embedded && <button type="button" onClick={() => { onNavigate("/assistant"); setOpen(false); }} className="ml-auto h-7 shrink-0 rounded-full px-2.5 font-medium text-muted transition-colors hover:bg-bg-gray hover:text-ink dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white/80">完整工作台</button>}
+                  {embedded && <>
                   <select value={dataScope} onChange={(event) => setDataScope(event.target.value as "none" | "page" | "account")} className="h-7 rounded-full border border-edge bg-white px-2.5 text-[10px] text-ink dark:border-white/10 dark:bg-white/[.06] dark:text-white/75" aria-label="发送给模型的数据范围">
                     <option value="none">不附带数据</option><option value="page">仅当前页面</option><option value="account">账户摘要</option>
                   </select>
                   <button type="button" aria-pressed={temporary} onClick={toggleTemporary} className={`h-7 shrink-0 rounded-full border px-2.5 transition-colors ${temporary ? "border-edge-strong bg-[#eceff1] text-ink dark:border-white/20 dark:bg-white/12 dark:text-white" : "border-edge bg-white dark:border-white/10 dark:bg-white/[.06]"}`}>临时对话</button>
                   <button type="button" onClick={()=>setPrivacyOpen(value=>!value)} className="h-7 shrink-0 rounded-full border border-edge bg-white px-2.5 dark:border-white/10 dark:bg-white/[.06]">发送内容</button><button type="button" aria-pressed={persistAttachments} onClick={()=>setPersistAttachments(value=>!value)} className={`h-7 shrink-0 rounded-full border px-2.5 ${persistAttachments?"border-edge-strong bg-[#eceff1] text-ink dark:bg-white/12 dark:text-white":"border-edge bg-white dark:border-white/10 dark:bg-white/[.06]"}`}>{persistAttachments?"保留图片":"图片仅本次"}</button>
                   {messages.length > 0 && <button type="button" onClick={exportConversation} className="flex h-7 shrink-0 items-center gap-1 rounded-full border border-edge bg-white px-2.5 dark:border-white/10 dark:bg-white/[.06]" aria-label="导出当前对话"><IconDownload size={12} />导出</button>}
+                  </>}
                 </div>
                 <div className="rounded-[20px] border border-edge-strong bg-bg-gray p-2 dark:border-white/12 dark:bg-white/[.045]">
                   {pendingImages.length > 0 && <div className="flex gap-2 overflow-x-auto px-1 pb-2" aria-label="待发送图片">{pendingImages.map((image) => <div key={image.id} role="button" tabIndex={0} onClick={() => setPreviewImage(image)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setPreviewImage(image); } }} className="group/image relative h-14 w-14 shrink-0 cursor-zoom-in overflow-hidden rounded-xl border border-edge bg-white dark:border-white/10 dark:bg-white/5" aria-label={`查看图片：${image.name}`}><img src={image.dataUrl} alt={image.name} className="h-full w-full object-cover transition-transform duration-200 group-hover/image:scale-105" /><button type="button" onClick={(event) => { event.stopPropagation(); pendingImageBytesRef.current = Math.max(0, pendingImageBytesRef.current - image.size); setPendingImages((current) => current.filter((item) => item.id !== image.id)); if (previewImage?.id === image.id) setPreviewImage(null); }} className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-90 shadow-sm transition hover:bg-black" aria-label={`移除图片：${image.name}`}><IconX size={12} /></button></div>)}</div>}
@@ -770,6 +776,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
           <button type="button" onClick={() => setPreviewImage(null)} className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80" aria-label="关闭图片预览"><IconX size={20} /></button>
         </div>
       </div>}
-    </>, document.body
+    </>
   );
+  return embedded ? experience : createPortal(experience, document.body);
 }

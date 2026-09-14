@@ -47,6 +47,12 @@ export const NAV_ICONS: Record<string, React.ReactNode> = {
       <path d="M8 17h.01" /><path d="M12 17h.01" /><path d="M16 17h.01" />
     </svg>
   ),
+  assistant: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
+      <path d="M10.7 3.2c.35-1.45 2.4-1.45 2.75 0l.5 2a6 6 0 0 0 4.4 4.4l2 .5c1.45.35 1.45 2.4 0 2.75l-2 .5a6 6 0 0 0-4.4 4.4l-.5 2c-.35 1.45-2.4 1.45-2.75 0l-.5-2a6 6 0 0 0-4.4-4.4l-2-.5c-1.45-.35-1.45-2.4 0-2.75l2-.5a6 6 0 0 0 4.4-4.4Z" />
+      <path d="m18.5 2 .35 1.15L20 3.5l-1.15.35L18.5 5l-.35-1.15L17 3.5l1.15-.35Z" fill="currentColor" stroke="none" />
+    </svg>
+  ),
   celebs: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
       <path d="M12 2.5l2.75 6.15 6.75.78-5.05 4.55 1.35 6.62L12 17.3l-5.8 3.3 1.35-6.62-5.05-4.55 6.75-.78Z" />

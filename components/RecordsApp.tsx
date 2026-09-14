@@ -42,10 +42,11 @@ import AttachmentsView from "@/components/views/AttachmentsView";
 import GlobalPreviewView from "@/components/views/GlobalPreviewView";
 import AssetPnlAnalysisView from "@/components/AssetPnlAnalysis";
 import ContextAssistant from "@/components/ContextAssistant";
+import AssistantView from "@/components/views/AssistantView";
 
 // 后台页签全部同步引入：next/dynamic 的 loading 会在刷新水合时盖住已 SSR 的内容，整页闪「加载中…」。
 
-type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
+type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "assistant" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
 
 function NoPermission() {
   return (
@@ -65,6 +66,7 @@ const DEFAULT_TABS: TabConfig[] = [
   { key: "trading", label: "交易广场", url: "/trading" },
   { key: "quotes", label: "股票添加", url: "/quotes" },
   { key: "earnings", label: "财报日历", url: "/earnings" },
+  { key: "assistant", label: "智能助手", url: "/assistant" },
   { key: "celebs", label: "名人持仓", url: "/celebs" },
   { key: "users", label: "用户管理", url: "/users" },
   { key: "attachments", label: "附件管理", url: "/attachments" },
@@ -881,6 +883,7 @@ export default function RecordsApp({
           {activeTab === "global" && <GlobalPreviewView />}
           {activeTab === "trading" && <TradingSquareView avatars={initialCelebAvatars} records={records} />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} />}
+          {activeTab === "assistant" && <AssistantView page="assistant" symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} />}
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
           {activeTab === "attachments" && (user?.role === "admin" ? <AttachmentsView /> : <NoPermission />)}
@@ -892,7 +895,7 @@ export default function RecordsApp({
         </div>
       </div>
     </div>
-    <ContextAssistant page={activeTab} symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />
+    {activeTab !== "assistant" && <ContextAssistant page={activeTab} symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}
     </>
   );
 }
