@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { randomBytes } from "crypto";
+import { deleteConversationAttachments } from "./assistantAttachments";
 
 export interface StoredAssistantMessage {
   role: "user" | "assistant";
@@ -12,6 +13,7 @@ export interface StoredAssistantMessage {
   undoStatus?: "running" | "error" | "uncertain";
   model?: { serviceId: string; serviceName: string; model: string };
   fallbackUsed?: boolean;
+  attachments?: Array<{ id: string; name: string; url: string; size: number }>;
 }
 
 export interface StoredAssistantConversation {
@@ -133,6 +135,11 @@ export function sanitizeAssistantMessages(value: unknown): StoredAssistantMessag
       if (serviceId && serviceName && model) message.model = { serviceId, serviceName, model };
     }
     if (row.role === "assistant" && row.fallbackUsed === true) message.fallbackUsed = true;
+    if (row.role === "user" && Array.isArray(row.attachments)) message.attachments = row.attachments.flatMap(item => {
+      if (!item || typeof item !== "object") return [];
+      const value=item as Record<string,unknown>, id=text(value.id,40), name=text(value.name,120), url=text(value.url,500); const size=finite(value.size);
+      return /^ai-[a-f0-9]{24}$/.test(id)&&url.startsWith("/api/assistant/attachments?id=")&&size!==null?[{id,name:name||"图片",url,size}]:[];
+    }).slice(0,100);
     return [message];
   }).slice(-MAX_MESSAGES);
   while (messages.length && Buffer.byteLength(JSON.stringify(messages), "utf8") > MAX_BYTES) messages.shift();
@@ -223,9 +230,13 @@ export function clearAssistantHistory(userId: string, conversationId?: unknown):
   if (id) {
     if (!CONVERSATION_ID_RE.test(id)) throw new Error("invalid conversation id");
     getDb().prepare("DELETE FROM assistant_conversation_threads WHERE user_id = ? AND conversation_id = ?").run(userId, id);
+    getDb().prepare("DELETE FROM assistant_conversation_spaces WHERE user_id = ? AND conversation_id = ?").run(userId,id);
+    deleteConversationAttachments(userId,id);
   } else {
     getDb().prepare("DELETE FROM assistant_conversation_threads WHERE user_id = ?").run(userId);
     getDb().prepare("DELETE FROM assistant_conversations WHERE user_id = ?").run(userId);
+    getDb().prepare("DELETE FROM assistant_conversation_spaces WHERE user_id = ?").run(userId);
+    deleteConversationAttachments(userId);
   }
   return getAssistantHistoryState(userId);
 }

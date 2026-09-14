@@ -14,9 +14,10 @@ type UndoAction =
   | { type: "delete_group"; groupId: string; actionId: string; createdAt: string }
   | { type: "restore_groups"; previous: Array<{ id: string; groupId: string }>; actionId: string; createdAt: string }
   | { type: "delete_order"; orderId: string; actionId: string; createdAt: string };
-type Message = { role: "user" | "assistant"; content: string; responseError?: boolean; retryQuestion?: string; action?: AssistantAction; actionStatus?: "running" | "done" | "error" | "uncertain"; undo?: UndoAction; undoStatus?: "running" | "error" | "uncertain"; model?: { serviceId: string; serviceName: string; model: string }; fallbackUsed?: boolean };
+type Message = { role: "user" | "assistant"; content: string; responseError?: boolean; retryQuestion?: string; action?: AssistantAction; actionStatus?: "running" | "done" | "error" | "uncertain"; undo?: UndoAction; undoStatus?: "running" | "error" | "uncertain"; model?: { serviceId: string; serviceName: string; model: string }; fallbackUsed?: boolean; attachments?: Array<{id:string;name:string;url:string;size:number}> };
 type PendingImage = { id: string; name: string; dataUrl: string; size: number };
 type AvailableModel = { serviceId: string; serviceName: string; model: string; priority: number; configured: boolean; health?: { ok: boolean; latencyMs: number; checkedAt: string } | null };
+type AssistantSpace = { id: string; name: string };
 
 const PAGE_COPY: Record<string, { label: string; prompts: string[] }> = {
   holdings: { label: "账户资产", prompts: ["概览我的持仓", "检查持仓数据异常", "我的持仓分布如何？"] },
@@ -153,6 +154,13 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [memory, setMemory] = useState("");
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [persistAttachments, setPersistAttachments] = useState(false);
+  const [insightsOpen, setInsightsOpen] = useState(false);
+  const [spaces, setSpaces] = useState<AssistantSpace[]>([]);
+  const [selectedSpace, setSelectedSpace] = useState("");
+  const [spaceAssignments, setSpaceAssignments] = useState<Record<string,string>>({});
+  const [usageSummary, setUsageSummary] = useState({ calls: 0, errors: 0, tokens: 0, cost: 0 });
   const [historyStatus, setHistoryStatus] = useState<"idle" | "saving" | "error">("idle");
   const [historyError, setHistoryError] = useState("");
   const [historyRetry, setHistoryRetry] = useState(0);
@@ -185,6 +193,14 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   useEffect(() => {
     void fetch("/api/assistant/models").then(response => response.ok ? response.json() : null).then(data => {
       if (Array.isArray(data?.services)) setAvailableModels(data.services);
+    }).catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    void Promise.all([fetch("/api/assistant/spaces"), fetch("/api/assistant/usage")]).then(async ([spaceResponse, usageResponse]) => {
+      const spaceData = spaceResponse.ok ? await spaceResponse.json() : null, usageData = usageResponse.ok ? await usageResponse.json() : null;
+      if (Array.isArray(spaceData?.spaces)) setSpaces(spaceData.spaces);
+      if (spaceData?.assignments&&typeof spaceData.assignments==="object") { setSpaceAssignments(spaceData.assignments); setSelectedSpace(spaceData.assignments[conversationId]||""); }
+      if (usageData?.summary) setUsageSummary(usageData.summary);
     }).catch(() => undefined);
   }, []);
   useEffect(() => {
@@ -305,8 +321,9 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     }
     const base = typeof retryIndex === "number" ? messages.slice(0, retryIndex) : messages;
     const alreadyHasQuestion = base.at(-1)?.role === "user" && base.at(-1)?.content === question;
-    const next = (alreadyHasQuestion ? base : [...base, { role: "user" as const, content: question }]).slice(-MAX_SAVED_MESSAGES);
-    if (!conversationId) setConversationId(newConversationId());
+    let next = (alreadyHasQuestion ? base : [...base, { role: "user" as const, content: question }]).slice(-MAX_SAVED_MESSAGES);
+    const activeConversationId = conversationId || newConversationId();
+    if (!conversationId) setConversationId(activeConversationId);
     const generation = requestGeneration.current;
     const controller = new AbortController();
     requestController.current = controller;
@@ -318,11 +335,17 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     stickToBottom.current = true;
     setLoading(true);
     try {
+      if (persistAttachments && selectedImages.length && typeof retryIndex !== "number") {
+        const savedResponse=await fetch("/api/assistant/attachments",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({conversationId:activeConversationId,images:selectedImages.map(({name,dataUrl})=>({name,dataUrl}))}),signal:controller.signal});
+        const saved=await savedResponse.json().catch(()=>null);
+        if(!savedResponse.ok)throw new Error(saved?.error||"附件保存失败");
+        const lastIndex=next.length-1; next=next.map((message,index)=>index===lastIndex?{...message,attachments:saved.attachments}:message); setMessages(next);
+      }
       const filter = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("filter") || "";
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, images: selectedImages.map(({ name, dataUrl }) => ({ name, dataUrl })), context: { page, label: copy.label, symbol, filter }, dataScope, model: selectedModel === "auto" ? undefined : (() => { const [serviceId, ...modelParts] = selectedModel.split(":"); return { serviceId, model: modelParts.join(":") }; })() }),
+        body: JSON.stringify({ conversationId: activeConversationId, messages: next, images: selectedImages.map(({ name, dataUrl }) => ({ name, dataUrl })), context: { page, label: copy.label, symbol, filter }, dataScope, model: selectedModel === "auto" ? undefined : (() => { const [serviceId, ...modelParts] = selectedModel.split(":"); return { serviceId, model: modelParts.join(":") }; })() }),
         signal: controller.signal
       });
       if (response.ok && response.headers.get("content-type")?.includes("application/x-ndjson") && response.body) {
@@ -356,6 +379,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     } finally {
       if (requestController.current === controller) requestController.current = null;
       if (requestGeneration.current === generation) setLoading(false);
+      void fetch("/api/assistant/usage").then(response=>response.ok?response.json():null).then(data=>{if(data?.summary)setUsageSummary(data.summary);}).catch(()=>undefined);
     }
   }
 
@@ -408,6 +432,21 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     await fetch("/api/assistant/preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memoryEnabled: nextEnabled, memory: nextMemory }) }).catch(() => undefined);
   }
 
+  async function addSpace() {
+    const name = window.prompt("空间名称")?.trim();
+    if (!name) return;
+    const response = await fetch("/api/assistant/spaces", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name}) });
+    const data = await response.json().catch(()=>null);
+    if (response.ok && data?.space) { setSpaces(current=>[...current,data.space]); setSelectedSpace(data.space.id); }
+  }
+
+  async function moveCurrentConversation(spaceId:string) {
+    setSelectedSpace(spaceId);
+    if (!conversationId) return;
+    setSpaceAssignments(current=>({...current,[conversationId]:spaceId}));
+    await fetch("/api/assistant/spaces", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({conversationId,spaceId}) }).catch(()=>undefined);
+  }
+
   function editFromMessage(index: number) {
     const message = messages[index];
     if (!message || message.role !== "user" || actionBusy) return;
@@ -454,6 +493,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     setLoading(false);
     lastSavedHistory.current.delete(conversation.id);
     setConversationId(conversation.id);
+    setSelectedSpace(spaceAssignments[conversation.id]||"");
     setMessages(conversation.messages as Message[]);
     setPendingImages([]);
     pendingImageBytesRef.current = 0;
@@ -658,6 +698,9 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                   {conversations.length > 0 && <label className="mt-3 flex h-9 items-center gap-2 rounded-xl border border-edge bg-bg-gray/55 px-3 text-muted focus-within:border-edge-strong dark:border-white/10 dark:bg-white/[.045] dark:text-white/45 dark:focus-within:border-white/20"><IconSearch size={15} /><input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-faint dark:text-white/85 dark:placeholder:text-white/30" placeholder="搜索对话" /></label>}
                   <button type="button" onClick={() => setMemoryOpen(value => !value)} className="mt-2 flex h-9 w-full items-center gap-2 rounded-xl border border-edge bg-white px-3 text-left text-xs text-ink transition-colors hover:bg-bg-gray dark:border-white/10 dark:bg-white/[.035] dark:text-white/75 dark:hover:bg-white/[.07]"><IconBrain size={15} className="text-muted" /><span className="flex-1">记忆</span><span className="text-[10px] text-faint">{memoryEnabled ? "已开启" : "已关闭"}</span></button>
                   {memoryOpen && <div className="mt-2 rounded-xl border border-edge bg-bg-gray/45 p-3 dark:border-white/10 dark:bg-white/[.035]"><label className="flex items-center justify-between text-xs font-medium text-ink dark:text-white/80"><span>跨对话使用记忆</span><input type="checkbox" checked={memoryEnabled} onChange={(event) => void saveMemory(event.target.checked, memory)} /></label><textarea value={memory} onChange={(event) => setMemory(event.target.value)} onBlur={() => void saveMemory(memoryEnabled, memory)} maxLength={2000} rows={3} placeholder="例如：偏好简洁回答、默认使用港币……" className="mt-2 w-full resize-none rounded-lg border border-edge bg-white p-2 text-xs text-ink placeholder:text-faint dark:border-white/10 dark:bg-black/10 dark:text-white/75" /><div className="mt-2 flex items-center justify-between text-[10px] text-faint"><span>{memory.length}/2000</span><button type="button" onClick={() => { setMemory(""); setMemoryEnabled(false); void fetch("/api/assistant/preferences", { method: "DELETE" }); }} className="hover:text-[#b84d4d]">清除记忆</button></div></div>}
+                  <div className="mt-2 flex gap-2"><select value={selectedSpace} onChange={(event)=>void moveCurrentConversation(event.target.value)} className="h-9 min-w-0 flex-1 rounded-xl border border-edge bg-white px-3 text-xs text-ink dark:border-white/10 dark:bg-white/[.035] dark:text-white/75" aria-label="当前对话空间"><option value="">未分类空间</option>{spaces.map(space=><option key={space.id} value={space.id}>{space.name}</option>)}</select><button type="button" onClick={()=>void addSpace()} className="h-9 rounded-xl border border-edge bg-white px-3 text-xs text-ink dark:border-white/10 dark:bg-white/[.035] dark:text-white/75">新建空间</button></div>
+                  <button type="button" onClick={()=>setInsightsOpen(value=>!value)} className="mt-2 flex h-9 w-full items-center justify-between rounded-xl border border-edge bg-white px-3 text-xs text-ink dark:border-white/10 dark:bg-white/[.035] dark:text-white/75"><span>模型调用</span><span className="text-[10px] text-faint">{usageSummary.calls} 次 · {usageSummary.errors} 次失败</span></button>
+                  {insightsOpen&&<div className="mt-2 grid grid-cols-3 gap-2 rounded-xl bg-bg-gray/50 p-3 text-center dark:bg-white/[.035]"><div><b className="block text-sm text-ink dark:text-white/80">{usageSummary.calls}</b><span className="text-[9px] text-faint">调用</span></div><div><b className="block text-sm text-ink dark:text-white/80">{usageSummary.tokens}</b><span className="text-[9px] text-faint">Token</span></div><div><b className="block text-sm text-ink dark:text-white/80">{usageSummary.cost>0?usageSummary.cost.toFixed(4):"—"}</b><span className="text-[9px] text-faint">估算费用</span></div></div>}
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
                   {conversations.length === 0 ? <div className="flex h-full flex-col items-center justify-center px-8 pb-16 text-center"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-bg-gray text-muted dark:bg-white/[.06] dark:text-white/45"><IconMessageCircle size={22} /></span><div className="mt-4 text-sm font-semibold text-ink dark:text-white/85">还没有归档对话</div><p className="mt-1.5 text-xs leading-5 text-faint dark:text-white/35">开始一次对话后，它会自动保存并出现在这里。</p></div> : conversations.filter((conversation) => !historyQuery.trim() || conversation.title.toLowerCase().includes(historyQuery.trim().toLowerCase()) || conversation.id.toLowerCase().includes(historyQuery.trim().toLowerCase())).map((conversation) => <div key={conversation.id} role="button" tabIndex={actionBusy ? -1 : 0} aria-disabled={actionBusy} onClick={() => { if (!actionBusy) selectConversation(conversation); }} onKeyDown={(event) => { if (!actionBusy && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); selectConversation(conversation); } }} className={`group/history mb-1 flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${actionBusy ? "cursor-not-allowed opacity-40" : ""} ${conversation.id === conversationId ? "bg-[#f0f2f4] dark:bg-white/[.085]" : "hover:bg-bg-gray/80 dark:hover:bg-white/[.055]"}`}>
@@ -687,7 +730,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {messages.map((message, index) => <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "border border-[#e0e3e7] bg-[#f3f4f6] text-[#374151] shadow-[0_4px_14px_rgba(15,23,42,.035)] dark:border-white/10 dark:bg-white/[.085] dark:text-white/80" : message.responseError ? "border border-[#ecd9d9] bg-[#fff8f8] text-[#7d4545] dark:border-[#6b3e3e] dark:bg-[#301f21] dark:text-[#f0b6b6]" : "bg-bg-gray text-ink dark:bg-white/[0.06] dark:text-white/85"}`}>{displayText(message.content)}{message.role === "user" && <div className="mt-1.5 flex justify-end"><button type="button" disabled={loading || actionBusy} onClick={() => editFromMessage(index)} className="rounded-full px-2 py-0.5 text-[10px] text-faint hover:bg-black/5 hover:text-ink disabled:opacity-30 dark:text-white/35 dark:hover:bg-white/10 dark:hover:text-white/70">编辑并分支</button></div>}{message.role === "assistant" && <div className="mt-2 flex items-center gap-2 border-t border-edge/70 pt-2 text-[10px] text-faint dark:border-white/10 dark:text-white/35">{message.model && <span className="min-w-0 truncate">{message.model.serviceName} · {message.model.model}{message.fallbackUsed ? " · 已回退" : ""}</span>}<button type="button" onClick={() => void copyMessage(message.content, index)} className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10" aria-label="复制回答">{copiedIndex === index ? <IconCheck size={13} /> : <IconCopy size={13} />}</button><button type="button" disabled={loading} onClick={() => void send(baseQuestionForMessage(messages, index), index)} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-black/5 disabled:opacity-35 dark:hover:bg-white/10" aria-label="重新回答"><IconRefresh size={13} /></button></div>}{message.responseError && message.retryQuestion && <button type="button" disabled={loading} onClick={() => void send(message.retryQuestion as string, index)} className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-[#e3caca] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#9b5555] transition-colors hover:bg-[#fff3f3] disabled:opacity-40 dark:border-[#6b3e3e] dark:bg-white/5 dark:text-[#f0b6b6] dark:hover:bg-white/10"><IconRefresh size={13} />重新回答</button>}{message.action && <div className="mt-3 rounded-xl border border-edge bg-white/80 p-3 dark:border-white/10 dark:bg-white/5"><div className="text-xs font-medium text-ink dark:text-white/85">{actionSummary(message.action)}</div><button type="button" disabled={actionBusy || message.actionStatus === "running" || message.actionStatus === "done" || actionExpired(message.action)} onClick={() => void executeAction(message.action as AssistantAction, index)} className="mt-3 w-full rounded-xl border border-edge-strong bg-white px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover disabled:opacity-55 dark:border-white/15 dark:bg-white/5 dark:text-white/85 dark:hover:bg-white/10">{message.actionStatus === "running" ? "处理中…" : message.actionStatus === "done" ? "已完成" : message.actionStatus === "uncertain" ? "安全重试并核对" : actionExpired(message.action) ? "预览已过期，请重新输入" : message.actionStatus === "error" ? "重试" : message.action.label}</button>{message.actionStatus === "uncertain" && <p className="mt-2 text-[11px] leading-5 text-muted">页面曾在执行过程中中断。安全重试会复用原操作标识：已成功则只返回原结果，未成功才执行。</p>}{message.actionStatus === "done" && message.undo && <button type="button" disabled={actionBusy || message.undoStatus === "running" || isTimestampExpired(message.undo.createdAt)} onClick={() => void undoAction(message.undo as UndoAction, index)} className="mt-2 w-full text-center text-[11px] text-muted hover:text-ink disabled:opacity-35 dark:hover:text-white">{message.undoStatus === "running" ? "撤销中…" : isTimestampExpired(message.undo.createdAt) ? "撤销窗口已结束" : message.undoStatus === "uncertain" ? "安全重试撤销" : message.undoStatus === "error" ? "重试撤销" : "撤销操作"}</button>}{message.undoStatus === "uncertain" && !isTimestampExpired(message.undo?.createdAt || "") && <p className="mt-1 text-[11px] leading-5 text-muted">撤销响应曾中断，再次点击不会重复撤销。</p>}</div>}</div></div>)}
+                    {messages.map((message, index) => <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "border border-[#e0e3e7] bg-[#f3f4f6] text-[#374151] shadow-[0_4px_14px_rgba(15,23,42,.035)] dark:border-white/10 dark:bg-white/[.085] dark:text-white/80" : message.responseError ? "border border-[#ecd9d9] bg-[#fff8f8] text-[#7d4545] dark:border-[#6b3e3e] dark:bg-[#301f21] dark:text-[#f0b6b6]" : "bg-bg-gray text-ink dark:bg-white/[0.06] dark:text-white/85"}`}>{displayText(message.content)}{message.attachments?.length ? <div className="mt-2 flex gap-2 overflow-x-auto">{message.attachments.map(attachment=><a key={attachment.id} href={attachment.url} target="_blank" rel="noreferrer" className="block h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-edge"><img src={attachment.url} alt={attachment.name} className="h-full w-full object-cover" /></a>)}</div>:null}{message.role === "user" && <div className="mt-1.5 flex justify-end"><button type="button" disabled={loading || actionBusy} onClick={() => editFromMessage(index)} className="rounded-full px-2 py-0.5 text-[10px] text-faint hover:bg-black/5 hover:text-ink disabled:opacity-30 dark:text-white/35 dark:hover:bg-white/10 dark:hover:text-white/70">编辑并分支</button></div>}{message.role === "assistant" && <div className="mt-2 flex items-center gap-2 border-t border-edge/70 pt-2 text-[10px] text-faint dark:border-white/10 dark:text-white/35">{message.model && <span className="min-w-0 truncate">{message.model.serviceName} · {message.model.model}{message.fallbackUsed ? " · 已回退" : ""}</span>}<button type="button" onClick={() => void copyMessage(message.content, index)} className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10" aria-label="复制回答">{copiedIndex === index ? <IconCheck size={13} /> : <IconCopy size={13} />}</button><button type="button" disabled={loading} onClick={() => void send(baseQuestionForMessage(messages, index), index)} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-black/5 disabled:opacity-35 dark:hover:bg-white/10" aria-label="重新回答"><IconRefresh size={13} /></button></div>}{message.responseError && message.retryQuestion && <button type="button" disabled={loading} onClick={() => void send(message.retryQuestion as string, index)} className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-[#e3caca] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#9b5555] transition-colors hover:bg-[#fff3f3] disabled:opacity-40 dark:border-[#6b3e3e] dark:bg-white/5 dark:text-[#f0b6b6] dark:hover:bg-white/10"><IconRefresh size={13} />重新回答</button>}{message.action && <div className="mt-3 rounded-xl border border-edge bg-white/80 p-3 dark:border-white/10 dark:bg-white/5"><div className="text-xs font-medium text-ink dark:text-white/85">{actionSummary(message.action)}</div><button type="button" disabled={actionBusy || message.actionStatus === "running" || message.actionStatus === "done" || actionExpired(message.action)} onClick={() => void executeAction(message.action as AssistantAction, index)} className="mt-3 w-full rounded-xl border border-edge-strong bg-white px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover disabled:opacity-55 dark:border-white/15 dark:bg-white/5 dark:text-white/85 dark:hover:bg-white/10">{message.actionStatus === "running" ? "处理中…" : message.actionStatus === "done" ? "已完成" : message.actionStatus === "uncertain" ? "安全重试并核对" : actionExpired(message.action) ? "预览已过期，请重新输入" : message.actionStatus === "error" ? "重试" : message.action.label}</button>{message.actionStatus === "uncertain" && <p className="mt-2 text-[11px] leading-5 text-muted">页面曾在执行过程中中断。安全重试会复用原操作标识：已成功则只返回原结果，未成功才执行。</p>}{message.actionStatus === "done" && message.undo && <button type="button" disabled={actionBusy || message.undoStatus === "running" || isTimestampExpired(message.undo.createdAt)} onClick={() => void undoAction(message.undo as UndoAction, index)} className="mt-2 w-full text-center text-[11px] text-muted hover:text-ink disabled:opacity-35 dark:hover:text-white">{message.undoStatus === "running" ? "撤销中…" : isTimestampExpired(message.undo.createdAt) ? "撤销窗口已结束" : message.undoStatus === "uncertain" ? "安全重试撤销" : message.undoStatus === "error" ? "重试撤销" : "撤销操作"}</button>}{message.undoStatus === "uncertain" && !isTimestampExpired(message.undo?.createdAt || "") && <p className="mt-1 text-[11px] leading-5 text-muted">撤销响应曾中断，再次点击不会重复撤销。</p>}</div>}</div></div>)}
                     {loading && <div className="flex justify-start"><div className="flex items-center gap-1.5 rounded-2xl bg-[#f3f4f6] px-4 py-3 text-[#8a929e] dark:bg-white/[.06] dark:text-white/45" role="status" aria-label="智能助手正在回答"><i className="assistant-dot" /><i className="assistant-dot [animation-delay:220ms]" /><i className="assistant-dot [animation-delay:440ms]" /></div></div>}
                     <div ref={endRef} />
                   </div>
@@ -703,6 +746,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                     <option value="none">不附带数据</option><option value="page">仅当前页面</option><option value="account">账户摘要</option>
                   </select>
                   <button type="button" aria-pressed={temporary} onClick={toggleTemporary} className={`h-7 shrink-0 rounded-full border px-2.5 transition-colors ${temporary ? "border-edge-strong bg-[#eceff1] text-ink dark:border-white/20 dark:bg-white/12 dark:text-white" : "border-edge bg-white dark:border-white/10 dark:bg-white/[.06]"}`}>临时对话</button>
+                  <button type="button" onClick={()=>setPrivacyOpen(value=>!value)} className="h-7 shrink-0 rounded-full border border-edge bg-white px-2.5 dark:border-white/10 dark:bg-white/[.06]">发送内容</button><button type="button" aria-pressed={persistAttachments} onClick={()=>setPersistAttachments(value=>!value)} className={`h-7 shrink-0 rounded-full border px-2.5 ${persistAttachments?"border-edge-strong bg-[#eceff1] text-ink dark:bg-white/12 dark:text-white":"border-edge bg-white dark:border-white/10 dark:bg-white/[.06]"}`}>{persistAttachments?"保留图片":"图片仅本次"}</button>
                   {messages.length > 0 && <button type="button" onClick={exportConversation} className="flex h-7 shrink-0 items-center gap-1 rounded-full border border-edge bg-white px-2.5 dark:border-white/10 dark:bg-white/[.06]" aria-label="导出当前对话"><IconDownload size={12} />导出</button>}
                 </div>
                 <div className="rounded-[20px] border border-edge-strong bg-bg-gray p-2 dark:border-white/12 dark:bg-white/[.045]">
@@ -714,6 +758,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                 </div>
                 {attachmentError && <p role="alert" className="mt-2 px-1 text-[10px] text-[#a45353] dark:text-[#ef9a9a]">{attachmentError}</p>}
                 {historyStatus === "error" && <button type="button" onClick={() => setHistoryRetry((value) => value + 1)} className="mt-2 w-full text-center text-[10px] text-muted hover:text-ink">对话保存失败，点击重试</button>}
+                {privacyOpen&&<div className="mt-2 rounded-xl border border-edge bg-bg-gray/55 p-3 text-[10px] leading-5 text-muted dark:border-white/10 dark:bg-white/[.04] dark:text-white/50"><div className="font-medium text-ink dark:text-white/75">将发送给 {selectedModel==="auto"?"首个可用的第三方模型服务":availableModels.find(item=>`${item.serviceId}:${item.model}`===selectedModel)?.serviceName||"所选模型服务"}</div><div>问题文字{pendingImages.length?`、${pendingImages.length} 张图片`:""}{dataScope==="page"?"、当前页面摘要":dataScope==="account"?"、账户持仓摘要":""}{memoryEnabled&&memory?"、已启用的记忆":""}。模型服务商可能按其条款保留请求，请勿发送密码、Cookie 或 API Key。</div></div>}
               </form>
             </>
           </section>

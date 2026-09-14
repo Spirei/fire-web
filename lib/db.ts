@@ -68,6 +68,46 @@ function migrate(database: Database.Database) {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS assistant_spaces (
+      id TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS assistant_conversation_spaces (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      conversation_id TEXT NOT NULL,
+      space_id TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (user_id, conversation_id)
+    );
+    CREATE TABLE IF NOT EXISTS assistant_usage (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      conversation_id TEXT NOT NULL DEFAULT '',
+      service_id TEXT NOT NULL,
+      service_name TEXT NOT NULL,
+      model TEXT NOT NULL,
+      status TEXT NOT NULL,
+      latency_ms INTEGER NOT NULL DEFAULT 0,
+      prompt_tokens INTEGER NOT NULL DEFAULT 0,
+      completion_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost REAL NOT NULL DEFAULT 0,
+      error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_assistant_usage_user_time ON assistant_usage(user_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS assistant_attachments (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      conversation_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_assistant_attachments_conversation ON assistant_attachments(user_id,conversation_id);
+
     CREATE TABLE IF NOT EXISTS assistant_actions (
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       action_id TEXT NOT NULL,

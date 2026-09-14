@@ -16,6 +16,7 @@ import { modelAttempts } from "@/lib/modelServices";
 import { getModelHealth, setModelHealth } from "@/lib/modelHealth";
 import { readLimitedJson, readLimitedResponseJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 import { getAssistantPreferences } from "@/lib/assistantPreferences";
+import { logAssistantUsage } from "@/lib/assistantWorkspace";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type AssistantImage = { name: string; dataUrl: string };
@@ -33,10 +34,10 @@ const PAGE_LABELS: Record<string, string> = {
   celebs: "名人持仓", cards: "卡面库", library: "素材库", settings: "设置"
 };
 
-function streamAssistantResponse(response: Response, meta: { serviceId: string; serviceName: string; model: string }, fallbackUsed: boolean, startedAt: number) {
+function streamAssistantResponse(response: Response, meta: { serviceId: string; serviceName: string; model: string }, fallbackUsed: boolean, startedAt: number, userId: string, conversationId: string) {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
-  let buffered = "", answer = "", received = 0;
+  let buffered = "", answer = "", received = 0, promptTokens = 0, completionTokens = 0;
   const body = new ReadableStream({
     async start(controller) {
       const reader = response.body?.getReader();
@@ -53,7 +54,8 @@ function streamAssistantResponse(response: Response, meta: { serviceId: string; 
             const line = raw.trim();
             if (!line.startsWith("data:") || line === "data: [DONE]") continue;
             try {
-              const parsed = JSON.parse(line.slice(5).trim()) as { choices?: Array<{ delta?: { content?: string } }> };
+              const parsed = JSON.parse(line.slice(5).trim()) as { choices?: Array<{ delta?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+              promptTokens = Number(parsed.usage?.prompt_tokens || promptTokens); completionTokens = Number(parsed.usage?.completion_tokens || completionTokens);
               const delta = parsed.choices?.[0]?.delta?.content || "";
               if (!delta || answer.length >= 4000) continue;
               const safe = delta.slice(0, 4000 - answer.length); answer += safe;
@@ -62,6 +64,7 @@ function streamAssistantResponse(response: Response, meta: { serviceId: string; 
           }
         }
         setModelHealth(meta.serviceId, meta.model, { ok: Boolean(answer), latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString(), ...(answer ? {} : { error: "empty" }) });
+        logAssistantUsage({ userId, conversationId, serviceId: meta.serviceId, serviceName: meta.serviceName, model: meta.model, status: answer ? "ok" : "empty", latencyMs: Date.now()-startedAt, promptTokens, completionTokens });
         controller.enqueue(encoder.encode(`${JSON.stringify({ done: true, model: meta, fallbackUsed })}\n`));
         controller.close();
       } catch (error) { controller.error(error); }
@@ -288,7 +291,7 @@ export async function POST(request: Request) {
   if (!rateLimit(`assistant:${clientIp(request)}:${user.id}`, 24, 60_000) || !rateLimitGlobal("assistant", 240, 60_000)) {
     return NextResponse.json({ error: "提问过于频繁，请稍后再试" }, { status: 429 });
   }
-  let body: { messages?: ChatMessage[]; images?: AssistantImage[]; context?: PageContext; dataScope?: "none" | "page" | "account"; model?: { serviceId?: string; model?: string } } | null;
+  let body: { messages?: ChatMessage[]; images?: AssistantImage[]; context?: PageContext; dataScope?: "none" | "page" | "account"; model?: { serviceId?: string; model?: string }; conversationId?: string } | null;
   try {
     body = await readLimitedJson(request, 140 * 1024 * 1024);
   } catch (error) {
@@ -341,6 +344,7 @@ export async function POST(request: Request) {
           model: attempt.model,
           temperature: 0.2,
           stream: true,
+          stream_options: { include_usage: true },
           messages: [{ role: "system", content: system }, ...messages.map((item, index) => index === messages.length - 1 && item.role === "user" && images.length ? { role: "user", content: [{ type: "text", text: item.content.slice(0, 1200) }, ...images.map((image) => ({ type: "image_url", image_url: { url: image.dataUrl } }))] } : { role: item.role, content: item.content.slice(0, 1200) })]
         }),
         signal: AbortSignal.any([request.signal, timeoutSignal]),
@@ -348,20 +352,23 @@ export async function POST(request: Request) {
         cache: "no-store"
       });
       if (response.ok && response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
-        return streamAssistantResponse(response, { serviceId: attempt.service.id, serviceName: attempt.service.name, model: attempt.model }, attempts[0] !== attempt, startedAt);
+        return streamAssistantResponse(response, { serviceId: attempt.service.id, serviceName: attempt.service.name, model: attempt.model }, attempts[0] !== attempt, startedAt, user.id, String(body?.conversationId || "").slice(0,40));
       }
-      const data = await readLimitedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(response, 2 * 1024 * 1024).catch(() => null);
+      const data = await readLimitedResponseJson<{ choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } }>(response, 2 * 1024 * 1024).catch(() => null);
       const answer = data?.choices?.[0]?.message?.content?.trim();
       if (response.ok && answer) {
         setModelHealth(attempt.service.id, attempt.model, { ok: true, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString() });
+        logAssistantUsage({ userId:user.id, conversationId:String(body?.conversationId||"").slice(0,40), serviceId:attempt.service.id, serviceName:attempt.service.name, model:attempt.model, status:"ok", latencyMs:Date.now()-startedAt, promptTokens:Number(data?.usage?.prompt_tokens||0), completionTokens:Number(data?.usage?.completion_tokens||0) });
         return NextResponse.json({ answer: answer.slice(0, 4000), mode: "llm", model: { serviceId: attempt.service.id, serviceName: attempt.service.name, model: attempt.model }, fallbackUsed: attempts[0] !== attempt });
       }
       setModelHealth(attempt.service.id, attempt.model, { ok: false, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString(), error: `HTTP ${response.status || "empty"}` });
+      logAssistantUsage({ userId:user.id, conversationId:String(body?.conversationId||"").slice(0,40), serviceId:attempt.service.id, serviceName:attempt.service.name, model:attempt.model, status:"error", latencyMs:Date.now()-startedAt, error:`HTTP ${response.status||"empty"}` });
       console.warn(`[assistant] ${attempt.service.name}/${attempt.model} returned HTTP ${response.status || "empty"}, trying fallback`);
     } catch (error) {
       if (request.signal.aborted) return new Response(null, { status: 499 });
       sawTimeout ||= error instanceof Error && error.name === "TimeoutError";
       setModelHealth(attempt.service.id, attempt.model, { ok: false, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString(), error: error instanceof Error && error.name === "TimeoutError" ? "timeout" : "request_failed" });
+      logAssistantUsage({ userId:user.id, conversationId:String(body?.conversationId||"").slice(0,40), serviceId:attempt.service.id, serviceName:attempt.service.name, model:attempt.model, status:"error", latencyMs:Date.now()-startedAt, error:error instanceof Error&&error.name==="TimeoutError"?"timeout":"request_failed" });
       console.warn(`[assistant] ${attempt.service.name}/${attempt.model} failed, trying fallback`);
     }
   }
