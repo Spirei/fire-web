@@ -165,6 +165,10 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [persistAttachments, setPersistAttachments] = useState(false);
   const [spaces, setSpaces] = useState<AssistantSpace[]>([]);
   const [selectedSpace, setSelectedSpace] = useState("");
+  const [spaceDialogOpen, setSpaceDialogOpen] = useState(false);
+  const [spaceDraft, setSpaceDraft] = useState("");
+  const [spaceCreating, setSpaceCreating] = useState(false);
+  const [spaceError, setSpaceError] = useState("");
   const [spaceAssignments, setSpaceAssignments] = useState<Record<string,string>>({});
   const [usageSummary, setUsageSummary] = useState({ calls: 0, errors: 0, tokens: 0, cost: 0 });
   const [workspaceView, setWorkspaceView] = useState<"chat"|"trace">("chat");
@@ -550,11 +554,27 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   }
 
   async function addSpace() {
-    const name = window.prompt("空间名称")?.trim();
+    if (!spaceDialogOpen) {
+      setSpaceDraft("");
+      setSpaceError("");
+      setSpaceDialogOpen(true);
+      return;
+    }
+    const name = spaceDraft.trim();
     if (!name) return;
-    const response = await fetch("/api/assistant/spaces", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name}) });
-    const data = await response.json().catch(()=>null);
-    if (response.ok && data?.space) { setSpaces(current=>[...current,data.space]); setSelectedSpace(data.space.id); }
+    setSpaceCreating(true);
+    setSpaceError("");
+    try {
+      const response = await fetch("/api/assistant/spaces", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name}) });
+      const data = await response.json().catch(()=>null);
+      if (!response.ok || !data?.space) { setSpaceError(data?.error || "创建失败，请重试"); return; }
+      setSpaces(current=>[...current,data.space]);
+      setSelectedSpace(data.space.id);
+      setSpaceDialogOpen(false);
+      setSpaceDraft("");
+    } finally {
+      setSpaceCreating(false);
+    }
   }
 
   async function moveCurrentConversation(spaceId:string) {
@@ -933,6 +953,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
         </div>
       </div>}
       {renameTarget&&<div className="assistant-rename-overlay" data-assistant-theme={appearance} role="dialog" aria-modal="true" aria-label="重命名会话"><button type="button" className="assistant-rename-mask" aria-label="取消重命名" onClick={()=>setRenameTarget(null)}/><form className="assistant-rename-dialog" onSubmit={event=>{event.preventDefault();if(renameDraft.trim())void updateConversation(renameTarget.id,{title:renameDraft.trim()});}}><h3>重命名会话</h3><input autoFocus value={renameDraft} maxLength={80} onChange={event=>setRenameDraft(event.target.value)} aria-label="会话名称"/><div><button type="button" onClick={()=>setRenameTarget(null)}>取消</button><button type="submit" disabled={!renameDraft.trim()}>保存</button></div></form></div>}
+      {spaceDialogOpen&&<div className="assistant-rename-overlay" data-assistant-theme={appearance} role="dialog" aria-modal="true" aria-label="新建空间"><button type="button" className="assistant-rename-mask" aria-label="取消新建空间" onClick={()=>!spaceCreating&&setSpaceDialogOpen(false)}/><form className="assistant-rename-dialog assistant-space-dialog" onSubmit={event=>{event.preventDefault();void addSpace();}}><h3>新建空间</h3><p>用空间归类相关对话。</p><input autoFocus value={spaceDraft} maxLength={40} onChange={event=>{setSpaceDraft(event.target.value);setSpaceError("");}} onKeyDown={event=>{if(event.key==="Escape"&&!spaceCreating)setSpaceDialogOpen(false);}} placeholder="输入空间名称" aria-label="空间名称"/>{spaceError&&<span role="alert">{spaceError}</span>}<div><button type="button" disabled={spaceCreating} onClick={()=>setSpaceDialogOpen(false)}>取消</button><button type="submit" disabled={!spaceDraft.trim()||spaceCreating}>{spaceCreating?"创建中…":"创建"}</button></div></form></div>}
       <AssistantHarnessSettings open={settingsOpen} section={settingsSection} appearance={appearance} fontSize={contentFontSize} density={density} models={availableModels} selectedModel={selectedModel} spaces={spaces} selectedSpace={selectedSpace} memoryEnabled={memoryEnabled} memory={memory} usage={usageSummary} onSelectModel={selectAssistantModel} onMoveSpace={value=>void moveCurrentConversation(value)} onAddSpace={()=>void addSpace()} onMemoryEnabled={value=>void saveMemory(value,memory)} onMemoryChange={setMemory} onMemorySave={()=>void saveMemory(memoryEnabled,memory)} onClearMemory={()=>{setMemory("");setMemoryEnabled(false);void fetch("/api/assistant/preferences",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({memoryEnabled:false,memory:""})});}} onClose={()=>setSettingsOpen(false)} onSection={setSettingsSection} onAppearance={setAppearance} onFontSize={setContentFontSize} onDensity={setDensity} onModelsSaved={()=>{void fetch("/api/assistant/models").then(response=>response.ok?response.json():null).then(data=>{if(Array.isArray(data?.services))setAvailableModels(data.services);}).catch(()=>undefined);}} />
     </>
   );
