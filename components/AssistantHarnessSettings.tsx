@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { IconAdjustmentsHorizontal, IconBrain, IconDatabaseCog, IconMoon, IconRobot, IconSettings, IconSun, IconTrash, IconX } from "@tabler/icons-react";
+import { IconAdjustmentsHorizontal, IconBrain, IconCheck, IconChevronDown, IconDatabaseCog, IconMoon, IconRobot, IconSettings, IconSun, IconTrash, IconX } from "@tabler/icons-react";
 
 export type AssistantAppearance = "light" | "dark" | "system";
 export type AssistantDensity = "compact" | "comfortable";
@@ -38,7 +38,9 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
   const [services,setServices]=useState<ServiceDraft[]>([]);
   const [saving,setSaving]=useState(false);
   const [saveMessage,setSaveMessage]=useState("");
+  const [spaceMenuOpen,setSpaceMenuOpen]=useState(false);
   useEffect(()=>{if(!open||section!=="models")return;void fetch("/api/settings").then(r=>r.ok?r.json():null).then(data=>{const rows=data?.settings?.modelServices;if(Array.isArray(rows))setServices(rows);}).catch(()=>undefined);},[open,section]);
+  useEffect(()=>{if(!spaceMenuOpen)return;const close=(event:KeyboardEvent)=>{if(event.key==="Escape")setSpaceMenuOpen(false);};window.addEventListener("keydown",close);return()=>window.removeEventListener("keydown",close);},[spaceMenuOpen]);
   const updateService=(id:string,patch:Partial<ServiceDraft>)=>setServices(current=>current.map(item=>item.id===id?{...item,...patch}:item));
   const saveModels=async()=>{setSaving(true);setSaveMessage("");try{const response=await fetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({modelServices:services})});if(!response.ok)throw new Error();setEditingModels(false);setSaveMessage("模型服务已保存");onModelsSaved?.();}catch{setSaveMessage("保存失败，请重试");}finally{setSaving(false);}};
   if (!open) return null;
@@ -70,7 +72,7 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
             <SettingRow title="繁忙时的发送行为" desc="模型回答时输入新问题会排队发送"><span className="harness-setting-pill">排队发送</span></SettingRow>
           </>}
           {section === "conversation" && <><h3>对话与记忆</h3><p className="harness-section-intro">集中管理对话归类、跨对话记忆和模型调用信息。</p>
-            <SettingRow title="当前对话空间" desc="把当前对话归入空间，方便长期整理"><select className="harness-setting-select" value={selectedSpace} onChange={event=>onMoveSpace?.(event.target.value)} aria-label="当前对话空间"><option value="">未分类空间</option>{spaces.map(space=><option key={space.id} value={space.id}>{space.name}</option>)}</select></SettingRow>
+            <SettingRow title="当前对话空间" desc="把当前对话归入空间，方便长期整理"><div className="harness-setting-menu-wrap"><button type="button" className="harness-setting-select" aria-haspopup="listbox" aria-expanded={spaceMenuOpen} onClick={()=>setSpaceMenuOpen(value=>!value)}><span>{spaces.find(space=>space.id===selectedSpace)?.name||"未分类空间"}</span><IconChevronDown size={16}/></button>{spaceMenuOpen&&<><button type="button" className="harness-setting-menu-mask" aria-label="关闭空间选择" onClick={()=>setSpaceMenuOpen(false)}/><div className="harness-setting-menu" role="listbox" aria-label="选择对话空间">{[{id:"",name:"未分类空间"},...spaces].map(space=><button type="button" role="option" aria-selected={space.id===selectedSpace} key={space.id||"unclassified"} onClick={()=>{onMoveSpace?.(space.id);setSpaceMenuOpen(false);}}><span>{space.name}</span>{space.id===selectedSpace&&<IconCheck size={16}/>}</button>)}</div></>}</div></SettingRow>
             <SettingRow title="空间管理" desc="创建新的对话空间"><button type="button" className="harness-setting-pill" onClick={onAddSpace}>新建空间</button></SettingRow>
             <div className="harness-setting-block"><div className="harness-memory-head"><div><div className="harness-setting-title">跨对话记忆</div><p>让智能助手记住你的回答偏好</p></div><label className="harness-switch"><input type="checkbox" checked={memoryEnabled} onChange={event=>onMemoryEnabled?.(event.target.checked)}/><span/></label></div><textarea className="harness-memory-editor" value={memory} maxLength={2000} rows={5} onChange={event=>onMemoryChange?.(event.target.value)} onBlur={onMemorySave} placeholder="例如：偏好简洁回答、默认使用港币……"/><div className="harness-memory-foot"><span>{memory.length}/2000</span><button type="button" onClick={onClearMemory}>清除记忆</button></div></div>
             <div className="harness-setting-block"><div className="harness-setting-title">模型调用</div><p className="harness-block-desc">当前账户的智能助手调用概览</p><div className="harness-usage-grid"><div><b>{usage.calls.toLocaleString()}</b><span>调用</span></div><div><b>{usage.tokens.toLocaleString()}</b><span>Token</span></div><div><b>{usage.errors.toLocaleString()}</b><span>失败</span></div><div><b>{usage.cost>0?usage.cost.toFixed(4):"—"}</b><span>估算费用</span></div></div></div>
