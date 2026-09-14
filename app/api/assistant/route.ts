@@ -10,9 +10,9 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 type PageContext = { page?: string; label?: string; symbol?: string; filter?: string };
 type AssistantAction =
   | { type: "navigate"; label: string; path: string }
-  | { type: "create_group"; label: string; name: string }
-  | { type: "assign_group"; label: string; groupId: string; groupName: string; recordIds: string[]; symbols: string[]; previous: Array<{ id: string; groupId: string }> }
-  | { type: "trade"; label: string; recordId: string; code: string; name: string; side: "buy" | "sell"; qty: number; price: number; fees: number };
+  | { type: "create_group"; label: string; name: string; createdAt: string }
+  | { type: "assign_group"; label: string; groupId: string; groupName: string; recordIds: string[]; symbols: string[]; previous: Array<{ id: string; groupId: string }>; createdAt: string }
+  | { type: "trade"; label: string; recordId: string; code: string; name: string; market: string; side: "buy" | "sell"; qty: number; price: number; fees: number; createdAt: string };
 
 const PAGE_LABELS: Record<string, string> = {
   holdings: "账户资产", assets: "资产分析", pnl: "资产总盈亏", fire: "FIRE",
@@ -33,7 +33,10 @@ function compactRecords(records: StockRecord[]) {
   const incompleteAll = records.filter((item) => !item.code || !item.name || item.price === "");
   const incomplete = incompleteAll.slice(0, 12);
   const staleBefore = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const staleAll = records.filter((item) => !item.updatedAt || Date.parse(item.updatedAt) < staleBefore);
+  const staleAll = records.filter((item) => {
+    const updatedAt = Date.parse(item.updatedAt || "");
+    return !Number.isFinite(updatedAt) || updatedAt < staleBefore;
+  });
   const stale = staleAll.slice(0, 12);
   const codeCounts = new Map<string, number>();
   records.forEach((item) => codeCounts.set(`${item.market}:${item.code}`.toUpperCase(), (codeCounts.get(`${item.market}:${item.code}`.toUpperCase()) || 0) + 1));
@@ -103,41 +106,56 @@ const MARKET_FILTERS: Array<[RegExp, string, string]> = [[/美股/, "美股", "u
 
 function recordForToken(records: StockRecord[], token: string) {
   const value = token.trim().toUpperCase();
-  return records.find((item) => {
+  const qualified = records.find((item) => {
     const market = item.market.toUpperCase();
     const code = item.code.toUpperCase();
-    return value === code || value === `${market}.${code}` || value === `${market}:${code}` || value === `${market}-${code}`;
+    return value === `${market}.${code}` || value === `${market}:${code}` || value === `${market}-${code}`;
   });
+  if (qualified) return qualified;
+  const matches = records.filter((item) => value === item.code.toUpperCase());
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
-function parseAction(question: string, records: StockRecord[], userId: string): { answer: string; action: AssistantAction } | null {
+function parseAction(question: string, records: StockRecord[], userId: string): { answer: string; action?: AssistantAction } | null {
+  const createdAt = new Date().toISOString();
   const trade = question.match(/(?:记录|录入|记一笔|我)?\s*(买入|卖出)\s*([A-Za-z0-9.:-]{1,20})\s*(\d+(?:\.\d+)?)\s*(?:股|只|份)?\s*(?:，|,|@|以|价格|单价|每股)?\s*(\d+(?:\.\d+)?)/i);
   if (trade) {
     const record = recordForToken(records, trade[2]);
-    if (!record) return null;
     const qty = Number(trade[3]), price = Number(trade[4]);
+    const sameCode = records.filter((item) => item.code.toUpperCase() === trade[2].toUpperCase());
+    if (!record && sameCode.length > 1) {
+      return { answer: `代码 ${trade[2].toUpperCase()} 在多个市场都有记录，请改用 ${sameCode.map((item) => `${item.market.toUpperCase()}:${item.code}`).join(" 或 ")} 明确标的。` };
+    }
+    if (!record) return null;
+    if (!Number.isFinite(qty) || !Number.isFinite(price) || qty <= 0 || price <= 0) {
+      return { answer: "数量和成交价必须是大于 0 的有效数字，请修改后重新输入。" };
+    }
     const side = trade[1] === "买入" ? "buy" : "sell";
     return {
       answer: `已生成${trade[1]}预览。请核对股票、数量、价格和预计金额，确认后才会写入订单与持仓。`,
-      action: { type: "trade", label: `确认${trade[1]}入账`, recordId: record.id, code: record.code, name: record.name, side, qty, price, fees: 0 }
+      action: { type: "trade", label: `确认${trade[1]}入账`, recordId: record.id, code: record.code, name: record.name, market: record.market.toUpperCase(), side, qty, price, fees: 0, createdAt }
     };
   }
 
   const create = question.match(/(?:创建|新建|添加)(?:一个|名为)?[“"']?(.{1,30}?)[”"']?(?:的)?(?:自选)?分组(?:吧|。|！|!)?$/);
   if (create) {
     const name = create[1].trim();
-    return { answer: `已准备创建自选分组“${name}”。确认后才会保存，你也可以继续修改名称。`, action: { type: "create_group", label: "确认创建分组", name } };
+    return { answer: `已准备创建自选分组“${name}”。确认后才会保存，你也可以继续修改名称。`, action: { type: "create_group", label: "确认创建分组", name, createdAt } };
   }
 
   const assign = question.match(/(?:把|将)\s*([A-Za-z0-9.、,，\s:-]+?)\s*(?:移到|移动到|加入|放进)\s*[“"']?(.{1,30}?)[”"']?(?:分组)?(?:里|中|。|！|!)?$/i);
   if (assign) {
-    const tokens = assign[1].split(/[、,，\s]+/).filter(Boolean);
-    const selected = [...new Map(tokens.map((token) => recordForToken(records, token)).filter((item): item is StockRecord => Boolean(item)).map((item) => [item.id, item])).values()];
+    const tokens = [...new Set(assign[1].split(/[、,，\s]+/).filter(Boolean))];
+    const resolved = tokens.map((token) => ({ token, record: recordForToken(records, token) }));
+    const unresolved = resolved.filter((item) => !item.record).map((item) => item.token.toUpperCase());
+    if (unresolved.length) return { answer: `未能唯一确定 ${unresolved.join("、")}。如果不同市场有相同代码，请写成 US:代码、HK:代码或 CN:代码后重试。` };
+    const selected = [...new Map(resolved.map((item) => item.record as StockRecord).map((item) => [item.id, item])).values()];
     const groupName = assign[2].trim().replace(/分组$/, "").trim();
     const group = listWatchGroups(userId).find((item) => item.kind === "custom" && item.name.toLowerCase() === groupName.toLowerCase());
+    if (!group) return { answer: `没有找到自选分组“${groupName}”。请先创建该分组，或检查名称后重试。` };
     if (selected.length && group) return {
       answer: `已找到 ${selected.map((item) => item.code).join("、")} 和分组“${group.name}”。确认后会移动，并提供撤销。`,
-      action: { type: "assign_group", label: `确认移入“${group.name}”`, groupId: group.id, groupName: group.name, recordIds: selected.map((item) => item.id), symbols: selected.map((item) => item.code), previous: selected.map((item) => ({ id: item.id, groupId: item.watchGroupId || "" })) }
+      action: { type: "assign_group", label: `确认移入“${group.name}”`, groupId: group.id, groupName: group.name, recordIds: selected.map((item) => item.id), symbols: selected.map((item) => item.code), previous: selected.map((item) => ({ id: item.id, groupId: item.watchGroupId || "" })), createdAt }
     };
   }
 

@@ -74,6 +74,7 @@ function filterIdFromToken(groups: WatchGroup[], raw: string): string {
 
 export default function QuotesView({ initialSymbol, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, groups, onDetailChange, onToggleWatch }: Props) {
   const searchParams = useSearchParams();
+  const filterToken = searchParams.get("filter") ?? "";
   const { brokerIcons, stockIcons, assetIcons } = useAssetIcons(["broker", "stock", "crypto", "metal"]);
   const [added, setAdded] = useState("");
   const [importOpen, setImportOpen] = useState(false);
@@ -101,7 +102,8 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
   const [watchGroups, setWatchGroups] = useState<WatchGroup[]>(initialWatchGroups);
   // useSearchParams 在 SSR 与水合阶段提供同一个地址快照，既保留首帧筛选，又避免直接读 window
   // 造成 ?filter=us 刷新时 className 不一致和先闪出「全部」。
-  const [filterId, setFilterId] = useState(() => filterIdFromToken(initialWatchGroups, searchParams.get("filter") ?? ""));
+  const [filterId, setFilterId] = useState(() => filterIdFromToken(initialWatchGroups, filterToken));
+  const lastUrlFilterRef = useRef(filterToken);
   const [groupSheetOpen, setGroupSheetOpen] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 6;
@@ -227,22 +229,29 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
   // 市场使用 us/cn/hk 等市场码，自定义分组按当前顺序使用 1/2/3；其他格式直接清理。
   useLayoutEffect(() => {
     if (watchGroups.length === 0) return;
-    const sp = new URLSearchParams(window.location.search);
-    const raw = sp.get("filter") ?? "";
+    const raw = filterToken;
     if (!raw) {
       if (filterId) setFilterId("");
+      lastUrlFilterRef.current = "";
       return;
     }
-    // 重排分组时以当前已选中的实体为准，只更新它的新序号，不能切换到新的第 N 组。
-    const resolved = watchGroups.some((item) => item.id === filterId)
-      ? filterId
-      : filterIdFromToken(watchGroups, raw);
+    // 地址栏主动变化（助手同页切换、前进/后退）时以 URL 为准；仅分组重排时保留实体 id，
+    // 再把数字序号替换成重排后的新序号。
+    const urlChanged = raw !== lastUrlFilterRef.current;
+    const resolved = urlChanged
+      ? filterIdFromToken(watchGroups, raw)
+      : watchGroups.some((item) => item.id === filterId) ? filterId : filterIdFromToken(watchGroups, raw);
     const canonical = compactFilterToken(watchGroups, resolved);
     if (resolved !== filterId) setFilterId(resolved);
-    if (canonical !== raw) writeFilterToUrl(resolved, "replace");
+    if (canonical !== raw) {
+      lastUrlFilterRef.current = canonical;
+      writeFilterToUrl(resolved, "replace");
+    } else {
+      lastUrlFilterRef.current = raw;
+    }
     // writeFilterToUrl 只依赖浏览器当前地址。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchGroups, filterId]);
+  }, [watchGroups, filterId, filterToken]);
 
   // 分组 chips：全部 + 可见分组
   const groupChips = useMemo(() => {

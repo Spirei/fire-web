@@ -7,11 +7,11 @@ import type { StoredAssistantMessage } from "@/lib/assistantHistory";
 
 type AssistantAction =
   | { type: "navigate"; label: string; path: string }
-  | { type: "create_group"; label: string; name: string }
-  | { type: "assign_group"; label: string; groupId: string; groupName: string; recordIds: string[]; symbols: string[]; previous: Array<{ id: string; groupId: string }> }
-  | { type: "trade"; label: string; recordId: string; code: string; name: string; side: "buy" | "sell"; qty: number; price: number; fees: number };
+  | { type: "create_group"; label: string; name: string; createdAt: string }
+  | { type: "assign_group"; label: string; groupId: string; groupName: string; recordIds: string[]; symbols: string[]; previous: Array<{ id: string; groupId: string }>; createdAt: string }
+  | { type: "trade"; label: string; recordId: string; code: string; name: string; market?: string; side: "buy" | "sell"; qty: number; price: number; fees: number; createdAt: string };
 type UndoAction = { type: "delete_group"; groupId: string } | { type: "restore_groups"; previous: Array<{ id: string; groupId: string }> } | { type: "delete_order"; orderId: string };
-type Message = { role: "user" | "assistant"; content: string; action?: AssistantAction; actionStatus?: "running" | "done" | "error"; undo?: UndoAction };
+type Message = { role: "user" | "assistant"; content: string; action?: AssistantAction; actionStatus?: "running" | "done" | "error" | "uncertain"; undo?: UndoAction };
 
 const PAGE_COPY: Record<string, { label: string; prompts: string[] }> = {
   holdings: { label: "账户资产", prompts: ["概览我的持仓", "检查持仓数据异常", "我的持仓分布如何？"] },
@@ -29,6 +29,13 @@ function displayText(text: string) {
 }
 
 const MAX_SAVED_MESSAGES = 30;
+const ACTION_TTL_MS = 15 * 60 * 1000;
+
+function isActionExpired(action: AssistantAction) {
+  if (action.type === "navigate") return false;
+  const createdAt = Date.parse(action.createdAt);
+  return !Number.isFinite(createdAt) || createdAt > Date.now() + 60_000 || Date.now() - createdAt > ACTION_TTL_MS;
+}
 
 function historyKey(userId: string) {
   return `fire:assistant:history:${userId}`;
@@ -45,6 +52,11 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const saveQueue = useRef(Promise.resolve());
   const lastSavedHistory = useRef(JSON.stringify(initialHistory));
   const legacyHistoryPending = useRef(false);
+  const actionsInFlight = useRef(new Set<number>());
+  const actionOperationInFlight = useRef(false);
+  const requestGeneration = useRef(0);
+  const requestController = useRef<AbortController | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const copy = PAGE_COPY[page] || { label: "当前页面", prompts: ["概览当前数据", "检查数据异常", "给我下一步建议"] };
   const contextLabel = useMemo(() => symbol ? `${copy.label} · ${symbol}` : copy.label, [copy.label, symbol]);
@@ -56,7 +68,9 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       const saved = JSON.parse(localStorage.getItem(historyKey(userId)) || "[]") as Message[];
       if (messages.length === 0 && Array.isArray(saved) && saved.length > 0) {
         legacyHistoryPending.current = true;
-        setMessages(saved.filter((item) => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string").slice(-MAX_SAVED_MESSAGES));
+        setMessages(saved.flatMap((item): Message[] => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string"
+          ? [{ role: item.role, content: item.content.slice(0, 4000) }]
+          : []).slice(-MAX_SAVED_MESSAGES));
       } else {
         localStorage.removeItem(historyKey(userId));
       }
@@ -88,7 +102,10 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   async function send(value: string) {
     const question = value.trim();
     if (!question || loading) return;
-    const next = [...messages, { role: "user" as const, content: question }];
+    const next = [...messages, { role: "user" as const, content: question }].slice(-MAX_SAVED_MESSAGES);
+    const generation = requestGeneration.current;
+    const controller = new AbortController();
+    requestController.current = controller;
     setMessages(next);
     setInput("");
     setLoading(true);
@@ -97,19 +114,30 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, context: { page, label: copy.label, symbol, filter } })
+        body: JSON.stringify({ messages: next, context: { page, label: copy.label, symbol, filter } }),
+        signal: controller.signal
       });
       const data = await response.json().catch(() => null) as { answer?: string; error?: string; action?: AssistantAction } | null;
       if (!response.ok) throw new Error(data?.error || "暂时无法回答");
-      setMessages((current) => [...current, { role: "assistant", content: data?.answer || "暂时没有结果", action: data?.action }]);
+      if (requestGeneration.current === generation) {
+        setMessages((current) => [...current, { role: "assistant" as const, content: data?.answer || "暂时没有结果", action: data?.action }].slice(-MAX_SAVED_MESSAGES));
+      }
     } catch (error) {
-      setMessages((current) => [...current, { role: "assistant", content: error instanceof Error ? error.message : "连接失败，请稍后重试" }]);
+      if (requestGeneration.current === generation && !(error instanceof DOMException && error.name === "AbortError")) {
+        setMessages((current) => [...current, { role: "assistant" as const, content: error instanceof Error ? error.message : "连接失败，请稍后重试" }].slice(-MAX_SAVED_MESSAGES));
+      }
     } finally {
-      setLoading(false);
+      if (requestController.current === controller) requestController.current = null;
+      if (requestGeneration.current === generation) setLoading(false);
     }
   }
 
   function startNewChat() {
+    if (actionOperationInFlight.current) return;
+    requestGeneration.current += 1;
+    requestController.current?.abort();
+    requestController.current = null;
+    setLoading(false);
     setMessages([]);
     setInput("");
     void fetch("/api/assistant/history", { method: "DELETE" });
@@ -126,10 +154,21 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   }
 
   async function executeAction(action: AssistantAction, index: number) {
+    if (actionsInFlight.current.has(index) || actionOperationInFlight.current) return;
+    if (isActionExpired(action)) {
+      updateMessage(index, { action: undefined, actionStatus: undefined, content: `${messages[index]?.content || "操作预览"}\n\n预览已超过 15 分钟，请重新输入指令后再确认。` });
+      return;
+    }
+    actionsInFlight.current.add(index);
+    actionOperationInFlight.current = true;
+    setActionBusy(true);
     if (action.type === "navigate") {
       updateMessage(index, { actionStatus: "done" });
       onNavigate(action.path);
       setOpen(false);
+      actionsInFlight.current.delete(index);
+      actionOperationInFlight.current = false;
+      setActionBusy(false);
       return;
     }
     updateMessage(index, { actionStatus: "running" });
@@ -155,10 +194,18 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       updateMessage(index, { actionStatus: "done", undo });
     } catch (error) {
       updateMessage(index, { actionStatus: "error", content: `${messages[index]?.content || "操作"}\n\n${error instanceof Error ? error.message : "操作失败"}` });
+    } finally {
+      actionsInFlight.current.delete(index);
+      actionOperationInFlight.current = false;
+      setActionBusy(false);
     }
   }
 
   async function undoAction(undo: UndoAction, index: number) {
+    if (actionsInFlight.current.has(index) || actionOperationInFlight.current) return;
+    actionsInFlight.current.add(index);
+    actionOperationInFlight.current = true;
+    setActionBusy(true);
     updateMessage(index, { actionStatus: "running" });
     try {
       if (undo.type === "delete_group") {
@@ -180,14 +227,22 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       updateMessage(index, { actionStatus: undefined, action: undefined, undo: undefined, content: `${messages[index]?.content || "操作"}\n\n已撤销。` });
     } catch (error) {
       updateMessage(index, { actionStatus: "done", content: `${messages[index]?.content || "操作"}\n\n撤销失败：${error instanceof Error ? error.message : "请稍后重试"}` });
+    } finally {
+      actionsInFlight.current.delete(index);
+      actionOperationInFlight.current = false;
+      setActionBusy(false);
     }
   }
 
   function actionSummary(action: AssistantAction) {
-    if (action.type === "trade") return `${action.name}（${action.code}） · ${action.side === "buy" ? "买入" : "卖出"} ${action.qty} 股 × ${action.price} · 预计 ${(action.qty * action.price + (action.side === "buy" ? action.fees : -action.fees)).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
+    if (action.type === "trade") return `${action.name}（${action.market ? `${action.market}:` : ""}${action.code}） · ${action.side === "buy" ? "买入" : "卖出"} ${action.qty} 股 × ${action.price} · 预计 ${(action.qty * action.price + (action.side === "buy" ? action.fees : -action.fees)).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
     if (action.type === "assign_group") return `${action.symbols.join("、")} → ${action.groupName}`;
     if (action.type === "create_group") return `新分组：${action.name}`;
     return action.label;
+  }
+
+  function actionExpired(action: AssistantAction) {
+    return isActionExpired(action);
   }
 
   if (!mounted) return null;
@@ -204,7 +259,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
             <header className="flex min-h-[68px] items-center gap-3 border-b border-edge px-5">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#171b24] text-white dark:bg-white dark:text-[#11151d]"><IconSparkles size={18} /></span>
               <div className="min-w-0 flex-1"><div className="text-sm font-semibold text-ink">账户助手</div><div className="truncate text-[11px] text-muted">正在查看：{contextLabel}</div></div>
-              {messages.length > 0 && <button type="button" onClick={startNewChat} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="开始新对话" title="开始新对话"><IconPlus size={18} /></button>}
+              {messages.length > 0 && <button type="button" disabled={actionBusy} onClick={startNewChat} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="开始新对话" title={actionBusy ? "操作完成后可开始新对话" : "开始新对话"}><IconPlus size={18} /></button>}
               <button type="button" onClick={() => setMinimized((value) => !value)} className="hidden h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray sm:flex" aria-label={minimized ? "展开" : "最小化"}><IconMinus size={18} /></button>
               <button type="button" onClick={() => setOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭"><IconX size={18} /></button>
             </header>
@@ -225,7 +280,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {messages.map((message, index) => <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-[#171b24] text-white dark:bg-white dark:text-[#11151d]" : "bg-bg-gray text-ink"}`}>{displayText(message.content)}{message.action && <div className="mt-3 rounded-xl border border-edge bg-white/80 p-3 dark:bg-white/[.05]"><div className="text-xs font-medium text-ink">{actionSummary(message.action)}</div><button type="button" disabled={message.actionStatus === "running" || message.actionStatus === "done"} onClick={() => void executeAction(message.action as AssistantAction, index)} className="mt-3 w-full rounded-xl border border-edge-strong bg-white px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover disabled:opacity-55 dark:bg-[#1c222d]">{message.actionStatus === "running" ? "处理中…" : message.actionStatus === "done" ? "已完成" : message.actionStatus === "error" ? "重试" : message.action.label}</button>{message.actionStatus === "done" && message.undo && <button type="button" onClick={() => void undoAction(message.undo as UndoAction, index)} className="mt-2 w-full text-center text-[11px] text-muted hover:text-ink">撤销操作</button>}</div>}</div></div>)}
+                    {messages.map((message, index) => <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-[#171b24] text-white dark:bg-white dark:text-[#11151d]" : "bg-bg-gray text-ink"}`}>{displayText(message.content)}{message.action && <div className="mt-3 rounded-xl border border-edge bg-white/80 p-3 dark:bg-white/[.05]"><div className="text-xs font-medium text-ink">{actionSummary(message.action)}</div><button type="button" disabled={message.actionStatus === "running" || message.actionStatus === "done" || message.actionStatus === "uncertain" || actionExpired(message.action)} onClick={() => void executeAction(message.action as AssistantAction, index)} className="mt-3 w-full rounded-xl border border-edge-strong bg-white px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover disabled:opacity-55 dark:bg-[#1c222d]">{message.actionStatus === "running" ? "处理中…" : message.actionStatus === "done" ? "已完成" : message.actionStatus === "uncertain" ? "请先核对执行结果" : actionExpired(message.action) ? "预览已过期，请重新输入" : message.actionStatus === "error" ? "重试" : message.action.label}</button>{message.actionStatus === "uncertain" && <p className="mt-2 text-[11px] leading-5 text-muted">页面曾在执行过程中中断。为避免重复入账，请先到对应页面核对结果，再重新下达指令。</p>}{message.actionStatus === "done" && message.undo && <button type="button" onClick={() => void undoAction(message.undo as UndoAction, index)} className="mt-2 w-full text-center text-[11px] text-muted hover:text-ink">撤销操作</button>}</div>}</div></div>)}
                     {loading && <div className="flex justify-start"><div className="flex items-center gap-1 rounded-2xl bg-bg-gray px-4 py-3"><i className="assistant-dot" /><i className="assistant-dot [animation-delay:120ms]" /><i className="assistant-dot [animation-delay:240ms]" /></div></div>}
                     <div ref={endRef} />
                   </div>
