@@ -802,7 +802,6 @@
   color:#8d9299;
 }
 .fire-workspace-breadcrumb { display:flex; min-width:0; align-items:center; gap:6px; font-size:12px; white-space:nowrap; }
-.fire-workspace-breadcrumb i { font-style:normal; opacity:.62; }
 .fire-workspace-breadcrumb strong { overflow:hidden; color:var(--ink); font-weight:650; text-overflow:ellipsis; }
 .fire-workspace-status { display:flex; flex:none; align-items:center; gap:7px; margin-left:auto; padding-left:18px; font-size:11px; }
 .fire-workspace-status i { width:6px; height:6px; border-radius:999px; background:var(--workspace-accent); box-shadow:0 0 9px color-mix(in srgb,var(--workspace-accent) 72%,transparent); }

@@ -845,7 +845,7 @@ export default function RecordsApp({
         <div className={activeTab === "assistant" ? "" : "fire-workspace-shell"}>
         {activeTab !== "assistant" && (
           <header className="fire-workspace-context" style={{ "--workspace-accent": doorStatus?.accent ?? "#8b9199" } as React.CSSProperties}>
-            <div className="fire-workspace-breadcrumb"><span>Fire</span><i>/</i><strong>{activePageLabel}</strong></div>
+            <div className="fire-workspace-breadcrumb"><strong>{activePageLabel}</strong></div>
             {doorStatus && <div className="fire-workspace-status"><i />{doorStatus.label}</div>}
           </header>
         )}
