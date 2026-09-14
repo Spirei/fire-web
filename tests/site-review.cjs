@@ -220,8 +220,10 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   assert(globalStyles.includes('assistant-thinking 1.8s'));
   assert(source.includes('onPaste={(event) =>'));
   assert(source.includes('onDrop={(event) =>'));
-  assert(!source.includes('IconPaperclip'));
-  assert(!source.includes('imageInputRef'));
+  assert(source.includes('IconPaperclip'));
+  assert(source.includes('imageInputRef'));
+  assert(source.includes('accept="image/*"'));
+  assert(source.includes('aria-label="添加附件"'));
   assert(source.includes('100 * 1024 * 1024'));
   assert(source.includes('pendingImageBytesRef.current += reservedBytes'));
   assert(source.includes('pendingImageSequenceRef.current'));
