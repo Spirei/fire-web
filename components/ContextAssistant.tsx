@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconMessageCircle, IconMinus, IconPlus, IconSparkles, IconX } from "@tabler/icons-react";
+import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconMessageCircle, IconMinus, IconPlus, IconX } from "@tabler/icons-react";
 import type { StoredAssistantMessage } from "@/lib/assistantHistory";
 
 type AssistantAction =
@@ -29,6 +29,15 @@ const PAGE_COPY: Record<string, { label: string; prompts: string[] }> = {
 
 function displayText(text: string) {
   return text.split("\n").map((line, index) => <span key={`${index}-${line}`} className="block min-h-[1.35em]">{line}</span>);
+}
+
+function AssistantGlyph({ size = 22 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M10.7 3.15c.38-1.53 2.55-1.53 2.93 0l.5 2.02a6.15 6.15 0 0 0 4.48 4.48l2.02.5c1.53.38 1.53 2.55 0 2.93l-2.02.5a6.15 6.15 0 0 0-4.48 4.48l-.5 2.02c-.38 1.53-2.55 1.53-2.93 0l-.5-2.02a6.15 6.15 0 0 0-4.48-4.48l-2.02-.5c-1.53-.38-1.53-2.55 0-2.93l2.02-.5a6.15 6.15 0 0 0 4.48-4.48l.5-2.02Z" fill="currentColor" />
+      <path d="M18.3 1.65c.17-.7 1.16-.7 1.33 0l.12.47c.2.82.84 1.46 1.66 1.66l.47.12c.7.17.7 1.16 0 1.33l-.47.12c-.82.2-1.46.84-1.66 1.66l-.12.47c-.17.7-1.16.7-1.33 0l-.12-.47a2.3 2.3 0 0 0-1.66-1.66l-.47-.12c-.7-.17-.7-1.16 0-1.33l.47-.12c.82-.2 1.46-.84 1.66-1.66l.12-.47Z" fill="#22e6bd" />
+    </svg>
+  );
 }
 
 const MAX_SAVED_MESSAGES = 30;
@@ -277,15 +286,15 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   return createPortal(
     <>
       {!open && (
-        <button type="button" onClick={() => { setOpen(true); setMinimized(false); }} className="assistant-launcher fixed bottom-5 right-5 z-[90] flex h-12 w-12 items-center justify-center rounded-full border border-[#5eead4]/45 bg-gradient-to-br from-[#14b8a6] to-[#0f766e] text-white shadow-[0_12px_34px_rgba(13,148,136,.32)] transition-all duration-200 hover:-translate-y-0.5 hover:from-[#2dd4bf] hover:to-[#0d9488] hover:shadow-[0_14px_38px_rgba(13,148,136,.4)] active:scale-95 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label="打开账户助手" title="账户助手">
-          <IconSparkles size={23} stroke={1.8} />
+        <button type="button" onClick={() => { setOpen(true); setMinimized(false); }} className="assistant-launcher fixed bottom-5 right-5 z-[90] flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_12px_34px_rgba(0,0,0,.3)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#20252a] hover:shadow-[0_14px_38px_rgba(0,0,0,.36)] active:scale-95 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label="打开账户助手" title="账户助手">
+          <AssistantGlyph size={25} />
         </button>
       )}
       {open && (
         <div onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }} className="assistant-layer fixed inset-0 z-[100] flex items-end justify-end bg-black/20 sm:pointer-events-none sm:bg-transparent">
-          <section role="dialog" aria-modal="true" aria-label="账户助手" className={`assistant-panel pointer-events-auto flex w-full flex-col overflow-hidden border border-edge bg-white shadow-[0_24px_80px_rgba(0,0,0,.25)] dark:bg-[#121722] ${minimized ? "h-[68px] sm:w-[320px]" : "h-[72dvh] rounded-t-[22px] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]"}`}>
+          <section role="dialog" aria-modal="true" aria-label="账户助手" className={`assistant-panel pointer-events-auto flex w-full flex-col overflow-hidden border border-[#dce8e5] bg-white shadow-[0_24px_80px_rgba(13,71,64,.16)] ${minimized ? "h-[68px] sm:w-[320px]" : "h-[72dvh] rounded-t-[22px] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]"}`}>
             <header className="flex min-h-[68px] items-center gap-3 border-b border-edge px-5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#5eead4]/45 bg-gradient-to-br from-[#14b8a6] to-[#0f766e] text-white shadow-[0_6px_18px_rgba(13,148,136,.24)]"><IconSparkles size={18} /></span>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_5px_16px_rgba(0,0,0,.18)]"><AssistantGlyph size={20} /></span>
               <div className="min-w-0 flex-1"><div className="text-sm font-semibold text-ink">账户助手</div><div className="truncate text-[11px] text-muted">正在查看：{contextLabel}</div></div>
               {messages.length > 0 && <button type="button" disabled={actionBusy} onClick={startNewChat} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="开始新对话" title={actionBusy ? "操作完成后可开始新对话" : "开始新对话"}><IconPlus size={18} /></button>}
               <button type="button" onClick={() => setMinimized((value) => !value)} className="hidden h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray sm:flex" aria-label={minimized ? "展开" : "最小化"}><IconMinus size={18} /></button>
@@ -308,7 +317,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {messages.map((message, index) => <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-[#0f766e] text-white shadow-[0_5px_16px_rgba(13,148,136,.14)]" : "bg-bg-gray text-ink"}`}>{displayText(message.content)}{message.action && <div className="mt-3 rounded-xl border border-edge bg-white/80 p-3 dark:bg-white/[.05]"><div className="text-xs font-medium text-ink">{actionSummary(message.action)}</div><button type="button" disabled={actionBusy || message.actionStatus === "running" || message.actionStatus === "done" || actionExpired(message.action)} onClick={() => void executeAction(message.action as AssistantAction, index)} className="mt-3 w-full rounded-xl border border-edge-strong bg-white px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover disabled:opacity-55 dark:bg-[#1c222d]">{message.actionStatus === "running" ? "处理中…" : message.actionStatus === "done" ? "已完成" : message.actionStatus === "uncertain" ? "安全重试并核对" : actionExpired(message.action) ? "预览已过期，请重新输入" : message.actionStatus === "error" ? "重试" : message.action.label}</button>{message.actionStatus === "uncertain" && <p className="mt-2 text-[11px] leading-5 text-muted">页面曾在执行过程中中断。安全重试会复用原操作标识：已成功则只返回原结果，未成功才执行。</p>}{message.actionStatus === "done" && message.undo && <button type="button" disabled={actionBusy || message.undoStatus === "running" || isTimestampExpired(message.undo.createdAt)} onClick={() => void undoAction(message.undo as UndoAction, index)} className="mt-2 w-full text-center text-[11px] text-muted hover:text-ink disabled:opacity-35">{message.undoStatus === "running" ? "撤销中…" : isTimestampExpired(message.undo.createdAt) ? "撤销窗口已结束" : message.undoStatus === "uncertain" ? "安全重试撤销" : message.undoStatus === "error" ? "重试撤销" : "撤销操作"}</button>}{message.undoStatus === "uncertain" && !isTimestampExpired(message.undo?.createdAt || "") && <p className="mt-1 text-[11px] leading-5 text-muted">撤销响应曾中断，再次点击不会重复撤销。</p>}</div>}</div></div>)}
+                    {messages.map((message, index) => <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "border border-[#bdece2] bg-[#e8fbf7] text-[#075e57] shadow-[0_5px_16px_rgba(15,159,143,.08)]" : "bg-bg-gray text-ink"}`}>{displayText(message.content)}{message.action && <div className="mt-3 rounded-xl border border-edge bg-white/80 p-3 dark:bg-white/[.05]"><div className="text-xs font-medium text-ink">{actionSummary(message.action)}</div><button type="button" disabled={actionBusy || message.actionStatus === "running" || message.actionStatus === "done" || actionExpired(message.action)} onClick={() => void executeAction(message.action as AssistantAction, index)} className="mt-3 w-full rounded-xl border border-edge-strong bg-white px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover disabled:opacity-55">{message.actionStatus === "running" ? "处理中…" : message.actionStatus === "done" ? "已完成" : message.actionStatus === "uncertain" ? "安全重试并核对" : actionExpired(message.action) ? "预览已过期，请重新输入" : message.actionStatus === "error" ? "重试" : message.action.label}</button>{message.actionStatus === "uncertain" && <p className="mt-2 text-[11px] leading-5 text-muted">页面曾在执行过程中中断。安全重试会复用原操作标识：已成功则只返回原结果，未成功才执行。</p>}{message.actionStatus === "done" && message.undo && <button type="button" disabled={actionBusy || message.undoStatus === "running" || isTimestampExpired(message.undo.createdAt)} onClick={() => void undoAction(message.undo as UndoAction, index)} className="mt-2 w-full text-center text-[11px] text-muted hover:text-ink disabled:opacity-35">{message.undoStatus === "running" ? "撤销中…" : isTimestampExpired(message.undo.createdAt) ? "撤销窗口已结束" : message.undoStatus === "uncertain" ? "安全重试撤销" : message.undoStatus === "error" ? "重试撤销" : "撤销操作"}</button>}{message.undoStatus === "uncertain" && !isTimestampExpired(message.undo?.createdAt || "") && <p className="mt-1 text-[11px] leading-5 text-muted">撤销响应曾中断，再次点击不会重复撤销。</p>}</div>}</div></div>)}
                     {loading && <div className="flex justify-start"><div className="flex items-center gap-1 rounded-2xl bg-bg-gray px-4 py-3 text-[#0d9488]"><i className="assistant-dot" /><i className="assistant-dot [animation-delay:120ms]" /><i className="assistant-dot [animation-delay:240ms]" /></div></div>}
                     <div ref={endRef} />
                   </div>
@@ -317,7 +326,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
               <form onSubmit={(event) => { event.preventDefault(); void send(input); }} className="border-t border-edge p-4 pb-[max(16px,env(safe-area-inset-bottom))]">
                 <div className="flex items-end gap-2 rounded-[20px] border border-edge-strong bg-bg-gray p-2 pl-4">
                   <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.nativeEvent.isComposing) return; if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} rows={1} maxLength={1200} placeholder={`问问${copy.label}…`} className="max-h-28 min-h-[38px] flex-1 resize-none bg-transparent py-2 text-sm text-ink placeholder:text-faint" />
-                  <button type="submit" disabled={!input.trim() || loading} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#5eead4]/40 bg-gradient-to-br from-[#14b8a6] to-[#0f766e] text-white shadow-[0_5px_16px_rgba(13,148,136,.22)] transition-all hover:from-[#2dd4bf] hover:to-[#0d9488] active:scale-95 disabled:opacity-30" aria-label="发送"><IconArrowUp size={19} /></button>
+                  <button type="submit" disabled={!input.trim() || loading} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#0f9f8f] bg-[#0f9f8f] text-white shadow-[0_5px_16px_rgba(15,159,143,.2)] transition-all hover:border-[#087f73] hover:bg-[#087f73] active:scale-95 disabled:opacity-30" aria-label="发送"><IconArrowUp size={19} /></button>
                 </div>
                 <p className="mt-2 truncate text-center text-[10px] text-faint" title="示例：打开美股自选；创建科技分组；把 AAPL、NVDA 加入科技分组；买入 AAPL 10 股 200">可直接说：筛选市场、创建或整理分组、录入买卖</p>
                 {historyStatus === "error" ? <button type="button" onClick={() => setHistoryRetry((value) => value + 1)} className="mt-2 w-full text-center text-[10px] text-muted hover:text-ink">对话保存失败，点击重试</button> : <p className="mt-2 text-center text-[10px] text-faint">{historyStatus === "saving" ? "正在保存对话…" : "账户数据仅用于本次回答，请核对关键金额与行情时间"}</p>}
