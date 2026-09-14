@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import echarts from "@/lib/echarts";
 import CurrencyFlag from "@/components/CurrencyFlag";
-import { fmtMoney, fmtMoneyCompact, fmtNumMarket, fmtPct, fmtQty } from "@/lib/format";
+import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCompact, fmtNumMarket, fmtPct, fmtQty } from "@/lib/format";
 import { marketMeta, type Quote, type StockRecord, type TradeOrder } from "@/lib/types";
 import { showToast } from "@/lib/toast";
 import { HoldingColumnManager, HoldingColumnsButton, useHoldingColumns } from "@/components/HoldingColumnManager";
@@ -628,6 +628,10 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const calendarCompact = (usd: number) => {
     const value = usd * currencyFactor;
     return `${value < 0 ? "−" : "+"}${fmtMoneyCompact(Math.abs(value), symbol)}`;
+  };
+  const calendarNarrow = (usd: number) => {
+    const value = usd * currencyFactor;
+    return `${value < 0 ? "−" : "+"}${fmtMoneyCalendarCell(Math.abs(value), symbol)}`;
   };
 
   const summary = useMemo(() => positions.reduce((acc, record) => {
@@ -1285,6 +1289,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
             }}
             formatAmount={calendarAmount}
             formatCompact={calendarCompact}
+            formatNarrow={calendarNarrow}
             stockIcons={stockIcons}
             onDayClick={(date) => {
               const rows = buildDayDetailRows({ date, positions: calendarRows, closesMap: recordCloses, rates });

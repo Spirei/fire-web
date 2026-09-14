@@ -14,7 +14,7 @@ import { usePersistedState } from "@/lib/usePersistedState";
 import { showToast } from "@/lib/toast";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
-import { fmtMoney, fmtMoneyCompact, localDateKey } from "@/lib/format";
+import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCompact, localDateKey } from "@/lib/format";
 import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses } from "@/lib/portfolioSeries";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
@@ -407,6 +407,10 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
     const abs = Math.abs(converted);
     const sign = converted < 0 ? "−" : "+";
     return `${sign}${fmtMoneyCompact(abs, curSymbol)}`;
+  };
+  const narrowDisp = (value: number) => {
+    const converted = value * currencyFactor;
+    return `${converted < 0 ? "−" : "+"}${fmtMoneyCalendarCell(Math.abs(converted), curSymbol)}`;
   };
   const benchLabel = BENCHMARKS.find((b) => b.key === benchKey)?.label ?? "标普 500";
 
@@ -909,6 +913,7 @@ export default function AssetPnlAnalysis({ onBack }: { onBack?: () => void }) {
               }}
               formatAmount={moneyDisp}
               formatCompact={compactDisp}
+              formatNarrow={narrowDisp}
               stockIcons={stockIcons}
               onDayClick={openDayDetail}
               dayDetail={dayDetail}

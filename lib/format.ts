@@ -38,6 +38,18 @@ export function fmtMoneyCompact(n: number, currency: string): string {
   return fmtMoney(n, currency);
 }
 
+/** 七列手机日历专用金额：千位开始缩写，小额省略小数，长货币符号也能装入单元格。 */
+export function fmtMoneyCalendarCell(n: number, currency: string): string {
+  if (!Number.isFinite(n)) return "—";
+  const value = Math.abs(n);
+  const compact = (divisor: number, unit: string) =>
+    `${currency}${(value / divisor).toLocaleString("zh-CN", { minimumFractionDigits: 0, maximumFractionDigits: 1 })}${unit}`;
+  if (value >= 1e8) return compact(1e8, "亿");
+  if (value >= 1e4) return compact(1e4, "万");
+  if (value >= 1e3) return compact(1e3, "千");
+  return `${currency}${Math.round(value).toLocaleString("zh-CN")}`;
+}
+
 /** 受宽度约束的金额：常规数值保留完整精度，大数强制使用中文金融单位。 */
 export function fmtMoneyAdaptive(n: number, currency: string, compactFrom = 1e7): string {
   return Math.abs(n) >= compactFrom ? fmtMoneyCompact(n, currency) : fmtMoney(n, currency);
