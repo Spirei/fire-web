@@ -1,20 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { IconAdjustmentsHorizontal, IconDatabaseCog, IconMoon, IconRobot, IconSettings, IconSun, IconTrash, IconX } from "@tabler/icons-react";
+import { IconAdjustmentsHorizontal, IconBrain, IconDatabaseCog, IconMoon, IconRobot, IconSettings, IconSun, IconTrash, IconX } from "@tabler/icons-react";
 
 export type AssistantAppearance = "light" | "dark" | "system";
 export type AssistantDensity = "compact" | "comfortable";
 type ServiceDraft = { id:string; name:string; provider:string; apiUrl:string; apiKey:string; apiKeyConfigured?:boolean; models:string[]; icon?:string };
 
-export default function AssistantHarnessSettings({ open, section, appearance, fontSize, density, models = [], selectedModel = "auto", onClose, onSection, onAppearance, onFontSize, onDensity, onSelectModel, onModelsSaved }: {
+export default function AssistantHarnessSettings({ open, section, appearance, fontSize, density, models = [], selectedModel = "auto", spaces = [], selectedSpace = "", memoryEnabled = false, memory = "", usage = { calls:0, errors:0, tokens:0, cost:0 }, onClose, onSection, onAppearance, onFontSize, onDensity, onSelectModel, onModelsSaved, onMoveSpace, onAddSpace, onMemoryEnabled, onMemoryChange, onMemorySave, onClearMemory }: {
   open: boolean;
-  section: "general" | "models" | "plugins" | "preset";
+  section: "general" | "conversation" | "models" | "plugins" | "preset";
   appearance: AssistantAppearance;
   fontSize: number;
   density: AssistantDensity;
   onClose: () => void;
-  onSection: (section: "general" | "models" | "plugins" | "preset") => void;
+  onSection: (section: "general" | "conversation" | "models" | "plugins" | "preset") => void;
   onAppearance: (value: AssistantAppearance) => void;
   onFontSize: (value: number) => void;
   onDensity: (value: AssistantDensity) => void;
@@ -22,6 +22,17 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
   selectedModel?: string;
   onSelectModel?: (value:string) => void;
   onModelsSaved?: () => void;
+  spaces?: Array<{ id:string; name:string }>;
+  selectedSpace?: string;
+  memoryEnabled?: boolean;
+  memory?: string;
+  usage?: { calls:number; errors:number; tokens:number; cost:number };
+  onMoveSpace?: (value:string) => void;
+  onAddSpace?: () => void;
+  onMemoryEnabled?: (value:boolean) => void;
+  onMemoryChange?: (value:string) => void;
+  onMemorySave?: () => void;
+  onClearMemory?: () => void;
 }) {
   const [editingModels,setEditingModels]=useState(false);
   const [services,setServices]=useState<ServiceDraft[]>([]);
@@ -33,6 +44,7 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
   if (!open) return null;
   const nav = [
     ["general", "通用设置", IconSettings],
+    ["conversation", "对话与记忆", IconBrain],
     ["models", "模型", IconDatabaseCog],
     ["plugins", "插件", IconAdjustmentsHorizontal],
     ["preset", "助手预设", IconRobot],
@@ -56,6 +68,12 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
             <SettingRow title="字号大小" desc="仅影响会话内容的字号"><span className="harness-number-control"><button type="button" onClick={()=>onFontSize(Math.max(12,fontSize-1))}>−</button><b>{fontSize}</b><button type="button" onClick={()=>onFontSize(Math.min(18,fontSize+1))}>＋</button><em>px</em></span></SettingRow>
             <SettingRow title="对话显示" desc="控制已完成轮次的过程内容"><button type="button" className="harness-setting-pill" onClick={()=>onDensity(density==="compact"?"comfortable":"compact")}>{density==="compact"?"紧凑":"舒适"}</button></SettingRow>
             <SettingRow title="繁忙时的发送行为" desc="模型回答时输入新问题会排队发送"><span className="harness-setting-pill">排队发送</span></SettingRow>
+          </>}
+          {section === "conversation" && <><h3>对话与记忆</h3><p className="harness-section-intro">集中管理对话归类、跨对话记忆和模型调用信息。</p>
+            <SettingRow title="当前对话空间" desc="把当前对话归入空间，方便长期整理"><select className="harness-setting-select" value={selectedSpace} onChange={event=>onMoveSpace?.(event.target.value)} aria-label="当前对话空间"><option value="">未分类空间</option>{spaces.map(space=><option key={space.id} value={space.id}>{space.name}</option>)}</select></SettingRow>
+            <SettingRow title="空间管理" desc="创建新的对话空间"><button type="button" className="harness-setting-pill" onClick={onAddSpace}>新建空间</button></SettingRow>
+            <div className="harness-setting-block"><div className="harness-memory-head"><div><div className="harness-setting-title">跨对话记忆</div><p>让智能助手记住你的回答偏好</p></div><label className="harness-switch"><input type="checkbox" checked={memoryEnabled} onChange={event=>onMemoryEnabled?.(event.target.checked)}/><span/></label></div><textarea className="harness-memory-editor" value={memory} maxLength={2000} rows={5} onChange={event=>onMemoryChange?.(event.target.value)} onBlur={onMemorySave} placeholder="例如：偏好简洁回答、默认使用港币……"/><div className="harness-memory-foot"><span>{memory.length}/2000</span><button type="button" onClick={onClearMemory}>清除记忆</button></div></div>
+            <div className="harness-setting-block"><div className="harness-setting-title">模型调用</div><p className="harness-block-desc">当前账户的智能助手调用概览</p><div className="harness-usage-grid"><div><b>{usage.calls.toLocaleString()}</b><span>调用</span></div><div><b>{usage.tokens.toLocaleString()}</b><span>Token</span></div><div><b>{usage.errors.toLocaleString()}</b><span>失败</span></div><div><b>{usage.cost>0?usage.cost.toFixed(4):"—"}</b><span>估算费用</span></div></div></div>
           </>}
           {section === "models" && <><h3>模型</h3><p className="harness-section-intro">直接复用“模型服务”中配置的提供方和模型，所有操作都在当前弹窗完成。</p>{editingModels?<div className="harness-inline-model-editor">{services.map(service=><article key={service.id}><div className="harness-inline-model-head"><b>{service.name||"未命名服务"}</b><button type="button" onClick={()=>setServices(current=>current.filter(item=>item.id!==service.id))} disabled={services.length===1} aria-label="删除模型服务"><IconTrash size={16}/></button></div><label><span>服务名称</span><input value={service.name} onChange={event=>updateService(service.id,{name:event.target.value})}/></label><label><span>API 地址</span><input value={service.apiUrl} onChange={event=>updateService(service.id,{apiUrl:event.target.value})}/></label><label><span>API 密钥</span><input type="password" value={service.apiKey||""} placeholder={service.apiKeyConfigured?"已配置，留空不会覆盖":"输入 API Key"} onChange={event=>updateService(service.id,{apiKey:event.target.value})}/></label><label><span>模型 ID</span><textarea rows={2} value={service.models.join("\n")} onChange={event=>updateService(service.id,{models:event.target.value.split("\n")})}/></label></article>)}<button type="button" className="harness-add-provider" onClick={()=>setServices(current=>[...current,{id:`assistant-model-${Date.now().toString(36)}`,name:"新模型服务",provider:"custom",apiUrl:"",apiKey:"",models:[""]}])}>＋ 添加模型服务</button><button type="button" className="harness-model-save" disabled={saving} onClick={()=>void saveModels()}>{saving?"保存中…":"保存"}</button>{saveMessage&&<p className="harness-model-message">{saveMessage}</p>}</div>:<><div className="harness-model-settings-list"><button type="button" className={selectedModel==="auto"?"selected":""} onClick={()=>onSelectModel?.("auto")}><div><b>自动选择模型</b><span>按模型服务顺序自动回退</span></div>{selectedModel==="auto"&&<IconCheckmark/>}</button>{models.filter(model=>model.configured).map(model=>{const value=`${model.serviceId}:${model.model}`;return <button type="button" key={value} className={selectedModel===value?"selected":""} onClick={()=>onSelectModel?.(value)}><div><b>{model.model}</b><span>{model.serviceName}</span></div><i className={model.health?.ok===false?"error":""}/>{selectedModel===value&&<IconCheckmark/>}</button>})}</div><button type="button" className="harness-add-provider" onClick={()=>setEditingModels(true)}>＋ 管理模型服务</button>{saveMessage&&<p className="harness-model-message">{saveMessage}</p>}</>}</>}
           {section === "plugins" && <><h3>插件</h3><p className="harness-section-intro">智能助手能力已按现有 Fire 功能适配。</p>{["账户数据与当前页面","图片与附件","对话记忆","模型运行轨迹"].map(x=><div className="harness-plugin-card" key={x}><b>{x}</b><span>已启用</span></div>)}</>}
