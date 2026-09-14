@@ -724,21 +724,6 @@ export default function RecordsApp({
     [navTabs, user, assetIcons, initialNavIcons, navIconsHydrated]
   );
 
-  const activePageLabel = activeTab === "holdings"
-    ? "我的持仓"
-    : activeTab === "pnl"
-      ? "资产总盈亏"
-      : sidebarTabs.find((tab) => tab.key === activeTab)?.label ?? "工作区";
-  const doorStatus = activeTab === "holdings"
-    ? { label: "蓝门 · 市场", accent: "#168aca" }
-    : activeTab === "assets" || activeTab === "pnl"
-      ? { label: "黑门 · 分析", accent: "#85898d" }
-      : activeTab === "fire"
-        ? { label: "红门 · 计划", accent: "#ef493d" }
-        : activeTab === "global"
-          ? { label: "绿门 · 发现", accent: "#66b746" }
-          : null;
-
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia("(max-width: 1023px)").matches) return;
     const frame = window.requestAnimationFrame(() => {
@@ -841,13 +826,6 @@ export default function RecordsApp({
             </button>
           ))}
         </div>
-
-        {activeTab !== "assistant" && (
-          <header className="fire-workspace-context" style={{ "--workspace-accent": doorStatus?.accent ?? "#8b9199" } as React.CSSProperties}>
-            <div className="fire-workspace-breadcrumb"><strong>{activePageLabel}</strong></div>
-            {doorStatus && <div className="fire-workspace-status"><i />{doorStatus.label}</div>}
-          </header>
-        )}
 
         <div key={activeTab} className="tab-panel min-w-0">
           {activeTab === "watchlist" && (
