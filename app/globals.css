@@ -707,6 +707,33 @@
 .harness-composer-stats { display:flex;width:min(100%,860px);justify-content:center;gap:18px;margin:6px auto 0;color:var(--assistant-muted);font-size:11px;line-height:16px; }
 .harness-sidebar-settings { display:flex;width:100%;height:38px;align-items:center;gap:9px;padding:0 10px;border-radius:11px;color:var(--assistant-label);transition:background-color 120ms ease; }
 .harness-sidebar-settings:hover { background:rgba(127,127,127,.11); }
+.assistant-workspace-sidebar { background:#f4f4f3; }
+.dark .assistant-workspace-sidebar,.assistant-workspace[data-assistant-theme="dark"] .assistant-workspace-sidebar { background:#202122!important; }
+.assistant-sidebar-top { padding:14px 12px 4px!important; }
+.assistant-sidebar-brand { height:42px!important;padding:0 10px!important;font-size:15px!important;letter-spacing:-.01em; }
+.assistant-sidebar-brand>svg { width:20px;height:20px; }
+.assistant-sidebar-new { height:42px!important;margin-top:11px;border-radius:10px!important;padding:0 10px!important;font-size:14px!important; }
+.assistant-sidebar-section { height:40px!important;margin-top:24px;padding:0 8px 0 10px; }
+.assistant-sidebar-section>span { font-size:12px!important;font-weight:600;letter-spacing:.02em;color:var(--assistant-muted); }
+.assistant-sidebar-conversations { padding:5px 12px 12px!important; }
+.assistant-conversation-row { margin-bottom:3px!important;border-radius:11px!important; }
+.assistant-conversation-row:hover { background:rgba(127,127,127,.08)!important; }
+.assistant-conversation-row.active { background:rgba(127,127,127,.14)!important; }
+.assistant-conversation-main { height:42px!important;gap:10px!important;padding-left:11px!important; }
+.assistant-conversation-main span { font-size:14px!important;font-weight:450!important;letter-spacing:-.005em; }
+.assistant-search-overlay { position:fixed;inset:0;z-index:10020;display:flex;align-items:flex-start;justify-content:center;padding:7vh 24px 24px; }
+.assistant-search-mask { position:absolute;inset:0;background:rgba(0,0,0,.38);backdrop-filter:blur(2px); }
+.assistant-search-dialog { position:relative;width:min(720px,calc(100vw - 40px));max-height:min(760px,86vh);overflow:auto;border:.5px solid rgba(127,127,127,.34);border-radius:24px;background:var(--assistant-raised);padding:10px;box-shadow:0 24px 80px rgba(0,0,0,.35);animation:harness-panel-in 160ms cubic-bezier(.2,.8,.2,1) both; }
+.assistant-search-input { display:flex;height:52px;align-items:center;gap:10px;padding:0 14px;color:var(--assistant-muted); }
+.assistant-search-input input { min-width:0;flex:1;background:transparent;color:var(--assistant-label);font-size:17px;font-weight:500;outline:none; }
+.assistant-search-input input::placeholder { color:var(--assistant-muted); }
+.assistant-search-section-title { padding:16px 14px 7px;color:var(--assistant-muted);font-size:12px;font-weight:600; }
+.assistant-search-results,.assistant-search-actions { display:grid;gap:2px; }
+.assistant-search-results button,.assistant-search-actions button { display:flex;height:42px;align-items:center;gap:10px;border-radius:11px;padding:0 13px;color:var(--assistant-label);font-size:14px;text-align:left; }
+.assistant-search-results button:hover,.assistant-search-results button.active,.assistant-search-actions button:hover { background:rgba(127,127,127,.13); }
+.assistant-search-results button span,.assistant-search-actions button span { min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.assistant-search-dialog kbd { border-radius:8px;background:rgba(127,127,127,.14);padding:3px 8px;color:var(--assistant-muted);font-family:inherit;font-size:11px; }
+.assistant-search-results p { padding:18px 14px;color:var(--assistant-muted);font-size:13px; }
 .assistant-sidebar-toggle { width:17px;height:17px;border:1.5px solid currentColor;border-radius:4px;box-shadow:inset 5px 0 0 -3px currentColor;opacity:.9; }
 .assistant-workspace[data-sidebar-collapsed="true"] .assistant-sidebar-label { display:none; }
 .assistant-workspace[data-sidebar-collapsed="true"] .harness-sidebar-settings { justify-content:center;padding:0; }
