@@ -117,11 +117,9 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
   }, []);
 
   function toggleTheme() {
-    setDark((d) => {
-      const next = !d;
-      applySiteTheme(next ? "dark" : "light");
-      return next;
-    });
+    const next = !dark;
+    setDark(next);
+    applySiteTheme(next ? "dark" : "light");
   }
 
   // 登录状态确认前渲染占位，避免刷新闪现「登录」按钮

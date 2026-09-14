@@ -21,5 +21,11 @@ export function applySiteTheme(theme: SiteTheme, emit = true) {
   document.documentElement.classList.toggle("dark", dark);
   try { localStorage.setItem(THEME_KEY, theme); } catch { /* 忽略存储异常 */ }
   setThemeCookie(dark);
-  if (emit) window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: { theme } }));
+  // Theme listeners can update React state. Defer the notification so a theme
+  // change triggered by another component never runs those updates mid-render.
+  if (emit) {
+    queueMicrotask(() => {
+      window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: { theme } }));
+    });
+  }
 }
