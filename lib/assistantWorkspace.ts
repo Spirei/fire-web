@@ -8,14 +8,16 @@ export function listConversationSpaces(userId:string){return Object.fromEntries(
 export function createAssistantSpace(userId: string, name: unknown) {
   const safe = String(name || "").trim().slice(0, 40);
   if (!safe) throw new Error("空间名称不能为空");
+  const duplicate=getDb().prepare("SELECT 1 FROM assistant_spaces WHERE user_id=? AND lower(name)=lower(?)").get(userId,safe);
+  if (duplicate) throw new Error("已有同名空间");
   const id = `as-${randomBytes(8).toString("hex")}`;
   getDb().prepare("INSERT INTO assistant_spaces(id,user_id,name,created_at) VALUES(?,?,?,?)").run(id,userId,safe,new Date().toISOString());
   return { id, name: safe };
 }
 export function deleteAssistantSpace(userId: string, id: string) {
-  getDb().transaction(() => {
+  return getDb().transaction(() => {
     getDb().prepare("UPDATE assistant_conversation_spaces SET space_id='' WHERE user_id=? AND space_id=?").run(userId,id);
-    getDb().prepare("DELETE FROM assistant_spaces WHERE user_id=? AND id=?").run(userId,id);
+    return getDb().prepare("DELETE FROM assistant_spaces WHERE user_id=? AND id=?").run(userId,id).changes>0;
   })();
 }
 export function setConversationSpace(userId: string, conversationId: string, spaceId: string) {

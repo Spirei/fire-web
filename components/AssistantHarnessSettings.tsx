@@ -1,23 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { IconAdjustmentsHorizontal, IconBrain, IconCheck, IconChevronDown, IconDatabaseCog, IconMoon, IconRobot, IconSettings, IconSun, IconTrash, IconX } from "@tabler/icons-react";
+import { IconBrain, IconCheck, IconChevronDown, IconDatabaseCog, IconMoon, IconSettings, IconSun, IconTrash, IconX } from "@tabler/icons-react";
 
 export type AssistantAppearance = "light" | "dark" | "system";
 export type AssistantDensity = "compact" | "comfortable";
 type ServiceDraft = { id:string; name:string; provider:string; apiUrl:string; apiKey:string; apiKeyConfigured?:boolean; models:string[]; icon?:string };
 
-export default function AssistantHarnessSettings({ open, section, appearance, fontSize, density, models = [], selectedModel = "auto", spaces = [], selectedSpace = "", memoryEnabled = false, memory = "", usage = { calls:0, errors:0, tokens:0, cost:0 }, onClose, onSection, onAppearance, onFontSize, onDensity, onSelectModel, onModelsSaved, onMoveSpace, onAddSpace, onDeleteSpace, onMemoryEnabled, onMemoryChange, onMemorySave, onClearMemory }: {
+export default function AssistantHarnessSettings({ open, section, appearance, fontSize, density, dataScope, models = [], selectedModel = "auto", spaces = [], selectedSpace = "", memoryEnabled = false, memory = "", usage = { calls:0, errors:0, tokens:0, cost:0 }, onClose, onSection, onAppearance, onFontSize, onDensity, onDataScope, onSelectModel, onModelsSaved, onMoveSpace, onAddSpace, onDeleteSpace, onMemoryEnabled, onMemoryChange, onMemorySave, onClearMemory }: {
   open: boolean;
-  section: "general" | "conversation" | "models" | "plugins" | "preset";
+  section: "general" | "conversation" | "models";
   appearance: AssistantAppearance;
   fontSize: number;
   density: AssistantDensity;
   onClose: () => void;
-  onSection: (section: "general" | "conversation" | "models" | "plugins" | "preset") => void;
+  onSection: (section: "general" | "conversation" | "models") => void;
   onAppearance: (value: AssistantAppearance) => void;
   onFontSize: (value: number) => void;
   onDensity: (value: AssistantDensity) => void;
+  dataScope: "none" | "page" | "account";
+  onDataScope: (value: "none" | "page" | "account") => void;
   models?: Array<{ serviceId:string; serviceName:string; model:string; configured:boolean; health?:{ok:boolean}|null }>;
   selectedModel?: string;
   onSelectModel?: (value:string) => void;
@@ -49,8 +51,6 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
     ["general", "通用设置", IconSettings],
     ["conversation", "对话与记忆", IconBrain],
     ["models", "模型", IconDatabaseCog],
-    ["plugins", "插件", IconAdjustmentsHorizontal],
-    ["preset", "助手预设", IconRobot],
   ] as const;
   return <div className="harness-settings-overlay" data-assistant-theme={appearance} role="dialog" aria-modal="true" aria-label="设置">
     <button type="button" className="harness-settings-mask" aria-label="关闭设置" onClick={onClose} />
@@ -63,7 +63,7 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
         <header>{section==="models"&&<button type="button" className="harness-config-button" onClick={()=>setEditingModels(value=>!value)}>{editingModels?"取消编辑":"配置模型服务"}</button>}<button type="button" onClick={onClose} aria-label="关闭"><IconX size={21}/></button></header>
         <div className="harness-settings-options">
           {section === "general" && <>
-            <SettingRow title="数据权限" desc="选择新对话默认发送的数据范围"><span className="harness-setting-pill">账户摘要</span></SettingRow>
+            <div className="harness-setting-block"><div className="harness-setting-title">数据权限</div><p className="harness-block-desc">选择发送给模型的数据范围</p><div className="harness-scope-options">{([{value:"none",label:"不附带数据"},{value:"page",label:"仅当前页面"},{value:"account",label:"账户摘要"}] as const).map(item=><button type="button" key={item.value} aria-pressed={dataScope===item.value} onClick={()=>onDataScope(item.value)}>{item.label}{dataScope===item.value&&<IconCheck size={15}/>}</button>)}</div></div>
             <SettingRow title="语言"><span className="harness-setting-pill">中文</span></SettingRow>
             <div className="harness-setting-block"><div className="harness-setting-title">外观</div><div className="harness-theme-cubes">
               {(["light","dark","system"] as AssistantAppearance[]).map(value => { const Icon=value==="light"?IconSun:value==="dark"?IconMoon:IconSettings; return <button type="button" key={value} className={appearance===value?"selected":""} onClick={()=>onAppearance(value)}><Icon size={20}/><span>{value==="light"?"浅色":value==="dark"?"深色":"跟随系统"}</span></button>; })}
@@ -79,8 +79,6 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
             <div className="harness-setting-block"><div className="harness-setting-title">模型调用</div><p className="harness-block-desc">当前账户的智能助手调用概览</p><div className="harness-usage-grid"><div><b>{usage.calls.toLocaleString()}</b><span>调用</span></div><div><b>{usage.tokens.toLocaleString()}</b><span>Token</span></div><div><b>{usage.errors.toLocaleString()}</b><span>失败</span></div><div><b>{usage.cost>0?usage.cost.toFixed(4):"—"}</b><span>估算费用</span></div></div></div>
           </>}
           {section === "models" && <><h3>模型</h3><p className="harness-section-intro">直接复用“模型服务”中配置的提供方和模型，所有操作都在当前弹窗完成。</p>{editingModels?<div className="harness-inline-model-editor">{services.map(service=><article key={service.id}><div className="harness-inline-model-head"><b>{service.name||"未命名服务"}</b><button type="button" onClick={()=>setServices(current=>current.filter(item=>item.id!==service.id))} disabled={services.length===1} aria-label="删除模型服务"><IconTrash size={16}/></button></div><label><span>服务名称</span><input value={service.name} onChange={event=>updateService(service.id,{name:event.target.value})}/></label><label><span>API 地址</span><input value={service.apiUrl} onChange={event=>updateService(service.id,{apiUrl:event.target.value})}/></label><label><span>API 密钥</span><input type="password" value={service.apiKey||""} placeholder={service.apiKeyConfigured?"已配置，留空不会覆盖":"输入 API Key"} onChange={event=>updateService(service.id,{apiKey:event.target.value})}/></label><label><span>模型 ID</span><textarea rows={2} value={service.models.join("\n")} onChange={event=>updateService(service.id,{models:event.target.value.split("\n")})}/></label></article>)}<button type="button" className="harness-add-provider" onClick={()=>setServices(current=>[...current,{id:`assistant-model-${Date.now().toString(36)}`,name:"新模型服务",provider:"custom",apiUrl:"",apiKey:"",models:[""]}])}>＋ 添加模型服务</button><button type="button" className="harness-model-save" disabled={saving} onClick={()=>void saveModels()}>{saving?"保存中…":"保存"}</button>{saveMessage&&<p className="harness-model-message">{saveMessage}</p>}</div>:<><div className="harness-model-settings-list"><button type="button" className={selectedModel==="auto"?"selected":""} onClick={()=>onSelectModel?.("auto")}><div><b>自动选择模型</b><span>按模型服务顺序自动回退</span></div>{selectedModel==="auto"&&<IconCheckmark/>}</button>{models.filter(model=>model.configured).map(model=>{const value=`${model.serviceId}:${model.model}`;return <button type="button" key={value} className={selectedModel===value?"selected":""} onClick={()=>onSelectModel?.(value)}><div><b>{model.model}</b><span>{model.serviceName}</span></div><i className={model.health?.ok===false?"error":""}/>{selectedModel===value&&<IconCheckmark/>}</button>})}</div><button type="button" className="harness-add-provider" onClick={()=>setEditingModels(true)}>＋ 管理模型服务</button>{saveMessage&&<p className="harness-model-message">{saveMessage}</p>}</>}</>}
-          {section === "plugins" && <><h3>插件</h3><p className="harness-section-intro">智能助手能力已按现有 Fire 功能适配。</p>{["账户数据与当前页面","图片与附件","对话记忆","模型运行轨迹"].map(x=><div className="harness-plugin-card" key={x}><b>{x}</b><span>已启用</span></div>)}</>}
-          {section === "preset" && <><h3>助手预设</h3><p className="harness-section-intro">决定新对话使用的数据和回答方式。</p>{["投资分析","数据检查","简洁回答"].map((x,i)=><button type="button" className={`harness-preset-card ${i===0?"selected":""}`} key={x}><b>{x}</b><span>{i===0?"默认":"可选"}</span></button>)}</>}
         </div>
       </main>
     </section>
