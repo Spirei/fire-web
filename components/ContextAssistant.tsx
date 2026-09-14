@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconHistory, IconMessageCircle, IconMinus, IconPin, IconPlus, IconRefresh, IconTrash, IconX } from "@tabler/icons-react";
+import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconHistory, IconMessageCircle, IconPin, IconPinFilled, IconPlus, IconRefresh, IconTrash, IconX } from "@tabler/icons-react";
 import type { AssistantHistoryState, StoredAssistantConversation, StoredAssistantMessage } from "@/lib/assistantHistory";
 
 type AssistantAction =
@@ -125,7 +125,6 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const initialConversation = initialHistory.conversations.find((item) => item.id === initialHistory.activeId) || initialHistory.conversations[0];
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
-  const [minimized, setMinimized] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [input, setInput] = useState("");
@@ -182,7 +181,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     };
     window.addEventListener("resize", clampVisibleItems);
     return () => window.removeEventListener("resize", clampVisibleItems);
-  }, [launcherPosition, panelPosition, minimized]);
+  }, [launcherPosition, panelPosition]);
   useEffect(() => () => dragCleanupRef.current?.(), []);
   useEffect(() => {
     // 一次性迁移旧版浏览器历史到服务端，随后清除本地的账户对话数据。
@@ -250,9 +249,9 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     textarea.style.height = `${Math.min(112, textarea.scrollHeight)}px`;
   }, [input]);
   useEffect(() => {
-    if (!open || minimized || !window.matchMedia("(min-width: 640px)").matches) return;
+    if (!open || !window.matchMedia("(min-width: 640px)").matches) return;
     inputRef.current?.focus({ preventScroll: true });
-  }, [open, minimized]);
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") { if (historyOpen) setHistoryOpen(false); else setOpen(false); } };
@@ -489,24 +488,21 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   if (!mounted) return null;
   return createPortal(
     <>
-      {!open && (
-        <button ref={launcherRef} type="button" onPointerDown={(event) => startFloatingDrag("launcher", event)} onClick={() => { if (suppressLauncherClick.current) { suppressLauncherClick.current = false; return; } setOpen(true); setMinimized(false); }} style={launcherPosition ? { left: launcherPosition.x, top: launcherPosition.y, right: "auto", bottom: "auto" } : undefined} className="assistant-launcher fixed bottom-5 right-5 z-[90] flex h-12 w-12 touch-none cursor-grab items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_12px_34px_rgba(0,0,0,.3)] transition-[background-color,box-shadow,transform] duration-200 hover:bg-[#20252a] hover:shadow-[0_14px_38px_rgba(0,0,0,.36)] active:scale-95 active:cursor-grabbing data-[dragging=true]:scale-100 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label="打开账户助手" title="拖动可移动，点击打开账户助手">
+      <button ref={launcherRef} type="button" aria-pressed={open} onPointerDown={(event) => startFloatingDrag("launcher", event)} onClick={() => { if (suppressLauncherClick.current) { suppressLauncherClick.current = false; return; } setOpen((value) => !value); }} style={launcherPosition ? { left: launcherPosition.x, top: launcherPosition.y, right: "auto", bottom: "auto" } : undefined} className="assistant-launcher fixed bottom-5 right-5 z-[110] flex h-12 w-12 touch-none cursor-grab items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_12px_34px_rgba(0,0,0,.3)] transition-[background-color,box-shadow,transform] duration-200 hover:bg-[#20252a] hover:shadow-[0_14px_38px_rgba(0,0,0,.36)] active:scale-95 active:cursor-grabbing data-[dragging=true]:scale-100 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label={open ? "收起账户助手" : "打开账户助手"} title={open ? "拖动可移动，点击收起账户助手" : "拖动可移动，点击打开账户助手"}>
           <AssistantGlyph size={25} />
-        </button>
-      )}
+      </button>
       {open && (
         <div onMouseDown={(event) => { if (!pinned && event.target === event.currentTarget) setOpen(false); }} className="assistant-layer fixed inset-0 z-[100] flex items-end justify-end bg-black/20 sm:pointer-events-none sm:bg-transparent">
-          <section ref={panelRef} role="dialog" aria-modal="true" aria-label="账户助手" style={panelPosition ? { position: "fixed", left: panelPosition.x, top: panelPosition.y, right: "auto", bottom: "auto" } : undefined} className={`assistant-panel pointer-events-auto relative flex w-full flex-col overflow-hidden border border-[#e1e7e6] bg-white shadow-[0_24px_80px_rgba(15,23,42,.16)] ${minimized ? "h-[68px] sm:w-[320px]" : "h-[72dvh] rounded-t-[22px] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]"}`}>
-            <header onPointerDown={(event) => startFloatingDrag("panel", event)} className="flex min-h-[68px] touch-none cursor-grab items-center gap-3 border-b border-edge px-5 active:cursor-grabbing">
+          <section ref={panelRef} role="dialog" aria-modal="true" aria-label="账户助手" style={panelPosition ? { position: "fixed", left: panelPosition.x, top: panelPosition.y, right: "auto", bottom: "auto" } : undefined} className="assistant-panel pointer-events-auto relative flex h-[72dvh] w-full flex-col overflow-hidden rounded-t-[22px] border border-[#e1e7e6] bg-white shadow-[0_24px_80px_rgba(15,23,42,.16)] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]">
+            <header onPointerDown={(event) => startFloatingDrag("panel", event)} className="flex min-h-[68px] touch-none cursor-grab items-center gap-2 border-b border-edge px-4 active:cursor-grabbing sm:gap-2.5 sm:px-5">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_5px_16px_rgba(0,0,0,.18)]"><AssistantGlyph size={20} /></span>
-              <div className="min-w-0 flex-1 text-sm font-semibold text-ink">账户助手</div>
-              <button type="button" disabled={actionBusy} onClick={() => setHistoryOpen((value) => !value)} className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="历史对话" title="历史对话"><IconHistory size={18} /></button>
-              <button type="button" disabled={actionBusy} onClick={startNewChat} className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="开始新对话" title={actionBusy ? "操作完成后可开始新对话" : "开始新对话"}><IconPlus size={18} /></button>
-              <button type="button" aria-pressed={pinned} onPointerDown={(event) => event.stopPropagation()} onClick={() => setPinned((value) => { const next = !value; writePersistentPreference(`fire:assistant:pinned:${userId}`, next ? "1" : "0"); return next; })} className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-bg-gray" aria-label={pinned ? "取消置顶" : "置顶账户助手"} title={pinned ? "已置顶，点击取消" : "置顶面板"}><IconPin size={17} /></button>
-              <button type="button" onClick={() => setMinimized((value) => !value)} className="hidden h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray sm:flex" aria-label={minimized ? "展开" : "最小化"}><IconMinus size={18} /></button>
-              <button type="button" onClick={() => setOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭"><IconX size={18} /></button>
+              <div className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">账户助手</div>
+              <button type="button" disabled={actionBusy} onPointerDown={(event) => event.stopPropagation()} onClick={() => setHistoryOpen((value) => !value)} className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="对话归档" title="对话归档"><IconHistory size={18} /></button>
+              <button type="button" disabled={actionBusy} onPointerDown={(event) => event.stopPropagation()} onClick={startNewChat} className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="开始新对话" title={actionBusy ? "操作完成后可开始新对话" : "开始新对话"}><IconPlus size={18} /></button>
+              <button type="button" aria-pressed={pinned} onPointerDown={(event) => event.stopPropagation()} onClick={() => setPinned((value) => { const next = !value; writePersistentPreference(`fire:assistant:pinned:${userId}`, next ? "1" : "0"); return next; })} className={`relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-edge-strong text-muted transition-colors hover:bg-bg-gray ${pinned ? "bg-bg-gray" : "bg-white"}`} aria-label={pinned ? "取消置顶" : "置顶账户助手"} title={pinned ? "已置顶，点击取消" : "置顶面板"}>{pinned ? <IconPinFilled size={17} /> : <IconPin size={17} />}</button>
+              <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setOpen(false)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭"><IconX size={18} /></button>
             </header>
-            {!minimized && historyOpen && <div className="absolute inset-x-0 bottom-0 top-[68px] z-20 flex justify-end bg-white/70 backdrop-blur-[2px]">
+            {historyOpen && <div className="absolute inset-x-0 bottom-0 top-[68px] z-20 flex justify-end bg-white/70 backdrop-blur-[2px]">
               <aside className="flex h-full w-[88%] flex-col border-l border-edge bg-white shadow-[-14px_0_36px_rgba(15,23,42,.08)]" aria-label="历史对话抽屉">
                 <div className="flex h-14 items-center justify-between border-b border-edge px-4">
                   <div><div className="text-sm font-semibold text-ink">对话归档</div><div className="mt-0.5 text-[10px] text-faint">所有会话都会保留在这里</div></div>
@@ -518,10 +514,10 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                     <button type="button" onClick={(event) => { event.stopPropagation(); void deleteConversation(conversation.id); }} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-faint opacity-60 transition hover:bg-white hover:text-[#d14343] group-hover/history:opacity-100" aria-label={`删除对话：${conversation.title}`} title="删除对话"><IconTrash size={16} /></button>
                   </div>)}
                 </div>
-                <div className="border-t border-edge p-3">{historyError && <p className="mb-2 text-center text-[11px] text-[#9b5555]">{historyError}</p>}<button type="button" onClick={startNewChat} className="w-full rounded-xl border border-[#cfeee8] bg-[#f4fbf9] px-3 py-2.5 text-xs font-semibold text-[#0d7f74] transition-colors hover:bg-[#e8f8f4]">新建对话</button></div>
+                {historyError && <div className="border-t border-edge p-3 text-center text-[11px] text-[#9b5555]">{historyError}</div>}
               </aside>
             </div>}
-            {!minimized && <>
+            <>
               <div ref={messageListRef} onScroll={(event) => { const element = event.currentTarget; stickToBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 72; }} className="flex-1 overflow-y-auto px-5 py-5">
                 {messages.length === 0 ? (
                   <div>
@@ -551,7 +547,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                 </div>
                 {historyStatus === "error" && <button type="button" onClick={() => setHistoryRetry((value) => value + 1)} className="mt-2 w-full text-center text-[10px] text-muted hover:text-ink">对话保存失败，点击重试</button>}
               </form>
-            </>}
+            </>
           </section>
         </div>
       )}

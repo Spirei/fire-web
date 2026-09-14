@@ -197,6 +197,12 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   assert(source.includes('aria-pressed={pinned}'));
   assert(source.includes('onPointerDown={(event) => event.stopPropagation()}'));
   assert(source.includes('所有会话都会保留在这里'));
+  assert(!source.includes('IconMinus'));
+  assert(!source.includes('setMinimized'));
+  assert(source.includes('IconPinFilled'));
+  assert(!source.includes('>新建对话</button>'));
+  assert(source.includes('aria-pressed={open}'));
+  assert(source.includes('收起账户助手'));
     assert(source.includes("closest(\"button, input, textarea, a, [role='button']\")"));
   });
   const ledgerXlsx=require(path.join(root,'lib/simpleLedgerXlsx.ts'));
