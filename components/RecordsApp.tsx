@@ -725,7 +725,7 @@ export default function RecordsApp({
   );
 
   const activePageLabel = activeTab === "holdings"
-    ? "账户资产"
+    ? "我的持仓"
     : activeTab === "pnl"
       ? "资产总盈亏"
       : sidebarTabs.find((tab) => tab.key === activeTab)?.label ?? "工作区";
@@ -842,6 +842,7 @@ export default function RecordsApp({
           ))}
         </div>
 
+        <div className={activeTab === "assistant" ? "" : "fire-workspace-shell"}>
         {activeTab !== "assistant" && (
           <header className="fire-workspace-context" style={{ "--workspace-accent": doorStatus?.accent ?? "#8b9199" } as React.CSSProperties}>
             <div className="fire-workspace-breadcrumb"><span>Fire</span><i>/</i><strong>{activePageLabel}</strong></div>
@@ -924,6 +925,7 @@ export default function RecordsApp({
           {activeTab === "settings" && (
             <SettingsWindow>{settingsPanel}</SettingsWindow>
           )}
+        </div>
         </div>
       </div>
     </div>
