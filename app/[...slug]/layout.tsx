@@ -94,7 +94,7 @@ export default async function SlugLayout({
   const initialCardCovers = initialCardLibrary ? heldCardCoverUrls(initialCardLibrary) : [];
 
   return (
-    <div className="min-h-screen bg-page">
+    <div className="app-shell-root min-h-screen bg-page">
       {/* 名人持仓页：HTML 阶段并行预加载自定义头像，刷新时人物不闪现文字占位 */}
       {tab.key === "celebs" &&
         Object.values(celebAvatars)
