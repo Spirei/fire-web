@@ -8,6 +8,7 @@ import AssistantTraceView, { type AssistantTrace } from "@/components/AssistantT
 import AssistantHarnessSettings, { type AssistantAppearance, type AssistantDensity } from "@/components/AssistantHarnessSettings";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { applySiteTheme, THEME_CHANGE_EVENT, type SiteTheme } from "@/lib/theme";
+import { appConfirm } from "@/lib/appDialog";
 
 type AssistantAction =
   | { type: "navigate"; label: string; path: string }
@@ -584,6 +585,15 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     await fetch("/api/assistant/spaces", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({conversationId,spaceId}) }).catch(()=>undefined);
   }
 
+  async function removeSpace(space:AssistantSpace) {
+    if (!await appConfirm(`空间“${space.name}”将被删除，其中的对话会回到未分类。`, { title:"删除空间", danger:true })) return;
+    const response = await fetch(`/api/assistant/spaces?id=${encodeURIComponent(space.id)}`, { method:"DELETE" }).catch(()=>null);
+    if (!response?.ok) return;
+    setSpaces(current=>current.filter(item=>item.id!==space.id));
+    setSpaceAssignments(current=>Object.fromEntries(Object.entries(current).map(([id,value])=>[id,value===space.id?"":value])));
+    if (selectedSpace===space.id) setSelectedSpace("");
+  }
+
   function editFromMessage(index: number) {
     const message = messages[index];
     if (!message || message.role !== "user" || actionBusy) return;
@@ -954,7 +964,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       </div>}
       {renameTarget&&<div className="assistant-rename-overlay" data-assistant-theme={appearance} role="dialog" aria-modal="true" aria-label="重命名会话"><button type="button" className="assistant-rename-mask" aria-label="取消重命名" onClick={()=>setRenameTarget(null)}/><form className="assistant-rename-dialog" onSubmit={event=>{event.preventDefault();if(renameDraft.trim())void updateConversation(renameTarget.id,{title:renameDraft.trim()});}}><h3>重命名会话</h3><input autoFocus value={renameDraft} maxLength={80} onChange={event=>setRenameDraft(event.target.value)} aria-label="会话名称"/><div><button type="button" onClick={()=>setRenameTarget(null)}>取消</button><button type="submit" disabled={!renameDraft.trim()}>保存</button></div></form></div>}
       {spaceDialogOpen&&<div className="assistant-rename-overlay" data-assistant-theme={appearance} role="dialog" aria-modal="true" aria-label="新建空间"><button type="button" className="assistant-rename-mask" aria-label="取消新建空间" onClick={()=>!spaceCreating&&setSpaceDialogOpen(false)}/><form className="assistant-rename-dialog assistant-space-dialog" onSubmit={event=>{event.preventDefault();void addSpace();}}><h3>新建空间</h3><p>用空间归类相关对话。</p><input autoFocus value={spaceDraft} maxLength={40} onChange={event=>{setSpaceDraft(event.target.value);setSpaceError("");}} onKeyDown={event=>{if(event.key==="Escape"&&!spaceCreating)setSpaceDialogOpen(false);}} placeholder="输入空间名称" aria-label="空间名称"/>{spaceError&&<span role="alert">{spaceError}</span>}<div><button type="button" disabled={spaceCreating} onClick={()=>setSpaceDialogOpen(false)}>取消</button><button type="submit" disabled={!spaceDraft.trim()||spaceCreating}>{spaceCreating?"创建中…":"创建"}</button></div></form></div>}
-      <AssistantHarnessSettings open={settingsOpen} section={settingsSection} appearance={appearance} fontSize={contentFontSize} density={density} models={availableModels} selectedModel={selectedModel} spaces={spaces} selectedSpace={selectedSpace} memoryEnabled={memoryEnabled} memory={memory} usage={usageSummary} onSelectModel={selectAssistantModel} onMoveSpace={value=>void moveCurrentConversation(value)} onAddSpace={()=>void addSpace()} onMemoryEnabled={value=>void saveMemory(value,memory)} onMemoryChange={setMemory} onMemorySave={()=>void saveMemory(memoryEnabled,memory)} onClearMemory={()=>{setMemory("");setMemoryEnabled(false);void fetch("/api/assistant/preferences",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({memoryEnabled:false,memory:""})});}} onClose={()=>setSettingsOpen(false)} onSection={setSettingsSection} onAppearance={setAppearance} onFontSize={setContentFontSize} onDensity={setDensity} onModelsSaved={()=>{void fetch("/api/assistant/models").then(response=>response.ok?response.json():null).then(data=>{if(Array.isArray(data?.services))setAvailableModels(data.services);}).catch(()=>undefined);}} />
+      <AssistantHarnessSettings open={settingsOpen} section={settingsSection} appearance={appearance} fontSize={contentFontSize} density={density} models={availableModels} selectedModel={selectedModel} spaces={spaces} selectedSpace={selectedSpace} memoryEnabled={memoryEnabled} memory={memory} usage={usageSummary} onSelectModel={selectAssistantModel} onMoveSpace={value=>void moveCurrentConversation(value)} onAddSpace={()=>void addSpace()} onDeleteSpace={space=>void removeSpace(space)} onMemoryEnabled={value=>void saveMemory(value,memory)} onMemoryChange={setMemory} onMemorySave={()=>void saveMemory(memoryEnabled,memory)} onClearMemory={()=>{setMemory("");setMemoryEnabled(false);void fetch("/api/assistant/preferences",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({memoryEnabled:false,memory:""})});}} onClose={()=>setSettingsOpen(false)} onSection={setSettingsSection} onAppearance={setAppearance} onFontSize={setContentFontSize} onDensity={setDensity} onModelsSaved={()=>{void fetch("/api/assistant/models").then(response=>response.ok?response.json():null).then(data=>{if(Array.isArray(data?.services))setAvailableModels(data.services);}).catch(()=>undefined);}} />
     </>
   );
   return embedded ? experience : createPortal(experience, document.body);

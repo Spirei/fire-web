@@ -7,7 +7,7 @@ export type AssistantAppearance = "light" | "dark" | "system";
 export type AssistantDensity = "compact" | "comfortable";
 type ServiceDraft = { id:string; name:string; provider:string; apiUrl:string; apiKey:string; apiKeyConfigured?:boolean; models:string[]; icon?:string };
 
-export default function AssistantHarnessSettings({ open, section, appearance, fontSize, density, models = [], selectedModel = "auto", spaces = [], selectedSpace = "", memoryEnabled = false, memory = "", usage = { calls:0, errors:0, tokens:0, cost:0 }, onClose, onSection, onAppearance, onFontSize, onDensity, onSelectModel, onModelsSaved, onMoveSpace, onAddSpace, onMemoryEnabled, onMemoryChange, onMemorySave, onClearMemory }: {
+export default function AssistantHarnessSettings({ open, section, appearance, fontSize, density, models = [], selectedModel = "auto", spaces = [], selectedSpace = "", memoryEnabled = false, memory = "", usage = { calls:0, errors:0, tokens:0, cost:0 }, onClose, onSection, onAppearance, onFontSize, onDensity, onSelectModel, onModelsSaved, onMoveSpace, onAddSpace, onDeleteSpace, onMemoryEnabled, onMemoryChange, onMemorySave, onClearMemory }: {
   open: boolean;
   section: "general" | "conversation" | "models" | "plugins" | "preset";
   appearance: AssistantAppearance;
@@ -29,6 +29,7 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
   usage?: { calls:number; errors:number; tokens:number; cost:number };
   onMoveSpace?: (value:string) => void;
   onAddSpace?: () => void;
+  onDeleteSpace?: (space: { id:string; name:string }) => void;
   onMemoryEnabled?: (value:boolean) => void;
   onMemoryChange?: (value:string) => void;
   onMemorySave?: () => void;
@@ -73,7 +74,7 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
           </>}
           {section === "conversation" && <><h3>对话与记忆</h3><p className="harness-section-intro">集中管理对话归类、跨对话记忆和模型调用信息。</p>
             <SettingRow title="当前对话空间" desc="把当前对话归入空间，方便长期整理"><div className="harness-setting-menu-wrap"><button type="button" className="harness-setting-select" aria-haspopup="listbox" aria-expanded={spaceMenuOpen} onClick={()=>setSpaceMenuOpen(value=>!value)}><span>{spaces.find(space=>space.id===selectedSpace)?.name||"未分类空间"}</span><IconChevronDown size={16}/></button>{spaceMenuOpen&&<><button type="button" className="harness-setting-menu-mask" aria-label="关闭空间选择" onClick={()=>setSpaceMenuOpen(false)}/><div className="harness-setting-menu" role="listbox" aria-label="选择对话空间">{[{id:"",name:"未分类空间"},...spaces].map(space=><button type="button" role="option" aria-selected={space.id===selectedSpace} key={space.id||"unclassified"} onClick={()=>{onMoveSpace?.(space.id);setSpaceMenuOpen(false);}}><span>{space.name}</span>{space.id===selectedSpace&&<IconCheck size={16}/>}</button>)}</div></>}</div></SettingRow>
-            <SettingRow title="空间管理" desc="创建新的对话空间"><button type="button" className="harness-setting-pill" onClick={onAddSpace}>新建空间</button></SettingRow>
+            <div className="harness-setting-block"><div className="harness-space-management-head"><div><div className="harness-setting-title">空间管理</div><p className="harness-block-desc">创建、删除对话空间</p></div><button type="button" className="harness-setting-pill" onClick={onAddSpace}>新建空间</button></div>{spaces.length>0&&<div className="harness-space-list">{spaces.map(space=><div key={space.id}><span>{space.name}</span><button type="button" onClick={()=>onDeleteSpace?.(space)} aria-label={`删除空间：${space.name}`} title="删除空间"><IconTrash size={15}/></button></div>)}</div>}</div>
             <div className="harness-setting-block"><div className="harness-memory-head"><div><div className="harness-setting-title">跨对话记忆</div><p>让智能助手记住你的回答偏好</p></div><label className="harness-switch"><input type="checkbox" checked={memoryEnabled} onChange={event=>onMemoryEnabled?.(event.target.checked)}/><span/></label></div><textarea className="harness-memory-editor" value={memory} maxLength={2000} rows={5} onChange={event=>onMemoryChange?.(event.target.value)} onBlur={onMemorySave} placeholder="例如：偏好简洁回答、默认使用港币……"/><div className="harness-memory-foot"><span>{memory.length}/2000</span><button type="button" onClick={onClearMemory}>清除记忆</button></div></div>
             <div className="harness-setting-block"><div className="harness-setting-title">模型调用</div><p className="harness-block-desc">当前账户的智能助手调用概览</p><div className="harness-usage-grid"><div><b>{usage.calls.toLocaleString()}</b><span>调用</span></div><div><b>{usage.tokens.toLocaleString()}</b><span>Token</span></div><div><b>{usage.errors.toLocaleString()}</b><span>失败</span></div><div><b>{usage.cost>0?usage.cost.toFixed(4):"—"}</b><span>估算费用</span></div></div></div>
           </>}
