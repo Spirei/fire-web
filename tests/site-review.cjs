@@ -179,6 +179,18 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(validateAssistantEndpoint('http://192.168.28.8:11434/v1/chat/completions'),'http://192.168.28.8:11434/v1/chat/completions');
     assert.equal(validateAssistantEndpoint('https://api.deepseek.com/chat/completions'),'https://api.deepseek.com/chat/completions');
   });
+  await test('assistant launcher and panel positions are draggable, isolated and persistent',()=>{
+    const source=fs.readFileSync(path.join(root,'components/ContextAssistant.tsx'),'utf8');
+    assert(source.includes('startFloatingDrag("launcher"'));
+    assert(source.includes('startFloatingDrag("panel"'));
+    assert(source.includes('fire:assistant:${target}-position:${userId}'));
+    assert(source.includes('suppressLauncherClick.current'));
+    assert(source.includes('clampFloatingPosition'));
+    assert(source.includes('writePersistentPreference'));
+    assert(source.includes('Max-Age=31536000'));
+    assert(source.includes('aria-pressed={pinned}'));
+    assert(source.includes("closest(\"button, input, textarea, a, [role='button']\")"));
+  });
   const ledgerXlsx=require(path.join(root,'lib/simpleLedgerXlsx.ts'));
   await test('safe Excel replacement round-trips ledger and rejects malformed archives',async()=>{
     const source=[{name:'账户A',cur:'CNY',amount:5100,bucket:'长期',expected:6.5,updated:'2026-09-14',hist:[{d:'2026-09-13',v:5000,inn:5000,out:0},{d:'2026-09-14',v:5100,inn:0,out:0}]}];

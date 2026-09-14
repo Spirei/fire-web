@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconHistory, IconMessageCircle, IconMinus, IconPlus, IconRefresh, IconTrash, IconX } from "@tabler/icons-react";
+import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconHistory, IconMessageCircle, IconMinus, IconPin, IconPinnedOff, IconPlus, IconRefresh, IconTrash, IconX } from "@tabler/icons-react";
 import type { AssistantHistoryState, StoredAssistantConversation, StoredAssistantMessage } from "@/lib/assistantHistory";
 
 type AssistantAction =
@@ -60,6 +60,43 @@ function AssistantGlyph({ size = 22 }: { size?: number }) {
 
 const MAX_SAVED_MESSAGES = 30;
 const ACTION_TTL_MS = 15 * 60 * 1000;
+const FLOATING_MARGIN = 12;
+
+type FloatingPosition = { x: number; y: number };
+type FloatingTarget = "launcher" | "panel";
+
+function floatingPositionKey(userId: string, target: FloatingTarget) {
+  return `fire:assistant:${target}-position:${userId}`;
+}
+
+function readPersistentPreference(key: string) {
+  try {
+    const value = localStorage.getItem(key);
+    if (value !== null) return value;
+  } catch { /* Cookie fallback below. */ }
+  const cookieName = encodeURIComponent(key);
+  const match = document.cookie.split("; ").find((part) => part.startsWith(`${cookieName}=`));
+  return match ? decodeURIComponent(match.slice(cookieName.length + 1)) : null;
+}
+
+function writePersistentPreference(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+    return;
+  } catch {
+    try { localStorage.removeItem(key); } catch { /* Storage may be unavailable. */ }
+  }
+  document.cookie = `${encodeURIComponent(key)}=${encodeURIComponent(value)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+}
+
+function clampFloatingPosition(position: FloatingPosition, width: number, height: number) {
+  const horizontalMargin = width + FLOATING_MARGIN * 2 <= window.innerWidth ? FLOATING_MARGIN : 0;
+  const verticalMargin = height + FLOATING_MARGIN * 2 <= window.innerHeight ? FLOATING_MARGIN : 0;
+  return {
+    x: Math.min(Math.max(horizontalMargin, position.x), Math.max(horizontalMargin, window.innerWidth - width - horizontalMargin)),
+    y: Math.min(Math.max(verticalMargin, position.y), Math.max(verticalMargin, window.innerHeight - height - verticalMargin))
+  };
+}
 
 function isActionExpired(action: AssistantAction) {
   if (action.type === "navigate") return false;
@@ -90,6 +127,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [historyStatus, setHistoryStatus] = useState<"idle" | "saving" | "error">("idle");
@@ -112,9 +150,40 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const messageListRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const launcherRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const [launcherPosition, setLauncherPosition] = useState<FloatingPosition | null>(null);
+  const [panelPosition, setPanelPosition] = useState<FloatingPosition | null>(null);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  const suppressLauncherClick = useRef(false);
   const copy = PAGE_COPY[page] || { label: "当前页面", prompts: ["概览当前数据", "检查数据异常", "给我下一步建议"] };
 
   useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setPinned(readPersistentPreference(`fire:assistant:pinned:${userId}`) === "1");
+  }, [userId]);
+  useEffect(() => {
+    const restore = (target: FloatingTarget, element: HTMLElement | null, setter: (value: FloatingPosition) => void) => {
+      if (!element) return;
+      try {
+        const saved = JSON.parse(readPersistentPreference(floatingPositionKey(userId, target)) || "null") as FloatingPosition | null;
+        if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) setter(clampFloatingPosition(saved, element.offsetWidth, element.offsetHeight));
+      } catch {
+        try { localStorage.removeItem(floatingPositionKey(userId, target)); } catch { /* Invalid or unavailable storage is ignored. */ }
+      }
+    };
+    restore("launcher", launcherRef.current, setLauncherPosition);
+    restore("panel", panelRef.current, setPanelPosition);
+  }, [mounted, open, userId]);
+  useEffect(() => {
+    const clampVisibleItems = () => {
+      if (launcherPosition && launcherRef.current) setLauncherPosition(clampFloatingPosition(launcherPosition, launcherRef.current.offsetWidth, launcherRef.current.offsetHeight));
+      if (panelPosition && panelRef.current) setPanelPosition(clampFloatingPosition(panelPosition, panelRef.current.offsetWidth, panelRef.current.offsetHeight));
+    };
+    window.addEventListener("resize", clampVisibleItems);
+    return () => window.removeEventListener("resize", clampVisibleItems);
+  }, [launcherPosition, panelPosition, minimized]);
+  useEffect(() => () => dragCleanupRef.current?.(), []);
   useEffect(() => {
     // 一次性迁移旧版浏览器历史到服务端，随后清除本地的账户对话数据。
     try {
@@ -378,22 +447,62 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     return isActionExpired(action);
   }
 
+  function startFloatingDrag(target: FloatingTarget, event: ReactPointerEvent<HTMLElement>) {
+    if (event.button !== 0 || (target === "panel" && (event.target as HTMLElement).closest("button, input, textarea, a, [role='button']"))) return;
+    const element = target === "launcher" ? launcherRef.current : panelRef.current;
+    if (!element) return;
+    event.preventDefault();
+    const rect = element.getBoundingClientRect();
+    const origin = { x: rect.left, y: rect.top };
+    const start = { x: event.clientX, y: event.clientY };
+    let moved = false;
+    const setter = target === "launcher" ? setLauncherPosition : setPanelPosition;
+    document.body.style.userSelect = "none";
+    element.dataset.dragging = "true";
+    const onMove = (moveEvent: PointerEvent) => {
+      const deltaX = moveEvent.clientX - start.x;
+      const deltaY = moveEvent.clientY - start.y;
+      if (Math.hypot(deltaX, deltaY) > 4) moved = true;
+      setter(clampFloatingPosition({ x: origin.x + deltaX, y: origin.y + deltaY }, rect.width, rect.height));
+    };
+    const finish = (endEvent?: PointerEvent) => {
+      if (endEvent && Math.hypot(endEvent.clientX - start.x, endEvent.clientY - start.y) > 4) moved = true;
+      const currentRect = element.getBoundingClientRect();
+      const finalPosition = clampFloatingPosition({ x: currentRect.left, y: currentRect.top }, currentRect.width, currentRect.height);
+      setter(finalPosition);
+      writePersistentPreference(floatingPositionKey(userId, target), JSON.stringify(finalPosition));
+      if (target === "launcher" && moved) suppressLauncherClick.current = true;
+      delete element.dataset.dragging;
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      dragCleanupRef.current = null;
+    };
+    dragCleanupRef.current?.();
+    dragCleanupRef.current = finish;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", finish, { once: true });
+    window.addEventListener("pointercancel", finish, { once: true });
+  }
+
   if (!mounted) return null;
   return createPortal(
     <>
       {!open && (
-        <button type="button" onClick={() => { setOpen(true); setMinimized(false); }} className="assistant-launcher fixed bottom-5 right-5 z-[90] flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_12px_34px_rgba(0,0,0,.3)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#20252a] hover:shadow-[0_14px_38px_rgba(0,0,0,.36)] active:scale-95 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label="打开账户助手" title="账户助手">
+        <button ref={launcherRef} type="button" onPointerDown={(event) => startFloatingDrag("launcher", event)} onClick={() => { if (suppressLauncherClick.current) { suppressLauncherClick.current = false; return; } setOpen(true); setMinimized(false); }} style={launcherPosition ? { left: launcherPosition.x, top: launcherPosition.y, right: "auto", bottom: "auto" } : undefined} className="assistant-launcher fixed bottom-5 right-5 z-[90] flex h-12 w-12 touch-none cursor-grab items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_12px_34px_rgba(0,0,0,.3)] transition-[background-color,box-shadow,transform] duration-200 hover:bg-[#20252a] hover:shadow-[0_14px_38px_rgba(0,0,0,.36)] active:scale-95 active:cursor-grabbing data-[dragging=true]:scale-100 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label="打开账户助手" title="拖动可移动，点击打开账户助手">
           <AssistantGlyph size={25} />
         </button>
       )}
       {open && (
-        <div onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }} className="assistant-layer fixed inset-0 z-[100] flex items-end justify-end bg-black/20 sm:pointer-events-none sm:bg-transparent">
-          <section role="dialog" aria-modal="true" aria-label="账户助手" className={`assistant-panel pointer-events-auto relative flex w-full flex-col overflow-hidden border border-[#e1e7e6] bg-white shadow-[0_24px_80px_rgba(15,23,42,.16)] ${minimized ? "h-[68px] sm:w-[320px]" : "h-[72dvh] rounded-t-[22px] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]"}`}>
-            <header className="flex min-h-[68px] items-center gap-3 border-b border-edge px-5">
+        <div onMouseDown={(event) => { if (!pinned && event.target === event.currentTarget) setOpen(false); }} className="assistant-layer fixed inset-0 z-[100] flex items-end justify-end bg-black/20 sm:pointer-events-none sm:bg-transparent">
+          <section ref={panelRef} role="dialog" aria-modal="true" aria-label="账户助手" style={panelPosition ? { position: "fixed", left: panelPosition.x, top: panelPosition.y, right: "auto", bottom: "auto" } : undefined} className={`assistant-panel pointer-events-auto relative flex w-full flex-col overflow-hidden border border-[#e1e7e6] bg-white shadow-[0_24px_80px_rgba(15,23,42,.16)] ${minimized ? "h-[68px] sm:w-[320px]" : "h-[72dvh] rounded-t-[22px] sm:mb-7 sm:mr-7 sm:h-[min(680px,calc(100dvh-112px))] sm:w-[420px] sm:rounded-[22px]"}`}>
+            <header onPointerDown={(event) => startFloatingDrag("panel", event)} className="flex min-h-[68px] touch-none cursor-grab items-center gap-3 border-b border-edge px-5 active:cursor-grabbing">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_5px_16px_rgba(0,0,0,.18)]"><AssistantGlyph size={20} /></span>
               <div className="min-w-0 flex-1 text-sm font-semibold text-ink">账户助手</div>
               {conversations.length > 0 && <button type="button" disabled={actionBusy} onClick={() => setHistoryOpen((value) => !value)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="历史对话" title="历史对话"><IconHistory size={18} /></button>}
               {messages.length > 0 && <button type="button" disabled={actionBusy} onClick={startNewChat} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="开始新对话" title={actionBusy ? "操作完成后可开始新对话" : "开始新对话"}><IconPlus size={18} /></button>}
+              <button type="button" aria-pressed={pinned} onClick={() => setPinned((value) => { const next = !value; writePersistentPreference(`fire:assistant:pinned:${userId}`, next ? "1" : "0"); return next; })} className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${pinned ? "bg-[#e8faf6] text-[#0d9488]" : "text-muted hover:bg-bg-gray"}`} aria-label={pinned ? "取消置顶" : "置顶账户助手"} title={pinned ? "已置顶，点击取消" : "置顶面板"}>{pinned ? <IconPinnedOff size={17} /> : <IconPin size={17} />}</button>
               <button type="button" onClick={() => setMinimized((value) => !value)} className="hidden h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray sm:flex" aria-label={minimized ? "展开" : "最小化"}><IconMinus size={18} /></button>
               <button type="button" onClick={() => setOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray" aria-label="关闭"><IconX size={18} /></button>
             </header>
