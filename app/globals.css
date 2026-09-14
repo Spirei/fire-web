@@ -673,6 +673,17 @@
 .app-shell-main:has(.assistant-page) { padding-top:0; padding-bottom:0; }
 .records-app:has(.assistant-page) { gap:0; align-items:stretch; }
 .records-app:has(.assistant-page) > aside { top:88px; }
+
+/* Codex-inspired workspace navigation: quiet hierarchy, compact rows, and a single clear active state. */
+.fire-sidebar { color: var(--ink); }
+.fire-sidebar-brand { min-height: 38px; }
+.fire-sidebar-chevron { color: #8c919b; font-size: 20px; line-height: 1; transform: translateY(-2px); }
+.fire-sidebar-section-label { color: #8f949d; font-size: 12px; font-weight: 600; letter-spacing: .02em; padding: 10px 12px 6px; }
+.fire-sidebar-section-label-spaced { margin-top: 12px; }
+.fire-sidebar-item { border: 1px solid transparent; }
+.fire-sidebar-item-active { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.04); }
+.dark .fire-sidebar-item-active { background: #3a3b3d; }
+.dark .fire-sidebar { box-shadow: inset -1px 0 rgba(255,255,255,.04); }
 .assistant-page,.assistant-page-layer { width:100%; min-width:0; }
 
 /* DeepSeek Harness 工作台：布局、弹出菜单、输入坞与设置面板。 */

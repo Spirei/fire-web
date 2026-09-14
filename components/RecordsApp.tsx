@@ -771,29 +771,41 @@ export default function RecordsApp({
     <>
     <div translate="no" className="records-app notranslate flex items-start gap-6">
       {/* 桌面侧边导航 */}
-      <aside className="sticky top-[88px] hidden w-[220px] flex-none lg:block">
-        <nav className="relative rounded-2xl bg-bg-gray p-2">
-          {sidebarTabs.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => selectTab(t.key)}
-              draggable
-              onDragStart={() => { tabDragKeyRef.current = t.key; }}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => onTabDrop(t.key)}
-              onDragEnd={() => { tabDragKeyRef.current = null; }}
-              title={`${t.label}（可拖动排序）`}
-              className={`flex h-[44px] w-full cursor-grab items-center gap-3 rounded-[12px] px-4 text-sm transition-all duration-200 active:cursor-grabbing ${
-                activeTab === t.key
-                  ? "bg-white font-semibold text-ink shadow-[0_1px_4px_rgba(10,14,25,.08)] dark:bg-[#1c222d] dark:text-white"
-                  : "text-muted hover:bg-white/60 hover:text-ink dark:hover:bg-white/10"
-              }`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
+      <aside className="fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block">
+        <nav className="relative min-h-[calc(100vh-112px)] rounded-2xl bg-bg-gray px-2 pb-3 pt-3 dark:bg-[#232425]">
+          <div className="fire-sidebar-brand mb-3 flex items-center justify-between px-3">
+            <span className="text-[21px] font-semibold tracking-[-0.03em] text-ink dark:text-white">Fire</span>
+            <span className="fire-sidebar-chevron" aria-hidden="true">⌄</span>
+          </div>
+          <div className="fire-sidebar-section-label">工作区</div>
+          {sidebarTabs.map((t, index) => {
+            const isManagement = ["users", "attachments", "library", "cards", "activities", "settings"].includes(t.key);
+            const previous = sidebarTabs[index - 1];
+            const startsManagement = isManagement && !previous?.key || isManagement && !["users", "attachments", "library", "cards", "activities", "settings"].includes(previous.key);
+            return (
+              <div key={t.key}>
+                {startsManagement && <div className="fire-sidebar-section-label fire-sidebar-section-label-spaced">管理</div>}
+                <button
+                  type="button"
+                  onClick={() => selectTab(t.key)}
+                  draggable
+                  onDragStart={() => { tabDragKeyRef.current = t.key; }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => onTabDrop(t.key)}
+                  onDragEnd={() => { tabDragKeyRef.current = null; }}
+                  title={`${t.label}（可拖动排序）`}
+                  className={`fire-sidebar-item flex h-[42px] w-full cursor-grab items-center gap-3 rounded-[10px] px-3 text-[15px] transition-all duration-200 active:cursor-grabbing ${
+                    activeTab === t.key
+                      ? "fire-sidebar-item-active font-semibold text-ink dark:text-white"
+                      : "text-muted hover:bg-black/[.05] hover:text-ink dark:hover:bg-white/[.07]"
+                  }`}
+                >
+                  {t.icon}
+                  <span className="truncate">{t.label}</span>
+                </button>
+              </div>
+            );
+          })}
         </nav>
       </aside>
 
