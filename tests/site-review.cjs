@@ -60,6 +60,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(saved.status,200);
     assert.equal(settings.getSiteSettings().llmProvider,'openai');
     assert.equal(settings.getSiteSettings().llmModel,'gpt-test');
+    const incomplete={id:'draft-model',name:'待配置模型',provider:'deepseek',icon:'',apiUrl:'https://api.deepseek.com/chat/completions',apiKey:'',models:['deepseek-chat']};
+    assert.equal((await settingsRoute.PUT(request('admin',{modelServices:[incomplete]},'PUT'))).status,200);
+    assert.equal(settings.getSiteSettings().modelServices[0].apiKey,'');
   });
   await test('ordered model services preserve secrets and expose only configured state', async () => {
     const services=[
@@ -95,6 +98,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(source.includes('function ModelProviderIcon'));
     assert(!source.includes('label: "翻译配置"'));
     assert(source.includes('const input = event.currentTarget'));
+    assert(source.includes('icon={item.id === service.provider ? service.icon : ""}'));
+    assert(source.includes('icon: item.id === service.provider ? service.icon : ""'));
+    assert(source.includes('`${serviceId}-${Date.now().toString(36)}`'));
     assert(source.includes('draggable={!editingModel && services.length > 1 && !blockSaving["model-order"]}'));
     assert(!source.includes('rounded-[inherit] object-cover'));
   });

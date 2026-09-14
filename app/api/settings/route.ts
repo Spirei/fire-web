@@ -67,7 +67,6 @@ export async function PUT(request: Request) {
     for (const item of modelServices) {
       if (!item.name || !item.models.length) return NextResponse.json({ error: "每个模型服务都需要名称和至少一个模型" }, { status: 400 });
       if (!validateAssistantEndpoint(item.apiUrl)) return NextResponse.json({ error: `${item.name} 的 API 地址无效或不安全` }, { status: 400 });
-      if (!item.apiKey) return NextResponse.json({ error: `${item.name} 尚未配置 API 密钥` }, { status: 400 });
       if (item.icon && !/^\/uploads\/(?:asset\/icon|logo)\//.test(item.icon)) return NextResponse.json({ error: `${item.name} 的图标路径无效` }, { status: 400 });
     }
   }

@@ -887,11 +887,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     }
   }
 
-  async function uploadModelIcon(file: File, name: string): Promise<string> {
+  async function uploadModelIcon(file: File, name: string, serviceId: string): Promise<string> {
     const fd = new FormData();
     fd.set("kind", "asset");
     fd.set("folder", "icon");
     fd.set("name", name || "模型服务");
+    // 服务与上传批次共同组成文件名，避免不同服务共享 URL 或命中旧图片缓存。
+    fd.set("code", `${serviceId}-${Date.now().toString(36)}`);
     fd.set("file", file);
     const res = await fetch("/api/upload", { method: "POST", body: fd });
     const data = await res.json().catch(() => null);
@@ -2929,8 +2931,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 <div className="model-service-editor">
                                   <div className="model-provider-grid">
                                     {MODEL_PROVIDERS.map(item => (
-                                      <button key={item.id} type="button" onClick={() => updateService(service.id, { provider: item.id, name: service.name === "新模型服务" || MODEL_PROVIDERS.some(candidate => candidate.name === service.name) ? item.name : service.name, apiUrl: item.url || service.apiUrl })} className={`model-provider-option ${service.provider === item.id ? "is-active" : ""}`}>
-                                        <ModelProviderIcon provider={item.id} className="h-8 w-8" />
+                                      <button key={item.id} type="button" onClick={() => updateService(service.id, { provider: item.id, icon: item.id === service.provider ? service.icon : "", name: service.name === "新模型服务" || MODEL_PROVIDERS.some(candidate => candidate.name === service.name) ? item.name : service.name, apiUrl: item.url || service.apiUrl })} className={`model-provider-option ${service.provider === item.id ? "is-active" : ""}`}>
+                                        <ModelProviderIcon provider={item.id} icon={item.id === service.provider ? service.icon : ""} className="h-8 w-8" />
                                         <span><b>{item.name}</b><small>{item.hint}</small></span><i className="model-provider-check" />
                                       </button>
                                     ))}
@@ -2939,7 +2941,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                     <label className="model-field"><span>服务名称<small>会显示在上方服务列表</small></span><input className="sw-row-input" value={service.name} maxLength={50} onChange={event => updateService(service.id, { name: event.target.value })} placeholder="例如：公司代理服务" /></label>
                                     <div className="model-icon-controls">
                                       <label className="model-icon-upload">
-                                        <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={async event => { const input = event.currentTarget; const file = input.files?.[0]; if (!file) return; try { updateService(service.id, { icon: await uploadModelIcon(file, service.name) }); showToast("模型服务图标已上传"); } catch (error) { showToast(error instanceof Error ? error.message : "图标上传失败", "err"); } finally { input.value = ""; } }} />
+                                        <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={async event => { const input = event.currentTarget; const file = input.files?.[0]; if (!file) return; try { updateService(service.id, { icon: await uploadModelIcon(file, service.name, service.id) }); showToast("模型服务图标已上传"); } catch (error) { showToast(error instanceof Error ? error.message : "图标上传失败", "err"); } finally { input.value = ""; } }} />
                                         <ModelProviderIcon provider={service.provider} icon={service.icon} className="h-9 w-9" />
                                         <span>{service.icon ? "更换图标" : "上传图标"}</span>
                                       </label>
