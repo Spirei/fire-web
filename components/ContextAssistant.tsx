@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconHistory, IconMessageCircle, IconPlus, IconRefresh, IconSearch, IconTrash, IconX } from "@tabler/icons-react";
+import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconHistory, IconMessageCircle, IconPaperclip, IconPlus, IconRefresh, IconSearch, IconTrash, IconX } from "@tabler/icons-react";
 import type { AssistantHistoryState, StoredAssistantConversation, StoredAssistantMessage } from "@/lib/assistantHistory";
 
 type AssistantAction =
@@ -15,6 +15,7 @@ type UndoAction =
   | { type: "restore_groups"; previous: Array<{ id: string; groupId: string }>; actionId: string; createdAt: string }
   | { type: "delete_order"; orderId: string; actionId: string; createdAt: string };
 type Message = { role: "user" | "assistant"; content: string; responseError?: boolean; retryQuestion?: string; action?: AssistantAction; actionStatus?: "running" | "done" | "error" | "uncertain"; undo?: UndoAction; undoStatus?: "running" | "error" | "uncertain" };
+type PendingImage = { id: string; name: string; dataUrl: string; size: number };
 
 const PAGE_COPY: Record<string, { label: string; prompts: string[] }> = {
   holdings: { label: "账户资产", prompts: ["概览我的持仓", "检查持仓数据异常", "我的持仓分布如何？"] },
@@ -61,6 +62,7 @@ function AssistantGlyph({ size = 22 }: { size?: number }) {
 const MAX_SAVED_MESSAGES = 30;
 const ACTION_TTL_MS = 15 * 60 * 1000;
 const FLOATING_MARGIN = 12;
+const MAX_IMAGE_TOTAL_BYTES = 100 * 1024 * 1024;
 
 type FloatingPosition = { x: number; y: number };
 type FloatingTarget = "launcher" | "panel";
@@ -129,6 +131,8 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [historyQuery, setHistoryQuery] = useState("");
   const [pinned, setPinned] = useState(false);
   const [input, setInput] = useState("");
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const [attachmentError, setAttachmentError] = useState("");
   const [loading, setLoading] = useState(false);
   const [historyStatus, setHistoryStatus] = useState<"idle" | "saving" | "error">("idle");
   const [historyError, setHistoryError] = useState("");
@@ -150,6 +154,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const messageListRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const [launcherPosition, setLauncherPosition] = useState<FloatingPosition | null>(null);
@@ -261,7 +266,8 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   }, [open, historyOpen]);
 
   async function send(value: string, retryIndex?: number) {
-    const question = value.trim();
+    const selectedImages = typeof retryIndex === "number" ? [] : pendingImages;
+    const question = value.trim() || (selectedImages.length ? "请分析这些图片" : "");
     if (!question) return;
     if (loading) {
       requestGeneration.current += 1;
@@ -278,6 +284,8 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     requestController.current = controller;
     setMessages(next);
     setInput("");
+    setPendingImages([]);
+    setAttachmentError("");
     stickToBottom.current = true;
     setLoading(true);
     try {
@@ -285,7 +293,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, context: { page, label: copy.label, symbol, filter } }),
+        body: JSON.stringify({ messages: next, images: selectedImages.map(({ name, dataUrl }) => ({ name, dataUrl })), context: { page, label: copy.label, symbol, filter } }),
         signal: controller.signal
       });
       const data = await response.json().catch(() => null) as { answer?: string; error?: string; action?: AssistantAction } | null;
@@ -301,6 +309,26 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       if (requestController.current === controller) requestController.current = null;
       if (requestGeneration.current === generation) setLoading(false);
     }
+  }
+
+  async function addImages(files: File[]) {
+    setAttachmentError("");
+    const images = files.filter((file) => file.type.startsWith("image/"));
+    if (images.length !== files.length) setAttachmentError("只能添加图片文件");
+    const existingBytes = pendingImages.reduce((sum, image) => sum + image.size, 0);
+    let totalBytes = existingBytes;
+    const withinTotal = images.filter((file) => {
+      if (totalBytes + file.size > MAX_IMAGE_TOTAL_BYTES) { setAttachmentError("单次提问的图片总大小不能超过 100MB"); return false; }
+      totalBytes += file.size;
+      return true;
+    });
+    const loaded = await Promise.all(withinTotal.map((file) => new Promise<PendingImage>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ id: crypto.randomUUID(), name: file.name || "粘贴的图片", dataUrl: String(reader.result), size: file.size });
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    })));
+    setPendingImages((current) => [...current, ...loaded]);
   }
 
   function stopGenerating() {
@@ -565,11 +593,17 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                   </div>
                 )}
               </div>
-              <form onSubmit={(event) => { event.preventDefault(); void send(input); }} className="border-t border-edge p-4 pb-[max(16px,env(safe-area-inset-bottom))]">
-                <div className="flex items-end gap-2 rounded-[20px] border border-edge-strong bg-bg-gray p-2 pl-4">
-                  <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.nativeEvent.isComposing) return; if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} rows={1} maxLength={1200} placeholder={`问问${copy.label}…`} className="max-h-28 min-h-[38px] flex-1 resize-none bg-transparent py-2 text-sm text-ink placeholder:text-faint" />
-                  <button type={loading && !input.trim() ? "button" : "submit"} disabled={!input.trim() && !loading} onClick={loading && !input.trim() ? stopGenerating : undefined} className={`group flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 ${input.trim() || loading ? "border-[#4caf58] bg-[#4caf58] text-white shadow-[0_4px_14px_rgba(76,175,88,.2)] hover:border-[#45a550] hover:bg-[#45a550]" : "border-[#dfe2e6] bg-[#eef0f2] text-[#a7adb5] dark:border-white/10 dark:bg-white/[.07] dark:text-white/25"}`} aria-label={loading && !input.trim() ? "停止生成" : "发送"}>{loading && !input.trim() ? <span className="h-3.5 w-3.5 rounded-[2px] bg-white" /> : <IconArrowUp size={20} stroke={2.1} className="transition-transform duration-200 group-hover:-translate-y-0.5" />}</button>
+              <form onSubmit={(event) => { event.preventDefault(); void send(input); }} onDragOver={(event) => { if ([...event.dataTransfer.items].some((item) => item.kind === "file" && item.type.startsWith("image/"))) event.preventDefault(); }} onDrop={(event) => { const files = [...event.dataTransfer.files]; if (!files.some((file) => file.type.startsWith("image/"))) return; event.preventDefault(); void addImages(files); }} className="border-t border-edge p-4 pb-[max(16px,env(safe-area-inset-bottom))] dark:border-white/10">
+                <div className="rounded-[20px] border border-edge-strong bg-bg-gray p-2 dark:border-white/12 dark:bg-white/[.045]">
+                  {pendingImages.length > 0 && <div className="flex gap-2 overflow-x-auto px-1 pb-2" aria-label="待发送图片">{pendingImages.map((image) => <div key={image.id} className="group/image relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-edge bg-white dark:border-white/10 dark:bg-white/5"><img src={image.dataUrl} alt={image.name} className="h-full w-full object-cover" /><button type="button" onClick={() => setPendingImages((current) => current.filter((item) => item.id !== image.id))} className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-90 shadow-sm transition hover:bg-black" aria-label={`移除图片：${image.name}`}><IconX size={12} /></button></div>)}</div>}
+                  <div className="flex items-end gap-1.5">
+                    <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(event) => { void addImages([...event.target.files || []]); event.currentTarget.value = ""; }} />
+                    <button type="button" onClick={() => imageInputRef.current?.click()} className="flex h-10 w-9 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-white dark:text-white/45 dark:hover:bg-white/10" aria-label="添加图片" title="添加图片"><IconPaperclip size={18} /></button>
+                    <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onPaste={(event) => { const files = [...event.clipboardData.files].filter((file) => file.type.startsWith("image/")); if (files.length) { event.preventDefault(); void addImages(files); } }} onKeyDown={(event) => { if (event.nativeEvent.isComposing) return; if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} rows={1} maxLength={1200} placeholder={`问问${copy.label}…`} className="max-h-28 min-h-[38px] flex-1 resize-none bg-transparent py-2 text-sm text-ink placeholder:text-faint dark:text-white/85 dark:placeholder:text-white/30" />
+                    <button type={loading && !input.trim() && pendingImages.length === 0 ? "button" : "submit"} disabled={!input.trim() && pendingImages.length === 0 && !loading} onClick={loading && !input.trim() && pendingImages.length === 0 ? stopGenerating : undefined} className={`group flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 ${input.trim() || pendingImages.length || loading ? "border-[#4caf58] bg-[#4caf58] text-white shadow-[0_4px_14px_rgba(76,175,88,.2)] hover:border-[#45a550] hover:bg-[#45a550]" : "border-[#dfe2e6] bg-[#eef0f2] text-[#a7adb5] dark:border-white/10 dark:bg-white/[.07] dark:text-white/25"}`} aria-label={loading && !input.trim() && pendingImages.length === 0 ? "停止生成" : "发送"}>{loading && !input.trim() && pendingImages.length === 0 ? <span className="h-3.5 w-3.5 rounded-[2px] bg-white" /> : <IconArrowUp size={20} stroke={2.1} className="transition-transform duration-200 group-hover:-translate-y-0.5" />}</button>
+                  </div>
                 </div>
+                {attachmentError && <p role="alert" className="mt-2 px-1 text-[10px] text-[#a45353] dark:text-[#ef9a9a]">{attachmentError}</p>}
                 {historyStatus === "error" && <button type="button" onClick={() => setHistoryRetry((value) => value + 1)} className="mt-2 w-full text-center text-[10px] text-muted hover:text-ink">对话保存失败，点击重试</button>}
               </form>
             </>

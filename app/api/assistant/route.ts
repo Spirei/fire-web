@@ -16,6 +16,7 @@ import { modelAttempts } from "@/lib/modelServices";
 import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
+type AssistantImage = { name: string; dataUrl: string };
 type PageContext = { page?: string; label?: string; symbol?: string; filter?: string };
 type PageSnapshot = Record<string, unknown> | null;
 type AssistantAction =
@@ -247,14 +248,23 @@ export async function POST(request: Request) {
   if (!rateLimit(`assistant:${clientIp(request)}:${user.id}`, 24, 60_000) || !rateLimitGlobal("assistant", 240, 60_000)) {
     return NextResponse.json({ error: "提问过于频繁，请稍后再试" }, { status: 429 });
   }
-  let body: { messages?: ChatMessage[]; context?: PageContext } | null;
+  let body: { messages?: ChatMessage[]; images?: AssistantImage[]; context?: PageContext } | null;
   try {
-    body = await readLimitedJson(request, 64 * 1024);
+    body = await readLimitedJson(request, 140 * 1024 * 1024);
   } catch (error) {
     if (error instanceof RequestBodyTooLargeError) return NextResponse.json({ error: "请求内容过大" }, { status: 413 });
     throw error;
   }
   const messages = (Array.isArray(body?.messages) ? body.messages : []).filter((item) => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string").slice(-10);
+  let encodedImageBytes = 0;
+  const images = (Array.isArray(body?.images) ? body.images : []).flatMap((image) => {
+    if (!image || typeof image !== "object" || typeof image.dataUrl !== "string") return [];
+    const match = image.dataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/i);
+    if (!match) return [];
+    encodedImageBytes += match[2].length;
+    if (encodedImageBytes > Math.ceil(100 * 1024 * 1024 * 4 / 3) + 16) return [];
+    return [{ name: typeof image.name === "string" ? image.name.slice(0, 120) : "image", dataUrl: image.dataUrl }];
+  });
   const question = messages.at(-1)?.content.trim().slice(0, 1200) || "";
   if (!question) return NextResponse.json({ error: "请输入问题" }, { status: 400 });
 
@@ -278,7 +288,7 @@ export async function POST(request: Request) {
         body: JSON.stringify({
           model: attempt.model,
           temperature: 0.2,
-          messages: [{ role: "system", content: system }, ...messages.map((item) => ({ role: item.role, content: item.content.slice(0, 1200) }))]
+          messages: [{ role: "system", content: system }, ...messages.map((item, index) => index === messages.length - 1 && item.role === "user" && images.length ? { role: "user", content: [{ type: "text", text: item.content.slice(0, 1200) }, ...images.map((image) => ({ type: "image_url", image_url: { url: image.dataUrl } }))] } : { role: item.role, content: item.content.slice(0, 1200) })]
         }),
         signal: AbortSignal.timeout(30_000),
         redirect: "manual",
