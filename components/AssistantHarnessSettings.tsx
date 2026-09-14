@@ -5,7 +5,7 @@ import { IconAdjustmentsHorizontal, IconDatabaseCog, IconMoon, IconRobot, IconSe
 export type AssistantAppearance = "light" | "dark" | "system";
 export type AssistantDensity = "compact" | "comfortable";
 
-export default function AssistantHarnessSettings({ open, section, appearance, fontSize, density, onClose, onSection, onAppearance, onFontSize, onDensity, onOpenModels }: {
+export default function AssistantHarnessSettings({ open, section, appearance, fontSize, density, models = [], selectedModel = "auto", onClose, onSection, onAppearance, onFontSize, onDensity, onOpenModels, onSelectModel }: {
   open: boolean;
   section: "general" | "models" | "plugins" | "preset";
   appearance: AssistantAppearance;
@@ -17,6 +17,9 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
   onFontSize: (value: number) => void;
   onDensity: (value: AssistantDensity) => void;
   onOpenModels: () => void;
+  models?: Array<{ serviceId:string; serviceName:string; model:string; configured:boolean; health?:{ok:boolean}|null }>;
+  selectedModel?: string;
+  onSelectModel?: (value:string) => void;
 }) {
   if (!open) return null;
   const nav = [
@@ -45,7 +48,7 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
             <SettingRow title="对话显示" desc="控制已完成轮次的过程内容"><button type="button" className="harness-setting-pill" onClick={()=>onDensity(density==="compact"?"comfortable":"compact")}>{density==="compact"?"紧凑":"舒适"}</button></SettingRow>
             <SettingRow title="繁忙时的发送行为" desc="模型回答时输入新问题会排队发送"><span className="harness-setting-pill">排队发送</span></SettingRow>
           </>}
-          {section === "models" && <><h3>模型</h3><p className="harness-section-intro">使用“模型服务”中已配置的提供方和模型。</p><div className="harness-provider-card"><span>当前模型服务</span><i/><button type="button" onClick={onOpenModels}>编辑</button></div><button type="button" className="harness-add-provider" onClick={onOpenModels}>＋ 管理模型服务</button></>}
+          {section === "models" && <><h3>模型</h3><p className="harness-section-intro">直接使用“模型服务”中已配置的提供方和模型，选择会同步到智能助手输入框。</p><div className="harness-model-settings-list"><button type="button" className={selectedModel==="auto"?"selected":""} onClick={()=>onSelectModel?.("auto")}><div><b>自动选择模型</b><span>按模型服务顺序自动回退</span></div>{selectedModel==="auto"&&<IconCheckmark/>}</button>{models.filter(model=>model.configured).map(model=>{const value=`${model.serviceId}:${model.model}`;return <button type="button" key={value} className={selectedModel===value?"selected":""} onClick={()=>onSelectModel?.(value)}><div><b>{model.model}</b><span>{model.serviceName}</span></div><i className={model.health?.ok===false?"error":""}/>{selectedModel===value&&<IconCheckmark/>}</button>})}</div><button type="button" className="harness-add-provider" onClick={onOpenModels}>＋ 管理模型服务</button></>}
           {section === "plugins" && <><h3>插件</h3><p className="harness-section-intro">智能助手能力已按现有 Fire 功能适配。</p>{["账户数据与当前页面","图片与附件","对话记忆","模型运行轨迹"].map(x=><div className="harness-plugin-card" key={x}><b>{x}</b><span>已启用</span></div>)}</>}
           {section === "preset" && <><h3>助手预设</h3><p className="harness-section-intro">决定新对话使用的数据和回答方式。</p>{["投资分析","数据检查","简洁回答"].map((x,i)=><button type="button" className={`harness-preset-card ${i===0?"selected":""}`} key={x}><b>{x}</b><span>{i===0?"默认":"可选"}</span></button>)}</>}
         </div>
@@ -53,6 +56,8 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
     </section>
   </div>;
 }
+
+function IconCheckmark(){return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m5 12 4 4L19 6"/></svg>}
 
 function SettingRow({ title, desc, children }: { title:string; desc?:string; children:React.ReactNode }) {
   return <div className="harness-setting-row"><div><div className="harness-setting-title">{title}</div>{desc&&<p>{desc}</p>}</div><div>{children}</div></div>;
