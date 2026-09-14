@@ -2580,6 +2580,49 @@ html.dark .watch-import-target {
 .asset-library-tabs { scrollbar-width:none; }
 .asset-library-tabs::-webkit-scrollbar { display:none; }
 @media (max-width: 640px) {
+  /* 手机壳层：把有效高度留给内容，顶部信息只保留品牌与账户入口。 */
+  .app-shell-header { height:60px!important; }
+  .app-shell-header-inner { gap:10px!important; padding-right:12px!important; padding-left:12px!important; }
+  .app-shell-ticker { display:none; }
+  .app-shell-main { padding-top:12px!important; padding-bottom:28px!important; }
+  .app-shell-footer { padding:22px 16px calc(22px + env(safe-area-inset-bottom))!important; }
+  .app-shell-footer-detail { display:none; }
+  .records-app { display:block; width:100%; padding-right:12px; padding-left:12px; }
+
+  /* 入口很多时保持单行、可横滑，并把当前入口自动滚到视口中央。 */
+  .mobile-tab-nav {
+    position:sticky; top:68px; z-index:40; gap:4px; margin-bottom:14px!important;
+    border:1px solid #dfe2e8; border-radius:14px!important; padding:4px!important;
+    background:rgba(247,248,250,.94);
+    box-shadow:0 8px 22px rgba(10,14,25,.06); backdrop-filter:blur(16px);
+    scroll-snap-type:x proximity; scrollbar-width:none;
+  }
+  .mobile-tab-nav::-webkit-scrollbar { display:none; }
+  .mobile-tab-nav > button {
+    min-width:max-content!important; flex:none!important; flex-direction:row!important;
+    gap:6px!important; min-height:40px; padding:0 12px!important; border-radius:10px!important;
+    scroll-snap-align:center; white-space:nowrap;
+  }
+  .mobile-tab-nav > button svg,.mobile-tab-nav > button img { width:17px!important; height:17px!important; }
+  .dark .mobile-tab-nav { border-color:#2a3140; background:rgba(21,26,38,.94); box-shadow:0 8px 22px rgba(0,0,0,.18); }
+
+  .asset-library-card { gap:14px!important; border-radius:16px!important; }
+  .asset-library-tabs { scroll-snap-type:x proximity; }
+  .asset-library-tabs > button { padding:7px 12px!important; scroll-snap-align:start; }
+  .asset-library-market-tools { flex-wrap:wrap!important; }
+  .asset-library-market-tools > input { order:20; width:100%!important; margin-left:0!important; }
+
+  /* 分组工作台在手机上分成紧凑分组栏与可滚动成员区，避免固定桌面高度裁掉操作。 */
+  .watch-group-manage {
+    height:min(72dvh,680px)!important; min-height:0!important;
+    grid-template-rows:minmax(116px,30%) minmax(0,1fr); gap:12px!important;
+  }
+  .watch-group-manage .watch-group-sidebar { padding:8px!important; }
+  .watch-group-toolbar { align-items:flex-start!important; }
+  .watch-group-toolbar > div:last-child { width:100%; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+  .watch-group-toolbar > div:last-child::-webkit-scrollbar { display:none; }
+  .watch-group-toolbar > div:last-child button { flex:none; white-space:nowrap; }
+
   /* 手机端宽数据表禁止浏览器自行压缩/省略列：固定七列后仅由外层横向滚动。 */
   .mobile-global-table { display:block; width:800px; min-width:800px; table-layout:fixed; }
   .mobile-global-table colgroup { display:none; }

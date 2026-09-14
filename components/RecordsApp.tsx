@@ -793,7 +793,7 @@ export default function RecordsApp({
               type="button"
               onClick={() => selectTab(t.key)}
               className={`flex min-w-[76px] flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-xs transition-all duration-200 ${
-                activeTab === t.key ? "bg-white font-semibold text-ink shadow-[0_1px_4px_rgba(10,14,25,.08)]" : "text-muted"
+                activeTab === t.key ? "bg-white font-semibold text-ink shadow-[0_1px_4px_rgba(10,14,25,.08)] dark:bg-[#252c3a] dark:text-white" : "text-muted"
               }`}
             >
               {t.icon}

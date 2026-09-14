@@ -476,7 +476,7 @@ export default function WatchGroupSheet({
           </div>
         </>
       ) : (
-        <div className="grid h-[min(620px,calc(100vh-190px))] min-h-[420px] gap-5 md:grid-cols-[240px_minmax(0,1fr)]">
+        <div className="watch-group-manage grid h-[min(620px,calc(100vh-190px))] min-h-[420px] gap-5 md:grid-cols-[240px_minmax(0,1fr)]">
           <aside className="watch-group-sidebar flex min-h-0 flex-col rounded-2xl border border-edge p-3">
             <h4 className="px-2 pb-2 text-sm font-bold text-ink">自选分组</h4>
             <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
@@ -504,7 +504,7 @@ export default function WatchGroupSheet({
           </aside>
 
           <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="watch-group-toolbar mb-3 flex flex-wrap items-center justify-between gap-3">
               <div><h4 className="text-base font-bold text-ink">{activeGroup?.name ?? "全部"}</h4><p className="mt-0.5 text-xs text-muted">{activeMembers.length} 只股票</p></div>
               <div className="flex items-center gap-2">
                 <div className="relative">

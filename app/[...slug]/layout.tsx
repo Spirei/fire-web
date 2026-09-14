@@ -105,7 +105,7 @@ export default async function SlugLayout({
       {initialCardCovers.map((url) => <link key={url} rel="preload" as="image" href={url} />)}
       <Toaster />
       <header className="app-shell-header site-header sticky top-0 z-50 h-[72px] border-b border-edge/80">
-        <div className="mx-auto flex h-full max-w-[1140px] items-center gap-5 px-6">
+        <div className="app-shell-header-inner mx-auto flex h-full max-w-[1140px] items-center gap-5 px-6">
           <Link href="/" className="inline-flex flex-none items-center gap-2.5 hover:opacity-90">
             <SiteLogo initialLogo={settings.siteLogo} initialText={settings.logoText} initialFont={settings.logoFont} />
           </Link>
