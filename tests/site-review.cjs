@@ -217,6 +217,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   assert(source.includes('onDrop={(event) =>'));
   assert(source.includes('100 * 1024 * 1024'));
   assert(source.includes('pendingImageBytesRef.current += reservedBytes'));
+  assert(source.includes('pendingImageSequenceRef.current'));
+  assert(!source.includes('crypto.randomUUID()'));
   assert(!globalStyles.includes('color-scheme: light;\n  border-color: #e1e7e6;\n  background: #fff;'));
     assert(source.includes("closest(\"button, input, textarea, a, [role='button']\")"));
   });

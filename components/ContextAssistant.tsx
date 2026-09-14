@@ -133,6 +133,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [input, setInput] = useState("");
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const pendingImageBytesRef = useRef(0);
+  const pendingImageSequenceRef = useRef(0);
   const [attachmentError, setAttachmentError] = useState("");
   const [loading, setLoading] = useState(false);
   const [historyStatus, setHistoryStatus] = useState<"idle" | "saving" | "error">("idle");
@@ -327,7 +328,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     pendingImageBytesRef.current += reservedBytes;
     const settled = await Promise.allSettled(withinTotal.map((file) => new Promise<PendingImage>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve({ id: crypto.randomUUID(), name: file.name || "粘贴的图片", dataUrl: String(reader.result), size: file.size });
+      reader.onload = () => resolve({ id: `assistant-image-${Date.now()}-${++pendingImageSequenceRef.current}`, name: file.name || "粘贴的图片", dataUrl: String(reader.result), size: file.size });
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
     })));
