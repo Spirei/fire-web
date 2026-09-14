@@ -151,12 +151,12 @@ export default async function SlugLayout({
         </CurrencyProvider>
       </main>
 
-      <footer className="app-shell-footer border-t border-edge bg-white px-6 pb-7 pt-10">
+      {tab.key !== "assistant" && <footer className="app-shell-footer border-t border-edge bg-white px-6 pb-7 pt-10">
         <div className="mx-auto flex max-w-[1140px] flex-wrap items-center justify-between gap-3 text-xs text-faint">
           <span>© 2026 Fire · 记录仅供参考，不构成任何投资建议</span>
           <span className="app-shell-footer-detail">数据保存在服务端 data/records.json</span>
         </div>
-      </footer>
+      </footer>}
     </div>
   );
 }

@@ -3009,6 +3009,8 @@ html.dark .watch-import-target {
   .app-shell-header-inner { gap:10px!important; padding-right:12px!important; padding-left:12px!important; }
   .app-shell-ticker { display:none; }
   .app-shell-main { padding-top:12px!important; padding-bottom:28px!important; }
+  .app-shell-main:has(.assistant-page) { padding-top:0!important; padding-bottom:0!important; }
+  .assistant-workspace { height:calc(100dvh - 112px)!important; }
   .app-shell-footer { padding:22px 16px calc(22px + env(safe-area-inset-bottom))!important; }
   .app-shell-footer-detail { display:none; }
   .records-app { display:block; width:100%; padding-right:12px; padding-left:12px; }
