@@ -43,6 +43,7 @@ import GlobalPreviewView from "@/components/views/GlobalPreviewView";
 import AssetPnlAnalysisView from "@/components/AssetPnlAnalysis";
 import ContextAssistant from "@/components/ContextAssistant";
 import AssistantView from "@/components/views/AssistantView";
+import FourDoorNavigator, { type FourDoorKey } from "@/components/FourDoorNavigator";
 
 // 后台页签全部同步引入：next/dynamic 的 loading 会在刷新水合时盖住已 SSR 的内容，整页闪「加载中…」。
 
@@ -723,6 +724,21 @@ export default function RecordsApp({
     [navTabs, user, assetIcons, initialNavIcons, navIconsHydrated]
   );
 
+  const activePageLabel = activeTab === "holdings"
+    ? "账户资产"
+    : activeTab === "pnl"
+      ? "资产总盈亏"
+      : sidebarTabs.find((tab) => tab.key === activeTab)?.label ?? "工作区";
+  const doorStatus = activeTab === "holdings"
+    ? { label: "蓝门 · 市场", accent: "#168aca" }
+    : activeTab === "assets" || activeTab === "pnl"
+      ? { label: "黑门 · 分析", accent: "#85898d" }
+      : activeTab === "fire"
+        ? { label: "红门 · 计划", accent: "#ef493d" }
+        : activeTab === "global"
+          ? { label: "绿门 · 发现", accent: "#66b746" }
+          : null;
+
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia("(max-width: 1023px)").matches) return;
     const frame = window.requestAnimationFrame(() => {
@@ -772,7 +788,8 @@ export default function RecordsApp({
     <div translate="no" className="records-app notranslate flex items-start">
       {/* 桌面侧边导航 */}
       <aside className="fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block">
-        <nav className="fire-sidebar-panel relative min-h-[calc(100vh-112px)] overflow-hidden rounded-2xl px-2 pb-3 pt-3">
+        <nav className="fire-sidebar-panel relative flex min-h-[calc(100vh-112px)] max-h-[calc(100vh-104px)] flex-col overflow-y-auto rounded-2xl px-2 pb-3">
+          <FourDoorNavigator activeKey={activeTab} onSelect={(key: FourDoorKey) => selectTab(key)} />
           <div className="fire-sidebar-section-label">工作区</div>
           {sidebarTabs.map((t, index) => {
             const isManagement = ["users", "attachments", "library", "cards", "activities", "settings"].includes(t.key);
@@ -824,6 +841,13 @@ export default function RecordsApp({
             </button>
           ))}
         </div>
+
+        {activeTab !== "assistant" && (
+          <header className="fire-workspace-context" style={{ "--workspace-accent": doorStatus?.accent ?? "#8b9199" } as React.CSSProperties}>
+            <div className="fire-workspace-breadcrumb"><span>Fire</span><i>/</i><strong>{activePageLabel}</strong></div>
+            {doorStatus && <div className="fire-workspace-status"><i />{doorStatus.label}</div>}
+          </header>
+        )}
 
         <div key={activeTab} className="tab-panel min-w-0">
           {activeTab === "watchlist" && (

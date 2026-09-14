@@ -732,6 +732,94 @@
   background: rgba(255,255,255,.07);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.035),0 1px 3px rgba(0,0,0,.12);
 }
+
+/* 四色门：素材只约束在侧栏内部，业务内容宽度继续由各页面自身决定。 */
+.four-door-zone {
+  position:relative;
+  display:flex;
+  min-height:292px;
+  flex:none;
+  align-items:center;
+  justify-content:center;
+  margin:0 -8px 8px;
+  overflow:hidden;
+  border-bottom:1px solid rgba(30,41,59,.07);
+  background:radial-gradient(circle at 50% 43%,rgba(255,255,255,.52),transparent 62%);
+}
+.four-door-art { position:relative; width:220px; height:286px; filter:drop-shadow(0 12px 16px rgba(21,25,31,.16)); }
+.four-door-window { position:absolute; left:0; top:0; width:220px; height:auto; pointer-events:none; user-select:none; }
+.four-door-wheel {
+  position:absolute;
+  z-index:2;
+  left:41.75px;
+  top:134.75px;
+  width:136.5px;
+  height:136.5px;
+  border-radius:50%;
+  transition:transform 820ms cubic-bezier(.16,1,.3,1),filter 180ms ease;
+  will-change:transform;
+}
+.four-door-wheel:hover { filter:brightness(1.045); }
+.four-door-wheel>img { display:block; width:100%; height:100%; pointer-events:none; user-select:none; }
+.four-door-sector { position:absolute; inset:0; border:0; background:transparent; cursor:pointer; }
+.four-door-sector.blue { clip-path:polygon(0 0,100% 0,50% 50%); }
+.four-door-sector.charcoal { clip-path:polygon(100% 0,100% 100%,50% 50%); }
+.four-door-sector.ember { clip-path:polygon(100% 100%,0 100%,50% 50%); }
+.four-door-sector.moss { clip-path:polygon(0 100%,0 0,50% 50%); }
+.four-door-pointer { position:absolute; left:99.25px; top:117.75px; width:23.2px; height:auto; pointer-events:none; user-select:none; filter:drop-shadow(0 3px 3px rgba(0,0,0,.42)); transform-origin:50% 72%; }
+.four-door-pointer-arch { z-index:1; clip-path:polygon(17% 0,78% 0,78% 60%,61% 60%,62% 28%,57% 14%,48% 9%,39% 15%,34% 31%,34% 55%,17% 55%); }
+.four-door-pointer-tip { z-index:4; clip-path:polygon(16% 45%,84% 45%,79% 72%,58% 100%,42% 100%,20% 72%); }
+.four-door-art.is-turning .four-door-pointer { animation:four-door-pointer-tick 420ms cubic-bezier(.2,.75,.25,1); }
+.four-door-advance { position:absolute; z-index:6; left:91px; top:233px; width:40px; height:38px; border:0; border-radius:50%; background:transparent; cursor:pointer; }
+.four-door-sector:focus-visible,.four-door-advance:focus-visible,.four-door-sound:focus-visible { outline:2px solid #6d97bc; outline-offset:2px; }
+.four-door-hand { position:absolute; z-index:5; left:100px; top:270px; width:20px; height:auto; pointer-events:none; user-select:none; filter:drop-shadow(0 2px 3px rgba(0,0,0,.45)); }
+.four-door-sound {
+  position:absolute;
+  z-index:8;
+  right:10px;
+  top:10px;
+  display:grid;
+  width:28px;
+  height:28px;
+  place-items:center;
+  border:1px solid rgba(30,41,59,.1);
+  border-radius:9px;
+  background:rgba(255,255,255,.38);
+  color:#7d848d;
+  cursor:pointer;
+  transition:color 160ms ease,background-color 160ms ease,border-color 160ms ease;
+}
+.four-door-sound:hover { border-color:rgba(30,41,59,.16); background:rgba(255,255,255,.68); color:#343a42; }
+.four-door-sound svg { width:15px; height:15px; }
+.fire-workspace-context {
+  display:flex;
+  min-width:0;
+  height:52px;
+  align-items:center;
+  margin-bottom:24px;
+  border-bottom:1px solid rgba(30,41,59,.09);
+  padding:0 4px;
+  color:#8d9299;
+}
+.fire-workspace-breadcrumb { display:flex; min-width:0; align-items:center; gap:6px; font-size:12px; white-space:nowrap; }
+.fire-workspace-breadcrumb i { font-style:normal; opacity:.62; }
+.fire-workspace-breadcrumb strong { overflow:hidden; color:var(--ink); font-weight:650; text-overflow:ellipsis; }
+.fire-workspace-status { display:flex; flex:none; align-items:center; gap:7px; margin-left:auto; padding-left:18px; font-size:11px; }
+.fire-workspace-status i { width:6px; height:6px; border-radius:999px; background:var(--workspace-accent); box-shadow:0 0 9px color-mix(in srgb,var(--workspace-accent) 72%,transparent); }
+.dark .four-door-zone { border-color:rgba(255,255,255,.065); background:radial-gradient(circle at 50% 43%,rgba(255,255,255,.045),transparent 62%); }
+.dark .four-door-sound { border-color:rgba(255,255,255,.08); background:rgba(15,16,17,.28); color:#aeb3ba; }
+.dark .four-door-sound:hover { border-color:rgba(255,255,255,.14); background:rgba(255,255,255,.06); color:#fff; }
+.dark .fire-workspace-context { border-color:rgba(255,255,255,.075); color:#858a91; }
+.dark .fire-workspace-breadcrumb strong { color:#eef0f2; }
+@keyframes four-door-pointer-tick { 0%,100%{transform:rotate(0)} 42%{transform:rotate(-3deg)} 68%{transform:rotate(1.5deg)} }
+@media (prefers-reduced-motion:reduce) {
+  .four-door-wheel { transition-duration:.01ms!important; }
+  .four-door-art.is-turning .four-door-pointer { animation:none!important; }
+}
+@media (max-height:820px) and (min-width:1024px) {
+  .four-door-zone { min-height:244px; }
+  .four-door-art { transform:scale(.82); }
+}
 .assistant-page,.assistant-page-layer { width:100%; min-width:0; }
 
 /* DeepSeek Harness 工作台：布局、弹出菜单、输入坞与设置面板。 */

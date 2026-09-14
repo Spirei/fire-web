@@ -3230,7 +3230,7 @@ export const V0_1_29_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_30_ENTRY: VersionEntry = {
   ...V0_1_29_ENTRY,
   version: "v0.1.30",
   date: "2026-09-14",
@@ -3483,6 +3483,23 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   }, {
     title: "新增智能助手独立工作台",
     desc: "左侧导航在财报日历下方新增智能助手入口，并参考主流 AI 工作台重构为固定会话侧栏与右侧单一会话画布：新建、搜索、空间、记忆和调用统计常驻左侧，输入区固定在右侧底部，模型选择与发送按钮位于输入框右下角，数据范围、临时对话、发送内容、图片策略和导出收为次级控件。原右下角可拖动入口保持轻量化；独立页完整适配深浅色、窄屏抽屉和手机宽度，当前页不重复挂载第二个浮动实例，避免会话状态竞争。",
+    kind: "feature"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_30_ENTRY,
+  version: "v0.1.31",
+  date: "2026-09-15",
+  summary: "四色门工作区入口正式迁入主站，并统一业务页面的自适应上下文顶栏。",
+  software: V0_1_30_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.31" } : item),
+  changes: [{
+    title: "四色门工作区入口迁入主站",
+    desc: "将验证完成的四色门窗户、转盘、固定指针、手势与声音开关迁入桌面端主导航顶部；账户资产、资产分析、FIRE 与全球经济可从色块、转盘或原导航进入，转盘使用连续缓动并同步轻量棘轮声与落位提示音。静音偏好通过全站偏好机制持久化，关闭时立即终止当前声音，重新开启不会自动试听。素材约束在侧栏内部，窄高窗口自动缩放，其他导航继续滚动可达。",
+    kind: "feature"
+  }, {
+    title: "业务页面新增自适应上下文顶栏",
+    desc: "除独立智能助手工作台外，主站页面统一增加 Fire / 当前页面面包屑；我的持仓明确显示为账户资产，资产分析、FIRE 与全球经济显示对应四色门状态。顶栏只跟随既有 records-content 可用宽度，不修改持仓表格、资产分析分栏、设置窗口等页面内部宽度，并完成深浅色适配。",
     kind: "feature"
   }]
 };
