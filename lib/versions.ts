@@ -3237,6 +3237,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "修复设置密钥泄露、跨市场导入覆盖、币种汇总与刷新，并完善移动端和普通用户权限。",
   software: V0_1_29_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.30" } : item),
   changes: [{
+    title: "收敛智能助手配色与加载动画",
+    desc: "用户消息、归档选中态与回答加载改为冷调浅灰，仅保留品牌图标的小面积青色点缀。发送按钮参考 ChatGPT：可发送时显示绿色圆形上箭头，生成中切换为可点击的白色停止方块；回答中输入新内容会立即恢复上箭头，提交时停止当前请求并发送新问题。三点动画改为 1.8 秒低幅度缩放节奏。",
+    kind: "feature"
+  }, {
     title: "重新设计对话归档",
     desc: "对话归档改为占满助手内容区的独立页，移除无意义的左侧黑色遮罩。新增对话数量、搜索、当前会话状态和克制的空状态，删除操作收起到列表行内，并同步适配深浅色。",
     kind: "feature"

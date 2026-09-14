@@ -206,6 +206,10 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   assert(source.includes('aria-pressed={open}'));
   assert(source.includes('收起智能助手'));
   assert(source.includes('dark:bg-[#17191d]'));
+  assert(source.includes('bg-[#4caf58]'));
+  assert(source.includes('aria-label={loading && !input.trim() ? "停止生成" : "发送"}'));
+  assert(source.includes('onClick={loading && !input.trim() ? stopGenerating : undefined}'));
+  assert(globalStyles.includes('assistant-thinking 1.8s'));
   assert(!globalStyles.includes('color-scheme: light;\n  border-color: #e1e7e6;\n  background: #fff;'));
     assert(source.includes("closest(\"button, input, textarea, a, [role='button']\")"));
   });
