@@ -231,11 +231,13 @@ export function clearAssistantHistory(userId: string, conversationId?: unknown):
     if (!CONVERSATION_ID_RE.test(id)) throw new Error("invalid conversation id");
     getDb().prepare("DELETE FROM assistant_conversation_threads WHERE user_id = ? AND conversation_id = ?").run(userId, id);
     getDb().prepare("DELETE FROM assistant_conversation_spaces WHERE user_id = ? AND conversation_id = ?").run(userId,id);
+    getDb().prepare("DELETE FROM assistant_usage WHERE user_id = ? AND conversation_id = ?").run(userId,id);
     deleteConversationAttachments(userId,id);
   } else {
     getDb().prepare("DELETE FROM assistant_conversation_threads WHERE user_id = ?").run(userId);
     getDb().prepare("DELETE FROM assistant_conversations WHERE user_id = ?").run(userId);
     getDb().prepare("DELETE FROM assistant_conversation_spaces WHERE user_id = ?").run(userId);
+    getDb().prepare("DELETE FROM assistant_usage WHERE user_id = ?").run(userId);
     deleteConversationAttachments(userId);
   }
   return getAssistantHistoryState(userId);

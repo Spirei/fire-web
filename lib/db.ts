@@ -94,6 +94,11 @@ function migrate(database: Database.Database) {
       completion_tokens INTEGER NOT NULL DEFAULT 0,
       estimated_cost REAL NOT NULL DEFAULT 0,
       error TEXT NOT NULL DEFAULT '',
+      turn_id TEXT NOT NULL DEFAULT '',
+      attempt_index INTEGER NOT NULL DEFAULT 0,
+      first_token_ms INTEGER NOT NULL DEFAULT 0,
+      image_count INTEGER NOT NULL DEFAULT 0,
+      data_scope TEXT NOT NULL DEFAULT 'none',
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_assistant_usage_user_time ON assistant_usage(user_id, created_at DESC);
@@ -413,6 +418,13 @@ function migrate(database: Database.Database) {
 
   const userSettingCols = (database.prepare("PRAGMA table_info(user_settings)").all() as { name: string }[]).map((c) => c.name);
   if (!userSettingCols.includes("simple")) database.exec("ALTER TABLE user_settings ADD COLUMN simple TEXT NOT NULL DEFAULT '{}'");
+
+  const assistantUsageCols = (database.prepare("PRAGMA table_info(assistant_usage)").all() as { name: string }[]).map((c) => c.name);
+  if (!assistantUsageCols.includes("turn_id")) database.exec("ALTER TABLE assistant_usage ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''");
+  if (!assistantUsageCols.includes("attempt_index")) database.exec("ALTER TABLE assistant_usage ADD COLUMN attempt_index INTEGER NOT NULL DEFAULT 0");
+  if (!assistantUsageCols.includes("first_token_ms")) database.exec("ALTER TABLE assistant_usage ADD COLUMN first_token_ms INTEGER NOT NULL DEFAULT 0");
+  if (!assistantUsageCols.includes("image_count")) database.exec("ALTER TABLE assistant_usage ADD COLUMN image_count INTEGER NOT NULL DEFAULT 0");
+  if (!assistantUsageCols.includes("data_scope")) database.exec("ALTER TABLE assistant_usage ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'none'");
 
   // 卡面库卡背信息增量字段（兼容旧库）：备注与币种后加
   const cardDetailCols = (database.prepare("PRAGMA table_info(card_details)").all() as { name: string }[]).map((c) => c.name);

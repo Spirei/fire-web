@@ -26,11 +26,18 @@ export function conversationSpace(userId: string, conversationId: string) {
   return (getDb().prepare("SELECT space_id FROM assistant_conversation_spaces WHERE user_id=? AND conversation_id=?").get(userId,conversationId) as {space_id:string}|undefined)?.space_id || "";
 }
 
-export function logAssistantUsage(value: { userId:string; conversationId?:string; serviceId:string; serviceName:string; model:string; status:string; latencyMs:number; promptTokens?:number; completionTokens?:number; estimatedCost?:number; error?:string }) {
-  getDb().prepare("INSERT INTO assistant_usage(id,user_id,conversation_id,service_id,service_name,model,status,latency_ms,prompt_tokens,completion_tokens,estimated_cost,error,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    .run(`au-${randomBytes(12).toString("hex")}`,value.userId,value.conversationId||"",value.serviceId,value.serviceName,value.model,value.status,value.latencyMs,value.promptTokens||0,value.completionTokens||0,value.estimatedCost||0,(value.error||"").slice(0,120),new Date().toISOString());
+export function logAssistantUsage(value: { userId:string; conversationId?:string; serviceId:string; serviceName:string; model:string; status:string; latencyMs:number; promptTokens?:number; completionTokens?:number; estimatedCost?:number; error?:string; turnId?:string; attemptIndex?:number; firstTokenMs?:number; imageCount?:number; dataScope?:string }) {
+  const database=getDb();
+  database.transaction(()=>{
+    database.prepare("DELETE FROM assistant_usage WHERE created_at < ?").run(new Date(Date.now()-30*24*60*60*1000).toISOString());
+    database.prepare("INSERT INTO assistant_usage(id,user_id,conversation_id,service_id,service_name,model,status,latency_ms,prompt_tokens,completion_tokens,estimated_cost,error,turn_id,attempt_index,first_token_ms,image_count,data_scope,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run(`au-${randomBytes(12).toString("hex")}`,value.userId,value.conversationId||"",value.serviceId,value.serviceName,value.model,value.status,value.latencyMs,value.promptTokens||0,value.completionTokens||0,value.estimatedCost||0,(value.error||"").slice(0,120),(value.turnId||"").slice(0,40),Math.max(0,value.attemptIndex||0),Math.max(0,value.firstTokenMs||0),Math.max(0,value.imageCount||0),["none","page","account"].includes(value.dataScope||"")?value.dataScope:"none",new Date().toISOString());
+  })();
 }
-export function assistantUsage(userId:string) {
-  const rows=getDb().prepare("SELECT service_name AS serviceName,model,status,latency_ms AS latencyMs,prompt_tokens AS promptTokens,completion_tokens AS completionTokens,estimated_cost AS estimatedCost,error,created_at AS createdAt FROM assistant_usage WHERE user_id=? ORDER BY created_at DESC LIMIT 200").all(userId) as Array<Record<string,unknown>>;
+export function assistantUsage(userId:string, conversationId="") {
+  const cutoff=new Date(Date.now()-30*24*60*60*1000).toISOString();
+  const rows=(conversationId
+    ? getDb().prepare("SELECT id,conversation_id AS conversationId,service_id AS serviceId,service_name AS serviceName,model,status,latency_ms AS latencyMs,prompt_tokens AS promptTokens,completion_tokens AS completionTokens,estimated_cost AS estimatedCost,error,turn_id AS turnId,attempt_index AS attemptIndex,first_token_ms AS firstTokenMs,image_count AS imageCount,data_scope AS dataScope,created_at AS createdAt FROM assistant_usage WHERE user_id=? AND conversation_id=? AND created_at>=? ORDER BY created_at DESC LIMIT 200").all(userId,conversationId,cutoff)
+    : getDb().prepare("SELECT id,conversation_id AS conversationId,service_id AS serviceId,service_name AS serviceName,model,status,latency_ms AS latencyMs,prompt_tokens AS promptTokens,completion_tokens AS completionTokens,estimated_cost AS estimatedCost,error,turn_id AS turnId,attempt_index AS attemptIndex,first_token_ms AS firstTokenMs,image_count AS imageCount,data_scope AS dataScope,created_at AS createdAt FROM assistant_usage WHERE user_id=? AND created_at>=? ORDER BY created_at DESC LIMIT 200").all(userId,cutoff)) as Array<Record<string,unknown>>;
   return { rows, summary: rows.reduce<{calls:number;errors:number;tokens:number;cost:number}>((s,r)=>({calls:s.calls+1,errors:s.errors+(r.status==='ok'?0:1),tokens:s.tokens+Number(r.promptTokens||0)+Number(r.completionTokens||0),cost:s.cost+Number(r.estimatedCost||0)}),{calls:0,errors:0,tokens:0,cost:0}) };
 }

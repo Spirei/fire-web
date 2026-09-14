@@ -18,6 +18,7 @@ type Message = { role: "user" | "assistant"; content: string; responseError?: bo
 type PendingImage = { id: string; name: string; dataUrl: string; size: number };
 type AvailableModel = { serviceId: string; serviceName: string; model: string; priority: number; configured: boolean; health?: { ok: boolean; latencyMs: number; checkedAt: string } | null };
 type AssistantSpace = { id: string; name: string };
+type AssistantTrace = { id:string; conversationId:string; serviceId:string; serviceName:string; model:string; status:string; latencyMs:number; promptTokens:number; completionTokens:number; estimatedCost:number; error:string; turnId:string; attemptIndex:number; firstTokenMs:number; imageCount:number; dataScope:"none"|"page"|"account"; createdAt:string };
 
 const PAGE_COPY: Record<string, { label: string; prompts: string[] }> = {
   holdings: { label: "账户资产", prompts: ["概览我的持仓", "检查持仓数据异常", "我的持仓分布如何？"] },
@@ -162,6 +163,10 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [selectedSpace, setSelectedSpace] = useState("");
   const [spaceAssignments, setSpaceAssignments] = useState<Record<string,string>>({});
   const [usageSummary, setUsageSummary] = useState({ calls: 0, errors: 0, tokens: 0, cost: 0 });
+  const [workspaceView, setWorkspaceView] = useState<"chat"|"trace">("chat");
+  const [traces, setTraces] = useState<AssistantTrace[]>([]);
+  const [traceQuery, setTraceQuery] = useState("");
+  const [selectedTraceId, setSelectedTraceId] = useState("");
   const [historyStatus, setHistoryStatus] = useState<"idle" | "saving" | "error">("idle");
   const [historyError, setHistoryError] = useState("");
   const [historyRetry, setHistoryRetry] = useState(0);
@@ -196,6 +201,16 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
       if (Array.isArray(data?.services)) setAvailableModels(data.services);
     }).catch(() => undefined);
   }, []);
+  useEffect(() => {
+    if (!embedded || workspaceView !== "trace") return;
+    const controller = new AbortController();
+    void fetch(`/api/assistant/usage?conversationId=${encodeURIComponent(conversationId)}`, { signal: controller.signal }).then(response => response.ok ? response.json() : null).then(data => {
+      if (!Array.isArray(data?.rows)) return;
+      setTraces(data.rows);
+      setSelectedTraceId((current) => data.rows.some((row: AssistantTrace) => row.id === current) ? current : data.rows[0]?.id || "");
+    }).catch(() => undefined);
+    return () => controller.abort();
+  }, [embedded, workspaceView, conversationId, loading]);
   useEffect(() => {
     void Promise.all([fetch("/api/assistant/spaces"), fetch("/api/assistant/usage")]).then(async ([spaceResponse, usageResponse]) => {
       const spaceData = spaceResponse.ok ? await spaceResponse.json() : null, usageData = usageResponse.ok ? await usageResponse.json() : null;
@@ -667,6 +682,8 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   }
 
   if (!mounted) return null;
+  const filteredTraces = traces.filter((trace) => !traceQuery.trim() || `${trace.serviceName} ${trace.model} ${trace.status}`.toLowerCase().includes(traceQuery.trim().toLowerCase()));
+  const selectedTrace = traces.find((trace) => trace.id === selectedTraceId) || filteredTraces[0];
   const experience = (
     <>
       {!embedded && <button ref={launcherRef} type="button" aria-pressed={open} onPointerDown={(event) => startFloatingDrag("launcher", event)} onClick={() => { if (suppressLauncherClick.current) { suppressLauncherClick.current = false; return; } setOpen((value) => !value); }} style={launcherPosition ? { left: launcherPosition.x, top: launcherPosition.y, right: "auto", bottom: "auto" } : undefined} className="assistant-launcher fixed bottom-5 right-5 z-[110] flex h-12 w-12 touch-none cursor-grab items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_12px_34px_rgba(0,0,0,.3)] transition-[background-color,box-shadow,transform] duration-200 hover:bg-[#20252a] hover:shadow-[0_14px_38px_rgba(0,0,0,.36)] active:scale-95 active:cursor-grabbing data-[dragging=true]:scale-100 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label={open ? "收起智能助手" : "打开智能助手"} title={open ? "拖动可移动，点击收起智能助手" : "拖动可移动，点击打开智能助手"}>
@@ -679,6 +696,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_5px_16px_rgba(0,0,0,.18)]"><AssistantGlyph size={20} /></span>
               <div className="min-w-0 flex-1 truncate text-sm font-semibold text-ink dark:text-white/90">{embedded ? conversations.find(item => item.id === conversationId)?.title || "新对话" : "智能助手"}</div>
               {embedded && <button type="button" onClick={() => setHistoryOpen(true)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-bg-gray md:hidden" aria-label="打开对话列表"><IconHistory size={18} /></button>}
+              {embedded && <div className="flex items-center rounded-xl bg-black/[.035] p-0.5 dark:bg-white/[.055]"><button type="button" onClick={()=>setWorkspaceView("chat")} className={`h-7 rounded-[10px] px-3 text-[11px] font-medium transition-colors ${workspaceView==="chat"?"bg-white text-ink shadow-sm dark:bg-white/10 dark:text-white":"text-muted dark:text-white/45"}`}>对话</button><button type="button" onClick={()=>setWorkspaceView("trace")} className={`h-7 rounded-[10px] px-3 text-[11px] font-medium transition-colors ${workspaceView==="trace"?"bg-white text-ink shadow-sm dark:bg-white/10 dark:text-white":"text-muted dark:text-white/45"}`}>运行记录</button></div>}
               {!embedded && <button type="button" disabled={actionBusy} onPointerDown={(event) => event.stopPropagation()} onClick={() => setHistoryOpen((value) => !value)} className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="对话归档" title="对话归档"><IconHistory size={18} /></button>}
               {!embedded && <button type="button" disabled={actionBusy} onPointerDown={(event) => event.stopPropagation()} onClick={() => { setTemporary(false); startNewChat(); }} className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-35" aria-label="开始新对话" title={actionBusy ? "操作完成后可开始新对话" : "开始新对话"}><IconPlus size={18} /></button>}
               {embedded && <a href="/settings?sub=stocks&anchor=model" className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-bg-gray hover:text-ink dark:hover:bg-white/[.07] dark:hover:text-white/80">模型服务</a>}
@@ -739,7 +757,16 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
             </div>}
             <>
               <div ref={messageListRef} onScroll={(event) => { const element = event.currentTarget; stickToBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 72; }} className={`overflow-y-auto px-5 py-5 ${embedded ? "col-start-1 row-start-2 sm:px-[10%] md:col-start-2 sm:py-8" : "flex-1"}`}>
-                {messages.length === 0 ? (
+                {embedded && workspaceView === "trace" ? (
+                  <div className="mx-auto flex h-full w-full max-w-6xl flex-col">
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5"><div className="rounded-2xl bg-bg-gray p-3 dark:bg-white/[.05]"><b className="block text-base text-ink dark:text-white/85">{traces.length}</b><span className="text-[10px] text-faint">模型尝试</span></div><div className="rounded-2xl bg-bg-gray p-3 dark:bg-white/[.05]"><b className="block text-base text-ink dark:text-white/85">{traces.filter(item=>item.status!=="ok").length}</b><span className="text-[10px] text-faint">失败</span></div><div className="rounded-2xl bg-bg-gray p-3 dark:bg-white/[.05]"><b className="block text-base text-ink dark:text-white/85">{traces.reduce((sum,item)=>sum+item.promptTokens+item.completionTokens,0)}</b><span className="text-[10px] text-faint">Token</span></div><div className="hidden rounded-2xl bg-bg-gray p-3 dark:bg-white/[.05] sm:block"><b className="block text-base text-ink dark:text-white/85">{traces.length?Math.round(traces.reduce((sum,item)=>sum+item.latencyMs,0)/traces.length):0} ms</b><span className="text-[10px] text-faint">平均耗时</span></div><div className="hidden rounded-2xl bg-bg-gray p-3 dark:bg-white/[.05] sm:block"><b className="block text-base text-ink dark:text-white/85">{traces.filter(item=>item.attemptIndex>0).length}</b><span className="text-[10px] text-faint">回退尝试</span></div></div>
+                    <label className="mt-3 flex h-9 items-center gap-2 rounded-xl border border-edge bg-bg-gray/45 px-3 text-muted dark:border-white/10 dark:bg-white/[.035]"><IconSearch size={15}/><input value={traceQuery} onChange={event=>setTraceQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none dark:text-white/80" placeholder="搜索模型或状态" /></label>
+                    <div className="mt-3 grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-edge dark:border-white/10 lg:grid-cols-[minmax(280px,.85fr)_minmax(360px,1.15fr)]">
+                      <div className="overflow-y-auto border-b border-edge p-2 dark:border-white/10 lg:border-b-0 lg:border-r">{filteredTraces.length?filteredTraces.map(trace=><button key={trace.id} type="button" onClick={()=>setSelectedTraceId(trace.id)} className={`mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${selectedTrace?.id===trace.id?"bg-black/[.06] dark:bg-white/[.09]":"hover:bg-black/[.035] dark:hover:bg-white/[.05]"}`}><span className={`h-2 w-2 shrink-0 rounded-full ${trace.status==="ok"?"bg-[#7b858f]":"bg-[#b46b6b]"}`} /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium text-ink dark:text-white/80">{trace.serviceName} · {trace.model}</span><span className="mt-1 block text-[10px] text-faint">第 {trace.attemptIndex+1} 次尝试 · {trace.latencyMs} ms · {new Date(trace.createdAt).toLocaleString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})}</span></span><span className="text-[10px] text-faint">{trace.status==="ok"?"完成":"失败"}</span></button>):<div className="flex h-full min-h-40 items-center justify-center text-xs text-faint">当前对话还没有运行记录</div>}</div>
+                      <div className="overflow-y-auto bg-bg-gray/20 p-5 dark:bg-black/10">{selectedTrace?<><div className="flex items-center justify-between"><div><div className="text-sm font-semibold text-ink dark:text-white/85">{selectedTrace.serviceName}</div><div className="mt-1 text-xs text-muted">{selectedTrace.model}</div></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${selectedTrace.status==="ok"?"bg-black/[.055] text-muted dark:bg-white/[.08] dark:text-white/60":"bg-[#f8eded] text-[#985555] dark:bg-[#3b2528] dark:text-[#efaaaa]"}`}>{selectedTrace.status==="ok"?"已完成":selectedTrace.status==="empty"?"空响应":"调用失败"}</span></div><div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4 text-xs"><div><span className="block text-[10px] text-faint">总耗时</span><b className="mt-1 block font-medium text-ink dark:text-white/80">{selectedTrace.latencyMs} ms</b></div><div><span className="block text-[10px] text-faint">首字延迟</span><b className="mt-1 block font-medium text-ink dark:text-white/80">{selectedTrace.firstTokenMs?`${selectedTrace.firstTokenMs} ms`:"—"}</b></div><div><span className="block text-[10px] text-faint">输入 / 输出 Token</span><b className="mt-1 block font-medium text-ink dark:text-white/80">{selectedTrace.promptTokens} / {selectedTrace.completionTokens}</b></div><div><span className="block text-[10px] text-faint">尝试顺序</span><b className="mt-1 block font-medium text-ink dark:text-white/80">第 {selectedTrace.attemptIndex+1} 个模型</b></div><div><span className="block text-[10px] text-faint">数据范围</span><b className="mt-1 block font-medium text-ink dark:text-white/80">{selectedTrace.dataScope==="account"?"账户摘要":selectedTrace.dataScope==="page"?"当前页面":"不附带数据"}</b></div><div><span className="block text-[10px] text-faint">图片</span><b className="mt-1 block font-medium text-ink dark:text-white/80">{selectedTrace.imageCount} 张</b></div></div>{selectedTrace.error&&<div className="mt-5 rounded-xl border border-[#ecd9d9] bg-[#fff8f8] p-3 text-xs text-[#8f5353] dark:border-[#633a3e] dark:bg-[#301f21] dark:text-[#efaaaa]">{selectedTrace.error}</div>}<div className="mt-5 border-t border-edge pt-4 text-[10px] leading-5 text-faint dark:border-white/10">运行记录只保存模型、耗时、Token、图片数量和数据范围，不保存 API Key、请求头、账户摘要或图片内容。</div></>:<div className="flex h-full items-center justify-center text-xs text-faint">选择一条记录查看详情</div>}</div>
+                    </div>
+                  </div>
+                ) : messages.length === 0 ? (
                   <div>
                     <h2 className="text-xl font-semibold tracking-tight text-ink">想了解什么？</h2>
                     <p className="mt-2 text-sm leading-6 text-muted">按输入区选择的数据范围回答；你可以随时改为不附带数据。</p>
