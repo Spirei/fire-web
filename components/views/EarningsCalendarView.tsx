@@ -715,13 +715,13 @@ export default function EarningsCalendarView({ records = [], canManage = false }
               <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
                 {grid.map((cell, i) =>
                   cell.type === "blank" ? (
-                    <div key={`blank-${i}`} className="min-h-[88px] rounded-[14px]" />
+                    <div key={`blank-${i}`} className="min-h-[52px] rounded-lg sm:min-h-[88px] sm:rounded-[14px]" />
                   ) : (
                     <button
                       key={cell.key}
                       type="button"
                       aria-current={cell.isToday ? "date" : undefined}
-                      className={`flex min-h-[88px] cursor-default flex-col rounded-[14px] border bg-bg-gray/30 p-2.5 dark:bg-white/[0.04] ${
+                      className={`flex min-h-[52px] cursor-default flex-col items-center rounded-lg border bg-bg-gray/30 p-1.5 sm:min-h-[88px] sm:items-stretch sm:rounded-[14px] sm:p-2.5 dark:bg-white/[0.04] ${
                         cell.isToday
                           ? "border-2 border-white bg-[#eef0f3] shadow-[0_0_0_2px_rgba(17,24,39,0.22)] dark:bg-white/[0.08] dark:shadow-[0_0_0_2px_rgba(255,255,255,0.18)]"
                           : "border-transparent"
@@ -759,7 +759,7 @@ export default function EarningsCalendarView({ records = [], canManage = false }
               <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
                 {grid.map((cell, i) =>
                   cell.type === "blank" ? (
-                    <div key={`blank-${i}`} className="min-h-[88px] rounded-[14px]" />
+                    <div key={`blank-${i}`} className="min-h-[52px] rounded-lg sm:min-h-[88px] sm:rounded-[14px]" />
                   ) : (
                     <button
                       key={cell.key}
@@ -768,7 +768,7 @@ export default function EarningsCalendarView({ records = [], canManage = false }
                       aria-current={cell.isToday ? "date" : undefined}
                       onClick={() => toggleDate(cell.key)}
                       data-open={selectedDate === cell.key ? "true" : undefined}
-                      className={`group relative flex min-h-[88px] cursor-pointer flex-col gap-1.5 overflow-hidden rounded-[14px] border p-2.5 text-left transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop ${
+                      className={`group relative flex min-h-[52px] cursor-pointer flex-col items-center gap-0.5 overflow-hidden rounded-lg border p-1 text-center transition-all duration-300 ease-out hover:border-edge-strong sm:min-h-[88px] sm:items-stretch sm:gap-1.5 sm:rounded-[14px] sm:p-2.5 sm:text-left sm:hover:-translate-y-0.5 sm:hover:shadow-pop ${
                         selectedDate === cell.key
                           ? "border-edge bg-white shadow-pop dark:bg-[#252c3a]"
                           : cell.rows.length > 0
@@ -784,12 +784,16 @@ export default function EarningsCalendarView({ records = [], canManage = false }
                         {cell.day}
                       </span>
                       {cell.rows.length === 0 && (byDateAll.get(cell.key)?.length ?? 0) > 0 && (
-                        <span className="text-[9.5px] font-medium leading-tight text-faint">
+                        <span className="hidden text-[9.5px] font-medium leading-tight text-faint sm:inline">
                           {byDateAll.get(cell.key)!.length} 家已过滤
                         </span>
                       )}
 
-                      <div data-earnings-rows className="flex flex-col gap-[4px] pt-0.5">
+                      {cell.rows.length > 0 && (
+                        <span className="text-[9px] font-semibold leading-none text-muted sm:hidden">{cell.rows.length} 家</span>
+                      )}
+
+                      <div data-earnings-rows className="hidden flex-col gap-[4px] pt-0.5 sm:flex">
                         {cell.rows.map((row) => (
                           <span data-earnings-row key={row.symbol} className="flex min-w-0 items-center gap-1 overflow-hidden text-[10px] font-medium leading-[1.3] text-ink-2 sm:text-[10.5px]">
                             <span data-earnings-logo className="flex h-3.5 w-3.5 flex-none overflow-hidden rounded-full">
@@ -808,7 +812,7 @@ export default function EarningsCalendarView({ records = [], canManage = false }
                         <div
                           data-earnings-pop
                           onClick={() => toggleDate(cell.key)}
-                          className={`pointer-events-none absolute inset-0 z-20 flex flex-col overflow-hidden rounded-[14px] border border-edge-strong bg-white p-2 shadow-pop transition-all duration-300 ease-out ${selectedDate === cell.key ? "translate-y-0 scale-100 opacity-100 pointer-events-auto" : "-translate-y-1 scale-95 opacity-0 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-hover:pointer-events-auto"}`}
+                          className={`pointer-events-none absolute inset-0 z-20 hidden flex-col overflow-hidden rounded-[14px] border border-edge-strong bg-white p-2 shadow-pop transition-all duration-300 ease-out sm:flex ${selectedDate === cell.key ? "translate-y-0 scale-100 opacity-100 pointer-events-auto" : "-translate-y-1 scale-95 opacity-0 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-hover:pointer-events-auto"}`}
                         >
                           <div className="mb-1 flex items-center justify-between">
                             <span className="text-[11px] font-bold text-ink">{cell.key.slice(5).replace("-", "月")}日</span>

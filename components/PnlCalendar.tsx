@@ -219,9 +219,9 @@ export default function PnlCalendar({
       </div>
 
       {loading && days.every((cell) => !cell || cell.pnl === 0) ? (
-        <div className="mt-4 grid grid-cols-7 gap-2" aria-hidden>
+        <div className="mt-4 grid grid-cols-7 gap-[3px] sm:gap-2" aria-hidden>
           {Array.from({ length: 28 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse rounded-xl bg-bg-gray" />
+            <div key={i} className="h-[52px] animate-pulse rounded-lg bg-bg-gray sm:h-16 sm:rounded-xl" />
           ))}
         </div>
       ) : view === "year" ? (
@@ -231,7 +231,7 @@ export default function PnlCalendar({
               key={m}
               type="button"
               onClick={() => onMonthChange({ y: month.y, m })}
-              className={`flex min-h-20 flex-col items-center justify-center rounded-xl border transition ${active ? "border-up bg-up-bg" : "border-edge hover:border-edge-strong"} ${pnl > 0 ? "text-up" : pnl < 0 ? "text-down" : "text-muted"}`}
+              className={`flex min-h-16 flex-col items-center justify-center rounded-xl border transition sm:min-h-20 ${active ? "border-up bg-up-bg" : "border-edge hover:border-edge-strong"} ${pnl > 0 ? "text-up" : pnl < 0 ? "text-down" : "text-muted"}`}
             >
               <b className="text-sm text-ink">{m}月</b>
               {pnl !== 0 && (
