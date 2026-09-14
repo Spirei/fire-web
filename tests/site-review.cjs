@@ -212,9 +212,10 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   assert(source.includes('aria-label={loading && !input.trim() && pendingImages.length === 0 ? "停止生成" : "发送"}'));
   assert(source.includes('onClick={loading && !input.trim() && pendingImages.length === 0 ? stopGenerating : undefined}'));
   assert(globalStyles.includes('assistant-thinking 1.8s'));
-  assert(source.includes('accept="image/*" multiple'));
   assert(source.includes('onPaste={(event) =>'));
   assert(source.includes('onDrop={(event) =>'));
+  assert(!source.includes('IconPaperclip'));
+  assert(!source.includes('imageInputRef'));
   assert(source.includes('100 * 1024 * 1024'));
   assert(source.includes('pendingImageBytesRef.current += reservedBytes'));
   assert(source.includes('pendingImageSequenceRef.current'));

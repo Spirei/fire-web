@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconHistory, IconMessageCircle, IconPaperclip, IconPlus, IconRefresh, IconSearch, IconTrash, IconX } from "@tabler/icons-react";
+import { IconArrowUp, IconChartPie, IconDatabaseSearch, IconHistory, IconMessageCircle, IconPlus, IconRefresh, IconSearch, IconTrash, IconX } from "@tabler/icons-react";
 import type { AssistantHistoryState, StoredAssistantConversation, StoredAssistantMessage } from "@/lib/assistantHistory";
 
 type AssistantAction =
@@ -157,7 +157,6 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const messageListRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const [launcherPosition, setLauncherPosition] = useState<FloatingPosition | null>(null);
@@ -611,8 +610,6 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                 <div className="rounded-[20px] border border-edge-strong bg-bg-gray p-2 dark:border-white/12 dark:bg-white/[.045]">
                   {pendingImages.length > 0 && <div className="flex gap-2 overflow-x-auto px-1 pb-2" aria-label="待发送图片">{pendingImages.map((image) => <div key={image.id} role="button" tabIndex={0} onClick={() => setPreviewImage(image)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setPreviewImage(image); } }} className="group/image relative h-14 w-14 shrink-0 cursor-zoom-in overflow-hidden rounded-xl border border-edge bg-white dark:border-white/10 dark:bg-white/5" aria-label={`查看图片：${image.name}`}><img src={image.dataUrl} alt={image.name} className="h-full w-full object-cover transition-transform duration-200 group-hover/image:scale-105" /><button type="button" onClick={(event) => { event.stopPropagation(); pendingImageBytesRef.current = Math.max(0, pendingImageBytesRef.current - image.size); setPendingImages((current) => current.filter((item) => item.id !== image.id)); if (previewImage?.id === image.id) setPreviewImage(null); }} className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-90 shadow-sm transition hover:bg-black" aria-label={`移除图片：${image.name}`}><IconX size={12} /></button></div>)}</div>}
                   <div className="flex items-end gap-1.5">
-                    <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(event) => { void addImages([...event.target.files || []]); event.currentTarget.value = ""; }} />
-                    <button type="button" onClick={() => imageInputRef.current?.click()} className="flex h-10 w-9 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-white dark:text-white/45 dark:hover:bg-white/10" aria-label="添加图片" title="添加图片"><IconPaperclip size={18} /></button>
                     <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onPaste={(event) => { const files = [...event.clipboardData.files].filter((file) => file.type.startsWith("image/")); if (files.length) { event.preventDefault(); void addImages(files); } }} onKeyDown={(event) => { if (event.nativeEvent.isComposing) return; if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} rows={1} maxLength={1200} placeholder={`问问${copy.label}…`} className="max-h-28 min-h-[38px] flex-1 resize-none bg-transparent py-2 text-sm text-ink placeholder:text-faint dark:text-white/85 dark:placeholder:text-white/30" />
                     <button type={loading && !input.trim() && pendingImages.length === 0 ? "button" : "submit"} disabled={!input.trim() && pendingImages.length === 0 && !loading} onClick={loading && !input.trim() && pendingImages.length === 0 ? stopGenerating : undefined} className={`group flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 ${input.trim() || pendingImages.length || loading ? "border-[#4caf58] bg-[#4caf58] text-white shadow-[0_4px_14px_rgba(76,175,88,.2)] hover:border-[#45a550] hover:bg-[#45a550]" : "border-[#dfe2e6] bg-[#eef0f2] text-[#a7adb5] dark:border-white/10 dark:bg-white/[.07] dark:text-white/25"}`} aria-label={loading && !input.trim() && pendingImages.length === 0 ? "停止生成" : "发送"}>{loading && !input.trim() && pendingImages.length === 0 ? <span className="h-3.5 w-3.5 rounded-[2px] bg-white" /> : <IconArrowUp size={20} stroke={2.1} className="transition-transform duration-200 group-hover:-translate-y-0.5" />}</button>
                   </div>

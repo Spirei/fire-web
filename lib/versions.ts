@@ -3237,6 +3237,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "修复设置密钥泄露、跨市场导入覆盖、币种汇总与刷新，并完善移动端和普通用户权限。",
   software: V0_1_29_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.30" } : item),
   changes: [{
+    title: "智能助手输入区移除附件按钮",
+    desc: "按常见对话产品交互精简输入区，移除回形针附件按钮和隐藏文件选择器；图片改为直接粘贴或拖入输入区域，缩略图删除、点击查看原图与 100MB 总量限制保持不变。",
+    kind: "fix"
+  }, {
     title: "智能助手图片支持点击预览",
     desc: "待发送图片缩略图支持点击或键盘打开全屏原图预览，点击遮罩、关闭按钮或按 Escape 可退出；删除按钮继续独立工作，不会误触预览。预览层通过顶层 Portal 展示，适配手机端与深浅色页面。",
     kind: "feature"
