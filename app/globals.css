@@ -677,6 +677,8 @@
 @media (min-width:1024px) {
   .records-app { gap:28px; padding-inline:18px; }
   .records-app:has(.assistant-page) { padding-inline:16px; gap:16px; }
+  /* 智能助手工作区与左侧导航等高：同一顶部起点、同一高度，面板下方不再留大片空白 */
+  .records-app:has(.assistant-page) .assistant-workspace { height:calc(100vh - 112px); }
 }
 
 /* 主导航与每个业务工作区之间统一保留清晰的呼吸区。 */
@@ -805,17 +807,12 @@
   transition:opacity 160ms ease,transform 160ms ease,color 160ms ease,background-color 160ms ease,border-color 160ms ease;
 }
 .four-door-zone:hover .four-door-sound,.four-door-zone:focus-within .four-door-sound { opacity:1; pointer-events:auto; transform:translateY(0); }
-.four-door-sound::after { content:""; position:absolute; right:3px; bottom:3px; width:4px; height:4px; border-radius:50%; background:#36a76f; box-shadow:0 0 0 1.5px rgba(255,255,255,.72); }
 .four-door-sound.is-muted { color:#666d76; background:rgba(255,255,255,.7); }
-.four-door-sound.is-muted::after { background:#8d939b; }
-.four-door-sound.is-on { color:#376d63; }
 .four-door-sound:hover { border-color:rgba(30,41,59,.16); background:rgba(255,255,255,.68); color:#343a42; }
 .four-door-sound svg { width:15px; height:15px; }
 .dark .four-door-zone { border-color:rgba(255,255,255,.065); background:radial-gradient(circle at 50% 43%,rgba(255,255,255,.045),transparent 62%); }
 .dark .four-door-sound { border-color:rgba(255,255,255,.08); background:rgba(15,16,17,.28); color:#aeb3ba; }
-.dark .four-door-sound.is-on { border-color:rgba(91,194,154,.22); background:rgba(39,92,72,.28); color:#a9dec9; }
 .dark .four-door-sound.is-muted { border-color:rgba(255,255,255,.09); background:rgba(10,11,13,.5); color:#858b93; }
-.dark .four-door-sound::after { box-shadow:0 0 0 1.5px rgba(16,18,20,.9); }
 .dark .four-door-sound:hover { border-color:rgba(255,255,255,.14); background:rgba(255,255,255,.06); color:#fff; }
 @keyframes four-door-pointer-tick { 0%,100%{transform:rotate(0)} 38%{transform:rotate(-2.5deg)} 72%{transform:rotate(.9deg)} }
 @media (prefers-reduced-motion:reduce) {
