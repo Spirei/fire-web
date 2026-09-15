@@ -378,6 +378,20 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow;
     }
   });
+  await test('assistant context covers management pages and attaches live site data', async () => {
+    const { normalizeAssistantContext } = require(path.join(root, 'lib/assistantSecurity.ts'));
+    for (const [page, label] of [['attachments', '附件管理'], ['users', '用户管理'], ['activities', '日志']]) {
+      const normalized = normalizeAssistantContext({ page });
+      assert.equal(normalized.page, page);
+      assert.equal(normalized.label, label);
+    }
+    assert.equal(normalizeAssistantContext({ page: '../etc/passwd' }).page, undefined);
+
+    const { buildAssistantLiveData } = require(path.join(root, 'lib/assistantLiveData.ts'));
+    const lines = await buildAssistantLiveData([{ id: '1', market: 'US', code: 'AAPL', name: '苹果' }], { includeAccount: true, quoteTimeoutMs: 50 });
+    assert(Array.isArray(lines));
+    assert(lines.every((line) => typeof line === 'string'));
+  });
   await test('runtime-uploaded assets are served back (regression: model service icon 404)', async () => {
     const upload = require(path.join(root, 'app/api/upload/route.ts'));
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR9sAAAAASUVORK5CYII=', 'base64');

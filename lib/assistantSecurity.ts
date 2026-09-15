@@ -1,7 +1,9 @@
 const PAGE_LABELS: Record<string, string> = {
   holdings: "账户资产", assets: "资产分析", pnl: "资产总盈亏", fire: "FIRE",
   watchlist: "自选股", global: "全球经济", trading: "交易广场", earnings: "财报日历",
-  celebs: "名人持仓", cards: "卡面库", library: "素材库", settings: "设置"
+  celebs: "名人持仓", cards: "卡面库", library: "素材库", settings: "设置",
+  // 管理分组也要能被浮动入口识别，否则在这些页面上助手只能说"当前页面上下文为空"
+  users: "用户管理", attachments: "附件管理", activities: "日志"
 };
 
 export type SafeAssistantContext = { page?: string; label: string; symbol?: string; filter?: string };
