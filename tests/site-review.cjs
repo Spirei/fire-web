@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, '..');
 const resolve = Module._resolveFilename;
 Module._resolveFilename = function(id, parent, ...rest) { return resolve.call(this, id.startsWith('@/') ? path.join(root, id.slice(2)) : id, parent, ...rest); };
 require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
+require.extensions['.tsx'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, jsx: ts.JsxEmit.ReactJSX } }).outputText, filename);
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'fire-regression-'));
 process.chdir(temp); // Real route/store integration tests, isolated from the user's database and uploads.
 process.env.STOCKLOG_FUTU = 'off';
@@ -391,6 +392,65 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const lines = await buildAssistantLiveData([{ id: '1', market: 'US', code: 'AAPL', name: '苹果' }], { includeAccount: true, quoteTimeoutMs: 50 });
     assert(Array.isArray(lines));
     assert(lines.every((line) => typeof line === 'string'));
+  });
+  await test('assistant answers render markdown tables and only safe links', () => {
+    const { parseAssistantBlocks, parseInlineSegments } = require(path.join(root, 'lib/assistantMarkdown.ts'));
+    const blocks = parseAssistantBlocks([
+      '结论：持仓分化',
+      '',
+      '| 标的 | 现价 | 涨跌 |',
+      '| --- | --- | --- |',
+      '| 特斯拉 | 420.5 | +1.2% |',
+      '| 苹果 | 233.1 | -0.4% |',
+      '',
+      '> 数据抓取于 09-16 10:20',
+      '---',
+      '- 风险：单一标的占比过高',
+      '1. 继续观察',
+      '详见 https://example.com/news 与 [雪球](https://xueqiu.com/a)'
+    ].join('\n'));
+    const table = blocks.find((block) => block.type === 'table');
+    assert.deepEqual(table && table.rows, [['标的', '现价', '涨跌'], ['特斯拉', '420.5', '+1.2%'], ['苹果', '233.1', '-0.4%']]);
+    assert(blocks.some((block) => block.type === 'quote'));
+    assert(blocks.some((block) => block.type === 'divider'));
+    assert(blocks.some((block) => block.type === 'bullet'));
+    assert(blocks.some((block) => block.type === 'numbered' && block.marker === '1'));
+    assert(!blocks.some((block) => block.type === 'text' && block.text.includes('|')));
+
+    const inline = parseInlineSegments('详见 https://example.com/news 与 [雪球](https://xueqiu.com/a)');
+    assert.deepEqual(inline.filter((segment) => segment.type === 'link').map((segment) => segment.href), ['https://example.com/news', 'https://xueqiu.com/a']);
+    assert(parseInlineSegments('[危险](javascript:alert(1))').every((segment) => segment.type !== 'link'));
+    assert(parseInlineSegments('[伪装](data:text/html;base64,PHN2Zz4=)').every((segment) => segment.type !== 'link'));
+
+    // 真渲染一遍：表格必须变成 <table>、合法链接必须变成 <a>、危险协议只能留文本。
+    const React = require('react');
+    const { renderToStaticMarkup } = require('react-dom/server');
+    const AssistantRichText = require(path.join(root, 'components/AssistantRichText.tsx')).default;
+    const html = renderToStaticMarkup(React.createElement(AssistantRichText, { text: [
+      '| 标的 | 现价 | 涨跌 |',
+      '| --- | --- | --- |',
+      '| 特斯拉 | 420.5 | +1.2% |',
+      '',
+      '详见 [雪球](https://xueqiu.com/a) 与 [危险](javascript:alert(1))'
+    ].join('\n') }));
+    assert(html.includes('assistant-md-table-wrap') && html.includes('<table class="assistant-md-table">'));
+    assert(html.includes('<th><span>标的</span></th>') && html.includes('<th><span>涨跌</span></th>'));
+    assert(html.includes('<td><span>特斯拉</span></td>') && html.includes('<td><span>+1.2%</span></td>'));
+    assert(html.includes('href="https://xueqiu.com/a"'));
+    assert(!html.includes('href="javascript:alert(1)"'));
+
+    const source = fs.readFileSync(path.join(root, 'components/ContextAssistant.tsx'), 'utf8');
+    const richText = fs.readFileSync(path.join(root, 'components/AssistantRichText.tsx'), 'utf8');
+    const styles = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    const route = fs.readFileSync(path.join(root, 'app/api/assistant/route.ts'), 'utf8');
+    assert(source.includes('function pinToLatest()'));
+    assert(source.includes('assistant-jump-latest'));
+    assert(source.includes('<AssistantRichText text={message.content} />'));
+    assert(richText.includes('parseAssistantBlocks(text)'));
+    assert(styles.includes('.assistant-md-table'));
+    assert(styles.includes('.assistant-jump-latest'));
+    assert(styles.includes('.assistant-inline-link'));
+    assert(route.includes('回答风格：默认短'));
   });
   await test('runtime-uploaded assets are served back (regression: model service icon 404)', async () => {
     const upload = require(path.join(root, 'app/api/upload/route.ts'));

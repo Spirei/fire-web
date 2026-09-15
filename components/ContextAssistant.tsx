@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { IconArchive, IconArrowUp, IconBrain, IconChartPie, IconCheck, IconChevronDown, IconCopy, IconDatabaseSearch, IconDots, IconHistory, IconMessageCircle, IconPaperclip, IconPencil, IconPlus, IconRefresh, IconSearch, IconSettings, IconTrash, IconX } from "@tabler/icons-react";
+import { IconArchive, IconArrowDown, IconArrowUp, IconBrain, IconChartPie, IconCheck, IconChevronDown, IconCopy, IconDatabaseSearch, IconDots, IconHistory, IconMessageCircle, IconPaperclip, IconPencil, IconPlus, IconRefresh, IconSearch, IconSettings, IconTrash, IconX } from "@tabler/icons-react";
 import type { AssistantHistoryState, StoredAssistantConversation, StoredAssistantMessage } from "@/lib/assistantHistory";
 import AssistantTraceView, { type AssistantTrace } from "@/components/AssistantTraceView";
 import AssistantHarnessSettings, { type AssistantAppearance, type AssistantDensity } from "@/components/AssistantHarnessSettings";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { clientRandomId } from "@/lib/randomId";
+import AssistantRichText from "@/components/AssistantRichText";
 import { applySiteTheme, THEME_CHANGE_EVENT, type SiteTheme } from "@/lib/theme";
 import { appConfirm } from "@/lib/appDialog";
 import { showToast } from "@/lib/toast";
@@ -44,28 +45,6 @@ const PAGE_COPY: Record<string, { label: string; prompts: string[] }> = {
   trading: { label: "交易广场", prompts: ["最近有什么大新闻吗", "总结名人最新观点", "这些观点涉及哪些股票？"] },
   settings: { label: "设置", prompts: ["检查关键配置", "哪些数据源还没配好？", "给出上线前检查清单"] }
 };
-
-function inlineText(text: string) {
-  return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean).map((part, index) => {
-    if (part.startsWith("`") && part.endsWith("`")) return <code key={index} className="rounded bg-black/[.055] px-1 py-0.5 font-mono text-[.88em]">{part.slice(1, -1)}</code>;
-    if (part.startsWith("**") && part.endsWith("**")) return <strong key={index} className="font-semibold text-ink">{part.slice(2, -2)}</strong>;
-    return <span key={index}>{part}</span>;
-  });
-}
-
-function displayText(text: string) {
-  return <div className="space-y-1.5">{text.split("\n").map((raw, index) => {
-    const line = raw.trim();
-    if (!line) return <div key={index} className="h-1" />;
-    const heading = line.match(/^#{1,3}\s+(.+)$/);
-    if (heading) return <div key={index} className="pt-1 font-semibold text-ink">{inlineText(heading[1])}</div>;
-    const bullet = line.match(/^[-*•]\s+(.+)$/);
-    if (bullet) return <div key={index} className="flex gap-2"><span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-[#6c9f98]" /><span className="min-w-0">{inlineText(bullet[1])}</span></div>;
-    const numbered = line.match(/^(\d+)[.、]\s*(.+)$/);
-    if (numbered) return <div key={index} className="flex gap-2"><span className="min-w-4 shrink-0 font-medium text-muted">{numbered[1]}.</span><span className="min-w-0">{inlineText(numbered[2])}</span></div>;
-    return <div key={index}>{inlineText(line)}</div>;
-  })}</div>;
-}
 
 function AssistantGlyph({ size = 22 }: { size?: number }) {
   return (
@@ -202,6 +181,9 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [conversationListMode,setConversationListMode]=useState<"active"|"archived">("active");
   const [conversationMenuId,setConversationMenuId]=useState<string|null>(null);
   const [workspaceMenuOpen,setWorkspaceMenuOpen]=useState(false);
+  // 用户向上翻看历史时，底部浮出「回到最新」；只在贴底状态真的翻转时才 setState。
+  const [atLatest,setAtLatest]=useState(true);
+  const atLatestRef=useRef(true);
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
   const [sidebarWidth,setSidebarWidth]=useState(260);
   const [sidebarResizing,setSidebarResizing]=useState(false);
@@ -223,6 +205,15 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const deletedConversationIds = useRef(new Set<string>());
   const actionsInFlight = useRef(new Set<number>());
   const actionOperationInFlight = useRef(false);
+
+  /** 贴底的唯一入口：滚动、发消息、切对话都走它，顺带同步「回到最新」按钮的显隐。 */
+  function pinToLatest() {
+    stickToBottom.current = true;
+    if (!atLatestRef.current) {
+      atLatestRef.current = true;
+      setAtLatest(true);
+    }
+  }
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -437,7 +428,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     setPendingImages([]);
     pendingImageBytesRef.current = 0;
     setAttachmentError("");
-    stickToBottom.current = true;
+    pinToLatest();
     setLoading(true);
     try {
       if (persistAttachments && selectedImages.length && typeof retryIndex !== "number") {
@@ -648,7 +639,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     setInput("");
     setPendingImages([]);
     pendingImageBytesRef.current = 0;
-    stickToBottom.current = true;
+    pinToLatest();
     setHistoryOpen(false);
   }
 
@@ -671,7 +662,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     setPendingImages([]);
     pendingImageBytesRef.current = 0;
     setAttachmentError("");
-    stickToBottom.current = true;
+    pinToLatest();
     setHistoryOpen(false);
   }
 
@@ -693,7 +684,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
         const active = next.conversations.find((item) => item.id === next.activeId) || next.conversations[0];
         setConversationId(active?.id || newConversationId());
         setMessages((active?.messages || []) as Message[]);
-        stickToBottom.current = true;
+        pinToLatest();
       }
     } catch {
       setHistoryError("删除失败，请稍后重试");
@@ -931,7 +922,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
               </aside>
             </div>}
             <>
-              <div ref={messageListRef} onScroll={(event) => { const element = event.currentTarget; stickToBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 72; const rows=[...element.querySelectorAll<HTMLElement>(".space-y-4 > div")]; if(rows.length){const anchor=element.getBoundingClientRect().top+element.clientHeight*.32;let best=0,bestDistance=Infinity;rows.forEach((row,index)=>{const distance=Math.abs(row.getBoundingClientRect().top-anchor);if(distance<bestDistance){best=index;bestDistance=distance;}});setActiveTurn(best);} }} className={`overflow-y-auto px-5 py-5 ${embedded ? "col-start-1 row-start-2 sm:px-[10%] md:col-start-2 sm:py-8" : "flex-1"}`}>
+              <div ref={messageListRef} onScroll={(event) => { const element = event.currentTarget; const atBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 72; stickToBottom.current = atBottom; if (atBottom !== atLatestRef.current) { atLatestRef.current = atBottom; setAtLatest(atBottom); } const rows=[...element.querySelectorAll<HTMLElement>(".space-y-4 > div")]; if(rows.length){const anchor=element.getBoundingClientRect().top+element.clientHeight*.32;let best=0,bestDistance=Infinity;rows.forEach((row,index)=>{const distance=Math.abs(row.getBoundingClientRect().top-anchor);if(distance<bestDistance){best=index;bestDistance=distance;}});setActiveTurn(best);} }} className={`overflow-y-auto px-5 py-5 ${embedded ? "col-start-1 row-start-2 sm:px-[10%] md:col-start-2 sm:py-8" : "flex-1"}`}>
                 {embedded && workspaceView === "trace" ? (
                   <AssistantTraceView traces={traces} query={traceQuery} onQueryChange={setTraceQuery} onRefresh={()=>setTraceRefresh(value=>value+1)} />
                 ) : messages.length === 0 ? (
@@ -949,9 +940,10 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
                   </div>
                 ) : (
                   <div className="assistant-message-list space-y-4">
-                    {messages.map((message, index) => <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div onDoubleClick={message.role === "user" && editingMessageIndex !== index ? () => editFromMessage(index) : undefined} title={message.role === "user" && editingMessageIndex !== index ? "双击编辑" : undefined} className={`max-w-[88%] rounded-2xl text-sm leading-6 ${message.role === "user" ? "border-[0.5px] border-[#dfe2e6] bg-[#f3f4f6] px-3 py-2 text-[#374151] shadow-[0_3px_10px_rgba(15,23,42,.025)] dark:border-white/10 dark:bg-white/[.085] dark:text-white/80" : message.responseError ? "border border-[#ecd9d9] px-4 py-3 bg-[#fff8f8] text-[#7d4545] dark:border-[#6b3e3e] dark:bg-[#301f21] dark:text-[#f0b6b6]" : "bg-bg-gray px-4 py-3 text-ink dark:bg-white/[0.06] dark:text-white/85"}`}>{message.role === "user" && editingMessageIndex === index ? <div className="assistant-inline-edit-row"><textarea autoFocus rows={1} maxLength={1200} value={editingMessageDraft} onChange={event=>setEditingMessageDraft(event.target.value)} onKeyDown={event=>{if(event.key==="Escape"){event.preventDefault();setEditingMessageIndex(null);setEditingMessageDraft("");}else if(event.key==="Enter"&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();saveInlineMessageEdit(index);}}} className="assistant-inline-message-editor" aria-label="编辑消息"/><button type="button" onClick={()=>{setEditingMessageIndex(null);setEditingMessageDraft("");}} className="assistant-message-icon" aria-label="取消编辑"><IconX size={14}/></button><button type="button" disabled={!editingMessageDraft.trim()} onClick={()=>saveInlineMessageEdit(index)} className="assistant-message-icon" aria-label="保存并重新回答"><IconCheck size={14}/></button></div> : displayText(message.content)}{message.attachments?.length ? <div className="mt-2 flex gap-2 overflow-x-auto">{message.attachments.map(attachment=><a key={attachment.id} href={attachment.url} target="_blank" rel="noreferrer" className="block h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-edge"><img src={attachment.url} alt={attachment.name} className="h-full w-full object-cover" /></a>)}</div>:null}{message.role === "assistant" && <div className="mt-2 flex items-center gap-2 border-t border-edge/70 pt-2 text-[10px] text-faint dark:border-white/10 dark:text-white/35">{message.model && <span className="min-w-0 truncate">{message.model.serviceName} · {message.model.model}{message.fallbackUsed ? " · 已回退" : ""}</span>}<button type="button" onClick={() => void copyMessage(message.content, index)} className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10" aria-label="复制回答">{copiedIndex === index ? <IconCheck size={13} /> : <IconCopy size={13} />}</button><button type="button" disabled={loading} onClick={() => void send(baseQuestionForMessage(messages, index), index)} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-black/5 disabled:opacity-35 dark:hover:bg-white/10" aria-label="重新回答"><IconRefresh size={13} /></button></div>}{message.responseError && message.retryQuestion && <button type="button" disabled={loading} onClick={() => void send(message.retryQuestion as string, index)} className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-[#e3caca] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#9b5555] transition-colors hover:bg-[#fff3f3] disabled:opacity-40 dark:border-[#6b3e3e] dark:bg-white/5 dark:text-[#f0b6b6] dark:hover:bg-white/10"><IconRefresh size={13} />重新回答</button>}{message.action && <div className="mt-3 rounded-xl border border-edge bg-white/80 p-3 dark:border-white/10 dark:bg-white/5"><div className="text-xs font-medium text-ink dark:text-white/85">{actionSummary(message.action)}</div><button type="button" disabled={actionBusy || message.actionStatus === "running" || message.actionStatus === "done" || actionExpired(message.action)} onClick={() => void executeAction(message.action as AssistantAction, index)} className="mt-3 w-full rounded-xl border border-edge-strong bg-white px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover disabled:opacity-55 dark:border-white/15 dark:bg-white/5 dark:text-white/85 dark:hover:bg-white/10">{message.actionStatus === "running" ? "处理中…" : message.actionStatus === "done" ? "已完成" : message.actionStatus === "uncertain" ? "安全重试并核对" : actionExpired(message.action) ? "预览已过期，请重新输入" : message.actionStatus === "error" ? "重试" : message.action.label}</button>{message.actionStatus === "uncertain" && <p className="mt-2 text-[11px] leading-5 text-muted">页面曾在执行过程中中断。安全重试会复用原操作标识：已成功则只返回原结果，未成功才执行。</p>}{message.actionStatus === "done" && message.undo && <button type="button" disabled={actionBusy || message.undoStatus === "running" || isTimestampExpired(message.undo.createdAt)} onClick={() => void undoAction(message.undo as UndoAction, index)} className="mt-2 w-full text-center text-[11px] text-muted hover:text-ink disabled:opacity-35 dark:hover:text-white">{message.undoStatus === "running" ? "撤销中…" : isTimestampExpired(message.undo.createdAt) ? "撤销窗口已结束" : message.undoStatus === "uncertain" ? "安全重试撤销" : message.undoStatus === "error" ? "重试撤销" : "撤销操作"}</button>}{message.undoStatus === "uncertain" && !isTimestampExpired(message.undo?.createdAt || "") && <p className="mt-1 text-[11px] leading-5 text-muted">撤销响应曾中断，再次点击不会重复撤销。</p>}</div>}</div></div>)}
+                    {messages.map((message, index) => <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div onDoubleClick={message.role === "user" && editingMessageIndex !== index ? () => editFromMessage(index) : undefined} title={message.role === "user" && editingMessageIndex !== index ? "双击编辑" : undefined} className={`max-w-[88%] rounded-2xl text-sm leading-6 ${message.role === "user" ? "border-[0.5px] border-[#dfe2e6] bg-[#f3f4f6] px-3 py-2 text-[#374151] shadow-[0_3px_10px_rgba(15,23,42,.025)] dark:border-white/10 dark:bg-white/[.085] dark:text-white/80" : message.responseError ? "border border-[#ecd9d9] px-4 py-3 bg-[#fff8f8] text-[#7d4545] dark:border-[#6b3e3e] dark:bg-[#301f21] dark:text-[#f0b6b6]" : "bg-bg-gray px-4 py-3 text-ink dark:bg-white/[0.06] dark:text-white/85"}`}>{message.role === "user" && editingMessageIndex === index ? <div className="assistant-inline-edit-row"><textarea autoFocus rows={1} maxLength={1200} value={editingMessageDraft} onChange={event=>setEditingMessageDraft(event.target.value)} onKeyDown={event=>{if(event.key==="Escape"){event.preventDefault();setEditingMessageIndex(null);setEditingMessageDraft("");}else if(event.key==="Enter"&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();saveInlineMessageEdit(index);}}} className="assistant-inline-message-editor" aria-label="编辑消息"/><button type="button" onClick={()=>{setEditingMessageIndex(null);setEditingMessageDraft("");}} className="assistant-message-icon" aria-label="取消编辑"><IconX size={14}/></button><button type="button" disabled={!editingMessageDraft.trim()} onClick={()=>saveInlineMessageEdit(index)} className="assistant-message-icon" aria-label="保存并重新回答"><IconCheck size={14}/></button></div> : <AssistantRichText text={message.content} />}{message.attachments?.length ? <div className="mt-2 flex gap-2 overflow-x-auto">{message.attachments.map(attachment=><a key={attachment.id} href={attachment.url} target="_blank" rel="noreferrer" className="block h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-edge"><img src={attachment.url} alt={attachment.name} className="h-full w-full object-cover" /></a>)}</div>:null}{message.role === "assistant" && <div className="mt-2 flex items-center gap-2 border-t border-edge/70 pt-2 text-[10px] text-faint dark:border-white/10 dark:text-white/35">{message.model && <span className="min-w-0 truncate">{message.model.serviceName} · {message.model.model}{message.fallbackUsed ? " · 已回退" : ""}</span>}<button type="button" onClick={() => void copyMessage(message.content, index)} className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10" aria-label="复制回答">{copiedIndex === index ? <IconCheck size={13} /> : <IconCopy size={13} />}</button><button type="button" disabled={loading} onClick={() => void send(baseQuestionForMessage(messages, index), index)} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-black/5 disabled:opacity-35 dark:hover:bg-white/10" aria-label="重新回答"><IconRefresh size={13} /></button></div>}{message.responseError && message.retryQuestion && <button type="button" disabled={loading} onClick={() => void send(message.retryQuestion as string, index)} className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-[#e3caca] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#9b5555] transition-colors hover:bg-[#fff3f3] disabled:opacity-40 dark:border-[#6b3e3e] dark:bg-white/5 dark:text-[#f0b6b6] dark:hover:bg-white/10"><IconRefresh size={13} />重新回答</button>}{message.action && <div className="mt-3 rounded-xl border border-edge bg-white/80 p-3 dark:border-white/10 dark:bg-white/5"><div className="text-xs font-medium text-ink dark:text-white/85">{actionSummary(message.action)}</div><button type="button" disabled={actionBusy || message.actionStatus === "running" || message.actionStatus === "done" || actionExpired(message.action)} onClick={() => void executeAction(message.action as AssistantAction, index)} className="mt-3 w-full rounded-xl border border-edge-strong bg-white px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover disabled:opacity-55 dark:border-white/15 dark:bg-white/5 dark:text-white/85 dark:hover:bg-white/10">{message.actionStatus === "running" ? "处理中…" : message.actionStatus === "done" ? "已完成" : message.actionStatus === "uncertain" ? "安全重试并核对" : actionExpired(message.action) ? "预览已过期，请重新输入" : message.actionStatus === "error" ? "重试" : message.action.label}</button>{message.actionStatus === "uncertain" && <p className="mt-2 text-[11px] leading-5 text-muted">页面曾在执行过程中中断。安全重试会复用原操作标识：已成功则只返回原结果，未成功才执行。</p>}{message.actionStatus === "done" && message.undo && <button type="button" disabled={actionBusy || message.undoStatus === "running" || isTimestampExpired(message.undo.createdAt)} onClick={() => void undoAction(message.undo as UndoAction, index)} className="mt-2 w-full text-center text-[11px] text-muted hover:text-ink disabled:opacity-35 dark:hover:text-white">{message.undoStatus === "running" ? "撤销中…" : isTimestampExpired(message.undo.createdAt) ? "撤销窗口已结束" : message.undoStatus === "uncertain" ? "安全重试撤销" : message.undoStatus === "error" ? "重试撤销" : "撤销操作"}</button>}{message.undoStatus === "uncertain" && !isTimestampExpired(message.undo?.createdAt || "") && <p className="mt-1 text-[11px] leading-5 text-muted">撤销响应曾中断，再次点击不会重复撤销。</p>}</div>}</div></div>)}
                     {loading && (messages[messages.length - 1]?.role !== "assistant" || !messages[messages.length - 1]?.content.trim()) && <div className="flex justify-start"><div className="assistant-thinking-shimmer px-1 py-2 text-sm" role="status" aria-label="智能助手正在思考">正在思考…</div></div>}
                     <div ref={endRef} />
+                    {!atLatest && <div className="sticky bottom-0 z-20 flex justify-center pt-3 pb-2"><button type="button" onClick={pinToLatest} className="assistant-jump-latest" aria-label="回到最新消息"><IconArrowDown size={15} /><span>回到最新</span></button></div>}
                   </div>
                 )}
               </div>
