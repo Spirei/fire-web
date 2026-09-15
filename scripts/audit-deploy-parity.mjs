@@ -25,6 +25,12 @@ const sharedCompose = [
   "path: .env",
   "${DATA_DIR:-./data}:/app/data",
   "${UPLOADS_DIR:-./uploads}:/app/public/uploads",
+  // 插图 / 字体 / 图标 / 分享图既不进仓库也不进镜像，只能靠运行时挂载提供；
+  // 少了它们 FIRE 页面的小丑鱼、礁石、自定义字体与图标会 404（曾以「我的鱼丢了」的形式暴露）。
+  "${IMAGES_DIR:-./images}:/app/public/images:ro",
+  "${FONTS_DIR:-./fonts}:/app/public/fonts:ro",
+  "${ICONS_DIR:-./icons}:/app/public/icons:ro",
+  "${SHARE_DIR:-./share}:/app/public/share:ro",
   "http://127.0.0.1:3000/api/settings/public"
 ];
 requireText("GHCR Compose", ghcrCompose, sharedCompose);
@@ -60,7 +66,10 @@ requireText("启动脚本", entrypoint, [
   "/app/resource-default",
   "/app/public/uploads",
   "/app/public-cache-default",
-  "seed-trading-square.mjs"
+  "seed-trading-square.mjs",
+  // 部署素材缺失必须有一条日志线索，不能只靠肉眼发现「图不见了」。
+  "缺少部署素材",
+  "docs/synology-deploy.md"
 ]);
 requireText("Docker 构建上下文", dockerignore, [
   "!data/asset-quotes-cache.json",

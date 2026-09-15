@@ -45,6 +45,42 @@ chmod -R u+rwX  data uploads
 - DSM 的 File Station 里这些文件会显示成 UID `1000`（DSM 没有这个用户），但 admin 有特权，照样能浏览和编辑。
 - 只改 `uploads` 不改 `data` 不够：SQLite 的建库、WAL 与临时文件都在 `data/` 下。
 
+### 1d. 挂载插图 / 字体 / 图标素材（少了会「丢鱼」）
+
+FIRE 页面那对游动的小丑鱼、礁石贴图，以及全站自定义字体与图标，属于**部署者自行提供的素材**：
+它们不进 Git 仓库、也不进镜像（见 `ASSETS.md`），镜像里连这些目录都不存在。所以必须从宿主机挂进去，
+否则 `/images/fire/clownfish-family.png` 直接 404 —— 页面不会报错，只是**鱼不见了**（鱼和礁石是 sprite 贴图，
+缺图就是一片空白，很容易被当成动画 bug）。
+
+在 `/volume1/docker/fire` 下建好这四个目录并放入文件（目录名与 Compose 默认值一致，无需改 Compose）：
+
+```bash
+cd /volume1/docker/fire
+mkdir -p images fonts icons share
+
+# 在 Mac 上从本项目目录上传（按需只传 images 也能先把鱼找回来）：
+#   scp -r public/images/fire  <群晖账号>@<群晖IP>:/volume1/docker/fire/images/
+#   scp    public/fonts/*      <群晖账号>@<群晖IP>:/volume1/docker/fire/fonts/
+#   scp    public/icons/*      <群晖账号>@<群晖IP>:/volume1/docker/fire/icons/
+#   scp    public/share/*      <群晖账号>@<群晖IP>:/volume1/docker/fire/share/
+
+chown -R 1000:1000 images fonts icons share
+docker compose -f docker-compose.ghcr.yml up -d --force-recreate
+```
+
+验证（两条都应返回 `200`）：
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/images/fire/clownfish-family.png
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/images/fire/coral-reef-transparent.png
+```
+
+- 这四个目录是**只读挂载**（`:ro`），容器只读不写，不会影响备份与数据卷。
+- 路径可用 `.env` 覆盖：`IMAGES_DIR` / `FONTS_DIR` / `ICONS_DIR` / `SHARE_DIR`。
+- 目录为空或未挂载时行为与旧版一致：对应资源 404，但**不影响服务启动**；此时容器启动日志会打印一行
+  `[entrypoint] 提示：/app/public 下缺少部署素材：…`，看到它就说明有素材没放。
+- 素材是宿主机文件、不在镜像里，所以之后升级镜像、`up -d --force-recreate` 都不会把它们覆盖掉。
+
 ### 2. 准备生产环境变量
 在项目根目录创建 `.env`（复制 `.env.example` 后填写）：
 ```bash
@@ -78,6 +114,7 @@ docker compose -f docker-compose.ghcr.yml up -d --force-recreate
 ## 数据持久化与备份
 - **SQLite 数据库 / 附件 / 备份 / 缓存** → `/volume1/docker/fire/data/`（挂载到 `/app/data`）。
 - **上传素材**（图标 / 头像 / 截图）→ `/volume1/docker/fire/uploads/`（挂载到 `/app/public/uploads`）。
+- **插图 / 字体 / 图标 / 分享图** → `/volume1/docker/fire/{images,fonts,icons,share}/`（只读挂载到 `/app/public/` 下同名目录，见「1d」）。
 - 备份：直接打包 `data/` 目录，或用「设置 → 个人信息 → 网站数据导出」生成 JSON 备份文件。
 - 升级：`docker compose -f docker-compose.ghcr.yml pull && docker compose -f docker-compose.ghcr.yml up -d --force-recreate`，数据不动。
 
@@ -107,6 +144,27 @@ docker inspect fire --format 'status={{.State.Status}} restarts={{.RestartCount}
 公开缓存种子（`seed-trading-square.mjs`）失败只告警、不再阻塞启动，因此不会因为种子问题变成无限重启。
 若该共享启用了 Windows ACL 导致 `chown` 不生效，可临时在 `.env` 里把 `IMAGE_TAG` 钉到升级前的
 `sha-…` 标签回滚，再按上面的方式处理权限。
+
+## 排查：FIRE 页面的小丑鱼不见了 / 图片、字体、图标 404
+
+症状：FIRE 页面里那对游动的小丑鱼（父子鱼）与礁石贴图不见了，页面本身不报错；或浏览器控制台里
+`/images/...`、`/fonts/...`、`/icons/...` 一律 404。
+
+原因：这些素材不进仓库也不进镜像，只从宿主机挂载提供；旧版部署没有这几个挂载点，所以线上必然是 404
+（本地 `next dev` 直接读源码目录下的 `public/`，因此本地看着一切正常，容易误判成"线上代码有 bug"）。
+
+处理：按「1d. 挂载插图 / 字体 / 图标素材」把文件放到宿主机对应目录并重建容器，然后用同一节里的
+两条 `curl` 验证 200。日志里出现 `[entrypoint] 提示：/app/public 下缺少部署素材：…` 时，
+按提示补对应目录即可。
+
+排查命令：
+
+```bash
+cd /volume1/docker/fire
+ls -l images/fire/                       # 期望看到 clownfish-family.png / coral-reef-transparent.png
+docker compose -f docker-compose.ghcr.yml config | grep -A8 'volumes'   # 期望看到四个只读挂载
+docker logs --tail 30 fire | grep '部署素材'
+```
 
 ## 说明 / 注意
 - **富途 OpenD 桥接**（`scripts/futu_quotes.py`）已由共用 `Dockerfile` 打包 Python 运行时与 `futu-api`。生产容器按设置连接 OpenD；本地 `next dev` 默认跳过（`STOCKLOG_FUTU=on` 可开启），避免抢免费额度的唯一连接。未配置或不可达时行情自动回退腾讯 / 雅虎（腾讯源已支持美股 / 港股 / A股 / 日股 / 韩股）。在设置→股票设置→交易·富途里把 OpenD 主机填写为纯 IP/主机名（如 `192.168.x.x`，不要带 `http://`），端口通常为 `11111`，并确保容器能访问该端口。

@@ -481,7 +481,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       data: path.join(base, 'data'),
       uploads: path.join(base, 'uploads'),
       defaults: path.join(base, 'defaults'),
-      cache: path.join(base, 'cache')
+      cache: path.join(base, 'cache'),
+      public: path.join(base, 'public')
     };
     Object.values(dirs).forEach((dir) => fs.mkdirSync(dir, { recursive: true }));
     const run = (extraEnv = {}) => spawnSync('sh', [entrypoint, 'echo', 'REACHED_CMD'], {
@@ -492,6 +493,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
         FIRE_ENTRYPOINT_UPLOADS_DIR: dirs.uploads,
         FIRE_ENTRYPOINT_DEFAULTS_DIR: dirs.defaults,
         FIRE_ENTRYPOINT_CACHE_DIR: dirs.cache,
+        FIRE_ENTRYPOINT_PUBLIC_DIR: dirs.public,
         FIRE_ENTRYPOINT_SEED_SCRIPT: seedScript,
         ...extraEnv
       }
@@ -512,6 +514,17 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       assert.equal(warned.status, 0);
       assert.equal(warned.stdout.includes('REACHED_CMD'), true);
       assert.match(warned.stderr, /警告：公开缓存种子合并失败/);
+      // 部署素材（插图 / 字体 / 图标 / 分享图）缺失：服务照常启动，但日志必须留一条中文线索，
+      // 否则线上只会表现为「FIRE 页面的小丑鱼不见了」这种静默视觉缺失。
+      assert.match(warned.stderr, /缺少部署素材： images fonts icons share/);
+      for (const media of ['images', 'fonts', 'icons', 'share']) {
+        const dir = path.join(dirs.public, media);
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'placeholder'), 'x');
+      }
+      const stocked = run();
+      assert.equal(stocked.status, 0);
+      assert.equal(stocked.stderr.includes('缺少部署素材'), false);
     } finally {
       fs.rmSync(base, { recursive: true, force: true });
     }

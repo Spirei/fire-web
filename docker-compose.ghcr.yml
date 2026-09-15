@@ -18,6 +18,13 @@ services:
     volumes:
       - ${DATA_DIR:-./data}:/app/data
       - ${UPLOADS_DIR:-./uploads}:/app/public/uploads
+      # 插图 / 字体 / 图标 / 分享图不进仓库也不进镜像（见 ASSETS.md），由部署者放在宿主机目录后挂进来。
+      # 少了这些目录不会影响服务运行，但 FIRE 页面的小丑鱼与礁石贴图、自定义字体与图标都会是 404。
+      # 目录为空或不挂载时行为与旧版一致，先把文件放进对应目录、再 up -d --force-recreate 即可生效。
+      - ${IMAGES_DIR:-./images}:/app/public/images:ro
+      - ${FONTS_DIR:-./fonts}:/app/public/fonts:ro
+      - ${ICONS_DIR:-./icons}:/app/public/icons:ro
+      - ${SHARE_DIR:-./share}:/app/public/share:ro
     labels:
       com.centurylinklabs.watchtower.enable: "true"
       com.centurylinklabs.watchtower.scope: "fire"

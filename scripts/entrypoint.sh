@@ -29,6 +29,24 @@ else
   rm -f "$UPLOADS_DIR/.write-test" 2>/dev/null || true
 fi
 
+# 部署素材自检：插图（public/images）、字体、图标、分享图既不在仓库也不在镜像里（见 ASSETS.md），
+# 需要部署者放到宿主机目录后挂载进来。缺失时服务照常运行，只是 FIRE 页面会出现「小丑鱼不见了」
+# 这种静默视觉缺失 —— 这里给一行中文提示，避免只能靠肉眼发现。
+PUBLIC_DIR="${FIRE_ENTRYPOINT_PUBLIC_DIR:-/app/public}"
+media_missing=""
+for media in images fonts icons share; do
+  if [ -d "$PUBLIC_DIR/$media" ] && [ -n "$(ls -A "$PUBLIC_DIR/$media" 2>/dev/null || true)" ]; then
+    :
+  else
+    media_missing="$media_missing $media"
+  fi
+done
+if [ -n "$media_missing" ]; then
+  echo "[entrypoint] 提示：$PUBLIC_DIR 下缺少部署素材：$media_missing" >&2
+  echo "[entrypoint] 影响：FIRE 页面的小丑鱼与礁石贴图、自定义字体与图标会 404（服务不受影响）。" >&2
+  echo "[entrypoint] 处理：按 docs/synology-deploy.md「挂载插图 / 字体 / 图标素材」把目录放进宿主机并挂载后重启容器。" >&2
+fi
+
 # 首次启动把打进镜像的默认资源（asset 素材库 / celebs 名人头像 / currency / ico / login / logo / background）
 # 复制到挂载目录（/app/public/uploads ← 宿主机 ./uploads）。
 # 幂等：已存在的不覆盖（-n），用户后来上传/替换的内容不会被还原。

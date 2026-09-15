@@ -44,6 +44,12 @@ chown -R 1000:1000 data uploads && chmod -R u+rwX data uploads
 反复重启（日志形如 `EACCES: permission denied, open '/app/data/duan-posts.json.<pid>.tmp'`）。
 完整排查步骤见 `docs/synology-deploy.md` 的「排查：升级镜像后容器无限重启，日志只有 EACCES」。
 
+**插图 / 字体 / 图标素材（必做一次）**：`public/images`、`public/fonts`、`public/icons`、`public/share`
+不进仓库也不进镜像，Compose 会把宿主机 `./images`、`./fonts`、`./icons`、`./share`
+以只读方式挂到 `/app/public/` 下。请在 `docker-compose.ghcr.yml` 同目录建好这四个目录并把素材放进去，
+否则 FIRE 页面会出现「小丑鱼不见了」这类静默视觉缺失（日志会提示 `缺少部署素材`）。
+步骤与验证命令见 `docs/synology-deploy.md` 的「1d. 挂载插图 / 字体 / 图标素材」。
+
 ## 日常更新
 
 本地修改并推送：
