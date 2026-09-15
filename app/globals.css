@@ -963,6 +963,11 @@
 .harness-turn-nav button:hover::after { width:26px;opacity:.72; }.harness-turn-nav button.active::after { width:32px;opacity:1;background:var(--assistant-label); }
 .harness-turn-nav button span { position:absolute;right:44px;top:50%;width:260px;max-width:42vw;padding:10px 12px;border:.5px solid var(--assistant-line);border-radius:12px;background:var(--assistant-raised);box-shadow:0 14px 38px rgba(0,0,0,.2);color:var(--assistant-label);font-size:12.5px;line-height:18px;text-align:left;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;opacity:0;pointer-events:none;transform:translate(6px,-50%);transition:opacity 130ms ease,transform 130ms ease; }
 .harness-turn-nav button:hover span { opacity:1;transform:translate(0,-50%); }
+/* 交易广场的股票提及按雪球习惯显示为蓝色链接（$名称(代码)$）：一眼能认出是股票，不再靠虚线下划线。 */
+.stock-mention { color:#3774e0; }
+.stock-mention:hover { color:#2a62c6; text-decoration:underline; text-underline-offset:3px; }
+.dark .stock-mention { color:#5b91f0; }
+.dark .stock-mention:hover { color:#7fabf5; }
 /* 轮次短线按主流大模型（ChatGPT / Claude）的对话轨道：右对齐短横线、每根长度不同、
    当前轮更亮略长、悬停加长并出预览，静止时完全不动，只在悬停 / 切换时走 150ms 过渡。
    列表由旧到新，最新一条在最下面。 */

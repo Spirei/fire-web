@@ -356,7 +356,7 @@ function PostBody({
             return (
               <StockTextLink
                 key={`${part.market}-${part.code}-${index}`}
-                value={part.value.startsWith("$") && part.name ? part.name : part.value}
+                value={`$${part.name || part.code}(${part.code})$`}
                 market={part.market}
                 code={part.code}
                 name={part.name}
