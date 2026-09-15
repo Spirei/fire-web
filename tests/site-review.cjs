@@ -341,6 +341,26 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       .map((part) => (part.type === 'stock' ? `$${part.name}(${part.code})$` : part.value)).join('');
     assert.equal(rendered, '$长和(00001)$ 今天涨了');
   });
+  await test('runtime-uploaded assets are served back (regression: model service icon 404)', async () => {
+    const upload = require(path.join(root, 'app/api/upload/route.ts'));
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR9sAAAAASUVORK5CYII=', 'base64');
+    const fd = new FormData();
+    fd.set('kind', 'asset');
+    fd.set('folder', 'icon');
+    fd.set('name', 'DeepSeek');
+    fd.set('code', `deepseek-${Date.now().toString(36)}`);
+    fd.set('file', new File([png], 'icon.png', { type: 'image/png' }));
+    const res = await upload.POST(new Request('http://localhost/api/upload', { method: 'POST', headers: { cookie: `fire_session=${tokens.admin}` }, body: fd }));
+    assert.equal(res.status, 200);
+    const { url } = await res.json();
+    const rel = decodeURIComponent(url.replace(/^\/uploads\//, ''));
+    const route = require(path.join(root, 'app/uploads/[...path]/route.ts'));
+    const served = await route.GET(new Request(`http://localhost${url}`), { params: Promise.resolve({ path: rel.split('/') }) });
+    assert.equal(served.status, 200);
+    assert.equal(served.headers.get('content-type'), 'image/png');
+    const missing = await route.GET(new Request('http://localhost/uploads/asset/icon/not-there.png'), { params: Promise.resolve({ path: ['asset', 'icon', 'not-there.png'] }) });
+    assert.equal(missing.status, 404);
+  });
   await test('entrypoint: unwritable data volume fails loudly, failing seed does not block startup', () => {
     const { spawnSync } = require('node:child_process');
     const entrypoint = path.join(root, 'scripts/entrypoint.sh');

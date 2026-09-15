@@ -37,10 +37,13 @@ export async function GET(
     let source = abs;
     let data: Buffer;
     try {
+      // 用户上传的素材本来就落在 ROOT（uploads 卷）里，这里只做「必须仍在 ROOT 内」的穿越防护。
+      // 之前这里还要求非 reports 的路径必须位于 DEFAULT_ROOT（镜像内置素材目录）之内，
+      // 等于把运行期新上传的文件（模型服务图标、头像等）全部判为非法 —— 静态命中不到时路由直接 404。
       if (!fs.realpathSync(source).startsWith(fs.realpathSync(ROOT) + path.sep)) throw new Error("Invalid path");
-      if (segs[0] === "reports" || !fs.realpathSync(source).startsWith(fs.realpathSync(DEFAULT_ROOT) + path.sep)) throw new Error("Invalid path");
       data = fs.readFileSync(source);
     } catch {
+      // 回退到镜像内置素材：只有这一支才要求路径位于 DEFAULT_ROOT 内（reports 不参与回退）。
       source = defaultAbs;
       if (segs[0] === "reports" || !fs.realpathSync(source).startsWith(fs.realpathSync(DEFAULT_ROOT) + path.sep)) throw new Error("Invalid path");
       data = fs.readFileSync(source);
