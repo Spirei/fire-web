@@ -737,7 +737,7 @@
 .four-door-zone {
   position:relative;
   display:flex;
-  min-height:292px;
+  min-height:310px;
   flex:none;
   align-items:center;
   justify-content:center;
@@ -746,7 +746,7 @@
   border-bottom:1px solid rgba(30,41,59,.07);
   background:radial-gradient(circle at 50% 43%,rgba(255,255,255,.52),transparent 62%);
 }
-.four-door-art { position:relative; width:220px; height:286px; filter:drop-shadow(0 12px 16px rgba(21,25,31,.16)); }
+.four-door-art { position:relative; width:220px; height:304px; filter:drop-shadow(0 12px 16px rgba(21,25,31,.16)); }
 .four-door-window { position:absolute; left:0; top:0; width:220px; height:auto; pointer-events:none; user-select:none; }
 .four-door-wheel {
   position:absolute;
@@ -801,7 +801,7 @@
 }
 @media (max-height:820px) and (min-width:1024px) {
   .four-door-zone { min-height:260px; }
-  .four-door-art { transform:scale(.82); }
+  .four-door-art { height:286px; transform:scale(.82); }
 }
 .assistant-page,.assistant-page-layer { width:100%; min-width:0; }
 
