@@ -1019,7 +1019,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     <div className="min-w-0 max-w-full">
       {/* 一级标题 */}
       <div className="mb-4 flex items-center gap-2.5">
-        <h2 className="text-lg font-bold">账户资产</h2>
+        <h2 className="text-lg font-bold">我的持仓</h2>
         <QuoteSourceBadge records={records} quotes={quotes} />
         <RefreshButton onClick={() => void refreshAccount()} title="刷新账户资产" />
       </div>
