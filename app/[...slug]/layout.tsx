@@ -19,6 +19,7 @@ import { unstable_noStore } from "next/cache";
 import { fundState } from "@/lib/fundState";
 import { listWatchGroups } from "@/lib/watchGroupsStore";
 import { getAssistantHistoryState } from "@/lib/assistantHistory";
+import { readTradingSquareSnapshot } from "@/lib/tradingSquareSnapshot";
 
 export const dynamic = "force-dynamic";
 
@@ -96,11 +97,14 @@ export default async function SlugLayout({
   // 避免「HTML → JS → 水合 → 再请求」的串行等待（卡面图片本身随后按需加载）
   const initialCardLibrary = tab.key === "cards" ? cardLibraryForUser(user.id) : null;
   const initialCardCovers = initialCardLibrary ? heldCardCoverUrls(initialCardLibrary) : [];
+  // 交易广场：把服务端已有的帖子快照随首屏下发，刷新时列表与作者头像立刻可见，
+  // 不再先渲染一整屏骨架、等 /api/trading-square/feed 返回后才出现（本地缓存不可用时也一样）。
+  const initialTradingPosts = tab.key === "trading" ? readTradingSquareSnapshot(40) : null;
 
   return (
     <div className="app-shell-root min-h-screen bg-page">
-      {/* 名人持仓页：HTML 阶段并行预加载自定义头像，刷新时人物不闪现文字占位 */}
-      {tab.key === "celebs" &&
+      {/* 名人持仓与交易广场都会用到名人头像：HTML 阶段并行预加载，刷新时人物不闪现文字占位 */}
+      {(tab.key === "celebs" || tab.key === "trading") &&
         Object.values(celebAvatars)
           .filter(Boolean)
           .map((u) => <link key={u} rel="preload" as="image" href={u} />)}
@@ -140,6 +144,7 @@ export default async function SlugLayout({
           initialFlagIcons={initialFlagIcons}
           initialAssetLibrary={initialAssetLibrary}
           initialCardLibrary={initialCardLibrary}
+          initialTradingPosts={initialTradingPosts}
           initialSettings={{
             tabs: settings.tabs,
             groups: settings.groups,

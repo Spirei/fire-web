@@ -376,10 +376,11 @@ function PostBody({
   );
 }
 
-export default function TradingSquareView({ avatars, records = [] }: { avatars?: Record<string, string>; records?: StockRecord[] }) {
-  // 首帧必须与 SSR 一致（空列表 / 默认筛选）。浏览器缓存和 URL 参数在 useLayoutEffect 里恢复，避免水合报错。
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function TradingSquareView({ avatars, records = [], initialPosts = null }: { avatars?: Record<string, string>; records?: StockRecord[]; initialPosts?: Post[] | null }) {
+  // 首帧与服务端一致：优先用 SSR 下发的帖子快照（刷新时列表与作者头像立刻可见），
+  // 没有快照才进入加载态；浏览器缓存和 URL 参数仍由 useLayoutEffect 接着恢复，避免水合报错。
+  const [posts, setPosts] = useState<Post[]>(() => initialPosts ?? []);
+  const [loading, setLoading] = useState(() => !(initialPosts && initialPosts.length));
   const [refreshingByAuthor, setRefreshingByAuthor] = useState<AuthorFlags>(emptyFlags);
   const [updatedByAuthor, setUpdatedByAuthor] = useState<AuthorTimes>(emptyTimes);
   const [seen, setSeen] = useState<AuthorTimes>(emptyTimes);
