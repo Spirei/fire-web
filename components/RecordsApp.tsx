@@ -43,7 +43,7 @@ import GlobalPreviewView from "@/components/views/GlobalPreviewView";
 import AssetPnlAnalysisView from "@/components/AssetPnlAnalysis";
 import ContextAssistant from "@/components/ContextAssistant";
 import AssistantView from "@/components/views/AssistantView";
-import FourDoorNavigator, { type FourDoorKey } from "@/components/FourDoorNavigator";
+import FourDoorNavigator from "@/components/FourDoorNavigator";
 
 // 后台页签全部同步引入：next/dynamic 的 loading 会在刷新水合时盖住已 SSR 的内容，整页闪「加载中…」。
 
@@ -723,6 +723,10 @@ export default function RecordsApp({
         }),
     [navTabs, user, assetIcons, initialNavIcons, navIconsHydrated]
   );
+  const randomWorkspaceKeys = useMemo(
+    () => sidebarTabs.filter((tab) => !["users", "attachments", "library", "cards", "activities", "settings"].includes(tab.key)).map((tab) => tab.key),
+    [sidebarTabs]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia("(max-width: 1023px)").matches) return;
@@ -774,7 +778,7 @@ export default function RecordsApp({
       {/* 桌面侧边导航 */}
       <aside className="fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block">
         <nav className="fire-sidebar-panel relative flex min-h-[calc(100vh-112px)] max-h-[calc(100vh-104px)] flex-col overflow-y-auto rounded-2xl px-2 pb-3">
-          <FourDoorNavigator activeKey={activeTab} onSelect={(key: FourDoorKey) => selectTab(key)} />
+          <FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} />
           <div className="fire-sidebar-section-label">工作区</div>
           {sidebarTabs.map((t, index) => {
             const isManagement = ["users", "attachments", "library", "cards", "activities", "settings"].includes(t.key);

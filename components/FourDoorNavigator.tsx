@@ -18,14 +18,17 @@ function shortestStep(from: number, to: number) {
 
 export default function FourDoorNavigator({
   activeKey,
-  onSelect
+  onSelect,
+  randomKeys = []
 }: {
   activeKey: string;
-  onSelect: (key: FourDoorKey) => void;
+  onSelect: (key: string) => void;
+  randomKeys?: string[];
 }) {
   const initialIndex = Math.max(0, DOORS.findIndex((door) => door.key === activeKey));
   const currentIndex = useRef(initialIndex);
   const audioContext = useRef<AudioContext | null>(null);
+  const navigationTimer = useRef<number | null>(null);
   const [rotation, setRotation] = useState(-initialIndex * 90);
   const [turning, setTurning] = useState(false);
   const [soundOn, setSoundOn] = usePersistedState("fire:four-door-sound", true);
@@ -121,6 +124,25 @@ export default function FourDoorNavigator({
     }
   }
 
+  function spinToRandomWorkspace() {
+    const candidates = randomKeys.filter((key) => key !== activeKey);
+    if (!candidates.length) return;
+    const random = crypto.getRandomValues(new Uint32Array(2));
+    const destination = candidates[random[0] % candidates.length];
+    const quarterSteps = (random[1] % 3) + 1;
+    currentIndex.current = (currentIndex.current + quarterSteps) % DOORS.length;
+    setRotation((value) => value - (720 + quarterSteps * 90));
+    setTurning(false);
+    window.requestAnimationFrame(() => setTurning(true));
+    window.setTimeout(() => setTurning(false), 820);
+    playTurn(quarterSteps === 2 ? 2 : 1);
+    if (navigationTimer.current !== null) window.clearTimeout(navigationTimer.current);
+    navigationTimer.current = window.setTimeout(() => {
+      navigationTimer.current = null;
+      onSelect(destination);
+    }, 650);
+  }
+
   useEffect(() => {
     const next = DOORS.findIndex((door) => door.key === activeKey);
     if (next >= 0) moveTo(next, false);
@@ -128,7 +150,10 @@ export default function FourDoorNavigator({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKey]);
 
-  useEffect(() => () => stopAllSound(), []);
+  useEffect(() => () => {
+    stopAllSound();
+    if (navigationTimer.current !== null) window.clearTimeout(navigationTimer.current);
+  }, []);
 
   return (
     <div className="four-door-zone">
@@ -157,7 +182,7 @@ export default function FourDoorNavigator({
         </div>
         <img className="four-door-pointer four-door-pointer-arch" src="/uploads/feature/four-door/pointer.png" alt="" />
         <img className="four-door-pointer four-door-pointer-tip" src="/uploads/feature/four-door/pointer.png" alt="固定指针" />
-        <button type="button" className="four-door-advance" aria-label="旋转至下一个工作区" title="旋转至下一个工作区" onClick={() => moveTo((currentIndex.current + 1) % DOORS.length, true)} />
+        <button type="button" className="four-door-advance" aria-label="随机前往工作区" title="随机前往工作区" onClick={spinToRandomWorkspace} />
         <img className="four-door-hand" src="/uploads/feature/four-door/cursor-hand.png" alt="" aria-hidden="true" />
       </div>
     </div>
