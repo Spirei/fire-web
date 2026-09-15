@@ -50,7 +50,8 @@ export async function GET(
       headers: {
         "Content-Type": MIME[ext] || "application/octet-stream",
         // 头像等上传可能同名重传，不能 immutable；浏览器每次重新校验，避免缓存旧图
-        "Cache-Control": segs[0] === "reports" ? "private, no-store" : "public, max-age=0, must-revalidate",
+        // 运行期上传的素材同样极少变化：先让浏览器复用上次成功加载的副本，再后台静默校验。
+        "Cache-Control": segs[0] === "reports" ? "private, no-store" : "public, max-age=3600, stale-while-revalidate=86400",
         "X-Content-Type-Options": "nosniff",
         "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'"
       }

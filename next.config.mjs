@@ -75,7 +75,12 @@ const nextConfig = {
       },
       {
         source: "/uploads/:path*",
-        headers: [{ key: "Content-Security-Policy", value: "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'" }]
+        headers: [
+          { key: "Content-Security-Policy", value: "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'" },
+          // 上传素材（名人头像、股票图标等）极少变化：允许浏览器直接用上一次成功加载的副本
+          // 立即绘制（刷新不再出现首字母占位），同时在一小时后后台静默校验，有更新再换新图。
+          { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }
+        ]
       },
       {
         source: "/api/:path*",
