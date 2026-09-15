@@ -851,13 +851,14 @@
 .dark :is(.assistant-workspace,.assistant-panel) :is(input:not([type="checkbox"]):not([type="file"]):not([type="radio"]),textarea):focus { background-color:transparent; }
 .dark .assistant-rename-dialog input:focus { background-color:#1f1f21; }
 .dark .harness-inline-model-editor :is(input,textarea):focus { background-color:rgba(127,127,127,.07); }
-/* 用户消息胶囊与发送按钮（#4caf58）同色，白色文字对应按钮上的白色箭头。 */
+/* 用户消息胶囊与发送按钮（#4caf58）同色，白色文字对应按钮上的白色箭头。
+   上面的 [title="双击编辑"] 主题规则带 !important（用户气泡也带这个 title），这里必须同级覆盖。 */
 .assistant-workspace .assistant-message-list > .justify-end > div,
-.assistant-panel .assistant-message-list > .justify-end > div { border-color:#4caf58; background-color:#4caf58; color:#fff; box-shadow:0 3px 10px rgba(76,175,88,.22); }
+.assistant-panel .assistant-message-list > .justify-end > div { border-color:#4caf58!important; background-color:#4caf58!important; color:#fff!important; box-shadow:0 3px 10px rgba(76,175,88,.22)!important; }
 .assistant-workspace .assistant-message-list > .justify-end > div .assistant-message-icon,
-.assistant-panel .assistant-message-list > .justify-end > div .assistant-message-icon { color:rgba(255,255,255,.86); }
+.assistant-panel .assistant-message-list > .justify-end > div .assistant-message-icon { color:rgba(255,255,255,.86)!important; }
 .assistant-workspace .assistant-message-list > .justify-end > div .assistant-message-icon:hover,
-.assistant-panel .assistant-message-list > .justify-end > div .assistant-message-icon:hover { background:rgba(0,0,0,.16); color:#fff; }
+.assistant-panel .assistant-message-list > .justify-end > div .assistant-message-icon:hover { background:rgba(0,0,0,.16)!important; color:#fff!important; }
 .assistant-composer-card { width:min(100%,860px); margin:0 auto; background:var(--assistant-raised)!important; border:0; box-shadow:0 0 0 .5px var(--assistant-line),0 8px 24px rgba(0,0,0,.08); transition:background-color 160ms ease,box-shadow 160ms ease,transform 160ms ease; }
 .assistant-composer-card:focus-within { box-shadow:0 0 0 .5px rgba(102,111,125,.55),0 10px 28px rgba(0,0,0,.1); }
 .assistant-thinking-shimmer { color:transparent;background:linear-gradient(100deg,var(--assistant-muted) 18%,var(--assistant-label) 43%,var(--assistant-muted) 68%);background-size:230% 100%;background-position:110% 0;background-clip:text;-webkit-background-clip:text;animation:assistant-thinking-shimmer 2.15s cubic-bezier(.4,0,.2,1) infinite;opacity:.72; }
