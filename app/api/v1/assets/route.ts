@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { deleteAsset, getAssets, upsertAsset, type AssetType } from "@/lib/assets";
 import { getDb } from "@/lib/db";
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
   const user = getAuthUser(request);
   if (!user) return fail(40101, "未登录", 401);
   if (!isAdmin(user)) return fail(40301, "需要管理员权限", 403);
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body || !["stock", "market", "flag", "crypto", "metal"].includes(body.type)) {
     return fail(40001, "type 必须为 stock / market / flag / crypto / metal", 400);
   }

@@ -1,3 +1,4 @@
+import { readFormBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
   if (!isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
 
-  const form = await request.formData().catch(() => null);
+  const form = await readFormBody(request).catch(() => null);
   if (!form) return NextResponse.json({ error: "无效的上传请求" }, { status: 400 });
   const id = String(form.get("id") ?? "").trim();
   if (!CELEBS.some((c) => c.id === id)) return NextResponse.json({ error: "未知的名人" }, { status: 400 });

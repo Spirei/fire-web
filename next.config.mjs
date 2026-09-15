@@ -2,7 +2,7 @@
 
 // 局域网开发来源：本机默认放行；额外地址用 DEV_ORIGINS 环境变量配置（逗号分隔，
 // 如 DEV_ORIGINS=http://192.168.x.x），换 IP 只改 .env.local 即可，无需改代码。
-const lanOrigins = (process.env.DEV_ORIGINS || "localhost")
+const lanOrigins = (process.env.DEV_ORIGINS || "")
   .split(",")
   .map((s) => s.trim().replace(/^https?:\/\//, "").replace(/:\d+$/, ""))
   .filter(Boolean);
@@ -32,6 +32,7 @@ const nextConfig = {
   },
   // 局域网访问开发资源（避免 cross-origin 警告，Next 未来大版本将强制要求）
   allowedDevOrigins,
+  async rewrites() { return { beforeFiles: [{ source: "/uploads/reports/:path*", destination: "/api/private-reports/:path*" }] }; },
   async headers() {
     const isProd = process.env.NODE_ENV === "production";
     // 生产更严格；开发模式放行 HMR（ws）与 source-map 所需
@@ -71,6 +72,10 @@ const nextConfig = {
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           ...(isProd ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }] : [])
         ]
+      },
+      {
+        source: "/uploads/:path*",
+        headers: [{ key: "Content-Security-Policy", value: "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'" }]
       },
       {
         source: "/api/:path*",

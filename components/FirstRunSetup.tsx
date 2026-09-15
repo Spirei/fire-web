@@ -5,15 +5,16 @@ import { useRouter } from "next/navigation";
 
 type Step = 1 | 2 | 3;
 
-export default function FirstRunSetup() {
+export default function FirstRunSetup({ requireSetupToken = false }: { requireSetupToken?: boolean }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [host, setHost] = useState("当前主机:3000");
+  const [setupToken, setSetupToken] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [title, setTitle] = useState("Fire");
-  const [allowRegister, setAllowRegister] = useState(true);
+  const [allowRegister, setAllowRegister] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -47,7 +48,7 @@ export default function FirstRunSetup() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim(), password })
+        body: JSON.stringify({ username: username.trim(), password, setupToken })
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "创建管理员失败");
@@ -178,6 +179,7 @@ export default function FirstRunSetup() {
                 }}
               >
                 <div className="fr-fields">
+                  {requireSetupToken && <label htmlFor="fr-setup-token">安装令牌<input id="fr-setup-token" type="password" value={setupToken} onChange={e => setSetupToken(e.target.value)} autoComplete="off" placeholder="部署时配置的 FIRE_SETUP_TOKEN" /></label>}
                   <label htmlFor="fr-username">
                     登录名
                     <input id="fr-username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="例如：admin" autoComplete="username" autoFocus />

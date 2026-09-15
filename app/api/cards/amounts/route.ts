@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { deleteCardAmount, listCardAmounts, setCardHeld, upsertCardAmount } from "@/lib/cardAmounts";
@@ -32,7 +33,7 @@ export async function PUT(request: Request) {
   if (!rateLimit(`card-amounts:${user.id}:${clientIp(request)}`, 120, 60 * 1000)) {
     return NextResponse.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body || typeof body !== "object") return NextResponse.json({ error: "无效请求" }, { status: 400 });
   const cardKey = normalizeCardKey(String((body as { cardKey?: unknown }).cardKey ?? "").trim());
   const amount = Number((body as { amount?: unknown }).amount);

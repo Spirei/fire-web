@@ -33,9 +33,13 @@
     "**/*.tsx",
     ".next-dev/types/**/*.ts",
     ".next/types/**/*.ts",
-    "next-env.d.ts"
+    "next-env.d.ts",
+    ".next-qa/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    ".next-dev",
+    ".next",
+    ".next-qa"
   ]
 }

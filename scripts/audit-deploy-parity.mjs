@@ -68,15 +68,8 @@ requireText("Docker 构建上下文", dockerignore, [
 requireText("上传资源路由", uploadRoute, ["resource-default", "defaultAbs", "fs.readFileSync(source)"]);
 requireText("素材播种", assetsModule, ["resource-default", "ensureBrokerAssets", "ensureCategoryAssets"]);
 
-for (const [label, directory, minimum] of [
-  ["国旗默认素材", "public/uploads/asset/flag", 200],
-  ["券商默认素材", "public/uploads/asset/broker", 1],
-  ["贵金属默认素材", "public/uploads/asset/metal", 4]
-]) {
-  const full = path.join(root, directory);
-  const count = fs.existsSync(full) ? fs.readdirSync(full).filter((file) => /\.(svg|png|webp|jpe?g)$/i.test(file)).length : 0;
-  if (count < minimum) failures.push(`${label}不完整：${count}/${minimum}`);
-}
+requireText("部署者自行提供素材", dockerignore, ["public/uploads/**", "!public/uploads/.gitkeep"]);
+requireText("非 root 运行", dockerfile, ["USER node", "chmod -R 750"]);
 
 for (const [label, file] of [
   ["交易广场段永平缓存", "data/duan-posts.json"],

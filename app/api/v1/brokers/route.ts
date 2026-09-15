@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextRequest } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getBrokers, saveBrokers, type Broker } from "@/lib/brokers";
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
   const user = getAuthUser(request);
   if (!user) return fail(40101, "未登录", 401);
   if (!isAdmin(user)) return fail(40301, "需要管理员权限", 403);
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body || !Array.isArray(body.groups)) {
     return fail(40001, "groups 必须为券商数组 [{ id, name }]", 400);
   }

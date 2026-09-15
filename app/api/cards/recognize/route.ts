@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import path from "node:path";
 import { getAuthUser } from "@/lib/auth";
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ enabled: false, card: null }, { headers: NO_STORE });
   }
 
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const image = String((body as { image?: unknown } | null)?.image ?? "").trim();
   if (!image.startsWith("/uploads/") || image.includes("..")) {
     return NextResponse.json({ error: "图片地址无效" }, { status: 400 });

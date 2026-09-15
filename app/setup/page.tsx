@@ -18,7 +18,7 @@ export default async function SetupPage() {
   }
   return (
     <div style={{ minHeight: "100dvh", background: "#0b0f16" }}>
-      <FirstRunSetup />
+      <FirstRunSetup requireSetupToken={process.env.NODE_ENV === "production"} />
     </div>
   );
 }

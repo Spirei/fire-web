@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { deleteRecordsByIds, listRecords, logActivity } from "@/lib/store";
@@ -6,7 +7,7 @@ export async function POST(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
 
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const ids = Array.isArray(body?.ids)
     ? [...new Set(body.ids.filter((x: unknown): x is string => typeof x === "string" && x.length > 0 && x.length <= 100))]
     : [];

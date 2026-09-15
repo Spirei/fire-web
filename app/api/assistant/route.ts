@@ -294,7 +294,7 @@ export async function POST(request: Request) {
   }
   let body: { messages?: ChatMessage[]; images?: AssistantImage[]; context?: PageContext; dataScope?: "none" | "page" | "account"; model?: { serviceId?: string; model?: string }; conversationId?: string } | null;
   try {
-    body = await readLimitedJson(request, 140 * 1024 * 1024);
+    body = await readLimitedJson(request, 28 * 1024 * 1024);
   } catch (error) {
     if (error instanceof RequestBodyTooLargeError) return NextResponse.json({ error: "请求内容过大" }, { status: 413 });
     throw error;
@@ -312,7 +312,7 @@ export async function POST(request: Request) {
     return [{ name: typeof image.name === "string" ? image.name.slice(0, 120) : "image", dataUrl: image.dataUrl }];
   });
   if (invalidImage) return NextResponse.json({ error: "图片数据无效，请重新添加" }, { status: 400 });
-  if (imageBytes > 100 * 1024 * 1024) return NextResponse.json({ error: "单次提问的图片总大小不能超过 100MB" }, { status: 413 });
+  if (imageBytes > 20 * 1024 * 1024) return NextResponse.json({ error: "单次提问的图片总大小不能超过 20MB" }, { status: 413 });
   const question = messages.at(-1)?.content.trim().slice(0, 1200) || "";
   if (!question) return NextResponse.json({ error: "请输入问题" }, { status: 400 });
 

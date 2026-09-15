@@ -1,3 +1,4 @@
+import { readFormBody } from "@/lib/requestBody";
 import { NextRequest } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { parseYouzhiyouxing, type XlsxInvest } from "@/lib/simpleLedgerXlsx";
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
   }
   let form: FormData;
   try {
-    form = await request.formData();
+    form = await readFormBody(request);
   } catch {
     return json({ ok: false, error: "无效请求" }, 400);
   }

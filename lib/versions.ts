@@ -3493,7 +3493,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   date: "2026-09-15",
   summary: "四色门工作区入口正式迁入主站，并统一业务页面的自适应上下文顶栏。",
   software: V0_1_30_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.31" } : item),
-  changes: [{
+  changes: [{ title: "公开仓库安全加固与素材分离", desc: "SVG 使用 XML 解析白名单，上传路径与真实图片格式校验；请求体流式限额，助手附件限额，财报权限保护，首次安装令牌及非 root 容器运行。公开代码采用 MIT，部署素材由部署者自行提供。", kind: "security" }, {
     title: "四色门工作区入口迁入主站",
     desc: "将验证完成的四色门窗户、转盘、固定指针、手势与声音开关迁入桌面端主导航顶部；账户资产、资产分析、FIRE 与全球经济可从色块、转盘或原导航进入，转盘使用连续缓动并同步轻量棘轮声与落位提示音。静音偏好通过全站偏好机制持久化，关闭时立即终止当前声音，重新开启不会自动试听。素材约束在侧栏内部，窄高窗口自动缩放，其他导航继续滚动可达。",
     kind: "feature"

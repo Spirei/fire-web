@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { getAuthUser } from "@/lib/auth";
 import { fail, ok } from "@/lib/api";
 import { FUND_CURRENCIES, isFundCurrency, type FundCurrency } from "@/lib/fundCurrencies";
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
 }
 export async function POST(request: Request) {
   const user = getAuthUser(request); if (!user) return fail(40101, "未登录", 401);
-  const body = await request.json().catch(() => null); if (!body) return fail(40001, "无效请求", 400);
+  const body = await readJsonBody(request).catch(() => null); if (!body) return fail(40001, "无效请求", 400);
   const rawCurrency = String(body.currency || "").toUpperCase();
   const type = String(body.type || "") as FundType;
   const amount = Number(body.amount); const direction = Number(body.direction);

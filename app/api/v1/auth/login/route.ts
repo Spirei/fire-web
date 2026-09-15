@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { authenticateUser, createSession, sessionCookieMaxAge } from "@/lib/auth";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { fail, ok } from "@/lib/api";
@@ -7,7 +8,7 @@ export async function POST(request: Request) {
   if (!rateLimit(`login:${clientIp(request)}`, 50, 15 * 60 * 1000) || !rateLimitGlobal("login", 100, 15 * 60 * 1000)) {
     return fail(42901, "尝试过于频繁，请 15 分钟后再试", 429);
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request, 16 * 1024).catch(() => null);
   if (!body) return fail(40002, "无效的请求体", 400);
   const username = String(body.username ?? "").trim();
   const password = String(body.password ?? "");

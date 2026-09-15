@@ -52,3 +52,15 @@ public/mockups
 public/fire
 public/fire-planner-preview.html
 public/settings-mockup-standard.html
+
+public/uploads/**
+!public/uploads/.gitkeep
+public/*preview*.html
+
+public/fonts
+public/images
+public/share
+public/icons
+public/maps-world.json
+
+app/favicon.ico

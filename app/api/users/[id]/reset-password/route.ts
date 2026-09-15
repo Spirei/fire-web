@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { deleteOtherSessions, getAuthUser, isAdmin, resetUserPassword } from "@/lib/auth";
 import { validatePassword } from "@/lib/password";
@@ -8,7 +9,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!isAdmin(me)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
 
   const { id } = await params;
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const newPassword = String(body?.newPassword ?? "");
   const pwdErr = validatePassword(newPassword);
   if (pwdErr) {

@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getCelebsData, patchCelebCache, sortCelebCache } from "@/lib/celebsData";
@@ -61,7 +62,7 @@ function toCelebInput(body: Record<string, unknown>): CelebInput {
 export async function POST(request: Request) {
   const auth = requireAdmin(request);
   if ("error" in auth) return auth.error;
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body || typeof body !== "object") return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
   const input = toCelebInput(body as Record<string, unknown>);
   if (!input.id || !input.name) return NextResponse.json({ error: "需要 id 和名称（id 用于唯一标识，如 bill-gates）" }, { status: 400 });
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   const auth = requireAdmin(request);
   if ("error" in auth) return auth.error;
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body || typeof body !== "object") return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
   const raw = body as Record<string, unknown>;
   // 排序：{ reorder: [id1, id2, ...] }

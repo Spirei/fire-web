@@ -72,7 +72,7 @@ const DEFAULTS: SiteSettings = {
   assetAnalysisOrder: { left: [], right: [] },
   indicesOrder: [],
   holdingColumns: DEFAULT_HOLDING_COLUMNS,
-  allowRegister: true,
+  allowRegister: false,
   stockIconCdn: false,
   siteLogo: "",
   logoText: "Fire",

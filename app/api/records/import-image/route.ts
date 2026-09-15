@@ -1,3 +1,4 @@
+import { readFormBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { sniffImageExt } from "@/lib/imageSecurity";
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
   if (!rateLimit(`import-image:${clientIp(request)}`, 10, 60 * 1000) || !rateLimitGlobal("import-image", 30, 60 * 1000)) {
     return NextResponse.json({ error: "识别过于频繁，请稍后再试" }, { status: 429 });
   }
-  const form = await request.formData().catch(() => null);
+  const form = await readFormBody(request).catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return NextResponse.json({ error: "请选择要识别的截图" }, { status: 400 });

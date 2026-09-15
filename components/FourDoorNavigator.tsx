@@ -34,6 +34,7 @@ export default function FourDoorNavigator({
   const [rotation, setRotation] = useState(-initialIndex * 90);
   const [turning, setTurning] = useState(false);
   const [randomizing, setRandomizing] = useState(false);
+  const [artAvailable, setArtAvailable] = useState(true);
   const [soundOn, setSoundOn] = usePersistedState("fire:four-door-sound", true);
 
   function stopAllSound() {
@@ -178,6 +179,7 @@ export default function FourDoorNavigator({
     if (turningTimer.current !== null) window.clearTimeout(turningTimer.current);
   }, []);
 
+  if (!artAvailable) return null;
   return (
     <div className="four-door-zone">
       <button
@@ -198,7 +200,7 @@ export default function FourDoorNavigator({
         )}
       </button>
       <div className={`four-door-art ${turning ? "is-turning" : ""} ${randomizing ? "is-randomizing" : ""}`} aria-busy={randomizing}>
-        <img className="four-door-window" src="/uploads/feature/four-door/window.png" alt="霍尔的移动城堡窗户" />
+        <img onError={() => setArtAvailable(false)} className="four-door-window" src="/uploads/feature/four-door/window.png" alt="霍尔的移动城堡窗户" />
         <div className="four-door-wheel" style={{ transform: `rotate(${rotation}deg)` }} role="group" aria-label="四色门工作区入口">
           <img src="/uploads/feature/four-door/dial.png" alt="" />
           {DOORS.map((door, index) => <button key={door.key} type="button" disabled={randomizing} className={`four-door-sector ${door.color}`} aria-label={`${door.label}入口`} onClick={() => moveTo(index, true)} />)}

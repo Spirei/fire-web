@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { authenticateUser, createSession, LEGACY_SESSION_COOKIE, sessionCookieMaxAge, sessionCookieSecure, SESSION_COOKIE } from "@/lib/auth";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     logSecurityEvent(request, "", "auth.login.rate_limited", "全局登录尝试过于频繁");
     return NextResponse.json({ error: "尝试过于频繁，请稍后再试" }, { status: 429 });
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request, 16 * 1024).catch(() => null);
   if (!body) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
 
   const username = String(body.username ?? "").trim();

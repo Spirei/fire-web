@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { deleteRecord, listRecords, logActivity, parseMarket, toNumberOrEmpty, updateRecord } from "@/lib/store";
@@ -9,7 +10,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
 
   const { id } = await params;
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
 
   const name = String(body.name ?? "").trim();

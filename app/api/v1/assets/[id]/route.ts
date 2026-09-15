@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { deleteAsset } from "@/lib/assets";
 import { getDb } from "@/lib/db";
@@ -9,7 +10,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!user) return fail(40101, "未登录", 401);
   if (!isAdmin(user)) return fail(40301, "需要管理员权限", 403);
   const { id } = await params;
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const name = String(body?.name ?? "").trim();
   if (!name) return fail(40001, "缺少素材名称", 400);
   const result = getDb()

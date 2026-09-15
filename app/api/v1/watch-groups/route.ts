@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { getAuthUser } from "@/lib/auth";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { fail, ok } from "@/lib/api";
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   if (!rateLimit(`watch-groups:${clientIp(request)}`, 60, 60 * 1000) || !rateLimitGlobal("watch-groups", 300, 60 * 1000)) {
     return fail(42901, "请求过于频繁，请稍后再试", 429);
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const name = String(body?.name ?? "").trim();
   if (!name) return fail(40001, "缺少分组名称", 400);
   try {

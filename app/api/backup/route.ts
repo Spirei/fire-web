@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getBackupConfig, listBackups, maybeRunBackup, runBackup, saveBackupConfig } from "@/lib/backup";
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   const denied = guard(request);
   if (denied) return denied;
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const enabled = typeof body?.enabled === "boolean" ? body.enabled : undefined;
   const intervalHours = Number(body?.intervalHours);
   const keep = Number(body?.keep);

@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { deleteUserById, getAuthUser, isAdmin, updateUserById } from "@/lib/auth";
 
@@ -10,7 +11,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!isAdmin(me)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
   const { id } = await params;
 
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
 
   const patch: { username?: string; email?: string; role?: string } = {};

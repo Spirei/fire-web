@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { applyImport, type ImportRow } from "@/lib/importSnapshot";
@@ -7,7 +8,7 @@ export async function POST(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
 
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const groupId = typeof body?.groupId === "string" ? body.groupId.trim().slice(0, 100) : "";
   if (groupId) {
     const group = listWatchGroups(user.id).find((item) => item.id === groupId);

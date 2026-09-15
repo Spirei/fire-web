@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { createSession, createUser, findUserByUsername, LEGACY_SESSION_COOKIE, needsSetup, sessionCookieMaxAge, sessionCookieSecure, SESSION_COOKIE } from "@/lib/auth";
 import { validatePassword } from "@/lib/password";
@@ -13,9 +15,16 @@ export async function POST(request: Request) {
   if (!rateLimitGlobal("register", 50, 15 * 60 * 1000)) {
     return NextResponse.json({ error: "注册过于频繁，请稍后再试" }, { status: 429 });
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request, 16 * 1024).catch(() => null);
   if (!body) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
 
+  if (process.env.NODE_ENV === "production" && needsSetup()) {
+    const expected = process.env.FIRE_SETUP_TOKEN || "";
+    if (expected.length < 32) return NextResponse.json({ error: "请先配置至少 32 字符的 FIRE_SETUP_TOKEN" }, { status: 503 });
+    const provided = Buffer.from(String(body.setupToken || ""));
+    const wanted = Buffer.from(expected);
+    if (provided.length !== wanted.length || !timingSafeEqual(provided, wanted)) return NextResponse.json({ error: "安装令牌无效" }, { status: 403 });
+  }
   const username = String(body.username ?? "").trim();
   const password = String(body.password ?? "");
   const isTest = body.isTest === true;

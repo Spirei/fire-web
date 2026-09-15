@@ -1,3 +1,4 @@
+import { readFormBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import {
@@ -122,7 +123,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "单个文件最大 50MB" }, { status: 413 });
   }
 
-  const form = await request.formData().catch(() => null);
+  const form = await readFormBody(request).catch(() => null);
   if (!form) return NextResponse.json({ error: "无效的请求" }, { status: 400 });
   const action = String(form.get("action") ?? "upload");
   const parent = String(form.get("dir") ?? form.get("parent") ?? "").trim();

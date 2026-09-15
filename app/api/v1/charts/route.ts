@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { fetchIntraday } from "@/lib/quotes";
 import { parseMarket } from "@/lib/store";
 import type { QuoteItem } from "@/lib/quotes";
@@ -9,7 +10,7 @@ export async function POST(request: Request) {
   if (!rateLimit(`charts:${clientIp(request)}`, 120, 60 * 1000) || !rateLimitGlobal("charts", 600, 60 * 1000)) {
     return fail(42901, "请求过于频繁，请稍后再试", 429);
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const rawItems = Array.isArray(body?.items) ? body.items : [];
   if (rawItems.length === 0) return ok({ charts: {} });
   if (rawItems.length > 100) return fail(40001, "单次最多获取 100 只走势", 400);

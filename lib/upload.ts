@@ -7,6 +7,8 @@ import { removeFileIfUnused } from "@/lib/fileCleanup";
 import { normalizeSvgAttribution, sanitizeSvg, validateImageContent } from "@/lib/imageSecurity";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
+import { assetFilePath, validAssetCode } from "./assetSecurity";
+import { readFormBody } from "./requestBody";
 
 export type UploadKind = "avatar" | "ico" | "background" | "logo" | "login" | "asset";
 
@@ -65,6 +67,8 @@ function assetFilename(
   const name = String(form.get("name") ?? "").trim();
   const code = String(form.get("code") ?? "").trim().toUpperCase();
   const market = String(form.get("market") ?? "").trim().toUpperCase();
+  if (code && !validAssetCode(code)) throw new UploadError("素材代码格式不正确", 400);
+  if (name.length > 120) throw new UploadError("素材名称过长", 400);
   const base =
     name
       .replace(/[\\/:*?"<>|\s()（）[\]{}]+/g, "-")
@@ -84,7 +88,7 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
   if (!rateLimit(`upload:${clientIp(request)}:${user.id}`, 60, 60 * 60 * 1000) || !rateLimitGlobal("upload", 600, 60 * 60 * 1000)) {
     throw new UploadError("上传过于频繁，请稍后再试", 429);
   }
-  const form = await request.formData().catch(() => null);
+  const form = await readFormBody(request, 21 * 1024 * 1024).catch(() => null);
   if (!form) throw new UploadError("无效的上传请求", 400);
   const kind = String(form.get("kind") ?? "avatar") as UploadKind;
   const config = KIND_CONFIG[kind];
@@ -138,7 +142,7 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
   }
   try {
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, filename), outputBuffer);
+    fs.writeFileSync(assetFilePath(dir, filename), outputBuffer);
   } catch {
     throw new UploadError("文件保存失败，请检查磁盘空间或上传目录权限", 500);
   }
@@ -164,7 +168,7 @@ export async function saveWatchGroupIcon(request: Request, groupId: string) {
   if (!rateLimit(`group-icon:${user.id}`, 30, 60 * 60 * 1000) || !rateLimitGlobal("group-icon", 300, 60 * 60 * 1000)) throw new UploadError("上传过于频繁", 429);
   const config = KIND_CONFIG.asset;
   if (Number(request.headers.get("content-length")) > config.maxBytes + 65536) throw new UploadError("文件过大，最大 2MB", 413);
-  const form = await request.formData().catch(() => null);
+  const form = await readFormBody(request, config.maxBytes + 65536).catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File) || !file.size) throw new UploadError("请选择要上传的文件");
   if (file.size > config.maxBytes) throw new UploadError("文件过大，最大 2MB", 413);
@@ -179,7 +183,7 @@ export async function saveWatchGroupIcon(request: Request, groupId: string) {
   const dir = path.join(process.cwd(), "public", "uploads", "asset", "group", user.id, groupId);
   const url = `/uploads/asset/group/${user.id}/${groupId}/${encodeURIComponent(filename)}`;
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, filename), output);
+  fs.writeFileSync(assetFilePath(dir, filename), output);
   const updated = updateWatchGroup(user.id, groupId, { icon: url });
   if (group.icon && group.icon !== url) removeFileIfUnused(group.icon);
   logSecurityEvent(request, user.id, "group_icon_upload", groupId);

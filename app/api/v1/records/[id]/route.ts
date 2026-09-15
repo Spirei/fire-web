@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { getAuthUser } from "@/lib/auth";
 import { deleteRecord, updateRecord, parseMarket, toNumberOrEmpty } from "@/lib/store";
 import type { RecordInput } from "@/lib/types";
@@ -9,7 +10,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const user = getAuthUser(request);
   if (!user) return fail(40101, "未登录", 401);
   const { id } = await params;
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body) return fail(40002, "无效的请求体", 400);
   const name = String(body.name ?? "").trim();
   const code = String(body.code ?? "").trim();

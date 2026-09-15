@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   const user = getAuthUser(request);
   if (!user || !isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
-  const body = await request.json().catch(() => null) as { repository?: unknown; token?: unknown; clearToken?: unknown } | null;
+  const body = await readJsonBody(request).catch(() => null) as { repository?: unknown; token?: unknown; clearToken?: unknown } | null;
   const repository = String(body?.repository || "").trim();
   if (!/^[^/\s]+\/[^/\s]+$/.test(repository)) return NextResponse.json({ error: "仓库格式应为 账号/仓库名" }, { status: 400 });
   write("deployGithubRepository", repository);

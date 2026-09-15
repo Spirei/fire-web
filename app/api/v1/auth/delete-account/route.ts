@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   if (!rateLimit(`delete-account:${clientIp(request)}:${user.id}`, 5, 60 * 60 * 1000) || !rateLimitGlobal("delete-account", 30, 60 * 60 * 1000)) {
     return NextResponse.json({ error: "尝试过于频繁，请稍后再试" }, { status: 429 });
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request, 16 * 1024).catch(() => null);
   const rowWithPassword = findUserById(user.id);
   if (!rowWithPassword || !verifyPassword(String(body?.password ?? ""), rowWithPassword.password_hash)) {
     logSecurityEvent(request, user.id, "account_delete_rejected", "password verification failed");

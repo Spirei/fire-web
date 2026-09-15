@@ -71,7 +71,7 @@ function AssistantGlyph({ size = 22 }: { size?: number }) {
 const MAX_SAVED_MESSAGES = 30;
 const ACTION_TTL_MS = 15 * 60 * 1000;
 const FLOATING_MARGIN = 12;
-const MAX_IMAGE_TOTAL_BYTES = 100 * 1024 * 1024;
+const MAX_IMAGE_TOTAL_BYTES = 20 * 1024 * 1024;
 const ASSISTANT_MODEL_CHANGED_EVENT = "fire:assistant-selected-model-changed";
 
 type FloatingPosition = { x: number; y: number };
@@ -506,7 +506,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     if (images.length !== files.length) setAttachmentError("只能添加图片文件");
     let totalBytes = pendingImageBytesRef.current;
     const withinTotal = images.filter((file) => {
-      if (totalBytes + file.size > MAX_IMAGE_TOTAL_BYTES) { setAttachmentError("单次提问的图片总大小不能超过 100MB"); return false; }
+      if (totalBytes + file.size > MAX_IMAGE_TOTAL_BYTES) { setAttachmentError("单次提问的图片总大小不能超过 20MB"); return false; }
       totalBytes += file.size;
       return true;
     });

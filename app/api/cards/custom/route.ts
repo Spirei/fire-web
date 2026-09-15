@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { createCustomCard, customCardImageOf, deleteCustomCard, listCustomCards } from "@/lib/cardCustom";
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
   if (!rateLimit(`card-custom:${user.id}:${clientIp(request)}`, 60, 60 * 1000)) {
     return NextResponse.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body || typeof body !== "object") return NextResponse.json({ error: "无效请求" }, { status: 400 });
 
   const raw = body as { name?: unknown; bank?: unknown; region?: unknown; type?: unknown; brand?: unknown; level?: unknown; image?: unknown; currencyScope?: unknown };

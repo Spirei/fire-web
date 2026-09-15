@@ -226,7 +226,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   assert(source.includes('imageInputRef'));
   assert(source.includes('accept="image/*"'));
   assert(source.includes('aria-label="添加附件"'));
-  assert(source.includes('100 * 1024 * 1024'));
+  assert(source.includes('20 * 1024 * 1024'));
   assert(source.includes('pendingImageBytesRef.current += reservedBytes'));
   assert(source.includes('pendingImageSequenceRef.current'));
   assert(!source.includes('crypto.randomUUID()'));
@@ -274,6 +274,26 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const {VERSIONS}=require(path.join(root,'lib/versions-history.ts'));const {CURRENT_VERSION}=require(path.join(root,'lib/versions.ts'));
     assert.equal(VERSIONS.filter(v=>v.version===CURRENT_VERSION.version).length,1);assert(VERSIONS.some(v=>v.version==='v0.1.29'));
     assert.equal(new Set(VERSIONS.map(v=>v.version)).size,VERSIONS.length);
+  });
+  await test('upload security rejects expanded SVG scripts and traversal; stream limits cannot be bypassed', async () => {
+    const { isSafeSvg } = require(path.join(root, 'lib/imageSecurity.ts'));
+    for (const payload of [
+      '<svg xmlns="http://www.w3.org/2000/svg"><s:script xmlns:s="http://www.w3.org/2000/svg">alert(1)</s:script></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><use href="&#106;avascript:alert(1)"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject/></svg>'
+    ]) assert.equal(isSafeSvg(Buffer.from(payload)), false);
+    assert.equal(isSafeSvg(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g"><stop offset="0" stop-color="red"/></linearGradient></defs><path fill="url(#g)" d="M0 0"/></svg>')), true);
+    const { validAssetCode, assetFilePath } = require(path.join(root, 'lib/assetSecurity.ts'));
+    assert.equal(validAssetCode('../../proof'), false);
+    assert.throws(() => assetFilePath(temp, '../proof'), /无效/);
+    const { readJsonBody } = require(path.join(root, 'lib/requestBody.ts'));
+    await assert.rejects(() => readJsonBody(new Request('http://localhost', {method:'POST',body:'"'+'x'.repeat(100)+'"'}), 32));
+    const { saveAssistantAttachments } = require(path.join(root, 'lib/assistantAttachments.ts'));
+    assert.throws(() => saveAssistantAttachments(user.id, 'ac-'+'a'.repeat(24), [{name:'evil',dataUrl:'data:image/svg+xml;base64,'+Buffer.from('<svg onload=alert(1)>').toString('base64')}]), /仅支持/);
+    const reports = require(path.join(root, 'app/api/v1/financial-reports/route.ts'));
+    assert.equal((await reports.GET(request(null))).status, 401);
+    assert.equal((await reports.GET(request('user'))).status, 403);
   });
   db.close();console.log(`${passed} regression suites passed (isolated database)`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{ fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode || 0); });

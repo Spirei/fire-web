@@ -3,9 +3,9 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const tracked = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
+const tracked = [...new Set( execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { encoding: "utf8" })
   .split("\0")
-  .filter(Boolean);
+  .filter(Boolean))];
 
 const forbiddenText = [
   {
@@ -31,6 +31,8 @@ const deploymentFiles = new Set([
 
 const findings = [];
 for (const file of tracked) {
+  if (/^public\/(?:uploads\/(?!\.gitkeep$)|fonts\/|images\/|share\/|icons\/|mockups\/)/.test(file)) findings.push(`${file}: 部署素材不得进入公开仓库`);
+  if (/\.(?:png|jpe?g|gif|webp|avif|ico|mp3|wav|ogg|woff2?|ttf)$/i.test(file)) findings.push(`${file}: 二进制素材不得进入公开仓库`);
   let buffer;
   try { buffer = readFileSync(file); }
   catch (error) {
@@ -42,7 +44,7 @@ for (const file of tracked) {
 
   for (const rule of forbiddenText) {
     const match = text.match(rule.pattern);
-    if (match) findings.push(`${file}: ${rule.label}（${match[0]}）`);
+    if (match) findings.push(`${file}: ${rule.label}（内容已隐藏）`);
   }
 
   if (deploymentFiles.has(file)) {

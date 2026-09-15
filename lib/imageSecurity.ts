@@ -1,4 +1,5 @@
 /** 图片内容识别与 SVG 消毒。扩展名、MIME 均不可信，最终以文件内容为准。 */
+import { SaxesParser } from "saxes";
 
 export type SafeImageExt = "jpg" | "png" | "gif" | "webp" | "ico" | "svg";
 
@@ -93,6 +94,26 @@ export function sniffImageExt(buffer: Buffer): SafeImageExt | null {
  */
 export function isSafeSvg(buffer: Buffer): boolean {
   if (sniffImageExt(buffer) !== "svg") return false;
+  // Validate expanded XML names and decoded attributes, never raw-text prefixes.
+  const allowed = new Set("svg g defs symbol use path rect circle ellipse line polyline polygon text tspan title desc linearGradient radialGradient stop clipPath mask pattern filter feGaussianBlur feOffset feBlend feColorMatrix feComponentTransfer feFuncR feFuncG feFuncB feFuncA feMerge feMergeNode feFlood feComposite feDropShadow".split(" "));
+  let safe = true;
+  const parser = new SaxesParser({ xmlns: true });
+  parser.on("error", () => { safe = false; });
+  parser.on("processinginstruction", instruction => { if (instruction.target.toLowerCase() !== "xml") safe = false; });
+  parser.on("opentag", tag => {
+    if ((tag.uri && tag.uri !== "http://www.w3.org/2000/svg") || !allowed.has(tag.local)) safe = false;
+    for (const attribute of Object.values(tag.attributes)) {
+      const name = attribute.local.toLowerCase();
+      const value = attribute.value.trim();
+      if (name.startsWith("on")) safe = false;
+      if (attribute.uri && !["http://www.w3.org/2000/xmlns/", "http://www.w3.org/XML/1998/namespace", "http://www.w3.org/1999/xlink"].includes(attribute.uri)) safe = false;
+      if (["href", "src", "poster"].includes(name) && !/^#[A-Za-z0-9_.:-]+$/.test(value)) safe = false;
+      if (value.includes("\\") || /(?:javascript:|vbscript:|@import|expression\s*\()/i.test(value)) safe = false;
+      for (const match of value.matchAll(/url\s*\((.*?)\)/gi)) if (!/^\s*["']?#[A-Za-z0-9_.:-]+["']?\s*$/.test(match[1])) safe = false;
+    }
+  });
+  try { parser.write(stripDoctypeStr(buffer.toString("utf8"))).close(); } catch { safe = false; }
+  if (!safe) return false;
   // 先剥离 DOCTYPE（无害），避免误伤 Apple CoreSVG 等含 DTD 导出的文件。
   const text = stripDoctypeStr(buffer.toString("utf8")).toLowerCase();
   const dangerousMarkup = [

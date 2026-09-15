@@ -1,7 +1,8 @@
+import { randomBytes } from "node:crypto";
 import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
-import { hashPassword, validatePassword } from "./password";
+import { hashPassword, validatePassword, verifyPassword } from "./password";
 import type { RecordInput } from "./types";
 import { maybeRunBackup } from "./backup";
 import { applyFilledTrade } from "./tradeAccounting";
@@ -964,6 +965,13 @@ function reassignUids(database: Database.Database) {
 }
 
 function seed(database: Database.Database) {
+  if (process.env.NODE_ENV === "production") {
+    const demo = database.prepare("SELECT password_hash FROM users WHERE id='demo-user'").get() as { password_hash: string } | undefined;
+    if (demo && verifyPassword("demo1234", demo.password_hash)) {
+      database.prepare("UPDATE users SET password_hash=? WHERE id='demo-user'").run(hashPassword(randomBytes(32).toString("hex")));
+      database.prepare("DELETE FROM sessions WHERE user_id='demo-user'").run();
+    }
+  }
   const userCount = (database.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number }).n;
   if (userCount === 0) {
     const isProd = process.env.NODE_ENV === "production";

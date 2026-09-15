@@ -30,3 +30,19 @@ public/uploads/trading-square/
 # 卡面素材（313MB / 460+ 个文件）：不进 Git、也不进镜像，
 # 部署时手动放到服务器的 uploads 目录（compose 把 UPLOADS_DIR 挂到 /app/public/uploads）
 public/uploads/cards/
+
+# Deployment media is supplied by deployers; never redistribute it.
+/public/uploads/*
+!/public/uploads/.gitkeep
+/public/mockups/
+/public/fire/
+/public/*preview*.html
+/public/settings-mockup-standard.html
+
+/public/fonts/
+/public/images/
+/public/share/
+/public/icons/
+/public/maps-world.json
+
+/app/favicon.ico

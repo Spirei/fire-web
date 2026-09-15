@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { getAuthUser } from "@/lib/auth";
 import { fail, ok } from "@/lib/api";
 import { cancelOrder, deleteOrder, updateOrder } from "@/lib/orders";
@@ -17,7 +18,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = getAuthUser(request);
   if (!user) return fail(40101, "未登录", 401);
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body) return fail(40002, "无效的请求体", 400);
   const side = body.side === "buy" || body.side === "sell" || body.side === "dividend" ? body.side : null;
   const qty = Number(body.qty);

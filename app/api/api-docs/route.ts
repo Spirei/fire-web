@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import fs from "fs";
 import path from "path";
 import { getAuthUser, isAdmin } from "@/lib/auth";
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
   const user = getAuthUser(request);
   if (!user) return fail(40101, "未登录", 401);
   if (!isAdmin(user)) return fail(40301, "需要管理员权限", 403);
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body || typeof body.content !== "string") return fail(40001, "缺少文档内容", 400);
   if (body.content.length > MAX_BYTES) return fail(40001, "文档内容过大", 400);
   try {

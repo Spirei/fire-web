@@ -1,3 +1,4 @@
+import { readFormBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { readBrokerOrderSheet } from "@/lib/orderImportXlsx";
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "导入过于频繁，请稍后再试" }, { status: 429 });
   }
   const dryRun = new URL(request.url).searchParams.get("dryRun") === "1";
-  const form = await request.formData().catch(() => null);
+  const form = await readFormBody(request).catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return NextResponse.json({ error: "请选择要导入的 xlsx 文件" }, { status: 400 });

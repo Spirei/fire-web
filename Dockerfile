@@ -79,7 +79,8 @@ ENV PATH="/opt/futu-venv/bin:${PATH}"
 RUN chmod +x /app/entrypoint.sh
 
 # 运行期数据与上传占位（由 compose volume 挂载覆盖）
-RUN mkdir -p /app/data /app/public/uploads && chmod -R 777 /app/data /app/public/uploads
+RUN mkdir -p /app/data /app/public/uploads && chown -R node:node /app/data /app/public/uploads && chmod -R 750 /app/data /app/public/uploads
+USER node
 
 EXPOSE 3000
 ENV HOSTNAME=0.0.0.0

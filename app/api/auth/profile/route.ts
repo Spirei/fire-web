@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { findUserByEmail, findUserById, getAuthUser, updateProfile } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
@@ -14,7 +15,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
   }
 
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request, 16 * 1024).catch(() => null);
   if (!body) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
 
   const patch: { username?: string; email?: string; nickname?: string } = {};

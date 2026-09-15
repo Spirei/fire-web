@@ -1,3 +1,4 @@
+import { readTextBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { validateBackupAccess, validateBackupPayload, restoreBackupPayload } from "@/lib/dataTransfer";
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   }
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (contentLength > MAX_IMPORT_BYTES) return NextResponse.json({ error: "备份文件超过 10MB 限制" }, { status: 413 });
-  const raw = await request.text().catch(() => "");
+  const raw = await readTextBody(request).catch(() => "");
   if (Buffer.byteLength(raw, "utf8") > MAX_IMPORT_BYTES) return NextResponse.json({ error: "备份文件超过 10MB 限制" }, { status: 413 });
   let body: unknown = null;
   try { body = raw ? JSON.parse(raw) : null; } catch { body = null; }

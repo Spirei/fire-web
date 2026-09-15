@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { deleteAsset, ensureBrokerAssets, ensureCategoryAssets, ensureIconAssets, ensureMarketAssets, ensureStockAssets, getAssets, getAssetsPage, getFlagIconMap, getStockIconMap, upsertAsset, type AssetType } from "@/lib/assets";
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
   if (!isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body || !["stock", "market", "flag", "crypto", "metal", "broker", "group", "icon", "card"].includes(body.type)) {
     return NextResponse.json({ error: "type 必须为 stock / market / flag / broker / crypto / metal / group / icon / card" }, { status: 400 });
   }
@@ -131,7 +132,7 @@ export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   if (!id) {
-    const body = await request.json().catch(() => null);
+    const body = await readJsonBody(request).catch(() => null);
     if (!body?.id) return NextResponse.json({ error: "缺少素材 id" }, { status: 400 });
     deleteAsset(String(body.id));
     return NextResponse.json({ ok: true });

@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { getAuthUser } from "@/lib/auth";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { fail, ok } from "@/lib/api";
@@ -16,7 +17,7 @@ export async function PUT(
     return fail(42901, "请求过于频繁，请稍后再试", 429);
   }
   const { id } = await params;
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const input: { name?: string; icon?: string; visible?: number } = {};
   if (body?.name !== undefined) input.name = String(body.name);
   if (body?.icon !== undefined) {

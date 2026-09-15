@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { getAuthUser } from "@/lib/auth";
 import { getDividends } from "@/lib/dividends";
 import { inspectHoldingDividends, settleRecordDividends } from "@/lib/dividendSettlement";
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
   if (!rateLimit(`dividends-settle:${user.id}`, 20, 60 * 1000)) {
     return fail(42901, "请求过于频繁，请稍后再试", 429);
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const recordId = String(body?.recordId || "").trim();
   if (!recordId) return fail(40001, "缺少持仓记录", 400);
   try {

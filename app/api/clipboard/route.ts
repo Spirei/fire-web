@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   if (!rateLimit(`clipboard:${clientIp(request)}`, 10, 60 * 1000) || !rateLimitGlobal("clipboard", 30, 60 * 1000)) {
     return NextResponse.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const raw = typeof body?.image === "string" ? body.image : "";
   const b64 = raw.startsWith("data:image/png;base64,") ? raw.slice("data:image/png;base64,".length) : raw;
   if (!b64) return NextResponse.json({ error: "缺少图片数据" }, { status: 400 });

@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { getAuthUser } from "@/lib/auth";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { fail, ok } from "@/lib/api";
@@ -12,7 +13,7 @@ export async function POST(request: Request) {
   if (!rateLimit(`group-assign:${clientIp(request)}`, 60, 60 * 1000) || !rateLimitGlobal("group-assign", 300, 60 * 1000)) {
     return fail(42901, "请求过于频繁，请稍后再试", 429);
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const ids: string[] = Array.isArray(body?.ids)
     ? [...new Set<string>((body.ids as unknown[]).filter((x: unknown): x is string => typeof x === "string" && x.length > 0 && x.length <= 100))]
     : [];

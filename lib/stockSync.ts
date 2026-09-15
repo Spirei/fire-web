@@ -3,6 +3,8 @@ import path from "node:path";
 import { getDb } from "./db";
 import { upsertAsset } from "./assets";
 import { isSafeSvg, sniffImageExt } from "./imageSecurity";
+import { assetFilePath, validAssetCode } from "./assetSecurity";
+import { readLimitedResponseBytes } from "./requestBody";
 
 export type SyncMarket = "US" | "HK" | "CN" | "JP" | "KR";
 
@@ -238,7 +240,7 @@ async function downloadIcon(url: string, market: SyncMarket, code: string, name:
     const type = res.headers.get("content-type") || "";
     // 微牛部分图标 CDN 返回 application/octet-stream（类型不规范），放宽并靠魔数校验兜底
     if (!(type.startsWith("image/") || type === "application/octet-stream")) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
+    const buf = Buffer.from(await readLimitedResponseBytes(res, 2 * 1024 * 1024));
     if (buf.length === 0) return null;
     const ext = sniffImageExt(buf) ?? (type.includes("svg") ? "svg" : type.includes("webp") ? "webp" : type.includes("png") ? "png" : null);
     if (!ext) return null;
@@ -246,7 +248,7 @@ async function downloadIcon(url: string, market: SyncMarket, code: string, name:
     const dir = path.join(ASSET_DIR, "stock", market);
     fs.mkdirSync(dir, { recursive: true });
     const filename = iconFilename(market, code, name, `.${ext}`);
-    fs.writeFileSync(path.join(dir, filename), buf);
+    fs.writeFileSync(assetFilePath(dir, filename), buf);
     return `/uploads/asset/stock/${market}/${encodeURIComponent(filename)}`;
   } catch {
     return null;
@@ -277,6 +279,7 @@ async function resolveTradingViewIcon(market: SyncMarket, code: string): Promise
 export { sniffImageExt } from "./imageSecurity";
 
 export async function resolveIcon(market: SyncMarket, code: string, name: string): Promise<string | null> {
+  if (!Object.hasOwn(TRADINGVIEW_EXCHANGES, market) || !validAssetCode(code.trim().toUpperCase()) || name.length > 120) return null;
   const norm = normCode(market, code);
   // 新增股票缺图时优先采用 TradingView 标的页实际使用的官方图标，并保存为本地素材。
   const tradingView = await resolveTradingViewIcon(market, norm);

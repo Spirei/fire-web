@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { getUserFire, setUserFire } from "@/lib/fireStore";
@@ -18,7 +19,7 @@ export async function PUT(request: Request) {
   if (!rateLimit(`fire:${user.id}`, 200, 10 * 60 * 1000)) {
     return NextResponse.json({ error: "保存过于频繁，请稍后再试" }, { status: 429 });
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const fire = body?.fire && typeof body.fire === "object" ? body.fire as Record<string, unknown> : null;
   if (!fire) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
 

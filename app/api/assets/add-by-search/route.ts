@@ -1,8 +1,12 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import { getAuthUser, isAdmin } from "@/lib/auth";
-import { getStockIconMap, upsertAsset } from "@/lib/assets";
+import { assetId, getAssets, getStockIconMap, upsertAsset } from "@/lib/assets";
+import { getDb } from "@/lib/db";
+import { assetFilePath, validAssetCode } from "@/lib/assetSecurity";
+import { readLimitedResponseBytes } from "@/lib/requestBody";
 import { resolveIcon, sanitizeName } from "@/lib/stockSync";
 import { isSafeSvg, sniffImageExt } from "@/lib/imageSecurity";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
@@ -51,14 +55,14 @@ async function downloadRemoteIcon(iconUrl: string, folder: "crypto" | "metal", c
     if (!res?.ok) return null;
     const length = Number(res.headers.get("content-length") ?? 0);
     if (length > MAX_ICON_BYTES) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
+    const buf = Buffer.from(await readLimitedResponseBytes(res, MAX_ICON_BYTES));
     if (buf.length === 0 || buf.length > MAX_ICON_BYTES) return null;
     const ext = sniffImageExt(buf);
     if (!ext || (ext === "svg" && !isSafeSvg(buf))) return null;
     const dir = path.join(process.cwd(), "public", "uploads", "asset", folder);
     fs.mkdirSync(dir, { recursive: true });
     const filename = `${sanitizeName(name)}${code.toUpperCase()}.${ext}`;
-    fs.writeFileSync(path.join(dir, filename), buf);
+    fs.writeFileSync(assetFilePath(dir, filename), buf);
     return `/uploads/asset/${folder}/${encodeURIComponent(filename)}`;
   } catch {
     return null;
@@ -78,7 +82,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
   }
 
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   if (!body) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
   const type = String(body.type ?? "stock").trim();
   const market = String(body.market ?? "").trim().toUpperCase();
@@ -97,6 +101,13 @@ export async function POST(request: Request) {
   if (!code || !name) {
     return NextResponse.json({ error: "缺少股票代码或名称" }, { status: 400 });
   }
+  if (!validAssetCode(code) || name.length > 120) return NextResponse.json({ error: "素材代码或名称格式不正确" }, { status: 400 });
+  const admin = isAdmin(user);
+  if (!admin) {
+    if (type !== "stock") return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
+    const owned = getDb().prepare("SELECT name FROM records WHERE user_id = ? AND market = ? AND upper(code) = ? LIMIT 1").get(user.id, market, code) as { name: string } | undefined;
+    if (!owned) return NextResponse.json({ error: "只能补齐自己持仓或自选证券的图标" }, { status: 403 });
+  }
 
   try {
     if (type === "stock" && onlyIfMissing) {
@@ -113,6 +124,20 @@ export async function POST(request: Request) {
       ]);
     } else if (iconUrl) {
       url = await downloadRemoteIcon(iconUrl, type as "crypto" | "metal", code, name).catch(() => null);
+    }
+    if (!admin) {
+      const id = assetId("stock", market, code);
+      getDb().transaction(() => {
+        const existing = getDb().prepare("SELECT id FROM assets WHERE id = ?").get(id);
+        if (existing) {
+          if (url) getDb().prepare("UPDATE assets SET url = ?, updated_at = ? WHERE id = ? AND (url = '' OR url IS NULL)").run(url, new Date().toISOString(), id);
+        } else {
+          const owned = getDb().prepare("SELECT name FROM records WHERE user_id = ? AND market = ? AND upper(code) = ? LIMIT 1").get(user.id, market, code) as { name: string } | undefined;
+          if (!owned) throw new Error("证券归属已变更");
+          upsertAsset({ type: "stock", market, code, name: owned.name, url: url || "", source: "auto" });
+        }
+      })();
+      return NextResponse.json({ asset: getAssets("stock").find(item => item.id === id) });
     }
     const asset = upsertAsset({
       type: type as "stock" | "crypto" | "metal",

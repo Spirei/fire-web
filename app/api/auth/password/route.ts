@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { deleteOtherSessions, findUserById, getAuthUser, getCookie, LEGACY_SESSION_COOKIE, SESSION_COOKIE, updatePassword } from "@/lib/auth";
 import { validatePassword, verifyPassword } from "@/lib/password";
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "尝试过于频繁，请稍后再试" }, { status: 429 });
   }
 
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request, 16 * 1024).catch(() => null);
   if (!body) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
 
   const oldPassword = String(body.oldPassword ?? "");

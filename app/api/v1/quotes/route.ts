@@ -1,3 +1,4 @@
+import { readJsonBody } from "@/lib/requestBody";
 import { fetchQuotes } from "@/lib/quotes";
 import { fillEtfMarketCaps } from "@/lib/etfMarketCap";
 import { parseMarket } from "@/lib/store";
@@ -10,7 +11,7 @@ export async function POST(request: Request) {
   if (!rateLimit(`quotes:${clientIp(request)}`, 120, 60 * 1000) || !rateLimitGlobal("quotes", 600, 60 * 1000)) {
     return fail(42901, "请求过于频繁，请稍后再试", 429);
   }
-  const body = await request.json().catch(() => null);
+  const body = await readJsonBody(request).catch(() => null);
   const rawItems = Array.isArray(body?.items) ? body.items : [];
   if (rawItems.length === 0) return ok({ quotes: {} });
   if (rawItems.length > 100) return fail(40001, "单次最多查询 100 只", 400);

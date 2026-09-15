@@ -1,3 +1,4 @@
+import { getAuthUser, isAdmin } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
@@ -25,19 +26,23 @@ export async function GET(
   if (!rel || rel.includes("..") || rel.includes("\0")) {
     return new NextResponse("Bad Request", { status: 400 });
   }
+  if (segs[0] === "reports") { const user = getAuthUser(request); if (!user || !isAdmin(user)) return new NextResponse("Forbidden", { status: 403 }); }
   const normalized = path.normalize(rel);
   const abs = path.join(ROOT, normalized);
   const defaultAbs = path.join(DEFAULT_ROOT, normalized);
-  if (!abs.startsWith(ROOT) || !defaultAbs.startsWith(DEFAULT_ROOT)) {
+  if (!abs.startsWith(ROOT + path.sep) || !defaultAbs.startsWith(DEFAULT_ROOT + path.sep)) {
     return new NextResponse("Bad Request", { status: 400 });
   }
   try {
     let source = abs;
     let data: Buffer;
     try {
+      if (!fs.realpathSync(source).startsWith(fs.realpathSync(ROOT) + path.sep)) throw new Error("Invalid path");
+      if (segs[0] === "reports" || !fs.realpathSync(source).startsWith(fs.realpathSync(DEFAULT_ROOT) + path.sep)) throw new Error("Invalid path");
       data = fs.readFileSync(source);
     } catch {
       source = defaultAbs;
+      if (segs[0] === "reports" || !fs.realpathSync(source).startsWith(fs.realpathSync(DEFAULT_ROOT) + path.sep)) throw new Error("Invalid path");
       data = fs.readFileSync(source);
     }
     const ext = (path.extname(source) || "").slice(1).toLowerCase();
@@ -45,7 +50,9 @@ export async function GET(
       headers: {
         "Content-Type": MIME[ext] || "application/octet-stream",
         // 头像等上传可能同名重传，不能 immutable；浏览器每次重新校验，避免缓存旧图
-        "Cache-Control": "public, max-age=0, must-revalidate"
+        "Cache-Control": segs[0] === "reports" ? "private, no-store" : "public, max-age=0, must-revalidate",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'"
       }
     });
   } catch {
