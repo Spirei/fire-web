@@ -26,6 +26,10 @@
 
 > 以后素材库新增卡片，同样在本地跑一次抓取脚本后重传这个目录即可，不需要重新构建镜像。
 
+> 四色门侧栏的 4 个素材（`public/uploads/feature/four-door/{window,dial,pointer,cursor-hand}.png`）**已随镜像提供**，
+> 首次启动由容器启动脚本自动播种到 uploads 卷，不需要手动传；如果侧栏入口"闪一下就消失"，说明这四个文件缺失
+> （老镜像 + 手动挂载的 uploads 目录里没有它们），重新 `up -d --force-recreate` 让 entrypoint 播种即可。
+
 ### 1c. 挂载目录属主必须是 1000:1000（重要）
 容器自 v0.1.31 起以**非 root** 运行（容器内的 `node` 用户 = **uid 1000 / gid 1000**），
 而 `DATA_DIR`、`UPLOADS_DIR` 是宿主机 bind mount —— 挂载会覆盖镜像里的属主，最终以**宿主机目录权限**为准。

@@ -34,6 +34,15 @@ public/uploads/cards/
 # Deployment media is supplied by deployers; never redistribute it.
 /public/uploads/*
 !/public/uploads/.gitkeep
+# 例外：四色门侧栏运行必需的 4 个素材（窗户 / 转盘 / 指针 / 手型光标）。
+# 缺任意一个，侧栏入口会先闪烁再整块消失；体积极小，已获准随公开仓库分发。
+!/public/uploads/feature/
+!/public/uploads/feature/four-door/
+/public/uploads/feature/four-door/*
+!/public/uploads/feature/four-door/window.png
+!/public/uploads/feature/four-door/dial.png
+!/public/uploads/feature/four-door/pointer.png
+!/public/uploads/feature/four-door/cursor-hand.png
 /public/mockups/
 /public/fire/
 /public/*preview*.html

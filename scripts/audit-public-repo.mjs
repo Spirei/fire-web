@@ -29,10 +29,21 @@ const deploymentFiles = new Set([
   ".env.example"
 ]);
 
+// 四色门侧栏运行必需的 4 个素材：体积极小、缺任意一个侧栏入口会先闪再消失，
+// 已获准随公开仓库分发（其余 public/uploads、二进制素材仍然禁止入库）。
+const publicMediaAllowlist = new Set([
+  "public/uploads/feature/four-door/window.png",
+  "public/uploads/feature/four-door/dial.png",
+  "public/uploads/feature/four-door/pointer.png",
+  "public/uploads/feature/four-door/cursor-hand.png"
+]);
+
 const findings = [];
 for (const file of tracked) {
-  if (/^public\/(?:uploads\/(?!\.gitkeep$)|fonts\/|images\/|share\/|icons\/|mockups\/)/.test(file)) findings.push(`${file}: 部署素材不得进入公开仓库`);
-  if (/\.(?:png|jpe?g|gif|webp|avif|ico|mp3|wav|ogg|woff2?|ttf)$/i.test(file)) findings.push(`${file}: 二进制素材不得进入公开仓库`);
+  if (!publicMediaAllowlist.has(file)) {
+    if (/^public\/(?:uploads\/(?!\.gitkeep$)|fonts\/|images\/|share\/|icons\/|mockups\/)/.test(file)) findings.push(`${file}: 部署素材不得进入公开仓库`);
+    if (/\.(?:png|jpe?g|gif|webp|avif|ico|mp3|wav|ogg|woff2?|ttf)$/i.test(file)) findings.push(`${file}: 二进制素材不得进入公开仓库`);
+  }
   let buffer;
   try { buffer = readFileSync(file); }
   catch (error) {

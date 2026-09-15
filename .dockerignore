@@ -55,6 +55,12 @@ public/settings-mockup-standard.html
 
 public/uploads/**
 !public/uploads/.gitkeep
+# 例外：四色门侧栏运行必需的 4 个素材（窗户 / 转盘 / 指针 / 手型光标）。
+# 随镜像进入 /app/resource-default，由 entrypoint 播种到 uploads 卷；其余上传素材仍由部署者提供。
+!public/uploads/feature/four-door/window.png
+!public/uploads/feature/four-door/dial.png
+!public/uploads/feature/four-door/pointer.png
+!public/uploads/feature/four-door/cursor-hand.png
 public/*preview*.html
 
 public/fonts
