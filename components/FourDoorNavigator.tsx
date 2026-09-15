@@ -29,6 +29,8 @@ export default function FourDoorNavigator({
   const currentIndex = useRef(initialIndex);
   const audioContext = useRef<AudioContext | null>(null);
   const navigationTimer = useRef<number | null>(null);
+  const pointerTimer = useRef<number | null>(null);
+  const turningTimer = useRef<number | null>(null);
   const [rotation, setRotation] = useState(-initialIndex * 90);
   const [turning, setTurning] = useState(false);
   const [randomizing, setRandomizing] = useState(false);
@@ -40,15 +42,17 @@ export default function FourDoorNavigator({
     if (context && context.state !== "closed") void context.close().catch(() => undefined);
   }
 
-  function playTurn(steps: number) {
+  function playTurn(steps: number, durationMs = 520) {
     if (!soundOn) return;
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
     const context = audioContext.current ?? new AudioContextClass();
     audioContext.current = context;
-    const ticks = Math.abs(steps) === 2 ? 6 : 4;
+    const ticks = durationMs > 700 ? 9 : Math.abs(steps) === 2 ? 6 : 4;
     const start = context.currentTime;
-    const lockAt = start + 0.13 + ticks * 0.095;
+    const firstTickAt = start + 0.08;
+    const tickSpacing = durationMs > 700 ? (durationMs / 1000 - 0.3) / (ticks - 1) : 0.095;
+    const lockAt = start + durationMs / 1000 - 0.1;
     const master = context.createGain();
     const compressor = context.createDynamicsCompressor();
     master.gain.value = 0.88;
@@ -60,7 +64,7 @@ export default function FourDoorNavigator({
     master.connect(compressor).connect(context.destination);
 
     for (let index = 0; index < ticks; index += 1) {
-      const at = start + 0.13 + index * 0.095;
+      const at = firstTickAt + index * tickSpacing;
       const oscillator = context.createOscillator();
       const gain = context.createGain();
       const filter = context.createBiquadFilter();
@@ -119,7 +123,11 @@ export default function FourDoorNavigator({
     setRotation((value) => value - step * 90);
     setTurning(false);
     window.requestAnimationFrame(() => setTurning(true));
-    window.setTimeout(() => setTurning(false), 520);
+    if (turningTimer.current !== null) window.clearTimeout(turningTimer.current);
+    turningTimer.current = window.setTimeout(() => {
+      turningTimer.current = null;
+      setTurning(false);
+    }, 520);
     if (navigate) {
       playTurn(step);
       onSelect(DOORS[index].key);
@@ -137,15 +145,23 @@ export default function FourDoorNavigator({
     setRandomizing(true);
     setRotation((value) => value - (720 + quarterSteps * 90));
     setTurning(false);
-    window.requestAnimationFrame(() => setTurning(true));
-    window.setTimeout(() => setTurning(false), 920);
-    playTurn(quarterSteps === 2 ? 2 : 1);
+    if (pointerTimer.current !== null) window.clearTimeout(pointerTimer.current);
+    if (turningTimer.current !== null) window.clearTimeout(turningTimer.current);
+    pointerTimer.current = window.setTimeout(() => {
+      pointerTimer.current = null;
+      setTurning(true);
+    }, 700);
+    turningTimer.current = window.setTimeout(() => {
+      turningTimer.current = null;
+      setTurning(false);
+    }, 1130);
+    playTurn(quarterSteps === 2 ? 2 : 1, 1050);
     if (navigationTimer.current !== null) window.clearTimeout(navigationTimer.current);
     navigationTimer.current = window.setTimeout(() => {
       navigationTimer.current = null;
       setRandomizing(false);
       onSelect(destination);
-    }, 940);
+    }, 1140);
   }
 
   useEffect(() => {
@@ -158,6 +174,8 @@ export default function FourDoorNavigator({
   useEffect(() => () => {
     stopAllSound();
     if (navigationTimer.current !== null) window.clearTimeout(navigationTimer.current);
+    if (pointerTimer.current !== null) window.clearTimeout(pointerTimer.current);
+    if (turningTimer.current !== null) window.clearTimeout(turningTimer.current);
   }, []);
 
   return (

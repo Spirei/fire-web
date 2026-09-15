@@ -765,7 +765,7 @@
   transition:transform 820ms cubic-bezier(.16,1,.3,1),filter 180ms ease;
   will-change:transform;
 }
-.four-door-art.is-randomizing .four-door-wheel { transition-duration:900ms; }
+.four-door-art.is-randomizing .four-door-wheel { transition-duration:1050ms; transition-timing-function:cubic-bezier(.15,.72,.2,1); }
 .four-door-wheel:hover { filter:brightness(1.045); }
 .four-door-wheel>img { display:block; width:100%; height:100%; pointer-events:none; user-select:none; }
 .four-door-sector { position:absolute; inset:0; border:0; background:transparent; cursor:pointer; }
