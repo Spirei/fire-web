@@ -3149,7 +3149,8 @@ html.dark .watch-import-target {
   .app-shell-ticker { display:none; }
   .app-shell-main { padding-top:12px!important; padding-bottom:28px!important; }
   .app-shell-main:has(.assistant-page) { padding-top:0!important; padding-bottom:0!important; }
-  .assistant-workspace { height:calc(100dvh - 112px)!important; border-radius:14px; }
+  /* 助手页高度不再写死：见文末 @media (max-width:1023px) 的 flex 撑满规则（含手机上 60px 顶栏的口径）。 */
+  .assistant-workspace { border-radius:14px; }
   .app-shell-footer { padding:22px 16px calc(22px + env(safe-area-inset-bottom))!important; }
   .app-shell-footer-detail { display:none; }
   .records-app { display:block; width:100%; padding-right:12px; padding-left:12px; }
@@ -5468,4 +5469,32 @@ button.PhotoView-Slider__toolbarIcon {
 .sv-win-root .sw-window .settings-model-section > .settings-section-top + .model-service-stack {
   margin-top: 10px;
   padding: 0;
+}
+
+/* ---------- 智能助手 · 窄屏（手机 / 平板，<1024px） ---------- */
+/*
+ * 1) 助手工作区填满「顶栏 + 移动端标签栏」之外的剩余高度。此前写死 calc(100dvh - 112px)，
+ *    而手机端顶部实际占用为 60（顶栏）+ 约 56（sticky 标签栏）+ 14（下边距）≈ 130px，
+ *    面板底部连同输入框会被推出可视区；平板（标签栏同样存在、顶栏 72）偏差更大。
+ *    这里改用 flex 撑满，顶栏高度 / 标签栏高度变化都不再需要同步改常量。
+ * 2) 轮次短线轨道依赖悬停预览，触屏上没有 hover、还会压住正文，窄屏隐藏。
+ */
+@media (max-width: 1023px) {
+  .app-shell-main:has(.assistant-page) { display:flex; flex-direction:column; min-height:calc(100dvh - 72px); }
+  .records-app:has(.assistant-page) { display:flex; flex-direction:column; flex:1; align-items:stretch; min-height:0; }
+  .records-app:has(.assistant-page) > .records-content { display:flex; flex-direction:column; flex:1; min-height:0; }
+  .records-app:has(.assistant-page) .mobile-tab-nav { flex:none; }
+  .records-app:has(.assistant-page) .assistant-page { display:flex; flex:1; min-height:0; }
+  .records-app:has(.assistant-page) .assistant-page-layer { display:flex; flex:1; min-height:0; width:100%; }
+  .records-app:has(.assistant-page) .assistant-workspace { flex:1; height:auto!important; min-height:0; }
+}
+@media (max-width: 767px) {
+  .harness-turn-nav { display:none; }
+}
+/* 轮次很多时只保留最近 24 轮：轨道是垂直居中的，条数过多会同时顶出上下边界，
+   最新一轮（最下面那条）会被裁掉而看不见（用 CSS 裁剪整条轨道又会切掉悬停预览，所以只限条数）。 */
+.harness-turn-nav button:nth-last-child(n+25) { display:none; }
+@media (max-width: 640px) {
+  /* 手机上顶栏只有 60px（见「手机壳层」段落），可用高度相应再多 12px。 */
+  .app-shell-main:has(.assistant-page) { min-height:calc(100dvh - 60px); }
 }

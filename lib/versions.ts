@@ -3590,6 +3590,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "修复局域网 HTTP 下删除对话报 crypto.randomUUID 不存在",
     desc: "弹窗模块（appDialog）此前用 crypto.randomUUID 生成请求 id，而这个 API 只在安全上下文（https / localhost）提供：通过局域网 HTTP 地址访问时，助手侧栏「删除会话」等操作会直接抛 TypeError: crypto.randomUUID is not a function（此前截图粘贴也踩过同一个坑）。现在新增 lib/randomId.ts 统一生成客户端随机 id —— 使用任何上下文都可用的 crypto.getRandomValues，无 crypto 时退回 Math.random，输出恒为 24 位小写十六进制，因此 ac-<24hex> 这类服务端格式校验继续成立；appDialog 与助手的会话 id 都改用它。回归用例除模拟非安全上下文（randomUUID 缺失、getRandomValues 抛错）外，还会扫描全部「use client」文件禁止再出现 crypto.randomUUID(，避免同类问题复发。",
     kind: "fix"
+  }, {
+    title: "智能助手窄屏适配打磨",
+    desc: "手机与平板（<1024px）下助手工作区高度此前写死 calc(100dvh - 112px)，而窄屏顶部真实占用是顶栏 60px（手机）/ 72px（平板）+ sticky 移动端标签栏约 56px + 下边距 14px，面板底部连同输入框会被推出可视区，平板偏差更大。现在改为 flex 撑满「顶栏 + 标签栏」之外的剩余高度（app-shell-main → records-app → records-content → assistant-page → assistant-workspace 全链路，覆盖 :has 选择器并在手机上按 60px 顶栏口径补 min-height），此后顶栏或标签栏高度调整都不需要再同步改常量。同时：触屏没有 hover，轮次短线轨道（仅悬停出预览、还会压住正文）在 <768px 隐藏；对话超过 24 轮时轨道只保留最近 24 条，避免垂直居中的轨道把最新一轮顶出可视区（此前用 overflow 裁剪整条轨道会切掉悬停预览，因此改成按条数显示）。",
+    kind: "fix"
   }]
 };
 
