@@ -3487,7 +3487,7 @@ export const V0_1_30_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_31_ENTRY: VersionEntry = {
   ...V0_1_30_ENTRY,
   version: "v0.1.31",
   date: "2026-09-15",
@@ -3520,6 +3520,19 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   }, {
     title: "用户消息胶囊统一为发送按钮绿",
     desc: "智能助手对话里的用户消息气泡改用与发送按钮完全相同的实心绿（#4caf58），描边同色并保留同色轻投影，文字改为白色、与按钮上的白色箭头呼应；编辑消息时的取消 / 保存图标同步改为白色系。工作台与悬浮面板、深浅色模式表现一致，并显式覆盖助手自带主题里那两条把用户气泡钉成灰底浅字的强制规则（此前只有投影生效、底色不变），助手侧消息气泡配色不变。",
+    kind: "fix"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_31_ENTRY,
+  version: "v0.1.32",
+  date: "2026-09-16",
+  summary: "统一智能助手的分隔线与消息配色，与资产分析、发送按钮保持一致。",
+  software: V0_1_31_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.32" } : item),
+  changes: [{
+    title: "智能助手分隔线与资产分析同色",
+    desc: "智能助手工作台里侧栏与对话区之间的竖线此前由两层叠成：侧栏自带的 1px 边框 + 可拖动分隔条，重叠处比资产分析那根更亮、还多出半像素宽度。现在 768px 以上把分隔线完全交给分隔条绘制，浅色 rgba(122,132,146,.24)、深色 rgba(255,255,255,.15)，与资产分析的分隔条取值完全同源，悬停变宽变蓝的交互保留；手机端侧栏是覆盖式抽屉，仍保留自身边框。",
     kind: "fix"
   }]
 };
