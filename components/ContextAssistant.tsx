@@ -202,6 +202,13 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [renameTarget,setRenameTarget]=useState<StoredAssistantConversation|null>(null);
   const [renameDraft,setRenameDraft]=useState("");
   const [messages, setMessages] = useState<Message[]>(() => (initialConversation?.messages || []) as Message[]);
+  // 打开对话或新增消息后，把轮次高亮落在最新一轮（列表默认停在底部），不再固定停在第一轮。
+  useEffect(() => {
+    const lastUserTurn = messages.reduce((acc, message, index) => (message.role === "user" ? index : acc), -1);
+    if (lastUserTurn >= 0) setActiveTurn(lastUserTurn);
+    // 只在切换对话 / 新增消息时同步；流式输出与手动滚动不重置高亮。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, messages.length]);
   const historyReady = useRef(false);
   const saveQueue = useRef(Promise.resolve());
   const lastSavedHistory = useRef(new Map(initialHistory.conversations.map((item) => [item.id, JSON.stringify(item.messages)])));
