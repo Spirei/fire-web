@@ -963,9 +963,9 @@
 .harness-turn-nav button:hover::after { width:26px;opacity:.72; }.harness-turn-nav button.active::after { width:32px;opacity:1;background:var(--assistant-label); }
 .harness-turn-nav button span { position:absolute;right:48px;top:50%;width:360px;max-width:45vw;padding:12px 14px;border:.5px solid var(--assistant-line);border-radius:14px;background:var(--assistant-raised);box-shadow:0 14px 38px rgba(0,0,0,.2);color:var(--assistant-label);font-size:13px;line-height:20px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;pointer-events:none;transform:translate(6px,-50%);transition:opacity 130ms ease,transform 130ms ease; }
 .harness-turn-nav button:hover span { opacity:1;transform:translate(0,-50%); }
-/* 轮次短线参考主流大模型（ChatGPT / Claude）的对话轨道：右对齐短横线、当前轮更亮略长、悬停出预览。
-   这里再给每根不同的基准长度（8 根一组的平缓旋律），并以很慢的节奏轻微伸缩、相位沿轨道推移，
-   像音量条轻轻呼吸；不再做整体上下弹跳，幅度也压到最小以免抢注意力。列表由旧到新，最新一条在最下面。 */
+/* 轮次短线按主流大模型（ChatGPT / Claude）的对话轨道：右对齐短横线、每根长度不同、
+   当前轮更亮略长、悬停加长并出预览，静止时完全不动，只在悬停 / 切换时走 150ms 过渡。
+   列表由旧到新，最新一条在最下面。 */
 .harness-turn-nav button:nth-child(8n+1){--bar-len:12px}
 .harness-turn-nav button:nth-child(8n+2){--bar-len:16px}
 .harness-turn-nav button:nth-child(8n+3){--bar-len:14px}
@@ -974,17 +974,9 @@
 .harness-turn-nav button:nth-child(8n+6){--bar-len:20px}
 .harness-turn-nav button:nth-child(8n+7){--bar-len:13px}
 .harness-turn-nav button:nth-child(8n+8){--bar-len:17px}
-@keyframes harness-turn-breathe-a { 0%,100% { transform:scaleX(.87); } 50% { transform:scaleX(1); } }
-@keyframes harness-turn-breathe-b { 0%,100% { transform:scaleX(1); } 50% { transform:scaleX(.85); } }
-.harness-turn-nav button::after { width:var(--bar-len,14px); transform-origin:right center; animation:harness-turn-breathe-a 3.2s cubic-bezier(.45,.05,.55,.95) infinite; }
-.harness-turn-nav button:nth-child(2n)::after { animation-name:harness-turn-breathe-b; }
-.harness-turn-nav button:nth-child(4n+1)::after { animation-delay:-.4s; }
-.harness-turn-nav button:nth-child(4n+2)::after { animation-delay:-.8s; }
-.harness-turn-nav button:nth-child(4n+3)::after { animation-delay:-1.2s; }
-.harness-turn-nav button:nth-child(4n+4)::after { animation-delay:-1.6s; }
+.harness-turn-nav button::after { width:var(--bar-len,14px); }
 .harness-turn-nav button:hover::after { width:calc(var(--bar-len,14px) + 8px); }
 .harness-turn-nav button.active::after { width:calc(var(--bar-len,14px) + 4px); }
-@media (prefers-reduced-motion:reduce) { .harness-turn-nav button::after { animation:none; } }
 
 .harness-settings-overlay { position:fixed;inset:0;z-index:10030;display:flex;align-items:center;justify-content:center;padding:24px; }
 .harness-settings-mask { position:absolute;inset:0;width:100%;height:100%;background:rgba(12,14,18,.54);animation:harness-fade 160ms ease both; }
