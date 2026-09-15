@@ -765,6 +765,7 @@
   transition:transform 820ms cubic-bezier(.16,1,.3,1),filter 180ms ease;
   will-change:transform;
 }
+.four-door-art.is-randomizing .four-door-wheel { transition-duration:900ms; }
 .four-door-wheel:hover { filter:brightness(1.045); }
 .four-door-wheel>img { display:block; width:100%; height:100%; pointer-events:none; user-select:none; }
 .four-door-sector { position:absolute; inset:0; border:0; background:transparent; cursor:pointer; }
@@ -776,9 +777,12 @@
 .four-door-pointer-arch { z-index:1; clip-path:polygon(17% 0,78% 0,78% 60%,61% 60%,62% 28%,57% 14%,48% 9%,39% 15%,34% 31%,34% 55%,17% 55%); }
 .four-door-pointer-tip { z-index:4; clip-path:polygon(16% 45%,84% 45%,79% 72%,58% 100%,42% 100%,20% 72%); }
 .four-door-art.is-turning .four-door-pointer { animation:four-door-pointer-tick 420ms cubic-bezier(.2,.75,.25,1); }
-.four-door-advance { position:absolute; z-index:6; left:91px; top:233px; width:40px; height:38px; border:0; border-radius:50%; background:transparent; cursor:pointer; }
+.four-door-advance { position:absolute; z-index:6; left:91px; top:232px; width:40px; height:68px; border:0; border-radius:20px; background:transparent; cursor:pointer; }
+.four-door-advance:disabled { cursor:wait; }
 .four-door-sector:focus-visible,.four-door-advance:focus-visible,.four-door-sound:focus-visible { outline:2px solid #6d97bc; outline-offset:2px; }
-.four-door-hand { position:absolute; z-index:5; left:100px; top:270px; width:20px; height:auto; pointer-events:none; user-select:none; filter:drop-shadow(0 2px 3px rgba(0,0,0,.45)); }
+.four-door-hand { position:absolute; z-index:5; left:100px; top:270px; width:20px; height:auto; pointer-events:none; user-select:none; filter:drop-shadow(0 2px 3px rgba(0,0,0,.45)); transition:transform 180ms ease,filter 180ms ease; transform-origin:50% 15%; }
+.four-door-advance:hover+.four-door-hand { transform:translateY(-1px) scale(1.04); filter:drop-shadow(0 3px 4px rgba(0,0,0,.52)); }
+.four-door-art.is-randomizing .four-door-hand { transform:translateY(2px) scale(.96); }
 .four-door-sound {
   position:absolute;
   z-index:8;

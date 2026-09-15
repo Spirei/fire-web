@@ -31,6 +31,7 @@ export default function FourDoorNavigator({
   const navigationTimer = useRef<number | null>(null);
   const [rotation, setRotation] = useState(-initialIndex * 90);
   const [turning, setTurning] = useState(false);
+  const [randomizing, setRandomizing] = useState(false);
   const [soundOn, setSoundOn] = usePersistedState("fire:four-door-sound", true);
 
   function stopAllSound() {
@@ -111,6 +112,7 @@ export default function FourDoorNavigator({
   }
 
   function moveTo(index: number, navigate: boolean) {
+    if (randomizing) return;
     const step = shortestStep(currentIndex.current, index);
     if (step === 0) return;
     currentIndex.current = index;
@@ -125,22 +127,25 @@ export default function FourDoorNavigator({
   }
 
   function spinToRandomWorkspace() {
+    if (randomizing) return;
     const candidates = randomKeys.filter((key) => key !== activeKey);
     if (!candidates.length) return;
     const random = crypto.getRandomValues(new Uint32Array(2));
     const destination = candidates[random[0] % candidates.length];
     const quarterSteps = (random[1] % 3) + 1;
     currentIndex.current = (currentIndex.current + quarterSteps) % DOORS.length;
+    setRandomizing(true);
     setRotation((value) => value - (720 + quarterSteps * 90));
     setTurning(false);
     window.requestAnimationFrame(() => setTurning(true));
-    window.setTimeout(() => setTurning(false), 820);
+    window.setTimeout(() => setTurning(false), 920);
     playTurn(quarterSteps === 2 ? 2 : 1);
     if (navigationTimer.current !== null) window.clearTimeout(navigationTimer.current);
     navigationTimer.current = window.setTimeout(() => {
       navigationTimer.current = null;
+      setRandomizing(false);
       onSelect(destination);
-    }, 650);
+    }, 940);
   }
 
   useEffect(() => {
@@ -174,15 +179,15 @@ export default function FourDoorNavigator({
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6.8 8.5H3v7h3.8L11 19Z" /><path d="m15.5 9.5 5 5m0-5-5 5" /></svg>
         )}
       </button>
-      <div className={`four-door-art ${turning ? "is-turning" : ""}`}>
+      <div className={`four-door-art ${turning ? "is-turning" : ""} ${randomizing ? "is-randomizing" : ""}`} aria-busy={randomizing}>
         <img className="four-door-window" src="/uploads/feature/four-door/window.png" alt="霍尔的移动城堡窗户" />
         <div className="four-door-wheel" style={{ transform: `rotate(${rotation}deg)` }} role="group" aria-label="四色门工作区入口">
           <img src="/uploads/feature/four-door/dial.png" alt="" />
-          {DOORS.map((door, index) => <button key={door.key} type="button" className={`four-door-sector ${door.color}`} aria-label={`${door.label}入口`} onClick={() => moveTo(index, true)} />)}
+          {DOORS.map((door, index) => <button key={door.key} type="button" disabled={randomizing} className={`four-door-sector ${door.color}`} aria-label={`${door.label}入口`} onClick={() => moveTo(index, true)} />)}
         </div>
         <img className="four-door-pointer four-door-pointer-arch" src="/uploads/feature/four-door/pointer.png" alt="" />
         <img className="four-door-pointer four-door-pointer-tip" src="/uploads/feature/four-door/pointer.png" alt="固定指针" />
-        <button type="button" className="four-door-advance" aria-label="随机前往工作区" title="随机前往工作区" onClick={spinToRandomWorkspace} />
+        <button type="button" disabled={randomizing || randomKeys.filter((key) => key !== activeKey).length === 0} className="four-door-advance" aria-label={randomizing ? "正在随机选择工作区" : "随机前往工作区"} title={randomizing ? "正在选择…" : "随机前往工作区"} onClick={spinToRandomWorkspace} />
         <img className="four-door-hand" src="/uploads/feature/four-door/cursor-hand.png" alt="" aria-hidden="true" />
       </div>
     </div>
