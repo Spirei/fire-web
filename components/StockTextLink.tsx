@@ -242,7 +242,11 @@ export default function StockTextLink({
         onPointerLeave={scheduleHide}
         onFocus={() => scheduleShow("mouse")}
         onBlur={scheduleHide}
-        className="stock-mention inline cursor-pointer whitespace-nowrap bg-transparent p-0 font-medium"
+        className={`stock-mention inline cursor-pointer whitespace-nowrap bg-transparent p-0 font-semibold underline decoration-dashed decoration-1 underline-offset-[5px] ${
+          quote && Number.isFinite(quote.changePct)
+            ? quote.changePct >= 0 ? "decoration-up" : "decoration-down"
+            : "decoration-brand-deep"
+        }`}
       >
         {value}
       </button>
