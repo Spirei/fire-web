@@ -107,7 +107,7 @@ export default async function SlugLayout({
       {(tab.key === "celebs" || tab.key === "trading") &&
         Object.values(celebAvatars)
           .filter(Boolean)
-          .map((u) => <link key={u} rel="preload" as="image" href={u} />)}
+          .map((u) => <link key={u} rel="preload" as="image" href={u} fetchPriority="high" />)}
       {[...new Set(Object.values(initialStockIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
       {[...new Set(Object.values(initialMarketIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
       {[...new Set(Object.values(initialNavIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
