@@ -3586,6 +3586,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "修复上传素材在运行期 404（模型服务图标上传不生效）",
     desc: "安全加固时给 /uploads/[...path] 兜底路由加错了判断：非 reports 的路径被要求必须位于镜像内置素材目录（resource-default）之内，而用户新上传的素材（模型服务图标、头像、卡面等）都写在 uploads 卷里，于是静态命中不到时一律被判非法、返回 404 —— 表现就是上传提示成功、图标却始终是破图。现在兜底路由只在「回退到镜像内置素材」那一支校验 resource-default 归属，主分支只保留「必须仍在 uploads 卷内」的穿越防护，reports 仍不参与回退。附带回归用例：上传 PNG 素材后经该路由取回必须是 200 + image/png，缺失文件仍为 404。线上更新到本版后，此前上传成功却显示破图的图标会直接恢复（文件已经在 uploads 卷里），无需重新上传。",
     kind: "fix"
+  }, {
+    title: "修复局域网 HTTP 下删除对话报 crypto.randomUUID 不存在",
+    desc: "弹窗模块（appDialog）此前用 crypto.randomUUID 生成请求 id，而这个 API 只在安全上下文（https / localhost）提供：通过局域网 HTTP 地址访问时，助手侧栏「删除会话」等操作会直接抛 TypeError: crypto.randomUUID is not a function（此前截图粘贴也踩过同一个坑）。现在新增 lib/randomId.ts 统一生成客户端随机 id —— 使用任何上下文都可用的 crypto.getRandomValues，无 crypto 时退回 Math.random，输出恒为 24 位小写十六进制，因此 ac-<24hex> 这类服务端格式校验继续成立；appDialog 与助手的会话 id 都改用它。回归用例除模拟非安全上下文（randomUUID 缺失、getRandomValues 抛错）外，还会扫描全部「use client」文件禁止再出现 crypto.randomUUID(，避免同类问题复发。",
+    kind: "fix"
   }]
 };
 

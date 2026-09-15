@@ -341,6 +341,43 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       .map((part) => (part.type === 'stock' ? `$${part.name}(${part.code})$` : part.value)).join('');
     assert.equal(rendered, '$长和(00001)$ 今天涨了');
   });
+  await test('client code never calls crypto.randomUUID (insecure LAN HTTP breaks it)', () => {
+    const { clientRandomId } = require(path.join(root, 'lib/randomId.ts'));
+    assert.match(clientRandomId('ac-'), /^ac-[0-9a-f]{24}$/);
+
+    const clientFiles = [];
+    for (const dir of ['components', 'lib']) {
+      for (const name of fs.readdirSync(path.join(root, dir), { recursive: true })) {
+        const rel = path.join(dir, String(name));
+        if (!/\.(ts|tsx)$/.test(rel)) continue;
+        const text = fs.readFileSync(path.join(root, rel), 'utf8');
+        if (/^\s*"use client"/.test(text)) clientFiles.push([rel, text]);
+      }
+    }
+    assert(clientFiles.length > 20);
+    for (const [rel, text] of clientFiles) assert(!text.includes('crypto.randomUUID('), `${rel} 不能调用 crypto.randomUUID`);
+
+    // 模拟局域网 HTTP（非安全上下文）：randomUUID 不存在、getRandomValues 抛错，都必须仍能拿到 id
+    const dialog = require(path.join(root, 'lib/appDialog.ts'));
+    const cryptoGlobal = globalThis.crypto;
+    const originalRandomUUID = cryptoGlobal.randomUUID;
+    const originalGetRandomValues = cryptoGlobal.getRandomValues;
+    const events = [];
+    const originalWindow = globalThis.window;
+    try {
+      Object.defineProperty(cryptoGlobal, 'randomUUID', { value: undefined, configurable: true, writable: true });
+      globalThis.window = { dispatchEvent: (event) => { events.push(event.detail); return true; } };
+      void dialog.appConfirm('删除“这条测试对话”？删除后无法恢复。', { title: '删除对话', danger: true });
+      assert.equal(events.length, 1);
+      assert.match(events[0].id, /^dlg-[0-9a-f]{24}$/);
+      Object.defineProperty(cryptoGlobal, 'getRandomValues', { value: () => { throw new Error('insecure context'); }, configurable: true, writable: true });
+      assert.match(clientRandomId(), /^[0-9a-f]{24}$/);
+    } finally {
+      Object.defineProperty(cryptoGlobal, 'randomUUID', { value: originalRandomUUID, configurable: true, writable: true });
+      Object.defineProperty(cryptoGlobal, 'getRandomValues', { value: originalGetRandomValues, configurable: true, writable: true });
+      if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow;
+    }
+  });
   await test('runtime-uploaded assets are served back (regression: model service icon 404)', async () => {
     const upload = require(path.join(root, 'app/api/upload/route.ts'));
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR9sAAAAASUVORK5CYII=', 'base64');

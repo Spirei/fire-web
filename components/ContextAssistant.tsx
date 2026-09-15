@@ -7,6 +7,7 @@ import type { AssistantHistoryState, StoredAssistantConversation, StoredAssistan
 import AssistantTraceView, { type AssistantTrace } from "@/components/AssistantTraceView";
 import AssistantHarnessSettings, { type AssistantAppearance, type AssistantDensity } from "@/components/AssistantHarnessSettings";
 import { usePersistedState } from "@/lib/usePersistedState";
+import { clientRandomId } from "@/lib/randomId";
 import { applySiteTheme, THEME_CHANGE_EVENT, type SiteTheme } from "@/lib/theme";
 import { appConfirm } from "@/lib/appDialog";
 import { showToast } from "@/lib/toast";
@@ -125,8 +126,7 @@ function historyKey(userId: string) {
 }
 
 function newConversationId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(12));
-  return `ac-${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
+  return clientRandomId("ac-");
 }
 
 function conversationTime(value: string) {
