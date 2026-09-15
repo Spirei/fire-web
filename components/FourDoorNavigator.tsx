@@ -134,7 +134,7 @@ export default function FourDoorNavigator({
     <div className="four-door-zone">
       <button
         type="button"
-        className="four-door-sound"
+        className={`four-door-sound ${soundOn ? "is-on" : "is-muted"}`}
         aria-pressed={soundOn}
         aria-label={soundOn ? "关闭四色门音效" : "开启四色门音效"}
         title={soundOn ? "关闭音效" : "开启音效"}
@@ -146,7 +146,7 @@ export default function FourDoorNavigator({
         {soundOn ? (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M11 5 6.8 8.5H3v7h3.8L11 19Z" /><path d="M15 9a4 4 0 0 1 0 6" /><path d="M18 6a8 8 0 0 1 0 12" /></svg>
         ) : (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6.8 8.5H3v7h3.8L11 19Z" /><path d="M4 4 20 20" /></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6.8 8.5H3v7h3.8L11 19Z" /><path d="m15.5 9.5 5 5m0-5-5 5" /></svg>
         )}
       </button>
       <div className={`four-door-art ${turning ? "is-turning" : ""}`}>
