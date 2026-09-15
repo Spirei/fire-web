@@ -42,16 +42,16 @@ export default function FourDoorNavigator({
     if (context && context.state !== "closed") void context.close().catch(() => undefined);
   }
 
-  function playTurn(steps: number, durationMs = 520) {
+  function playTurn(steps: number, durationMs = 600) {
     if (!soundOn) return;
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
     const context = audioContext.current ?? new AudioContextClass();
     audioContext.current = context;
-    const ticks = durationMs > 700 ? 9 : Math.abs(steps) === 2 ? 6 : 4;
+    const ticks = durationMs > 700 ? 11 : Math.abs(steps) === 2 ? 6 : 4;
     const start = context.currentTime;
-    const firstTickAt = start + 0.08;
-    const tickSpacing = durationMs > 700 ? (durationMs / 1000 - 0.3) / (ticks - 1) : 0.095;
+    const firstTickAt = start + 0.1;
+    const tickSpacing = durationMs > 700 ? (durationMs / 1000 - 0.34) / (ticks - 1) : 0.105;
     const lockAt = start + durationMs / 1000 - 0.1;
     const master = context.createGain();
     const compressor = context.createDynamicsCompressor();
@@ -127,7 +127,7 @@ export default function FourDoorNavigator({
     turningTimer.current = window.setTimeout(() => {
       turningTimer.current = null;
       setTurning(false);
-    }, 520);
+    }, 600);
     if (navigate) {
       playTurn(step);
       onSelect(DOORS[index].key);
@@ -150,18 +150,18 @@ export default function FourDoorNavigator({
     pointerTimer.current = window.setTimeout(() => {
       pointerTimer.current = null;
       setTurning(true);
-    }, 700);
+    }, 650);
     turningTimer.current = window.setTimeout(() => {
       turningTimer.current = null;
       setTurning(false);
-    }, 1130);
-    playTurn(quarterSteps === 2 ? 2 : 1, 1050);
+    }, 1320);
+    playTurn(quarterSteps === 2 ? 2 : 1, 1260);
     if (navigationTimer.current !== null) window.clearTimeout(navigationTimer.current);
     navigationTimer.current = window.setTimeout(() => {
       navigationTimer.current = null;
       setRandomizing(false);
       onSelect(destination);
-    }, 1140);
+    }, 1340);
   }
 
   useEffect(() => {
