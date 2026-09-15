@@ -393,6 +393,34 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(Array.isArray(lines));
     assert(lines.every((line) => typeof line === 'string'));
   });
+  await test('holdings sankey layout adapts to phone width and keeps every label', () => {
+    const { sankeyLayoutFor, sankeyCanvasHeight } = require(path.join(root, 'lib/sankeyLayout.ts'));
+    const phone = sankeyLayoutFor(390);
+    assert.equal(phone.wide, false);
+    assert(phone.sideMargin * 2 < 390 * 0.6, '手机端两端留白不能吃掉大半宽度');
+    assert(390 - phone.sideMargin * 2 > 160, '手机端中间流带要留下可读宽度');
+    // 节点间距必须大于标签行高，否则小持仓标签会被 ECharts 的 hideOverlap 成片藏掉
+    assert(phone.nodeGap > phone.lineHeight, '手机端节点间距必须大于单行标签行高');
+    const desktop = sankeyLayoutFor(1180);
+    assert.equal(desktop.wide, true);
+    assert.equal(desktop.labelWidth, 155);
+    assert(desktop.nodeGap >= desktop.lineHeight * 2, '宽屏标签两行，节点间距要放得下两行');
+    // 连续自适应：越窄留白越小，但标签宽度有下限，不会窄到看不清
+    assert(sankeyLayoutFor(320).sideMargin <= sankeyLayoutFor(430).sideMargin);
+    assert(sankeyLayoutFor(700).sideMargin <= desktop.sideMargin);
+    assert(sankeyLayoutFor(120).labelWidth >= 78, '极窄宽度也要保证标签最小可读宽度');
+    // 画布高度随持仓数增长，并有上下限
+    assert.equal(sankeyCanvasHeight(0), 360);
+    assert.equal(sankeyCanvasHeight(1), 360);
+    assert(sankeyCanvasHeight(10) > sankeyCanvasHeight(4));
+    assert.equal(sankeyCanvasHeight(100), 820);
+
+    const source = fs.readFileSync(path.join(root, 'components/HoldingsPnlSankey.tsx'), 'utf8');
+    assert(source.includes('sankeyLayoutFor(width)'));
+    assert(source.includes('sankeyCanvasHeight(Math.max(profit.length, loss.length))'));
+    assert(!source.includes('--sankey-mobile-height'), '旧的写死高度变量应已移除');
+    assert(fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8').includes('height: var(--sankey-canvas-height, 420px)'));
+  });
   await test('assistant answers render markdown tables and only safe links', () => {
     const { parseAssistantBlocks, parseInlineSegments } = require(path.join(root, 'lib/assistantMarkdown.ts'));
     const blocks = parseAssistantBlocks([

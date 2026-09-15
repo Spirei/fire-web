@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import echarts, { type EChartsInstance } from "@/lib/echarts";
 import MarketIcon from "@/components/MarketIcon";
 import AppModal from "@/components/AppModal";
+import { sankeyCanvasHeight, sankeyLayoutFor } from "@/lib/sankeyLayout";
 import { MULTI_CURRENCIES } from "@/lib/currency";
 import { localDateKey } from "@/lib/format";
 import { showToast } from "@/lib/toast";
@@ -70,16 +71,21 @@ export default function HoldingsPnlSankey({ profit, loss, profitTotal, lossTotal
   const convert = (value: number) => value * currencyRate;
   const dateLabel = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
 
-  function buildOption(dark: boolean, compact = false) {
+  function buildOption(dark: boolean, width: number) {
     const ink = dark ? "#e6ebf2" : "#313944";
     const muted = dark ? "#8f99a7" : "#7e8794";
+    const layout = sankeyLayoutFor(width);
     const center = "持仓盈亏";
     const centerAmountColor = netTotal >= 0 ? "#e5484d" : "#0aa77d";
     const nodeName = (item: PnlSankeyItem, side: "P" | "L") => `${side}:${item.market}:${item.code}`;
-    const label = (item: PnlSankeyItem) => `{name|${displayName(item)}}\n{amount|${compactMoney(item.pnl, currency)}}`;
+    // 宽屏两行（名称 / 金额），手机单行（名称 + 金额）：单行标签只有一半高，
+    // ECharts 的 hideOverlap 就不会再成片隐藏小持仓的标签。
+    const label = (item: PnlSankeyItem) => layout.wide
+      ? `{name|${displayName(item)}}\n{amount|${compactMoney(item.pnl, currency)}}`
+      : `{name|${displayName(item)}} {amount|${compactMoney(item.pnl, currency)}}`;
     const nodes = [
       ...profit.map((item) => ({ name: nodeName(item, "P"), depth: 0, itemStyle: { color: "#e5484d" }, label: { formatter: label(item), position: "left", rich: { name: { color: ink }, amount: { color: "rgba(229,72,77,.85)" } } } })),
-      { name: center, depth: 1, itemStyle: { color: "#7567b9" }, label: compact ? { show: false } : { color: centerAmountColor, fontWeight: 800, formatter: `{name|${center}}\n{amount|${compactMoney(netTotal, currency)}}`, rich: { name: { color: centerAmountColor, fontSize: 12, fontWeight: 800, lineHeight: 16 }, amount: { color: centerAmountColor, fontSize: 10, fontWeight: 700, lineHeight: 13 } } } },
+      { name: center, depth: 1, itemStyle: { color: "#7567b9" }, label: layout.wide ? { color: centerAmountColor, fontWeight: 800, formatter: `{name|${center}}\n{amount|${compactMoney(netTotal, currency)}}`, rich: { name: { color: centerAmountColor, fontSize: 12, fontWeight: 800, lineHeight: 16 }, amount: { color: centerAmountColor, fontSize: 10, fontWeight: 700, lineHeight: 13 } } } : { show: false } },
       ...loss.map((item) => ({ name: nodeName(item, "L"), depth: 2, itemStyle: { color: "#0aa77d" }, label: { formatter: label(item), position: "right", rich: { name: { color: ink }, amount: { color: "rgba(10,167,125,.88)" } } } }))
     ];
     const links = [
@@ -96,31 +102,31 @@ export default function HoldingsPnlSankey({ profit, loss, profitTotal, lossTotal
       } },
       series: [{
         type: "sankey",
-        left: compact ? 82 : 170,
-        right: compact ? 82 : 170,
-        top: compact ? 18 : 30,
-        bottom: compact ? 18 : 30,
-        nodeWidth: compact ? 10 : 14,
-        nodeGap: compact ? 12 : 18,
+        left: layout.sideMargin,
+        right: layout.sideMargin,
+        top: layout.wide ? 30 : 18,
+        bottom: layout.wide ? 30 : 18,
+        nodeWidth: layout.nodeWidth,
+        nodeGap: layout.nodeGap,
         nodeAlign: "justify",
         draggable: false,
-        layoutIterations: compact ? 32 : 48,
+        layoutIterations: layout.wide ? 48 : 32,
         data: nodes,
         links,
         lineStyle: { curveness: .5, opacity: .55 },
         itemStyle: { borderWidth: 0, borderRadius: 3 },
         label: {
           color: ink,
-          fontSize: compact ? 9 : 11,
+          fontSize: layout.fontSize,
           fontWeight: 650,
-          distance: compact ? 6 : 10,
-          lineHeight: compact ? 12 : 15,
+          distance: layout.labelGap,
+          lineHeight: layout.lineHeight,
           verticalAlign: "middle",
           overflow: "truncate",
-          width: compact ? 74 : 155,
+          width: layout.labelWidth,
           rich: {
-            name: { fontSize: compact ? 9 : 11, fontWeight: 650, color: ink, lineHeight: compact ? 12 : 15 },
-            amount: { fontSize: compact ? 8 : 10, fontWeight: 700, color: muted, lineHeight: compact ? 11 : 13 }
+            name: { fontSize: layout.fontSize, fontWeight: 650, color: ink, lineHeight: layout.lineHeight },
+            amount: { fontSize: layout.amountFontSize, fontWeight: 700, color: muted, lineHeight: layout.lineHeight }
           }
         },
         emphasis: { focus: "adjacency", lineStyle: { opacity: .95 } },
@@ -134,15 +140,17 @@ export default function HoldingsPnlSankey({ profit, loss, profitTotal, lossTotal
     const chart = echarts.init(ref.current, null, { renderer: "canvas" });
     chartRef.current = chart;
     const dark = document.documentElement.classList.contains("dark");
-    let compact = ref.current.clientWidth < 520;
-    chart.setOption(buildOption(dark, compact));
+    let appliedWidth = ref.current.clientWidth;
+    chart.setOption(buildOption(dark, appliedWidth));
     const resize = new ResizeObserver(() => {
       if (!ref.current) return;
-      const nextCompact = ref.current.clientWidth < 520;
+      const nextWidth = ref.current.clientWidth;
       chart.resize();
-      if (nextCompact !== compact) {
-        compact = nextCompact;
-        chart.setOption(buildOption(dark, compact), true);
+      // 标签列宽、字号、节点宽度都随宽度连续变化，宽度变动超过一个阈值才重算布局，
+      // 避免布局抖动（键盘弹出、滚动条出现）时反复 setOption。
+      if (Math.abs(nextWidth - appliedWidth) >= 24) {
+        appliedWidth = nextWidth;
+        chart.setOption(buildOption(dark, nextWidth), true);
       }
     });
     resize.observe(ref.current);
@@ -321,7 +329,7 @@ export default function HoldingsPnlSankey({ profit, loss, profitTotal, lossTotal
         <strong>{formatCurrency(convert(lossTotal), currency)}</strong>
       </div>
     </div>
-    {empty ? <div className="holdings-pnl-sankey-empty">暂无可计算的持仓盈亏数据</div> : <div ref={ref} className="holdings-pnl-sankey-canvas" style={{ "--sankey-mobile-height": `${Math.min(720, Math.max(360, Math.max(profit.length, loss.length) * 48 + 64))}px` } as CSSProperties} />}
+    {empty ? <div className="holdings-pnl-sankey-empty">暂无可计算的持仓盈亏数据</div> : <div ref={ref} className="holdings-pnl-sankey-canvas" style={{ "--sankey-canvas-height": `${sankeyCanvasHeight(Math.max(profit.length, loss.length))}px` } as CSSProperties} />}
     {sharing && (
       <div
         ref={shareCardRef}
