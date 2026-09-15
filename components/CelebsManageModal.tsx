@@ -591,10 +591,10 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
               </section>
 
               {/* 底部操作 */}
-              <div className="mt-5 flex justify-end gap-2.5 border-t border-edge pt-4 dark:border-[#2a3140]">
-                <button type="button" onClick={() => setDraft(null)} className="btn btn-line px-4 py-2 text-xs">取消</button>
+              <div className="dialog-actions border-t border-edge pt-4 dark:border-[#2a3140]">
+                <button type="button" onClick={() => setDraft(null)} className="dialog-btn dialog-btn-ghost">取消</button>
                 {draft && !celebs.find((c) => c.id === draft.id) ? (
-                  <button type="button" disabled={busy || !draftIdValid} onClick={save} className="btn btn-brand px-4 py-2 text-xs disabled:opacity-50">
+                  <button type="button" disabled={busy || !draftIdValid} onClick={save} className="dialog-btn dialog-btn-neutral">
                     {busy ? "保存中…" : "创建名人"}
                   </button>
                 ) : (
@@ -619,7 +619,7 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
                         refreshHours: draft.refreshHours
                       });
                     }}
-                    className="btn btn-brand px-4 py-2 text-xs disabled:opacity-50"
+                    className="dialog-btn dialog-btn-neutral"
                   >
                     {busy ? "保存中…" : "保存"}
                   </button>

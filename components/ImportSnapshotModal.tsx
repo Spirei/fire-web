@@ -161,8 +161,8 @@ export default function ImportSnapshotModal({
             onChange={(e) => void handleFile(e.target.files?.[0] ?? null)}
           />
           {error && <p className="rounded-[10px] bg-up-bg px-3.5 py-2.5 text-[13px] text-up">{error}</p>}
-          <div className="flex justify-end gap-2.5">
-            <button type="button" onClick={onClose} className="btn btn-ghost btn-sm">取消</button>
+          <div className="dialog-actions">
+            <button type="button" onClick={onClose} className="dialog-btn dialog-btn-ghost">取消</button>
           </div>
         </div>
       ) : (
@@ -230,9 +230,9 @@ export default function ImportSnapshotModal({
             </details>
           )}
           {error && <p className="rounded-[10px] bg-up-bg px-3.5 py-2.5 text-[13px] text-up">{error}</p>}
-          <div className="flex justify-end gap-2.5">
-            <button type="button" onClick={onClose} disabled={importing} className="btn btn-ghost btn-sm disabled:opacity-50">取消</button>
-            <button type="button" onClick={() => void apply()} disabled={importing} className="btn btn-line btn-sm disabled:opacity-60">{importing ? "导入中…" : `导入 ${rows.filter((r) => r.name.trim() || r.code.trim()).length} 条`}</button>
+          <div className="dialog-actions">
+            <button type="button" onClick={onClose} disabled={importing} className="dialog-btn dialog-btn-ghost">取消</button>
+            <button type="button" onClick={() => void apply()} disabled={importing} className="dialog-btn dialog-btn-neutral">{importing ? "导入中…" : `导入 ${rows.filter((r) => r.name.trim() || r.code.trim()).length} 条`}</button>
           </div>
         </div>
       )}

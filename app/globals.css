@@ -642,6 +642,72 @@
   .btn-icon {
     @apply h-[38px] px-4 text-[13px] text-muted;
   }
+  /* 弹窗底部操作区：全站统一胶囊按钮。三档语义固定下来，弹窗只挑一档，不再各写样式：
+     ghost = 取消 / 次要（透明底，悬停浅灰），neutral = 确认 / 保存（白底浅灰边框），danger = 删除（实心红）。 */
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+  }
+  .dialog-btn {
+    display: inline-flex;
+    height: 38px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 0 18px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+  }
+  .dialog-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .dialog-btn-ghost {
+    color: #6b7280;
+  }
+  .dialog-btn-ghost:hover:not(:disabled) {
+    background-color: rgba(15, 23, 42, 0.05);
+    color: #20242a;
+  }
+  .dark .dialog-btn-ghost {
+    color: rgba(255, 255, 255, 0.62);
+  }
+  .dark .dialog-btn-ghost:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+  .dialog-btn-neutral {
+    border-color: rgba(22, 26, 31, 0.12);
+    background-color: #fff;
+    color: #20242a;
+  }
+  .dialog-btn-neutral:hover:not(:disabled) {
+    background-color: #e9ebee;
+  }
+  .dark .dialog-btn-neutral {
+    border-color: rgba(255, 255, 255, 0.12);
+    background-color: #1c1c1e;
+    color: #fff;
+  }
+  .dark .dialog-btn-neutral:hover:not(:disabled) {
+    background-color: #26282e;
+  }
+  .dialog-btn-danger {
+    border-color: #c34f4f;
+    background-color: #c34f4f;
+    color: #fff;
+  }
+  .dialog-btn-danger:hover:not(:disabled) {
+    border-color: #ad4545;
+    background-color: #ad4545;
+  }
   .field {
     @apply h-[44px] w-full rounded-[12px] border border-transparent bg-[#f2f2f7] px-3.5 text-[15px] text-ink outline-none transition-all duration-200 placeholder:text-faint;
   }
@@ -935,6 +1001,18 @@
 .dark .assistant-rename-dialog>div button:last-child:hover,.assistant-rename-overlay[data-assistant-theme="dark"] .assistant-rename-dialog>div button:last-child:hover { background:rgba(255,255,255,.18);color:#fff; }
 .assistant-rename-dialog>div button:disabled { cursor:not-allowed;border-color:transparent;background:rgba(32,36,42,.07);color:rgba(32,36,42,.28);opacity:1; }
 .dark .assistant-rename-dialog>div button:disabled,.assistant-rename-overlay[data-assistant-theme="dark"] .assistant-rename-dialog>div button:disabled { border-color:transparent;background:rgba(255,255,255,.06);color:rgba(255,255,255,.24); }
+/* 助手「重命名 / 新建空间」弹窗底部按钮并入全站胶囊配方：取消 = 幽灵胶囊（浅色主题下也有足够对比度），
+   确认 = 中性胶囊（白底浅灰边框 / 深色模式深灰底白字），尺寸与其它弹窗一致（38px 胶囊）。 */
+.assistant-rename-dialog>div { gap:10px;margin-top:20px; }
+.assistant-rename-dialog>div button { height:38px;border-radius:999px;padding:0 18px; }
+.assistant-rename-dialog>div button:first-child { color:#6b7280; }
+.assistant-rename-dialog>div button:first-child:hover { background:rgba(15,23,42,.05);color:#20242a; }
+.dark .assistant-rename-dialog>div button:first-child,.assistant-rename-overlay[data-assistant-theme="dark"] .assistant-rename-dialog>div button:first-child { color:rgba(255,255,255,.62); }
+.dark .assistant-rename-dialog>div button:first-child:hover,.assistant-rename-overlay[data-assistant-theme="dark"] .assistant-rename-dialog>div button:first-child:hover { background:rgba(255,255,255,.1);color:#fff; }
+.assistant-rename-dialog>div button:last-child { border:1px solid rgba(22,26,31,.12);background:#fff;color:#20242a; }
+.assistant-rename-dialog>div button:last-child:hover { background:#e9ebee; }
+.dark .assistant-rename-dialog>div button:last-child,.assistant-rename-overlay[data-assistant-theme="dark"] .assistant-rename-dialog>div button:last-child { border-color:rgba(255,255,255,.12);background:#1c1c1e;color:#fff; }
+.dark .assistant-rename-dialog>div button:last-child:hover,.assistant-rename-overlay[data-assistant-theme="dark"] .assistant-rename-dialog>div button:last-child:hover { background:#26282e; }
 .harness-space-management-head { display:flex;align-items:center;justify-content:space-between;gap:20px; }
 .harness-space-list { display:flex;flex-direction:column;gap:3px;margin-top:10px; }
 .harness-space-list>div { display:flex;height:38px;align-items:center;justify-content:space-between;border-radius:10px;padding:0 6px 0 12px;color:inherit;font-size:13px; }

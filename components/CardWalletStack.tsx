@@ -1200,11 +1200,11 @@ function CardDetailPanel({
               </span>
             </div>
           )}
-          <div className="mt-5 flex justify-end gap-2">
+          <div className="dialog-actions">
             <button
               type="button"
               onClick={() => setForm(null)}
-              className="h-10 rounded-xl px-4 text-[13px] font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink"
+              className="dialog-btn dialog-btn-ghost"
             >
               取消
             </button>
@@ -1212,7 +1212,7 @@ function CardDetailPanel({
               type="button"
               disabled={saving}
               onClick={() => void submitEntry(form)}
-              className="h-10 rounded-xl bg-[#111] px-5 text-[13px] font-semibold text-white transition-transform duration-200 hover:-translate-y-px disabled:opacity-50 dark:bg-white dark:text-[#111]"
+              className="dialog-btn dialog-btn-neutral"
             >
               {saving ? "保存中…" : "保存"}
             </button>
@@ -1279,11 +1279,11 @@ function CardDetailPanel({
               className={`h-10 rounded-xl border border-edge bg-white px-3 text-[13px] text-ink placeholder:text-faint dark:bg-[#1c222d] ${FOCUS_RING}`}
             />
           </label>
-          <div className="mt-5 flex justify-end gap-2">
+          <div className="dialog-actions">
             <button
               type="button"
               onClick={() => setForm(null)}
-              className="h-10 rounded-xl px-4 text-[13px] font-semibold text-muted transition-colors duration-200 hover:bg-brand-hover hover:text-ink"
+              className="dialog-btn dialog-btn-ghost"
             >
               取消
             </button>
@@ -1291,7 +1291,7 @@ function CardDetailPanel({
               type="button"
               disabled={saving}
               onClick={() => void submitDetails()}
-              className="h-10 rounded-xl bg-[#111] px-5 text-[13px] font-semibold text-white transition-transform duration-200 hover:-translate-y-px disabled:opacity-50 dark:bg-white dark:text-[#111]"
+              className="dialog-btn dialog-btn-neutral"
             >
               {saving ? "保存中…" : "保存"}
             </button>
