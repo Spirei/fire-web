@@ -219,7 +219,12 @@ function collectMatches(text: string, holdings: HoldingHint[]): Array<{ start: n
       }));
       if (item.name.length >= 2 && !GENERIC_NAMES.has(item.name) && !GENERIC_NAMES.has(item.name.toLowerCase())) {
         const name = item.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const bounded = /[\u4e00-\u9fff]/.test(item.name) ? name : `\\b${name}\\b`;
+        // 两个汉字的名字最容易撞进更长的词里（例：「纽约州总检察长和曼哈顿」里的「长和」），
+        // 这种两字中文名要求左右至少一侧不是汉字才算提及；雪球原文的 $名称(代码)$ 走上面的
+        // cash tag 分支，不受这里影响，仍然可以随意出现在句子中间。
+        const bounded = /[\u4e00-\u9fff]/.test(item.name)
+          ? (item.name.length === 2 ? `(?<![\\u4e00-\\u9fff])${name}|${name}(?![\\u4e00-\\u9fff])` : name)
+          : `\\b${name}\\b`;
         push(new RegExp(bounded, "gi"), (match) => ({
           type: "stock",
           value: match[0],
@@ -235,6 +240,20 @@ function collectMatches(text: string, holdings: HoldingHint[]): Array<{ start: n
   let cursor = 0;
   hits.forEach((hit) => {
     if (hit.start < cursor) return;
+    const previous = picked[picked.length - 1];
+    // 「名称(代码)」相邻写法会同时命中名称与代码两处，这里合并成一个提及，
+    // 否则同一只票会在正文里连出两个链接（雪球原文的 $名称(代码)$ 本来就是一个整体，不受影响）。
+    if (
+      previous && previous.part.type === "stock" && hit.part.type === "stock" &&
+      previous.part.market === hit.part.market && previous.part.code === hit.part.code &&
+      hit.start - previous.end <= 2
+    ) {
+      // 顺带吞掉代码后面的右括号，避免渲染成 $长和(00001)$) 这种多余符号。
+      const trailing = /[)）]/.test(text[hit.end] ?? "") ? hit.end + 1 : hit.end;
+      previous.end = trailing;
+      cursor = trailing;
+      return;
+    }
     picked.push(hit);
     cursor = hit.end;
   });

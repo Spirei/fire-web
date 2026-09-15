@@ -326,5 +326,20 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       assert.equal((await registration.POST(req({setupToken:process.env.FIRE_SETUP_TOKEN,username:'install_review',password:'Install-test-1234'}))).status, 201);
     } finally { auth.needsSetup=original; if(environment===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=environment; if(token===undefined)delete process.env.FIRE_SETUP_TOKEN;else process.env.FIRE_SETUP_TOKEN=token; }
   });
+  await test('trading square: stock names embedded in longer Chinese words are not linked', () => {
+    const { splitTradingText, normalizeTradingText } = require(path.join(root, 'lib/tradingSquareText.ts'));
+    const holdings = [{ market: 'HK', code: '00001', name: '长和' }, { market: 'US', code: 'OXY', name: '西方石油' }];
+    const text = normalizeTradingText('针对我发起的、由纽约州总检察长和曼哈顿地区检察官主导的案件。西方石油(OXY) 今天涨了。');
+    const stocks = splitTradingText(text, holdings).filter((part) => part.type === 'stock');
+    // 「总检察长和曼哈顿」里的「长和」不能算提及；四字的「西方石油」照旧命中。
+    assert.equal(stocks.some((part) => part.name === '长和'), false);
+    assert.equal(stocks.some((part) => part.name === '西方石油' && part.market === 'US' && part.code === 'OXY'), true);
+    // 裸写的「名称(代码)」只应产生一个提及，不能连出两个链接。
+    const paired = splitTradingText(normalizeTradingText('长和(00001) 今天涨了'), holdings).filter((part) => part.type === 'stock');
+    assert.deepEqual(paired.map((part) => `${part.name}:${part.code}`), ['长和:00001']);
+    const rendered = splitTradingText(normalizeTradingText('长和(00001) 今天涨了'), holdings)
+      .map((part) => (part.type === 'stock' ? `$${part.name}(${part.code})$` : part.value)).join('');
+    assert.equal(rendered, '$长和(00001)$ 今天涨了');
+  });
   db.close();console.log(`${passed} regression suites passed (isolated database)`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{ fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode || 0); });
