@@ -846,6 +846,11 @@
 .assistant-workspace .assistant-composer-dock { background:linear-gradient(to bottom,transparent,var(--assistant-surface) 28%); padding:20px clamp(24px,8vw,128px) 8px!important; border-top:0!important; }
 .assistant-panel .assistant-composer-dock { flex:none;width:100%;padding:16px!important;border-top:1px solid var(--assistant-line)!important;background:var(--assistant-surface); }
 .assistant-panel .assistant-composer-card textarea,.assistant-panel .assistant-composer-card textarea:focus { min-height:44px;background:transparent!important; }
+/* 深色模式下全局 input/textarea:focus 的蓝黑填充（#151a26）会盖在智能助手的卡片与浮层上，
+   形成一块与卡片底色不搭的深蓝色块；助手内的输入控件改为保留自身底色。 */
+.dark :is(.assistant-workspace,.assistant-panel) :is(input:not([type="checkbox"]):not([type="file"]):not([type="radio"]),textarea):focus { background-color:transparent; }
+.dark .assistant-rename-dialog input:focus { background-color:#1f1f21; }
+.dark .harness-inline-model-editor :is(input,textarea):focus { background-color:rgba(127,127,127,.07); }
 .assistant-composer-card { width:min(100%,860px); margin:0 auto; background:var(--assistant-raised)!important; border:0; box-shadow:0 0 0 .5px var(--assistant-line),0 8px 24px rgba(0,0,0,.08); transition:background-color 160ms ease,box-shadow 160ms ease,transform 160ms ease; }
 .assistant-composer-card:focus-within { box-shadow:0 0 0 .5px rgba(102,111,125,.55),0 10px 28px rgba(0,0,0,.1); }
 .assistant-thinking-shimmer { color:transparent;background:linear-gradient(100deg,var(--assistant-muted) 18%,var(--assistant-label) 43%,var(--assistant-muted) 68%);background-size:230% 100%;background-position:110% 0;background-clip:text;-webkit-background-clip:text;animation:assistant-thinking-shimmer 2.15s cubic-bezier(.4,0,.2,1) infinite;opacity:.72; }
