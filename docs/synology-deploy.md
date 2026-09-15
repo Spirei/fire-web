@@ -26,6 +26,21 @@
 
 > 以后素材库新增卡片，同样在本地跑一次抓取脚本后重传这个目录即可，不需要重新构建镜像。
 
+### 1c. 挂载目录属主必须是 1000:1000（重要）
+容器自 v0.1.31 起以**非 root** 运行（容器内的 `node` 用户 = **uid 1000 / gid 1000**），
+而 `DATA_DIR`、`UPLOADS_DIR` 是宿主机 bind mount —— 挂载会覆盖镜像里的属主，最终以**宿主机目录权限**为准。
+所以部署/升级后请执行一次（把路径换成 `.env` 里的真实值）：
+
+```bash
+cd /volume1/docker/fire
+chown -R 1000:1000 data uploads
+chmod -R u+rwX  data uploads
+```
+
+- 这两条命令只需执行一次，属主会随卷保留，之后重建容器、升级镜像都不用再改。
+- DSM 的 File Station 里这些文件会显示成 UID `1000`（DSM 没有这个用户），但 admin 有特权，照样能浏览和编辑。
+- 只改 `uploads` 不改 `data` 不够：SQLite 的建库、WAL 与临时文件都在 `data/` 下。
+
 ### 2. 准备生产环境变量
 在项目根目录创建 `.env`（复制 `.env.example` 后填写）：
 ```bash
@@ -61,6 +76,33 @@ docker compose -f docker-compose.ghcr.yml up -d --force-recreate
 - **上传素材**（图标 / 头像 / 截图）→ `/volume1/docker/fire/uploads/`（挂载到 `/app/public/uploads`）。
 - 备份：直接打包 `data/` 目录，或用「设置 → 个人信息 → 网站数据导出」生成 JSON 备份文件。
 - 升级：`docker compose -f docker-compose.ghcr.yml pull && docker compose -f docker-compose.ghcr.yml up -d --force-recreate`，数据不动。
+
+## 排查：升级镜像后容器无限重启，日志只有 EACCES
+
+症状：`docker ps` 里容器总是刚起来又重建（`RestartCount` 持续增长），日志末尾是
+
+```
+Error: EACCES: permission denied, open '/app/data/duan-posts.json.<pid>.tmp'
+    at file:///app/scripts/seed-trading-square.mjs:30:5
+```
+
+原因：挂载目录属主不是容器内的 uid 1000（见「1c. 挂载目录属主必须是 1000:1000」）。
+**v0.1.31 之前的镜像以 root 运行，所以从来不会暴露这个问题**，升级到非 root 之后才第一次出现。
+
+处理：
+
+```bash
+cd /volume1/docker/fire
+chown -R 1000:1000 data uploads && chmod -R u+rwX data uploads
+docker restart fire
+docker logs --tail 20 fire          # 期望看到 Next.js 的 ✓ Ready，不再有 EACCES
+docker inspect fire --format 'status={{.State.Status}} restarts={{.RestartCount}}'
+```
+
+现版本启动脚本已内置自检：数据目录不可写时会直接打印上面那行 `chown` 命令再退出；
+公开缓存种子（`seed-trading-square.mjs`）失败只告警、不再阻塞启动，因此不会因为种子问题变成无限重启。
+若该共享启用了 Windows ACL 导致 `chown` 不生效，可临时在 `.env` 里把 `IMAGE_TAG` 钉到升级前的
+`sha-…` 标签回滚，再按上面的方式处理权限。
 
 ## 说明 / 注意
 - **富途 OpenD 桥接**（`scripts/futu_quotes.py`）已由共用 `Dockerfile` 打包 Python 运行时与 `futu-api`。生产容器按设置连接 OpenD；本地 `next dev` 默认跳过（`STOCKLOG_FUTU=on` 可开启），避免抢免费额度的唯一连接。未配置或不可达时行情自动回退腾讯 / 雅虎（腾讯源已支持美股 / 港股 / A股 / 日股 / 韩股）。在设置→股票设置→交易·富途里把 OpenD 主机填写为纯 IP/主机名（如 `192.168.x.x`，不要带 `http://`），端口通常为 `11111`，并确保容器能访问该端口。

@@ -341,5 +341,49 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       .map((part) => (part.type === 'stock' ? `$${part.name}(${part.code})$` : part.value)).join('');
     assert.equal(rendered, '$长和(00001)$ 今天涨了');
   });
+  await test('entrypoint: unwritable data volume fails loudly, failing seed does not block startup', () => {
+    const { spawnSync } = require('node:child_process');
+    const entrypoint = path.join(root, 'scripts/entrypoint.sh');
+    const seedScript = path.join(root, 'scripts/seed-trading-square.mjs');
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'fire-entrypoint-'));
+    const dirs = {
+      data: path.join(base, 'data'),
+      uploads: path.join(base, 'uploads'),
+      defaults: path.join(base, 'defaults'),
+      cache: path.join(base, 'cache')
+    };
+    Object.values(dirs).forEach((dir) => fs.mkdirSync(dir, { recursive: true }));
+    const run = (extraEnv = {}) => spawnSync('sh', [entrypoint, 'echo', 'REACHED_CMD'], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        FIRE_ENTRYPOINT_DATA_DIR: dirs.data,
+        FIRE_ENTRYPOINT_UPLOADS_DIR: dirs.uploads,
+        FIRE_ENTRYPOINT_DEFAULTS_DIR: dirs.defaults,
+        FIRE_ENTRYPOINT_CACHE_DIR: dirs.cache,
+        FIRE_ENTRYPOINT_SEED_SCRIPT: seedScript,
+        ...extraEnv
+      }
+    });
+    try {
+      // 数据目录不可写：必须给出中文提示并非零退出，而不是让日志只剩一行英文 EACCES。
+      fs.chmodSync(dirs.data, 0o500);
+      const blocked = run();
+      assert.equal(blocked.status, 1);
+      assert.match(blocked.stderr, /数据目录不可写/);
+      assert.match(blocked.stderr, /chown -R 1000:1000/);
+      assert.equal(blocked.stdout.includes('REACHED_CMD'), false);
+      fs.chmodSync(dirs.data, 0o700);
+      // 种子步骤失败（用占位目录挡住写入）：只告警，容器命令照常执行。
+      fs.mkdirSync(path.join(dirs.data, 'duan-posts.json'), { recursive: true });
+      fs.writeFileSync(path.join(dirs.cache, 'duan-posts.json'), JSON.stringify([{ id: '1', date: '2026-09-16T00:00:00Z', text: 'x', originalUrl: 'https://example.com' }]));
+      const warned = run();
+      assert.equal(warned.status, 0);
+      assert.equal(warned.stdout.includes('REACHED_CMD'), true);
+      assert.match(warned.stderr, /警告：公开缓存种子合并失败/);
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
+  });
   db.close();console.log(`${passed} regression suites passed (isolated database)`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{ fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode || 0); });

@@ -32,6 +32,18 @@ docker login ghcr.io
 
 登录用户名填写 GitHub 用户名，密码填写 Personal Access Token。
 
+**挂载目录属主（必做一次）**：容器以非 root 运行（容器内 `node` 用户 = uid 1000），而 `DATA_DIR` / `UPLOADS_DIR`
+是宿主机 bind mount，属主由宿主机决定。请执行一次：
+
+```bash
+cd /volume1/docker/fire
+chown -R 1000:1000 data uploads && chmod -R u+rwX data uploads
+```
+
+否则镜像升级到非 root 版本后，容器会在启动脚本写数据卷时报 `EACCES` 并被 `restart: unless-stopped`
+反复重启（日志形如 `EACCES: permission denied, open '/app/data/duan-posts.json.<pid>.tmp'`）。
+完整排查步骤见 `docs/synology-deploy.md` 的「排查：升级镜像后容器无限重启，日志只有 EACCES」。
+
 ## 日常更新
 
 本地修改并推送：

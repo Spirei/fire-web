@@ -55,9 +55,11 @@ requireText("生产镜像", dockerfile, [
   'ENTRYPOINT ["sh", "/app/entrypoint.sh"]'
 ]);
 requireText("启动脚本", entrypoint, [
-  "if [ -d /app/resource-default ]",
-  "cp -rn /app/resource-default/* /app/public/uploads/",
-  "if [ -d /app/public-cache-default ]",
+  // 校验的是「镜像内路径必须被启动脚本引用」这一不变式；路径已改为带默认值的变量，
+  // 因此断言路径本身，不再断言具体某行 shell 写法。
+  "/app/resource-default",
+  "/app/public/uploads",
+  "/app/public-cache-default",
   "seed-trading-square.mjs"
 ]);
 requireText("Docker 构建上下文", dockerignore, [
