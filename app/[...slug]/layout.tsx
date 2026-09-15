@@ -100,6 +100,9 @@ export default async function SlugLayout({
   // 交易广场：把服务端已有的帖子快照随首屏下发，刷新时列表与作者头像立刻可见，
   // 不再先渲染一整屏骨架、等 /api/trading-square/feed 返回后才出现（本地缓存不可用时也一样）。
   const initialTradingPosts = tab.key === "trading" ? readTradingSquareSnapshot(40) : null;
+  // 交易广场的筛选状态（谁 / 分类 / 页码 / 个股）由客户端镜像到 cookie，
+  // 这里读回来交给首屏，避免刷新后标签行先消失、水合后才补上。
+  const initialTradingFilter = tab.key === "trading" ? (cookieStore.get("fire_trading_square_filter")?.value ?? null) : null;
 
   return (
     <div className="app-shell-root min-h-screen bg-page">
@@ -145,6 +148,7 @@ export default async function SlugLayout({
           initialAssetLibrary={initialAssetLibrary}
           initialCardLibrary={initialCardLibrary}
           initialTradingPosts={initialTradingPosts}
+          initialTradingFilter={initialTradingFilter}
           initialSettings={{
             tabs: settings.tabs,
             groups: settings.groups,

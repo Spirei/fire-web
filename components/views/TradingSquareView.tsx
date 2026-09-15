@@ -32,6 +32,8 @@ const CATEGORY_OPTIONS: Array<{ id: "all" | DuanCategory; label: string }> = [
 const PAGE_SIZE = 10;
 const FEED_CACHE_KEY = "fire:trading-square-feed";
 const SEEN_CACHE_KEY = "fire:trading-square-seen";
+/** 筛选状态的 cookie 镜像：让服务端首帧就能画出「段永平 + 分类标签行」，刷新不再先消失再出现。 */
+const FILTER_COOKIE = "fire_trading_square_filter";
 const FEED_FETCH_MS = 12_000;
 type AuthorTimes = Record<string, string | null>;
 type AuthorFlags = Record<string, boolean>;
@@ -260,6 +262,10 @@ function writeQuery(selected: "all" | AuthorId, duanCategory: "all" | DuanCatego
   else url.searchParams.delete("symbol");
   const next = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : "");
   window.history.replaceState(null, "", next);
+  // 镜像到 cookie：下次刷新服务端首帧就能画出同一份筛选状态（标签行不再先消失再出现）。
+  try {
+    document.cookie = `${FILTER_COOKIE}=${encodeURIComponent(url.searchParams.toString())}; path=/; max-age=31536000; SameSite=Lax`;
+  } catch { /* cookie 不可用时只影响首帧，不影响筛选本身 */ }
 }
 
 function parseSymbol(raw: string): { market: string; code: string; name: string } | null {
@@ -269,6 +275,22 @@ function parseSymbol(raw: string): { market: string; code: string; name: string 
   const market = parsed?.market || match[1].toUpperCase();
   const code = parsed?.code || match[2].toUpperCase();
   return { market, code, name: code };
+}
+
+function parseFilterCookie(raw?: string | null): { selected: "all" | AuthorId; duanCategory: "all" | DuanCategory; page: number; symbol: string } {
+  const fallback = { selected: "all" as const, duanCategory: "all" as const, page: 1, symbol: "" };
+  if (!raw) return fallback;
+  const params = new URLSearchParams(raw);
+  const person = params.get("person");
+  const cat = params.get("cat");
+  const page = Number(params.get("page") || "1");
+  const symbol = params.get("symbol") || "";
+  return {
+    selected: person === "trump" || person === "duan" ? person : "all",
+    duanCategory: cat === "hot" || cat === "original" || cat === "longform" ? cat : "all",
+    page: Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1,
+    symbol: /^[A-Za-z]{2,5}[:.][A-Za-z0-9._-]{1,16}$/.test(symbol) ? symbol.toUpperCase() : ""
+  };
 }
 
 const LINK_CLASS = "inline bg-transparent p-0 font-semibold text-brand-deep hover:underline";
@@ -376,7 +398,7 @@ function PostBody({
   );
 }
 
-export default function TradingSquareView({ avatars, records = [], initialPosts = null }: { avatars?: Record<string, string>; records?: StockRecord[]; initialPosts?: Post[] | null }) {
+export default function TradingSquareView({ avatars, records = [], initialPosts = null, initialFilter = null }: { avatars?: Record<string, string>; records?: StockRecord[]; initialPosts?: Post[] | null; initialFilter?: string | null }) {
   // 首帧与服务端一致：优先用 SSR 下发的帖子快照（刷新时列表与作者头像立刻可见），
   // 没有快照才进入加载态；浏览器缓存和 URL 参数仍由 useLayoutEffect 接着恢复，避免水合报错。
   const [posts, setPosts] = useState<Post[]>(() => initialPosts ?? []);
@@ -384,10 +406,12 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
   const [refreshingByAuthor, setRefreshingByAuthor] = useState<AuthorFlags>(emptyFlags);
   const [updatedByAuthor, setUpdatedByAuthor] = useState<AuthorTimes>(emptyTimes);
   const [seen, setSeen] = useState<AuthorTimes>(emptyTimes);
-  const [selected, setSelected] = useState<"all" | AuthorId>("all");
-  const [duanCategory, setDuanCategory] = useState<"all" | DuanCategory>("all");
-  const [page, setPage] = useState(1);
-  const [detail, setDetail] = useState<{ market: string; code: string; name: string } | null>(null);
+  // 筛选状态由 cookie 镜像预置（服务端首帧即正确），URL 在水合后依然是最终依据。
+  const seeded = parseFilterCookie(initialFilter);
+  const [selected, setSelected] = useState<"all" | AuthorId>(seeded.selected);
+  const [duanCategory, setDuanCategory] = useState<"all" | DuanCategory>(seeded.duanCategory);
+  const [page, setPage] = useState(seeded.page);
+  const [detail, setDetail] = useState<{ market: string; code: string; name: string } | null>(() => parseSymbol(seeded.symbol));
   const [original, setOriginal] = useState<Record<string, boolean>>({});
   const [fixed, setFixed] = useState(false);
   const [hydrated, setHydrated] = useState(false);

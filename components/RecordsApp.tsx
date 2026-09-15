@@ -103,7 +103,8 @@ export default function RecordsApp({
   initialFlagIcons = {},
   initialAssetLibrary = null,
   initialCardLibrary = null,
-  initialTradingPosts = null
+  initialTradingPosts = null,
+  initialTradingFilter = null
 }: {
   initialTab: string;
   initialSymbol?: string;
@@ -122,6 +123,7 @@ export default function RecordsApp({
   initialAssetLibrary?: { assets: import("@/lib/useAssetIcons").Asset[]; total: number } | null;
   initialCardLibrary?: import("@/lib/cardLibrary").CardLibraryPayload | null;
   initialTradingPosts?: import("@/lib/tradingSquareSnapshot").TradingSquareSnapshotPost[] | null;
+  initialTradingFilter?: string | null;
 }) {
   const router = useRouter();
   const [user] = useState<User>(initialUser);
@@ -897,7 +899,7 @@ export default function RecordsApp({
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
           {activeTab === "global" && <GlobalPreviewView />}
-          {activeTab === "trading" && <TradingSquareView avatars={initialCelebAvatars} records={records} initialPosts={initialTradingPosts} />}
+          {activeTab === "trading" && <TradingSquareView avatars={initialCelebAvatars} records={records} initialPosts={initialTradingPosts} initialFilter={initialTradingFilter} />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} />}
           {activeTab === "assistant" && <AssistantView page="assistant" symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} />}
