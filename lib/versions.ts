@@ -3592,7 +3592,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     kind: "fix"
   }, {
     title: "智能助手窄屏适配打磨",
-    desc: "手机与平板（<1024px）下助手工作区高度此前写死 calc(100dvh - 112px)，而窄屏顶部真实占用是顶栏 60px（手机）/ 72px（平板）+ sticky 移动端标签栏约 56px + 下边距 14px，面板底部连同输入框会被推出可视区，平板偏差更大。现在改为 flex 撑满「顶栏 + 标签栏」之外的剩余高度（app-shell-main → records-app → records-content → assistant-page → assistant-workspace 全链路，覆盖 :has 选择器并在手机上按 60px 顶栏口径补 min-height），此后顶栏或标签栏高度调整都不需要再同步改常量。同时：触屏没有 hover，轮次短线轨道（仅悬停出预览、还会压住正文）在 <768px 隐藏；对话超过 24 轮时轨道只保留最近 24 条，避免垂直居中的轨道把最新一轮顶出可视区（此前用 overflow 裁剪整条轨道会切掉悬停预览，因此改成按条数显示）。",
+    desc: "手机与平板（<1024px）下助手工作区高度此前写死 calc(100dvh - 112px)，而窄屏顶部真实占用是顶栏 60px（手机）/ 72px（平板）+ sticky 移动端标签栏约 56px + 下边距 14px，面板底部连同输入框会被推出可视区，平板偏差更大。现在改为 flex 撑满「顶栏 + 标签栏」之外的剩余高度（app-shell-main → records-app → records-content → assistant-page → assistant-workspace 全链路，覆盖 :has 选择器并在手机上按 60px 顶栏口径补 min-height），此后顶栏或标签栏高度调整都不需要再同步改常量。手机上还把输入区与消息列表两侧留白由 24–31px 收到 16px，与输入框左右对齐；「轨迹」工具栏按钮 + 搜索框在窄屏会顶出边界，改为整条横向滚动、不换行不裁切。触屏没有 hover，轮次短线轨道（仅悬停出预览、还会压住正文）在 <768px 隐藏；对话超过 24 轮时轨道只保留最近 24 条，避免垂直居中的轨道把最新一轮顶出可视区（此前用 overflow 裁剪整条轨道会切掉悬停预览，因此改成按条数显示）。",
     kind: "fix"
   }]
 };

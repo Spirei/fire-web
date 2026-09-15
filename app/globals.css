@@ -5497,4 +5497,11 @@ button.PhotoView-Slider__toolbarIcon {
 @media (max-width: 640px) {
   /* 手机上顶栏只有 60px（见「手机壳层」段落），可用高度相应再多 12px。 */
   .app-shell-main:has(.assistant-page) { min-height:calc(100dvh - 60px); }
+  /* 助手输入区：手机两侧各让出 16px 就够，把宽度留给正文与输入框（原为 clamp(24px,8vw,128px)）。 */
+  .assistant-workspace .assistant-composer-dock { padding-left:16px!important; padding-right:16px!important; }
+  /* 消息列表容器（.assistant-message-list 的父级）同样收到 16px，与输入框左右对齐。 */
+  .assistant-workspace div:has(> .assistant-message-list) { padding-left:16px; padding-right:16px; }
+  /* 轨迹工具栏：手机上按钮 + 搜索框会顶出边界，这里允许横向滚动，不换行、不裁切。 */
+  .assistant-trace-toolbar { overflow-x:auto; scrollbar-width:none; }
+  .assistant-trace-toolbar::-webkit-scrollbar { display:none; }
 }

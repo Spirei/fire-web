@@ -50,7 +50,7 @@ export default function AssistantTraceView({ traces, query, onQueryChange, onRef
   };
 
   return <div className="-mx-5 -my-5 flex h-[calc(100%+2.5rem)] min-h-0 flex-col bg-white text-[#26282c] dark:bg-[#171819] dark:text-[#d8d9dc] sm:-mx-[12.5%] sm:-my-8 sm:h-[calc(100%+4rem)]">
-    <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-black/10 px-3 dark:border-white/10">
+    <div className="assistant-trace-toolbar flex h-11 shrink-0 items-center gap-1.5 border-b border-black/10 px-3 dark:border-white/10">
       <button type="button" onClick={()=>setRealDuration(value=>!value)} className={`flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition ${realDuration?"bg-black/[.08] dark:bg-white/10":"text-[#70747c] hover:bg-black/[.045] dark:text-[#989ca4] dark:hover:bg-white/[.06]"}`}><IconClock size={14}/>时长</button>
       <button type="button" onClick={toggleAll} className="h-7 rounded-md px-2 text-xs text-[#70747c] hover:bg-black/[.045] dark:text-[#989ca4] dark:hover:bg-white/[.06]">{allCollapsed?"展开轮次":"收起轮次"}</button>
       <button type="button" onClick={()=>setDetailsOpen(false)} className="hidden h-7 rounded-md px-2 text-xs text-[#70747c] hover:bg-black/[.045] dark:text-[#989ca4] dark:hover:bg-white/[.06] sm:block">收起详情</button>
