@@ -295,5 +295,36 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal((await reports.GET(request(null))).status, 401);
     assert.equal((await reports.GET(request('user'))).status, 403);
   });
+  await test('ordinary users cannot alter unowned shared assets; legacy unsafe attachments remain removable', async () => {
+    const assets = require(path.join(root, 'app/api/assets/add-by-search/route.ts'));
+    const call = body => assets.POST(new Request('http://localhost/api/assets/add-by-search', {method:'POST',headers:{cookie:`fire_session=${tokens.user}`,'Content-Type':'application/json'},body:JSON.stringify(body)}));
+    assert.equal((await call({type:'crypto',market:'ASSET',code:'BTC',name:'Bitcoin',onlyIfMissing:true})).status,403);
+    assert.equal((await call({type:'stock',market:'US',code:'../../proof',name:'Proof',onlyIfMissing:true})).status,400);
+    assert.equal((await call({type:'stock',market:'US',code:'UNOWNED',name:'Proof',onlyIfMissing:true})).status,403);
+    const attachments = require(path.join(root, 'lib/assistantAttachments.ts'));
+    const conversationId='ac-'+'b'.repeat(24);
+    const saved=attachments.saveAssistantAttachments(user.id,conversationId,[{name:'pixel.png',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR9sAAAAASUVORK5CYII='}])[0];
+    const rootDir=path.join(temp,'data','assistant-attachments',user.id,conversationId);
+    fs.unlinkSync(path.join(rootDir,saved.id+'.png'));
+    const legacy=path.join(rootDir,saved.id+'.svg');fs.writeFileSync(legacy,'<svg onload="alert(1)"/>');
+    assert.equal(attachments.getAssistantAttachment(user.id,saved.id),null);
+    attachments.deleteConversationAttachments(user.id,conversationId);
+    assert.equal(fs.existsSync(legacy),false);
+  });
+  await test('production initial registration requires the private deployment token', async () => {
+    const auth = require(path.join(root, 'lib/auth.ts'));
+    const original = auth.needsSetup, environment = process.env.NODE_ENV, token = process.env.FIRE_SETUP_TOKEN;
+    auth.needsSetup = () => true;
+    process.env.NODE_ENV = 'production';
+    const registration = require(path.join(root, 'app/api/auth/register/route.ts'));
+    const req = body => new Request('http://localhost/api/auth/register', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    try {
+      delete process.env.FIRE_SETUP_TOKEN;
+      assert.equal((await registration.POST(req({}))).status, 503);
+      process.env.FIRE_SETUP_TOKEN = 'test-install-token-'.repeat(3);
+      assert.equal((await registration.POST(req({setupToken:'incorrect'}))).status, 403);
+      assert.equal((await registration.POST(req({setupToken:process.env.FIRE_SETUP_TOKEN,username:'install_review',password:'Install-test-1234'}))).status, 201);
+    } finally { auth.needsSetup=original; if(environment===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=environment; if(token===undefined)delete process.env.FIRE_SETUP_TOKEN;else process.env.FIRE_SETUP_TOKEN=token; }
+  });
   db.close();console.log(`${passed} regression suites passed (isolated database)`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{ fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode || 0); });

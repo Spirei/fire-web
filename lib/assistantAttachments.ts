@@ -18,7 +18,16 @@ export function saveAssistantAttachments(userId:string,conversationId:string,ite
 }
 export function getAssistantAttachment(userId:string,id:string){if(!/^[A-Za-z0-9_-]{1,80}$/.test(userId)||!/^ai-[a-f0-9]{24}$/.test(id))return null;const row=getDb().prepare("SELECT conversation_id,name,size FROM assistant_attachments WHERE user_id=? AND id=?").get(userId,id) as {conversation_id:string;name:string;size:number}|undefined;if(!row||!/^ac-[a-f0-9]{24}$/.test(row.conversation_id))return null;const root=path.join(process.cwd(),"data","assistant-attachments",userId,row.conversation_id);if(!fs.existsSync(root))return null;const file=fs.readdirSync(root).find(name=>name.startsWith(`${id}.`));if(!file || !["jpg","png","gif","webp"].includes(path.extname(file).slice(1)))return null;const info=fs.lstatSync(path.join(root,file));if(!info.isFile()||info.isSymbolicLink()||info.size>8*1024*1024)return null;return{...row,file:path.join(root,file),ext:path.extname(file).slice(1)};}
 export function deleteConversationAttachments(userId:string,conversationId?:string){
-  const rows=(conversationId?getDb().prepare("SELECT url FROM assistant_attachments WHERE user_id=? AND conversation_id=?").all(userId,conversationId):getDb().prepare("SELECT url FROM assistant_attachments WHERE user_id=?").all(userId)) as Array<{url:string}>;
-  for(const row of rows){const id=new URL(row.url,"http://local").searchParams.get("id")||"";const attachment=getAssistantAttachment(userId,id);if(attachment)try{fs.unlinkSync(attachment.file);}catch{}}
+  if(!/^[A-Za-z0-9_-]{1,80}$/.test(userId) || (conversationId && !/^ac-[a-f0-9]{24}$/.test(conversationId))) return;
+  const rows=(conversationId?getDb().prepare("SELECT id,conversation_id FROM assistant_attachments WHERE user_id=? AND conversation_id=?").all(userId,conversationId):getDb().prepare("SELECT id,conversation_id FROM assistant_attachments WHERE user_id=?").all(userId)) as Array<{id:string;conversation_id:string}>;
+  for(const row of rows){
+    if(!/^ai-[a-f0-9]{24}$/.test(row.id)||!/^ac-[a-f0-9]{24}$/.test(row.conversation_id))continue;
+    const root=path.join(process.cwd(),"data","assistant-attachments",userId,row.conversation_id);
+    if(!fs.existsSync(root))continue;
+    for(const name of fs.readdirSync(root))if(name.startsWith(`${row.id}.`)){
+      const target=path.join(root,name), info=fs.lstatSync(target);
+      if(info.isFile()||info.isSymbolicLink())fs.rmSync(target,{force:true});
+    }
+  }
   if(conversationId)getDb().prepare("DELETE FROM assistant_attachments WHERE user_id=? AND conversation_id=?").run(userId,conversationId);else getDb().prepare("DELETE FROM assistant_attachments WHERE user_id=?").run(userId);
 }

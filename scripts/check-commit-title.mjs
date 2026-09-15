@@ -7,7 +7,12 @@ function readTitles(args) {
   if (args[0] === "--title") return [args.slice(1).join(" ")];
 
   const [before = "", head = "HEAD"] = args;
-  const revisions = before && !/^0+$/.test(before) ? [`${before}..${head}`] : ["-1", head];
+  let useRange = false;
+  if (before && !/^0+$/.test(before)) {
+    try { execFileSync("git", ["merge-base", "--is-ancestor", before, head], { stdio: "pipe" }); useRange = true; }
+    catch { /* Rewritten history can make the previous remote SHA unavailable. */ }
+  }
+  const revisions = useRange ? [`${before}..${head}`] : ["-1", head];
   const output = execFileSync("git", ["log", "--format=%s", ...revisions], { encoding: "utf8" }).trim();
   return output ? output.split("\n") : [];
 }
