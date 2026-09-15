@@ -779,7 +779,7 @@ export default function RecordsApp({
       <aside className="fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block">
         <nav className="fire-sidebar-panel relative flex min-h-[calc(100vh-112px)] max-h-[calc(100vh-104px)] flex-col overflow-y-auto rounded-2xl px-2 pb-3">
           <FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} />
-          <div className="fire-sidebar-section-label">工作区</div>
+          <div className="fire-sidebar-section-label">资产</div>
           {sidebarTabs.map((t, index) => {
             const isManagement = ["users", "attachments", "library", "cards", "activities", "settings"].includes(t.key);
             const previous = sidebarTabs[index - 1];
