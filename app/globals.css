@@ -839,7 +839,7 @@
 .four-door-wheel>img,.four-door-dial { display:block; width:100%; height:100%; pointer-events:none; user-select:none; }
 .four-door-art.is-style-2 .four-door-hub {
   position:absolute;
-  z-index:5;
+  z-index:3;
   left:99px;
   top:192px;
   width:22px;
@@ -873,9 +873,9 @@
 .four-door-sector.charcoal { clip-path:polygon(100% 0,100% 100%,50% 50%); }
 .four-door-sector.ember { clip-path:polygon(100% 100%,0 100%,50% 50%); }
 .four-door-sector.moss { clip-path:polygon(0 100%,0 0,50% 50%); }
-.four-door-pointer { position:absolute; left:99px; top:118px; width:23px; height:auto; pointer-events:none; user-select:none; filter:drop-shadow(0 3px 3px rgba(0,0,0,.42)); transform-origin:50% 72%; backface-visibility:hidden; }
-.four-door-pointer-arch { z-index:1; clip-path:polygon(17% 0,78% 0,78% 60%,61% 60%,62% 28%,57% 14%,48% 9%,39% 15%,34% 31%,34% 55%,17% 55%); }
-.four-door-pointer-tip { z-index:4; clip-path:polygon(16% 45%,84% 45%,79% 72%,58% 100%,42% 100%,20% 72%); }
+.four-door-pointer { position:absolute; z-index:4; left:99px; top:118px; width:23px; height:auto; pointer-events:none; user-select:none; filter:drop-shadow(0 3px 3px rgba(0,0,0,.42)); transform-origin:50% 72%; backface-visibility:hidden; }
+.four-door-pointer-arch { clip-path:polygon(16% 0,80% 0,80% 68%,64% 68%,63% 28%,57% 12%,48% 7%,38% 13%,32% 30%,32% 66%,16% 66%); }
+.four-door-pointer-tip { clip-path:polygon(15% 40%,86% 40%,80% 72%,58% 100%,42% 100%,19% 72%); }
 .four-door-advance { position:absolute; z-index:6; left:91px; top:232px; width:40px; height:72px; border:0; border-radius:20px; background:transparent; cursor:pointer; }
 .four-door-advance:disabled { cursor:wait; }
 .four-door-sector:focus-visible,.four-door-advance:focus-visible,.four-door-tool:focus-visible { outline:2px solid #6d97bc; outline-offset:2px; }
