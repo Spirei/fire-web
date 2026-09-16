@@ -409,11 +409,15 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(sankeyLayoutFor(320).sideMargin <= sankeyLayoutFor(430).sideMargin);
     assert(sankeyLayoutFor(700).sideMargin <= desktop.sideMargin);
     assert(sankeyLayoutFor(120).labelWidth >= 78, '极窄宽度也要保证标签最小可读宽度');
-    // 画布高度随持仓数增长，并有上下限
+    // 画布高度随持仓数增长，并有上下限；手机宽度有限，高度必须给足，否则六行持仓挤成方块（被压扁）
     assert.equal(sankeyCanvasHeight(0), 360);
     assert.equal(sankeyCanvasHeight(1), 360);
     assert(sankeyCanvasHeight(10) > sankeyCanvasHeight(4));
-    assert.equal(sankeyCanvasHeight(100), 820);
+    assert.equal(sankeyCanvasHeight(100), 980);
+    assert(sankeyCanvasHeight(6) >= 520, '满 6 行持仓时手机高度不能低于 520px');
+    assert(sankeyCanvasHeight(6) / 390 > 1.3, '手机端（390 宽）高度至少要是宽度的 1.3 倍，否则看起来是压扁的方块');
+    // 桌面端由 CSS 收回上限，避免被拉得过高
+    assert(fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8').includes('min(var(--sankey-canvas-height, 420px), 460px)'));
 
     const source = fs.readFileSync(path.join(root, 'components/HoldingsPnlSankey.tsx'), 'utf8');
     const model = fs.readFileSync(path.join(root, 'lib/sankeyModel.ts'), 'utf8');

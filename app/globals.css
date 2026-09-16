@@ -3717,6 +3717,9 @@ html.dark .watch-import-target {
 .holdings-pnl-sankey-summary .is-profit strong { color: #e5484d; }
 .holdings-pnl-sankey-summary .is-loss strong { color: #0aa77d; }
 .holdings-pnl-sankey-canvas { width: 100%; height: var(--sankey-canvas-height, 420px); }
+/* 手机端保留「按持仓数算出来的高度」（否则 6 行持仓挤成方块、曲线被压扁）；
+   桌面端宽度足够，把高度收回一个上限，避免图被拉得过高。 */
+@media (min-width: 720px) { .holdings-pnl-sankey-canvas { height: min(var(--sankey-canvas-height, 420px), 460px); } }
 .holdings-pnl-sankey-empty { display: grid; height: 380px; place-items: center; color: #9aa2ad; font-size: 12px; }
 .dark .holdings-pnl-sankey-card { border-color: rgba(255,255,255,.1); background: rgba(22,27,35,.76); box-shadow: none; }
 .dark .holdings-pnl-sankey-card > header { border-color: rgba(255,255,255,.08); }
