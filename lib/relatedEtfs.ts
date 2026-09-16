@@ -235,9 +235,20 @@ export function relatedStock(market: string, code: string): RelatedStock | null 
   };
 }
 
+export type RelatedEtfBadgeTone = "long2x" | "short" | "income" | "long";
+
 export interface RelatedEtfBadgeMeta {
   label: "2x" | "反" | "收" | "多";
   title: string;
+  tone: RelatedEtfBadgeTone;
+}
+
+function is2xProduct(badge: string, name?: string) {
+  return /(2x|2倍|两倍)/i.test(badge) || /(2x|2倍|两倍)/i.test(name || "");
+}
+
+function isShortProduct(name?: string) {
+  return /(做空|short|inverse|bear)/i.test(name || "");
 }
 
 /** 全站相关 ETF 图标角标：统一从关系目录派生，避免各组件自行判断和展示。 */
@@ -246,12 +257,19 @@ export function relatedEtfBadge(market: string, code: string, name?: string): Re
     const normalized = normalizedUsCode(code);
     const relation = RELATED_ETF_BY_CODE[normalized];
     if (relation) {
-      if (relation.kind === "income") return { label: "收", title: "收益策略" };
-      if (relation.kind === "short") return { label: "反", title: "反向 ETF" };
-      return /2X/i.test(relation.badge) ? { label: "2x", title: relation.badge } : { label: "多", title: relation.badge };
+      if (relation.kind === "income") return { label: "收", title: "收益策略", tone: "income" };
+      const double = is2xProduct(relation.badge, relation.name);
+      if (relation.kind === "short") {
+        return { label: double ? "2x" : "反", title: relation.badge, tone: "short" };
+      }
+      return double
+        ? { label: "2x", title: relation.badge, tone: "long2x" }
+        : { label: "多", title: relation.badge, tone: "long" };
     }
   }
-  return isDoubleEtf(market, code, name) ? { label: "2x", title: "2X 做多" } : null;
+  if (!isDoubleEtf(market, code, name)) return null;
+  const short = isShortProduct(name);
+  return { label: "2x", title: short ? "2X 做空" : "2X 做多", tone: short ? "short" : "long2x" };
 }
 
 /** 判断某只股票/ETF 是否为 2 倍杠杆产品（用于显示 2x 徽标）：
