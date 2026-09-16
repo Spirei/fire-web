@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { createFourDoorAudio, TICK_DEG } from "@/lib/fourDoor";
+import { createFourDoorAudio, LONG_EASE, LONG_TURN_MS, SHORT_EASE, SHORT_TURN_MS, TICK_DEG } from "@/lib/fourDoor";
 import { usePersistedState } from "@/lib/usePersistedState";
 
 export type FourDoorKey = "holdings" | "assets" | "fire" | "global";
@@ -53,6 +53,7 @@ function FourDoorDial({ uid }: { uid: string }) {
   const moss = `fd-${uid}-moss`;
   const rim = `fd-${uid}-rim`;
   const gloss = `fd-${uid}-gloss`;
+  const arrow = `fd-${uid}-arrow`;
   return (
     <svg className="four-door-dial" viewBox="0 0 200 200" aria-hidden="true">
       <defs>
@@ -86,6 +87,9 @@ function FourDoorDial({ uid }: { uid: string }) {
           <stop offset="38%" stopColor="#fff" stopOpacity="0.08" />
           <stop offset="100%" stopColor="#fff" stopOpacity="0" />
         </radialGradient>
+        <marker id={arrow} viewBox="0 0 12 12" refX="10" refY="6" markerWidth="5.8" markerHeight="5.8" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0.6 1.2 11.4 6 0.6 10.8Z" fill="#fff" />
+        </marker>
       </defs>
       <circle cx="100" cy="100" r="99" fill={`url(#${rim})`} />
       <circle cx="100" cy="100" r="93.5" fill="#1a1308" />
@@ -98,9 +102,15 @@ function FourDoorDial({ uid }: { uid: string }) {
         const [x2, y2] = polar(92, deg);
         return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(255,255,255,.22)" strokeWidth="1.2" />;
       })}
-      <path d="M118 163 A46 46 0 0 1 82 163" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" />
-      <path d="M80 163 L88.5 157.5 L87.2 168.4 Z" fill="#fff" />
       <ellipse cx="78" cy="72" rx="46" ry="28" fill={`url(#${gloss})`} transform="rotate(-28 78 72)" />
+      <path
+        d="M131 158 C 117 176 86 176 74 159"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="3.8"
+        strokeLinecap="round"
+        markerEnd={`url(#${arrow})`}
+      />
     </svg>
   );
 }
@@ -188,9 +198,9 @@ export default function FourDoorNavigator({
     turningTimer.current = window.setTimeout(() => {
       turningTimer.current = null;
       setTurning(false);
-    }, 600);
+    }, SHORT_TURN_MS);
     if (navigate) {
-      watchSpin(from, 600, true);
+      watchSpin(from, SHORT_TURN_MS, true);
       onSelect(DOORS[index].key);
     }
   }
@@ -213,18 +223,18 @@ export default function FourDoorNavigator({
     pointerTimer.current = window.setTimeout(() => {
       pointerTimer.current = null;
       setTurning(true);
-    }, 650);
+    }, Math.round(LONG_TURN_MS * 0.42));
     turningTimer.current = window.setTimeout(() => {
       turningTimer.current = null;
       setTurning(false);
-    }, 1320);
-    watchSpin(from, 1260, true);
+    }, LONG_TURN_MS + 40);
+    watchSpin(from, LONG_TURN_MS, true);
     if (navigationTimer.current !== null) window.clearTimeout(navigationTimer.current);
     navigationTimer.current = window.setTimeout(() => {
       navigationTimer.current = null;
       setRandomizing(false);
       onSelect(destination);
-    }, 1340);
+    }, LONG_TURN_MS + 60);
   }
 
   useEffect(() => {
@@ -281,7 +291,17 @@ export default function FourDoorNavigator({
       </button>
       <div className={`four-door-art ${turning ? "is-turning" : ""} ${randomizing ? "is-randomizing" : ""} ${styleTwo ? "is-style-2" : "is-style-1"}`} aria-busy={randomizing}>
         <img onError={() => setArtAvailable(false)} className="four-door-window" src="/uploads/feature/four-door/window.png" alt="霍尔的移动城堡窗户" />
-        <div ref={wheelRef} className="four-door-wheel" style={{ transform: `rotate(${rotation}deg)` }} role="group" aria-label="四色门工作区入口">
+        <div
+          ref={wheelRef}
+          className="four-door-wheel"
+          style={{
+            transform: `translateZ(0) rotate(${rotation}deg)`,
+            transitionDuration: `${randomizing ? LONG_TURN_MS : SHORT_TURN_MS}ms`,
+            transitionTimingFunction: randomizing ? LONG_EASE : SHORT_EASE
+          }}
+          role="group"
+          aria-label="四色门工作区入口"
+        >
           {styleTwo ? <FourDoorDial uid={uid} /> : <img src="/uploads/feature/four-door/dial.png" alt="" />}
           {DOORS.map((door, index) => <button key={door.key} type="button" disabled={randomizing} className={`four-door-sector ${door.color}`} aria-label={`${door.label}入口`} onClick={() => moveTo(index, true)} />)}
         </div>

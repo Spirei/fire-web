@@ -1,8 +1,10 @@
 /** 四色门转盘：缓动曲线与和转角联动的棘轮音效。 */
 
 export const TICK_DEG = 15;
-export const SHORT_TURN_MS = 680;
-export const LONG_TURN_MS = 1680;
+export const SHORT_TURN_MS = 820;
+export const LONG_TURN_MS = 1760;
+export const SHORT_EASE = "cubic-bezier(.2,.82,.12,1)";
+export const LONG_EASE = "cubic-bezier(.12,.86,.08,1)";
 
 function cubicBezier(x1: number, y1: number, x2: number, y2: number) {
   const ax = 3 * x1 - 3 * x2 + 1;
@@ -44,6 +46,7 @@ export function createFourDoorAudio() {
     const Ctor = window.AudioContext || (window as AudioWindow).webkitAudioContext;
     if (!Ctor) return null;
     context = new Ctor();
+    if (context.state === "suspended") void context.resume();
     const compressor = context.createDynamicsCompressor();
     compressor.threshold.value = -18;
     compressor.knee.value = 6;
@@ -63,6 +66,7 @@ export function createFourDoorAudio() {
   function tick(velocityDegPerSec: number) {
     const ctx = ensure();
     if (!ctx || !master || !noise) return;
+    if (ctx.state === "suspended") void ctx.resume();
     const speed = Math.min(1, Math.max(0, velocityDegPerSec / 780));
     const now = ctx.currentTime;
     const dur = 0.016 + (1 - speed) * 0.028;
@@ -99,34 +103,24 @@ export function createFourDoorAudio() {
   function lock() {
     const ctx = ensure();
     if (!ctx || !master) return;
+    if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
-    const thud = ctx.createOscillator();
-    const thudGain = ctx.createGain();
-    thud.type = "sine";
-    thud.frequency.setValueAtTime(168, now);
-    thud.frequency.exponentialRampToValueAtTime(92, now + 0.16);
-    thudGain.gain.setValueAtTime(0.0001, now);
-    thudGain.gain.exponentialRampToValueAtTime(0.12, now + 0.004);
-    thudGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
-    thud.connect(thudGain).connect(master);
-    thud.start(now);
-    thud.stop(now + 0.2);
-
     ([
-      [1318.5, 0.07, 0.22],
-      [1975.5, 0.035, 0.16],
-      [2637, 0.016, 0.1]
-    ] as const).forEach(([freq, volume, duration]) => {
+      [2093.0, 0.1, 0.36, "triangle"],
+      [2637.02, 0.048, 0.28, "sine"],
+      [3135.96, 0.024, 0.2, "sine"],
+      [4186.01, 0.012, 0.12, "sine"]
+    ] as const).forEach(([freq, volume, duration, type]) => {
       const bell = ctx.createOscillator();
       const gain = ctx.createGain();
-      bell.type = "sine";
+      bell.type = type;
       bell.frequency.setValueAtTime(freq, now);
       gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(volume, now + 0.002);
+      gain.gain.exponentialRampToValueAtTime(volume, now + 0.004);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
       bell.connect(gain).connect(master!);
       bell.start(now);
-      bell.stop(now + duration + 0.01);
+      bell.stop(now + duration + 0.02);
     });
   }
 
