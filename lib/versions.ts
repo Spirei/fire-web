@@ -3524,7 +3524,7 @@ export const V0_1_31_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_32_ENTRY: VersionEntry = {
   ...V0_1_31_ENTRY,
   version: "v0.1.32",
   date: "2026-09-16",
@@ -3626,6 +3626,19 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "相关 ETF 圆点改年轻配色（形状不变）",
     desc: "按要求保留现有 19px 圆形角标（右下错位、白描边、8px 加粗白字），只改配色：去掉偏压抑的深灰 #4b5563。两倍做多与两倍做空都显示 2x，用颜色区分——做多西瓜红 #ff4d78、做空薄荷绿 #12c48b；1x/1.5x 反向仍为「反」（同绿色）、收益橙 #e8890c、非 2x 做多蓝 #3b93ff，投影改成同色轻晕。调用点与尺寸位置不变。",
     kind: "fix"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_32_ENTRY,
+  version: "v0.1.33",
+  date: "2026-09-17",
+  summary: "四色门增加样式 2，转盘棘轮声跟随真实转角。",
+  software: V0_1_32_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.33" } : item),
+  changes: [{
+    title: "四色门样式 2 + 转盘棘轮声跟随转动",
+    desc: "原插画转盘保留为样式 1；珐琅金边转盘作为样式 2。左上角四色圆标切换两套外观（偏好写入 fire:four-door-style），右上角仍是静音。转动时按真实转角每 15° 发一记棘轮声，转速越快越密越尖，停稳再落一声锁位音；静音立即切断。窗口、挂钩、手型光标与原有缓动时长不变。",
+    kind: "feature"
   }]
 };
 
