@@ -4,19 +4,45 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import echarts, { type EChartsInstance } from "@/lib/echarts";
 import MarketIcon from "@/components/MarketIcon";
 import AppModal from "@/components/AppModal";
-import { sankeyCanvasHeight } from "@/lib/sankeyLayout";
-import { buildSankeyOption, formatCurrency, type PnlSankeyItem } from "@/lib/sankeyModel";
 import { MULTI_CURRENCIES } from "@/lib/currency";
 import { localDateKey } from "@/lib/format";
 import { showToast } from "@/lib/toast";
 
-export type { PnlSankeyItem } from "@/lib/sankeyModel";
+export interface PnlSankeyItem { name: string; code: string; market: string; pnl: number }
 interface Props {
   profit: PnlSankeyItem[];
   loss: PnlSankeyItem[];
   profitTotal: number;
   lossTotal: number;
   rates: Record<string, number>;
+}
+
+const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", HKD: "HK$", CNY: "¥", SGD: "S$", JPY: "¥", KRW: "₩", EUR: "€" };
+
+function formatCurrency(value: number, currency: string) {
+  const digits = currency === "JPY" || currency === "KRW" ? 0 : 2;
+  return `${CURRENCY_SYMBOLS[currency] || `${currency} `}${Math.abs(value).toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+}
+
+/** 块上金额缩写：≥1 亿显示亿、≥1 万显示万，其余保留两位，如 +$1.23万 / −¥5,678.90 */
+function compactMoney(value: number, currency: string) {
+  const sign = value >= 0 ? "+" : "−";
+  const abs = Math.abs(value);
+  const symbol = CURRENCY_SYMBOLS[currency] || `${currency} `;
+  if (abs >= 1e12) return `${sign}${symbol}${(abs / 1e12).toFixed(2)}万亿`;
+  if (abs >= 1e8) return `${sign}${symbol}${(abs / 1e8).toFixed(2)}亿`;
+  if (abs >= 1e4) return `${sign}${symbol}${(abs / 1e4).toFixed(2)}万`;
+  return `${sign}${symbol}${abs.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function marketLabel(market: string) {
+  return market === "US" ? "美股" : market === "HK" ? "港股" : market === "CN" ? "A股" : market;
+}
+
+/** 2 倍杠杆 ETF（名称含 2倍/2x 且带 ETF/做多/做空）只显示代码，正股显示名称 */
+function displayName(item: PnlSankeyItem): string {
+  const leveraged = /(\d+(?:\.\d+)?)\s*[xX倍]/.test(item.name) && /ETF|做多|做空/i.test(item.name);
+  return leveraged ? item.code : (item.name || item.code);
 }
 
 const FALLBACK_LOGO =
@@ -44,25 +70,79 @@ export default function HoldingsPnlSankey({ profit, loss, profitTotal, lossTotal
   const convert = (value: number) => value * currencyRate;
   const dateLabel = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
 
-  // 图表配置统一放在 lib/sankeyModel（纯函数），本地与回归测试渲染的是同一份实现。
-  const sankeyOption = (dark: boolean, width: number) => buildSankeyOption({ dark, width, currency, profit, loss, netTotal, convert });
+  function buildOption(dark: boolean, compact = false) {
+    const ink = dark ? "#e6ebf2" : "#313944";
+    const muted = dark ? "#8f99a7" : "#7e8794";
+    const center = "持仓盈亏";
+    const centerAmountColor = netTotal >= 0 ? "#e5484d" : "#0aa77d";
+    const nodeName = (item: PnlSankeyItem, side: "P" | "L") => `${side}:${item.market}:${item.code}`;
+    const label = (item: PnlSankeyItem) => `{name|${displayName(item)}}\n{amount|${compactMoney(item.pnl, currency)}}`;
+    const nodes = [
+      ...profit.map((item) => ({ name: nodeName(item, "P"), depth: 0, itemStyle: { color: "#e5484d" }, label: { formatter: label(item), position: "left", rich: { name: { color: ink }, amount: { color: "rgba(229,72,77,.85)" } } } })),
+      { name: center, depth: 1, itemStyle: { color: "#7567b9" }, label: compact ? { show: false } : { color: centerAmountColor, fontWeight: 800, formatter: `{name|${center}}\n{amount|${compactMoney(netTotal, currency)}}`, rich: { name: { color: centerAmountColor, fontSize: 12, fontWeight: 800, lineHeight: 16 }, amount: { color: centerAmountColor, fontSize: 10, fontWeight: 700, lineHeight: 13 } } } },
+      ...loss.map((item) => ({ name: nodeName(item, "L"), depth: 2, itemStyle: { color: "#0aa77d" }, label: { formatter: label(item), position: "right", rich: { name: { color: ink }, amount: { color: "rgba(10,167,125,.88)" } } } }))
+    ];
+    const links = [
+      ...profit.map((item) => ({ source: nodeName(item, "P"), target: center, value: Math.max(.01, Math.abs(item.pnl)), stock: item, lineStyle: { color: "rgba(229,72,77,.42)" } })),
+      ...loss.map((item) => ({ source: center, target: nodeName(item, "L"), value: Math.max(.01, Math.abs(item.pnl)), stock: item, lineStyle: { color: "rgba(10,167,125,.38)" } }))
+    ];
+    return {
+      animationDuration: 450,
+      tooltip: { trigger: "item", confine: true, backgroundColor: dark ? "#202630" : "#fff", borderColor: dark ? "rgba(255,255,255,.14)" : "#d9dee5", textStyle: { color: ink, fontSize: 12 }, formatter: (params: { data?: { stock?: PnlSankeyItem }; name?: string }) => {
+        const item = params.data?.stock;
+        if (!item) return `<b>${params.name || center}</b>`;
+        const positive = item.pnl > 0;
+        return `<b>${item.name} ${item.code}</b><br/><span style="color:${muted}">${marketLabel(item.market)}</span><br/><b style="color:${positive ? "#e5484d" : "#0aa77d"}">${positive ? "+" : "−"}${formatCurrency(convert(item.pnl), currency)}</b>`;
+      } },
+      series: [{
+        type: "sankey",
+        left: compact ? 82 : 170,
+        right: compact ? 82 : 170,
+        top: compact ? 18 : 30,
+        bottom: compact ? 18 : 30,
+        nodeWidth: compact ? 10 : 14,
+        nodeGap: compact ? 12 : 18,
+        nodeAlign: "justify",
+        draggable: false,
+        layoutIterations: compact ? 32 : 48,
+        data: nodes,
+        links,
+        lineStyle: { curveness: .5, opacity: .55 },
+        itemStyle: { borderWidth: 0, borderRadius: 3 },
+        label: {
+          color: ink,
+          fontSize: compact ? 9 : 11,
+          fontWeight: 650,
+          distance: compact ? 6 : 10,
+          lineHeight: compact ? 12 : 15,
+          verticalAlign: "middle",
+          overflow: "truncate",
+          width: compact ? 74 : 155,
+          rich: {
+            name: { fontSize: compact ? 9 : 11, fontWeight: 650, color: ink, lineHeight: compact ? 12 : 15 },
+            amount: { fontSize: compact ? 8 : 10, fontWeight: 700, color: muted, lineHeight: compact ? 11 : 13 }
+          }
+        },
+        emphasis: { focus: "adjacency", lineStyle: { opacity: .95 } },
+        labelLayout: { hideOverlap: true }
+      }]
+    };
+  }
 
   useEffect(() => {
     if (!ref.current || empty) return;
     const chart = echarts.init(ref.current, null, { renderer: "canvas" });
     chartRef.current = chart;
     const dark = document.documentElement.classList.contains("dark");
-    let appliedWidth = ref.current.clientWidth;
-    chart.setOption(sankeyOption(dark, appliedWidth));
+    let compact = ref.current.clientWidth < 520;
+    chart.setOption(buildOption(dark, compact));
     const resize = new ResizeObserver(() => {
       if (!ref.current) return;
-      const nextWidth = ref.current.clientWidth;
+      const nextCompact = ref.current.clientWidth < 520;
       chart.resize();
-      // 标签列宽、字号、节点宽度都随宽度连续变化，宽度变动超过一个阈值才重算布局，
-      // 避免布局抖动（键盘弹出、滚动条出现）时反复 setOption。
-      if (Math.abs(nextWidth - appliedWidth) >= 24) {
-        appliedWidth = nextWidth;
-        chart.setOption(sankeyOption(dark, nextWidth), true);
+      if (nextCompact !== compact) {
+        compact = nextCompact;
+        chart.setOption(buildOption(dark, compact), true);
       }
     });
     resize.observe(ref.current);
@@ -241,7 +321,7 @@ export default function HoldingsPnlSankey({ profit, loss, profitTotal, lossTotal
         <strong>{formatCurrency(convert(lossTotal), currency)}</strong>
       </div>
     </div>
-    {empty ? <div className="holdings-pnl-sankey-empty">暂无可计算的持仓盈亏数据</div> : <div ref={ref} className="holdings-pnl-sankey-canvas" style={{ "--sankey-canvas-height": `${sankeyCanvasHeight(Math.max(profit.length, loss.length))}px` } as CSSProperties} />}
+    {empty ? <div className="holdings-pnl-sankey-empty">暂无可计算的持仓盈亏数据</div> : <div ref={ref} className="holdings-pnl-sankey-canvas" style={{ "--sankey-mobile-height": `${Math.min(720, Math.max(360, Math.max(profit.length, loss.length) * 48 + 64))}px` } as CSSProperties} />}
     {sharing && (
       <div
         ref={shareCardRef}
