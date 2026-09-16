@@ -37,7 +37,7 @@ export function sankeyLayoutFor(width: number): SankeyLayout {
     labelWidth,
     labelGap,
     sideMargin: labelWidth + labelGap + 2,
-    nodeWidth: wide ? 14 : 9,
+    nodeWidth: wide ? 14 : 11,
     // 节点间距必须大于标签行高，否则小持仓的标签会与邻标签重叠、被 ECharts 的 hideOverlap
     // 悄悄藏掉（实测：宽屏两行标签需要 ≥30，手机单行标签需要 ≥14）。这组值都留了余量。
     nodeGap: wide ? 32 : 18,

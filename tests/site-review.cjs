@@ -416,10 +416,38 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(sankeyCanvasHeight(100), 820);
 
     const source = fs.readFileSync(path.join(root, 'components/HoldingsPnlSankey.tsx'), 'utf8');
-    assert(source.includes('sankeyLayoutFor(width)'));
+    const model = fs.readFileSync(path.join(root, 'lib/sankeyModel.ts'), 'utf8');
+    // option 构建已抽到 lib/sankeyModel（本地与回归测试渲染同一份实现），组件只负责挂载与分享
+    assert(source.includes('buildSankeyOption({ dark, width, currency, profit, loss, netTotal, convert })'));
+    assert(model.includes('sankeyLayoutFor(width)'));
     assert(source.includes('sankeyCanvasHeight(Math.max(profit.length, loss.length))'));
     assert(!source.includes('--sankey-mobile-height'), '旧的写死高度变量应已移除');
     assert(fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8').includes('height: var(--sankey-canvas-height, 420px)'));
+  });
+  await test('sankey option uses renderer-safe gradients and theme palettes', () => {
+    const { buildSankeyOption, sankeyPalette } = require(path.join(root, 'lib/sankeyModel.ts'));
+    const profit = [{ name: '英伟达', code: 'NVDA', market: 'US', pnl: 42000 }];
+    const loss = [{ name: 'Meta', code: 'META', market: 'US', pnl: -26000 }];
+    const option = buildSankeyOption({ dark: false, width: 390, currency: 'USD', profit, loss, netTotal: 16000, convert: (value) => value });
+    const series = option.series[0];
+    // 连线必须是显式渐变对象：ECharts 的 'gradient' 关键字是 canvas 专用写法，
+    // SVG 渲染器会把它原样写成 fill="gradient"（无效值）并附带一层裁剪，把两侧标签切掉。
+    for (const link of series.links) {
+      assert.equal(link.lineStyle.color.type, 'linear');
+      assert.equal(link.lineStyle.color.colorStops.length, 2);
+    }
+    assert(!JSON.stringify(series).includes('"gradient"'), '不能出现 canvas 专用的 gradient 关键字');
+    for (const node of series.data) assert.equal(typeof node.itemStyle.color, 'object', '节点颜色也用显式渐变');
+    // 深浅色两套调色板必须不同，否则深色底上柱体发白、中间脊柱亮得像荧光棒
+    const light = sankeyPalette(false);
+    const darkPalette = sankeyPalette(true);
+    assert.notEqual(light.spineTop, darkPalette.spineTop);
+    assert.notEqual(light.profitTop, darkPalette.profitTop);
+    assert.notEqual(light.linkMid, darkPalette.linkMid);
+    // 手机端单行标签、宽屏两行标签
+    const desktop = buildSankeyOption({ dark: false, width: 1180, currency: 'USD', profit, loss, netTotal: 16000, convert: (value) => value });
+    assert(!series.data[0].label.formatter.includes("\n"), '手机端标签应为单行');
+    assert(desktop.series[0].data[0].label.formatter.includes("\n"), '宽屏标签应为两行');
   });
   await test('assistant answers render markdown tables and only safe links', () => {
     const { parseAssistantBlocks, parseInlineSegments } = require(path.join(root, 'lib/assistantMarkdown.ts'));
