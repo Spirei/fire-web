@@ -1,6 +1,6 @@
-/** 四色门转盘：缓动曲线，以及开始 / 转动 / 落定三段风铃钟声（合成，不取样原片）。 */
+/** 四色门转盘：缓动曲线，以及开始 / 转动 / 落定的纸牌拨动感音效（合成，不取样原片）。 */
 
-export const TICK_DEG = 22.5;
+export const TICK_DEG = 15;
 export const SHORT_TURN_MS = 900;
 export const LONG_TURN_MS = 2000;
 export const SHORT_EASE = "cubic-bezier(0.25, 0.1, 0.25, 1)";
@@ -35,14 +35,12 @@ export const easeLong = cubicBezier(0.16, 0.84, 0.18, 1);
 
 type AudioWindow = Window & { webkitAudioContext?: typeof AudioContext };
 
-const SPARKLE = [783.99, 987.77, 1174.66, 1318.51, 1567.98];
-
 export function createFourDoorAudio() {
   let context: AudioContext | null = null;
   let master: GainNode | null = null;
   let air: BiquadFilterNode | null = null;
+  let noise: AudioBuffer | null = null;
   let lastTickAt = 0;
-  let sparkleIndex = 0;
 
   function ensure() {
     if (typeof window === "undefined") return null;
@@ -52,33 +50,57 @@ export function createFourDoorAudio() {
     context = new Ctor();
     if (context.state === "suspended") void context.resume();
     const compressor = context.createDynamicsCompressor();
-    compressor.threshold.value = -26;
-    compressor.knee.value = 12;
-    compressor.ratio.value = 1.6;
-    compressor.attack.value = 0.02;
-    compressor.release.value = 0.22;
+    compressor.threshold.value = -22;
+    compressor.knee.value = 8;
+    compressor.ratio.value = 1.7;
+    compressor.attack.value = 0.008;
+    compressor.release.value = 0.14;
     air = context.createBiquadFilter();
     air.type = "lowpass";
-    air.frequency.value = 3200;
-    air.Q.value = 0.4;
+    air.frequency.value = 2800;
+    air.Q.value = 0.5;
     master = context.createGain();
-    master.gain.value = 0.5;
+    master.gain.value = 0.62;
     master.connect(air).connect(compressor).connect(context.destination);
+    const samples = Math.floor(context.sampleRate * 0.2);
+    noise = context.createBuffer(1, samples, context.sampleRate);
+    const data = noise.getChannelData(0);
+    for (let i = 0; i < samples; i += 1) data[i] = Math.random() * 2 - 1;
     return context;
   }
 
-  function chime(ctx: AudioContext, dest: AudioNode, freq: number, volume: number, attack: number, decay: number, now: number) {
+  function flick(ctx: AudioContext, dest: AudioNode, now: number, volume: number, bright: number, decay: number) {
+    if (!noise) return;
+    const source = ctx.createBufferSource();
+    const band = ctx.createBiquadFilter();
+    const high = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    source.buffer = noise;
+    band.type = "bandpass";
+    band.frequency.value = 900 + bright * 700;
+    band.Q.value = 1.1;
+    high.type = "highpass";
+    high.frequency.value = 280;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(volume, now + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+    source.connect(high).connect(band).connect(gain).connect(dest);
+    source.start(now);
+    source.stop(now + decay + 0.02);
+  }
+
+  function wood(ctx: AudioContext, dest: AudioNode, now: number, freq: number, volume: number, decay: number) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = "sine";
     osc.frequency.setValueAtTime(freq, now);
-    osc.frequency.exponentialRampToValueAtTime(freq * 0.988, now + attack + decay);
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(volume, now + attack);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + attack + decay);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.72, now + decay);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(volume, now + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
     osc.connect(gain).connect(dest);
     osc.start(now);
-    osc.stop(now + attack + decay + 0.06);
+    osc.stop(now + decay + 0.03);
   }
 
   function begin() {
@@ -86,10 +108,9 @@ export function createFourDoorAudio() {
     if (!ctx || !master) return;
     if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
-    sparkleIndex = 0;
-    chime(ctx, master, 783.99, 0.02, 0.018, 0.42, now);
-    chime(ctx, master, 987.77, 0.024, 0.02, 0.5, now + 0.05);
-    chime(ctx, master, 1174.66, 0.016, 0.022, 0.4, now + 0.1);
+    flick(ctx, master, now, 0.055, 0.35, 0.07);
+    wood(ctx, master, now, 210, 0.03, 0.09);
+    flick(ctx, master, now + 0.045, 0.04, 0.55, 0.055);
   }
 
   function tick(velocityDegPerSec: number) {
@@ -97,15 +118,12 @@ export function createFourDoorAudio() {
     if (!ctx || !master) return;
     if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
-    if (now - lastTickAt < 0.038) return;
+    if (now - lastTickAt < 0.02) return;
     lastTickAt = now;
     const speed = Math.min(1, Math.max(0, (Number.isFinite(velocityDegPerSec) ? velocityDegPerSec : 0) / 640));
-    const freq = SPARKLE[sparkleIndex % SPARKLE.length];
-    sparkleIndex += 1;
-    const volume = 0.01 + (1 - speed) * 0.012;
-    const decay = 0.16 + (1 - speed) * 0.1;
-    chime(ctx, master, freq, volume, 0.014, decay, now);
-    chime(ctx, master, freq * 2, volume * 0.12, 0.018, decay * 0.55, now);
+    const volume = 0.018 + (1 - speed) * 0.016;
+    flick(ctx, master, now, volume, 0.25 + speed * 0.5, 0.028 + (1 - speed) * 0.02);
+    if (speed < 0.45) wood(ctx, master, now, 180 + speed * 40, 0.012, 0.04);
   }
 
   function lock() {
@@ -113,10 +131,9 @@ export function createFourDoorAudio() {
     if (!ctx || !master) return;
     if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
-    chime(ctx, master, 1318.51, 0.022, 0.022, 0.72, now);
-    chime(ctx, master, 987.77, 0.028, 0.026, 0.95, now + 0.055);
-    chime(ctx, master, 783.99, 0.024, 0.03, 1.15, now + 0.12);
-    chime(ctx, master, 587.33, 0.014, 0.034, 0.9, now + 0.18);
+    flick(ctx, master, now, 0.05, 0.4, 0.06);
+    wood(ctx, master, now, 245, 0.038, 0.11);
+    wood(ctx, master, now + 0.03, 390, 0.016, 0.08);
   }
 
   function stop() {
@@ -124,8 +141,8 @@ export function createFourDoorAudio() {
     context = null;
     master = null;
     air = null;
+    noise = null;
     lastTickAt = 0;
-    sparkleIndex = 0;
     if (current && current.state !== "closed") void current.close().catch(() => undefined);
   }
 
