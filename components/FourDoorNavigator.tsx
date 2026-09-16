@@ -169,6 +169,7 @@ export default function FourDoorNavigator({
     let lastTime = performance.now();
     const start = lastTime;
     const delta = toAngle - fromAngle;
+    if (withSound && soundOn) audio().begin();
     const loop = (now: number) => {
       const t = Math.min(1, (now - start) / durationMs);
       const angle = fromAngle + delta * ease(t);

@@ -1,4 +1,4 @@
-/** 四色门转盘：缓动曲线与和转角联动的棘轮音效。 */
+/** 四色门转盘：缓动曲线，以及开始 / 转动 / 落定三段风铃钟声（合成，不取样原片）。 */
 
 export const TICK_DEG = 22.5;
 export const SHORT_TURN_MS = 900;
@@ -35,11 +35,14 @@ export const easeLong = cubicBezier(0.16, 0.84, 0.18, 1);
 
 type AudioWindow = Window & { webkitAudioContext?: typeof AudioContext };
 
+const SPARKLE = [783.99, 987.77, 1174.66, 1318.51, 1567.98];
+
 export function createFourDoorAudio() {
   let context: AudioContext | null = null;
   let master: GainNode | null = null;
   let air: BiquadFilterNode | null = null;
   let lastTickAt = 0;
+  let sparkleIndex = 0;
 
   function ensure() {
     if (typeof window === "undefined") return null;
@@ -49,32 +52,44 @@ export function createFourDoorAudio() {
     context = new Ctor();
     if (context.state === "suspended") void context.resume();
     const compressor = context.createDynamicsCompressor();
-    compressor.threshold.value = -24;
-    compressor.knee.value = 10;
-    compressor.ratio.value = 1.8;
-    compressor.attack.value = 0.012;
-    compressor.release.value = 0.16;
+    compressor.threshold.value = -26;
+    compressor.knee.value = 12;
+    compressor.ratio.value = 1.6;
+    compressor.attack.value = 0.02;
+    compressor.release.value = 0.22;
     air = context.createBiquadFilter();
     air.type = "lowpass";
-    air.frequency.value = 2400;
-    air.Q.value = 0.55;
+    air.frequency.value = 3200;
+    air.Q.value = 0.4;
     master = context.createGain();
-    master.gain.value = 0.58;
+    master.gain.value = 0.5;
     master.connect(air).connect(compressor).connect(context.destination);
     return context;
   }
 
-  function tone(ctx: AudioContext, dest: AudioNode, freq: number, volume: number, attack: number, decay: number, now: number) {
+  function chime(ctx: AudioContext, dest: AudioNode, freq: number, volume: number, attack: number, decay: number, now: number) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = "sine";
     osc.frequency.setValueAtTime(freq, now);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(volume, now + attack);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.988, now + attack + decay);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(volume, now + attack);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + attack + decay);
     osc.connect(gain).connect(dest);
     osc.start(now);
-    osc.stop(now + attack + decay + 0.04);
+    osc.stop(now + attack + decay + 0.06);
+  }
+
+  function begin() {
+    const ctx = ensure();
+    if (!ctx || !master) return;
+    if (ctx.state === "suspended") void ctx.resume();
+    const now = ctx.currentTime;
+    sparkleIndex = 0;
+    chime(ctx, master, 783.99, 0.02, 0.018, 0.42, now);
+    chime(ctx, master, 987.77, 0.024, 0.02, 0.5, now + 0.05);
+    chime(ctx, master, 1174.66, 0.016, 0.022, 0.4, now + 0.1);
   }
 
   function tick(velocityDegPerSec: number) {
@@ -82,14 +97,15 @@ export function createFourDoorAudio() {
     if (!ctx || !master) return;
     if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
-    if (now - lastTickAt < 0.028) return;
+    if (now - lastTickAt < 0.038) return;
     lastTickAt = now;
     const speed = Math.min(1, Math.max(0, (Number.isFinite(velocityDegPerSec) ? velocityDegPerSec : 0) / 640));
-    const dur = 0.034 + (1 - speed) * 0.028;
-    const volume = 0.012 + (1 - speed) * 0.018;
-    const ping = 620 - speed * 80;
-    tone(ctx, master, ping, volume, 0.01, dur, now);
-    tone(ctx, master, ping * 1.5, volume * 0.22, 0.012, dur * 0.7, now);
+    const freq = SPARKLE[sparkleIndex % SPARKLE.length];
+    sparkleIndex += 1;
+    const volume = 0.01 + (1 - speed) * 0.012;
+    const decay = 0.16 + (1 - speed) * 0.1;
+    chime(ctx, master, freq, volume, 0.014, decay, now);
+    chime(ctx, master, freq * 2, volume * 0.12, 0.018, decay * 0.55, now);
   }
 
   function lock() {
@@ -97,9 +113,10 @@ export function createFourDoorAudio() {
     if (!ctx || !master) return;
     if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
-    tone(ctx, master, 783.99, 0.048, 0.02, 0.62, now);
-    tone(ctx, master, 1174.66, 0.026, 0.024, 0.5, now);
-    tone(ctx, master, 1567.98, 0.01, 0.028, 0.36, now);
+    chime(ctx, master, 1318.51, 0.022, 0.022, 0.72, now);
+    chime(ctx, master, 987.77, 0.028, 0.026, 0.95, now + 0.055);
+    chime(ctx, master, 783.99, 0.024, 0.03, 1.15, now + 0.12);
+    chime(ctx, master, 587.33, 0.014, 0.034, 0.9, now + 0.18);
   }
 
   function stop() {
@@ -108,8 +125,9 @@ export function createFourDoorAudio() {
     master = null;
     air = null;
     lastTickAt = 0;
+    sparkleIndex = 0;
     if (current && current.state !== "closed") void current.close().catch(() => undefined);
   }
 
-  return { tick, lock, stop };
+  return { begin, tick, lock, stop };
 }
