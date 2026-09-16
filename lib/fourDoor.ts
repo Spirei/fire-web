@@ -1,10 +1,10 @@
 /** 四色门转盘：缓动曲线与和转角联动的棘轮音效。 */
 
-export const TICK_DEG = 15;
-export const SHORT_TURN_MS = 820;
-export const LONG_TURN_MS = 1760;
-export const SHORT_EASE = "cubic-bezier(.2,.82,.12,1)";
-export const LONG_EASE = "cubic-bezier(.12,.86,.08,1)";
+export const TICK_DEG = 22.5;
+export const SHORT_TURN_MS = 900;
+export const LONG_TURN_MS = 2000;
+export const SHORT_EASE = "cubic-bezier(0.25, 0.1, 0.25, 1)";
+export const LONG_EASE = "cubic-bezier(0.16, 0.84, 0.18, 1)";
 
 function cubicBezier(x1: number, y1: number, x2: number, y2: number) {
   const ax = 3 * x1 - 3 * x2 + 1;
@@ -30,15 +30,14 @@ function cubicBezier(x1: number, y1: number, x2: number, y2: number) {
   };
 }
 
-export const easeShort = cubicBezier(0.18, 0.78, 0.18, 1);
-export const easeLong = cubicBezier(0.08, 0.86, 0.12, 1);
+export const easeShort = cubicBezier(0.25, 0.1, 0.25, 1);
+export const easeLong = cubicBezier(0.16, 0.84, 0.18, 1);
 
 type AudioWindow = Window & { webkitAudioContext?: typeof AudioContext };
 
 export function createFourDoorAudio() {
   let context: AudioContext | null = null;
   let master: GainNode | null = null;
-  let noise: AudioBuffer | null = null;
 
   function ensure() {
     if (typeof window === "undefined") return null;
@@ -56,48 +55,29 @@ export function createFourDoorAudio() {
     master = context.createGain();
     master.gain.value = 0.9;
     master.connect(compressor).connect(context.destination);
-    const samples = Math.floor(context.sampleRate * 0.08);
-    noise = context.createBuffer(1, samples, context.sampleRate);
-    const data = noise.getChannelData(0);
-    for (let i = 0; i < samples; i += 1) data[i] = Math.random() * 2 - 1;
     return context;
   }
 
   function tick(velocityDegPerSec: number) {
     const ctx = ensure();
-    if (!ctx || !master || !noise) return;
+    if (!ctx || !master) return;
     if (ctx.state === "suspended") void ctx.resume();
-    const speed = Math.min(1, Math.max(0, velocityDegPerSec / 780));
+    const speed = Math.min(1, Math.max(0, velocityDegPerSec / 720));
     const now = ctx.currentTime;
-    const dur = 0.016 + (1 - speed) * 0.028;
-    const volume = 0.034 + (1 - speed) * 0.05;
-    const ping = 860 + speed * 640;
-
-    const source = ctx.createBufferSource();
-    const noiseFilter = ctx.createBiquadFilter();
-    const noiseGain = ctx.createGain();
-    source.buffer = noise;
-    noiseFilter.type = "bandpass";
-    noiseFilter.frequency.value = 1400 + speed * 1800;
-    noiseFilter.Q.value = 1.6;
-    noiseGain.gain.setValueAtTime(0.0001, now);
-    noiseGain.gain.exponentialRampToValueAtTime(volume * 1.15, now + 0.0012);
-    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    source.connect(noiseFilter).connect(noiseGain).connect(master);
-    source.start(now);
-    source.stop(now + dur + 0.01);
-
+    const dur = 0.02 + (1 - speed) * 0.018;
+    const volume = 0.028 + (1 - speed) * 0.032;
+    const ping = 1180 + speed * 420;
     const osc = ctx.createOscillator();
     const oscGain = ctx.createGain();
-    osc.type = "triangle";
+    osc.type = "sine";
     osc.frequency.setValueAtTime(ping, now);
-    osc.frequency.exponentialRampToValueAtTime(ping * 0.62, now + dur);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(420, ping * 0.72), now + dur);
     oscGain.gain.setValueAtTime(0.0001, now);
-    oscGain.gain.exponentialRampToValueAtTime(volume * 0.7, now + 0.001);
+    oscGain.gain.exponentialRampToValueAtTime(volume, now + 0.003);
     oscGain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
     osc.connect(oscGain).connect(master);
     osc.start(now);
-    osc.stop(now + dur + 0.008);
+    osc.stop(now + dur + 0.01);
   }
 
   function lock() {
@@ -128,7 +108,6 @@ export function createFourDoorAudio() {
     const current = context;
     context = null;
     master = null;
-    noise = null;
     if (current && current.state !== "closed") void current.close().catch(() => undefined);
   }
 

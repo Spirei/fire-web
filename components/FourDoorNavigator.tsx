@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { createFourDoorAudio, LONG_EASE, LONG_TURN_MS, SHORT_EASE, SHORT_TURN_MS, TICK_DEG } from "@/lib/fourDoor";
+import { createFourDoorAudio, easeLong, easeShort, LONG_EASE, LONG_TURN_MS, SHORT_EASE, SHORT_TURN_MS, TICK_DEG } from "@/lib/fourDoor";
 import { usePersistedState } from "@/lib/usePersistedState";
 
 export type FourDoorKey = "holdings" | "assets" | "fire" | "global";
@@ -18,6 +18,10 @@ function shortestStep(from: number, to: number) {
   return ((to - from + 2) % 4) - 2;
 }
 
+function canonicalAngle(index: number) {
+  return -((index % 4 + 4) % 4) * 90;
+}
+
 function polar(radius: number, deg: number) {
   const rad = (deg * Math.PI) / 180;
   return [100 + radius * Math.sin(rad), 100 - radius * Math.cos(rad)] as const;
@@ -29,21 +33,6 @@ function sectorPath(startDeg: number, endDeg: number, inner: number, outer: numb
   const [x2, y2] = polar(inner, endDeg);
   const [x3, y3] = polar(inner, startDeg);
   return `M${x0.toFixed(2)},${y0.toFixed(2)} A${outer},${outer} 0 0 1 ${x1.toFixed(2)},${y1.toFixed(2)} L${x2.toFixed(2)},${y2.toFixed(2)} A${inner},${inner} 0 0 0 ${x3.toFixed(2)},${y3.toFixed(2)} Z`;
-}
-
-function readMatrixAngle(el: HTMLElement) {
-  const transform = getComputedStyle(el).transform;
-  if (!transform || transform === "none") return 0;
-  const matrix = new DOMMatrixReadOnly(transform);
-  return Math.atan2(matrix.b, matrix.a) * (180 / Math.PI);
-}
-
-function unwrapAngle(previous: number, sampled: number) {
-  const wrapped = ((previous + 180) % 360 + 360) % 360 - 180;
-  let delta = sampled - wrapped;
-  if (delta > 180) delta -= 360;
-  if (delta < -180) delta += 360;
-  return previous + delta;
 }
 
 function FourDoorDial({ uid }: { uid: string }) {
@@ -127,15 +116,13 @@ export default function FourDoorNavigator({
   const uid = useId().replace(/:/g, "");
   const initialIndex = Math.max(0, DOORS.findIndex((door) => door.key === activeKey));
   const currentIndex = useRef(initialIndex);
-  const rotationRef = useRef(-initialIndex * 90);
+  const rotationRef = useRef(canonicalAngle(initialIndex));
   const wheelRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<ReturnType<typeof createFourDoorAudio> | null>(null);
   const watchRef = useRef<number | null>(null);
-  const navigationTimer = useRef<number | null>(null);
-  const pointerTimer = useRef<number | null>(null);
-  const turningTimer = useRef<number | null>(null);
-  const [rotation, setRotation] = useState(-initialIndex * 90);
-  const [turning, setTurning] = useState(false);
+  const doneTimer = useRef<number | null>(null);
+  const spinJob = useRef<{ from: number; to: number; start: number; duration: number; ease: (t: number) => number } | null>(null);
+  const [rotation, setRotation] = useState(canonicalAngle(initialIndex));
   const [randomizing, setRandomizing] = useState(false);
   const [artAvailable, setArtAvailable] = useState(true);
   const [soundOn, setSoundOn] = usePersistedState("fire:four-door-sound", true);
@@ -151,22 +138,45 @@ export default function FourDoorNavigator({
     audioRef.current = null;
   }
 
-  function watchSpin(fromAngle: number, durationMs: number, withSound: boolean) {
+  function visualAngle() {
+    const job = spinJob.current;
+    if (!job) return rotationRef.current;
+    const t = Math.min(1, (performance.now() - job.start) / job.duration);
+    return job.from + (job.to - job.from) * job.ease(t);
+  }
+
+  function settle(index: number) {
+    const canon = canonicalAngle(index);
     const el = wheelRef.current;
-    if (!el) return;
+    spinJob.current = null;
+    rotationRef.current = canon;
+    if (el) {
+      el.style.transition = "none";
+      el.style.transform = `rotate(${canon}deg)`;
+    }
+    setRotation(canon);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (wheelRef.current) wheelRef.current.style.transition = "";
+      });
+    });
+  }
+
+  function watchSpin(fromAngle: number, toAngle: number, durationMs: number, ease: (t: number) => number, withSound: boolean) {
     if (watchRef.current !== null) window.cancelAnimationFrame(watchRef.current);
-    let unwrapped = fromAngle;
-    let lastAngle = fromAngle;
     let lastNotch = Math.floor(fromAngle / TICK_DEG);
+    let lastAngle = fromAngle;
     let lastTime = performance.now();
     const start = lastTime;
+    const delta = toAngle - fromAngle;
     const loop = (now: number) => {
-      unwrapped = unwrapAngle(unwrapped, readMatrixAngle(el));
+      const t = Math.min(1, (now - start) / durationMs);
+      const angle = fromAngle + delta * ease(t);
       const dt = Math.max(0.001, (now - lastTime) / 1000);
-      const velocity = Math.abs(unwrapped - lastAngle) / dt;
+      const velocity = Math.abs(angle - lastAngle) / dt;
       lastTime = now;
-      lastAngle = unwrapped;
-      const notch = Math.floor(unwrapped / TICK_DEG);
+      lastAngle = angle;
+      const notch = Math.floor(angle / TICK_DEG);
       if (notch !== lastNotch) {
         const crossed = Math.abs(notch - lastNotch);
         lastNotch = notch;
@@ -174,7 +184,7 @@ export default function FourDoorNavigator({
           for (let i = 0; i < crossed; i += 1) audio().tick(velocity);
         }
       }
-      if (now - start < durationMs + 36) {
+      if (t < 1) {
         watchRef.current = window.requestAnimationFrame(loop);
         return;
       }
@@ -184,57 +194,47 @@ export default function FourDoorNavigator({
     watchRef.current = window.requestAnimationFrame(loop);
   }
 
+  function spinTo(index: number, extraTurns: number, duration: number, easeName: string, ease: (t: number) => number, withSound: boolean, navigate: boolean) {
+    const from = visualAngle();
+    const step = extraTurns === 0 ? shortestStep(currentIndex.current, index) : ((index - currentIndex.current + 4) % 4 || 4);
+    if (extraTurns === 0 && step === 0) return;
+    const to = from - extraTurns * 360 - step * 90;
+    currentIndex.current = index;
+    spinJob.current = { from, to, start: performance.now(), duration, ease };
+    rotationRef.current = to;
+    const el = wheelRef.current;
+    if (el) {
+      el.style.transition = "none";
+      el.style.transform = `rotate(${from}deg)`;
+      void el.offsetWidth;
+      el.style.transition = `transform ${duration}ms ${easeName}`;
+      el.style.transform = `rotate(${to}deg)`;
+    }
+    setRotation(to);
+    watchSpin(from, to, duration, ease, withSound);
+    if (doneTimer.current !== null) window.clearTimeout(doneTimer.current);
+    doneTimer.current = window.setTimeout(() => {
+      doneTimer.current = null;
+      settle(index);
+      setRandomizing(false);
+      if (navigate) onSelect(DOORS[index].key);
+    }, duration + 32);
+  }
+
   function moveTo(index: number, navigate: boolean) {
     if (randomizing) return;
-    const step = shortestStep(currentIndex.current, index);
-    if (step === 0) return;
-    const from = rotationRef.current;
-    currentIndex.current = index;
-    rotationRef.current = from - step * 90;
-    setRotation(rotationRef.current);
-    setTurning(false);
-    window.requestAnimationFrame(() => setTurning(true));
-    if (turningTimer.current !== null) window.clearTimeout(turningTimer.current);
-    turningTimer.current = window.setTimeout(() => {
-      turningTimer.current = null;
-      setTurning(false);
-    }, SHORT_TURN_MS);
-    if (navigate) {
-      watchSpin(from, SHORT_TURN_MS, true);
-      onSelect(DOORS[index].key);
-    }
+    spinTo(index, 0, SHORT_TURN_MS, SHORT_EASE, easeShort, navigate, navigate);
   }
 
   function spinToRandomWorkspace() {
     if (randomizing) return;
     const candidates = randomKeys.filter((key) => key !== activeKey);
     if (!candidates.length) return;
-    const random = crypto.getRandomValues(new Uint32Array(2));
+    const random = crypto.getRandomValues(new Uint32Array(1));
     const destination = candidates[random[0] % candidates.length];
-    const quarterSteps = (random[1] % 3) + 1;
-    const from = rotationRef.current;
-    currentIndex.current = (currentIndex.current + quarterSteps) % DOORS.length;
-    rotationRef.current = from - (720 + quarterSteps * 90);
+    const destIndex = Math.max(0, DOORS.findIndex((door) => door.key === destination));
     setRandomizing(true);
-    setRotation(rotationRef.current);
-    setTurning(false);
-    if (pointerTimer.current !== null) window.clearTimeout(pointerTimer.current);
-    if (turningTimer.current !== null) window.clearTimeout(turningTimer.current);
-    pointerTimer.current = window.setTimeout(() => {
-      pointerTimer.current = null;
-      setTurning(true);
-    }, Math.round(LONG_TURN_MS * 0.42));
-    turningTimer.current = window.setTimeout(() => {
-      turningTimer.current = null;
-      setTurning(false);
-    }, LONG_TURN_MS + 40);
-    watchSpin(from, LONG_TURN_MS, true);
-    if (navigationTimer.current !== null) window.clearTimeout(navigationTimer.current);
-    navigationTimer.current = window.setTimeout(() => {
-      navigationTimer.current = null;
-      setRandomizing(false);
-      onSelect(destination);
-    }, LONG_TURN_MS + 60);
+    spinTo(destIndex, 2, LONG_TURN_MS, LONG_EASE, easeLong, true, true);
   }
 
   useEffect(() => {
@@ -247,9 +247,7 @@ export default function FourDoorNavigator({
   useEffect(() => () => {
     stopAllSound();
     if (watchRef.current !== null) window.cancelAnimationFrame(watchRef.current);
-    if (navigationTimer.current !== null) window.clearTimeout(navigationTimer.current);
-    if (pointerTimer.current !== null) window.clearTimeout(pointerTimer.current);
-    if (turningTimer.current !== null) window.clearTimeout(turningTimer.current);
+    if (doneTimer.current !== null) window.clearTimeout(doneTimer.current);
   }, []);
 
   if (!artAvailable) return null;
@@ -289,16 +287,12 @@ export default function FourDoorNavigator({
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6.8 8.5H3v7h3.8L11 19Z" /><path d="m15.5 9.5 5 5m0-5-5 5" /></svg>
         )}
       </button>
-      <div className={`four-door-art ${turning ? "is-turning" : ""} ${randomizing ? "is-randomizing" : ""} ${styleTwo ? "is-style-2" : "is-style-1"}`} aria-busy={randomizing}>
+      <div className={`four-door-art ${randomizing ? "is-randomizing" : ""} ${styleTwo ? "is-style-2" : "is-style-1"}`} aria-busy={randomizing}>
         <img onError={() => setArtAvailable(false)} className="four-door-window" src="/uploads/feature/four-door/window.png" alt="霍尔的移动城堡窗户" />
         <div
           ref={wheelRef}
           className="four-door-wheel"
-          style={{
-            transform: `translateZ(0) rotate(${rotation}deg)`,
-            transitionDuration: `${randomizing ? LONG_TURN_MS : SHORT_TURN_MS}ms`,
-            transitionTimingFunction: randomizing ? LONG_EASE : SHORT_EASE
-          }}
+          style={{ transform: `rotate(${rotation}deg)` }}
           role="group"
           aria-label="四色门工作区入口"
         >
