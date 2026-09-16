@@ -57,10 +57,10 @@ export function createFourDoorAudio() {
     compressor.release.value = 0.14;
     air = context.createBiquadFilter();
     air.type = "lowpass";
-    air.frequency.value = 2800;
-    air.Q.value = 0.5;
+    air.frequency.value = 7800;
+    air.Q.value = 0.35;
     master = context.createGain();
-    master.gain.value = 0.62;
+    master.gain.value = 0.7;
     master.connect(air).connect(compressor).connect(context.destination);
     const samples = Math.floor(context.sampleRate * 0.2);
     noise = context.createBuffer(1, samples, context.sampleRate);
@@ -69,38 +69,39 @@ export function createFourDoorAudio() {
     return context;
   }
 
-  function flick(ctx: AudioContext, dest: AudioNode, now: number, volume: number, bright: number, decay: number) {
+  function flick(ctx: AudioContext, dest: AudioNode, now: number, volume: number, decay: number) {
     if (!noise) return;
-    const source = ctx.createBufferSource();
-    const band = ctx.createBiquadFilter();
-    const high = ctx.createBiquadFilter();
-    const gain = ctx.createGain();
-    source.buffer = noise;
-    band.type = "bandpass";
-    band.frequency.value = 900 + bright * 700;
-    band.Q.value = 1.1;
-    high.type = "highpass";
-    high.frequency.value = 280;
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(volume, now + 0.004);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
-    source.connect(high).connect(band).connect(gain).connect(dest);
-    source.start(now);
-    source.stop(now + decay + 0.02);
-  }
+    const body = ctx.createBufferSource();
+    const hp = ctx.createBiquadFilter();
+    const mid = ctx.createBiquadFilter();
+    const g1 = ctx.createGain();
+    body.buffer = noise;
+    hp.type = "highpass";
+    hp.frequency.value = 380;
+    mid.type = "peaking";
+    mid.frequency.value = 2200;
+    mid.Q.value = 0.7;
+    mid.gain.value = 5;
+    g1.gain.setValueAtTime(0.0001, now);
+    g1.gain.exponentialRampToValueAtTime(volume, now + 0.0018);
+    g1.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+    body.connect(hp).connect(mid).connect(g1).connect(dest);
+    body.start(now);
+    body.stop(now + decay + 0.03);
 
-  function wood(ctx: AudioContext, dest: AudioNode, now: number, freq: number, volume: number, decay: number) {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(freq, now);
-    osc.frequency.exponentialRampToValueAtTime(freq * 0.72, now + decay);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(volume, now + 0.006);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
-    osc.connect(gain).connect(dest);
-    osc.start(now);
-    osc.stop(now + decay + 0.03);
+    const snap = ctx.createBufferSource();
+    const air = ctx.createBiquadFilter();
+    const g2 = ctx.createGain();
+    snap.buffer = noise;
+    air.type = "bandpass";
+    air.frequency.value = 5200;
+    air.Q.value = 1.1;
+    g2.gain.setValueAtTime(0.0001, now);
+    g2.gain.exponentialRampToValueAtTime(volume * 0.7, now + 0.0012);
+    g2.gain.exponentialRampToValueAtTime(0.0001, now + decay * 0.4);
+    snap.connect(air).connect(g2).connect(dest);
+    snap.start(now);
+    snap.stop(now + decay);
   }
 
   function begin() {
@@ -108,9 +109,8 @@ export function createFourDoorAudio() {
     if (!ctx || !master) return;
     if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
-    flick(ctx, master, now, 0.055, 0.35, 0.07);
-    wood(ctx, master, now, 210, 0.03, 0.09);
-    flick(ctx, master, now + 0.045, 0.04, 0.55, 0.055);
+    flick(ctx, master, now, 0.07, 0.085);
+    flick(ctx, master, now + 0.08, 0.05, 0.06);
   }
 
   function tick(velocityDegPerSec: number) {
@@ -118,12 +118,10 @@ export function createFourDoorAudio() {
     if (!ctx || !master) return;
     if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
-    if (now - lastTickAt < 0.02) return;
+    if (now - lastTickAt < 0.065) return;
     lastTickAt = now;
     const speed = Math.min(1, Math.max(0, (Number.isFinite(velocityDegPerSec) ? velocityDegPerSec : 0) / 640));
-    const volume = 0.018 + (1 - speed) * 0.016;
-    flick(ctx, master, now, volume, 0.25 + speed * 0.5, 0.028 + (1 - speed) * 0.02);
-    if (speed < 0.45) wood(ctx, master, now, 180 + speed * 40, 0.012, 0.04);
+    flick(ctx, master, now, 0.028 + (1 - speed) * 0.018, 0.032 + (1 - speed) * 0.018);
   }
 
   function lock() {
@@ -131,9 +129,7 @@ export function createFourDoorAudio() {
     if (!ctx || !master) return;
     if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
-    flick(ctx, master, now, 0.05, 0.4, 0.06);
-    wood(ctx, master, now, 245, 0.038, 0.11);
-    wood(ctx, master, now + 0.03, 390, 0.016, 0.08);
+    flick(ctx, master, now, 0.08, 0.11);
   }
 
   function stop() {
