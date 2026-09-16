@@ -956,8 +956,9 @@ export default function TradeOrdersPanel({
           <span className="inline-flex min-w-0 max-w-full items-center gap-2">
             <span className="relative flex-none">
               {icon ? <img src={icon} alt="" className="h-6 w-6 rounded-full object-cover" /> : <span className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-gray text-[11px] font-bold text-muted">{order.name.slice(0, 1)}</span>}
+              <EtfDoubleBadge market={order.market} code={order.code} name={order.name} />
             </span>
-            <span className="flex min-w-0 items-center gap-1.5"><span className="truncate font-medium text-ink" title={order.name}>{order.name}</span><EtfDoubleBadge market={order.market} code={order.code} name={order.name} /></span>
+            <span className="truncate font-medium text-ink" title={order.name}>{order.name}</span>
           </span>
         );
       }
@@ -1825,10 +1826,11 @@ export default function TradeOrdersPanel({
                   <div className="mt-1.5 flex items-center gap-2">
                     <span className="relative flex-none">
                       {icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <span className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">{detail.name.slice(0, 1)}</span>}
+                      <EtfDoubleBadge market={detail.market} code={detail.code} name={detail.name} />
                     </span>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-ink">{detail.name}</p>
-                      <p className="flex items-center gap-1.5 text-[11px] text-faint"><EtfDoubleBadge market={detail.market} code={detail.code} name={detail.name} /><span className="truncate">{detail.code} · {meta.label} · {currency}</span></p>
+                      <p className="truncate text-[11px] text-faint">{detail.code} · {meta.label} · {currency}</p>
                     </div>
                   </div>
                 </div>

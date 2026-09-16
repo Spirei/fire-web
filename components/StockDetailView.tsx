@@ -702,11 +702,11 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
           ) : (
             <span className="stock-detail-logo flex h-9 w-9 items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">{(name || "?").slice(0, 1)}</span>
           )}
+          <EtfDoubleBadge market={market} code={code} name={name} />
         </span>
         <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
           <h2 className="min-w-0 truncate text-xl font-bold text-ink" title={displayName}>{displayName}</h2>
           <MarketCodeBadge market={market} code={code} />
-          <EtfDoubleBadge market={market} code={code} name={name} />
           <span className="stock-detail-code flex-none text-sm text-muted">{code}</span>
         </div>
         <div className="ml-auto flex flex-none items-center gap-1.5">
@@ -952,6 +952,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
                             <img src={itemIcon} alt={`${mainStock ? item.name : displayName} 图标`} className="h-full w-full object-cover" />
                           ) : item.code.slice(0, 2)}
                         </span>
+                        <EtfDoubleBadge market="US" code={item.code} name={item.name} />
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex min-w-0 items-center gap-2">

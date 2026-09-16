@@ -227,12 +227,12 @@ export default function StockSearch({ onSelect, onQueryChange, marketFilter, sec
                       className="h-9 w-9 rounded-full object-cover"
                       fallback={<span className="grid h-9 w-9 place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted dark:bg-white/10">{m.name.slice(0, 1)}</span>}
                     />
+                    {related && <EtfDoubleBadge market={m.market} code={m.code} name={m.name} />}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block max-w-[min(46vw,260px)] truncate font-semibold">{m.name}</span>
                     <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted">
                       <MarketCodeBadge market={m.type === "crypto" ? "CRYPTO" : m.market} code={m.code} />
-                      <EtfDoubleBadge market={m.market} code={m.code} name={m.name} />
                       <span className="min-w-0 truncate">{m.code}</span>
                     </span>
                   </span>

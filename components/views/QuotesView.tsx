@@ -868,17 +868,19 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
                                 alt=""
                                 className="h-9 w-9 flex-none rounded-full object-cover"
                               />
+                              <EtfDoubleBadge market={r.market} code={r.code} name={r.name} />
                             </span>
                           ) : (
                             <span className="relative flex-none">
                               <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">
                                 {(r.name || "?").slice(0, 1)}
                               </span>
+                              <EtfDoubleBadge market={r.market} code={r.code} name={r.name} />
                             </span>
                           )}
                           <span className="min-w-0">
                             <span className="block truncate font-semibold text-ink">{r.name}</span>
-                            <span className="mt-0.5 flex min-w-0 items-center gap-1.5"><MarketCodeBadge market={r.market} code={r.code} /><EtfDoubleBadge market={r.market} code={r.code} name={r.name} /><span className="truncate text-[11px] text-faint">{r.code}</span><QuoteRowHint market={r.market} quote={q} quotes={quotes} /></span>
+                            <span className="mt-0.5 flex min-w-0 items-center gap-1.5"><MarketCodeBadge market={r.market} code={r.code} /><span className="truncate text-[11px] text-faint">{r.code}</span><QuoteRowHint market={r.market} quote={q} quotes={quotes} /></span>
                           </span>
                         </div>
                       </td>

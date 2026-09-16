@@ -393,27 +393,6 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(Array.isArray(lines));
     assert(lines.every((line) => typeof line === 'string'));
   });
-  await test('related ETF marker is an inline tag in the info line, not a logo corner badge', () => {
-    const source = fs.readFileSync(path.join(root, 'components/EtfDoubleBadge.tsx'), 'utf8');
-    // 主流做法：跟 MarketCodeBadge 同规格的内联小标签，不再绝对定位盖在 logo 上
-    assert(!source.includes('absolute'), '不再使用绝对定位角标');
-    assert(source.includes('inline-flex h-[18px] flex-none items-center justify-center rounded-[4px] px-1.5 text-[10px] font-bold'), '与市场徽标同规格');
-    assert(source.includes('const DISPLAY: Record<string, string> = { "2x": "2×" }'), '杠杆倍数用乘号显示');
-    for (const tone of ['"2x"', '"多"', '"反"', '"收"']) assert(source.includes(tone), `缺少 ${tone} 的配色档`);
-    // 各调用点都不再把标记挂在图标容器里（同一行里出现 relative flex-none 即视为挂回角标）
-    for (const file of [
-      'components/views/HoldingsView.tsx', 'components/views/QuotesView.tsx', 'components/AssetAnalysisDashboard.tsx',
-      'components/PnlCalendar.tsx', 'components/StockSearch.tsx', 'components/TradeOrdersPanel.tsx',
-      'components/AssetPnlAnalysis.tsx', 'components/StockDetailView.tsx'
-    ]) {
-      const text = fs.readFileSync(path.join(root, file), 'utf8');
-      assert(text.includes('EtfDoubleBadge'), `${file} 应仍在使用该标记`);
-      for (const line of text.split('\n')) {
-        if (!line.includes('<EtfDoubleBadge')) continue;
-        assert(!line.includes('relative flex-none'), `${file} 仍有标记挂在图标容器里`);
-      }
-    }
-  });
   await test('assistant answers render markdown tables and only safe links', () => {
     const { parseAssistantBlocks, parseInlineSegments } = require(path.join(root, 'lib/assistantMarkdown.ts'));
     const blocks = parseAssistantBlocks([
