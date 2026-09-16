@@ -131,7 +131,6 @@ function PnlStockIcon({ src, name, market, code }: { src?: string; name: string;
 
   return <span className="relative flex-none">
     {!src || failed ? <span className="grid h-8 w-8 place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted">{name.slice(0, 1) || "?"}</span> : <img src={src} alt="" onError={() => setFailed(true)} className="h-8 w-8 rounded-full object-cover" />}
-    <EtfDoubleBadge market={market} code={code} name={name} />
   </span>;
 }
 
@@ -144,6 +143,7 @@ function AdaptivePnlIdentity({ row }: { row: PnlRow }) {
       <p className="truncate text-xs font-semibold" title={row.name}>{row.name}</p>
       <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted">
         <MarketBadge market={row.market} code={row.code} />
+        <EtfDoubleBadge market={row.market} code={row.code} name={row.name} />
         <span className="truncate">{row.code}</span>
         {closed && <ClosedBadge />}
       </p>

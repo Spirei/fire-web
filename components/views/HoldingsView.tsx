@@ -566,9 +566,8 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       return <button type="button" onClick={() => openHoldingDetail(record)} className="group flex min-w-[180px] max-w-full items-center gap-2.5 text-left" title={`查看 ${record.name} 持仓概览与订单`}>
         <span className="relative flex-none">
           {icon ? <img src={icon} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">{(record.name || "?").slice(0, 1)}</span>}
-          <EtfDoubleBadge market={record.market} code={record.code} name={record.name} />
         </span>
-        <span className="min-w-0"><span className="block truncate font-semibold text-ink transition-colors group-hover:text-brand-deep dark:group-hover:text-[#c6cdd8]">{record.name}</span><span className="mt-0.5 flex min-w-0 items-center gap-1.5"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate text-[11px] text-faint">{record.code}</span><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></span></span>
+        <span className="min-w-0"><span className="block truncate font-semibold text-ink transition-colors group-hover:text-brand-deep dark:group-hover:text-[#c6cdd8]">{record.name}</span><span className="mt-0.5 flex min-w-0 items-center gap-1.5"><MarketCodeBadge market={record.market} code={record.code} /><EtfDoubleBadge market={record.market} code={record.code} name={record.name} /><span className="truncate text-[11px] text-faint">{record.code}</span><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></span></span>
       </button>;
     }
     if (key === "marketValue") return marketValue !== null ? <span className="font-semibold">{compactMoney(marketValue * displayMoneyFactor, displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;

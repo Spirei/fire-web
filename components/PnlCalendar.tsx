@@ -306,13 +306,13 @@ export default function PnlCalendar({
                           const icon = stockIcons?.[`${row.market.toUpperCase()}:${row.code.toUpperCase()}`];
                           return <span className="relative flex-none">
                             {icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full bg-bg-gray object-cover" /> : <span className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray text-[11px] font-bold text-ink-2">{(row.name || row.code).trim().slice(0, 1).toUpperCase()}</span>}
-                            <EtfDoubleBadge market={row.market} code={row.code} name={row.name} />
                           </span>;
                         })()}
                         <div className="min-w-0">
                           <p className="truncate text-xs font-semibold">{row.name}</p>
                           <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
                             {renderMarketBadge ? renderMarketBadge(row) : <MarketCodeBadge market={row.market} code={row.code} />}
+                            <EtfDoubleBadge market={row.market} code={row.code} name={row.name} />
                             <span className="truncate">{row.code}</span>
                           </p>
                         </div>
