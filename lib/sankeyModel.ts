@@ -152,7 +152,8 @@ export function buildSankeyOption(input: SankeyOptionInput) {
       links,
       // 连线淡一点、曲线缓一点，让粗柱子与文字站得住；柱子给足圆角，手机上也不显得生硬。
       lineStyle: { curveness: .45, opacity: layout.wide ? .4 : .34 },
-      itemStyle: { borderWidth: 0, borderRadius: layout.wide ? 5 : 6 },
+      // 圆角跟着柱宽走：手机端柱宽 16px、圆角 8px 正好是胶囊端头，和站内其他胶囊控件一致。
+      itemStyle: { borderWidth: 0, borderRadius: layout.wide ? 5 : 8 },
       label: {
         color: ink,
         fontSize: layout.fontSize,

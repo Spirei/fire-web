@@ -37,7 +37,9 @@ export function sankeyLayoutFor(width: number): SankeyLayout {
     labelWidth,
     labelGap,
     sideMargin: labelWidth + labelGap + 2,
-    nodeWidth: wide ? 14 : 11,
+    // 手机端柱体加粗到 16px（实测 15–19 最合适：再细没存在感，再粗就成了色块、
+    // 而且每宽 1px 都在吃中间流带的横向长度 —— 11→16 会少掉约 10%）。桌面维持原值。
+    nodeWidth: wide ? 14 : 16,
     // 节点间距必须大于标签行高，否则小持仓的标签会与邻标签重叠、被 ECharts 的 hideOverlap
     // 悄悄藏掉（实测：宽屏两行标签需要 ≥30，手机单行标签需要 ≥14）。手机端再放宽一点，
     // 让下面几行小持仓不被挤成一堆。

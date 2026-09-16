@@ -401,9 +401,13 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(390 - phone.sideMargin * 2 > 160, '手机端中间流带要留下可读宽度');
     // 节点间距必须大于标签行高，否则小持仓标签会被 ECharts 的 hideOverlap 成片藏掉
     assert(phone.nodeGap > phone.lineHeight, '手机端节点间距必须大于单行标签行高');
+    // 手机端柱体要够粗才有存在感（实测 15–19px 最合适），桌面维持原值不被带粗
+    assert(phone.nodeWidth >= 15, '手机端柱体宽度至少 15px');
+    assert(phone.sideMargin * 2 + phone.nodeWidth * 3 < 390, '加粗柱体后仍要留出流带的横向长度');
     const desktop = sankeyLayoutFor(1180);
     assert.equal(desktop.wide, true);
     assert.equal(desktop.labelWidth, 155);
+    assert.equal(desktop.nodeWidth, 14);
     assert(desktop.nodeGap >= desktop.lineHeight * 2, '宽屏标签两行，节点间距要放得下两行');
     // 连续自适应：越窄留白越小，但标签宽度有下限，不会窄到看不清
     assert(sankeyLayoutFor(320).sideMargin <= sankeyLayoutFor(430).sideMargin);
