@@ -178,11 +178,8 @@ export default function FourDoorNavigator({
       lastAngle = angle;
       const notch = Math.floor(angle / TICK_DEG);
       if (notch !== lastNotch) {
-        const crossed = Math.abs(notch - lastNotch);
         lastNotch = notch;
-        if (withSound && soundOn) {
-          for (let i = 0; i < crossed; i += 1) audio().tick(velocity);
-        }
+        if (withSound && soundOn) audio().tick(velocity);
       }
       if (t < 1) {
         watchRef.current = window.requestAnimationFrame(loop);

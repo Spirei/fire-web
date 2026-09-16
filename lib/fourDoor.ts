@@ -38,6 +38,8 @@ type AudioWindow = Window & { webkitAudioContext?: typeof AudioContext };
 export function createFourDoorAudio() {
   let context: AudioContext | null = null;
   let master: GainNode | null = null;
+  let air: BiquadFilterNode | null = null;
+  let lastTickAt = 0;
 
   function ensure() {
     if (typeof window === "undefined") return null;
@@ -47,37 +49,47 @@ export function createFourDoorAudio() {
     context = new Ctor();
     if (context.state === "suspended") void context.resume();
     const compressor = context.createDynamicsCompressor();
-    compressor.threshold.value = -18;
-    compressor.knee.value = 6;
-    compressor.ratio.value = 2.8;
-    compressor.attack.value = 0.001;
-    compressor.release.value = 0.09;
+    compressor.threshold.value = -24;
+    compressor.knee.value = 10;
+    compressor.ratio.value = 1.8;
+    compressor.attack.value = 0.012;
+    compressor.release.value = 0.16;
+    air = context.createBiquadFilter();
+    air.type = "lowpass";
+    air.frequency.value = 2400;
+    air.Q.value = 0.55;
     master = context.createGain();
-    master.gain.value = 0.9;
-    master.connect(compressor).connect(context.destination);
+    master.gain.value = 0.58;
+    master.connect(air).connect(compressor).connect(context.destination);
     return context;
+  }
+
+  function tone(ctx: AudioContext, dest: AudioNode, freq: number, volume: number, attack: number, decay: number, now: number) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(volume, now + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + attack + decay);
+    osc.connect(gain).connect(dest);
+    osc.start(now);
+    osc.stop(now + attack + decay + 0.04);
   }
 
   function tick(velocityDegPerSec: number) {
     const ctx = ensure();
     if (!ctx || !master) return;
     if (ctx.state === "suspended") void ctx.resume();
-    const speed = Math.min(1, Math.max(0, velocityDegPerSec / 720));
     const now = ctx.currentTime;
-    const dur = 0.02 + (1 - speed) * 0.018;
-    const volume = 0.028 + (1 - speed) * 0.032;
-    const ping = 1180 + speed * 420;
-    const osc = ctx.createOscillator();
-    const oscGain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(ping, now);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(420, ping * 0.72), now + dur);
-    oscGain.gain.setValueAtTime(0.0001, now);
-    oscGain.gain.exponentialRampToValueAtTime(volume, now + 0.003);
-    oscGain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    osc.connect(oscGain).connect(master);
-    osc.start(now);
-    osc.stop(now + dur + 0.01);
+    if (now - lastTickAt < 0.028) return;
+    lastTickAt = now;
+    const speed = Math.min(1, Math.max(0, (Number.isFinite(velocityDegPerSec) ? velocityDegPerSec : 0) / 640));
+    const dur = 0.034 + (1 - speed) * 0.028;
+    const volume = 0.012 + (1 - speed) * 0.018;
+    const ping = 620 - speed * 80;
+    tone(ctx, master, ping, volume, 0.01, dur, now);
+    tone(ctx, master, ping * 1.5, volume * 0.22, 0.012, dur * 0.7, now);
   }
 
   function lock() {
@@ -85,29 +97,17 @@ export function createFourDoorAudio() {
     if (!ctx || !master) return;
     if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
-    ([
-      [2093.0, 0.1, 0.36, "triangle"],
-      [2637.02, 0.048, 0.28, "sine"],
-      [3135.96, 0.024, 0.2, "sine"],
-      [4186.01, 0.012, 0.12, "sine"]
-    ] as const).forEach(([freq, volume, duration, type]) => {
-      const bell = ctx.createOscillator();
-      const gain = ctx.createGain();
-      bell.type = type;
-      bell.frequency.setValueAtTime(freq, now);
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(volume, now + 0.004);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-      bell.connect(gain).connect(master!);
-      bell.start(now);
-      bell.stop(now + duration + 0.02);
-    });
+    tone(ctx, master, 783.99, 0.048, 0.02, 0.62, now);
+    tone(ctx, master, 1174.66, 0.026, 0.024, 0.5, now);
+    tone(ctx, master, 1567.98, 0.01, 0.028, 0.36, now);
   }
 
   function stop() {
     const current = context;
     context = null;
     master = null;
+    air = null;
+    lastTickAt = 0;
     if (current && current.state !== "closed") void current.close().catch(() => undefined);
   }
 
