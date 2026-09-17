@@ -84,6 +84,26 @@ export function fmtPct(n: number) {
 
 /** 本地日历日期（YYYY-MM-DD）。禁止用 toISOString() 取「今天」——它按 UTC 算，
  *  东八区 00:00-08:00 会得到昨天，用于日期选择 / 默认日期就会错一天。 */
+/**
+ * 相对时间（主流社交软件的写法）：刚刚 / N 分钟前 / N 小时前 / 昨天 HH:MM / MM-DD HH:MM。
+ * 纯函数，`now` 可注入 —— 只在客户端渲染的地方用（服务端渲染会因为「现在」不同而水合不一致）。
+ */
+export function formatRelativeTime(value: string, now: number = Date.now()): string {
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return value || "";
+  const diff = now - time;
+  const minute = 60_000;
+  if (diff < minute) return "刚刚";
+  if (diff < 60 * minute) return `${Math.floor(diff / minute)} 分钟前`;
+  if (diff < 24 * 60 * minute) return `${Math.floor(diff / (60 * minute))} 小时前`;
+  const date = new Date(time);
+  const clock = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  if (time >= startOfToday.getTime() - 24 * 60 * minute && time < startOfToday.getTime()) return `昨天 ${clock}`;
+  return `${date.getMonth() + 1}-${String(date.getDate()).padStart(2, "0")} ${clock}`;
+}
+
 export function localDateKey(date: Date = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;

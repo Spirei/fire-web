@@ -412,6 +412,21 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     // 真正空白的状态仍然丢弃
     assert.equal(mapDuanStatus({ id: 1 }), null);
   });
+  await test('trading square marks unseen posts consistently', () => {
+    const { isUnseenPost, unseenCounts } = require(path.join(root, 'lib/tradingSquareSeen.ts'));
+    const seen = { duan: '2026-09-17T00:00:00.000Z', trump: null };
+    const posts = [
+      { author: 'duan', date: '2026-09-17T01:00:00.000Z' },
+      { author: 'duan', date: '2026-09-16T23:00:00.000Z' },
+      { author: 'trump', date: '2026-09-04T00:00:00.000Z' }
+    ];
+    assert.equal(isUnseenPost(posts[0], seen), true, '比已读时间新 → 新');
+    assert.equal(isUnseenPost(posts[1], seen), false, '比已读时间旧 → 不算新');
+    assert.equal(isUnseenPost(posts[2], seen), true, '从没看过这位作者 → 算新');
+    assert.deepEqual(unseenCounts(posts, seen), { duan: 1, trump: 1 });
+    assert.equal(isUnseenPost({ author: 'duan', date: 'oops' }, seen), false, '时间解析失败不标记');
+    assert.deepEqual(unseenCounts(posts, {}), { duan: 2, trump: 1 }, '首次访问全部算新');
+  });
   await test('trading square strips scraped page chrome from post text', () => {
     const { normalizeTradingText, stripTradingSquareChrome } = require(path.join(root, 'lib/tradingSquareText.ts'));
     // 开头的「回复@某人:」是回复上下文（雪球页面上的链接），不是作者写的字

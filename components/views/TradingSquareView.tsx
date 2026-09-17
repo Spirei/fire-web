@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { IconChevronLeft, IconMessageCircle, IconMinus, IconPin, IconPlus, IconWindmill } from "@tabler/icons-react";
+import { IconChevronLeft, IconMessageCircle, IconMinus, IconPin, IconPlus, IconThumbUp, IconWindmill } from "@tabler/icons-react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
 import useDraggableWindow from "@/lib/useDraggableWindow";
@@ -11,6 +11,8 @@ import StockDetailView from "@/components/StockDetailView";
 import StockTextLink from "@/components/StockTextLink";
 import { isLocalPostImageUrl } from "@/lib/tradingSquareImages";
 import { TRADING_SQUARE_AUTHOR_LIMIT, takeNewestByAuthor } from "@/lib/tradingSquareLimits";
+import { formatRelativeTime } from "@/lib/format";
+import { isUnseenPost, unseenCounts } from "@/lib/tradingSquareSeen";
 import { hasTranslatableText, normalizeCode, normalizeTradingText, parseSymbolToken, splitTradingText, type HoldingHint } from "@/lib/tradingSquareText";
 import type { StockRecord } from "@/lib/types";
 
@@ -124,16 +126,6 @@ function writeSeen(seen: AuthorTimes) {
   try { localStorage.setItem(SEEN_CACHE_KEY, JSON.stringify(seen)); } catch { /* quota / private mode */ }
 }
 
-function countUnseen(posts: Post[], seen: AuthorTimes): Record<string, number> {
-  const counts: Record<string, number> = {};
-  posts.forEach((post) => {
-    const seenAt = Date.parse(seen[post.author] || "");
-    const time = Date.parse(post.date);
-    if (!Number.isFinite(time) || (Number.isFinite(seenAt) && time <= seenAt)) return;
-    counts[post.author] = (counts[post.author] || 0) + 1;
-  });
-  return counts;
-}
 
 function localUrls(urls?: string[]): string[] {
   return (urls || []).filter((url) => isLocalPostImageUrl(url));
@@ -355,10 +347,10 @@ function CommentRow({ comment }: { comment: PostComment }) {
         <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
           <span className="min-w-0 truncate font-semibold text-ink dark:text-white/85">{comment.name}</span>
           {comment.replyTo ? <span className="flex-none text-muted">回复 @{comment.replyTo}</span> : null}
-          {comment.createdAt ? <><span className="flex-none text-faint">·</span><time className="flex-none text-muted" dateTime={comment.createdAt}>{formatPostTime(comment.createdAt)}</time></> : null}
+          {comment.createdAt ? <><span className="flex-none text-faint">·</span><time className="flex-none text-muted" dateTime={comment.createdAt} title={formatPostTime(comment.createdAt)}>{formatRelativeTime(comment.createdAt)}</time></> : null}
         </div>
         <p className="mt-1 whitespace-pre-line break-words text-[13px] leading-6 text-ink-2 dark:text-slate-300">{comment.text}</p>
-        {comment.likes ? <p className="mt-1 text-[11px] tabular-nums text-muted">赞 {comment.likes}</p> : null}
+        {comment.likes ? <p className="mt-1 flex items-center gap-1 text-[11px] tabular-nums text-muted"><IconThumbUp size={12} stroke={1.8} />赞 {comment.likes}</p> : null}
       </div>
     </div>
   );
@@ -378,7 +370,8 @@ function TradingCommentsPanel({ post, author, holdings, onStock, onBack }: { pos
         </div>
         <a href={post.originalUrl} target="_blank" rel="noreferrer" className="ml-auto flex-none text-[11px] font-semibold text-brand-deep">去雪球查看 ↗</a>
       </header>
-      <div className="max-h-[calc(100dvh-260px)] overflow-y-auto px-4 py-4 sm:px-5">
+      {/* 不在这里再开一层滚动条：二级页跟着页面滚（主流社交的帖子详情就是这样） */}
+      <div className="px-4 py-4 sm:px-5">
         <article className="flex gap-3">
           <Avatar src={author.avatar} name={author.name} />
           <div className="min-w-0 flex-1">
@@ -473,6 +466,8 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
   const [refreshingByAuthor, setRefreshingByAuthor] = useState<AuthorFlags>(emptyFlags);
   const [updatedByAuthor, setUpdatedByAuthor] = useState<AuthorTimes>(emptyTimes);
   const [seen, setSeen] = useState<AuthorTimes>(emptyTimes);
+  /** 本次进入页面时的已读快照：帖子上的「新」角标按它判断，整个会话里保持可见 */
+  const [seenOnLoad, setSeenOnLoad] = useState<AuthorTimes>(emptyTimes);
   // 筛选状态由 cookie 镜像预置（服务端首帧即正确），URL 在水合后依然是最终依据。
   const seeded = parseFilterCookie(initialFilter);
   const [selected, setSelected] = useState<"all" | AuthorId>(seeded.selected);
@@ -524,11 +519,15 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
       const merged = takeNewestByAuthor(mergeFeedPosts(cached.posts, initialPosts ?? []), TRADING_SQUARE_AUTHOR_LIMIT);
       setPosts(merged);
       setUpdatedByAuthor(cached.updatedByAuthor);
-      setSeen(readSeen(merged));
+      const snapshot = readSeen(merged);
+      setSeen(snapshot);
+      setSeenOnLoad(snapshot);
       setLoading(false);
       writeLocalFeed(merged, cached.updatedAt, cached.updatedByAuthor);
     } else {
-      setSeen(readSeen([]));
+      const snapshot = readSeen([]);
+      setSeen(snapshot);
+      setSeenOnLoad(snapshot);
     }
     setHydrated(true);
   }, []);
@@ -647,7 +646,7 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
   // 加载完成前不显示「尚未同步 / 0 条」这类文字：让人感觉是在原处等内容出现，而不是发文被清空了
   const allFreshness = latestTime(updatedByAuthor) ? formatUpdatedAt(latestTime(updatedByAuthor)) : (refreshing ? "正在检查更新" : "");
   const personFreshness = selected === "all" ? "" : refreshingByAuthor[selected] ? "正在检查更新" : formatUpdatedAt(updatedByAuthor[selected] ?? null);
-  const newCounts = useMemo(() => countUnseen(posts, seen), [posts, seen]);
+  const newCounts = useMemo(() => unseenCounts(posts, seen), [posts, seen]);
   const followed = detail ? records.some((record) => {
     const market = record.market.toUpperCase();
     return market === detail.market && normalizeCode(record.code, market) === detail.code;
@@ -758,6 +757,8 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
                       <span className="text-muted">{author.handle}</span>
                       <span className="text-faint">·</span>
                       <time className="text-muted" dateTime={post.date}>{formatPostTime(post.date)}</time>
+                      {/* 本次进入页面后新出现的帖子（作者卡片上的未读计数同源）：一眼能看到哪些是新更新的 */}
+                      {isUnseenPost(post, seenOnLoad) ? <span className="ml-auto flex-none rounded-full bg-[#4caf58] px-1.5 py-[1px] text-[10px] font-bold leading-4 text-white">新</span> : null}
                     </div>
                     {post.replyTo && (
                       <p className="mb-1.5 text-[11px] text-muted">
@@ -812,7 +813,7 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
                           type="button"
                           onClick={() => (post.comments && post.comments.length > INLINE_COMMENT_LIMIT ? setCommentPost(post) : setCommentsOpen((value) => ({ ...value, [post.id]: !value[post.id] })))}
                           aria-expanded={Boolean(commentsOpen[post.id])}
-                          className="flex items-center gap-1 font-semibold transition-colors hover:text-ink dark:hover:text-white"
+                          className={`flex items-center gap-1 font-semibold transition-colors hover:text-ink dark:hover:text-white ${commentsOpen[post.id] ? "text-ink dark:text-white" : ""}`}
                         >
                           <IconMessageCircle size={14} />评论 {post.comments.length}
                         </button>
