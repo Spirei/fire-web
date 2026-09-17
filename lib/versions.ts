@@ -3690,7 +3690,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_33_ENTRY,
   version: "v0.1.34",
   date: "2026-09-18",
-  summary: "四色门两套音效；发布状态热力图按全年提交计数。",
+  summary: "后台页签按需加载；四色门转盘图收到三倍显示尺寸。",
   software: V0_1_33_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.34" } : item),
   changes: [{
     title: "四色门两套样式各用各的音效",
@@ -3699,6 +3699,14 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   }, {
     title: "发布状态热力图按全年提交计数",
     desc: "热力图此前只拿最近 100 条运行/提交，八月和九月前半会被挤掉。已按页拉完全年 main 提交并逐月核对：1–7 月无提交，8 月 30–31 日共 73 次，9 月 1–18 日每天都有、共 767 次。格子外观仍用线上版按周排列。",
+    kind: "fix"
+  }, {
+    title: "后台页签恢复按需加载，刷新不再闪加载中",
+    desc: "持仓、自选、资产分析仍随壳同步渲染（服务端首帧就有内容）。其余页签改回 next/dynamic 按需下载，且不设 loading 挡板，避免再把已画出的页面盖成「加载中…」。首屏空闲后再预取其余页签，第一次点开也更快。",
+    kind: "fix"
+  }, {
+    title: "四色门窗户无损压缩、转盘收到三倍显示尺寸",
+    desc: "窗户 window.png 保持 838×447 像素只做无损压缩。转盘 dial.png 从 2088×2068 收到 414×410（侧栏显示 138px 的 3 倍，覆盖三倍屏），Lanczos 缩放并保留透明通道。指针和手型图本来就小，未改。",
     kind: "fix"
   }, {
     title: "交易广场接入帖子评论（含评论者头像）",

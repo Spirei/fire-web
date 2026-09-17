@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   MARKET_LIST,
@@ -29,23 +30,40 @@ import WatchlistView from "@/components/views/WatchlistView";
 import type { WatchGroup } from "@/lib/watchGroups";
 import HoldingsView from "@/components/views/HoldingsView";
 import AssetAnalysisView from "@/components/views/AssetAnalysisView";
-import FireView from "@/components/views/FireView";
-import ActivitiesView from "@/components/views/ActivitiesView";
-import EarningsCalendarView from "@/components/views/EarningsCalendarView";
-import CelebsView from "@/components/views/CelebsView";
-import TradingSquareView from "@/components/views/TradingSquareView";
-import SettingsView from "@/components/views/SettingsView";
-import UsersView from "@/components/views/UsersView";
-import AssetLibraryView from "@/components/views/AssetLibraryView";
-import CardLibraryView from "@/components/views/CardLibraryView";
-import AttachmentsView from "@/components/views/AttachmentsView";
-import GlobalPreviewView from "@/components/views/GlobalPreviewView";
-import AssetPnlAnalysisView from "@/components/AssetPnlAnalysis";
 import ContextAssistant from "@/components/ContextAssistant";
-import AssistantView from "@/components/views/AssistantView";
 import FourDoorNavigator from "@/components/FourDoorNavigator";
 
-// 后台页签全部同步引入：next/dynamic 的 loading 会在刷新水合时盖住已 SSR 的内容，整页闪「加载中…」。
+// 持仓 / 自选 / 资产分析随壳同步渲染，避免刷新当前页被 loading 挡板盖住。
+// 其余页签按需加载，且不设 loading，所以不会再闪「加载中…」。
+const FireView = dynamic(() => import("@/components/views/FireView"));
+const ActivitiesView = dynamic(() => import("@/components/views/ActivitiesView"));
+const EarningsCalendarView = dynamic(() => import("@/components/views/EarningsCalendarView"));
+const CelebsView = dynamic(() => import("@/components/views/CelebsView"));
+const TradingSquareView = dynamic(() => import("@/components/views/TradingSquareView"));
+const SettingsView = dynamic(() => import("@/components/views/SettingsView"));
+const UsersView = dynamic(() => import("@/components/views/UsersView"));
+const AssetLibraryView = dynamic(() => import("@/components/views/AssetLibraryView"));
+const CardLibraryView = dynamic(() => import("@/components/views/CardLibraryView"));
+const AttachmentsView = dynamic(() => import("@/components/views/AttachmentsView"));
+const GlobalPreviewView = dynamic(() => import("@/components/views/GlobalPreviewView"));
+const AssetPnlAnalysisView = dynamic(() => import("@/components/AssetPnlAnalysis"));
+const AssistantView = dynamic(() => import("@/components/views/AssistantView"));
+
+const LAZY_TAB_LOADERS = [
+  () => import("@/components/views/FireView"),
+  () => import("@/components/views/ActivitiesView"),
+  () => import("@/components/views/EarningsCalendarView"),
+  () => import("@/components/views/CelebsView"),
+  () => import("@/components/views/TradingSquareView"),
+  () => import("@/components/views/SettingsView"),
+  () => import("@/components/views/UsersView"),
+  () => import("@/components/views/AssetLibraryView"),
+  () => import("@/components/views/CardLibraryView"),
+  () => import("@/components/views/AttachmentsView"),
+  () => import("@/components/views/GlobalPreviewView"),
+  () => import("@/components/AssetPnlAnalysis"),
+  () => import("@/components/views/AssistantView")
+];
 
 type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "assistant" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
 
@@ -167,6 +185,16 @@ export default function RecordsApp({
   useMemo(() => primeFlagIconCache(initialFlagIcons), [initialFlagIcons]);
   usePrefetchFlagIcons(initialFlagIcons);
   useEffect(() => setNavIconsHydrated(true), []);
+  useEffect(() => {
+    const win = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+    const start = () => { LAZY_TAB_LOADERS.forEach((load) => { void load(); }); };
+    if (typeof win.requestIdleCallback === "function") {
+      const id = win.requestIdleCallback(start, { timeout: 2500 });
+      return () => win.cancelIdleCallback?.(id);
+    }
+    const id = window.setTimeout(start, 1200);
+    return () => window.clearTimeout(id);
+  }, []);
   useLayoutEffect(() => {
     applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
   }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible]);
