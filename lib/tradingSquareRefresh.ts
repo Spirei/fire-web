@@ -516,15 +516,18 @@ function extractQuote(item: XueqiuStatus): Quote | undefined {
   return asQuote(item.reply_comment) || asQuote(item.reply_status) || asQuote(item.comment) || asQuote(item.retweeted_status) || asQuote(item.retweet_status) || asQuote(item.quoted_status);
 }
 
-function mapDuanStatus(item: XueqiuStatus): DuanPost | null {
+/** 把雪球时间线里的一条状态转成站内结构（导出以便回归测试：这里有「转发帖被整条丢掉」的坑）。 */
+export function mapDuanStatus(item: XueqiuStatus): DuanPost | null {
   const images = extractXueqiuImages(item);
   const rawText = item.text || item.description || item.title || "";
   const text = clean(rawText);
   const id = String(item.id || "");
-  if (!id || (!text && !images?.length)) return null;
+  const quote = extractQuote(item);
+  // 转发别人的帖子时，他自己的正文可能只有一个表情（例如 👍）、也没有自己的图片：
+  // 这种帖要留下来（内容全在引用里），否则时间线上最新的一条会被整条丢掉。
+  if (!id || (!text && !images?.length && !quote)) return null;
   const likes = Number(item.like_count || 0);
   const replies = Number(item.reply_count || item.comments_count || 0);
-  const quote = extractQuote(item);
   const replyMatch = String(rawText).match(/^\s*回复\s*@([^\s:：]{1,40})\s*[:：]\s*/u);
   const reply = replyMatch ? true : undefined;
   return {

@@ -386,6 +386,32 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const legacy = '<div class="status"><div class="status-info__meta-item">September 17, 2026, 9:00 AM</div><div class="status__content"><p>Legacy</p></div></div>';
     assert.equal(parseTrumpPage(legacy, 'https://trumpstruth.org/')[0].date, new Date('September 17, 2026, 9:00 AM').toISOString());
   });
+  await test('trading square keeps quote-only reposts and preserves emoji labels', () => {
+    const { mapDuanStatus } = require(path.join(root, 'lib/tradingSquareRefresh.ts'));
+    const { normalizeTradingText } = require(path.join(root, 'lib/tradingSquareText.ts'));
+    // 雪球 emoji 是图片：取 alt，别让整段表情被去标签删掉
+    assert.equal(normalizeTradingText('<img src="//assets.imedao.com/emoji.png" title="[很赞]" alt="[很赞]" height="24" />'), '[很赞]');
+    assert.equal(normalizeTradingText('今天很好<img src="x" alt="[大笑]">，明天见'), '今天很好 [大笑] ，明天见');
+    // 转发别人的帖子：自己的正文只有一个表情、也没有自己的图片 —— 以前会被整条丢掉
+    const repost = mapDuanStatus({
+      id: 409704400,
+      created_at: 1789660143000,
+      text: '<img src="//assets.imedao.com/ugc/images/face/emoji_35_like.png?v=1" title="[很赞]" alt="[很赞]" height="24" />',
+      retweeted_status: {
+        id: 409618513,
+        created_at: 1789600000000,
+        text: '<p>昨天有幸参观了vivo全球总部（东莞）</p>',
+        user: { id: 9914456386, screen_name: '岩木', profile_image_url: 'community/x/a.png,community/x/a.png!50x50.png' }
+      }
+    });
+    assert(repost, '转发+引用型帖子不能被丢弃');
+    assert.equal(repost.id, '409704400');
+    assert.equal(repost.text, '[很赞]');
+    assert.equal(repost.quote.name, '岩木');
+    assert(repost.quote.text.includes('vivo全球总部'));
+    // 真正空白的状态仍然丢弃
+    assert.equal(mapDuanStatus({ id: 1 }), null);
+  });
   await test('trading square strips scraped page chrome from post text', () => {
     const { normalizeTradingText, stripTradingSquareChrome } = require(path.join(root, 'lib/tradingSquareText.ts'));
     // 开头的「回复@某人:」是回复上下文（雪球页面上的链接），不是作者写的字

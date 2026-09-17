@@ -519,11 +519,14 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
     try { setFixed(localStorage.getItem("fire:trading-square-window-fixed") === "1"); } catch { /* ignore */ }
     const cached = readLocalFeed();
     if (cached) {
-      setPosts(cached.posts);
+      // 本地缓存只用来補服务端窗口之外的历史，不能整份盖掉首帧已经渲染的新数据 ——
+      // 之前直接 setPosts(cached.posts)，缓存比服务端旧时就会「先显示旧帖、等接口回来再跳回新的」。
+      const merged = takeNewestByAuthor(mergeFeedPosts(cached.posts, initialPosts ?? []), TRADING_SQUARE_AUTHOR_LIMIT);
+      setPosts(merged);
       setUpdatedByAuthor(cached.updatedByAuthor);
-      setSeen(readSeen(cached.posts));
+      setSeen(readSeen(merged));
       setLoading(false);
-      writeLocalFeed(cached.posts, cached.updatedAt, cached.updatedByAuthor);
+      writeLocalFeed(merged, cached.updatedAt, cached.updatedByAuthor);
     } else {
       setSeen(readSeen([]));
     }

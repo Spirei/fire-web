@@ -78,6 +78,12 @@ export function normalizeTradingText(value: string, options: { keepReplyPrefix?:
     stripMarkdownLite(decodeHtmlEntities(
       value
         .replace(/<br\s*\/?\s*>/gi, "\n")
+        // 雪球的 emoji 是 <img alt="[很赞]"> 这种图片：先取出 alt/title，
+        // 否则整段表情会被下面的去标签步骤删掉 —— 纯表情帖（转发时的 👍）会变成空正文。
+        .replace(/<img\b[^>]*>/gi, (tag) => {
+          const label = tag.match(/(?:alt|title)="([^"]{1,12})"/i)?.[1];
+          return label ? ` ${label} ` : " ";
+        })
         .replace(/<[^>]+>/g, "")
     ))
       .replace(/\u00a0/g, " ")
