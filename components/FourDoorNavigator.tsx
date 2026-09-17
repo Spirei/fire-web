@@ -169,7 +169,8 @@ export default function FourDoorNavigator({
     let lastTime = performance.now();
     const start = lastTime;
     const delta = toAngle - fromAngle;
-    if (withSound && soundOn) audio().begin();
+    const voice = doorStyle;
+    if (withSound && soundOn) audio().begin(voice);
     const loop = (now: number) => {
       const t = Math.min(1, (now - start) / durationMs);
       const angle = fromAngle + delta * ease(t);
@@ -180,14 +181,14 @@ export default function FourDoorNavigator({
       const notch = Math.floor(angle / TICK_DEG);
       if (notch !== lastNotch) {
         lastNotch = notch;
-        if (withSound && soundOn) audio().tick(velocity);
+        if (withSound && soundOn) audio().tick(velocity, voice);
       }
       if (t < 1) {
         watchRef.current = window.requestAnimationFrame(loop);
         return;
       }
       watchRef.current = null;
-      if (withSound && soundOn) audio().lock();
+      if (withSound && soundOn) audio().lock(voice);
     };
     watchRef.current = window.requestAnimationFrame(loop);
   }

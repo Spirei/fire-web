@@ -3629,7 +3629,7 @@ export const V0_1_32_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_33_ENTRY: VersionEntry = {
   ...V0_1_32_ENTRY,
   version: "v0.1.33",
   date: "2026-09-17",
@@ -3682,6 +3682,19 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   }, {
     title: "四色门音效改成珐琅八音盒",
     desc: "自由发挥一版：转前 C-G-C 三记拇指琴加一口气声，转动是线上棘轮当齿轮底、上面叠 C 五声音阶滑动，越慢琴声越长；落定是 C-G 五度打开再收到 E、C。低通约 3.6kHz，没有 6kHz 刺音、也不是纸牌。样式和挂钩不变。",
+    kind: "fix"
+  }]
+};
+
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_33_ENTRY,
+  version: "v0.1.34",
+  date: "2026-09-18",
+  summary: "四色门样式 1 恢复线上棘轮，样式 2 保留珐琅八音盒。",
+  software: V0_1_33_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.34" } : item),
+  changes: [{
+    title: "四色门两套样式各用各的音效",
+    desc: "样式 2 珐琅盘保留本次八音盒（转前 C-G-C 拇指琴、转动五声滑动、落定 C-G 五度）。样式 1 原插画转盘改回线上棘轮：三角波 690→410Hz、转前晚 0.1 秒第一记、落定 G6 谐波钟加 4.2kHz 轻咔。切换样式后下一次转动换声，挂钩和落点不变。",
     kind: "fix"
   }]
 };
