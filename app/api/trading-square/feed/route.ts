@@ -7,10 +7,11 @@ import { getSiteSettings } from "@/lib/settings";
 import { backfillTrumpTranslations } from "@/lib/tradingSquareTranslate";
 import { isDuanRefreshing, isTrumpRefreshing, postTimestamp, readTrumpPosts, refreshDuanPosts, refreshTrumpPosts, withoutRemoteImages } from "@/lib/tradingSquareRefresh";
 import { validTranslation } from "@/lib/tradingSquareTranslate";
-import { hasTranslatableText } from "@/lib/tradingSquareText";
+import { hasTranslatableText, replyTargetFromText } from "@/lib/tradingSquareText";
+import { readDuanComments, type PostComment } from "@/lib/tradingSquareComments";
 
-type CachedPost = { id: string; date: string; text: string; textZh?: string; originalUrl: string; categories?: string[]; quote?: { name: string; text: string; url?: string; images?: string[] }; images?: string[] };
-type FeedPost = CachedPost & { author: "trump" | "duan" };
+type CachedPost = { id: string; date: string; text: string; textZh?: string; originalUrl: string; categories?: string[]; quote?: { name: string; text: string; url?: string; images?: string[] }; images?: string[]; replyTo?: string };
+type FeedPost = CachedPost & { author: "trump" | "duan"; replyTo?: string; comments?: PostComment[] };
 const DATA = path.join(process.cwd(), "data");
 const TRUMP = path.join(DATA, "trump-posts.json");
 const TRANSLATIONS = path.join(DATA, "trump-translations.json");
@@ -33,7 +34,18 @@ function assembleFeed() {
     const textZh = hasTranslatableText(post.text) && validTranslation(translations[post.id]) ? translations[post.id] : undefined;
     return withoutRemoteImages(textZh ? { ...post, textZh, author: "trump" as const } : { ...post, author: "trump" as const });
   });
-  const duan = readJsonFile<CachedPost[]>(DUAN, []).map((post) => withoutRemoteImages({ ...post, author: "duan" as const }));
+  const commentsByPost = readDuanComments();
+  const duan = readJsonFile<CachedPost[]>(DUAN, []).map((post) => {
+    // 老缓存里正文还带着「回复@某人:」，这里补出 replyTo 供界面提示；清洗后的新帖直接带字段
+    const replyTo = post.replyTo || replyTargetFromText(post.text);
+    const comments = commentsByPost[post.id]?.comments;
+    return withoutRemoteImages({
+      ...post,
+      author: "duan" as const,
+      ...(replyTo ? { replyTo } : {}),
+      ...(comments?.length ? { comments } : {})
+    });
+  });
   // 不设时间窗、不截断：现有内容 + 往后追加的新帖
   const posts = takeNewestByAuthor([...trump, ...duan].sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date)), TRADING_SQUARE_AUTHOR_LIMIT);
   assembled = {

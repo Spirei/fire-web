@@ -55,9 +55,9 @@ function stripMarkdownLite(value: string): string {
 const SQUARE_REPLY_PREFIX = /^\s*回复\s*@[^\s:：]{1,40}\s*[:：]\s*/u;
 const SQUARE_LINK_LABELS = /(?:查看图片|查看大图|网页链接)/g;
 
-export function stripTradingSquareChrome(value: string): string {
-  return value
-    .replace(SQUARE_REPLY_PREFIX, "")
+export function stripTradingSquareChrome(value: string, options: { keepReplyPrefix?: boolean } = {}): string {
+  const withoutReplyPrefix = options.keepReplyPrefix ? value : value.replace(SQUARE_REPLY_PREFIX, "");
+  return withoutReplyPrefix
     .replace(SQUARE_LINK_LABELS, "")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/[ \t]+\n/g, "\n")
@@ -65,8 +65,14 @@ export function stripTradingSquareChrome(value: string): string {
     .trim();
 }
 
+/** 从「回复@某人: …」里取出被回复的人；正文清洗后前缀没了，界面提示要用这个名字。 */
+export function replyTargetFromText(value: string): string | undefined {
+  const match = String(value || "").match(/^\s*回复\s*@([^\s:：]{1,40})\s*[:：]/u);
+  return match?.[1] || undefined;
+}
+
 /** 解码 HTML 实体、去掉 Gemini/雪球残留的 markdown，已清洗的文本再跑一遍保持原样。 */
-export function normalizeTradingText(value: string): string {
+export function normalizeTradingText(value: string, options: { keepReplyPrefix?: boolean } = {}): string {
   if (!value) return "";
   return stripTradingSquareChrome(
     stripMarkdownLite(decodeHtmlEntities(
@@ -78,7 +84,8 @@ export function normalizeTradingText(value: string): string {
       .replace(/[ \t]+\n/g, "\n")
       .replace(/\n[ \t]+/g, "\n")
       .replace(/\n{3,}/g, "\n\n")
-      .trim()
+      .trim(),
+    options
   );
 }
 

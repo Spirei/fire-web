@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { IconMinus, IconPin, IconPlus, IconWindmill } from "@tabler/icons-react";
+import { IconMessageCircle, IconMinus, IconPin, IconPlus, IconWindmill } from "@tabler/icons-react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
 import useDraggableWindow from "@/lib/useDraggableWindow";
@@ -16,8 +16,9 @@ import type { StockRecord } from "@/lib/types";
 
 type AuthorId = "trump" | "duan";
 type DuanCategory = "hot" | "original" | "longform";
-type Quote = { name: string; text: string; url?: string; images?: string[] };
-type Post = { id: string; author: AuthorId; date: string; text: string; textZh?: string; originalUrl: string; categories?: DuanCategory[]; quote?: Quote; images?: string[] };
+type Quote = { name: string; text: string; url?: string; images?: string[]; avatar?: string };
+type PostComment = { id: string; name: string; avatar?: string; createdAt: string; text: string; likes?: number; replyTo?: string };
+type Post = { id: string; author: AuthorId; date: string; text: string; textZh?: string; originalUrl: string; categories?: DuanCategory[]; quote?: Quote; images?: string[]; replyTo?: string; comments?: PostComment[] };
 
 const PEOPLE = [
   { id: "trump" as const, name: "特朗普", handle: "@realDonaldTrump", platform: "Truth Social", avatar: "/uploads/celebs/trump-custom-1786043526485-1e34c87e.png" },
@@ -30,6 +31,8 @@ const CATEGORY_OPTIONS: Array<{ id: "all" | DuanCategory; label: string }> = [
   { id: "longform", label: "长文" }
 ];
 const PAGE_SIZE = 10;
+/** 帖子下面默认展示几条评论（他的帖子评论本来就少，多的去雪球看） */
+const COMMENT_PREVIEW = 3;
 const FEED_CACHE_KEY = "fire:trading-square-feed";
 const SEEN_CACHE_KEY = "fire:trading-square-seen";
 /** 筛选状态的 cookie 镜像：让服务端首帧就能画出「段永平 + 分类标签行」，刷新不再先消失再出现。 */
@@ -413,6 +416,8 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
   const [page, setPage] = useState(seeded.page);
   const [detail, setDetail] = useState<{ market: string; code: string; name: string } | null>(() => parseSymbol(seeded.symbol));
   const [original, setOriginal] = useState<Record<string, boolean>>({});
+  /** 评论默认收起，点评论图标才展开（一级页面保持清爽） */
+  const [commentsOpen, setCommentsOpen] = useState<Record<string, boolean>>({});
   const [fixed, setFixed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const restored = useRef(false);
@@ -674,11 +679,56 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
                       <span className="text-faint">·</span>
                       <time className="text-muted" dateTime={post.date}>{formatPostTime(post.date)}</time>
                     </div>
+                    {post.replyTo && (
+                      <p className="mb-1.5 text-[11px] text-muted">
+                        回复 <a href={mentionHref(post.author, post.replyTo)} target="_blank" rel="noreferrer" className={MENTION_CLASS}>@{post.replyTo}</a> 的动态
+                      </p>
+                    )}
                     {displayText ? <PostBody text={displayText} holdings={holdings} onStock={openStock} author={post.author} /> : null}
                     <PostImages urls={post.images} />
+                    {post.comments?.length && commentsOpen[post.id] ? (
+                      <div className="mt-3 rounded-xl border border-edge px-3 py-2.5 dark:border-white/10">
+                        <div className="flex items-center justify-between gap-3 text-xs">
+                          <span className="font-semibold text-muted">评论 {post.comments.length}</span>
+                          <a href={post.originalUrl} target="_blank" rel="noreferrer" className="flex-none font-semibold text-brand-deep">去雪球看评论 ↗</a>
+                        </div>
+                        <ul className="mt-2 space-y-2.5">
+                          {post.comments.slice(0, COMMENT_PREVIEW).map((comment) => (
+                            <li key={comment.id} className="flex gap-2">
+                              <SafeAssetImage
+                                src={comment.avatar}
+                                alt=""
+                                className="h-6 w-6 flex-none rounded-full bg-bg-gray object-cover"
+                                fallback={<span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-bg-gray text-[10px] font-bold text-muted">{(comment.name || "?").slice(0, 1)}</span>}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted">
+                                  <span className="min-w-0 truncate font-semibold text-ink dark:text-white/80">{comment.name}</span>
+                                  {comment.replyTo && <span className="flex-none">回复 @{comment.replyTo}</span>}
+                                  {comment.createdAt && <><span className="flex-none">·</span><time className="flex-none" dateTime={comment.createdAt}>{formatPostTime(comment.createdAt)}</time></>}
+                                  {comment.likes ? <span className="ml-auto flex-none tabular-nums">赞 {comment.likes}</span> : null}
+                                </div>
+                                <p className="mt-1 whitespace-pre-line break-words text-xs leading-5 text-ink-2 dark:text-slate-300">{comment.text}</p>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                        {post.comments.length > COMMENT_PREVIEW && (
+                          <a href={post.originalUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-semibold text-brand-deep">还有 {post.comments.length - COMMENT_PREVIEW} 条评论，去雪球查看 ↗</a>
+                        )}
+                      </div>
+                    ) : null}
                     {post.quote && (
                       <div className="mt-3 rounded-xl border border-edge bg-bg-gray/60 px-3 py-2.5 dark:border-white/10 dark:bg-white/[.04]">
-                        <p className="text-xs font-semibold text-muted">{post.quote.name}</p>
+                        <p className="flex items-center gap-1.5 text-xs font-semibold text-muted">
+                          <SafeAssetImage
+                            src={post.quote.avatar}
+                            alt=""
+                            className="h-4 w-4 flex-none rounded-full bg-bg-gray object-cover"
+                            fallback={<span className="grid h-4 w-4 flex-none place-items-center rounded-full bg-bg-gray text-[9px] font-bold text-muted">{(post.quote.name || "?").slice(0, 1)}</span>}
+                          />
+                          <span className="min-w-0 truncate">{post.quote.name}</span>
+                        </p>
                         <PostBody
                           text={post.quote.text}
                           holdings={holdings}
@@ -695,6 +745,16 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
                     )}
                     <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted">
                       <a href={post.originalUrl} target="_blank" rel="noreferrer" className="font-semibold text-brand-deep">查看原文 ↗</a>
+                      {post.comments?.length ? (
+                        <button
+                          type="button"
+                          onClick={() => setCommentsOpen((value) => ({ ...value, [post.id]: !value[post.id] }))}
+                          aria-expanded={Boolean(commentsOpen[post.id])}
+                          className="flex items-center gap-1 font-semibold transition-colors hover:text-ink dark:hover:text-white"
+                        >
+                          <IconMessageCircle size={14} />评论 {post.comments.length}
+                        </button>
+                      ) : null}
                       {post.textZh && (
                         <button type="button" onClick={() => setOriginal((value) => ({ ...value, [post.id]: !showOriginal }))} className="font-semibold">
                           {showOriginal ? "中文" : "原文"}

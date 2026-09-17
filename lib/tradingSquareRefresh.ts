@@ -2,10 +2,11 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { sniffImageExt } from "@/lib/imageSecurity";
-import { isAllowedRemoteImageUrl, isLocalPostImageUrl, originalRemoteImageUrl } from "@/lib/tradingSquareImages";
+import { isAllowedRemoteImageUrl, isLocalPostImageUrl, normalizeXueqiuAvatar, originalRemoteImageUrl } from "@/lib/tradingSquareImages";
 import { getSiteSettings } from "@/lib/settings";
 import { readJsonFile, writeJsonAtomic } from "@/lib/tradingSquareCache";
 import { normalizeTradingText } from "@/lib/tradingSquareText";
+import { COMMENTS_CACHE_VERSION, commentsFilePath, mapXueqiuComment, readDuanComments, type CommentsCache, type XueqiuComment } from "@/lib/tradingSquareComments";
 import { backfillTrumpTranslations, translateTrumpPostsNow } from "@/lib/tradingSquareTranslate";
 import { proxyFetch } from "@/lib/net";
 
@@ -17,10 +18,11 @@ const DUAN_USER = "1247347556";
 
 export type TrumpPost = { id: string; date: string; text: string; originalUrl: string; archiveUrl: string; images?: string[] };
 type DuanCategory = "hot" | "original" | "longform";
-export type Quote = { name: string; text: string; url?: string; images?: string[] };
+export type Quote = { name: string; text: string; url?: string; images?: string[]; avatar?: string };
 // reply：这条是不是「回复某人」。正文会清掉开头的「回复@某人:」（那是雪球页面元素，不是作者写的），
 // 所以是否回复必须在清洗前记下来，补抓引用时还要用。
-export type DuanPost = { id: string; date: string; text: string; originalUrl: string; categories: DuanCategory[]; replies?: number; likes?: number; quote?: Quote; images?: string[]; reply?: boolean };
+// replyTo：「回复@某人」里的那个人（正文清洗后前缀没了，但界面上要用它标出「回复 @某人」）。
+export type DuanPost = { id: string; date: string; text: string; originalUrl: string; categories: DuanCategory[]; replies?: number; likes?: number; quote?: Quote; images?: string[]; reply?: boolean; replyTo?: string };
 
 type XueqiuStatus = {
   id?: number | string;
@@ -41,7 +43,7 @@ type XueqiuStatus = {
   cover_pic?: unknown;
   firstImg?: string;
   image_info_list?: Array<{ filename?: string; url?: string; original?: string }>;
-  user?: { id?: number | string; screen_name?: string; name?: string };
+  user?: { id?: number | string; screen_name?: string; name?: string; profile_image_url?: string };
   retweeted_status?: XueqiuStatus;
   retweet_status?: XueqiuStatus;
   reply_comment?: XueqiuStatus;
@@ -312,6 +314,23 @@ async function localizeUrlMap(author: string, urls: string[]): Promise<Map<strin
   return map;
 }
 
+/**
+ * 头像专用下载：`localizeUrlMap` 会按「正文配图」过滤掉含 avatar/profile 的地址（那是为了排除
+ * 正文里混进的作者头像），而评论者 / 引用作者的头像正好在这个过滤范围内，所以单独走这条通道。
+ */
+async function localizeAvatars(author: string, urls: (string | undefined)[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const unique = [...new Set(urls.filter((url): url is string => Boolean(url) && /^https?:\/\//i.test(url as string) && !isLocalPostImageUrl(url as string)))];
+  for (let index = 0; index < unique.length; index += 4) {
+    const batch = unique.slice(index, index + 4);
+    await Promise.all(batch.map(async (url) => {
+      const local = await downloadImage(author, url);
+      if (local) map.set(url, local);
+    }));
+  }
+  return map;
+}
+
 export function keepLocalImages(urls?: string[], map?: Map<string, string>): string[] | undefined {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -450,7 +469,8 @@ function asQuote(value: unknown): Quote | undefined {
   const id = item.id != null ? String(item.id) : "";
   const uid = user.id != null ? String(user.id) : "";
   const images = extractXueqiuImages(item);
-  return { name: name || "原动态", text, url: id && uid ? `https://xueqiu.com/${uid}/${id}` : undefined, ...(images ? { images } : {}) };
+  const avatar = normalizeXueqiuAvatar(user.profile_image_url);
+  return { name: name || "原动态", text, url: id && uid ? `https://xueqiu.com/${uid}/${id}` : undefined, ...(images ? { images } : {}), ...(avatar ? { avatar } : {}) };
 }
 
 function extractQuote(item: XueqiuStatus): Quote | undefined {
@@ -466,7 +486,8 @@ function mapDuanStatus(item: XueqiuStatus): DuanPost | null {
   const likes = Number(item.like_count || 0);
   const replies = Number(item.reply_count || item.comments_count || 0);
   const quote = extractQuote(item);
-  const reply = /^\s*回复\s*@/.test(rawText) || undefined;
+  const replyMatch = String(rawText).match(/^\s*回复\s*@([^\s:：]{1,40})\s*[:：]\s*/u);
+  const reply = replyMatch ? true : undefined;
   return {
     id,
     date: typeof item.created_at === "number" ? new Date(item.created_at).toISOString() : new Date(item.created_at || Date.now()).toISOString(),
@@ -476,14 +497,22 @@ function mapDuanStatus(item: XueqiuStatus): DuanPost | null {
     likes,
     replies,
     ...(reply ? { reply } : {}),
+    ...(replyMatch?.[1] ? { replyTo: replyMatch[1] } : {}),
     ...(images ? { images } : {}),
     ...(quote && quote.text !== text ? { quote } : {})
   };
 }
 
 async function fillMissingQuotes(posts: DuanPost[]): Promise<DuanPost[]> {
-  // 老缓存里的帖没有 reply 标记，再兜一层正文判断（清洗后开头的「回复@」没了，但 //@ 转发链还在）。
-  const missing = posts.filter((post) => !post.quote && (post.reply === true || /^\s*回复\s*@/.test(post.text) || /^\s*\/\/@/.test(post.text))).slice(0, 40);
+  // 两种情况要补：1) 回复了别人但没抓到引用；2) 有引用但缺作者头像（多花一次详情请求补上）。
+  // 只对最近这些帖子做，避免把几百条老帖全部重抓一遍。
+  const recent = posts.slice(0, 24);
+  const missing = recent.filter((post) => {
+    if (post.quote && post.quote.avatar) return false;
+    if (post.quote) return true;
+    // 老缓存里的帖没有 reply 标记，再兜一层正文判断（清洗后开头的「回复@」没了，但 //@ 转发链还在）。
+    return post.reply === true || /^\s*回复\s*@/.test(post.text) || /^\s*\/\/@/.test(post.text);
+  }).slice(0, 24);
   if (!missing.length) return posts;
   const quotes = new Map<string, Quote>();
   const images = new Map<string, string[]>();
@@ -493,7 +522,7 @@ async function fillMissingQuotes(posts: DuanPost[]): Promise<DuanPost[]> {
       const detail = await xueqiuFetch(`/statuses/show.json?id=${encodeURIComponent(post.id)}`) as XueqiuStatus | null;
       if (!detail) return;
       const quote = extractQuote(detail);
-      if (quote && quote.text !== post.text) quotes.set(post.id, quote);
+      if (quote && (quote.text !== post.text || (quote.avatar && !post.quote?.avatar))) quotes.set(post.id, quote);
       const pics = extractXueqiuImages(detail);
       if (pics?.length && !post.images?.length) images.set(post.id, pics);
     }));
@@ -504,6 +533,60 @@ async function fillMissingQuotes(posts: DuanPost[]): Promise<DuanPost[]> {
     ...(quotes.has(post.id) ? { quote: quotes.get(post.id) } : {}),
     ...(images.has(post.id) ? { images: images.get(post.id) } : {})
   }));
+}
+
+/** 只刷新最近这些帖子的评论；他为「只有关注的人能评论」，多数帖子评论数为 0，请求量很小。 */
+const COMMENT_REFRESH_POSTS = 24;
+const COMMENT_PAGE_SIZE = 20;
+const COMMENT_CACHE_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * 拉取帖子评论（别人在他帖子下面的留言）。
+ * 省请求的两个条件：帖子评论数没变、且缓存不超过 30 分钟 —— 两者都满足就跳过这条帖子。
+ */
+async function refreshDuanComments(posts: DuanPost[], now = Date.now()): Promise<CommentsCache> {
+  const cache = readDuanComments();
+  const candidates = posts.filter((post) => (post.replies || 0) > 0).slice(0, COMMENT_REFRESH_POSTS);
+  let changed = false;
+  const pending = candidates.filter((post) => {
+    const hit = cache[post.id];
+    if (!hit || hit.version !== COMMENTS_CACHE_VERSION) return true;
+    if (Number(hit.total) !== Number(post.replies || 0)) return true;
+    const at = Date.parse(hit.updatedAt);
+    return !Number.isFinite(at) || now - at > COMMENT_CACHE_TTL_MS;
+  });
+  if (pending.length) {
+    for (let index = 0; index < pending.length; index += 3) {
+      const batch = pending.slice(index, index + 3);
+      await Promise.all(batch.map(async (post) => {
+        const data = await xueqiuFetch(`/statuses/comments.json?id=${encodeURIComponent(post.id)}&count=${COMMENT_PAGE_SIZE}&page=1&reply=true&asc=false`) as { comments?: XueqiuComment[]; count?: number } | null;
+        if (!data) return;
+        const comments = (data.comments || []).map(mapXueqiuComment).filter((item): item is NonNullable<ReturnType<typeof mapXueqiuComment>> => item !== null);
+        const total = Number(data.count ?? comments.length);
+        cache[post.id] = { updatedAt: new Date(now).toISOString(), total: Number.isFinite(total) ? total : comments.length, comments, version: COMMENTS_CACHE_VERSION };
+        changed = true;
+      }));
+    }
+  }
+  // 头像本地化也要跑：缓存里还留着远程头像时（比如刚升级完代码）也算「需要处理」
+  const remoteAvatars = Object.values(cache)
+    .flatMap((entry) => entry.comments.map((comment) => comment.avatar))
+    .filter((url): url is string => Boolean(url) && !isLocalPostImageUrl(url as string));
+  if (!changed && !remoteAvatars.length) return cache;
+
+  // 下载失败就保留原地址，前端有首字母兜底
+  const avatarMap = await localizeAvatars("duan", remoteAvatars);
+  if (avatarMap.size) {
+    for (const entry of Object.values(cache)) {
+      for (const comment of entry.comments) {
+        if (!comment.avatar || isLocalPostImageUrl(comment.avatar)) continue;
+        const local = avatarMap.get(comment.avatar);
+        if (local) comment.avatar = local;
+      }
+    }
+  }
+  writeJsonAtomic(commentsFilePath(), cache);
+  return cache;
 }
 
 export async function refreshDuanPosts(): Promise<DuanPost[]> {
@@ -533,21 +616,30 @@ export async function refreshDuanPosts(): Promise<DuanPost[]> {
     }
     const quoted = await fillMissingQuotes(live);
     if (!quoted.length) return existing;
+    // 评论只是附加信息：拉取失败不影响帖子本身
+    try {
+      await refreshDuanComments(quoted);
+    } catch {
+      /* ignore */
+    }
     const remoteUrls = [
       ...quoted.flatMap((item) => [...(item.images || []), ...(item.quote?.images || [])]),
       ...existing.flatMap((item) => [...(item.images || []), ...(item.quote?.images || [])])
     ];
     const localMap = await localizeUrlMap("duan", remoteUrls);
+    // 引用作者头像单独下载（会被 localizeUrlMap 的头像过滤挡掉）
+    const avatarMap = await localizeAvatars("duan", [...quoted, ...existing].map((item) => item.quote?.avatar));
     const merged = new Map(existing.map((item) => [item.id, item]));
     quoted.forEach((item) => {
       const saved = merged.get(item.id);
       const images = keepLocalImages(item.images?.length ? item.images : saved?.images, localMap);
       const quoteSource = item.quote || saved?.quote;
       const quoteImages = quoteSource ? keepLocalImages(quoteSource.images?.length ? quoteSource.images : saved?.quote?.images, localMap) : undefined;
+      const quoteAvatar = quoteSource?.avatar && !isLocalPostImageUrl(quoteSource.avatar) ? avatarMap.get(quoteSource.avatar) : quoteSource?.avatar;
       const next = {
         ...saved,
         ...item,
-        quote: quoteSource ? { ...quoteSource, ...(quoteImages ? { images: quoteImages } : {}) } : undefined,
+        quote: quoteSource ? { ...quoteSource, ...(quoteImages ? { images: quoteImages } : {}), ...(quoteAvatar || saved?.quote?.avatar ? { avatar: quoteAvatar || saved?.quote?.avatar } : {}) } : undefined,
         categories: Array.from(new Set([...(saved?.categories || []), ...item.categories]))
       };
       if (images) next.images = images;

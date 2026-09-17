@@ -356,10 +356,38 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(normalizeTradingText('//@小明:转发了这条'), '//@小明:转发了这条');
     assert.equal(stripTradingSquareChrome('好的，谢谢@小明: 我看看'), '好的，谢谢@小明: 我看看');
     assert.equal(stripTradingSquareChrome('回复@小明: 收到[已修改]'), '收到[已修改]');
-    // 抓取脚本靠「清洗前的正文」判断是否回复、要不要补抓引用，清洗后必须改用显式标记
+    // 抓取脚本靠「清洗前的正文」判断是否回复、回复了谁，清洗后必须改用显式字段
     const refresh = fs.readFileSync(path.join(root, 'lib/tradingSquareRefresh.ts'), 'utf8');
-    assert(refresh.includes('/^\\s*回复\\s*@/.test(rawText)'), '清洗前记录是否回复');
+    assert(refresh.includes('.match(/^\\s*回复\\s*@('), '清洗前记录回复对象');
     assert(refresh.includes('post.reply === true'), '补抓引用改用 reply 标记');
+  });
+  await test('trading square comments: avatar url + reply target', () => {
+    const { mapXueqiuComment } = require(path.join(root, 'lib/tradingSquareComments.ts'));
+    const { normalizeXueqiuAvatar, isAllowedRemoteImageUrl } = require(path.join(root, 'lib/tradingSquareImages.ts'));
+    const { replyTargetFromText } = require(path.join(root, 'lib/tradingSquareText.ts'));
+    // 雪球头像字段：逗号分隔的多档尺寸、且不带域名（取第一档并补 xavatar 域名，否则前端是破图）
+    assert.equal(normalizeXueqiuAvatar('community/20165/a.png,community/20165/a.png!180x180.png'), 'https://xavatar.imedao.com/community/20165/a.png');
+    assert.equal(normalizeXueqiuAvatar('https://xavatar.imedao.com/community/a.png'), 'https://xavatar.imedao.com/community/a.png');
+    assert.equal(normalizeXueqiuAvatar(''), undefined);
+    assert.equal(isAllowedRemoteImageUrl('https://xavatar.imedao.com/community/20165/a.png'), true);
+    assert.equal(isAllowedRemoteImageUrl('https://evil.example.com/a.png'), false);
+    // 评论：作者、时间、赞数、回复对象、正文里的「回复@x:」前缀要拆出来
+    const comment = mapXueqiuComment({
+      id: 1,
+      created_at: 1789455535000,
+      like_count: 18,
+      text: '回复@随水而行的Star: 是的，这个位置的人流量在国内也是排前几名的。',
+      user: { screen_name: 'neng', profile_image_url: 'community/1/a.png,community/1/a.png!50x50.png' }
+    });
+    assert.equal(comment.name, 'neng');
+    assert.equal(comment.text, '是的，这个位置的人流量在国内也是排前几名的。');
+    assert.equal(comment.replyTo, '随水而行的Star');
+    assert.equal(comment.likes, 18);
+    assert.equal(comment.avatar, 'https://xavatar.imedao.com/community/1/a.png');
+    assert.equal(comment.createdAt, new Date(1789455535000).toISOString());
+    assert.equal(mapXueqiuComment({ id: 2, text: '   ' }), null);
+    assert.equal(replyTargetFromText('回复@小马种西瓜: 正文'), '小马种西瓜');
+    assert.equal(replyTargetFromText('//@小明:转发'), undefined);
   });
   await test('client code never calls crypto.randomUUID (insecure LAN HTTP breaks it)', () => {
     const { clientRandomId } = require(path.join(root, 'lib/randomId.ts'));

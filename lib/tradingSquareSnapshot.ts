@@ -1,6 +1,7 @@
 import { postTimestamp, readDuanPosts, readTrumpPosts, withoutRemoteImages } from "./tradingSquareRefresh";
 import { readTranslations, validTranslation } from "./tradingSquareTranslate";
-import { hasTranslatableText } from "./tradingSquareText";
+import { hasTranslatableText, replyTargetFromText } from "./tradingSquareText";
+import { readDuanComments, type PostComment } from "./tradingSquareComments";
 import { takeNewestByAuthor } from "./tradingSquareLimits";
 
 export type TradingSquareSnapshotPost = {
@@ -13,6 +14,10 @@ export type TradingSquareSnapshotPost = {
   categories?: Array<"hot" | "original" | "longform">;
   quote?: { name: string; text: string; url?: string; images?: string[] };
   images?: string[];
+  /** 「回复@某人」里的那个人（正文里的前缀会被清掉，这里单独标出来） */
+  replyTo?: string;
+  /** 别人在他帖子下面的评论（雪球限「只有关注的人能评论」，所以他帖子评论很少） */
+  comments?: PostComment[];
 };
 
 /**
@@ -26,7 +31,16 @@ export function readTradingSquareSnapshot(perAuthor: number): TradingSquareSnaps
     const textZh = hasTranslatableText(post.text) && validTranslation(translations[post.id]) ? translations[post.id] : undefined;
     return withoutRemoteImages(textZh ? { ...post, textZh, author: "trump" as const } : { ...post, author: "trump" as const });
   });
-  const duan: TradingSquareSnapshotPost[] = readDuanPosts().map((post) => withoutRemoteImages({ ...post, author: "duan" as const }));
+  const comments = readDuanComments();
+  const duan: TradingSquareSnapshotPost[] = readDuanPosts().map((post) => {
+    const replyTo = post.replyTo || replyTargetFromText(post.text);
+    return withoutRemoteImages({
+      ...post,
+      author: "duan" as const,
+      ...(replyTo ? { replyTo } : {}),
+      ...(comments[post.id]?.comments?.length ? { comments: comments[post.id].comments } : {})
+    });
+  });
   const merged = [...trump, ...duan].sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date));
   return takeNewestByAuthor(merged, perAuthor);
 }

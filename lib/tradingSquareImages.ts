@@ -29,10 +29,25 @@ function isPrivateHostname(host: string): boolean {
 function isAllowedImageHost(host: string): boolean {
   const hostname = host.toLowerCase();
   if (hostname === "xqimg.imedao.com" || hostname.endsWith(".xqimg.imedao.com")) return true;
+  // 雪球头像走这台 CDN（xqimg 上取不到）
+  if (hostname === "xavatar.imedao.com" || hostname.endsWith(".xavatar.imedao.com")) return true;
   if (hostname === "xueqiu.com" || hostname.endsWith(".xueqiu.com")) return true;
   if (hostname.startsWith("truth-archive.") && hostname.endsWith(".linodeobjects.com")) return true;
   if (hostname.endsWith(".truthsocial.com") && (hostname.includes("static-assets") || hostname.includes("media"))) return true;
   return false;
+}
+
+/**
+ * 雪球的头像字段长得像
+ * `community/20165/xxx.png,community/20165/xxx.png!180x180.png,community/20165/xxx.png!50x50.png`：
+ * 不带域名、逗号分隔多档尺寸。这里取第一档并补上头像 CDN 域名，否则既下载不了、前端也是破图。
+ */
+export function normalizeXueqiuAvatar(value?: string): string | undefined {
+  const first = String(value || "").split(",")[0]?.trim();
+  if (!first) return undefined;
+  if (/^https?:\/\//i.test(first)) return first;
+  if (first.startsWith("//")) return `https:${first}`;
+  return `https://xavatar.imedao.com/${first.replace(/^\/+/, "")}`;
 }
 
 /** 雪球 `!thumb.jpg` / `!custom.jpg` 是压缩图；去掉 `!` 后缀才是原图。 */
