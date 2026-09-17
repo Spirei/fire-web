@@ -70,18 +70,6 @@ function hongKongDayKey(value: string | Date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Hong_Kong", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
 }
 
-function nextGithubLink(header: string | null) {
-  if (!header) return null;
-  for (const part of header.split(",")) {
-    const [urlPart, relPart] = part.split(";").map((item) => item.trim());
-    if (relPart === 'rel="next"') {
-      const match = urlPart.match(/^<([^>]+)>$/);
-      if (match) return match[1];
-    }
-  }
-  return null;
-}
-
 async function fetchMainCommitHeatmap(repository: string, token: string) {
   const year = hongKongDayKey(new Date()).slice(0, 4);
   const cacheKey = `${repository}:${year}`;
@@ -94,9 +82,9 @@ async function fetchMainCommitHeatmap(repository: string, token: string) {
     ...(token ? { authorization: `Bearer ${token}` } : {})
   };
   const counts: Record<string, number> = {};
-  let url: string | null = `https://api.github.com/repos/${repository}/commits?sha=main&since=${year}-01-01T00:00:00+08:00&per_page=100`;
-  for (let page = 0; url && page < 30; page += 1) {
-    const response: Response = await fetch(url, { headers, cache: "no-store" });
+  for (let page = 1; page <= 30; page += 1) {
+    const url = `https://api.github.com/repos/${repository}/commits?sha=main&per_page=100&page=${page}`;
+    const response = await fetch(url, { headers, cache: "no-store" });
     if (!response.ok) break;
     const items = await response.json() as GithubCommitItem[];
     if (!Array.isArray(items) || items.length === 0) break;
@@ -107,7 +95,7 @@ async function fetchMainCommitHeatmap(repository: string, token: string) {
       if (!key.startsWith(`${year}-`)) continue;
       counts[key] = (counts[key] || 0) + 1;
     }
-    url = items.length < 100 ? null : nextGithubLink(response.headers.get("link"));
+    if (items.length < 100) break;
   }
   heatmapCache = { key: cacheKey, fetchedAt: Date.now(), counts };
   return counts;
