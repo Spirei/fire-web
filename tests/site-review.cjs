@@ -342,6 +342,28 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       .map((part) => (part.type === 'stock' ? `$${part.name}(${part.code})$` : part.value)).join('');
     assert.equal(rendered, '$长和(00001)$ 今天涨了');
   });
+  await test('trading square window keeps the pinned position when the layout narrows', () => {
+    const { baseRectFrom, clampOffsetX, edgeGutter } = require(path.join(root, 'lib/useDraggableWindow.ts'));
+    // 内容区 1440 宽、面板 800 宽居中（左 280~右 1720）：用户右移 200px 正常放行
+    const wideBase = { left: 600, right: 1400, width: 800 };
+    const wideBounds = { left: 280, right: 1720, width: 1440 };
+    assert.equal(clampOffsetX(200, wideBase, wideBounds), 200);
+    // 内容区变窄到 1000（换显示器 / 窗口缩小）：显示位置被夹回来……
+    const narrowBase = { left: 380, right: 1180, width: 800 };
+    const narrowBounds = { left: 280, right: 1280, width: 1000 };
+    assert.equal(clampOffsetX(200, narrowBase, narrowBounds), 88);
+    // ……但用户位置没被改：内容区变宽后原样生效（这就是「卡片跑到中间」的回归点）
+    assert.equal(clampOffsetX(200, wideBase, wideBounds), 200);
+    // 内容区比面板还窄：贴左，不越界
+    assert.equal(clampOffsetX(200, { left: 285, right: 1085, width: 800 }, { left: 280, right: 1090, width: 810 }), 0);
+    assert.equal(edgeGutter(800, 810), 5);
+    // baseRectFrom：拿带位移的矩形反推居中基准
+    assert.deepEqual(baseRectFrom({ left: 800, right: 1600, width: 800 }, { x: 200, y: 40 }), { left: 600, right: 1400, width: 800 });
+    // 关键不变式：夹紧只影响渲染，绝不写回 localStorage（只有拖动结束写一次位置）
+    const hook = fs.readFileSync(path.join(root, 'lib/useDraggableWindow.ts'), 'utf8');
+    assert.equal((hook.match(/localStorage\.setItem/g) || []).length, 1, '只有拖动结束写位置');
+    assert(hook.includes('不写回 localStorage'), '夹紧不得持久化');
+  });
   await test('trading square strips scraped page chrome from post text', () => {
     const { normalizeTradingText, stripTradingSquareChrome } = require(path.join(root, 'lib/tradingSquareText.ts'));
     // 开头的「回复@某人:」是回复上下文（雪球页面上的链接），不是作者写的字
