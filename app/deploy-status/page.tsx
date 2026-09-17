@@ -18,6 +18,7 @@ import {
   IconShieldCheck
 } from "@tabler/icons-react";
 import ThemeToggle from "@/components/ThemeToggle";
+import { localDateKey } from "@/lib/format";
 
 type Run = {
   id: number;
@@ -147,65 +148,57 @@ type ContainerUpdateState = "idle" | "triggering" | "watching" | "restarting" | 
 type AutoUpdateSchedule = { key: string; deadline: number; triggered: boolean };
 
 type HeatView = "day" | "week" | "month" | "total";
-type HeatCell = { key: string; label: string; count: number; date?: Date; weekKey?: string; monthKey?: string; empty?: boolean };
+type HeatCell = { key: string; label: string; count: number; date: Date; weekKey: string; monthKey: string; empty: boolean; column: number; row: number };
 
-function dayKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+function addCalendarDays(base: Date, days: number) {
+  return new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
+}
+
+function mondayIndex(date: Date) {
+  return (date.getDay() + 6) % 7;
 }
 
 function UpdateHeatmap({ runs }: { runs: Run[] }) {
   const [view, setView] = useState<HeatView>("day");
   const [selected, setSelected] = useState<HeatCell | null>(null);
   const today = useMemo(() => {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    return date;
+    const [year, month, day] = localDateKey().split("-").map(Number);
+    return new Date(year, month - 1, day);
   }, []);
   const counts = useMemo(() => {
     const map = new Map<string, number>();
     runs.forEach((run) => {
-      const date = new Date(run.updatedAt);
-      const key = dayKey(date);
+      const key = localDateKey(new Date(run.updatedAt));
       map.set(key, (map.get(key) || 0) + 1);
     });
     return map;
   }, [runs]);
-  const { cells, monthLabels, weekCount } = useMemo(() => {
-    const rangeStart = new Date(today.getFullYear(), 0, 1);
-    const rangeEnd = new Date(today.getFullYear(), 11, 31);
-    const gridStart = new Date(rangeStart);
-    gridStart.setDate(gridStart.getDate() - gridStart.getDay());
-    const gridEnd = new Date(rangeEnd);
-    gridEnd.setDate(gridEnd.getDate() + (6 - gridEnd.getDay()));
-    const result: HeatCell[] = [];
-    const labels: { key: string; label: string; column: number }[] = [];
-    let previousMonth = "";
-    for (let date = new Date(gridStart), index = 0; date <= gridEnd; date.setDate(date.getDate() + 1), index += 1) {
-      const current = new Date(date);
-      const inYear = current >= rangeStart && current <= rangeEnd;
-      const hasOccurred = inYear && current <= today;
-      const key = dayKey(current);
-      const monthKey = `${current.getFullYear()}-${current.getMonth() + 1}`;
-      if (inYear && monthKey !== previousMonth) {
-        labels.push({ key: monthKey, label: `${current.getMonth() + 1}月`, column: Math.floor(index / 7) });
-        previousMonth = monthKey;
-      }
-      const weekStart = new Date(current);
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-      result.push({
-        key: inYear ? key : `pad-${key}`,
-        label: inYear ? `${current.getMonth() + 1}月${current.getDate()}日` : "",
-        count: hasOccurred ? counts.get(key) || 0 : 0,
-        date: inYear ? current : undefined,
-        weekKey: `week-${dayKey(weekStart)}`,
-        monthKey: `month-${monthKey}`,
-        empty: !inYear
+  const months = useMemo(() => {
+    const year = today.getFullYear();
+    return Array.from({ length: 12 }, (_, month) => {
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      return Array.from({ length: daysInMonth }, (_, index) => {
+        const day = index + 1;
+        const current = new Date(year, month, day);
+        const key = localDateKey(current);
+        const weekStart = addCalendarDays(current, -mondayIndex(current));
+        const hasOccurred = current.getTime() <= today.getTime();
+        return {
+          key,
+          label: `${month + 1}月${day}日`,
+          count: hasOccurred ? counts.get(key) || 0 : 0,
+          date: current,
+          weekKey: `week-${localDateKey(weekStart)}`,
+          monthKey: `month-${year}-${month + 1}`,
+          empty: false,
+          column: index,
+          row: month
+        } satisfies HeatCell;
       });
-    }
-    return { cells: result, monthLabels: labels, weekCount: result.length / 7 };
+    });
   }, [counts, today]);
-  const dayCells = cells.filter((cell) => cell.date);
-  const max = Math.max(1, ...dayCells.map((cell) => cell.count));
+  const cells = useMemo(() => months.flat(), [months]);
+  const max = Math.max(1, ...cells.map((cell) => cell.count));
   const tone = (count: number) => count === 0 ? "rgba(100,116,139,.14)" : `rgba(16,185,129,${(0.22 + 0.7 * Math.min(1, count / max)).toFixed(2)})`;
   const tabs: [HeatView, string][] = [["day", "每日"], ["week", "每周"], ["month", "每月"], ["total", "累计"]];
   return (
@@ -213,7 +206,7 @@ function UpdateHeatmap({ runs }: { runs: Run[] }) {
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium">更新热力图</h2>
-          <p className="mt-1 text-xs text-slate-500">最近一年工作流更新频率</p>
+          <p className="mt-1 text-xs text-slate-500">当年每日工作流更新频率，每月一行、日期从 1 号连到月底</p>
         </div>
         <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-xs dark:bg-white/[.06]" role="tablist" aria-label="热力图统计周期">
           {tabs.map(([key, label]) => (
@@ -222,32 +215,43 @@ function UpdateHeatmap({ runs }: { runs: Run[] }) {
         </div>
       </div>
       <div className="deploy-heatmap-continuous min-w-0">
-        <div className="deploy-heatmap-labels" style={{ gridTemplateColumns: `repeat(${weekCount}, minmax(0, 1fr))` }}>
-          {monthLabels.map((month) => <span key={month.key} style={{ gridColumnStart: month.column + 1 }}>{month.label}</span>)}
+        <div className="mb-1 grid grid-cols-[28px_minmax(0,1fr)] gap-x-1">
+          <span />
+          <div className="deploy-heatmap-day-scale" aria-hidden="true">
+            {[1, 5, 10, 15, 20, 25, 31].map((day) => <span key={day} style={{ gridColumnStart: day }}>{day}</span>)}
+          </div>
         </div>
-        <div className="deploy-heatmap-grid grid w-full grid-flow-col grid-rows-7 gap-[2px]" style={{ gridTemplateColumns: `repeat(${weekCount}, minmax(0, 1fr))` }}>
-              {cells.map((cell) => {
-                if (!cell.date) return <span key={cell.key} className="min-w-0 rounded-[2px]" style={{ aspectRatio: "1 / 1" }} />;
-                const groupKey = view === "week" ? cell.weekKey : view === "month" ? cell.monthKey : null;
-                const highlighted = Boolean(groupKey && selected?.[view === "week" ? "weekKey" : "monthKey"] === groupKey);
-                const total = groupKey ? dayCells.filter((item) => item[view === "week" ? "weekKey" : "monthKey"] === groupKey).reduce((sum, item) => sum + item.count, 0) : cell.count;
-                return (
-                  <button
-                    key={cell.key}
-                    type="button"
-                    onClick={() => setSelected({ ...cell, count: total })}
-                    aria-label={`${cell.label}，${total} 次 workflow`}
-                    title={`${cell.label} · ${total} workflow`}
-                    className={`min-w-0 rounded-[2px] p-0 transition hover:ring-2 hover:ring-emerald-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${highlighted ? "ring-2 ring-emerald-400/80" : ""}`}
-                    style={{ backgroundColor: cell.empty ? "transparent" : tone(cell.count), aspectRatio: "1 / 1" }}
-                  />
-                );
-              })}
+        <div className="grid grid-cols-[28px_minmax(0,1fr)] gap-x-1 gap-y-[3px]">
+          {months.map((monthCells, month) => (
+            <div key={month} className="contents">
+              <span className="flex items-center text-[10px] leading-none text-slate-500">{month + 1}月</span>
+              <div className="deploy-heatmap-grid grid w-full gap-[2px]" style={{ gridTemplateColumns: "repeat(31, minmax(0, 1fr))" }}>
+                {Array.from({ length: 31 }, (_, day) => {
+                  const cell = monthCells[day];
+                  if (!cell) return <span key={`${month}-${day}`} className="min-w-0" style={{ aspectRatio: "1 / 1" }} />;
+                  const groupKey = view === "week" ? cell.weekKey : view === "month" ? cell.monthKey : null;
+                  const highlighted = Boolean(groupKey && selected?.[view === "week" ? "weekKey" : "monthKey"] === groupKey);
+                  const total = groupKey ? cells.filter((item) => item[view === "week" ? "weekKey" : "monthKey"] === groupKey).reduce((sum, item) => sum + item.count, 0) : cell.count;
+                  return (
+                    <button
+                      key={cell.key}
+                      type="button"
+                      onClick={() => setSelected({ ...cell, count: total })}
+                      aria-label={`${cell.label}，${total} 次 workflow`}
+                      title={`${cell.label} · ${total} workflow`}
+                      className={`min-w-0 rounded-[2px] p-0 transition hover:ring-2 hover:ring-emerald-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${highlighted ? "ring-2 ring-emerald-400/80" : ""}`}
+                      style={{ backgroundColor: tone(cell.count), aspectRatio: "1 / 1" }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
       {selected && (
         <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700 dark:bg-white/[.06] dark:text-slate-200">
-          {view === "week" ? `${selected.label}所在周` : view === "month" ? `${selected.date ? selected.date.getMonth() + 1 : ""}月` : selected.label} · {selected.count} workflow
+          {view === "week" ? `${selected.label}所在周` : view === "month" ? `${selected.date.getMonth() + 1}月` : selected.label} · {selected.count} workflow
         </p>
       )}
       <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-slate-500">

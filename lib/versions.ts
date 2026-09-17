@@ -3690,11 +3690,15 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_33_ENTRY,
   version: "v0.1.34",
   date: "2026-09-18",
-  summary: "四色门样式 1 恢复线上棘轮，样式 2 保留珐琅八音盒。",
+  summary: "四色门两套音效；发布状态热力图格子按日历日连续。",
   software: V0_1_33_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.34" } : item),
   changes: [{
     title: "四色门两套样式各用各的音效",
     desc: "样式 2 珐琅盘保留本次八音盒（转前 C-G-C 拇指琴、转动五声滑动、落定 C-G 五度）。样式 1 原插画转盘改回线上棘轮：三角波 690→410Hz、转前晚 0.1 秒第一记、落定 G6 谐波钟加 4.2kHz 轻咔。切换样式后下一次转动换声，挂钩和落点不变。",
+    kind: "fix"
+  }, {
+    title: "发布状态热力图小格子按日历日连续",
+    desc: "更新热力图改为每月一行、当月 1 号到月底从左到右连排，不再按周列把相邻格子隔成差 7 天。短月右侧留空、不插空日；悬停一行可见 1、2、3… 连续日期。每周 / 每月视图仍按周一口径高亮对应格子。",
     kind: "fix"
   }]
 };
