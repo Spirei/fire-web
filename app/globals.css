@@ -3842,8 +3842,6 @@ html.dark .watch-import-target {
 .deploy-heatmap-continuous { width: 100%; }
 .deploy-heatmap-labels { display: grid; width: 100%; height: 20px; align-items: start; }
 .deploy-heatmap-labels > span { overflow: visible; color: rgb(100 116 139); font-size: 10px; line-height: 16px; white-space: nowrap; }
-.deploy-heatmap-day-scale { display: grid; grid-template-columns: repeat(31, minmax(0, 1fr)); height: 14px; color: rgb(100 116 139); font-size: 9px; line-height: 1; }
-.deploy-heatmap-day-scale > span { overflow: visible; white-space: nowrap; }
 .deploy-heatmap-grid > button { min-width: 0; padding: 0; border: 0; }
 @media (max-width: 767px) {
   .deploy-heatmap-grid { gap:2px; }
