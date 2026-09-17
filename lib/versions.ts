@@ -3694,7 +3694,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_33_ENTRY,
   version: "v0.1.34",
   date: "2026-09-18",
-  summary: "四色门两套音效；发布状态热力图格子按日历日连续。",
+  summary: "四色门两套音效；发布状态热力图按全年提交点亮。",
   software: V0_1_33_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.34" } : item),
   changes: [{
     title: "四色门两套样式各用各的音效",
@@ -3703,6 +3703,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   }, {
     title: "发布状态热力图小格子按日历日连续",
     desc: "更新热力图改为每月一行、当月 1 号到月底从左到右连排，不再按周列把相邻格子隔成差 7 天。短月右侧留空、不插空日；悬停一行可见 1、2、3… 连续日期。每周 / 每月视图仍按周一口径高亮对应格子。",
+    kind: "fix"
+  }, {
+    title: "发布状态热力图按全年提交计数",
+    desc: "热力图此前只拿最近 100 条 GitHub Actions 运行，繁忙几天就会把九月其余提交挤掉（例如只剩 4 天有颜色）。改为分页读取当年 main 提交，按香港日期逐日计数；九月 1–18 日每天都有提交都会点亮。最近运行列表仍显示最近工作流。",
     kind: "fix"
   }]
 };

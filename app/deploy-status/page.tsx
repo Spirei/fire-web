@@ -18,7 +18,6 @@ import {
   IconShieldCheck
 } from "@tabler/icons-react";
 import ThemeToggle from "@/components/ThemeToggle";
-import { localDateKey } from "@/lib/format";
 
 type Run = {
   id: number;
@@ -158,37 +157,30 @@ function mondayIndex(date: Date) {
   return (date.getDay() + 6) % 7;
 }
 
-function UpdateHeatmap({ runs }: { runs: Run[] }) {
+function hkDayKey(date: Date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Hong_Kong", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+function UpdateHeatmap({ counts }: { counts: Record<string, number> }) {
   const [view, setView] = useState<HeatView>("day");
   const [selected, setSelected] = useState<HeatCell | null>(null);
-  const today = useMemo(() => {
-    const [year, month, day] = localDateKey().split("-").map(Number);
-    return new Date(year, month - 1, day);
-  }, []);
-  const counts = useMemo(() => {
-    const map = new Map<string, number>();
-    runs.forEach((run) => {
-      const key = localDateKey(new Date(run.updatedAt));
-      map.set(key, (map.get(key) || 0) + 1);
-    });
-    return map;
-  }, [runs]);
+  const todayKey = useMemo(() => hkDayKey(), []);
+  const year = Number(todayKey.slice(0, 4));
   const months = useMemo(() => {
-    const year = today.getFullYear();
     return Array.from({ length: 12 }, (_, month) => {
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       return Array.from({ length: daysInMonth }, (_, index) => {
         const day = index + 1;
         const current = new Date(year, month, day);
-        const key = localDateKey(current);
+        const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         const weekStart = addCalendarDays(current, -mondayIndex(current));
-        const hasOccurred = current.getTime() <= today.getTime();
+        const hasOccurred = key <= todayKey;
         return {
           key,
           label: `${month + 1}月${day}日`,
-          count: hasOccurred ? counts.get(key) || 0 : 0,
+          count: hasOccurred ? counts[key] || 0 : 0,
           date: current,
-          weekKey: `week-${localDateKey(weekStart)}`,
+          weekKey: `week-${hkDayKey(weekStart)}`,
           monthKey: `month-${year}-${month + 1}`,
           empty: false,
           column: index,
@@ -196,7 +188,7 @@ function UpdateHeatmap({ runs }: { runs: Run[] }) {
         } satisfies HeatCell;
       });
     });
-  }, [counts, today]);
+  }, [counts, todayKey, year]);
   const cells = useMemo(() => months.flat(), [months]);
   const max = Math.max(1, ...cells.map((cell) => cell.count));
   const tone = (count: number) => count === 0 ? "rgba(100,116,139,.14)" : `rgba(16,185,129,${(0.22 + 0.7 * Math.min(1, count / max)).toFixed(2)})`;
@@ -206,7 +198,7 @@ function UpdateHeatmap({ runs }: { runs: Run[] }) {
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium">更新热力图</h2>
-          <p className="mt-1 text-xs text-slate-500">当年每日工作流更新频率，每月一行、日期从 1 号连到月底</p>
+          <p className="mt-1 text-xs text-slate-500">当年 main 每日提交次数，每月一行、日期从 1 号连到月底</p>
         </div>
         <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-xs dark:bg-white/[.06]" role="tablist" aria-label="热力图统计周期">
           {tabs.map(([key, label]) => (
@@ -237,8 +229,8 @@ function UpdateHeatmap({ runs }: { runs: Run[] }) {
                       key={cell.key}
                       type="button"
                       onClick={() => setSelected({ ...cell, count: total })}
-                      aria-label={`${cell.label}，${total} 次 workflow`}
-                      title={`${cell.label} · ${total} workflow`}
+                      aria-label={`${cell.label}，${total} 次提交`}
+                      title={`${cell.label} · ${total} 次提交`}
                       className={`min-w-0 rounded-[2px] p-0 transition hover:ring-2 hover:ring-emerald-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${highlighted ? "ring-2 ring-emerald-400/80" : ""}`}
                       style={{ backgroundColor: tone(cell.count), aspectRatio: "1 / 1" }}
                     />
@@ -251,7 +243,7 @@ function UpdateHeatmap({ runs }: { runs: Run[] }) {
       </div>
       {selected && (
         <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700 dark:bg-white/[.06] dark:text-slate-200">
-          {view === "week" ? `${selected.label}所在周` : view === "month" ? `${selected.date.getMonth() + 1}月` : selected.label} · {selected.count} workflow
+          {view === "week" ? `${selected.label}所在周` : view === "month" ? `${selected.date.getMonth() + 1}月` : selected.label} · {selected.count} 次提交
         </p>
       )}
       <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-slate-500">
@@ -276,6 +268,7 @@ const readApiJson = async <T extends Record<string, unknown>>(response: Response
 
 export default function DeployStatusPage() {
   const [runs, setRuns] = useState<Run[]>([]);
+  const [heatmap, setHeatmap] = useState<Record<string, number>>({});
   const [hasLoaded, setHasLoaded] = useState(false);
   const [imageProgress, setImageProgress] = useState<ImageProgress | null>(null);
   const [sourceVersion, setSourceVersion] = useState<SourceVersion | null>(null);
@@ -308,11 +301,12 @@ export default function DeployStatusPage() {
       const data = await readApiJson<{
         repository?: string; error?: string; runs?: Run[]; imageProgress?: ImageProgress | null;
         source?: SourceVersion | null; image?: ImageVersion | null; runtime?: RuntimeVersion | null;
-        packageName?: string; workflowRunCount?: number; checkedAt?: string;
+        packageName?: string; workflowRunCount?: number; checkedAt?: string; heatmap?: Record<string, number>;
       }>(response);
       if (data.repository) setRepository(data.repository);
       if (!response.ok) throw new Error(data.error || "读取失败");
       setRuns(data.runs || []);
+      setHeatmap(data.heatmap || {});
       setImageProgress(data.imageProgress || null);
       setSourceVersion(data.source || null);
       setImageVersion(data.image || null);
@@ -585,7 +579,7 @@ export default function DeployStatusPage() {
           {hasLoaded && !runs.length && !error && <p className="px-5 py-10 text-center text-sm text-slate-500">暂无运行记录</p>}
           {runs.length > RUNS_PER_PAGE && <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3 text-xs text-slate-500 dark:border-slate-800"><span>第 {page} / {totalPages} 页 · 共 {runs.length} 条</span><div className="flex gap-2"><button onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1} className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-white/[.04]">上一页</button><button onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages} className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-white/[.04]">下一页</button></div></div>}
         </section>
-        <UpdateHeatmap runs={runs} />
+        <UpdateHeatmap counts={heatmap} />
       </div>
     </main>
   );

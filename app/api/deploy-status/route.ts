@@ -42,9 +42,16 @@ type GithubCommit = {
   html_url: string;
 };
 
+type GithubCommitItem = {
+  sha: string;
+  commit?: { author?: { date?: string }; committer?: { date?: string } };
+};
+
 const DISPATCH_COOLDOWN_MS = 30_000;
+const HEATMAP_CACHE_MS = 60_000;
 let lastDispatchAt = 0;
 const jobsCache = new Map<string, { fetchedAt: number; jobs: GithubJob[] }>();
+let heatmapCache: { key: string; fetchedAt: number; counts: Record<string, number> } | null = null;
 
 function repositoryName() {
   const imageRepository = process.env.GHCR_IMAGE?.replace(/^ghcr\.io\//, "").replace(/:[^/]+$/, "");
@@ -59,6 +66,53 @@ function deployToken() {
   return (oauth ? decryptDeploySecret(oauth) : "") || process.env.GITHUB_TOKEN || (fallback ? decryptDeploySecret(fallback) : "");
 }
 
+function hongKongDayKey(value: string | Date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Hong_Kong", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
+}
+
+function nextGithubLink(header: string | null) {
+  if (!header) return null;
+  for (const part of header.split(",")) {
+    const [urlPart, relPart] = part.split(";").map((item) => item.trim());
+    if (relPart === 'rel="next"') {
+      const match = urlPart.match(/^<([^>]+)>$/);
+      if (match) return match[1];
+    }
+  }
+  return null;
+}
+
+async function fetchMainCommitHeatmap(repository: string, token: string) {
+  const year = hongKongDayKey(new Date()).slice(0, 4);
+  const cacheKey = `${repository}:${year}`;
+  if (heatmapCache && heatmapCache.key === cacheKey && Date.now() - heatmapCache.fetchedAt < HEATMAP_CACHE_MS) {
+    return heatmapCache.counts;
+  }
+  const headers: Record<string, string> = {
+    accept: "application/vnd.github+json",
+    "user-agent": "fire-deploy-status",
+    ...(token ? { authorization: `Bearer ${token}` } : {})
+  };
+  const counts: Record<string, number> = {};
+  let url: string | null = `https://api.github.com/repos/${repository}/commits?sha=main&since=${year}-01-01T00:00:00+08:00&per_page=100`;
+  for (let page = 0; url && page < 30; page += 1) {
+    const response: Response = await fetch(url, { headers, cache: "no-store" });
+    if (!response.ok) break;
+    const items = await response.json() as GithubCommitItem[];
+    if (!Array.isArray(items) || items.length === 0) break;
+    for (const item of items) {
+      const when = item.commit?.committer?.date || item.commit?.author?.date;
+      if (!when) continue;
+      const key = hongKongDayKey(when);
+      if (!key.startsWith(`${year}-`)) continue;
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    url = items.length < 100 ? null : nextGithubLink(response.headers.get("link"));
+  }
+  heatmapCache = { key: cacheKey, fetchedAt: Date.now(), counts };
+  return counts;
+}
+
 export async function GET(request: Request) {
   const user = getAuthUser(request);
   if (!user || !isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
@@ -66,6 +120,7 @@ export async function GET(request: Request) {
   const token = deployToken();
   const endpoint = `https://api.github.com/repos/${repository}/actions/runs?branch=main&per_page=100`;
   try {
+    const heatmapPromise = fetchMainCommitHeatmap(repository, token).catch(() => ({} as Record<string, number>));
     const response = await fetch(endpoint, {
       headers: {
         accept: "application/vnd.github+json",
@@ -164,10 +219,12 @@ export async function GET(request: Request) {
     const mainSha = mainCommit?.sha || latestMainPushRun?.head_sha || "";
     const deployedSha = process.env.FIRE_BUILD_SHA?.trim() || "unknown";
     const packageName = repository.split("/").filter(Boolean).pop() || "fire-web";
+    const heatmap = await heatmapPromise;
     return NextResponse.json({
       repository,
       packageName,
       workflowRunCount: payload.total_count ?? workflowRuns.length,
+      heatmap,
       runs,
       imageProgress,
       source: mainSha ? { sha: mainSha, shortSha: mainSha.slice(0, 7), url: mainCommit?.html_url || `https://github.com/${repository}/commit/${mainSha}` } : null,
