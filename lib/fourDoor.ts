@@ -37,14 +37,15 @@ type AudioWindow = Window & { webkitAudioContext?: typeof AudioContext };
 
 /** 花园那场转盘碎晶：C7–C#8 一带，带一个低八度身。 */
 const TREE = [2093.0, 2349.3, 2637.0, 3136.0, 3520.0, 3951.1, 4186.0, 4434.9];
-const SPIN = [2349.3, 2637.0, 2793.8, 3136.0, 3520.0];
+/** 转动中沿用之前的五声风铃滑动。 */
+const SPARKLE = [783.99, 987.77, 1174.66, 1318.51, 1567.98];
 
 export function createFourDoorAudio() {
   let context: AudioContext | null = null;
   let master: GainNode | null = null;
   let air: BiquadFilterNode | null = null;
   let lastTickAt = 0;
-  let spinIndex = 0;
+  let sparkleIndex = 0;
 
   function ensure() {
     if (typeof window === "undefined") return null;
@@ -95,6 +96,7 @@ export function createFourDoorAudio() {
     if (!ctx || !master) return;
     if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
+    sparkleIndex = 0;
     bar(ctx, master, 2093.0, 0.01, 0.016, 0.55, now);
     for (let i = 0; i < 5; i += 1) {
       const freq = TREE[4 + (i % 4)] * (0.997 + ((i * 13) % 5) * 0.0018);
@@ -105,17 +107,17 @@ export function createFourDoorAudio() {
   function tick(velocityDegPerSec: number) {
     const ctx = ensure();
     if (!ctx || !master) return;
+    if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
-    if (now - lastTickAt < 0.042) return;
+    if (now - lastTickAt < 0.038) return;
     lastTickAt = now;
     const speed = Math.min(1, Math.max(0, (Number.isFinite(velocityDegPerSec) ? velocityDegPerSec : 0) / 640));
-    const freq = SPIN[spinIndex % SPIN.length] * (0.996 + ((spinIndex * 11) % 5) * 0.002);
-    spinIndex += 1;
-    bar(ctx, master, freq, 0.0055 + (1 - speed) * 0.0045, 0.012, 0.18 + (1 - speed) * 0.1, now);
-    if (speed < 0.45) {
-      bar(ctx, master, SPIN[spinIndex % SPIN.length], 0.004, 0.014, 0.22, now + 0.028);
-      spinIndex += 1;
-    }
+    const freq = SPARKLE[sparkleIndex % SPARKLE.length];
+    sparkleIndex += 1;
+    const volume = 0.01 + (1 - speed) * 0.012;
+    const decay = 0.16 + (1 - speed) * 0.1;
+    tone(ctx, master, freq, volume, 0.014, decay, now);
+    tone(ctx, master, freq * 2, volume * 0.12, 0.018, decay * 0.55, now);
   }
 
   function lock() {
@@ -137,7 +139,7 @@ export function createFourDoorAudio() {
     master = null;
     air = null;
     lastTickAt = 0;
-    spinIndex = 0;
+    sparkleIndex = 0;
     if (current && current.state !== "closed") void current.close().catch(() => undefined);
   }
 
