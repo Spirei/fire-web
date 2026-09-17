@@ -757,8 +757,11 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
                       <span className="text-muted">{author.handle}</span>
                       <span className="text-faint">·</span>
                       <time className="text-muted" dateTime={post.date}>{formatPostTime(post.date)}</time>
-                      {/* 本次进入页面后新出现的帖子（作者卡片上的未读计数同源）：一眼能看到哪些是新更新的 */}
-                      {isUnseenPost(post, seenOnLoad) ? <span className="ml-auto flex-none rounded-full bg-[#4caf58] px-1.5 py-[1px] text-[10px] font-bold leading-4 text-white">新</span> : null}
+                      {/* 新动态标记：沿用站内「未读」的那抹红（头像未读计数同色），软底小胶囊比实心色块轻，
+                          紧跟时间方便顺着「谁·什么时候·新」一行读完 */}
+                      {isUnseenPost(post, seenOnLoad) ? (
+                        <span className="flex-none rounded-full bg-up-bg px-1.5 py-[1px] text-[10px] font-semibold leading-4 text-up dark:text-[#ff8a8a]" title="上次访问之后的新动态">新</span>
+                      ) : null}
                     </div>
                     {post.replyTo && (
                       <p className="mb-1.5 text-[11px] text-muted">

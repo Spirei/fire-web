@@ -426,6 +426,11 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.deepEqual(unseenCounts(posts, seen), { duan: 1, trump: 1 });
     assert.equal(isUnseenPost({ author: 'duan', date: 'oops' }, seen), false, '时间解析失败不标记');
     assert.deepEqual(unseenCounts(posts, {}), { duan: 2, trump: 1 }, '首次访问全部算新');
+    // 角标配色必须用站内「未读」色：本站绿色表示下跌，自己发明一枚绿块会和涨跌语义打架
+    const square = fs.readFileSync(path.join(root, 'components/views/TradingSquareView.tsx'), 'utf8');
+    assert(square.includes('title="上次访问之后的新动态"'), '「新」角标还在');
+    assert(square.includes('bg-up-bg'), '「新」角标沿用站内未读色');
+    assert(!square.includes('#4caf58'), '不再引入站外的绿色');
   });
   await test('trading square strips scraped page chrome from post text', () => {
     const { normalizeTradingText, stripTradingSquareChrome } = require(path.join(root, 'lib/tradingSquareText.ts'));
