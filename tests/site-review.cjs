@@ -364,6 +364,28 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal((hook.match(/localStorage\.setItem/g) || []).length, 1, '只有拖动结束写位置');
     assert(hook.includes('不写回 localStorage'), '夹紧不得持久化');
   });
+  await test('trading square parses the Trump archive page markup (time datetime + extra attributes)', () => {
+    const { parseTrumpPage } = require(path.join(root, 'lib/tradingSquareRefresh.ts'));
+    // 归档站改版后的真实结构：日期包在 <time datetime> 里、正文容器带 data-post-preview
+    const html = [
+      '<div class="statuses">',
+      '<div class="status" data-status-url="https://www.trumpstruth.org/statuses/1">',
+      '<div class="status-info__meta"><a href="#" class="status-info__meta-item">@realDonaldTrump</a> · ',
+      '<a href="https://www.trumpstruth.org/statuses/1" class="status-info__meta-item"><time datetime="2026-09-17T13:00:22+00:00">September 17, 2026, 9:00 AM</time></a></div>',
+      '<div class="status__content" data-post-preview><p>Hello <b>world</b></p></div>',
+      '<a href="https://truthsocial.com/@realDonaldTrump/117287545147440255" rel="nofollow">原文</a>',
+      '</div>',
+      '</div>'
+    ].join('');
+    const posts = parseTrumpPage(html, 'https://trumpstruth.org/');
+    assert.equal(posts.length, 1, '一页解析出 1 条');
+    assert.equal(posts[0].date, '2026-09-17T13:00:22.000Z', '日期要取 time[datetime]');
+    assert.equal(posts[0].text, 'Hello world', '正文要容得下额外属性');
+    assert(posts[0].originalUrl.includes('117287545147440255'));
+    // 旧的纯文本日期写法仍要能解析（向后兼容）
+    const legacy = '<div class="status"><div class="status-info__meta-item">September 17, 2026, 9:00 AM</div><div class="status__content"><p>Legacy</p></div></div>';
+    assert.equal(parseTrumpPage(legacy, 'https://trumpstruth.org/')[0].date, new Date('September 17, 2026, 9:00 AM').toISOString());
+  });
   await test('trading square strips scraped page chrome from post text', () => {
     const { normalizeTradingText, stripTradingSquareChrome } = require(path.join(root, 'lib/tradingSquareText.ts'));
     // 开头的「回复@某人:」是回复上下文（雪球页面上的链接），不是作者写的字

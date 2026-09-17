@@ -358,12 +358,41 @@ export function withoutRemoteImages<T extends { images?: string[]; quote?: { ima
   return next;
 }
 
-function parseTrumpPage(html: string, source: string): TrumpPost[] {
+/**
+ * 取 `class="<className>"`（可带额外属性）那个 div 的完整内部 HTML。
+ * 按 div 深度配对，既不要求类名后面紧跟 `>`（归档站后来加了 data-post-preview 之类的属性），
+ * 也不会被正文里的内层 </div> 提前截断。
+ */
+function innerHtmlOfDiv(html: string, className: string): string {
+  const start = html.search(new RegExp(`<div class="${className}"[^>]*>`, "i"));
+  if (start < 0) return "";
+  const open = html.indexOf(">", start) + 1;
+  const tags = /<\/?div\b[^>]*>/gi;
+  tags.lastIndex = open;
+  let depth = 1;
+  let match: RegExpExecArray | null;
+  while ((match = tags.exec(html))) {
+    depth += match[0].startsWith("</") ? -1 : 1;
+    if (depth === 0) return html.slice(open, match.index);
+  }
+  return html.slice(open);
+}
+
+/** 解析归档站列表页（导出以便回归测试：这站改过两次标记，改坏时是静默失效）。 */
+export function parseTrumpPage(html: string, source: string): TrumpPost[] {
   return html.split('<div class="status"').slice(1).map((tail, index) => {
     const block = tail.split('<div class="status"')[0];
-    const date = toIsoDate(block.match(/status-info__meta-item">([^<]+,\s*\d{4},\s*[^<]+)</)?.[1] ?? "");
+    // 归档站把日期改成了 <time datetime="2026-09-17T13:00:22+00:00">September 17, 2026, 9:00 AM</time>：
+    // 旧正则（直接取 meta-item 的文本）取不到日期，整页会被过滤成 0 条、刷新等于没刷新。
+    // 现在优先读 datetime 属性，再退回旧的纯文本写法，最后用通用日期串兜底。
+    const date = toIsoDate(
+      block.match(/<time[^>]*datetime="([^"]+)"/i)?.[1]
+      ?? block.match(/status-info__meta-item">([^<]+,\s*\d{4},\s*[^<]+)</)?.[1]
+      ?? block.match(/([A-Z][a-z]+ \d{1,2}, \d{4}, \d{1,2}:\d{2} ?[AP]M)/)?.[1]
+      ?? ""
+    );
     const originalUrl = block.match(/href="(https:\/\/truthsocial\.com\/@realDonaldTrump\/[^" ]+)"/)?.[1] ?? "https://truthsocial.com/@realDonaldTrump";
-    const content = clean(block.match(/<div class="status__content">([\s\S]*?)<\/div>/)?.[1] ?? "");
+    const content = clean(innerHtmlOfDiv(block, "status__content"));
     const rawArchive = block.match(/data-status-url="([^" ]+)/)?.[1] ?? source;
     const archiveUrl = rawArchive.startsWith("http") ? rawArchive : `https://trumpstruth.org/statuses/${rawArchive}`;
     const archiveId = archiveUrl.split("/").pop() || "";
@@ -403,13 +432,20 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
   const maxPages = existing.length < 200 ? 40 : 5;
   try {
     for (let page = 0; page < maxPages && nextUrl; page += 1) {
-      const response = await fetch(nextUrl, {
-        headers: { "User-Agent": "Fire/1.0 public archive reader" },
-        cache: "no-store",
-        signal: AbortSignal.timeout(4000)
-      });
-      if (!response.ok) break;
-      const html = await response.text();
+      let html = "";
+      try {
+        const response = await fetch(nextUrl, {
+          headers: { "User-Agent": "Fire/1.0 public archive reader" },
+          cache: "no-store",
+          // 归档站有时单页要 2 秒以上；4 秒太紧会把整次刷新打断（异常直接抛出去、一条都写不进来）
+          signal: AbortSignal.timeout(8000)
+        });
+        if (!response.ok) break;
+        html = await response.text();
+      } catch {
+        // 单页失败就停在已抓到的内容上，不要让整次刷新失败
+        break;
+      }
       const parsed = parseTrumpPage(html, source);
       if (!parsed.length) break;
       for (const post of parsed) {
@@ -446,6 +482,9 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
     try { writeJsonAtomic(TRUMP_FILE, mergedPosts); } catch { /* read-only deployments */ }
     void backfillTrumpTranslations(mergedPosts, 20);
     return mergedPosts;
+  } catch {
+    // 兜底：翻译 / 图片本地化等任何一步失败都不该让已有缓存白刷一轮
+    return existing;
   } finally {
     trumpRunning = false;
   }
