@@ -687,35 +687,35 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
                     {displayText ? <PostBody text={displayText} holdings={holdings} onStock={openStock} author={post.author} /> : null}
                     <PostImages urls={post.images} />
                     {post.comments?.length && commentsOpen[post.id] ? (
-                      <div className="mt-3 rounded-xl border border-edge px-3 py-2.5 dark:border-white/10">
-                        <div className="flex items-center justify-between gap-3 text-xs">
-                          <span className="font-semibold text-muted">评论 {post.comments.length}</span>
-                          <a href={post.originalUrl} target="_blank" rel="noreferrer" className="flex-none font-semibold text-brand-deep">去雪球看评论 ↗</a>
+                      <div className="mt-3 border-t border-edge pt-3 dark:border-white/10">
+                        <div className="flex items-center justify-between gap-3 text-[11px] text-muted">
+                          <span className="tabular-nums">评论 {post.comments.length}</span>
+                          <a href={post.originalUrl} target="_blank" rel="noreferrer" className="flex-none font-semibold text-brand-deep">全部评论 ↗</a>
                         </div>
-                        <ul className="mt-2 space-y-2.5">
+                        <ul className="mt-2.5 space-y-3.5">
                           {post.comments.slice(0, COMMENT_PREVIEW).map((comment) => (
-                            <li key={comment.id} className="flex gap-2">
+                            <li key={comment.id} className="flex gap-2.5">
                               <SafeAssetImage
                                 src={comment.avatar}
                                 alt=""
-                                className="h-6 w-6 flex-none rounded-full bg-bg-gray object-cover"
-                                fallback={<span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-bg-gray text-[10px] font-bold text-muted">{(comment.name || "?").slice(0, 1)}</span>}
+                                className="h-7 w-7 flex-none rounded-full bg-bg-gray object-cover"
+                                fallback={<span className="grid h-7 w-7 flex-none place-items-center rounded-full bg-bg-gray text-[10px] font-bold text-muted">{(comment.name || "?").slice(0, 1)}</span>}
                               />
                               <div className="min-w-0 flex-1">
-                                <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted">
-                                  <span className="min-w-0 truncate font-semibold text-ink dark:text-white/80">{comment.name}</span>
-                                  {comment.replyTo && <span className="flex-none">回复 @{comment.replyTo}</span>}
-                                  {comment.createdAt && <><span className="flex-none">·</span><time className="flex-none" dateTime={comment.createdAt}>{formatPostTime(comment.createdAt)}</time></>}
-                                  {comment.likes ? <span className="ml-auto flex-none tabular-nums">赞 {comment.likes}</span> : null}
+                                <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
+                                  <span className="min-w-0 truncate font-semibold text-ink dark:text-white/85">{comment.name}</span>
+                                  {comment.replyTo ? <span className="flex-none text-muted">回复 @{comment.replyTo}</span> : null}
+                                  {comment.createdAt ? <><span className="flex-none text-faint">·</span><time className="flex-none text-muted" dateTime={comment.createdAt}>{formatPostTime(comment.createdAt)}</time></> : null}
                                 </div>
-                                <p className="mt-1 whitespace-pre-line break-words text-xs leading-5 text-ink-2 dark:text-slate-300">{comment.text}</p>
+                                <p className="mt-1 whitespace-pre-line break-words text-[13px] leading-6 text-ink-2 dark:text-slate-300">{comment.text}</p>
+                                {comment.likes ? <p className="mt-1 text-[11px] tabular-nums text-muted">赞 {comment.likes}</p> : null}
                               </div>
                             </li>
                           ))}
                         </ul>
-                        {post.comments.length > COMMENT_PREVIEW && (
-                          <a href={post.originalUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-semibold text-brand-deep">还有 {post.comments.length - COMMENT_PREVIEW} 条评论，去雪球查看 ↗</a>
-                        )}
+                        {post.comments.length > COMMENT_PREVIEW ? (
+                          <a href={post.originalUrl} target="_blank" rel="noreferrer" className="mt-3 inline-block text-[11px] font-semibold text-brand-deep">还有 {post.comments.length - COMMENT_PREVIEW} 条评论，去雪球查看 ↗</a>
+                        ) : null}
                       </div>
                     ) : null}
                     {post.quote && (
