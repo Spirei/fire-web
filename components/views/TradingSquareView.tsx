@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { IconMessageCircle, IconMinus, IconPin, IconPlus, IconWindmill } from "@tabler/icons-react";
+import { IconChevronLeft, IconMessageCircle, IconMinus, IconPin, IconPlus, IconWindmill } from "@tabler/icons-react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
 import useDraggableWindow from "@/lib/useDraggableWindow";
@@ -18,7 +18,7 @@ type AuthorId = "trump" | "duan";
 type DuanCategory = "hot" | "original" | "longform";
 type Quote = { name: string; text: string; url?: string; images?: string[]; avatar?: string };
 type PostComment = { id: string; name: string; avatar?: string; createdAt: string; text: string; likes?: number; replyTo?: string };
-type Post = { id: string; author: AuthorId; date: string; text: string; textZh?: string; originalUrl: string; categories?: DuanCategory[]; quote?: Quote; images?: string[]; replyTo?: string; comments?: PostComment[] };
+type Post = { id: string; author: AuthorId; date: string; text: string; textZh?: string; originalUrl: string; categories?: DuanCategory[]; quote?: Quote; images?: string[]; replyTo?: string; comments?: PostComment[]; replies?: number };
 
 const PEOPLE = [
   { id: "trump" as const, name: "特朗普", handle: "@realDonaldTrump", platform: "Truth Social", avatar: "/uploads/celebs/trump-custom-1786043526485-1e34c87e.png" },
@@ -31,8 +31,8 @@ const CATEGORY_OPTIONS: Array<{ id: "all" | DuanCategory; label: string }> = [
   { id: "longform", label: "长文" }
 ];
 const PAGE_SIZE = 10;
-/** 帖子下面默认展示几条评论（他的帖子评论本来就少，多的去雪球看） */
-const COMMENT_PREVIEW = 3;
+/** 评论不超过这个数就在帖子下面直接展开；再多就点进二级评论页看（主流社交网站的做法） */
+const INLINE_COMMENT_LIMIT = 10;
 const FEED_CACHE_KEY = "fire:trading-square-feed";
 const SEEN_CACHE_KEY = "fire:trading-square-seen";
 /** 筛选状态的 cookie 镜像：让服务端首帧就能画出「段永平 + 分类标签行」，刷新不再先消失再出现。 */
@@ -341,6 +341,70 @@ function mentionHref(author: AuthorId | undefined, name: string) {
   return `https://xueqiu.com/n/${encodeURIComponent(name)}`;
 }
 
+/** 单条评论：头像与名字行顶对齐（主流社交网站都是这样排，垂直居中会显得错位）。 */
+function CommentRow({ comment }: { comment: PostComment }) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <SafeAssetImage
+        src={comment.avatar}
+        alt=""
+        className="h-7 w-7 flex-none rounded-full bg-bg-gray object-cover"
+        fallback={<span className="grid h-7 w-7 flex-none place-items-center rounded-full bg-bg-gray text-[10px] font-bold text-muted">{(comment.name || "?").slice(0, 1)}</span>}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
+          <span className="min-w-0 truncate font-semibold text-ink dark:text-white/85">{comment.name}</span>
+          {comment.replyTo ? <span className="flex-none text-muted">回复 @{comment.replyTo}</span> : null}
+          {comment.createdAt ? <><span className="flex-none text-faint">·</span><time className="flex-none text-muted" dateTime={comment.createdAt}>{formatPostTime(comment.createdAt)}</time></> : null}
+        </div>
+        <p className="mt-1 whitespace-pre-line break-words text-[13px] leading-6 text-ink-2 dark:text-slate-300">{comment.text}</p>
+        {comment.likes ? <p className="mt-1 text-[11px] tabular-nums text-muted">赞 {comment.likes}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+/** 二级评论页：原帖 + 全部评论（评论很多时从「评论 N」图标点进来）。 */
+function TradingCommentsPanel({ post, author, holdings, onStock, onBack }: { post: Post; author: (typeof PEOPLE)[number]; holdings: HoldingHint[]; onStock: (item: HoldingHint) => void; onBack: () => void }) {
+  const text = (post.textZh || post.text || "").trim();
+  const total = post.replies && post.replies > (post.comments?.length ?? 0) ? post.replies : post.comments?.length ?? 0;
+  return (
+    <div className="flex min-h-0 flex-col">
+      <header className="flex items-center gap-2 border-b border-edge px-4 py-3 dark:border-white/10 sm:px-5">
+        <button type="button" onClick={onBack} aria-label="返回动态" className="flex h-8 w-8 flex-none items-center justify-center rounded-full text-muted transition-colors hover:bg-bg-gray dark:hover:bg-white/[.07]"><IconChevronLeft size={18} /></button>
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-bold text-ink dark:text-white">评论</h2>
+          <p className="truncate text-[11px] text-faint">{total ? "共 " + total + " 条" : "暂无评论"} · {author.name}</p>
+        </div>
+        <a href={post.originalUrl} target="_blank" rel="noreferrer" className="ml-auto flex-none text-[11px] font-semibold text-brand-deep">去雪球查看 ↗</a>
+      </header>
+      <div className="max-h-[calc(100dvh-260px)] overflow-y-auto px-4 py-4 sm:px-5">
+        <article className="flex gap-3">
+          <Avatar src={author.avatar} name={author.name} />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5 text-sm">
+              <strong className="text-ink dark:text-white">{author.name}</strong>
+              <PlatformBadge platform={author.id} />
+              <span className="text-muted">{author.handle}</span>
+              <span className="text-faint">·</span>
+              <time className="text-muted" dateTime={post.date}>{formatPostTime(post.date)}</time>
+            </div>
+            {post.replyTo ? <p className="mt-1 text-[11px] text-muted">回复 <a href={mentionHref(post.author, post.replyTo)} target="_blank" rel="noreferrer" className={MENTION_CLASS}>@{post.replyTo}</a> 的动态</p> : null}
+            {text ? <PostBody text={text} holdings={holdings} onStock={onStock} author={post.author} /> : null}
+            <PostImages urls={post.images} />
+          </div>
+        </article>
+        <div className="mt-4 space-y-3.5 border-t border-edge pt-3.5 dark:border-white/10">
+          {(post.comments ?? []).map((comment) => <CommentRow key={comment.id} comment={comment} />)}
+          {post.replies && post.replies > (post.comments?.length ?? 0) ? (
+            <a href={post.originalUrl} target="_blank" rel="noreferrer" className="inline-block text-[11px] font-semibold text-brand-deep">还有 {post.replies - (post.comments?.length ?? 0)} 条评论，去雪球查看 ↗</a>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PostBody({
   text,
   holdings,
@@ -418,6 +482,8 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
   const [original, setOriginal] = useState<Record<string, boolean>>({});
   /** 评论默认收起，点评论图标才展开（一级页面保持清爽） */
   const [commentsOpen, setCommentsOpen] = useState<Record<string, boolean>>({});
+  /** 评论很多时点进的二级评论页（≤10 条直接内联展开） */
+  const [commentPost, setCommentPost] = useState<Post | null>(null);
   const [fixed, setFixed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const restored = useRef(false);
@@ -584,6 +650,17 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
     return market === detail.market && normalizeCode(record.code, market) === detail.code;
   }) : false;
 
+  if (commentPost) {
+    const author = people.find((person) => person.id === commentPost.author) ?? people[0];
+    return (
+      <main ref={windowRef} style={windowStyle} className={`mx-auto w-full max-w-[800px] overflow-hidden rounded-2xl border border-edge bg-white shadow-card dark:bg-[#10151d] md:[transform:translate(var(--trading-x,0px),var(--trading-y,0px))]`}>
+        <div style={{ animation: "fade-in .25s ease" }}>
+          <TradingCommentsPanel post={commentPost} author={author} holdings={holdings} onStock={openStock} onBack={() => setCommentPost(null)} />
+        </div>
+      </main>
+    );
+  }
+
   if (detail) {
     return (
       <main ref={windowRef} style={windowStyle} className={`mx-auto w-full max-w-[800px] overflow-hidden rounded-2xl border border-edge bg-white shadow-card dark:bg-[#10151d] md:[transform:translate(var(--trading-x,0px),var(--trading-y,0px))] ${dragging ? "select-none" : ""}`}>
@@ -693,28 +770,10 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
                           <a href={post.originalUrl} target="_blank" rel="noreferrer" className="flex-none font-semibold text-brand-deep">全部评论 ↗</a>
                         </div>
                         <ul className="mt-2.5 space-y-3.5">
-                          {post.comments.slice(0, COMMENT_PREVIEW).map((comment) => (
-                            <li key={comment.id} className="flex gap-2.5">
-                              <SafeAssetImage
-                                src={comment.avatar}
-                                alt=""
-                                className="h-7 w-7 flex-none rounded-full bg-bg-gray object-cover"
-                                fallback={<span className="grid h-7 w-7 flex-none place-items-center rounded-full bg-bg-gray text-[10px] font-bold text-muted">{(comment.name || "?").slice(0, 1)}</span>}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
-                                  <span className="min-w-0 truncate font-semibold text-ink dark:text-white/85">{comment.name}</span>
-                                  {comment.replyTo ? <span className="flex-none text-muted">回复 @{comment.replyTo}</span> : null}
-                                  {comment.createdAt ? <><span className="flex-none text-faint">·</span><time className="flex-none text-muted" dateTime={comment.createdAt}>{formatPostTime(comment.createdAt)}</time></> : null}
-                                </div>
-                                <p className="mt-1 whitespace-pre-line break-words text-[13px] leading-6 text-ink-2 dark:text-slate-300">{comment.text}</p>
-                                {comment.likes ? <p className="mt-1 text-[11px] tabular-nums text-muted">赞 {comment.likes}</p> : null}
-                              </div>
-                            </li>
-                          ))}
+                          {(post.comments ?? []).map((comment) => <CommentRow key={comment.id} comment={comment} />)}
                         </ul>
-                        {post.comments.length > COMMENT_PREVIEW ? (
-                          <a href={post.originalUrl} target="_blank" rel="noreferrer" className="mt-3 inline-block text-[11px] font-semibold text-brand-deep">还有 {post.comments.length - COMMENT_PREVIEW} 条评论，去雪球查看 ↗</a>
+                        {post.replies && post.replies > post.comments.length ? (
+                          <a href={post.originalUrl} target="_blank" rel="noreferrer" className="mt-3 inline-block text-[11px] font-semibold text-brand-deep">还有 {post.replies - post.comments.length} 条评论，去雪球查看 ↗</a>
                         ) : null}
                       </div>
                     ) : null}
@@ -748,7 +807,7 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
                       {post.comments?.length ? (
                         <button
                           type="button"
-                          onClick={() => setCommentsOpen((value) => ({ ...value, [post.id]: !value[post.id] }))}
+                          onClick={() => (post.comments && post.comments.length > INLINE_COMMENT_LIMIT ? setCommentPost(post) : setCommentsOpen((value) => ({ ...value, [post.id]: !value[post.id] })))}
                           aria-expanded={Boolean(commentsOpen[post.id])}
                           className="flex items-center gap-1 font-semibold transition-colors hover:text-ink dark:hover:text-white"
                         >

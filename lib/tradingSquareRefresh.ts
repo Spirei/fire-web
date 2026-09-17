@@ -538,6 +538,8 @@ async function fillMissingQuotes(posts: DuanPost[]): Promise<DuanPost[]> {
 /** 只刷新最近这些帖子的评论；他为「只有关注的人能评论」，多数帖子评论数为 0，请求量很小。 */
 const COMMENT_REFRESH_POSTS = 24;
 const COMMENT_PAGE_SIZE = 20;
+/** 评论很多的帖子（>20 条）最多抓这么多页，够二级评论页展示；再多去雪球看 */
+const COMMENT_MAX_PAGES = 3;
 const COMMENT_CACHE_TTL_MS = 30 * 60 * 1000;
 
 /**
@@ -559,11 +561,23 @@ async function refreshDuanComments(posts: DuanPost[], now = Date.now()): Promise
     for (let index = 0; index < pending.length; index += 3) {
       const batch = pending.slice(index, index + 3);
       await Promise.all(batch.map(async (post) => {
-        const data = await xueqiuFetch(`/statuses/comments.json?id=${encodeURIComponent(post.id)}&count=${COMMENT_PAGE_SIZE}&page=1&reply=true&asc=false`) as { comments?: XueqiuComment[]; count?: number } | null;
-        if (!data) return;
-        const comments = (data.comments || []).map(mapXueqiuComment).filter((item): item is NonNullable<ReturnType<typeof mapXueqiuComment>> => item !== null);
-        const total = Number(data.count ?? comments.length);
-        cache[post.id] = { updatedAt: new Date(now).toISOString(), total: Number.isFinite(total) ? total : comments.length, comments, version: COMMENTS_CACHE_VERSION };
+        const pages = post.replies && post.replies > COMMENT_PAGE_SIZE ? COMMENT_MAX_PAGES : 1;
+        const raw: XueqiuComment[] = [];
+        let reported = 0;
+        for (let page = 1; page <= pages; page += 1) {
+          const data = await xueqiuFetch(`/statuses/comments.json?id=${encodeURIComponent(post.id)}&count=${COMMENT_PAGE_SIZE}&page=${page}&reply=true&asc=false`) as { comments?: XueqiuComment[]; count?: number } | null;
+          if (!data) break;
+          if (page === 1) reported = Number(data.count ?? 0) || 0;
+          const list = data.comments || [];
+          raw.push(...list);
+          if (list.length < COMMENT_PAGE_SIZE) break;
+        }
+        const seen = new Set<string>();
+        const comments = raw
+          .map(mapXueqiuComment)
+          .filter((item): item is NonNullable<ReturnType<typeof mapXueqiuComment>> => item !== null)
+          .filter((item) => (seen.has(item.id) ? false : (seen.add(item.id), true)));
+        cache[post.id] = { updatedAt: new Date(now).toISOString(), total: reported || comments.length, comments, version: COMMENTS_CACHE_VERSION };
         changed = true;
       }));
     }
