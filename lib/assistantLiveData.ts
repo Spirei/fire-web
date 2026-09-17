@@ -1,5 +1,6 @@
 import { fetchQuotes, type QuoteItem } from "./quotes";
 import { readTradingSquareSnapshot } from "./tradingSquareSnapshot";
+import { normalizeTradingText } from "./tradingSquareText";
 import type { StockRecord } from "./types";
 
 export type AssistantLiveDataOptions = {
@@ -36,7 +37,9 @@ export async function buildAssistantLiveData(records: StockRecord[], options: As
       posts.forEach((post, index) => {
         const author = post.author === "trump" ? "特朗普" : "段永平";
         const time = String(post.date || "").slice(5, 16).replace("T", " ");
-        const summary = clean(post.textZh || post.text || "", 80);
+        // 走和页面上同一套清洗：去掉「回复@某人:」「查看图片」这类抓取带进来的页面文案，
+        // 否则模型会把它们当成正文内容照抄进回答。
+        const summary = clean(normalizeTradingText(post.textZh || post.text || ""), 80);
         if (!summary) return;
         lines.push(`  ${index + 1}) [${author} · ${time}] ${summary}`);
       });

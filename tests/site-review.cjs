@@ -342,6 +342,25 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       .map((part) => (part.type === 'stock' ? `$${part.name}(${part.code})$` : part.value)).join('');
     assert.equal(rendered, '$长和(00001)$ 今天涨了');
   });
+  await test('trading square strips scraped page chrome from post text', () => {
+    const { normalizeTradingText, stripTradingSquareChrome } = require(path.join(root, 'lib/tradingSquareText.ts'));
+    // 开头的「回复@某人:」是回复上下文（雪球页面上的链接），不是作者写的字
+    assert.equal(normalizeTradingText('回复@小马种西瓜: 其实是这样'), '其实是这样');
+    assert.equal(normalizeTradingText('回复@小马种西瓜： 其实是这样'), '其实是这样');
+    assert.equal(normalizeTradingText('回复@科研炒股: 是这个//@科研炒股:同款 查看图片'), '是这个//@科研炒股:同款');
+    // 图片 / 外链的链接文案
+    assert.equal(normalizeTradingText('这款确实可爱的。查看图片'), '这款确实可爱的。');
+    assert.equal(normalizeTradingText('网页链接\n不知道哪个网友收集的'), '不知道哪个网友收集的');
+    assert.equal(normalizeTradingText('$泡泡玛特(09992)$ 这款确实可爱的。查看图片'), '$泡泡玛特(09992)$ 这款确实可爱的。');
+    // 正文中间的内容要保留：转发链、提及，以及不属于页面文案的方括号标记
+    assert.equal(normalizeTradingText('//@小明:转发了这条'), '//@小明:转发了这条');
+    assert.equal(stripTradingSquareChrome('好的，谢谢@小明: 我看看'), '好的，谢谢@小明: 我看看');
+    assert.equal(stripTradingSquareChrome('回复@小明: 收到[已修改]'), '收到[已修改]');
+    // 抓取脚本靠「清洗前的正文」判断是否回复、要不要补抓引用，清洗后必须改用显式标记
+    const refresh = fs.readFileSync(path.join(root, 'lib/tradingSquareRefresh.ts'), 'utf8');
+    assert(refresh.includes('/^\\s*回复\\s*@/.test(rawText)'), '清洗前记录是否回复');
+    assert(refresh.includes('post.reply === true'), '补抓引用改用 reply 标记');
+  });
   await test('client code never calls crypto.randomUUID (insecure LAN HTTP breaks it)', () => {
     const { clientRandomId } = require(path.join(root, 'lib/randomId.ts'));
     assert.match(clientRandomId('ac-'), /^ac-[0-9a-f]{24}$/);

@@ -18,7 +18,9 @@ const DUAN_USER = "1247347556";
 export type TrumpPost = { id: string; date: string; text: string; originalUrl: string; archiveUrl: string; images?: string[] };
 type DuanCategory = "hot" | "original" | "longform";
 export type Quote = { name: string; text: string; url?: string; images?: string[] };
-export type DuanPost = { id: string; date: string; text: string; originalUrl: string; categories: DuanCategory[]; replies?: number; likes?: number; quote?: Quote; images?: string[] };
+// reply：这条是不是「回复某人」。正文会清掉开头的「回复@某人:」（那是雪球页面元素，不是作者写的），
+// 所以是否回复必须在清洗前记下来，补抓引用时还要用。
+export type DuanPost = { id: string; date: string; text: string; originalUrl: string; categories: DuanCategory[]; replies?: number; likes?: number; quote?: Quote; images?: string[]; reply?: boolean };
 
 type XueqiuStatus = {
   id?: number | string;
@@ -457,12 +459,14 @@ function extractQuote(item: XueqiuStatus): Quote | undefined {
 
 function mapDuanStatus(item: XueqiuStatus): DuanPost | null {
   const images = extractXueqiuImages(item);
-  const text = clean(item.text || item.description || item.title || "");
+  const rawText = item.text || item.description || item.title || "";
+  const text = clean(rawText);
   const id = String(item.id || "");
   if (!id || (!text && !images?.length)) return null;
   const likes = Number(item.like_count || 0);
   const replies = Number(item.reply_count || item.comments_count || 0);
   const quote = extractQuote(item);
+  const reply = /^\s*回复\s*@/.test(rawText) || undefined;
   return {
     id,
     date: typeof item.created_at === "number" ? new Date(item.created_at).toISOString() : new Date(item.created_at || Date.now()).toISOString(),
@@ -471,13 +475,15 @@ function mapDuanStatus(item: XueqiuStatus): DuanPost | null {
     categories: duanCategories(text, likes, replies),
     likes,
     replies,
+    ...(reply ? { reply } : {}),
     ...(images ? { images } : {}),
     ...(quote && quote.text !== text ? { quote } : {})
   };
 }
 
 async function fillMissingQuotes(posts: DuanPost[]): Promise<DuanPost[]> {
-  const missing = posts.filter((post) => !post.quote && /^\s*回复@/.test(post.text)).slice(0, 40);
+  // 老缓存里的帖没有 reply 标记，再兜一层正文判断（清洗后开头的「回复@」没了，但 //@ 转发链还在）。
+  const missing = posts.filter((post) => !post.quote && (post.reply === true || /^\s*回复\s*@/.test(post.text) || /^\s*\/\/@/.test(post.text))).slice(0, 40);
   if (!missing.length) return posts;
   const quotes = new Map<string, Quote>();
   const images = new Map<string, string[]>();

@@ -45,19 +45,41 @@ function stripMarkdownLite(value: string): string {
     .replace(/\*([^*\n]+)\*/g, "$1");
 }
 
+/**
+ * 雪球页面上「不是作者写的字」：正文是连页面元素一起抓下来的，这几类会混进来 ——
+ *  1. 开头的「回复@某人:」是回复上下文（雪球把它渲染成正文前面的一条链接）；
+ *  2. 「查看图片」「查看大图」是图片的链接文案（图片我们直接渲染，留着像作者写了一句废话）；
+ *  3. 「网页链接」是外链的链接文案（真实 URL 抓不到，照抄出来只是一句莫名其妙的话）。
+ * 只在正文里清，标题 / 人名等字段不受影响。
+ */
+const SQUARE_REPLY_PREFIX = /^\s*回复\s*@[^\s:：]{1,40}\s*[:：]\s*/u;
+const SQUARE_LINK_LABELS = /(?:查看图片|查看大图|网页链接)/g;
+
+export function stripTradingSquareChrome(value: string): string {
+  return value
+    .replace(SQUARE_REPLY_PREFIX, "")
+    .replace(SQUARE_LINK_LABELS, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** 解码 HTML 实体、去掉 Gemini/雪球残留的 markdown，已清洗的文本再跑一遍保持原样。 */
 export function normalizeTradingText(value: string): string {
   if (!value) return "";
-  return stripMarkdownLite(decodeHtmlEntities(
-    value
-      .replace(/<br\s*\/?\s*>/gi, "\n")
-      .replace(/<[^>]+>/g, "")
-  ))
-    .replace(/\u00a0/g, " ")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return stripTradingSquareChrome(
+    stripMarkdownLite(decodeHtmlEntities(
+      value
+        .replace(/<br\s*\/?\s*>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+    ))
+      .replace(/\u00a0/g, " ")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n[ \t]+/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+  );
 }
 
 const GENERIC_NAMES = new Set([
