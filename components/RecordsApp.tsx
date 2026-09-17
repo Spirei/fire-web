@@ -30,7 +30,6 @@ import WatchlistView from "@/components/views/WatchlistView";
 import type { WatchGroup } from "@/lib/watchGroups";
 import HoldingsView from "@/components/views/HoldingsView";
 import AssetAnalysisView from "@/components/views/AssetAnalysisView";
-import ContextAssistant from "@/components/ContextAssistant";
 import FourDoorNavigator from "@/components/FourDoorNavigator";
 
 // 持仓 / 自选 / 资产分析随壳同步渲染，避免刷新当前页被 loading 挡板盖住。
@@ -48,6 +47,7 @@ const AttachmentsView = dynamic(() => import("@/components/views/AttachmentsView
 const GlobalPreviewView = dynamic(() => import("@/components/views/GlobalPreviewView"));
 const AssetPnlAnalysisView = dynamic(() => import("@/components/AssetPnlAnalysis"));
 const AssistantView = dynamic(() => import("@/components/views/AssistantView"));
+const ContextAssistant = dynamic(() => import("@/components/ContextAssistant"));
 
 const LAZY_TAB_LOADERS = [
   () => import("@/components/views/FireView"),
@@ -168,6 +168,7 @@ export default function RecordsApp({
   const [marketLabels, setMarketLabels] = useState<{ key: string; label: string; flag: string }[]>(initialSettings.marketLabels);
   const { assetIcons, stockIcons } = useAssetIcons(["icon", "stock"], { stockIconCdn: initialSettings.stockIconCdn });
   const [navIconsHydrated, setNavIconsHydrated] = useState(false);
+  const [floatingAssistantReady, setFloatingAssistantReady] = useState(false);
   const attemptedIconBackfillRef = useRef(new Set<string>());
 
   // 市场色块是模块级 store（不是 React 状态）：必须在水合首帧之前按服务端设置初始化。
@@ -187,7 +188,10 @@ export default function RecordsApp({
   useEffect(() => setNavIconsHydrated(true), []);
   useEffect(() => {
     const win = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
-    const start = () => { LAZY_TAB_LOADERS.forEach((load) => { void load(); }); };
+    const start = () => {
+      setFloatingAssistantReady(true);
+      LAZY_TAB_LOADERS.forEach((load) => { void load(); });
+    };
     if (typeof win.requestIdleCallback === "function") {
       const id = win.requestIdleCallback(start, { timeout: 2500 });
       return () => win.cancelIdleCallback?.(id);
@@ -941,7 +945,7 @@ export default function RecordsApp({
         </div>
       </div>
     </div>
-    {activeTab !== "assistant" && <ContextAssistant page={activeTab} symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}
+    {activeTab !== "assistant" && floatingAssistantReady && <ContextAssistant page={activeTab} symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}
     </>
   );
 }

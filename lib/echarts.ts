@@ -1,7 +1,7 @@
-// ECharts 按需引入：只注册全站实际用到的图表与组件，替代 `import * as echarts from "echarts"`，
-// 避免把整套 ECharts（约 1MB）打进首屏包。新增图表类型/组件时在此补注册即可。
+// K 线 / 柱状 / 折线 / 桑基用的核心包。地图与 SVG 渲染器见 lib/echarts-map.ts，
+// 避免持仓页把 MapChart 打进首屏。新增图表类型时按使用面补注册。
 import * as echarts from "echarts/core";
-import { BarChart, CandlestickChart, LineChart, MapChart, SankeyChart } from "echarts/charts";
+import { BarChart, CandlestickChart, LineChart, SankeyChart } from "echarts/charts";
 import {
   AxisPointerComponent,
   DataZoomComponent,
@@ -13,13 +13,12 @@ import {
   TooltipComponent,
   VisualMapComponent
 } from "echarts/components";
-import { CanvasRenderer, SVGRenderer } from "echarts/renderers";
+import { CanvasRenderer } from "echarts/renderers";
 
 echarts.use([
   BarChart,
   CandlestickChart,
   LineChart,
-  MapChart,
   SankeyChart,
   AxisPointerComponent,
   DataZoomComponent,
@@ -30,8 +29,7 @@ echarts.use([
   TitleComponent,
   TooltipComponent,
   VisualMapComponent,
-  CanvasRenderer,
-  SVGRenderer
+  CanvasRenderer
 ]);
 
 export type EChartsInstance = ReturnType<typeof echarts.init>;

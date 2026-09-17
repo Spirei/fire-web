@@ -5,6 +5,9 @@ import Script from "next/script";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconArrowDown, IconCheck, IconExclamationMark, IconLoader2 } from "@tabler/icons-react";
 import echarts from "@/lib/echarts";
+import { SVGRenderer } from "echarts/renderers";
+
+echarts.use([SVGRenderer]);
 
 const WINDOW_KEY = "fire-simple-win";
 

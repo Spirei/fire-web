@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import echarts from "@/lib/echarts";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCompact, fmtNumMarket, fmtPct, fmtQty } from "@/lib/format";
 import { marketMeta, type Quote, type StockRecord, type TradeOrder } from "@/lib/types";

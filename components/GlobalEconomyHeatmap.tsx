@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import echarts, { type EChartsInstance } from "@/lib/echarts";
+import echarts, { type EChartsInstance } from "@/lib/echarts-map";
 import { WORLD_ECONOMY_INDICATORS, type WorldEconomyCountry, type WorldEconomyIndicator } from "@/lib/worldEconomy";
 import { countryCatalogForMapNames, countryNameZh, type CountryCatalogItem } from "@/lib/countryCatalog";
 import { useAssetIcons } from "@/lib/useAssetIcons";
