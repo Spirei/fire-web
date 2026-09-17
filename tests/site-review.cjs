@@ -493,6 +493,15 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(replyTargetFromText('回复@小马种西瓜: 正文'), '小马种西瓜');
     assert.equal(replyTargetFromText('//@小明:转发'), undefined);
   });
+  await test('sidebar scrollbar stays hidden until hover (dark mode)', () => {
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    // 全站那条「.dark *」滚动条规则与单写一个类的选择器特异性相同（都是 0-1-0），
+    // 且位置更靠后 —— 左侧栏的「默认透明」如果不带 .dark 前缀，深色模式下就会被它盖掉、滚动条常显。
+    assert.match(css, /\.fire-sidebar-panel,\s*\.dark \.fire-sidebar-panel\s*\{\s*scrollbar-color:\s*transparent transparent;?\s*\}/, '默认隐藏规则必须同时覆盖深色模式');
+    assert.match(css, /\.dark \.fire-sidebar-panel::-webkit-scrollbar-thumb\s*\{\s*background:\s*transparent;?\s*\}/, 'webkit 分支同样要覆盖深色模式');
+    // 悬停 / 聚焦时仍要显示：深色下由更高特异性的规则接管
+    assert.match(css, /\.dark \.fire-sidebar-panel:hover[^{]*\{\s*scrollbar-color:\s*rgba\(255,\s*255,\s*255,\s*\.?0?\.26\)/, '悬停时深色滚动条仍要显示');
+  });
   await test('client code never calls crypto.randomUUID (insecure LAN HTTP breaks it)', () => {
     const { clientRandomId } = require(path.join(root, 'lib/randomId.ts'));
     assert.match(clientRandomId('ac-'), /^ac-[0-9a-f]{24}$/);
