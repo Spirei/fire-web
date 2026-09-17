@@ -413,7 +413,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(mapDuanStatus({ id: 1 }), null);
   });
   await test('trading square marks unseen posts consistently', () => {
-    const { isUnseenPost, unseenCounts } = require(path.join(root, 'lib/tradingSquareSeen.ts'));
+    const { isUnseenPost, unseenBoundaryIndex, unseenCounts } = require(path.join(root, 'lib/tradingSquareSeen.ts'));
     const seen = { duan: '2026-09-17T00:00:00.000Z', trump: null };
     const posts = [
       { author: 'duan', date: '2026-09-17T01:00:00.000Z' },
@@ -426,10 +426,22 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.deepEqual(unseenCounts(posts, seen), { duan: 1, trump: 1 });
     assert.equal(isUnseenPost({ author: 'duan', date: 'oops' }, seen), false, '时间解析失败不标记');
     assert.deepEqual(unseenCounts(posts, {}), { duan: 2, trump: 1 }, '首次访问全部算新');
-    // 角标配色必须用站内「未读」色：本站绿色表示下跌，自己发明一枚绿块会和涨跌语义打架
+    // 分界线画在最后一条新动态下面：整页都新 / 全都看过时不画线
+    const boundary = (list) => unseenBoundaryIndex(list, seen);
+    assert.equal(boundary([
+      { author: 'duan', date: '2026-09-17T03:00:00.000Z' },
+      { author: 'duan', date: '2026-09-17T02:00:00.000Z' },
+      { author: 'duan', date: '2026-09-16T23:00:00.000Z' }
+    ]), 1, '两条新动态 → 线画在第二条下面');
+    assert.equal(boundary([{ author: 'duan', date: '2026-09-16T23:00:00.000Z' }]), -1, '没有新动态 → 不画线');
+    assert.equal(boundary([{ author: 'duan', date: '2026-09-17T01:00:00.000Z' }]), -1, '整页都是新动态 → 不画线');
+    assert.equal(boundary([]), -1, '空列表 → 不画线');
+    // 新动态标记按主流做法：单条只用一个小圆点（不用文字胶囊），交界处画一次分隔线；
+    // 颜色必须用站内「未读」色 —— 本站绿色表示下跌，自己发明一枚绿块会和涨跌语义打架
     const square = fs.readFileSync(path.join(root, 'components/views/TradingSquareView.tsx'), 'utf8');
-    assert(square.includes('title="上次访问之后的新动态"'), '「新」角标还在');
-    assert(square.includes('bg-up-bg'), '「新」角标沿用站内未读色');
+    assert(square.includes('aria-label="上次访问之后的新动态"'), '新动态标记还在');
+    assert(square.includes('rounded-full bg-up dark:bg-[#ff8a8a]'), '单条标记是站内未读色的小圆点');
+    assert(square.includes('条为新动态'), '新动态与看过的帖子之间有分隔线');
     assert(!square.includes('#4caf58'), '不再引入站外的绿色');
   });
   await test('trading square strips scraped page chrome from post text', () => {

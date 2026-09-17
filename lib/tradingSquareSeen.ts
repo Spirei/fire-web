@@ -31,3 +31,18 @@ export function unseenCounts(posts: SeenPost[], seen: SeenTimes): Record<string,
   });
   return counts;
 }
+
+/**
+ * 「新动态」与「看过的帖子」之间的分界下标（-1 = 这一页里没有分界，不画线）。
+ *
+ * 列表按时间倒序，新动态在最上面，所以分界画在最后一条新动态下面：
+ * 整页都是新动态（第一次打开）时没有分界，看完之后再进来也不会凭空多一条线。
+ */
+export function unseenBoundaryIndex(posts: SeenPost[], seen: SeenTimes): number {
+  let boundary = -1;
+  posts.forEach((post, index) => {
+    const next = posts[index + 1];
+    if (next && isUnseenPost(post, seen) && !isUnseenPost(next, seen)) boundary = index;
+  });
+  return boundary;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { IconChevronLeft, IconMessageCircle, IconMinus, IconPin, IconPlus, IconThumbUp, IconWindmill } from "@tabler/icons-react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
@@ -12,7 +12,7 @@ import StockTextLink from "@/components/StockTextLink";
 import { isLocalPostImageUrl } from "@/lib/tradingSquareImages";
 import { TRADING_SQUARE_AUTHOR_LIMIT, takeNewestByAuthor } from "@/lib/tradingSquareLimits";
 import { formatRelativeTime } from "@/lib/format";
-import { isUnseenPost, unseenCounts } from "@/lib/tradingSquareSeen";
+import { isUnseenPost, unseenBoundaryIndex, unseenCounts } from "@/lib/tradingSquareSeen";
 import { hasTranslatableText, normalizeCode, normalizeTradingText, parseSymbolToken, splitTradingText, type HoldingHint } from "@/lib/tradingSquareText";
 import type { StockRecord } from "@/lib/types";
 
@@ -606,6 +606,10 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
 
   const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const safePage = visible.length === 0 ? Math.max(1, page) : Math.min(page, pages);
+  const pagePosts = visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  // 新动态与「上次看过的」之间的分界（当前页内的下标，-1 = 本页没有分界）
+  const newBoundary = unseenBoundaryIndex(pagePosts, seenOnLoad);
+  const newAboveBoundary = newBoundary < 0 ? 0 : pagePosts.slice(0, newBoundary + 1).filter((post) => isUnseenPost(post, seenOnLoad)).length;
 
   useEffect(() => {
     if (selected !== "duan" && duanCategory !== "all") setDuanCategory("all");
@@ -741,27 +745,33 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
               <p className="text-sm font-medium text-ink dark:text-white">{refreshing ? "正在拉取近期动态" : "这个分类暂时没有动态"}</p>
               <p className="mt-1 text-xs text-muted">{refreshing ? "页面会自动显示新内容，无需手动刷新" : "切换其他分类查看近期内容"}</p>
             </div>
-          ) : visible.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE).map((post) => {
+          ) : pagePosts.map((post, index) => {
             const showOriginal = original[post.id] === true;
             const author = people.find((person) => person.id === post.author) ?? people[0];
             const bodyText = showOriginal ? post.text : (post.textZh ?? post.text);
             const displayText = (bodyText || "").trim();
             return (
-              <article key={`${post.author}-${post.id}`} className="px-4 py-5 sm:px-5">
+              <Fragment key={`${post.author}-${post.id}`}>
+              <article className="px-4 py-5 sm:px-5">
                 <div className="flex gap-3">
                   <Avatar src={author.avatar} name={author.name} large />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                      {/* 未读圆点：主流阅读器（Gmail / Feedly / Inoreader）都用「一个小圆点」表示这条没看过，
+                          并且放在标题行最前面，比在时间后面贴一枚文字角标轻得多 */}
+                      {isUnseenPost(post, seenOnLoad) ? (
+                        <span
+                          role="img"
+                          aria-label="上次访问之后的新动态"
+                          title="上次访问之后的新动态"
+                          className="h-1.5 w-1.5 flex-none rounded-full bg-up dark:bg-[#ff8a8a]"
+                        />
+                      ) : null}
                       <strong className="text-ink dark:text-white">{author.name}</strong>
                       <PlatformBadge platform={author.id} />
                       <span className="text-muted">{author.handle}</span>
                       <span className="text-faint">·</span>
                       <time className="text-muted" dateTime={post.date}>{formatPostTime(post.date)}</time>
-                      {/* 新动态标记：沿用站内「未读」的那抹红（头像未读计数同色），软底小胶囊比实心色块轻，
-                          紧跟时间方便顺着「谁·什么时候·新」一行读完 */}
-                      {isUnseenPost(post, seenOnLoad) ? (
-                        <span className="flex-none rounded-full bg-up-bg px-1.5 py-[1px] text-[10px] font-semibold leading-4 text-up dark:text-[#ff8a8a]" title="上次访问之后的新动态">新</span>
-                      ) : null}
                     </div>
                     {post.replyTo && (
                       <p className="mb-1.5 text-[11px] text-muted">
@@ -830,6 +840,15 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
                   </div>
                 </div>
               </article>
+              {/* 未读分隔线：照 Slack / Discord / Inoreader 的做法，只在「新动态」与「看过的帖子」交界处画一次。
+                  逐条贴标记要贴很多次，一条线就把两段分干净了 —— 注意列表是倒序，所以线画在新帖下方 */}
+              {index === newBoundary ? (
+                <div className="flex items-center gap-2 px-4 pb-1 sm:px-5">
+                  <span className="flex-none text-[10px] font-semibold text-up dark:text-[#ff8a8a]">以上 {newAboveBoundary} 条为新动态</span>
+                  <span className="h-px flex-1 bg-up/20 dark:bg-[#ff8a8a]/20" />
+                </div>
+              ) : null}
+              </Fragment>
             );
           })}
         </div>
