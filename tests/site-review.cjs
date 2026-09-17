@@ -441,7 +441,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const square = fs.readFileSync(path.join(root, 'components/views/TradingSquareView.tsx'), 'utf8');
     assert(square.includes('aria-label="上次访问之后的新动态"'), '新动态标记还在');
     assert(square.includes('rounded-full bg-up dark:bg-[#ff8a8a]'), '单条标记是站内未读色的小圆点');
-    assert(square.includes('条为新动态'), '新动态与看过的帖子之间有分隔线');
+    // 分界标签压在那条本来就有的帖间分隔线上（微信「以下是新消息」的写法），不额外画线、不用红色
+    assert(square.includes('relative flex h-0 items-center justify-center'), '分界标签压在原有分隔线上');
+    assert(/font-medium text-faint[^>]*>以上 \{newAboveBoundary\} 条为新动态/.test(square), '分界标签是中性灰小字');
     assert(!square.includes('#4caf58'), '不再引入站外的绿色');
   });
   await test('trading square strips scraped page chrome from post text', () => {

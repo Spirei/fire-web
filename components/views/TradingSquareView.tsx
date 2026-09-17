@@ -840,12 +840,12 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
                   </div>
                 </div>
               </article>
-              {/* 未读分隔线：照 Slack / Discord / Inoreader 的做法，只在「新动态」与「看过的帖子」交界处画一次。
-                  逐条贴标记要贴很多次，一条线就把两段分干净了 —— 注意列表是倒序，所以线画在新帖下方 */}
+              {/* 未读分界：照微信「以下是新消息」/ Telegram 的做法，把一行小字压在「本来就存在的那条帖间分隔线」中间 ——
+                  不额外画线、也不用红色（红字 + 红细线夹在两条分隔线之间，深色下像一道脏边）。
+                  列表是倒序，新动态在最上面，所以这条线标的是「以上为新动态」 */}
               {index === newBoundary ? (
-                <div className="flex items-center gap-2 px-4 pb-1 sm:px-5">
-                  <span className="flex-none text-[10px] font-semibold text-up dark:text-[#ff8a8a]">以上 {newAboveBoundary} 条为新动态</span>
-                  <span className="h-px flex-1 bg-up/20 dark:bg-[#ff8a8a]/20" />
+                <div className="relative flex h-0 items-center justify-center">
+                  <span className="relative z-[1] flex-none bg-white px-2 text-[10px] font-medium text-faint dark:bg-[#10151d]">以上 {newAboveBoundary} 条为新动态</span>
                 </div>
               ) : null}
               </Fragment>
