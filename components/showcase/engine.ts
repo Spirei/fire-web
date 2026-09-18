@@ -90,7 +90,9 @@ function normalizeConfig(config: ShowcaseConfig) {
               bars: tunnel?.bars ?? [],
               gold: tunnel?.gold ?? "#ffc266",
               white: tunnel?.white ?? "#ccdcfa",
-              dashes: tunnel?.dashes ?? 1
+              dashes: tunnel?.dashes ?? 1,
+              vanish: tunnel?.vanish ?? [0.5, 0.47],
+              barIntensity: tunnel?.barIntensity ?? 1
             }
     },
     post: {
@@ -107,6 +109,7 @@ function normalizeConfig(config: ShowcaseConfig) {
       max: config.zoom?.max ?? 2.4,
       wheelStep: config.zoom?.wheelStep ?? 0.0016
     },
+    lights: config.lights ?? [],
     phases: config.phases,
     parts: config.parts ?? []
   };
@@ -133,8 +136,18 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       : new Set<string>();
 
   /* ---------- 渲染器 / 相机 ---------- */
+  // 像素预算：EffectComposer 会建两块 HalfFloat 的 RT（后来还要泛光的多级），
+  // 大窗口 + 高分屏下按设备像素比铺满会直接吃掉几百 MB 显存，久了会丢上下文变白屏。
+  // 这里给整屏输出封一个像素上限，超了就降倍率（分辨率换稳定）。
+  const MAX_OUTPUT_PIXELS = 2_600_000;
+  const MIN_PIXEL_RATIO = 0.5;
+  const budgetRatio = (w: number, h: number, wanted: number) => {
+    const area = Math.max(1, w * h);
+    if (area * wanted * wanted <= MAX_OUTPUT_PIXELS) return wanted;
+    return Math.max(MIN_PIXEL_RATIO, Math.sqrt(MAX_OUTPUT_PIXELS / area));
+  };
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  renderer.setPixelRatio(budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, Math.min(window.devicePixelRatio || 1, 1.6)));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = CFG.post.exposure;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -636,7 +649,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     uOpacity: { value: 0 },
     uTint: { value: new THREE.Color(1, 1, 1) },
     tNoise: { value: streakNoise },
-    uBars: { value: 1 },
+    uBars: { value: 0 },   // 主光条改到屏幕空间的后期里画（见 LightLinesShader）
     // 光条取色：按参考视频逐点取样后的暖金与冷白（照片偏色已做中性化）
     uGold: { value: new THREE.Color(TUNNEL?.gold ?? "#ffc266") },
     uWhite: { value: new THREE.Color(TUNNEL?.white ?? "#ccdcfa") },
@@ -767,8 +780,53 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         gl_FragColor = vec4(col, 1.0);
       }`
   });
+  // 主光条：屏幕空间里从消失点放射出去的细亮线（参考视频里就是这个观感）。
+  // 贴在圆柱面上的线只有在柱面很细的时候才进得来，所以改成后期。
+  const lineBars = CFG.speed.tunnel?.bars ?? [];
+  const lineAngles = lineBars.map((b) => ({ a: (b.angle * Math.PI) / 180, w: (b.width * Math.PI) / 180, gold: b.tone === "gold" }));
+  const lightLinesPass = new ShaderPass({
+    uniforms: {
+      tDiffuse: { value: null },
+      uTime: { value: 0 },
+      uStrength: { value: 0 },
+      uSpeed: { value: 0 },
+      uCenter: { value: new THREE.Vector2(CFG.speed.tunnel?.vanish?.[0] ?? 0.5, CFG.speed.tunnel?.vanish?.[1] ?? 0.47) },
+      uAspect: { value: 1.78 },
+      uGold: { value: new THREE.Color(CFG.speed.tunnel?.gold ?? "#ffc266") },
+      uWhite: { value: new THREE.Color(CFG.speed.tunnel?.white ?? "#ccdcfa") },
+      uIntensity: { value: CFG.speed.tunnel?.barIntensity ?? 1 }
+    },
+    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+    fragmentShader: `
+      uniform sampler2D tDiffuse; uniform float uTime; uniform float uStrength; uniform float uSpeed;
+      uniform vec2 uCenter; uniform float uAspect; uniform vec3 uGold; uniform vec3 uWhite; uniform float uIntensity;
+      varying vec2 vUv;
+      const float TAU = 6.28318530718;
+      float barLine(float ang, float target, float w){
+        float d = abs(fract((ang - target) / TAU + 0.5) - 0.5) * TAU;
+        return smoothstep(w * 3.0, 0.0, d) * 0.1 + smoothstep(w, 0.0, d);
+      }
+      void main(){
+        vec4 base = texture2D(tDiffuse, vUv);
+        if (uStrength <= 0.001) { gl_FragColor = base; return; }
+        // 用像素比例还原真实屏幕角度，宽屏也不会把线压扁
+        vec2 d = (vUv - uCenter) * vec2(uAspect, 1.0);
+        float r = length(d);
+        float ang = atan(d.y, d.x);
+        float radial = smoothstep(0.06, 0.34, r) * (1.0 - smoothstep(0.9, 1.35, r) * 0.3);
+        float goldMask = 0.0;
+        float whiteMask = 0.0;
+        ${lineAngles.map((b) => `${b.gold ? "goldMask" : "whiteMask"} += barLine(ang, ${b.a.toFixed(5)}, ${b.w.toFixed(5)});`).join("\n        ")}
+        // 沿线流动的虚线段，让光条有速度感
+        float flow = 0.72 + 0.28 * sin(r * 26.0 - uTime * (2.0 + uSpeed * 0.35));
+        float mask = (goldMask + whiteMask * 0.8) * radial * flow * uStrength * uIntensity;
+        vec3 col = uGold * goldMask + uWhite * whiteMask;
+        gl_FragColor = vec4(base.rgb + col * mask, base.a);
+      }`
+  });
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(lightLinesPass);
   composer.addPass(smearPass);
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(1, 1),
@@ -784,6 +842,46 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   /* ---------- 6) 模型 ---------- */
   const carRoot = new THREE.Group();
   scene.add(carRoot);
+
+  /** 车上的发光点：一张径向渐变广告牌 + 一盏点光，按 preset 给的模式常亮或只在发车时亮 */
+  function glowTexture(size = 64) {
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const g = c.getContext("2d");
+    if (g) {
+      const grd = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      grd.addColorStop(0, "rgba(255,255,255,1)");
+      grd.addColorStop(0.25, "rgba(255,255,255,0.75)");
+      grd.addColorStop(0.55, "rgba(255,255,255,0.18)");
+      grd.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grd;
+      g.fillRect(0, 0, size, size);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+  const carLights: Array<{ sprite: THREE.Sprite; light: THREE.PointLight; intensity: number; mode: "always" | "race" }> = [];
+  CFG.lights.forEach((def) => {
+    const tex = glowTexture();
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: tex,
+        color: new THREE.Color(def.color),
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    sprite.position.set(def.pos[0], def.pos[1], def.pos[2]);
+    sprite.scale.setScalar(def.size ?? 0.28);
+    sprite.renderOrder = 4;
+    carRoot.add(sprite);
+    const light = new THREE.PointLight(new THREE.Color(def.color), 0, 2.4, 2);
+    light.position.set(def.pos[0], def.pos[1], def.pos[2]);
+    carRoot.add(light);
+    carLights.push({ sprite, light, intensity: def.intensity ?? 0.7, mode: def.mode ?? "race" });
+  });
   const spinAxis = new THREE.Vector3(1, 0, 0);   // 轮子自转轴（config.model.wheelAxis）
   const wheelPivots: Array<
     Array<{ mesh: THREE.Mesh; angle: number; rot: THREE.Matrix4; t1: THREE.Matrix4; t2: THREE.Matrix4 }>
@@ -1031,15 +1129,19 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       if (Math.abs(userYawVel) < 0.0004) userYawVel = 0;
     }
     zoom += (zoomTarget - zoom) * clamp(dt * 8, 0, 1);
-    // 冲刺时镜头保持锁定（与参考视频一致）：车往隧道深处开走，画面不动
-    const az = ((camState.az + userYaw) * Math.PI) / 180;
+    // 冲刺时镜头顺隧道方向跟随：方位角平滑绕到车尾正后方，机位与注视点随车往隧道深处推进，
+    // 因此消失点始终在画面中心，车开走时不会被甩到画面外。
+    const azBase = camState.az + userYaw;
+    const azDelta = ((180 - azBase + 540) % 360) - 180;
+    const az = ((azBase + azDelta * racingAmt * 0.85) * Math.PI) / 180;
+    const follow = carTravel * racingAmt;
     // 竖屏 / 窄屏时水平视野会变窄，这里按宽高比把相机拉远、视角放宽，保证整车进画面
     const fitAspect = CFG.camera.fitMinAspect;
   const fit = camera.aspect < fitAspect ? clamp(fitAspect / camera.aspect, 1, CFG.camera.fitMaxPullback) : 1;
     const r = (camState.r - sp * 1.5) * Math.pow(fit, 0.8) * zoom;
     const h = camState.h - sp * 0.22;
-    camPos.set(Math.sin(az) * r, Math.max(0.35, h), Math.cos(az) * r);
-    lookAt.set(0, camState.ty + sp * 0.05, camState.tz);
+    camPos.set(Math.sin(az) * r, Math.max(0.35, h), Math.cos(az) * r + follow * 0.55);
+    lookAt.set(0, camState.ty + sp * 0.05, camState.tz + follow * 0.62);
     camState.fovEff = camState.fov * Math.pow(fit, 0.45);
 
     // fbm 晃动：三个轴各自随机错开频率，高速才明显
@@ -1078,6 +1180,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     bodyMaterials.forEach((m) => {
       m.envMapIntensity = 1.25 - sp * 0.3;
     });
+    carLights.forEach((item) => {
+      const on = item.mode === "always" ? 1 : racingAmt;
+      const flicker = item.mode === "race" ? 0.92 + Math.sin(elapsed * 9 + item.sprite.position.z) * 0.08 : 1;
+      (item.sprite.material as THREE.SpriteMaterial).opacity = on * flicker;
+      item.light.intensity = on * item.intensity * flicker;
+    });
 
     // 地面 / 隧道 / 流光
     const sps = reduced ? 0 : sp;
@@ -1103,6 +1211,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const tunnelOn = !!CFG.speed.tunnel && speed > 0.6 && !off.has("tunnel");
     if (tunnel) tunnel.visible = tunnelOn;
     if (accent) accent.visible = tunnelOn;
+
+    // 主光条：只在有速度时出现（滚动浏览时表是 0，不会亮）
+    lightLinesPass.uniforms.uTime.value = elapsed;
+    lightLinesPass.uniforms.uSpeed.value = reduced ? 0 : speed;
+    lightLinesPass.uniforms.uStrength.value = sps * sps;
+    lightLinesPass.enabled = sps > 0.04;   // 静止段整趟跳过，省一层全屏后期
 
     // 后期：拖影只在高速时才有意义，静止段直接关掉这一整趟全屏后期
     smearPass.uniforms.uChroma.value = sps * CFG.post.smearChroma;
@@ -1168,6 +1282,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   function resize() {
     const w = canvas.clientWidth || hud.stage.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || hud.stage.clientHeight || window.innerHeight;
+    budgetedScale = budgetRatio(w, h, wantedScale);
+    if (renderScale > budgetedScale) {
+      renderScale = budgetedScale;
+      renderer.setPixelRatio(renderScale);
+      composer.setPixelRatio(renderScale);
+    }
     renderer.setSize(w, h, false);
     composer.setSize(w, h);
     // 泛光只是低频辉光，按设备像素的一半渲染，观感几乎不变但填充率省一大截
@@ -1175,6 +1295,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     bloom.setSize(Math.max(64, Math.round(w * pr * 0.5)), Math.max(64, Math.round(h * pr * 0.5)));
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    (lightLinesPass.uniforms.uAspect.value as number) = w / h;
   }
 
   /**
@@ -1182,11 +1303,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    * 帧耗时偏高就降倍率（最低 0.75），长时间流畅再慢慢升回去（最高 1.6），
    * 这样高分屏与集成显卡都能保住流畅度。
    */
-  const maxScale = Math.min(window.devicePixelRatio || 1, 1.6);
-  let renderScale = Math.min(maxScale, 1.25);
+  const wantedScale = Math.min(window.devicePixelRatio || 1, 1.6);
+  let renderScale = Math.min(wantedScale, 1.25);
   let frameCost = 0;
   let frameSamples = 0;
   let lastAdapt = performance.now();
+  let qualityChanges = 0;
+  let budgetedScale = 1;
   // 调参用：地址栏加 ?mclhud=1 会在右下角显示实测帧耗时与当前渲染倍率
   const qualityHud =
     typeof location !== "undefined" && location.search.includes("mclhud")
@@ -1211,15 +1334,18 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     frameCost = 0;
     frameSamples = 0;
     lastAdapt = now;
+    // 只在明显掉帧时降、长时间很稳才升，避免来回抖动反复重建 RT（那也是显存压力来源）
     if (avg > 26 && renderScale > 0.75) {
       renderScale = Math.max(0.75, renderScale - 0.25);
     } else if (avg > 19 && renderScale > 0.75) {
       renderScale = Math.max(0.75, renderScale - 0.15);
-    } else if (avg < 12 && renderScale < maxScale) {
-      renderScale = Math.min(maxScale, renderScale + 0.1);
+    } else if (avg < 11 && renderScale < Math.min(wantedScale, budgetedScale)) {
+      renderScale = Math.min(wantedScale, budgetedScale, renderScale + 0.1);
     } else {
       return;
     }
+    if (qualityChanges > 6) return;
+    qualityChanges += 1;
     if (qualityHud) qualityHud.textContent = `${avg.toFixed(1)} ms · ${renderScale.toFixed(2)}x`;
     renderer.setPixelRatio(renderScale);
     composer.setPixelRatio(renderScale);
@@ -1387,7 +1513,25 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     canvas.removeEventListener("pointercancel", onTouchEnd);
   });
 
-  /* ---------- 9) 渲染循环：不可见时暂停 ---------- */
+  /* ---------- 9) 上下文丢失 / 恢复 ---------- */
+  // 显存吃紧或驱动回收时 WebGL 上下文会丢，画面会变成白板。
+  // 这里接管事件：丢失时阻止默认行为以便恢复，恢复或连续报错时让上层重建场景。
+  const onContextLost = (e: Event) => {
+    e.preventDefault();
+    options.onContextLost?.();
+  };
+  const onContextRestored = () => {
+    options.onContextLost?.();
+  };
+  canvas.addEventListener("webglcontextlost", onContextLost);
+  canvas.addEventListener("webglcontextrestored", onContextRestored);
+  cleanups.push(() => {
+    canvas.removeEventListener("webglcontextlost", onContextLost);
+    canvas.removeEventListener("webglcontextrestored", onContextRestored);
+  });
+  let renderErrors = 0;
+
+  /* ---------- 10) 渲染循环：不可见时暂停 ---------- */
   let last = performance.now();
   let pSmooth = 0;
   const tick = () => {
@@ -1401,7 +1545,18 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     pSmooth += (target - pSmooth) * clamp(dt * 6, 0, 1);
     if (Math.abs(target - pSmooth) < 0.0002) pSmooth = target;
     adaptQuality(frameMs);
-    render(pSmooth, dt);
+    try {
+      render(pSmooth, dt);
+      renderErrors = 0;
+    } catch (err) {
+      // 单帧偶发错误不要拖死整个循环；连续出错说明上下文已经不健康，重建场景
+      renderErrors += 1;
+      if (renderErrors === 1) (window as unknown as { __errs?: string[] }).__errs?.push(String(err));
+      if (renderErrors > 3) {
+        renderer.setAnimationLoop(null);
+        options.onContextLost?.();
+      }
+    }
   };
   renderer.setAnimationLoop(tick);
   cleanups.push(() => renderer.setAnimationLoop(null));
@@ -1415,6 +1570,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   );
   io.observe(hud.stage);
   cleanups.push(() => io.disconnect());
+
+  const onVisible = () => {
+    if (!document.hidden) {
+      last = performance.now();
+      resize();
+      render(pSmooth, 1 / 60);
+    }
+  };
+  document.addEventListener("visibilitychange", onVisible);
+  cleanups.push(() => document.removeEventListener("visibilitychange", onVisible));
 
   const ro = new ResizeObserver(() => resize());
   ro.observe(canvas);

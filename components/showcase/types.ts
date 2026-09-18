@@ -23,9 +23,13 @@ export interface ShowcaseCameraKey {
   fov: number;
 }
 
-/** 隧道里的一条主光条 */
+/**
+ * 隧道里的一条主光条。
+ * 角度是屏幕空间角度（相对消失点，度）：0° = 向右，90° = 向上，180° = 向左。
+ * 参考视频里这些线是从消失点放射出去的，所以放在后期里画，而不是贴在圆柱面上。
+ */
 export interface ShowcaseLightBar {
-  /** 圆周角度（度），0° = 车身右侧，90° = 上方 */
+  /** 屏幕角度（度），0° = 向右，90° = 向上 */
   angle: number;
   /** 角宽度（度） */
   width: number;
@@ -140,6 +144,10 @@ export interface ShowcaseConfig {
           length?: number;
           /** 主光条（不传则只有很浅的虚线） */
           bars?: ShowcaseLightBar[];
+          /** 消失点在画面里的位置（默认 0.5 / 0.47） */
+          vanish?: [number, number];
+          /** 主光条的亮度倍率 */
+          barIntensity?: number;
           gold?: string;
           white?: string;
           /** 虚线亮度 */
@@ -155,6 +163,20 @@ export interface ShowcaseConfig {
   };
   /** 缩放范围（相机距离倍率，越小越近） */
   zoom?: { min?: number; max?: number; wheelStep?: number };
+  /**
+   * 车上的发光点（F1 的 T 字灯、雨灯这种）。
+   * 位置用归一化之后的坐标：车头朝 +Z、落地 y=0、车长由 model.length 决定。
+   */
+  lights?: Array<{
+    pos: [number, number, number];
+    color: string;
+    /** 光点直径（米） */
+    size?: number;
+    /** 点光强度 */
+    intensity?: number;
+    /** 常亮还是只在发车时亮 */
+    mode?: "always" | "race";
+  }>;
   /** 冲刺按钮文案（参考站点：未发车是 HOLD TO RACE，发车后变成 RE-ENGAGE TO SLOW） */
   race?: { idleLabel?: string; label?: string; cap?: string };
   /** 章节文案（React 层渲染，引擎只负责按进度回调） */
@@ -195,6 +217,8 @@ export interface ShowcaseOptions {
   onPhase?: (index: number) => void;
   /** 冲刺状态变化（按住空格 / 按住按钮） */
   onRacing?: (racing: boolean) => void;
+  /** WebGL 上下文丢失（显存吃紧、驱动回收）：上层重建一次场景即可恢复 */
+  onContextLost?: () => void;
   onError?: (message: string) => void;
 }
 

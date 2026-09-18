@@ -35,6 +35,8 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
   const [loadRatio, setLoadRatio] = useState(0);
   const [ready, setReady] = useState(false);
   const [racing, setRacing] = useState(false);
+  // WebGL 上下文丢了就重建一次场景（重建计数用作 key，触发重新挂载）
+  const [rebuild, setRebuild] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const phaseRef = useRef(0);
   const fadeTimer = useRef<number | null>(null);
@@ -88,6 +90,11 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
           onReady: () => setReady(true),
           onPhase: handlePhase,
           onRacing: (on) => setRacing(on),
+          onContextLost: () => {
+            if (cancelled) return;
+            setReady(false);
+            setRebuild((n) => (n > 3 ? n : n + 1));
+          },
           onError: (message) => setError(message)
         });
         // 开发环境留一个调试句柄，方便按进度截图与排查（生产不会写）
@@ -108,7 +115,7 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
       }
       if (fadeTimer.current) window.clearTimeout(fadeTimer.current);
     };
-  }, [config, handlePhase]);
+  }, [config, handlePhase, rebuild]);
 
   const current = config.phases[phase] ?? config.phases[0];
 

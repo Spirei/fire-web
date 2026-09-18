@@ -48,10 +48,10 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       { p: 0.38, az: 60, r: 5.9, h: 0.8, ty: 0.5, tz: 0.9, fov: 27 },    // 前轮 / 侧箱特写（参考视频里车是满画甚至溢出的）
       { p: 0.46, az: 104, r: 6.2, h: 0.78, ty: 0.52, tz: 0.1, fov: 28 }, // 沿车身滑到后段，继续贴近
       { p: 0.54, az: 130, r: 9.4, h: 1.0, ty: 0.62, tz: 0.1, fov: 29 },  // 拉回 3/4 侧视
-      { p: 0.62, az: 160, r: 10.6, h: 0.76, ty: 0.6, tz: 0, fov: 31 },   // 收进车尾方向
+      { p: 0.62, az: 162, r: 10.4, h: 1.9, ty: 0.7, tz: 0, fov: 31 },    // 抬升并收到车尾方向
       // 发车位：车尾正后方的低机位，按住空格后车就是朝这里驶入隧道，镜头保持锁定
-      { p: 0.7, az: 176, r: 11, h: 0.72, ty: 0.62, tz: -0.15, fov: 31 },
-      { p: 0.8, az: 181, r: 10.4, h: 0.8, ty: 0.62, tz: -0.1, fov: 31 },
+      { p: 0.7, az: 176, r: 10.2, h: 2.7, ty: 0.78, tz: -0.2, fov: 32 },
+      { p: 0.8, az: 181, r: 9.8, h: 2.9, ty: 0.8, tz: -0.1, fov: 32 },
       { p: 0.88, az: 186, r: 5.6, h: 0.9, ty: 0.6, tz: -0.7, fov: 29 },  // 收车后的一次极近特写（车尾 / 后轮）
       { p: 1, az: 190, r: 11, h: 1.9, ty: 0.82, tz: 0.1, fov: 30 }       // 最后拉出到英雄机位
     ],
@@ -79,24 +79,35 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       gold: "#ffc266",
       white: "#ccdbfa",
       dashes: 0.6,
+      // 角度是屏幕空间角度（相对消失点）：左三 = 150°/190°/230°，右三 = 30°/350°/310°，
+      // 每侧上下两条是暖金、中间那条偏白灰，对应参考视频里的六道主光条。
+      vanish: [0.5, 0.46],
+      barIntensity: 0.26,
       bars: [
-        { angle: 10, width: 0.4, tone: "white" },
-        { angle: 70, width: 0.52, tone: "gold" },
-        { angle: 130, width: 0.46, tone: "white" },
-        { angle: 190, width: 0.4, tone: "white" },
-        { angle: 250, width: 0.52, tone: "gold" },
-        { angle: 310, width: 0.46, tone: "white" }
+        { angle: 30, width: 0.34, tone: "gold" },
+        { angle: 350, width: 0.28, tone: "white" },
+        { angle: 310, width: 0.34, tone: "gold" },
+        { angle: 150, width: 0.34, tone: "gold" },
+        { angle: 190, width: 0.28, tone: "white" },
+        { angle: 230, width: 0.34, tone: "gold" }
       ]
     }
   },
 
   post: {
     exposure: 1.16,
-    bloom: { strength: 0.4, radius: 0.58, threshold: 0.88, speedBoost: 0.3 },
+    bloom: { strength: 0.38, radius: 0.5, threshold: 0.9, speedBoost: 0.26 },
     smear: { strength: 0.055, chroma: 0.01 }
   },
 
   zoom: { min: 0.55, max: 2.4, wheelStep: 0.0016 },
+
+  // 车上的发光点：T 字灯（车顶摄像机，常亮）与雨灯（车尾，只在发车时亮）。
+  // 颜色按参考视频逐点取样后做了中性化（取样到的是屏幕照片的偏色）。
+  lights: [
+    { pos: [0, 1.02, -0.72], color: "#d9e85f", size: 0.3, intensity: 0.9, mode: "always" },
+    { pos: [0, 0.62, -2.72], color: "#ff2f4f", size: 0.34, intensity: 0.8, mode: "race" }
+  ],
 
   // 参考站点：未发车是 HOLD TO RACE，发车后变成 RE-ENGAGE TO SLOW（提示松开回到慢速）
   race: { idleLabel: "HOLD TO RACE", label: "RE-ENGAGE TO SLOW", cap: "CHASE THE LIMIT" },
