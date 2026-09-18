@@ -1,6 +1,7 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { deleteOtherSessions, findUserById, getAuthUser, getCookie, LEGACY_SESSION_COOKIE, SESSION_COOKIE, updatePassword } from "@/lib/auth";
+import { consumeTotpFactor, userTotpEnabled } from "@/lib/totpAuth";
 import { validatePassword, verifyPassword } from "@/lib/password";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
@@ -25,6 +26,10 @@ export async function POST(request: Request) {
   if (!row || !verifyPassword(oldPassword, row.password_hash)) {
     logSecurityEvent(request, user.id, "password_change_rejected", "old password mismatch");
     return NextResponse.json({ error: "原密码错误" }, { status: 400 });
+  }
+  if (userTotpEnabled(user.id) && !consumeTotpFactor(user.id, String(body.code ?? ""))) {
+    logSecurityEvent(request, user.id, "password_change_rejected", "totp mismatch");
+    return NextResponse.json({ error: "二次验证失败" }, { status: 400 });
   }
   const pwdErr = validatePassword(newPassword);
   if (pwdErr) {

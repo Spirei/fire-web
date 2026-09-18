@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -39,4 +39,8 @@ export function decryptSecret(value: string) {
   } catch {
     return "";
   }
+}
+
+export function hmacWithDataKey(value: string) {
+  return createHmac("sha256", key()).update(value).digest("hex");
 }

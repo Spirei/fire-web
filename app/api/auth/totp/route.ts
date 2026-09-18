@@ -1,28 +1,32 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
-import { findUserById, getAuthUser } from "@/lib/auth";
+import { deleteOtherSessions, findUserById, getAuthUser, getCookie, LEGACY_SESSION_COOKIE, SESSION_COOKIE } from "@/lib/auth";
 import { beginTotpSetup, disableTotp, enableTotp, userTotpEnabled } from "@/lib/totpAuth";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
 import { verifyPassword } from "@/lib/password";
 
+const NO_STORE = { headers: { "Cache-Control": "no-store, private" } };
+
 export async function GET(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
-  return NextResponse.json({ enabled: userTotpEnabled(user.id) }, { headers: { "Cache-Control": "no-store, private" } });
+  return NextResponse.json({ enabled: userTotpEnabled(user.id) }, NO_STORE);
 }
 
 export async function POST(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  if (!rateLimit(`totp-setup:${user.id}`, 8, 15 * 60 * 1000)) {
+    return NextResponse.json({ error: "尝试过于频繁，请稍后再试" }, { status: 429 });
+  }
   if (userTotpEnabled(user.id)) return NextResponse.json({ error: "已经开启二次验证" }, { status: 409 });
   const setup = await beginTotpSetup(user.id, user.username, "Fire");
   logSecurityEvent(request, user.id, "auth.totp.setup", "开始绑定二次验证");
   return NextResponse.json({
     secret: setup.secret,
-    otpauthUrl: setup.otpauthUrl,
     qrSvg: setup.qrSvg
-  }, { headers: { "Cache-Control": "no-store, private" } });
+  }, NO_STORE);
 }
 
 export async function PUT(request: Request) {
@@ -34,8 +38,9 @@ export async function PUT(request: Request) {
   const body = await readJsonBody(request, 4 * 1024).catch(() => null);
   const result = enableTotp(user.id, String(body?.code ?? ""));
   if (!result.ok) return NextResponse.json({ error: result.error || "验证失败" }, { status: 400 });
-  logSecurityEvent(request, user.id, "auth.totp.enabled", "二次验证已开启");
-  return NextResponse.json({ ok: true, backupCodes: result.backupCodes });
+  deleteOtherSessions(user.id, getCookie(request, SESSION_COOKIE) || getCookie(request, LEGACY_SESSION_COOKIE));
+  logSecurityEvent(request, user.id, "auth.totp.enabled", "二次验证已开启，其它会话已退出");
+  return NextResponse.json({ ok: true, backupCodes: result.backupCodes }, NO_STORE);
 }
 
 export async function DELETE(request: Request) {
@@ -51,9 +56,9 @@ export async function DELETE(request: Request) {
   const passwordOk = Boolean(row && verifyPassword(password, row.password_hash));
   const result = disableTotp(user.id, code, passwordOk);
   if (!result.ok) {
-    logSecurityEvent(request, user.id, "auth.totp.disable_rejected", result.error || "关闭二次验证失败");
+    logSecurityEvent(request, user.id, "auth.totp.disable_rejected", "关闭二次验证失败");
     return NextResponse.json({ error: result.error || "关闭失败" }, { status: 400 });
   }
   logSecurityEvent(request, user.id, "auth.totp.disabled", "二次验证已关闭");
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true }, NO_STORE);
 }

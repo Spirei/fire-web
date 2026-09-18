@@ -1686,17 +1686,17 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [totpBackupCodes, setTotpBackupCodes] = useState<string[] | null>(null);
   const [totpDisablePassword, setTotpDisablePassword] = useState("");
   const [totpDisableCode, setTotpDisableCode] = useState("");
+  const [totpPasswordCode, setTotpPasswordCode] = useState("");
   const [totpMsg, setTotpMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   useEffect(() => {
-    if (sub !== "profile") return;
     fetch("/api/auth/totp", { cache: "no-store", credentials: "same-origin" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (typeof data?.enabled === "boolean") setTotpEnabled(data.enabled);
       })
       .catch(() => {});
-  }, [sub]);
+  }, []);
 
   async function startTotpSetup() {
     setTotpMsg(null);
@@ -1732,8 +1732,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setTotpSetup(null);
       setTotpSetupCode("");
       setTotpBackupCodes(Array.isArray(data?.backupCodes) ? data.backupCodes : []);
-      setTotpMsg({ type: "ok", text: "二次验证已开启，请立即保存备用码" });
-      showToast("二次验证已开启");
+      setTotpMsg({ type: "ok", text: "二次验证已开启。备用码只显示这一次，其它设备需要重新登录。" });
+      showToast("二次验证已开启，其它设备需重新登录");
     } catch (err) {
       setTotpMsg({ type: "err", text: err instanceof Error ? err.message : "验证失败" });
     } finally {
@@ -1780,13 +1780,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       const res = await fetch("/api/auth/password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ oldPassword, newPassword })
+        body: JSON.stringify({ oldPassword, newPassword, code: totpPasswordCode })
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "修改失败");
       setPwdMsg({ type: "ok", text: "密码修改成功，下次登录请使用新密码" });
       showToast("密码修改成功");
-      setOldPassword(""); setNewPassword(""); setConfirmPassword("");
+      setOldPassword(""); setNewPassword(""); setConfirmPassword(""); setTotpPasswordCode("");
     } catch (err) {
       setPwdMsg({ type: "err", text: err instanceof Error ? err.message : "修改失败" });
     } finally {
@@ -3324,6 +3324,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <label><span>当前密码</span><input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required /></label>
                     <label><span>新密码</span><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required placeholder="至少 8 位，含字母和数字" /></label>
                     <label><span>确认新密码</span><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required /></label>
+                    {totpEnabled && (
+                      <label><span>二次验证码</span><input autoComplete="one-time-code" spellCheck={false} value={totpPasswordCode} onChange={(e) => setTotpPasswordCode(e.target.value)} required placeholder="验证器 6 位数字或备用码" /></label>
+                    )}
                     <button type="submit" disabled={pwdBusy} className="btn btn-ghost btn-sm">{pwdBusy ? "提交中…" : "修改密码"}</button>
                   </form>
                   {pwdMsg && <p className={`settings-form-message ${pwdMsg.type === "ok" ? "is-ok" : "is-error"}`}>{pwdMsg.text}</p>}</>}
@@ -3372,6 +3375,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             验证码
                             <input
                               autoComplete="one-time-code"
+                              spellCheck={false}
+                              maxLength={8}
                               value={totpSetupCode}
                               onChange={(e) => setTotpSetupCode(e.target.value)}
                               placeholder="输入验证器中的 6 位数字"
@@ -3396,13 +3401,18 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           <li key={code} className="rounded-[8px] border border-edge bg-white px-3 py-1.5 dark:bg-[#161b26]">{code}</li>
                         ))}
                       </ul>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm mt-3"
-                        onClick={() => { void copyText(totpBackupCodes.join("\n")); showToast("备用码已复制"); }}
-                      >
-                        复制全部备用码
-                      </button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => { void copyText(totpBackupCodes.join("\n")); showToast("备用码已复制"); }}
+                        >
+                          复制全部备用码
+                        </button>
+                        <button type="button" className="btn btn-line btn-sm" onClick={() => setTotpBackupCodes(null)}>
+                          我已保存
+                        </button>
+                      </div>
                     </div>
                   )}
                   {totpEnabled && (

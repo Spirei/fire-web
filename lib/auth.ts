@@ -280,7 +280,7 @@ export interface AdminUser extends User {
 export function listUsers(): AdminUser[] {
   const now = Date.now();
   const rows = getDb().prepare(`
-    SELECT u.*,
+    SELECT u.id, u.username, u.nickname, u.uid, u.email, u.avatar, u.role, u.created_at, u.is_test, u.totp_enabled,
       (SELECT COUNT(*) FROM records r WHERE r.user_id = u.id) AS records_count,
       EXISTS(SELECT 1 FROM sessions s WHERE s.user_id = u.id AND s.expires_at > ?) AS online
     FROM users u

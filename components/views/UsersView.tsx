@@ -7,7 +7,7 @@ import { showToast } from "@/lib/toast";
 import AppModal from "@/components/AppModal";
 import DeleteIcon from "@/components/DeleteIcon";
 import AppSelect from "@/components/AppSelect";
-import { appConfirm } from "@/lib/appDialog";
+import { appConfirm, appPrompt } from "@/lib/appDialog";
 
 interface AdminUser extends User {
   createdAt: string;
@@ -171,8 +171,14 @@ export default function UsersView() {
 
   async function disableUserTotp(u: AdminUser) {
     if (!await appConfirm(`关闭「${u.username}」的二次验证？该用户下次登录将不再需要验证码。`, { title: "关闭二次验证", danger: true })) return;
+    const password = await appPrompt("请输入你的管理员密码以继续", { title: "安全验证", placeholder: "当前密码" });
+    if (!password) return;
     setMsg(null);
-    const res = await fetch(`/api/users/${u.id}/disable-totp`, { method: "POST" });
+    const res = await fetch(`/api/users/${u.id}/disable-totp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password })
+    });
     const data = await res.json().catch(() => null);
     if (!res.ok) {
       setMsg({ type: "err", text: data?.error || "关闭失败" });

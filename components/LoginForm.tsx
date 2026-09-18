@@ -59,7 +59,14 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
           body: JSON.stringify({ ticket: totpTicket, code: totpCode })
         });
         const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(data?.error || "验证失败");
+        if (!res.ok) {
+          const message = data?.error || "验证失败";
+          if (/过期|次数过多|失效/.test(message)) {
+            setTotpTicket("");
+            setTotpCode("");
+          }
+          throw new Error(message);
+        }
         onClose?.();
         router.push("/records");
         return;
@@ -74,6 +81,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
       if (data?.requires2fa && data?.ticket) {
         setTotpTicket(data.ticket);
         setTotpCode("");
+        setPassword("");
         return;
       }
       // 登录/注册成功：先关闭弹窗，再跳转到记录页，避免弹窗常驻不消失。
@@ -136,6 +144,8 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
             <input
               autoComplete="one-time-code"
               autoFocus
+              spellCheck={false}
+              maxLength={29}
               value={totpCode}
               onChange={(e) => setTotpCode(e.target.value)}
               placeholder="6 位验证码或备用码"

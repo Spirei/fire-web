@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import QRCode from "qrcode";
+import { hmacWithDataKey } from "./secretStorage";
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const STEP_SECONDS = 30;
@@ -28,13 +29,13 @@ export async function totpQrSvg(otpauthUrl: string): Promise<string> {
 
 export function generateBackupCodes(count = 8): string[] {
   return Array.from({ length: count }, () => {
-    const raw = randomBytes(4).toString("hex");
-    return `${raw.slice(0, 4)}-${raw.slice(4)}`;
+    const raw = randomBytes(8).toString("hex");
+    return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12)}`;
   });
 }
 
 export function hashBackupCode(code: string): string {
-  return createHash("sha256").update(normalizeBackupCode(code)).digest("hex");
+  return `v2:${hmacWithDataKey(normalizeBackupCode(code))}`;
 }
 
 export function normalizeBackupCode(code: string): string {
@@ -42,10 +43,15 @@ export function normalizeBackupCode(code: string): string {
 }
 
 export function verifyBackupCode(code: string, hashes: string[]): { ok: boolean; remaining: string[] } {
-  const digest = hashBackupCode(code);
+  if (!Array.isArray(hashes) || hashes.length === 0) return { ok: false, remaining: [] };
+  const normalized = normalizeBackupCode(code);
+  if (normalized.length < 8) return { ok: false, remaining: hashes };
+  const digestV2 = `v2:${hmacWithDataKey(normalized)}`;
+  const digestV1 = createHash("sha256").update(normalized).digest("hex");
   const index = hashes.findIndex((item) => {
+    const target = item.startsWith("v2:") ? digestV2 : digestV1;
     try {
-      return timingSafeEqual(Buffer.from(item, "hex"), Buffer.from(digest, "hex"));
+      return item.length === target.length && timingSafeEqual(Buffer.from(item), Buffer.from(target));
     } catch {
       return false;
     }

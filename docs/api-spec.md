@@ -60,7 +60,7 @@
 
 1. `POST /api/v1/auth/login`，请求体 `{ "username": "你的用户名", "password": "你的密码" }`
 2. 未开启二次验证时，响应 `data` 携带 `token` 与 `expiresIn`（秒）
-3. 已开启二次验证时，密码正确不签发 token，返回 `{ "requires2fa": true, "ticket": "…" }`；接着 `POST /api/v1/auth/login/totp`，请求体 `{ "ticket", "code" }`（`code` 为 6 位 TOTP 或一次性备用码），成功后再拿到 `token`
+3. 已开启二次验证时，密码正确不签发 token，返回 `{ "requires2fa": true, "ticket": "…" }`（ticket 5 分钟有效、同一账号只保留最新一张）；接着 `POST /api/v1/auth/login/totp`，请求体 `{ "ticket", "code" }`（`code` 为 6 位 TOTP 或一次性备用码），成功后再拿到 `token`。ticket 校验失败 8 次作废。
 4. 后续请求头携带 `Authorization: Bearer <token>`
 5. 退出：`POST /api/v1/auth/logout`（携带同一 token）
 

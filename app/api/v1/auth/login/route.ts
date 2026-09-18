@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   if (!body) return fail(40002, "无效的请求体", 400);
   const username = String(body.username ?? "").trim();
   const password = String(body.password ?? "");
-  if (username.length > 20 || password.length > 128) {
+  if (username.length > 254 || password.length > 128) {
     return fail(40103, "用户名或密码错误", 401);
   }
   const userRow = authenticateUser(username, password);
