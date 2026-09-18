@@ -396,10 +396,14 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   contact.renderOrder = 2;
   groundFx.add(contact);
 
-  /** 车周围的椭圆刻度环：长轴顺着车身（和参考图一致），外层两条细线 + 一圈刻度 */
-  const RING_COUNT = 190;
-  const RING_A = 2.85;  // 横向半轴
-  const RING_B = 4.35;  // 车身方向半轴（参考图里椭圆大约比车长出一半）
+  /**
+   * 车下方的刻度环：世界坐标里是一个正圆（屏幕上的椭圆来自俯视透视，参考图也是这样），
+   * 外圈按计时码表排布 144 条径向刻度，每 6 条一根长刻度，内圈再补两条细圆线。
+   */
+  const RING_COUNT = 180;   // 2° 一条，密到像表圈
+  const RING_R = 4.0;
+  const RING_LONG = 0.34;   // 长刻度
+  const RING_SHORT = 0.16;  // 短刻度
   function ellipseOutline(scaleX: number, scaleY: number, lineWidth: number, opacity: number, color: number) {
     const g = new THREE.RingGeometry(1, 1 + lineWidth, 256);
     const mesh = new THREE.Mesh(
@@ -419,15 +423,15 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     mesh.renderOrder = 3;
     return mesh;
   }
-  groundFx.add(ellipseOutline(RING_A, RING_B, 0.012, 0.5, 0xffc08a));
-  groundFx.add(ellipseOutline(RING_A * 1.16, RING_B * 1.16, 0.006, 0.22, 0xffd9b8));
+  groundFx.add(ellipseOutline(RING_R + RING_LONG, RING_R + RING_LONG, 0.008, 0.34, 0xffc08a));
+  groundFx.add(ellipseOutline(RING_R, RING_R, 0.005, 0.18, 0xffd9b8));
   const ringUniforms = {
     uSweep: { value: 0 },
     uSpeed: { value: 0 },
     uTime: { value: 0 },
     uColor: { value: new THREE.Color(0xffb070) }
   };
-  const ringGeo = new THREE.BoxGeometry(0.028, 0.004, 0.2);
+  const ringGeo = new THREE.BoxGeometry(0.024, 0.004, 0.16);
   const ringMat = new THREE.ShaderMaterial({
     uniforms: ringUniforms,
     transparent: true,
@@ -444,11 +448,11 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
       uniform float uSweep; uniform float uSpeed; uniform float uTime; uniform vec3 uColor;
       varying float vIndex;
       void main(){
-        float diff = abs(fract(vIndex - uSweep + 0.5) - 0.5) * 2.0;   // 环上的角距离
-        float glow = pow(1.0 - clamp(diff, 0.0, 1.0), 7.0);
-        float flick = 0.85 + 0.15 * sin(uTime * 3.0 + vIndex * 90.0);
-        float a = (0.1 + glow * 0.95) * flick * (0.75 + uSpeed * 0.6);
-        gl_FragColor = vec4(uColor * (0.7 + glow * 1.6), a);
+      float diff = abs(fract(vIndex - uSweep + 0.5) - 0.5) * 2.0;   // 环上的角距离
+      float glow = pow(1.0 - clamp(diff, 0.0, 1.0), 7.0);
+      float flick = 0.85 + 0.15 * sin(uTime * 3.0 + vIndex * 90.0);
+      float a = (0.3 + glow * 0.8) * flick * (0.8 + uSpeed * 0.5);
+      gl_FragColor = vec4(uColor * (0.8 + glow * 1.4), a);
       }`
   });
   const ring = new THREE.InstancedMesh(ringGeo, ringMat, RING_COUNT);
@@ -460,10 +464,14 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     const zAxis = new THREE.Vector3(0, 0, 1);
     for (let i = 0; i < RING_COUNT; i += 1) {
       const a = (i / RING_COUNT) * Math.PI * 2;
-      pos.set(Math.sin(a) * RING_A, 0.012, Math.cos(a) * RING_B);
-      const tangent = new THREE.Vector3(Math.cos(a) * RING_A, 0, -Math.sin(a) * RING_B).normalize();
-      quat.setFromUnitVectors(zAxis, tangent);
-      m.compose(pos, quat, new THREE.Vector3(1, 1, i % 5 === 0 ? 2.1 : 1));
+      // 径向刻度：从圆周往外画，每 6 条一根长刻度（计时码表排布）
+      const dir = new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
+      const long = i % 15 === 0;   // 180 条里每 15 条一根长刻度 → 12 根，正好是钟面小时刻度
+      const len = long ? RING_LONG : RING_SHORT;
+      pos.copy(dir).multiplyScalar(RING_R + len / 2);
+      pos.y = 0.012;
+      quat.setFromUnitVectors(zAxis, dir);
+      m.compose(pos, quat, new THREE.Vector3(long ? 1.6 : 1, 1, len / 0.16));
       ring.setMatrixAt(i, m);
       idx[i] = i;
     }
@@ -820,8 +828,8 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   // 方位角 0° = 正对车头，90° = 车身左侧，180° = 车尾。
   // 开场对齐参考图：左侧全览（车头朝画面右），随后绕到车头 3/4、细节特写，最后在车尾方向收车。
   const CAM_KEYS = [
-    { p: 0, az: -74, r: 11.2, h: 1.85, ty: 0.98, tz: 0.1, fov: 30 },
-    { p: 0.12, az: -56, r: 10.5, h: 1.72, ty: 0.9, tz: 0.15, fov: 30 },
+    { p: 0, az: -74, r: 12.2, h: 1.9, ty: 0.98, tz: 0.1, fov: 30 },
+    { p: 0.12, az: -56, r: 11.2, h: 1.76, ty: 0.9, tz: 0.15, fov: 30 },
     { p: 0.28, az: -6, r: 9.2, h: 1.3, ty: 0.76, tz: 0.1, fov: 29 },
     { p: 0.4, az: 26, r: 8.3, h: 1.02, ty: 0.62, tz: 0.85, fov: 27 },
     { p: 0.52, az: 66, r: 8.7, h: 0.85, ty: 0.6, tz: 0.4, fov: 28 },
