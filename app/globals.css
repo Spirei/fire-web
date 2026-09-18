@@ -772,15 +772,21 @@
   background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 46%,rgba(30,41,59,.02));
 }
 .fire-sidebar-panel > * { position:relative; z-index:1; }
-/* 默认隐藏滚动条。注意必须带上 .dark 前缀：全站滚动条规则里的「.dark *」与单写一个类的
-   .fire-sidebar-panel 特异性相同（都是 0-1-0），它在文件里更靠后，深色模式下会把这里盖掉，
-   滚动条就变成常显（2026-09-18 修复，浅色模式无此问题）。 */
-.fire-sidebar-panel,.dark .fire-sidebar-panel { scrollbar-color:transparent transparent; }
-.fire-sidebar-panel:hover,.fire-sidebar-panel:focus-within { scrollbar-color:rgba(120,130,145,.45) transparent; }
-.fire-sidebar-panel::-webkit-scrollbar-thumb,.dark .fire-sidebar-panel::-webkit-scrollbar-thumb { background:transparent; }
+/* 默认隐藏、划过才显示。
+   全站 `* { scrollbar-width:thin; scrollbar-color:… }` 会让 Chrome 121+ 忽略 ::-webkit-scrollbar，
+   侧栏再把 scrollbar-color 设成 transparent 等于把滚动条彻底关掉，划过也不出现。
+   这里把两项重置为 auto，Chrome 重新走 4px 的 webkit 滑块：默认透明、悬停着色。 */
+.fire-sidebar-panel,.dark .fire-sidebar-panel { scrollbar-width:auto; scrollbar-color:auto; }
+.fire-sidebar-panel::-webkit-scrollbar,.dark .fire-sidebar-panel::-webkit-scrollbar { width:4px; }
+.fire-sidebar-panel::-webkit-scrollbar-track,.dark .fire-sidebar-panel::-webkit-scrollbar-track { background:transparent; }
+.fire-sidebar-panel::-webkit-scrollbar-thumb,.dark .fire-sidebar-panel::-webkit-scrollbar-thumb { background:transparent; border-radius:999px; }
 .fire-sidebar-panel:hover::-webkit-scrollbar-thumb,.fire-sidebar-panel:focus-within::-webkit-scrollbar-thumb { background:rgba(120,130,145,.45); }
-.dark .fire-sidebar-panel:hover,.dark .fire-sidebar-panel:focus-within { scrollbar-color:rgba(255,255,255,.26) transparent; }
 .dark .fire-sidebar-panel:hover::-webkit-scrollbar-thumb,.dark .fire-sidebar-panel:focus-within::-webkit-scrollbar-thumb { background:rgba(255,255,255,.26); }
+@supports not selector(::-webkit-scrollbar) {
+  .fire-sidebar-panel,.dark .fire-sidebar-panel { scrollbar-width:thin; scrollbar-color:transparent transparent; }
+  .fire-sidebar-panel:hover,.fire-sidebar-panel:focus-within { scrollbar-color:rgba(120,130,145,.45) transparent; }
+  .dark .fire-sidebar-panel:hover,.dark .fire-sidebar-panel:focus-within { scrollbar-color:rgba(255,255,255,.26) transparent; }
+}
 .fire-sidebar-section-label { color: #8f949d; font-size: 12px; font-weight: 600; letter-spacing: .02em; padding: 10px 12px 6px; }
 .fire-sidebar-section-label-spaced { margin-top: 12px; }
 .fire-sidebar-item { margin-bottom:5px; border:1px solid transparent; }

@@ -104,8 +104,11 @@ Review 自查清单（按项目实际走一遍）：
 - 例外只有两种，都必须用**更具体的选择器**覆盖，不要改全局规则：
   - **隐藏**滚动条：横向滑动的胶囊行 / tab 用 `scrollbar-width: none` + `::-webkit-scrollbar { display: none }`（如 `.ticker-scroll`、`.stock-detail-tabs`）；
   - **特殊定制**：订单表、每日盈亏分享列表等自己有明确设计的地方（`.orders-scroll`、`.share-list-scroll`）保持各自样式。
-- 备注：Chrome 只要元素设了标准属性 `scrollbar-width`，就会忽略 `::-webkit-scrollbar` 的像素宽度、改用内置「thin」档；要精确控制 Chrome 宽度得用 `@supports not selector(::-webkit-scrollbar)` 把标准属性只留给 Firefox，改之前先确认清楚。
-- **「默认隐藏、悬停才显示」的写法必须带上 `.dark` 前缀**（参考 `.fire-sidebar-panel`）：全站那条 `.dark *` 规则与单写一个类的选择器**特异性相同（都是 0-1-0）且位置更靠后**，只写类名会在深色模式下被它盖成「常显」（2026-09-18 踩过：左侧导航滚动条默认就露出来）。写法：`.x,.dark .x{scrollbar-color:transparent transparent}` + `.x::-webkit-scrollbar-thumb,.dark .x::-webkit-scrollbar-thumb{background:transparent}`，悬停用 `.x:hover` / `.dark .x:hover`（特异性 0-2-0 / 0-3-0，自然压过后面的全局规则）。
+- 备注：Chrome 121+ 只要元素上存在标准属性 `scrollbar-width` / `scrollbar-color`（包括全站 `*` 设的 thin），就会忽略 `::-webkit-scrollbar*`，改用内置「thin」档。要精确控制 Chrome 宽度，得把这两项重置为 `auto`（或用 `@supports not selector(::-webkit-scrollbar)` 把标准属性只留给 Firefox）。
+- **「默认隐藏、悬停才显示」不要再写 `scrollbar-color:transparent`**（2026-09-19 踩过：左侧导航滚动条彻底消失）。Chrome 忽略 webkit 之后，透明的标准滚动条等于把条子关掉，划过也不出现。正确写法参考 `.fire-sidebar-panel`：
+  - 必须带 `.dark` 前缀：全站 `.dark *` 与单写一个类特异性相同（都是 0-1-0）且位置更靠后，只写类名会在深色模式下被盖回去（2026-09-18 还踩过常显）。
+  - Chrome / Safari：`.x,.dark .x{scrollbar-width:auto;scrollbar-color:auto}`，再用 `::-webkit-scrollbar-thumb` 默认透明、`:hover` / `:focus-within` 着色。
+  - Firefox：放进 `@supports not selector(::-webkit-scrollbar)`，用 `scrollbar-color` 做同样的隐藏 / 悬停。
 
 ## 弹层 / 整屏视图必须 portal 到 body（2026-09-13 起）
 

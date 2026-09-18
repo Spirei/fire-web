@@ -495,12 +495,13 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   });
   await test('sidebar scrollbar stays hidden until hover (dark mode)', () => {
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
-    // 全站那条「.dark *」滚动条规则与单写一个类的选择器特异性相同（都是 0-1-0），
-    // 且位置更靠后 —— 左侧栏的「默认透明」如果不带 .dark 前缀，深色模式下就会被它盖掉、滚动条常显。
-    assert.match(css, /\.fire-sidebar-panel,\s*\.dark \.fire-sidebar-panel\s*\{\s*scrollbar-color:\s*transparent transparent;?\s*\}/, '默认隐藏规则必须同时覆盖深色模式');
-    assert.match(css, /\.dark \.fire-sidebar-panel::-webkit-scrollbar-thumb\s*\{\s*background:\s*transparent;?\s*\}/, 'webkit 分支同样要覆盖深色模式');
-    // 悬停 / 聚焦时仍要显示：深色下由更高特异性的规则接管
-    assert.match(css, /\.dark \.fire-sidebar-panel:hover[^{]*\{\s*scrollbar-color:\s*rgba\(255,\s*255,\s*255,\s*\.?0?\.26\)/, '悬停时深色滚动条仍要显示');
+    // Chrome 121+ 只要元素上有 scrollbar-width / scrollbar-color（全站 * 已设 thin），
+    // 就会忽略 ::-webkit-scrollbar。侧栏若再写 scrollbar-color:transparent，标准滚动条也被关掉。
+    // 必须先重置为 auto（并带 .dark 前缀压过后面的 .dark *），Chrome 才走 4px webkit 滑块。
+    assert.match(css, /\.fire-sidebar-panel,\s*\.dark \.fire-sidebar-panel\s*\{\s*scrollbar-width:\s*auto;\s*scrollbar-color:\s*auto;?\s*\}/, 'Chrome 必须把标准滚动条属性重置为 auto，且覆盖深色模式');
+    assert.match(css, /\.fire-sidebar-panel::-webkit-scrollbar-thumb,\s*\.dark \.fire-sidebar-panel::-webkit-scrollbar-thumb\s*\{\s*background:\s*transparent/, 'webkit 滑块默认透明，且覆盖深色模式');
+    assert.match(css, /\.dark \.fire-sidebar-panel:hover::-webkit-scrollbar-thumb[^{]*\{\s*background:\s*rgba\(255,\s*255,\s*255,\s*\.?0?\.26\)/, '悬停时深色 webkit 滑块要着色');
+    assert.match(css, /@supports not selector\(::-webkit-scrollbar\)[\s\S]*?\.dark \.fire-sidebar-panel:hover[^{]*\{\s*scrollbar-color:\s*rgba\(255,\s*255,\s*255,\s*\.?0?\.26\)/, 'Firefox 用 scrollbar-color 做同样的悬停显示');
   });
   await test('client code never calls crypto.randomUUID (insecure LAN HTTP breaks it)', () => {
     const { clientRandomId } = require(path.join(root, 'lib/randomId.ts'));

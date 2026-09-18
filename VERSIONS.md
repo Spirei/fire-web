@@ -29,6 +29,10 @@
 #### 修复设置导航图标被裁成色块
 - SafeAssetImage 用 grid 叠图片和占位时，百分比高度在未定高的格子里解析不出来，图片退回 SVG 固有尺寸再被 overflow 裁掉，应用导航里「资产分析 / 全球经济」会显示成深色色块。改为由占位撑开盒子，图片绝对定位铺满。
 
+#### 修复左侧导航滚动条彻底消失
+- 9 月 13 日全站加了 `* { scrollbar-width: thin }` 之后，Chrome 121+ 会忽略侧栏的 ::-webkit-scrollbar 悬停规则；9 月 15 日又把 scrollbar-color 设成 transparent，标准滚动条也被关掉，划过也不出现。
+- 侧栏改为把 scrollbar-width / scrollbar-color 重置为 auto，Chrome 重新走 4px webkit 滑块：默认透明，悬停或聚焦才着色；Firefox 仍用 @supports 的 scrollbar-color 悬停。
+
 ---
 
 ## v0.1.34 · 2026-09-18

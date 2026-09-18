@@ -3812,6 +3812,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "交易广场新动态圆点改为绿色",
     desc: "每条新动态前的小圆点由站内未读红改为绿色（浅色用站内绿 #0fa07b，深色提亮为 #34d399），在深浅色下都清晰；分界标签与左侧作者卡片的未读数保持原来的中性色与红色，不受影响。",
     kind: "fix"
+  }, {
+    title: "修复左侧导航滚动条彻底消失",
+    desc: "9 月 13 日全站加了 `* { scrollbar-width: thin }` 之后，Chrome 121+ 会忽略侧栏的 ::-webkit-scrollbar 悬停规则；9 月 15 日又把 scrollbar-color 设成 transparent，标准滚动条也被关掉，划过也不出现。\n侧栏改为把 scrollbar-width / scrollbar-color 重置为 auto，Chrome 重新走 4px webkit 滑块：默认透明，悬停或聚焦才着色；Firefox 仍用 @supports 的 scrollbar-color 悬停。",
+    kind: "fix"
   }]
 };
 
