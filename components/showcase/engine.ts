@@ -140,7 +140,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 像素预算：EffectComposer 会建两块 HalfFloat 的 RT（后来还要泛光的多级），
   // 大窗口 + 高分屏下按设备像素比铺满会直接吃掉几百 MB 显存，久了会丢上下文变白屏。
   // 这里给整屏输出封一个像素上限，超了就降倍率（分辨率换稳定）。
-  const MAX_OUTPUT_PIXELS = 2_600_000;
+  const MAX_OUTPUT_PIXELS = 2_000_000;
   const MIN_PIXEL_RATIO = 0.5;
   const budgetRatio = (w: number, h: number, wanted: number) => {
     const area = Math.max(1, w * h);
@@ -148,7 +148,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     return Math.max(MIN_PIXEL_RATIO, Math.sqrt(MAX_OUTPUT_PIXELS / area));
   };
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
-  renderer.setPixelRatio(budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, Math.min(window.devicePixelRatio || 1, 1.6)));
+  renderer.setPixelRatio(budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, Math.min(window.devicePixelRatio || 1, 1.5)));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = CFG.post.exposure;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -1331,8 +1331,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   }
 
   function resize() {
-    const w = canvas.clientWidth || hud.stage.clientWidth || window.innerWidth;
-    const h = canvas.clientHeight || hud.stage.clientHeight || window.innerHeight;
+    let w = canvas.clientWidth || hud.stage.clientWidth || window.innerWidth;
+    let h = canvas.clientHeight || hud.stage.clientHeight || window.innerHeight;
+    // 关键防线：显示器休眠/唤醒、窗口最小化还原时，浏览器可能在一帧里给出 0 或 NaN 的尺寸，
+    // 一旦让它写进 camera.aspect，投影矩阵就会变成 Infinity/NaN，
+    // 再经 HalfFloat 后期放大成一整屏白（GPU 把 NaN 写成 255）。这里直接拒绝异常尺寸。
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 2 || h < 2) return;
+    w = Math.round(w);
+    h = Math.round(h);
     budgetedScale = budgetRatio(w, h, wantedScale);
     if (renderScale > budgetedScale) {
       renderScale = budgetedScale;
@@ -1358,7 +1364,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    * 帧耗时偏高就降倍率（最低 0.75），长时间流畅再慢慢升回去（最高 1.6），
    * 这样高分屏与集成显卡都能保住流畅度。
    */
-  const wantedScale = Math.min(window.devicePixelRatio || 1, 1.6);
+  const wantedScale = Math.min(window.devicePixelRatio || 1, 1.5);
   let renderScale = Math.min(wantedScale, 1.25);
   let frameCost = 0;
   let frameSamples = 0;
@@ -1592,14 +1598,70 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   });
   let renderErrors = 0;
 
+  /**
+   * 自愈看门狗：GPU 驱动回收上下文时会留下整屏发白（或全黑）的画面，
+   * 这里每隔约 1.5 秒回读 5 个点（中心与四角），连续 3 次都异常就通知上层重建场景。
+   * 正常画面（哪怕在最亮的高速段）不会 5 个点同时接近纯白，因此不会误判。
+   */
+  const gl = renderer.getContext();
+  const probe = new Uint8Array(4);
+  let badFrames = 0;
+  let softTries = 0;
+  let lastProbe = performance.now();
+  function watchdog() {
+    const now = performance.now();
+    if (now - lastProbe < 1500) return;
+    lastProbe = now;
+    const w = canvas.width;
+    const h = canvas.height;
+    if (!w || !h) return;
+    const points: Array<[number, number]> = [
+      [Math.round(w / 2), Math.round(h / 2)],
+      [Math.round(w * 0.06), Math.round(h * 0.06)],
+      [Math.round(w * 0.94), Math.round(h * 0.06)],
+      [Math.round(w * 0.06), Math.round(h * 0.94)],
+      [Math.round(w * 0.94), Math.round(h * 0.94)]
+    ];
+    let white = 0;
+    let black = 0;
+    for (const [x, y] of points) {
+      gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
+      const lum = (probe[0] * 0.299 + probe[1] * 0.587 + probe[2] * 0.114) / 255;
+      if (lum > 0.9) white += 1;
+      if (lum < 0.012) black += 1;
+    }
+    if (white >= 5 || black >= 5) {
+      badFrames += 1;
+      if (badFrames >= 3) {
+        badFrames = 0;
+        if (softTries < 2) {
+          // 先做一次“软恢复”：多数白屏是尺寸/投影矩阵被写坏，重新算一次尺寸就能回来
+          softTries += 1;
+          resize();
+        } else {
+          softTries = 0;
+          options.onContextLost?.();
+        }
+      }
+    } else {
+      badFrames = 0;
+      softTries = 0;
+    }
+  }
+
   /* ---------- 10) 渲染循环：不可见时暂停 ---------- */
   let last = performance.now();
   let pSmooth = 0;
   const tick = () => {
     const now = performance.now();
-    const dt = Math.min((now - last) / 1000, 0.05);
-    const frameMs = now - last;
+    const rawDt = (now - last) / 1000;
+    const dt = Number.isFinite(rawDt) ? Math.min(Math.max(rawDt, 0), 0.05) : 1 / 60;
+    const frameMs = Number.isFinite(now - last) ? now - last : 16.7;
     last = now;
+    if (!canvas.width || !canvas.height || !Number.isFinite(camera.aspect)) {
+      resize();
+      if (!canvas.width || !canvas.height || !Number.isFinite(camera.aspect)) return;
+    }
     if (!active || document.hidden) return;
     // 滚动进度先做一阶平滑：鼠标滚轮的台阶感不会直接传到镜头上，整体才顺
     const target = progress();
@@ -1609,6 +1671,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     try {
       render(pSmooth, dt);
       renderErrors = 0;
+      watchdog();
     } catch (err) {
       // 单帧偶发错误不要拖死整个循环；连续出错说明上下文已经不健康，重建场景
       renderErrors += 1;
@@ -1684,7 +1747,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       pmrem.dispose();
       backdrop.dispose();
       renderer.dispose();
-      renderer.forceContextLoss();
+      try {
+        renderer.forceContextLoss();
+      } catch {
+        /* 上下文可能已经被驱动回收，忽略 */
+      }
     },
     setProgress: (p: number, settle = 0) => {
       const steps = Math.max(1, Math.round(settle * 60));

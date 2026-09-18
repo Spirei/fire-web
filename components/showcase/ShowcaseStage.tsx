@@ -37,6 +37,8 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
   const [racing, setRacing] = useState(false);
   // WebGL 上下文丢了就重建一次场景（重建计数用作 key，触发重新挂载）
   const [rebuild, setRebuild] = useState(0);
+  // 第二次重建开始主动降级：贴图最长边收到 2048（4K 贴图约占 236MB 显存），换取稳定
+  const degraded = rebuild >= 2;
   const [error, setError] = useState<string | null>(null);
   const phaseRef = useRef(0);
   const fadeTimer = useRef<number | null>(null);
@@ -67,7 +69,9 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
         if (cancelled) return;
         handle = createShowcaseScene({
           canvas,
-          config,
+          config: degraded
+            ? { ...config, model: { ...config.model, maxTextureSize: 2048 } }
+            : config,
           hud: {
             scroll,
             stage,
@@ -115,7 +119,7 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
       }
       if (fadeTimer.current) window.clearTimeout(fadeTimer.current);
     };
-  }, [config, handlePhase, rebuild]);
+  }, [config, handlePhase, rebuild, degraded]);
 
   const current = config.phases[phase] ?? config.phases[0];
 
