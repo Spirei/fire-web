@@ -758,13 +758,13 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5 text-sm">
                       {/* 未读圆点：主流阅读器（Gmail / Feedly / Inoreader）都用「一个小圆点」表示这条没看过，
-                          并且放在标题行最前面，比在时间后面贴一枚文字角标轻得多 */}
+                          并且放在标题行最前面，比在时间后面贴一枚文字角标轻得多；颜色用站内绿（浅色 #0fa07b、深色提亮） */}
                       {isUnseenPost(post, seenOnLoad) ? (
                         <span
                           role="img"
                           aria-label="上次访问之后的新动态"
                           title="上次访问之后的新动态"
-                          className="h-1.5 w-1.5 flex-none rounded-full bg-up dark:bg-[#ff8a8a]"
+                          className="h-1.5 w-1.5 flex-none rounded-full bg-down dark:bg-[#34d399]"
                         />
                       ) : null}
                       <strong className="text-ink dark:text-white">{author.name}</strong>
