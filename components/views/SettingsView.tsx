@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { isSixDigitTotp, normalizeTotpDigits } from "@/lib/totpInput";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { GroupConfig, ModelServiceConfig, SiteSettings, TabConfig, TickerConfig } from "@/lib/types";
@@ -1706,6 +1707,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [totpBusy, setTotpBusy] = useState(false);
   const [totpSetup, setTotpSetup] = useState<{ secret: string; qrPng: string; otpauthUrl: string } | null>(null);
   const [totpSetupCode, setTotpSetupCode] = useState("");
+  const totpSetupAutoTried = useRef("");
   const [totpBackupCodes, setTotpBackupCodes] = useState<string[] | null>(null);
   const [totpDisablePassword, setTotpDisablePassword] = useState("");
   const [totpDisableCode, setTotpDisableCode] = useState("");
@@ -1734,6 +1736,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         otpauthUrl: String(data.otpauthUrl || "")
       });
       setTotpSetupCode("");
+      totpSetupAutoTried.current = "";
       setTotpBackupCodes(null);
     } catch (err) {
       setTotpMsg({ type: "err", text: err instanceof Error ? err.message : "无法开始绑定" });
@@ -1742,8 +1745,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     }
   }
 
-  async function confirmTotpSetup(e: React.FormEvent) {
-    e.preventDefault();
+  async function confirmTotpSetup(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (totpBusy || !isSixDigitTotp(totpSetupCode)) return;
     setTotpMsg(null);
     setTotpBusy(true);
     try {
@@ -1766,6 +1770,30 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     } finally {
       setTotpBusy(false);
     }
+  }
+
+  useEffect(() => {
+    if (!totpSetup || totpBusy) return;
+    if (!isSixDigitTotp(totpSetupCode)) {
+      totpSetupAutoTried.current = "";
+      return;
+    }
+    if (totpSetupAutoTried.current === totpSetupCode) return;
+    totpSetupAutoTried.current = totpSetupCode;
+    void confirmTotpSetup();
+  }, [totpSetupCode, totpSetup, totpBusy]);
+
+  function downloadBackupCodes() {
+    if (!totpBackupCodes?.length) return;
+    const body = `Fire 二次验证备用码\n每条只能用一次，请妥善保存。\n\n${totpBackupCodes.join("\n")}\n`;
+    const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "fire-backup-codes.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("备用码已下载");
   }
 
   async function disableTotp(e: React.FormEvent) {
@@ -3448,7 +3476,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           <img
                             alt="二次验证二维码"
                             src={totpSetup.qrPng}
-                            className="h-[240px] w-[240px] rounded-[10px] border border-edge bg-white p-2"
+                            className="h-auto w-full max-w-[240px] rounded-[10px] border border-edge bg-white p-2"
                           />
                         )}
                       </div>
@@ -3469,13 +3497,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             验证码
                             <input
                               autoComplete="one-time-code"
+                              autoFocus
                               spellCheck={false}
-                              maxLength={8}
+                              inputMode="numeric"
+                              maxLength={6}
                               value={totpSetupCode}
-                              onChange={(e) => setTotpSetupCode(e.target.value)}
-                              placeholder="输入验证器中的 6 位数字"
+                              onChange={(e) => setTotpSetupCode(normalizeTotpDigits(e.target.value))}
+                              placeholder="6 位数字"
                               required
-                              className="sw-row-input w-full min-w-0"
+                              className="sw-row-input w-full min-w-0 text-center font-mono text-[18px] tracking-[0.35em]"
                             />
                           </label>
                           <div className="flex flex-wrap gap-2">
@@ -3503,13 +3533,16 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         >
                           复制全部备用码
                         </button>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={downloadBackupCodes}>
+                          下载备用码
+                        </button>
                         <button type="button" className="btn btn-line btn-sm" onClick={() => setTotpBackupCodes(null)}>
                           我已保存
                         </button>
                       </div>
                     </div>
                   )}
-                  {totpEnabled && (
+                  {totpEnabled && !totpBackupCodes?.length && (
                     <form onSubmit={disableTotp} className="mt-4 grid gap-3 sm:grid-cols-2">
                       <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
                         当前密码

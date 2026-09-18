@@ -692,6 +692,13 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   await test('totp: generate, verify, replay, backup codes, login ticket', async () => {
     const totp = require(path.join(root, 'lib/totp.ts'));
     const totpAuth = require(path.join(root, 'lib/totpAuth.ts'));
+    const totpInput = require(path.join(root, 'lib/totpInput.ts'));
+    assert.equal(totpInput.normalizeTotpDigits('12 34 56'), '123456');
+    assert.equal(totpInput.normalizeTotpDigits('1234567'), '123456');
+    assert.equal(totpInput.isSixDigitTotp('123456'), true);
+    assert.equal(totpInput.isSixDigitTotp('12345'), false);
+    assert.equal(totpInput.normalizeBackupInput('ABCD-EF01-2345-6789 extra'), 'abcd-ef01-2345-6789');
+    assert.equal(totpInput.isCompleteBackupCode('abcd-ef01'), true);
     const secret = totp.generateTotpSecret();
     assert.match(secret, /^[A-Z2-7]{32}$/);
     const url = totp.totpOtpauthUrl('Fire', 'review_user', secret);
@@ -759,6 +766,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const loginForm = fs.readFileSync(path.join(root, 'components/LoginForm.tsx'), 'utf8');
     assert(loginForm.includes('/api/auth/login/totp'));
     assert(loginForm.includes('{!totpTicket && ('));
+    assert(loginForm.includes('使用备用码'));
+    assert(loginForm.includes('normalizeTotpDigits'));
     const loginRoute = fs.readFileSync(path.join(root, 'app/api/auth/login/route.ts'), 'utf8');
     assert(loginRoute.includes('requires2fa'));
     assert(loginRoute.includes('createLoginTicket'));
@@ -776,6 +785,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('或手动输入密钥'));
     assert(settings.includes('确认开启后密钥和二维码都不再显示'));
     assert(settings.includes('confirmTotpSetup} className="mt-4 flex flex-col gap-3"'));
+    assert(settings.includes('下载备用码'));
+    assert(settings.includes('totpEnabled && !totpBackupCodes?.length'));
     assert(!settings.includes('/api/auth/totp/reveal'));
     assert(!settings.includes('添加其他验证器'));
     // 入口名用通用叫法 2FA，但点进去的页面文案保持「二次验证」

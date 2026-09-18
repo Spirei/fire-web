@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { isCompleteBackupCode, isSixDigitTotp, normalizeBackupInput, normalizeTotpDigits } from "@/lib/totpInput";
 
 type Mode = "login" | "register";
 
@@ -16,6 +17,9 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [totpTicket, setTotpTicket] = useState("");
   const [totpCode, setTotpCode] = useState("");
+  const [useBackupCode, setUseBackupCode] = useState(false);
+  const totpAutoTried = useRef("");
+  const totpSubmitting = useRef(false);
   const [allowRegister, setAllowRegister] = useState(true);
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -39,9 +43,53 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
   }, [router]);
 
   const formValid = useMemo(
-    () => totpTicket ? totpCode.replace(/\s/g, "").length === 6 || totpCode.replace(/[^a-f0-9]/gi, "").length >= 8 : username.trim().length > 0 && password.length > 0 && (mode === "login" || confirm.length > 0),
-    [username, password, mode, confirm, totpTicket, totpCode]
+    () => totpTicket
+      ? (useBackupCode ? isCompleteBackupCode(totpCode) : isSixDigitTotp(totpCode))
+      : username.trim().length > 0 && password.length > 0 && (mode === "login" || confirm.length > 0),
+    [username, password, mode, confirm, totpTicket, totpCode, useBackupCode]
   );
+
+  async function completeTotp(code: string) {
+    if (!totpTicket || totpSubmitting.current) return;
+    totpSubmitting.current = true;
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/login/totp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticket: totpTicket, code })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const message = data?.error || "验证失败";
+        if (/过期|次数过多|失效/.test(message)) {
+          setTotpTicket("");
+          setTotpCode("");
+          setUseBackupCode(false);
+        }
+        throw new Error(message);
+      }
+      onClose?.();
+      router.push("/records");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "验证失败");
+    } finally {
+      totpSubmitting.current = false;
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!totpTicket || useBackupCode || loading) return;
+    if (!isSixDigitTotp(totpCode)) {
+      totpAutoTried.current = "";
+      return;
+    }
+    if (totpAutoTried.current === totpCode) return;
+    totpAutoTried.current = totpCode;
+    void completeTotp(totpCode);
+  }, [totpCode, totpTicket, useBackupCode, loading]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,27 +98,12 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
       setError("两次输入的密码不一致");
       return;
     }
+    if (totpTicket) {
+      void completeTotp(totpCode);
+      return;
+    }
     setLoading(true);
     try {
-      if (totpTicket) {
-        const res = await fetch("/api/auth/login/totp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ticket: totpTicket, code: totpCode })
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) {
-          const message = data?.error || "验证失败";
-          if (/过期|次数过多|失效/.test(message)) {
-            setTotpTicket("");
-            setTotpCode("");
-          }
-          throw new Error(message);
-        }
-        onClose?.();
-        router.push("/records");
-        return;
-      }
       const res = await fetch(`/api/auth/${mode === "login" ? "login" : "register"}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -81,6 +114,8 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
       if (data?.requires2fa && data?.ticket) {
         setTotpTicket(data.ticket);
         setTotpCode("");
+        setUseBackupCode(false);
+        totpAutoTried.current = "";
         setPassword("");
         return;
       }
@@ -106,7 +141,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
             {totpTicket ? "二次验证" : mode === "login" ? "登录" : "注册账号"}
           </h1>
           <p className="mt-1 text-[13px] text-muted">
-            {totpTicket ? "请输入验证器中的 6 位数字，或备用码" : mode === "login" ? "欢迎回来，继续你的投资记录" : "创建账号，数据独立保存在服务端"}
+            {totpTicket ? (useBackupCode ? "请输入一次性备用码" : "请输入验证器中的 6 位数字") : mode === "login" ? "欢迎回来，继续你的投资记录" : "创建账号，数据独立保存在服务端"}
           </p>
         </div>
         <button
@@ -140,17 +175,18 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
       <form onSubmit={submit} className="mt-7 flex flex-col gap-4">
         {totpTicket ? (
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-            验证码
+            {useBackupCode ? "备用码" : "验证码"}
             <input
               autoComplete="one-time-code"
               autoFocus
               spellCheck={false}
-              maxLength={29}
+              inputMode={useBackupCode ? "text" : "numeric"}
+              maxLength={useBackupCode ? 19 : 6}
               value={totpCode}
-              onChange={(e) => setTotpCode(e.target.value)}
-              placeholder="6 位验证码或备用码"
+              onChange={(e) => setTotpCode(useBackupCode ? normalizeBackupInput(e.target.value) : normalizeTotpDigits(e.target.value))}
+              placeholder={useBackupCode ? "xxxx-xxxx-xxxx-xxxx" : "6 位数字"}
               required
-              className={`${inputCls} tracking-[0.18em]`}
+              className={`${inputCls} text-center font-mono ${useBackupCode ? "tracking-[0.12em]" : "text-[20px] tracking-[0.35em]"}`}
             />
           </label>
         ) : null}
@@ -244,8 +280,15 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
         </button>
 
         {totpTicket && (
-          <p className="mt-1 text-center text-[13px] text-muted">
-            <button type="button" onClick={() => { setTotpTicket(""); setTotpCode(""); setError(""); }} className="font-semibold text-ink underline-offset-4 hover:underline">返回账号密码</button>
+          <p className="mt-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-[13px] text-muted">
+            <button
+              type="button"
+              onClick={() => { setUseBackupCode((v) => !v); setTotpCode(""); setError(""); totpAutoTried.current = ""; }}
+              className="font-semibold text-ink underline-offset-4 hover:underline"
+            >
+              {useBackupCode ? "使用验证器验证码" : "使用备用码"}
+            </button>
+            <button type="button" onClick={() => { setTotpTicket(""); setTotpCode(""); setUseBackupCode(false); setError(""); }} className="font-semibold text-ink underline-offset-4 hover:underline">返回账号密码</button>
           </p>
         )}
 
