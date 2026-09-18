@@ -74,6 +74,9 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     maxSpeed: 34,
     topKmh: 355,
     launchTravel: 11,
+    // 顶点粒子隧道（零跑 C16 课件的做法）：拿车模顶点当粒子种子，顶点着色器里做位移，
+    // 没有 CPU 模拟也没有额外显存，只在冲刺时出现，负责给隧道补上纵深与视差。
+    shards: { count: 420, color: "#dff3ff", size: 0.1, spread: 12, far: 52, near: -16, opacity: 0.4 },
     tunnel: {
       radius: 26,
       length: 120,

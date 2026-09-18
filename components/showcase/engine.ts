@@ -79,6 +79,18 @@ function normalizeConfig(config: ShowcaseConfig) {
       pool: config.ground?.pool ?? 0.14
     },
     speed: {
+      shards:
+        config.speed.shards === false
+          ? null
+          : {
+              count: config.speed.shards?.count ?? 900,
+              color: config.speed.shards?.color ?? "#dff3ff",
+              size: config.speed.shards?.size ?? 0.22,
+              spread: config.speed.shards?.spread ?? 9,
+              far: config.speed.shards?.far ?? 52,
+              near: config.speed.shards?.near ?? -16,
+              opacity: config.speed.shards?.opacity ?? 0.85
+            },
       maxSpeed: config.speed.maxSpeed ?? 34,
       topKmh: config.speed.topKmh ?? 355,
       launchTravel: config.speed.launchTravel ?? 11,
@@ -895,6 +907,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     carRoot.add(light);
     carLights.push({ sprite, light, intensity: def.intensity ?? 0.7, mode: def.mode ?? "race" });
   });
+  let shardMesh: THREE.Mesh | null = null;
+  let shardUniformsRef: {
+    uTime: { value: number };
+    uSpeed: { value: number };
+    uOpacity: { value: number };
+  } | null = null;
   const spinAxis = new THREE.Vector3(1, 0, 0);   // 轮子自转轴（config.model.wheelAxis）
   const wheelPivots: Array<
     Array<{ mesh: THREE.Mesh; angle: number; rot: THREE.Matrix4; t1: THREE.Matrix4; t2: THREE.Matrix4 }>
@@ -941,6 +959,113 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       out.set(key, { geometry: g, center: min.clone().add(max).multiplyScalar(0.5) });
     });
     return out;
+  }
+
+  /**
+   * 顶点粒子隧道（参考零跑 C16 公开课的做法）：
+   * 从车模顶点里等距采样若干点当粒子种子，每颗粒子只存「自己的位置 + 随机相位」，
+   * 位置偏移全部在顶点着色器里算 —— 没有 CPU 粒子模拟、没有每帧上传、也没有额外贴图，
+   * 因此这一层的显存占用几乎为零（只有一个很小的实例化三角形缓冲）。
+   */
+  function buildShardField(car: THREE.Object3D) {
+    const SHARD = CFG.speed.shards;
+    if (!SHARD) return;
+    car.updateMatrixWorld(true);
+    const sampled: THREE.Vector3[] = [];
+    const meshes: THREE.Mesh[] = [];
+    car.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.geometry?.attributes?.position) return;
+      meshes.push(mesh);
+    });
+    if (meshes.length === 0) return;
+    const perMesh = Math.max(8, Math.ceil(SHARD.count / meshes.length));
+    const v = new THREE.Vector3();
+    meshes.forEach((mesh) => {
+      const pos = mesh.geometry.attributes.position as THREE.BufferAttribute;
+      const step = Math.max(1, Math.floor(pos.count / perMesh));
+      for (let i = 0; i < pos.count; i += step) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+        sampled.push(v.clone());
+      }
+    });
+    if (sampled.length === 0) return;
+    // 均匀抽到目标数量（保持形状分布）
+    const stepAll = Math.max(1, Math.floor(sampled.length / SHARD.count));
+    const picked = sampled.filter((_, i) => i % stepAll === 0).slice(0, SHARD.count);
+    const base = new THREE.BufferGeometry();
+    // 基础形状：一个三角形，用重心坐标在片元里只画边框（和课件里的线框三角一致）
+    base.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0], 3));
+    base.setAttribute("uv", new THREE.Float32BufferAttribute([1, 0, 0, 1, 0, 0, 1, 0, 0, 1], 2));
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.index = base.index;
+    geo.attributes.position = base.attributes.position;
+    geo.attributes.uv = base.attributes.uv;
+    const seeds = new Float32Array(picked.length);
+    const posArr = new Float32Array(picked.length * 3);
+    picked.forEach((p, i) => {
+      seeds[i] = Math.random();
+      posArr[i * 3] = p.x;
+      posArr[i * 3 + 1] = p.y;
+      posArr[i * 3 + 2] = p.z;
+    });
+    geo.setAttribute("aSeed", new THREE.InstancedBufferAttribute(seeds, 1));
+    geo.setAttribute("aOrigin", new THREE.InstancedBufferAttribute(posArr, 3));
+    geo.instanceCount = picked.length;
+    const shardUniforms = {
+      uTime: { value: 0 },
+      uSpeed: { value: 0 },
+      uOpacity: { value: 0 },
+      uColor: { value: new THREE.Color(SHARD.color) },
+      uSize: { value: SHARD.size },
+      uSpread: { value: SHARD.spread },
+      uFar: { value: SHARD.far },
+      uNear: { value: SHARD.near }
+    };
+    const mat = new THREE.ShaderMaterial({
+      uniforms: shardUniforms,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      vertexShader: `
+        attribute float aSeed;
+        attribute vec3 aOrigin;
+        uniform float uTime; uniform float uSpeed; uniform float uSize; uniform float uSpread; uniform float uFar; uniform float uNear;
+        varying vec3 vBary; varying float vFade;
+        void main(){
+          float t = fract(aSeed + uTime * (0.05 + uSpeed * 0.012));
+          // 采样点在横截面里的方向决定往哪边扩散；越靠近镜头扩散越大
+          vec2 planar = vec2(aOrigin.x, aOrigin.z);
+          vec2 dir = normalize(planar + vec2(0.0001, 0.0001));
+          float radial = length(planar);
+          float grow = uSpread * pow(t, 1.5);
+          vec3 center = vec3(dir.x * (radial + grow), aOrigin.y * 0.6 + 0.5, dir.y * (radial + grow));
+          // 沿隧道轴从远处飞到镜头后方（相机在车尾一侧）
+          center.z = mix(uFar, uNear, t);
+          vBary = vec3(uv.x, uv.y, 1.0 - uv.x - uv.y);
+          // 远端淡入、贴近镜头淡出
+          vFade = smoothstep(0.0, 0.12, t) * (1.0 - smoothstep(0.86, 1.0, t));
+          vec3 scaled = position * uSize * (0.6 + 0.8 * fract(aSeed * 7.0));
+          gl_Position = projectionMatrix * viewMatrix * vec4(center + scaled, 1.0);
+        }`,
+      fragmentShader: `
+        uniform vec3 uColor; uniform float uOpacity;
+        varying vec3 vBary; varying float vFade;
+        void main(){
+          float e = min(min(vBary.x, vBary.y), vBary.z);
+          float edge = smoothstep(0.09, 0.0, e);
+          if (edge <= 0.002) discard;
+          gl_FragColor = vec4(uColor, edge * vFade * uOpacity);
+        }`
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 5;
+    mesh.visible = false;
+    scene.add(mesh);
+    shardMesh = mesh;
+    shardUniformsRef = shardUniforms;
   }
 
   const loadTotal = 3;   // 两个 HDR + 一个模型
@@ -1042,6 +1167,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         mesh.visible = false;
       });
 
+      buildShardField(car);
       loadDone += 1;
       reportProgress();
       resize();
@@ -1239,6 +1365,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     tunnel2Uniforms.uTime.value = elapsed * 0.75;
     tunnel2Uniforms.uSpeed.value = reduced ? 0 : speed * 0.8;
     tunnel2Uniforms.uOpacity.value = sps * 0.35;
+    if (shardUniformsRef && shardMesh) {
+      shardUniformsRef.uTime.value = elapsed;
+      shardUniformsRef.uSpeed.value = reduced ? 0 : speed;
+      const on = CFG.speed.shards ? CFG.speed.shards.opacity : 0;
+      shardUniformsRef.uOpacity.value = sps * on;
+      shardMesh.visible = sps > 0.05 && !off.has("shards");
+    }
     if (ringUniformsRef) {
       ringUniformsRef.uTime.value = elapsed;
       ringUniformsRef.uSpeed.value = sps;

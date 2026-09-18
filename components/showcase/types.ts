@@ -141,6 +141,26 @@ export interface ShowcaseConfig {
     topKmh?: number;
     /** 冲刺时车驶离的距离（米） */
     launchTravel?: number;
+    /**
+     * 顶点粒子隧道（参考零跑 C16 公开课的做法）：直接拿车模自身的顶点当粒子种子，
+     * 位移全在顶点着色器里算，没有 CPU 粒子模拟，也不需要额外贴图或渲染目标。
+     * false 表示不要这一层。
+     */
+    shards?:
+      | false
+      | {
+          /** 粒子数量（从车模顶点里等距采样） */
+          count?: number;
+          color?: string;
+          /** 三角形边长（米） */
+          size?: number;
+          /** 越靠近镜头向外扩散的距离（米） */
+          spread?: number;
+          /** 起点与终点在隧道轴上的位置（米） */
+          far?: number;
+          near?: number;
+          opacity?: number;
+        };
     /** 速度线隧道，false 表示不要 */
     tunnel?:
       | false
