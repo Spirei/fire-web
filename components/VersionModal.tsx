@@ -212,25 +212,28 @@ export default function VersionModal({
                             {items.length} 项
                           </span>
                         </div>
-                        <ol className="space-y-2">
-                          {items.map((c, i) => (
+                        <ul className="space-y-2">
+                          {items.map((c) => (
                             <li
                               key={c.title}
-                              className="flex items-start gap-3 rounded-[12px] border border-edge bg-bg-gray/40 px-3.5 py-3 transition-colors hover:border-edge-strong/25 dark:bg-white/5"
+                              className="rounded-[12px] border border-edge bg-bg-gray/40 px-3.5 py-3 transition-colors hover:border-edge-strong/25 dark:bg-white/5"
                             >
-                              <span className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-white text-[12px] font-bold text-ink-2 ring-1 ring-edge dark:bg-white/10 dark:text-white">
-                                {i + 1}
-                              </span>
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="mt-1.5 h-3.5 w-3.5 flex-none text-brand">
-                                <path d="m9 6 6 6-6 6" />
-                              </svg>
-                              <div className="min-w-0 flex-1">
-                                <span className="block text-[13px] font-bold text-ink">{c.title}</span>
-                                <p className="mt-1 text-[12px] leading-relaxed text-muted">{c.desc}</p>
+                              {/* 每行一条、行首一横：标题与说明共用一条左边界，说明缩进一级 —— 与仓库 VERSIONS.md 的写法一致 */}
+                              <div className="flex items-start gap-2">
+                                <span aria-hidden="true" className="flex-none select-none text-[13px] font-semibold text-faint">-</span>
+                                <span className="min-w-0 flex-1 text-[13px] font-bold text-ink">{c.title}</span>
                               </div>
+                              <ul className="mt-1.5 space-y-1 pl-4">
+                                {c.desc.split("\n").filter((line) => line.trim()).map((line, index) => (
+                                  <li key={index} className="flex items-start gap-2">
+                                    <span aria-hidden="true" className="flex-none select-none text-[12px] font-semibold text-faint">-</span>
+                                    <span className="min-w-0 flex-1 text-[12px] leading-relaxed text-muted">{line}</span>
+                                  </li>
+                                ))}
+                              </ul>
                             </li>
                           ))}
-                        </ol>
+                        </ul>
                       </div>
                     );
                   })}
