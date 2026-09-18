@@ -43,16 +43,6 @@ export async function beginTotpSetup(userId: string, account: string, issuer = "
   return { secret, otpauthUrl, qrSvg, qrPng };
 }
 
-export async function revealTotp(userId: string, account: string, code: string, issuer = "Fire") {
-  if (!userTotpEnabled(userId)) return { ok: false as const, error: "尚未开启二次验证" };
-  if (!consumeTotpFactor(userId, code)) return { ok: false as const, error: "验证码不正确" };
-  const secret = readTotpSecret(userId);
-  if (!secret) return { ok: false as const, error: "密钥不可用，请关闭后重新绑定" };
-  const otpauthUrl = totpOtpauthUrl(issuer, account, secret);
-  const [qrSvg, qrPng] = await Promise.all([totpQrSvg(otpauthUrl), totpQrPng(otpauthUrl)]);
-  return { ok: true as const, secret, otpauthUrl, qrSvg, qrPng };
-}
-
 export function enableTotp(userId: string, code: string): { ok: boolean; error?: string; backupCodes?: string[] } {
   if (userTotpEnabled(userId)) return { ok: false, error: "已经开启二次验证" };
   const pending = getDb().prepare("SELECT secret, expires_at FROM totp_setup WHERE user_id = ?").get(userId) as { secret: string; expires_at: number } | undefined;

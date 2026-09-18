@@ -723,6 +723,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(totpAuth.userTotpEnabled(totpUser.id), false);
     const setup = await totpAuth.beginTotpSetup(totpUser.id, totpUser.username, 'Fire');
     assert(setup.qrSvg.includes('<svg'));
+    assert(setup.qrPng.startsWith('data:image/png'));
+    assert(setup.otpauthUrl.includes(`secret=${setup.secret}`));
     assert(!setup.otpauthUrl.includes('chart.googleapis'));
     const enableCode = totp.totpCodeAt(setup.secret);
     const enabled = totpAuth.enableTotp(totpUser.id, enableCode);
@@ -748,15 +750,6 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.match(totpAuth.completeLoginTicket(locked, enabled.backupCodes[1]).error, /次数过多|过期/);
     totpAuth.clearTotp(totpUser.id);
     assert.equal(totpAuth.userTotpEnabled(totpUser.id), false);
-    const bitwardenUser = createUser('totp_bitwarden', 'Totp-test-1234');
-    const bitwardenSetup = await totpAuth.beginTotpSetup(bitwardenUser.id, bitwardenUser.username, 'Fire');
-    const bitwardenEnabled = totpAuth.enableTotp(bitwardenUser.id, totp.totpCodeAt(bitwardenSetup.secret));
-    assert.equal(bitwardenEnabled.ok, true);
-    const revealed = await totpAuth.revealTotp(bitwardenUser.id, bitwardenUser.username, bitwardenEnabled.backupCodes[0]);
-    assert.equal(revealed.ok, true);
-    assert.equal(revealed.secret, bitwardenSetup.secret);
-    assert(revealed.otpauthUrl.includes(`secret=${bitwardenSetup.secret}`));
-    assert(revealed.qrPng.startsWith('data:image/png'));
     const disableUser = createUser('totp_disable', 'Totp-test-1234');
     const setup2 = await totpAuth.beginTotpSetup(disableUser.id, disableUser.username, 'Fire');
     totpAuth.enableTotp(disableUser.id, totp.totpCodeAt(setup2.secret));
@@ -780,8 +773,10 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(spec.includes('/api/v1/auth/login/totp'));
     const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
     assert(settings.includes('复制密钥'));
-    assert(settings.includes('复制 otpauth 链接'));
-    assert(settings.includes('/api/auth/totp/reveal'));
+    assert(settings.includes('或手动输入密钥'));
+    assert(settings.includes('确认开启后密钥和二维码都不再显示'));
+    assert(!settings.includes('/api/auth/totp/reveal'));
+    assert(!settings.includes('添加其他验证器'));
     assert(settings.includes('{ key: "totp", label: "二次验证" }'));
     assert(settings.includes('{sub === "totp" && ('));
     assert(settings.includes('sub: "totp"'));

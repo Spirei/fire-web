@@ -3790,11 +3790,11 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_34_ENTRY,
   version: "v0.1.35",
   date: "2026-09-19",
-  summary: "二次验证可复制密钥，方便 Bitwarden 手动添加。",
+  summary: "二次验证首次同时显示二维码和密钥。",
   software: V0_1_34_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.35" } : item),
   changes: [{
-    title: "二次验证补上可复制密钥，方便 Bitwarden 添加",
-    desc: "Google Authenticator 扫码可用，Bitwarden 通常要手动填写密钥；绑定成功后密钥不再显示，因此无法再加第二台验证器。\n绑定页现在同时给出更大的 PNG 二维码、可复制密钥和 otpauth 链接。\n已经开启的账号可在设置 → 二次验证输入当前验证码后再次显示同一密钥，不必关闭后重绑。",
+    title: "二次验证首次同时显示二维码和密钥",
+    desc: "绑定页按主流站点做法：首次同时给出二维码和可复制密钥（以及 otpauth 链接），确认开启后不再显示。\nBitwarden 等需要手动填密钥的验证器，请在点确认开启前一并添加。",
     kind: "fix"
   }]
 };
