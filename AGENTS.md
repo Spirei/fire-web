@@ -242,10 +242,10 @@ Review 自查清单（按项目实际走一遍）：
 ## 版本记录约定（重要）
 
 - **网站每一次更新（新功能、漏洞修复、安全加固、界面变动、技术栈变动）都必须写入版本记录**，禁止只改代码不记版本。
-- 版本记录单一数据源：`lib/versions.ts`（类型 + 当前版本条目 `CURRENT_VERSION_ENTRY` + `CURRENT_VERSION`）；历史数组 `VERSIONS` 已拆分到 `lib/versions-history.ts`（仅供版本弹窗懒加载，避免约 200KB 历史文案进首屏包）。设置 → 关于 → 版本弹窗展示的内容全部来自这两个文件；同时同步一份人工可读日志到仓库根目录 `VERSIONS.md`。
+- 版本记录单一数据源：`lib/versions.ts`（类型 + 当前版本条目 `CURRENT_VERSION_ENTRY` + `CURRENT_VERSION` + 全量历史数组 `VERSIONS`，**版本记录只维护这一个文件**）。设置 → 关于 → 版本弹窗展示的内容全部来自它；同时同步一份人工可读日志到仓库根目录 `VERSIONS.md`。
 - 每次更新完成后：
   1. **版本以「日」为判断标准**：同一天内的多次更新合并进当天版本号，不单独递增；跨过凌晨（新的一天）后的首次更新才开启新的版本号（v0.1.0 → v0.1.1 → v0.1.2 ...）。
-  2. 今天已有版本条目 → 把新变更追加到 `lib/versions.ts` 的 `CURRENT_VERSION_ENTRY.changes`；跨天 → 把旧 `CURRENT_VERSION_ENTRY` 整体移入 `lib/versions-history.ts` 的 `VERSIONS` 数组头部（替换其中 `CURRENT_VERSION_ENTRY` 占位引用），再在 `lib/versions.ts` 写入新条目（`CURRENT_VERSION_ENTRY` 即当前版本）；
+  2. 今天已有版本条目 → 把新变更追加到 `lib/versions.ts` 的 `CURRENT_VERSION_ENTRY.changes`；跨天 → 把旧 `CURRENT_VERSION_ENTRY` 整体移入同文件 `VERSIONS` 数组头部（替换其中 `CURRENT_VERSION_ENTRY` 占位引用），再写入新的当前版本条目（`CURRENT_VERSION_ENTRY` 即当前版本）；
   3. 变更按类型标记：`feature`（新功能）/ `fix`（修复）/ `security`（安全）；
   4. 弹窗内「前端版本 / 软件版本 / 新功能」三个分区内容保持齐全，软件版本号与当前条目一致；
   5. 同步更新 `VERSIONS.md` 对应章节（新功能 / 修复 / 安全修复 / 界面与规范）。

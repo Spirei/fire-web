@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CURRENT_VERSION, type VersionEntry, type ChangeKind } from "@/lib/versions";
-import { VERSIONS } from "@/lib/versions-history";
+import { CURRENT_VERSION, VERSIONS, type VersionEntry, type ChangeKind } from "@/lib/versions";
 
 function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
@@ -218,11 +217,8 @@ export default function VersionModal({
                               key={c.title}
                               className="rounded-[12px] border border-edge bg-bg-gray/40 px-3.5 py-3 transition-colors hover:border-edge-strong/25 dark:bg-white/5"
                             >
-                              {/* 每行一条、行首一横：标题与说明共用一条左边界，说明缩进一级 —— 与仓库 VERSIONS.md 的写法一致 */}
-                              <div className="flex items-start gap-2">
-                                <span aria-hidden="true" className="flex-none select-none text-[13px] font-semibold text-faint">-</span>
-                                <span className="min-w-0 flex-1 text-[13px] font-bold text-ink">{c.title}</span>
-                              </div>
+                              {/* 改动标题不带横线，具体说明每条一行、行首一横 —— 与仓库 VERSIONS.md 的写法一致 */}
+                              <div className="text-[13px] font-bold text-ink">{c.title}</div>
                               <ul className="mt-1.5 space-y-1 pl-4">
                                 {c.desc.split("\n").filter((line) => line.trim()).map((line, index) => (
                                   <li key={index} className="flex items-start gap-2">

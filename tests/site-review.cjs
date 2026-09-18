@@ -272,7 +272,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     await assert.rejects(()=>saveUpload(new Request('http://localhost:3000/api/upload',{method:'POST',headers:{cookie:`fire_session=${tokens.user}`},body:f})),e=>e.status===403);
   });
   await test('version list includes current version once and previous release',()=>{
-    const {VERSIONS}=require(path.join(root,'lib/versions-history.ts'));const {CURRENT_VERSION}=require(path.join(root,'lib/versions.ts'));
+    const {VERSIONS, CURRENT_VERSION}=require(path.join(root,'lib/versions.ts'));
     assert.equal(VERSIONS.filter(v=>v.version===CURRENT_VERSION.version).length,1);assert(VERSIONS.some(v=>v.version==='v0.1.29'));
     assert.equal(new Set(VERSIONS.map(v=>v.version)).size,VERSIONS.length);
   });
