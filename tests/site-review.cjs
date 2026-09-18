@@ -771,6 +771,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('{sub === "totp" && ('));
     assert(settings.includes('sub: "totp"'));
     assert(!settings.includes('desc: "头像、资料、密码、二次验证、数据管理"'));
+    assert(settings.includes('url.searchParams.delete("anchor")'), '只有一个区块时不写重复的 anchor');
   });
   db.close();console.log(`${passed} regression suites passed (isolated database)`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{ fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode || 0); });

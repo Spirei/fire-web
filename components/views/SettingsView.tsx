@@ -78,6 +78,15 @@ const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; group
   { sub: "about", anchor: "about", label: "关于", groupLabel: "系统", keywords: "关于 版本 技术栈 数据源 更新" }
 ];
 
+function defaultAnchorFor(sub: SubKey): string {
+  return SETTINGS_SEARCH_INDEX.find((item) => item.sub === sub)?.anchor || "info";
+}
+
+function persistSettingsAnchor(sub: SubKey, anchor: string): boolean {
+  const anchors = SETTINGS_SEARCH_INDEX.filter((item) => item.sub === sub);
+  return anchors.length > 1 && anchor !== anchors[0].anchor;
+}
+
 const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   info: "site",
   appearance: "image",
@@ -566,7 +575,7 @@ function ModelProviderIcon({ provider, icon, className = "h-10 w-10" }: { provid
   const meta = MODEL_PROVIDERS.find((item) => item.id === provider) || MODEL_PROVIDERS[2];
   return (
     <span className={`model-provider-icon ${className}`} style={{ "--model-color": meta.color } as React.CSSProperties} aria-hidden="true">
-      {icon ? <SafeAssetImage src={icon} alt="" className="h-full w-full object-contain" fallback={null} /> : provider === "deepseek" ? (
+      {icon ? <SafeAssetImage src={icon} alt="" className="h-full w-full object-contain" style={{ width: "100%", height: "100%" }} fallback={null} /> : provider === "deepseek" ? (
         <svg viewBox="0 0 32 32"><path d="M5.2 17.2c3.7-1 5.4-3.8 5.8-8.1 2 3 4.8 4.7 8.7 4.9 2.4.1 4.5-.5 6.2-1.7-.6 5.9-4.9 10.7-11.1 11.4-4.5.5-8.1-1.4-9.6-6.5Z"/><path d="M20.2 10.6c1.8-2.2 4.3-2.8 7.1-1.7-1.2 2.7-3.5 4-6.9 3.7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
       ) : provider === "openai" ? (
         <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 5.2a6 6 0 0 1 10.2 4.3 6 6 0 0 1-.8 10.4A6 6 0 0 1 16 25.6a6 6 0 0 1-10.2-4.3 6 6 0 0 1 .8-10.4A6 6 0 0 1 16 5.2Z"/><path d="m10.7 9.2 10.6 6.1v7.1M21.4 9.4l-10.7 6.2v7M5.9 16h12.2"/></svg>
@@ -787,15 +796,18 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     if (initialSub === "profile" && requestedAnchor === "totp") {
       setSub("totp");
       setActiveAnchor("totp");
+      syncSettingsUrl("totp", "totp");
       return;
     }
     if (isSettingsSub(initialSub)) {
       const next = initialSub;
-      setSub(isAdminUser || !ADMIN_SUB_KEYS.has(next) ? next : "profile");
-      const nextAnchor = requestedAnchor && SETTINGS_SEARCH_INDEX.some((item) => item.sub === next && item.anchor === requestedAnchor)
+      const resolved = isAdminUser || !ADMIN_SUB_KEYS.has(next) ? next : "profile";
+      setSub(resolved);
+      const nextAnchor = requestedAnchor && SETTINGS_SEARCH_INDEX.some((item) => item.sub === resolved && item.anchor === requestedAnchor)
         ? requestedAnchor
-        : SETTINGS_SEARCH_INDEX.find((item) => item.sub === next)?.anchor;
+        : defaultAnchorFor(resolved);
       if (nextAnchor) setActiveAnchor(nextAnchor);
+      syncSettingsUrl(resolved, nextAnchor);
     }
   }, [initialSub, isAdminUser]);
 
@@ -1816,15 +1828,18 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }
 
   function changeSub(key: SubKey) {
+    const anchor = defaultAnchorFor(key);
     setSub(key);
-    setActiveAnchor(SETTINGS_SEARCH_INDEX.find((x) => x.sub === key)?.anchor || "info");
+    setActiveAnchor(anchor);
+    syncSettingsUrl(key, anchor);
     window.dispatchEvent(new CustomEvent("fire:navigate", { detail: { tab: "settings", sub: key } }));
   }
 
   function syncSettingsUrl(nextSub: SubKey, anchor: string) {
     const url = new URL(window.location.href);
     url.searchParams.set("sub", nextSub);
-    url.searchParams.set("anchor", anchor);
+    if (persistSettingsAnchor(nextSub, anchor)) url.searchParams.set("anchor", anchor);
+    else url.searchParams.delete("anchor");
     window.history.replaceState({}, "", url.toString());
   }
 
@@ -2507,8 +2522,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           >
                             <SafeAssetImage
                               src={assetIcons[t.key.toUpperCase()]}
-                              fallback={<span className="flex h-full w-full items-center justify-center text-muted">{NAV_ICONS[t.key] ?? null}</span>}
-                              className="h-full w-full object-contain p-0.5"
+                              fallback={<span className="flex h-[22px] w-[22px] items-center justify-center text-muted">{NAV_ICONS[t.key] ?? null}</span>}
+                              className="h-full w-full object-contain"
                             />
                             {editingTabs && <span className="absolute inset-0 flex items-center justify-center rounded-[9px] bg-black/45 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                               {blockSaving[`nav-icon:${t.key}`] ? (

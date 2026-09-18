@@ -3701,7 +3701,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     kind: "security"
   }, {
     title: "二次验证改为独立设置项",
-    desc: "从设置 → 个人信息中拆分出来，在账号分组下单独成项，地址为 ?sub=totp。\n个人信息仍然支持在改密时填写验证码。",
+    desc: "从设置 → 个人信息中拆分出来，在账号分组下单独成项，地址为 ?sub=totp。\n只有一个区块时不再重复写 anchor，因此不会出现 ?sub=totp&anchor=totp。\n个人信息仍然支持在改密时填写验证码。",
     kind: "fix"
   }, {
     title: "二次验证安全加固",
