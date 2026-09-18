@@ -105,12 +105,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
 
   zoom: { min: 0.55, max: 2.4, wheelStep: 0.0016 },
 
-  // 车上的发光点：T 字灯（车顶摄像机，常亮）与雨灯（车尾，只在发车时亮）。
-  // 颜色按参考视频逐点取样后做了中性化（取样到的是屏幕照片的偏色）。
-  lights: [
-    { pos: [0, 1.02, -0.72], color: "#d9e85f", size: 0.3, intensity: 0.9, mode: "always" },
-    { pos: [0, 0.62, -2.72], color: "#ff2f4f", size: 0.34, intensity: 0.8, mode: "race" }
-  ],
+  // 车顶 T 字灯与车尾雨灯先去掉（引擎仍支持 lights 配置，换素材时按需再加）
 
   // 参考站点：未发车是 HOLD TO RACE，发车后变成 RE-ENGAGE TO SLOW（提示松开回到慢速）
   race: { idleLabel: "HOLD TO RACE", label: "RE-ENGAGE TO SLOW", cap: "CHASE THE LIMIT" },
