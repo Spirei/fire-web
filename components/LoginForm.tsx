@@ -14,6 +14,8 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [totpTicket, setTotpTicket] = useState("");
+  const [totpCode, setTotpCode] = useState("");
   const [allowRegister, setAllowRegister] = useState(true);
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -37,8 +39,8 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
   }, [router]);
 
   const formValid = useMemo(
-    () => username.trim().length > 0 && password.length > 0 && (mode === "login" || confirm.length > 0),
-    [username, password, mode, confirm]
+    () => totpTicket ? totpCode.replace(/\s/g, "").length === 6 || totpCode.replace(/[^a-f0-9]/gi, "").length >= 8 : username.trim().length > 0 && password.length > 0 && (mode === "login" || confirm.length > 0),
+    [username, password, mode, confirm, totpTicket, totpCode]
   );
 
   async function submit(e: React.FormEvent) {
@@ -50,6 +52,18 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
     }
     setLoading(true);
     try {
+      if (totpTicket) {
+        const res = await fetch("/api/auth/login/totp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ticket: totpTicket, code: totpCode })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data?.error || "验证失败");
+        onClose?.();
+        router.push("/records");
+        return;
+      }
       const res = await fetch(`/api/auth/${mode === "login" ? "login" : "register"}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -57,6 +71,11 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "操作失败");
+      if (data?.requires2fa && data?.ticket) {
+        setTotpTicket(data.ticket);
+        setTotpCode("");
+        return;
+      }
       // 登录/注册成功：先关闭弹窗，再跳转到记录页，避免弹窗常驻不消失。
       onClose?.();
       router.push("/records");
@@ -76,10 +95,10 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-[26px] font-extrabold tracking-[-0.3px] text-ink">
-            {mode === "login" ? "登录" : "注册账号"}
+            {totpTicket ? "二次验证" : mode === "login" ? "登录" : "注册账号"}
           </h1>
           <p className="mt-1 text-[13px] text-muted">
-            {mode === "login" ? "欢迎回来，继续你的投资记录" : "创建账号，数据独立保存在服务端"}
+            {totpTicket ? "请输入验证器中的 6 位数字，或备用码" : mode === "login" ? "欢迎回来，继续你的投资记录" : "创建账号，数据独立保存在服务端"}
           </p>
         </div>
         <button
@@ -93,7 +112,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
       </div>
 
       {/* 登录方式：用户名 / 邮箱 */}
-      {mode === "login" && (
+      {mode === "login" && !totpTicket && (
         <div className="mt-6 grid grid-cols-2 rounded-full bg-bg-gray p-1">
           {([["username", "用户名登录"], ["email", "邮箱登录"]] as const).map(([key, label]) => (
             <button
@@ -111,6 +130,22 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
       )}
 
       <form onSubmit={submit} className="mt-7 flex flex-col gap-4">
+        {totpTicket ? (
+          <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
+            验证码
+            <input
+              autoComplete="one-time-code"
+              autoFocus
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value)}
+              placeholder="6 位验证码或备用码"
+              required
+              className={`${inputCls} tracking-[0.18em]`}
+            />
+          </label>
+        ) : null}
+        {!totpTicket && (
+        <>
         <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
           {mode === "login" ? (loginType === "email" ? "邮箱" : "用户名") : "用户名"}
           <input
@@ -184,6 +219,8 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
             </div>
           </label>
         )}
+        </>
+        )}
 
         {error && <p className="rounded-[10px] bg-up-bg px-3.5 py-2.5 text-[13px] text-up">{error}</p>}
 
@@ -193,10 +230,16 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
           disabled={loading || !formValid}
           className="mt-1 h-[46px] rounded-[10px] bg-[#1FBE9E] text-[15px] font-bold text-white transition-all duration-200 hover:bg-[#17A887] active:scale-[.98] disabled:cursor-not-allowed disabled:bg-bg-gray disabled:text-faint dark:disabled:bg-[#263040] dark:disabled:text-[#aab4c2]"
         >
-          {loading ? "请稍候…" : mode === "login" ? "登录" : "注册并登录"}
+          {loading ? "请稍候…" : totpTicket ? "验证并登录" : mode === "login" ? "登录" : "注册并登录"}
         </button>
 
-        {allowRegister && (
+        {totpTicket && (
+          <p className="mt-1 text-center text-[13px] text-muted">
+            <button type="button" onClick={() => { setTotpTicket(""); setTotpCode(""); setError(""); }} className="font-semibold text-ink underline-offset-4 hover:underline">返回账号密码</button>
+          </p>
+        )}
+
+        {allowRegister && !totpTicket && (
           <p className="mt-1 text-center text-[13px] text-muted">
             {mode === "login" ? (
               <>

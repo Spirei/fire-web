@@ -596,6 +596,10 @@ function migrate(database: Database.Database) {
   if (!userCols.includes("nickname")) database.exec("ALTER TABLE users ADD COLUMN nickname TEXT DEFAULT ''");
   if (!userCols.includes("uid")) database.exec("ALTER TABLE users ADD COLUMN uid TEXT DEFAULT ''");
   if (!userCols.includes("is_test")) database.exec("ALTER TABLE users ADD COLUMN is_test INTEGER DEFAULT 0");
+  if (!userCols.includes("totp_secret")) database.exec("ALTER TABLE users ADD COLUMN totp_secret TEXT DEFAULT ''");
+  if (!userCols.includes("totp_enabled")) database.exec("ALTER TABLE users ADD COLUMN totp_enabled INTEGER DEFAULT 0");
+  if (!userCols.includes("totp_backup_codes")) database.exec("ALTER TABLE users ADD COLUMN totp_backup_codes TEXT DEFAULT '[]'");
+  if (!userCols.includes("totp_last_step")) database.exec("ALTER TABLE users ADD COLUMN totp_last_step INTEGER DEFAULT -1");
   const legacyUid = (database
     .prepare("SELECT COUNT(*) AS n FROM users WHERE is_test = 0 AND (uid IS NULL OR uid = '' OR uid NOT GLOB '[0-9]*')")
     .get() as { n: number }).n;

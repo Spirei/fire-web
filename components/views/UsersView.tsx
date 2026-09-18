@@ -13,6 +13,7 @@ interface AdminUser extends User {
   createdAt: string;
   recordsCount: number;
   online: boolean;
+  totpEnabled?: boolean;
 }
 
 /** 模块级短缓存：进入用户管理秒开（5s 内复用，避免每次切页都整页「加载中」） */
@@ -164,8 +165,22 @@ export default function UsersView() {
       return;
     }
     setResetUser(null);
-    setMsg({ type: "ok", text: `已重置 ${resetUser.username} 的密码` });
-    showToast("密码已重置");
+    setMsg({ type: "ok", text: `已重置 ${resetUser.username} 的密码${data?.totpDisabled ? "，并关闭二次验证" : ""}` });
+    showToast(data?.totpDisabled ? "密码已重置，二次验证已关闭" : "密码已重置");
+  }
+
+  async function disableUserTotp(u: AdminUser) {
+    if (!await appConfirm(`关闭「${u.username}」的二次验证？该用户下次登录将不再需要验证码。`, { title: "关闭二次验证", danger: true })) return;
+    setMsg(null);
+    const res = await fetch(`/api/users/${u.id}/disable-totp`, { method: "POST" });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setMsg({ type: "err", text: data?.error || "关闭失败" });
+      return;
+    }
+    setMsg({ type: "ok", text: `已关闭 ${u.username} 的二次验证` });
+    showToast("二次验证已关闭");
+    load({ force: true });
   }
 
   async function removeUser(u: AdminUser) {
@@ -217,12 +232,12 @@ export default function UsersView() {
           </div>
         ) : (
         <div>
-          <div className="hidden grid-cols-[minmax(220px,1.5fr)_minmax(170px,1fr)_100px_140px_64px_112px] items-center gap-4 border-b border-edge bg-bg-gray/65 px-4 py-2.5 text-[11px] font-semibold text-muted lg:grid dark:bg-white/[.025]">
+          <div className="hidden grid-cols-[minmax(220px,1.5fr)_minmax(170px,1fr)_100px_140px_64px_148px] items-center gap-4 border-b border-edge bg-bg-gray/65 px-4 py-2.5 text-[11px] font-semibold text-muted lg:grid dark:bg-white/[.025]">
             <span>用户</span><span>邮箱</span><span>权限</span><span>注册时间</span><span className="text-right">记录</span><span className="text-right">操作</span>
           </div>
           <div className="divide-y divide-edge">
               {users.map((u) => (
-                <div key={u.id} className="grid gap-3 px-4 py-3.5 transition-colors hover:bg-[#fafbfc] sm:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(220px,1.5fr)_minmax(170px,1fr)_100px_140px_64px_112px] lg:items-center lg:gap-4 dark:hover:bg-[#1a212e]">
+                <div key={u.id} className="grid gap-3 px-4 py-3.5 transition-colors hover:bg-[#fafbfc] sm:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(220px,1.5fr)_minmax(170px,1fr)_100px_140px_64px_148px] lg:items-center lg:gap-4 dark:hover:bg-[#1a212e]">
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-3">
                       <UserAvatar user={u} />
@@ -231,6 +246,7 @@ export default function UsersView() {
                           <b className="truncate font-semibold text-ink">{u.nickname || u.username}</b>
                           {u.online && <span className="h-1.5 w-1.5 flex-none rounded-full bg-down shadow-[0_0_0_3px_rgba(15,160,123,.12)]" title="在线" />}
                           {u.id === me && <span className="flex-none rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-semibold text-brand-deep">当前</span>}
+                          {u.totpEnabled && <span className="flex-none rounded-full border border-edge px-2 py-0.5 text-[10px] font-semibold text-ink-2">二次验证</span>}
                           {u.isTest && <span className="flex-none rounded-full border border-dashed border-edge px-2 py-0.5 text-[10px] font-semibold text-muted">测试</span>}
                         </div>
                         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-faint">
@@ -252,6 +268,11 @@ export default function UsersView() {
                   <div className="flex gap-1.5 sm:col-start-2 sm:row-start-3 sm:justify-self-end lg:col-start-auto lg:row-start-auto lg:justify-end">
                       <button type="button" onClick={() => setEditUser(u)} aria-label={`编辑 ${u.username}`} title="编辑资料" className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-white text-muted transition-colors hover:bg-brand-hover hover:text-ink dark:bg-[#1c222d] dark:hover:bg-white/10"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
                       <button type="button" onClick={() => setResetUser(u)} aria-label={`重置 ${u.username} 的密码`} title="重置密码" className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-white text-muted transition-colors hover:bg-brand-hover hover:text-ink dark:bg-[#1c222d] dark:hover:bg-white/10"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/><circle cx="12" cy="12" r="2.25"/><path d="m13.6 13.6 2.4 2.4"/></svg></button>
+                      {u.totpEnabled && (
+                        <button type="button" onClick={() => disableUserTotp(u)} aria-label={`关闭 ${u.username} 的二次验证`} title="关闭二次验证" className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-white text-muted transition-colors hover:bg-brand-hover hover:text-ink dark:bg-[#1c222d] dark:hover:bg-white/10">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 3a9 9 0 0 0-9 9c0 4.2 3 7.7 7 8.7V13H8v-3h2V8.5A3.5 3.5 0 0 1 13.5 5H16v3h-2.2c-.4 0-.8.4-.8.8V10h3l-.4 3H13v7.7c4-.9 7-4.5 7-8.7a9 9 0 0 0-8-8.9Z"/><path d="m4 4 16 16"/></svg>
+                        </button>
+                      )}
                       <button
                         type="button"
                         disabled={u.id === me}
@@ -298,6 +319,9 @@ export default function UsersView() {
       {resetUser && (
         <AppModal title="重置密码" desc={`为「${resetUser.username}」设置新密码`} onClose={() => setResetUser(null)}>
           <form onSubmit={doResetPassword} className="flex flex-col gap-4">
+            {resetUser.totpEnabled && (
+              <p className="rounded-[10px] bg-bg-gray px-3.5 py-2.5 text-[13px] text-muted">重置密码会同时关闭该用户的二次验证。</p>
+            )}
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
               新密码（至少 8 位，含字母和数字）
               <input name="newPassword" type="password" required minLength={6} className="field" />

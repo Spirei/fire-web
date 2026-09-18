@@ -1,6 +1,7 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { deleteOtherSessions, getAuthUser, isAdmin, resetUserPassword } from "@/lib/auth";
+import { clearTotp } from "@/lib/totpAuth";
 import { validatePassword } from "@/lib/password";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -17,6 +18,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   const ok = resetUserPassword(id, newPassword);
   if (!ok) return NextResponse.json({ error: "用户不存在" }, { status: 404 });
+  clearTotp(id);
   deleteOtherSessions(id, null);
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, totpDisabled: true });
 }

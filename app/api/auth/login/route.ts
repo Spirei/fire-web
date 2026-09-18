@@ -1,6 +1,7 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
-import { authenticateUser, createSession, LEGACY_SESSION_COOKIE, sessionCookieMaxAge, sessionCookieSecure, SESSION_COOKIE } from "@/lib/auth";
+import { applySessionCookie, authenticateUser, createSession, sessionCookieMaxAge } from "@/lib/auth";
+import { createLoginTicket, userTotpEnabled } from "@/lib/totpAuth";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
 
@@ -31,6 +32,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "用户名或密码错误" }, { status: 401 });
   }
 
+  if (userTotpEnabled(userRow.id)) {
+    const ticket = createLoginTicket(userRow.id);
+    logSecurityEvent(request, userRow.id, "auth.login.totp_required", "网页登录需要二次验证");
+    return NextResponse.json({ requires2fa: true, ticket }, { headers: { "Cache-Control": "no-store" } });
+  }
+
   const token = createSession(userRow.id);
   logSecurityEvent(request, userRow.id, "auth.login.success", "网页登录成功");
   // Web 登录只通过 httpOnly Cookie 交付会话，避免 token 暴露给页面 JavaScript。
@@ -39,13 +46,6 @@ export async function POST(request: Request) {
     user: { id: userRow.id, username: userRow.username },
     expiresIn: sessionCookieMaxAge()
   }, { headers: { "Cache-Control": "no-store" } });
-  res.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: sessionCookieMaxAge(),
-    secure: sessionCookieSecure(request)
-  });
-  res.cookies.set(LEGACY_SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+  applySessionCookie(res, token, request);
   return res;
 }

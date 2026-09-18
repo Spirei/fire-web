@@ -1,5 +1,6 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { authenticateUser, createSession, sessionCookieMaxAge } from "@/lib/auth";
+import { createLoginTicket, userTotpEnabled } from "@/lib/totpAuth";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { fail, ok } from "@/lib/api";
 
@@ -18,6 +19,9 @@ export async function POST(request: Request) {
   const userRow = authenticateUser(username, password);
   if (!userRow) {
     return fail(40103, "用户名或密码错误", 401);
+  }
+  if (userTotpEnabled(userRow.id)) {
+    return ok({ requires2fa: true, ticket: createLoginTicket(userRow.id) });
   }
   const token = createSession(userRow.id);
   return ok({

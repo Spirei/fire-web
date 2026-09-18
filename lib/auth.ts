@@ -225,6 +225,17 @@ export function sessionCookieMaxAge() {
   return SESSION_DAYS * 24 * 60 * 60;
 }
 
+export function applySessionCookie(res: { cookies: { set: (name: string, value: string, options: { httpOnly: boolean; sameSite: "lax"; path: string; maxAge: number; secure: boolean }) => void } }, token: string, request: Request) {
+  res.cookies.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: sessionCookieMaxAge(),
+    secure: sessionCookieSecure(request)
+  });
+  res.cookies.set(LEGACY_SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0, sameSite: "lax", secure: false });
+}
+
 /** 判断当前请求是否通过 HTTPS 访问，用于决定 session cookie 是否带 Secure 标志。
  * 局域网 http://IP:port 部署时若带 Secure，浏览器不保存/不发送 cookie，登录后会无限跳回登录页。
  * 仅当反向代理转发 x-forwarded-proto: https 或原生 https 时才返回 true。 */
@@ -263,6 +274,7 @@ export interface AdminUser extends User {
   createdAt: string;
   recordsCount: number;
   online: boolean;
+  totpEnabled: boolean;
 }
 
 export function listUsers(): AdminUser[] {
@@ -278,7 +290,8 @@ export function listUsers(): AdminUser[] {
     ...toUser(r),
     createdAt: r.created_at,
     recordsCount: r.records_count,
-    online: !!r.online
+    online: !!r.online,
+    totpEnabled: Boolean((r as UserRow & { totp_enabled?: number }).totp_enabled)
   }));
 }
 

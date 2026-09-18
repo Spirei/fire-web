@@ -3690,9 +3690,17 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_33_ENTRY,
   version: "v0.1.34",
   date: "2026-09-18",
-  summary: "后台页签按需加载；四色门转盘图收到三倍显示尺寸。",
+  summary: "登录二次验证；后台页签按需加载；四色门转盘图收到三倍显示尺寸。",
+  frontend: [
+    ...V0_1_33_ENTRY.frontend,
+    { name: "qrcode", version: "1.5.4", desc: "二次验证绑定二维码（本地 SVG，密钥不经过第三方）" }
+  ],
   software: V0_1_33_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.34" } : item),
   changes: [{
+    title: "登录二次验证（TOTP）",
+    desc: "设置 → 个人信息可绑定验证器。扫描本地生成的二维码（密钥不经过第三方图片接口），输入 6 位数字后开启，并一次性给出 8 条备用码。开启后，网页与 iOS 登录在密码正确时不会立刻发会话：先返回 5 分钟有效的 ticket，再提交验证码或备用码才登录。同一验证码不能重放；管理员重置密码会同时关闭该用户的二次验证，用户管理页也可单独关闭。",
+    kind: "security"
+  }, {
     title: "四色门两套样式各用各的音效",
     desc: "样式 2 珐琅盘保留本次八音盒（转前 C-G-C 拇指琴、转动五声滑动、落定 C-G 五度）。样式 1 原插画转盘改回线上棘轮：三角波 690→410Hz、转前晚 0.1 秒第一记、落定 G6 谐波钟加 4.2kHz 轻咔。切换样式后下一次转动换声，挂钩和落点不变。",
     kind: "fix"

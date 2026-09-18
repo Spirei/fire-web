@@ -46,6 +46,7 @@
 | `40101` | 未登录 |
 | `40102` | 会话失效 |
 | `40103` | 用户名或密码错误 |
+| `40104` | 二次验证失败（验证码 / 备用码不正确，或 ticket 过期） |
 | `40301` | 无权限（需管理员） |
 | `40401` | 资源不存在 |
 | `40901` | 冲突 / 重复 |
@@ -58,11 +59,12 @@
 移动端推荐 Bearer Token：
 
 1. `POST /api/v1/auth/login`，请求体 `{ "username": "你的用户名", "password": "你的密码" }`
-2. 响应 `data` 携带 `token` 与 `expiresIn`（秒）
-3. 后续请求头携带 `Authorization: Bearer <token>`
-4. 退出：`POST /api/v1/auth/logout`（携带同一 token）
+2. 未开启二次验证时，响应 `data` 携带 `token` 与 `expiresIn`（秒）
+3. 已开启二次验证时，密码正确不签发 token，返回 `{ "requires2fa": true, "ticket": "…" }`；接着 `POST /api/v1/auth/login/totp`，请求体 `{ "ticket", "code" }`（`code` 为 6 位 TOTP 或一次性备用码），成功后再拿到 `token`
+4. 后续请求头携带 `Authorization: Bearer <token>`
+5. 退出：`POST /api/v1/auth/logout`（携带同一 token）
 
-Web 端继续使用 httpOnly Cookie 会话，两种方式等价，`GET /api/v1/auth/me` 均可识别。
+Web 端继续使用 httpOnly Cookie 会话，两种方式等价，`GET /api/v1/auth/me` 均可识别。开启二次验证后，网页登录同样先返回 ticket，再由 `POST /api/auth/login/totp` 写入会话 Cookie。
 
 ## 5. 公共约定
 
@@ -77,7 +79,8 @@ Web 端继续使用 httpOnly Cookie 会话，两种方式等价，`GET /api/v1/a
 ### 6.1 认证
 | 方法 | 路径 | 说明 | 鉴权 |
 | --- | --- | --- | --- |
-| POST | `/api/v1/auth/login` | 登录，返回 user + token | 无 |
+| POST | `/api/v1/auth/login` | 登录；未开 2FA 返回 user + token，已开 2FA 返回 `{ requires2fa, ticket }` | 无 |
+| POST | `/api/v1/auth/login/totp` | 二次验证：ticket + 6 位验证码或备用码，返回 user + token | 无（持有效 ticket） |
 | GET | `/api/v1/auth/setup-status` | 空实例是否需要首次管理员设置（`{ needsSetup }`） | 无 |
 | GET | `/api/v1/auth/me` | 当前用户 | 登录 |
 | POST | `/api/v1/auth/logout` | 登出 | 登录 |

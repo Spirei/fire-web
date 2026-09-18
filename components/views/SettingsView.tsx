@@ -66,7 +66,8 @@ const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; group
   { sub: "stocks", anchor: "trade", label: "交易 · 富途", groupLabel: "股票", keywords: "富途 futu opend 交易 行情源 主机 端口 腾讯 yahoo 备用" },
   { sub: "stocks", anchor: "currency-display", label: "货币金额显示", groupLabel: "股票", keywords: "货币 单位 金额 万 百万 千万 亿 缩写" },
   { sub: "stocks", anchor: "sources", label: "股票来源接口", groupLabel: "股票", keywords: "股票来源 接口 行情 财报 图标 url 数据源" },
-  { sub: "profile", anchor: "profile", label: "个人信息", groupLabel: "账号", keywords: "头像 昵称 密码 邮箱 导出 清空 数据" },
+  { sub: "profile", anchor: "profile", label: "个人信息", groupLabel: "账号", keywords: "头像 昵称 密码 邮箱 二次验证 2FA TOTP 验证器 备用码 导出 清空 数据" },
+  { sub: "profile", anchor: "totp", label: "二次验证", groupLabel: "账号", keywords: "二次验证 2FA TOTP 验证器 备用码 谷歌验证 Google Authenticator" },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
   { sub: "api", anchor: "api", label: "API 接口", groupLabel: "系统", keywords: "api 接口 开发 文档 鉴权" },
@@ -86,6 +87,7 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   trade: "trade",
   "currency-display": "stocks",
   profile: "profile",
+  totp: "profile",
   database: "database",
   cron: "cron",
   api: "api",
@@ -272,7 +274,7 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
   },
   {
     label: "账号",
-    items: [{ key: "profile", label: "个人信息", desc: "头像、资料、密码、数据管理" }]
+    items: [{ key: "profile", label: "个人信息", desc: "头像、资料、密码、二次验证、数据管理" }]
   },
   {
     label: "系统",
@@ -1677,6 +1679,94 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [pwdMsg, setPwdMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [pwdBusy, setPwdBusy] = useState(false);
   const [profilePassword, setProfilePassword] = useState("");
+  const [totpEnabled, setTotpEnabled] = useState(false);
+  const [totpBusy, setTotpBusy] = useState(false);
+  const [totpSetup, setTotpSetup] = useState<{ secret: string; qrSvg: string } | null>(null);
+  const [totpSetupCode, setTotpSetupCode] = useState("");
+  const [totpBackupCodes, setTotpBackupCodes] = useState<string[] | null>(null);
+  const [totpDisablePassword, setTotpDisablePassword] = useState("");
+  const [totpDisableCode, setTotpDisableCode] = useState("");
+  const [totpMsg, setTotpMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  useEffect(() => {
+    if (sub !== "profile") return;
+    fetch("/api/auth/totp", { cache: "no-store", credentials: "same-origin" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (typeof data?.enabled === "boolean") setTotpEnabled(data.enabled);
+      })
+      .catch(() => {});
+  }, [sub]);
+
+  async function startTotpSetup() {
+    setTotpMsg(null);
+    setTotpBusy(true);
+    try {
+      const res = await fetch("/api/auth/totp", { method: "POST", credentials: "same-origin" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "无法开始绑定");
+      setTotpSetup({ secret: String(data.secret || ""), qrSvg: String(data.qrSvg || "") });
+      setTotpSetupCode("");
+      setTotpBackupCodes(null);
+    } catch (err) {
+      setTotpMsg({ type: "err", text: err instanceof Error ? err.message : "无法开始绑定" });
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
+  async function confirmTotpSetup(e: React.FormEvent) {
+    e.preventDefault();
+    setTotpMsg(null);
+    setTotpBusy(true);
+    try {
+      const res = await fetch("/api/auth/totp", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ code: totpSetupCode })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "验证失败");
+      setTotpEnabled(true);
+      setTotpSetup(null);
+      setTotpSetupCode("");
+      setTotpBackupCodes(Array.isArray(data?.backupCodes) ? data.backupCodes : []);
+      setTotpMsg({ type: "ok", text: "二次验证已开启，请立即保存备用码" });
+      showToast("二次验证已开启");
+    } catch (err) {
+      setTotpMsg({ type: "err", text: err instanceof Error ? err.message : "验证失败" });
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
+  async function disableTotp(e: React.FormEvent) {
+    e.preventDefault();
+    setTotpMsg(null);
+    setTotpBusy(true);
+    try {
+      const res = await fetch("/api/auth/totp", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ password: totpDisablePassword, code: totpDisableCode })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "关闭失败");
+      setTotpEnabled(false);
+      setTotpDisablePassword("");
+      setTotpDisableCode("");
+      setTotpBackupCodes(null);
+      setTotpSetup(null);
+      setTotpMsg({ type: "ok", text: "二次验证已关闭" });
+      showToast("二次验证已关闭");
+    } catch (err) {
+      setTotpMsg({ type: "err", text: err instanceof Error ? err.message : "关闭失败" });
+    } finally {
+      setTotpBusy(false);
+    }
+  }
 
   async function changePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -3237,7 +3327,102 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <button type="submit" disabled={pwdBusy} className="btn btn-ghost btn-sm">{pwdBusy ? "提交中…" : "修改密码"}</button>
                   </form>
                   {pwdMsg && <p className={`settings-form-message ${pwdMsg.type === "ok" ? "is-ok" : "is-error"}`}>{pwdMsg.text}</p>}</>}
-                  <div className="subhead">数据与备份</div>
+                </SettingsSection>
+                <SettingsSection
+                  id="totp"
+                  icon="profile"
+                  title="二次验证"
+                  desc="登录时除密码外，再输入验证器中的 6 位数字"
+                >
+                  <div className="sw-row">
+                    <div className="sw-row-label">
+                      <b>验证器</b>
+                      <span>{totpEnabled ? "已开启，登录需要 6 位验证码或备用码" : "使用 Google Authenticator、1Password 等 TOTP 应用"}</span>
+                    </div>
+                    <div className="ctrl">
+                      <span className={`inline-flex rounded-full border px-2.5 py-[3px] text-[11px] font-medium ${totpEnabled ? "border-edge-strong/30 bg-brand-light text-brand-deep" : "border-edge bg-bg-gray text-ink-2 dark:bg-white/[.04]"}`}>
+                        {totpEnabled ? "已开启" : "未开启"}
+                      </span>
+                    </div>
+                  </div>
+                  {!totpEnabled && !totpSetup && (
+                    <div className="mt-3">
+                      <button type="button" disabled={totpBusy} onClick={startTotpSetup} className="btn btn-line btn-sm disabled:opacity-60">
+                        {totpBusy ? "生成中…" : "开始绑定"}
+                      </button>
+                    </div>
+                  )}
+                  {totpSetup && (
+                    <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
+                      {totpSetup.qrSvg && (
+                        <img
+                          alt="二次验证二维码"
+                          src={`data:image/svg+xml;utf8,${encodeURIComponent(totpSetup.qrSvg)}`}
+                          className="h-[180px] w-[180px] rounded-[10px] border border-edge bg-white p-2"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] text-muted">用验证器扫描二维码，或手动输入密钥：</p>
+                        <code className="mt-2 block break-all rounded-[10px] border border-edge bg-bg-gray px-3 py-2 text-[13px] tracking-[0.12em] text-ink">
+                          {totpSetup.secret.replace(/(.{4})/g, "$1 ").trim()}
+                        </code>
+                        <button type="button" className="btn btn-ghost btn-sm mt-2" onClick={() => { void copyText(totpSetup.secret); showToast("密钥已复制"); }}>复制密钥</button>
+                        <form onSubmit={confirmTotpSetup} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+                          <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
+                            验证码
+                            <input
+                              autoComplete="one-time-code"
+                              value={totpSetupCode}
+                              onChange={(e) => setTotpSetupCode(e.target.value)}
+                              placeholder="输入验证器中的 6 位数字"
+                              required
+                              className="sw-row-input"
+                            />
+                          </label>
+                          <div className="flex gap-2">
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setTotpSetup(null); setTotpSetupCode(""); setTotpMsg(null); }}>取消</button>
+                            <button type="submit" disabled={totpBusy || totpSetupCode.replace(/\s/g, "").length !== 6} className="btn btn-line btn-sm disabled:opacity-60">{totpBusy ? "验证中…" : "确认开启"}</button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+                  {totpBackupCodes && totpBackupCodes.length > 0 && (
+                    <div className="mt-4 rounded-[10px] border border-edge bg-bg-gray/60 px-3.5 py-3">
+                      <p className="text-[13px] font-semibold text-ink">备用码只显示这一次，请立刻保存</p>
+                      <p className="mt-1 text-[12px] text-muted">每条只能用一次。验证器丢失时，可用备用码登录。</p>
+                      <ul className="mt-3 grid grid-cols-2 gap-2 font-mono text-[13px] tracking-[0.08em] text-ink">
+                        {totpBackupCodes.map((code) => (
+                          <li key={code} className="rounded-[8px] border border-edge bg-white px-3 py-1.5 dark:bg-[#161b26]">{code}</li>
+                        ))}
+                      </ul>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm mt-3"
+                        onClick={() => { void copyText(totpBackupCodes.join("\n")); showToast("备用码已复制"); }}
+                      >
+                        复制全部备用码
+                      </button>
+                    </div>
+                  )}
+                  {totpEnabled && (
+                    <form onSubmit={disableTotp} className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
+                        当前密码
+                        <input type="password" autoComplete="current-password" value={totpDisablePassword} onChange={(e) => setTotpDisablePassword(e.target.value)} required className="sw-row-input" />
+                      </label>
+                      <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
+                        验证码或备用码
+                        <input autoComplete="one-time-code" value={totpDisableCode} onChange={(e) => setTotpDisableCode(e.target.value)} required className="sw-row-input" />
+                      </label>
+                      <div className="sm:col-span-2">
+                        <button type="submit" disabled={totpBusy} className="btn btn-ghost btn-sm disabled:opacity-60">{totpBusy ? "提交中…" : "关闭二次验证"}</button>
+                      </div>
+                    </form>
+                  )}
+                  {totpMsg && <p className={`settings-form-message ${totpMsg.type === "ok" ? "is-ok" : "is-error"}`}>{totpMsg.text}</p>}
+                </SettingsSection>
+                <SettingsSection icon="profile" title="数据与备份" desc="导出或清空本账号数据">
                   <div className="settings-profile-actions">
                   <div className="sw-row">
                     <div className="sw-row-label">
