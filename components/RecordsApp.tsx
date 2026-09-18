@@ -835,7 +835,7 @@ export default function RecordsApp({
                   className={`fire-sidebar-item flex h-[42px] w-full cursor-grab items-center gap-3 rounded-[10px] px-3 text-[15px] transition-all duration-200 active:cursor-grabbing ${
                     activeTab === t.key
                       ? "fire-sidebar-item-active font-semibold text-ink dark:text-white"
-                      : "text-muted hover:bg-black/[.05] hover:text-ink dark:hover:bg-white/[.07]"
+                      : "text-muted hover:bg-black/[.05] hover:text-ink dark:hover:bg-[#2a2a2a]"
                   }`}
                 >
                   {t.icon}
