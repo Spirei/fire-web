@@ -797,8 +797,9 @@
   background: rgba(255,255,255,.68);
   box-shadow: 0 1px 3px rgba(30,41,59,.055), inset 0 1px 0 rgba(255,255,255,.66);
 }
+/* 外层只负责定位与吸顶，不画底色：圆角由 .fire-sidebar-panel 自己出，
+   否则外层这块方形底色会盖住卡片的四个圆角，左侧看起来就是硬直角。 */
 .dark .fire-sidebar {
-  background:#1b1b1b;
   min-height:calc(100vh - 112px);
 }
 .dark .fire-sidebar-panel {
