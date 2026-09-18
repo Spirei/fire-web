@@ -34,6 +34,7 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
   const [textVisible, setTextVisible] = useState(true);
   const [loadRatio, setLoadRatio] = useState(0);
   const [ready, setReady] = useState(false);
+  const [racing, setRacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const phaseRef = useRef(0);
   const fadeTimer = useRef<number | null>(null);
@@ -86,6 +87,7 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
           onProgress: (ratio) => setLoadRatio(ratio),
           onReady: () => setReady(true),
           onPhase: handlePhase,
+          onRacing: (on) => setRacing(on),
           onError: (message) => setError(message)
         });
         // 开发环境留一个调试句柄，方便按进度截图与排查（生产不会写）
@@ -214,9 +216,9 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
             </div>
 
             <div className="sc-row sc-ctr">
-              <div className="sc-ctr-cap">{current.cap}</div>
+              <div className="sc-ctr-cap">{racing ? config.race?.cap ?? "CHASE THE LIMIT" : current.cap}</div>
               <button type="button" className="sc-race" ref={raceRef}>
-                <span>HOLD TO RACE</span>
+                <span>{racing ? config.race?.label ?? "RE-ENGAGE TO SLOW" : config.race?.idleLabel ?? "HOLD TO RACE"}</span>
                 <em>→</em>
               </button>
               <div className="sc-ctr-hint">

@@ -90,6 +90,13 @@ export interface ShowcaseConfig {
     /** 按材质名修正金属度 / 粗糙度（不同模型自带参数差别很大） */
     materialRules?: Array<{ match: string | RegExp; metalness?: number; roughness?: number }>;
   };
+  /** 昼夜环境过渡（参考视频整段 hero 都是夜景，通常把窗口放到收尾或整段保持夜色） */
+  environment?: {
+    /** 夜 → 昼的滚动进度区间 */
+    nightToDay?: [number, number];
+    /** 白天环境的混合强度 0–1 */
+    dayIntensity?: number;
+  };
   camera: {
     keyframes: ShowcaseCameraKey[];
     /** 相机晃动（仅高速时明显） */
@@ -148,6 +155,8 @@ export interface ShowcaseConfig {
   };
   /** 缩放范围（相机距离倍率，越小越近） */
   zoom?: { min?: number; max?: number; wheelStep?: number };
+  /** 冲刺按钮文案（参考站点：未发车是 HOLD TO RACE，发车后变成 RE-ENGAGE TO SLOW） */
+  race?: { idleLabel?: string; label?: string; cap?: string };
   /** 章节文案（React 层渲染，引擎只负责按进度回调） */
   phases: ShowcasePhase[];
   /** 部件标注锚点 */
@@ -184,6 +193,8 @@ export interface ShowcaseOptions {
   onReady?: () => void;
   /** 章节切换 */
   onPhase?: (index: number) => void;
+  /** 冲刺状态变化（按住空格 / 按住按钮） */
+  onRacing?: (racing: boolean) => void;
   onError?: (message: string) => void;
 }
 

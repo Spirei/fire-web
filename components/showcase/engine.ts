@@ -50,6 +50,10 @@ function normalizeConfig(config: ShowcaseConfig) {
         roughness: rule.roughness
       }))
     },
+    environment: {
+      nightToDay: config.environment?.nightToDay ?? [0.72, 0.88],
+      dayIntensity: config.environment?.dayIntensity ?? 1
+    },
     camera: {
       keyframes: [...config.camera.keyframes].sort((a, b) => a.p - b.p),
       shakeAmount: config.camera.shake?.amount ?? 0.34,
@@ -612,7 +616,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         float whiteCore = ${whiteCores};
         // 亮度放在颜色里，alpha 顶到 1 就够，否则叠上 Bloom 会一片糊
         col += uGold * (gold * 1.15 + goldCore * 2.0) + uWhite * (white * 0.7 + whiteCore * 1.4);
-        mask += gold * 0.85 + goldCore * 0.5 + white * 0.6 + whiteCore * 0.4;
+        mask += gold * 0.6 + goldCore * 0.32 + white * 0.42 + whiteCore * 0.24;
       }
       // 其余是很浅的虚线：噪声贴图沿轴拉伸并滚动
       vec2 nUv = vec2(vUv.x * 48.0, vUv.y * 0.32 - uTime * (0.15 + uSpeed * 0.035));
@@ -979,6 +983,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let racing = false;
   let racingAmt = 0;   // 冲刺状态的平滑量：镜头、轮胎、光条都跟它走
   let carTravel = 0;   // 冲刺时车沿隧道开走的距离
+  let lastRacing = false;
   let userYaw = 0;
   let userYawVel = 0;
   // 用户缩放：滚轮（⌘/Ctrl + 滚轮或触控板捏合）与按钮都改这个倍率，用来放大看细节
@@ -996,25 +1001,26 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   function render(p: number, dt = 0.016) {
     elapsed += dt;
 
-    // 环境：夜 → 昼（加速时保持夜色，收车后切到明亮工作室）
-    const envWeight = seg(p, 0.72, 0.88);
+    // 环境：夜 → 昼（窗口与强度由 preset 给；参考视频里整段 hero 都是夜景，只在收尾略微提亮）
+    const envWeight = seg(p, CFG.environment.nightToDay[0], CFG.environment.nightToDay[1]) * CFG.environment.dayIntensity;
     updateEnv(envWeight);
     const day = envWeight;
     // 参考图里冲刺时车身反而更亮：速度越高，暖色轮廓光与主光一起加码
     const speedLight = clamp(speed / CFG.speed.maxSpeed, 0, 1) ** 2;
-    keyLight.intensity = 0.72 + day * 0.42 + speedLight * 0.42;
-    rimLight.intensity = 0.78 + day * 0.3 + seg(p, 0.42, 0.5) * 0.2 + speedLight * 1.05;
-    fillLight.intensity = 0.32 + day * 0.24 + speedLight * 0.18;
+    keyLight.intensity = 0.78 + day * 0.42 + speedLight * 0.18;
+    rimLight.intensity = 0.82 + day * 0.3 + seg(p, 0.42, 0.5) * 0.18 + speedLight * 0.45;
+    fillLight.intensity = 0.36 + day * 0.24 + speedLight * 0.08;
 
-    // 速度：加速段 0.46→0.64 拉起，0.74→0.86 落回；按住空格 / 按钮随时冲刺
-    const accel = seg(p, 0.46, 0.64);
-    const decel = seg(p, 0.74, 0.86);
-    const cruise = seg(p, 0.3, 0.42) * 4;
-    let targetSpeed = (accel - decel) * CFG.speed.maxSpeed + cruise;
-    if (racing) targetSpeed = CFG.speed.maxSpeed * 1.02;
-    speed += (targetSpeed - speed) * clamp(dt * (racing ? 2.4 : 2), 0, 1);
+    // 速度只由冲刺（按住空格 / 按住按钮）驱动：参考视频里滚动的过程中表一直是 000，
+    // 只有在发车后才爬升，松开后回落 —— 滚动只负责镜头与舞台。
+    const targetSpeed = racing ? CFG.speed.maxSpeed * 1.02 : 0;
+    speed += (targetSpeed - speed) * clamp(dt * (racing ? 2.4 : 1.6), 0, 1);
     const sp = clamp(speed / CFG.speed.maxSpeed, 0, 1);
     racingAmt += ((racing ? 1 : 0) - racingAmt) * clamp(dt * 2.2, 0, 1);
+    if (racing !== lastRacing) {
+      lastRacing = racing;
+      options.onRacing?.(racing);
+    }
 
     // 相机
     camAt(p);
@@ -1083,10 +1089,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     flowUniforms.uFlowStrength.value = sps * sps * 0.6;
     tunnelUniforms.uTime.value = elapsed;
     tunnelUniforms.uSpeed.value = reduced ? 0 : speed;
-    tunnelUniforms.uOpacity.value = 0.5 + sps * 0.4;
+    tunnelUniforms.uOpacity.value = 0.46 + sps * 0.3;
     tunnel2Uniforms.uTime.value = elapsed * 0.75;
     tunnel2Uniforms.uSpeed.value = reduced ? 0 : speed * 0.8;
-    tunnel2Uniforms.uOpacity.value = sps * 0.5;
+    tunnel2Uniforms.uOpacity.value = sps * 0.35;
     if (ringUniformsRef) {
       ringUniformsRef.uTime.value = elapsed;
       ringUniformsRef.uSpeed.value = sps;
