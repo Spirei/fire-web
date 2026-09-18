@@ -440,7 +440,10 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     // 颜色必须用站内「未读」色 —— 本站绿色表示下跌，自己发明一枚绿块会和涨跌语义打架
     const square = fs.readFileSync(path.join(root, 'components/views/TradingSquareView.tsx'), 'utf8');
     assert(square.includes('aria-label="上次访问之后的新动态"'), '新动态标记还在');
-    assert(square.includes('rounded-full bg-down dark:bg-[#34d399]'), '单条标记是站内绿色的小圆点');
+    assert(square.includes('unseen-dot h-1.5 w-1.5 flex-none rounded-full bg-down dark:bg-[#34d399]'), '单条标记是站内绿色的小圆点（带呼吸动画类）');
+    const globals = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    assert(/@keyframes unseen-dot-breathe/.test(globals) && /\.unseen-dot\s*\{\s*animation:/.test(globals), '绿点有呼吸动画');
+    assert(/prefers-reduced-motion[\s\S]{0,120}\.unseen-dot/.test(globals), '呼吸动画尊重减少动态效果设置');
     // 分界标签压在那条本来就有的帖间分隔线上（微信「以下是新消息」的写法），不额外画线、不用红色
     assert(square.includes('relative flex h-0 items-center justify-center'), '分界标签压在原有分隔线上');
     assert(/font-medium text-faint[^>]*>以上 \{newAboveBoundary\} 条为新动态/.test(square), '分界标签是中性灰小字');

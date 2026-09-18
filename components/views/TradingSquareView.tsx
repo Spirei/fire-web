@@ -764,7 +764,7 @@ export default function TradingSquareView({ avatars, records = [], initialPosts 
                           role="img"
                           aria-label="上次访问之后的新动态"
                           title="上次访问之后的新动态"
-                          className="h-1.5 w-1.5 flex-none rounded-full bg-down dark:bg-[#34d399]"
+                          className="unseen-dot h-1.5 w-1.5 flex-none rounded-full bg-down dark:bg-[#34d399]"
                         />
                       ) : null}
                       <strong className="text-ink dark:text-white">{author.name}</strong>

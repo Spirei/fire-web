@@ -1612,6 +1612,28 @@ html.dark .watch-import-target {
   animation: live-dot-pulse 1.6s ease-in-out infinite;
 }
 
+/* 交易广场新动态圆点：缓慢呼吸（透明度与柔和光晕同步起伏，尺寸不变避免抢眼） */
+@keyframes unseen-dot-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.22);
+  }
+}
+.unseen-dot {
+  animation: unseen-dot-breathe 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .unseen-dot {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 /* 收藏爱心动效：点击弹跳 + 红色微粒迸发（长桥风格） */
 @keyframes heart-pop {
   0% {
