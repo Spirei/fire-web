@@ -1523,118 +1523,118 @@ export const V0_1_16_ENTRY: VersionEntry = {
   ),
   changes: [
     {
-      title: "修复美股盘前/盘后/夜盘当日盈亏「昨收」错位（富途 prev_close_price 落后一个交易日）",
-      desc: "排查「美股当日盈利还未更新」：盘前时段富途快照的 `prev_close_price` 会落后一个常规交易日（如周一盘前返回上周四收盘，AAPL 报 311.30，而真正上周五收盘是 309.35），但富途官方 `pre_change_val` 是基于真正前一常规收盘计算的（AAPL 盘前 310.35 − 309.35 = +1.05，正确）。改动：桥接脚本 `scripts/futu_quotes.py` 在扩展时段（PRE/AFTER/OVERNIGHT）命中官方涨跌字段后，用 `prevClose = price − change` 反推当日基准，保证「昨收 / 今日涨跌 / 当日盈亏」使用同一基准；缺 `change` 时同样反推，避免回退到错误的旧昨收。修复前 /api/v1/stock-detail 对 AAPL 报 price 310.4 / prevClose 311.30 / change +1.05（price−prev=−0.95，涨跌互相矛盾），修复后 price 310.4 / prevClose 309.35 / change +1.05（price−prev=+1.05 一致）。仅影响美股扩展时段行情来源，不改港股/A股、不改分享页。实测 /api/v1/quotes 全部 美股 source=futu、prevClose 与 `price − change` 严格一致；tsc 无错误、npm run build 通过、冒烟测试 82 项全 PASS。",
+      title: "修复美股扩展时段昨收错位",
+      desc: "排查「美股当日盈利还未更新」：盘前时段富途快照的 prev_close_price 会落后一个常规交易日（如周一盘前返回上周四收盘，AAPL 报 311.30，而真正上周五收盘是 309.35），但官方 pre_change_val 是基于真正前一常规收盘计算的（AAPL 盘前 310.35 − 309.35 = +1.05，正确）。\n改动：桥接脚本 scripts/futu_quotes.py 在扩展时段（PRE / AFTER / OVERNIGHT）命中官方涨跌字段后，用 prevClose = price − change 反推当日基准，保证昨收、今日涨跌与当日盈亏使用同一基准；缺 change 时同样反推，避免回退到错误的旧昨收。\n修复前 /api/v1/stock-detail 对 AAPL 报 price 310.4、prevClose 311.30、change +1.05（price − prev = −0.95，互相矛盾），修复后为 price 310.4、prevClose 309.35、change +1.05（一致）。仅影响美股扩展时段行情来源，不改港股与 A股、不改分享页。",
       kind: "fix"
     },
     {
-      title: "素材库/附件管理操作按钮统一大小、配色与间距",
-      desc: "按反馈放大并统一素材库、附件管理里过小的操作按钮：1) 图标素材、股票/券商/分组图标列表的操作列（编辑/预览/删除）此前尺寸与配色不一致（删除图标曾为 3px/4px、部分按钮为圆钮配 16px 图标），统一为 h-7 w-7 圆角 8px 边框按钮——编辑/预览用中性 hover（hover:bg-brand-hover hover:text-ink），删除用红色语义（hover:border-down/40 hover:bg-down/10 hover:text-down），图标统一 14px，含 disabled 态；2) 操作列与「市场」列间距由 gap-2（8px）放宽为 gap-3（12px），三个操作按钮间 gap-1（4px）放宽为 gap-1.5（6px），消除「与市场列贴太近」观感；「操作」列宽由 72px 加宽到 96px，编辑态「保存」按钮同步为 h-7 圆角框（不再布局跳动）；3) 生效文件：LibraryAttachmentsView（附件管理-素材库）、AssetLibraryView（素材库 图标/券商/分组 tab）、WatchGroupSheet（自选股分组删除按钮）、CelebsManageModal（名人持仓删除按钮×3）；删除按钮从几乎不可点的小图标变为清晰的 28×28 圆角框按钮，与相邻编辑/预览按钮完全同尺寸同风格，默认色统一 text-muted（hover 才加深）。实测：三按钮均 28×28、列间距 12px、按钮间距 6px。tsc 无错误、npm run build 通过。",
+      title: "素材库与附件管理操作按钮统一",
+      desc: "图标素材、股票、券商与分组图标列表的操作列（编辑 / 预览 / 删除）此前尺寸与配色不一致，统一为 h-7 w-7 圆角 8px 边框按钮：编辑与预览用中性悬停，删除用红色语义，图标统一 14px，含禁用态。\n操作列与「市场」列间距由 8px 放宽为 12px，三个操作按钮之间由 4px 放宽为 6px，操作列宽由 72px 加宽到 96px，编辑态的「保存」按钮同步为 h-7 圆角框，不再布局跳动。\n生效文件：LibraryAttachmentsView、AssetLibraryView、WatchGroupSheet、CelebsManageModal；删除按钮从几乎不可点的小图标变为清晰的 28×28 圆角框按钮，默认色统一 text-muted（悬停才加深）。",
       kind: "fix"
     },
     {
-      title: "素材库图标列表显示真实文件路径（可点击复制）",
-      desc: "附件管理-素材库（图标素材列表）行内新增真实路径展示：assets.url 存的是 encodeURIComponent 编码形式（如 /uploads/asset/stock/US/%E8%8B%B9%E6%9E%9CAAPL.png），此前行内仅显示名称/代码不显示路径，用户无法查看或复制素材实物文件地址。修复：1) 组件新增 realPath() 把 url decodeURIComponent 解码为可读路径（/uploads/asset/stock/US/苹果AAPL.png，与磁盘文件名一致），渲染在名称、代码下方第三行；2) 点击该行即复制真实路径（Clipboard API 优先，非安全上下文回退 execCommand 写剪贴板），复制成功 Toast「已复制真实路径」；无 url 的素材显示占位「（无本地文件）」且不可点。实测：英伟达/苹果/腾讯控股/贵州茅台等常用股票 url 均指向磁盘真实文件，解码路径与 public/uploads 一致。tsc 无错误、npm run build 通过。",
+      title: "素材库图标列表显示真实文件路径",
+      desc: "assets.url 存的是 encodeURIComponent 编码形式，此前行内仅显示名称与代码，用户无法查看或复制素材实物文件地址。\n修复：组件新增 realPath() 把 url 解码为可读路径（与磁盘文件名一致），渲染在名称与代码下方第三行；点击该行即复制真实路径（Clipboard API 优先，非安全上下文回退 execCommand），复制成功提示「已复制真实路径」；无 url 的素材显示「（无本地文件）」且不可点。",
       kind: "feature"
     },
     {
-      title: "素材库国家/地区旗帜改用本地开源高清圆形 SVG（hatscripts/circle-flags）",
-      desc: "素材库「国家/地区旗帜」tab 此前默认用 flagcdn.com/w80/{flagCode}.png（外部 PNG，80px，依赖外部加载）。按用户要求替换为 GitHub 开源高清 SVG 并本地保存：调研对比 lipis/flag-icons（4x3 矩形 640×480）、hampusborgos/country-flags（7410×3900 矩形）、hatscripts/circle-flags（512×512 圆形，mask 裁切）三库；用户明确要圆形旗帜，选定 hatscripts/circle-flags——每国一个 {iso2}.svg、viewBox 512×512、自带 <mask><circle r=256/></mask> 圆形裁切、MIT。（先用矩形版后按用户要求换成圆形版）；脚本批量下载 249 国圆形 SVG 本地保存到 public/uploads/asset/flag/（cn.svg 705B 与用户提供逐字节一致），缺失的 bq/bv/hm/sh/sj/um 6 国映射到真实或同源旗帜（bq→bq-bo、bv/sj→no、hm→au、sh→sh-hl、um→us，全部含 mask 圆形）；旗帜 tab 默认来源改为本地 /uploads/asset/flag/{iso2}.svg（custom?.url 上传的自定义旗帜仍优先）。实测：249 个 SVG 全部含圆 mask、Next 正常 serve（200）。tsc 无错误、npm run build 通过。",
+      title: "素材库国家旗帜改用本地圆形 SVG",
+      desc: "素材库「国家/地区旗帜」tab 此前默认用 flagcdn.com 的外部 PNG（80px，依赖外部加载），按用户要求替换为 GitHub 开源高清 SVG 并本地保存。\n调研对比 lipis/flag-icons（4x3 矩形）、hampusborgos/country-flags（7410×3900 矩形）与 hatscripts/circle-flags（512×512 圆形、mask 裁切）后，按用户要求选定圆形版：每国一个 {iso2}.svg，自带圆形 mask 裁切，MIT 许可。\n脚本批量下载 249 国圆形 SVG 到 public/uploads/asset/flag/，缺失的 bq、bv、hm、sh、sj、um 六个代码映射到真实或同源旗帜；旗帜 tab 默认来源改为本地路径，用户上传的自定义旗帜仍优先。",
       kind: "feature"
     },
     {
-      title: "全球经济热图国旗改用素材库国旗（本地圆形 SVG）",
-      desc: "全球经济热图（/global?section=heatmap）里的国旗此前用 flagcdn.com/w40/{flagCode}.png（外部 PNG，依赖外部加载），与素材库国家/地区旗帜不一致。修复：地图悬停 tooltip 的 flagMarkup 与右侧经济看板排行的 CountryFlag 两处默认来源，从 flagcdn PNG 统一改为本地素材库圆形 SVG /uploads/asset/flag/{flagCode}.svg（hatscripts/circle-flags，512×512 圆裁切），用户上传的自定义国旗（countryFlags 自定义素材）仍优先；tooltip 圆形容器与看板 economy-ranking-flag 保持 20px 圆形显示。GlobalEconomyHeatmap 组件内 flagcdn 引用已全部清除。tsc 无错误、npm run build 通过。",
+      title: "全球经济热图国旗改用本地素材库",
+      desc: "全球经济热图里的国旗此前用 flagcdn.com 的外部 PNG，与素材库国家/地区旗帜不一致。\n修复：地图悬停 tooltip 的 flagMarkup 与右侧经济看板排行的 CountryFlag 两处默认来源，统一改为本地素材库圆形 SVG，用户上传的自定义国旗仍优先；tooltip 圆形容器与看板国旗保持 20px 圆形显示，组件内的 flagcdn 引用已全部清除。",
       kind: "feature"
     },
     {
-      title: "附件管理分类重构：财报文件独立成一级 tab，文件空间改名文件管理",
-      desc: "把「财报文件」从素材资源内部的二级界面独立出来，作为附件管理的一级分类 tab（位于「文件管理」右侧），分类变为 文件管理 | 财报文件 | 素材资源：1) category 支持 docs/reports/library 三态；新增「财报文件」tab（文档图标）；「文件空间」改名「文件管理」；2) FinancialAttachments 从 LibraryAttachmentsView 抽出并导出为可独立复用的组件（新增 standalone 模式：独立显示搜索栏，取消原二级面包屑「图标素材/财报文件」），素材资源内部的「财报文件」二级入口按钮移除；3) 财报文件 tab 复用 /api/v1/financial-reports 数据（市场/交易所/公司/报告期分组、搜索、分页、删除）。实测三个 tab（文件管理/财报文件/素材资源）正常渲染。tsc 无错误、npm run build 通过。",
+      title: "附件管理分类重构",
+      desc: "把「财报文件」从素材资源内部的二级界面独立出来，作为附件管理的一级分类 tab（位于「文件管理」右侧），分类变为 文件管理、财报文件、素材资源三态。\nFinancialAttachments 从 LibraryAttachmentsView 抽出并导出为可独立复用的组件（新增 standalone 模式：独立显示搜索栏，取消原二级面包屑），素材资源内部的「财报文件」二级入口按钮移除；财报文件 tab 复用 /api/v1/financial-reports 数据（市场、交易所、公司、报告期分组，搜索、分页、删除）。",
       kind: "feature"
     },
     {
-      title: "素材资源进入加速：分页缓存秒出 + 预取后续页",
-      desc: "素材库（素材资源）首次进入显示「正在读取素材库」，每次挂载都重新请求分页数据。新增前端分页缓存：1) 缓存键 = fire:lib-page:{type}|{market}|{q}|{sort}|{page}，值 = {at, data}，5 分钟 TTL；2) 首次进入/切分类/翻页时，若 localStorage 有当前页缓存则立即渲染并保底显示（loading 保持 false，避免闪「正在读取」），再后台刷新覆盖；3) 请求成功后写当前页缓存，并预取第 2、3 页写入缓存（翻页秒出）；4) 无缓存时才显示 loading。实测：素材库 API 单页约 0.05s，首次进入 content 区 loading 约 0.8s 消失；二次进入/翻页由缓存秒出。tsc 无错误、npm run build 通过。",
+      title: "素材资源进入加速",
+      desc: "素材库（素材资源）首次进入显示「正在读取素材库」，每次挂载都重新请求分页数据。\n新增前端分页缓存：缓存键按类型、市场、搜索、排序与页码组合，值含时间戳与数据，5 分钟 TTL；有缓存时立即渲染并保持 loading 为 false，再后台刷新覆盖；请求成功后写入当前页缓存并预取第 2、3 页，无缓存时才显示加载态。\n实测：素材库 API 单页约 0.05s，首次进入 loading 约 0.8s 消失，二次进入与翻页由缓存秒出。",
       kind: "fix"
     },
     {
-      title: "财报文件改为类网盘文件夹导航（市场→交易所→股票→年→年报/半年报/单季报）",
-      desc: "把财报文件从平铺分组改为参照主流存储网站（网盘）的文件夹导航视图：1) 面包屑逐级下钻 全部 → 市场（美股/港股/A股）→ 交易所（NASDA/纽交所等，按 exchange 细分）→ 股票 → 财年 → 报告类型，每层文件夹卡片显示该目录文件数，点击进入下一层，文件夹回到上一级（面包屑可任意回退）；2) 股票层文件夹图标默认使用素材库股票图标（useAssetIcons.stockIcons，键 市场:代码），无图标回退文件夹图标；3) 最内层（报告类型）用文件表格展示（类型/文件/大小/删除）；4) 报告类型由 fiscalPeriod + reportType 推导（FY 年报、H1/H2 半年报、Q1~Q4 单季报），新增 reportCategory/reportCategoryRank 归类函数。实测层级下钻 全部→美股→NASDAQ→Apple Inc. 正常。tsc 无错误、npm run build 通过。",
+      title: "财报文件改为类网盘文件夹导航",
+      desc: "把财报文件从平铺分组改为参照主流存储网站的文件夹导航：面包屑逐级下钻 全部 → 市场（美股 / 港股 / A股）→ 交易所 → 股票 → 财年 → 报告类型，每层文件夹卡片显示该目录文件数，点击进入下一层，面包屑可任意回退。\n股票层文件夹图标默认使用素材库股票图标（键为 市场:代码），无图标回退文件夹图标；最内层（报告类型）用文件表格展示（类型、文件、大小、删除）。\n报告类型由 fiscalPeriod 与 reportType 推导（FY 年报、H1 与 H2 半年报、Q1–Q4 单季报），新增 reportCategory 与 reportCategoryRank 归类函数。",
       kind: "feature"
     },
     {
-      title: "附件管理 URL 状态持久化（刷新保持分类与财报目录，URL 用稳定数字码）",
-      desc: "附件管理刷新后分类与财报文件目录会重置回默认。新增 URL 状态持久化：1) 附件管理分类写入 ?category=docs|reports|library（AttachmentsView category 初始从 URL 读、切换时 history.replaceState 写回，docs 默认时移除参数）；2) 财报文件文件夹路径写入 ?view=市场/交易所/公司代码/财年/报告类型码（FinancialAttachments view 初始从 URL 解码恢复、下钻/回退时写回）。参考主流存储网站用稳定代码而非中文长名：公司用 companyCode（AAPL）、报告类型用数字码（年报=01/半年报=02/单季报=03），显示时才由 reportCategoryName 映射回中文，公司名/中文报告类型不进 URL。实测下钻至 美股→NASDAQ→Apple→2026→单季报 后 URL 为 ?category=reports&view=US/NASDAQ/AAPL/2026/03（简短），刷新后面包屑恢复「单季报/2026 财年」、视图保持。tsc 无错误、npm run build 通过。",
+      title: "附件管理 URL 状态持久化",
+      desc: "附件管理刷新后分类与财报文件目录会重置回默认，因此新增 URL 状态持久化：分类写入 ?category=docs|reports|library（默认 docs 时移除参数）。\n财报文件文件夹路径写入 ?view=市场/交易所/公司代码/财年/报告类型码，参考主流存储网站使用稳定代码而非中文长名：公司用 companyCode、报告类型用数字码（年报 01、半年报 02、单季报 03），显示时才映射回中文。\n实测下钻至 美股 → NASDAQ → Apple → 2026 → 单季报 后地址为 ?category=reports&view=US/NASDAQ/AAPL/2026/03，刷新后面包屑与视图保持。",
       kind: "fix"
     },
     {
-      title: "财报目录 URL 保留可读分隔符（去掉 %2F 编码乱码）",
-      desc: "用 URLSearchParams.set 写 ?view= 时会把路径里的 \"/\" 编码成 %2F，导致地址栏出现 US%2FNASDAQ%2FAAPL... 的乱码。改为手动拼 query 字符串（encodeURIComponent 每段后按 \"/\" 拼接），浏览器地址栏显示可读的 ?view=US/NASDAQ/AAPL/2026/03；读取端仍用 URLSearchParams.get('view') 按 \"/\" 分割，兼容不变。实测 URL 无 %2F、view 还原 5 段正确。tsc 无错误、npm run build 通过。",
+      title: "财报目录 URL 去掉编码乱码",
+      desc: "用 URLSearchParams.set 写 ?view= 时会把路径里的斜杠编码成 %2F，地址栏出现 US%2FNASDAQ%2FAAPL 的乱码。\n改为手动拼 query 字符串（每段 encodeURIComponent 后按斜杠拼接），地址栏显示可读的 ?view=US/NASDAQ/AAPL/2026/03；读取端仍按斜杠分割，兼容不变。",
       kind: "fix"
     },
     {
-      title: "财报文件夹导航各层配图标（市场/交易所/股票）",
-      desc: "财报文件网盘式文件夹导航每层配图标，参考主流存储网站与 TradingView 指数图标：1) 市场层（美股/港股/A股/日股/韩股）默认使用素材库市场图标（useAssetIcons marketIcons，键 market 大写），文件夹卡片显示对应市场 logo；2) 交易所层（NASDAQ/纽交所等）用 EXCHANGE_ICON_CODE 映射——交易所自家公司在素材库的图标（NASDAQ→NDAQ、NYSE→ICE、AMEX→CME），无则市场图标兜底；3) 股票层沿用素材库股票图标（stockIcons，键 市场:代码）；4) 新增标普500 市场素材与本地保存 TradingView 指数图标（标普500SPX.svg 下载自 tradingview s3-symbol-logo，美国US.svg 兜底；DJI/IXIC/NDX 等 TradingView 接口 403 限流未直连获取）。实测市场层「美股」文件夹显示美股US.svg 图标。tsc 无错误、npm run build 通过。",
+      title: "财报文件夹导航各层配图标",
+      desc: "财报文件网盘式导航每层配图标，参考主流存储网站与 TradingView 指数图标：市场层（美股 / 港股 / A股 / 日股 / 韩股）默认使用素材库市场图标。\n交易所层用映射表取交易所自家公司在素材库的图标（NASDAQ→NDAQ、NYSE→ICE、AMEX→CME），无则用市场图标兜底；股票层沿用素材库股票图标。\n新增标普 500 市场素材并本地保存 TradingView 指数图标（DJI、IXIC、NDX 等因 TradingView 接口 403 限流未直连获取）。",
       kind: "feature"
     },
     {
-      title: "文件夹图标背景深色适配（去掉深色模式下的白色底块）",
-      desc: "财报文件夹卡片的图标容器此前用 bg-brand-light/60（浅色底）+ img object-cover（拉伸填充），在深色模式下图标周围露出一圈白底方块，很突兀。修复：图标容器背景改为透明（bg-transparent），图片改为 object-contain + p-1（保持旗帜/SVG 原始比例居中，不再拉伸填充）。实测深色模式下「美股」文件夹图标周围背景为深色/透明、无白色底块，整体协调。tsc 无错误、npm run build 通过。",
+      title: "文件夹图标深色模式适配",
+      desc: "财报文件夹卡片的图标容器此前用浅色底加 object-cover 拉伸填充，在深色模式下图标周围露出一圈白底方块。\n修复：图标容器背景改为透明，图片改为 object-contain 加 p-1，保持旗帜与 SVG 原始比例居中，不再拉伸填充。",
       kind: "fix"
     },
     {
-      title: "财报页删除说明文字 + 市场/指数文件夹支持自定义图标上传（相机）",
-      desc: "1) 删除财报文件详情顶部一行「共 N 个财报文件 · 按 市场分类 / 股票名称 / 年份 / 报告类型 递进浏览」说明文字（信息冗余，层级已由面包屑体现）；2) 市场/指数层文件夹图标支持自定义上传：文件夹图标 hover 显示相机角标，点击弹文件选择，上传走 /api/upload（kind=asset folder=market）+ 更新素材库 market 图标记录（/api/assets），成功后派发 fire:assets-updated 全局刷新，市场图标全局生效（自选股/持仓/素材库同步）；图标缺失的其他层仍显示默认文件夹/日程/文档图标。实测说明文字消失、美股卡片 hover 出现相机角标与 file input。tsc 无错误、npm run build 通过。",
+      title: "财报页市场文件夹支持自定义图标",
+      desc: "删除财报文件详情顶部一行「共 N 个财报文件 · 按 市场分类 / 股票名称 / 年份 / 报告类型 递进浏览」说明文字，层级已由面包屑体现。\n市场与指数层文件夹图标支持自定义上传：文件夹图标悬停显示相机角标，点击弹文件选择，上传走 /api/upload（kind=asset、folder=market）并更新素材库 market 图标记录，成功后派发 fire:assets-updated 全局刷新，市场图标在自选股、持仓与素材库同步生效。",
       kind: "feature"
     },
     {
-      title: "财报「指数/交易所」层补上自定义图标上传相机（此前仅市场层有）",
-      desc: "上一步给市场/指数文件夹加了相机上传，但实测进入美股后的交易所层（NASDAQ 等）文件夹卡片没有相机——只在最外层（市场）的 folderCard 传了 uploadableKey，交易所层的调用漏传，导致 camera 角标不渲染。修复：1) folderCard 新增 onUpload 回调参数，相机角标 file input 弹文件选择后改调 onUpload；2) 新增 uploadExchangeIcon(market, exchange, file)——交易所层图标按 stockIcons[市场:EXCHANGE_ICON_CODE[e]]（如美股 US:NDAQ）取图，故把它以 type=stock（market=市场、code=NDAQ、folder=stock/{市场}）落库到素材库，成功后派发 fire:assets-updated 全局刷新，交易所图标即由素材库同名股票图标提供（与交易所自家公司图标共用一套）；3) 市场层调用同步改为传 onUpload 走 uploadMarketIcon。实测进入 美股→NASDAQ 层卡片 hover 出现相机角标；tsc 无错误、npm run build 通过。",
+      title: "交易所层补上自定义图标上传",
+      desc: "上一步给市场与指数文件夹加了相机上传，但实测进入美股后的交易所层文件夹卡片没有相机 —— 只在最外层传了 uploadableKey，交易所层的调用漏传。\n修复：folderCard 新增 onUpload 回调参数；新增 uploadExchangeIcon(market, exchange, file)，交易所层图标按 stockIcons[市场:映射代码] 取图，因此以 type=stock（market 与 code 都指定）落库到素材库，成功后派发 fire:assets-updated 全局刷新；市场层调用同步改为传 onUpload。",
       kind: "feature"
     },
     {
-      title: "财报文件夹图标统一为圆形（市场/交易所/股票）",
-      desc: "财报文件夹卡片图标展示不一致：市场层招牌是圆形国旗（circle-flags 圆形 SVG）而交易所层取的是方形公司 logo（NASDAQ→NDAQ 蓝底方块），视觉上一圆一方不协调。按用户要求把文件夹图标统一为「圆形」：1) 图标容器由 rounded-[10px] 改为 rounded-full（真正圆形）；2) 图片由 object-contain + p-1 改为 object-cover（铺满圆形容器、正方形 logo 被裁成圆形，国旗因本身是圆 SVG 仍完美贴合）；3) 相机角标遮罩同步改为 rounded-full。改动后 美股（圆国旗）与 NASDAQ（圆形蓝底 N）外观一致，均为圆形。tsc 无错误、npm run build 通过。",
+      title: "财报文件夹图标统一为圆形",
+      desc: "财报文件夹卡片图标展示不一致：市场层是圆形国旗，而交易所层取的是方形公司 logo，视觉上一圆一方不协调。\n按用户要求统一为圆形：图标容器由圆角方框改为 rounded-full，图片由 object-contain 加内边距改为 object-cover（方形 logo 被裁成圆形，圆形国旗仍贴合），相机角标遮罩同步改为圆形。",
       kind: "fix"
     },
     {
-      title: "附件管理配色统一为蓝色（文件夹图标/头部图标与上传按钮同色）",
-      desc: "附件管理-文件管理页配色不统一：文件夹图标与左上「附件管理」头部图标是橙色（琥珀色），而「上传文件」主按钮是蓝色，一橙一蓝显得割裂。按用户要求统一为蓝色：把附件主题变量 --attachment-folder（文件夹主色）与 --attachment-folder-soft（文件夹浅底）从橙色改为与 --attachment-accent 一致的蓝色——浅色 mode 橙色 #e99016→#2382f7（浅底 #fff4d8→#eaf3ff），深色 mode #f2b24d→#66aaff（浅底 rgba(242,178,77,.12)→rgba(60,145,255,.14)）。该变量驱动所有文件夹相关图标：头部附件管理图标、行/网格/详情/弹窗/树形视图的文件夹图标及文件夹浅色底，全部由橙变蓝，与上传按钮同色。tsc 无错误、npm run build 通过。",
+      title: "附件管理配色统一为蓝色",
+      desc: "附件管理-文件管理页配色不统一：文件夹图标与左上「附件管理」头部图标是橙色，而「上传文件」主按钮是蓝色。\n按用户要求统一为蓝色：把附件主题变量中的文件夹主色与浅底从橙色改为与 accent 一致的蓝色（浅色模式主色与浅底、深色模式对应色一并替换）。该变量驱动所有文件夹相关图标与浅底，因此头部图标、行、网格、详情、弹窗与树形视图的文件夹图标全部由橙变蓝。",
       kind: "fix"
     },
     {
-      title: "美股 top 股票财报自动补全（SEC EDGAR 10-K/10-Q/20-F）",
-      desc: "财报文件此前几乎为空（只有手动上传的 AAPL Q1）。新增脚本 scripts/backfill-sec-financial-reports.mjs 从 SEC EDGAR（美股官方）补齐持仓/自选里美股近一年财报：1) 读取 records 里美股代码（去 .AM/.N 等交易所后缀），用 SEC company_tickers_exchange.json 映射 ticker→CIK/交易所/公司名；2) 拉取 data.sec.gov 的 submissions，取最新年报（10-K，外国发行人用 20-F）+ 最近 4 个 10-Q（美股的 Q4 不单独发 10-Q 而是并入年度 10-K）；3) 按「财政年末月」推导 fiscalYear/fiscalPeriod（AAPL 2025-12-27→2026 Q1 等），保存 SEC 主文档（HTML）到 public/uploads/reports/US/{交易所}/{代码}/{财年}/{期}/，并写入 financial_report_files（file_kind=filing、source=sec）；4) 幂等（跳过已存在）、自动排除基金/ETF（ProShares、Vanguard 等，按公司名 trust/fund/proshares 等特征）。实测补齐 20 家美股共 83 份（AAPL/NVDA/MSFT/AMZN/GOOGL/META/TSLA/MU/WDC/SNDK/INTC/INTU/MSTR/NFLX/RKLB/GOOG/SPCX + NIO/XPEV/FUTU 的 20-F 年报），数据库 financial_report_files 从 1 行增至 84 行。UI：file_kind 新增 filing 类型，财报附件表格标注「SEC 文件」（FinancialAttachments）与「SEC」徽标（FinancialPanel 个股详情-财务-财报附件），点击在新窗口打开 SEC 原文。tsc 无错误、npm run build 通过。",
+      title: "美股财报自动补全（SEC EDGAR）",
+      desc: "财报文件此前几乎为空（只有手动上传的 AAPL Q1），因此新增脚本 scripts/backfill-sec-financial-reports.mjs，从 SEC EDGAR 补齐持仓与自选里美股近一年财报。\n脚本用 SEC 的 company_tickers_exchange.json 映射 ticker 到 CIK、交易所与公司名，拉取 submissions 取最新年报（10-K，外国发行人用 20-F）与最近 4 个 10-Q（美股的 Q4 并入年度 10-K），并按财政年末月推导 fiscalYear 与 fiscalPeriod，保存 SEC 主文档到 public/uploads/reports/ 对应目录，写入 financial_report_files（file_kind=filing、source=sec）。\n脚本幂等（跳过已存在）并自动排除基金与 ETF（按公司名特征）。实测补齐 20 家美股共 83 份，数据库记录从 1 行增至 84 行；UI 新增 filing 类型，财报附件表格标注「SEC 文件」与「SEC」徽标，点击在新窗口打开原文。",
       kind: "feature"
     },
     {
-      title: "财报公司文件夹主显示中文名、下方股票代码",
-      desc: "财报文件公司层文件夹此前主显示 SEC 英文公司名（Apple Inc. / NVIDIA CORP）且下方是「代码 · N 份」。改为「主显示中文名称、下方为股票代码」：从素材库 stock 行（assets.name，如 AAPL→苹果、NVDA→英伟达、MSFT→微软、AMZN→亚马逊）建立 代码→中文名 映射（FinancialAttachments 内 stockNameMap），公司层 folderCard 主文本用中文名（无素材库映射时回退 SEC 公司名/代码），下方只显示股票代码（如 AAPL）。市场层（美股/港股）本就是中文，交易所层（NASDAQ）维持。实测公司层显示 苹果/AAPL、英伟达/NVDA 等。tsc 无错误、npm run build 通过。",
+      title: "财报公司文件夹显示中文名",
+      desc: "财报文件公司层文件夹此前主显示 SEC 英文公司名，下方是「代码 · N 份」。\n改为主显示中文名称、下方为股票代码：从素材库 stock 行建立代码到中文名的映射，公司层主文本用中文名（无映射时回退 SEC 公司名或代码），下方只显示股票代码；市场层本就是中文，交易所层维持。",
       kind: "fix"
     },
     {
-      title: "财报文件读取提速（保留 sec 冷编译 + 列表客户端缓存秒出）",
-      desc: "财报文件 tab 首次进入显示「正在读取财报文件」很久。排查：dev 服务器（next dev）首次命中 /api/v1/financial-reports 与 /api/attachments 会做 Webpack 一次性冷编译（实测各 ~10s），之后降到 36ms；此外每次进财报文件 tab 组件重挂载都会重新请求并闪加载态。提速：1) 财报文件列表新增客户端缓存（key=fire:finreports:v1，5 分钟 TTL），重进 tab / 切回直接读缓存秒出首帧、loading 保持 false 不闪「正在读取」，仅无缓存时才显示加载态，后台刷新再覆盖；2) 已对 dev 服务器关键路由（financial-reports / attachments / assets）做预热，冷编译后热态 reports 约 18-26ms、页面 shell 约 365ms。tsc 无错误、npm run build 通过。",
+      title: "财报文件读取提速",
+      desc: "财报文件 tab 首次进入会显示「正在读取财报文件」很久：开发服务器首次命中相关接口会做一次性冷编译（各约 10s），之后降到 36ms；此外每次进 tab 组件重挂载都会重新请求并闪加载态。\n提速：财报文件列表新增客户端缓存（5 分钟 TTL），重进 tab 或切回时直接读缓存秒出首帧、保持 loading 为 false，仅无缓存时显示加载态，后台刷新再覆盖；并对开发服务器的关键路由做预热。",
       kind: "fix"
     },
     {
-      title: "附件管理分类 tab 图标垂直居中对齐（去掉跨行导致偏下）",
-      desc: "附件管理顶部三个分类 tab（文件管理 / 财报文件 / 素材资源）的图标相对文字偏下，尤其「素材资源」最明显。排查：.attachments-space-tabs > button 是 grid（18px auto 两列），而图标被 .attachments-space-tabs > button > svg 设为 grid-row:1 / 3（跨两行网格），但这些 tab 只有「图标+文字」一行内容，跨两行会让图标垂直居中在更高的区域里而比文字偏下（移动端媒体查询里恰好是 grid-row:auto 所以不偏）。修复：基础规则改为 align-self:center，让图标与文字在同一行垂直居中（移动端原 grid-row:auto 保留不变）。实测三个 tab 图标与文字垂直对齐、不再偏下。tsc 无错误、npm run build 通过。",
+      title: "附件管理分类 tab 图标对齐",
+      desc: "附件管理顶部三个分类 tab 的图标相对文字偏下，尤其「素材资源」最明显。\n排查：tab 按钮是两列网格，而图标被设为跨两行网格，但这些 tab 只有一行内容，跨两行会让图标在更高区域垂直居中而比文字偏下（移动端媒体查询恰好是自动行高，所以不偏）。修复：基础规则改为 align-self:center，让图标与文字在同一行垂直居中。",
       kind: "fix"
     },
     {
-      title: "素材资源筛选胶囊配色统一为中性灰（去掉橙色高亮）",
-      desc: "附件管理-素材资源（LibraryAttachmentsView）的分类 tab（股票/加密货币/贵金属/市场）与股票市场筛选胶囊（全部/美股/港股/A股/日股/韩股）悬停高亮用了橙色 #FF9828（「港股」胶囊悬停呈整块橙色），与全站中性色标准不符、也未与页面其余（蓝 accent/中性白）统一。排查：橙色来自组件内联 hover:bg-[#FF9828] hover:text-black 与全局 .seg-active:hover（注释写明「中性灰白取代浅蓝」却误用橙色）；素材库分页 Pagination 也有同款橙色 hover。修复：1) LibraryAttachmentsView 分类/市场胶囊 hover 由 #FF9828 改为 hover:bg-brand-hover hover:text-ink（中性浅灰+深字，深色模式自动适配）；2) 全局 .seg-active:hover 由 #FF9828 改 bg-brand-hover text-ink（6 个组件统一，不再橙色）；3) Pagination 按钮 hover 由 #FF9828 改 hover:bg-brand-hover hover:text-ink。注：设置-主题「V1 富途橙」的 sv-accent 属可选主题色，未改动。tsc 无错误、npm run build 通过。",
+      title: "素材资源筛选胶囊改为中性灰",
+      desc: "附件管理-素材资源的分类 tab 与股票市场筛选胶囊悬停高亮用了橙色，与全站中性色标准不符，也未与页面其余部分统一。\n排查：橙色来自组件内联样式与全局分段控件悬停规则（注释写明应用中性灰白却误用橙色），素材库分页按钮也有同款。修复：分类与市场胶囊悬停改为中性浅灰加深字（深色模式自动适配），全局分段控件悬停同样改为中性灰（6 个组件统一），分页按钮同步修改。设置中的「V1 富途橙」属可选主题色，未改动。",
       kind: "fix"
     },
     {
-      title: "全站橙色高亮统一为中性灰（同款 #FF9828 一并清理）",
-      desc: "附件管理排查发现橙色 #FF9828 高亮后，按用户要求做全站统一：首页（HomeContent）、资产库（AssetLibraryView：分类/市场筛选触发器打开态、圆形小按钮、列表项）、财报日历（EarningsCalendarView 分类/市场胶囊）、全球经济（GlobalPreviewView 双侧胶囊）、我的持仓（HoldingsView 排序/分页按钮）、自选股（QuotesView 分页按钮）共约 20 处 hover:bg-[#FF9828] hover:text-black（及打开态 bg-[#FF9828] text-black、深色 dark:hover:bg-[#FF9828]）统一改为 hover:bg-brand-hover hover:text-ink（中性浅灰+深字）、打开态 bg-brand-hover text-ink、深色 dark:hover:bg-white/10；并将 API 文档编辑器光标色 caret-color #ff9828 改中性灰 #6b7280。保留「设置→主题」V1 富途橙等可选主题预设（--sv-accent / .sv-v1 logo 与导航 / SettingsWindow 色卡）——那是刻意保留的选择型主题色，非站点高亮。实测 /、/earnings、/holdings、/watchlist、/library 均 200；tsc 无错误、npm run build 通过。",
+      title: "全站橙色高亮统一为中性灰",
+      desc: "按用户要求做全站统一：首页、资产库（分类与市场筛选触发器打开态、圆形小按钮、列表项）、财报日历（分类与市场胶囊）、全球经济（双侧胶囊）、我的持仓（排序与分页按钮）、自选股（分页按钮）共约 20 处橙色悬停与打开态，统一改为中性浅灰加深字（深色模式为白色 10%），并把 API 文档编辑器光标色改为中性灰。\n保留「设置 → 主题」中 V1 富途橙等可选主题预设 —— 那是刻意保留的选择型主题色，不是站点高亮。",
       kind: "fix"
     },
     {
-      title: "K 线「股票对比」报错 yAxis not found 修复",
-      desc: "个股 K 线在「涨跌幅对比」模式报运行时错误 yAxis \"O\" not found。排查：1) markLine.data: [{ yAxis: latestPrice }] 里的 latestPrice（新增价）与 baseline 直接取 data.values 首尾值，行情接口可能返回字符串（类型标注是 number[] 但运行时是字符串），传给 yAxis 被 ECharts 当成轴名引用而抛「yAxis not found」；对比模式触发重渲染必现。修复：① baseline / latestPrice 改为 Number(...) 强转，并用 Number.isFinite 守卫——非有限数字就不画该 markLine（折线图与基准线 markLine 都加守卫）；② 对比模式下 priceSeries 不需要「最新价线」（归一化 % 轴，画最新价反而失真），直接 drop markLine（markLine: undefined）；③ compareSeries 渲染条件由 compareSeries.length>0 改为 isComparing && compareSeries.length>0，避免 compareSeries 残留时 yAxisIndex: subCount+1 越界。tsc 无错误、npm run build 通过。",
+      title: "修复 K 线对比模式报错",
+      desc: "个股 K 线在「涨跌幅对比」模式报运行时错误 yAxis \"O\" not found。\n排查：标记线数据里的最新价与基准值直接取自行情序列首尾，接口可能返回字符串（类型标注为数字数组但运行时是字符串），传给 yAxis 后被 ECharts 当成轴名引用而抛错；对比模式触发重渲染必现。\n修复：基准值与最新价改为 Number(...) 强转并用 Number.isFinite 守卫，非有限数字就不画该标记线；对比模式下价格序列不需要最新价线（归一化百分比轴，画最新价反而失真），直接去掉标记线；对比序列的渲染条件加上「正在对比」判断，避免残留时轴索引越界。",
       kind: "fix"
     }
   ]
