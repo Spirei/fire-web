@@ -27,31 +27,30 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
 }
 
+/* 卡面右下角的加入／移出按钮：与内页（卡面详情）同款半透明深色圆钮 + 白色图标，
+   压在卡面底图上更干净；悬停加深，深浅色一致（不跟随主题，因为它是浮在图上的控件）。 */
 .card-library-action {
-  background: #f5f6f8;
-  color: #3f4652;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
+.card-library-action:hover {
+  background: rgba(0, 0, 0, 0.6);
+}
+/* 悬停提示也换成内页同款深色胶囊（原先的浅灰药丸压在卡面上偏亮） */
 .card-library-action-tip {
   display: inline-flex;
   align-items: center;
   height: 22px;
-  padding: 0 7px;
-  border: 1px solid #e2e5e9;
-  border-radius: 7px;
-  background: #f5f6f8;
-  color: #3f4652;
-  font-size: 10px;
-  font-weight: 500;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: rgba(28, 34, 45, 0.95);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
   line-height: 1;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
-}
-.dark .card-library-action,
-.dark .card-library-action-tip {
-  background: #e2e5e9;
-  color: #343a44;
-}
-.dark .card-library-action-tip {
-  border-color: #cbd0d7;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 10px 40px rgba(10, 14, 25, 0.14);
 }
 
 /* 触屏没有悬停，保留可发现的加入／移除入口。 */
