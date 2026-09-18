@@ -537,6 +537,14 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.deepEqual(extractRateMap({ rates: { CNY: 7.2, HKD: '7.85' } }), { CNY: 7.2, HKD: 7.85 });
     assert.equal(Number(toUsdBase({ USD: 1.08, CNY: 7.56 }).CNY.toFixed(4)), 7);
   });
+  await test('settings window keeps online height and hover scrollbar', () => {
+    const win = fs.readFileSync(path.join(root, 'components/SettingsWindow.tsx'), 'utf8');
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    assert.match(win, /h-\[min\(780px,calc\(100vh-120px\)\)\]/, '设置窗口高度必须与线上一致');
+    assert.match(win, /overflow-hidden">\{children\}/, '中间层不能抢走右侧滚动');
+    assert.match(css, /height:min\(780px,calc\(100vh - 120px\)\)/, 'CSS 高度必须与线上一致');
+    assert.match(css, /\.sv-win-root \.sw-content-scroll,\s*\.dark \.sv-win-root \.sw-content-scroll\s*\{\s*scrollbar-width:\s*auto;\s*scrollbar-color:\s*auto/, '右侧滚动条必须重置后才能划过显示');
+  });
   await test('global economy places 汇率换算 to the right of 经济热图', () => {
     const view = fs.readFileSync(path.join(root, 'components/views/GlobalPreviewView.tsx'), 'utf8');
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');

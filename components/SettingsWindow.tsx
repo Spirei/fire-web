@@ -164,9 +164,7 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
 
   return (
     <div className={`sv-win-root sv-${variant} w-full max-w-[960px]`} style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}>
-      {/* 高度自适应可用空间：窗口顶在 header(72px) + main 上内边距(py-14=56px) 之下，
-          底部同样留 56px，即 100vh - 184px，正好填满一屏、不再留下大片空白；屏幕过矮时保底 520px 由页面滚动。 */}
-      <div className="sw-window flex h-[calc(100vh-184px)] min-h-[520px] flex-col overflow-hidden rounded-[10px] border shadow-[0_12px_40px_rgba(0,0,0,.12)]">
+      <div className="sw-window flex h-[min(780px,calc(100vh-120px))] flex-col overflow-hidden rounded-[10px] border shadow-[0_12px_40px_rgba(0,0,0,.12)]">
         {/* 窗口标题栏 */}
         <div
           onMouseDown={onTitleMouseDown}
@@ -267,7 +265,7 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
         </div>
 
         {/* 窗口主体 */}
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
 
         {/* 底部状态栏（所有版本统一） */}
           <div className="sw-statusbar flex h-[26px] flex-none items-center gap-4 border-t px-4 text-[10.5px]">
