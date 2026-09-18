@@ -47,6 +47,8 @@ export interface McLarenHud {
   /** 缩放按钮（放大 / 缩小） */
   zoomIn?: HTMLElement | null;
   zoomOut?: HTMLElement | null;
+  /** 缩放模式开关（打开后普通滚轮 / 手指滚动就是缩放，不再滚动页面） */
+  zoomMode?: HTMLElement | null;
   /** 部件标注元素（位置由本文件每帧投影更新） */
   labels: { el: HTMLElement; from: number; pos: [number, number, number] }[];
 }
@@ -534,26 +536,53 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
   const streakFrag = `
     uniform float uTime; uniform float uSpeed; uniform float uOpacity; uniform vec3 uTint; uniform sampler2D tNoise;
+    uniform float uBars; uniform vec3 uGold; uniform vec3 uWhite;
     varying vec2 vUv;
+    const float TAU = 6.28318530718;
+    // 圆周上的角度距离（弧度），用来画径向光条
+    float barLine(float ang, float target, float w){
+      float d = abs(fract((ang - target) / TAU + 0.5) - 0.5) * TAU;
+      return smoothstep(w, 0.0, d);
+    }
     void main(){
-      // 噪声贴图沿隧道轴拉伸并滚动：x 方向密、y 方向疏，就得到放射状速度线
+      float ang = vUv.x * TAU;
+      vec3 col = vec3(0.0);
+      float mask = 0.0;
+      if (uBars > 0.5) {
+        // 左右各三条主光条（60° 均分）：上下两条是暖金色，靠内侧的四条偏白灰。
+        // 宽度按参考视频量出来约 0.5°，所以这里是很细的亮线，靠 Bloom 出光晕。
+        float gold = barLine(ang, 1.2217, 0.009) + barLine(ang, 4.3633, 0.009);
+        float white = barLine(ang, 0.1745, 0.007) + barLine(ang, 2.2689, 0.008)
+                    + barLine(ang, 3.3161, 0.007) + barLine(ang, 5.4105, 0.008);
+        float goldCore = barLine(ang, 1.2217, 0.0024) + barLine(ang, 4.3633, 0.0024);
+        float whiteCore = barLine(ang, 0.1745, 0.0018) + barLine(ang, 2.2689, 0.0022)
+                        + barLine(ang, 3.3161, 0.0018) + barLine(ang, 5.4105, 0.0022);
+        // 亮度放在颜色里，alpha 顶到 1 就够，否则叠上 Bloom 会一片糊
+        col += uGold * (gold * 1.15 + goldCore * 2.0) + uWhite * (white * 0.7 + whiteCore * 1.4);
+        mask += gold * 0.85 + goldCore * 0.5 + white * 0.6 + whiteCore * 0.4;
+      }
+      // 其余是很浅的虚线：噪声贴图沿轴拉伸并滚动
       vec2 nUv = vec2(vUv.x * 48.0, vUv.y * 0.32 - uTime * (0.15 + uSpeed * 0.035));
       vec3 s = texture2D(tNoise, nUv).rgb;
-      float mask = smoothstep(0.8, 0.97, s.r);
-      // 参考图里速度线偏白与青，夹少量橙
-      vec3 col = mix(vec3(1.0, 0.74, 0.42), vec3(0.62, 0.82, 1.7) * (0.75 + s.b), step(0.58, s.g));
+      float dash = smoothstep(0.86, 0.99, s.r) * 0.34;
+      col += mix(vec3(0.52, 0.58, 0.72), vec3(0.92, 0.94, 1.0), s.g) * dash;
+      mask += dash;
       col *= uTint;
       mask *= smoothstep(0.0, 0.16, vUv.y) * smoothstep(0.0, 0.16, 1.0 - vUv.y);
       mask *= smoothstep(0.0, 0.1, vUv.x) * smoothstep(0.0, 0.1, 1.0 - vUv.x);
       mask *= smoothstep(2.0, 12.0, uSpeed);
-      gl_FragColor = vec4(col * 1.9, mask * uOpacity);
+      gl_FragColor = vec4(col, mask * uOpacity);
     }`;
   const tunnelUniforms = {
     uTime: { value: 0 },
     uSpeed: { value: 0 },
     uOpacity: { value: 0 },
     uTint: { value: new THREE.Color(1, 1, 1) },
-    tNoise: { value: streakNoise }
+    tNoise: { value: streakNoise },
+    uBars: { value: 1 },
+    // 光条取色：按参考视频逐点取样后的暖金与冷白（照片偏色已做中性化）
+    uGold: { value: new THREE.Color(1.0, 0.76, 0.4) },
+    uWhite: { value: new THREE.Color(0.8, 0.86, 0.98) }
   };
   const tunnel = new THREE.Mesh(
     new THREE.CylinderGeometry(26, 26, 120, 64, 1, true),
@@ -576,7 +605,10 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     uSpeed: { value: 0 },
     uOpacity: { value: 0 },
     uTint: { value: new THREE.Color(1.6, 0.85, 0.45) },
-    tNoise: { value: streakNoise }
+    tNoise: { value: streakNoise },
+    uBars: { value: 0 },               // 副层只画很浅的虚线，主光条只留在主层
+    uGold: { value: new THREE.Color(1.0, 0.76, 0.4) },
+    uWhite: { value: new THREE.Color(0.8, 0.86, 0.98) }
   };
   const accent = new THREE.Mesh(
     new THREE.CylinderGeometry(19, 19, 120, 48, 1, true),
@@ -829,13 +861,16 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   // 开场对齐参考图：左侧全览（车头朝画面右），随后绕到车头 3/4、细节特写，最后在车尾方向收车。
   const CAM_KEYS = [
     { p: 0, az: -74, r: 12.2, h: 1.9, ty: 0.98, tz: 0.1, fov: 30 },
-    { p: 0.12, az: -56, r: 11.2, h: 1.76, ty: 0.9, tz: 0.15, fov: 30 },
-    { p: 0.28, az: -6, r: 9.2, h: 1.3, ty: 0.76, tz: 0.1, fov: 29 },
-    { p: 0.4, az: 26, r: 8.3, h: 1.02, ty: 0.62, tz: 0.85, fov: 27 },
-    { p: 0.52, az: 66, r: 8.7, h: 0.85, ty: 0.6, tz: 0.4, fov: 28 },
-    { p: 0.68, az: 148, r: 10.6, h: 0.6, ty: 0.6, tz: -0.1, fov: 32 },
-    { p: 0.84, az: 176, r: 11.4, h: 1.9, ty: 0.8, tz: 0, fov: 30 },
-    { p: 1, az: 188, r: 10.8, h: 2.15, ty: 0.84, tz: 0.1, fov: 30 }
+    { p: 0.1, az: -56, r: 11.2, h: 1.76, ty: 0.9, tz: 0.15, fov: 30 },
+    { p: 0.22, az: -16, r: 9.2, h: 1.3, ty: 0.76, tz: 0.1, fov: 29 },
+    { p: 0.32, az: 26, r: 8.3, h: 1.02, ty: 0.62, tz: 0.85, fov: 27 },
+    { p: 0.42, az: 84, r: 8.7, h: 0.85, ty: 0.6, tz: 0.4, fov: 28 },
+    { p: 0.52, az: 140, r: 9.6, h: 0.68, ty: 0.6, tz: 0.1, fov: 30 },
+    // 冲刺段镜头落在车尾正后方：车沿隧道开走时始终在画面中间，镜头本身保持锁定
+    { p: 0.62, az: 172, r: 10.2, h: 0.65, ty: 0.6, tz: 0, fov: 31 },
+    { p: 0.74, az: 180, r: 10.8, h: 0.75, ty: 0.62, tz: -0.2, fov: 32 },
+    { p: 0.86, az: 186, r: 11.4, h: 1.9, ty: 0.8, tz: 0, fov: 30 },
+    { p: 1, az: 192, r: 10.8, h: 2.15, ty: 0.84, tz: 0.1, fov: 30 }
   ];
   const camState = { az: CAM_KEYS[0].az, r: CAM_KEYS[0].r, h: CAM_KEYS[0].h, ty: 0.9, tz: 0.2, fov: 30, fovEff: 30 };
   function camAt(p: number) {
@@ -884,6 +919,8 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   let speed = 0;
   let elapsed = 0;
   let racing = false;
+  let racingAmt = 0;   // 冲刺状态的平滑量：镜头、轮胎、光条都跟它走
+  let carTravel = 0;   // 冲刺时车沿隧道开走的距离
   let userYaw = 0;
   let userYawVel = 0;
   // 用户缩放：滚轮（⌘/Ctrl + 滚轮或触控板捏合）与按钮都改这个倍率，用来放大看细节
@@ -919,6 +956,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     if (racing) targetSpeed = CONFIG.maxSpeed * 1.02;
     speed += (targetSpeed - speed) * clamp(dt * (racing ? 2.4 : 2), 0, 1);
     const sp = clamp(speed / CONFIG.maxSpeed, 0, 1);
+    racingAmt += ((racing ? 1 : 0) - racingAmt) * clamp(dt * 2.2, 0, 1);
 
     // 相机
     camAt(p);
@@ -929,6 +967,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
       if (Math.abs(userYawVel) < 0.0004) userYawVel = 0;
     }
     zoom += (zoomTarget - zoom) * clamp(dt * 8, 0, 1);
+    // 冲刺时镜头保持锁定（与参考视频一致）：车往隧道深处开走，画面不动
     const az = ((camState.az + userYaw) * Math.PI) / 180;
     // 竖屏 / 窄屏时水平视野会变窄，这里按宽高比把相机拉远、视角放宽，保证整车进画面
     const fit = camera.aspect < 1.2 ? clamp(1.2 / camera.aspect, 1, 1.8) : 1;
@@ -954,10 +993,15 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     }
 
     // 车：加速时下沉、轻微前倾，轮胎自转
+    // 冲刺时车顺着隧道开走（镜头锁定，车越来越小），松开后回到原位
+    carTravel += (racingAmt * 11 - carTravel) * clamp(dt * 1.1, 0, 1);
+    carRoot.position.z = carTravel;
     carRoot.position.y = Math.sin(elapsed * 0.7) * 0.004 - sp * 0.022;
     carRoot.rotation.z = -sp * 0.014;
     carRoot.rotation.y = Math.sin(elapsed * 0.25) * 0.006 + sp * 0.02;
-    const spin = speed * 0.62 * dt;
+    // 轮胎只在冲刺（按住空格 / 按住按钮）时转，纯滚动浏览时保持静止
+    const spin = speed * 0.62 * dt * racingAmt;
+    contact.position.z = carTravel;   // 接触阴影跟着车走，不然车会像浮在空中
     wheelPivots.forEach((parts) =>
       parts.forEach((w) => {
         w.angle -= spin;
@@ -980,14 +1024,14 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     flowUniforms.uFlowStrength.value = sps * sps * 0.6;
     tunnelUniforms.uTime.value = elapsed;
     tunnelUniforms.uSpeed.value = reduced ? 0 : speed;
-    tunnelUniforms.uOpacity.value = 0.55 + sps * 0.45;
+    tunnelUniforms.uOpacity.value = 0.5 + sps * 0.4;
     tunnel2Uniforms.uTime.value = elapsed * 0.75;
     tunnel2Uniforms.uSpeed.value = reduced ? 0 : speed * 0.8;
     tunnel2Uniforms.uOpacity.value = sps * 0.5;
     ringUniforms.uTime.value = elapsed;
     ringUniforms.uSpeed.value = sps;
     ringUniforms.uSweep.value = elapsed * (0.05 + sps * 0.22);
-    (pool.material as THREE.MeshBasicMaterial).opacity = 0.16 + sps * 0.24;
+    (pool.material as THREE.MeshBasicMaterial).opacity = 0.14 + sps * 0.1;
     ring.visible = p > 0.12 || sps > 0.05;
     tunnel.visible = speed > 0.6 && !off.has("tunnel");
     accent.visible = speed > 0.6 && !off.has("tunnel");
@@ -996,11 +1040,11 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     // 拖影只在高速时才有意义，静止段直接关掉这一整趟全屏后期
    smearPass.uniforms.uChroma.value = sps * 0.012;
     smearPass.uniforms.uTime.value = elapsed;
-    const smear = sps * sps * 0.14;
+    const smear = sps * sps * 0.09;
     smearPass.uniforms.uStrength.value = smear;
     smearPass.enabled = smear > 0.004;
-    bloom.strength = 0.4 + sps * 0.72;
-    bloom.radius = 0.62 + sps * 0.3;
+    bloom.strength = 0.4 + sps * 0.42;
+    bloom.radius = 0.6 + sps * 0.14;
     scene.backgroundIntensity = 0.85 + day * 0.35;
 
     // HUD
@@ -1140,6 +1184,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
       e.preventDefault();
       press(true);
     }
+    if (e.key === "z" && !isTyping() && !e.metaKey && !e.ctrlKey) setZoomMode(!zoomMode);
   };
   const onKeyUp = (e: KeyboardEvent) => {
     if (e.code === "Space") press(false);
@@ -1190,14 +1235,23 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   const applyZoom = (factor: number) => {
     zoomTarget = clamp(zoomTarget * factor, MIN_ZOOM, MAX_ZOOM);
   };
+  let zoomMode = false;
+  const setZoomMode = (on: boolean) => {
+    zoomMode = on;
+    hud.zoomMode?.classList.toggle("on", on);
+    hud.zoomMode?.setAttribute("aria-pressed", on ? "true" : "false");
+  };
   const onWheel = (e: WheelEvent) => {
-    if (!(e.ctrlKey || e.metaKey || e.altKey)) return;
+    const withModifier = e.ctrlKey || e.metaKey || e.altKey || e.shiftKey;
+    // 打开缩放模式后普通滚轮 / 触控板双指滚动就是缩放，不再滚动页面（触屏仍可单指上下滑动）
+    if (!withModifier && !zoomMode) return;
     e.preventDefault();
     // 往下滚 = 拉远，往上滚 / 双指张开 = 推近看细节
     applyZoom(Math.exp(e.deltaY * 0.0016));
   };
   const onDoubleClick = () => {
     zoomTarget = 1;
+    setZoomMode(false);
   };
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("dblclick", onDoubleClick);
@@ -1208,11 +1262,21 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
 
   const onZoomIn = () => applyZoom(1 / 1.25);
   const onZoomOut = () => applyZoom(1.25);
+  const onZoomModeToggle = () => {
+    if (zoomMode) {
+      zoomTarget = 1;
+      setZoomMode(false);
+      return;
+    }
+    setZoomMode(true);
+  };
   hud.zoomIn?.addEventListener("click", onZoomIn);
   hud.zoomOut?.addEventListener("click", onZoomOut);
+  hud.zoomMode?.addEventListener("click", onZoomModeToggle);
   cleanups.push(() => {
     hud.zoomIn?.removeEventListener("click", onZoomIn);
     hud.zoomOut?.removeEventListener("click", onZoomOut);
+    hud.zoomMode?.removeEventListener("click", onZoomModeToggle);
   });
 
   // 触屏双指捏合
@@ -1333,6 +1397,13 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
       for (let i = 0; i < steps; i += 1) render(p, 1 / 60);
       render(p, 1 / 60);
     },
-    debug: () => ({ progress: +pSmooth.toFixed(3), speed: +speed.toFixed(2), scale: renderScale })
-  };
+  debug: () => ({
+    progress: +pSmooth.toFixed(3),
+    speed: +speed.toFixed(2),
+    scale: renderScale,
+    racing,
+    travel: +carTravel.toFixed(2),
+    zoom: +zoom.toFixed(2)
+  })
+};
 }

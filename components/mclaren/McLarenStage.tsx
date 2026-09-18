@@ -28,6 +28,7 @@ export default function McLarenStage({ watermark = "FORMULA" }: { watermark?: st
   const raceRef = useRef<HTMLButtonElement | null>(null);
   const zoomInRef = useRef<HTMLButtonElement | null>(null);
   const zoomOutRef = useRef<HTMLButtonElement | null>(null);
+  const zoomModeRef = useRef<HTMLButtonElement | null>(null);
   const labelRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   const [phase, setPhase] = useState(0);
@@ -77,6 +78,7 @@ export default function McLarenStage({ watermark = "FORMULA" }: { watermark?: st
             raceBtn: raceRef.current,
             zoomIn: zoomInRef.current,
             zoomOut: zoomOutRef.current,
+            zoomMode: zoomModeRef.current,
             labels: MCL_PARTS.map((part, i) => ({ el: labelRefs.current[i], from: part.from, pos: part.pos })).filter(
               (item): item is { el: HTMLDivElement; from: number; pos: [number, number, number] } => Boolean(item.el)
             )
@@ -157,6 +159,19 @@ export default function McLarenStage({ watermark = "FORMULA" }: { watermark?: st
               </svg>
               STUDIO
             </span>
+            <button
+              type="button"
+              className="mcl-pill mcl-zoom-mode"
+              ref={zoomModeRef}
+              aria-pressed="false"
+              title="打开后普通滚轮 / 双指滚动就是放大缩小（快捷键 Z）"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <circle cx="11" cy="11" r="6.5" />
+                <path d="m20 20-4.6-4.6M11 8.5v5M8.5 11h5" />
+              </svg>
+              ZOOM
+            </button>
             <button type="button" className="mcl-zoom" ref={zoomOutRef} title="缩小（⌘/Ctrl + 滚轮）" aria-label="缩小">
               −
             </button>

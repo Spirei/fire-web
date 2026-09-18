@@ -179,6 +179,22 @@ html:has(.mcl-home) body {
   color: #fff;
 }
 
+/* 缩放模式：打开后普通滚轮 / 双指滚动直接缩放，不再滚动页面 */
+.mcl-zoom-mode {
+  pointer-events: auto;
+  cursor: pointer;
+  font: inherit;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.mcl-zoom-mode.on {
+  background: rgba(255, 128, 0, 0.22);
+  border-color: rgba(255, 128, 0, 0.7);
+  color: #fff;
+}
+
 /* 遥测面板 */
 .mcl-tele {
   right: 3.4vw;
