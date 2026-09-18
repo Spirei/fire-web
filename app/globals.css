@@ -4555,7 +4555,11 @@ html.dark .watch-import-target {
 }
 .sv-win-root .sw-window {
   position:relative;
-  height:min(780px,calc(100vh - 120px));
+  /* 高度自适应一屏：上 72px 页头 + main 的 py-14(56px) 上留白，下同样留 56px → 100vh - 184px；
+     屏幕过矮时保底 520px（窗口内部自己滚动）。此前写死 min(780px, …)：高屏上窗口只有 780px，
+     下方留出一大片空白。 */
+  height:calc(100vh - 184px);
+  min-height:520px;
   overflow:hidden;
   border:1px solid var(--sv-border);
   border-radius:10px;

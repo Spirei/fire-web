@@ -164,7 +164,9 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
 
   return (
     <div className={`sv-win-root sv-${variant} w-full max-w-[960px]`} style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}>
-      <div className="sw-window flex h-[min(780px,calc(100vh-120px))] flex-col overflow-hidden rounded-[10px] border shadow-[0_12px_40px_rgba(0,0,0,.12)]">
+      {/* 高度自适应可用空间：窗口顶在 header(72px) + main 上内边距(py-14=56px) 之下，
+          底部同样留 56px，即 100vh - 184px，正好填满一屏、不再留下大片空白；屏幕过矮时保底 520px 由页面滚动。 */}
+      <div className="sw-window flex h-[calc(100vh-184px)] min-h-[520px] flex-col overflow-hidden rounded-[10px] border shadow-[0_12px_40px_rgba(0,0,0,.12)]">
         {/* 窗口标题栏 */}
         <div
           onMouseDown={onTitleMouseDown}

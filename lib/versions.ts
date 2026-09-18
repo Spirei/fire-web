@@ -3790,11 +3790,19 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_34_ENTRY,
   version: "v0.1.35",
   date: "2026-09-19",
-  summary: "二次验证首次同时显示二维码和密钥。",
+  summary: "二次验证首次同时显示二维码和密钥；设置窗口铺满一屏。",
   software: V0_1_34_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.35" } : item),
   changes: [{
     title: "二次验证首次同时显示二维码和密钥",
     desc: "绑定页按主流站点做法：首次同时给出二维码和可复制密钥（以及 otpauth 链接），确认开启后不再显示。\nBitwarden 等需要手动填密钥的验证器，请在点确认开启前一并添加。\n验证码输入框改为单独一行，取消 / 确认开启放在下面，避免和输入框挤在一起。",
+    kind: "fix"
+  }, {
+    title: "设置窗口铺满一屏",
+    desc: "设置窗口高度不再封顶 780px。按页头和上下内边距算出可用高度（100vh − 184px），矮屏保底 520px，高屏不再在窗口下面空出一大块。",
+    kind: "fix"
+  }, {
+    title: "修复设置导航图标被裁成色块",
+    desc: "SafeAssetImage 用 grid 叠图片和占位时，百分比高度在未定高的格子里解析不出来，图片退回 SVG 固有尺寸再被 overflow 裁掉，应用导航里「资产分析 / 全球经济」会显示成深色色块。改为由占位撑开盒子，图片绝对定位铺满。",
     kind: "fix"
   }]
 };
