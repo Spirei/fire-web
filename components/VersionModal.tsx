@@ -135,8 +135,9 @@ export default function VersionModal({
             { label: "前端版本", n: active.frontend.length, cls: "bg-bg-gray text-ink-2 dark:bg-white/5 dark:text-muted" }
           ];
           const groups: { kind: ChangeKind; title: string; desc: string; dot: string }[] = [
-            { kind: "feature", title: "新功能", desc: "新增能力与界面优化", dot: "bg-brand" },
-            { kind: "fix", title: "修复", desc: "问题修复与细节完善", dot: "bg-[#9aa1ab]" },
+            // 每个分类一个颜色，一眼区分：新功能=绿、修复=蓝、安全=琥珀
+            { kind: "feature", title: "新功能", desc: "新增能力与界面优化", dot: "bg-[#0fa07b]" },
+            { kind: "fix", title: "修复", desc: "问题修复与细节完善", dot: "bg-[#3297f6]" },
             { kind: "security", title: "安全", desc: "安全加固与权限修复", dot: "bg-amber-500" }
           ];
           const statToKind: Record<string, string> = {
