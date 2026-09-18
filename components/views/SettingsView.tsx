@@ -21,6 +21,7 @@ import type { BackupConfig } from "@/lib/backup";
 import { DEFAULT_HOLDING_COLUMNS } from "@/lib/holdingColumns";
 import { useCurrencyDisplayUnit, type CurrencyDisplayUnit } from "@/lib/currencyPrefs";
 import { applyMarketBadges, DEFAULT_MARKET_BADGES, MARKET_BADGE_ITEMS, normalizeMarketBadges } from "@/lib/marketBadge";
+import { DEFAULT_CURRENCY_REFRESH_PATTERN, formatRefreshTimes, parseRefreshTimes } from "@/lib/currencyRefresh";
 
 // 版本历史弹窗按需懒加载：完整 VERSIONS 数组只在点开「版本」弹窗时下载，不进首屏包。
 const VersionModal = dynamic(() => import("@/components/VersionModal"), { ssr: false });
@@ -528,6 +529,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   searchApiUrl: "",
   chartApiUrl: "",
   currencyApiUrl: "",
+  currencyRefreshPattern: "09:00|23:00",
   earningsApiUrl: "",
   cnEarningsApiUrl: "",
   hkEarningsApiUrl: "",
@@ -606,7 +608,7 @@ const SOURCE_FIELDS: {
   { key: "quoteApiUrl", name: "实时行情", desc: "直接拼接股票代码，多个用逗号分隔", placeholder: "https://qt.gtimg.cn/q=", icon: "chart" },
   { key: "searchApiUrl", name: "搜索联想", desc: "用 {q} 代替查询词", placeholder: "https://smartbox.gtimg.cn/s3/?v=2&q={q}&t=all", icon: "search" },
   { key: "chartApiUrl", name: "分时走势", desc: "用 {code} 代替股票代码", placeholder: "https://web.ifzq.gtimg.cn/appstock/app/minute/query?code={code}", icon: "wave" },
-  { key: "currencyApiUrl", name: "汇率接口", desc: "每日 9:00 / 23:00 各刷新一次", placeholder: "https://api.frankfurter.dev/v1/latest", icon: "money" },
+  { key: "currencyApiUrl", name: "汇率接口", desc: "只走此地址；没返回的币种在换算页显示暂无汇率", placeholder: "https://api.frankfurter.dev/v1/latest?base=USD", icon: "money" },
   { key: "earningsApiUrl", name: "美股财报", desc: "直接拼接日期 YYYY-MM-DD", placeholder: "https://api.nasdaq.com/api/calendar/earnings?date=", icon: "cal" },
   { key: "cnEarningsApiUrl", name: "A股财报", desc: "东方财富预约披露，自动拼接报表参数", placeholder: "https://datacenter.eastmoney.com/securities/api/data/v1/get", icon: "cn" },
   { key: "hkEarningsApiUrl", name: "港股财报", desc: "雪球财报日历（需配置雪球 Cookie），按 begin_date / end_date 取整月", placeholder: "https://stock.xueqiu.com/v5/stock/screener/earnings_calendar/hk/list.json", icon: "hk" },
@@ -1002,6 +1004,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       searchApiUrl: s.searchApiUrl,
       chartApiUrl: s.chartApiUrl,
       currencyApiUrl: s.currencyApiUrl,
+      currencyRefreshPattern: s.currencyRefreshPattern,
       earningsApiUrl: s.earningsApiUrl,
       cnEarningsApiUrl: s.cnEarningsApiUrl,
       hkEarningsApiUrl: s.hkEarningsApiUrl,
@@ -1580,6 +1583,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           searchApiUrl: site.searchApiUrl,
           chartApiUrl: site.chartApiUrl,
           currencyApiUrl: site.currencyApiUrl,
+          currencyRefreshPattern: site.currencyRefreshPattern,
           earningsApiUrl: site.earningsApiUrl,
           cnEarningsApiUrl: site.cnEarningsApiUrl,
           hkEarningsApiUrl: site.hkEarningsApiUrl,
@@ -3249,8 +3253,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           <p className={`subhead ${label.startsWith("翻译服务") ? "mt-6 border-t border-edge pt-5 text-brand-deep" : ""}`}>{label}</p>
                           {fields.map((f) => {
                             const value = (site as unknown as Record<string, string>)[f.key] || f.placeholder;
+                            const refreshPattern = site.currencyRefreshPattern || DEFAULT_CURRENCY_REFRESH_PATTERN;
+                            const refreshTimes = parseRefreshTimes(refreshPattern);
                             return (
-                              <div key={f.key} className="sw-row">
+                              <div key={f.key}>
+                              <div className="sw-row">
                                 <div className="sw-row-label"><b>{f.name}</b><span>{f.desc}</span></div>
                                 <div className="ctrl">
                                   {editingSources ? (
@@ -3300,6 +3307,32 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                     </span>
                                   )}
                                 </div>
+                              </div>
+                              {f.key === "currencyApiUrl" && (
+                                <div className="sw-row">
+                                  <div className="sw-row-label">
+                                    <b>刷新时间</b>
+                                    <span>用正则写下每天的时刻，例如 09:00|23:00 或 09:00,12:00,18:00</span>
+                                  </div>
+                                  <div className="ctrl">
+                                    {editingSources ? (
+                                      <input
+                                        className="sw-row-input"
+                                        value={refreshPattern}
+                                        title={refreshPattern}
+                                        onChange={(e) => setSite((s) => ({ ...s, currencyRefreshPattern: e.target.value }))}
+                                        placeholder={DEFAULT_CURRENCY_REFRESH_PATTERN}
+                                        spellCheck={false}
+                                      />
+                                    ) : (
+                                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted" title={refreshPattern}>
+                                        {refreshPattern}
+                                      </span>
+                                    )}
+                                    <span className="flex-none text-[11px] text-faint">每天 {formatRefreshTimes(refreshTimes)}</span>
+                                  </div>
+                                </div>
+                              )}
                               </div>
                             );
                           })}
@@ -3706,7 +3739,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       icon: "money",
                       name: "汇率定时刷新",
                       desc: "从汇率接口拉取 USD 兑各币种汇率，供账户资产总资产换算",
-                      schedule: "每天 09:00 / 23:00",
+                      schedule: `每天 ${formatRefreshTimes(parseRefreshTimes(site.currencyRefreshPattern || DEFAULT_CURRENCY_REFRESH_PATTERN))}`,
                       state: "已启用",
                       action: true
                     },

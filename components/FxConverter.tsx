@@ -2,16 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import CurrencyFlag from "@/components/CurrencyFlag";
-import { FUND_CURRENCIES, FUND_CURRENCY_META, isFundCurrency, type FundCurrency } from "@/lib/fundCurrencies";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
-import { useRates } from "@/lib/useRates";
 import { showToast } from "@/lib/toast";
 import {
+  FX_CURRENCIES,
+  FX_CURRENCY_META,
+  type FxCurrency,
   amountToDraft,
   convertAmount,
   formatFxAmount,
   formatPairRate,
+  formatRatesDate,
+  isFxCurrency,
   moveFxOrder,
   normalizeFxOrder,
   pairRate,
@@ -21,14 +24,14 @@ import {
 
 const FX_ORDER_KEY = "fire:fx-order";
 
-function readUrlState(fallback: FundCurrency): { from: FundCurrency; amount: string } {
+function readUrlState(fallback: FxCurrency): { from: FxCurrency; amount: string } {
   if (typeof window === "undefined") return { from: fallback, amount: "100" };
   const params = new URLSearchParams(window.location.search);
   const from = params.get("from");
   const amount = params.get("amount");
   const parsed = amount != null ? parseFxAmount(amount) : 100;
   return {
-    from: isFundCurrency(from) ? from : fallback,
+    from: isFxCurrency(from) ? from : fallback,
     amount: parsed == null ? "100" : sanitizeFxInput(amount ?? "100")
   };
 }
@@ -51,14 +54,16 @@ function DragHandle({ label }: { label: string }) {
 }
 
 export default function FxConverter() {
-  const rates = useRates();
   const { currency: displayCurrency } = useDisplayCurrency();
-  const start = isFundCurrency(displayCurrency) ? displayCurrency : "USD";
-  const [base, setBase] = useState<FundCurrency>(() => readUrlState(start).from);
+  const start = isFxCurrency(displayCurrency) ? displayCurrency : "USD";
+  const [base, setBase] = useState<FxCurrency>(() => readUrlState(start).from);
   const [text, setText] = useState(() => readUrlState(start).amount);
-  const [savedOrder, setSavedOrder] = usePersistedState<FundCurrency[]>(FX_ORDER_KEY, [...FUND_CURRENCIES]);
+  const [savedOrder, setSavedOrder] = usePersistedState<FxCurrency[]>(FX_ORDER_KEY, [...FX_CURRENCIES]);
+  const [rates, setRates] = useState<Record<string, number>>({ USD: 1 });
+  const [quoted, setQuoted] = useState<Set<string>>(() => new Set(["USD"]));
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const codes = normalizeFxOrder(savedOrder);
-  const inputRefs = useRef<Partial<Record<FundCurrency, HTMLInputElement | null>>>({});
+  const inputRefs = useRef<Partial<Record<FxCurrency, HTMLInputElement | null>>>({});
   const dragFrom = useRef<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
@@ -73,11 +78,49 @@ export default function FxConverter() {
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }, [base, text]);
 
-  const amount = parseFxAmount(text);
-  const sourceMeta = FUND_CURRENCY_META[base];
+  useEffect(() => {
+    let cancelled = false;
+    async function load(force = false) {
+      try {
+        const response = await fetch(force ? "/api/rates?refresh=1" : "/api/rates");
+        const data = await response.json().catch(() => null);
+        if (cancelled || !data?.rates) return;
+        const quotedList = Array.isArray(data.quoted)
+          ? data.quoted.filter((code: unknown): code is string => typeof code === "string" && /^[A-Z]{3}$/.test(code))
+          : [];
+        const nextQuoted = new Set<string>(["USD", ...quotedList]);
+        const nextRates: Record<string, number> = { USD: 1 };
+        nextQuoted.forEach((code) => {
+          const value = Number(data.rates[code]);
+          if (value > 0) nextRates[code] = code === "USD" ? 1 : value;
+        });
+        setQuoted(nextQuoted);
+        setRates(nextRates);
+        if (typeof data.updatedAt === "number" && data.updatedAt > 0) setUpdatedAt(data.updatedAt);
+        if (!quotedList.length && !force) {
+          await load(true);
+        }
+      } catch {
+        /* 保留当前表 */
+      }
+    }
+    void load();
+    const onRates = () => { void load(true); };
+    window.addEventListener("fire:rates-updated", onRates);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("fire:rates-updated", onRates);
+    };
+  }, []);
 
-  function activate(next: FundCurrency) {
-    if (next === base) return;
+  const amount = parseFxAmount(text);
+
+  function hasQuote(code: string) {
+    return quoted.has(code) && (code === "USD" || (rates[code] ?? 0) > 0);
+  }
+
+  function activate(next: FxCurrency) {
+    if (next === base || !hasQuote(next)) return;
     if (amount != null) {
       const converted = convertAmount(amount, base, next, rates);
       setText(converted == null ? "" : amountToDraft(converted, next));
@@ -108,14 +151,15 @@ export default function FxConverter() {
 
       <div className="fx-converter-card">
         {codes.map((code, index) => {
-          const meta = FUND_CURRENCY_META[code];
-          const active = code === base;
-          const converted = active ? amount : amount == null ? null : convertAmount(amount, base, code, rates);
-          const rate = pairRate(base, code, rates);
+          const meta = FX_CURRENCY_META[code];
+          const live = hasQuote(code);
+          const active = code === base && live;
+          const converted = !live || !hasQuote(base) ? null : active ? amount : amount == null ? null : convertAmount(amount, base, code, rates);
+          const rate = live && hasQuote(base) ? pairRate(base, code, rates) : null;
           return (
             <div
               key={code}
-              className={`fx-converter-row${active ? " is-active" : ""}${dragging === index ? " is-dragging" : ""}${over === index && dragging !== index ? " is-over" : ""}`}
+              className={`fx-converter-row${active ? " is-active" : ""}${!live ? " is-missing" : ""}${dragging === index ? " is-dragging" : ""}${over === index && dragging !== index ? " is-over" : ""}`}
               draggable
               onPointerDown={(event) => {
                 if ((event.target as HTMLElement).closest(".drag-handle")) dragFrom.current = index;
@@ -167,8 +211,9 @@ export default function FxConverter() {
                     autoComplete="off"
                     spellCheck={false}
                     aria-label={`${meta.label}金额`}
-                    value={active ? text : converted == null ? "" : formatFxAmount(converted, code)}
-                    readOnly={!active}
+                    value={live ? (active ? text : converted == null ? "" : formatFxAmount(converted, code)) : ""}
+                    readOnly={!active || !live}
+                    placeholder={live ? "" : "暂无汇率"}
                     onMouseDown={() => activate(code)}
                     onFocus={() => {
                       activate(code);
@@ -179,11 +224,13 @@ export default function FxConverter() {
                 </span>
               </label>
               <span className="fx-converter-rate">
-                {active
-                  ? "正在输入"
-                  : rate == null
-                    ? "暂无汇率"
-                    : `1 ${base} = ${formatPairRate(rate)} ${code}`}
+                {!live
+                  ? "暂无汇率"
+                  : active
+                    ? "正在输入"
+                    : rate == null
+                      ? "暂无汇率"
+                      : `1 ${base} = ${formatPairRate(rate)} ${code}`}
               </span>
             </div>
           );
@@ -191,7 +238,7 @@ export default function FxConverter() {
       </div>
 
       <p className="text-xs text-muted">
-        以 1 {sourceMeta.label}（{base}）为基准换算。汇率来自欧洲央行，台币由腾讯外汇补齐，非实时成交价。
+        以 1 美元（USD）为基准换算。汇率接口 更新于：{formatRatesDate(updatedAt)}
       </p>
     </section>
   );

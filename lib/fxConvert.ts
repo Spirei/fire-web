@@ -3,26 +3,69 @@
  * rates[code] = 1 美元可兑换的该币种数量（与 /api/rates、FALLBACK_RATES 同一口径）。
  */
 
-import { FUND_CURRENCIES, isFundCurrency, type FundCurrency } from "./fundCurrencies";
+import { FUND_CURRENCY_META } from "./fundCurrencies";
 
-export function normalizeFxOrder(saved: unknown): FundCurrency[] {
-  const seen = new Set<FundCurrency>();
-  const next: FundCurrency[] = [];
+/** 换算页 14 个币种，两两一排。去掉澳门元，补瑞士法郎。 */
+export const FX_CURRENCIES = [
+  "USD",
+  "EUR",
+  "HKD",
+  "CNY",
+  "JPY",
+  "KRW",
+  "SGD",
+  "GBP",
+  "AUD",
+  "CAD",
+  "TWD",
+  "CHF",
+  "INR",
+  "BRL"
+] as const;
+
+export type FxCurrency = (typeof FX_CURRENCIES)[number];
+
+export const FX_CURRENCY_META: Record<FxCurrency, { label: string; symbol: string; iso: string }> = {
+  USD: FUND_CURRENCY_META.USD,
+  EUR: FUND_CURRENCY_META.EUR,
+  HKD: FUND_CURRENCY_META.HKD,
+  CNY: FUND_CURRENCY_META.CNY,
+  JPY: FUND_CURRENCY_META.JPY,
+  KRW: FUND_CURRENCY_META.KRW,
+  SGD: FUND_CURRENCY_META.SGD,
+  GBP: FUND_CURRENCY_META.GBP,
+  AUD: FUND_CURRENCY_META.AUD,
+  CAD: FUND_CURRENCY_META.CAD,
+  TWD: FUND_CURRENCY_META.TWD,
+  CHF: { label: "瑞士法郎", symbol: "Fr.", iso: "CH" },
+  INR: FUND_CURRENCY_META.INR,
+  BRL: FUND_CURRENCY_META.BRL
+};
+
+const FX_CURRENCY_SET = new Set<string>(FX_CURRENCIES);
+
+export function isFxCurrency(value: unknown): value is FxCurrency {
+  return typeof value === "string" && FX_CURRENCY_SET.has(value);
+}
+
+export function normalizeFxOrder(saved: unknown): FxCurrency[] {
+  const seen = new Set<FxCurrency>();
+  const next: FxCurrency[] = [];
   if (Array.isArray(saved)) {
     for (const code of saved) {
-      if (isFundCurrency(code) && !seen.has(code)) {
+      if (isFxCurrency(code) && !seen.has(code)) {
         seen.add(code);
         next.push(code);
       }
     }
   }
-  for (const code of FUND_CURRENCIES) {
+  for (const code of FX_CURRENCIES) {
     if (!seen.has(code)) next.push(code);
   }
   return next;
 }
 
-export function moveFxOrder(order: FundCurrency[], from: number, to: number): FundCurrency[] {
+export function moveFxOrder(order: FxCurrency[], from: number, to: number): FxCurrency[] {
   if (!Number.isInteger(from) || !Number.isInteger(to)) return order;
   if (from === to || from < 0 || to < 0 || from >= order.length || to >= order.length) return order;
   const next = order.slice();
@@ -94,4 +137,11 @@ export function amountToDraft(value: number, code: string): string {
   const text = value.toFixed(digits);
   if (!text.includes(".")) return text;
   return text.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+
+export function formatRatesDate(at: number | null | undefined): string {
+  if (!at || !Number.isFinite(at)) return "—";
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return "—";
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }

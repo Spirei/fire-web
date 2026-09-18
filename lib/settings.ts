@@ -84,7 +84,8 @@ const DEFAULTS: SiteSettings = {
   quoteApiUrl: "https://qt.gtimg.cn/q=",
   searchApiUrl: "https://smartbox.gtimg.cn/s3/?v=2&q={q}&t=all",
   chartApiUrl: "https://web.ifzq.gtimg.cn/appstock/app/minute/query?code={code}",
-  currencyApiUrl: "https://api.frankfurter.dev/v1/latest",
+  currencyApiUrl: "https://api.frankfurter.dev/v1/latest?base=USD",
+  currencyRefreshPattern: "09:00|23:00",
   earningsApiUrl: "https://api.nasdaq.com/api/calendar/earnings?date=",
   cnEarningsApiUrl: "https://datacenter.eastmoney.com/securities/api/data/v1/get",
   hkEarningsApiUrl: "https://stock.xueqiu.com/v5/stock/screener/earnings_calendar/hk/list.json",
@@ -114,9 +115,9 @@ const DEFAULTS: SiteSettings = {
   ticker: DEFAULT_TICKER
 };
 
-const SIMPLE_KEYS: ("domain" | "title" | "ico" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "xueqiuCookie")[] = [
+const SIMPLE_KEYS: ("domain" | "title" | "ico" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "currencyRefreshPattern" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "xueqiuCookie")[] = [
   "domain", "title", "ico", "homepageBg", "loginSideImage", "siteLogo", "logoText", "logoFont", "quoteSource", "futuHost", "futuPort", "footerDesc",
-  "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl", "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl", "translationProvider", "deepseekApiUrl", "deepseekModel", "deepseekApiKey", "llmProvider", "llmApiUrl", "llmModel", "llmApiKey",
+  "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl", "currencyRefreshPattern", "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl", "translationProvider", "deepseekApiUrl", "deepseekModel", "deepseekApiKey", "llmProvider", "llmApiUrl", "llmModel", "llmApiKey",
   "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword", "xueqiuCookie"
 ];
 

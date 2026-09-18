@@ -509,14 +509,29 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(sanitizeFxInput('12.3.4a'), '12.34');
     assert.equal(amountToDraft(720, 'CNY'), '720');
     assert.equal(amountToDraft(155.4, 'JPY'), '155');
-    const { normalizeFxOrder, moveFxOrder } = require(path.join(root, 'lib/fxConvert.ts'));
-    const { FUND_CURRENCIES } = require(path.join(root, 'lib/fundCurrencies.ts'));
-    assert.deepEqual(normalizeFxOrder(['CNY', 'USD', 'NOPE', 'CNY']), ['CNY', 'USD', ...FUND_CURRENCIES.filter((code) => code !== 'CNY' && code !== 'USD')]);
+    const { FX_CURRENCIES, formatRatesDate, normalizeFxOrder, moveFxOrder } = require(path.join(root, 'lib/fxConvert.ts'));
+    assert.equal(FX_CURRENCIES.length, 14);
+    assert.equal(FX_CURRENCIES.length % 2, 0);
+    assert(!FX_CURRENCIES.includes('MOP'));
+    assert(FX_CURRENCIES.includes('CHF'));
+    assert.deepEqual(normalizeFxOrder(['CNY', 'USD', 'MOP', 'NOPE', 'CNY']), ['CNY', 'USD', ...FX_CURRENCIES.filter((code) => code !== 'CNY' && code !== 'USD')]);
+    assert.equal(formatRatesDate(Date.UTC(2026, 8, 19, 4, 0, 0)).includes('2026年'), true);
     assert.deepEqual(moveFxOrder(['USD', 'EUR', 'HKD'], 0, 2), ['EUR', 'HKD', 'USD']);
     assert.deepEqual(moveFxOrder(['USD', 'EUR', 'HKD'], 2, 0), ['HKD', 'USD', 'EUR']);
     const untouched = ['USD', 'EUR'];
     assert.equal(moveFxOrder(untouched, 0, 0), untouched);
     assert.deepEqual(moveFxOrder(['USD', 'EUR'], 9, 0), ['USD', 'EUR']);
+  });
+  await test('currency refresh pattern extracts HH:MM and normalizes USD base', () => {
+    const { parseRefreshTimes, nextRefreshAt, extractRateMap, toUsdBase } = require(path.join(root, 'lib/currencyRefresh.ts'));
+    assert.deepEqual(parseRefreshTimes('09:00|23:00').map((item) => item.label), ['09:00', '23:00']);
+    assert.deepEqual(parseRefreshTimes('9:00, 12:00, 18:00').map((item) => item.label), ['09:00', '12:00', '18:00']);
+    const noon = new Date(2026, 8, 19, 12, 0, 0).getTime();
+    const next = nextRefreshAt(noon, parseRefreshTimes('09:00|23:00'));
+    assert.equal(new Date(next).getHours(), 23);
+    assert.equal(new Date(next).getMinutes(), 0);
+    assert.deepEqual(extractRateMap({ rates: { CNY: 7.2, HKD: '7.85' } }), { CNY: 7.2, HKD: 7.85 });
+    assert.equal(Number(toUsdBase({ USD: 1.08, CNY: 7.56 }).CNY.toFixed(4)), 7);
   });
   await test('global economy places 汇率换算 to the right of 经济热图', () => {
     const view = fs.readFileSync(path.join(root, 'components/views/GlobalPreviewView.tsx'), 'utf8');

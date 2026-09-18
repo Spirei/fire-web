@@ -102,6 +102,7 @@ export async function PUT(request: Request) {
     searchApiUrl: body.searchApiUrl !== undefined ? String(body.searchApiUrl) : undefined,
     chartApiUrl: body.chartApiUrl !== undefined ? String(body.chartApiUrl) : undefined,
     currencyApiUrl: body.currencyApiUrl !== undefined ? String(body.currencyApiUrl) : undefined,
+    currencyRefreshPattern: body.currencyRefreshPattern !== undefined ? String(body.currencyRefreshPattern).slice(0, 200) : undefined,
     earningsApiUrl: body.earningsApiUrl !== undefined ? String(body.earningsApiUrl) : undefined,
     cnEarningsApiUrl: body.cnEarningsApiUrl !== undefined ? String(body.cnEarningsApiUrl) : undefined,
     hkEarningsApiUrl: body.hkEarningsApiUrl !== undefined ? String(body.hkEarningsApiUrl) : undefined,

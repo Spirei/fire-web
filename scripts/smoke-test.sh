@@ -63,7 +63,7 @@ check "韩股 005930 有现价" 1 "$(echo "$JP_KR_JSON" | python3 -c 'import jso
 check "美股五日分时接口" 200 "$(code --max-time 40 "$BASE/api/kline/five-day?code=AAPL&market=US")"
 check "个股详情接口" 200 "$(code --max-time 40 "$BASE/api/v1/stock-detail?market=US&code=AAPL")"
 check "汇率接口（登录后）" 200 "$(code -b "$JAR_DEMO" "$BASE/api/rates")"
-check "汇率含台币（腾讯外汇补齐）" 1 "$(curl -s -b "$JAR_DEMO" "$BASE/api/rates" | python3 -c 'import json,sys; r=json.load(sys.stdin).get("rates") or {}; print(1 if isinstance(r.get("TWD"), (int,float)) and r["TWD"] > 0 else 0)')"
+check "汇率以美元为基准" 1 "$(curl -s -b "$JAR_DEMO" "$BASE/api/rates" | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d.get("rates") or {}; print(1 if r.get("USD")==1 else 0)')"
 
 # 备份真实设置，测试结束后恢复，避免覆盖用户配置
 BACKUP_FILE=$(mktemp)

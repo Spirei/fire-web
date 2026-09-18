@@ -197,7 +197,7 @@ Review 自查清单（按项目实际走一遍）：
 ## 货币换算规范
 
 - 素材库 / 资产总览等所有市值展示统一换算为美元：`usdCap(market, cap, rates) = cap ÷ rates[MARKET_CURRENCY[market]]`。
-- 新增市场（如新加坡 / 英国 / 德国 / 法国 / 澳大利亚 / 加拿大 / 印度 / 台湾 / 巴西）必须同步：`MARKET_CURRENCY` 映射市场→货币、`FALLBACK_RATES` 补兜底汇率、`lib/rates.ts` 的 frankfurter `symbols` 追加币种。
+- 新增市场（如新加坡 / 英国 / 德国 / 法国 / 澳大利亚 / 加拿大 / 印度 / 台湾 / 巴西）必须同步：`MARKET_CURRENCY` 映射市场→货币、`FALLBACK_RATES` 补兜底汇率。实时汇率只走设置里的 `currencyApiUrl`，接口没返回的币种在汇率换算页显示「暂无汇率」，不要再为单个币种接腾讯外汇。
 - 此问题已两次出现（港股 / A股早期、全球市场新增时），后续新增任何市场类型必须按此检查清单执行。
 
 ## 苹果风格开关（Toggle）标准（重要）

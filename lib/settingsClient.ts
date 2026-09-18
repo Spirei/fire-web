@@ -6,7 +6,7 @@ const CLIENT_KEYS = [
   "markets", "marketLabels", "marketBadges", "marketBadgesVisible", "assetMarketOrder",
   "assetAnalysisOrder", "indicesOrder", "holdingColumns", "allowRegister", "stockIconCdn",
   "siteLogo", "logoText", "logoFont", "quoteSource", "footerDesc", "quoteApiUrl", "searchApiUrl",
-  "chartApiUrl", "currencyApiUrl", "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl",
+  "chartApiUrl", "currencyApiUrl", "currencyRefreshPattern", "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl",
   "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl", "translationEnabled",
   "translationProvider", "deepseekApiUrl", "deepseekModel", "llmProvider", "llmApiUrl", "llmModel",
   "tradingSquareTrumpRefreshMinutes", "tradingSquareDuanRefreshMinutes", "dbType", "ticker"

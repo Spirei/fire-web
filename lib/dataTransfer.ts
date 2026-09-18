@@ -17,7 +17,7 @@ const SCHEMA_VERSION = 1;
 // 环境专属、不应随站点迁移的设置键（数据库连接串等；线上由部署方在目标环境配置）
 const ENV_SETTING_KEYS = new Set(["dbType", "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword"]);
 const SITE_SETTING_KEYS = new Set([
-  "allowRegister", "assetMarketOrder", "chartApiUrl", "cnEarningsApiUrl", "cnLogoApiUrl", "currencyApiUrl", "domain", "earningsApiUrl",
+  "allowRegister", "assetMarketOrder", "chartApiUrl", "cnEarningsApiUrl", "cnLogoApiUrl", "currencyApiUrl", "currencyRefreshPattern", "domain", "earningsApiUrl",
   "footerDesc", "futuHost", "futuPort", "groups", "heroBadge", "heroCtaPrimary", "heroCtaSecondary", "heroSubtitle", "heroTitle",
   "holdingColumns", "homeNav", "homepageBg", "ico", "indicesOrder", "loginSideImage", "logoFont", "logoText", "marketLabels", "markets",
   "quoteApiUrl", "quoteSource", "searchApiUrl", "siteLogo", "stockIconCdn", "tabs", "ticker", "title", "usLogoApiUrl"

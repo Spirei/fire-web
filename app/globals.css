@@ -4033,6 +4033,8 @@ html.dark .watch-import-target {
   opacity: 1;
   -webkit-text-fill-color: inherit;
 }
+.fx-converter-input::placeholder { color: #8b93a0; font-weight: 600; font-size: 13px; letter-spacing: 0; }
+.fx-converter-row.is-missing .fx-converter-input { cursor: default; }
 .fx-converter-rate { grid-area: rate; overflow: hidden; color: #8b93a0; font-size: 11px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .dark .fx-converter-card { border-color: rgba(255,255,255,.08); background: #171b22; box-shadow: none; }
 .dark .fx-converter-row { border-right-color: rgba(255,255,255,.06); border-bottom-color: rgba(255,255,255,.06); }
