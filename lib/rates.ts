@@ -3,7 +3,7 @@
  * 1. 只请求设置里的汇率接口（currencyApiUrl），不再拼接 symbols、也不再用腾讯补缺。
  * 2. 接口没返回的币种不写入实时表；换算页显示「暂无汇率」。
  * 3. 持仓等金额换算仍用 FALLBACK_RATES 垫底，避免刷新瞬间按 1:1 错算。
- * 4. 刷新时刻由 currencyRefreshPattern 决定，默认 09:00|23:00。
+ * 4. 刷新时刻由 currencyRefreshPattern 正则匹配每天的 HH:MM，默认 09:00|23:00。
  */
 
 import { getDb } from "./db";

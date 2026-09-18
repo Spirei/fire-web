@@ -21,7 +21,7 @@ import type { BackupConfig } from "@/lib/backup";
 import { DEFAULT_HOLDING_COLUMNS } from "@/lib/holdingColumns";
 import { useCurrencyDisplayUnit, type CurrencyDisplayUnit } from "@/lib/currencyPrefs";
 import { applyMarketBadges, DEFAULT_MARKET_BADGES, MARKET_BADGE_ITEMS, normalizeMarketBadges } from "@/lib/marketBadge";
-import { DEFAULT_CURRENCY_REFRESH_PATTERN, formatRefreshTimes, parseRefreshTimes } from "@/lib/currencyRefresh";
+import { compileCurrencyRefreshRegex, DEFAULT_CURRENCY_REFRESH_PATTERN, formatRefreshTimes, parseRefreshTimes } from "@/lib/currencyRefresh";
 
 // 版本历史弹窗按需懒加载：完整 VERSIONS 数组只在点开「版本」弹窗时下载，不进首屏包。
 const VersionModal = dynamic(() => import("@/components/VersionModal"), { ssr: false });
@@ -3312,7 +3312,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 <div className="sw-row">
                                   <div className="sw-row-label">
                                     <b>刷新时间</b>
-                                    <span>用正则写下每天的时刻，例如 09:00|23:00 或 09:00,12:00,18:00</span>
+                                    <span>完全按正则匹配每天的 HH:MM，例如 09:00|23:00 或 ^([01]\d|2[0-3]):00$</span>
                                   </div>
                                   <div className="ctrl">
                                     {editingSources ? (
@@ -3329,7 +3329,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                         {refreshPattern}
                                       </span>
                                     )}
-                                    <span className="flex-none text-[11px] text-faint">每天 {formatRefreshTimes(refreshTimes)}</span>
+                                    <span className="flex-none text-[11px] text-faint">
+                                      {compileCurrencyRefreshRegex(refreshPattern)
+                                        ? `每天 ${formatRefreshTimes(refreshTimes)}`
+                                        : `正则无效，回退每天 ${formatRefreshTimes(refreshTimes)}`}
+                                    </span>
                                   </div>
                                 </div>
                               )}

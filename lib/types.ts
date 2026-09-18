@@ -263,7 +263,7 @@ export interface SiteSettings {
   searchApiUrl: string;
   chartApiUrl: string;
   currencyApiUrl: string;
-  /** 汇率刷新时刻，用 HH:MM 加 | 或逗号分隔，例如 09:00|23:00 */
+  /** 汇率刷新正则，匹配每天的 HH:MM，例如 09:00|23:00 或 ^([01]\\d|2[0-3]):00$ */
   currencyRefreshPattern: string;
   earningsApiUrl: string;
   cnEarningsApiUrl: string;

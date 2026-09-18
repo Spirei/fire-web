@@ -523,9 +523,13 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.deepEqual(moveFxOrder(['USD', 'EUR'], 9, 0), ['USD', 'EUR']);
   });
   await test('currency refresh pattern extracts HH:MM and normalizes USD base', () => {
-    const { parseRefreshTimes, nextRefreshAt, extractRateMap, toUsdBase } = require(path.join(root, 'lib/currencyRefresh.ts'));
+    const { parseRefreshTimes, nextRefreshAt, extractRateMap, toUsdBase, compileCurrencyRefreshRegex } = require(path.join(root, 'lib/currencyRefresh.ts'));
     assert.deepEqual(parseRefreshTimes('09:00|23:00').map((item) => item.label), ['09:00', '23:00']);
-    assert.deepEqual(parseRefreshTimes('9:00, 12:00, 18:00').map((item) => item.label), ['09:00', '12:00', '18:00']);
+    assert.deepEqual(parseRefreshTimes('^(09|12|18):00$').map((item) => item.label), ['09:00', '12:00', '18:00']);
+    assert.equal(parseRefreshTimes('^([01]\\d|2[0-3]):00$').length, 24);
+    assert.deepEqual(parseRefreshTimes('/09:00|23:00/').map((item) => item.label), ['09:00', '23:00']);
+    assert.deepEqual(parseRefreshTimes('(').map((item) => item.label), ['09:00', '23:00']);
+    assert.equal(compileCurrencyRefreshRegex('('), null);
     const noon = new Date(2026, 8, 19, 12, 0, 0).getTime();
     const next = nextRefreshAt(noon, parseRefreshTimes('09:00|23:00'));
     assert.equal(new Date(next).getHours(), 23);

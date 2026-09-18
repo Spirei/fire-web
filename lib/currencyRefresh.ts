@@ -1,8 +1,9 @@
 /**
  * 汇率刷新时刻与上游 JSON 解析（客户端 / 服务端共用，不碰数据库）。
  *
- * 刷新时间写成日常的 HH:MM，用 | 或逗号分隔即可，例如 09:00|23:00。
- * 用正则从字符串里抽出时刻，不把用户输入当成 RegExp 源码执行。
+ * 刷新时间是真正的正则：拿用户表达式去匹配当天每一个 HH:MM（00:00–23:59）。
+ * 例如 09:00|23:00、^(09|12|18):00$、^([01]\d|2[0-3]):00$。
+ * 也接受 /pattern/flags 写法。正则无效或一个时刻都匹配不到时，回退 09:00|23:00。
  */
 
 export const DEFAULT_CURRENCY_REFRESH_PATTERN = "09:00|23:00";
@@ -13,37 +14,55 @@ export interface RefreshTime {
   label: string;
 }
 
-const TIME_RE = /\b([01]?\d|2[0-3]):([0-5]\d)\b/g;
+const DEFAULT_REFRESH_TIMES: RefreshTime[] = [
+  { hour: 9, minute: 0, label: "09:00" },
+  { hour: 23, minute: 0, label: "23:00" }
+];
+
+const MAX_REFRESH_SLOTS = 96;
+
+function padTime(hour: number, minute: number): string {
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+/** 把输入编成正则。允许 /pattern/flags；去掉 g，避免 test 时 lastIndex 错位。 */
+export function compileCurrencyRefreshRegex(raw: string): RegExp | null {
+  const source = String(raw || "").trim();
+  if (!source) return null;
+  let pattern = source;
+  let flags = "";
+  const wrapped = /^\/((?:\\\/|[^/])+)\/([a-z]*)$/.exec(source);
+  if (wrapped) {
+    pattern = wrapped[1];
+    flags = wrapped[2].replace(/g/g, "");
+  }
+  try {
+    return new RegExp(pattern, flags);
+  } catch {
+    return null;
+  }
+}
 
 export function parseRefreshTimes(pattern: string): RefreshTime[] {
-  const seen = new Set<string>();
+  const regex = compileCurrencyRefreshRegex(pattern);
+  if (!regex) return DEFAULT_REFRESH_TIMES;
   const times: RefreshTime[] = [];
-  const source = String(pattern || "");
-  for (const match of source.matchAll(TIME_RE)) {
-    const hour = Number(match[1]);
-    const minute = Number(match[2]);
-    if (!Number.isInteger(hour) || hour > 23 || minute > 59) continue;
-    const label = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-    if (seen.has(label)) continue;
-    seen.add(label);
-    times.push({ hour, minute, label });
-    if (times.length >= 24) break;
-  }
-  if (!times.length) {
-    if (source.trim() === DEFAULT_CURRENCY_REFRESH_PATTERN) {
-      return [
-        { hour: 9, minute: 0, label: "09:00" },
-        { hour: 23, minute: 0, label: "23:00" }
-      ];
+  for (let hour = 0; hour < 24; hour += 1) {
+    for (let minute = 0; minute < 60; minute += 1) {
+      const label = padTime(hour, minute);
+      regex.lastIndex = 0;
+      if (!regex.test(label)) continue;
+      times.push({ hour, minute, label });
+      if (times.length >= MAX_REFRESH_SLOTS) return times;
     }
-    return parseRefreshTimes(DEFAULT_CURRENCY_REFRESH_PATTERN);
   }
-  times.sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute));
-  return times;
+  return times.length ? times : DEFAULT_REFRESH_TIMES;
 }
 
 export function formatRefreshTimes(times: RefreshTime[]): string {
-  return times.map((item) => item.label).join(" / ");
+  const labels = times.map((item) => item.label);
+  if (labels.length <= 6) return labels.join(" / ");
+  return `${labels.slice(0, 4).join(" / ")} 等 ${labels.length} 个时刻`;
 }
 
 export function nextRefreshAt(now: number, times: RefreshTime[]): number {
