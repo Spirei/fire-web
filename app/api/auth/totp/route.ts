@@ -25,7 +25,8 @@ export async function POST(request: Request) {
   logSecurityEvent(request, user.id, "auth.totp.setup", "开始绑定二次验证");
   return NextResponse.json({
     secret: setup.secret,
-    qrSvg: setup.qrSvg
+    otpauthUrl: setup.otpauthUrl,
+    qrPng: setup.qrPng
   }, NO_STORE);
 }
 

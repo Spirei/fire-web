@@ -3685,7 +3685,7 @@ export const V0_1_33_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_34_ENTRY: VersionEntry = {
   ...V0_1_33_ENTRY,
   version: "v0.1.34",
   date: "2026-09-18",
@@ -3786,11 +3786,25 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   }]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_34_ENTRY,
+  version: "v0.1.35",
+  date: "2026-09-19",
+  summary: "二次验证可复制密钥，方便 Bitwarden 手动添加。",
+  software: V0_1_34_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.35" } : item),
+  changes: [{
+    title: "二次验证补上可复制密钥，方便 Bitwarden 添加",
+    desc: "Google Authenticator 扫码可用，Bitwarden 通常要手动填写密钥；绑定成功后密钥不再显示，因此无法再加第二台验证器。\n绑定页现在同时给出更大的 PNG 二维码、可复制密钥和 otpauth 链接。\n已经开启的账号可在设置 → 二次验证输入当前验证码后再次显示同一密钥，不必关闭后重绑。",
+    kind: "fix"
+  }]
+};
+
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_34_ENTRY,
   V0_1_33_ENTRY,
   V0_1_32_ENTRY,
   V0_1_31_ENTRY,

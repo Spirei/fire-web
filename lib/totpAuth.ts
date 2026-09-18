@@ -6,6 +6,7 @@ import {
   generateTotpSecret,
   hashBackupCode,
   totpOtpauthUrl,
+  totpQrPng,
   totpQrSvg,
   verifyBackupCode,
   verifyTotpCode
@@ -38,8 +39,18 @@ export async function beginTotpSetup(userId: string, account: string, issuer = "
     "INSERT INTO totp_setup (user_id, secret, expires_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET secret = excluded.secret, expires_at = excluded.expires_at"
   ).run(userId, encryptSecret(secret), Date.now() + SETUP_TTL_MS);
   const otpauthUrl = totpOtpauthUrl(issuer, account, secret);
-  const qrSvg = await totpQrSvg(otpauthUrl);
-  return { secret, otpauthUrl, qrSvg };
+  const [qrSvg, qrPng] = await Promise.all([totpQrSvg(otpauthUrl), totpQrPng(otpauthUrl)]);
+  return { secret, otpauthUrl, qrSvg, qrPng };
+}
+
+export async function revealTotp(userId: string, account: string, code: string, issuer = "Fire") {
+  if (!userTotpEnabled(userId)) return { ok: false as const, error: "尚未开启二次验证" };
+  if (!consumeTotpFactor(userId, code)) return { ok: false as const, error: "验证码不正确" };
+  const secret = readTotpSecret(userId);
+  if (!secret) return { ok: false as const, error: "密钥不可用，请关闭后重新绑定" };
+  const otpauthUrl = totpOtpauthUrl(issuer, account, secret);
+  const [qrSvg, qrPng] = await Promise.all([totpQrSvg(otpauthUrl), totpQrPng(otpauthUrl)]);
+  return { ok: true as const, secret, otpauthUrl, qrSvg, qrPng };
 }
 
 export function enableTotp(userId: string, code: string): { ok: boolean; error?: string; backupCodes?: string[] } {

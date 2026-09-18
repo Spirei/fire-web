@@ -13,18 +13,25 @@ export function generateTotpSecret(): string {
 
 export function totpOtpauthUrl(issuer: string, account: string, secret: string): string {
   const label = `${encodeURIComponent(issuer)}:${encodeURIComponent(account)}`;
-  const query = new URLSearchParams({
-    secret,
-    issuer,
-    algorithm: "SHA1",
-    digits: String(CODE_DIGITS),
-    period: String(STEP_SECONDS)
-  });
-  return `otpauth://totp/${label}?${query.toString()}`;
+  const query = [
+    `secret=${secret}`,
+    `issuer=${encodeURIComponent(issuer)}`,
+    `digits=${CODE_DIGITS}`,
+    `period=${STEP_SECONDS}`
+  ].join("&");
+  return `otpauth://totp/${label}?${query}`;
 }
 
 export async function totpQrSvg(otpauthUrl: string): Promise<string> {
-  return QRCode.toString(otpauthUrl, { type: "svg", margin: 1, width: 180, errorCorrectionLevel: "M" });
+  return QRCode.toString(otpauthUrl, { type: "svg", margin: 2, width: 240, errorCorrectionLevel: "M" });
+}
+
+export async function totpQrPng(otpauthUrl: string): Promise<string> {
+  return QRCode.toDataURL(otpauthUrl, { type: "image/png", margin: 2, width: 240, errorCorrectionLevel: "M" });
+}
+
+export function formatTotpSecret(secret: string): string {
+  return secret.replace(/(.{4})/g, "$1 ").trim();
 }
 
 export function generateBackupCodes(count = 8): string[] {

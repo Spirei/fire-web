@@ -1704,12 +1704,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [profilePassword, setProfilePassword] = useState("");
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [totpBusy, setTotpBusy] = useState(false);
-  const [totpSetup, setTotpSetup] = useState<{ secret: string; qrSvg: string } | null>(null);
+  const [totpSetup, setTotpSetup] = useState<{ secret: string; qrPng: string; otpauthUrl: string; mode: "bind" | "reveal" } | null>(null);
   const [totpSetupCode, setTotpSetupCode] = useState("");
   const [totpBackupCodes, setTotpBackupCodes] = useState<string[] | null>(null);
   const [totpDisablePassword, setTotpDisablePassword] = useState("");
   const [totpDisableCode, setTotpDisableCode] = useState("");
   const [totpPasswordCode, setTotpPasswordCode] = useState("");
+  const [totpRevealCode, setTotpRevealCode] = useState("");
   const [totpMsg, setTotpMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   useEffect(() => {
@@ -1728,7 +1729,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       const res = await fetch("/api/auth/totp", { method: "POST", credentials: "same-origin" });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "无法开始绑定");
-      setTotpSetup({ secret: String(data.secret || ""), qrSvg: String(data.qrSvg || "") });
+      setTotpSetup({
+        secret: String(data.secret || ""),
+        qrPng: String(data.qrPng || ""),
+        otpauthUrl: String(data.otpauthUrl || ""),
+        mode: "bind"
+      });
       setTotpSetupCode("");
       setTotpBackupCodes(null);
     } catch (err) {
@@ -1757,6 +1763,33 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setTotpBackupCodes(Array.isArray(data?.backupCodes) ? data.backupCodes : []);
       setTotpMsg({ type: "ok", text: "二次验证已开启。备用码只显示这一次，其它设备需要重新登录。" });
       showToast("二次验证已开启，其它设备需重新登录");
+    } catch (err) {
+      setTotpMsg({ type: "err", text: err instanceof Error ? err.message : "验证失败" });
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
+  async function revealTotp(e: React.FormEvent) {
+    e.preventDefault();
+    setTotpMsg(null);
+    setTotpBusy(true);
+    try {
+      const res = await fetch("/api/auth/totp/reveal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ code: totpRevealCode })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "验证失败");
+      setTotpSetup({
+        secret: String(data.secret || ""),
+        qrPng: String(data.qrPng || ""),
+        otpauthUrl: String(data.otpauthUrl || ""),
+        mode: "reveal"
+      });
+      setTotpRevealCode("");
     } catch (err) {
       setTotpMsg({ type: "err", text: err instanceof Error ? err.message : "验证失败" });
     } finally {
@@ -3438,38 +3471,48 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   )}
                   {totpSetup && (
                     <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
-                      {totpSetup.qrSvg && (
+                      {totpSetup.qrPng && (
                         <img
                           alt="二次验证二维码"
-                          src={`data:image/svg+xml;utf8,${encodeURIComponent(totpSetup.qrSvg)}`}
-                          className="h-[180px] w-[180px] rounded-[10px] border border-edge bg-white p-2"
+                          src={totpSetup.qrPng}
+                          className="h-[240px] w-[240px] rounded-[10px] border border-edge bg-white p-2"
                         />
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="text-[13px] text-muted">用验证器扫描二维码，或手动输入密钥：</p>
-                        <code className="mt-2 block break-all rounded-[10px] border border-edge bg-bg-gray px-3 py-2 text-[13px] tracking-[0.12em] text-ink">
+                        <p className="text-[13px] text-muted">Google Authenticator 可直接扫码。Bitwarden / 1Password 请复制下面的密钥，粘贴到「验证器密钥」。也可复制 otpauth 链接。</p>
+                        <label className="mt-3 block text-[13px] font-semibold text-ink-2">密钥</label>
+                        <code className="mt-1.5 block break-all rounded-[10px] border border-edge bg-bg-gray px-3 py-2 text-[13px] tracking-[0.12em] text-ink">
                           {totpSetup.secret.replace(/(.{4})/g, "$1 ").trim()}
                         </code>
-                        <button type="button" className="btn btn-ghost btn-sm mt-2" onClick={() => { void copyText(totpSetup.secret); showToast("密钥已复制"); }}>复制密钥</button>
-                        <form onSubmit={confirmTotpSetup} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
-                          <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                            验证码
-                            <input
-                              autoComplete="one-time-code"
-                              spellCheck={false}
-                              maxLength={8}
-                              value={totpSetupCode}
-                              onChange={(e) => setTotpSetupCode(e.target.value)}
-                              placeholder="输入验证器中的 6 位数字"
-                              required
-                              className="sw-row-input"
-                            />
-                          </label>
-                          <div className="flex gap-2">
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setTotpSetup(null); setTotpSetupCode(""); setTotpMsg(null); }}>取消</button>
-                            <button type="submit" disabled={totpBusy || totpSetupCode.replace(/\s/g, "").length !== 6} className="btn btn-line btn-sm disabled:opacity-60">{totpBusy ? "验证中…" : "确认开启"}</button>
-                          </div>
-                        </form>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { void copyText(totpSetup.secret); showToast("密钥已复制"); }}>复制密钥</button>
+                          {totpSetup.otpauthUrl && (
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { void copyText(totpSetup.otpauthUrl); showToast("otpauth 链接已复制"); }}>复制 otpauth 链接</button>
+                          )}
+                        </div>
+                        {totpSetup.mode === "bind" ? (
+                          <form onSubmit={confirmTotpSetup} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+                            <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
+                              验证码
+                              <input
+                                autoComplete="one-time-code"
+                                spellCheck={false}
+                                maxLength={8}
+                                value={totpSetupCode}
+                                onChange={(e) => setTotpSetupCode(e.target.value)}
+                                placeholder="输入验证器中的 6 位数字"
+                                required
+                                className="sw-row-input"
+                              />
+                            </label>
+                            <div className="flex gap-2">
+                              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setTotpSetup(null); setTotpSetupCode(""); setTotpMsg(null); }}>取消</button>
+                              <button type="submit" disabled={totpBusy || totpSetupCode.replace(/\s/g, "").length !== 6} className="btn btn-line btn-sm disabled:opacity-60">{totpBusy ? "验证中…" : "确认开启"}</button>
+                            </div>
+                          </form>
+                        ) : (
+                          <button type="button" className="btn btn-line btn-sm mt-4" onClick={() => setTotpSetup(null)}>完成</button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -3495,6 +3538,23 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         </button>
                       </div>
                     </div>
+                  )}
+                  {totpEnabled && !totpSetup && (
+                    <form onSubmit={revealTotp} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+                      <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
+                        添加其他验证器
+                        <input
+                          autoComplete="one-time-code"
+                          spellCheck={false}
+                          value={totpRevealCode}
+                          onChange={(e) => setTotpRevealCode(e.target.value)}
+                          placeholder="输入当前 6 位验证码或备用码"
+                          required
+                          className="sw-row-input"
+                        />
+                      </label>
+                      <button type="submit" disabled={totpBusy} className="btn btn-line btn-sm disabled:opacity-60">{totpBusy ? "验证中…" : "显示密钥"}</button>
+                    </form>
                   )}
                   {totpEnabled && (
                     <form onSubmit={disableTotp} className="mt-4 grid gap-3 sm:grid-cols-2">
