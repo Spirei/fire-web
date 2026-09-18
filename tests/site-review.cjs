@@ -766,6 +766,11 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const spec = fs.readFileSync(path.join(root, 'docs/api-spec.md'), 'utf8');
     assert(spec.includes('40104'));
     assert(spec.includes('/api/v1/auth/login/totp'));
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    assert(settings.includes('{ key: "totp", label: "二次验证" }'));
+    assert(settings.includes('{sub === "totp" && ('));
+    assert(settings.includes('sub: "totp"'));
+    assert(!settings.includes('desc: "头像、资料、密码、二次验证、数据管理"'));
   });
   db.close();console.log(`${passed} regression suites passed (isolated database)`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{ fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode || 0); });

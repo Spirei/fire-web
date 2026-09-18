@@ -48,7 +48,11 @@ interface Props {
   initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "groups" | "markets" | "marketLabels">;
 }
 
-type SubKey = "site" | "features" | "stocks" | "api" | "profile" | "database" | "cron" | "about";
+const SETTINGS_SUB_KEYS = ["site", "features", "stocks", "api", "profile", "totp", "database", "cron", "about"] as const;
+type SubKey = (typeof SETTINGS_SUB_KEYS)[number];
+function isSettingsSub(value: string | undefined | null): value is SubKey {
+  return Boolean(value && (SETTINGS_SUB_KEYS as readonly string[]).includes(value));
+}
 
 // 仅管理员可见的设置子项
 const ADMIN_SUB_KEYS = new Set<SubKey>(["site", "features", "stocks", "database", "cron"]);
@@ -66,8 +70,8 @@ const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; group
   { sub: "stocks", anchor: "trade", label: "交易 · 富途", groupLabel: "股票", keywords: "富途 futu opend 交易 行情源 主机 端口 腾讯 yahoo 备用" },
   { sub: "stocks", anchor: "currency-display", label: "货币金额显示", groupLabel: "股票", keywords: "货币 单位 金额 万 百万 千万 亿 缩写" },
   { sub: "stocks", anchor: "sources", label: "股票来源接口", groupLabel: "股票", keywords: "股票来源 接口 行情 财报 图标 url 数据源" },
-  { sub: "profile", anchor: "profile", label: "个人信息", groupLabel: "账号", keywords: "头像 昵称 密码 邮箱 二次验证 2FA TOTP 验证器 备用码 导出 清空 数据" },
-  { sub: "profile", anchor: "totp", label: "二次验证", groupLabel: "账号", keywords: "二次验证 2FA TOTP 验证器 备用码 谷歌验证 Google Authenticator" },
+  { sub: "profile", anchor: "profile", label: "个人信息", groupLabel: "账号", keywords: "头像 昵称 密码 邮箱 导出 清空 数据" },
+  { sub: "totp", anchor: "totp", label: "二次验证", groupLabel: "账号", keywords: "二次验证 2FA TOTP 验证器 备用码 谷歌验证 Google Authenticator 安全" },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
   { sub: "api", anchor: "api", label: "API 接口", groupLabel: "系统", keywords: "api 接口 开发 文档 鉴权" },
@@ -87,7 +91,7 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   trade: "trade",
   "currency-display": "stocks",
   profile: "profile",
-  totp: "profile",
+  totp: "totp",
   database: "database",
   cron: "cron",
   api: "api",
@@ -251,6 +255,7 @@ const SUB_NAV: { key: SubKey; label: string }[] = [
   { key: "features", label: "功能" },
   { key: "stocks", label: "股票设置" },
   { key: "profile", label: "个人信息" },
+  { key: "totp", label: "二次验证" },
   { key: "database", label: "数据库增强" },
   { key: "cron", label: "定时任务" },
   { key: "api", label: "API 开发接口" },
@@ -274,7 +279,10 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
   },
   {
     label: "账号",
-    items: [{ key: "profile", label: "个人信息", desc: "头像、资料、密码、二次验证、数据管理" }]
+    items: [
+      { key: "profile", label: "个人信息", desc: "头像、资料、密码、数据管理" },
+      { key: "totp", label: "二次验证", desc: "验证器与备用码" }
+    ]
   },
   {
     label: "系统",
@@ -729,13 +737,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       return acc;
     }, []);
   const [sub, setSub] = useState<SubKey>(() => {
-    const valid = initialSub === "site" || initialSub === "features" || initialSub === "stocks" || initialSub === "api" || initialSub === "profile" || initialSub === "database" || initialSub === "cron" || initialSub === "about"
-      ? (initialSub as SubKey)
-      : (isAdminUser ? "site" : "profile");
+    const valid = isSettingsSub(initialSub) ? initialSub : (isAdminUser ? "site" : "profile");
     return isAdminUser || !ADMIN_SUB_KEYS.has(valid) ? valid : "profile";
   });
   const [activeAnchor, setActiveAnchor] = useState<string>(() => {
-    const valid = (initialSub === "site" || initialSub === "features" || initialSub === "stocks" || initialSub === "api" || initialSub === "profile" || initialSub === "database" || initialSub === "cron" || initialSub === "about") ? initialSub : (isAdminUser ? "site" : "profile");
+    const valid = isSettingsSub(initialSub) ? initialSub : (isAdminUser ? "site" : "profile");
     // 首次渲染必须与服务端完全一致；URL 中的锚点在挂载后的同步 effect 再恢复。
     return SETTINGS_SEARCH_INDEX.find((x) => x.sub === valid)?.anchor || "info";
   });
@@ -777,10 +783,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const tickerDragIndex = useRef<number | null>(null);
 
   useEffect(() => {
-    if (initialSub === "site" || initialSub === "features" || initialSub === "stocks" || initialSub === "api" || initialSub === "profile" || initialSub === "database" || initialSub === "cron" || initialSub === "about") {
-      const next = initialSub as SubKey;
+    const requestedAnchor = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("anchor") : null;
+    if (initialSub === "profile" && requestedAnchor === "totp") {
+      setSub("totp");
+      setActiveAnchor("totp");
+      return;
+    }
+    if (isSettingsSub(initialSub)) {
+      const next = initialSub;
       setSub(isAdminUser || !ADMIN_SUB_KEYS.has(next) ? next : "profile");
-      const requestedAnchor = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("anchor") : null;
       const nextAnchor = requestedAnchor && SETTINGS_SEARCH_INDEX.some((item) => item.sub === next && item.anchor === requestedAnchor)
         ? requestedAnchor
         : SETTINGS_SEARCH_INDEX.find((item) => item.sub === next)?.anchor;
@@ -3331,9 +3342,64 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </form>
                   {pwdMsg && <p className={`settings-form-message ${pwdMsg.type === "ok" ? "is-ok" : "is-error"}`}>{pwdMsg.text}</p>}</>}
                 </SettingsSection>
+                <SettingsSection icon="profile" title="数据与备份" desc="导出或清空本账号数据">
+                  <div className="settings-profile-actions">
+                  <div className="sw-row">
+                    <div className="sw-row-label">
+                      <span
+                        ref={dataTipRef}
+                        className="sw-help-tip"
+                        style={{ marginLeft: 0 }}
+                        onMouseEnter={() => {
+                          const win = dataTipRef.current?.closest(".sv-win-root") as HTMLElement | null;
+                          const r = dataTipRef.current?.getBoundingClientRect();
+                          if (!r) return;
+                          const wr = win?.getBoundingClientRect();
+                          setDataTip({ top: (wr ? r.bottom - wr.top : r.bottom) + 8, left: wr ? r.left - wr.left : r.left });
+                        }}
+                        onMouseLeave={() => setDataTip(null)}
+                      >
+                        <b className="!text-[12.5px] underline decoration-dotted decoration-[var(--sv-text-3)] underline-offset-4">网站数据</b>
+                      </span>
+                    </div>
+                    <div className="ctrl">
+                      <button type="button" disabled={backupBusy === "export"} onClick={exportSiteBackup} className="btn btn-ghost btn-sm disabled:opacity-60">{backupBusy === "export" ? "导出中…" : "导出"}</button>
+                      <button type="button" disabled={backupBusy === "import"} onClick={() => importBackupRef.current?.click()} className="btn btn-ghost btn-sm disabled:opacity-60">{backupBusy === "import" ? "导入中…" : "导入"}</button>
+                      <input ref={importBackupRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importSiteBackup(f); }} />
+                    </div>
+                  </div>
+                  {dataTip && (
+                    <div className="sw-tip-fixed" style={{ top: dataTip.top, left: dataTip.left }}>
+                      <span className="block"><b className="text-up">导出 / 导入：</b>你的持仓、订单、自选分组、个人偏好与昵称</span>
+                      <span className="block mt-1"><b className="text-up">数据：</b>纯数据，不含图标 / 图片与数据库连接串等环境专属配置</span>
+                      <span className="block mt-0.5 opacity-70"><b className="text-up">权限：</b>管理员额外包含站点设置与名人持仓</span>
+                    </div>
+                  )}
+                  <div className="sw-row">
+                    <div className="sw-row-label"><b>持仓数据</b><span>导出持仓与自选记录，共 {recordsCount} 条</span></div>
+                    <button type="button" onClick={onExport} className="btn btn-ghost btn-sm">导出</button>
+                  </div>
+                  </div>
+                  <div className="subhead settings-danger-title">危险操作</div>
+                  <div className="settings-danger-zone">
+                  <div className="sw-row">
+                    <div className="sw-row-label"><b>清空数据</b><span>不可恢复，请谨慎操作</span></div>
+                    <button type="button" onClick={clearAll} disabled={clearing || recordsCount === 0} className="btn btn-ghost btn-sm !text-up disabled:opacity-50">{clearing ? "清空中…" : "清空"}</button>
+                  </div>
+                  <div className="sw-row">
+                    <div className="sw-row-label"><b>注销账号</b><span>永久删除本账号及全部数据，不可恢复</span></div>
+                    <button type="button" onClick={() => setShowDeleteConfirm(true)} className="btn btn-ghost btn-sm !text-up">注销账号</button>
+                  </div>
+                  </div>
+                </SettingsSection>
+              </div>
+            )}
+
+            {sub === "totp" && (
+              <div id="totp" className="flex flex-col gap-6">
+                <SettingsHeader name="totp" title="二次验证" />
                 <SettingsSection
-                  id="totp"
-                  icon="profile"
+                  icon="totp"
                   title="二次验证"
                   desc="登录时除密码外，再输入验证器中的 6 位数字"
                 >
@@ -3431,56 +3497,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </form>
                   )}
                   {totpMsg && <p className={`settings-form-message ${totpMsg.type === "ok" ? "is-ok" : "is-error"}`}>{totpMsg.text}</p>}
-                </SettingsSection>
-                <SettingsSection icon="profile" title="数据与备份" desc="导出或清空本账号数据">
-                  <div className="settings-profile-actions">
-                  <div className="sw-row">
-                    <div className="sw-row-label">
-                      <span
-                        ref={dataTipRef}
-                        className="sw-help-tip"
-                        style={{ marginLeft: 0 }}
-                        onMouseEnter={() => {
-                          const win = dataTipRef.current?.closest(".sv-win-root") as HTMLElement | null;
-                          const r = dataTipRef.current?.getBoundingClientRect();
-                          if (!r) return;
-                          const wr = win?.getBoundingClientRect();
-                          setDataTip({ top: (wr ? r.bottom - wr.top : r.bottom) + 8, left: wr ? r.left - wr.left : r.left });
-                        }}
-                        onMouseLeave={() => setDataTip(null)}
-                      >
-                        <b className="!text-[12.5px] underline decoration-dotted decoration-[var(--sv-text-3)] underline-offset-4">网站数据</b>
-                      </span>
-                    </div>
-                    <div className="ctrl">
-                      <button type="button" disabled={backupBusy === "export"} onClick={exportSiteBackup} className="btn btn-ghost btn-sm disabled:opacity-60">{backupBusy === "export" ? "导出中…" : "导出"}</button>
-                      <button type="button" disabled={backupBusy === "import"} onClick={() => importBackupRef.current?.click()} className="btn btn-ghost btn-sm disabled:opacity-60">{backupBusy === "import" ? "导入中…" : "导入"}</button>
-                      <input ref={importBackupRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importSiteBackup(f); }} />
-                    </div>
-                  </div>
-                  {dataTip && (
-                    <div className="sw-tip-fixed" style={{ top: dataTip.top, left: dataTip.left }}>
-                      <span className="block"><b className="text-up">导出 / 导入：</b>你的持仓、订单、自选分组、个人偏好与昵称</span>
-                      <span className="block mt-1"><b className="text-up">数据：</b>纯数据，不含图标 / 图片与数据库连接串等环境专属配置</span>
-                      <span className="block mt-0.5 opacity-70"><b className="text-up">权限：</b>管理员额外包含站点设置与名人持仓</span>
-                    </div>
-                  )}
-                  <div className="sw-row">
-                    <div className="sw-row-label"><b>持仓数据</b><span>导出持仓与自选记录，共 {recordsCount} 条</span></div>
-                    <button type="button" onClick={onExport} className="btn btn-ghost btn-sm">导出</button>
-                  </div>
-                  </div>
-                  <div className="subhead settings-danger-title">危险操作</div>
-                  <div className="settings-danger-zone">
-                  <div className="sw-row">
-                    <div className="sw-row-label"><b>清空数据</b><span>不可恢复，请谨慎操作</span></div>
-                    <button type="button" onClick={clearAll} disabled={clearing || recordsCount === 0} className="btn btn-ghost btn-sm !text-up disabled:opacity-50">{clearing ? "清空中…" : "清空"}</button>
-                  </div>
-                  <div className="sw-row">
-                    <div className="sw-row-label"><b>注销账号</b><span>永久删除本账号及全部数据，不可恢复</span></div>
-                    <button type="button" onClick={() => setShowDeleteConfirm(true)} className="btn btn-ghost btn-sm !text-up">注销账号</button>
-                  </div>
-                  </div>
                 </SettingsSection>
               </div>
             )}

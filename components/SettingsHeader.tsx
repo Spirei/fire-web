@@ -37,6 +37,12 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
       <path d="M4 21v-1.5a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5V21" />
     </>
   ),
+  totp: (
+    <>
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </>
+  ),
   database: (
     <>
       <ellipse cx="12" cy="5.5" rx="8" ry="3" />
