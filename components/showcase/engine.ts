@@ -801,12 +801,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       uAspect: { value: 1.78 },
       uGold: { value: new THREE.Color(CFG.speed.tunnel?.gold ?? "#ffc266") },
       uWhite: { value: new THREE.Color(CFG.speed.tunnel?.white ?? "#ccdcfa") },
-      uIntensity: { value: CFG.speed.tunnel?.barIntensity ?? 1 }
+      uIntensity: { value: CFG.speed.tunnel?.barIntensity ?? 1 },
+      uCarBox: { value: new THREE.Vector4(0.5, 0.46, 0.12, 0.06) }
     },
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: `
       uniform sampler2D tDiffuse; uniform float uTime; uniform float uStrength; uniform float uSpeed;
       uniform vec2 uCenter; uniform float uAspect; uniform vec3 uGold; uniform vec3 uWhite; uniform float uIntensity;
+      uniform vec4 uCarBox;   // 车在屏幕上的包围盒：xy 中心、zw 半尺寸（uv）
       varying vec2 vUv;
       const float TAU = 6.28318530718;
       float barLine(float ang, float target, float w){
@@ -824,9 +826,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         float goldMask = 0.0;
         float whiteMask = 0.0;
         ${lineAngles.map((b) => `${b.gold ? "goldMask" : "whiteMask"} += barLine(ang, ${b.a.toFixed(5)}, ${b.w.toFixed(5)});`).join("\n        ")}
-        // 沿线流动的虚线段，让光条有速度感
+        // 沿线流动的虚线段：光条像一段段光带往镜头方向掠过
         float flow = 0.72 + 0.28 * sin(r * 26.0 - uTime * (2.0 + uSpeed * 0.35));
-        float mask = (goldMask + whiteMask * 0.8) * radial * flow * uStrength * uIntensity;
+        float dash = 0.82 + 0.18 * smoothstep(0.1, 0.9, fract(r * 9.0 - uTime * (1.2 + uSpeed * 0.04)));
+        // 车体遮挡：参考视频里光条是从车后面去的，不要画在车身上
+        vec2 carQ = (vUv - uCarBox.xy) / max(uCarBox.zw, vec2(1e-4));
+        float hide = 1.0 - smoothstep(0.8, 1.12, length(carQ));
+        float mask = (goldMask + whiteMask * 0.85) * radial * flow * dash * (1.0 - hide) * uStrength * uIntensity;
         vec3 col = uGold * goldMask + uWhite * whiteMask;
         gl_FragColor = vec4(base.rgb + col * mask, base.a);
       }`
@@ -1120,6 +1126,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let active = true;
   let lastPhase = -1;
 
+  const carHalfA = new THREE.Vector3();
+  const carHalfB = new THREE.Vector3();
+  const carHalfC = new THREE.Vector3();
+  const carHalfD = new THREE.Vector3();
   const camPos = new THREE.Vector3();
   const lookAt = new THREE.Vector3();
   const projected = new THREE.Vector3();
@@ -1241,6 +1251,19 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     if (accent) accent.visible = tunnelOn;
 
     // 主光条：只在有速度时出现（滚动浏览时表是 0，不会亮）
+    if (sps > 0.04) {
+      // 车的屏幕包围盒：车心 ± 车身方向半长、± 车高一半，投影后取半尺寸
+      const halfLength = CFG.model.length / 2;
+      carHalfA.set(-halfLength, 0.4, 0).applyMatrix4(carRoot.matrixWorld).project(camera);
+      carHalfB.set(halfLength, 0.4, 0).applyMatrix4(carRoot.matrixWorld).project(camera);
+      carHalfC.set(0, 0.4 + 0.8, 0).applyMatrix4(carRoot.matrixWorld).project(camera);
+      carHalfD.set(0, 0.4 - 0.85, 0).applyMatrix4(carRoot.matrixWorld).project(camera);
+      const cx = (carHalfA.x + carHalfB.x) / 4 + 0.5;
+      const cy = (-(carHalfA.y + carHalfB.y) / 4) * 0.5 + 0.5;
+      const hx = Math.abs(carHalfB.x - carHalfA.x) / 4 + 0.012;
+      const hy = Math.abs(carHalfC.y - carHalfD.y) / 4 + 0.02;
+      (lightLinesPass.uniforms.uCarBox.value as THREE.Vector4).set(cx, cy, hx, hy);
+    }
     lightLinesPass.uniforms.uTime.value = elapsed;
     lightLinesPass.uniforms.uSpeed.value = reduced ? 0 : speed;
     lightLinesPass.uniforms.uStrength.value = sps * sps;

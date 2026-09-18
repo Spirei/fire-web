@@ -85,7 +85,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       // 角度是屏幕空间角度（相对消失点）：左三 = 150°/190°/230°，右三 = 30°/350°/310°，
       // 每侧上下两条是暖金、中间那条偏白灰，对应参考视频里的六道主光条。
       vanish: [0.5, 0.46],
-      barIntensity: 0.26,
+      barIntensity: 0.34,
       bars: [
         { angle: 30, width: 0.34, tone: "gold" },
         { angle: 350, width: 0.28, tone: "white" },
