@@ -797,23 +797,22 @@
   background: rgba(255,255,255,.68);
   box-shadow: 0 1px 3px rgba(30,41,59,.055), inset 0 1px 0 rgba(255,255,255,.66);
 }
+.dark .fire-sidebar {
+  background:#1b1b1b;
+  min-height:calc(100vh - 112px);
+}
 .dark .fire-sidebar-panel {
-  border-color: rgba(255,255,255,.07);
-  background:
-    linear-gradient(150deg,rgba(45,47,50,.78),rgba(31,32,34,.88)),
-    rgba(32,33,35,.84);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.055),
-    inset -1px 0 0 rgba(255,255,255,.025),
-    0 18px 44px rgba(0,0,0,.18);
+  border-color:transparent;
+  background:#1b1b1b;
+  box-shadow:none;
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
 }
-.dark .fire-sidebar-panel::before {
-  background:linear-gradient(135deg,rgba(255,255,255,.035),transparent 44%,rgba(0,0,0,.07));
-}
+.dark .fire-sidebar-panel::before { display:none; }
 .dark .fire-sidebar-item-active {
-  border-color: rgba(255,255,255,.045);
-  background: rgba(255,255,255,.07);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.035),0 1px 3px rgba(0,0,0,.12);
+  border-color:transparent;
+  background:#393939;
+  box-shadow:none;
 }
 
 /* 四色门：素材只约束在侧栏内部，业务内容宽度继续由各页面自身决定。 */
@@ -1313,25 +1312,25 @@ html.dark .watch-import-target {
   color-scheme: dark;
 }
 .dark body {
-  @apply bg-[#0a0e19] text-[#e5e7eb];
+  @apply bg-[#111111] text-[#e5e7eb];
   /* 暗黑模式：背景图叠加深色遮罩，避免浅色背景图造成大片白色 */
-  background-image: linear-gradient(rgba(10, 14, 25, 0.86), rgba(10, 14, 25, 0.86)), var(--site-bg-image, none);
+  background-image: linear-gradient(rgba(17, 17, 17, 0.86), rgba(17, 17, 17, 0.86)), var(--site-bg-image, none);
 }
-/* 后台暗色外壳采用中性炭灰，避免侧栏的玻璃灰与内容区冷蓝黑互相割裂。 */
-.dark .app-shell-root { background:#18191a; }
+/* 深色左右栏取自参考图实测：左 #1b1b1b，右/顶栏 #111111，卡片与左栏同色。 */
+.dark .app-shell-root { background:#111111; }
 .dark .app-shell-header {
-  border-color:rgba(255,255,255,.075);
-  background:rgba(27,28,29,.9);
-  box-shadow:inset 0 -1px 0 rgba(0,0,0,.14);
-  -webkit-backdrop-filter:blur(16px) saturate(115%);
-  backdrop-filter:blur(16px) saturate(115%);
+  border-color:#1b1b1b;
+  background:#111111;
+  box-shadow:none;
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
 }
-.dark .app-shell-main { background:#18191a; }
-.dark .app-shell-root .bg-white { background-color:#202123; }
-.dark .app-shell-root .bg-bg-gray { background-color:#1c1d1f; }
-.dark .app-shell-root .border-edge { border-color:rgba(255,255,255,.085); }
-.dark .app-shell-root .border-edge\/80 { border-color:rgba(255,255,255,.07); }
-.dark .app-shell-root .divide-edge > :not([hidden]) ~ :not([hidden]) { border-color:rgba(255,255,255,.085); }
+.dark .app-shell-main { background:#111111; }
+.dark .app-shell-root .bg-white { background-color:#1b1b1b; }
+.dark .app-shell-root .bg-bg-gray { background-color:#161616; }
+.dark .app-shell-root .border-edge { border-color:#2a2a2a; }
+.dark .app-shell-root .border-edge\/80 { border-color:#1b1b1b; }
+.dark .app-shell-root .divide-edge > :not([hidden]) ~ :not([hidden]) { border-color:#2a2a2a; }
 .dark .bg-white {
   background-color: #151a26;
 }
@@ -1948,10 +1947,14 @@ html.dark .watch-import-target {
   background-color: rgba(255, 255, 255, 0.96);
 }
 .dark .site-header {
-  background-color: rgba(21, 26, 38, 0.96);
+  background-color: #111111;
 }
 .dark .app-shell-root .site-header {
-  background-color:rgba(27,28,29,.94);
+  background-color:#111111;
+}
+.dark .records-app,
+.dark .records-content {
+  background:#111111;
 }
 .dark .shadow-card,
 .dark .shadow-pop {
