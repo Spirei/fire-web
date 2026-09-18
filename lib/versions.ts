@@ -3816,6 +3816,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     title: "修复左侧导航滚动条彻底消失",
     desc: "9 月 13 日全站加了 `* { scrollbar-width: thin }` 之后，Chrome 121+ 会忽略侧栏的 ::-webkit-scrollbar 悬停规则；9 月 15 日又把 scrollbar-color 设成 transparent，标准滚动条也被关掉，划过也不出现。\n侧栏改为把 scrollbar-width / scrollbar-color 重置为 auto，Chrome 重新走 4px webkit 滑块：默认透明，悬停或聚焦才着色；Firefox 仍用 @supports 的 scrollbar-color 悬停。",
     kind: "fix"
+  }, {
+    title: "全球经济新增汇率换算",
+    desc: "全球经济在经济热图右侧新增「汇率换算」。每格带国旗，一排两个；金额可直接输入，其余货币按当前汇率跟随换算，点某一格即改为以该币种为基准。\n拖动手柄可自由排序，顺序记在本机偏好里，刷新保持。币种覆盖资金系统那 14 种能折算的货币，汇率与全站同一条 /api/rates 链路。刷新也保持页签、基准币种与金额。",
+    kind: "feature"
   }]
 };
 

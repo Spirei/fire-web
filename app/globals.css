@@ -3901,7 +3901,8 @@ html.dark .watch-import-target {
 @media (min-width:1280px) {
   .global-economy-page { width:min(100%,1024px); }
 }
-.global-section-nav { display:flex; align-items:center; align-self:stretch; gap:26px; min-height:48px; border-bottom:1px solid #e5e7eb; }
+.global-section-nav { display:flex; align-items:center; align-self:stretch; gap:26px; min-height:48px; overflow-x:auto; border-bottom:1px solid #e5e7eb; scrollbar-width:none; }
+.global-section-nav::-webkit-scrollbar { display:none; }
 .global-section-button { position:relative; display:flex; height:48px; align-items:center; gap:8px; border:0; background:transparent; padding:0 2px; color:#7b8290; font-size:13px; font-weight:600; letter-spacing:-.01em; white-space:nowrap; transition:color .18s ease,transform .12s ease; }
 .global-section-button:hover { color:#242a34; }
 .global-section-button:active { transform:translateY(1px); }
@@ -3924,6 +3925,103 @@ html.dark .watch-import-target {
 /* 这里只做透明度过渡。即使结束值写成 translateY(0)，动画填充层仍会创建
    containing block，把地图的 fixed 全屏层困在页面内容列中。 */
 @keyframes global-section-panel-in { from { opacity:0; } to { opacity:1; } }
+
+.fx-converter-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+  border: 1px solid var(--edge, #e5e7eb);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+}
+.fx-converter-row {
+  display: grid;
+  position: relative;
+  grid-template-columns: 28px minmax(0, 1fr) 22px;
+  grid-template-areas:
+    "flag body handle"
+    ". rate handle";
+  column-gap: 10px;
+  row-gap: 2px;
+  min-width: 0;
+  align-items: center;
+  padding: 12px 10px 11px 14px;
+  border-right: 1px solid #eef0f3;
+  border-bottom: 1px solid #eef0f3;
+  cursor: text;
+  transition: background-color .15s ease, opacity .15s ease;
+}
+.fx-converter-row:nth-child(even) { border-right: 0; }
+.fx-converter-row:nth-last-child(-n+2) { border-bottom: 0; }
+.fx-converter-row:hover { background: #fafbfc; }
+.fx-converter-row.is-active { background: #f4f6f8; }
+.fx-converter-row.is-dragging { opacity: .45; }
+.fx-converter-row.is-over { background: #eef2f6; }
+.fx-converter-handle {
+  grid-area: handle;
+  display: inline-flex;
+  align-self: start;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #b0b6c0;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity .15s ease, color .15s ease, background-color .15s ease;
+}
+.fx-converter-handle svg { width: 14px; height: 14px; }
+.fx-converter-row:hover .fx-converter-handle,
+.fx-converter-row:focus-within .fx-converter-handle,
+.fx-converter-row.is-dragging .fx-converter-handle { opacity: 1; }
+.fx-converter-handle:hover { color: #4b5563; background: rgb(15 23 42 / 6%); }
+.fx-converter-handle:active { cursor: grabbing; }
+@media (hover: none) {
+  .fx-converter-handle { opacity: 1; }
+}
+.fx-converter-flag { grid-area: flag; display: flex; align-self: start; margin-top: 2px; }
+.fx-converter-body { grid-area: body; display: flex; min-width: 0; flex-direction: column; gap: 2px; cursor: text; }
+.fx-converter-meta { display: flex; min-width: 0; align-items: baseline; gap: 6px; }
+.fx-converter-name { overflow: hidden; font-size: 14px; font-weight: 650; color: #1f2937; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
+.fx-converter-code { flex: none; font-size: 11px; font-weight: 600; color: #8b93a0; letter-spacing: .04em; }
+.fx-converter-value { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.fx-converter-symbol { flex: none; color: #6b7280; font-size: 13px; font-weight: 600; }
+.fx-converter-input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  text-align: left;
+  outline: none;
+}
+.fx-converter-input:read-only {
+  cursor: text;
+  opacity: 1;
+  -webkit-text-fill-color: inherit;
+}
+.fx-converter-rate { grid-area: rate; overflow: hidden; color: #8b93a0; font-size: 11px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.dark .fx-converter-card { border-color: rgba(255,255,255,.08); background: #171b22; box-shadow: none; }
+.dark .fx-converter-row { border-right-color: rgba(255,255,255,.06); border-bottom-color: rgba(255,255,255,.06); }
+.dark .fx-converter-row:hover { background: rgba(255,255,255,.03); }
+.dark .fx-converter-row.is-active { background: rgba(255,255,255,.055); }
+.dark .fx-converter-row.is-over { background: rgba(255,255,255,.08); }
+.dark .fx-converter-handle { color: #6f7784; }
+.dark .fx-converter-handle:hover { color: #d5dbe4; background: rgba(255,255,255,.08); }
+.dark .fx-converter-name { color: #f0f3f7; }
+.dark .fx-converter-code,.dark .fx-converter-rate,.dark .fx-converter-symbol { color: #8a93a2; }
+.dark .fx-converter-input { color: #f6f8fb; }
 .economy-indicator-tabs { scrollbar-width: none; overscroll-behavior-inline: contain; }
 .economy-indicator-tabs::-webkit-scrollbar { display: none; }
 .economy-indicator-pill { flex:none; min-height:34px; border:1px solid #ebebeb; border-radius:999px; background:#fff; padding:0 14px; color:#707070; font-size:12px; font-weight:600; white-space:nowrap; transition:color .18s ease,background-color .18s ease,border-color .18s ease,transform .18s ease,box-shadow .18s ease; }

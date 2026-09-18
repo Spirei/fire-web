@@ -493,6 +493,37 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(replyTargetFromText('回复@小马种西瓜: 正文'), '小马种西瓜');
     assert.equal(replyTargetFromText('//@小明:转发'), undefined);
   });
+  await test('fx converter uses USD mid-market rates and sanitizes input', () => {
+    const { convertAmount, pairRate, parseFxAmount, sanitizeFxInput, amountToDraft } = require(path.join(root, 'lib/fxConvert.ts'));
+    const rates = { USD: 1, CNY: 7.2, HKD: 7.85, JPY: 155 };
+    assert.equal(convertAmount(100, 'USD', 'CNY', rates), 720);
+    assert.equal(convertAmount(720, 'CNY', 'USD', rates), 100);
+    assert.equal(Number(convertAmount(100, 'CNY', 'HKD', rates).toFixed(6)), Number(((100 / 7.2) * 7.85).toFixed(6)));
+    assert.equal(convertAmount(100, 'USD', 'GBP', rates), null);
+    assert.equal(pairRate('USD', 'JPY', rates), 155);
+    assert.equal(parseFxAmount('1,234.50'), 1234.5);
+    assert.equal(parseFxAmount('.'), null);
+    assert.equal(sanitizeFxInput('12.3.4a'), '12.34');
+    assert.equal(amountToDraft(720, 'CNY'), '720');
+    assert.equal(amountToDraft(155.4, 'JPY'), '155');
+    const { normalizeFxOrder, moveFxOrder } = require(path.join(root, 'lib/fxConvert.ts'));
+    const { FUND_CURRENCIES } = require(path.join(root, 'lib/fundCurrencies.ts'));
+    assert.deepEqual(normalizeFxOrder(['CNY', 'USD', 'NOPE', 'CNY']), ['CNY', 'USD', ...FUND_CURRENCIES.filter((code) => code !== 'CNY' && code !== 'USD')]);
+    assert.deepEqual(moveFxOrder(['USD', 'EUR', 'HKD'], 0, 2), ['EUR', 'HKD', 'USD']);
+    assert.deepEqual(moveFxOrder(['USD', 'EUR', 'HKD'], 2, 0), ['HKD', 'USD', 'EUR']);
+    const untouched = ['USD', 'EUR'];
+    assert.equal(moveFxOrder(untouched, 0, 0), untouched);
+    assert.deepEqual(moveFxOrder(['USD', 'EUR'], 9, 0), ['USD', 'EUR']);
+  });
+  await test('global economy places 汇率换算 to the right of 经济热图', () => {
+    const view = fs.readFileSync(path.join(root, 'components/views/GlobalPreviewView.tsx'), 'utf8');
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    const heatmap = view.indexOf('["heatmap", "经济热图"');
+    const convert = view.indexOf('["convert", "汇率换算"');
+    assert(heatmap >= 0 && convert > heatmap, '汇率换算必须紧跟经济热图之后');
+    assert.match(view, /section === "heatmap" \? <GlobalEconomyHeatmap \/> : <FxConverter \/>/);
+    assert.match(css, /\.fx-converter-card\s*\{[^}]*grid-template-columns:\s*1fr 1fr/, '汇率换算必须一排两个');
+  });
   await test('sidebar scrollbar stays hidden until hover (dark mode)', () => {
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
     // Chrome 121+ 只要元素上有 scrollbar-width / scrollbar-color（全站 * 已设 thin），

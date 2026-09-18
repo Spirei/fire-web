@@ -65,6 +65,11 @@
 
   .global-economy-page { gap: 16px; }
   .global-section-nav { gap: 8px; }
+  .fx-converter-card { grid-template-columns: 1fr 1fr; }
+  .fx-converter-row { padding: 10px 6px 9px 10px; column-gap: 8px; grid-template-columns: 24px minmax(0, 1fr) 22px; }
+  .fx-converter-handle { opacity: 1; }
+  .fx-converter-name { font-size: 13px; }
+  .fx-converter-input { height: 30px; font-size: 16px; }
   .global-section-button.is-icon-only { flex: none; width: 46px; height: 46px; min-width: 46px; padding: 3px; border-radius: 14px; }
   .global-section-button .global-section-icon { width: 36px; height: 36px; flex: none; border-radius: 11px; }
   .global-section-button .global-section-icon img { width: 20px; height: 20px; }

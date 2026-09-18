@@ -41,7 +41,7 @@ const PAGE_COPY: Record<string, { label: string; prompts: string[] }> = {
   users: { label: "用户管理", prompts: ["概览用户情况", "有哪些权限风险？", "给出账号管理建议"] },
   attachments: { label: "附件管理", prompts: ["概览附件占用", "哪些附件可以清理？", "检查异常文件"] },
   activities: { label: "日志", prompts: ["总结近期操作", "有没有异常登录？", "检查安全事件"] },
-  global: { label: "全球经济", prompts: ["总结当前全球经济要点", "哪些市场值得关注？", "检查数据源"] },
+  global: { label: "全球经济", prompts: ["总结当前全球经济要点", "哪些市场值得关注？", "按当前汇率换算 100 美元"] },
   trading: { label: "交易广场", prompts: ["最近有什么大新闻吗", "总结名人最新观点", "这些观点涉及哪些股票？"] },
   settings: { label: "设置", prompts: ["检查关键配置", "哪些数据源还没配好？", "给出上线前检查清单"] }
 };

@@ -7,7 +7,7 @@ import MarketIcon from "@/components/MarketIcon";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import CurrencySelect from "@/components/CurrencySelect";
 import { useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
-import { IconChartHistogram, IconMap2 } from "@tabler/icons-react";
+import { IconArrowsExchange, IconChartHistogram, IconMap2 } from "@tabler/icons-react";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 
 interface TopAsset {
@@ -240,6 +240,10 @@ const GlobalEconomyHeatmap = dynamic(() => import("@/components/GlobalEconomyHea
   ssr: false,
   loading: () => <div className="h-[520px] animate-pulse rounded-card bg-bg-gray dark:bg-white/[.04]" />
 });
+const FxConverter = dynamic(() => import("@/components/FxConverter"), {
+  ssr: false,
+  loading: () => <div className="h-[420px] animate-pulse rounded-card bg-bg-gray dark:bg-white/[.04]" />
+});
 
 function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
   const { stockIcons, assetIcons } = useAssetIcons(["stock", "crypto", "metal", "icon"]);
@@ -441,23 +445,44 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
   );
 }
 
-type GlobalSection = "assets" | "heatmap";
+type GlobalSection = "assets" | "heatmap" | "convert";
+
+const GLOBAL_SECTIONS: [GlobalSection, string, string][] = [
+  ["assets", "市值排行", "全球主要资产的市值、价格与走势"],
+  ["heatmap", "经济热图", "按国家比较关键宏观经济指标"],
+  ["convert", "汇率换算", "输入金额，按当前汇率换算其他货币"]
+];
+
+const SECTION_ICONS = {
+  assets: IconChartHistogram,
+  heatmap: IconMap2,
+  convert: IconArrowsExchange
+} as const;
+
+function parseGlobalSection(value: string | null): GlobalSection {
+  if (value === "heatmap" || value === "convert") return value;
+  return "assets";
+}
 
 function SectionIcon({ section }: { section: GlobalSection }) {
-  const Icon = section === "assets" ? IconChartHistogram : IconMap2;
+  const Icon = SECTION_ICONS[section];
   return <Icon className="global-section-icon" size={18} stroke={1.65} aria-hidden="true" />;
 }
 
 export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
   const [section, setSection] = useState<GlobalSection>(() => {
     if (typeof window === "undefined" || pageSize) return "assets";
-    return new URLSearchParams(window.location.search).get("section") === "heatmap" ? "heatmap" : "assets";
+    return parseGlobalSection(new URLSearchParams(window.location.search).get("section"));
   });
 
   useEffect(() => {
     if (pageSize) return;
     const params = new URLSearchParams(window.location.search);
     params.set("section", section);
+    if (section !== "convert") {
+      params.delete("from");
+      params.delete("amount");
+    }
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }, [pageSize, section]);
 
@@ -466,10 +491,7 @@ export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
   return (
     <div className="global-economy-page flex flex-col gap-6">
       <nav className="global-section-nav" aria-label="全球经济功能">
-        {([
-          ["assets", "市值排行", "全球主要资产的市值、价格与走势"],
-          ["heatmap", "经济热图", "按国家比较关键宏观经济指标"]
-        ] as [GlobalSection, string, string][]).map(([key, label, description]) => (
+        {GLOBAL_SECTIONS.map(([key, label, description]) => (
           <button
             key={key}
             type="button"
@@ -486,7 +508,7 @@ export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
         ))}
       </nav>
       <div key={section} className="global-section-panel">
-        {section === "assets" ? <AssetMarketCapRanking /> : <GlobalEconomyHeatmap />}
+        {section === "assets" ? <AssetMarketCapRanking /> : section === "heatmap" ? <GlobalEconomyHeatmap /> : <FxConverter />}
       </div>
     </div>
   );
