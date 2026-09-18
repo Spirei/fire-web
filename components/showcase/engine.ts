@@ -1,14 +1,15 @@
 /**
- * 首页迈凯伦（F1）滚动叙事场景。
+ * 通用 3D 展示台引擎（滚动叙事）。
  *
  * 实现思路来自 alphardex 的 SU7 展示站还原心得与 su7-replica 源码：
  * 1) FBO 全屏四边形把两张 HDR 环境贴图 mix 起来（夜 → 昼），结果既当环境反射又不用额外灯光；
  * 2) 平面反射 + 法线扰动 + 菲涅尔混合 + 粗糙度控制模糊的地面；
- * 3) 速度线隧道：纯片元着色器（噪声沿轴向拉长 → 取尖峰勾细线 → 随机颜色），配合 Bloom；
+ * 3) 速度线隧道：主光条 + 很浅的虚线，配合 Bloom；
  * 4) fbm 相机晃动、随速度增强的流光与 Bloom、轮胎自转，全部由同一个速度变量驱动；
- * 5) 滚动进度 p 是唯一输入，换成任意 glb 都能复用。
+ * 5) 滚动进度 p 是唯一输入。
  *
- * 这个文件只在浏览器里被动态 import，不会进入首屏包。
+ * 引擎只认 config（见 ./types）：换车 / 换镜头 / 换配色都通过 preset 传入，
+ * 本文件不含任何车型相关常量。它只在浏览器里被动态 import，不会进入首屏包。
  */
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -18,63 +19,107 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { MCL_PARTS, MCL_PHASES } from "./phases";
+import type { ShowcaseCameraKey, ShowcaseConfig, ShowcaseHandle, ShowcaseLightBar, ShowcaseOptions } from "./types";
 
-const CONFIG = {
-  model: "/mclaren/mcl35m.glb",
-  envNight: "/mclaren/moonless_golf_1k.hdr",
-  envDay: "/mclaren/studio_small_09_1k.hdr",
-  /** 归一化后的车长（米） */
-  length: 5.6,
-  /** 内部速度上限，对应 355 km/h */
-  maxSpeed: 34,
-  topKmh: 355
-};
-
-export interface McLarenHud {
-  /** 滚动长度容器（决定滚动推进区间） */
-  scroll: HTMLElement;
-  /** 粘性舞台 */
-  stage: HTMLElement;
-  kmh: HTMLElement | null;
-  gear: HTMLElement | null;
-  rpmTicks: HTMLElement[];
-  ersBar: HTMLElement | null;
-  ersText: HTMLElement | null;
-  teleFoot: HTMLElement | null;
-  mark: HTMLElement | null;
-  raceBtn: HTMLElement | null;
-  /** 缩放按钮（放大 / 缩小） */
-  zoomIn?: HTMLElement | null;
-  zoomOut?: HTMLElement | null;
-  /** 缩放模式开关（打开后普通滚轮 / 手指滚动就是缩放，不再滚动页面） */
-  zoomMode?: HTMLElement | null;
-  /** 部件标注元素（位置由本文件每帧投影更新） */
-  labels: { el: HTMLElement; from: number; pos: [number, number, number] }[];
+/** 配置里的正则既能写字符串（可跨服务端/客户端传递）也能直接给 RegExp */
+function toRegExp(value: string | RegExp | undefined, fallback: RegExp) {
+  if (value === undefined) return fallback;
+  return typeof value === "string" ? new RegExp(value, "i") : value;
 }
 
-export interface McLarenSceneOptions {
-  canvas: HTMLCanvasElement;
-  hud: McLarenHud;
-  /** 加载进度 0–1（模型 + 环境贴图） */
-  onProgress?: (ratio: number) => void;
-  /** 就绪（可以隐藏 loading） */
-  onReady?: () => void;
-  /** 章节切换 */
-  onPhase?: (index: number) => void;
-  onError?: (message: string) => void;
+export type { ShowcaseHandle, ShowcaseHud, ShowcaseOptions } from "./types";
+
+/** 把 config 里的可选值补齐成引擎内部使用的常量 */
+function normalizeConfig(config: ShowcaseConfig) {
+  const ring = config.ground?.ring;
+  const tunnel = config.speed.tunnel;
+  return {
+    assets: config.assets,
+    watermark: config.watermark ?? "SHOWCASE",
+    model: {
+      length: config.model?.length ?? 5.6,
+      yaw: config.model?.yaw ?? 0,
+      pitch: config.model?.pitch ?? 0,
+      wheelPattern: toRegExp(config.model?.wheelPattern, /rim|tread|tyre/i),
+      wheelAxis: config.model?.wheelAxis ?? "x",
+      wheelLateral: config.model?.wheelLateral ?? "x",
+      wheelLongitudinal: config.model?.wheelLongitudinal ?? "y",
+      materialRules: (config.model?.materialRules ?? []).map((rule) => ({
+        match: toRegExp(rule.match, /$^/),
+        metalness: rule.metalness,
+        roughness: rule.roughness
+      }))
+    },
+    camera: {
+      keyframes: [...config.camera.keyframes].sort((a, b) => a.p - b.p),
+      shakeAmount: config.camera.shake?.amount ?? 0.34,
+      shakeSmoothing: config.camera.shake?.smoothing ?? 1.6,
+      fitMinAspect: config.camera.fit?.minAspect ?? 1.2,
+      fitMaxPullback: config.camera.fit?.maxPullback ?? 1.8
+    },
+    ground: {
+      ring:
+        ring === false
+          ? null
+          : {
+              radius: ring?.radius ?? 4,
+              count: ring?.count ?? 180,
+              longEvery: ring?.longEvery ?? 15,
+              longLength: ring?.longLength ?? 0.34,
+              shortLength: ring?.shortLength ?? 0.16,
+              color: ring?.color ?? "#ffb070"
+            },
+      reflectIntensity: config.ground?.reflectIntensity ?? 0.95,
+      reflectionSize: config.ground?.reflectionSize ?? 512,
+      pool: config.ground?.pool ?? 0.14
+    },
+    speed: {
+      maxSpeed: config.speed.maxSpeed ?? 34,
+      topKmh: config.speed.topKmh ?? 355,
+      launchTravel: config.speed.launchTravel ?? 11,
+      tunnel:
+        tunnel === false
+          ? null
+          : {
+              radius: tunnel?.radius ?? 26,
+              length: tunnel?.length ?? 120,
+              bars: tunnel?.bars ?? [],
+              gold: tunnel?.gold ?? "#ffc266",
+              white: tunnel?.white ?? "#ccdcfa",
+              dashes: tunnel?.dashes ?? 1
+            }
+    },
+    post: {
+      exposure: config.post?.exposure ?? 1.16,
+      bloomStrength: config.post?.bloom?.strength ?? 0.4,
+      bloomRadius: config.post?.bloom?.radius ?? 0.6,
+      bloomThreshold: config.post?.bloom?.threshold ?? 0.85,
+      bloomSpeedBoost: config.post?.bloom?.speedBoost ?? 0.42,
+      smearStrength: config.post?.smear?.strength ?? 0.09,
+      smearChroma: config.post?.smear?.chroma ?? 0.012
+    },
+    zoom: {
+      min: config.zoom?.min ?? 0.55,
+      max: config.zoom?.max ?? 2.4,
+      wheelStep: config.zoom?.wheelStep ?? 0.0016
+    },
+    phases: config.phases,
+    parts: config.parts ?? []
+  };
 }
 
-export interface McLarenSceneHandle {
-  dispose: () => void;
-  /** 手动设置滚动进度（调试 / 截图用） */
-  setProgress: (p: number, settle?: number) => void;
-  /** 调试用：当前平滑后的进度、速度与自适应倍率 */
-  debug: () => { progress: number; speed: number; scale: number };
+/** 把 config 里的光条展开成 GLSL 表达式（unrolled，避免动态数组索引） */
+function barGlsl(bars: ShowcaseLightBar[], tone: "gold" | "white", scale = 1) {
+  const list = bars.filter((b) => b.tone === tone);
+  if (list.length === 0) return "0.0";
+  return list
+    .map((b) => `barLine(ang, ${((b.angle * Math.PI) / 180).toFixed(5)}, ${((b.width * Math.PI) / 180).toFixed(5)})`)
+    .join(" + ") + (scale !== 1 ? ` * ${scale}` : "");
 }
 
-export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHandle {
+export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const { canvas, hud } = options;
+  const CFG = normalizeConfig(options.config);
   const cleanups: Array<() => void> = [];
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   // 排查性能用：?mcloff=reflect,bloom,tunnel,floor,car 可逐项关掉效果（只影响诊断，不影响正常访问）
@@ -87,7 +132,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.16;
+  renderer.toneMappingExposure = CFG.post.exposure;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
@@ -282,7 +327,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   /* 平面反射：镜像相机 + 斜裁剪（three Reflector 的做法） */
   // 反射贴图每次都会重渲染整个场景，分辨率是这张图最大的成本项；
   // 地面本来就带粗糙度模糊，512 与 1024 的观感差别很小。
-  const reflectRT = new THREE.WebGLRenderTarget(512, 512, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
+  const reflectRT = new THREE.WebGLRenderTarget(CFG.ground.reflectionSize, CFG.ground.reflectionSize, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
   const mirrorCamera = new THREE.PerspectiveCamera();
   const reflectorPlane = new THREE.Plane();
   const normalV = new THREE.Vector3();
@@ -335,20 +380,20 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     p.elements[14] = clipPlane.w;
 
     const prevTarget = renderer.getRenderTarget();
-    const tunnelWas = tunnel.visible;
-    const accentWas = accent.visible;
+    const tunnelWas = tunnel?.visible ?? false;
+    const accentWas = accent?.visible ?? false;
     floor.visible = false;
     groundFx.visible = false;
-    tunnel.visible = false;      // 速度线不参与地面反射，否则整块地面会被照亮成一片白
-    accent.visible = false;
+    if (tunnel) tunnel.visible = false;   // 速度线不参与地面反射，否则整块地面会被照亮成一片白
+    if (accent) accent.visible = false;
     renderer.setRenderTarget(reflectRT);
     renderer.clear();
     renderer.render(scene, mirrorCamera);
     renderer.setRenderTarget(prevTarget);
     floor.visible = true;
     groundFx.visible = true;
-    tunnel.visible = tunnelWas;
-    accent.visible = accentWas;
+    if (tunnel) tunnel.visible = tunnelWas;
+    if (accent) accent.visible = accentWas;
   }
 
   /* ---------- 地面装饰：光池 / 接触阴影 / 刻度环 ---------- */
@@ -368,6 +413,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   }
   const groundFx = new THREE.Group();
   scene.add(groundFx);
+  let ringUniformsRef: { uSweep: { value: number }; uSpeed: { value: number }; uTime: { value: number } } | null = null;
 
   const pool = new THREE.Mesh(
     new THREE.PlaneGeometry(34, 34),
@@ -399,13 +445,12 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   groundFx.add(contact);
 
   /**
-   * 车下方的刻度环：世界坐标里是一个正圆（屏幕上的椭圆来自俯视透视，参考图也是这样），
-   * 外圈按计时码表排布 144 条径向刻度，每 6 条一根长刻度，内圈再补两条细圆线。
+   * 车下方的刻度环（config.ground.ring）：世界坐标里是一个正圆（屏幕上的椭圆来自俯视透视），
+   * 外圈按计时码表排布径向刻度，每 longEvery 条一根长刻度，内圈再补两条细圆线。
    */
-  const RING_COUNT = 180;   // 2° 一条，密到像表圈
-  const RING_R = 4.0;
-  const RING_LONG = 0.34;   // 长刻度
-  const RING_SHORT = 0.16;  // 短刻度
+  const RING = CFG.ground.ring;
+  const RING_COUNT = RING ? RING.count : 0;
+  const RING_R = RING ? RING.radius : 0;
   function ellipseOutline(scaleX: number, scaleY: number, lineWidth: number, opacity: number, color: number) {
     const g = new THREE.RingGeometry(1, 1 + lineWidth, 256);
     const mesh = new THREE.Mesh(
@@ -425,64 +470,68 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     mesh.renderOrder = 3;
     return mesh;
   }
-  groundFx.add(ellipseOutline(RING_R + RING_LONG, RING_R + RING_LONG, 0.008, 0.34, 0xffc08a));
-  groundFx.add(ellipseOutline(RING_R, RING_R, 0.005, 0.18, 0xffd9b8));
-  const ringUniforms = {
-    uSweep: { value: 0 },
-    uSpeed: { value: 0 },
-    uTime: { value: 0 },
-    uColor: { value: new THREE.Color(0xffb070) }
-  };
-  const ringGeo = new THREE.BoxGeometry(0.024, 0.004, 0.16);
-  const ringMat = new THREE.ShaderMaterial({
-    uniforms: ringUniforms,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    vertexShader: `
-      attribute float aIndex;
-      varying float vIndex;
-      void main(){
-        vIndex = aIndex / ${RING_COUNT}.0;
-        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: `
-      uniform float uSweep; uniform float uSpeed; uniform float uTime; uniform vec3 uColor;
-      varying float vIndex;
-      void main(){
-      float diff = abs(fract(vIndex - uSweep + 0.5) - 0.5) * 2.0;   // 环上的角距离
-      float glow = pow(1.0 - clamp(diff, 0.0, 1.0), 7.0);
-      float flick = 0.85 + 0.15 * sin(uTime * 3.0 + vIndex * 90.0);
-      float a = (0.3 + glow * 0.8) * flick * (0.8 + uSpeed * 0.5);
-      gl_FragColor = vec4(uColor * (0.8 + glow * 1.4), a);
-      }`
-  });
-  const ring = new THREE.InstancedMesh(ringGeo, ringMat, RING_COUNT);
-  {
+  let ring: THREE.InstancedMesh | null = null;
+  if (RING) {
+    const ringColor = new THREE.Color(RING.color);
+    groundFx.add(ellipseOutline(RING_R + RING.longLength, RING_R + RING.longLength, 0.008, 0.34, ringColor.getHex()));
+    groundFx.add(ellipseOutline(RING_R, RING_R, 0.005, 0.18, ringColor.clone().lerp(new THREE.Color(0xffffff), 0.35).getHex()));
+    const ringUniforms = {
+      uSweep: { value: 0 },
+      uSpeed: { value: 0 },
+      uTime: { value: 0 },
+      uColor: { value: ringColor }
+    };
+    const ringGeo = new THREE.BoxGeometry(0.024, 0.004, RING.shortLength);
+    const ringMat = new THREE.ShaderMaterial({
+      uniforms: ringUniforms,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexShader: `
+        attribute float aIndex;
+        varying float vIndex;
+        void main(){
+          vIndex = aIndex / ${RING.count}.0;
+          gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        uniform float uSweep; uniform float uSpeed; uniform float uTime; uniform vec3 uColor;
+        varying float vIndex;
+        void main(){
+          float diff = abs(fract(vIndex - uSweep + 0.5) - 0.5) * 2.0;   // 环上的角距离
+          float glow = pow(1.0 - clamp(diff, 0.0, 1.0), 7.0);
+          float flick = 0.85 + 0.15 * sin(uTime * 3.0 + vIndex * 90.0);
+          float a = (0.3 + glow * 0.8) * flick * (0.8 + uSpeed * 0.5);
+          gl_FragColor = vec4(uColor * (0.8 + glow * 1.4), a);
+        }`
+    });
+    const mesh = new THREE.InstancedMesh(ringGeo, ringMat, RING.count);
     const m = new THREE.Matrix4();
-    const idx = new Float32Array(RING_COUNT);
+    const idx = new Float32Array(RING.count);
     const pos = new THREE.Vector3();
     const quat = new THREE.Quaternion();
     const zAxis = new THREE.Vector3(0, 0, 1);
-    for (let i = 0; i < RING_COUNT; i += 1) {
-      const a = (i / RING_COUNT) * Math.PI * 2;
-      // 径向刻度：从圆周往外画，每 6 条一根长刻度（计时码表排布）
+    for (let i = 0; i < RING.count; i += 1) {
+      const a = (i / RING.count) * Math.PI * 2;
+      // 径向刻度：从圆周往外画，每 longEvery 条一根长刻度
       const dir = new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
-      const long = i % 15 === 0;   // 180 条里每 15 条一根长刻度 → 12 根，正好是钟面小时刻度
-      const len = long ? RING_LONG : RING_SHORT;
+      const long = i % RING.longEvery === 0;
+      const len = long ? RING.longLength : RING.shortLength;
       pos.copy(dir).multiplyScalar(RING_R + len / 2);
       pos.y = 0.012;
       quat.setFromUnitVectors(zAxis, dir);
-      m.compose(pos, quat, new THREE.Vector3(long ? 1.6 : 1, 1, len / 0.16));
-      ring.setMatrixAt(i, m);
+      m.compose(pos, quat, new THREE.Vector3(long ? 1.6 : 1, 1, len / RING.shortLength));
+      mesh.setMatrixAt(i, m);
       idx[i] = i;
     }
     ringGeo.setAttribute("aIndex", new THREE.InstancedBufferAttribute(idx, 1));
-    ring.instanceMatrix.needsUpdate = true;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.renderOrder = 3;
+    mesh.frustumCulled = false;
+    groundFx.add(mesh);
+    ring = mesh;
+    ringUniformsRef = ringUniforms;
   }
-  ring.renderOrder = 3;
-  ring.frustumCulled = false;
-  groundFx.add(ring);
 
   /* ---------- 3) 速度线隧道：纯片元着色器 ---------- */
   /** 速度线用的预计算噪声贴图：把逐像素的 hash 计算换成一次纹理采样，环形网格保证无缝平铺 */
@@ -534,9 +583,15 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   const streakVert = `
     varying vec2 vUv;
     void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+  const TUNNEL = CFG.speed.tunnel;
+  const barTune = TUNNEL?.bars ?? [];
+  const goldBars = barGlsl(barTune, "gold");
+  const whiteBars = barGlsl(barTune, "white");
+  const goldCores = barGlsl(barTune, "gold", 0.27);
+  const whiteCores = barGlsl(barTune, "white", 0.26);
   const streakFrag = `
     uniform float uTime; uniform float uSpeed; uniform float uOpacity; uniform vec3 uTint; uniform sampler2D tNoise;
-    uniform float uBars; uniform vec3 uGold; uniform vec3 uWhite;
+    uniform float uBars; uniform vec3 uGold; uniform vec3 uWhite; uniform float uDash;
     varying vec2 vUv;
     const float TAU = 6.28318530718;
     // 圆周上的角度距离（弧度），用来画径向光条
@@ -551,12 +606,10 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
       if (uBars > 0.5) {
         // 左右各三条主光条（60° 均分）：上下两条是暖金色，靠内侧的四条偏白灰。
         // 宽度按参考视频量出来约 0.5°，所以这里是很细的亮线，靠 Bloom 出光晕。
-        float gold = barLine(ang, 1.2217, 0.009) + barLine(ang, 4.3633, 0.009);
-        float white = barLine(ang, 0.1745, 0.007) + barLine(ang, 2.2689, 0.008)
-                    + barLine(ang, 3.3161, 0.007) + barLine(ang, 5.4105, 0.008);
-        float goldCore = barLine(ang, 1.2217, 0.0024) + barLine(ang, 4.3633, 0.0024);
-        float whiteCore = barLine(ang, 0.1745, 0.0018) + barLine(ang, 2.2689, 0.0022)
-                        + barLine(ang, 3.3161, 0.0018) + barLine(ang, 5.4105, 0.0022);
+        float gold = ${goldBars};
+        float white = ${whiteBars};
+        float goldCore = ${goldCores};
+        float whiteCore = ${whiteCores};
         // 亮度放在颜色里，alpha 顶到 1 就够，否则叠上 Bloom 会一片糊
         col += uGold * (gold * 1.15 + goldCore * 2.0) + uWhite * (white * 0.7 + whiteCore * 1.4);
         mask += gold * 0.85 + goldCore * 0.5 + white * 0.6 + whiteCore * 0.4;
@@ -564,7 +617,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
       // 其余是很浅的虚线：噪声贴图沿轴拉伸并滚动
       vec2 nUv = vec2(vUv.x * 48.0, vUv.y * 0.32 - uTime * (0.15 + uSpeed * 0.035));
       vec3 s = texture2D(tNoise, nUv).rgb;
-      float dash = smoothstep(0.86, 0.99, s.r) * 0.34;
+      float dash = smoothstep(0.86, 0.99, s.r) * 0.34 * uDash;
       col += mix(vec3(0.52, 0.58, 0.72), vec3(0.92, 0.94, 1.0), s.g) * dash;
       mask += dash;
       col *= uTint;
@@ -581,11 +634,12 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     tNoise: { value: streakNoise },
     uBars: { value: 1 },
     // 光条取色：按参考视频逐点取样后的暖金与冷白（照片偏色已做中性化）
-    uGold: { value: new THREE.Color(1.0, 0.76, 0.4) },
-    uWhite: { value: new THREE.Color(0.8, 0.86, 0.98) }
+    uGold: { value: new THREE.Color(TUNNEL?.gold ?? "#ffc266") },
+    uWhite: { value: new THREE.Color(TUNNEL?.white ?? "#ccdcfa") },
+    uDash: { value: TUNNEL?.dashes ?? 1 }
   };
-  const tunnel = new THREE.Mesh(
-    new THREE.CylinderGeometry(26, 26, 120, 64, 1, true),
+  const tunnel = TUNNEL ? new THREE.Mesh(
+    new THREE.CylinderGeometry(TUNNEL.radius, TUNNEL.radius, TUNNEL.length, 64, 1, true),
     new THREE.ShaderMaterial({
       uniforms: tunnelUniforms,
       vertexShader: streakVert,
@@ -595,10 +649,12 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
       depthWrite: false,
       blending: THREE.AdditiveBlending
     })
-  );
-  tunnel.rotation.x = Math.PI / 2;   // 圆柱轴对齐车长方向（Z）
-  tunnel.frustumCulled = false;
-  scene.add(tunnel);
+  ) : null;
+  if (tunnel) {
+    tunnel.rotation.x = Math.PI / 2;   // 圆柱轴对齐车长方向（Z）
+    tunnel.frustumCulled = false;
+    scene.add(tunnel);
+  }
 
   const tunnel2Uniforms = {
     uTime: { value: 0 },
@@ -607,11 +663,12 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     uTint: { value: new THREE.Color(1.6, 0.85, 0.45) },
     tNoise: { value: streakNoise },
     uBars: { value: 0 },               // 副层只画很浅的虚线，主光条只留在主层
+    uDash: { value: TUNNEL?.dashes ?? 1 },
     uGold: { value: new THREE.Color(1.0, 0.76, 0.4) },
     uWhite: { value: new THREE.Color(0.8, 0.86, 0.98) }
   };
-  const accent = new THREE.Mesh(
-    new THREE.CylinderGeometry(19, 19, 120, 48, 1, true),
+  const accent = TUNNEL ? new THREE.Mesh(
+    new THREE.CylinderGeometry(TUNNEL.radius * 0.73, TUNNEL.radius * 0.73, TUNNEL.length, 48, 1, true),
     new THREE.ShaderMaterial({
       uniforms: tunnel2Uniforms,
       vertexShader: streakVert,
@@ -621,10 +678,12 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
       depthWrite: false,
       blending: THREE.AdditiveBlending
     })
-  );
-  accent.rotation.set(Math.PI / 2, 0, 0.35);
-  accent.frustumCulled = false;
-  scene.add(accent);
+  ) : null;
+  if (accent) {
+    accent.rotation.set(Math.PI / 2, 0, 0.35);
+    accent.frustumCulled = false;
+    scene.add(accent);
+  }
 
   /* ---------- 4) 车身流光：世界坐标驱动的流动光带 ---------- */
   const flowUniforms = {
@@ -707,7 +766,12 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   composer.addPass(smearPass);
-  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.42, 0.62, 0.85);
+  const bloom = new UnrealBloomPass(
+    new THREE.Vector2(1, 1),
+    CFG.post.bloomStrength,
+    CFG.post.bloomRadius,
+    CFG.post.bloomThreshold
+  );
   bloom.enabled = !off.has("bloom");
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
@@ -716,13 +780,14 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   /* ---------- 6) 模型 ---------- */
   const carRoot = new THREE.Group();
   scene.add(carRoot);
+  const spinAxis = new THREE.Vector3(1, 0, 0);   // 轮子自转轴（config.model.wheelAxis）
   const wheelPivots: Array<
     Array<{ mesh: THREE.Mesh; angle: number; rot: THREE.Matrix4; t1: THREE.Matrix4; t2: THREE.Matrix4 }>
   > = [];
   const bodyMaterials: THREE.MeshStandardMaterial[] = [];
 
   /** 合并网格里一个材质覆盖四个轮子，按三角面质心聚类拆成四个独立的轮子 */
-  function splitWheels(mesh: THREE.Mesh, midX: number, midY: number) {
+  function splitWheels(mesh: THREE.Mesh, midLateral: number, midLong: number, lateralAxis: number, longAxis: number) {
     const geo = mesh.geometry;
     const idx = geo.index;
     const pos = geo.attributes.position as THREE.BufferAttribute;
@@ -735,9 +800,9 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
       a.fromBufferAttribute(pos, idx.getX(i));
       b.fromBufferAttribute(pos, idx.getX(i + 1));
       c.fromBufferAttribute(pos, idx.getX(i + 2));
-      const cx = (a.x + b.x + c.x) / 3;
-      const cy = (a.y + b.y + c.y) / 3;
-      const key = (cx > midX ? 1 : 0) + (cy > midY ? 2 : 0);
+      const cl = (a.getComponent(lateralAxis) + b.getComponent(lateralAxis) + c.getComponent(lateralAxis)) / 3;
+      const cf = (a.getComponent(longAxis) + b.getComponent(longAxis) + c.getComponent(longAxis)) / 3;
+      const key = (cl > midLateral ? 1 : 0) + (cf > midLong ? 2 : 0);
       const list = buckets.get(key);
       if (list) list.push(idx.getX(i), idx.getX(i + 1), idx.getX(i + 2));
       else buckets.set(key, [idx.getX(i), idx.getX(i + 1), idx.getX(i + 2)]);
@@ -771,14 +836,18 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   };
 
   new GLTFLoader().load(
-    CONFIG.model,
+    CFG.assets.model,
     (gltf) => {
       const car = gltf.scene;
       car.visible = !off.has("car");
+      // 不同来源的模型朝向不一致：preset 里给 yaw / pitch 做一次性修正
+      if (CFG.model.yaw) car.rotation.y += (CFG.model.yaw * Math.PI) / 180;
+      if (CFG.model.pitch) car.rotation.x += (CFG.model.pitch * Math.PI) / 180;
+      car.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(car);
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
-      const scale = CONFIG.length / Math.max(size.x, size.y, size.z);
+      const scale = CFG.model.length / Math.max(size.x, size.y, size.z);
       car.scale.setScalar(scale);
       car.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
 
@@ -789,23 +858,18 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
         mesh.frustumCulled = false;
         const mat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial;
         const name = mat?.name || "";
-        // 修正贴图模型自带的材质参数：轮胎不该是金属，碳纤维别太像镜子
+        // 按 preset 的规则修正材质参数（不同模型自带参数差别很大：轮胎不该是金属，碳纤维别太像镜子）
         if (mat?.isMeshStandardMaterial) {
-          if (/tread|tyrewall/i.test(name)) {
-            mat.metalness = 0;
-            mat.roughness = 0.85;
-          } else if (/rim/i.test(name)) {
-            mat.metalness = 1;
-            mat.roughness = 0.28;
-          } else if (/mcl35m_c/i.test(name)) {
-            mat.metalness = 0.35;
-            mat.roughness = 0.42;
-          }
+          CFG.model.materialRules.forEach((rule) => {
+            if (!rule.match.test(name)) return;
+            if (rule.metalness !== undefined) mat.metalness = rule.metalness;
+            if (rule.roughness !== undefined) mat.roughness = rule.roughness;
+          });
           mat.envMapIntensity = 1.25;
           addFlow(mat);
           bodyMaterials.push(mat);
         }
-        if (/rim|tread|tyre/i.test(name) && !/st_wheel/i.test(name)) splitTargets.push(mesh);
+        if (CFG.model.wheelPattern.test(name) && !/st_wheel/i.test(name)) splitTargets.push(mesh);
       });
       carRoot.add(car);
 
@@ -814,10 +878,14 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
       splitTargets.forEach((m) =>
         wheelBox.union(new THREE.Box3().setFromBufferAttribute(m.geometry.attributes.position as THREE.BufferAttribute))
       );
-      const midX = (wheelBox.min.x + wheelBox.max.x) / 2;
-      const midY = (wheelBox.min.y + wheelBox.max.y) / 2;
+      const axisIndex = { x: 0, y: 1, z: 2 } as const;
+      const lateralAxis = axisIndex[CFG.model.wheelLateral];
+      const longAxis = axisIndex[CFG.model.wheelLongitudinal];
+      const midLateral = (wheelBox.min.getComponent(lateralAxis) + wheelBox.max.getComponent(lateralAxis)) / 2;
+      const midLong = (wheelBox.min.getComponent(longAxis) + wheelBox.max.getComponent(longAxis)) / 2;
+      spinAxis.set(CFG.model.wheelAxis === "x" ? 1 : 0, CFG.model.wheelAxis === "y" ? 1 : 0, CFG.model.wheelAxis === "z" ? 1 : 0);
       splitTargets.forEach((mesh) => {
-        splitWheels(mesh, midX, midY).forEach((part, key) => {
+        splitWheels(mesh, midLateral, midLong, lateralAxis, longAxis).forEach((part, key) => {
           const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.Material;
           const m = new THREE.Mesh(part.geometry, material);
           m.matrixAutoUpdate = false;
@@ -859,20 +927,10 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   // 相机关键帧：方位角（度）/ 半径 / 高度 / 注视点 / 视角
   // 方位角 0° = 正对车头，90° = 车身左侧，180° = 车尾。
   // 开场对齐参考图：左侧全览（车头朝画面右），随后绕到车头 3/4、细节特写，最后在车尾方向收车。
-  const CAM_KEYS = [
-    { p: 0, az: -74, r: 12.2, h: 1.9, ty: 0.98, tz: 0.1, fov: 30 },
-    { p: 0.1, az: -56, r: 11.2, h: 1.76, ty: 0.9, tz: 0.15, fov: 30 },
-    { p: 0.22, az: -16, r: 9.2, h: 1.3, ty: 0.76, tz: 0.1, fov: 29 },
-    { p: 0.32, az: 26, r: 8.3, h: 1.02, ty: 0.62, tz: 0.85, fov: 27 },
-    { p: 0.42, az: 84, r: 8.7, h: 0.85, ty: 0.6, tz: 0.4, fov: 28 },
-    { p: 0.52, az: 140, r: 9.6, h: 0.68, ty: 0.6, tz: 0.1, fov: 30 },
-    // 冲刺段镜头落在车尾正后方：车沿隧道开走时始终在画面中间，镜头本身保持锁定
-    { p: 0.62, az: 172, r: 10.2, h: 0.65, ty: 0.6, tz: 0, fov: 31 },
-    { p: 0.74, az: 180, r: 10.8, h: 0.75, ty: 0.62, tz: -0.2, fov: 32 },
-    { p: 0.86, az: 186, r: 11.4, h: 1.9, ty: 0.8, tz: 0, fov: 30 },
-    { p: 1, az: 192, r: 10.8, h: 2.15, ty: 0.84, tz: 0.1, fov: 30 }
-  ];
-  const camState = { az: CAM_KEYS[0].az, r: CAM_KEYS[0].r, h: CAM_KEYS[0].h, ty: 0.9, tz: 0.2, fov: 30, fovEff: 30 };
+  const CAM_KEYS: ShowcaseCameraKey[] = CFG.camera.keyframes.length
+    ? CFG.camera.keyframes
+    : [{ p: 0, az: 0, r: 12, h: 2, ty: 0.9, tz: 0, fov: 30 }];
+  const camState = { az: CAM_KEYS[0].az, r: CAM_KEYS[0].r, h: CAM_KEYS[0].h, ty: CAM_KEYS[0].ty, tz: CAM_KEYS[0].tz, fov: CAM_KEYS[0].fov, fovEff: CAM_KEYS[0].fov };
   function camAt(p: number) {
     let i = 0;
     while (i < CAM_KEYS.length - 2 && p > CAM_KEYS[i + 1].p) i += 1;
@@ -924,8 +982,8 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
   let userYaw = 0;
   let userYawVel = 0;
   // 用户缩放：滚轮（⌘/Ctrl + 滚轮或触控板捏合）与按钮都改这个倍率，用来放大看细节
-  const MIN_ZOOM = 0.55;
-  const MAX_ZOOM = 2.4;
+  const MIN_ZOOM = CFG.zoom.min;
+  const MAX_ZOOM = CFG.zoom.max;
   let zoom = 1;
   let zoomTarget = 1;
   let active = true;
@@ -943,7 +1001,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     updateEnv(envWeight);
     const day = envWeight;
     // 参考图里冲刺时车身反而更亮：速度越高，暖色轮廓光与主光一起加码
-    const speedLight = clamp(speed / CONFIG.maxSpeed, 0, 1) ** 2;
+    const speedLight = clamp(speed / CFG.speed.maxSpeed, 0, 1) ** 2;
     keyLight.intensity = 0.72 + day * 0.42 + speedLight * 0.42;
     rimLight.intensity = 0.78 + day * 0.3 + seg(p, 0.42, 0.5) * 0.2 + speedLight * 1.05;
     fillLight.intensity = 0.32 + day * 0.24 + speedLight * 0.18;
@@ -952,10 +1010,10 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     const accel = seg(p, 0.46, 0.64);
     const decel = seg(p, 0.74, 0.86);
     const cruise = seg(p, 0.3, 0.42) * 4;
-    let targetSpeed = (accel - decel) * CONFIG.maxSpeed + cruise;
-    if (racing) targetSpeed = CONFIG.maxSpeed * 1.02;
+    let targetSpeed = (accel - decel) * CFG.speed.maxSpeed + cruise;
+    if (racing) targetSpeed = CFG.speed.maxSpeed * 1.02;
     speed += (targetSpeed - speed) * clamp(dt * (racing ? 2.4 : 2), 0, 1);
-    const sp = clamp(speed / CONFIG.maxSpeed, 0, 1);
+    const sp = clamp(speed / CFG.speed.maxSpeed, 0, 1);
     racingAmt += ((racing ? 1 : 0) - racingAmt) * clamp(dt * 2.2, 0, 1);
 
     // 相机
@@ -970,7 +1028,8 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     // 冲刺时镜头保持锁定（与参考视频一致）：车往隧道深处开走，画面不动
     const az = ((camState.az + userYaw) * Math.PI) / 180;
     // 竖屏 / 窄屏时水平视野会变窄，这里按宽高比把相机拉远、视角放宽，保证整车进画面
-    const fit = camera.aspect < 1.2 ? clamp(1.2 / camera.aspect, 1, 1.8) : 1;
+    const fitAspect = CFG.camera.fitMinAspect;
+  const fit = camera.aspect < fitAspect ? clamp(fitAspect / camera.aspect, 1, CFG.camera.fitMaxPullback) : 1;
     const r = (camState.r - sp * 1.5) * Math.pow(fit, 0.8) * zoom;
     const h = camState.h - sp * 0.22;
     camPos.set(Math.sin(az) * r, Math.max(0.35, h), Math.cos(az) * r);
@@ -978,13 +1037,13 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     camState.fovEff = camState.fov * Math.pow(fit, 0.45);
 
     // fbm 晃动：三个轴各自随机错开频率，高速才明显
-    const shakeAmp = reduced ? 0 : (sp * sp * 0.34 + 0.02) * 0.6;
+    const shakeAmp = reduced ? 0 : (sp * sp * CFG.camera.shakeAmount + 0.02) * 0.6;
     shakeTarget.set(
       fbm2(elapsed * 0.5 + SHAKE_SEED[0], 3.1) * shakeAmp,
       fbm2(elapsed * 0.5 + SHAKE_SEED[1], 7.7) * shakeAmp * 0.8,
       fbm2(elapsed * 0.5 + SHAKE_SEED[2], 11.3) * shakeAmp * 0.6
     );
-    shakeOffset.lerp(shakeTarget, clamp(dt * 1.6, 0, 1));
+    shakeOffset.lerp(shakeTarget, clamp(dt * CFG.camera.shakeSmoothing, 0, 1));
     camera.position.copy(camPos).add(shakeOffset);
     camera.lookAt(lookAt);
     if (Math.abs(camera.fov - camState.fovEff) > 0.02) {
@@ -994,7 +1053,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
 
     // 车：加速时下沉、轻微前倾，轮胎自转
     // 冲刺时车顺着隧道开走（镜头锁定，车越来越小），松开后回到原位
-    carTravel += (racingAmt * 11 - carTravel) * clamp(dt * 1.1, 0, 1);
+    carTravel += (racingAmt * CFG.speed.launchTravel - carTravel) * clamp(dt * 1.1, 0, 1);
     carRoot.position.z = carTravel;
     carRoot.position.y = Math.sin(elapsed * 0.7) * 0.004 - sp * 0.022;
     carRoot.rotation.z = -sp * 0.014;
@@ -1005,7 +1064,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     wheelPivots.forEach((parts) =>
       parts.forEach((w) => {
         w.angle -= spin;
-        w.rot.makeRotationX(w.angle);
+        w.rot.makeRotationAxis(spinAxis, w.angle);
         w.mesh.matrix.copy(w.t1).multiply(w.rot).multiply(w.t2);
         w.mesh.matrixWorldNeedsUpdate = true;
       })
@@ -1019,7 +1078,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     floorUniforms.uTime.value = elapsed;
     floorUniforms.uSpeed.value = sps;
     floorUniforms.uFlow.value = sps * sps;
-    floorUniforms.uReflectIntensity.value = 0.95 + sps * 0.2;
+    floorUniforms.uReflectIntensity.value = CFG.ground.reflectIntensity + sps * 0.2;
     flowUniforms.uFlowTime.value = elapsed;
     flowUniforms.uFlowStrength.value = sps * sps * 0.6;
     tunnelUniforms.uTime.value = elapsed;
@@ -1028,27 +1087,29 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     tunnel2Uniforms.uTime.value = elapsed * 0.75;
     tunnel2Uniforms.uSpeed.value = reduced ? 0 : speed * 0.8;
     tunnel2Uniforms.uOpacity.value = sps * 0.5;
-    ringUniforms.uTime.value = elapsed;
-    ringUniforms.uSpeed.value = sps;
-    ringUniforms.uSweep.value = elapsed * (0.05 + sps * 0.22);
-    (pool.material as THREE.MeshBasicMaterial).opacity = 0.14 + sps * 0.1;
-    ring.visible = p > 0.12 || sps > 0.05;
-    tunnel.visible = speed > 0.6 && !off.has("tunnel");
-    accent.visible = speed > 0.6 && !off.has("tunnel");
+    if (ringUniformsRef) {
+      ringUniformsRef.uTime.value = elapsed;
+      ringUniformsRef.uSpeed.value = sps;
+      ringUniformsRef.uSweep.value = elapsed * (0.05 + sps * 0.22);
+    }
+    (pool.material as THREE.MeshBasicMaterial).opacity = CFG.ground.pool + sps * 0.1;
+    if (ring) ring.visible = p > 0.12 || sps > 0.05;
+    const tunnelOn = !!CFG.speed.tunnel && speed > 0.6 && !off.has("tunnel");
+    if (tunnel) tunnel.visible = tunnelOn;
+    if (accent) accent.visible = tunnelOn;
 
-    // 后期
-    // 拖影只在高速时才有意义，静止段直接关掉这一整趟全屏后期
-   smearPass.uniforms.uChroma.value = sps * 0.012;
+    // 后期：拖影只在高速时才有意义，静止段直接关掉这一整趟全屏后期
+    smearPass.uniforms.uChroma.value = sps * CFG.post.smearChroma;
     smearPass.uniforms.uTime.value = elapsed;
-    const smear = sps * sps * 0.09;
+    const smear = sps * sps * CFG.post.smearStrength;
     smearPass.uniforms.uStrength.value = smear;
     smearPass.enabled = smear > 0.004;
-    bloom.strength = 0.4 + sps * 0.42;
-    bloom.radius = 0.6 + sps * 0.14;
+    bloom.strength = CFG.post.bloomStrength + sps * CFG.post.bloomSpeedBoost;
+    bloom.radius = CFG.post.bloomRadius + sps * 0.14;
     scene.backgroundIntensity = 0.85 + day * 0.35;
 
     // HUD
-    const kmh = Math.round(clamp(speed / CONFIG.maxSpeed, 0, 1.02) * CONFIG.topKmh);
+    const kmh = Math.round(clamp(speed / CFG.speed.maxSpeed, 0, 1.02) * CFG.speed.topKmh);
     if (hud.kmh) hud.kmh.textContent = String(kmh).padStart(3, "0");
     if (hud.gear) hud.gear.textContent = speed < 0.4 ? "N" : String(clamp(1 + Math.floor(sp * 8.9), 1, 8));
     const lit = speed < 0.4 ? 0 : Math.round(clamp(3 + sp * (hud.rpmTicks.length - 3) + fbm2(elapsed * 6, 2) * 1.2, 0, hud.rpmTicks.length));
@@ -1058,8 +1119,8 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     if (hud.ersText) hud.ersText.textContent = `${ers.toFixed(0)}%`;
     if (hud.teleFoot) hud.teleFoot.textContent = sps > 0.25 ? "LIVE DATA · DEPLOYING" : "LIVE DATA";
     let phase = 0;
-    for (let i = MCL_PHASES.length - 1; i >= 0; i -= 1) {
-      if (p >= MCL_PHASES[i].at) {
+    for (let i = CFG.phases.length - 1; i >= 0; i -= 1) {
+      if (p >= CFG.phases[i].at) {
         phase = i;
         break;
       }
@@ -1076,7 +1137,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
 
     // 部件标注：把 3D 锚点投影到屏幕
     hud.labels.forEach((part, i) => {
-      const def = MCL_PARTS[i];
+      const def = CFG.parts[i];
       const vis = seg(p, def.from, def.from + 0.05) * (1 - seg(p, 0.46, 0.52));
       if (vis < 0.02) {
         part.el.style.opacity = "0";
@@ -1157,7 +1218,8 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     renderer.setPixelRatio(renderScale);
     composer.setPixelRatio(renderScale);
     // 反射贴图也跟着倍率走：帧耗时偏高时它同样是最贵的一项
-    const reflectSize = Math.round(clamp(512 * (renderScale + 0.4), 320, 640));
+    const base = CFG.ground.reflectionSize;
+    const reflectSize = Math.round(clamp(base * (renderScale + 0.4), base * 0.62, base * 1.25));
     if (reflectSize !== reflectRT.width) reflectRT.setSize(reflectSize, reflectSize);
     resize();
   }
@@ -1247,7 +1309,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
     if (!withModifier && !zoomMode) return;
     e.preventDefault();
     // 往下滚 = 拉远，往上滚 / 双指张开 = 推近看细节
-    applyZoom(Math.exp(e.deltaY * 0.0016));
+    applyZoom(Math.exp(e.deltaY * CFG.zoom.wheelStep));
   };
   const onDoubleClick = () => {
     zoomTarget = 1;
@@ -1354,7 +1416,7 @@ export function createMcLarenScene(options: McLarenSceneOptions): McLarenSceneHa
 
   // 先加载环境贴图，再启动，避免首帧全黑
   const hdr = new HDRLoader();
-  Promise.all([hdr.loadAsync(CONFIG.envDay), hdr.loadAsync(CONFIG.envNight)])
+  Promise.all([hdr.loadAsync(CFG.assets.envDay), hdr.loadAsync(CFG.assets.envNight)])
     .then(([day, night]) => {
       day.mapping = night.mapping = THREE.EquirectangularReflectionMapping;
       envMixMat.uniforms.uEnv1.value = night;

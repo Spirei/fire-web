@@ -1,13 +1,10 @@
-import McLarenStage from "@/components/mclaren/McLarenStage";
+import ShowcaseStage from "@/components/showcase/ShowcaseStage";
+import { MCL35M_SHOWCASE } from "@/components/showcase/presets/mcl35m";
 
 /**
- * 首页：整页是迈凯伦（F1）滚动叙事，原有的产品预览、功能说明、页脚与顶栏都已移除。
- * 这里只做一层深色容器，3D 场景在客户端挂载后才动态加载 three.js。
+ * 首页：整页是 3D 展示台（滚动叙事），车型与镜头都来自 preset。
+ * 换车只需要在 components/showcase/presets 下新增/替换一份配置。
  */
 export default function HomePage() {
-  return (
-    <main className="mcl-home">
-      <McLarenStage />
-    </main>
-  );
+  return <ShowcaseStage config={MCL35M_SHOWCASE} />;
 }

@@ -1,33 +1,33 @@
-/* 首页迈凯伦（F1 滚动叙事）——样式全部限定在 .mcl-home 内，避免影响全站其他页面 */
+/* 通用 3D 展示台样式：全部限定在 .showcase 内，不影响全站其他页面 */
 
-.mcl-home {
-  --mcl-papaya: #ff8000;
-  --mcl-line: rgba(255, 255, 255, 0.14);
-  --mcl-dim: #7c7c80;
-  --mcl-header: 0px;
+.showcase {
+  --sc-papaya: #ff8000;
+  --sc-line: rgba(255, 255, 255, 0.14);
+  --sc-dim: #7c7c80;
+  --sc-header: 0px;
   background: #050506;
 }
 
-/* 首页整屏是深色 3D 场景，连 html / body 的底色一起压深，避免橡皮筋回弹时露出白底 */
-html:has(.mcl-home),
-html:has(.mcl-home) body {
+/* 舞台是整屏深色 3D 场景，连 html / body 的底色一起压深，避免橡皮筋回弹时露出白底 */
+html:has(.showcase),
+html:has(.showcase) body {
   background-color: #050506 !important;
 }
 
-.mcl-scroll {
+.sc-scroll {
   position: relative;
   height: 620vh;
 }
 
-.mcl-stage {
+.sc-stage {
   position: sticky;
-  top: var(--mcl-header);
-  height: calc(100svh - var(--mcl-header));
+  top: var(--sc-header);
+  height: calc(100svh - var(--sc-header));
   overflow: hidden;
   background: #050506;
 }
 
-.mcl-canvas {
+.sc-canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -35,7 +35,7 @@ html:has(.mcl-home) body {
   touch-action: pan-y;
 }
 
-.mcl-vignette {
+.sc-vignette {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -44,7 +44,7 @@ html:has(.mcl-home) body {
     linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, transparent 22%, transparent 76%, rgba(0, 0, 0, 0.6) 100%);
 }
 
-.mcl-watermark {
+.sc-watermark {
   position: absolute;
   left: 50%;
   top: 15.5%;
@@ -60,7 +60,7 @@ html:has(.mcl-home) body {
   will-change: transform, opacity;
 }
 
-.mcl-hud {
+.sc-hud {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -69,11 +69,11 @@ html:has(.mcl-home) body {
   -webkit-font-smoothing: antialiased;
 }
 
-.mcl-hud .mcl-row {
+.sc-hud .sc-row {
   position: absolute;
 }
 
-.mcl-kicker {
+.sc-kicker {
   top: 3.2vh;
   left: 50%;
   transform: translateX(-50%);
@@ -82,7 +82,7 @@ html:has(.mcl-home) body {
   color: #9a9a9e;
 }
 
-.mcl-sec {
+.sc-sec {
   left: 3.4vw;
   top: 20vh;
   display: flex;
@@ -93,19 +93,19 @@ html:has(.mcl-home) body {
   color: #bbb;
 }
 
-.mcl-sec i {
+.sc-sec i {
   display: block;
   width: 34px;
   height: 1px;
-  background: var(--mcl-line);
+  background: var(--sc-line);
 }
 
-.mcl-sec b {
-  color: var(--mcl-papaya);
+.sc-sec b {
+  color: var(--sc-papaya);
   font-weight: 500;
 }
 
-.mcl-headline {
+.sc-headline {
   left: 3.4vw;
   top: 23.5vh;
   margin: 0;
@@ -118,29 +118,29 @@ html:has(.mcl-home) body {
   transition: opacity 0.32s ease;
 }
 
-.mcl-copy {
+.sc-copy {
   left: 3.4vw;
   top: 36.5vh;
   margin: 0;
   font-size: 12px;
   line-height: 1.75;
-  color: var(--mcl-dim);
+  color: var(--sc-dim);
   transition: opacity 0.32s ease;
 }
 
-.mcl-left-foot {
+.sc-left-foot {
   left: 3.4vw;
   bottom: 5.5vh;
   display: flex;
   gap: 8px;
 }
 
-.mcl-pill {
+.sc-pill {
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 7px 13px;
-  border: 1px solid var(--mcl-line);
+  border: 1px solid var(--sc-line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.03);
   font-size: 9.5px;
@@ -149,14 +149,14 @@ html:has(.mcl-home) body {
   backdrop-filter: blur(6px);
 }
 
-.mcl-pill svg {
+.sc-pill svg {
   width: 11px;
   height: 11px;
   opacity: 0.75;
 }
 
 /* 缩放按钮：与左侧胶囊同一套观感 */
-.mcl-zoom {
+.sc-zoom {
   pointer-events: auto;
   cursor: pointer;
   width: 30px;
@@ -164,7 +164,7 @@ html:has(.mcl-home) body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--mcl-line);
+  border: 1px solid var(--sc-line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.03);
   color: #d8d8dc;
@@ -174,13 +174,13 @@ html:has(.mcl-home) body {
   transition: background 0.2s ease, color 0.2s ease;
 }
 
-.mcl-zoom:hover {
+.sc-zoom:hover {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
 
 /* 缩放模式：打开后普通滚轮 / 双指滚动直接缩放，不再滚动页面 */
-.mcl-zoom-mode {
+.sc-zoom-mode {
   pointer-events: auto;
   cursor: pointer;
   font: inherit;
@@ -189,21 +189,21 @@ html:has(.mcl-home) body {
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
-.mcl-zoom-mode.on {
+.sc-zoom-mode.on {
   background: rgba(255, 128, 0, 0.22);
   border-color: rgba(255, 128, 0, 0.7);
   color: #fff;
 }
 
 /* 遥测面板 */
-.mcl-tele {
+.sc-tele {
   right: 3.4vw;
   top: 20vh;
   width: 168px;
   text-align: right;
 }
 
-.mcl-tele-cap {
+.sc-tele-cap {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -214,22 +214,22 @@ html:has(.mcl-home) body {
   margin-bottom: 12px;
 }
 
-.mcl-tele-cap em {
+.sc-tele-cap em {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--mcl-papaya);
+  background: var(--sc-papaya);
   opacity: 0.9;
 }
 
-.mcl-speed-wrap {
+.sc-speed-wrap {
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
   gap: 7px;
 }
 
-.mcl-kmh {
+.sc-kmh {
   font-size: clamp(38px, 4.1vw, 62px);
   font-weight: 200;
   line-height: 0.88;
@@ -238,14 +238,14 @@ html:has(.mcl-home) body {
   color: #fff;
 }
 
-.mcl-unit {
+.sc-unit {
   font-size: 9px;
   letter-spacing: 0.24em;
   color: #86868b;
   padding-bottom: 3px;
 }
 
-.mcl-line-row {
+.sc-line-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -255,45 +255,45 @@ html:has(.mcl-home) body {
   color: #86868b;
 }
 
-.mcl-line-row b {
+.sc-line-row b {
   color: #fff;
   font-weight: 500;
   font-size: 13px;
   letter-spacing: 0;
 }
 
-.mcl-ticks {
+.sc-ticks {
   display: flex;
   gap: 2px;
   margin-top: 9px;
   justify-content: flex-end;
 }
 
-.mcl-ticks span {
+.sc-ticks span {
   width: 4px;
   height: 8px;
   background: rgba(255, 255, 255, 0.12);
   transform: skewX(-16deg);
 }
 
-.mcl-ticks span.on {
-  background: var(--mcl-papaya);
+.sc-ticks span.on {
+  background: var(--sc-papaya);
 }
 
-.mcl-ers {
+.sc-ers {
   margin-top: 12px;
   height: 3px;
   background: rgba(255, 255, 255, 0.1);
 }
 
-.mcl-ers i {
+.sc-ers i {
   display: block;
   height: 100%;
   width: 62%;
   background: linear-gradient(90deg, #29d3a0, #7bffcf);
 }
 
-.mcl-tele-foot {
+.sc-tele-foot {
   margin-top: 12px;
   font-size: 9px;
   letter-spacing: 0.24em;
@@ -301,21 +301,21 @@ html:has(.mcl-home) body {
 }
 
 /* 中间按钮 */
-.mcl-ctr {
+.sc-ctr {
   left: 50%;
   bottom: 12.5vh;
   transform: translateX(-50%);
   text-align: center;
 }
 
-.mcl-ctr-cap {
+.sc-ctr-cap {
   font-size: 9.5px;
   letter-spacing: 0.34em;
   color: #9a9a9e;
   margin-bottom: 10px;
 }
 
-.mcl-race {
+.sc-race {
   pointer-events: auto;
   cursor: pointer;
   display: inline-flex;
@@ -332,33 +332,33 @@ html:has(.mcl-home) body {
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
-.mcl-race.on,
-.mcl-race:hover {
+.sc-race.on,
+.sc-race:hover {
   background: linear-gradient(180deg, rgba(255, 128, 0, 0.42), rgba(255, 128, 0, 0.16));
   border-color: rgba(255, 170, 60, 0.9);
 }
 
-.mcl-race.on {
+.sc-race.on {
   transform: scale(0.985);
 }
 
-.mcl-ctr-hint {
+.sc-ctr-hint {
   margin-top: 10px;
   font-size: 8.5px;
   letter-spacing: 0.26em;
   color: #6b6b70;
 }
 
-.mcl-ctr-hint kbd {
+.sc-ctr-hint kbd {
   font: inherit;
   padding: 2px 5px;
-  border: 1px solid var(--mcl-line);
+  border: 1px solid var(--sc-line);
   border-radius: 3px;
   color: #b4b4b9;
 }
 
 /* 底部导航与角标 */
-.mcl-nav {
+.sc-nav {
   left: 50%;
   bottom: 4.6vh;
   transform: translateX(-50%);
@@ -370,12 +370,12 @@ html:has(.mcl-home) body {
   color: #6f6f74;
 }
 
-.mcl-nav u {
+.sc-nav u {
   text-decoration: none;
   color: #d6d6da;
 }
 
-.mcl-meta-l {
+.sc-meta-l {
   left: 3.4vw;
   bottom: 1.6vh;
   font-size: 8.5px;
@@ -383,7 +383,7 @@ html:has(.mcl-home) body {
   color: #62626a;
 }
 
-.mcl-meta-r {
+.sc-meta-r {
   right: 3.4vw;
   bottom: 1.6vh;
   font-size: 8.5px;
@@ -391,7 +391,7 @@ html:has(.mcl-home) body {
   color: #62626a;
 }
 
-.mcl-hint-drag {
+.sc-hint-drag {
   left: 50%;
   bottom: 8.6vh;
   transform: translateX(-50%);
@@ -403,7 +403,7 @@ html:has(.mcl-home) body {
 }
 
 /* 部件标注 */
-.mcl-part {
+.sc-part {
   position: absolute;
   transform: translate(0, -50%);
   padding-left: 12px;
@@ -413,7 +413,7 @@ html:has(.mcl-home) body {
   pointer-events: none;
 }
 
-.mcl-part::before {
+.sc-part::before {
   content: "";
   position: absolute;
   left: 0;
@@ -423,7 +423,7 @@ html:has(.mcl-home) body {
   background: linear-gradient(90deg, rgba(255, 128, 0, 0.9), rgba(255, 128, 0, 0.25));
 }
 
-.mcl-part::after {
+.sc-part::after {
   content: "";
   position: absolute;
   left: -2.5px;
@@ -431,11 +431,11 @@ html:has(.mcl-home) body {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--mcl-papaya);
+  background: var(--sc-papaya);
   box-shadow: 0 0 8px rgba(255, 128, 0, 0.9);
 }
 
-.mcl-part b {
+.sc-part b {
   display: block;
   font-size: 9.5px;
   letter-spacing: 0.24em;
@@ -443,34 +443,34 @@ html:has(.mcl-home) body {
   font-weight: 500;
 }
 
-.mcl-part i {
+.sc-part i {
   display: block;
   font-style: normal;
   font-size: 8.5px;
   letter-spacing: 0.18em;
-  color: var(--mcl-papaya);
+  color: var(--sc-papaya);
   margin-top: 4px;
 }
 
-.mcl-part.rev {
+.sc-part.rev {
   transform: translate(-100%, -50%);
   padding-left: 0;
   padding-right: 12px;
   text-align: right;
 }
 
-.mcl-part.rev::before {
+.sc-part.rev::before {
   left: auto;
   right: 0;
   background: linear-gradient(270deg, rgba(255, 128, 0, 0.9), rgba(255, 128, 0, 0.25));
 }
 
-.mcl-part.rev::after {
+.sc-part.rev::after {
   left: auto;
   right: -2.5px;
 }
 
-.mcl-loading {
+.sc-loading {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -485,73 +485,73 @@ html:has(.mcl-home) body {
   transition: opacity 0.6s ease;
 }
 
-.mcl-loading-bar {
+.sc-loading-bar {
   width: 180px;
   height: 1px;
   background: rgba(255, 255, 255, 0.14);
   overflow: hidden;
 }
 
-.mcl-loading-bar i {
+.sc-loading-bar i {
   display: block;
   height: 100%;
   width: 0;
-  background: var(--mcl-papaya);
+  background: var(--sc-papaya);
   transition: width 0.3s ease;
 }
 
-.mcl-loading-error {
+.sc-loading-error {
   color: #ff8f8f;
   letter-spacing: 0.1em;
 }
 
 @media (max-width: 860px) {
-  .mcl-watermark {
+  .sc-watermark {
     font-size: 21vw;
     top: 12.5%;
   }
 
-  .mcl-sec {
+  .sc-sec {
     left: 5vw;
     top: 14vh;
   }
 
-  .mcl-headline {
+  .sc-headline {
     left: 5vw;
     top: 17vh;
     font-size: 22px;
   }
 
-  .mcl-copy {
+  .sc-copy {
     left: 5vw;
     top: 29vh;
   }
 
-  .mcl-left-foot {
+  .sc-left-foot {
     display: none;
   }
 
-  .mcl-tele {
+  .sc-tele {
     right: 5vw;
     top: 15vh;
     width: 120px;
   }
 
-  .mcl-ctr {
+  .sc-ctr {
     bottom: 16vh;
   }
 
-  .mcl-nav {
+  .sc-nav {
     gap: 14px;
     letter-spacing: 0.2em;
   }
 
-  .mcl-hint-drag,
-  .mcl-meta-r {
+  .sc-hint-drag,
+  .sc-meta-r {
     display: none;
   }
 
-  .mcl-meta-l {
+  .sc-meta-l {
     left: 5vw;
   }
 }
