@@ -26,6 +26,8 @@ export default function McLarenStage({ watermark = "FORMULA" }: { watermark?: st
   const ersTextRef = useRef<HTMLElement | null>(null);
   const teleFootRef = useRef<HTMLDivElement | null>(null);
   const raceRef = useRef<HTMLButtonElement | null>(null);
+  const zoomInRef = useRef<HTMLButtonElement | null>(null);
+  const zoomOutRef = useRef<HTMLButtonElement | null>(null);
   const labelRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   const [phase, setPhase] = useState(0);
@@ -73,6 +75,8 @@ export default function McLarenStage({ watermark = "FORMULA" }: { watermark?: st
             teleFoot: teleFootRef.current,
             mark: markRef.current,
             raceBtn: raceRef.current,
+            zoomIn: zoomInRef.current,
+            zoomOut: zoomOutRef.current,
             labels: MCL_PARTS.map((part, i) => ({ el: labelRefs.current[i], from: part.from, pos: part.pos })).filter(
               (item): item is { el: HTMLDivElement; from: number; pos: [number, number, number] } => Boolean(item.el)
             )
@@ -153,6 +157,12 @@ export default function McLarenStage({ watermark = "FORMULA" }: { watermark?: st
               </svg>
               STUDIO
             </span>
+            <button type="button" className="mcl-zoom" ref={zoomOutRef} title="缩小（⌘/Ctrl + 滚轮）" aria-label="缩小">
+              −
+            </button>
+            <button type="button" className="mcl-zoom" ref={zoomInRef} title="放大看细节（⌘/Ctrl + 滚轮）" aria-label="放大">
+              ＋
+            </button>
           </div>
 
           <div className="mcl-row mcl-tele">
@@ -200,7 +210,7 @@ export default function McLarenStage({ watermark = "FORMULA" }: { watermark?: st
 
           <div className="mcl-row mcl-hint-drag">
             <span>↻ DRAG TO EXPLORE</span>
-            <span>SCROLL TO ZOOM</span>
+            <span>⌘ / CTRL + SCROLL TO ZOOM</span>
           </div>
           <div className="mcl-row mcl-nav">
             <span>▴ CAR</span>
