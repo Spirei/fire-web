@@ -71,7 +71,7 @@ const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; group
   { sub: "stocks", anchor: "currency-display", label: "货币金额显示", groupLabel: "股票", keywords: "货币 单位 金额 万 百万 千万 亿 缩写" },
   { sub: "stocks", anchor: "sources", label: "股票来源接口", groupLabel: "股票", keywords: "股票来源 接口 行情 财报 图标 url 数据源" },
   { sub: "profile", anchor: "profile", label: "个人信息", groupLabel: "账号", keywords: "头像 昵称 密码 邮箱 导出 清空 数据" },
-  { sub: "totp", anchor: "totp", label: "二次验证", groupLabel: "账号", keywords: "二次验证 2FA TOTP 验证器 备用码 谷歌验证 Google Authenticator 安全" },
+  { sub: "totp", anchor: "totp", label: "2FA", groupLabel: "账号", keywords: "2FA 二次验证 TOTP 验证器 备用码 谷歌验证 Google Authenticator 安全" },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
   { sub: "api", anchor: "api", label: "API 接口", groupLabel: "系统", keywords: "api 接口 开发 文档 鉴权" },
@@ -264,7 +264,7 @@ const SUB_NAV: { key: SubKey; label: string }[] = [
   { key: "features", label: "功能" },
   { key: "stocks", label: "股票设置" },
   { key: "profile", label: "个人信息" },
-  { key: "totp", label: "二次验证" },
+  { key: "totp", label: "2FA" },
   { key: "database", label: "数据库增强" },
   { key: "cron", label: "定时任务" },
   { key: "api", label: "API 开发接口" },
@@ -290,7 +290,7 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
     label: "账号",
     items: [
       { key: "profile", label: "个人信息", desc: "头像、资料、密码、数据管理" },
-      { key: "totp", label: "二次验证", desc: "验证器与备用码" }
+      { key: "totp", label: "2FA", desc: "验证器与备用码" }
     ]
   },
   {

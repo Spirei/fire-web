@@ -778,7 +778,10 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('confirmTotpSetup} className="mt-4 flex flex-col gap-3"'));
     assert(!settings.includes('/api/auth/totp/reveal'));
     assert(!settings.includes('添加其他验证器'));
-    assert(settings.includes('{ key: "totp", label: "二次验证" }'));
+    // 入口名用通用叫法 2FA，但点进去的页面文案保持「二次验证」
+    assert(settings.includes('{ key: "totp", label: "2FA" }'));
+    assert(settings.includes('label: "2FA", groupLabel: "账号"'));
+    assert(settings.includes('<SettingsHeader name="totp" title="二次验证" />'));
     assert(settings.includes('{sub === "totp" && ('));
     assert(settings.includes('sub: "totp"'));
     assert(!settings.includes('desc: "头像、资料、密码、二次验证、数据管理"'));
