@@ -3464,8 +3464,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => { void copyText(totpSetup.otpauthUrl); showToast("otpauth 链接已复制"); }}>复制 otpauth 链接</button>
                           )}
                         </div>
-                        <form onSubmit={confirmTotpSetup} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
-                          <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
+                        <form onSubmit={confirmTotpSetup} className="mt-4 flex flex-col gap-3">
+                          <label className="flex min-w-0 w-full flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
                             验证码
                             <input
                               autoComplete="one-time-code"
@@ -3475,10 +3475,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                               onChange={(e) => setTotpSetupCode(e.target.value)}
                               placeholder="输入验证器中的 6 位数字"
                               required
-                              className="sw-row-input"
+                              className="sw-row-input w-full min-w-0"
                             />
                           </label>
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setTotpSetup(null); setTotpSetupCode(""); setTotpMsg(null); }}>取消</button>
                             <button type="submit" disabled={totpBusy || totpSetupCode.replace(/\s/g, "").length !== 6} className="btn btn-line btn-sm disabled:opacity-60">{totpBusy ? "验证中…" : "确认开启"}</button>
                           </div>

@@ -775,6 +775,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('复制密钥'));
     assert(settings.includes('或手动输入密钥'));
     assert(settings.includes('确认开启后密钥和二维码都不再显示'));
+    assert(settings.includes('confirmTotpSetup} className="mt-4 flex flex-col gap-3"'));
     assert(!settings.includes('/api/auth/totp/reveal'));
     assert(!settings.includes('添加其他验证器'));
     assert(settings.includes('{ key: "totp", label: "二次验证" }'));
