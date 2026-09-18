@@ -2622,71 +2622,71 @@ export const V0_1_26_ENTRY: VersionEntry = {
   software: V0_1_25_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.26" } : item),
   changes: [{
     title: "修复资产分析刷新时左侧布局闪扩",
-    desc: "刷新资产分析时左侧分栏会先扩大再收回。根因有两层：1) 分栏比例默认 29%，等 useEffect 读完 localStorage 才跳回保存值；2) CSS minmax(340px, 29%) 在容器宽度未定时把百分比当成内容上限，左栏先被图表/表格撑开。修复：<head> 同步脚本在首屏绘制前写入 fr 比例；组件首帧不写 inline 默认值；桌面分栏改用 fr，并给网格 width:100% + contain:inline-size，宽度只跟父级走。tsc 无错误。",
+    desc: "刷新资产分析时左侧分栏会先扩大再收回。根因有两层：分栏比例默认 29%，等 useEffect 读完 localStorage 才跳回保存值；CSS minmax(340px, 29%) 在容器宽度未定时把百分比当成内容上限，左栏先被图表与表格撑开。\n修复：在 head 同步脚本里于首屏绘制前写入 fr 比例；组件首帧不写 inline 默认值；桌面分栏改用 fr，并给网格 width:100% 与 contain:inline-size，宽度只跟父级走。",
     kind: "fix"
   }, {
     title: "修复资产分析刷新闪现「加载中」",
-    desc: "资产分析虽已 SSR，但仍用 next/dynamic 的 loading 组件；水合时异步块未就绪，整页会被 TabLoading「加载中…」盖住。改为随 RecordsApp 同步引入资产分析视图。趋势图缓存改为绘制前恢复，有缓存不再先显示「正在汇总真实历史行情…」，无缓存改为无文字骨架。tsc 无错误。",
+    desc: "资产分析虽已做服务端渲染，但仍用 next/dynamic 的 loading 组件；水合时异步块未就绪，整页会被 TabLoading「加载中…」覆盖。\n改为随 RecordsApp 同步引入资产分析视图；趋势图缓存改为绘制前恢复，有缓存不再先显示「正在汇总真实历史行情…」，无缓存改为无文字骨架。",
     kind: "fix"
   }, {
-    title: "全站排查并消除刷新闪「加载中」",
-    desc: "后台所有页签不再用 next/dynamic 的 TabLoading：持仓、自选、FIRE、设置、全球预览、财报日历、名人持仓、交易广场、用户管理、素材库、附件、盈亏分析刷新时不再整页闪「加载中…」。登录表单去掉鉴权检查的加载中挡板（服务端已拦截已登录访问）。用户管理、全球市值榜绘制前恢复本地缓存；盈亏分析与财报日历的加载文案改为无文字骨架。tsc 无错误。",
+    title: "全站消除刷新闪「加载中」",
+    desc: "后台所有页签不再使用 next/dynamic 的 TabLoading：持仓、自选、FIRE、设置、全球预览、财报日历、名人持仓、交易广场、用户管理、素材库、附件、盈亏分析刷新时不再整页闪「加载中…」。\n登录表单去掉鉴权检查的加载中挡板（服务端已拦截已登录访问）；用户管理与全球市值榜在绘制前恢复本地缓存；盈亏分析与财报日历的加载文案改为无文字骨架。",
     kind: "fix"
   }, {
     title: "设置-股票新增市场色块",
-    desc: "全站市场徽标颜色与文字改为可配置：设置 → 股票设置 → 市场色块，可改美股/港股/上证/深证/加密及其他市场的底色、文字色与缩写；默认显示改用与站点信息「允许新用户注册」相同的开关，只读浏览也可直接拨动。保存后持仓、搜索、分享页、盈亏分析等处同步生效。股票来源接口移到股票类别末尾。tsc 无错误。",
+    desc: "全站市场徽标颜色与文字改为可配置：设置 → 股票设置 → 市场色块，可修改美股 / 港股 / 上证 / 深证 / 加密及其他市场的底色、文字色与缩写；默认显示改用与站点信息「允许新用户注册」相同的开关，只读浏览也可直接拨动。\n保存后持仓、搜索、分享页与盈亏分析等处同步生效；股票来源接口移到股票类别末尾。",
     kind: "feature"
   }, {
-    title: "默认券商分组与图标纳入干净素材",
-    desc: "把已配置的九家券商（长桥、华泰、盈透、富途、同花顺、东方财富、老虎、罗宾汉、嘉信）写入默认设置，并与素材库 public/uploads/asset/broker 图标按名称/别名对应；新部署无需再手动添加券商，素材库券商图标随仓库同步。tsc 无错误。",
+    title: "默认券商分组与图标纳入素材",
+    desc: "把已配置的九家券商（长桥、华泰、盈透、富途、同花顺、东方财富、老虎、罗宾汉、嘉信）写入默认设置，并与素材库 public/uploads/asset/broker 的图标按名称与别名对应。\n新部署无需再手动添加券商，素材库券商图标随仓库同步。",
     kind: "feature"
   }, {
     title: "设置开关在只读浏览下也可拨动",
-    desc: "站点信息「允许新用户注册」、市场色块「默认显示」以及定时备份开关统一为同一款绿色圆点开关；只读浏览时不再禁用，拨动后自动保存并弹出胶囊提示。tsc 无错误。",
+    desc: "站点信息「允许新用户注册」、市场色块「默认显示」以及定时备份开关统一为同一款绿色圆点开关；只读浏览时不再禁用，拨动后自动保存并弹出胶囊提示。",
     kind: "fix"
   }, {
     title: "设置页接入 Orca 设计语言",
-    desc: "设置窗口按 Orca 的设置语言重排：默认中性灰色板、248px 分组侧栏、侧栏内搜索（⌘K）、大标题+说明与圆角内容卡片、左文案右控件的行语法；开关仍保留绿色圆点。原有风格切换（富途橙 / Notion / Claude 等）可继续换肤。tsc 无错误。",
+    desc: "设置窗口按 Orca 的设置语言重排：默认中性灰色板、248px 分组侧栏、侧栏内搜索（⌘K）、大标题与说明加圆角内容卡片、左侧文案右侧控件的行语法；开关仍保留绿色圆点。\n原有风格切换（富途橙 / Notion / Claude 等）可继续换肤。",
     kind: "feature"
   }, {
-    title: "修复市场色块设置触发 SWC 插件报错",
-    desc: "服务端 settings 误引入带 React Hook 的市场色块模块，开发编译出现 Plugin is not supported with current @swc/core。已把 Hook 拆到独立客户端模块，服务端只引用纯函数。tsc 无错误。",
+    title: "修复市场色块设置触发编译报错",
+    desc: "服务端 settings 误引入带 React Hook 的市场色块模块，开发编译出现 Plugin is not supported with current @swc/core。\n已把 Hook 拆到独立客户端模块，服务端只引用纯函数。",
     kind: "fix"
   }, {
-    title: "修复美股当日盈亏不更新（富途整批行情被 OTC 代码拖垮）",
-    desc: "排查线上版美股当日盈亏整天不动、本地版正常：持仓 / 自选里的「软银（ADR）SFTBY」属于美股 OTC 市场，富途快照接口不支持它，而桥接脚本是整批一次请求 —— 一只不被支持就让整批 44 只美股全部拿不到富途行情。随后走腾讯兜底，但腾讯对美股只提供常规盘口径（盘前 / 盘后 / 夜盘仍停在上一交易日收盘的涨跌），当日盈亏就冻结在昨天；代码里本还有 Yahoo 扩展时段兜底，本机可用、线上容器取不到（同一接口线上连续 502）。量化：同一时刻线上口径合计 −941.63 USD（昨日常规盘涨跌），富途口径 −55.85 USD（今日盘前）。修复：scripts/futu_quotes.py 的批量快照改为容错 —— 整批失败时先剔除报错点名的代码重试，仍失败再二分定位，不支持的代码记入 skipped 由调用方继续走兜底源；实测含 SFTBY 的 45 只由「0 只返回」变为「44 只实盘 + 1 只跳过」，本机 /api/quotes 恢复 43 只 futu + 1 只 yahoo 盘前实时行情。tsc 无错误。",
+    title: "修复美股当日盈亏不更新",
+    desc: "现象：线上版美股当日盈亏整天不动，本地版正常。排查结论：持仓与自选里的软银（ADR）SFTBY 属于美股 OTC 市场，富途快照接口不支持它，而桥接脚本是整批一次请求 —— 一只不被支持就让整批 44 只美股全部拿不到富途行情。\n随后走腾讯兜底，但腾讯对美股只提供常规盘口径（盘前 / 盘后 / 夜盘仍停在上一交易日收盘），当日盈亏因此冻结在昨天；代码里本还有 Yahoo 扩展时段兜底，本机可用、线上容器取不到。\n量化：同一时刻线上口径合计 −941.63 USD（昨日常规盘涨跌），富途口径 −55.85 USD（今日盘前）。\n修复：scripts/futu_quotes.py 的批量快照改为容错 —— 整批失败时先剔除报错点名的代码重试，仍失败再二分定位，不支持的代码记入 skipped 由调用方继续走兜底源；实测含 SFTBY 的 45 只由「0 只返回」变为「44 只实盘 + 1 只跳过」。",
     kind: "fix"
   }, {
-    title: "恢复美股行情降级提示 + 空市场标签自动隐藏",
-    desc: "1) 富途不可用退回腾讯时，我的持仓与资产分析的「账户资产」标题旁重新显示琥珀色「美股·腾讯兜底」胶囊（hover 说明盘前 / 盘后 / 夜盘的最新价与当日盈亏可能停在上一交易日收盘），行情正常时隐藏 —— 此前该提示组件在源码中缺失，降级时页面毫无迹象。2) 我的持仓市场标签改为「有持仓 / 本页添加记录才显示」：设置里的 markets 只负责顺序，空市场标签自动隐藏（与自选股空分组隐藏一致），日股等无记录市场不再出现「日股 0」；新增该市场记录后标签自动出现，当前停留的空市场自动回到总资产。tsc 无错误。",
+    title: "恢复美股行情降级提示与空市场隐藏",
+    desc: "富途不可用退回腾讯时，我的持仓与资产分析的「账户资产」标题旁重新显示琥珀色「美股·腾讯兜底」胶囊（悬停说明盘前 / 盘后 / 夜盘的最新价与当日盈亏可能停在上一交易日收盘），行情正常时隐藏 —— 此前该提示组件在源码中缺失，降级时页面没有迹象。\n我的持仓市场标签改为「有持仓或本页添加记录才显示」：设置里的 markets 只负责顺序，空市场标签自动隐藏（与自选股空分组隐藏一致），日股等无记录市场不再出现「日股 0」；新增该市场记录后标签自动出现，当前停留的空市场自动回到总资产。",
     kind: "fix"
   }, {
-    title: "美股行情兜底再加固（Yahoo 熔断 / OTC 单只隔离 / 空市场提示）",
-    desc: "1) lib/usExtendedQuote.ts 新增 Yahoo 双主机熔断：出现服务级失败（连不上 / 403 限流 / 非 200）后 60 秒内直接判定不可用，不再逐只等超时 —— 含 44 只持仓的行情请求由 17.6 秒回落到 2.4 秒；只对服务级失败生效，单只标的在 Yahoo 查不到（200 无 result，如下市 / OTC）不触发熔断，避免一只坏标的关掉整批兜底（已用真实模块 + 打桩网络验证两种边界）。2) scripts/futu_quotes.py 的快照调用补异常容错：网络抖动 / SDK 抛错同样按「这批失败」处理，走剔除与二分重试。3) 我的持仓市场编辑面板对无记录市场标注「无记录 · 自动隐藏」，说明为何标签不显示。4) AGENTS.md 记录富途整批快照、美股扩展时段降级两条经验。tsc 无错误。",
+    title: "美股行情兜底再加固",
+    desc: "lib/usExtendedQuote.ts 新增 Yahoo 双主机熔断：出现服务级失败（连不上、403 限流、非 200）后 60 秒内直接判定不可用，不再逐只等待超时 —— 含 44 只持仓的行情请求由 17.6 秒回落到 2.4 秒；熔断只对服务级失败生效，单只标的在 Yahoo 查不到（200 无 result，如下市或 OTC）不触发，避免一只坏标的关掉整批兜底。\nscripts/futu_quotes.py 的快照调用补异常容错：网络抖动与 SDK 抛错同样按「这批失败」处理，走剔除与二分重试。\n我的持仓市场编辑面板对无记录市场标注「无记录 · 自动隐藏」，说明标签为何不显示；AGENTS.md 记录富途整批快照与美股扩展时段降级两条经验。",
     kind: "fix"
   }, {
-    title: "全站 Review：修复交易广场 500 + FIRE 跨年口径不一致 + 冒烟补页面巡检",
-    desc: "1) 交易广场整页 500：TradingSquareView 的 readSeen() 在 useState 初始化时读取 localStorage 且该行没被 try 包住，服务端渲染直接 ReferenceError，登录后访问 /trading 返回 500（本地 dev 与生产构建都复现，线上同源同版本受影响，2026-09-03 引入）。已改为显式判断浏览器环境；并用 TypeScript 编译器 API 扫过全部 JSX 确认没有 <button> 嵌套按钮，其余初始化期浏览器 API 均有保护。2) FIRE 跨年落账口径不一致：年末快照的「当前资产」用 currentAssets（不含手动覆盖），而上方面板 / 水球 / 今年这一行用 effCurUsd（含手动覆盖），跨年后冻结值会与页面显示对不上——统一为 effCurUsd 并补齐依赖项。3) 冒烟测试新增登录后页面巡检（16 个页面逐一检查 200），这台机器上旧的 82 项检查覆盖不到页面渲染，正是 /trading 500 漏网的原因；测试项 82 → 101。tsc 无错误、npm run build 通过、冒烟 101/101 全 PASS。",
+    title: "修复交易广场 500 与 FIRE 跨年口径不一致",
+    desc: "交易广场整页 500：TradingSquareView 的 readSeen() 在 useState 初始化时读取 localStorage，该行没有被 try 包住，服务端渲染直接 ReferenceError；已改为显式判断浏览器环境，并用 TypeScript 编译器 API 扫过全部 JSX 确认没有按钮嵌套按钮，其余初始化期的浏览器 API 均已保护。\nFIRE 跨年落账口径不一致：年末快照的「当前资产」用 currentAssets（不含手动覆盖），而上方面板、水球与今年这一行用 effCurUsd（含手动覆盖），跨年后冻结值与页面显示会对不上 —— 统一为 effCurUsd 并补齐依赖项。\n冒烟测试新增登录后页面巡检（16 个页面逐一检查 200），旧的 82 项检查覆盖不到页面渲染，正是 /trading 500 漏网的原因；测试项由 82 增至 101。",
     kind: "fix"
   }, {
-    title: "台币接实时汇率 + 降级提示扩到自选股 + 冒烟补公开接口",
-    desc: "1) 台币（TWD）过去只能一直用静态兜底汇率：汇率源富兰克福是 ECB 口径，不含台币（实测混在批量里被静默忽略、单独查 404），台湾市场换算偏差约 1–3%。现在 lib/rates.ts 对上游缺失的币种改用腾讯外汇补齐（whUSDTWD，与行情同主机、走设置里的 quoteApiUrl，无需 Referer、境内可直连），实测 TWD 由固定 0.031（≈32.3）变为实时 31.517；补齐失败仍回退上次成功值 / 静态兜底，不影响主流程。2) 行情降级提示判定放宽并接入自选股：有持仓的美股降级必报，只看自选股时至少两只走腾讯兜底才报（富途本就不提供美股 OTC 行情，单只 OTC 不再误报）。3) 冒烟测试补 9 项公开接口检查（交易广场 feed / 段永平 / 特朗普、行情、美股五日分时、个股详情、汇率含台币），测试项 101 → 110。4) 删除已被 app/api-docs/page.tsx 取代的 components/views/ApiDocsView.tsx（179 行死代码）。tsc 无错误、冒烟 110/110 全 PASS。",
+    title: "台币接实时汇率并扩充冒烟检查",
+    desc: "台币（TWD）过去只能一直用静态兜底汇率：汇率源富兰克福是 ECB 口径，不含台币（实测混在批量里被静默忽略、单独查返回 404），台湾市场换算偏差约 1–3%。\n现在 lib/rates.ts 对上游缺失的币种改用腾讯外汇补齐（whUSDTWD，与行情同主机、走设置里的 quoteApiUrl，无需 Referer、境内可直连），实测 TWD 由固定 0.031 变为实时 31.517；补齐失败仍回退上次成功值与静态兜底，不影响主流程。\n行情降级提示判定放宽并接入自选股：有持仓的美股降级必报，只看自选股时至少两只走腾讯兜底才报（富途本就不提供美股 OTC 行情，单只 OTC 不再误报）。\n冒烟测试补 9 项公开接口检查（交易广场 feed、段永平、特朗普、行情、美股五日分时、个股详情、汇率含台币），测试项由 101 增至 110；删除已被 app/api-docs/page.tsx 取代的 components/views/ApiDocsView.tsx（179 行死代码）。",
     kind: "feature"
   }, {
-    title: "修复出站代理一直失效（undici 与 Node fetch 不匹配）+ 全部 Yahoo 请求接入代理",
-    desc: "排查「配了 STOCKLOG_PROXY 线上仍取不到 Yahoo 扩展行情」：lib/net.ts 用 Node 自带的全局 fetch 承载 npm 安装的 undici ProxyAgent，两者不是同一份实现，请求必定抛 `invalid onRequestStart method (UND_ERR_INVALID_ARG)` 并被 catch 静默回退直连——所以代理看起来「开着」，其实从未生效。修复：代理分支改用 undici 包自己的 fetch（`import { fetch as undiciFetch } from \"undici\"`）与 ProxyAgent 配套，未启用代理或代理失败仍回退全局 fetch 直连。同时把仍走裸 fetch 的 Yahoo 调用全部接入 proxyFetch：lib/usExtendedQuote.ts（盘前 / 盘后 / 夜盘报价）、lib/quotes.ts（美股分时迷你图）、lib/kline.ts（美股日 K）、/api/kline/five-day、/api/kline/session-day、/api/v1/index-kline；境内源（腾讯 / 新浪 / 东财）保持直连。实测：带代理启动的隔离实例上 /api/kline/session-day 由 502 变为 200 并返回盘前点（AAPL 04:00 起），未经代理时仍直连不受影响；线上群晖 .env 的 STOCKLOG_PROXY 已由 off 改为 http://192.168.28.55:1088（下次重建容器生效）。AGENTS.md 记录该坑。tsc 无错误、构建通过。",
+    title: "修复出站代理失效",
+    desc: "排查「配了 STOCKLOG_PROXY 线上仍取不到 Yahoo 扩展行情」：lib/net.ts 用 Node 自带的全局 fetch 承载 npm 安装的 undici ProxyAgent，两者不是同一份实现，请求必定抛 invalid onRequestStart method (UND_ERR_INVALID_ARG) 并被 catch 静默回退直连 —— 因此代理看起来开着，其实从未生效。\n修复：代理分支改用 undici 包自己的 fetch 与 ProxyAgent 配套，未启用代理或代理失败仍回退全局 fetch 直连。\n同时把仍走裸 fetch 的 Yahoo 调用全部接入 proxyFetch：lib/usExtendedQuote.ts（盘前 / 盘后 / 夜盘报价）、lib/quotes.ts（美股分时迷你图）、lib/kline.ts（美股日 K）、/api/kline/five-day、/api/kline/session-day、/api/v1/index-kline；境内源（腾讯 / 新浪 / 东财）保持直连。\n实测：带代理启动的隔离实例上 /api/kline/session-day 由 502 变为 200 并返回盘前点（AAPL 04:00 起），未经代理时仍直连不受影响；线上群晖的 STOCKLOG_PROXY 已由 off 改为 http://192.168.28.55:1088（下次重建容器生效）。",
     kind: "fix"
   }, {
-    title: "代理加 no_proxy 保护：内网地址永不发往代理",
-    desc: "按「防止本地 / 内网地址被交给代理」的要求在 proxyFetch 里补 no_proxy 判定：命中「内置私网（10/8、172.16-31、192.168/16、127/8、169.254/16、100.64/10、.local / .lan / .internal / localhost / IPv6 回环与 ULA）」或 NO_PROXY / no_proxy 环境变量（支持 `*`、域名后缀、IPv4 与 IPv4/掩码）时直接直连，不看代理是否可用；这样富途 OpenD、NAS 接口、体检探针等内网请求不会泄露给第三方代理。另加 STOCKLOG_PROXY_DEBUG=1 开关，按请求打印「走代理 / 直连（内网 / NO_PROXY）/ 代理失败回退直连」，代理问题不再需要猜。实测：带代理时 127.0.0.1 与 192.168.28.5 判定直连、Yahoo 走代理返回 200。注意 Node 的 fetch 不读容器里的 http_proxy / https_proxy / no_proxy（那是给 curl / python / npm 的），因此本应用只认 STOCKLOG_PROXY + 这套 no_proxy 规则。tsc 无错误。",
+    title: "代理加 no_proxy 保护",
+    desc: "在 proxyFetch 里补上 no_proxy 判定：命中内置私网（10/8、172.16-31、192.168/16、127/8、169.254/16、100.64/10、.local 与 .lan、.internal、localhost、IPv6 回环与 ULA）或 NO_PROXY / no_proxy 环境变量（支持 *、域名后缀、IPv4 与 IPv4/掩码）时直接直连，不看代理是否可用。\n这样富途 OpenD、NAS 接口、体检探针等内网请求不会发给第三方代理；另加 STOCKLOG_PROXY_DEBUG=1 开关，按请求打印「走代理 / 直连（内网或 NO_PROXY）/ 代理失败回退直连」。\n实测：带代理时 127.0.0.1 与 192.168.28.5 判定直连、Yahoo 走代理返回 200。注意 Node 的 fetch 不读容器里的 http_proxy / https_proxy / no_proxy（那是给 curl、python、npm 的），本应用只认 STOCKLOG_PROXY 与这套 no_proxy 规则。",
     kind: "security"
   }, {
-    title: "日韩实时行情 + OpenD 本地让路 + 行情提示补齐",
-    desc: "1) 自选股 / 持仓行情接口补上腾讯日股 jp{} / 韩股 kr{}，分时与搜索联想同步；台股 / 新加坡 / 欧澳加印巴等无源市场行内标明「暂不支持实时行情」。2) 本地 next dev 默认不连 OpenD（STOCKLOG_FUTU=on 可开），线上生产继续用唯一连接。3) 富途正常时单只 OTC 在 Web 行内与 iOS 列表显示「无扩展行情」，整批降级仍用「美股·腾讯兜底」。4) Yahoo 扩展行情可用 STOCKLOG_EXTENDED_QUOTE=off 关掉。5) 仓库只保留 docker-compose.ghcr.yml，审计不再读已删除的本地 compose。6) CI build 后跑公开短冒烟（含日韩现价），并提供 .githooks/pre-push。tsc 无错误。",
+    title: "补齐日韩实时行情与本地 OpenD 策略",
+    desc: "自选股与持仓行情接口补上腾讯日股 jp{} 与韩股 kr{}，分时与搜索联想同步；台股、新加坡、欧澳加印巴等无源市场行内标明「暂不支持实时行情」。\n本地 next dev 默认不连 OpenD（STOCKLOG_FUTU=on 可开），线上生产继续使用唯一连接。\n富途正常时单只 OTC 在 Web 行内与 iOS 列表显示「无扩展行情」，整批降级仍用「美股·腾讯兜底」；Yahoo 扩展行情可用 STOCKLOG_EXTENDED_QUOTE=off 关闭。\n仓库只保留 docker-compose.ghcr.yml，审计不再读取已删除的本地 compose；CI 在构建后运行公开短冒烟（含日韩现价），并提供 .githooks/pre-push。",
     kind: "fix"
   }, {
-    title: "打磨行情提示位置与整批降级判定",
-    desc: "行内「暂无实时行情 / 无扩展行情」收到股票代码同一行，资产分析持仓表与盈亏排行同步显示；整批「美股·腾讯兜底」把 Yahoo 扩展行情也视为在线，避免本地跳过 OpenD 后单只 OTC 误报整批降级。设置页补充 OpenD 本地跳过说明；东财搜索联想覆盖日股 / 韩股。tsc 无错误。",
+    title: "打磨行情提示位置与降级判定",
+    desc: "行内「暂无实时行情 / 无扩展行情」收到股票代码同一行，资产分析持仓表与盈亏排行同步显示。\n整批「美股·腾讯兜底」把 Yahoo 扩展行情也视为在线，避免本地跳过 OpenD 后单只 OTC 误报整批降级；设置页补充 OpenD 本地跳过说明，东财搜索联想覆盖日股与韩股。",
     kind: "fix"
   }]
 };
