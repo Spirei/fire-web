@@ -44,6 +44,7 @@ function normalizeConfig(config: ShowcaseConfig) {
       wheelAxis: config.model?.wheelAxis ?? "x",
       wheelLateral: config.model?.wheelLateral ?? "x",
       wheelLongitudinal: config.model?.wheelLongitudinal ?? "y",
+      maxTextureSize: config.model?.maxTextureSize ?? 4096,
       materialRules: (config.model?.materialRules ?? []).map((rule) => ({
         match: toRegExp(rule.match, /$^/),
         metalness: rule.metalness,
@@ -74,7 +75,7 @@ function normalizeConfig(config: ShowcaseConfig) {
               color: ring?.color ?? "#ffb070"
             },
       reflectIntensity: config.ground?.reflectIntensity ?? 0.95,
-      reflectionSize: config.ground?.reflectionSize ?? 512,
+      reflectionSize: config.ground?.reflectionSize ?? 384,
       pool: config.ground?.pool ?? 0.14
     },
     speed: {
@@ -344,7 +345,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   /* 平面反射：镜像相机 + 斜裁剪（three Reflector 的做法） */
   // 反射贴图每次都会重渲染整个场景，分辨率是这张图最大的成本项；
   // 地面本来就带粗糙度模糊，512 与 1024 的观感差别很小。
-  const reflectRT = new THREE.WebGLRenderTarget(CFG.ground.reflectionSize, CFG.ground.reflectionSize, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
+  // 反射贴图用 8 位（参考项目 su7-replica 的 meshReflectorMaterial 也是 UnsignedByteType + 256），
+  // 地面本身带粗糙度模糊，8 位足够，显存只有 HalfFloat 的一半。
+  const reflectRT = new THREE.WebGLRenderTarget(CFG.ground.reflectionSize, CFG.ground.reflectionSize, {
+    type: THREE.UnsignedByteType,
+    generateMipmaps: true,
+    minFilter: THREE.LinearMipmapLinearFilter
+  });
   const mirrorCamera = new THREE.PerspectiveCamera();
   const reflectorPlane = new THREE.Plane();
   const normalV = new THREE.Vector3();
@@ -953,6 +960,24 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       car.scale.setScalar(scale);
       car.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
 
+      // 贴图尺寸上限：默认 4096（等于不动），大贴图模型可在 preset 里调到 2048 省一半以上显存
+      const maxTex = CFG.model.maxTextureSize;
+      const clampTexture = (tex: THREE.Texture | null | undefined) => {
+        const img = tex?.image as { width?: number; height?: number } | undefined;
+        if (!tex || !img?.width || !img?.height) return;
+        const longest = Math.max(img.width, img.height);
+        if (longest <= maxTex) return;
+        const ratio = maxTex / longest;
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.width * ratio));
+        c.height = Math.max(1, Math.round(img.height * ratio));
+        const ctx = c.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img as CanvasImageSource, 0, 0, c.width, c.height);
+        tex.image = c;
+        tex.needsUpdate = true;
+      };
+
       const splitTargets: THREE.Mesh[] = [];
       car.traverse((o) => {
         const mesh = o as THREE.Mesh;
@@ -966,6 +991,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
             if (!rule.match.test(name)) return;
             if (rule.metalness !== undefined) mat.metalness = rule.metalness;
             if (rule.roughness !== undefined) mat.roughness = rule.roughness;
+          });
+          ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap"].forEach((key) => {
+            clampTexture((mat as unknown as Record<string, THREE.Texture | null>)[key]);
           });
           mat.envMapIntensity = 1.25;
           addFlow(mat);
@@ -1290,9 +1318,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     renderer.setSize(w, h, false);
     composer.setSize(w, h);
-    // 泛光只是低频辉光，按设备像素的一半渲染，观感几乎不变但填充率省一大截
+    // 泛光只是低频辉光：按设备像素的一半渲染，并且整块封顶到 1280×720 以内
+    // （参考项目用 postprocessing 的 mipmapBlur，只有一条 mip 链；这里用固定上限达到同样的省显存效果）
     const pr = renderer.getPixelRatio();
-    bloom.setSize(Math.max(64, Math.round(w * pr * 0.5)), Math.max(64, Math.round(h * pr * 0.5)));
+    const bw = w * pr * 0.5;
+    const bh = h * pr * 0.5;
+    const cap = Math.min(1, 1280 / Math.max(1, bw), 720 / Math.max(1, bh));
+    bloom.setSize(Math.max(64, Math.round(bw * cap)), Math.max(64, Math.round(bh * cap)));
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     (lightLinesPass.uniforms.uAspect.value as number) = w / h;
@@ -1316,7 +1348,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       ? (() => {
           const el = document.createElement("div");
           el.style.cssText =
-            "position:absolute;right:10px;bottom:10px;z-index:9;font:10px/1.4 ui-monospace,monospace;color:#8a8a90;background:rgba(0,0,0,.5);padding:4px 8px;border-radius:4px;pointer-events:none";
+            "position:absolute;right:10px;bottom:10px;z-index:9;font:10px/1.4 ui-monospace,monospace;color:#8a8a90;background:rgba(0,0,0,.5);padding:4px 8px;border-radius:4px;pointer-events:none;text-align:right";
           hud.stage.appendChild(el);
           return el;
         })()
@@ -1346,7 +1378,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     if (qualityChanges > 6) return;
     qualityChanges += 1;
-    if (qualityHud) qualityHud.textContent = `${avg.toFixed(1)} ms · ${renderScale.toFixed(2)}x`;
+    if (qualityHud) {
+      qualityHud.innerHTML = [
+        `${avg.toFixed(1)} ms · ${renderScale.toFixed(2)}x`,
+        `buffer ${canvas.width}×${canvas.height} · reflect ${reflectRT.width}`,
+        `tex ${renderer.info.memory.textures} · geo ${renderer.info.memory.geometries}`
+      ].join("<br>");
+    }
     renderer.setPixelRatio(renderScale);
     composer.setPixelRatio(renderScale);
     // 反射贴图也跟着倍率走：帧耗时偏高时它同样是最贵的一项
@@ -1636,7 +1674,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     scale: renderScale,
     racing,
     travel: +carTravel.toFixed(2),
-    zoom: +zoom.toFixed(2)
+    zoom: +zoom.toFixed(2),
+    buffer: [canvas.width, canvas.height],
+    reflection: reflectRT.width,
+    textures: renderer.info.memory.textures,
+    geometries: renderer.info.memory.geometries
   })
 };
 }

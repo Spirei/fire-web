@@ -91,6 +91,11 @@ export interface ShowcaseConfig {
     wheelLateral?: "x" | "y" | "z";
     /** 用来区分前后轮的轴 */
     wheelLongitudinal?: "x" | "y" | "z";
+    /**
+     * 贴图最长边上限（像素）。默认 4096（等于不动）。
+     * 4K 贴图解码后很吃显存，换到重贴图模型时可以降到 2048。
+     */
+    maxTextureSize?: number;
     /** 按材质名修正金属度 / 粗糙度（不同模型自带参数差别很大） */
     materialRules?: Array<{ match: string | RegExp; metalness?: number; roughness?: number }>;
   };
@@ -234,5 +239,10 @@ export interface ShowcaseHandle {
     racing: boolean;
     travel: number;
     zoom: number;
+    /** 实际绘制缓冲尺寸 / 反射贴图边长 / 贴图与几何体数量（排查显存用） */
+    buffer: [number, number];
+    reflection: number;
+    textures: number;
+    geometries: number;
   };
 }

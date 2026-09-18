@@ -21,6 +21,8 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
 
   model: {
     length: 5.6,
+    // 4K 贴图解码后约 236MB 显存；想让显存更省可以改成 2048（约省四分之三），代价是特写贴图变软
+    maxTextureSize: 4096,
     // 轮子：Sketchfab 这份模型一个材质盖住四个轮子，按材质名挑出来再拆开自转
     wheelPattern: "rim|tread|tyre",
     wheelAxis: "x",           // 自转轴
@@ -63,7 +65,8 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     // 车下方的钟面刻度环：正圆，屏幕上的椭圆来自俯视透视
     ring: { radius: 4, count: 180, longEvery: 15, longLength: 0.34, shortLength: 0.16, color: "#ffb070" },
     reflectIntensity: 0.95,
-    reflectionSize: 512,
+    // 参考项目 su7-replica 的地面反射只用 256 的 8 位贴图；这里取 384，地面本来就有粗糙度模糊
+    reflectionSize: 384,
     pool: 0.14
   },
 

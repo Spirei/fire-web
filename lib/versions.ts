@@ -3885,6 +3885,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     desc: "原来镜头、配色、光条、刻度环都写死在迈凯伦场景里，换素材要改引擎。现在拆成两层：components/showcase/engine.ts 是通用引擎，只认一份 config；车型相关的模型路径、朝向修正、轮子材质与自转轴、镜头关键帧、地面刻度环、隧道光条与配色、后期强度、章节文案与部件标注都收进 components/showcase/presets/mcl35m.ts。换车只要复制一份 preset，不用动引擎与组件。\n新增 docs/showcase-3d.md：四步换车（放素材、复制预设、对朝向与轮子、改镜头关键帧）与效果开关说明。配置里的正则统一写成字符串（引擎内部再构造），这样配置可以从服务端组件直接传给客户端组件。",
     kind: "feature"
   }, {
+    title: "按开源项目方案压缩首页显存占用",
+    desc: "对照 su7-replica 的源码逐项核了一遍显存策略：它的地面反射贴图是 256 的 8 位贴图（meshReflectorMaterial 里 resolution 默认 256、type 用 UnsignedByteType），环境立方体贴图是 512 的 8 位贴图，泛光走 postprocessing 的 mipmapBlur（只有一条 mip 链），并且把车从环境立方体里排除。\n我们照这个思路改了三处：反射贴图由 512 的 HalfFloat 降到 384 的 8 位（地面本身带粗糙度模糊，观感不变）；泛光在「设备像素一半」的基础上再封顶到 1280×720；同时新增 model.maxTextureSize（默认 4096 不压缩，重贴图模型可调 2048 直接省掉四分之三贴图显存，本车 4K 贴图解码后约 236MB）。\n实测 2560×1440 窗口下绘制缓冲被压到 1920×1014（0.75 倍），两块 HalfFloat 后期目标只剩 31MB 左右。",
+    kind: "fix"
+  }, {
     title: "修复首页停留久了变白屏",
     desc: "根因是后期通道按整屏分辨率建了两块 HalfFloat 渲染目标，窗口大、屏幕又是高分屏时（实测 3698×2491 的窗口）单块就接近 400MB，显存吃紧后 WebGL 上下文被驱动回收，画面只剩白板。\n现在给整屏输出设了 2.6M 像素的上限，超了按比例降倍率（最低 0.5 倍），自适应倍率加了滞回与调整次数上限，避免反复重建渲染目标；同时接管 webglcontextlost / webglcontextrestored 与页面可见性变化：上下文丢失或连续报错时上层自动重建场景，切回标签页也会补一帧。",
     kind: "fix"
