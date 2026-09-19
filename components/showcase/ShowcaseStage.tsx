@@ -323,16 +323,18 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
                   aria-label={musicOn ? "关闭背景音乐" : "播放背景音乐"}
                   aria-pressed={musicOn}
                 >
-                  {/* 音符图标：播放时实心、暂停时描边，配色跟随深浅色主题 */}
+                  {/* 双音符（♫）：播放时实心、暂停时描边，配色跟随深浅色主题 */}
                   {musicOn ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M14 17V4.5c2.6.2 4.4 1.2 4.4 2.9" />
-                      <circle cx="10.6" cy="17" r="3.4" fill="currentColor" stroke="none" />
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M9 17.4V6.6l9-1.8v10.6" />
+                      <circle cx="6.7" cy="17.5" r="2.6" fill="currentColor" stroke="none" />
+                      <circle cx="15.7" cy="15.6" r="2.6" fill="currentColor" stroke="none" />
                     </svg>
                   ) : (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M14 17V4.5c2.6.2 4.4 1.2 4.4 2.9" />
-                      <circle cx="10.6" cy="17" r="3.4" />
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M9 17.4V6.6l9-1.8v10.6" />
+                      <circle cx="6.7" cy="17.5" r="2.6" />
+                      <circle cx="15.7" cy="15.6" r="2.6" />
                     </svg>
                   )}
                 </button>

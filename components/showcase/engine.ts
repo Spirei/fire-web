@@ -303,7 +303,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         nData[i + 1] = ((ny / len) * 0.5 + 0.5) * 255;
         nData[i + 2] = ((1 / len) * 0.5 + 0.5) * 255;
         nData[i + 3] = 255;
-        const r = 0.28 + h * 0.34;
+        const r = 0.1 + h * 0.16;   // 更平滑 → 反射更锐（镜面感）
         rData[i] = rData[i + 1] = rData[i + 2] = r * 255;
         rData[i + 3] = 255;
       }
@@ -369,7 +369,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           vec4 rp = vReflect; rp.xyz /= rp.w;
           float rough = texture2D(tRough, vWorld.xz * 0.06 + scroll).r;
           // 粗糙度控制 mip 级别 → 自带模糊的反射
-          vec3 refl = texture2D(tReflect, clamp(rp.xy + distortion, 0.002, 0.998), rough * 1.1 * uMipBias).rgb;
+          vec3 refl = texture2D(tReflect, clamp(rp.xy + distortion, 0.002, 0.998), rough * 0.5 * uMipBias).rgb;
           vec3 viewDir = normalize(-vView);
           // 菲涅尔用「几何法线」而不是噪声法线：否则逐像素抖动会让地面像磨砂玻璃
           vec3 upView = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
@@ -1348,6 +1348,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let lastRacing = false;
   let frameCount = 0;
   let reflectDirty = true;
+  // 反射是否在动：只要相机或车动过就必须逐帧更新，否则倒影会比画面慢一帧 → 看起来在抖。
+  // 完全静止时才隔帧更新（省一半绘制调用）。
+  const reflectCamLast = new THREE.Vector3(1e9, 0, 0);
+  let reflectTravelLast = -1;
+  const reflectNeedsUpdate = () => {
+    const camMoved = camera.position.distanceToSquared(reflectCamLast) > 1e-8;
+    const carMoved = Math.abs(carTravel - reflectTravelLast) > 1e-5;
+    if (camMoved || carMoved || reflectDirty) return true;
+    return frameCount % 2 === 0;
+  };
   let lastLit = -1;
   let lastMarkP = -1;
   let lastRaceClass: boolean | null = null;
@@ -1486,13 +1496,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     floorUniforms.uSpeed.value = sps;
     floorUniforms.uFlow.value = sps * sps;
     // 浅色主题下地面保持深色工作台：反射降下来，否则亮背景经法线扰动会变成一片噪点灰
-    floorUniforms.uReflectIntensity.value = (light ? 0.34 : CFG.ground.reflectIntensity) + sps * 0.2;
+    floorUniforms.uReflectIntensity.value = (light ? 0.6 : CFG.ground.reflectIntensity) + sps * 0.2;
     // 浅色主题：反射与法线扰动都压低，地面保持干净的深色工作台
     // 浅色主题下反射再压一档、模糊级别再高一级，避免亮背景经法线扰动形成麻点
-    floorUniforms.uMixBase.value = light ? 0.06 : 0.3;
-    floorUniforms.uMixFres.value = light ? 0.4 : 1.05;
-    floorUniforms.uNormalAmount.value = light ? 0.15 : 0.25;
-    floorUniforms.uMipBias.value = light ? 1.6 : 1;
+    floorUniforms.uMixBase.value = light ? 0.32 : 0.46;
+    floorUniforms.uMixFres.value = light ? 0.7 : 1.05;
+    floorUniforms.uNormalAmount.value = light ? 0.12 : 0.18;
+    floorUniforms.uMipBias.value = light ? 1.35 : 1;
     flowUniforms.uFlowTime.value = elapsed;
     flowUniforms.uFlowStrength.value = sps * sps * 0.6;
     tunnelUniforms.uTime.value = elapsed;
@@ -1626,10 +1636,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       }
     });
 
-    // 地面反射是「把整个场景再画一遍」，隔帧更新省掉一半的绘制调用；
-    // 60fps 下反射晚一帧完全看不出来，但 CPU/GPU 的每帧开销明显下降。
-    if (frameCount % 2 === 0 || reflectDirty) {
+    // 相机或车在动 → 反射必须逐帧更新（否则转动时倒影会抖）；完全静止时才隔帧更新。
+    if (reflectNeedsUpdate()) {
       updateReflection();
+      reflectCamLast.copy(camera.position);
+      reflectTravelLast = carTravel;
       reflectDirty = false;
     }
     frameCount += 1;
