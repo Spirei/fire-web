@@ -429,22 +429,25 @@ export default function ShowcaseStage({
         // 后者让「平稳段落幅度小、高潮幅度大」这件事在整体上看得出来
         const decay = 0.995;
         bandMaxRef.current = bandMaxRef.current.map((m, i) => Math.max(leveled[i] * 1.05, m * decay, 0.04));
-        // 频率倾斜：低音压一档、高音补一档，避免「低音一根独大、高音永远贴地」
-        const TILT = [0.3, 0.5, 0.75, 1.0, 1.3, 1.6];
+        // 频率倾斜：低音压下去（不抢戏，柱子矮）、高音补上来
+        const TILT = [0.32, 0.5, 0.72, 0.92, 1.1, 1.25];
         const tilted = leveled.map((v, i) => v * TILT[i]);
         const peakNow = Math.max(...tilted);
         const globalMax = Math.max(peakNow * 1.05, globalMaxRef.current * decay, 0.05);
         globalMaxRef.current = globalMax;
-        // 整体强度（平稳段落小、高潮段落大）
+        // 整体强度：平稳段落幅度小、高潮段落幅度大
         const intensity = Math.min(1, Math.pow(globalNow / Math.max(globalMax * 0.6, 0.03), 0.7));
+        const now = performance.now() / 1000;
         const next: number[] = [];
         for (let i = 0; i < 6; i += 1) {
-          const rel = Math.min(1, tilted[i] / globalMax);
-          // 相对整体峰值开方：低音不再常年顶格，安静频段也能看出起伏
-          const target = Math.max(0, Math.min(1, Math.pow(rel, 0.55) * (0.5 + 0.5 * intensity)));
+          const rel = Math.pow(Math.min(1, tilted[i] / globalMax), 0.55);
+          // 从左往右推进的相位包络：每根比左边晚 0.62 弧度，整排像一道波滚过去，
+          // 幅度仍由音乐本身（rel × intensity）决定，所以换歌照样适用
+          const envelope = 0.52 + 0.48 * Math.sin(now * 2.2 - i * 0.62);
+          const target = Math.max(0, Math.min(1, rel * envelope * (0.55 + 0.45 * intensity)));
           const prev = waveLevelRef.current[i] ?? 0;
-          // 涨得快、落得慢：保留「平稳 / 高潮」的起伏又不抖
-          next.push(prev + (target - prev) * (target > prev ? 0.5 : 0.16));
+          // 涨得快、落得慢：保留「平稳 / 高潮」的起伏又保持流畅
+          next.push(prev + (target - prev) * (target > prev ? 0.45 : 0.18));
         }
         waveLevelRef.current = next;
         // 调试用：把当前各段能量写在 svg 上（?mclhud=1 或控制台可直接看）
