@@ -803,6 +803,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         vec3 col = sum / wsum;
         float g = fract(sin(dot(vUv * (1.0 + fract(uTime) * 0.5), vec2(12.9898, 78.233))) * 43758.5453);
         col += (g - 0.5) * 0.028 * uGrain;
+        // NaN 兜底：采样出 NaN 时直接回落成原图，避免整屏被放大成白
+        if (!(col.r == col.r) || !(col.g == col.g) || !(col.b == col.b)) col = texture2D(tDiffuse, vUv).rgb;
         gl_FragColor = vec4(col, 1.0);
       }`
   });
@@ -852,6 +854,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         vec2 carQ = (vUv - uCarBox.xy) / max(uCarBox.zw, vec2(1e-4));
         float hide = 1.0 - smoothstep(0.8, 1.12, length(carQ));
         float mask = (goldMask + whiteMask * 0.85) * radial * flow * dash * (1.0 - hide) * uStrength * uIntensity;
+        if (!(mask == mask)) mask = 0.0;   // NaN 兜底
         vec3 col = uGold * goldMask + uWhite * whiteMask;
         gl_FragColor = vec4(base.rgb + col * mask, base.a);
       }`
@@ -1802,13 +1805,36 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // readPixels 会同步等待 GPU，长期每秒探测会造成周期性卡顿；只在刚启动与刚经历过
   // 可见性/尺寸/上下文事件的窗口内探测（那才是白屏的高风险时刻）。
   let probeUntil = performance.now() + 8000;
+  let watchdogHits = 0;
+  let rebuilds = 0;
   const armWatchdog = () => {
     probeUntil = performance.now() + 8000;
   };
+  let frameForMatrixCheck = 0;
+  function checkCameraFinite() {
+    frameForMatrixCheck += 1;
+    if (frameForMatrixCheck % 30 !== 0) return;
+    const e = camera.matrixWorld.elements;
+    for (let i = 0; i < 16; i += 1) {
+      if (!Number.isFinite(e[i])) {
+        options.onContextLost?.();
+        return;
+      }
+    }
+    const p = camera.projectionMatrix.elements;
+    for (let i = 0; i < 16; i += 1) {
+      if (!Number.isFinite(p[i])) {
+        resize(true);
+        return;
+      }
+    }
+  }
+
   function watchdog() {
+    checkCameraFinite();
     const now = performance.now();
     if (now > probeUntil) return;
-    if (now - lastProbe < 1500) return;
+    if (now - lastProbe < 500) return;
     lastProbe = now;
     const w = canvas.width;
     const h = canvas.height;
@@ -1830,14 +1856,18 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     if (white >= 5 || black >= 5) {
       badFrames += 1;
-      if (badFrames >= 3) {
+      if (badFrames >= 2) {
         badFrames = 0;
+        watchdogHits += 1;
         if (softTries < 2) {
           // 先做一次“软恢复”：多数白屏是尺寸/投影矩阵被写坏，重新算一次尺寸就能回来
           softTries += 1;
-          resize();
+          console.warn(`[showcase] 检测到异常画面（整屏发白或全黑），第 ${watchdogHits} 次软恢复`);
+          resize(true);
         } else {
           softTries = 0;
+          rebuilds += 1;
+          console.warn(`[showcase] 软恢复无效，第 ${rebuilds} 次重建场景`);
           options.onContextLost?.();
         }
       }
@@ -1989,7 +2019,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     textures: renderer.info.memory.textures,
     geometries: renderer.info.memory.geometries,
     /** 每帧脚本耗时（毫秒，渲染调用 + HUD + 相机计算，不含 GPU 执行时间） */
-    jsMs: +jsAvg.toFixed(2)
+    jsMs: +jsAvg.toFixed(2),
+    /** 看门狗触发次数（软恢复 / 重建），排查白屏用 */
+    watchdogHits,
+    rebuilds
   })
 };
 }

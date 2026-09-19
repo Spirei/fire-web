@@ -291,5 +291,8 @@ export interface ShowcaseHandle {
     geometries: number;
     /** 每帧脚本耗时（毫秒，不含 GPU 执行时间） */
     jsMs: number;
+    /** 看门狗触发次数（软恢复 / 重建），排查白屏用 */
+    watchdogHits: number;
+    rebuilds: number;
   };
 }
