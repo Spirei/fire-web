@@ -231,7 +231,8 @@ html:has(.showcase) body {
 
 .sc-left-foot {
   left: 3.4vw;
-  bottom: 5.5vh;
+  /* 底边与右下角车型条同一行（4.6vh） */
+  bottom: 4.6vh;
   display: flex;
   gap: 8px;
 }
@@ -378,7 +379,8 @@ html:has(.showcase) body {
 /* 中间按钮 */
 .sc-ctr {
   left: 50%;
-  bottom: 12.5vh;
+  /* 整列（主按钮 + 两行提示）下移：底边与右下角车型条对齐 */
+  bottom: 8.5vh;
   transform: translateX(-50%);
   text-align: center;
 }
@@ -541,7 +543,8 @@ html:has(.showcase) body {
 
 .sc-hint-drag {
   left: 50%;
-  bottom: 8.6vh;
+  /* 与车型条同一行：整列下移后，这条提示就是最下方的那一行 */
+  bottom: 4.6vh;
   transform: translateX(-50%);
   font-size: 8.5px;
   letter-spacing: 0.26em;
