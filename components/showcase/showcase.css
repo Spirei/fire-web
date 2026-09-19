@@ -17,6 +17,8 @@
   /* 胶囊「已开启」的中性底色（不要橙色，太抢眼） */
   --sc-active: rgba(255, 255, 255, 0.18);
   --sc-active-line: rgba(255, 255, 255, 0.42);
+  /* hover 只轻微提亮描边，别做得像「开启态」 */
+  --sc-hover-line: rgba(255, 255, 255, 0.24);
   --sc-watermark: rgba(255, 255, 255, 0.045);
   --sc-vignette: radial-gradient(70% 62% at 50% 52%, transparent 0%, rgba(0, 0, 0, 0.55) 72%, rgba(0, 0, 0, 0.86) 100%),
     linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, transparent 22%, transparent 76%, rgba(0, 0, 0, 0.6) 100%);
@@ -37,6 +39,7 @@
   --sc-panel-hover: rgba(20, 24, 30, 0.1);
   --sc-active: rgba(20, 24, 30, 0.14);
   --sc-active-line: rgba(20, 24, 30, 0.4);
+  --sc-hover-line: rgba(20, 24, 30, 0.22);
   --sc-watermark: rgba(20, 24, 30, 0.05);
   --sc-vignette: radial-gradient(72% 64% at 50% 52%, transparent 0%, rgba(20, 24, 30, 0.06) 72%, rgba(20, 24, 30, 0.16) 100%);
 }
@@ -159,23 +162,33 @@ html:has(.showcase) body {
   height: 17px;
 }
 
+/*
+ * 悬停：只提亮描边与图标，不铺灰底 ——
+ * 否则暂停后指针还停在按钮上，看起来跟仍在播放（图 2）一样，要移开指针才恢复常态。
+ */
 .sc-tool:hover {
-  background: var(--sc-panel-hover);
+  background: var(--sc-panel);
+  border-color: var(--sc-hover-line);
   color: var(--sc-ink-strong);
 }
 
 /*
- * 音乐播放中：比 hover 更实一档 —— 之前和 hover 用同一个灰，
- * 暂停后指针还在按钮上时看起来跟仍在播放一样（用户反馈「胶囊色没收回」）。
- * 播放中 = 实心胶囊；hover = 淡填充；两者一眼能分。
+ * 播放中：更亮的「玻璃」底 + 亮描边 + 极轻外发光，
+ * 之前的纯灰太平（反馈「太灰」），现在和常态一眼能分又不抢眼。
  */
 .sc-tool.on {
   color: var(--sc-ink-strong);
-  background: var(--sc-active);
   border-color: var(--sc-active-line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 0 14px rgba(255, 255, 255, 0.12);
 }
 
-/* 键盘聚焦才画焦点环；鼠标点完不留底色（避免看起来一直是开启态） */
+.showcase.light .sc-tool.on {
+  background: linear-gradient(180deg, rgba(20, 24, 30, 0.2), rgba(20, 24, 30, 0.07));
+  box-shadow: 0 0 0 1px rgba(20, 24, 30, 0.05), 0 0 14px rgba(20, 24, 30, 0.1);
+}
+
+/* 键盘聚焦才画焦点环；鼠标点完不留圈、不留底色 */
 .sc-tool:focus {
   outline: none;
 }
