@@ -19,6 +19,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { fetchAssetBuffer } from "./assetCache";
 import type { ShowcaseCameraKey, ShowcaseConfig, ShowcaseHandle, ShowcaseLightBar, ShowcaseOptions } from "./types";
 
 /** 配置里的正则既能写字符串（可跨服务端/客户端传递）也能直接给 RegExp */
@@ -1255,9 +1256,23 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     if (loadDone >= loadTotal) options.onReady?.();
   };
 
-  new GLTFLoader().load(
-    CFG.assets.model,
-    (gltf) => {
+  // 车模走 IndexedDB 缓存：首次下载并写入，之后刷新直接读本地，不再重新下 20 MB
+  void (async () => {
+    let buffer: ArrayBuffer;
+    try {
+      const cached = await fetchAssetBuffer(CFG.assets.model, (ratio) => reportProgress(ratio));
+      buffer = cached.buffer;
+      if (cached.fromCache) logEvent("车模命中本地缓存");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err ?? "");
+      options.onError?.(message || "模型加载失败");
+      return;
+    }
+    const loader = new GLTFLoader();
+    loader.parse(
+      buffer,
+      "",
+      (gltf) => {
       const car = gltf.scene;
       car.visible = !off.has("car");
       // 不同来源的模型朝向不一致：preset 里给 yaw / pitch 做一次性修正
@@ -1394,13 +1409,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       reportProgress();
       resize();
       render(progress(), 1 / 60);
-    },
-    undefined,
-    (err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err ?? "");
-      options.onError?.(message || "模型加载失败");
-    }
-  );
+      },
+      (err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err ?? "");
+        options.onError?.(message || "模型加载失败");
+      }
+    );
+  })();
 
   /* ---------- 7) 滚动编排 ---------- */
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));

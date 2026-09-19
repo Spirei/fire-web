@@ -3797,6 +3797,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
   software: V0_1_34_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.35" } : item),
   changes: [{
+    title: "首页车模改为持久缓存：刷新不再重下 20MB",
+    desc: "实测刷新时车模会整包重下（20.8 MB / 2.4 秒）：HTTP 缓存只对两张 1.6 MB 的 HDR 生效（304、0 字节），车模即便加了 immutable 也没被浏览器留住，而局域网 HTTP 又拿不到 Cache API。\n现在新增 components/showcase/assetCache.ts：用 IndexedDB 按 URL（含 ?v= 版本号）保存车模字节流，首次访问下载后静默写入，之后刷新直接读本地、完全不发请求；换素材时版本号一变就清掉旧条目；读取或写入失败一律回退成普通请求，不影响加载。\n同时给 /mclaren/* 加上 Cache-Control: public, max-age=31536000, immutable（配合 preset 里的 ?v=1），让 HDR 与其他静态素材走浏览器长效缓存。\n实测：首次访问下载 20.77 MB；刷新时网络里没有 GLB 请求（只剩两张 HDR，0 字节），引擎日志出现「车模命中本地缓存」。",
+    kind: "feature"
+  }, {
     title: "修复浅色模式旋转时的黑色团影与整体发灰",
     desc: "三处。一、黑色团影：接触阴影原来是 8.4×3.6 米的纯黑椭圆（比车还大），浅色亮底上会从车轮两侧露出来 —— 现在收到 6.6×2.6、边缘更柔（浓度 0.7 → 0.7/0.45，浅色下再压一档），并保留车下光源让车不悬空。\n二、页面发灰：浅色背景原来是偏灰的渐变（#f2f4f6 → #bfc5cc），水印（FORMULA）一出现整屏就显得灰；现在背景提亮成真正的摄影棚白（#ffffff → #e2e7ee），水印透明度 0.07 → 0.05，天际线接色同步提到 #e7ecf2。\n三、越转越灰/糊：Retina（dpr=2）下连续旋转时自适应画质会一路降渲染倍率（实测 1.2 → 1.05 → 0.9）；现在交互期间（拖拽 / 环视 / 冲刺）冻结画质调整，画质下限由 0.85 抬到 0.95，实测 dpr=2 下转圈前后都稳定在 1.2。",
     kind: "fix"

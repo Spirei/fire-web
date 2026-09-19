@@ -104,6 +104,13 @@ const nextConfig = {
         // 浏览器可直接复用一天，之后一周内后台校验，避免每次打开地图都阻塞首屏。
         source: "/maps-world.json",
         headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }]
+      },
+      {
+        // 首页 3D 素材：车模约 20 MB、两张环境贴图各约 1.6 MB。
+        // 之前是 Next 默认的 max-age=0，刷新都要回服务器校验，车模体积大就直接整包重下；
+        // 这里长缓存 + 版本号（preset 里的 assets 会带 ?v=），换素材时把版本号 +1 即可。
+        source: "/mclaren/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }]
       }
     ];
   }
