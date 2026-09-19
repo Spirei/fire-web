@@ -72,8 +72,10 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     // 车下方的钟面刻度环：正圆，屏幕上的椭圆来自俯视透视
     ring: { radius: 3.3, count: 220, longEvery: 20, longLength: 0.16, shortLength: 0.07, color: "#d8c3a4" },
     reflectIntensity: 1.05,
-    // 参考视频里的地面是镜面：反射贴图给到 768（8 位，成本约 2.3MB）才够清晰，旋转时也不糊
-    reflectionSize: 768,
+    // 参考视频里的地面是镜面：反射贴图的高度基准给到 1024（宽度按画面宽高比推，16:9 下约 1638×1024）。
+    // 实测「糊」主要来自纵向分辨率：掠射角下倒影在纵向被拉长，高度不够就糊（宽度加 2.7 倍几乎看不出差别，
+    // 高度 768 → 1152 明显变清）。只填高度，宽度由引擎按画面比例补（见 engine.ts 的 reflectSizeFor）
+    reflectionSize: 1024,
     pool: 0.14
   },
 

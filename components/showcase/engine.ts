@@ -466,7 +466,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           vec3 col = uColor;
           col = mix(col, refl * uReflectIntensity, clamp(uMixBase + fres * uMixFres, 0.0, 1.0));
           // 越贴近天际线（掠射）越靠背景色：浅色模式下原来地面比背景暗一档，交界处能看到一条横线
-          col = mix(col, uHorizon, clamp(fres * uHorizonMix, 0.0, 1.0));
+          // 只压「极掠射」那一条带（fres 再取一次幂）：以前整块中景地面都被洗向天际线色，
+          // 车身倒影正好落在那一段、被冲成一片灰雾，看着就是「糊」。现在中景保住反射细节，接缝照旧看不到。
+          col = mix(col, uHorizon, clamp(pow(fres, 2.0) * uHorizonMix, 0.0, 1.0));
           // 流光：高速时地面上掠过的暖色光带
           float band = vnoise(vec2(vWorld.x * 0.32, vWorld.z * 0.06 + uTime * (0.6 + uSpeed * 0.5)));
           band = pow(max(band - 0.7, 0.0) * 3.2, 2.0);
@@ -480,10 +482,47 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   /* 平面反射：镜像相机 + 斜裁剪（three Reflector 的做法） */
   // 反射贴图每次都会重渲染整个场景，分辨率是这张图最大的成本项；
-  // 地面本来就带粗糙度模糊，512 与 1024 的观感差别很小。
+  // 观感上决定清晰度的是「纵向像素」：掠射角下倒影在纵向被拉长，高度不够就是一片糊
+  // （实测宽度加 2.7 倍几乎看不出差别）；宽度按画面宽高比推，见下面的 reflectSizeFor。
   // 反射贴图用 8 位（参考项目 su7-replica 的 meshReflectorMaterial 也是 UnsignedByteType + 256），
   // 地面本身带粗糙度模糊，8 位足够，显存只有 HalfFloat 的一半。
-  const reflectRT = new THREE.WebGLRenderTarget(CFG.ground.reflectionSize, CFG.ground.reflectionSize, {
+  /**
+   * 反射贴图尺寸：高度用基准值（画质自适应会调），宽度按画面宽高比给。
+   *
+   * 以前这里无论窗口多宽都是正方形（768×768，自适应后 998×998），而镜像相机用的是画面本身的
+   * 16:9 投影 —— 两个方向的像素密度不一致，倒影在两个方向上糊的程度也不同（观感就是「糊了一层」）。
+   * 现在宽度跟画面比例挂钩：像素密度一致、换窗口比例也不会变形，同一个高度下横向像素多出约 60%。
+   */
+  // 排查画质用：?mclreflect=1600 或 ?mclreflect=2048x1280 可以临时改反射贴图尺寸（只影响诊断，不影响正常访问）
+  const reflectOverride = (() => {
+    if (typeof location === "undefined") return null;
+    const raw = new URLSearchParams(location.search).get("mclreflect");
+    if (!raw) return null;
+    const [first, second] = raw.toLowerCase().split("x");
+    const height = Number(second ?? first);
+    const width = second ? Number(first) : null;
+    if (!Number.isFinite(height) || height < 64) return null;
+    return { width: width && Number.isFinite(width) && width >= 64 ? width : null, height };
+  })();
+  function reflectSizeFor(aspect: number, height: number): [number, number] {
+    if (reflectOverride) {
+      const h = Math.round(reflectOverride.height);
+      return [Math.round(reflectOverride.width ?? h * Math.max(0.6, Math.min(3, aspect))), h];
+    }
+    const h = Math.max(256, Math.round(height));
+    const w = Math.max(256, Math.round(h * Math.max(0.6, Math.min(3, aspect))));
+    return [w, h];
+  }
+  /** 舞台当前的宽高比（拿不到尺寸时按 16:9 兜底） */
+  function stageAspect() {
+    const w = canvas.clientWidth || hud.stage.clientWidth || window.innerWidth;
+    const h = canvas.clientHeight || hud.stage.clientHeight || window.innerHeight;
+    return w > 2 && h > 2 ? w / h : 16 / 9;
+  }
+  /** 反射贴图当前的高度基准（自适应画质会改它，宽度永远按宽高比推） */
+  let reflectHeight = CFG.ground.reflectionSize;
+  const [initialReflectW, initialReflectH] = reflectSizeFor(stageAspect(), reflectHeight);
+  const reflectRT = new THREE.WebGLRenderTarget(initialReflectW, initialReflectH, {
     type: THREE.UnsignedByteType,
     generateMipmaps: true,
     minFilter: THREE.LinearMipmapLinearFilter
@@ -2031,6 +2070,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     (lightLinesPass.uniforms.uAspect.value as number) = w / h;
+    // 反射贴图按画面宽高比同步（换窗口比例时倒影不会又被拉糊）
+    const [reflectW, reflectH] = reflectSizeFor(w / h, reflectHeight);
+    if (reflectRT.width !== reflectW || reflectRT.height !== reflectH) reflectRT.setSize(reflectW, reflectH);
   }
 
   /**
@@ -2097,16 +2139,18 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     if (qualityHud) {
       qualityHud.innerHTML = [
         `${avg.toFixed(1)} ms · ${renderScale.toFixed(2)}x`,
-        `buffer ${canvas.width}×${canvas.height} · reflect ${reflectRT.width}`,
+        `buffer ${canvas.width}×${canvas.height} · reflect ${reflectRT.width}×${reflectRT.height}`,
         `tex ${renderer.info.memory.textures} · geo ${renderer.info.memory.geometries}`
       ].join("<br>");
     }
     renderer.setPixelRatio(renderScale);
     composer.setPixelRatio(renderScale);
-    // 反射贴图也跟着倍率走：帧耗时偏高时它同样是最贵的一项
+    // 反射贴图也跟着倍率走：帧耗时偏高时它同样是最贵的一项。
+    // 高度按基准 × 画质倍率，宽度按画面宽高比推 —— 只改高度基准，倒影不会横向被拉糊。
     const base = CFG.ground.reflectionSize;
-    const reflectSize = Math.round(clamp(base * (renderScale + 0.55), base * 0.8, base * 1.3));
-    if (reflectSize !== reflectRT.width) reflectRT.setSize(reflectSize, reflectSize);
+    reflectHeight = Math.round(clamp(base * (renderScale + 0.55), base * 0.8, base * 1.3));
+    const [reflectW, reflectH] = reflectSizeFor(stageAspect(), reflectHeight);
+    if (reflectRT.width !== reflectW || reflectRT.height !== reflectH) reflectRT.setSize(reflectW, reflectH);
     resize();
   }
 
