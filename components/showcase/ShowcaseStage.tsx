@@ -152,6 +152,27 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
     };
   }, [config, handlePhase, rebuild, degraded, retry]);
 
+  // 刷新时浏览器会恢复上次的滚动位置，导致看到的是当时那个机位而不是默认姿势；
+  // 这里关掉滚动恢复并把进度归零，保证「刷新 = 回到默认视角」。
+  useEffect(() => {
+    const prev = typeof history !== "undefined" && "scrollRestoration" in history ? history.scrollRestoration : null;
+    try {
+      if (prev !== null) history.scrollRestoration = "manual";
+    } catch {
+      /* 忽略 */
+    }
+    window.scrollTo(0, 0);
+    return () => {
+      if (prev !== null) {
+        try {
+          history.scrollRestoration = prev;
+        } catch {
+          /* 忽略 */
+        }
+      }
+    };
+  }, []);
+
   // 首帧之后再读站点主题（服务端首帧固定深色，避免水合不一致）
   const themeRef = useRef<"dark" | "light">("dark");
   useEffect(() => {

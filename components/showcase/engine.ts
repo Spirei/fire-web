@@ -904,7 +904,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         float segPos = r * ${SEG_SCALE} - uTime * (0.7 + uSpeed * 0.06);
         float segIdx = floor(segPos);
         float segF = fract(segPos);
-        float segMask = smoothstep(0.02, 0.16, segF) * (1.0 - smoothstep(0.6, 0.78, segF));
+        float segMask = smoothstep(0.02, 0.11, segF) * (1.0 - smoothstep(0.44, 0.6, segF));
         float segRand = 0.65 + 0.7 * hash11(segIdx * 1.37);
         float flow = (0.72 + 0.28 * sin(r * 26.0 - uTime * (2.0 + uSpeed * 0.35))) * segMask * segRand;
         // 车体遮挡：参考视频里光条是从车后面去的，不要画在车身上
@@ -940,9 +940,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         mask += laneAll;
         col += laneCol;
         if (!(mask == mask)) mask = 0.0;
-        // 深色主题：光条加色发光；浅色主题：背景本身很亮，需要把强度放大几倍才读得出光条
-        float lightBoost = uLightMode > 0.5 ? 3.2 : 1.0;
-        gl_FragColor = vec4(base.rgb + col * mask * lightBoost, base.a);
+        // 深色主题：光条加色发光；浅色主题：亮背景上加色看不见，改成把光条压成深色线条（像白天隧道里的暗条纹）
+        // 浅色主题：光条画成深色线条，并且对比拉满（亮背景上对比不足就等于看不见）
+        vec3 outRgb = uLightMode > 0.5
+          ? mix(base.rgb, vec3(0.10, 0.12, 0.16), clamp(mask * 1.6, 0.0, 1.0))
+          : base.rgb + col * mask;
+        gl_FragColor = vec4(outRgb, base.a);
       }`
   });
   const composer = new EffectComposer(renderer);
@@ -1498,7 +1501,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     floorUniforms.uSpeed.value = sps;
     floorUniforms.uFlow.value = sps * sps * (CFG.speed.floorFlow ?? 1);
     // 浅色主题下地面保持深色工作台：反射降下来，否则亮背景经法线扰动会变成一片噪点灰
-    floorUniforms.uReflectIntensity.value = (light ? 0.6 : CFG.ground.reflectIntensity) + sps * 0.2;
+    floorUniforms.uReflectIntensity.value = (light ? 0.6 : CFG.ground.reflectIntensity) * (1 - clamp(sps * 0.3, 0, 0.35)) + sps * 0.1;
     // 浅色主题：反射与法线扰动都压低，地面保持干净的深色工作台
     // 浅色主题下反射再压一档、模糊级别再高一级，避免亮背景经法线扰动形成麻点
     floorUniforms.uMixBase.value = light ? 0.32 : 0.46;
@@ -1564,7 +1567,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const smear = sps * sps * CFG.post.smearStrength;
     smearPass.uniforms.uStrength.value = smear;
     smearPass.enabled = smear > 0.004 && !off.has("smear");
-    bloom.strength = CFG.post.bloomStrength + sps * CFG.post.bloomSpeedBoost;
+    bloom.strength = (CFG.post.bloomStrength + sps * CFG.post.bloomSpeedBoost) * (light ? 0.6 : 1);
     bloom.radius = CFG.post.bloomRadius + sps * 0.14;
     scene.background = light ? backdropLight : backdrop;
     scene.backgroundIntensity = light ? 1 : 0.85 + narrativeDay * 0.35;
