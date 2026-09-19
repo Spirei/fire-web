@@ -77,7 +77,7 @@ function normalizeConfig(config: ShowcaseConfig) {
               color: ring?.color ?? "#ffb070"
             },
       reflectIntensity: config.ground?.reflectIntensity ?? 0.95,
-      reflectionSize: config.ground?.reflectionSize ?? 320,
+      reflectionSize: config.ground?.reflectionSize ?? 512,
       pool: config.ground?.pool ?? 0.14
     },
     speed: {
@@ -313,8 +313,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     uTime: { value: 0 },
     uFlow: { value: 0 },
     // 反射混合：底色与反射的混合系数（基础量 + 菲涅尔权重）、法线扰动强度
-    uMixBase: { value: 0.22 },
-    uMixFres: { value: 1.2 },
+    uMixBase: { value: 0.3 },
+    uMixFres: { value: 1.05 },
     uNormalAmount: { value: 1 },
     uMipBias: { value: 1 }
   };
@@ -350,13 +350,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           vec3 n = texture2D(tNormal, vWorld.xz * 0.28 + scroll).rgb * 2.0 - 1.0;
           n = normalize(n.rbg);                        // 交换 G/B：法线方向修正
           float d = length(vView);
-          vec2 distortion = n.xz * (0.0015 + 1.6 / max(d, 1.0)) * 0.06 * uNormalAmount;
+          // 噪声只做极轻微的扰动：参考视频里的地面是镜面，扰动大了就成磨砂玻璃
+          vec2 distortion = n.xz * (0.0015 + 1.6 / max(d, 1.0)) * 0.02 * uNormalAmount;
           vec4 rp = vReflect; rp.xyz /= rp.w;
           float rough = texture2D(tRough, vWorld.xz * 0.06 + scroll).r;
           // 粗糙度控制 mip 级别 → 自带模糊的反射
-          vec3 refl = texture2D(tReflect, clamp(rp.xy + distortion, 0.002, 0.998), rough * 2.4 * uMipBias).rgb;
+          vec3 refl = texture2D(tReflect, clamp(rp.xy + distortion, 0.002, 0.998), rough * 1.1 * uMipBias).rgb;
           vec3 viewDir = normalize(-vView);
-          float fres = pow(1.0 - clamp(dot(n, viewDir), 0.0, 1.0), 3.0);
+          // 菲涅尔用「几何法线」而不是噪声法线：否则逐像素抖动会让地面像磨砂玻璃
+          vec3 upView = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+          float fres = pow(1.0 - clamp(dot(upView, viewDir), 0.0, 1.0), 4.0);
           vec3 col = uColor;
           col = mix(col, refl * uReflectIntensity, clamp(uMixBase + fres * uMixFres, 0.0, 1.0));
           // 流光：高速时地面上掠过的暖色光带
@@ -1403,10 +1406,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     floorUniforms.uReflectIntensity.value = (light ? 0.34 : CFG.ground.reflectIntensity) + sps * 0.2;
     // 浅色主题：反射与法线扰动都压低，地面保持干净的深色工作台
     // 浅色主题下反射再压一档、模糊级别再高一级，避免亮背景经法线扰动形成麻点
-    floorUniforms.uMixBase.value = light ? 0.02 : 0.22;
-    floorUniforms.uMixFres.value = light ? 0.16 : 1.2;
-    floorUniforms.uNormalAmount.value = light ? 0.2 : 1;
-    floorUniforms.uMipBias.value = light ? 1.5 : 1;
+    floorUniforms.uMixBase.value = light ? 0.06 : 0.3;
+    floorUniforms.uMixFres.value = light ? 0.4 : 1.05;
+    floorUniforms.uNormalAmount.value = light ? 0.15 : 0.25;
+    floorUniforms.uMipBias.value = light ? 1.6 : 1;
     flowUniforms.uFlowTime.value = elapsed;
     flowUniforms.uFlowStrength.value = sps * sps * 0.6;
     tunnelUniforms.uTime.value = elapsed;

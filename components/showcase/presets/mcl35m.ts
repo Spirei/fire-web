@@ -64,9 +64,9 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
   ground: {
     // 车下方的钟面刻度环：正圆，屏幕上的椭圆来自俯视透视
     ring: { radius: 4, count: 180, longEvery: 15, longLength: 0.34, shortLength: 0.16, color: "#ffb070" },
-    reflectIntensity: 0.95,
-    // 参考项目 su7-replica 的地面反射只用 256 的 8 位贴图；这里取 384，地面本来就有粗糙度模糊
-    reflectionSize: 384,
+    reflectIntensity: 1.05,
+    // 参考视频里的地面是镜面：反射贴图给到 512（8 位，成本很小）才够清晰
+    reflectionSize: 512,
     pool: 0.14
   },
 
