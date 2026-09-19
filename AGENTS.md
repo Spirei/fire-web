@@ -27,7 +27,20 @@ Review 自查清单（按项目实际走一遍）：
 - 所有排序类交互必须**全局生效**：结果保存到 `/api/settings`（`markets`、`tabs`、`groups`、`homeNav`），禁止只存在组件本地状态。
 - 可拖动的区域（账户资产市场标签、设置-导航菜单、设置-分组管理、网站管理-首页导航）统一使用 HTML5 拖拽：拖动手柄 + 拖动排序 + 保存后 Toast 提示；保存成功后派发 `fire:settings-updated` 事件（或通过回调同步父级状态）让全站立即一致。
 - 新增任何可排序/可拖动 UI 时沿用此约定（拖动手柄、持久化、事件通知、Toast），不要做成"刷新即还原"。
+- **例外**：3D 车型条的顺序属于 showcase 自己的登记表（uploads 卷的 showroom.json），不走 `/api/settings` —— 见下节「3D 车型导入与车型条」。
 - **我的持仓市场标签按记录显隐**：`settings.markets` 只负责市场顺序，标签只为「有持仓 / 本页添加记录」的市场显示 —— 空市场自动隐藏（与自选股「空分组自动隐藏」一致），避免出现「日股 0」这类空标签；新增该市场记录后标签自动出现，市场编辑面板对空市场标注「无记录 · 自动隐藏」。
+
+## 3D 车型导入与车型条（2026-09-20 起）
+
+- 首页右下角车型条 = **内置车**（`components/showcase/presets/models.ts` 的 `SHOWCASE_MODELS`，目前只有随仓库分发的 MCL35M）+ **导入车**；导入入口是车型条末尾的「＋」（登录可见），页面 `/showcase/import`。
+- **素材与登记表都放 uploads 卷**：`public/uploads/mclaren/models/*.glb`（导入的模型）、`covers/*`（自定义封面）、`showroom.json`（登记表）—— 三者都不进 Git、不进镜像（100MB+ 的 glb 会被公开仓库审计拦）。只有 MCL35M 的模型与两张 HDR 随仓库放 `public/mclaren/`；**禁止把导入的车型素材再塞回仓库**。
+- **顺序与封面只认 showroom.json**（`order` / `models[].cover` / `builtinMeta[内置车 id].cover`）：这是「排序结果存服务端」约定的 showcase 分支，排序走 `PUT /api/showcase/models/order`，**不要存 localStorage / 组件本地状态**。
+  - 顺序表缺项时按 `lib/showcaseModels.ts` 的 `resolveOrder` 兜底：内置车补最前、其余补末尾；导入页与首页车型条必须共用这一个函数，禁止各排一套（曾出现「导入页排最后、首页排最前」）。
+  - 保存顺序时内置车的 id 必须留在顺序表里（曾因为过滤掉它，内置车掉出顺序表、被排到最后）。
+- 卡片：封面高度 = 卡宽 × **52%**（`aspect-[100/52]`，实测「车不被切」的临界比例，再小就裁到车头 / 轮胎），角标（⠿ / 内置 / 年份）压 48px 上缘渐变，保证白底封面也读得清；操作胶囊在桌面三列宽度下必须同一行显示。
+- 内置车也能换封面（记 `builtinMeta`，素材与参数仍随仓库分发），但不能改参数、不能移出清单 / 删除；导入车可改参数 / 换封面 / 去封面 / 移出清单 / 删除并删文件。
+- 上传通过服务端体检（`lib/glbInspect.ts`）后才落盘：Draco / Meshopt / KTX2 压缩或损坏的 glb 直接丢弃，不让它占着 uploads 卷。
+- 细节与操作流程见 `docs/showcase-3d.md`。
 
 ## 状态持久化决策树（重要）
 

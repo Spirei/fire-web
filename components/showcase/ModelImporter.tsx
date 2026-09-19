@@ -337,6 +337,17 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
     [dragId, persistOrder]
   );
 
+  /** 拖到队尾：拖到某张卡上只会插到它前面，所以「排到最后」需要单独一个落点 */
+  const moveToEnd = useCallback(() => {
+    if (!dragId) return;
+    setOrder((prev) => {
+      if (prev[prev.length - 1] === dragId) return prev;
+      const list = [...prev.filter((id) => id !== dragId), dragId];
+      void persistOrder(list);
+      return list;
+    });
+  }, [dragId, persistOrder]);
+
   const uploadCover = useCallback(
     async (id: string, file: File) => {
       setCoverBusy(id);
@@ -832,6 +843,19 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             </article>
           ))}
         </div>
+        {/* 拖动时才出现：拖到某张卡上只会插到它前面，想排到最后要点这里 */}
+        {dragId && (
+          <div
+            className="mt-3 flex h-11 items-center justify-center rounded-2xl border border-dashed border-edge-strong text-[11.5px] font-semibold text-muted dark:border-white/25 dark:text-white/60"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              moveToEnd();
+            }}
+          >
+            松手排到最后
+          </div>
+        )}
       </section>
     </div>
   );

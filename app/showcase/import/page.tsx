@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { getAuthUser } from "@/lib/auth";
-import { modelUrlExists, orderRanker, readRegistry, readStoredModels } from "@/lib/showcaseModels";
+import { modelUrlExists, orderRanker, readRegistry, readStoredModels, resolveOrder } from "@/lib/showcaseModels";
 import { SHOWCASE_MODELS } from "@/components/showcase/presets/models";
 import ModelImporter from "@/components/showcase/ModelImporter";
 
@@ -56,9 +56,10 @@ export default async function ShowcaseImportPage() {
       builtin: true
     };
   });
+  const stored = readStoredModels();
   const existing = [
     ...builtin,
-    ...readStoredModels().map((model) => ({
+    ...stored.map((model) => ({
       id: model.id,
       label: model.label,
       note: model.note,
@@ -70,7 +71,7 @@ export default async function ShowcaseImportPage() {
     }))
   ];
   // 卡片顺序就是服务端保存的顺序（与首页右下角车型条同源），刷新不会跳回默认排列
-  const rank = orderRanker(order);
+  const rank = orderRanker(resolveOrder(order, stored.map((model) => model.id)));
   return (
     <main className="showcase-import">
       <ModelImporter existing={[...existing].sort((a, b) => rank(a.id) - rank(b.id))} />

@@ -272,14 +272,14 @@ export function saveModelOrder(ids: string[]): string[] {
   const { models } = readRegistry();
   // 内置车也在顺序表里（首页车型条与导入页共用同一份顺序），不能像以前那样被过滤掉 —— 
   // 过滤掉之后内置车会掉到顺序表之外、被排到最后
-  const known = [...models.map((model) => model.id), ...SHOWCASE_MODELS.map((item) => item.id)];
+  const known = [...SHOWCASE_MODELS.map((item) => item.id), ...models.map((model) => model.id)];
   const seen = new Set<string>();
   const picked = ids.filter((id) => {
     if (seen.has(id) || !known.includes(id)) return false;
     seen.add(id);
     return true;
   });
-  // 顺序表里没提到的车型（新导入的、直接丢进卷里的）按登记表原顺序补在末尾
+  // 顺序表里没提到的车型：内置车补在最前（随仓库分发、开箱即用的那辆），其余按登记表原顺序补在末尾
   const rest = known.filter((id) => !seen.has(id));
   const order = [...picked, ...rest];
   writeStoredModels(models, order);
@@ -299,6 +299,25 @@ function removeUploadFile(url?: string) {
   } catch {
     /* 旧封面可能已被删掉 */
   }
+}
+
+/**
+ * 把「顺序表 + 登记表里现有的车型」补成一份完整顺序。
+ *
+ * 顺序表是唯一权威，但历史版本写下的顺序表可能缺项（老 bug：保存时把内置车的 id 过滤掉了），
+ * 所以缺项的兜底是：内置车补在最前（随仓库分发、开箱即用的那辆），其余补在末尾。
+ * 导入页与首页车型条都走这一个函数，两边不会排出两种顺序。
+ */
+export function resolveOrder(order: string[], modelIds: string[]): string[] {
+  const builtinIds = SHOWCASE_MODELS.map((item) => item.id);
+  const known = new Set([...builtinIds, ...modelIds]);
+  const seen = new Set<string>();
+  const kept = order.filter((id) => {
+    if (seen.has(id) || !known.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  return [...builtinIds.filter((id) => !seen.has(id)), ...kept, ...modelIds.filter((id) => !seen.has(id))];
 }
 
 /** 展示顺序的排序函数：顺序表里没有的（新导入 / 直接丢进卷里的）排到最后 */
@@ -353,7 +372,7 @@ export function modelUrlExists(url: string) {
 /** 首页用的完整车型清单：按登记表里的展示顺序排（内置车也在顺序表里，可以拖到任意位置） */
 export function listShowcaseOptions(): ShowcaseModelOption[] {
   // 先把登记表补齐（首次访问会新建），再读顺序 —— 否则第一次渲染拿不到 order 会排成另一个样子
-  ensureRegistry();
+  const stored = ensureRegistry();
   const { order, builtinMeta } = readRegistry();
   const builtin: ShowcaseModelOption[] = SHOWCASE_MODELS.map((item) => {
     const cover = builtinMeta[item.id]?.cover ?? "";
@@ -368,7 +387,7 @@ export function listShowcaseOptions(): ShowcaseModelOption[] {
       config: item.config
     };
   });
-  const imported: ShowcaseModelOption[] = ensureRegistry()
+  const imported: ShowcaseModelOption[] = stored
     .slice()
     .map((model) => ({
       id: model.id,
@@ -380,8 +399,7 @@ export function listShowcaseOptions(): ShowcaseModelOption[] {
       config: buildImportedConfig({ file: model.file, version: Date.parse(model.updatedAt) || 1, params: model.params })
     }));
   const all = [...builtin, ...imported];
-  if (!order.length) return all;
-  const rank = orderRanker(order);
+  const rank = orderRanker(resolveOrder(order, stored.map((model) => model.id)));
   return all.sort((a, b) => rank(a.id) - rank(b.id));
 }
 
