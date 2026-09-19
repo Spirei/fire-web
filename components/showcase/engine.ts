@@ -688,11 +688,30 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const barTune = TUNNEL?.bars ?? [];
   // 主光条 / 车道线切成短段的密度（越大段越短）
   const SEG_SCALE = (CFG.speed.tunnel?.barSegment ?? 13).toFixed(1);
-  const LANE_SEG_SCALE = ((CFG.speed.tunnel?.barSegment ?? 13) * 0.42).toFixed(1);
+  const LANE_SEG_SCALE_NUM = (CFG.speed.tunnel?.barSegment ?? 13) * 0.3;
   const laneList = CFG.speed.tunnel?.lanes ?? [];
-  const laneAngles = laneList.length
+  // 跑道线逐条生成：每条自带颜色 / 宽度 / 不透明度 / 段长（dash 越大段越短）/ 流动速度。
+  // dash 取 1 是随镜头一路延伸的长虚线（跑道边线），取 3 以上是路面短标线 ——
+  // 参考视频里那条很短的白线就是它，行驶时一条条掠过镜头，速度与远近感主要靠它。
+  const laneCode = laneList.length
     ? laneList
-        .map((l) => `lane += barLine(ang, ${((l.angle * Math.PI) / 180).toFixed(5)}, ${((l.width * Math.PI) / 180).toFixed(5)}) * ${l.opacity ?? 0.6};`)
+        .map((l, i) => {
+          const a = ((l.angle * Math.PI) / 180).toFixed(5);
+          const w = ((l.width * Math.PI) / 180).toFixed(5);
+          const seg = (LANE_SEG_SCALE_NUM * (l.dash ?? 1)).toFixed(2);
+          const duty = l.dash ?? 1;
+          const on = duty >= 2 ? [0.02, 0.05, 0.34, 0.48] : [0.02, 0.14, 0.72, 0.86];
+          const flow = (0.4 + (l.dash ?? 1) * 0.42 + i * 0.05).toFixed(2);
+          const col = new THREE.Color(l.color ?? "#8f9aa8");
+          const fade = (l.opacity ?? 0.6).toFixed(3);
+          return `{
+            float lm = barLine(ang, ${a}, ${w}) * ${fade};
+            float lp = pow(max(r, 0.0), 1.3) * ${seg} - uTime * (${flow} + uSpeed * 0.075);
+            float ld = smoothstep(${on[0]}, ${on[1]}, fract(lp)) * (1.0 - smoothstep(${on[2]}, ${on[3]}, fract(lp)));
+            lane += lm * ld;
+            laneCol += vec3(${col.r.toFixed(3)}, ${col.g.toFixed(3)}, ${col.b.toFixed(3)}) * lm * ld;
+          }`;
+        })
         .join("\n        ")
     : "lane = 0.0;";
   const goldBars = barGlsl(barTune, "gold");
@@ -942,7 +961,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         ${lineAngles.map((b) => `${b.gold ? "goldMask" : "whiteMask"} += barLine(ang, ${b.a.toFixed(5)}, ${b.w.toFixed(5)});`).join("\n        ")}
         // 参考视频里每条光条都不是连续的，而是「长条短段」：量到单段约 120-200px、段间空隙约 30-60px，
         // 所以段内占空比给到 0.85 左右（之前只有三分之一，看着是一颗颗小疙瘩）。段沿径向往镜头流动。
-        float segPos = r * ${SEG_SCALE} - uTime * (0.7 + uSpeed * 0.06);
+        // 远近：段长随「离消失点的距离」放大（越靠镜头段越长、越靠消失点越短），
+        // 于是同一组光条在画面上有明确的空间尺度，不会像贴在玻璃上的一层线
+        float segPos = pow(max(r, 0.0), 1.3) * ${SEG_SCALE} - uTime * (0.7 + uSpeed * 0.06);
         float segIdx = floor(segPos);
         float segF = fract(segPos);
         float segMask = smoothstep(0.02, 0.07, segF) * (1.0 - smoothstep(0.8, 0.95, segF));
@@ -969,18 +990,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         float auxLine = smoothstep(slotMax, 0.0, slotDist) * step(0.34, hash11(symSlot + 11.3));
         float auxDash = smoothstep(0.32, 0.84, fract(r * (2.2 + h * 2.6) - uTime * (0.5 + uSpeed * 0.03) + h * 3.0));
         float aux = auxLine * auxDash * (0.25 + h * 0.75) * uAuxOpacity;
-        // 地面车道线：较宽、更暗、长虚线，专门做「隧道地面」的纵深
+        // 跑道线：逐条画（每条自带颜色 / 段长 / 流动速度），见上面的 laneCode
         float lane = 0.0;
-        ${laneAngles}
-        // 车道线同样是短段，但段更长、间隙更小
-        float lanePos = r * ${LANE_SEG_SCALE} - uTime * (0.4 + uSpeed * 0.03);
-        float laneDash = smoothstep(0.02, 0.14, fract(lanePos)) * (1.0 - smoothstep(0.72, 0.86, fract(lanePos)));
-        float laneMask = lane * laneDash;
-        float laneAux = 0.0;
         vec3 laneCol = vec3(0.0);
-        // 内侧蓝线（跑道边线）要比壁面虚线更亮，否则「跑道」读不出来
-        laneAux += laneMask * 0.6 + aux * 0.2;
-        laneCol += uLaneColor * laneMask * 0.52 + uWhite * aux * 0.09;
+        ${laneCode}
+        // 跑道线要比壁面虚线更亮，否则「跑道」读不出来
+        float laneAux = lane * 0.62 + aux * 0.2;
+        laneCol += uWhite * aux * 0.09;
         // 车道线与辅助虚线：和主光条一样受车体遮挡与强度控制
         float laneAll = laneAux * (1.0 - hide) * uStrength * uIntensity;
         if (!(laneAll == laneAll)) laneAll = 0.0;   // NaN 兜底
