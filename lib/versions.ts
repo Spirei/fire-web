@@ -3885,6 +3885,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     desc: "原来镜头、配色、光条、刻度环都写死在迈凯伦场景里，换素材要改引擎。现在拆成两层：components/showcase/engine.ts 是通用引擎，只认一份 config；车型相关的模型路径、朝向修正、轮子材质与自转轴、镜头关键帧、地面刻度环、隧道光条与配色、后期强度、章节文案与部件标注都收进 components/showcase/presets/mcl35m.ts。换车只要复制一份 preset，不用动引擎与组件。\n新增 docs/showcase-3d.md：四步换车（放素材、复制预设、对朝向与轮子、改镜头关键帧）与效果开关说明。配置里的正则统一写成字符串（引擎内部再构造），这样配置可以从服务端组件直接传给客户端组件。",
     kind: "feature"
   }, {
+    title: "首页文案改为中文",
+    desc: "舞台界面整体中文化：顶部标语、五个章节的标题与说明、实时遥测面板（实时遥测 / 档位 / 公里/时 / 实时数据 / 全功率输出）、中间按钮（按住起步 → 松手减速）与提示（按住空格或长按按钮）、左下角入口（360° 环视 / 影棚 / 缩放）、提示行（拖拽环视 / ⌘/Ctrl + 滚轮缩放）、底部导航（车辆 · 空力 · 动力 · 轮胎 · 科技）与加载文案。\\n专有名词保留原文：MCL35M、FORMULA 1、ERS、P ZERO、DRS、WEBGL。文案抽成 config.ui（引擎默认仍是英文），换素材或以后要做多语言都不用改组件。",
+    kind: "fix"
+  }, {
     title: "首页流畅度按 su7 实现逐项对齐",
     desc: "把 gamemcu.com/su7 的产物脚本拉下来读了一遍，找到它流畅的几条硬指标：像素比封顶 1.5（_maxDPR = 1.5，dpr = min(1.5, devicePixelRatio)）、渲染器关掉 antialias、后期用 postprocessing 的 EffectComposer + BloomEffect（mipmapBlur 只有一条 mip 链，而不是三组十几块渲染目标）、滚动用弹簧跟随而不是一阶滤波。\n我们逐项对齐并修掉自己的卡顿点：滚动几何改成缓存（原来每帧 getBoundingClientRect + offsetHeight，配合每帧 HUD 写入会触发强制同步布局）；HUD 文案、档位、转速刻度、部件标注都改成变化时才写；resize 在尺寸与倍率没变时直接返回，ResizeObserver 合并到一帧里执行，避免每次布局变化都重建二十多个渲染目标；看门狗 readPixels 只在启动后以及可见性/尺寸/上下文事件后的 8 秒窗口内探测（它是 GPU 同步点，长期每秒探测会造成周期卡顿）；渲染器关掉 MSAA；地面反射改成隔帧更新并把默认尺寸收到 320；滚动跟随由一阶滤波换成临界阻尼弹簧（stiffness 120 / damping 26，接近 framer-motion useSpring 的手感）。\n同时在 ?mclhud=1 里加了每帧脚本耗时，实测空闲时脚本约 1ms；关掉反射/泛光/光条/拖影/粒子后的帧耗时对比显示这几项在软件渲染下约占 26ms（真机 GPU 上小得多）。",
     kind: "fix"

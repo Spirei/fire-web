@@ -206,6 +206,29 @@ export interface ShowcaseConfig {
   }>;
   /** 冲刺按钮文案（参考站点：未发车是 HOLD TO RACE，发车后变成 RE-ENGAGE TO SLOW） */
   race?: { idleLabel?: string; label?: string; cap?: string };
+  /** 舞台界面文案（默认英文，传了就用传入的；本站首页已改中文） */
+  ui?: {
+    kicker?: string;
+    telemetry?: string;
+    gear?: string;
+    energy?: string;
+    unit?: string;
+    liveData?: string;
+    liveDeploying?: string;
+    raceIdle?: string;
+    raceActive?: string;
+    raceCap?: string;
+    raceHint?: string;
+    dragHint?: string;
+    zoomHint?: string;
+    zoomMode?: string;
+    view360?: string;
+    studio?: string;
+    loading?: string;
+    metaLeft?: string;
+    metaRight?: string;
+    nav?: string[];
+  };
   /** 章节文案（React 层渲染，引擎只负责按进度回调） */
   phases: ShowcasePhase[];
   /** 部件标注锚点 */

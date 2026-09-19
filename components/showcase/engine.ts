@@ -125,6 +125,10 @@ function normalizeConfig(config: ShowcaseConfig) {
       wheelStep: config.zoom?.wheelStep ?? 0.0016
     },
     lights: config.lights ?? [],
+    ui: {
+      liveData: config.ui?.liveData ?? "LIVE DATA",
+      liveDeploying: config.ui?.liveDeploying ?? "LIVE DATA · DEPLOYING"
+    },
     phases: config.phases,
     parts: config.parts ?? []
   };
@@ -1439,7 +1443,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const ersText = `${ers.toFixed(0)}%`;
     if (hud.ersBar) hud.ersBar.style.width = ersText;
     if (hud.ersText && hud.ersText.textContent !== ersText) hud.ersText.textContent = ersText;
-    const foot = sps > 0.25 ? "LIVE DATA · DEPLOYING" : "LIVE DATA";
+    const foot = sps > 0.25 ? CFG.ui.liveDeploying : CFG.ui.liveData;
     if (hud.teleFoot && hud.teleFoot.textContent !== foot) hud.teleFoot.textContent = foot;
     let phase = 0;
     for (let i = CFG.phases.length - 1; i >= 0; i -= 1) {

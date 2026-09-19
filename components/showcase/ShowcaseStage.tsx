@@ -122,6 +122,29 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
   }, [config, handlePhase, rebuild, degraded]);
 
   const current = config.phases[phase] ?? config.phases[0];
+  // 界面文案：默认英文，preset 里传 ui 就按传入的显示（本站首页已改中文）
+  const ui = {
+    kicker: config.ui?.kicker ?? "BEYOND THE LIMIT",
+    telemetry: config.ui?.telemetry ?? "LIVE TELEMETRY",
+    gear: config.ui?.gear ?? "GEAR",
+    energy: config.ui?.energy ?? "ERS",
+    unit: config.ui?.unit ?? "KM/H",
+    liveData: config.ui?.liveData ?? "LIVE DATA",
+    liveDeploying: config.ui?.liveDeploying ?? "LIVE DATA · DEPLOYING",
+    raceIdle: config.ui?.raceIdle ?? config.race?.idleLabel ?? "HOLD TO RACE",
+    raceActive: config.ui?.raceActive ?? config.race?.label ?? "RE-ENGAGE TO SLOW",
+    raceCap: config.ui?.raceCap ?? config.race?.cap ?? "CHASE THE LIMIT",
+    raceHint: config.ui?.raceHint ?? "HOLD [SPACE] OR PRESS & HOLD",
+    dragHint: config.ui?.dragHint ?? "↻ DRAG TO EXPLORE",
+    zoomHint: config.ui?.zoomHint ?? "⌘ / CTRL + SCROLL TO ZOOM",
+    zoomMode: config.ui?.zoomMode ?? "ZOOM",
+    view360: config.ui?.view360 ?? "360° VIEW",
+    studio: config.ui?.studio ?? "STUDIO",
+    loading: config.ui?.loading ?? "LOADING MODEL",
+    metaLeft: config.ui?.metaLeft ?? "MCL35M / 2021 · FORMULA 1",
+    metaRight: config.ui?.metaRight ?? "WEBGL SHOWCASE",
+    nav: config.ui?.nav ?? ["CAR", "AERO", "POWER", "TYRES", "TECH"]
+  };
 
   return (
     <div className={`showcase ${className}`}>
@@ -134,7 +157,7 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
           <div className="sc-vignette" />
 
           <div className="sc-hud">
-            <div className="sc-row sc-kicker">BEYOND THE LIMIT</div>
+            <div className="sc-row sc-kicker">{ui.kicker}</div>
 
             <div className="sc-row sc-sec">
               <b>{current.idx}</b>
@@ -164,14 +187,14 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
                   <path d="M12 5c5 0 9 4.5 9 7s-4 7-9 7-9-4.5-9-7 4-7 9-7z" />
                   <circle cx="12" cy="12" r="2.6" />
                 </svg>
-                360° VIEW
+                {ui.view360}
               </span>
               <span className="sc-pill">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
                   <circle cx="12" cy="12" r="4" />
                   <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
                 </svg>
-                STUDIO
+                {ui.studio}
               </span>
               <button
                 type="button"
@@ -184,7 +207,7 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
                   <circle cx="11" cy="11" r="6.5" />
                   <path d="m20 20-4.6-4.6M11 8.5v5M8.5 11h5" />
                 </svg>
-                ZOOM
+                {ui.zoomMode}
               </button>
               <button type="button" className="sc-zoom" ref={zoomOutRef} title="缩小（⌘/Ctrl + 滚轮）" aria-label="缩小">
                 −
@@ -197,16 +220,16 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
             <div className="sc-row sc-tele">
               <div className="sc-tele-cap">
                 <em />
-                LIVE TELEMETRY
+                {ui.telemetry}
               </div>
               <div className="sc-speed-wrap">
                 <span className="sc-kmh" ref={kmhRef}>
                   000
                 </span>
-                <span className="sc-unit">KM/H</span>
+                <span className="sc-unit">{ui.unit}</span>
               </div>
               <div className="sc-line-row">
-                <span>GEAR</span>
+                <span>{ui.gear}</span>
                 <b ref={gearRef}>N</b>
               </div>
               <div className="sc-ticks" ref={rpmRef}>
@@ -215,41 +238,37 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
                 ))}
               </div>
               <div className="sc-line-row">
-                <span>ERS</span>
+                <span>{ui.energy}</span>
                 <b ref={ersTextRef}>0%</b>
               </div>
               <div className="sc-ers">
                 <i ref={ersBarRef} />
               </div>
               <div className="sc-tele-foot" ref={teleFootRef}>
-                LIVE DATA
+                {ui.liveData}
               </div>
             </div>
 
             <div className="sc-row sc-ctr">
-              <div className="sc-ctr-cap">{racing ? config.race?.cap ?? "CHASE THE LIMIT" : current.cap}</div>
+              <div className="sc-ctr-cap">{racing ? ui.raceCap : current.cap}</div>
               <button type="button" className="sc-race" ref={raceRef}>
-                <span>{racing ? config.race?.label ?? "RE-ENGAGE TO SLOW" : config.race?.idleLabel ?? "HOLD TO RACE"}</span>
+                <span>{racing ? ui.raceActive : ui.raceIdle}</span>
                 <em>→</em>
               </button>
-              <div className="sc-ctr-hint">
-                HOLD <kbd>SPACE</kbd> OR PRESS &amp; HOLD
-              </div>
+              <div className="sc-ctr-hint">{ui.raceHint}</div>
             </div>
 
             <div className="sc-row sc-hint-drag">
-              <span>↻ DRAG TO EXPLORE</span>
-              <span>⌘ / CTRL + SCROLL TO ZOOM</span>
+              <span>{ui.dragHint}</span>
+              <span>{ui.zoomHint}</span>
             </div>
             <div className="sc-row sc-nav">
-              <span>▴ CAR</span>
-              <span>▴ AERO</span>
-              <span>▴ POWER</span>
-              <span>▴ TYRES</span>
-              <span>▴ TECH</span>
+              {ui.nav.map((item) => (
+                <span key={item}>▴ {item}</span>
+              ))}
             </div>
-            <div className="sc-row sc-meta-l">MCL35M / 2021 · FORMULA 1</div>
-            <div className="sc-row sc-meta-r">WEBGL SHOWCASE</div>
+            <div className="sc-row sc-meta-l">{ui.metaLeft}</div>
+            <div className="sc-row sc-meta-r">{ui.metaRight}</div>
           </div>
 
           <div aria-hidden="true">
@@ -269,7 +288,7 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
 
           {!ready && (
             <div className="sc-loading" style={{ opacity: error ? 1 : 0.9 }}>
-              <span className={error ? "sc-loading-error" : undefined}>{error ?? "LOADING MODEL"}</span>
+              <span className={error ? "sc-loading-error" : undefined}>{error ?? ui.loading}</span>
               {!error && (
                 <>
                   <span className="sc-loading-bar">

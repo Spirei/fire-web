@@ -111,20 +111,44 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
   // 车顶 T 字灯与车尾雨灯先去掉（引擎仍支持 lights 配置，换素材时按需再加）
 
   // 参考站点：未发车是 HOLD TO RACE，发车后变成 RE-ENGAGE TO SLOW（提示松开回到慢速）
-  race: { idleLabel: "HOLD TO RACE", label: "RE-ENGAGE TO SLOW", cap: "CHASE THE LIMIT" },
+  race: { idleLabel: "按住起步", label: "松手减速", cap: "追赶极限" },
+
+  // 首页界面文案（能中文就中文，专有名词保留）
+  ui: {
+    kicker: "超越极限",
+    telemetry: "实时遥测",
+    gear: "档位",
+    energy: "ERS",
+    unit: "公里/时",
+    liveData: "实时数据",
+    liveDeploying: "实时数据 · 全功率输出",
+    raceIdle: "按住起步",
+    raceActive: "松手减速",
+    raceCap: "追赶极限",
+    raceHint: "按住 空格 或 长按按钮",
+    dragHint: "↻ 拖拽环视",
+    zoomHint: "⌘ / Ctrl + 滚轮缩放",
+    zoomMode: "缩放",
+    view360: "360° 环视",
+    studio: "影棚",
+    loading: "正在加载模型",
+    metaLeft: "MCL35M / 2021 · FORMULA 1",
+    metaRight: "WEBGL 展示",
+    nav: ["车辆", "空力", "动力", "轮胎", "科技"]
+  },
 
   phases: [
-    { at: 0, idx: "01", name: "THE CAR", head: ["Built to chase", "the extraordinary."], copy: ["An obsession with every detail.", "A feeling like nothing else."], cap: "THE TRACK IS YOURS" },
-    { at: 0.2, idx: "02", name: "AERO", head: ["Air, shaped", "to obey."], copy: ["Every surface earns its place.", "Downforce without compromise."], cap: "SCRUB THE APEX" },
-    { at: 0.4, idx: "03", name: "POWER", head: ["Deploy.", "Then deploy again."], copy: ["1.6L V6 hybrid, eight gears,", "and one very loud idea."], cap: "LAUNCH IS ARMED" },
-    { at: 0.58, idx: "04", name: "TYRES", head: ["Where the lap", "actually happens."], copy: ["Four patches of rubber carrying", "an entire team's work."], cap: "GRIP TO THE LIMIT" },
-    { at: 0.78, idx: "05", name: "TECH", head: ["Two hundred sensors,", "one steering wheel."], copy: ["The car talks. The garage listens."], cap: "COOL DOWN" }
+    { at: 0, idx: "01", name: "车辆", head: ["为追逐", "非凡而造。"], copy: ["每一处细节都反复推敲，", "只为一种说不出的感觉。"], cap: "赛道是你的" },
+    { at: 0.2, idx: "02", name: "空气动力学", head: ["让空气", "学会听话。"], copy: ["每一条曲面都有它的任务，", "下压力上不做任何妥协。"], cap: "贴着顶点过弯" },
+    { at: 0.4, idx: "03", name: "动力单元", head: ["先释放，", "再释放一次。"], copy: ["1.6 升 V6 混动，八挡序列式，", "以及一个很大的想法。"], cap: "发车已就绪" },
+    { at: 0.58, idx: "04", name: "轮胎", head: ["圈速真正", "发生的地方。"], copy: ["四块橡胶，", "扛着整支车队的功课。"], cap: "把抓地力用满" },
+    { at: 0.78, idx: "05", name: "科技", head: ["两百个传感器，", "一个方向盘。"], copy: ["车在说话，", "车库在听。"], cap: "收车回库" }
   ],
 
   parts: [
-    { title: "FRONT WING", value: "3-PLANE · OUTWASH", pos: [1.05, 0.24, 2.35], from: 0.28, rev: false },
-    { title: "SIDEPOD", value: "PAPAYA · COOLING", pos: [1.1, 0.55, 0.5], from: 0.34, rev: false },
-    { title: "REAR WING", value: "DRS · 2021 SPEC", pos: [-0.25, 1, -2.55], from: 0.4, rev: true },
-    { title: "TYRES", value: "P ZERO · 18 IN", pos: [-1, 0.36, -1.35], from: 0.44, rev: true }
+    { title: "前翼", value: "三层翼片 · 外洗气流", pos: [1.05, 0.24, 2.35], from: 0.28, rev: false },
+    { title: "侧箱", value: "木瓜橙 · 散热进气", pos: [1.1, 0.55, 0.5], from: 0.34, rev: false },
+    { title: "尾翼", value: "DRS · 2021 规格", pos: [-0.25, 1, -2.55], from: 0.4, rev: true },
+    { title: "轮胎", value: "P ZERO · 18 英寸", pos: [-1, 0.36, -1.35], from: 0.44, rev: true }
   ]
 };
