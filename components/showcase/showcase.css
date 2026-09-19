@@ -97,6 +97,25 @@ html:has(.showcase) body {
   touch-action: pan-y;
 }
 
+/*
+ * 换车型时的冻结帧：引擎整块重建、dispose 会把 WebGL 画布清成黑色，
+ * 先把上一帧铺在画布之上顶住，新场景就绪（onReady）后淡出，中间不会再露出空场。
+ */
+.sc-freeze {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.42s ease;
+}
+
+.sc-freeze.out {
+  opacity: 0;
+}
+
 .sc-vignette {
   position: absolute;
   inset: 0;

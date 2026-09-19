@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ShowcaseConfig, ShowcaseHandle } from "./types";
 import { setThemeCookie } from "@/lib/theme";
 import { usePersistedState } from "@/lib/usePersistedState";
@@ -61,6 +61,13 @@ export default function ShowcaseStage({
   const zoomOutRef = useRef<HTMLButtonElement | null>(null);
   const zoomModeRef = useRef<HTMLButtonElement | null>(null);
   const labelRefs = useRef<Array<HTMLDivElement | null>>([]);
+  /** 上一帧的冻结图：换车型时当背景板，顶到新场景就绪再淡出（避免中间露出空场） */
+  const freezeRef = useRef<HTMLCanvasElement | null>(null);
+  /** 最新一次传入的 config：主 effect 只在「外壳」变化时重建，取最新值走这里，避免把 config 放进依赖 */
+  const configRef = useRef(config);
+  configRef.current = config;
+  /** 已经应用到场景里的车型签名：和当前 config 不一致时走原地换车（不重建场景） */
+  const appliedModelRef = useRef<string | null>(null);
 
   const [phase, setPhase] = useState(0);
   const [textVisible, setTextVisible] = useState(true);
@@ -106,18 +113,53 @@ export default function ShowcaseStage({
     }, 200);
   }, []);
 
+  /**
+   * 车型签名：素材 + 车型参数。只有这一串变化时走「原地换车」（引擎不重建、镜头不动、不出现空白期）；
+   * 其余字段（镜头 / 灯光 / 地面 / 文案）变了才重建整个场景。
+   */
+  const modelKey = useMemo(() => JSON.stringify({ a: config.assets.model, m: config.model ?? null }), [config]);
+  /** 外壳签名 = 去掉车型之后剩下的配置：变了才需要重建场景 */
+  const shellKey = useMemo(() => {
+    // 车型相关的两块（素材地址 + 车型参数）都要排掉，只留镜头 / 灯光 / 地面 / 文案这些「外壳」
+    const { assets, model: _model, ...rest } = config;
+    void _model;
+    return JSON.stringify({ ...rest, assets: { ...assets, model: null } });
+  }, [config]);
+
   useEffect(() => {
     const wrap = canvasWrapRef.current;
     const stage = stageRef.current;
     const scroll = scrollRef.current;
     if (!wrap || !stage || !scroll) return;
+    const cfg = configRef.current;
 
     // 每次实例化都新建 canvas：WebGL 上下文一旦丢失，同一个 canvas 上的上下文无法复活，
     // 复用 canvas 会导致「重建也还是白屏」。换新 canvas 才是真正可恢复的。
     const canvas = document.createElement("canvas");
     canvas.className = "sc-canvas";
-    canvas.setAttribute("aria-label", `${config.watermark ?? "3D"} 3D 展示`);
+    canvas.setAttribute("aria-label", `${cfg.watermark ?? "3D"} 3D 展示`);
     wrap.appendChild(canvas);
+
+    // 换车型 / 重建：把上一帧冻结图铺在画布之上、HUD 之下，新场景就绪后淡出
+    const frozen = freezeRef.current;
+    freezeRef.current = null;
+    /** 铺在画布上的冻结帧（可能正在淡出，所以一直留着引用，卸载时兜底移除） */
+    let freezeEl: HTMLCanvasElement | null = null;
+    let freezeTimer: number | null = null;
+    let freezeFadeTimer: number | null = null;
+    const dropFreeze = () => {
+      if (!freezeEl || freezeEl.classList.contains("out")) return;
+      freezeEl.classList.add("out");
+      const el = freezeEl;
+      freezeFadeTimer = window.setTimeout(() => el.remove(), 500);
+    };
+    if (frozen) {
+      freezeEl = frozen;
+      freezeEl.className = "sc-freeze";
+      wrap.after(freezeEl);
+      // 兜底：模型一直没就绪（加载失败 / 上下文异常）也不能让冻结帧一直盖着
+      freezeTimer = window.setTimeout(dropFreeze, 10000);
+    }
 
     let cancelled = false;
     let handle: ShowcaseHandle | null = null;
@@ -129,8 +171,8 @@ export default function ShowcaseStage({
         handle = createShowcaseScene({
           canvas,
           config: degraded
-            ? { ...config, model: { ...config.model, maxTextureSize: 2048 } }
-            : config,
+            ? { ...cfg, model: { ...cfg.model, maxTextureSize: 2048 } }
+            : cfg,
           // 置顶机位：引擎直接从置顶进度起步，不会先落到开场机位再弹回来
           startProgress: pinnedPoseRef.current?.p ?? 0,
           hud: {
@@ -147,12 +189,15 @@ export default function ShowcaseStage({
             zoomIn: zoomInRef.current,
             zoomOut: zoomOutRef.current,
             zoomMode: zoomModeRef.current,
-            labels: (config.parts ?? [])
+            labels: (cfg.parts ?? [])
               .map((part, i) => ({ el: labelRefs.current[i], from: part.from, pos: part.pos }))
               .filter((item): item is { el: HTMLDivElement; from: number; pos: [number, number, number] } => Boolean(item.el))
           },
           onProgress: (ratio) => setLoadRatio(ratio),
-          onReady: () => setReady(true),
+          onReady: () => {
+            setReady(true);
+            dropFreeze();
+          },
           onPhase: handlePhase,
           onRacing: (on) => setRacing(on),
           onContextLost: () => {
@@ -172,6 +217,16 @@ export default function ShowcaseStage({
           handle.applyPose(pinned);
         }
         handleRef.current = handle;
+        // 记下这一轮挂的是哪辆车：之后 config 里只有车型变了就原地换车，不重建场景
+        appliedModelRef.current = JSON.stringify({ a: cfg.assets.model, m: cfg.model ?? null });
+        const now = configRef.current;
+        const nowKey = JSON.stringify({ a: now.assets.model, m: now.model ?? null });
+        if (nowKey !== appliedModelRef.current) {
+          // 创建期间用户已经切了车：等引擎挂完这一次再补一次原地换车
+          void handle.setModel({ asset: now.assets.model, model: now.model }).then((ok) => {
+            if (ok) appliedModelRef.current = nowKey;
+          });
+        }
         // 开发环境留一个调试句柄，方便按进度截图与排查（生产不会写）
         if (process.env.NODE_ENV !== "production") {
           (window as unknown as { __mcl?: ShowcaseHandle | null }).__mcl = handle;
@@ -189,6 +244,13 @@ export default function ShowcaseStage({
 
     return () => {
       cancelled = true;
+      // 先冻结这一帧：下一个实例（换车型 / 重建）拿它当背景板，避免中间露出空场
+      try {
+        const shot = handle?.snapshot();
+        if (shot) freezeRef.current = shot;
+      } catch {
+        /* 快照失败就不铺背景板，只影响过渡观感 */
+      }
       const win = window as unknown as { __mcl?: ShowcaseHandle | null; __mclDiag?: unknown };
       if (process.env.NODE_ENV !== "production") {
         // 保留最后一次诊断快照，白屏之后仍能取到数据
@@ -201,11 +263,32 @@ export default function ShowcaseStage({
       }
       handle?.dispose();
       canvas.remove();
+      if (freezeTimer !== null) window.clearTimeout(freezeTimer);
+      if (freezeFadeTimer !== null) window.clearTimeout(freezeFadeTimer);
+      freezeEl?.remove();
+      freezeEl = null;
       handle = null;
       handleRef.current = null;
       if (fadeTimer.current) window.clearTimeout(fadeTimer.current);
     };
-  }, [config, handlePhase, rebuild, degraded, retry]);
+    // 依赖里放的是「外壳签名」：只有镜头 / 灯光 / 地面 / 文案这些变了才重建场景，
+    // 单纯换车型走下面的 setModel（原地换车，不重建、不空白）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shellKey, handlePhase, rebuild, degraded, retry]);
+
+  // 换车型：原地换车（引擎、镜头、地面、HUD 都不动），切换过程没有空白期
+  useEffect(() => {
+    if (appliedModelRef.current === null || appliedModelRef.current === modelKey) return;
+    const handle = handleRef.current;
+    if (!handle) return;
+    const previous = appliedModelRef.current;
+    appliedModelRef.current = modelKey;
+    const next = configRef.current;
+    void handle.setModel({ asset: next.assets.model, model: next.model }).then((ok) => {
+      // 失败（素材取不到 / 解析失败）就把标记退回去，下次变更还能重试
+      if (!ok) appliedModelRef.current = previous;
+    });
+  }, [modelKey]);
 
   // 刷新时浏览器会恢复上次的滚动位置（会话恢复、从别的页面回来、重新打开标签页都会触发），
   // 而这次恢复常常发生在我们重置之后 —— 于是「刷新」有时停在当时那个机位（车头朝左的侧视），

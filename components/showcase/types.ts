@@ -355,8 +355,15 @@ export interface ShowcaseOptions {
 
 export interface ShowcaseHandle {
   dispose: () => void;
+  /** 冻结当前这一帧（换车型时当背景板用）：返回一张 2D canvas，取不到就返回 null */
+  snapshot: () => HTMLCanvasElement | null;
   /** 切换深浅色：深色＝夜间隧道，浅色＝明亮摄影棚 */
   setTheme: (theme: "dark" | "light") => void;
+  /**
+   * 原地换车：只换车身，镜头 / 地面 / 环境 / HUD 都不动（不重建场景，所以切换不会有空白期）。
+   * 素材会走同一套缓存；解析失败时旧车留在画面上并返回 false。
+   */
+  setModel: (next: { asset: string; model?: ShowcaseConfig["model"] }) => Promise<boolean>;
   /** 360° 环视：自动绕车旋转（再调一次关闭并回到叙事机位） */
   setOrbit: (on: boolean) => void;
   /** 影棚：3D 场景切到明亮摄影棚（不改深浅色主题） */

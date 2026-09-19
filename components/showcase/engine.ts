@@ -20,7 +20,13 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { fetchAssetBuffer } from "./assetCache";
-import type { ShowcaseCameraKey, ShowcaseConfig, ShowcaseHandle, ShowcaseLightBar, ShowcaseOptions } from "./types";
+import type {
+  ShowcaseCameraKey,
+  ShowcaseConfig,
+  ShowcaseHandle,
+  ShowcaseLightBar,
+  ShowcaseOptions
+} from "./types";
 
 /** 配置里的正则既能写字符串（可跨服务端/客户端传递）也能直接给 RegExp */
 function toRegExp(value: string | RegExp | undefined, fallback: RegExp) {
@@ -30,6 +36,37 @@ function toRegExp(value: string | RegExp | undefined, fallback: RegExp) {
 
 export type { ShowcaseHandle, ShowcaseHud, ShowcaseOptions } from "./types";
 
+/**
+ * 车型参数归一化：换车型时也要再跑一遍（原地换车只换这一块），所以单独抽出来。
+ * 只补车型相关的字段，不碰镜头 / 灯光 / 地面。
+ */
+function normalizeModel(model: ShowcaseConfig["model"]) {
+  return {
+      length: model?.length ?? 5.6,
+      yaw: model?.yaw ?? 0,
+      pitch: model?.pitch ?? 0,
+      // 模型自带的发光材质（车灯 / 仪表 / 玻璃细节）统一压一档：
+      // 有的模型 emissiveStrength 高达 2 以上，叠上泛光就是一团白，压到 0.45 更像自然光
+      emissiveIntensity: model?.emissiveIntensity ?? 0.45,
+      // 清漆层粗糙度下限：模型给 0.04 就是一面镜子 —— 灯光在车身上会聚成一条死亮的光带
+      // （叠上泛光就是那团「大光晕」）。抬太高又会让高光摊成一片发虚的绒毛，
+      // 0.3 是这两者之间：高光仍看得出边界，但不再是死白的斑块
+      clearcoatRoughness: model?.clearcoatRoughness ?? 0.3,
+      // 环境反射强度：1.25 时夜景里的小亮点会被放大成光晕，1.0 更接近实车漆面
+      envMapIntensity: model?.envMapIntensity ?? 1,
+      wheelPattern: toRegExp(model?.wheelPattern, /rim|tread|tyre/i),
+      wheelAxis: model?.wheelAxis ?? "x",
+      wheelLateral: model?.wheelLateral ?? "x",
+      wheelLongitudinal: model?.wheelLongitudinal ?? "y",
+      maxTextureSize: model?.maxTextureSize ?? 4096,
+      materialRules: (model?.materialRules ?? []).map((rule) => ({
+        match: toRegExp(rule.match, /$^/),
+        metalness: rule.metalness,
+        roughness: rule.roughness
+      }))
+  };
+}
+
 /** 把 config 里的可选值补齐成引擎内部使用的常量 */
 function normalizeConfig(config: ShowcaseConfig) {
   const ring = config.ground?.ring;
@@ -37,30 +74,7 @@ function normalizeConfig(config: ShowcaseConfig) {
   return {
     assets: config.assets,
     watermark: config.watermark ?? "SHOWCASE",
-    model: {
-      length: config.model?.length ?? 5.6,
-      yaw: config.model?.yaw ?? 0,
-      pitch: config.model?.pitch ?? 0,
-      // 模型自带的发光材质（车灯 / 仪表 / 玻璃细节）统一压一档：
-      // 有的模型 emissiveStrength 高达 2 以上，叠上泛光就是一团白，压到 0.45 更像自然光
-      emissiveIntensity: config.model?.emissiveIntensity ?? 0.45,
-      // 清漆层粗糙度下限：模型给 0.04 就是一面镜子 —— 灯光在车身上会聚成一条死亮的光带
-      // （叠上泛光就是那团「大光晕」）。抬太高又会让高光摊成一片发虚的绒毛，
-      // 0.3 是这两者之间：高光仍看得出边界，但不再是死白的斑块
-      clearcoatRoughness: config.model?.clearcoatRoughness ?? 0.3,
-      // 环境反射强度：1.25 时夜景里的小亮点会被放大成光晕，1.0 更接近实车漆面
-      envMapIntensity: config.model?.envMapIntensity ?? 1,
-      wheelPattern: toRegExp(config.model?.wheelPattern, /rim|tread|tyre/i),
-      wheelAxis: config.model?.wheelAxis ?? "x",
-      wheelLateral: config.model?.wheelLateral ?? "x",
-      wheelLongitudinal: config.model?.wheelLongitudinal ?? "y",
-      maxTextureSize: config.model?.maxTextureSize ?? 4096,
-      materialRules: (config.model?.materialRules ?? []).map((rule) => ({
-        match: toRegExp(rule.match, /$^/),
-        metalness: rule.metalness,
-        roughness: rule.roughness
-      }))
-    },
+    model: normalizeModel(config.model),
     environment: {
       nightToDay: config.environment?.nightToDay ?? [0.72, 0.88],
       dayIntensity: config.environment?.dayIntensity ?? 1
@@ -1384,23 +1398,25 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
 
   // 车模走 IndexedDB 缓存：首次下载并写入，之后刷新直接读本地，不再重新下 20 MB
-  void (async () => {
-    let buffer: ArrayBuffer;
-    try {
-      const cached = await fetchAssetBuffer(CFG.assets.model, (ratio) => reportProgress(ratio));
-      buffer = cached.buffer;
-      logEvent(`车模来源 ${cached.mode}${cached.fromCache ? "（本地命中）" : "（网络下载）"}`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err ?? "");
-      options.onError?.(message || "模型加载失败");
-      return;
-    }
-    const loader = new GLTFLoader();
-    loader.parse(
-      buffer,
-      "",
-      (gltf) => {
-      const car = gltf.scene;
+  const loader = new GLTFLoader();
+  const parseCar = (buffer: ArrayBuffer) =>
+    new Promise<THREE.Object3D>((resolve, reject) => {
+      loader.parse(
+        buffer,
+        "",
+        (gltf) => resolve(gltf.scene),
+        (err: unknown) => reject(err instanceof Error ? err : new Error(String(err ?? "模型解析失败")))
+      );
+    });
+
+  /** 当前挂在场景里的车（换车型时用它撤掉旧车） */
+  let mountedCar: THREE.Object3D | null = null;
+
+  /**
+   * 把一辆车挂进 carRoot：尺寸归一化、材质规则、贴图上限、清漆 / 发光、拆轮子、车道朝向、包围盒。
+   * 首次加载与换车型共用这个函数 —— 换车型只是「撤旧车 + 挂新车」，场景 / 镜头 / 地面 / HUD 都不重建。
+   */
+  function mountCar(car: THREE.Object3D) {
       car.visible = !off.has("car");
       // 不同来源的模型朝向不一致：preset 里给 yaw / pitch 做一次性修正
       if (CFG.model.yaw) car.rotation.y += (CFG.model.yaw * Math.PI) / 180;
@@ -1563,20 +1579,65 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         const dbgSize = dbgBox.getSize(new THREE.Vector3());
         carDebugBox = [dbgSize.x, dbgSize.y, dbgSize.z].map((v) => +v.toFixed(2));
       }
-      carRoot.position.copy(keepPos);
-      carRoot.rotation.copy(keepRot);
-      carRoot.updateMatrixWorld(true);
-      buildShardField(car);
+    carRoot.position.copy(keepPos);
+    carRoot.rotation.copy(keepRot);
+    carRoot.updateMatrixWorld(true);
+    buildShardField(car);
+    mountedCar = car;
+  }
+
+  /** 撤掉上一辆车：车身 / 拆出来的轮子 / 几何体 / 材质 / 模型自带贴图全部释放，并清空与车身绑定的缓存 */
+  function unmountCar(car: THREE.Object3D | null) {
+    if (!car) return;
+    car.parent?.remove(car);
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    car.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      if (mesh.geometry) geometries.add(mesh.geometry);
+      (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((m) => {
+        if (m) materials.add(m);
+      });
+    });
+    geometries.forEach((g) => g.dispose());
+    materials.forEach((m) => {
+      // 只释放模型自带的贴图：环境贴图是场景共享的，跟着材质 dispose 会把新车也一起弄花
+      const maps = m as unknown as Record<string, THREE.Texture | null | undefined>;
+      ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap"].forEach((key) => maps[key]?.dispose?.());
+      m.dispose();
+    });
+    wheelPivots.length = 0;
+    bodyMaterials.length = 0;
+    carWheelGroups = 0;
+    carMaterialNames = [];
+    carMeshNames = [];
+    carRawBox = [];
+    carDebugBox = [];
+    carLocalBox.makeEmpty();
+    laneHeadingDeg = 0;
+  }
+
+  /** 取素材（走 IndexedDB 缓存）→ 解析 → 挂车；首次加载与换车型共用一条路径 */
+  async function loadCar(asset: string, model: ShowcaseConfig["model"], onRatio?: (ratio: number) => void) {
+    const cached = await fetchAssetBuffer(asset, onRatio);
+    logEvent(`车模来源 ${cached.mode}${cached.fromCache ? "（本地命中）" : "（网络下载）"}`);
+    const car = await parseCar(cached.buffer);
+    mountCar(car);
+    return car;
+  }
+
+  void (async () => {
+    try {
+      await loadCar(CFG.assets.model, CFG.model, (ratio) => reportProgress(ratio));
       loadDone += 1;
       reportProgress();
       resize();
       render(progress(), 1 / 60);
-      },
-      (err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err ?? "");
-        options.onError?.(message || "模型加载失败");
-      }
-    );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err ?? "");
+      options.onError?.(message || "模型加载失败");
+    }
   })();
 
   /* ---------- 7) 滚动编排 ---------- */
@@ -2618,6 +2679,51 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     },
     setTheme: (next: "dark" | "light") => {
       theme = next;
+    },
+    /**
+     * 原地换车：只换车身，镜头 / 地面 / 环境 / HUD 全不动 —— 不重建 WebGL 场景，所以切换过程没有空白期。
+     * 素材通常已经被预热进缓存，这里剩下的主要就是解析时间；解析完成后在同一个任务里撤旧车、挂新车。
+     */
+    setModel: async (next: { asset: string; model?: ShowcaseConfig["model"] }) => {
+      try {
+        const cached = await fetchAssetBuffer(next.asset);
+        const nextCar = await parseCar(cached.buffer);
+        logEvent(`换车 ${next.asset}：来源 ${cached.mode}${cached.fromCache ? "（本地命中）" : "（网络下载）"}`);
+        const previous = mountedCar;
+        mountedCar = null;
+        // 先把配置换成新车（车长 / 朝向 / 材质规则 / 轮子都读 CFG.model），再撤旧挂新
+        CFG.model = normalizeModel(next.model);
+        CFG.assets = { ...CFG.assets, model: next.asset };
+        unmountCar(previous);
+        mountCar(nextCar);
+        render(progress(), 1 / 60);
+        return true;
+      } catch (err) {
+        // 失败就把旧车留在画面上（mountedCar 没动），只报错
+        options.onError?.(err instanceof Error ? err.message : String(err ?? "换车失败"));
+        return false;
+      }
+    },
+    /**
+     * 冻结当前这一帧（换车型时当背景板用）：先补渲染一帧，再同步拷进一张 2D canvas。
+     * 不能直接把 WebGL canvas 留在页面上当背景 —— dispose() 里的 forceContextLoss 会把它清成黑色。
+     * 拷贝宽度封顶 1600：背景板不需要全分辨率，省内存也省拷贝时间。
+     */
+    snapshot: () => {
+      try {
+        if (renderer.getContext().isContextLost()) return null;
+        render(progress(), 1 / 60);
+        const scale = Math.min(1, 1600 / Math.max(1, canvas.width));
+        const copy = document.createElement("canvas");
+        copy.width = Math.max(16, Math.round(canvas.width * scale));
+        copy.height = Math.max(16, Math.round(canvas.height * scale));
+        const ctx2d = copy.getContext("2d");
+        if (!ctx2d) return null;
+        ctx2d.drawImage(canvas, 0, 0, copy.width, copy.height);
+        return copy;
+      } catch {
+        return null;
+      }
     },
     /** 360° 环视：自动绕车一圈，再点一次平滑回到叙事机位 */
     setOrbit: (on: boolean) => {
