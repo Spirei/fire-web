@@ -574,8 +574,16 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
                 {pinnedPose ? "已置顶" : "置顶机位"}
               </button>
               {pinnedPose && (
-                <button type="button" className="sc-pill sc-pin sc-pin-clear" onClick={clearPinnedPose} title="解除置顶，回到开场机位">
-                  解除
+                <button
+                  type="button"
+                  className="sc-pill sc-pin sc-pin-clear"
+                  onClick={clearPinnedPose}
+                  title="解除置顶，回到开场机位"
+                  aria-label="解除置顶"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
                 </button>
               )}
             </div>
