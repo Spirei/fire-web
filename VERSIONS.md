@@ -72,6 +72,12 @@
 
 ### 修复
 
+#### 车模缓存改用 Cache Storage（HTTPS）并修掉入库失败
+- 线上是 HTTPS（安全上下文），缓存改为优先走 Cache Storage（浏览器统一做容量管理与 LRU 淘汰，将来接 Service Worker 也能直接复用），只有局域网 HTTP 访问才回退 IndexedDB。
+- 入库踩到一个坑：直接把下载中的流式响应 put 进 Cache Storage 会报 “Cache.put() encountered a network error”，23 MB 的车模必失败；现在改成先用读到的字节流构造 Response 再 put，并保存 content-type。
+- 缓存键统一用绝对 URL —— 之前 prune 拿相对地址比对，会把刚写进去的条目当旧版本删掉。
+- 实测（安全上下文）：首次访问下载 20.77 MB 并写入 Cache Storage；刷新时 debug 日志为「车模来源 cache-api（本地命中）」，网络里完全没有 GLB 请求。
+
 #### 首页车模改为持久缓存：刷新不再重下 20MB
 - 实测刷新时车模整包重下（20.8 MB / 2.4 秒）：HTTP 缓存只对两张 1.6 MB 的 HDR 生效（304、0 字节），车模即便加了 immutable 也没被浏览器留住，而局域网 HTTP 又拿不到 Cache API。
 - 新增 components/showcase/assetCache.ts：用 IndexedDB 按 URL（含 ?v= 版本号）保存车模字节流，首次访问下载后静默写入，之后刷新直接读本地、完全不发请求；版本号变化时清掉旧条目；读写失败自动回退成普通请求。

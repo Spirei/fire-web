@@ -1262,7 +1262,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     try {
       const cached = await fetchAssetBuffer(CFG.assets.model, (ratio) => reportProgress(ratio));
       buffer = cached.buffer;
-      if (cached.fromCache) logEvent("车模命中本地缓存");
+      logEvent(`车模来源 ${cached.mode}${cached.fromCache ? "（本地命中）" : "（网络下载）"}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err ?? "");
       options.onError?.(message || "模型加载失败");
