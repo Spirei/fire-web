@@ -6,7 +6,9 @@ import path from "path";
 const MIME: Record<string, string> = {
   jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
   gif: "image/gif", svg: "image/svg+xml", ico: "image/x-icon", json: "application/json",
-  html: "text/html", txt: "text/plain", woff: "font/woff", woff2: "font/woff2", pdf: "application/pdf"
+  html: "text/html", txt: "text/plain", woff: "font/woff", woff2: "font/woff2", pdf: "application/pdf",
+  // 首页背景音乐从 uploads 卷里播（mp3 等音频素材不进公开仓库）
+  mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", wav: "audio/wav"
 };
 
 /** 动态服务上传目录 public/uploads/…：

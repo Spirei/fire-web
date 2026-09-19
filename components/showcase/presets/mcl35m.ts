@@ -18,6 +18,8 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     envDay: "/mclaren/studio_small_09_1k.hdr"
   },
   watermark: "FORMULA",
+  // 背景音乐放在 uploads 卷（不进公开仓库、也不进镜像），部署时把 mp3 放进服务器 uploads 目录即可
+  music: "/uploads/mclaren/theme.mp3",
 
   model: {
     length: 5.6,

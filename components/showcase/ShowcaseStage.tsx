@@ -37,6 +37,9 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
   const [ready, setReady] = useState(false);
   const [racing, setRacing] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [musicOn, setMusicOn] = useState(false);
+  const [musicReady, setMusicReady] = useState(true);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const handleRef = useRef<ShowcaseHandle | null>(null);
   // WebGL 上下文丢了就重建一次场景（重建计数用作 key，触发重新挂载）
   const [rebuild, setRebuild] = useState(0);
@@ -180,6 +183,100 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
     handleRef.current?.setTheme(next);
   }, []);
 
+  // 背景音乐：默认不播放（浏览器不允许自动播放），点图标才播；循环、音量 0.45。
+  // 开关记在 localStorage，下次进来会在首次交互后自动续播。
+  const MUSIC_KEY = "fire:showcase:music";
+  const ensureAudio = useCallback(() => {
+    if (audioRef.current) return audioRef.current;
+    const audio = new Audio(config.music ?? "/uploads/mclaren/theme.mp3");
+    audio.loop = true;
+    audio.volume = 0.45;
+    audio.preload = "none";
+    audio.addEventListener("error", () => {
+      setMusicReady(false);
+      setMusicOn(false);
+    });
+    audioRef.current = audio;
+    // 开发环境留个引用，方便在控制台/自动化里检查播放状态
+    if (process.env.NODE_ENV !== "production") {
+      (window as unknown as { __mclAudioRef?: HTMLAudioElement }).__mclAudioRef = audio;
+    }
+    return audio;
+  }, [config.music]);
+
+  const startMusic = useCallback(async () => {
+    const audio = ensureAudio();
+    try {
+      await audio.play();
+      setMusicOn(true);
+      try {
+        localStorage.setItem(MUSIC_KEY, "on");
+      } catch {
+        /* 忽略 */
+      }
+    } catch {
+      setMusicOn(false);
+    }
+  }, [ensureAudio]);
+
+  const stopMusic = useCallback(() => {
+    audioRef.current?.pause();
+    setMusicOn(false);
+    try {
+      localStorage.setItem(MUSIC_KEY, "off");
+    } catch {
+      /* 忽略 */
+    }
+  }, []);
+
+  const toggleMusic = useCallback(() => {
+    if (musicOn) stopMusic();
+    else void startMusic();
+  }, [musicOn, startMusic, stopMusic]);
+
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(MUSIC_KEY);
+    } catch {
+      /* 忽略 */
+    }
+    if (saved !== "on") return;
+    // 上次开着：等第一次用户交互再续播（否则被自动播放策略拦下）
+    const resume = () => {
+      void startMusic();
+      window.removeEventListener("pointerdown", resume);
+      window.removeEventListener("keydown", resume);
+    };
+    window.addEventListener("pointerdown", resume, { once: true });
+    window.addEventListener("keydown", resume, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", resume);
+      window.removeEventListener("keydown", resume);
+    };
+  }, [startMusic]);
+
+  useEffect(() => {
+    // 切走标签页先暂停，回来再续上，避免后台一直响
+    const onHidden = () => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      if (document.hidden) {
+        if (!audio.paused) {
+          audio.pause();
+          audio.dataset.wasPlaying = "1";
+        }
+      } else if (audio.dataset.wasPlaying === "1" && musicOn) {
+        audio.dataset.wasPlaying = "";
+        void audio.play().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", onHidden);
+    return () => document.removeEventListener("visibilitychange", onHidden);
+  }, [musicOn]);
+
+  useEffect(() => () => audioRef.current?.pause(), []);
+
   const current = config.phases[phase] ?? config.phases[0];
   // 界面文案：默认英文，preset 里传 ui 就按传入的显示（本站首页已改中文）
   const ui = {
@@ -217,6 +314,29 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
 
           <div className="sc-hud">
             <div className="sc-row sc-tools">
+              {musicReady && (
+                <button
+                  type="button"
+                  className={`sc-tool${musicOn ? " on" : ""}`}
+                  onClick={toggleMusic}
+                  title={musicOn ? "关闭背景音乐" : "播放背景音乐"}
+                  aria-label={musicOn ? "关闭背景音乐" : "播放背景音乐"}
+                  aria-pressed={musicOn}
+                >
+                  {/* 音符图标：播放时实心、暂停时描边，配色跟随深浅色主题 */}
+                  {musicOn ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M14 17V4.5c2.6.2 4.4 1.2 4.4 2.9" />
+                      <circle cx="10.6" cy="17" r="3.4" fill="currentColor" stroke="none" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M14 17V4.5c2.6.2 4.4 1.2 4.4 2.9" />
+                      <circle cx="10.6" cy="17" r="3.4" />
+                    </svg>
+                  )}
+                </button>
+              )}
               <button
                 type="button"
                 className="sc-tool"

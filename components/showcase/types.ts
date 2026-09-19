@@ -75,6 +75,8 @@ export interface ShowcaseConfig {
   };
   /** 仪表盘水印文字 */
   watermark?: string;
+  /** 背景音乐地址（放在 uploads 卷里，不随公开仓库分发） */
+  music?: string;
   model?: {
     /** 归一化后的车长（米） */
     length?: number;
