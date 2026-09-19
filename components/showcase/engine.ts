@@ -1295,7 +1295,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 速度只由冲刺（按住空格 / 按住按钮）驱动：参考视频里滚动的过程中表一直是 000，
     // 只有在发车后才爬升，松开后回落 —— 滚动只负责镜头与舞台。
     const targetSpeed = racing ? CFG.speed.maxSpeed * 1.02 : 0;
-    speed += (targetSpeed - speed) * clamp(dt * (racing ? 2.4 : 1.6), 0, 1);
+    speed += (targetSpeed - speed) * clamp(dt * (racing ? 2.4 : 1.0), 0, 1);
     const sp = clamp(speed / CFG.speed.maxSpeed, 0, 1);
     racingAmt += ((racing ? 1 : 0) - racingAmt) * clamp(dt * 2.2, 0, 1);
     if (racing !== lastRacing) {
@@ -1360,8 +1360,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     carRoot.position.y = Math.sin(elapsed * 0.7) * 0.004 - sp * 0.022;
     carRoot.rotation.z = -sp * 0.014;
     carRoot.rotation.y = Math.sin(elapsed * 0.25) * 0.006 + sp * 0.02;
-    // 轮胎只在冲刺（按住空格 / 按住按钮）时转，纯滚动浏览时保持静止
-    const spin = speed * 0.62 * dt * racingAmt;
+    // 轮胎跟着「当前车速」转：静止浏览时车速是 0 所以不转；
+    // 松手后画面会看到轮胎继续带着转、随车速一起慢下来才停（参考视频就是这样）。
+    const spin = speed * 0.62 * dt;
     contact.position.z = carTravel;   // 接触阴影跟着车走，不然车会像浮在空中
     wheelPivots.forEach((parts) =>
       parts.forEach((w) => {
@@ -2041,6 +2042,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     zoom: +zoom.toFixed(2),
     yaw: +userYaw.toFixed(1),
     pitch: +userPitch.toFixed(2),
+    wheelAngle: wheelPivots[0]?.[0] ? +wheelPivots[0][0].angle.toFixed(2) : 0,
     buffer: [canvas.width, canvas.height],
     reflection: reflectRT.width,
     textures: renderer.info.memory.textures,

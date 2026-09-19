@@ -294,6 +294,8 @@ export interface ShowcaseHandle {
     /** 用户拖拽的偏航（度）与俯仰偏移（弧度） */
     yaw: number;
     pitch: number;
+    /** 轮胎累计转角（弧度），用来确认松手后还在带着转 */
+    wheelAngle: number;
     /** 看门狗触发次数（软恢复 / 重建），排查白屏用 */
     watchdogHits: number;
     rebuilds: number;
