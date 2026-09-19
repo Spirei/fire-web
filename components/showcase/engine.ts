@@ -1622,13 +1622,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     floorUniforms.uTime.value = elapsed;
     floorUniforms.uSpeed.value = sps;
     floorUniforms.uFlow.value = sps * sps * (CFG.speed.floorFlow ?? 1);
-    // 浅色主题下地面保持深色工作台：反射降下来，否则亮背景经法线扰动会变成一片噪点灰
-    // 冲刺（隧道里）没有倒影：反射强度随速度衰减到 0，地面变成一块暗面
-    floorUniforms.uReflectIntensity.value = (light ? 0.6 : CFG.ground.reflectIntensity) * (1 - clamp(sps * 2.0, 0, 1));
-    // 浅色主题：反射与法线扰动都压低，地面保持干净的深色工作台
-    // 浅色主题下反射再压一档、模糊级别再高一级，避免亮背景经法线扰动形成麻点
-    floorUniforms.uMixBase.value = light ? 0.32 : 0.46;
-    floorUniforms.uMixFres.value = light ? 0.7 : 1.05;
+    // 冲刺（隧道里）没有倒影：反射强度随速度衰减到 0，地面变成一块暗面。
+    // 浅色/影棚下反射不再打折（原来 0.6 倍 + 与底色五五开，车身倒影会比车身暗一大截、颜色也对不上）
+    floorUniforms.uReflectIntensity.value = (light ? 1.0 : CFG.ground.reflectIntensity) * (1 - clamp(sps * 2.0, 0, 1));
+    // 浅色/影棚：反射占比给足，车身与倒影同色；法线扰动仍压低，避免亮背景经扰动出现麻点
+    floorUniforms.uMixBase.value = light ? 0.5 : 0.46;
+    floorUniforms.uMixFres.value = light ? 0.9 : 1.05;
     floorUniforms.uNormalAmount.value = light ? 0.12 : 0.18;
     floorUniforms.uMipBias.value = light ? 1.35 : 1;
     // 天际线接色：浅色背景（#dfe3e8 一带）与夜间背景（近黑）各自接自己的底色
