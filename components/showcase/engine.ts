@@ -421,6 +421,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     generateMipmaps: true,
     minFilter: THREE.LinearMipmapLinearFilter
   });
+  // 掠射角下地面会把反射贴图拉得很长：没有各向异性过滤时就会出现大块阶梯锯齿
+  // （浅色模式亮底最明显），这里把各向异性开到设备上限
+  reflectRT.texture.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy());
   const mirrorCamera = new THREE.PerspectiveCamera();
   const reflectorPlane = new THREE.Plane();
   const normalV = new THREE.Vector3();
@@ -435,6 +438,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   floorUniforms.tReflect.value = reflectRT.texture;
 
   function updateReflection() {
+    // 关键：镜面相机要用「本帧」的镜头矩阵。camera.matrixWorld 只在 renderer.render() 里更新，
+    // 不手动补这一下，倒影就会一直用上一帧的镜头 —— 静止时看不出来，
+    // 连续旋转时整块倒影会落后一帧、像被甩出去的残影（浅色亮底最明显）。
+    camera.updateMatrixWorld();
     if (off.has("reflect")) return;
     reflectorWorldPos.setFromMatrixPosition(floor.matrixWorld);
     cameraWorldPos.setFromMatrixPosition(camera.matrixWorld);
@@ -1495,6 +1502,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let orbitYaw = 0;
   /** 影棚：环境切到明亮摄影棚（与深浅色主题独立，供「影棚」胶囊使用） */
   let studioOn = false;
+  /** 镜头快速转动时倒影淡出（0=静止全强度，1=转动最快时几乎关掉），避免倒影扫过去像残影 */
+  let motionFade = 0;
+  let lastAzRad = Number.NaN;
   // 用户缩放：滚轮（⌘/Ctrl + 滚轮或触控板捏合）与按钮都改这个倍率，用来放大看细节
   const MIN_ZOOM = CFG.zoom.min;
   const MAX_ZOOM = CFG.zoom.max;
@@ -1573,6 +1583,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const azBase = camState.az + userYaw + (orbitYaw * 180) / Math.PI;
     const azDelta = ((CFG.speed.chaseAzimuth - azBase + 540) % 360) - 180;
     const az = ((azBase + azDelta * racingAmt * 0.85) * Math.PI) / 180;
+    // 镜头角速度（弧度/秒）→ 倒影淡出系数：1.6 rad/s（约 92°/秒）视为最快
+    if (Number.isFinite(lastAzRad) && dt > 0) {
+      const azSpeed = Math.abs(az - lastAzRad) / dt;
+      const target = clamp(azSpeed / 1.6, 0, 1);
+      motionFade += (target - motionFade) * clamp(dt * 6, 0, 1);
+    }
+    lastAzRad = az;
     const follow = carTravel * racingAmt;   // 轻微跟随；跟太多车就一直很大，隧道感会消失
     // 冲刺时机位整体右移（镜头与注视点同向平移，视线方向不变）：车因此落在画面左侧、
     // 光条汇聚点在其右 —— 参考视频就是这个构图，之前车正好压在汇聚点上，左右关系是反的
@@ -1651,12 +1668,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     floorUniforms.uFlow.value = sps * sps * (CFG.speed.floorFlow ?? 1);
     // 冲刺（隧道里）没有倒影：反射强度随速度衰减到 0，地面变成一块暗面。
     // 浅色/影棚下反射不再打折（原来 0.6 倍 + 与底色五五开，车身倒影会比车身暗一大截、颜色也对不上）
-    floorUniforms.uReflectIntensity.value = (light ? 1.0 : CFG.ground.reflectIntensity) * (1 - clamp(sps * 2.0, 0, 1));
+    floorUniforms.uReflectIntensity.value =
+      (light ? 1.0 : CFG.ground.reflectIntensity) * (1 - clamp(sps * 2.0, 0, 1)) * (1 - motionFade * 0.92);
     // 浅色/影棚：反射占比给足，车身与倒影同色；法线扰动仍压低，避免亮背景经扰动出现麻点
-    floorUniforms.uMixBase.value = light ? 0.5 : 0.46;
-    floorUniforms.uMixFres.value = light ? 0.9 : 1.05;
+    floorUniforms.uMixBase.value = light ? 0.62 : 0.46;
+    floorUniforms.uMixFres.value = light ? 0.5 : 1.05;
     floorUniforms.uNormalAmount.value = light ? 0.07 : 0.1;
-    floorUniforms.uMipBias.value = light ? 0.8 : 0.55;
+    floorUniforms.uMipBias.value = light ? 0.9 : 1.1;
     // 天际线接色：浅色背景（#dfe3e8 一带）与夜间背景（近黑）各自接自己的底色
     floorUniforms.uHorizon.value.set(light ? 0xe0e4e9 : 0x090a0c);
     floorUniforms.uHorizonMix.value = light ? 1 : 0.9;
