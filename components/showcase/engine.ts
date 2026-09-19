@@ -96,6 +96,7 @@ function normalizeConfig(config: ShowcaseConfig) {
       maxSpeed: config.speed.maxSpeed ?? 34,
       topKmh: config.speed.topKmh ?? 355,
       launchTravel: config.speed.launchTravel ?? 11,
+      chaseAzimuth: config.speed.chaseAzimuth ?? 180,
       tunnel:
         tunnel === false
           ? null
@@ -107,7 +108,11 @@ function normalizeConfig(config: ShowcaseConfig) {
               white: tunnel?.white ?? "#ccdcfa",
               dashes: tunnel?.dashes ?? 1,
               vanish: tunnel?.vanish ?? [0.5, 0.47],
-              barIntensity: tunnel?.barIntensity ?? 1
+              barIntensity: tunnel?.barIntensity ?? 1,
+              lanes: tunnel?.lanes ?? [],
+              barSegment: tunnel?.barSegment ?? 13,
+              auxCount: tunnel?.auxCount ?? 18,
+              auxOpacity: tunnel?.auxOpacity ?? 1
             }
     },
     post: {
@@ -649,6 +654,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
   const TUNNEL = CFG.speed.tunnel;
   const barTune = TUNNEL?.bars ?? [];
+  // 主光条 / 车道线切成短段的密度（越大段越短）
+  const SEG_SCALE = (CFG.speed.tunnel?.barSegment ?? 13).toFixed(1);
+  const LANE_SEG_SCALE = ((CFG.speed.tunnel?.barSegment ?? 13) * 0.42).toFixed(1);
+  const laneList = CFG.speed.tunnel?.lanes ?? [];
+  const laneAngles = laneList.length
+    ? laneList
+        .map((l) => `lane += barLine(ang, ${((l.angle * Math.PI) / 180).toFixed(5)}, ${((l.width * Math.PI) / 180).toFixed(5)}) * ${l.opacity ?? 0.6};`)
+        .join("\n        ")
+    : "lane = 0.0;";
   const goldBars = barGlsl(barTune, "gold");
   const whiteBars = barGlsl(barTune, "white");
   const goldCores = barGlsl(barTune, "gold", 0.27);
@@ -844,19 +858,25 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       uGold: { value: new THREE.Color(CFG.speed.tunnel?.gold ?? "#ffc266") },
       uWhite: { value: new THREE.Color(CFG.speed.tunnel?.white ?? "#ccdcfa") },
       uIntensity: { value: CFG.speed.tunnel?.barIntensity ?? 1 },
-      uCarBox: { value: new THREE.Vector4(0.5, 0.46, 0.12, 0.06) }
+      uCarBox: { value: new THREE.Vector4(0.5, 0.46, 0.12, 0.06) },
+      uLaneColor: { value: new THREE.Color(laneList[0]?.color ?? "#9aa6b4") },
+      uAuxCount: { value: CFG.speed.tunnel?.auxCount ?? 18 },
+      uAuxOpacity: { value: CFG.speed.tunnel?.auxOpacity ?? 1 },
+      uLightMode: { value: 0 }
     },
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: `
       uniform sampler2D tDiffuse; uniform float uTime; uniform float uStrength; uniform float uSpeed;
       uniform vec2 uCenter; uniform float uAspect; uniform vec3 uGold; uniform vec3 uWhite; uniform float uIntensity;
       uniform vec4 uCarBox;   // 车在屏幕上的包围盒：xy 中心、zw 半尺寸（uv）
+      uniform vec3 uLaneColor; uniform float uAuxCount; uniform float uAuxOpacity; uniform float uLightMode;
       varying vec2 vUv;
       const float TAU = 6.28318530718;
       float barLine(float ang, float target, float w){
         float d = abs(fract((ang - target) / TAU + 0.5) - 0.5) * TAU;
-        return smoothstep(w * 3.0, 0.0, d) * 0.1 + smoothstep(w, 0.0, d);
+        return smoothstep(w * 3.0, 0.0, d) * 0.12 + smoothstep(w, 0.0, d);
       }
+      float hash11(float p){ return fract(sin(p * 127.1) * 43758.5453); }
       void main(){
         vec4 base = texture2D(tDiffuse, vUv);
         if (uStrength <= 0.001) { gl_FragColor = base; return; }
@@ -864,20 +884,55 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         vec2 d = (vUv - uCenter) * vec2(uAspect, 1.0);
         float r = length(d);
         float ang = atan(d.y, d.x);
-        float radial = smoothstep(0.06, 0.34, r) * (1.0 - smoothstep(0.9, 1.35, r) * 0.3);
+        // 靠近消失点淡出；外侧不再衰减（参考视频里亮线一直延伸到画面边缘）
+        float radial = smoothstep(0.05, 0.3, r);
         float goldMask = 0.0;
         float whiteMask = 0.0;
         ${lineAngles.map((b) => `${b.gold ? "goldMask" : "whiteMask"} += barLine(ang, ${b.a.toFixed(5)}, ${b.w.toFixed(5)});`).join("\n        ")}
-        // 沿线流动的虚线段：光条像一段段光带往镜头方向掠过
-        float flow = 0.72 + 0.28 * sin(r * 26.0 - uTime * (2.0 + uSpeed * 0.35));
-        float dash = 0.82 + 0.18 * smoothstep(0.1, 0.9, fract(r * 9.0 - uTime * (1.2 + uSpeed * 0.04)));
+        // 参考视频里每条光条都不是连续的，而是一小段一小段的短段：
+        // 沿线的长度方向（屏幕半径 r）切段，段间留明显间隙，并让段往镜头方向流动。
+        float segPos = r * ${SEG_SCALE} - uTime * (0.7 + uSpeed * 0.06);
+        float segIdx = floor(segPos);
+        float segF = fract(segPos);
+        float segMask = smoothstep(0.02, 0.16, segF) * (1.0 - smoothstep(0.6, 0.78, segF));
+        float segRand = 0.65 + 0.7 * hash11(segIdx * 1.37);
+        float flow = (0.72 + 0.28 * sin(r * 26.0 - uTime * (2.0 + uSpeed * 0.35))) * segMask * segRand;
         // 车体遮挡：参考视频里光条是从车后面去的，不要画在车身上
         vec2 carQ = (vUv - uCarBox.xy) / max(uCarBox.zw, vec2(1e-4));
         float hide = 1.0 - smoothstep(0.8, 1.12, length(carQ));
-        float mask = (goldMask + whiteMask * 0.85) * radial * flow * dash * (1.0 - hide) * uStrength * uIntensity;
-        if (!(mask == mask)) mask = 0.0;   // NaN 兜底
+        float mask = (goldMask + whiteMask * 0.85) * radial * flow * (1.0 - hide) * uStrength * uIntensity;
         vec3 col = uGold * goldMask + uWhite * whiteMask;
-        gl_FragColor = vec4(base.rgb + col * mask, base.a);
+        // 大量很浅的虚线：按角度均匀分槽，每槽随机宽度 / 亮度 / 相位（参考视频里隧道壁上的那些细虚线）
+        float slotF = ang / TAU * uAuxCount;
+        float slot = floor(slotF);
+        float inSlot = fract(slotF);
+        float h = hash11(slot + 3.7);
+        float slotW = (0.28 + h * 0.44);                       // 占槽宽的比例（越小越细）
+        float slotDist = min(inSlot, 1.0 - inSlot) * TAU / uAuxCount;
+        float slotMax = slotW * (TAU / uAuxCount) * 0.5;
+        float auxLine = smoothstep(slotMax, 0.0, slotDist) * step(0.28, hash11(slot + 11.3));
+        float auxDash = smoothstep(0.3, 0.85, fract(r * (5.0 + h * 7.0) - uTime * (0.5 + uSpeed * 0.03) + h * 3.0));
+        float aux = auxLine * auxDash * (0.25 + h * 0.75) * uAuxOpacity;
+        // 地面车道线：较宽、更暗、长虚线，专门做「隧道地面」的纵深
+        float lane = 0.0;
+        ${laneAngles}
+        // 车道线同样是短段，但段更长、间隙更小
+        float lanePos = r * ${LANE_SEG_SCALE} - uTime * (0.4 + uSpeed * 0.03);
+        float laneDash = smoothstep(0.02, 0.14, fract(lanePos)) * (1.0 - smoothstep(0.72, 0.86, fract(lanePos)));
+        float laneMask = lane * laneDash;
+        float laneAux = 0.0;
+        vec3 laneCol = vec3(0.0);
+        laneAux += laneMask * 0.55 + aux * 0.32;
+        laneCol += uLaneColor * laneMask * 0.5 + uWhite * aux * 0.18;
+        // 车道线与辅助虚线：和主光条一样受车体遮挡与强度控制
+        float laneAll = laneAux * (1.0 - hide) * uStrength * uIntensity;
+        if (!(laneAll == laneAll)) laneAll = 0.0;   // NaN 兜底
+        mask += laneAll;
+        col += laneCol;
+        if (!(mask == mask)) mask = 0.0;
+        // 深色主题：光条加色发光；浅色主题：背景本身很亮，需要把强度放大几倍才读得出光条
+        float lightBoost = uLightMode > 0.5 ? 3.2 : 1.0;
+        gl_FragColor = vec4(base.rgb + col * mask * lightBoost, base.a);
       }`
   });
   const composer = new EffectComposer(renderer);
@@ -1223,7 +1278,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const CAM_KEYS: ShowcaseCameraKey[] = CFG.camera.keyframes.length
     ? CFG.camera.keyframes
     : [{ p: 0, az: 0, r: 12, h: 2, ty: 0.9, tz: 0, fov: 30 }];
-  const camState = { az: CAM_KEYS[0].az, r: CAM_KEYS[0].r, h: CAM_KEYS[0].h, ty: CAM_KEYS[0].ty, tz: CAM_KEYS[0].tz, fov: CAM_KEYS[0].fov, fovEff: CAM_KEYS[0].fov };
+  const camState = {
+    az: CAM_KEYS[0].az,
+    r: CAM_KEYS[0].r,
+    h: CAM_KEYS[0].h,
+    ty: CAM_KEYS[0].ty,
+    tz: CAM_KEYS[0].tz,
+    tx: CAM_KEYS[0].tx ?? 0,
+    fov: CAM_KEYS[0].fov,
+    fovEff: CAM_KEYS[0].fov
+  };
   function camAt(p: number) {
     let i = 0;
     while (i < CAM_KEYS.length - 2 && p > CAM_KEYS[i + 1].p) i += 1;
@@ -1235,6 +1299,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     camState.h = a.h + (b.h - a.h) * t;
     camState.ty = a.ty + (b.ty - a.ty) * t;
     camState.tz = a.tz + (b.tz - a.tz) * t;
+    camState.tx = (a.tx ?? 0) + ((b.tx ?? 0) - (a.tx ?? 0)) * t;
     camState.fov = a.fov + (b.fov - a.fov) * t;
   }
 
@@ -1344,9 +1409,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 冲刺时镜头顺隧道方向跟随：方位角平滑绕到车尾正后方，机位与注视点随车往隧道深处推进，
     // 因此消失点始终在画面中心，车开走时不会被甩到画面外。
     const azBase = camState.az + userYaw;
-    const azDelta = ((180 - azBase + 540) % 360) - 180;
+    const azDelta = ((CFG.speed.chaseAzimuth - azBase + 540) % 360) - 180;
     const az = ((azBase + azDelta * racingAmt * 0.85) * Math.PI) / 180;
-    const follow = carTravel * racingAmt;
+    const follow = carTravel * racingAmt;   // 轻微跟随；跟太多车就一直很大，隧道感会消失
     // 竖屏 / 窄屏时水平视野会变窄，这里按宽高比把相机拉远、视角放宽，保证整车进画面
     const fitAspect = CFG.camera.fitMinAspect;
   const fit = camera.aspect < fitAspect ? clamp(fitAspect / camera.aspect, 1, CFG.camera.fitMaxPullback) : 1;
@@ -1358,8 +1423,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const baseElev = Math.atan2(Math.max(0.2, h) - targetY, r);
     const elev = clamp(baseElev + userPitch, 0.05, 1.15);
     const horizontal = Math.cos(elev) * r;
-    camPos.set(Math.sin(az) * horizontal, targetY + Math.sin(elev) * r, Math.cos(az) * horizontal + follow * 0.55);
-    lookAt.set(0, targetY, camState.tz + follow * 0.62);
+    camPos.set(Math.sin(az) * horizontal, targetY + Math.sin(elev) * r, Math.cos(az) * horizontal + follow * 0.22);
+    lookAt.set(camState.tx, targetY, camState.tz + follow * 0.34);
     camState.fovEff = camState.fov * Math.pow(fit, 0.45);
 
     // fbm 晃动：三个轴各自随机错开频率，高速才明显
@@ -1462,6 +1527,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     lightLinesPass.uniforms.uTime.value = elapsed;
     lightLinesPass.uniforms.uSpeed.value = reduced ? 0 : speed;
     lightLinesPass.uniforms.uStrength.value = sps * sps;
+    lightLinesPass.uniforms.uLightMode.value = light ? 1 : 0;
     lightLinesPass.enabled = sps > 0.04;   // 静止段整趟跳过，省一层全屏后期
 
     // 后期：拖影只在高速时才有意义，静止段直接关掉这一整趟全屏后期

@@ -50,10 +50,10 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       { p: 0.38, az: 60, r: 5.9, h: 0.8, ty: 0.5, tz: 0.9, fov: 27 },    // 前轮 / 侧箱特写（参考视频里车是满画甚至溢出的）
       { p: 0.46, az: 104, r: 6.2, h: 0.78, ty: 0.52, tz: 0.1, fov: 28 }, // 沿车身滑到后段，继续贴近
       { p: 0.54, az: 130, r: 9.4, h: 1.0, ty: 0.62, tz: 0.1, fov: 29 },  // 拉回 3/4 侧视
-      { p: 0.62, az: 162, r: 10.4, h: 1.9, ty: 0.7, tz: 0, fov: 31 },    // 抬升并收到车尾方向
+      { p: 0.62, az: 178, r: 10.4, h: 2.0, ty: 0.72, tz: 0, tx: -0.5, fov: 31 },  // 抬升并收到车尾偏左
       // 发车位：车尾正后方的低机位，按住空格后车就是朝这里驶入隧道，镜头保持锁定
-      { p: 0.7, az: 176, r: 10.2, h: 2.7, ty: 0.78, tz: -0.2, fov: 32 },
-      { p: 0.8, az: 181, r: 9.8, h: 2.9, ty: 0.8, tz: -0.1, fov: 32 },
+      { p: 0.7, az: 198, r: 10.0, h: 2.6, ty: 0.8, tz: -0.2, tx: -1.35, fov: 32 },
+      { p: 0.8, az: 205, r: 9.8, h: 2.8, ty: 0.82, tz: -0.1, tx: -1.6, fov: 32 },
       { p: 0.88, az: 186, r: 5.6, h: 0.9, ty: 0.6, tz: -0.7, fov: 29 },  // 收车后的一次极近特写（车尾 / 后轮）
       { p: 1, az: 190, r: 11, h: 1.9, ty: 0.82, tz: 0.1, fov: 30 }       // 最后拉出到英雄机位
     ],
@@ -74,6 +74,8 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     maxSpeed: 34,
     topKmh: 355,
     launchTravel: 11,
+    // 冲刺时镜头绕到车尾偏左（参考视频里车是偏左、左右光条角度不对称的来源）
+    chaseAzimuth: 205,
     // 顶点粒子隧道：三角形太碎、影响观感，这里关掉（引擎仍支持，想要纵深时把 shards 配上即可）。
     shards: false,
     tunnel: {
@@ -81,20 +83,39 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       length: 120,
       // 左右各三条主光条（60° 均分）：上下两条暖金、内侧四条冷白。
       // 颜色按参考视频逐点取样后做了偏色中性化，宽度按视频量出来约 0.5°。
-      gold: "#ffc266",
-      white: "#ccdbfa",
+      // 外道浅黄（取样核心 #D0813F~#BB7611，按亮线观感提高明度后的浅黄）
+      gold: "#ffcc80",
+      // 内道浅蓝（取样核心 #4679D5~#6D89D3）
+      white: "#a8c8ff",
       dashes: 0.6,
       // 角度是屏幕空间角度（相对消失点）：左三 = 150°/190°/230°，右三 = 30°/350°/310°，
       // 每侧上下两条是暖金、中间那条偏白灰，对应参考视频里的六道主光条。
       vanish: [0.5, 0.46],
-      barIntensity: 0.34,
+      barIntensity: 0.62,
+      // 参考视频里每段长约 100-200px（1080 宽画面），这里约 1/8 屏幕半径一段
+      barSegment: 8,
+      // 地面车道线：比主光条更宽更暗的长虚线，专门做隧道地面的纵深
+      lanes: [
+        { angle: 168, width: 0.5, opacity: 1.1, color: "#9aa6b4" },
+        { angle: 12, width: 0.5, opacity: 1.1, color: "#9aa6b4" },
+        { angle: 194, width: 0.34, opacity: 0.5, color: "#8f9aa8" },
+        { angle: 346, width: 0.34, opacity: 0.5, color: "#8f9aa8" }
+      ],
+      // 隧道壁上的大量浅虚线
+      auxCount: 22,
+      auxOpacity: 1.15,
       bars: [
-        { angle: 30, width: 0.34, tone: "gold" },
-        { angle: 350, width: 0.28, tone: "white" },
-        { angle: 310, width: 0.34, tone: "gold" },
-        { angle: 150, width: 0.34, tone: "gold" },
-        { angle: 190, width: 0.28, tone: "white" },
-        { angle: 230, width: 0.34, tone: "gold" }
+        // 角度是逐帧量出来的（0°=右，90°=上，180°=左，270°=下）：
+        // 参考视频里主要光条在 59° / 112° / 239° / 268° / 296° / 317°。
+        // 严格取色（多帧、沿整条线取中位数与最饱和核心色）得到两组：
+        //   外道（较平的角度）核心 #D0813F ~ #BB7611 → 浅黄/琥珀；
+        //   内道（较陡的角度）核心 #4679D5 ~ #6D89D3 → 浅蓝，且更细更暗。
+        { angle: 59, width: 0.5, tone: "gold" },    // 外道 · 浅黄
+        { angle: 317, width: 0.44, tone: "gold" },  // 外道 · 浅黄
+        { angle: 239, width: 0.46, tone: "gold" },  // 外道 · 浅黄
+        { angle: 296, width: 0.44, tone: "gold" },  // 外道 · 浅黄
+        { angle: 112, width: 0.4, tone: "white" },  // 内道 · 浅蓝
+        { angle: 268, width: 0.42, tone: "white" }  // 内道 · 浅蓝
       ]
     }
   },

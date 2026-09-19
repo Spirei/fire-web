@@ -19,6 +19,8 @@ export interface ShowcaseCameraKey {
   ty: number;
   /** 注视点沿车身方向偏移（米） */
   tz: number;
+  /** 注视点左右偏移（米）：用来把车放在画面偏左/偏右，参考视频里车是偏左的 */
+  tx?: number;
   /** 垂直视角（度） */
   fov: number;
 }
@@ -143,6 +145,8 @@ export interface ShowcaseConfig {
     topKmh?: number;
     /** 冲刺时车驶离的距离（米） */
     launchTravel?: number;
+    /** 冲刺时镜头绕到的方位角（度，180 = 正后方；参考视频是偏左后方约 205） */
+    chaseAzimuth?: number;
     /**
      * 顶点粒子隧道（参考零跑 C16 公开课的做法）：直接拿车模自身的顶点当粒子种子，
      * 位移全在顶点着色器里算，没有 CPU 粒子模拟，也不需要额外贴图或渲染目标。
@@ -173,6 +177,14 @@ export interface ShowcaseConfig {
           bars?: ShowcaseLightBar[];
           /** 消失点在画面里的位置（默认 0.5 / 0.47） */
           vanish?: [number, number];
+          /** 地面车道线（参考视频里从画面左下/右下斜向消失点的灰色标线） */
+          lanes?: Array<{ angle: number; width: number; opacity?: number; dash?: number; color?: string }>;
+          /** 主光条切段密度：越大段越短（默认 13 ≈ 每条被切成十几段） */
+          barSegment?: number;
+          /** 辅助虚线的条数（均匀分布在整个圆周上，随机宽度与流动相位） */
+          auxCount?: number;
+          /** 辅助虚线的亮度倍率 */
+          auxOpacity?: number;
           /** 主光条的亮度倍率 */
           barIntensity?: number;
           gold?: string;
