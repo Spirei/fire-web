@@ -54,8 +54,9 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       { p: 0.54, az: 130, r: 9.4, h: 1.0, ty: 0.62, tz: 0.1, fov: 29 },  // 拉回 3/4 侧视
       { p: 0.62, az: 180, r: 10.4, h: 2.0, ty: 0.72, tz: 0, tx: 0, fov: 31 },  // 车尾正后方，车正对隧道方向
       // 发车位：车尾正后方的低机位，按住空格后车就是朝这里驶入隧道，镜头保持锁定
-      { p: 0.7, az: 180, r: 9.8, h: 2.4, ty: 0.78, tz: -0.2, tx: 0, fov: 32 },
-      { p: 0.8, az: 180, r: 9.6, h: 2.6, ty: 0.8, tz: -0.1, tx: 0, fov: 32 },
+      // 冲刺距离按参考视频量：同样时刻参考里的车只有画面宽度的三成，我们原来近了两成，镜头因此后收
+      { p: 0.7, az: 180, r: 11.2, h: 2.4, ty: 0.78, tz: -0.2, tx: 0, fov: 32 },
+      { p: 0.8, az: 180, r: 11.4, h: 2.6, ty: 0.8, tz: -0.1, tx: 0, fov: 32 },
       { p: 0.88, az: 186, r: 5.6, h: 0.9, ty: 0.6, tz: -0.7, fov: 29 },  // 收车后的一次极近特写（车尾 / 后轮）
       { p: 1, az: 190, r: 11, h: 1.9, ty: 0.82, tz: 0.1, fov: 30 }       // 最后拉出到英雄机位
     ],
@@ -77,7 +78,10 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     topKmh: 355,
     launchTravel: 7.5,
     // 冲刺时镜头绕到车尾偏左（参考视频里车是偏左、左右光条角度不对称的来源）
-    chaseAzimuth: 212,
+    chaseAzimuth: 192,
+    // 机位左移 0.6 米（镜头与注视点一起平移，视线方向不变）：车落在画面偏左、光条汇聚点在其右。
+    // 参考视频里车心在 0.42 画幅处，我们原来在 0.49-0.70（实测），这里按每米约 0.13 画幅的灵敏度校正。
+    chaseLateral: -1.3,
     // 车身流光与地面流光在参考视频里没有（高速时车身是暗的），置 0 去掉这两处多余光源
     flowStrength: 0,
     floorFlow: 0,
@@ -92,13 +96,17 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       gold: "#ffbe63",
       // 内道浅蓝（取样核心 #4679D5~#6D89D3）
       white: "#9dc0ff",
-      dashes: 0.6,
+      dashes: 0.9,
+      // 参考视频里每段线是「长条短段」：单段约 120-200px，所以切段密度取 3.4（越大越碎）
+      barSegment: 2.6,
       // 角度是屏幕空间角度（相对消失点）：左三 = 150°/190°/230°，右三 = 30°/350°/310°，
       // 每侧上下两条是暖金、中间那条偏白灰，对应参考视频里的六道主光条。
       vanish: [0.5, 0.46],
-      barIntensity: 1.0,
-      // 参考视频里每段长约 100-200px（1080 宽画面），这里约 1/8 屏幕半径一段
-      barSegment: 8,
+      // 冲刺机位是车尾偏左的 3/4（方位角 212°），真实消失点会跑到画面很右侧；
+      // 参考视频里光条是在车右后上方汇聚，所以这里仍用固定的画面汇聚点，不用真实投影
+      vanishFollow: false,
+      // 参考画面里光条像素占 1.9%，我们只有 0.55%，所以条数、宽度、亮度一起加
+      barIntensity: 1.75,
       // 地面车道线：比主光条更宽更暗的长虚线，专门做隧道地面的纵深
       // 路面边线（细而暗：参考里能看到的斜向标线），太宽会在屏幕上变成横带，所以宽度只给 0.18°
       lanes: [
@@ -107,24 +115,29 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       ],
       // 隧道壁上的大量浅虚线
       auxCount: 26,
-      auxOpacity: 1.0,
+      auxOpacity: 1.15,
       bars: [
         // 角度逐帧量取（0°=右，90°=上，180°=左，270°=下）。
         // 参考视频里左右并不对称：右边是「稍微宽的条」，左边是「细线条」，这也是视觉差来源。
         // 右半（0-90 与 270-360）：矩形条，浅黄 × 浅蓝，右侧蓝条更宽一点。
-        { angle: 59, width: 1.15, tone: "gold", style: "bar" },   // 右上 · 黄色条
-        { angle: 317, width: 1.35, tone: "white", style: "bar" },  // 右内下 · 蓝色条（更宽）
-        { angle: 296, width: 0.85, tone: "gold", style: "bar" },   // 右下 · 黄色条
+        { angle: 59, width: 1.7, tone: "gold", style: "bar" },     // 右上 · 黄色条
+        { angle: 317, width: 1.9, tone: "white", style: "bar" },   // 右内下 · 蓝色条（更宽）
+        { angle: 296, width: 1.3, tone: "gold", style: "bar" },    // 右下 · 黄色条
+        { angle: 25, width: 0.5, tone: "gold" },                   // 右上 · 暖色细线（补参考里的密集区）
+        { angle: 340, width: 0.5, tone: "white" },                 // 右 · 冷白细线
         // 左半（90-270）：细线条
-        { angle: 112, width: 0.4, tone: "gold" },                  // 左上 · 黄色细线
-        { angle: 239, width: 0.42, tone: "gold" },                 // 左下 · 黄色细线
-        { angle: 268, width: 0.4, tone: "white" }                  // 下方内道 · 蓝色细线
+        { angle: 112, width: 0.7, tone: "gold" },                  // 左上 · 黄色细线
+        { angle: 152, width: 0.6, tone: "white" },                 // 左 · 冷白长线（参考里最长的一条）
+        { angle: 178, width: 0.5, tone: "white" },                 // 左 · 冷白细线
+        { angle: 205, width: 0.55, tone: "gold" },                 // 左下 · 暖色长线
+        { angle: 239, width: 0.72, tone: "gold" },                 // 左下 · 黄色细线
+        { angle: 268, width: 0.65, tone: "white" }                 // 下方内道 · 蓝色细线
       ]
     }
   },
 
   post: {
-    exposure: 1.16,
+    exposure: 1.28,
     bloom: { strength: 0.38, radius: 0.5, threshold: 0.9, speedBoost: 0.26 },
     // 拖影（动态模糊）会让行驶中的车发虚，参考视频里车是清晰的，所以置 0（想要时改回 0.05 即可）
     smear: { strength: 0, chroma: 0 }

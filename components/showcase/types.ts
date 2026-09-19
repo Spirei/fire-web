@@ -151,6 +151,22 @@ export interface ShowcaseConfig {
     launchTravel?: number;
     /** 冲刺时镜头绕到的方位角（度，180 = 正后方；参考视频是偏左后方约 205） */
     chaseAzimuth?: number;
+    /**
+     * 冲刺时机位横向偏移（米，正数 = 镜头移到车道中心线右侧，车因此落在画面偏左）。
+     * 参考视频里车在画面左侧、光条汇聚点在其右，靠这一项对齐。
+     */
+    chaseLateral?: number;
+    /**
+     * 车道保持：把车从横向偏移与车头偏角里平滑拉回隧道中心线，避免「越跑越偏」。
+     * 默认开启；autoHeading 会用前后轴连线自动量出车头方向并一次性摆正（不同来源的模型朝向不一）。
+     */
+    laneKeep?: {
+      enabled?: boolean;
+      /** 回收速度（越大回得越快，默认 2.6） */
+      strength?: number;
+      /** 自动量取车头方向并摆正（默认开启） */
+      autoHeading?: boolean;
+    };
     /** 车身流光强度（0 = 不要，参考视频里高速时车身是暗的） */
     flowStrength?: number;
     /** 地面流光强度（0 = 不要） */
@@ -185,6 +201,8 @@ export interface ShowcaseConfig {
           bars?: ShowcaseLightBar[];
           /** 消失点在画面里的位置（默认 0.5 / 0.47） */
           vanish?: [number, number];
+          /** 消失点跟随隧道轴的真实投影（默认开启；关掉则固定用 vanish 的画面位置） */
+          vanishFollow?: boolean;
           /** 地面车道线（参考视频里从画面左下/右下斜向消失点的灰色标线） */
           lanes?: Array<{ angle: number; width: number; opacity?: number; dash?: number; color?: string }>;
           /** 景深强度：光条越远离消失点越虚（0 = 全锐利，默认 1.2） */
@@ -326,6 +344,9 @@ export interface ShowcaseHandle {
     /** 车身高度与偏航（度），用来确认车没有离地 / 偏出轨道 */
     carY: number;
     carYaw: number;
+    /** 车道保持：自动量出的车头偏角（度）与当前横向偏移（米） */
+    laneHeading: number;
+    laneOffset: number;
     /** 看门狗触发次数（软恢复 / 重建），排查白屏用 */
     watchdogHits: number;
     rebuilds: number;
