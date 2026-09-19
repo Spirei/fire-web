@@ -274,6 +274,8 @@ export interface ShowcaseOptions {
 
 export interface ShowcaseHandle {
   dispose: () => void;
+  /** 切换深浅色：深色＝夜间隧道，浅色＝明亮摄影棚 */
+  setTheme: (theme: "dark" | "light") => void;
   /** 手动设置滚动进度（调试 / 截图用） */
   setProgress: (p: number, settle?: number) => void;
   /** 调试用：当前平滑后的进度、速度、渲染倍率、冲刺与缩放状态 */
@@ -284,6 +286,7 @@ export interface ShowcaseHandle {
     racing: boolean;
     travel: number;
     zoom: number;
+    theme: "dark" | "light";
     /** 实际绘制缓冲尺寸 / 反射贴图边长 / 贴图与几何体数量（排查显存用） */
     buffer: [number, number];
     reflection: number;

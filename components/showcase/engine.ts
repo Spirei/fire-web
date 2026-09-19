@@ -154,6 +154,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       ? new Set((new URLSearchParams(location.search).get("mcloff") || "").split(",").filter(Boolean))
       : new Set<string>();
 
+  /** 深浅色：深色＝夜间隧道（默认），浅色＝明亮摄影棚 */
+  let theme: "dark" | "light" = "dark";
+
   /* ---------- 渲染器 / 相机 ---------- */
   // 像素预算：EffectComposer 会建两块 HalfFloat 的 RT（后来还要泛光的多级），
   // 大窗口 + 高分屏下按设备像素比铺满会直接吃掉几百 MB 显存，久了会丢上下文变白屏。
@@ -176,24 +179,24 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 400);
 
   /* ---------- 背景：程序化渐变（屏幕空间），避免 HDR 的地平线穿帮 ---------- */
-  const backdrop = (() => {
+  const makeBackdrop = (stops: Array<[number, string]>) => {
     const c = document.createElement("canvas");
     c.width = 8;
     c.height = 512;
     const g = c.getContext("2d");
     if (g) {
       const grd = g.createLinearGradient(0, 0, 0, 512);
-      grd.addColorStop(0, "#191c22");
-      grd.addColorStop(0.42, "#0b0c0f");
-      grd.addColorStop(0.72, "#070708");
-      grd.addColorStop(1, "#030303");
+      stops.forEach(([o, col]) => grd.addColorStop(o, col));
       g.fillStyle = grd;
       g.fillRect(0, 0, 8, 512);
     }
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     return t;
-  })();
+  };
+  const backdrop = makeBackdrop([[0, "#191c22"], [0.42, "#0b0c0f"], [0.72, "#070708"], [1, "#030303"]]);
+  // 浅色主题：明亮摄影棚背景
+  const backdropLight = makeBackdrop([[0, "#f2f4f6"], [0.45, "#dfe3e8"], [0.75, "#cfd4da"], [1, "#bfc5cc"]]);
   scene.background = backdrop;
 
   /* ---------- 灯光：环境贴图为主，补三盏软灯让车身读得出来 ---------- */
@@ -308,7 +311,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     uReflectIntensity: { value: 0.95 },
     uSpeed: { value: 0 },
     uTime: { value: 0 },
-    uFlow: { value: 0 }
+    uFlow: { value: 0 },
+    // 反射混合：底色与反射的混合系数（基础量 + 菲涅尔权重）、法线扰动强度
+    uMixBase: { value: 0.22 },
+    uMixFres: { value: 1.2 },
+    uNormalAmount: { value: 1 },
+    uMipBias: { value: 1 }
   };
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(140, 140),
@@ -327,6 +335,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       fragmentShader: `
         uniform sampler2D tReflect; uniform sampler2D tNormal; uniform sampler2D tRough;
         uniform vec3 uColor; uniform float uReflectIntensity; uniform float uSpeed; uniform float uTime; uniform float uFlow;
+      uniform float uMixBase; uniform float uMixFres; uniform float uNormalAmount; uniform float uMipBias;
         varying vec4 vWorld; varying vec4 vReflect; varying vec3 vView;
         float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float vnoise(vec2 p){
@@ -341,15 +350,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           vec3 n = texture2D(tNormal, vWorld.xz * 0.28 + scroll).rgb * 2.0 - 1.0;
           n = normalize(n.rbg);                        // 交换 G/B：法线方向修正
           float d = length(vView);
-          vec2 distortion = n.xz * (0.0015 + 1.6 / max(d, 1.0)) * 0.06;
+          vec2 distortion = n.xz * (0.0015 + 1.6 / max(d, 1.0)) * 0.06 * uNormalAmount;
           vec4 rp = vReflect; rp.xyz /= rp.w;
           float rough = texture2D(tRough, vWorld.xz * 0.06 + scroll).r;
           // 粗糙度控制 mip 级别 → 自带模糊的反射
-          vec3 refl = texture2D(tReflect, clamp(rp.xy + distortion, 0.002, 0.998), rough * 2.4).rgb;
+          vec3 refl = texture2D(tReflect, clamp(rp.xy + distortion, 0.002, 0.998), rough * 2.4 * uMipBias).rgb;
           vec3 viewDir = normalize(-vView);
           float fres = pow(1.0 - clamp(dot(n, viewDir), 0.0, 1.0), 3.0);
           vec3 col = uColor;
-          col = mix(col, refl * uReflectIntensity, clamp(0.22 + fres * 1.2, 0.0, 1.0));
+          col = mix(col, refl * uReflectIntensity, clamp(uMixBase + fres * uMixFres, 0.0, 1.0));
           // 流光：高速时地面上掠过的暖色光带
           float band = vnoise(vec2(vWorld.x * 0.32, vWorld.z * 0.06 + uTime * (0.6 + uSpeed * 0.5)));
           band = pow(max(band - 0.7, 0.0) * 3.2, 2.0);
@@ -1283,13 +1292,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     elapsed += dt;
 
     // 环境：夜 → 昼（窗口与强度由 preset 给；参考视频里整段 hero 都是夜景，只在收尾略微提亮）
-    const envWeight = seg(p, CFG.environment.nightToDay[0], CFG.environment.nightToDay[1]) * CFG.environment.dayIntensity;
+    // 浅色主题直接顶到白天环境；深色主题按叙事窗口在夜→昼之间过渡
+    const narrativeDay = seg(p, CFG.environment.nightToDay[0], CFG.environment.nightToDay[1]) * CFG.environment.dayIntensity;
+    const envWeight = theme === "light" ? 1 : narrativeDay;
     updateEnv(envWeight);
     const day = envWeight;
+    const light = theme === "light";
     // 参考图里冲刺时车身反而更亮：速度越高，暖色轮廓光与主光一起加码
     const speedLight = clamp(speed / CFG.speed.maxSpeed, 0, 1) ** 2;
-    keyLight.intensity = 0.78 + day * 0.42 + speedLight * 0.18;
-    rimLight.intensity = 0.82 + day * 0.3 + seg(p, 0.42, 0.5) * 0.18 + speedLight * 0.45;
+    keyLight.intensity = (light ? 1.1 : 0.78) + day * 0.42 + speedLight * 0.18;
+    rimLight.intensity = (light ? 0.7 : 0.82) + day * 0.3 + seg(p, 0.42, 0.5) * 0.18 + speedLight * 0.45;
     fillLight.intensity = 0.36 + day * 0.24 + speedLight * 0.08;
 
     // 速度只由冲刺（按住空格 / 按住按钮）驱动：参考视频里滚动的过程中表一直是 000，
@@ -1387,7 +1399,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     floorUniforms.uTime.value = elapsed;
     floorUniforms.uSpeed.value = sps;
     floorUniforms.uFlow.value = sps * sps;
-    floorUniforms.uReflectIntensity.value = CFG.ground.reflectIntensity + sps * 0.2;
+    // 浅色主题下地面保持深色工作台：反射降下来，否则亮背景经法线扰动会变成一片噪点灰
+    floorUniforms.uReflectIntensity.value = (light ? 0.34 : CFG.ground.reflectIntensity) + sps * 0.2;
+    // 浅色主题：反射与法线扰动都压低，地面保持干净的深色工作台
+    // 浅色主题下反射再压一档、模糊级别再高一级，避免亮背景经法线扰动形成麻点
+    floorUniforms.uMixBase.value = light ? 0.02 : 0.22;
+    floorUniforms.uMixFres.value = light ? 0.16 : 1.2;
+    floorUniforms.uNormalAmount.value = light ? 0.2 : 1;
+    floorUniforms.uMipBias.value = light ? 1.5 : 1;
     flowUniforms.uFlowTime.value = elapsed;
     flowUniforms.uFlowStrength.value = sps * sps * 0.6;
     tunnelUniforms.uTime.value = elapsed;
@@ -1441,7 +1460,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     smearPass.enabled = smear > 0.004 && !off.has("smear");
     bloom.strength = CFG.post.bloomStrength + sps * CFG.post.bloomSpeedBoost;
     bloom.radius = CFG.post.bloomRadius + sps * 0.14;
-    scene.backgroundIntensity = 0.85 + day * 0.35;
+    scene.background = light ? backdropLight : backdrop;
+    scene.backgroundIntensity = light ? 1 : 0.85 + narrativeDay * 0.35;
+    floorUniforms.uColor.value.set(light ? 0x101317 : 0x0b0c0e);
 
     // HUD
     // HUD 写入都做变更判断：每帧几十次 DOM 写会让浏览器反复重排（滚动发涩的另一个来源）
@@ -2021,12 +2042,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       envPmrem?.dispose();
       pmrem.dispose();
       backdrop.dispose();
+      backdropLight.dispose();
       renderer.dispose();
       try {
         renderer.forceContextLoss();
       } catch {
         /* 上下文可能已经被驱动回收，忽略 */
       }
+    },
+    setTheme: (next: "dark" | "light") => {
+      theme = next;
     },
     setProgress: (p: number, settle = 0) => {
       const steps = Math.max(1, Math.round(settle * 60));
@@ -2040,6 +2065,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     racing,
     travel: +carTravel.toFixed(2),
     zoom: +zoom.toFixed(2),
+    theme,
     yaw: +userYaw.toFixed(1),
     pitch: +userPitch.toFixed(2),
     wheelAngle: wheelPivots[0]?.[0] ? +wheelPivots[0][0].angle.toFixed(2) : 0,

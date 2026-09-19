@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ShowcaseConfig, ShowcaseHandle } from "./types";
+import { setThemeCookie } from "@/lib/theme";
 import "./showcase.css";
 
 const RPM_TICKS = 20;
@@ -35,6 +36,8 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
   const [loadRatio, setLoadRatio] = useState(0);
   const [ready, setReady] = useState(false);
   const [racing, setRacing] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const handleRef = useRef<ShowcaseHandle | null>(null);
   // WebGL 上下文丢了就重建一次场景（重建计数用作 key，触发重新挂载）
   const [rebuild, setRebuild] = useState(0);
   // 第二次重建开始主动降级：贴图最长边收到 2048（4K 贴图约占 236MB 显存），换取稳定
@@ -101,6 +104,8 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
           },
           onError: (message) => setError(message)
         });
+        handle.setTheme(themeRef.current);
+        handleRef.current = handle;
         // 开发环境留一个调试句柄，方便按进度截图与排查（生产不会写）
         if (process.env.NODE_ENV !== "production") {
           (window as unknown as { __mcl?: ShowcaseHandle | null }).__mcl = handle;
@@ -114,12 +119,44 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
       cancelled = true;
       handle?.dispose();
       handle = null;
+      handleRef.current = null;
       if (process.env.NODE_ENV !== "production") {
         (window as unknown as { __mcl?: ShowcaseHandle | null }).__mcl = null;
       }
       if (fadeTimer.current) window.clearTimeout(fadeTimer.current);
     };
   }, [config, handlePhase, rebuild, degraded]);
+
+  // 首帧之后再读站点主题（服务端首帧固定深色，避免水合不一致）
+  const themeRef = useRef<"dark" | "light">("dark");
+  useEffect(() => {
+    // 默认按深色展示（首页原本就是夜景）；只有用户自己选过浅色才用浅色，
+    // 避免新访客第一次进来直接看到明亮摄影棚而认不出来。
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem("fire.theme");
+    } catch {
+      /* 忽略 */
+    }
+    const next: "dark" | "light" = saved === "light" ? "light" : "dark";
+    themeRef.current = next;
+    setTheme(next);
+    handleRef.current?.setTheme(next);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    const next: "dark" | "light" = themeRef.current === "dark" ? "light" : "dark";
+    themeRef.current = next;
+    setTheme(next);
+    document.documentElement.classList.toggle("dark", next === "dark");
+    try {
+      localStorage.setItem("fire.theme", next);
+    } catch {
+      /* 忽略 */
+    }
+    setThemeCookie(next === "dark");
+    handleRef.current?.setTheme(next);
+  }, []);
 
   const current = config.phases[phase] ?? config.phases[0];
   // 界面文案：默认英文，preset 里传 ui 就按传入的显示（本站首页已改中文）
@@ -147,7 +184,7 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
   };
 
   return (
-    <div className={`showcase ${className}`}>
+    <div className={`showcase ${theme === "light" ? "light" : ""} ${className}`}>
       <div className="sc-scroll" ref={scrollRef}>
         <div className="sc-stage" ref={stageRef}>
           <canvas className="sc-canvas" ref={canvasRef} aria-label={`${config.watermark ?? "3D"} 3D 展示`} />
@@ -157,6 +194,26 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
           <div className="sc-vignette" />
 
           <div className="sc-hud">
+            <div className="sc-row sc-tools">
+              <button
+                type="button"
+                className="sc-tool"
+                onClick={toggleTheme}
+                title={theme === "dark" ? "切换到浅色（明亮摄影棚）" : "切换到深色（夜间隧道）"}
+                aria-label="切换深浅色"
+              >
+                {theme === "dark" ? (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
+                    <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+                  </svg>
+                )}
+              </button>
+            </div>
             <div className="sc-row sc-kicker">{ui.kicker}</div>
 
             <div className="sc-row sc-sec">

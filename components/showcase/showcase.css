@@ -5,7 +5,56 @@
   --sc-line: rgba(255, 255, 255, 0.14);
   --sc-dim: #7c7c80;
   --sc-header: 0px;
-  background: #050506;
+  /* 界面颜色集中在这里：浅色主题只覆盖这几个变量 */
+  --sc-bg: #050506;
+  --sc-ink: #f4f4f5;
+  --sc-ink-strong: #ffffff;
+  --sc-mute: #9a9a9e;
+  --sc-faint: #6b6b70;
+  --sc-faintest: #62626a;
+  --sc-panel: rgba(255, 255, 255, 0.03);
+  --sc-panel-hover: rgba(255, 255, 255, 0.1);
+  --sc-watermark: rgba(255, 255, 255, 0.045);
+  --sc-vignette: radial-gradient(70% 62% at 50% 52%, transparent 0%, rgba(0, 0, 0, 0.55) 72%, rgba(0, 0, 0, 0.86) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, transparent 22%, transparent 76%, rgba(0, 0, 0, 0.6) 100%);
+  background: var(--sc-bg);
+}
+
+/* 浅色：明亮摄影棚 */
+.showcase.light {
+  --sc-bg: #eef1f4;
+  --sc-line: rgba(20, 24, 30, 0.16);
+  --sc-dim: #5b6169;
+  --sc-ink: #14181e;
+  --sc-ink-strong: #0d1014;
+  --sc-mute: #5f656d;
+  --sc-faint: #6d747c;
+  --sc-faintest: #6d747c;
+  --sc-panel: rgba(20, 24, 30, 0.04);
+  --sc-panel-hover: rgba(20, 24, 30, 0.1);
+  --sc-watermark: rgba(20, 24, 30, 0.07);
+  --sc-vignette: radial-gradient(72% 64% at 50% 52%, transparent 0%, rgba(20, 24, 30, 0.06) 72%, rgba(20, 24, 30, 0.16) 100%);
+}
+
+/*
+ * 浅色主题下画面是「上半明亮背景 + 下半深色地面」：
+ * 顶部文案用深色字，下半部分的按钮/导航/角标仍在深色地面上，因此局部换回浅色字，
+ * 否则底部导航会深字压深底，几乎看不见。
+ */
+.showcase.light .sc-left-foot,
+.showcase.light .sc-ctr,
+.showcase.light .sc-hint-drag,
+.showcase.light .sc-nav,
+.showcase.light .sc-meta-l,
+.showcase.light .sc-meta-r {
+  --sc-ink: #f4f4f5;
+  --sc-ink-strong: #ffffff;
+  --sc-mute: #c9c9cd;
+  --sc-faint: #a4a4aa;
+  --sc-faintest: #909096;
+  --sc-line: rgba(255, 255, 255, 0.18);
+  --sc-panel: rgba(255, 255, 255, 0.06);
+  --sc-panel-hover: rgba(255, 255, 255, 0.14);
 }
 
 /* 舞台是整屏深色 3D 场景，连 html / body 的底色一起压深，避免橡皮筋回弹时露出白底 */
@@ -39,9 +88,7 @@ html:has(.showcase) body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(70% 62% at 50% 52%, transparent 0%, rgba(0, 0, 0, 0.55) 72%, rgba(0, 0, 0, 0.86) 100%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, transparent 22%, transparent 76%, rgba(0, 0, 0, 0.6) 100%);
+  background: var(--sc-vignette);
 }
 
 .sc-watermark {
@@ -53,7 +100,7 @@ html:has(.showcase) body {
   font-weight: 700;
   letter-spacing: 0.06em;
   line-height: 0.82;
-  color: rgba(255, 255, 255, 0.045);
+  color: var(--sc-watermark);
   white-space: nowrap;
   pointer-events: none;
   user-select: none;
@@ -64,7 +111,7 @@ html:has(.showcase) body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  color: #f4f4f5;
+  color: var(--sc-ink);
   font-family: "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -73,13 +120,47 @@ html:has(.showcase) body {
   position: absolute;
 }
 
+/* 顶部右侧工具条（深浅色切换） */
+.sc-tools {
+  right: 3.4vw;
+  top: 3.2vh;
+  display: flex;
+  gap: 8px;
+}
+
+.sc-tool {
+  pointer-events: auto;
+  cursor: pointer;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--sc-line);
+  border-radius: 999px;
+  background: var(--sc-panel);
+  color: var(--sc-ink);
+  backdrop-filter: blur(6px);
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.sc-tool svg {
+  width: 17px;
+  height: 17px;
+}
+
+.sc-tool:hover {
+  background: var(--sc-panel-hover);
+  color: var(--sc-ink-strong);
+}
+
 .sc-kicker {
   top: 3.2vh;
   left: 50%;
   transform: translateX(-50%);
   font-size: 10px;
   letter-spacing: 0.42em;
-  color: #9a9a9e;
+  color: var(--sc-mute);
 }
 
 .sc-sec {
@@ -90,7 +171,7 @@ html:has(.showcase) body {
   gap: 10px;
   font-size: 10px;
   letter-spacing: 0.3em;
-  color: #bbb;
+  color: var(--sc-mute);
 }
 
 .sc-sec i {
@@ -114,7 +195,7 @@ html:has(.showcase) body {
   line-height: 1.16;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: #fff;
+  color: var(--sc-ink-strong);
   transition: opacity 0.32s ease;
 }
 
@@ -142,10 +223,10 @@ html:has(.showcase) body {
   padding: 7px 13px;
   border: 1px solid var(--sc-line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--sc-panel);
   font-size: 9.5px;
   letter-spacing: 0.18em;
-  color: #d8d8dc;
+  color: var(--sc-ink);
   backdrop-filter: blur(6px);
 }
 
@@ -166,8 +247,8 @@ html:has(.showcase) body {
   justify-content: center;
   border: 1px solid var(--sc-line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
-  color: #d8d8dc;
+  background: var(--sc-panel);
+  color: var(--sc-ink);
   font-size: 13px;
   line-height: 1;
   backdrop-filter: blur(6px);
@@ -175,8 +256,8 @@ html:has(.showcase) body {
 }
 
 .sc-zoom:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--sc-panel-hover);
+  color: var(--sc-ink-strong);
 }
 
 /* 缩放模式：打开后普通滚轮 / 双指滚动直接缩放，不再滚动页面 */
@@ -192,7 +273,7 @@ html:has(.showcase) body {
 .sc-zoom-mode.on {
   background: rgba(255, 128, 0, 0.22);
   border-color: rgba(255, 128, 0, 0.7);
-  color: #fff;
+  color: var(--sc-ink-strong);
 }
 
 /* 遥测面板 */
@@ -210,7 +291,7 @@ html:has(.showcase) body {
   gap: 8px;
   font-size: 9.5px;
   letter-spacing: 0.28em;
-  color: #9a9a9e;
+  color: var(--sc-mute);
   margin-bottom: 12px;
 }
 
@@ -235,13 +316,13 @@ html:has(.showcase) body {
   line-height: 0.88;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-  color: #fff;
+  color: var(--sc-ink-strong);
 }
 
 .sc-unit {
   font-size: 9px;
   letter-spacing: 0.24em;
-  color: #86868b;
+  color: var(--sc-dim);
   padding-bottom: 3px;
 }
 
@@ -252,11 +333,11 @@ html:has(.showcase) body {
   margin-top: 16px;
   font-size: 9.5px;
   letter-spacing: 0.24em;
-  color: #86868b;
+  color: var(--sc-dim);
 }
 
 .sc-line-row b {
-  color: #fff;
+  color: var(--sc-ink-strong);
   font-weight: 500;
   font-size: 13px;
   letter-spacing: 0;
@@ -283,7 +364,7 @@ html:has(.showcase) body {
 .sc-ers {
   margin-top: 12px;
   height: 3px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--sc-panel-hover);
 }
 
 .sc-ers i {
@@ -297,7 +378,7 @@ html:has(.showcase) body {
   margin-top: 12px;
   font-size: 9px;
   letter-spacing: 0.24em;
-  color: #6f6f74;
+  color: var(--sc-faint);
 }
 
 /* 中间按钮 */
@@ -311,7 +392,7 @@ html:has(.showcase) body {
 .sc-ctr-cap {
   font-size: 9.5px;
   letter-spacing: 0.34em;
-  color: #9a9a9e;
+  color: var(--sc-mute);
   margin-bottom: 10px;
 }
 
@@ -325,7 +406,7 @@ html:has(.showcase) body {
   border-radius: 4px;
   border: 1px solid rgba(255, 128, 0, 0.55);
   background: linear-gradient(180deg, rgba(255, 128, 0, 0.2), rgba(255, 128, 0, 0.06));
-  color: #fff;
+  color: var(--sc-ink-strong);
   font: inherit;
   font-size: 10.5px;
   letter-spacing: 0.26em;
@@ -346,7 +427,7 @@ html:has(.showcase) body {
   margin-top: 10px;
   font-size: 8.5px;
   letter-spacing: 0.26em;
-  color: #6b6b70;
+  color: var(--sc-faint);
 }
 
 .sc-ctr-hint kbd {
@@ -367,7 +448,7 @@ html:has(.showcase) body {
   gap: 22px;
   font-size: 9.5px;
   letter-spacing: 0.3em;
-  color: #6f6f74;
+  color: var(--sc-faint);
 }
 
 .sc-nav u {
@@ -380,7 +461,7 @@ html:has(.showcase) body {
   bottom: 1.6vh;
   font-size: 8.5px;
   letter-spacing: 0.24em;
-  color: #62626a;
+  color: var(--sc-faintest);
 }
 
 .sc-meta-r {
@@ -388,7 +469,7 @@ html:has(.showcase) body {
   bottom: 1.6vh;
   font-size: 8.5px;
   letter-spacing: 0.24em;
-  color: #62626a;
+  color: var(--sc-faintest);
 }
 
 .sc-hint-drag {
@@ -397,7 +478,7 @@ html:has(.showcase) body {
   transform: translateX(-50%);
   font-size: 8.5px;
   letter-spacing: 0.26em;
-  color: #6b6b70;
+  color: var(--sc-faint);
   display: flex;
   gap: 18px;
 }
@@ -439,7 +520,7 @@ html:has(.showcase) body {
   display: block;
   font-size: 9.5px;
   letter-spacing: 0.24em;
-  color: #fff;
+  color: var(--sc-ink-strong);
   font-weight: 500;
 }
 
@@ -481,7 +562,7 @@ html:has(.showcase) body {
   gap: 14px;
   font-size: 9.5px;
   letter-spacing: 0.3em;
-  color: #8a8a90;
+  color: var(--sc-dim);
   transition: opacity 0.6s ease;
 }
 
