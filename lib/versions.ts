@@ -3797,6 +3797,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
   software: V0_1_34_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.35" } : item),
   changes: [{
+    title: "车型素材改为按需加载：悬停预热、就绪后再切",
+    desc: "车型素材从 20 MB 到 105 MB，默认不再全部加载 —— 首屏只加载当前选中的车型（实测首屏只有一个 glb 请求）。\n交互设计：鼠标划过 / 键盘聚焦 / 手指按下某个车型时，在后台静默预取（写进 Cache Storage / IndexedDB），胶囊里显示一条细进度条，但画面不变；点选时若已就绪立即切换，若还在下载就把旧车留在画面上、等素材到位再切，不会先黑一下；已缓存的车型第二次切换是瞬时的。\n实现：assetCache 增加 isAssetCached / prefetchAsset，并对同一 URL 做 in-flight 去重（预取与真正加载共用同一条请求）；HomeShowcase 负责 idle / loading / ready 状态机与「就绪后再 setModelId」。\n实测：首屏只请求 mcl35m.glb；悬停 Gulf 触发后台请求且画面仍是 MCL35M；未就绪点选时不立即切换，素材到位后自动切到 gulf2022。",
+    kind: "feature"
+  }, {
     title: "手机端布局与手势优化",
     desc: "底部重排成四行、互不重叠（≤640px）：章节导航在最下、车型切换、控制胶囊、主按钮；控制胶囊以前在 ≤860px 被整排 display:none 隐藏（手机上完全没法缩放 / 固定机位），现在改成 40px 圆形图标常驻、缩放加减号收起（改由双指捏合）；遥测面板在手机上只留时速 / 档位 / ERS，刻度与页脚隐藏。\n手势：横滑转车（触屏灵敏度 0.3 → 0.42）、竖滑交给页面滚动（触屏不再改俯仰，避免一边滚页一边俯仰）、双指捏合缩放（两指按下时阻止浏览器接管）、双击复位（手机上 dblclick 不可靠，自己按 320ms 判定）、并补上 pointercancel 结束拖拽（浏览器接管滚动时镜头不再跟着最后一段位移转）。\n互动：去掉系统点按灰底高亮（-webkit-tap-highlight-color），按下有轻微收缩反馈，并新增手机专属提示「横滑环视 · 双指缩放 · 双击复位」。\n实测（390×844 / dpr3 设备模拟）：底部三行互不重叠；横滑 yaw 0→77.7 且页面不滚动；竖滑页面滚 0→205 且 yaw 保持 0；捏合 zoom 1→0.55；双击 yaw / zoom 复位到 0 / 1。",
     kind: "feature"

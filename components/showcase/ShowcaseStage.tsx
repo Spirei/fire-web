@@ -24,14 +24,23 @@ export default function ShowcaseStage({
   className = "",
   models,
   currentModel,
-  onModelChange
+  onModelChange,
+  onModelIntent
 }: {
   config: ShowcaseConfig;
   className?: string;
-  /** 可切换的车型清单（不传就只展示当前这一辆） */
-  models?: Array<{ id: string; label: string; note?: string }>;
+  /** 可切换的车型清单（不传就只展示当前这一辆）；status/progress 由外层按需加载逻辑给出 */
+  models?: Array<{
+    id: string;
+    label: string;
+    note?: string;
+    status?: "idle" | "loading" | "ready";
+    progress?: number;
+  }>;
   currentModel?: string;
   onModelChange?: (id: string) => void;
+  /** 悬停 / 聚焦 / 触摸按下：外层据此静默预取素材 */
+  onModelIntent?: (id: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -766,18 +775,25 @@ export default function ShowcaseStage({
             {models && models.length > 1 && (
               <div className="sc-row sc-models">
                 <span className="sc-models-cap">车型</span>
-                {models.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={item.id === currentModel ? "sc-model on" : "sc-model"}
-                    onClick={() => onModelChange?.(item.id)}
-                    aria-pressed={item.id === currentModel}
-                    title={item.note ? `${item.label} · ${item.note}` : item.label}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+                {models.map((item) => {
+                  const loading = item.status === "loading" && item.id !== currentModel;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`sc-model${item.id === currentModel ? " on" : ""}${loading ? " loading" : ""}`}
+                      onClick={() => onModelChange?.(item.id)}
+                      onPointerEnter={() => onModelIntent?.(item.id)}
+                      onFocus={() => onModelIntent?.(item.id)}
+                      onTouchStart={() => onModelIntent?.(item.id)}
+                      aria-pressed={item.id === currentModel}
+                      title={item.note ? `${item.label} · ${item.note}` : item.label}
+                    >
+                      <span className="sc-model-label">{item.label}</span>
+                      {loading && <span className="sc-model-bar" style={{ width: `${Math.round((item.progress ?? 0) * 100)}%` }} />}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

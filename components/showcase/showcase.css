@@ -1020,3 +1020,28 @@ html:has(.showcase) body {
     transform: scale(0.97);
   }
 }
+
+/* 车型切换：未选中的车型按需加载，下载中在胶囊里显示进度条 */
+.sc-model {
+  position: relative;
+  overflow: hidden;
+}
+
+.sc-model-label {
+  position: relative;
+  z-index: 1;
+}
+
+.sc-model.loading {
+  color: var(--sc-mute);
+}
+
+.sc-model-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: currentColor;
+  opacity: 0.55;
+  transition: width 0.2s ease;
+}

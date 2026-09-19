@@ -134,13 +134,46 @@ function pruneOld(db: IDBDatabase, keepKey: string): Promise<void> {
  */
 export type AssetCacheMode = "cache-api" | "indexeddb" | "network";
 
-export async function fetchAssetBuffer(
+/** 同一个 URL 的下载只跑一次：预取与真正加载共用同一条请求 */
+const inflight = new Map<string, Promise<{ buffer: ArrayBuffer; fromCache: boolean; mode: AssetCacheMode }>>();
+
+/** 素材是否已经在本地缓存里（Cache Storage 或 IndexedDB），不发请求 */
+export async function isAssetCached(url: string): Promise<boolean> {
+  const absUrl = typeof location !== "undefined" ? new URL(url, location.href).href : url;
+  if (await readFromCacheApi(absUrl)) return true;
+  const db = await openDb();
+  if (!db) return false;
+  const hit = await readEntry(db, absUrl);
+  return hit instanceof ArrayBuffer && hit.byteLength > 0;
+}
+
+/**
+ * 静默预取：鼠标划过 / 聚焦车型时就先把素材拉下来存进缓存，
+ * 真正点选时通常已经就绪，点一下就切过去。
+ */
+export function prefetchAsset(url: string, onProgress?: (ratio: number) => void): Promise<unknown> {
+  return fetchAssetBuffer(url, onProgress);
+}
+
+export function fetchAssetBuffer(
   url: string,
   onProgress?: (ratio: number) => void
 ): Promise<{ buffer: ArrayBuffer; fromCache: boolean; mode: AssetCacheMode }> {
-  // 统一用绝对地址做缓存键：Cache Storage 里存的是绝对 URL，
-  // 之前拿相对地址去比对，刚写进去的条目会被 prune 自己删掉
   const absUrl = typeof location !== "undefined" ? new URL(url, location.href).href : url;
+  const running = inflight.get(absUrl);
+  if (running) {
+    running.then(() => onProgress?.(1), () => {});
+    return running;
+  }
+  const task = loadAsset(absUrl, onProgress).finally(() => inflight.delete(absUrl));
+  inflight.set(absUrl, task);
+  return task;
+}
+
+async function loadAsset(
+  absUrl: string,
+  onProgress?: (ratio: number) => void
+): Promise<{ buffer: ArrayBuffer; fromCache: boolean; mode: AssetCacheMode }> {
 
   // 1) HTTPS（线上）：Cache Storage
   const cachedByApi = await readFromCacheApi(absUrl);
@@ -159,7 +192,7 @@ export async function fetchAssetBuffer(
     }
   }
 
-  const res = await fetch(url, { credentials: "same-origin" });
+  const res = await fetch(absUrl, { credentials: "same-origin" });
   if (!res.ok) throw new Error(`素材请求失败：${res.status}`);
   const contentType = res.headers.get("content-type") || "application/octet-stream";
   const total = Number(res.headers.get("content-length") || 0);
