@@ -143,61 +143,18 @@ html:has(.showcase) body {
   gap: 8px;
 }
 
+/* 图标胶囊（音乐 / 深浅色）：底色、描边与三态统一走 fire-cap（见 capsule.css） */
 .sc-tool {
-  pointer-events: auto;
-  cursor: pointer;
   width: 34px;
   height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--sc-line);
-  border-radius: 999px;
-  background: var(--sc-panel);
-  color: var(--sc-ink);
-  backdrop-filter: blur(6px);
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .sc-tool svg {
   width: 17px;
   height: 17px;
-}
-
-/*
- * 悬停：只提亮描边与图标，不铺灰底 ——
- * 否则暂停后指针还停在按钮上，看起来跟仍在播放（图 2）一样，要移开指针才恢复常态。
- */
-.sc-tool:hover {
-  background: var(--sc-panel);
-  border-color: var(--sc-hover-line);
-  color: var(--sc-ink-strong);
-}
-
-/*
- * 播放中：更亮的「玻璃」底 + 亮描边 + 极轻外发光，
- * 之前的纯灰太平（反馈「太灰」），现在和常态一眼能分又不抢眼。
- */
-.sc-tool.on {
-  color: var(--sc-ink-strong);
-  border-color: var(--sc-active-line);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1));
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 0 14px rgba(255, 255, 255, 0.12);
-}
-
-.showcase.light .sc-tool.on {
-  background: linear-gradient(180deg, rgba(20, 24, 30, 0.2), rgba(20, 24, 30, 0.07));
-  box-shadow: 0 0 0 1px rgba(20, 24, 30, 0.05), 0 0 14px rgba(20, 24, 30, 0.1);
-}
-
-/* 键盘聚焦才画焦点环；鼠标点完不留圈、不留底色 */
-.sc-tool:focus {
-  outline: none;
-}
-
-.sc-tool:focus-visible {
-  outline: 2px solid var(--sc-active-line);
-  outline-offset: 2px;
 }
 
 .sc-kicker {
@@ -262,96 +219,38 @@ html:has(.showcase) body {
   gap: 8px;
 }
 
+/* 文字胶囊（环视 / 影棚 / ZOOM / 固定机位）：尺寸与排版在这里，观感走 fire-cap */
 .sc-pill {
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 7px 13px;
-  border: 1px solid var(--sc-line);
-  border-radius: 999px;
-  background: var(--sc-panel);
   font-size: 9.5px;
   letter-spacing: 0.18em;
-  color: var(--sc-ink);
-  backdrop-filter: blur(6px);
-  /* HUD 整层是 pointer-events: none，可点元素要各自打开 */
-  pointer-events: auto;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
-.sc-pill:hover {
-  background: var(--sc-panel-hover);
-  border-color: var(--sc-active-line);
-  color: var(--sc-ink-strong);
-}
-
-.sc-pill.on {
-  background: var(--sc-active);
-  border-color: var(--sc-active-line);
-  color: var(--sc-ink-strong);
-}
-
-/* 置顶机位：左下角一个图标按钮（点一下置顶当前视角，再点一下解除） */
-.sc-pin {
-  pointer-events: auto;
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-}
-
-/* 已固定时只用中性底色 + 亮字，不用橙色 */
-.sc-pin.on {
-  background: var(--sc-active);
-  border-color: var(--sc-active-line);
-  color: var(--sc-ink-strong);
-}
-
-
-
+/* 胶囊左侧的小图标（环视 / 影棚 / 固定机位的 svg 都吃这一条） */
 .sc-pill svg {
   width: 11px;
   height: 11px;
   opacity: 0.75;
 }
 
-/* 缩放按钮：与左侧胶囊同一套观感 */
+/* 缩放按钮：与左侧胶囊同一套观感（正方形图标胶囊） */
 .sc-zoom {
-  pointer-events: auto;
-  cursor: pointer;
   width: 30px;
   height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--sc-line);
-  border-radius: 999px;
-  background: var(--sc-panel);
-  color: var(--sc-ink);
   font-size: 13px;
   line-height: 1;
-  backdrop-filter: blur(6px);
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.sc-zoom:hover {
-  background: var(--sc-panel-hover);
-  color: var(--sc-ink-strong);
 }
 
 /* 缩放模式：打开后普通滚轮 / 双指滚动直接缩放，不再滚动页面 */
 .sc-zoom-mode {
-  pointer-events: auto;
-  cursor: pointer;
-  font: inherit;
   font-size: 9.5px;
   letter-spacing: 0.18em;
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-}
-
-.sc-zoom-mode.on {
-  background: var(--sc-active);
-  border-color: var(--sc-active-line);
-  color: var(--sc-ink-strong);
 }
 
 /* 遥测面板 */
@@ -747,7 +646,7 @@ html:has(.showcase) body {
   }
 }
 
-/* 右下角车型切换：一行胶囊，默认中性色（不抢眼），当前车型用中性底色标出 */
+/* 右下角车型切换：一行胶囊，观感走 fire-cap；当前车型 = 标准的「已开启」态 */
 .sc-models {
   right: 3.4vw;
   bottom: 4.6vh;
@@ -764,30 +663,9 @@ html:has(.showcase) body {
 }
 
 .sc-model {
-  pointer-events: auto;
-  cursor: pointer;
-  border: 1px solid var(--sc-line);
-  background: var(--sc-panel);
-  border-radius: 999px;
   padding: 5px 11px;
-  font: inherit;
   font-size: 9px;
   letter-spacing: 0.18em;
-  color: var(--sc-mute);
-  backdrop-filter: blur(6px);
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-}
-
-.sc-model:hover {
-  background: var(--sc-panel-hover);
-  border-color: var(--sc-active-line);
-  color: var(--sc-ink-strong);
-}
-
-.sc-model.on {
-  background: var(--sc-active);
-  border-color: var(--sc-active-line);
-  color: var(--sc-ink-strong);
 }
 
 /* 音乐波纹图标：填充跟随当前字色，播放时每根条上下舞动 */
@@ -1009,9 +887,7 @@ html:has(.showcase) body {
 
 /* 点按反馈：手机上手指按下去有轻微收缩，松开回到常态 */
 @media (hover: none) {
-  .sc-pill:active,
-  .sc-model:active,
-  .sc-tool:active,
+  /* 胶囊的按下反馈统一在 fire-cap 里（见 capsule.css），这里只管章节导航 */
   .sc-nav button:active {
     transform: scale(0.94);
   }
@@ -1051,10 +927,8 @@ html:has(.showcase) body {
   padding: 5px 9px;
   letter-spacing: 0;
   border-style: dashed;
-  color: var(--sc-faint);
 }
 
 .sc-model-add:hover {
-  color: var(--sc-ink-strong);
   border-style: solid;
 }

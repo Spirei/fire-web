@@ -60,10 +60,7 @@
   flex: none;
   font-size: 12px;
   padding: 7px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(127, 137, 152, 0.36);
   text-decoration: none;
-  color: inherit;
 }
 
 .mp-step {
@@ -186,29 +183,6 @@
 .mp-table small {
   display: block;
   opacity: 0.55;
-}
-
-.mp-actions-col {
-  width: 1%;
-  white-space: nowrap;
-}
-
-/* 操作列：按钮之间留出距离，别挤成一坨 */
-.mp-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.mp-actions .mp-ghost,
-.mp-actions .mp-danger {
-  padding: 6px 12px;
-  font-size: 11.5px;
-  white-space: nowrap;
-}
-
-.mp-dim {
-  opacity: 0.5;
 }
 
 .mp-tune {
@@ -348,34 +322,13 @@
   flex-wrap: wrap;
 }
 
+/* 按钮的底色 / 描边 / 三态统一走 fire-cap（见 capsule.css），这里只留尺寸与排版 */
 .mp-primary,
 .mp-ghost,
 .mp-danger {
-  font: inherit;
+  font-family: inherit;
   font-size: 12.5px;
   padding: 9px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(127, 137, 152, 0.36);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.mp-primary {
-  background: rgba(190, 210, 240, 0.16);
-  border-color: rgba(190, 210, 240, 0.52);
-}
-
-.mp-primary:disabled,
-.mp-ghost:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.mp-danger {
-  color: #ff9c8f;
-  border-color: rgba(255, 156, 143, 0.4);
 }
 
 .mp-notice,

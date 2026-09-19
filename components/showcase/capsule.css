@@ -1,0 +1,143 @@
+/*
+ * 胶囊统一标准（首页 3D 展示台 + 车型导入页共用，2026-09-20 起）
+ *
+ * 取自首页右上角音乐按钮（.sc-tool）的三态，两页的胶囊一律用这套：
+ *   常态      = 极淡面板底 + 1px 细描边 + 背景模糊（不铺灰块，避免「没点也像按着」）
+ *   悬停      = 底色不变，只提亮描边与字色
+ *   已开启    = 玻璃渐变底 + 亮描边 + 极轻外发光（点了之后的状态、当前选中项都走这个）
+ *   按下      = 轻微收缩，松开回到上一态
+ *   键盘聚焦  = 只有 :focus-visible 画环，鼠标点完不留圈、不留底色
+ *
+ * 深浅色只换一组变量（--cap-*），组件里不要再各写各的底色 / 描边。
+ * 用法：给胶囊元素加 class="fire-cap"（需要时叠加 fire-cap-primary / fire-cap-danger），
+ * 尺寸、字号、内边距仍由各自的布局类决定。
+ */
+
+.fire-cap {
+  --cap-ink: #f4f4f5;
+  --cap-ink-strong: #ffffff;
+  --cap-line: rgba(255, 255, 255, 0.14);
+  --cap-fill: rgba(255, 255, 255, 0.03);
+  --cap-hover-line: rgba(255, 255, 255, 0.24);
+  --cap-on-line: rgba(255, 255, 255, 0.42);
+  --cap-on-from: rgba(255, 255, 255, 0.26);
+  --cap-on-to: rgba(255, 255, 255, 0.1);
+  --cap-on-ring: rgba(255, 255, 255, 0.06);
+  --cap-on-glow: rgba(255, 255, 255, 0.12);
+
+  /* HUD 整层是 pointer-events: none，可点元素各自打开 */
+  pointer-events: auto;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  /* 胶囊不换行也不被压扁：一排放不下时由外层横向滚动，而不是把文字挤成两行 */
+  flex: none;
+  white-space: nowrap;
+  border: 1px solid var(--cap-line);
+  border-radius: 999px;
+  background: var(--cap-fill);
+  color: var(--cap-ink);
+  /* 只继承字族：字号 / 字重仍由各自布局类决定，避免两套样式的字体简写互相覆盖 */
+  font-family: inherit;
+  backdrop-filter: blur(6px);
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease,
+    transform 0.16s ease;
+}
+
+.fire-cap:hover {
+  background: var(--cap-fill);
+  border-color: var(--cap-hover-line);
+  color: var(--cap-ink-strong);
+}
+
+/* 已开启 / 当前选中 / 点了之后：玻璃渐变底 + 亮描边 + 极轻外发光 */
+.fire-cap.on,
+.fire-cap-primary {
+  color: var(--cap-ink-strong);
+  border-color: var(--cap-on-line);
+  background: linear-gradient(180deg, var(--cap-on-from), var(--cap-on-to));
+  box-shadow: 0 0 0 1px var(--cap-on-ring), 0 0 14px var(--cap-on-glow);
+}
+
+/* 主操作：常驻「已开启」的样子，不再另开一套配色 */
+.fire-cap-primary:hover {
+  border-color: var(--cap-on-line);
+  color: var(--cap-ink-strong);
+}
+
+/* 危险操作：同一套几何与交互，只把色相换成红 */
+.fire-cap-danger {
+  --cap-ink: #e8867a;
+  --cap-ink-strong: #ff9c8f;
+  --cap-line: rgba(255, 156, 143, 0.34);
+  --cap-hover-line: rgba(255, 156, 143, 0.62);
+  --cap-on-line: rgba(255, 156, 143, 0.62);
+  --cap-on-from: rgba(255, 156, 143, 0.26);
+  --cap-on-to: rgba(255, 156, 143, 0.1);
+  --cap-on-ring: rgba(255, 156, 143, 0.1);
+  --cap-on-glow: rgba(255, 156, 143, 0.14);
+}
+
+.fire-cap:active {
+  transform: scale(0.96);
+}
+
+.fire-cap:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.fire-cap:disabled:active {
+  transform: none;
+}
+
+.fire-cap:focus {
+  outline: none;
+}
+
+.fire-cap:focus-visible {
+  outline: 2px solid var(--cap-on-line);
+  outline-offset: 2px;
+}
+
+/* 系统开启「减少动态效果」时不缩放 */
+@media (prefers-reduced-motion: reduce) {
+  .fire-cap:active {
+    transform: none;
+  }
+}
+
+/*
+ * 浅色底：同一组变量换成深色半透明值。两处的判断信号不同，分开写 ——
+ *   3D 舞台：跟着舞台自己的主题（.showcase.light = 浅色主题或「影棚」光照），
+ *            不能跟站点的 html.dark，否则舞台是夜间隧道、站点主题却是浅色时会套错（套上 50% 白底）；
+ *   车型导入页：跟着站点深浅色（:root:not(.dark)），因为整页底色也是这么切的。
+ */
+.showcase.light .fire-cap,
+:root:not(.dark) .showcase-import .fire-cap {
+  --cap-ink: #14181e;
+  --cap-ink-strong: #0d1014;
+  --cap-line: rgba(20, 24, 30, 0.18);
+  --cap-fill: rgba(255, 255, 255, 0.5);
+  --cap-hover-line: rgba(20, 24, 30, 0.4);
+  --cap-on-line: rgba(20, 24, 30, 0.42);
+  --cap-on-from: rgba(20, 24, 30, 0.2);
+  --cap-on-to: rgba(20, 24, 30, 0.07);
+  --cap-on-ring: rgba(20, 24, 30, 0.05);
+  --cap-on-glow: rgba(20, 24, 30, 0.1);
+}
+
+.showcase.light .fire-cap-danger,
+:root:not(.dark) .showcase-import .fire-cap-danger {
+  --cap-ink: #b23a2a;
+  --cap-ink-strong: #9c2f20;
+  --cap-line: rgba(190, 70, 50, 0.36);
+  --cap-hover-line: rgba(190, 70, 50, 0.62);
+  --cap-on-line: rgba(190, 70, 50, 0.62);
+  --cap-on-from: rgba(190, 70, 50, 0.2);
+  --cap-on-to: rgba(190, 70, 50, 0.08);
+  --cap-on-ring: rgba(190, 70, 50, 0.08);
+  --cap-on-glow: rgba(190, 70, 50, 0.12);
+}

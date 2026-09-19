@@ -6,6 +6,7 @@ import { setThemeCookie } from "@/lib/theme";
 import { usePersistedState } from "@/lib/usePersistedState";
 import MusicIcon from "./MusicIcon";
 import "./showcase.css";
+import "./capsule.css";
 
 const RPM_TICKS = 20;
 /** 用户置顶的默认机位（进度 + 拖拽角度 + 缩放），刷新 / 重开页面都回到这里 */
@@ -598,7 +599,7 @@ export default function ShowcaseStage({
               {musicReady && (
                 <button
                   type="button"
-                  className={`sc-tool${musicOn ? " on" : ""}`}
+                  className={`sc-tool fire-cap${musicOn ? " on" : ""}`}
                   onClick={toggleMusic}
                   title={musicOn ? "关闭背景音乐" : "播放背景音乐"}
                   aria-label={musicOn ? "关闭背景音乐" : "播放背景音乐"}
@@ -610,7 +611,7 @@ export default function ShowcaseStage({
               )}
               <button
                 type="button"
-                className="sc-tool"
+                className="sc-tool fire-cap"
                 onClick={toggleTheme}
                 title={theme === "dark" ? "切换到浅色（明亮摄影棚）" : "切换到深色（夜间隧道）"}
                 aria-label="切换深浅色"
@@ -654,7 +655,7 @@ export default function ShowcaseStage({
             <div className="sc-row sc-left-foot">
               <button
                 type="button"
-                className={`sc-pill${orbit ? " on" : ""}`}
+                className={`sc-pill fire-cap${orbit ? " on" : ""}`}
                 onClick={toggleOrbit}
                 aria-pressed={orbit}
                 title={orbit ? "停止自动环视" : "自动绕车环视一圈"}
@@ -667,7 +668,7 @@ export default function ShowcaseStage({
               </button>
               <button
                 type="button"
-                className={`sc-pill${studio ? " on" : ""}`}
+                className={`sc-pill fire-cap${studio ? " on" : ""}`}
                 onClick={toggleStudio}
                 aria-pressed={studio}
                 title={studio ? "回到夜间隧道光照" : "切到明亮摄影棚光照"}
@@ -680,7 +681,7 @@ export default function ShowcaseStage({
               </button>
               <button
                 type="button"
-                className="sc-pill sc-zoom-mode"
+                className="sc-pill sc-zoom-mode fire-cap"
                 ref={zoomModeRef}
                 aria-pressed="false"
                 title="打开后普通滚轮 / 双指滚动就是放大缩小（快捷键 Z）"
@@ -691,16 +692,16 @@ export default function ShowcaseStage({
                 </svg>
                 {ui.zoomMode}
               </button>
-              <button type="button" className="sc-zoom" ref={zoomOutRef} title="缩小（⌘/Ctrl + 滚轮）" aria-label="缩小">
+              <button type="button" className="sc-zoom fire-cap" ref={zoomOutRef} title="缩小（⌘/Ctrl + 滚轮）" aria-label="缩小">
                 −
               </button>
-              <button type="button" className="sc-zoom" ref={zoomInRef} title="放大看细节（⌘/Ctrl + 滚轮）" aria-label="放大">
+              <button type="button" className="sc-zoom fire-cap" ref={zoomInRef} title="放大看细节（⌘/Ctrl + 滚轮）" aria-label="放大">
                 ＋
               </button>
               {/* 固定机位：图标 + 文字。点一下把当前视角固定下来（有底色），再点一下取消（底色消失） */}
               <button
                 type="button"
-                className={`sc-pill sc-pin${pinnedPose ? " on" : ""}`}
+                className={`sc-pill sc-pin fire-cap${pinnedPose ? " on" : ""}`}
                 onClick={pinnedPose ? clearPinnedPose : pinCurrentPose}
                 aria-pressed={Boolean(pinnedPose)}
                 title={pinnedPose ? "已固定当前机位：再点一下取消固定" : "把当前视角固定为默认机位（刷新后回到这里）"}
@@ -784,7 +785,7 @@ export default function ShowcaseStage({
                     <button
                       key={item.id}
                       type="button"
-                      className={`sc-model${item.id === currentModel ? " on" : ""}${loading ? " loading" : ""}`}
+                      className={`sc-model fire-cap${item.id === currentModel ? " on" : ""}${loading ? " loading" : ""}`}
                       onClick={() => onModelChange?.(item.id)}
                       onPointerEnter={() => onModelIntent?.(item.id)}
                       onFocus={() => onModelIntent?.(item.id)}
@@ -801,7 +802,7 @@ export default function ShowcaseStage({
                 {onImport && (
                   <button
                     type="button"
-                    className="sc-model sc-model-add"
+                    className="sc-model sc-model-add fire-cap"
                     onClick={onImport}
                     title="导入车型（.glb 放进 uploads 卷，不进仓库）"
                     aria-label="导入车型"

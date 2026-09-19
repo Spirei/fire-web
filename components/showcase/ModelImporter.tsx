@@ -8,6 +8,7 @@ import { buildImportedConfig } from "./presets/models";
 import type { ShowcaseModelParams } from "./types";
 import { showToast } from "@/lib/toast";
 import "./model-importer.css";
+import "./capsule.css";
 
 /** 服务端体检报告（与 lib/glbInspect.ts 的 GlbReport 对齐） */
 export interface ImportReport {
@@ -403,7 +404,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             上传后会先做一轮体检，再在预览里摆正、认轮子，最后写进车型条。
           </p>
         </div>
-        <Link className="mp-back" href="/">
+        <Link className="mp-back fire-cap" href="/">
           返回首页
         </Link>
       </header>
@@ -538,7 +539,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             <div className="mp-preview-wrap">
               {previewConfig && <ModelPreview key={previewKey} config={previewConfig} onDebug={setStructure} />}
               <div className="mp-preview-foot">
-                <button type="button" className="mp-ghost" onClick={() => setPreviewKey((prev) => prev + 1)}>
+                <button type="button" className="mp-ghost fire-cap" onClick={() => setPreviewKey((prev) => prev + 1)}>
                   重新加载预览
                 </button>
                 {structure && (
@@ -677,12 +678,12 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             之后再调参数不用重新上传，改完再点一次保存即可。
           </p>
           <div className="mp-save-row">
-            <button type="button" className="mp-primary" onClick={() => void save()} disabled={saving || !meta.id || !meta.label}>
+            <button type="button" className="mp-primary fire-cap fire-cap-primary" onClick={() => void save()} disabled={saving || !meta.id || !meta.label}>
               {saving ? "保存中…" : "保存车型"}
             </button>
             <button
               type="button"
-              className="mp-ghost"
+              className="mp-ghost fire-cap"
               onClick={() => setPreviewKey((prev) => prev + 1)}
               disabled={saving}
             >
@@ -775,7 +776,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                   {!row.builtin && (
                     <button
                       type="button"
-                      className="rounded-full border border-edge px-2 py-1 text-[11px] font-semibold text-ink-2 transition-colors hover:border-edge-strong hover:text-ink dark:border-white/15 dark:text-white/80 dark:hover:border-white/30"
+                      className="fire-cap px-2 py-1 text-[11px] font-semibold"
                       onClick={() => {
                         setEditingId(row.id);
                         setSavedId(null);
@@ -799,7 +800,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                   {/* 封面内置车也能换：只改卡面照片，素材与参数仍随仓库分发 */}
                   <button
                     type="button"
-                    className="rounded-full border border-edge px-2 py-1 text-[11px] font-semibold text-muted transition-colors hover:border-edge-strong hover:text-ink dark:border-white/15 dark:text-white/70"
+                    /* 上传中显示标准的「已开启」态：点一下之后有明确反馈 */
+                    className={`fire-cap px-2 py-1 text-[11px] font-semibold${coverBusy === row.id ? " on" : ""}`}
                     disabled={coverBusy === row.id}
                     onClick={() => {
                       coverTargetRef.current = row.id;
@@ -811,7 +813,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                   {row.cover && (
                     <button
                       type="button"
-                      className="rounded-full border border-edge px-2 py-1 text-[11px] font-semibold text-muted transition-colors hover:border-edge-strong hover:text-ink dark:border-white/15 dark:text-white/70"
+                      className={`fire-cap px-2 py-1 text-[11px] font-semibold${coverBusy === row.id ? " on" : ""}`}
                       disabled={coverBusy === row.id}
                       onClick={() => void clearCover(row.id)}
                     >
@@ -824,14 +826,14 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                     <>
                       <button
                         type="button"
-                        className="rounded-full border border-edge px-2 py-1 text-[11px] font-semibold text-muted transition-colors hover:border-edge-strong hover:text-ink dark:border-white/15 dark:text-white/70"
+                        className="fire-cap px-2 py-1 text-[11px] font-semibold"
                         onClick={() => void removeModel(row, false)}
                       >
                         移出清单
                       </button>
                       <button
                         type="button"
-                        className="rounded-full border border-[#ff9c8f]/40 px-2 py-1 text-[11px] font-semibold text-[#d9604f] transition-colors hover:border-[#ff9c8f] dark:text-[#ff9c8f]"
+                        className="fire-cap fire-cap-danger px-2 py-1 text-[11px] font-semibold"
                         onClick={() => void removeModel(row, true)}
                       >
                         删除并删文件
