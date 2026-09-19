@@ -72,6 +72,12 @@
 
 ### 修复
 
+#### 首页右下角新增车型切换（4 辆迈凯伦）
+- 右下角新增车型胶囊：MCL35M（2021，原有）、Gulf F1（2022 海湾涂装）、MP4/6（1991 红白）、MP4/5（1989 塞纳座驾），点一下整台展示台用新配置重建，选择记在 fire:showcase:model 里刷新保持。
+- 车型清单做成注册表 components/showcase/presets/models.ts：每辆车只是一份配置覆盖（素材路径 + 长度 / 朝向 / 轮子材质名），镜头、隧道、地面、后期继续复用同一套；选中车型由新的 HomeShowcase 客户端组件管理。
+- 为多车型补了两处通用能力：轮子识别按网格跨度自动区分单轮（Gulf / MP4 系列一个网格一个轮子，直接绕自身中心转）；debug() 增加 carBox，换车型时一眼看出缩放 / 朝向对不对。
+- 素材：Gulf（65 MB）与 MP4/6（20 MB）放进 public/mclaren/ 进仓库；MP4/5 有 105 MB，超过 GitHub 单文件上限，放 uploads 卷（不进仓库，部署时手动拷贝）。实测四辆车都能正常加载渲染。
+
 #### 车模缓存改用 Cache Storage（HTTPS）并修掉入库失败
 - 线上是 HTTPS（安全上下文），缓存改为优先走 Cache Storage（浏览器统一做容量管理与 LRU 淘汰，将来接 Service Worker 也能直接复用），只有局域网 HTTP 访问才回退 IndexedDB。
 - 入库踩到一个坑：直接把下载中的流式响应 put 进 Cache Storage 会报 “Cache.put() encountered a network error”，23 MB 的车模必失败；现在改成先用读到的字节流构造 Response 再 put，并保存 content-type。

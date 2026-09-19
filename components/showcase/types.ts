@@ -358,6 +358,8 @@ export interface ShowcaseHandle {
     /** 车身高度与偏航（度），用来确认车没有离地 / 偏出轨道 */
     carY: number;
     carYaw: number;
+    /** 车模在场景里的实际包围盒尺寸（排查换车型的缩放 / 朝向） */
+    carBox: number[];
     /** 车道保持：自动量出的车头偏角（度）与当前横向偏移（米） */
     laneHeading: number;
     laneOffset: number;

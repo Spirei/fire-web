@@ -1095,6 +1095,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let carHeadingOffset = 0;
   /** 车模在 carRoot 局部空间里的包围盒：每帧投影成屏幕包围盒，用来让光条从车后面穿过 */
   const carLocalBox = new THREE.Box3();
+  /** 排查换车型用：车模在场景里的实际包围盒尺寸 */
+  let carDebugBox: number[] = [];
   const wheelPivots: Array<
     Array<{ mesh: THREE.Mesh; angle: number; rot: THREE.Matrix4; t1: THREE.Matrix4; t2: THREE.Matrix4 }>
   > = [];
@@ -1103,6 +1105,20 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   /** 合并网格里一个材质覆盖四个轮子，按三角面质心聚类拆成四个独立的轮子 */
   function splitWheels(mesh: THREE.Mesh, midLateral: number, midLong: number, lateralAxis: number, longAxis: number) {
     const geo = mesh.geometry;
+    // 有的模型是「一个材质盖四个轮子」（本车），有的是「一个网格一个轮子」（Gulf / MP4 系列）。
+    // 先用网格自身的跨度区分：纵向没有明显长于横向的就是单轮，整体绕自身中心转；
+    // 否则按象限拆成四个轮子。
+    if (geo.boundingBox === null) geo.computeBoundingBox();
+    const bb = geo.boundingBox;
+    if (bb) {
+      const latSize = bb.max.getComponent(lateralAxis) - bb.min.getComponent(lateralAxis);
+      const longSize = bb.max.getComponent(longAxis) - bb.min.getComponent(longAxis);
+      if (longSize < latSize * 2.2) {
+        const single = new Map<number, { geometry: THREE.BufferGeometry; center: THREE.Vector3 }>();
+        single.set(0, { geometry: geo, center: bb.getCenter(new THREE.Vector3()) });
+        return single;
+      }
+    }
     const idx = geo.index;
     const pos = geo.attributes.position as THREE.BufferAttribute;
     if (!idx || !pos) return new Map<number, { geometry: THREE.BufferGeometry; center: THREE.Vector3 }>();
@@ -1401,6 +1417,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       carRoot.rotation.set(0, 0, 0);
       carRoot.updateMatrixWorld(true);
       carLocalBox.setFromObject(car);
+      {
+        // 排查换车型：把车模在场景里的实际包围盒记下来（缩放 / 朝向不对时一眼能看出来）
+        const dbgBox = new THREE.Box3().setFromObject(car);
+        const dbgSize = dbgBox.getSize(new THREE.Vector3());
+        carDebugBox = [dbgSize.x, dbgSize.y, dbgSize.z].map((v) => +v.toFixed(2));
+      }
       carRoot.position.copy(keepPos);
       carRoot.rotation.copy(keepRot);
       carRoot.updateMatrixWorld(true);
@@ -2460,6 +2482,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     carY: +carRoot.position.y.toFixed(3),
     carYaw: +((carRoot.rotation.y * 180) / Math.PI).toFixed(2),
     /** 车道保持：自动量出的车头偏角（度，对齐前）与当前横向偏移（米） */
+    carBox: carDebugBox,
     laneHeading: +laneHeadingDeg.toFixed(2),
     laneOffset: +carLateral.toFixed(3),
     /** 360° 环视 / 影棚当前是否打开（界面按钮要显示状态） */

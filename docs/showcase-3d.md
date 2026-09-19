@@ -48,3 +48,17 @@ export default function HomePage() {
 - 配置要能从服务端组件传给客户端组件，所以**正则一律写成字符串**（引擎内部再 `new RegExp(..., "i")`），不要直接写 `/.../ `；
 - 素材放 `public/` 下，不要放 `public/uploads/`（那是部署期的用户上传目录，公开仓库审计会拦）；
 - 交互约定：滚动 = 叙事推进，`拖拽` = 360° 环视，`⌘/Ctrl/Shift + 滚轮`（或 ZOOM 模式、双指捏合、左下角加减号）= 缩放，`空格 / 按住按钮` = 冲刺（车驶入隧道、轮胎转动）。
+
+## 切换车型（首页右下角）
+
+- 车型清单在 `components/showcase/presets/models.ts`：每辆车 = 一份 `ShowcaseConfig`（素材路径 + 车型参数覆盖），
+  镜头、隧道、地面、后期这些与车型无关的部分直接复用 MCL35M 那一套。
+- 加了新车只要：把 glb 放进 `public/mclaren/`（单文件超过 100 MB 的放 `public/uploads/mclaren/models/`，
+  这份目录不进仓库、部署时手动拷到 uploads 卷），然后在 `SHOWCASE_MODELS` 里补一条。
+- 每辆车的关键参数：`model.length`（整车目标长度）、`model.yaw` / `pitch`（朝向不对时修正）、
+  `model.wheelPattern`（匹配轮子材质名，例如 `rims|tyres`、`Tyre`、`wheels`）、
+  `wheelAxis` / `wheelLateral` / `wheelLongitudinal`（轮子自转轴与左右 / 前后判断轴）、
+  `maxTextureSize`（贴图很大的模型收到 2048 省显存）。
+- 轮子有两种建模方式：一个材质盖四个轮子（本车，引擎按象限拆成四个）与一个网格一个轮子
+  （Gulf / MP4 系列，引擎按网格跨度自动识别为单轮）。识别错时表现为轮子被切碎。
+- 选中的车型记在 `fire:showcase:model`（刷新保持）；排查缩放 / 朝向可以看 `__mcl.debug().carBox`。

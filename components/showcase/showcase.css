@@ -701,3 +701,46 @@ html:has(.showcase) body {
     left: 5vw;
   }
 }
+
+/* 右下角车型切换：一行胶囊，默认中性色（不抢眼），当前车型用中性底色标出 */
+.sc-models {
+  right: 3.4vw;
+  bottom: 4.6vh;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sc-models-cap {
+  font-size: 8.5px;
+  letter-spacing: 0.26em;
+  color: var(--sc-faintest);
+  margin-right: 2px;
+}
+
+.sc-model {
+  pointer-events: auto;
+  cursor: pointer;
+  border: 1px solid var(--sc-line);
+  background: var(--sc-panel);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: var(--sc-mute);
+  backdrop-filter: blur(6px);
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.sc-model:hover {
+  background: var(--sc-panel-hover);
+  border-color: var(--sc-active-line);
+  color: var(--sc-ink-strong);
+}
+
+.sc-model.on {
+  background: var(--sc-active);
+  border-color: var(--sc-active-line);
+  color: var(--sc-ink-strong);
+}

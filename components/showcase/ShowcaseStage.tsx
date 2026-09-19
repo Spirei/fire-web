@@ -18,7 +18,20 @@ type ShowcasePose = { p: number; yaw: number; pitch: number; zoom: number };
  * 配色、后期、章节文案、部件标注全部来自配置，换车不用改组件与引擎。
  * three.js 与引擎在挂载后才动态加载，首屏包不含 3D 代码。
  */
-export default function ShowcaseStage({ config, className = "" }: { config: ShowcaseConfig; className?: string }) {
+export default function ShowcaseStage({
+  config,
+  className = "",
+  models,
+  currentModel,
+  onModelChange
+}: {
+  config: ShowcaseConfig;
+  className?: string;
+  /** 可切换的车型清单（不传就只展示当前这一辆） */
+  models?: Array<{ id: string; label: string; note?: string }>;
+  currentModel?: string;
+  onModelChange?: (id: string) => void;
+}) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
@@ -637,6 +650,23 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
             </div>
             <div className="sc-row sc-meta-l">{ui.metaLeft}</div>
             <div className="sc-row sc-meta-r">{ui.metaRight}</div>
+            {models && models.length > 1 && (
+              <div className="sc-row sc-models">
+                <span className="sc-models-cap">车型</span>
+                {models.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={item.id === currentModel ? "sc-model on" : "sc-model"}
+                    onClick={() => onModelChange?.(item.id)}
+                    aria-pressed={item.id === currentModel}
+                    title={item.note ? `${item.label} · ${item.note}` : item.label}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div aria-hidden="true">

@@ -3797,6 +3797,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
   software: V0_1_34_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.35" } : item),
   changes: [{
+    title: "首页右下角新增车型切换（4 辆迈凯伦）",
+    desc: "右下角新增车型胶囊：MCL35M（2021，原有）、Gulf F1（2022 海湾涂装）、MP4/6（1991 红白）、MP4/5（1989 塞纳座驾），点一下整台展示台就用新配置重建，选择记在本机偏好 fire:showcase:model 里，刷新保持。\n车型清单做成注册表 components/showcase/presets/models.ts：每辆车只是一份配置覆盖（素材路径 + 长度 / 朝向 / 轮子材质名），镜头、隧道、地面、后期继续复用同一套；选中车型由新的 HomeShowcase 客户端组件管理。\n为多车型补了两处通用能力：① 轮子识别——原来只支持「一个材质盖四个轮子」，现在按网格跨度自动区分单轮（Gulf / MP4 系列一个网格一个轮子，直接绕自身中心转）；② debug() 增加 carBox（车模在场景里的实际包围盒），换车型时一眼看出缩放 / 朝向对不对。\n素材：Gulf（65 MB）与 MP4/6（20 MB）放进 public/mclaren/ 进仓库；MP4/5 有 105 MB，超过 GitHub 单文件上限，放在 uploads 卷（不进仓库，部署时手动拷贝）。实测四辆车都能正常加载渲染（车宽 2.0-3.8 m、车长 4.6-5.6 m、高度 1.0-1.2 m）。",
+    kind: "feature"
+  }, {
     title: "车模缓存改用 Cache Storage（HTTPS）并修掉入库失败",
     desc: "线上是 HTTPS，属于安全上下文，因此缓存改为优先走 Cache Storage（由浏览器统一做容量管理与 LRU 淘汰，将来接 Service Worker 也能直接复用），只有局域网 HTTP 访问（拿不到 Cache API）才回退 IndexedDB。\n入库时踩到一个坑：直接把下载中的流式响应 put 进 Cache Storage 会报 “Cache.put() encountered a network error”，23 MB 的车模必失败；现在改成先用读到的字节流构造 Response 再 put，并把 content-type 一起存下来。\n缓存键统一用绝对 URL —— 之前 prune 拿相对地址比对，会把刚写进去的条目当旧版本删掉。\n实测（安全上下文）：首次访问下载 20.77 MB 并写入 Cache Storage；刷新时 debug 日志为「车模来源 cache-api（本地命中）」，网络里完全没有 GLB 请求。",
     kind: "feature"
