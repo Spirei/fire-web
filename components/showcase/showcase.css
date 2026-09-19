@@ -37,9 +37,9 @@
 }
 
 /*
- * 浅色主题下画面是「上半明亮背景 + 下半深色地面」：
- * 顶部文案用深色字，下半部分的按钮/导航/角标仍在深色地面上，因此局部换回浅色字，
- * 否则底部导航会深字压深底，几乎看不见。
+ * 浅色主题（含「影棚」）下整屏都是亮底：地面与背景同色系（天际线接色），
+ * 因此底部按钮/导航/角标继续用深色字。之前这一块换回浅色字是因为地面是深色的，
+ * 现在地面变亮，白字会看不清。
  */
 .showcase.light .sc-left-foot,
 .showcase.light .sc-ctr,
@@ -47,14 +47,14 @@
 .showcase.light .sc-nav,
 .showcase.light .sc-meta-l,
 .showcase.light .sc-meta-r {
-  --sc-ink: #f4f4f5;
-  --sc-ink-strong: #ffffff;
-  --sc-mute: #c9c9cd;
-  --sc-faint: #a4a4aa;
-  --sc-faintest: #909096;
-  --sc-line: rgba(255, 255, 255, 0.18);
-  --sc-panel: rgba(255, 255, 255, 0.06);
-  --sc-panel-hover: rgba(255, 255, 255, 0.14);
+  --sc-ink: #14181e;
+  --sc-ink-strong: #0d1014;
+  --sc-mute: #5f656d;
+  --sc-faint: #6d747c;
+  --sc-faintest: #6d747c;
+  --sc-line: rgba(20, 24, 30, 0.18);
+  --sc-panel: rgba(255, 255, 255, 0.5);
+  --sc-panel-hover: rgba(255, 255, 255, 0.72);
 }
 
 /* 舞台是整屏深色 3D 场景，连 html / body 的底色一起压深，避免橡皮筋回弹时露出白底 */

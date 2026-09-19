@@ -346,7 +346,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     uMixBase: { value: 0.3 },
     uMixFres: { value: 1.05 },
     uNormalAmount: { value: 1 },
-    uMipBias: { value: 1 }
+    uMipBias: { value: 1 },
+    // 天际线接色：远处地面渐变成背景色，避免地面与背景在水平线上出现一条硬边
+    uHorizon: { value: new THREE.Color(0x0a0b0d) },
+    uHorizonMix: { value: 0.85 }
   };
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(140, 140),
@@ -366,6 +369,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         uniform sampler2D tReflect; uniform sampler2D tNormal; uniform sampler2D tRough;
         uniform vec3 uColor; uniform float uReflectIntensity; uniform float uSpeed; uniform float uTime; uniform float uFlow;
       uniform float uMixBase; uniform float uMixFres; uniform float uNormalAmount; uniform float uMipBias;
+        uniform vec3 uHorizon; uniform float uHorizonMix;
         varying vec4 vWorld; varying vec4 vReflect; varying vec3 vView;
         float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float vnoise(vec2 p){
@@ -392,6 +396,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           float fres = pow(1.0 - clamp(dot(upView, viewDir), 0.0, 1.0), 4.0);
           vec3 col = uColor;
           col = mix(col, refl * uReflectIntensity, clamp(uMixBase + fres * uMixFres, 0.0, 1.0));
+          // 越贴近天际线（掠射）越靠背景色：浅色模式下原来地面比背景暗一档，交界处能看到一条横线
+          col = mix(col, uHorizon, clamp(fres * uHorizonMix, 0.0, 1.0));
           // 流光：高速时地面上掠过的暖色光带
           float band = vnoise(vec2(vWorld.x * 0.32, vWorld.z * 0.06 + uTime * (0.6 + uSpeed * 0.5)));
           band = pow(max(band - 0.7, 0.0) * 3.2, 2.0);
@@ -1625,6 +1631,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     floorUniforms.uMixFres.value = light ? 0.7 : 1.05;
     floorUniforms.uNormalAmount.value = light ? 0.12 : 0.18;
     floorUniforms.uMipBias.value = light ? 1.35 : 1;
+    // 天际线接色：浅色背景（#dfe3e8 一带）与夜间背景（近黑）各自接自己的底色
+    floorUniforms.uHorizon.value.set(light ? 0xe0e4e9 : 0x090a0c);
+    floorUniforms.uHorizonMix.value = light ? 1 : 0.9;
     flowUniforms.uFlowTime.value = elapsed;
     flowUniforms.uFlowStrength.value = sps * sps * CFG.speed.flowStrength;
     tunnelUniforms.uTime.value = elapsed;
@@ -1709,7 +1718,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     bloom.radius = CFG.post.bloomRadius + sps * 0.14;
     scene.background = light ? backdropLight : backdrop;
     scene.backgroundIntensity = light ? 1 : 0.85 + narrativeDay * 0.35;
-    floorUniforms.uColor.value.set(light ? 0x101317 : 0x0b0c0e);
+    // 浅色/影棚：地面跟着背景走亮灰（冲刺时反射会关掉，地面若仍是深色就会和背景断开、底部深色字也看不清）
+    floorUniforms.uColor.value.set(light ? 0xc9ced5 : 0x0b0c0e);
 
     // HUD
     // HUD 写入都做变更判断：每帧几十次 DOM 写会让浏览器反复重排（滚动发涩的另一个来源）
