@@ -1472,9 +1472,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const reflectCamLast = new THREE.Vector3(1e9, 0, 0);
   let reflectTravelLast = -1;
   const reflectNeedsUpdate = () => {
-    const camMoved = camera.position.distanceToSquared(reflectCamLast) > 1e-8;
-    const carMoved = Math.abs(carTravel - reflectTravelLast) > 1e-5;
+    // 镜头只要动过就必须逐帧更新：阈值收到 1e-10（约 1e-5 米），
+    // 否则慢速旋转时倒影会隔帧更新，看起来就像有一层甩出去的残影
+    const camMoved = camera.position.distanceToSquared(reflectCamLast) > 1e-10;
+    const carMoved = Math.abs(carTravel - reflectTravelLast) > 1e-6;
     if (camMoved || carMoved || reflectDirty) return true;
+    // 环视 / 拖拽惯性期间也强制逐帧（这时镜头动得很慢，靠位置差判断会漏）
+    if (orbitOn || Math.abs(userYawVel) > 1e-4 || Math.abs(userPitchVel) > 1e-5 || Math.abs(zoomTarget - zoom) > 1e-4) return true;
     return frameCount % 2 === 0;
   };
   let lastLit = -1;
@@ -1651,8 +1655,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 浅色/影棚：反射占比给足，车身与倒影同色；法线扰动仍压低，避免亮背景经扰动出现麻点
     floorUniforms.uMixBase.value = light ? 0.5 : 0.46;
     floorUniforms.uMixFres.value = light ? 0.9 : 1.05;
-    floorUniforms.uNormalAmount.value = light ? 0.12 : 0.18;
-    floorUniforms.uMipBias.value = light ? 1.35 : 1;
+    floorUniforms.uNormalAmount.value = light ? 0.07 : 0.1;
+    floorUniforms.uMipBias.value = light ? 0.8 : 0.55;
     // 天际线接色：浅色背景（#dfe3e8 一带）与夜间背景（近黑）各自接自己的底色
     floorUniforms.uHorizon.value.set(light ? 0xe0e4e9 : 0x090a0c);
     floorUniforms.uHorizonMix.value = light ? 1 : 0.9;
