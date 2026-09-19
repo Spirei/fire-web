@@ -759,6 +759,7 @@ export default function ShowcaseStage({
               <span>{ui.zoomHint}</span>
             </div>
             <div className="sc-row sc-hint-touch">{ui.touchHint}</div>
+            {/* 章节导航：右侧竖排指示器（短横条 + 当前章节更长更亮），悬停 / 键盘聚焦显示章节名 */}
             <div className="sc-row sc-nav">
               {ui.nav.map((item, i) => (
                 <button
@@ -767,8 +768,12 @@ export default function ShowcaseStage({
                   className={phase === i ? "on" : undefined}
                   onClick={() => goPhase(i)}
                   aria-label={`跳到第 ${i + 1} 章 ${item}`}
+                  aria-current={phase === i ? "true" : undefined}
                 >
-                  ▴ {item}
+                  <span className="sc-nav-label" aria-hidden="true">
+                    {item}
+                  </span>
+                  <span className="sc-nav-tick" aria-hidden="true" />
                 </button>
               ))}
             </div>

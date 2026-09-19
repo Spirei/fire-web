@@ -414,37 +414,106 @@ html:has(.showcase) body {
 }
 
 /* 底部导航与角标 */
+/*
+ * 章节导航：右侧竖排指示器（借鉴智能助手的消息轨 —— 短横条 + 当前项更长更亮），
+ * 右侧留一条细竖轨当基准线；章节名只在悬停 / 键盘聚焦时浮在横条左侧（用绝对定位，横条不会左右跳）。
+ */
 .sc-nav {
-  left: 50%;
-  bottom: 4.6vh;
-  transform: translateX(-50%);
+  right: 3.4vw;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
-  align-items: center;
-  gap: 22px;
-  font-size: 9.5px;
-  letter-spacing: 0.3em;
-  color: var(--sc-faint);
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+  padding-right: 8px;
 }
 
-/* 章节导航：可点，点了滚到对应章节 */
+.sc-nav::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: -6px;
+  bottom: -6px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--sc-line);
+}
+
 .sc-nav button {
+  position: relative;
   pointer-events: auto;
   cursor: pointer;
   border: 0;
   background: none;
-  padding: 2px 0;
+  padding: 0;
   font: inherit;
-  letter-spacing: inherit;
-  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--sc-faint);
   transition: color 0.2s ease;
 }
 
-.sc-nav button:hover {
-  color: var(--sc-ink-strong);
+/* 短横条：常态细而暗，悬停变长变亮，当前章节最长最亮 */
+.sc-nav-tick {
+  display: block;
+  width: 16px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.5;
+  transition: width 0.24s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease;
+}
+
+.sc-nav button:hover,
+.sc-nav button:focus-visible {
+  color: var(--sc-ink);
+}
+
+.sc-nav button:hover .sc-nav-tick,
+.sc-nav button:focus-visible .sc-nav-tick {
+  width: 24px;
+  opacity: 0.85;
 }
 
 .sc-nav button.on {
-  color: #ff8000;
+  color: var(--sc-ink-strong);
+}
+
+.sc-nav button.on .sc-nav-tick {
+  width: 32px;
+  opacity: 1;
+}
+
+/* 章节名：悬停 / 聚焦才出现，不参与布局 */
+.sc-nav-label {
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9.5px;
+  letter-spacing: 0.24em;
+  white-space: nowrap;
+  color: var(--sc-ink-strong);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.sc-nav button:hover .sc-nav-label,
+.sc-nav button:focus-visible .sc-nav-label {
+  opacity: 1;
+}
+
+/* 键盘聚焦才画焦点环（鼠标点完不留圈） */
+.sc-nav button:focus {
+  outline: none;
+}
+
+.sc-nav button:focus-visible .sc-nav-tick {
+  outline: 2px solid var(--sc-active-line);
+  outline-offset: 3px;
 }
 
 .sc-hint-touch {
@@ -614,8 +683,8 @@ html:has(.showcase) body {
   }
 
   .sc-nav {
-    gap: 14px;
-    letter-spacing: 0.2em;
+    right: 4vw;
+    gap: 12px;
   }
 
   .sc-hint-drag {
@@ -831,12 +900,25 @@ html:has(.showcase) body {
     white-space: nowrap;
   }
 
-  /* 章节导航留在最下边一行 */
+  /* 章节导航：右侧竖排指示器在手机上保持竖排，横条收窄一点；章节名仍靠悬停 / 聚焦显示 */
   .sc-nav {
-    bottom: 2.4vh;
-    gap: 12px;
-    font-size: 8.5px;
-    letter-spacing: 0.14em;
+    right: 4.5vw;
+    gap: 14px;
+    padding-right: 6px;
+  }
+
+  .sc-nav-tick {
+    width: 12px;
+    height: 3px;
+  }
+
+  .sc-nav button.on .sc-nav-tick {
+    width: 26px;
+  }
+
+  .sc-nav button:hover .sc-nav-tick,
+  .sc-nav button:focus-visible .sc-nav-tick {
+    width: 20px;
   }
 
   .sc-hint-drag {

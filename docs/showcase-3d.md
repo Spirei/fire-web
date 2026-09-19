@@ -77,6 +77,7 @@ export default function HomePage() {
 - 随仓库分发的内置素材放 `public/mclaren/`；**导入的车型一律放 `public/uploads/mclaren/`**（运行期素材不进仓库、不进镜像，公开仓库审计会拦 100MB+ 的 glb）；
 - 车型顺序与封面只以 `public/uploads/mclaren/showroom.json` 为准（顺序表 `order` + 导入车 `cover` + 内置车 `builtinMeta`），不要在前端另存一份偏好；
 - 胶囊统一走「展示台胶囊标准」`components/showcase/capsule.css`：加 `class="fire-cap"` 即可（三态 = 常态淡底细描边 / 悬停只亮描边 / 已开启·当前选中·主操作 = 玻璃渐变底 + 亮描边 + 极轻外发光）；尺寸与排版留在各自布局类里，不要再写各自的底色与 hover。首页 HUD 与车型导入页共用这一套，深浅色分别按 `.showcase.light` 与 `:root:not(.dark)` 取变量；
+- 章节导航在画面右侧竖直排列：每条 = 一根短横条，当前章节最长最亮（借鉴智能助手的消息轨），右侧那条细竖线是导轨；章节名平时不显示，悬停 / 键盘聚焦才浮在横条左侧（绝对定位，不会把横条挤得左右跳）；点击滚到对应章节（`.sc-nav` / `.sc-nav-tick` / `.sc-nav-label`）。
 - 交互约定：滚动 = 叙事推进，`拖拽` = 360° 环视，`⌘/Ctrl/Shift + 滚轮`（或 ZOOM 模式、双指捏合、左下角加减号）= 缩放，`空格 / 按住按钮` = 冲刺（车驶入隧道、轮胎转动）。
 
 ## 切换车型（首页右下角）
