@@ -15,6 +15,24 @@ export function setThemeCookie(dark: boolean) {
   }
 }
 
+/**
+ * 服务端读主题：从请求头里的 cookie 串解析（根布局与首页首帧都用它）。
+ * 没写过 cookie 的访客默认深色 —— 首页本来就是夜景，浅色是用户自己切过的选择。
+ */
+export function readThemeFromCookieHeader(cookieHeader: string): SiteTheme {
+  const read = (name: string) => {
+    const matched = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+    if (!matched) return "";
+    try {
+      return decodeURIComponent(matched[1]);
+    } catch {
+      return matched[1];
+    }
+  };
+  const value = read(THEME_COOKIE) || read(LEGACY_THEME_COOKIE);
+  return value === "light" ? "light" : "dark";
+}
+
 export function applySiteTheme(theme: SiteTheme, emit = true) {
   if (typeof document === "undefined") return;
   const dark = theme === "dark";

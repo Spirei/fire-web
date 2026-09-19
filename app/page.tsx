@@ -2,6 +2,7 @@ import HomeShowcase from "@/components/showcase/HomeShowcase";
 import { DEFAULT_SHOWCASE_MODEL } from "@/components/showcase/presets/models";
 import { listShowcaseOptions } from "@/lib/showcaseModels";
 import { getAuthUser } from "@/lib/auth";
+import { readThemeFromCookieHeader } from "@/lib/theme";
 import { headers } from "next/headers";
 
 /**
@@ -29,6 +30,8 @@ export default async function HomePage() {
       models={models}
       canImport={Boolean(user)}
       defaultModelId={models.some((item) => item.id === DEFAULT_SHOWCASE_MODEL) ? DEFAULT_SHOWCASE_MODEL : models[0]?.id}
+      // 主题走服务端首帧：浅色用户刷新时不会再先渲染一屏深色（舞台自己只有挂载后才知道 localStorage）
+      initialTheme={readThemeFromCookieHeader(cookie)}
     />
   );
 }

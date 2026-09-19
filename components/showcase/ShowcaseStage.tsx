@@ -27,9 +27,12 @@ export default function ShowcaseStage({
   currentModel,
   onModelChange,
   onModelIntent,
-  onImport
+  onImport,
+  initialTheme = "dark"
 }: {
   config: ShowcaseConfig;
+  /** 服务端主题（主题 cookie）：首帧就是用户选的那个，浅色刷新不会先闪深色 */
+  initialTheme?: "dark" | "light";
   className?: string;
   /** 可切换的车型清单（不传就只展示当前这一辆）；status/progress 由外层按需加载逻辑给出 */
   models?: Array<{
@@ -74,7 +77,7 @@ export default function ShowcaseStage({
   const [loadRatio, setLoadRatio] = useState(0);
   const [ready, setReady] = useState(false);
   const [racing, setRacing] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">(initialTheme);
   const [musicOn, setMusicOn] = useState(false);
   const [musicReady, setMusicReady] = useState(true);
   /** 频谱可视化是否接手（接手后关掉 CSS 兜底动画，避免动画盖住每帧的 transform） */
@@ -363,21 +366,28 @@ export default function ShowcaseStage({
     };
   }, [homeTop]);
 
-  // 首帧之后再读站点主题（服务端首帧固定深色，避免水合不一致）
-  const themeRef = useRef<"dark" | "light">("dark");
+  /**
+   * 主题首帧由服务端给（主题 cookie），所以浅色用户刷新时不会先渲染一屏深色再切过来。
+   * 挂载后仍读一次 localStorage：两边不一致时以 localStorage 为准并回写 cookie（老数据自愈）。
+   */
+  const themeRef = useRef<"dark" | "light">(initialTheme);
   useEffect(() => {
-    // 默认按深色展示（首页原本就是夜景）；只有用户自己选过浅色才用浅色，
-    // 避免新访客第一次进来直接看到明亮摄影棚而认不出来。
     let saved: string | null = null;
     try {
       saved = localStorage.getItem("fire.theme");
     } catch {
       /* 忽略 */
     }
-    const next: "dark" | "light" = saved === "light" ? "light" : "dark";
-    themeRef.current = next;
-    setTheme(next);
-    handleRef.current?.setTheme(next);
+    if (saved !== "light" && saved !== "dark") return;
+    const next: "dark" | "light" = saved;
+    if (next !== themeRef.current) {
+      themeRef.current = next;
+      setTheme(next);
+      handleRef.current?.setTheme(next);
+    }
+    // localStorage 与 cookie 不一致时补写 cookie，下次刷新的首帧就是同一个值
+    document.documentElement.classList.toggle("dark", next === "dark");
+    setThemeCookie(next === "dark");
   }, []);
 
   const toggleTheme = useCallback(() => {

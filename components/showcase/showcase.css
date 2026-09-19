@@ -65,10 +65,18 @@
   --sc-panel-hover: rgba(255, 255, 255, 0.72);
 }
 
-/* 舞台是整屏深色 3D 场景，连 html / body 的底色一起压深，避免橡皮筋回弹时露出白底 */
-html:has(.showcase),
-html:has(.showcase) body {
+/*
+ * 舞台是整屏 3D 场景，html / body 的底色跟着舞台主题走：
+ * 深色时压深（橡皮筋回弹不露白底），浅色时用摄影棚底色（回弹不露深色，也不会闪一下黑）。
+ */
+html:has(.showcase:not(.light)),
+html:has(.showcase:not(.light)) body {
   background-color: #050506 !important;
+}
+
+html:has(.showcase.light),
+html:has(.showcase.light) body {
+  background-color: #f4f6f9 !important;
 }
 
 .sc-scroll {

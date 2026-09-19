@@ -31,11 +31,14 @@ export interface HomeShowcaseModel {
 export default function HomeShowcase({
   models,
   canImport = false,
-  defaultModelId
+  defaultModelId,
+  initialTheme = "dark"
 }: {
   models: HomeShowcaseModel[];
   canImport?: boolean;
   defaultModelId?: string;
+  /** 服务端从主题 cookie 读出来的首帧主题：浅色用户刷新时不会先闪深色 */
+  initialTheme?: "dark" | "light";
 }) {
   const router = useRouter();
   const list = useMemo(() => (models.length ? models : []), [models]);
@@ -121,6 +124,7 @@ export default function HomeShowcase({
       onModelChange={(id) => void select(id)}
       onModelIntent={warmUp}
       onImport={canImport ? () => router.push("/showcase/import") : undefined}
+      initialTheme={initialTheme}
     />
   );
 }
