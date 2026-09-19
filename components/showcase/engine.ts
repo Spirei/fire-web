@@ -1260,6 +1260,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const labelPos: Array<{ x: number; y: number; opacity?: number } | undefined> = [];
   let userYaw = 0;
   let userYawVel = 0;
+  // 上下拖拽的俯仰偏移：把「相机高度」换算成仰角后再叠加，这样上下拖是真抬头/俯视
+  let userPitch = 0;
+  let userPitchVel = 0;
   // 用户缩放：滚轮（⌘/Ctrl + 滚轮或触控板捏合）与按钮都改这个倍率，用来放大看细节
   const MIN_ZOOM = CFG.zoom.min;
   const MAX_ZOOM = CFG.zoom.max;
@@ -1304,9 +1307,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     camAt(p);
     // 拖拽环视：角度直接跟手，松手后带着惯性继续转，可以无限圈 360° 环视
     if (!dragging) {
-      userYaw += userYawVel * dt * 60;
-      userYawVel *= Math.pow(0.93, dt * 60);
-      if (Math.abs(userYawVel) < 0.0004) userYawVel = 0;
+      // 松手后的惯性：速度按帧衰减，且俯仰每帧都夹在范围内（之前漏夹会把镜头甩飞）
+      const decay = Math.pow(0.9, dt * 60);
+      userYaw += userYawVel * 0.35;
+      userYawVel *= decay;
+      if (Math.abs(userYawVel) < 0.002) userYawVel = 0;
+      userPitch = clamp(userPitch + userPitchVel * 0.35, -0.55, 0.95);
+      userPitchVel *= decay;
+      if (Math.abs(userPitchVel) < 0.00002) userPitchVel = 0;
     }
     zoom += (zoomTarget - zoom) * clamp(dt * 8, 0, 1);
     // 冲刺时镜头顺隧道方向跟随：方位角平滑绕到车尾正后方，机位与注视点随车往隧道深处推进，
@@ -1320,8 +1328,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const fit = camera.aspect < fitAspect ? clamp(fitAspect / camera.aspect, 1, CFG.camera.fitMaxPullback) : 1;
     const r = (camState.r - sp * 1.5) * Math.pow(fit, 0.8) * zoom;
     const h = camState.h - sp * 0.22;
-    camPos.set(Math.sin(az) * r, Math.max(0.35, h), Math.cos(az) * r + follow * 0.55);
-    lookAt.set(0, camState.ty + sp * 0.05, camState.tz + follow * 0.62);
+    const targetY = camState.ty + sp * 0.05;
+    // 关键帧给的是高度，换成仰角后才能和用户的上下拖拽相加；
+    // 最终仰角夹在 3° 到 66° 之间：既能贴地看侧面，也不会穿到地面下或翻过头顶。
+    const baseElev = Math.atan2(Math.max(0.2, h) - targetY, r);
+    const elev = clamp(baseElev + userPitch, 0.05, 1.15);
+    const horizontal = Math.cos(elev) * r;
+    camPos.set(Math.sin(az) * horizontal, targetY + Math.sin(elev) * r, Math.cos(az) * horizontal + follow * 0.55);
+    lookAt.set(0, targetY, camState.tz + follow * 0.62);
     camState.fovEff = camState.fov * Math.pow(fit, 0.45);
 
     // fbm 晃动：三个轴各自随机错开频率，高速才明显
@@ -1661,16 +1675,23 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   let dragging = false;
   let dragX = 0;
+  let dragY = 0;
   const onCanvasDown = (e: PointerEvent) => {
     dragging = true;
     dragX = e.clientX;
+    dragY = e.clientY;
   };
   const onPointerMove = (e: PointerEvent) => {
     if (!dragging) return;
     const dx = e.clientX - dragX;
     dragX = e.clientX;
+    const dy = e.clientY - dragY;
+    dragY = e.clientY;
     userYaw -= dx * 0.3;
     userYawVel = -dx * 0.3;
+    // 上下拖：向上拖 = 升高视角俯视，向下拖 = 降低视角平视/略微仰视
+    userPitch = clamp(userPitch + dy * 0.0035, -0.55, 0.95);
+    userPitchVel = dy * 0.0035;
   };
   const onDragEnd = () => {
     dragging = false;
@@ -1704,6 +1725,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   const onDoubleClick = () => {
     zoomTarget = 1;
+    userPitch = 0;
+    userPitchVel = 0;
+    userYaw = 0;
+    userYawVel = 0;
     setZoomMode(false);
   };
   canvas.addEventListener("wheel", onWheel, { passive: false });
@@ -2014,6 +2039,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     racing,
     travel: +carTravel.toFixed(2),
     zoom: +zoom.toFixed(2),
+    yaw: +userYaw.toFixed(1),
+    pitch: +userPitch.toFixed(2),
     buffer: [canvas.width, canvas.height],
     reflection: reflectRT.width,
     textures: renderer.info.memory.textures,
