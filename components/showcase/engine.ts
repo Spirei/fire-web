@@ -2291,13 +2291,21 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   /** 当前手势是不是手指（触屏）：手指横滑转车、竖滑留给页面滚动，不做俯仰 */
   let dragByTouch = false;
   let lastTapAt = 0;
+  /**
+   * 用户置顶的机位（由组件通过 setHomePose 传进来）。
+   * 双击复位要回到「用户的固定机位」，而不是引擎的中立角度 —— 以前这里一律归零，
+   * 于是双击之后停在的不是用户置顶的那一帧（反馈：「回到一个非我们设置的固定机位」）。
+   */
+  let homePose: { yaw: number; pitch: number; zoom: number } | null = null;
   const resetView = () => {
-    userYaw = 0;
+    userYaw = homePose?.yaw ?? 0;
     userYawVel = 0;
-    userPitch = 0;
+    userPitch = homePose?.pitch ?? 0;
     userPitchVel = 0;
-    zoomTarget = 1;
+    zoomTarget = homePose?.zoom ?? 1;
     setZoomMode(false);
+    // 置顶机位还包含「进度」：交给组件把滚动位置带回去，才真的回到那一帧
+    options.onResetView?.();
   };
   const onCanvasDown = (e: PointerEvent) => {
     // 触屏双击复位（手机上 dblclick 不可靠，自己判时间间隔）
@@ -2748,6 +2756,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         zoom = clamp(pose.zoom, MIN_ZOOM, MAX_ZOOM);
         zoomTarget = zoom;
       }
+    },
+    /** 用户置顶的机位：双击复位回到这里（传 null 表示没置顶，回到中立角度） */
+    setHomePose: (pose: { yaw?: number; pitch?: number; zoom?: number } | null) => {
+      homePose = pose
+        ? { yaw: pose.yaw ?? 0, pitch: pose.pitch ?? 0, zoom: pose.zoom ?? 1 }
+        : null;
     },
     setProgress: (p: number, settle = 0) => {
       const steps = Math.max(1, Math.round(settle * 60));

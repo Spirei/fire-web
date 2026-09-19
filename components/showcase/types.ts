@@ -350,6 +350,8 @@ export interface ShowcaseOptions {
   onRacing?: (racing: boolean) => void;
   /** WebGL 上下文丢失（显存吃紧、驱动回收）：上层重建一次场景即可恢复 */
   onContextLost?: () => void;
+  /** 双击复位：引擎已把角度 / 缩放调到置顶机位，这里由组件把滚动位置带回置顶进度 */
+  onResetView?: () => void;
   onError?: (message: string) => void;
 }
 
@@ -372,6 +374,8 @@ export interface ShowcaseHandle {
   readPose: () => { p: number; yaw: number; pitch: number; zoom: number };
   /** 应用机位：刷新或重建后回到用户置顶的角度（滚动位置由组件负责） */
   applyPose: (pose: { yaw?: number; pitch?: number; zoom?: number }) => void;
+  /** 用户置顶的机位：双击复位回到这里（null = 没置顶，回到中立角度） */
+  setHomePose: (pose: { yaw?: number; pitch?: number; zoom?: number } | null) => void;
   /** 手动设置滚动进度（调试 / 截图用） */
   setProgress: (p: number, settle?: number) => void;
   /** 调试用：当前平滑后的进度、速度、渲染倍率、冲刺与缩放状态 */

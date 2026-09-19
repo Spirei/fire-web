@@ -126,6 +126,20 @@ export default function ShowcaseStage({
     return JSON.stringify({ ...rest, assets: { ...assets, model: null } });
   }, [config]);
 
+  /**
+   * 首页的「固定机位」= 用户置顶的那一帧；没置顶就是开场（进度 0）。
+   * 每帧都从 ref 取（置顶值可能晚一拍才从存储里读出来），所以不缓存成常量。
+   * 开场的滚动守护与双击复位共用这一个。
+   */
+  const homeTop = useCallback(() => {
+    const el = scrollRef.current;
+    const stage = stageRef.current;
+    if (!el || !stage) return 0;
+    const total = Math.max(1, el.offsetHeight - stage.offsetHeight);
+    const at = pinnedPoseRef.current?.p ?? 0;
+    return el.getBoundingClientRect().top + window.scrollY + total * at;
+  }, []);
+
   useEffect(() => {
     const wrap = canvasWrapRef.current;
     const stage = stageRef.current;
@@ -200,6 +214,11 @@ export default function ShowcaseStage({
           },
           onPhase: handlePhase,
           onRacing: (on) => setRacing(on),
+          onResetView: () => {
+            // 双击复位：置顶机位是「进度 + 角度 + 缩放」，角度引擎已经调好，
+            // 这里把滚动位置带回置顶进度，才真的回到用户置顶的那一帧
+            if (pinnedPoseRef.current) window.scrollTo({ top: homeTop(), behavior: "smooth" });
+          },
           onContextLost: () => {
             if (cancelled) return;
             setReady(false);
@@ -215,6 +234,8 @@ export default function ShowcaseStage({
         const pinned = pinnedPoseRef.current;
         if (pinned) {
           handle.applyPose(pinned);
+          // 双击复位也回到这一帧（引擎自己归零会回到「不是我们设置的固定机位」）
+          handle.setHomePose({ yaw: pinned.yaw, pitch: pinned.pitch, zoom: pinned.zoom });
         }
         handleRef.current = handle;
         // 记下这一轮挂的是哪辆车：之后 config 里只有车型变了就原地换车，不重建场景
@@ -274,7 +295,14 @@ export default function ShowcaseStage({
     // 依赖里放的是「外壳签名」：只有镜头 / 灯光 / 地面 / 文案这些变了才重建场景，
     // 单纯换车型走下面的 setModel（原地换车，不重建、不空白）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shellKey, handlePhase, rebuild, degraded, retry]);
+  }, [shellKey, handlePhase, rebuild, degraded, retry, homeTop]);
+
+  // 置顶机位变化就同步给引擎：双击复位回到用户置顶的那一帧（没置顶时传 null = 回到中立角度）
+  useEffect(() => {
+    handleRef.current?.setHomePose(
+      pinnedPose ? { yaw: pinnedPose.yaw, pitch: pinnedPose.pitch, zoom: pinnedPose.zoom } : null
+    );
+  }, [pinnedPose]);
 
   // 换车型：原地换车（引擎、镜头、地面、HUD 都不动），切换过程没有空白期
   useEffect(() => {
@@ -303,16 +331,6 @@ export default function ShowcaseStage({
       /* 忽略 */
     }
     const mountAt = performance.now();
-    // 首页的「默认机位」= 用户置顶的那一帧；没置顶就是开场（进度 0）。
-    // 每帧都从 ref 取（置顶值可能晚一拍才从存储里读出来），所以这里不缓存成常量
-    const homeTop = () => {
-      const el = scrollRef.current;
-      const stage = stageRef.current;
-      if (!el || !stage) return 0;
-      const total = Math.max(1, el.offsetHeight - stage.offsetHeight);
-      const at = pinnedPoseRef.current?.p ?? 0;
-      return el.getBoundingClientRect().top + window.scrollY + total * at;
-    };
     window.scrollTo(0, homeTop());
 
     let released = false;
@@ -343,7 +361,7 @@ export default function ShowcaseStage({
         }
       }
     };
-  }, []);
+  }, [homeTop]);
 
   // 首帧之后再读站点主题（服务端首帧固定深色，避免水合不一致）
   const themeRef = useRef<"dark" | "light">("dark");
