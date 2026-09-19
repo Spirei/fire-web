@@ -52,10 +52,10 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       { p: 0.38, az: 60, r: 5.9, h: 0.8, ty: 0.5, tz: 0.9, fov: 27 },    // 前轮 / 侧箱特写（参考视频里车是满画甚至溢出的）
       { p: 0.46, az: 104, r: 6.2, h: 0.78, ty: 0.52, tz: 0.1, fov: 28 }, // 沿车身滑到后段，继续贴近
       { p: 0.54, az: 130, r: 9.4, h: 1.0, ty: 0.62, tz: 0.1, fov: 29 },  // 拉回 3/4 侧视
-      { p: 0.62, az: 178, r: 10.4, h: 2.0, ty: 0.72, tz: 0, tx: -0.5, fov: 31 },  // 抬升并收到车尾偏左
+      { p: 0.62, az: 180, r: 10.4, h: 2.0, ty: 0.72, tz: 0, tx: -0.05, fov: 31 },  // 抬升并收到车尾正后方（与光条汇聚点对齐）
       // 发车位：车尾正后方的低机位，按住空格后车就是朝这里驶入隧道，镜头保持锁定
-      { p: 0.7, az: 198, r: 10.0, h: 2.6, ty: 0.8, tz: -0.2, tx: -1.35, fov: 32 },
-      { p: 0.8, az: 205, r: 9.8, h: 2.8, ty: 0.82, tz: -0.1, tx: -1.6, fov: 32 },
+      { p: 0.7, az: 196, r: 10.0, h: 2.4, ty: 0.78, tz: -0.2, tx: -0.1, fov: 32 },
+      { p: 0.8, az: 202, r: 9.8, h: 2.6, ty: 0.8, tz: -0.1, tx: -0.12, fov: 32 },
       { p: 0.88, az: 186, r: 5.6, h: 0.9, ty: 0.6, tz: -0.7, fov: 29 },  // 收车后的一次极近特写（车尾 / 后轮）
       { p: 1, az: 190, r: 11, h: 1.9, ty: 0.82, tz: 0.1, fov: 30 }       // 最后拉出到英雄机位
     ],
@@ -78,6 +78,9 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     launchTravel: 11,
     // 冲刺时镜头绕到车尾偏左（参考视频里车是偏左、左右光条角度不对称的来源）
     chaseAzimuth: 212,
+    // 车身流光与地面流光在参考视频里没有（高速时车身是暗的），置 0 去掉这两处多余光源
+    flowStrength: 0,
+    floorFlow: 0,
     // 顶点粒子隧道：三角形太碎、影响观感，这里关掉（引擎仍支持，想要纵深时把 shards 配上即可）。
     shards: false,
     tunnel: {
@@ -97,15 +100,11 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       // 参考视频里每段长约 100-200px（1080 宽画面），这里约 1/8 屏幕半径一段
       barSegment: 8,
       // 地面车道线：比主光条更宽更暗的长虚线，专门做隧道地面的纵深
-      lanes: [
-        { angle: 168, width: 0.5, opacity: 1.1, color: "#9aa6b4" },
-        { angle: 12, width: 0.5, opacity: 1.1, color: "#9aa6b4" },
-        { angle: 194, width: 0.34, opacity: 0.5, color: "#8f9aa8" },
-        { angle: 346, width: 0.34, opacity: 0.5, color: "#8f9aa8" }
-      ],
+      // 地面车道线整组去掉：屏幕空间里它们会变成横贯画面的亮带，属于多余光源
+      lanes: [],
       // 隧道壁上的大量浅虚线
       auxCount: 22,
-      auxOpacity: 1.15,
+      auxOpacity: 0.85,
       bars: [
         // 角度是逐帧量出来的（0°=右，90°=上，180°=左，270°=下）：
         // 参考视频里主要光条在 59° / 112° / 239° / 268° / 296° / 317°。
@@ -125,7 +124,8 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
   post: {
     exposure: 1.16,
     bloom: { strength: 0.38, radius: 0.5, threshold: 0.9, speedBoost: 0.26 },
-    smear: { strength: 0.055, chroma: 0.01 }
+    // 拖影（动态模糊）会让行驶中的车发虚，参考视频里车是清晰的，所以置 0（想要时改回 0.05 即可）
+    smear: { strength: 0, chroma: 0 }
   },
 
   zoom: { min: 0.55, max: 2.4, wheelStep: 0.0016 },

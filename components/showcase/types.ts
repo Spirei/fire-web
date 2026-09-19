@@ -149,6 +149,10 @@ export interface ShowcaseConfig {
     launchTravel?: number;
     /** 冲刺时镜头绕到的方位角（度，180 = 正后方；参考视频是偏左后方约 205） */
     chaseAzimuth?: number;
+    /** 车身流光强度（0 = 不要，参考视频里高速时车身是暗的） */
+    flowStrength?: number;
+    /** 地面流光强度（0 = 不要） */
+    floorFlow?: number;
     /**
      * 顶点粒子隧道（参考零跑 C16 公开课的做法）：直接拿车模自身的顶点当粒子种子，
      * 位移全在顶点着色器里算，没有 CPU 粒子模拟，也不需要额外贴图或渲染目标。

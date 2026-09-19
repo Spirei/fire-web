@@ -97,6 +97,8 @@ function normalizeConfig(config: ShowcaseConfig) {
       topKmh: config.speed.topKmh ?? 355,
       launchTravel: config.speed.launchTravel ?? 11,
       chaseAzimuth: config.speed.chaseAzimuth ?? 180,
+      flowStrength: config.speed.flowStrength ?? 0.28,
+      floorFlow: config.speed.floorFlow ?? 1,
       tunnel:
         tunnel === false
           ? null
@@ -930,8 +932,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         float laneMask = lane * laneDash;
         float laneAux = 0.0;
         vec3 laneCol = vec3(0.0);
-        laneAux += laneMask * 0.55 + aux * 0.32;
-        laneCol += uLaneColor * laneMask * 0.5 + uWhite * aux * 0.18;
+        laneAux += laneMask * 0.38 + aux * 0.2;
+        laneCol += uLaneColor * laneMask * 0.3 + uWhite * aux * 0.09;
         // 车道线与辅助虚线：和主光条一样受车体遮挡与强度控制
         float laneAll = laneAux * (1.0 - hide) * uStrength * uIntensity;
         if (!(laneAll == laneAll)) laneAll = 0.0;   // NaN 兜底
@@ -1467,7 +1469,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     carRoot.position.y = Math.sin(elapsed * 0.7) * 0.004 - sp * 0.022;
     carRoot.rotation.z = -sp * 0.014;
     // 冲刺时车头略微偏出去，形成参考视频里那种车尾偏左的 3/4 视角
-    carRoot.rotation.y = Math.sin(elapsed * 0.25) * 0.006 + racingAmt * 0.11;
+    carRoot.rotation.y = Math.sin(elapsed * 0.25) * 0.006 + racingAmt * 0.02;
     // 轮胎跟着「当前车速」转：静止浏览时车速是 0 所以不转；
     // 松手后画面会看到轮胎继续带着转、随车速一起慢下来才停（参考视频就是这样）。
     const spin = speed * 0.62 * dt;
@@ -1494,7 +1496,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const sps = reduced ? 0 : sp;
     floorUniforms.uTime.value = elapsed;
     floorUniforms.uSpeed.value = sps;
-    floorUniforms.uFlow.value = sps * sps;
+    floorUniforms.uFlow.value = sps * sps * (CFG.speed.floorFlow ?? 1);
     // 浅色主题下地面保持深色工作台：反射降下来，否则亮背景经法线扰动会变成一片噪点灰
     floorUniforms.uReflectIntensity.value = (light ? 0.6 : CFG.ground.reflectIntensity) + sps * 0.2;
     // 浅色主题：反射与法线扰动都压低，地面保持干净的深色工作台
@@ -1504,7 +1506,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     floorUniforms.uNormalAmount.value = light ? 0.12 : 0.18;
     floorUniforms.uMipBias.value = light ? 1.35 : 1;
     flowUniforms.uFlowTime.value = elapsed;
-    flowUniforms.uFlowStrength.value = sps * sps * 0.6;
+    flowUniforms.uFlowStrength.value = sps * sps * CFG.speed.flowStrength;
     tunnelUniforms.uTime.value = elapsed;
     tunnelUniforms.uSpeed.value = reduced ? 0 : speed;
     tunnelUniforms.uOpacity.value = 0.46 + sps * 0.3;
@@ -1530,7 +1532,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         m.visible = ringFade > 0.02;
       });
     }
-    (pool.material as THREE.MeshBasicMaterial).opacity = CFG.ground.pool + sps * 0.1;
+    (pool.material as THREE.MeshBasicMaterial).opacity = CFG.ground.pool * (1 - clamp(sps * 0.6, 0, 0.8));
     if (ring) ring.visible = p > 0.12 || sps > 0.05;
     const tunnelOn = !!CFG.speed.tunnel && speed > 0.6 && !off.has("tunnel");
     if (tunnel) tunnel.visible = tunnelOn;
@@ -1695,7 +1697,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let renderScale = Math.min(wantedScale, 1.5);
   // 画质下限：低分屏绝不低于 1.0（原生），高分屏最低按 1.2 倍的 CSS 像素渲染，
   // 这样自动降级也不会出现「糊」的情况。
-  const minScale = Math.max(0.7, Math.min(1, 1.2 / Math.max(1, window.devicePixelRatio || 1)));
+  const minScale = Math.max(0.85, Math.min(1, 1.7 / Math.max(1, window.devicePixelRatio || 1)));
   let frameCost = 0;
   let frameSamples = 0;
   let lastAdapt = performance.now();
