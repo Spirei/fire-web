@@ -226,7 +226,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   const backdrop = makeBackdrop([[0, "#191c22"], [0.42, "#0b0c0f"], [0.72, "#070708"], [1, "#030303"]]);
   // 浅色主题：明亮摄影棚背景
-  const backdropLight = makeBackdrop([[0, "#f2f4f6"], [0.45, "#dfe3e8"], [0.75, "#cfd4da"], [1, "#bfc5cc"]]);
+  const backdropLight = makeBackdrop([[0, "#ffffff"], [0.4, "#f6f8fa"], [0.72, "#eceff4"], [1, "#e2e7ee"]]);
   scene.background = backdrop;
 
   /* ---------- 灯光：环境贴图为主，补三盏软灯让车身读得出来 ---------- */
@@ -531,12 +531,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   pool.renderOrder = 1;
   groundFx.add(pool);
 
+  // 接触阴影：原来 8.4×3.6 米的纯黑椭圆比车还大，浅色亮底上会从车轮两侧露出来，
+  // 看着就是一团黑影；现在收到接近车身尺寸，并把边缘做柔、浓度降下来
   const contact = new THREE.Mesh(
-    new THREE.PlaneGeometry(8.4, 3.6),
+    new THREE.PlaneGeometry(6.6, 2.6),
     new THREE.MeshBasicMaterial({
-      map: radialTexture([[0, "rgba(0,0,0,0.92)"], [0.45, "rgba(0,0,0,0.5)"], [1, "rgba(0,0,0,0)"]]),
+      map: radialTexture([[0, "rgba(0,0,0,0.7)"], [0.42, "rgba(0,0,0,0.32)"], [1, "rgba(0,0,0,0)"]]),
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.7,
       depthWrite: false
     })
   );
@@ -1669,14 +1671,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 冲刺（隧道里）没有倒影：反射强度随速度衰减到 0，地面变成一块暗面。
     // 浅色/影棚下反射不再打折（原来 0.6 倍 + 与底色五五开，车身倒影会比车身暗一大截、颜色也对不上）
     floorUniforms.uReflectIntensity.value =
-      (light ? 1.0 : CFG.ground.reflectIntensity) * (1 - clamp(sps * 2.0, 0, 1)) * (1 - motionFade * 0.92);
+      (light ? 0.72 : CFG.ground.reflectIntensity) * (1 - clamp(sps * 2.0, 0, 1)) * (1 - motionFade * 0.92);
     // 浅色/影棚：反射占比给足，车身与倒影同色；法线扰动仍压低，避免亮背景经扰动出现麻点
     floorUniforms.uMixBase.value = light ? 0.62 : 0.46;
     floorUniforms.uMixFres.value = light ? 0.5 : 1.05;
     floorUniforms.uNormalAmount.value = light ? 0.07 : 0.1;
-    floorUniforms.uMipBias.value = light ? 0.9 : 1.1;
+    floorUniforms.uMipBias.value = light ? 1.5 : 1.1;
     // 天际线接色：浅色背景（#dfe3e8 一带）与夜间背景（近黑）各自接自己的底色
-    floorUniforms.uHorizon.value.set(light ? 0xe0e4e9 : 0x090a0c);
+    floorUniforms.uHorizon.value.set(light ? 0xe7ecf2 : 0x090a0c);
     floorUniforms.uHorizonMix.value = light ? 1 : 0.9;
     flowUniforms.uFlowTime.value = elapsed;
     flowUniforms.uFlowStrength.value = sps * sps * CFG.speed.flowStrength;
@@ -1706,6 +1708,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       });
     }
     (pool.material as THREE.MeshBasicMaterial).opacity = CFG.ground.pool * (1 - clamp(sps * 0.6, 0, 0.8));
+    // 浅色/影棚：亮底上黑影更刺眼，接触阴影再压一档
+    (contact.material as THREE.MeshBasicMaterial).opacity = light ? 0.45 : 0.7;
     if (ring) ring.visible = p > 0.12 || sps > 0.05;
     const tunnelOn = !!CFG.speed.tunnel && speed > 0.6 && !off.has("tunnel");
     if (tunnel) tunnel.visible = tunnelOn;
@@ -1892,7 +1896,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let renderScale = Math.min(wantedScale, 1.5);
   // 画质下限：低分屏绝不低于 1.0（原生），高分屏最低按 1.2 倍的 CSS 像素渲染，
   // 这样自动降级也不会出现「糊」的情况。
-  const minScale = Math.max(0.85, Math.min(1, 1.7 / Math.max(1, window.devicePixelRatio || 1)));
+  const minScale = Math.max(0.95, Math.min(1, 1.9 / Math.max(1, window.devicePixelRatio || 1)));
   let frameCost = 0;
   let frameSamples = 0;
   let lastAdapt = performance.now();
@@ -1918,6 +1922,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     if (frameSamples < 20) return;
     const now = performance.now();
     if (now - lastAdapt < 700) return;
+    // 交互期间（拖拽 / 环视 / 冲刺）不调画质：这段时间帧耗被交互本身抬高，
+    // 一降就把画面变糊发灰，而且停下来还要等很久才升回去
+    const interacting =
+      dragging || orbitOn || racing || Math.abs(userYawVel) > 1e-4 || Math.abs(userPitchVel) > 1e-5;
+    if (interacting) {
+      frameCost = 0;
+      frameSamples = 0;
+      lastAdapt = now;
+      return;
+    }
     const avg = frameCost / frameSamples;
     frameCost = 0;
     frameSamples = 0;

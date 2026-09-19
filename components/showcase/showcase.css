@@ -25,7 +25,7 @@
 
 /* 浅色：明亮摄影棚 */
 .showcase.light {
-  --sc-bg: #eef1f4;
+  --sc-bg: #f4f6f9;
   --sc-line: rgba(20, 24, 30, 0.16);
   --sc-dim: #5b6169;
   --sc-ink: #14181e;
@@ -37,7 +37,7 @@
   --sc-panel-hover: rgba(20, 24, 30, 0.1);
   --sc-active: rgba(20, 24, 30, 0.14);
   --sc-active-line: rgba(20, 24, 30, 0.4);
-  --sc-watermark: rgba(20, 24, 30, 0.07);
+  --sc-watermark: rgba(20, 24, 30, 0.05);
   --sc-vignette: radial-gradient(72% 64% at 50% 52%, transparent 0%, rgba(20, 24, 30, 0.06) 72%, rgba(20, 24, 30, 0.16) 100%);
 }
 
