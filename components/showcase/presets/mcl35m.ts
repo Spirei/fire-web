@@ -173,8 +173,6 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     studio: "影棚",
     pinCamera: "固定机位",
     loading: "正在加载模型",
-    metaLeft: "MCL35M / 2021 · FORMULA 1",
-    metaRight: "WEBGL 展示",
     nav: ["车辆", "空力", "动力", "轮胎", "科技"]
   },
 

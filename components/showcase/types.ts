@@ -306,8 +306,6 @@ export interface ShowcaseConfig {
     /** 360° 环视的自动旋转角速度（弧度/秒，默认 0.55 ≈ 32°/秒） */
     orbitSpeed?: number;
     loading?: string;
-    metaLeft?: string;
-    metaRight?: string;
     nav?: string[];
   };
   /** 章节文案（React 层渲染，引擎只负责按进度回调） */

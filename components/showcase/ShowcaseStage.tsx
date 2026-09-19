@@ -578,8 +578,6 @@ export default function ShowcaseStage({
     studio: config.ui?.studio ?? "STUDIO",
     pinCamera: config.ui?.pinCamera ?? "PIN CAMERA",
     loading: config.ui?.loading ?? "LOADING MODEL",
-    metaLeft: config.ui?.metaLeft ?? "MCL35M / 2021 · FORMULA 1",
-    metaRight: config.ui?.metaRight ?? "WEBGL SHOWCASE",
     nav: config.ui?.nav ?? ["CAR", "AERO", "POWER", "TYRES", "TECH"]
   };
 
@@ -774,8 +772,6 @@ export default function ShowcaseStage({
                 </button>
               ))}
             </div>
-            <div className="sc-row sc-meta-l">{ui.metaLeft}</div>
-            <div className="sc-row sc-meta-r">{ui.metaRight}</div>
             {models && models.length > 0 && (models.length > 1 || onImport) && (
               <div className="sc-row sc-models">
                 <span className="sc-models-cap">车型</span>
