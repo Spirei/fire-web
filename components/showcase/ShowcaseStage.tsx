@@ -152,8 +152,11 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
     };
   }, [config, handlePhase, rebuild, degraded, retry]);
 
-  // 刷新时浏览器会恢复上次的滚动位置，导致看到的是当时那个机位而不是默认姿势；
-  // 这里关掉滚动恢复并把进度归零，保证「刷新 = 回到默认视角」。
+  // 刷新时浏览器会恢复上次的滚动位置（会话恢复、从别的页面回来、重新打开标签页都会触发），
+  // 而这次恢复常常发生在我们重置之后 —— 于是「刷新」有时停在当时那个机位（车头朝左的侧视），
+  // 有时才是默认机位（车头朝右的车尾 3/4），看着像默认姿势一直调不好。
+  // 做法：关掉滚动恢复，并在开场把滚动位置持续钉在顶部（最多 12 秒）；
+  // 用户一旦自己滚动（滚轮 / 触摸 / 键盘 / 按住滚动条）立刻交还控制权，之后不再干预。
   useEffect(() => {
     const prev = typeof history !== "undefined" && "scrollRestoration" in history ? history.scrollRestoration : null;
     try {
@@ -162,7 +165,28 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
       /* 忽略 */
     }
     window.scrollTo(0, 0);
+
+    const mountAt = performance.now();
+    let released = false;
+    const release = () => {
+      released = true;
+    };
+    const releaseEvents: Array<keyof WindowEventMap> = ["wheel", "touchstart", "pointerdown", "mousedown", "keydown"];
+    releaseEvents.forEach((name) => window.addEventListener(name, release, { passive: true }));
+
+    let raf = 0;
+    const pinTop = () => {
+      // 钉到「用户自己滚动」为止；模型异常慢时最多钉 12 秒，避免长期占着页面
+      const expired = performance.now() > mountAt + 12000;
+      if (released || expired) return;
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      raf = window.requestAnimationFrame(pinTop);
+    };
+    raf = window.requestAnimationFrame(pinTop);
+
     return () => {
+      window.cancelAnimationFrame(raf);
+      releaseEvents.forEach((name) => window.removeEventListener(name, release));
       if (prev !== null) {
         try {
           history.scrollRestoration = prev;

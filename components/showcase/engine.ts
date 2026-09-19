@@ -1796,6 +1796,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    */
   let scrollOrigin = 0;
   let scrollTravel = 1;
+  /**
+   * 用户是否已经自己滚动过。浏览器可能在挂载之后才把上次的滚动位置写回来（会话恢复、
+   * 重新打开标签页、从别的页面回来），那条路径会把「刷新后的默认机位」换成当时那个机位。
+   * 因此用户没自己滚动之前，进度一律按 0 处理 —— 这是组件侧「钉住滚动位置」之外的第二道防线。
+   */
+  let userScrolled = false;
   function measureScroll() {
     const el = hud.scroll;
     const stage = hud.stage;
@@ -1803,10 +1809,20 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     scrollTravel = Math.max(1, el.offsetHeight - stage.offsetHeight);
   }
   function progress() {
+    // 只守开场这三秒：这段时间足够覆盖浏览器的滚动恢复，也不会长期影响脚本化调试（直接 scrollTo 也能工作）
+    if (!userScrolled && elapsed < 3) return 0;
     return clamp((window.scrollY - scrollOrigin) / scrollTravel, 0, 1);
   }
 
   /* ---------- 8) 交互：按住冲刺 / 拖拽环视 ---------- */
+  // 用户一有滚动意图（滚轮 / 触摸 / 键盘 / 按下指针）就把进度控制权交出去
+  const markUserScroll = () => {
+    userScrolled = true;
+  };
+  const scrollIntentEvents: Array<keyof WindowEventMap> = ["wheel", "touchstart", "keydown", "pointerdown"];
+  scrollIntentEvents.forEach((name) => window.addEventListener(name, markUserScroll, { passive: true }));
+  cleanups.push(() => scrollIntentEvents.forEach((name) => window.removeEventListener(name, markUserScroll)));
+
   const press = (on: boolean) => {
     racing = on;
   };
