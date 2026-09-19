@@ -164,11 +164,25 @@ html:has(.showcase) body {
   color: var(--sc-ink-strong);
 }
 
-/* 音乐播放中：用与主题一致的墨色加深，而不是另起一套橙色，保证和深浅色切换按钮同款 */
+/*
+ * 音乐播放中：比 hover 更实一档 —— 之前和 hover 用同一个灰，
+ * 暂停后指针还在按钮上时看起来跟仍在播放一样（用户反馈「胶囊色没收回」）。
+ * 播放中 = 实心胶囊；hover = 淡填充；两者一眼能分。
+ */
 .sc-tool.on {
   color: var(--sc-ink-strong);
-  background: var(--sc-panel-hover);
-  border-color: var(--sc-line);
+  background: var(--sc-active);
+  border-color: var(--sc-active-line);
+}
+
+/* 键盘聚焦才画焦点环；鼠标点完不留底色（避免看起来一直是开启态） */
+.sc-tool:focus {
+  outline: none;
+}
+
+.sc-tool:focus-visible {
+  outline: 2px solid var(--sc-active-line);
+  outline-offset: 2px;
 }
 
 .sc-kicker {
