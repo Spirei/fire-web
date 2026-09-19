@@ -117,21 +117,23 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       auxCount: 26,
       auxOpacity: 1.15,
       bars: [
-        // 角度逐帧量取（0°=右，90°=上，180°=左，270°=下）。
-        // 参考视频里左右并不对称：右边是「稍微宽的条」，左边是「细线条」，这也是视觉差来源。
-        // 右半（0-90 与 270-360）：矩形条，浅黄 × 浅蓝，右侧蓝条更宽一点。
-        { angle: 59, width: 1.7, tone: "gold", style: "bar" },     // 右上 · 黄色条
-        { angle: 317, width: 1.9, tone: "white", style: "bar" },   // 右内下 · 蓝色条（更宽）
-        { angle: 296, width: 1.3, tone: "gold", style: "bar" },    // 右下 · 黄色条
-        { angle: 25, width: 0.5, tone: "gold" },                   // 右上 · 暖色细线（补参考里的密集区）
-        { angle: 340, width: 0.5, tone: "white" },                 // 右 · 冷白细线
-        // 左半（90-270）：细线条
-        { angle: 112, width: 0.7, tone: "gold" },                  // 左上 · 黄色细线
-        { angle: 152, width: 0.6, tone: "white" },                 // 左 · 冷白长线（参考里最长的一条）
-        { angle: 178, width: 0.5, tone: "white" },                 // 左 · 冷白细线
-        { angle: 205, width: 0.55, tone: "gold" },                 // 左下 · 暖色长线
-        { angle: 239, width: 0.72, tone: "gold" },                 // 左下 · 黄色细线
-        { angle: 268, width: 0.65, tone: "white" }                 // 下方内道 · 蓝色细线
+        // 隧道是左右对称的：光条按镜像成对出现（角度 a 与 180° − a 成对、宽度与颜色一致）。
+        // 角度约定 0°=右、90°=上、180°=左、270°=下；三条宽条对应参考里右侧那组，左侧是它的镜像。
+        { angle: 59, width: 1.7, tone: "gold", style: "bar" },     // 右上 · 黄色宽条
+        { angle: 121, width: 1.7, tone: "gold", style: "bar" },    // 左上 · 黄色宽条（镜像）
+        { angle: 317, width: 1.9, tone: "white", style: "bar" },   // 右内下 · 蓝色宽条
+        { angle: 223, width: 1.9, tone: "white", style: "bar" },   // 左内下 · 蓝色宽条（镜像）
+        { angle: 296, width: 1.3, tone: "gold", style: "bar" },    // 右下 · 黄色宽条
+        { angle: 244, width: 1.3, tone: "gold", style: "bar" },    // 左下 · 黄色宽条（镜像）
+        // 细线同样左右成对
+        { angle: 25, width: 0.5, tone: "gold" },
+        { angle: 155, width: 0.5, tone: "gold" },
+        { angle: 340, width: 0.5, tone: "white" },
+        { angle: 200, width: 0.5, tone: "white" },
+        { angle: 68, width: 0.7, tone: "gold" },
+        { angle: 112, width: 0.7, tone: "gold" },
+        { angle: 2, width: 0.5, tone: "white" },
+        { angle: 178, width: 0.5, tone: "white" }
       ]
     }
   },

@@ -954,15 +954,19 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         float mask = (goldMask + whiteMask * 0.85) * radial * flow * (1.0 - hide) * uStrength * uIntensity;
         vec3 col = uGold * goldMask + uWhite * whiteMask;
         // 隧道壁上的细虚线：按角度均匀分槽，每槽随机宽度 / 亮度 / 相位。
-        // 参考视频里这些线是「细而长」的（宽约 3-5px、长 120-200px），所以槽内宽度收窄、切段拉长
+        // 参考视频里这些线是「细而长」的（宽约 3-5px、长 120-200px），所以槽内宽度收窄、切段拉长。
+        // 隧道左右对称：槽号取其与镜像槽的较小值再哈希，两侧的宽度与相位因此完全一致
         float slotF = ang / TAU * uAuxCount;
         float slot = floor(slotF);
         float inSlot = fract(slotF);
-        float h = hash11(slot + 3.7);
+        // 横向镜像对应角度 180° − ang，换算到槽号就是 N/2 − slot（N 为偶数）
+        float mirror = mod(uAuxCount * 0.5 - slot, uAuxCount);
+        float symSlot = min(slot, mirror);
+        float h = hash11(symSlot + 3.7);
         float slotW = (0.06 + h * 0.14);                       // 占槽宽的比例（越小越细）
         float slotDist = min(inSlot, 1.0 - inSlot) * TAU / uAuxCount;
         float slotMax = slotW * (TAU / uAuxCount) * 0.5;
-        float auxLine = smoothstep(slotMax, 0.0, slotDist) * step(0.34, hash11(slot + 11.3));
+        float auxLine = smoothstep(slotMax, 0.0, slotDist) * step(0.34, hash11(symSlot + 11.3));
         float auxDash = smoothstep(0.32, 0.84, fract(r * (2.2 + h * 2.6) - uTime * (0.5 + uSpeed * 0.03) + h * 3.0));
         float aux = auxLine * auxDash * (0.25 + h * 0.75) * uAuxOpacity;
         // 地面车道线：较宽、更暗、长虚线，专门做「隧道地面」的纵深
