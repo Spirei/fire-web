@@ -112,6 +112,8 @@ export interface ShowcaseConfig {
     shake?: { amount?: number; smoothing?: number };
     /** 窄屏时自动拉远：宽高比低于 minAspect 时按比例放大距离 */
     fit?: { minAspect?: number; maxPullback?: number };
+    /** 滚动跟随的弹簧参数（越大越跟手；默认 120 / 26，接近 framer-motion useSpring 的手感） */
+    smoothing?: { stiffness?: number; damping?: number };
   };
   ground?: {
     /** 车下方的刻度环，false 表示不要 */
@@ -264,5 +266,7 @@ export interface ShowcaseHandle {
     reflection: number;
     textures: number;
     geometries: number;
+    /** 每帧脚本耗时（毫秒，不含 GPU 执行时间） */
+    jsMs: number;
   };
 }

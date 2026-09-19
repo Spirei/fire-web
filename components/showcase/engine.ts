@@ -60,7 +60,9 @@ function normalizeConfig(config: ShowcaseConfig) {
       shakeAmount: config.camera.shake?.amount ?? 0.34,
       shakeSmoothing: config.camera.shake?.smoothing ?? 1.6,
       fitMinAspect: config.camera.fit?.minAspect ?? 1.2,
-      fitMaxPullback: config.camera.fit?.maxPullback ?? 1.8
+      fitMaxPullback: config.camera.fit?.maxPullback ?? 1.8,
+      springStiffness: config.camera.smoothing?.stiffness ?? 120,
+      springDamping: config.camera.smoothing?.damping ?? 26
     },
     ground: {
       ring:
@@ -75,7 +77,7 @@ function normalizeConfig(config: ShowcaseConfig) {
               color: ring?.color ?? "#ffb070"
             },
       reflectIntensity: config.ground?.reflectIntensity ?? 0.95,
-      reflectionSize: config.ground?.reflectionSize ?? 384,
+      reflectionSize: config.ground?.reflectionSize ?? 320,
       pool: config.ground?.pool ?? 0.14
     },
     speed: {
@@ -159,7 +161,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     if (area * wanted * wanted <= MAX_OUTPUT_PIXELS) return wanted;
     return Math.max(MIN_PIXEL_RATIO, Math.sqrt(MAX_OUTPUT_PIXELS / area));
   };
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+  // 参考项目 su7 的渲染器是 antialias:false（后期链路里 MSAA 用不上，只会多占显存），保持一致
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
   renderer.setPixelRatio(budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, Math.min(window.devicePixelRatio || 1, 1.5)));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = CFG.post.exposure;
@@ -1242,6 +1245,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let racingAmt = 0;   // 冲刺状态的平滑量：镜头、轮胎、光条都跟它走
   let carTravel = 0;   // 冲刺时车沿隧道开走的距离
   let lastRacing = false;
+  let frameCount = 0;
+  let reflectDirty = true;
+  let lastLit = -1;
+  let lastMarkP = -1;
+  let lastRaceClass: boolean | null = null;
+  const labelPos: Array<{ x: number; y: number; opacity?: number } | undefined> = [];
   let userYaw = 0;
   let userYawVel = 0;
   // 用户缩放：滚轮（⌘/Ctrl + 滚轮或触控板捏合）与按钮都改这个倍率，用来放大看细节
@@ -1407,21 +1416,31 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     smearPass.uniforms.uTime.value = elapsed;
     const smear = sps * sps * CFG.post.smearStrength;
     smearPass.uniforms.uStrength.value = smear;
-    smearPass.enabled = smear > 0.004;
+    smearPass.enabled = smear > 0.004 && !off.has("smear");
     bloom.strength = CFG.post.bloomStrength + sps * CFG.post.bloomSpeedBoost;
     bloom.radius = CFG.post.bloomRadius + sps * 0.14;
     scene.backgroundIntensity = 0.85 + day * 0.35;
 
     // HUD
+    // HUD 写入都做变更判断：每帧几十次 DOM 写会让浏览器反复重排（滚动发涩的另一个来源）
     const kmh = Math.round(clamp(speed / CFG.speed.maxSpeed, 0, 1.02) * CFG.speed.topKmh);
-    if (hud.kmh) hud.kmh.textContent = String(kmh).padStart(3, "0");
-    if (hud.gear) hud.gear.textContent = speed < 0.4 ? "N" : String(clamp(1 + Math.floor(sp * 8.9), 1, 8));
+    const kmhText = String(kmh).padStart(3, "0");
+    if (hud.kmh && hud.kmh.textContent !== kmhText) hud.kmh.textContent = kmhText;
+    const gearText = speed < 0.4 ? "N" : String(clamp(1 + Math.floor(sp * 8.9), 1, 8));
+    if (hud.gear && hud.gear.textContent !== gearText) hud.gear.textContent = gearText;
     const lit = speed < 0.4 ? 0 : Math.round(clamp(3 + sp * (hud.rpmTicks.length - 3) + fbm2(elapsed * 6, 2) * 1.2, 0, hud.rpmTicks.length));
-    hud.rpmTicks.forEach((t, i) => t.classList.toggle("on", i < lit));
+    if (lit !== lastLit) {
+      const from = Math.min(lit, lastLit);
+      const to = Math.max(lit, lastLit);
+      for (let i = from; i < to; i += 1) hud.rpmTicks[i]?.classList.toggle("on", i < lit);
+      lastLit = lit;
+    }
     const ers = clamp(62 + sp * 30 + Math.sin(elapsed * 2.4) * 6, 0, 100);
-    if (hud.ersBar) hud.ersBar.style.width = `${ers.toFixed(0)}%`;
-    if (hud.ersText) hud.ersText.textContent = `${ers.toFixed(0)}%`;
-    if (hud.teleFoot) hud.teleFoot.textContent = sps > 0.25 ? "LIVE DATA · DEPLOYING" : "LIVE DATA";
+    const ersText = `${ers.toFixed(0)}%`;
+    if (hud.ersBar) hud.ersBar.style.width = ersText;
+    if (hud.ersText && hud.ersText.textContent !== ersText) hud.ersText.textContent = ersText;
+    const foot = sps > 0.25 ? "LIVE DATA · DEPLOYING" : "LIVE DATA";
+    if (hud.teleFoot && hud.teleFoot.textContent !== foot) hud.teleFoot.textContent = foot;
     let phase = 0;
     for (let i = CFG.phases.length - 1; i >= 0; i -= 1) {
       if (p >= CFG.phases[i].at) {
@@ -1433,11 +1452,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       lastPhase = phase;
       options.onPhase?.(phase);
     }
-    if (hud.mark) {
+    if (hud.mark && Math.abs(p - lastMarkP) > 0.002) {
+      lastMarkP = p;
       hud.mark.style.transform = `translate(-50%, -50%) scale(${1 + p * 0.1 + sps * 0.04})`;
       hud.mark.style.opacity = String(0.75 + sps * 0.5);
     }
-    hud.raceBtn?.classList.toggle("on", racing);
+    if (racing !== lastRaceClass) {
+      lastRaceClass = racing;
+      hud.raceBtn?.classList.toggle("on", racing);
+    }
 
     // 部件标注：把 3D 锚点投影到屏幕
     hud.labels.forEach((part, i) => {
@@ -1454,16 +1477,30 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       }
       const x = (projected.x * 0.5 + 0.5) * canvas.clientWidth;
       const y = (-projected.y * 0.5 + 0.5) * canvas.clientHeight;
-      part.el.style.left = `${x.toFixed(1)}px`;
-      part.el.style.top = `${y.toFixed(1)}px`;
-      part.el.style.opacity = String(clamp(vis, 0, 1));
+      const prev = labelPos[i];
+      if (!prev || Math.abs(prev.x - x) > 0.5 || Math.abs(prev.y - y) > 0.5) {
+        labelPos[i] = { x, y };
+        part.el.style.left = `${x.toFixed(1)}px`;
+        part.el.style.top = `${y.toFixed(1)}px`;
+      }
+      if (!prev || prev.opacity !== vis) {
+        labelPos[i] = { x: labelPos[i]?.x ?? x, y: labelPos[i]?.y ?? y, opacity: vis };
+        part.el.style.opacity = String(clamp(vis, 0, 1));
+      }
     });
 
-    updateReflection();
+    // 地面反射是「把整个场景再画一遍」，隔帧更新省掉一半的绘制调用；
+    // 60fps 下反射晚一帧完全看不出来，但 CPU/GPU 的每帧开销明显下降。
+    if (frameCount % 2 === 0 || reflectDirty) {
+      updateReflection();
+      reflectDirty = false;
+    }
+    frameCount += 1;
     composer.render();
   }
 
-  function resize() {
+  let lastResizeKey = "";
+  function resize(force = false) {
     let w = canvas.clientWidth || hud.stage.clientWidth || window.innerWidth;
     let h = canvas.clientHeight || hud.stage.clientHeight || window.innerHeight;
     // 关键防线：显示器休眠/唤醒、窗口最小化还原时，浏览器可能在一帧里给出 0 或 NaN 的尺寸，
@@ -1472,7 +1509,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     if (!Number.isFinite(w) || !Number.isFinite(h) || w < 2 || h < 2) return;
     w = Math.round(w);
     h = Math.round(h);
+    // 尺寸与倍率都没变就别重建渲染目标（composer / 泛光一共要重建二十来个，每次都是明显卡顿）
+    const key = `${w}x${h}@${renderScale.toFixed(2)}:${wantedScale.toFixed(2)}`;
+    if (!force && key === lastResizeKey) return;
+    lastResizeKey = key;
     budgetedScale = budgetRatio(w, h, wantedScale);
+    reflectDirty = true;
+    measureScroll();
     if (renderScale > budgetedScale) {
       renderScale = budgetedScale;
       renderer.setPixelRatio(renderScale);
@@ -1557,11 +1600,20 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   }
 
   /** 滚动进度：用「滚动容器已经划过多少」来算，粘性舞台高度变化时自动正确 */
+  /**
+   * 滚动几何只在必须时测量；帧循环里只用 window.scrollY（读它不会触发布局），
+   * 避免「每帧写 HUD → 每帧读布局」这种强制同步布局（那是滚动发涩的常见原因）。
+   */
+  let scrollOrigin = 0;
+  let scrollTravel = 1;
+  function measureScroll() {
+    const el = hud.scroll;
+    const stage = hud.stage;
+    scrollOrigin = el.getBoundingClientRect().top + window.scrollY;
+    scrollTravel = Math.max(1, el.offsetHeight - stage.offsetHeight);
+  }
   function progress() {
-    const total = hud.scroll.offsetHeight - hud.stage.offsetHeight;
-    if (total <= 0) return 0;
-    const top = hud.scroll.getBoundingClientRect().top;
-    return clamp(-top / total, 0, 1);
+    return clamp((window.scrollY - scrollOrigin) / scrollTravel, 0, 1);
   }
 
   /* ---------- 8) 交互：按住冲刺 / 拖拽环视 ---------- */
@@ -1718,6 +1770,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 这里接管事件：丢失时阻止默认行为以便恢复，恢复或连续报错时让上层重建场景。
   const onContextLost = (e: Event) => {
     e.preventDefault();
+    armWatchdog();
     options.onContextLost?.();
   };
   const onContextRestored = () => {
@@ -1730,6 +1783,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     canvas.removeEventListener("webglcontextrestored", onContextRestored);
   });
   let renderErrors = 0;
+  let jsAvg = 0;
 
   /**
    * 自愈看门狗：GPU 驱动回收上下文时会留下整屏发白（或全黑）的画面，
@@ -1741,8 +1795,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let badFrames = 0;
   let softTries = 0;
   let lastProbe = performance.now();
+  // readPixels 会同步等待 GPU，长期每秒探测会造成周期性卡顿；只在刚启动与刚经历过
+  // 可见性/尺寸/上下文事件的窗口内探测（那才是白屏的高风险时刻）。
+  let probeUntil = performance.now() + 8000;
+  const armWatchdog = () => {
+    probeUntil = performance.now() + 8000;
+  };
   function watchdog() {
     const now = performance.now();
+    if (now > probeUntil) return;
     if (now - lastProbe < 1500) return;
     lastProbe = now;
     const w = canvas.width;
@@ -1785,6 +1846,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   /* ---------- 10) 渲染循环：不可见时暂停 ---------- */
   let last = performance.now();
   let pSmooth = 0;
+  let pVel = 0;
   const tick = () => {
     const now = performance.now();
     const rawDt = (now - last) / 1000;
@@ -1796,13 +1858,21 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       if (!canvas.width || !canvas.height || !Number.isFinite(camera.aspect)) return;
     }
     if (!active || document.hidden) return;
-    // 滚动进度先做一阶平滑：鼠标滚轮的台阶感不会直接传到镜头上，整体才顺
+    // 滚动进度用临界阻尼弹簧跟随：相比一阶滤波，起步更快、收尾更顺，
+    // 接近 framer-motion useSpring 的手感（参考站点就是这套观感）。
     const target = progress();
-    pSmooth += (target - pSmooth) * clamp(dt * 6, 0, 1);
-    if (Math.abs(target - pSmooth) < 0.0002) pSmooth = target;
+    pVel += ((target - pSmooth) * CFG.camera.springStiffness - pVel * CFG.camera.springDamping) * dt;
+    pSmooth += pVel * dt;
+    if (Math.abs(target - pSmooth) < 0.0002 && Math.abs(pVel) < 0.0004) {
+      pSmooth = target;
+      pVel = 0;
+    }
     adaptQuality(frameMs);
     try {
+      const jsStart = performance.now();
       render(pSmooth, dt);
+      const jsCost = performance.now() - jsStart;
+      jsAvg = jsAvg === 0 ? jsCost : jsAvg * 0.9 + jsCost * 0.1;
       renderErrors = 0;
       watchdog();
     } catch (err) {
@@ -1831,15 +1901,27 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const onVisible = () => {
     if (!document.hidden) {
       last = performance.now();
+      armWatchdog();
       resize();
+      measureScroll();
       render(pSmooth, 1 / 60);
     }
   };
   document.addEventListener("visibilitychange", onVisible);
   cleanups.push(() => document.removeEventListener("visibilitychange", onVisible));
 
-  const ro = new ResizeObserver(() => resize());
+  let resizeQueued = false;
+  const ro = new ResizeObserver(() => {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    requestAnimationFrame(() => {
+      resizeQueued = false;
+      resize();
+      measureScroll();
+    });
+  });
   ro.observe(canvas);
+  ro.observe(hud.scroll);
   cleanups.push(() => ro.disconnect());
 
   // 先加载环境贴图，再启动，避免首帧全黑
@@ -1901,7 +1983,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     buffer: [canvas.width, canvas.height],
     reflection: reflectRT.width,
     textures: renderer.info.memory.textures,
-    geometries: renderer.info.memory.geometries
+    geometries: renderer.info.memory.geometries,
+    /** 每帧脚本耗时（毫秒，渲染调用 + HUD + 相机计算，不含 GPU 执行时间） */
+    jsMs: +jsAvg.toFixed(2)
   })
 };
 }

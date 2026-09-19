@@ -3885,6 +3885,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     desc: "原来镜头、配色、光条、刻度环都写死在迈凯伦场景里，换素材要改引擎。现在拆成两层：components/showcase/engine.ts 是通用引擎，只认一份 config；车型相关的模型路径、朝向修正、轮子材质与自转轴、镜头关键帧、地面刻度环、隧道光条与配色、后期强度、章节文案与部件标注都收进 components/showcase/presets/mcl35m.ts。换车只要复制一份 preset，不用动引擎与组件。\n新增 docs/showcase-3d.md：四步换车（放素材、复制预设、对朝向与轮子、改镜头关键帧）与效果开关说明。配置里的正则统一写成字符串（引擎内部再构造），这样配置可以从服务端组件直接传给客户端组件。",
     kind: "feature"
   }, {
+    title: "首页流畅度按 su7 实现逐项对齐",
+    desc: "把 gamemcu.com/su7 的产物脚本拉下来读了一遍，找到它流畅的几条硬指标：像素比封顶 1.5（_maxDPR = 1.5，dpr = min(1.5, devicePixelRatio)）、渲染器关掉 antialias、后期用 postprocessing 的 EffectComposer + BloomEffect（mipmapBlur 只有一条 mip 链，而不是三组十几块渲染目标）、滚动用弹簧跟随而不是一阶滤波。\n我们逐项对齐并修掉自己的卡顿点：滚动几何改成缓存（原来每帧 getBoundingClientRect + offsetHeight，配合每帧 HUD 写入会触发强制同步布局）；HUD 文案、档位、转速刻度、部件标注都改成变化时才写；resize 在尺寸与倍率没变时直接返回，ResizeObserver 合并到一帧里执行，避免每次布局变化都重建二十多个渲染目标；看门狗 readPixels 只在启动后以及可见性/尺寸/上下文事件后的 8 秒窗口内探测（它是 GPU 同步点，长期每秒探测会造成周期卡顿）；渲染器关掉 MSAA；地面反射改成隔帧更新并把默认尺寸收到 320；滚动跟随由一阶滤波换成临界阻尼弹簧（stiffness 120 / damping 26，接近 framer-motion useSpring 的手感）。\n同时在 ?mclhud=1 里加了每帧脚本耗时，实测空闲时脚本约 1ms；关掉反射/泛光/光条/拖影/粒子后的帧耗时对比显示这几项在软件渲染下约占 26ms（真机 GPU 上小得多）。",
+    kind: "fix"
+  }, {
     title: "首页隧道加入顶点粒子层",
     desc: "参考零跑 C16 公开课的思路：不做 CPU 粒子模拟，直接从车模顶点等距采样若干点当粒子种子，每颗粒子只存「原始位置 + 随机相位」；位移全部在顶点着色器里算（沿隧道轴从远处飞到镜头后方，越靠近镜头向外扩散越大），基础几何体只有一个三角形，用重心坐标在片元里只画线框，和课件里的线框三角一致。\n因此这一层没有额外贴图、没有额外渲染目标、也没有每帧顶点上传，显存增量接近零（实测几何体 +1、贴图数量不变），只在冲刺时出现，给隧道补上纵深与视差。默认按「细线为主、粒子补纵深」的配比开启（420 颗、边长 0.1 米、透明度 0.4），换素材时可以在 preset 里调大做成 C16 那种三角隧道，或直接 shards: false 关掉。",
     kind: "feature"
