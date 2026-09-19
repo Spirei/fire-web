@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ShowcaseConfig, ShowcaseHandle } from "./types";
 import { setThemeCookie } from "@/lib/theme";
 import { usePersistedState } from "@/lib/usePersistedState";
+import MusicIcon from "./MusicIcon";
 import "./showcase.css";
 
 const RPM_TICKS = 20;
@@ -56,6 +57,8 @@ export default function ShowcaseStage({
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [musicOn, setMusicOn] = useState(false);
   const [musicReady, setMusicReady] = useState(true);
+  /** 频谱可视化是否接手（接手后关掉 CSS 兜底动画，避免动画盖住每帧的 transform） */
+  const [waveLive, setWaveLive] = useState(false);
   // 360° 环视（自动绕车）与影棚（明亮摄影棚）：两个胶囊以前只是文字，现在是真的开关
   const [orbit, setOrbit] = useState(false);
   const [studio, setStudio] = useState(false);
@@ -347,10 +350,123 @@ export default function ShowcaseStage({
     return audio;
   }, [config.music]);
 
+  // 音乐波纹：用 Web Audio 的频谱分析驱动每根条，跟着歌曲本身的起伏动
+  //（平稳段落幅度小、高潮段落幅度大）；拿不到 AudioContext 时退回 CSS 循环动画。
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const waveRafRef = useRef(0);
+  const waveDataRef = useRef<Uint8Array | null>(null);
+  const waveLevelRef = useRef<number[]>([0, 0, 0, 0, 0, 0]);
+  const bandMaxRef = useRef<number[]>([0.05, 0.05, 0.05, 0.05, 0.05, 0.05]);
+  const globalMaxRef = useRef(0.05);
+
+  const stopWaveVisualizer = useCallback(() => {
+    if (waveRafRef.current) window.cancelAnimationFrame(waveRafRef.current);
+    waveRafRef.current = 0;
+    waveLevelRef.current = [0, 0, 0, 0, 0, 0];
+    setWaveLive(false);
+    document.querySelectorAll<SVGPathElement>(".sc-wave .sc-wave-bar").forEach((bar) => {
+      bar.style.transform = "";
+    });
+  }, []);
+
+  const startWaveVisualizer = useCallback((audio: HTMLAudioElement) => {
+    try {
+      const Ctor =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctor) return;
+      if (!audioCtxRef.current) audioCtxRef.current = new Ctor();
+      const ctx = audioCtxRef.current;
+      if (!analyserRef.current) {
+        // 一个 audio 元素只能建一次 MediaElementSource，所以只在这里建一次
+        const source = ctx.createMediaElementSource(audio);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.72;
+        source.connect(analyser);
+        analyser.connect(ctx.destination);
+        analyserRef.current = analyser;
+      }
+      void ctx.resume();
+      setWaveLive(true);
+      if (waveRafRef.current) return;
+      const analyser = analyserRef.current;
+      const tick = () => {
+        if (!analyser) {
+          waveRafRef.current = 0;
+          return;
+        }
+        const bins = analyser.frequencyBinCount;
+        const data =
+          waveDataRef.current && waveDataRef.current.length === bins
+            ? waveDataRef.current
+            : (waveDataRef.current = new Uint8Array(bins));
+        analyser.getByteFrequencyData(data);
+        const bars = document.querySelectorAll<SVGPathElement>(".sc-wave .sc-wave-bar");
+        // 频段边界覆盖 0–11 kHz（音乐能量集中区）：bin ≈ 172 Hz（44.1 kHz / fftSize 256）
+        const EDGES = [0, 2, 5, 11, 21, 38, 64];
+        const raws: number[] = [];
+        let sumAll = 0;
+        let countAll = 0;
+        for (let i = 0; i < 6; i += 1) {
+          const from = Math.min(bins - 1, EDGES[i]);
+          const to = Math.max(from + 1, Math.min(bins, EDGES[i + 1]));
+          let sum = 0;
+          for (let k = from; k < to; k += 1) sum += data[k];
+          const raw = sum / Math.max(1, to - from) / 255;
+          raws.push(raw);
+          sumAll += raw;
+          countAll += 1;
+        }
+        const globalNow = sumAll / Math.max(1, countAll);
+        // 邻近频段补值：这首歌高频几乎没有能量（第 6 段实测常年为 0），
+        // 直接用原始值会让最后一根像静止；这里让每段至少借到邻居的一部分能量
+        const leveled = raws.map((v, i) =>
+          Math.max(v, (raws[i - 1] ?? 0) * 0.62, (raws[i + 1] ?? 0) * 0.52)
+        );
+        // 每段各自的峰值（缓降）＋整首的峰值：前者保证每根都有起伏、不会像静止，
+        // 后者让「平稳段落幅度小、高潮幅度大」这件事在整体上看得出来
+        const decay = 0.995;
+        bandMaxRef.current = bandMaxRef.current.map((m, i) => Math.max(leveled[i] * 1.05, m * decay, 0.04));
+        // 频率倾斜：低音压一档、高音补一档，避免「低音一根独大、高音永远贴地」
+        const TILT = [0.3, 0.5, 0.75, 1.0, 1.3, 1.6];
+        const tilted = leveled.map((v, i) => v * TILT[i]);
+        const peakNow = Math.max(...tilted);
+        const globalMax = Math.max(peakNow * 1.05, globalMaxRef.current * decay, 0.05);
+        globalMaxRef.current = globalMax;
+        // 整体强度（平稳段落小、高潮段落大）
+        const intensity = Math.min(1, Math.pow(globalNow / Math.max(globalMax * 0.6, 0.03), 0.7));
+        const next: number[] = [];
+        for (let i = 0; i < 6; i += 1) {
+          const rel = Math.min(1, tilted[i] / globalMax);
+          // 相对整体峰值开方：低音不再常年顶格，安静频段也能看出起伏
+          const target = Math.max(0, Math.min(1, Math.pow(rel, 0.55) * (0.5 + 0.5 * intensity)));
+          const prev = waveLevelRef.current[i] ?? 0;
+          // 涨得快、落得慢：保留「平稳 / 高潮」的起伏又不抖
+          next.push(prev + (target - prev) * (target > prev ? 0.5 : 0.16));
+        }
+        waveLevelRef.current = next;
+        // 调试用：把当前各段能量写在 svg 上（?mclhud=1 或控制台可直接看）
+        const svg = document.querySelector<SVGSVGElement>(".sc-wave");
+        if (svg) svg.dataset.bands = next.map((v) => v.toFixed(2)).join(",");
+        bars.forEach((bar, i) => {
+          const v = next[i] ?? 0;
+          bar.style.transform = `scaleY(${(0.3 + v * 1.2).toFixed(3)})`;
+        });
+        waveRafRef.current = window.requestAnimationFrame(tick);
+      };
+      waveRafRef.current = window.requestAnimationFrame(tick);
+    } catch {
+      /* 拿不到音频上下文就让 CSS 动画兜底 */
+    }
+  }, []);
+
   const startMusic = useCallback(async () => {
     const audio = ensureAudio();
     try {
       await audio.play();
+      startWaveVisualizer(audio);
       setMusicOn(true);
       try {
         localStorage.setItem(MUSIC_KEY, "on");
@@ -364,6 +480,7 @@ export default function ShowcaseStage({
 
   const stopMusic = useCallback(() => {
     audioRef.current?.pause();
+    stopWaveVisualizer();
     setMusicOn(false);
     try {
       localStorage.setItem(MUSIC_KEY, "off");
@@ -375,7 +492,7 @@ export default function ShowcaseStage({
   const toggleMusic = useCallback(() => {
     if (musicOn) stopMusic();
     else void startMusic();
-  }, [musicOn, startMusic, stopMusic]);
+  }, [musicOn, startMusic, stopMusic, stopWaveVisualizer]);
 
   useEffect(() => {
     let saved: string | null = null;
@@ -418,7 +535,10 @@ export default function ShowcaseStage({
     return () => document.removeEventListener("visibilitychange", onHidden);
   }, [musicOn]);
 
-  useEffect(() => () => audioRef.current?.pause(), []);
+  useEffect(() => () => {
+    audioRef.current?.pause();
+    stopWaveVisualizer();
+  }, [stopWaveVisualizer]);
 
   const current = config.phases[phase] ?? config.phases[0];
   // 界面文案：默认英文，preset 里传 ui 就按传入的显示（本站首页已改中文）
@@ -468,20 +588,8 @@ export default function ShowcaseStage({
                   aria-label={musicOn ? "关闭背景音乐" : "播放背景音乐"}
                   aria-pressed={musicOn}
                 >
-                  {/* 双音符（♫）：播放时实心、暂停时描边，配色跟随深浅色主题 */}
-                  {musicOn ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M9 17.4V6.6l9-1.8v10.6" />
-                      <circle cx="6.7" cy="17.5" r="2.6" fill="currentColor" stroke="none" />
-                      <circle cx="15.7" cy="15.6" r="2.6" fill="currentColor" stroke="none" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M9 17.4V6.6l9-1.8v10.6" />
-                      <circle cx="6.7" cy="17.5" r="2.6" />
-                      <circle cx="15.7" cy="15.6" r="2.6" />
-                    </svg>
-                  )}
+                  {/* 波纹图标（waveform.mid）：配色跟随主题，播放时每根条跟着舞动 */}
+                  <MusicIcon playing={musicOn} live={waveLive} />
                 </button>
               )}
               <button

@@ -744,3 +744,41 @@ html:has(.showcase) body {
   border-color: var(--sc-active-line);
   color: var(--sc-ink-strong);
 }
+
+/* 音乐波纹图标：填充跟随当前字色，播放时每根条上下舞动 */
+.sc-wave {
+  width: 13px;
+  height: 11px;
+  overflow: visible;
+}
+
+.sc-wave-bar {
+  fill: currentColor;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* 拿不到音频频谱时用循环动画兜底；一旦频谱接手（.live）就交给每帧的 transform */
+.sc-wave.on:not(.live) .sc-wave-bar {
+  animation: sc-wave-dance 0.92s ease-in-out infinite;
+}
+
+@keyframes sc-wave-dance {
+  0%,
+  100% {
+    transform: scaleY(0.5);
+  }
+  35% {
+    transform: scaleY(1.12);
+  }
+  70% {
+    transform: scaleY(0.72);
+  }
+}
+
+/* 系统开启「减少动态效果」时保持静止，只保留图标本身 */
+@media (prefers-reduced-motion: reduce) {
+  .sc-wave.on:not(.live) .sc-wave-bar {
+    animation: none;
+  }
+}
