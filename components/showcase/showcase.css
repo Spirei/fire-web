@@ -1,6 +1,8 @@
 /* 通用 3D 展示台样式：全部限定在 .showcase 内，不影响全站其他页面 */
 
 .showcase {
+  /* 移动端：点按不要系统的灰色高亮，按下反馈自己给 */
+  -webkit-tap-highlight-color: transparent;
   --sc-papaya: #ff8000;
   --sc-line: rgba(255, 255, 255, 0.14);
   --sc-dim: #7c7c80;
@@ -564,6 +566,10 @@ html:has(.showcase) body {
   color: var(--sc-faintest);
 }
 
+.sc-hint-touch {
+  display: none;
+}
+
 .sc-hint-drag {
   left: 50%;
   bottom: 8.6vh;
@@ -700,8 +706,20 @@ html:has(.showcase) body {
     top: 29vh;
   }
 
+  /* 控制胶囊不再整排隐藏（以前手机上因此没法缩放 / 固定机位），改成紧凑版 */
   .sc-left-foot {
-    display: none;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 12vh;
+    max-width: 92vw;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .sc-pill {
+    padding: 6px 10px;
+    font-size: 9px;
+    letter-spacing: 0.12em;
   }
 
   .sc-tele {
@@ -807,5 +825,198 @@ html:has(.showcase) body {
 @media (prefers-reduced-motion: reduce) {
   .sc-wave.on:not(.live) .sc-wave-bar {
     animation: none;
+  }
+}
+
+/*
+ * 手机端（≤640px）：底部按「章节导航 → 车型 → 控制胶囊 → 主按钮」四行排布，
+ * 互不重叠；控制按钮改成 40px 圆形图标（原来整排被 display:none 隐藏，手机上没法缩放/固定机位）。
+ */
+@media (max-width: 640px) {
+  .sc-watermark {
+    font-size: 26vw;
+    top: 14%;
+  }
+
+  .sc-tools {
+    right: 4vw;
+    top: 2.2vh;
+    gap: 6px;
+  }
+
+  .sc-tool {
+    width: 38px;
+    height: 38px;
+  }
+
+  .sc-tool svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .sc-kicker {
+    display: none;
+  }
+
+  .sc-sec {
+    left: 6vw;
+    top: 11vh;
+  }
+
+  .sc-headline {
+    left: 6vw;
+    top: 14vh;
+    font-size: 26px;
+  }
+
+  .sc-copy {
+    left: 6vw;
+    top: 26vh;
+    font-size: 11px;
+  }
+
+  /* 遥测面板：手机上只留时速与档位，挪到右上角不挡字 */
+  .sc-tele {
+    right: 4vw;
+    top: 9vh;
+    width: 104px;
+  }
+
+  .sc-tele-cap,
+  .sc-ticks,
+  .sc-tele-foot,
+  .sc-ers {
+    display: none;
+  }
+
+  .sc-speed-wrap {
+    text-align: right;
+  }
+
+  .sc-kmh {
+    font-size: 30px;
+  }
+
+  /* 主按钮：抬高到拇指区，按钮本身加大 */
+  .sc-ctr {
+    bottom: 26vh;
+  }
+
+  .sc-ctr-cap {
+    font-size: 9px;
+    letter-spacing: 0.24em;
+  }
+
+  .sc-race {
+    padding: 13px 22px;
+    font-size: 11.5px;
+  }
+
+  .sc-ctr-hint {
+    font-size: 8px;
+    letter-spacing: 0.18em;
+  }
+
+  /* 控制胶囊：不再隐藏，改成一行圆形图标（360 / 影棚 / 缩放 / 固定机位） */
+  .sc-left-foot {
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 12vh;
+    display: flex;
+    gap: 8px;
+    max-width: 92vw;
+    flex-wrap: nowrap;
+  }
+
+  .sc-pill {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+    font-size: 0;
+    letter-spacing: 0;
+  }
+
+  .sc-pill svg {
+    width: 16px;
+    height: 16px;
+    opacity: 0.9;
+  }
+
+  /* 手机上缩放靠双指捏合，减号/加号收起来 */
+  .sc-zoom {
+    display: none;
+  }
+
+  /* 车型切换：缩到导航上方一行，横向可滑，避免和章节导航重叠 */
+  .sc-models {
+    left: 50%;
+    transform: translateX(-50%);
+    right: auto;
+    bottom: 6.4vh;
+    max-width: 94vw;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 0 2px;
+  }
+
+  .sc-models::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sc-models-cap {
+    display: none;
+  }
+
+  .sc-model {
+    padding: 6px 12px;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+  }
+
+  /* 章节导航留在最下边一行 */
+  .sc-nav {
+    bottom: 2.4vh;
+    gap: 12px;
+    font-size: 8.5px;
+    letter-spacing: 0.14em;
+  }
+
+  .sc-meta-l {
+    display: none;
+  }
+
+  .sc-hint-drag,
+  .sc-meta-r {
+    display: none;
+  }
+
+  /* 桌面提示在手机上换成手势提示 */
+  .sc-hint-touch {
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 17.5vh;
+    display: block;
+    font-size: 8.5px;
+    letter-spacing: 0.18em;
+    color: var(--sc-faintest);
+    text-align: center;
+    white-space: nowrap;
+  }
+}
+
+/* 点按反馈：手机上手指按下去有轻微收缩，松开回到常态 */
+@media (hover: none) {
+  .sc-pill:active,
+  .sc-model:active,
+  .sc-tool:active,
+  .sc-nav button:active {
+    transform: scale(0.94);
+  }
+
+  .sc-race:active {
+    transform: scale(0.97);
   }
 }

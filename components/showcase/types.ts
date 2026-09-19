@@ -261,6 +261,8 @@ export interface ShowcaseConfig {
     raceHint?: string;
     dragHint?: string;
     zoomHint?: string;
+    /** 手机端手势提示（横滑环视 / 双指缩放 / 双击复位） */
+    touchHint?: string;
     zoomMode?: string;
     view360?: string;
     studio?: string;

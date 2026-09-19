@@ -2074,8 +2074,30 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let dragging = false;
   let dragX = 0;
   let dragY = 0;
+  /** 当前手势是不是手指（触屏）：手指横滑转车、竖滑留给页面滚动，不做俯仰 */
+  let dragByTouch = false;
+  let lastTapAt = 0;
+  const resetView = () => {
+    userYaw = 0;
+    userYawVel = 0;
+    userPitch = 0;
+    userPitchVel = 0;
+    zoomTarget = 1;
+    setZoomMode(false);
+  };
   const onCanvasDown = (e: PointerEvent) => {
+    // 触屏双击复位（手机上 dblclick 不可靠，自己判时间间隔）
+    if (e.pointerType === "touch") {
+      const now = performance.now();
+      if (now - lastTapAt < 320) {
+        resetView();
+        lastTapAt = 0;
+        return;
+      }
+      lastTapAt = now;
+    }
     dragging = true;
+    dragByTouch = e.pointerType === "touch";
     dragX = e.clientX;
     dragY = e.clientY;
   };
@@ -2088,22 +2110,30 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 冲刺中不接收拖拽：否则镜头被转偏，车会跑出轨道、看起来在天上飞。
     // 基准点仍要跟着指针走，否则松开空格那一刻会一次结算掉整段位移，镜头瞬间被甩飞。
     if (racing) return;
-    userYaw -= dx * 0.3;
-    userYawVel = -dx * 0.3;
-    // 上下拖：向上拖 = 升高视角俯视，向下拖 = 降低视角平视/略微仰视
+    // 手指（触屏）：只吃横向位移，竖向留给页面滚动，避免「想滚页面却在俯仰」
+    const gain = dragByTouch ? 0.42 : 0.3;
+    userYaw -= dx * gain;
+    userYawVel = -dx * gain;
+    if (dragByTouch) return;
+    // 鼠标上下拖：向上拖 = 升高视角俯视，向下拖 = 降低视角平视/略微仰视
     userPitch = clamp(userPitch + dy * 0.0035, -0.55, 0.95);
     userPitchVel = dy * 0.0035;
   };
   const onDragEnd = () => {
     dragging = false;
+    dragByTouch = false;
   };
   canvas.addEventListener("pointerdown", onCanvasDown);
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onDragEnd);
+  // 浏览器接管滚动 / 捏合放大时会发 pointercancel，这里要结束拖拽状态，
+  // 否则手指抬起后镜头还在跟着最后一段位移转
+  window.addEventListener("pointercancel", onDragEnd);
   cleanups.push(() => {
     canvas.removeEventListener("pointerdown", onCanvasDown);
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onDragEnd);
+    window.removeEventListener("pointercancel", onDragEnd);
   });
 
   // 缩放：⌘/Ctrl + 滚轮（触控板捏合同样走这里）、按钮、双击复位
@@ -2124,14 +2154,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 往下滚 = 拉远，往上滚 / 双指张开 = 推近看细节
     applyZoom(Math.exp(e.deltaY * CFG.zoom.wheelStep));
   };
-  const onDoubleClick = () => {
-    zoomTarget = 1;
-    userPitch = 0;
-    userPitchVel = 0;
-    userYaw = 0;
-    userYawVel = 0;
-    setZoomMode(false);
-  };
+  const onDoubleClick = () => resetView();
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("dblclick", onDoubleClick);
   cleanups.push(() => {
@@ -2187,6 +2210,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     touches.delete(e.pointerId);
     if (touches.size < 2) pinchBase = 0;
   };
+  // 两指按下时阻止浏览器接管（canvas 是 touch-action: pan-y，单指竖滑仍可滚页面）
+  const onTouchStartCapture = (e: TouchEvent) => {
+    if (e.touches.length >= 2) e.preventDefault();
+  };
+  canvas.addEventListener("touchstart", onTouchStartCapture, { passive: false });
   canvas.addEventListener("pointerdown", onTouchDown);
   canvas.addEventListener("pointermove", onTouchMove);
   canvas.addEventListener("pointerup", onTouchEnd);

@@ -165,6 +165,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     raceHint: "按住 空格 或 长按按钮",
     dragHint: "↻ 拖拽环视 · 上下俯仰",
     zoomHint: "⌘ / Ctrl + 滚轮缩放",
+    touchHint: "横滑环视 · 双指缩放 · 双击复位",
     zoomMode: "缩放",
     view360: "360° 环视",
     studio: "影棚",

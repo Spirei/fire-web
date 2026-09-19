@@ -559,6 +559,7 @@ export default function ShowcaseStage({
     raceHint: config.ui?.raceHint ?? "HOLD [SPACE] OR PRESS & HOLD",
     dragHint: config.ui?.dragHint ?? "↻ DRAG TO EXPLORE",
     zoomHint: config.ui?.zoomHint ?? "⌘ / CTRL + SCROLL TO ZOOM",
+    touchHint: config.ui?.touchHint ?? "SWIPE TO LOOK · PINCH TO ZOOM · DOUBLE TAP RESET",
     zoomMode: config.ui?.zoomMode ?? "ZOOM",
     view360: config.ui?.view360 ?? "360° VIEW",
     studio: config.ui?.studio ?? "STUDIO",
@@ -746,6 +747,7 @@ export default function ShowcaseStage({
               <span>{ui.dragHint}</span>
               <span>{ui.zoomHint}</span>
             </div>
+            <div className="sc-row sc-hint-touch">{ui.touchHint}</div>
             <div className="sc-row sc-nav">
               {ui.nav.map((item, i) => (
                 <button
