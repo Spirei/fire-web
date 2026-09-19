@@ -168,8 +168,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 像素预算：EffectComposer 会建两块 HalfFloat 的 RT（后来还要泛光的多级），
   // 大窗口 + 高分屏下按设备像素比铺满会直接吃掉几百 MB 显存，久了会丢上下文变白屏。
   // 这里给整屏输出封一个像素上限，超了就降倍率（分辨率换稳定）。
-  const MAX_OUTPUT_PIXELS = 2_000_000;
-  const MIN_PIXEL_RATIO = 0.5;
+  // 清晰度优先：预算放宽到约 4K（8M 像素），像素比允许到设备原生 2 倍。
+  // 这个值仍远低于「整屏按 dpr 铺满」的 33M 像素（那才是之前白屏的显存来源）。
+  const MAX_OUTPUT_PIXELS = 8_000_000;
+  const MIN_PIXEL_RATIO = 0.7;
   const budgetRatio = (w: number, h: number, wanted: number) => {
     const area = Math.max(1, w * h);
     if (area * wanted * wanted <= MAX_OUTPUT_PIXELS) return wanted;
@@ -177,7 +179,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   // 参考项目 su7 的渲染器是 antialias:false（后期链路里 MSAA 用不上，只会多占显存），保持一致
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
-  renderer.setPixelRatio(budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, Math.min(window.devicePixelRatio || 1, 1.5)));
+  renderer.setPixelRatio(budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, Math.min(window.devicePixelRatio || 1, 2)));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = CFG.post.exposure;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -1596,8 +1598,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    * 帧耗时偏高就降倍率（最低 0.75），长时间流畅再慢慢升回去（最高 1.6），
    * 这样高分屏与集成显卡都能保住流畅度。
    */
-  const wantedScale = Math.min(window.devicePixelRatio || 1, 1.5);
-  let renderScale = Math.min(wantedScale, 1.25);
+  const wantedScale = Math.min(window.devicePixelRatio || 1, 2);
+  let renderScale = Math.min(wantedScale, 1.5);
+  // 画质下限：低分屏绝不低于 1.0（原生），高分屏最低按 1.2 倍的 CSS 像素渲染，
+  // 这样自动降级也不会出现「糊」的情况。
+  const minScale = Math.max(0.7, Math.min(1, 1.2 / Math.max(1, window.devicePixelRatio || 1)));
   let frameCost = 0;
   let frameSamples = 0;
   let lastAdapt = performance.now();
@@ -1628,11 +1633,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     frameSamples = 0;
     lastAdapt = now;
     // 只在明显掉帧时降、长时间很稳才升，避免来回抖动反复重建 RT（那也是显存压力来源）
-    if (avg > 26 && renderScale > 0.75) {
-      renderScale = Math.max(0.75, renderScale - 0.25);
-    } else if (avg > 19 && renderScale > 0.75) {
-      renderScale = Math.max(0.75, renderScale - 0.15);
-    } else if (avg < 11 && renderScale < Math.min(wantedScale, budgetedScale)) {
+    if (avg > 26 && renderScale > minScale) {
+      renderScale = Math.max(minScale, renderScale - 0.15);
+    } else if (avg > 20 && renderScale > minScale) {
+      renderScale = Math.max(minScale, renderScale - 0.08);
+    } else if (avg < 13 && renderScale < Math.min(wantedScale, budgetedScale)) {
       renderScale = Math.min(wantedScale, budgetedScale, renderScale + 0.1);
     } else {
       return;
@@ -1650,7 +1655,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     composer.setPixelRatio(renderScale);
     // 反射贴图也跟着倍率走：帧耗时偏高时它同样是最贵的一项
     const base = CFG.ground.reflectionSize;
-    const reflectSize = Math.round(clamp(base * (renderScale + 0.4), base * 0.62, base * 1.25));
+    const reflectSize = Math.round(clamp(base * (renderScale + 0.55), base * 0.8, base * 1.3));
     if (reflectSize !== reflectRT.width) reflectRT.setSize(reflectSize, reflectSize);
     resize();
   }
