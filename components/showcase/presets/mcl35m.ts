@@ -75,7 +75,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     topKmh: 355,
     launchTravel: 11,
     // 冲刺时镜头绕到车尾偏左（参考视频里车是偏左、左右光条角度不对称的来源）
-    chaseAzimuth: 205,
+    chaseAzimuth: 212,
     // 顶点粒子隧道：三角形太碎、影响观感，这里关掉（引擎仍支持，想要纵深时把 shards 配上即可）。
     shards: false,
     tunnel: {

@@ -482,7 +482,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   }
   const groundFx = new THREE.Group();
   scene.add(groundFx);
-  let ringUniformsRef: { uSweep: { value: number }; uSpeed: { value: number }; uTime: { value: number } } | null = null;
+  let ringUniformsRef: { uSweep: { value: number }; uSpeed: { value: number }; uTime: { value: number }; uFade?: { value: number } } | null = null;
+  const ringOutlineMats: THREE.MeshBasicMaterial[] = [];
 
   const pool = new THREE.Mesh(
     new THREE.PlaneGeometry(34, 34),
@@ -542,13 +543,20 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let ring: THREE.InstancedMesh | null = null;
   if (RING) {
     const ringColor = new THREE.Color(RING.color);
-    groundFx.add(ellipseOutline(RING_R + RING.longLength, RING_R + RING.longLength, 0.008, 0.34, ringColor.getHex()));
-    groundFx.add(ellipseOutline(RING_R, RING_R, 0.005, 0.18, ringColor.clone().lerp(new THREE.Color(0xffffff), 0.35).getHex()));
+    [ellipseOutline(RING_R + RING.longLength, RING_R + RING.longLength, 0.008, 0.34, ringColor.getHex()),
+     ellipseOutline(RING_R, RING_R, 0.005, 0.18, ringColor.clone().lerp(new THREE.Color(0xffffff), 0.35).getHex())
+    ].forEach((mesh) => {
+      const m = mesh.material as THREE.MeshBasicMaterial;
+      m.userData.baseOpacity = m.opacity;
+      ringOutlineMats.push(m);
+      groundFx.add(mesh);
+    });
     const ringUniforms = {
       uSweep: { value: 0 },
       uSpeed: { value: 0 },
       uTime: { value: 0 },
-      uColor: { value: ringColor }
+      uColor: { value: ringColor },
+      uFade: { value: 1 }
     };
     const ringGeo = new THREE.BoxGeometry(0.024, 0.004, RING.shortLength);
     const ringMat = new THREE.ShaderMaterial({
@@ -564,13 +572,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
         }`,
       fragmentShader: `
-        uniform float uSweep; uniform float uSpeed; uniform float uTime; uniform vec3 uColor;
+        uniform float uSweep; uniform float uSpeed; uniform float uTime; uniform vec3 uColor; uniform float uFade;
         varying float vIndex;
         void main(){
           float diff = abs(fract(vIndex - uSweep + 0.5) - 0.5) * 2.0;   // 环上的角距离
           float glow = pow(1.0 - clamp(diff, 0.0, 1.0), 7.0);
           float flick = 0.85 + 0.15 * sin(uTime * 3.0 + vIndex * 90.0);
-          float a = (0.3 + glow * 0.8) * flick * (0.8 + uSpeed * 0.5);
+          float a = (0.3 + glow * 0.8) * flick * (0.8 + uSpeed * 0.5) * uFade;
           gl_FragColor = vec4(uColor * (0.8 + glow * 1.4), a);
         }`
     });
@@ -1448,7 +1456,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     carRoot.position.z = carTravel;
     carRoot.position.y = Math.sin(elapsed * 0.7) * 0.004 - sp * 0.022;
     carRoot.rotation.z = -sp * 0.014;
-    carRoot.rotation.y = Math.sin(elapsed * 0.25) * 0.006 + sp * 0.02;
+    // 冲刺时车头略微偏出去，形成参考视频里那种车尾偏左的 3/4 视角
+    carRoot.rotation.y = Math.sin(elapsed * 0.25) * 0.006 + racingAmt * 0.11;
     // 轮胎跟着「当前车速」转：静止浏览时车速是 0 所以不转；
     // 松手后画面会看到轮胎继续带着转、随车速一起慢下来才停（参考视频就是这样）。
     const spin = speed * 0.62 * dt;
@@ -1503,6 +1512,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       ringUniformsRef.uTime.value = elapsed;
       ringUniformsRef.uSpeed.value = sps;
       ringUniformsRef.uSweep.value = elapsed * (0.05 + sps * 0.22);
+      // 冲刺时圆圈与两条椭圆线一起淡出：参考视频里车一开走，身后就没有圈了
+      const ringFade = 1 - clamp(racingAmt * 1.6, 0, 1);
+      if (ringUniformsRef.uFade) ringUniformsRef.uFade.value = ringFade;
+      ringOutlineMats.forEach((m) => {
+        m.opacity = (m.userData.baseOpacity as number) * ringFade;
+        m.visible = ringFade > 0.02;
+      });
     }
     (pool.material as THREE.MeshBasicMaterial).opacity = CFG.ground.pool + sps * 0.1;
     if (ring) ring.visible = p > 0.12 || sps > 0.05;
