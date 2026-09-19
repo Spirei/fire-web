@@ -43,10 +43,10 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     // 方位角 0° = 正对车头，90° = 车身左侧，180° = 车尾。
     // 节奏对齐参考视频：静置全览 → 绕车 → 前轮/侧箱特写 → 拉回侧视 → 车尾宽景（在这里发车）→ 收尾微推再拉出。
     keyframes: [
-      { p: 0, az: -74, r: 12.2, h: 1.9, ty: 0.98, tz: 0.1, fov: 30 },   // 开场：左侧全览，整车与刻度环都在画面里
-      { p: 0.1, az: -60, r: 11.4, h: 1.78, ty: 0.9, tz: 0.15, fov: 30 },
+      { p: 0, az: -74, r: 21.5, h: 3.4, ty: 1.0, tz: 0.1, fov: 30 },    // 开场：远景全览，整车与整圈都在画面中间且留白
+      { p: 0.1, az: -62, r: 18.5, h: 3.0, ty: 0.95, tz: 0.15, fov: 30 },
       { p: 0.2, az: -20, r: 9.6, h: 1.34, ty: 0.76, tz: 0.15, fov: 29 },
-      { p: 0.3, az: 18, r: 8.4, h: 1.04, ty: 0.62, tz: 0.7, fov: 27 },   // 开始推近车头
+      { p: 0.3, az: 18, r: 9.6, h: 1.2, ty: 0.7, tz: 0.6, fov: 27 },     // 开始推近车头
       { p: 0.38, az: 60, r: 5.9, h: 0.8, ty: 0.5, tz: 0.9, fov: 27 },    // 前轮 / 侧箱特写（参考视频里车是满画甚至溢出的）
       { p: 0.46, az: 104, r: 6.2, h: 0.78, ty: 0.52, tz: 0.1, fov: 28 }, // 沿车身滑到后段，继续贴近
       { p: 0.54, az: 130, r: 9.4, h: 1.0, ty: 0.62, tz: 0.1, fov: 29 },  // 拉回 3/4 侧视
@@ -63,7 +63,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
 
   ground: {
     // 车下方的钟面刻度环：正圆，屏幕上的椭圆来自俯视透视
-    ring: { radius: 4, count: 180, longEvery: 15, longLength: 0.34, shortLength: 0.16, color: "#ffb070" },
+    ring: { radius: 4, count: 220, longEvery: 20, longLength: 0.2, shortLength: 0.085, color: "#d8c3a4" },
     reflectIntensity: 1.05,
     // 参考视频里的地面是镜面：反射贴图给到 640（8 位，成本约 1.6MB）才够清晰
     reflectionSize: 640,

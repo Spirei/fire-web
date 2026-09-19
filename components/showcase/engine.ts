@@ -543,8 +543,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let ring: THREE.InstancedMesh | null = null;
   if (RING) {
     const ringColor = new THREE.Color(RING.color);
-    [ellipseOutline(RING_R + RING.longLength, RING_R + RING.longLength, 0.008, 0.34, ringColor.getHex()),
-     ellipseOutline(RING_R, RING_R, 0.005, 0.18, ringColor.clone().lerp(new THREE.Color(0xffffff), 0.35).getHex())
+    [ellipseOutline(RING_R + RING.longLength, RING_R + RING.longLength, 0.004, 0.2, ringColor.getHex()),
+     ellipseOutline(RING_R, RING_R, 0.0025, 0.1, ringColor.clone().lerp(new THREE.Color(0xffffff), 0.35).getHex())
     ].forEach((mesh) => {
       const m = mesh.material as THREE.MeshBasicMaterial;
       m.userData.baseOpacity = m.opacity;
@@ -578,7 +578,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           float diff = abs(fract(vIndex - uSweep + 0.5) - 0.5) * 2.0;   // 环上的角距离
           float glow = pow(1.0 - clamp(diff, 0.0, 1.0), 7.0);
           float flick = 0.85 + 0.15 * sin(uTime * 3.0 + vIndex * 90.0);
-          float a = (0.3 + glow * 0.8) * flick * (0.8 + uSpeed * 0.5) * uFade;
+          float a = (0.16 + glow * 0.5) * flick * (0.8 + uSpeed * 0.5) * uFade;
           gl_FragColor = vec4(uColor * (0.8 + glow * 1.4), a);
         }`
     });
@@ -597,7 +597,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       pos.copy(dir).multiplyScalar(RING_R + len / 2);
       pos.y = 0.012;
       quat.setFromUnitVectors(zAxis, dir);
-      m.compose(pos, quat, new THREE.Vector3(long ? 1.6 : 1, 1, len / RING.shortLength));
+      m.compose(pos, quat, new THREE.Vector3(long ? 1.3 : 1, 1, len / RING.shortLength));
       mesh.setMatrixAt(i, m);
       idx[i] = i;
     }
