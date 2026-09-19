@@ -163,21 +163,32 @@ export async function inspectGlb(absPath: string, displayName?: string): Promise
   const opened = await readGlb(absPath);
   const gltf = opened.gltf;
   try {
-    const views: Array<{ byteOffset?: number; byteLength?: number }> = gltf.bufferViews ?? [];
+    /**
+     * 上限：JSON 块本身已被 readGlb 限制在 64MB，但一个 64MB 的 JSON 能塞进上百万条 images / meshes，
+     * 逐条去磁盘读贴图头会把一次「上传体检」变成几十万次 IO。这里按参考模型的量级封顶，
+     * 超出的条目直接忽略（不影响判定：模型早就不正常了）。
+     */
+    const MAX_ENTRIES = 400;
+    const take = <T,>(list: unknown): T[] => (Array.isArray(list) ? (list.slice(0, MAX_ENTRIES) as T[]) : []);
+    const views = take<{ byteOffset?: number; byteLength?: number }>(gltf.bufferViews);
     const images: GlbImageInfo[] = [];
-    for (const [i, img] of ((gltf.images ?? []) as Array<Record<string, any>>).entries()) {
-      const view = img.bufferView !== undefined ? views[img.bufferView] : undefined;
+    for (const [i, img] of take<Record<string, any>>(gltf.images).entries()) {
+      const view = typeof img.bufferView === "number" ? views[img.bufferView] : undefined;
       const mime = String(img.mimeType ?? "unknown");
       let width: number | undefined;
       let height: number | undefined;
-      if (view && Number.isFinite(view.byteOffset) && Number.isFinite(view.byteLength)) {
-        const head = await readAt(opened.fd, opened.binStart + Number(view.byteOffset ?? 0), Math.min(Number(view.byteLength), 65536));
+      const offset = Number(view?.byteOffset ?? 0);
+      const viewBytes = Number(view?.byteLength ?? 0);
+      // 偏移 / 长度必须是合理数字：负偏移或 NaN 会让 fs.read 抛错（并被当成「文件损坏」），
+      // 超长偏移也没必要去读，直接跳过尺寸探测
+      if (view && Number.isFinite(offset) && offset >= 0 && Number.isFinite(viewBytes) && viewBytes >= 0) {
+        const head = await readAt(opened.fd, opened.binStart + offset, Math.min(viewBytes, 65536));
         ({ width, height } = imageSize(head, mime));
       }
-      images.push({ name: String(img.name ?? `image_${i}`), mime, bytes: Number(view?.byteLength ?? 0), width, height });
+      images.push({ name: String(img.name ?? `image_${i}`), mime, bytes: Number.isFinite(viewBytes) ? viewBytes : 0, width, height });
     }
 
-    const materials: GlbMaterialInfo[] = ((gltf.materials ?? []) as Array<Record<string, any>>).map((mat) => {
+    const materials: GlbMaterialInfo[] = take<Record<string, any>>(gltf.materials).map((mat) => {
       const pbr = mat.pbrMetallicRoughness ?? {};
       const ext = mat.extensions ?? {};
       return {
@@ -193,7 +204,7 @@ export async function inspectGlb(absPath: string, displayName?: string): Promise
       };
     });
     const materialNames = materials.map((m) => m.name);
-    const meshes = ((gltf.meshes ?? []) as Array<Record<string, any>>).map((mesh) => {
+    const meshes = take<Record<string, any>>(gltf.meshes).map((mesh) => {
       const mats = new Set<string>();
       for (const prim of mesh.primitives ?? []) {
         if (prim.material !== undefined && materialNames[prim.material]) mats.add(materialNames[prim.material]);
@@ -262,7 +273,7 @@ export async function inspectGlb(absPath: string, displayName?: string): Promise
         maxImageSize,
         imageBytes,
         meshes,
-        nodeCount: (gltf.nodes ?? []).length,
+        nodeCount: Array.isArray(gltf.nodes) ? gltf.nodes.length : 0,
         animations: (gltf.animations ?? []).length,
         skins: (gltf.skins ?? []).length,
         extensionsUsed,

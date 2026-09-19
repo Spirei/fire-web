@@ -80,8 +80,10 @@ export async function GET(
     if (range) {
       const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
       if (match) {
-        const start = match[1] ? Number(match[1]) : 0;
-        const end = match[2] ? Math.min(Number(match[2]), stat.size - 1) : stat.size - 1;
+        // bytes=-500 是「最后 500 字节」（后缀区间），不能当成从 0 开始 —— 音频 / 视频播放器常用这种写法
+        const suffix = !match[1] && match[2] ? Number(match[2]) : 0;
+        const start = suffix > 0 ? Math.max(0, stat.size - suffix) : match[1] ? Number(match[1]) : 0;
+        const end = suffix > 0 ? stat.size - 1 : match[2] ? Math.min(Number(match[2]), stat.size - 1) : stat.size - 1;
         if (Number.isFinite(start) && start <= end && start < stat.size) {
           const stream = Readable.toWeb(fs.createReadStream(source, { start, end })) as ReadableStream<Uint8Array>;
           return new NextResponse(stream, {

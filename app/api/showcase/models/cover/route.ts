@@ -1,8 +1,9 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { getAuthUser, isTrustedMutationRequest } from "@/lib/auth";
-import { COVERS_DIR, setModelCover, validModelId } from "@/lib/showcaseModels";
+import { getAuthUser, isAdmin, isTrustedMutationRequest } from "@/lib/auth";
+import { COVERS_DIR, readStoredModels, setModelCover, validModelId } from "@/lib/showcaseModels";
+import { SHOWCASE_MODELS } from "@/components/showcase/presets/models";
 import { validateImageContent } from "@/lib/imageSecurity";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 
@@ -15,6 +16,8 @@ const EXTS = ["png", "jpg", "jpeg", "webp"];
 export async function POST(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  // 封面同样是对外可见的车型条卡面：限管理员
+  if (!isAdmin(user)) return NextResponse.json({ error: "只有管理员能改封面" }, { status: 403 });
   if (!isTrustedMutationRequest(request)) return NextResponse.json({ error: "请求来源不可信" }, { status: 403 });
   if (!rateLimit(`showcase-cover:${clientIp(request)}`, 40, 60 * 60 * 1000)) {
     return NextResponse.json({ error: "上传过于频繁，请稍后再试" }, { status: 429 });
@@ -24,6 +27,9 @@ export async function POST(request: Request) {
   const rawName = String(url.searchParams.get("name") ?? "cover.jpg").trim();
   const ext = (rawName.split(".").pop() ?? "").toLowerCase();
   if (!validModelId(id)) return NextResponse.json({ error: "车型不存在" }, { status: 404 });
+  // 先确认车型真的在清单里，再落盘 —— 否则未知 id 会先写下一张永远没人引用的孤儿图
+  const known = SHOWCASE_MODELS.some((item) => item.id === id) || readStoredModels().some((model) => model.id === id);
+  if (!known) return NextResponse.json({ error: "车型不存在" }, { status: 404 });
   if (!EXTS.includes(ext)) return NextResponse.json({ error: "封面只支持 PNG / JPG / WEBP" }, { status: 400 });
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared && declared > MAX_BYTES) return NextResponse.json({ error: "封面请控制在 6MB 以内" }, { status: 413 });
@@ -47,6 +53,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  if (!isAdmin(user)) return NextResponse.json({ error: "只有管理员能改封面" }, { status: 403 });
   if (!isTrustedMutationRequest(request)) return NextResponse.json({ error: "请求来源不可信" }, { status: 403 });
   const id = String(new URL(request.url).searchParams.get("id") ?? "").trim().toLowerCase();
   if (!validModelId(id)) return NextResponse.json({ error: "车型不存在" }, { status: 404 });

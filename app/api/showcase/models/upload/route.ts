@@ -1,10 +1,10 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { getAuthUser, isTrustedMutationRequest } from "@/lib/auth";
+import { getAuthUser, isAdmin, isTrustedMutationRequest } from "@/lib/auth";
 import { inspectGlb } from "@/lib/glbInspect";
 import { MODELS_DIR, validModelFile } from "@/lib/showcaseModels";
-import { clientIp, rateLimit } from "@/lib/rateLimit";
+import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
 
 export const dynamic = "force-dynamic";
@@ -52,9 +52,14 @@ function slugFromFile(file: string) {
 export async function POST(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
-  // 只要登录就能导入车型（素材落在 uploads 卷里，不对外分发）
+  // 车型是首页对外的公共内容（模型经 /uploads 公开可下载），导入 / 覆盖一律限管理员
+  if (!isAdmin(user)) return NextResponse.json({ error: "只有管理员能导入车型" }, { status: 403 });
   if (!isTrustedMutationRequest(request)) return NextResponse.json({ error: "请求来源不可信" }, { status: 403 });
   if (!rateLimit(`showcase-model-upload:${clientIp(request)}`, 20, 60 * 60 * 1000)) {
+    return NextResponse.json({ error: "上传过于频繁，请稍后再试" }, { status: 429 });
+  }
+  // 单个 IP 之外再加一道全站闸门：一次 260MB，防止换 IP 把 uploads 卷写满
+  if (!rateLimitGlobal("showcase-model-upload", 40, 60 * 60 * 1000)) {
     return NextResponse.json({ error: "上传过于频繁，请稍后再试" }, { status: 429 });
   }
   const url = new URL(request.url);
@@ -68,7 +73,8 @@ export async function POST(request: Request) {
   }
   fs.mkdirSync(MODELS_DIR, { recursive: true });
   const dest = path.join(MODELS_DIR, rawName);
-  const tmp = `${dest}.part`;
+  // 临时名带随机后缀：同名并发上传不会互相写同一个 .part（否则可能双双落成半截文件）
+  const tmp = `${dest}.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.part`;
   let bytes = 0;
   try {
     bytes = await streamToFile(request.body, tmp, MAX_BYTES);

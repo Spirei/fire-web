@@ -694,6 +694,44 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const missing = await route.GET(new Request('http://localhost/uploads/asset/icon/not-there.png'), { params: Promise.resolve({ path: ['asset', 'icon', 'not-there.png'] }) });
     assert.equal(missing.status, 404);
   });
+  await test('showcase 写接口限管理员：普通用户改不了首页车型条', async () => {
+    const uploadRoute = require(path.join(root, 'app/api/showcase/models/upload/route.ts'));
+    const listRoute = require(path.join(root, 'app/api/showcase/models/route.ts'));
+    const orderRoute = require(path.join(root, 'app/api/showcase/models/order/route.ts'));
+    const coverRoute = require(path.join(root, 'app/api/showcase/models/cover/route.ts'));
+    const idRoute = require(path.join(root, 'app/api/showcase/models/[id]/route.ts'));
+    const call = (role, url, method = 'GET', body) =>
+      new Request(`http://localhost:3000${url}`, {
+        method,
+        headers: {
+          ...(role ? { cookie: `fire_session=${tokens[role]}` } : {}),
+          ...(body ? { 'Content-Type': 'application/json' } : {})
+        },
+        ...(body ? { body: JSON.stringify(body) } : {})
+      });
+    const params = (id) => ({ params: Promise.resolve({ id }) });
+
+    // 普通用户：导入 / 保存 / 排序 / 封面 / 改参数 / 删除 全部 403（车型条是首页对外的公共内容）
+    assert.equal((await uploadRoute.POST(call('user', '/api/showcase/models/upload?name=x.glb', 'POST'))).status, 403);
+    assert.equal((await listRoute.POST(call('user', '/api/showcase/models', 'POST', { id: 'x', label: 'x', file: 'x.glb' }))).status, 403);
+    assert.equal((await orderRoute.PUT(call('user', '/api/showcase/models/order', 'PUT', { ids: ['mcl35m'] }))).status, 403);
+    assert.equal((await coverRoute.DELETE(call('user', '/api/showcase/models/cover?id=mcl35m', 'DELETE'))).status, 403);
+    assert.equal((await idRoute.PUT(call('user', '/api/showcase/models/gulf2022', 'PUT', {}), params('gulf2022'))).status, 403);
+    assert.equal((await idRoute.DELETE(call('user', '/api/showcase/models/gulf2022?file=1'), params('gulf2022'))).status, 403);
+
+    // 访客：先卡在未登录
+    assert.equal((await listRoute.POST(call(null, '/api/showcase/models', 'POST', {}))).status, 401);
+    assert.equal((await uploadRoute.POST(call(null, '/api/showcase/models/upload?name=x.glb', 'POST'))).status, 401);
+
+    // 管理员：不再是 403（这里只验证授权，不真去写盘）
+    const adminRes = await idRoute.DELETE(call('admin', '/api/showcase/models/not-exist'), params('not-exist'));
+    assert.notEqual(adminRes.status, 403);
+
+    // 公开 GET：只给首页要用的清单，不再把整份登记表（文件参数）下发出去
+    const published = await (await listRoute.GET()).json();
+    assert.ok(Array.isArray(published.models));
+    assert.equal(published.stored, undefined);
+  });
   await test('entrypoint: unwritable data volume fails loudly, failing seed does not block startup', () => {
     const { spawnSync } = require('node:child_process');
     const entrypoint = path.join(root, 'scripts/entrypoint.sh');

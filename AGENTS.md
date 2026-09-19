@@ -32,7 +32,8 @@ Review 自查清单（按项目实际走一遍）：
 
 ## 3D 车型导入与车型条（2026-09-20 起）
 
-- 首页右下角车型条 = **内置车**（`components/showcase/presets/models.ts` 的 `SHOWCASE_MODELS`，目前只有随仓库分发的 MCL35M）+ **导入车**；导入入口是车型条末尾的「＋」（登录可见），页面 `/showcase/import`。
+- 首页右下角车型条 = **内置车**（`components/showcase/presets/models.ts` 的 `SHOWCASE_MODELS`，目前只有随仓库分发的 MCL35M）+ **导入车**；导入入口是车型条末尾的「＋」（**仅管理员可见**），页面 `/showcase/import`。
+- **车型相关写接口一律限管理员**（`upload` / `cover` / `order` / `[id]` 的 PUT+DELETE / `models` 的 POST）：车型条是首页对外的公共内容、素材经 `/uploads` 公开可下载，普通用户只读；新增展示台写接口时照这条挡（与素材库 / 名人 / 站点设置的惯例一致）。
 - **素材与登记表都放 uploads 卷**：`public/uploads/mclaren/models/*.glb`（导入的模型）、`covers/*`（自定义封面）、`showroom.json`（登记表）—— 三者都不进 Git、不进镜像（100MB+ 的 glb 会被公开仓库审计拦）。只有 MCL35M 的模型与两张 HDR 随仓库放 `public/mclaren/`；**禁止把导入的车型素材再塞回仓库**。
 - **顺序与封面只认 showroom.json**（`order` / `models[].cover` / `builtinMeta[内置车 id].cover`）：这是「排序结果存服务端」约定的 showcase 分支，排序走 `PUT /api/showcase/models/order`，**不要存 localStorage / 组件本地状态**。
   - 顺序表缺项时按 `lib/showcaseModels.ts` 的 `resolveOrder` 兜底：内置车补最前、其余补末尾；导入页与首页车型条必须共用这一个函数，禁止各排一套（曾出现「导入页排最后、首页排最前」）。

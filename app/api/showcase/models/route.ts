@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
-import { getAuthUser, isTrustedMutationRequest } from "@/lib/auth";
-import {
-  ensureRegistry,
-  listShowcaseOptions,
-  upsertStoredModel,
-  validModelFile,
-  validModelId
-} from "@/lib/showcaseModels";
+import { readJsonBody } from "@/lib/requestBody";
+import { getAuthUser, isAdmin, isTrustedMutationRequest } from "@/lib/auth";
+import { listShowcaseOptions, upsertStoredModel, validModelFile, validModelId } from "@/lib/showcaseModels";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -21,8 +16,7 @@ export async function GET() {
       builtin: item.builtin,
       present: item.present,
       config: item.config
-    })),
-    stored: ensureRegistry()
+    }))
   });
 }
 
@@ -30,13 +24,16 @@ export async function GET() {
 export async function POST(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  // 车型条是首页对外的公共内容：改动一律限管理员（与素材库 / 名人 / 站点设置一致）
+  if (!isAdmin(user)) return NextResponse.json({ error: "只有管理员能改车型" }, { status: 403 });
   if (!isTrustedMutationRequest(request)) return NextResponse.json({ error: "请求来源不可信" }, { status: 403 });
   if (!rateLimit(`showcase-model-save:${clientIp(request)}`, 60, 60 * 60 * 1000)) {
     return NextResponse.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
   }
+  // 请求体封顶 256KB：车型参数只有几十个字段，解析前先拦住超大 body
   let body: Record<string, unknown>;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    body = ((await readJsonBody(request, 256 * 1024)) ?? {}) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "请求格式不正确" }, { status: 400 });
   }

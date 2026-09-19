@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
-import { getAuthUser, isTrustedMutationRequest } from "@/lib/auth";
+import { readJsonBody } from "@/lib/requestBody";
+import { getAuthUser, isAdmin, isTrustedMutationRequest } from "@/lib/auth";
 import { ensureRegistry, removeStoredModel, sanitizeParams, upsertStoredModel, validModelId } from "@/lib/showcaseModels";
+import { clientIp, rateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
 function guard(request: Request) {
   const user = getAuthUser(request);
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  // 改参数 / 删除车型（连素材一起删）会影响首页对外的车型条：限管理员
+  if (!isAdmin(user)) return NextResponse.json({ error: "只有管理员能改车型" }, { status: 403 });
   if (!isTrustedMutationRequest(request)) return NextResponse.json({ error: "请求来源不可信" }, { status: 403 });
+  if (!rateLimit(`showcase-model-edit:${clientIp(request)}`, 60, 60 * 60 * 1000)) {
+    return NextResponse.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
+  }
   return null;
 }
 
@@ -21,7 +28,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (!existing) return NextResponse.json({ error: "车型不存在（内置车型不能改参数）" }, { status: 404 });
   let body: Record<string, unknown>;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    body = ((await readJsonBody(request, 256 * 1024)) ?? {}) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "请求格式不正确" }, { status: 400 });
   }

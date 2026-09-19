@@ -286,9 +286,15 @@ export function saveModelOrder(ids: string[]): string[] {
   return order;
 }
 
-/** /uploads/... 对应到 public 目录下的绝对路径 */
+/** /uploads/... 对应到 public 目录下的绝对路径（调用方负责确认它确实落在 uploads 内） */
 function uploadsPath(url: string) {
-  return path.join(process.cwd(), "public", "uploads", decodeURIComponent(url).replace(/^\/uploads\//, ""));
+  const root = path.join(process.cwd(), "public", "uploads");
+  const abs = path.join(root, decodeURIComponent(url).replace(/^\/uploads\//, ""));
+  // 登记表理论上只会有服务端生成的封面路径，但这里再兜一层：
+  // 路径穿越（.. / 绝对路径）一律不认，避免被篡改的登记表删到 uploads 之外的文件
+  const normalizedRoot = path.resolve(root) + path.sep;
+  if (!path.resolve(abs).startsWith(normalizedRoot)) throw new Error("封面路径不合法");
+  return abs;
 }
 
 /** 删掉被替换 / 清空的封面文件（文件可能已被手动删掉，失败忽略） */
@@ -297,7 +303,7 @@ function removeUploadFile(url?: string) {
   try {
     fs.unlinkSync(uploadsPath(url));
   } catch {
-    /* 旧封面可能已被删掉 */
+    /* 旧封面可能已被删掉；路径不合法也走这里 */
   }
 }
 

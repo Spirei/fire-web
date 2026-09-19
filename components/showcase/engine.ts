@@ -520,8 +520,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   })();
   function reflectSizeFor(aspect: number, height: number): [number, number] {
     if (reflectOverride) {
-      const h = Math.round(reflectOverride.height);
-      return [Math.round(reflectOverride.width ?? h * Math.max(0.6, Math.min(3, aspect))), h];
+      // 这个入口是地址栏可控的（?mclreflect=...）：夹到 256..4096，避免一个链接就让访问者
+      // 去分配几个 GB 的渲染目标（浏览器随即假死）
+      const h = Math.max(256, Math.min(4096, Math.round(reflectOverride.height)));
+      const w = reflectOverride.width ?? h * Math.max(0.6, Math.min(3, aspect));
+      return [Math.max(256, Math.min(4096, Math.round(w))), h];
     }
     const h = Math.max(256, Math.round(height));
     const w = Math.max(256, Math.round(h * Math.max(0.6, Math.min(3, aspect))));

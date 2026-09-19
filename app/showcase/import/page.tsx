@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { getAuthUser } from "@/lib/auth";
+import { getAuthUser, isAdmin } from "@/lib/auth";
 import { modelUrlExists, orderRanker, readRegistry, readStoredModels, resolveOrder } from "@/lib/showcaseModels";
 import { SHOWCASE_MODELS } from "@/components/showcase/presets/models";
 import ModelImporter from "@/components/showcase/ModelImporter";
@@ -17,12 +17,14 @@ export default async function ShowcaseImportPage() {
   const headerList = await headers();
   const cookie = headerList.get("cookie") ?? "";
   const user = getAuthUser(new Request("http://localhost/", { headers: { cookie } }));
-  if (!user) {
+  if (!user || !isAdmin(user)) {
     return (
       <main style={{ maxWidth: 640, margin: "18vh auto", padding: "0 24px", color: "var(--sc-ink, #e8eaee)" }}>
-        <h1 style={{ fontSize: 22, marginBottom: 12 }}>请先登录</h1>
+        <h1 style={{ fontSize: 22, marginBottom: 12 }}>{user ? "没有权限" : "请先登录"}</h1>
         <p style={{ fontSize: 13, lineHeight: 1.8, opacity: 0.7 }}>
-          车型素材与导入参数都写在服务器的 uploads 卷里，登录后就能导入与调整。请先登录，或
+          {user
+            ? "车型是首页对外的公共内容（素材经 /uploads 公开可访问），导入 / 改参数 / 删除都限管理员。请用管理员账号登录，或"
+            : "车型素材与导入参数都写在服务器的 uploads 卷里，管理员登录后就能导入与调整。请先登录，或"}
           <Link href="/" style={{ marginLeft: 6 }}>
             返回首页
           </Link>
