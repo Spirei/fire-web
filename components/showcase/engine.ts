@@ -165,6 +165,8 @@ function barGlsl(bars: ShowcaseLightBar[], tone: "gold" | "white", scale = 1) {
 export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const { canvas, hud } = options;
   const CFG = normalizeConfig(options.config);
+  /** 开场进度：用户置顶过机位时从这里起步（0 = 内置开场机位） */
+  const START_P = Math.min(1, Math.max(0, options.startProgress ?? 0));
   const cleanups: Array<() => void> = [];
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   // 排查性能用：?mcloff=reflect,bloom,tunnel,floor,car 可逐项关掉效果（只影响诊断，不影响正常访问）
@@ -1925,8 +1927,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     scrollTravel = Math.max(1, el.offsetHeight - stage.offsetHeight);
   }
   function progress() {
-    // 只守开场这三秒：这段时间足够覆盖浏览器的滚动恢复，也不会长期影响脚本化调试（直接 scrollTo 也能工作）
-    if (!userScrolled && elapsed < 3) return 0;
+    // 只守开场这三秒：这段时间足够覆盖浏览器的滚动恢复，也不会长期影响脚本化调试（直接 scrollTo 也能工作）。
+    // 用户置顶过机位时「家」不是 0 而是置顶进度，所以开场就停在那里
+    if (!userScrolled && elapsed < 3) return START_P;
     return clamp((window.scrollY - scrollOrigin) / scrollTravel, 0, 1);
   }
 
@@ -2212,7 +2215,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   /* ---------- 10) 渲染循环：不可见时暂停 ---------- */
   let last = performance.now();
-  let pSmooth = 0;
+  let pSmooth = START_P;
   let pVel = 0;
   const tick = () => {
     const now = performance.now();
@@ -2346,6 +2349,22 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     /** 影棚：把环境切到明亮摄影棚（不改深浅色主题，只影响 3D 场景的光与背景） */
     setStudio: (on: boolean) => {
       studioOn = on;
+    },
+    /** 当前机位：置顶时把这几项一起存下来 */
+    readPose: () => ({ p: +pSmooth.toFixed(4), yaw: +userYaw.toFixed(2), pitch: +userPitch.toFixed(4), zoom: +zoom.toFixed(3) }),
+    applyPose: (pose) => {
+      if (typeof pose.yaw === "number" && Number.isFinite(pose.yaw)) {
+        userYaw = pose.yaw;
+        userYawVel = 0;
+      }
+      if (typeof pose.pitch === "number" && Number.isFinite(pose.pitch)) {
+        userPitch = clamp(pose.pitch, -0.55, 0.95);
+        userPitchVel = 0;
+      }
+      if (typeof pose.zoom === "number" && Number.isFinite(pose.zoom)) {
+        zoom = clamp(pose.zoom, MIN_ZOOM, MAX_ZOOM);
+        zoomTarget = zoom;
+      }
     },
     setProgress: (p: number, settle = 0) => {
       const steps = Math.max(1, Math.round(settle * 60));

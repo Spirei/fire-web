@@ -3,9 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ShowcaseConfig, ShowcaseHandle } from "./types";
 import { setThemeCookie } from "@/lib/theme";
+import { usePersistedState } from "@/lib/usePersistedState";
 import "./showcase.css";
 
 const RPM_TICKS = 20;
+/** 用户置顶的默认机位（进度 + 拖拽角度 + 缩放），刷新 / 重开页面都回到这里 */
+const PIN_KEY = "fire:showcase:pose";
+type ShowcasePose = { p: number; yaw: number; pitch: number; zoom: number };
 
 /**
  * 通用 3D 展示台（滚动叙事）。
@@ -45,6 +49,12 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
   // 引擎是异步创建的，点得比它早就先把状态存下来，创建完再补上
   const orbitRef = useRef(false);
   const studioRef = useRef(false);
+  // 用户置顶的默认机位：默认隐藏，鼠标划过左下角胶囊才显示开关
+  const [pinnedPose, setPinnedPose] = usePersistedState<ShowcasePose | null>(PIN_KEY, null);
+  const pinnedPoseRef = useRef<ShowcasePose | null>(pinnedPose);
+  useEffect(() => {
+    pinnedPoseRef.current = pinnedPose;
+  }, [pinnedPose]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const handleRef = useRef<ShowcaseHandle | null>(null);
   // WebGL 上下文丢了就重建一次场景（重建计数用作 key，触发重新挂载）
@@ -92,6 +102,8 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
           config: degraded
             ? { ...config, model: { ...config.model, maxTextureSize: 2048 } }
             : config,
+          // 置顶机位：引擎直接从置顶进度起步，不会先落到开场机位再弹回来
+          startProgress: pinnedPoseRef.current?.p ?? 0,
           hud: {
             scroll,
             stage,
@@ -125,6 +137,11 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
         // 引擎是异步创建的：创建前点过的「360° 环视 / 影棚」要补上
         handle.setOrbit(orbitRef.current);
         handle.setStudio(studioRef.current);
+        // 置顶机位：刷新 / 重建后直接把镜头放回用户存下的角度（滚动位置由下面的滚动守护负责）
+        const pinned = pinnedPoseRef.current;
+        if (pinned) {
+          handle.applyPose(pinned);
+        }
         handleRef.current = handle;
         // 开发环境留一个调试句柄，方便按进度截图与排查（生产不会写）
         if (process.env.NODE_ENV !== "production") {
@@ -173,9 +190,19 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
     } catch {
       /* 忽略 */
     }
-    window.scrollTo(0, 0);
-
     const mountAt = performance.now();
+    // 首页的「默认机位」= 用户置顶的那一帧；没置顶就是开场（进度 0）。
+    // 每帧都从 ref 取（置顶值可能晚一拍才从存储里读出来），所以这里不缓存成常量
+    const homeTop = () => {
+      const el = scrollRef.current;
+      const stage = stageRef.current;
+      if (!el || !stage) return 0;
+      const total = Math.max(1, el.offsetHeight - stage.offsetHeight);
+      const at = pinnedPoseRef.current?.p ?? 0;
+      return el.getBoundingClientRect().top + window.scrollY + total * at;
+    };
+    window.scrollTo(0, homeTop());
+
     let released = false;
     const release = () => {
       released = true;
@@ -188,7 +215,7 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
       // 钉到「用户自己滚动」为止；模型异常慢时最多钉 12 秒，避免长期占着页面
       const expired = performance.now() > mountAt + 12000;
       if (released || expired) return;
-      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      if (Math.abs(window.scrollY - homeTop()) > 1) window.scrollTo(0, homeTop());
       raf = window.requestAnimationFrame(pinTop);
     };
     raf = window.requestAnimationFrame(pinTop);
@@ -271,6 +298,20 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
     },
     [config.phases]
   );
+
+  /** 置顶当前机位：把此刻的进度 / 角度 / 缩放存下来，刷新后回到这里 */
+  const pinCurrentPose = useCallback(() => {
+    const pose = handleRef.current?.readPose();
+    if (!pose) return;
+    setPinnedPose({
+      p: +pose.p.toFixed(4),
+      yaw: +pose.yaw.toFixed(2),
+      pitch: +pose.pitch.toFixed(4),
+      zoom: +pose.zoom.toFixed(3)
+    });
+  }, [setPinnedPose]);
+
+  const clearPinnedPose = useCallback(() => setPinnedPose(null), [setPinnedPose]);
 
   // 背景音乐：默认不播放（浏览器不允许自动播放），点图标才播；循环、音量 0.45。
   // 开关记在 localStorage，下次进来会在首次交互后自动续播。
@@ -518,6 +559,25 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
               <button type="button" className="sc-zoom" ref={zoomInRef} title="放大看细节（⌘/Ctrl + 滚轮）" aria-label="放大">
                 ＋
               </button>
+              {/* 置顶机位：默认隐藏，鼠标划过胶囊才出现；置顶后刷新 / 重开都回到这一帧 */}
+              <button
+                type="button"
+                className={`sc-pill sc-pin${pinnedPose ? " on" : ""}`}
+                onClick={pinCurrentPose}
+                aria-pressed={Boolean(pinnedPose)}
+                title={pinnedPose ? "更新置顶机位：把当前视角存为默认" : "把当前视角置顶为默认机位（刷新后回到这里）"}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                  <path d="M12 17v5" />
+                  <path d="M8 3h8l-1 6 3 3v2H6v-2l3-3-1-6z" />
+                </svg>
+                {pinnedPose ? "已置顶" : "置顶机位"}
+              </button>
+              {pinnedPose && (
+                <button type="button" className="sc-pill sc-pin sc-pin-clear" onClick={clearPinnedPose} title="解除置顶，回到开场机位">
+                  解除
+                </button>
+              )}
             </div>
 
             <div className="sc-row sc-tele">

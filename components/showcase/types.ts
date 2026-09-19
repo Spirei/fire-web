@@ -301,6 +301,8 @@ export interface ShowcaseOptions {
   canvas: HTMLCanvasElement;
   hud: ShowcaseHud;
   config: ShowcaseConfig;
+  /** 开场进度（0–1）：用户置顶过机位时从这里起步，避免先落到 0 再弹回置顶处 */
+  startProgress?: number;
   /** 加载进度 0–1（模型 + 环境贴图） */
   onProgress?: (ratio: number) => void;
   /** 就绪（可以隐藏 loading） */
@@ -322,6 +324,10 @@ export interface ShowcaseHandle {
   setOrbit: (on: boolean) => void;
   /** 影棚：3D 场景切到明亮摄影棚（不改深浅色主题） */
   setStudio: (on: boolean) => void;
+  /** 读取当前机位（进度 / 偏航 / 俯仰 / 缩放），用于「置顶当前机位」 */
+  readPose: () => { p: number; yaw: number; pitch: number; zoom: number };
+  /** 应用机位：刷新或重建后回到用户置顶的角度（滚动位置由组件负责） */
+  applyPose: (pose: { yaw?: number; pitch?: number; zoom?: number }) => void;
   /** 手动设置滚动进度（调试 / 截图用） */
   setProgress: (p: number, settle?: number) => void;
   /** 调试用：当前平滑后的进度、速度、渲染倍率、冲刺与缩放状态 */
