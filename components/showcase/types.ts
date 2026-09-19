@@ -65,6 +65,28 @@ export interface ShowcasePart {
   rev: boolean;
 }
 
+/**
+ * 导入车型可调的渲染参数（存在 uploads 卷的 showroom.json 里）。
+ * 与 ShowcaseConfig.model 同义，但只保留「换车时需要动」的那几项。
+ */
+export interface ShowcaseModelParams {
+  /** 归一化后的车长（米） */
+  length?: number;
+  /** 模型朝向修正（度）：车头没朝 +Z 时用 */
+  yaw?: number;
+  pitch?: number;
+  /** 轮子材质名（正则源码字符串） */
+  wheelPattern?: string;
+  wheelAxis?: "x" | "y" | "z";
+  wheelLateral?: "x" | "y" | "z";
+  wheelLongitudinal?: "x" | "y" | "z";
+  maxTextureSize?: number;
+  emissiveIntensity?: number;
+  clearcoatRoughness?: number;
+  envMapIntensity?: number;
+  materialRules?: Array<{ match: string; metalness?: number; roughness?: number }>;
+}
+
 export interface ShowcaseConfig {
   /** 换素材时改这里即可 */
   assets: {
@@ -104,6 +126,19 @@ export interface ShowcaseConfig {
     maxTextureSize?: number;
     /** 按材质名修正金属度 / 粗糙度（不同模型自带参数差别很大） */
     materialRules?: Array<{ match: string | RegExp; metalness?: number; roughness?: number }>;
+    /**
+     * 模型自带发光材质（车灯 / 仪表 / 玻璃细节）的强度上限，默认 0.45。
+     * 有的模型 KHR_materials_emissive_strength 高达 2 以上，叠上泛光就是一团白，压一档更像自然光。
+     */
+    emissiveIntensity?: number;
+    /**
+     * 清漆层（KHR_materials_clearcoat）的粗糙度下限，默认 0.2。
+     * 有的模型给 0.04（近乎镜面），环境贴图在这种镜面上会显出方块状色斑，
+     * 抬起一点相当于真实车漆的清漆层，反射变柔和但不失光泽。
+     */
+    clearcoatRoughness?: number;
+    /** 环境反射强度，默认 1。调高会让夜景里的小亮点在漆面上放大成光晕 */
+    envMapIntensity?: number;
   };
   /** 昼夜环境过渡（参考视频整段 hero 都是夜景，通常把窗口放到收尾或整段保持夜色） */
   environment?: {
@@ -362,6 +397,13 @@ export interface ShowcaseHandle {
     carYaw: number;
     /** 车模在场景里的实际包围盒尺寸（排查换车型的缩放 / 朝向） */
     carBox: number[];
+    /** 归一化之前、模型自带单位的包围盒（导入向导判断朝向与单位） */
+    carBoxRaw: number[];
+    /** 车模的材质名 / 网格名（导入向导用来挑轮子材质、核对模型结构） */
+    carMaterials: string[];
+    carMeshes: string[];
+    /** 按当前规则认出来几个轮子（4 = 正常；0 = 轮子材质名没对上） */
+    wheelGroups: number;
     /** 车道保持：自动量出的车头偏角（度）与当前横向偏移（米） */
     laneHeading: number;
     laneOffset: number;

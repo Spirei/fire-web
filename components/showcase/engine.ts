@@ -41,6 +41,15 @@ function normalizeConfig(config: ShowcaseConfig) {
       length: config.model?.length ?? 5.6,
       yaw: config.model?.yaw ?? 0,
       pitch: config.model?.pitch ?? 0,
+      // 模型自带的发光材质（车灯 / 仪表 / 玻璃细节）统一压一档：
+      // 有的模型 emissiveStrength 高达 2 以上，叠上泛光就是一团白，压到 0.45 更像自然光
+      emissiveIntensity: config.model?.emissiveIntensity ?? 0.45,
+      // 清漆层粗糙度下限：模型给 0.04 就是一面镜子 —— 灯光在车身上会聚成一条死亮的光带
+      // （叠上泛光就是那团「大光晕」）。抬太高又会让高光摊成一片发虚的绒毛，
+      // 0.3 是这两者之间：高光仍看得出边界，但不再是死白的斑块
+      clearcoatRoughness: config.model?.clearcoatRoughness ?? 0.3,
+      // 环境反射强度：1.25 时夜景里的小亮点会被放大成光晕，1.0 更接近实车漆面
+      envMapIntensity: config.model?.envMapIntensity ?? 1,
       wheelPattern: toRegExp(config.model?.wheelPattern, /rim|tread|tyre/i),
       wheelAxis: config.model?.wheelAxis ?? "x",
       wheelLateral: config.model?.wheelLateral ?? "x",
@@ -246,8 +255,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   /* ---------- 1) 双 HDR 环境：FBO 混合 ---------- */
   const pmrem = new THREE.PMREMGenerator(renderer);
   pmrem.compileEquirectangularShader();
-  // 环境只用来做反射，512×256 足够；PMREM 的开销与分辨率成正比，这里直接砍到四分之一
-  const envTarget = new THREE.WebGLRenderTarget(512, 256, { type: THREE.HalfFloatType });
+  // 环境只用来做反射；之前 512×256 在车身亮漆上会看到块状色斑，
+  // 提到 1024×512（HalfFloat 约 2 MB）后反射过渡才连续。
+  // envTarget 是给 PMREM 用的最终结果，envMixTarget / envBlurTarget 是模糊链的中间缓冲
+  // （WebGL 不允许同一张纹理既读又写，所以模糊必须两个目标来回倒）
+  const envTarget = new THREE.WebGLRenderTarget(1024, 512, { type: THREE.HalfFloatType });
+  const envMixTarget = new THREE.WebGLRenderTarget(1024, 512, { type: THREE.HalfFloatType });
+  const envBlurTarget = new THREE.WebGLRenderTarget(1024, 512, { type: THREE.HalfFloatType });
   const envQuadScene = new THREE.Scene();
   const envQuadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const envMixMat = new THREE.ShaderMaterial({
@@ -259,10 +273,34 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       void main(){
         vec3 night = texture2D(uEnv1, vUv).rgb * vec3(0.9, 0.95, 1.15);   // 夜里压暗并偏冷
         vec3 day = texture2D(uEnv2, vUv).rgb;
-        gl_FragColor = vec4(mix(night, day, uWeight), 1.0);
+        // 单颗星点 / 灯珠在亮漆上会被拉成一块死白，先压一下峰值再交给 PMREM
+        vec3 mixed = min(mix(night, day, uWeight), vec3(6.0));
+        gl_FragColor = vec4(mixed, 1.0);
       }`
   });
   envQuadScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), envMixMat));
+
+  // 环境贴图再走一趟可分离高斯：夜景 HDR 里的小亮点（星点、远处灯珠）在车漆上是一颗颗
+  // 硬边色斑，糊散之后才是连续的光带 —— 这就是「反射/折射里能看到色块」的来源。
+  const envBlurMat = new THREE.ShaderMaterial({
+    uniforms: { tSrc: { value: null }, uStep: { value: new THREE.Vector2(1 / 1024, 0) } },
+    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
+    fragmentShader: `
+      uniform sampler2D tSrc; uniform vec2 uStep;
+      varying vec2 vUv;
+      void main(){
+        // 9 抽头高斯（两趟凑成一次二维模糊），半径约 4 个像素：星点被抹平，光带仍然清楚
+        vec3 c = texture2D(tSrc, vUv).rgb * 0.227027;
+        c += (texture2D(tSrc, vUv + uStep).rgb + texture2D(tSrc, vUv - uStep).rgb) * 0.194595;
+        c += (texture2D(tSrc, vUv + uStep * 2.0).rgb + texture2D(tSrc, vUv - uStep * 2.0).rgb) * 0.121622;
+        c += (texture2D(tSrc, vUv + uStep * 3.0).rgb + texture2D(tSrc, vUv - uStep * 3.0).rgb) * 0.054054;
+        c += (texture2D(tSrc, vUv + uStep * 4.0).rgb + texture2D(tSrc, vUv - uStep * 4.0).rgb) * 0.016216;
+        gl_FragColor = vec4(c, 1.0);
+      }`
+  });
+  envQuadScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), envBlurMat));
+  const envMixMesh = envQuadScene.children[0] as THREE.Mesh;
+  const envBlurMesh = envQuadScene.children[1] as THREE.Mesh;
 
   let envPmrem: THREE.WebGLRenderTarget | null = null;
   let envApplied = -1;
@@ -274,6 +312,33 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     envApplied = w;
     envMixMat.uniforms.uWeight.value = w;
     const prev = renderer.getRenderTarget();
+    // 1) 夜 / 昼混到 envMixTarget
+    envMixMesh.visible = true;
+    envBlurMesh.visible = false;
+    renderer.setRenderTarget(envMixTarget);
+    renderer.render(envQuadScene, envQuadCam);
+    // ?mcloff=envblur 可跳过下面两趟模糊，用来对比「有没有色块」
+    if (off.has("envblur")) {
+      renderer.setRenderTarget(prev);
+      const plain = envMixTarget.texture;
+      plain.mapping = THREE.EquirectangularReflectionMapping;
+      envPmrem?.dispose();
+      envPmrem = pmrem.fromEquirectangular(plain);
+      scene.environment = envPmrem.texture;
+      return;
+    }
+    // 2) 横向模糊：envMixTarget → envBlurTarget
+    // 半径按 2 个纹素取（= 有效 sigma 约 5 个纹素）：夜景 HDR 里的星点、远处灯珠全部抹平，
+    // 车漆上就只剩连续的光带；半径太小的话，PMREM 的立方体面边界会在车身上留下方块状色斑
+    envMixMesh.visible = false;
+    envBlurMesh.visible = true;
+    envBlurMat.uniforms.tSrc.value = envMixTarget.texture;
+    (envBlurMat.uniforms.uStep.value as THREE.Vector2).set(2 / envMixTarget.width, 0);
+    renderer.setRenderTarget(envBlurTarget);
+    renderer.render(envQuadScene, envQuadCam);
+    // 3) 纵向模糊：envBlurTarget → envTarget（PMREM 用这一张）
+    envBlurMat.uniforms.tSrc.value = envBlurTarget.texture;
+    (envBlurMat.uniforms.uStep.value as THREE.Vector2).set(0, 2 / envBlurTarget.height);
     renderer.setRenderTarget(envTarget);
     renderer.render(envQuadScene, envQuadCam);
     renderer.setRenderTarget(prev);
@@ -281,7 +346,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     mixed.mapping = THREE.EquirectangularReflectionMapping;
     envPmrem?.dispose();
     envPmrem = pmrem.fromEquirectangular(mixed);
-    scene.environment = envPmrem.texture;
+    // ?mcloff=env 关掉环境反射（排查车身色块是不是环境贴图造成的）
+    scene.environment = off.has("env") ? null : envPmrem.texture;
   }
 
   /* ---------- 2) 地面：程序化法线 / 粗糙度贴图 ---------- */
@@ -1097,6 +1163,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const carLocalBox = new THREE.Box3();
   /** 排查换车型用：车模在场景里的实际包围盒尺寸 */
   let carDebugBox: number[] = [];
+  /** 归一化之前的原始包围盒（模型自带单位），导入向导用来判断朝向与单位 */
+  let carRawBox: number[] = [];
+  /** 模型结构快照（导入向导用来挑轮子材质 / 核对模型是否完整） */
+  let carMaterialNames: string[] = [];
+  let carMeshNames: string[] = [];
+  let carWheelGroups = 0;
   const wheelPivots: Array<
     Array<{ mesh: THREE.Mesh; angle: number; rot: THREE.Matrix4; t1: THREE.Matrix4; t2: THREE.Matrix4 }>
   > = [];
@@ -1299,6 +1371,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
       const scale = CFG.model.length / Math.max(size.x, size.y, size.z);
+      // 归一化之前的原始包围盒：导入向导靠它判断模型的单位与「哪根轴朝上」
+      carRawBox = [size.x, size.y, size.z].map((v) => +v.toFixed(4));
       car.scale.setScalar(scale);
       car.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
 
@@ -1321,12 +1395,17 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       };
 
       const splitTargets: THREE.Mesh[] = [];
+      const materialNames = new Set<string>();
+      const meshNames = new Set<string>();
       car.traverse((o) => {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
         mesh.frustumCulled = false;
         const mat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial;
         const name = mat?.name || "";
+        // 导入向导要看的模型结构：材质名用来挑轮子 / 写材质规则，网格名用来判断一个网格是不是一辆车
+        if (name && materialNames.size < 120) materialNames.add(name);
+        if (mesh.name && meshNames.size < 200) meshNames.add(mesh.name);
         // 按 preset 的规则修正材质参数（不同模型自带参数差别很大：轮胎不该是金属，碳纤维别太像镜子）
         if (mat?.isMeshStandardMaterial) {
           CFG.model.materialRules.forEach((rule) => {
@@ -1335,9 +1414,28 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
             if (rule.roughness !== undefined) mat.roughness = rule.roughness;
           });
           ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap"].forEach((key) => {
-            clampTexture((mat as unknown as Record<string, THREE.Texture | null>)[key]);
+            const tex = (mat as unknown as Record<string, THREE.Texture | null>)[key];
+            clampTexture(tex);
+            // 掠射角下没有各向异性过滤，车身上的字母会糊成一片；开到设备上限的一半更清楚
+            if (tex) tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
           });
-          mat.envMapIntensity = 1.25;
+          // 环境反射强度：1.25 时夜景里的小亮点在亮漆上会被放大成一团光晕，收到 1.0 更接近实车
+          mat.envMapIntensity = CFG.model.envMapIntensity;
+          // 清漆层：模型给 0.04 就是一面镜子，环境贴图在镜面上会显出砖块状色斑（车漆"色块"的来源）。
+          // 抬到 0.2 相当于真实车漆的清漆层 —— 依然有光泽，但反射是连续的
+          const physical = mat as THREE.MeshPhysicalMaterial;
+          if (physical.clearcoat && physical.clearcoat > 0) {
+            physical.clearcoatRoughness = Math.max(physical.clearcoatRoughness ?? 0, CFG.model.clearcoatRoughness);
+            // ?mcloff=clearcoat 关掉清漆层（排查车头那层镜面反射造成的色块）
+            if (off.has("clearcoat")) physical.clearcoat = 0;
+          }
+          // 发光材质压到自然强度：保留灯 / 仪表的亮，但不糊成一块白。
+          // ?mcloff=emissive 可整批关掉发光，用来确认画面里的亮斑是不是车灯造成的
+          if (off.has("emissive")) {
+            mat.emissiveIntensity = 0;
+          } else if (mat.emissive && (mat.emissive.r > 0.01 || mat.emissive.g > 0.01 || mat.emissive.b > 0.01)) {
+            mat.emissiveIntensity = Math.min(mat.emissiveIntensity || 1, CFG.model.emissiveIntensity);
+          }
           addFlow(mat);
           bodyMaterials.push(mat);
         }
@@ -1377,6 +1475,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         });
         mesh.visible = false;
       });
+      carMaterialNames = [...materialNames];
+      carMeshNames = [...meshNames];
+      carWheelGroups = wheelPivots.length;
 
       // 车道保持的第一件事：量出车头方向。
       // 前后轴中心连线就是车身纵轴，它与隧道方向（+z）的夹角就是「车头偏角」——
@@ -1543,6 +1644,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let studioOn = false;
   /** 镜头快速转动时倒影淡出（0=静止全强度，1=转动最快时几乎关掉），避免倒影扫过去像残影 */
   let motionFade = 0;
+  /** 低通后的镜头角速度（弧度/秒）：用来算倒影淡出，避免逐帧抖动变成频闪 */
+  let azSpeedSmooth = 0;
   let lastAzRad = Number.NaN;
   // 用户缩放：滚轮（⌘/Ctrl + 滚轮或触控板捏合）与按钮都改这个倍率，用来放大看细节
   const MIN_ZOOM = CFG.zoom.min;
@@ -1574,8 +1677,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const speedLight = clamp(speed / CFG.speed.maxSpeed, 0, 1) ** 2;
     // 参考视频里高速时车身是明亮的木瓜色（实测车身核心色 ≈ 224,155,72、亮度 0.88），
     // 因此冲刺段主光加码、暖色轮廓光收着打 —— 之前橙色轮廓光太强，车被染红（实测 187,90,58）
-    keyLight.intensity = (light ? 1.1 : 0.82) + day * 0.42 + speedLight * 0.72;
-    rimLight.intensity = (light ? 0.7 : 0.86) + day * 0.3 + seg(p, 0.42, 0.5) * 0.18 + speedLight * 0.12;
+    keyLight.intensity = (light ? 1.1 : 0.92) + day * 0.42 + speedLight * 0.72;
+    // 暖色轮廓光收一档：它给白漆打出的镜面高光最亮，叠上泛光就是车身上那团毛茸茸的大光晕。
+    // 主光相应加一点，整车亮度基本不变，只是高光不再聚成一块
+    rimLight.intensity = (light ? 0.6 : 0.58) + day * 0.26 + seg(p, 0.42, 0.5) * 0.14 + speedLight * 0.12;
     fillLight.intensity = 0.36 + day * 0.24 + speedLight * 0.52;
 
     // 速度只由冲刺（按住空格 / 按住按钮）驱动：参考视频里滚动的过程中表一直是 000，
@@ -1622,11 +1727,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const azBase = camState.az + userYaw + (orbitYaw * 180) / Math.PI;
     const azDelta = ((CFG.speed.chaseAzimuth - azBase + 540) % 360) - 180;
     const az = ((azBase + azDelta * racingAmt * 0.85) * Math.PI) / 180;
-    // 镜头角速度（弧度/秒）→ 倒影淡出系数：1.6 rad/s（约 92°/秒）视为最快
+    // 镜头角速度（弧度/秒）→ 倒影淡出系数：1.6 rad/s（约 92°/秒）视为最快。
+    // 注意：鼠标事件是一阵一阵来的，逐帧量出来的角速度快慢交替，直接喂给系数的话
+    // 倒影会跟着一明一暗（连续旋转时看起来就是频闪）。所以先对「角速度」本身做低通，
+    // 再算系数，并且整体淡出幅度收一半 —— 慢速旋转完全不淡出，快速旋转也只是略微收一点。
     if (Number.isFinite(lastAzRad) && dt > 0) {
       const azSpeed = Math.abs(az - lastAzRad) / dt;
-      const target = clamp(azSpeed / 1.6, 0, 1);
-      motionFade += (target - motionFade) * clamp(dt * 6, 0, 1);
+      azSpeedSmooth += (azSpeed - azSpeedSmooth) * clamp(dt * 3.2, 0, 1);
+      const target = clamp((azSpeedSmooth - 0.35) / 1.35, 0, 1);
+      motionFade += (target - motionFade) * clamp(dt * 3.5, 0, 1);
     }
     lastAzRad = az;
     const follow = carTravel * racingAmt;   // 轻微跟随；跟太多车就一直很大，隧道感会消失
@@ -1708,7 +1817,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 冲刺（隧道里）没有倒影：反射强度随速度衰减到 0，地面变成一块暗面。
     // 浅色/影棚下反射不再打折（原来 0.6 倍 + 与底色五五开，车身倒影会比车身暗一大截、颜色也对不上）
     floorUniforms.uReflectIntensity.value =
-      (light ? 0.72 : CFG.ground.reflectIntensity) * (1 - clamp(sps * 2.0, 0, 1)) * (1 - motionFade * 0.92);
+      (light ? 0.72 : CFG.ground.reflectIntensity) * (1 - clamp(sps * 2.0, 0, 1)) * (1 - motionFade * 0.45);
     // 浅色/影棚：反射占比给足，车身与倒影同色；法线扰动仍压低，避免亮背景经扰动出现麻点
     floorUniforms.uMixBase.value = light ? 0.62 : 0.46;
     floorUniforms.uMixFres.value = light ? 0.5 : 1.05;
@@ -2450,6 +2559,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       composer.passes.forEach((pass) => pass.dispose?.());
       reflectRT.dispose();
       envTarget.dispose();
+      envMixTarget.dispose();
+      envBlurTarget.dispose();
       envPmrem?.dispose();
       pmrem.dispose();
       backdrop.dispose();
@@ -2511,6 +2622,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     carYaw: +((carRoot.rotation.y * 180) / Math.PI).toFixed(2),
     /** 车道保持：自动量出的车头偏角（度，对齐前）与当前横向偏移（米） */
     carBox: carDebugBox,
+    carBoxRaw: carRawBox,
+    carMaterials: carMaterialNames,
+    carMeshes: carMeshNames,
+    wheelGroups: carWheelGroups,
     laneHeading: +laneHeadingDeg.toFixed(2),
     laneOffset: +carLateral.toFixed(3),
     /** 360° 环视 / 影棚当前是否打开（界面按钮要显示状态） */

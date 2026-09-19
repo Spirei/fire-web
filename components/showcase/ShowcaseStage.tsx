@@ -25,7 +25,8 @@ export default function ShowcaseStage({
   models,
   currentModel,
   onModelChange,
-  onModelIntent
+  onModelIntent,
+  onImport
 }: {
   config: ShowcaseConfig;
   className?: string;
@@ -41,6 +42,8 @@ export default function ShowcaseStage({
   onModelChange?: (id: string) => void;
   /** 悬停 / 聚焦 / 触摸按下：外层据此静默预取素材 */
   onModelIntent?: (id: string) => void;
+  /** 传了才显示车型条末尾的「＋」：点进导入向导（只有管理员会拿到这个回调） */
+  onImport?: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -772,7 +775,7 @@ export default function ShowcaseStage({
             </div>
             <div className="sc-row sc-meta-l">{ui.metaLeft}</div>
             <div className="sc-row sc-meta-r">{ui.metaRight}</div>
-            {models && models.length > 1 && (
+            {models && models.length > 0 && (models.length > 1 || onImport) && (
               <div className="sc-row sc-models">
                 <span className="sc-models-cap">车型</span>
                 {models.map((item) => {
@@ -794,6 +797,18 @@ export default function ShowcaseStage({
                     </button>
                   );
                 })}
+                {/* 导入车型：排在车型条最后一位，管理员才看得到 */}
+                {onImport && (
+                  <button
+                    type="button"
+                    className="sc-model sc-model-add"
+                    onClick={onImport}
+                    title="导入车型（.glb 放进 uploads 卷，不进仓库）"
+                    aria-label="导入车型"
+                  >
+                    <span className="sc-model-label">＋</span>
+                  </button>
+                )}
               </div>
             )}
           </div>

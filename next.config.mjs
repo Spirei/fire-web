@@ -106,10 +106,19 @@ const nextConfig = {
         headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }]
       },
       {
-        // 首页 3D 素材：车模约 20 MB、两张环境贴图各约 1.6 MB。
-        // 之前是 Next 默认的 max-age=0，刷新都要回服务器校验，车模体积大就直接整包重下；
-        // 这里长缓存 + 版本号（preset 里的 assets 会带 ?v=），换素材时把版本号 +1 即可。
+        // 默认车型（MCL35M）与两张环境贴图随仓库分发：车模放 public/mclaren/，
+        // 约 23MB + 3MB，保证别人克隆或部署后开箱就有车可看。
         source: "/mclaren/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }]
+      },
+      {
+        // 其余车型与隧道环境贴图放 uploads 卷手动导入，不进仓库也不进镜像。
+        // 这些文件按文件名版本化（preset 里带 ?v=），长缓存 + immutable，刷新不再回服务器校验。
+        source: "/uploads/mclaren/models/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }]
+      },
+      {
+        source: "/uploads/mclaren/env/:path*",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }]
       }
     ];

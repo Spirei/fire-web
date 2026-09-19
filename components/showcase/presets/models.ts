@@ -3,66 +3,13 @@
  *
  * 每辆车就是一份 ShowcaseConfig：素材路径 + 车型参数（长度 / 朝向修正 / 轮子材质名）覆盖，
  * 镜头、隧道、地面、后期这些与车型无关的部分直接复用 MCL35M 那一套。
- * 加车 = 把 glb 放进 public/mclaren/，在这里加一条（必要时按渲染结果微调 model.yaw / pitch）。
+ *
+ * 下面四辆是内置车型，素材放在 uploads 卷（public/uploads/mclaren/models/，不进 Git 也不进镜像）。
+ * 之后再进新车不用改这个文件：首页右下角车型条的「＋」走导入流程，参数写进 uploads 卷里的
+ * showroom.json，由 lib/showcaseModels.ts 读出来合并到这份清单后面（见 docs/showcase-3d.md）。
  */
-import type { ShowcaseConfig } from "../types";
+import type { ShowcaseConfig, ShowcaseModelParams } from "../types";
 import { MCL35M_SHOWCASE } from "./mcl35m";
-
-/** 2022 赛季 Gulf 涂装（海湾石油配色） */
-export const GULF2022_SHOWCASE: ShowcaseConfig = {
-  ...MCL35M_SHOWCASE,
-  assets: { ...MCL35M_SHOWCASE.assets, model: "/mclaren/gulf_mclaren_f1_2022_car.glb?v=1" },
-  model: {
-    ...MCL35M_SHOWCASE.model,
-    length: 5.6,
-    // 这辆车带 8192×8192 贴图（解码后接近 270 MB 显存），按 2048 收起
-    maxTextureSize: 2048,
-    wheelPattern: "rims|tyres",
-    wheelAxis: "x",
-    wheelLateral: "x",
-    wheelLongitudinal: "y",
-    materialRules: [
-      { match: "tyres|tyre", metalness: 0, roughness: 0.85 },
-      { match: "rims", metalness: 1, roughness: 0.3 },
-      { match: "carbon", metalness: 0.35, roughness: 0.45 }
-    ]
-  }
-};
-
-/** 1991 MP4/6：经典的红白涂装 */
-export const MP46_SHOWCASE: ShowcaseConfig = {
-  ...MCL35M_SHOWCASE,
-  assets: { ...MCL35M_SHOWCASE.assets, model: "/mclaren/mclaren_mp46.glb?v=1" },
-  model: {
-    ...MCL35M_SHOWCASE.model,
-    length: 4.6,
-    wheelPattern: "tyre",
-    wheelAxis: "x",
-    wheelLateral: "x",
-    wheelLongitudinal: "z",
-    maxTextureSize: 2048,
-    materialRules: [
-      { match: "tyre", metalness: 0, roughness: 0.85 },
-      { match: "chrome", metalness: 1, roughness: 0.25 }
-    ]
-  }
-};
-
-/** 1989 MP4/5：塞纳座驾，模型体积超过 GitHub 单文件上限，放在 uploads 卷里（不进仓库） */
-export const MP45_SHOWCASE: ShowcaseConfig = {
-  ...MCL35M_SHOWCASE,
-  assets: { ...MCL35M_SHOWCASE.assets, model: "/uploads/mclaren/models/mclaren_mp45__formula_1.glb" },
-  model: {
-    ...MCL35M_SHOWCASE.model,
-    length: 4.6,
-    wheelPattern: "wheels",
-    wheelAxis: "x",
-    wheelLateral: "x",
-    wheelLongitudinal: "z",
-    maxTextureSize: 2048,
-    materialRules: [{ match: "wheels", metalness: 0.2, roughness: 0.8 }]
-  }
-};
 
 export interface ShowcaseModelOption {
   id: string;
@@ -74,10 +21,32 @@ export interface ShowcaseModelOption {
 }
 
 export const SHOWCASE_MODELS: ShowcaseModelOption[] = [
-  { id: "mcl35m", label: "MCL35M", note: "2021", config: MCL35M_SHOWCASE },
-  { id: "gulf2022", label: "Gulf F1", note: "2022", config: GULF2022_SHOWCASE },
-  { id: "mp46", label: "MP4/6", note: "1991", config: MP46_SHOWCASE },
-  { id: "mp45", label: "MP4/5", note: "1989", config: MP45_SHOWCASE }
+  // 只有这一辆随仓库分发（别人克隆 / 部署后开箱就有车可看）。
+  // 其余车型全部走「导入」：文件放 uploads 卷、参数写 showroom.json，见 lib/showcaseModels.ts
+  { id: "mcl35m", label: "MCL35M", note: "2021", config: MCL35M_SHOWCASE }
 ];
 
 export const DEFAULT_SHOWCASE_MODEL = SHOWCASE_MODELS[0].id;
+
+/**
+ * 把「手动导入的车型」参数套到内置预设上，得到可直接交给引擎的配置。
+ *
+ * 镜头、隧道、地面、后期全部复用 MCL35M 那一套（本来就是车型无关的），
+ * 只有素材路径与 model 下的那几个参数用导入值覆盖 —— 服务端写登记表与浏览器里的
+ * 导入预览都走这一个函数，避免两边算出来的配置不一致。
+ */
+export function buildImportedConfig(input: {
+  file: string;
+  version?: string | number;
+  params?: ShowcaseModelParams;
+}): ShowcaseConfig {
+  const version = input.version ?? 1;
+  return {
+    ...MCL35M_SHOWCASE,
+    assets: {
+      ...MCL35M_SHOWCASE.assets,
+      model: `/uploads/mclaren/models/${encodeURIComponent(input.file)}?v=${version}`
+    },
+    model: { ...MCL35M_SHOWCASE.model, ...(input.params ?? {}) }
+  };
+}

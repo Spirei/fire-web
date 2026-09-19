@@ -1045,3 +1045,16 @@ html:has(.showcase) body {
   opacity: 0.55;
   transition: width 0.2s ease;
 }
+
+/* 导入车型的「＋」：比车型胶囊更轻，斜角箭头指向 uploads 卷的导入向导 */
+.sc-model-add {
+  padding: 5px 9px;
+  letter-spacing: 0;
+  border-style: dashed;
+  color: var(--sc-faint);
+}
+
+.sc-model-add:hover {
+  color: var(--sc-ink-strong);
+  border-style: solid;
+}

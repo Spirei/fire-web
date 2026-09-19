@@ -1,0 +1,428 @@
+/* 车型导入向导：只在 /showcase/import 用，样式独立、不依赖首页 HUD 的变量 */
+.showcase-import {
+  min-height: 100vh;
+  background: #0b0c0e;
+  color: #e8eaee;
+}
+
+:root:not(.dark) .showcase-import {
+  background: #f6f7f9;
+  color: #1c1f24;
+}
+
+.mp-root {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+  color: var(--sc-ink, #e8eaee);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.mp-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.mp-kicker {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.mp-head h1 {
+  margin: 0 0 8px;
+  font-size: 26px;
+}
+
+.mp-sub {
+  margin: 0;
+  max-width: 720px;
+  font-size: 13px;
+  line-height: 1.7;
+  opacity: 0.7;
+}
+
+.mp-sub code,
+.mp-table code {
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(127, 137, 152, 0.16);
+}
+
+.mp-back {
+  flex: none;
+  font-size: 12px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 137, 152, 0.36);
+  text-decoration: none;
+  color: inherit;
+}
+
+.mp-step {
+  border: 1px solid rgba(127, 137, 152, 0.22);
+  border-radius: 16px;
+  padding: 18px;
+  background: rgba(127, 137, 152, 0.06);
+}
+
+.mp-step h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+}
+
+.mp-step h2 span {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(127, 137, 152, 0.4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.mp-drop {
+  border: 1.5px dashed rgba(127, 137, 152, 0.42);
+  border-radius: 14px;
+  padding: 30px 18px;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.mp-drop:hover,
+.mp-drop.on {
+  border-color: rgba(180, 200, 230, 0.7);
+  background: rgba(127, 137, 152, 0.08);
+}
+
+.mp-drop small {
+  font-size: 11.5px;
+  opacity: 0.6;
+}
+
+.mp-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mp-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(127, 137, 152, 0.24);
+  overflow: hidden;
+}
+
+.mp-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #b9c8dc, #eef2f8);
+  transition: width 0.2s ease;
+}
+
+.mp-report-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 12px;
+  margin-bottom: 12px;
+  opacity: 0.8;
+}
+
+.mp-list {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+
+.mp-list.bad {
+  color: #ff9c8f;
+}
+
+.mp-list.warn {
+  color: #f3c98b;
+}
+
+.mp-list.note {
+  opacity: 0.72;
+}
+
+.mp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.mp-table th,
+.mp-table td {
+  text-align: left;
+  padding: 7px 8px;
+  border-bottom: 1px solid rgba(127, 137, 152, 0.2);
+  vertical-align: top;
+}
+
+.mp-table th {
+  font-weight: 500;
+  opacity: 0.6;
+}
+
+.mp-table small {
+  display: block;
+  opacity: 0.55;
+}
+
+.mp-actions-col {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* 操作列：按钮之间留出距离，别挤成一坨 */
+.mp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.mp-actions .mp-ghost,
+.mp-actions .mp-danger {
+  padding: 6px 12px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.mp-dim {
+  opacity: 0.5;
+}
+
+.mp-tune {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.05fr) minmax(280px, 1fr);
+  gap: 18px;
+}
+
+.mp-preview-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mp-preview {
+  position: relative;
+  min-height: 380px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 65%, #1b1d21, #0b0c0e 70%);
+}
+
+.mp-preview .sc-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.mp-preview-loading,
+.mp-preview-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  padding: 20px;
+  text-align: center;
+}
+
+.mp-preview-error {
+  color: #ff9c8f;
+}
+
+.mp-preview-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  opacity: 0.68;
+}
+
+.mp-hint {
+  font-size: 11.5px;
+  opacity: 0.72;
+}
+
+.mp-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+
+.mp-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11.5px;
+  opacity: 0.78;
+}
+
+.mp-form input,
+.mp-form select {
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(127, 137, 152, 0.34);
+  background: rgba(12, 13, 15, 0.5);
+  color: inherit;
+}
+
+.mp-wheel {
+  grid-column: 1 / -1;
+}
+
+.mp-wheel p {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  opacity: 0.78;
+}
+
+.mp-wheel em {
+  margin-left: 8px;
+  font-style: normal;
+  color: #f3c98b;
+}
+
+.mp-wheel-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mp-wheel-list label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 137, 152, 0.3);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.mp-wheel-list label.on {
+  border-color: rgba(190, 210, 240, 0.7);
+  background: rgba(127, 137, 152, 0.16);
+}
+
+.mp-wheel-list input {
+  accent-color: #cfd8e6;
+}
+
+.mp-save p {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  opacity: 0.75;
+}
+
+.mp-save-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mp-primary,
+.mp-ghost,
+.mp-danger {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 137, 152, 0.36);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.mp-primary {
+  background: rgba(190, 210, 240, 0.16);
+  border-color: rgba(190, 210, 240, 0.52);
+}
+
+.mp-primary:disabled,
+.mp-ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mp-danger {
+  color: #ff9c8f;
+  border-color: rgba(255, 156, 143, 0.4);
+}
+
+.mp-notice,
+.mp-error {
+  font-size: 12.5px;
+  padding: 10px 14px;
+  border-radius: 10px;
+}
+
+.mp-notice {
+  border: 1px solid rgba(150, 210, 160, 0.4);
+  background: rgba(150, 210, 160, 0.1);
+}
+
+.mp-error {
+  border: 1px solid rgba(255, 156, 143, 0.45);
+  background: rgba(255, 156, 143, 0.1);
+}
+
+.mp-empty {
+  font-size: 12.5px;
+  opacity: 0.66;
+}
+
+@media (max-width: 860px) {
+  .mp-tune {
+    grid-template-columns: 1fr;
+  }
+
+  .mp-preview {
+    min-height: 300px;
+  }
+}
+
+/* 浅色主题：导入页是后台页面，跟随全局深浅色 */
+.light .mp-root,
+:root:not(.dark) .mp-root {
+  color: #1c1f24;
+}
+
+:root:not(.dark) .mp-step {
+  background: rgba(16, 20, 28, 0.03);
+  border-color: rgba(16, 20, 28, 0.12);
+}
+
+:root:not(.dark) .mp-form input,
+:root:not(.dark) .mp-form select {
+  background: #fff;
+  border-color: rgba(16, 20, 28, 0.16);
+}

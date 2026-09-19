@@ -3786,7 +3786,7 @@ export const V0_1_34_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_35_ENTRY: VersionEntry = {
   ...V0_1_34_ENTRY,
   version: "v0.1.35",
   date: "2026-09-19",
@@ -4119,11 +4119,34 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   }]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_35_ENTRY,
+  version: "v0.1.36",
+  date: "2026-09-20",
+  summary: "车型导入向导上线：上传 .glb 体检后写进 uploads 卷的 showroom.json，可改参数、换封面、拖动排序；首页右下角车型条就按这份顺序排。",
+  frontend: [...V0_1_35_ENTRY.frontend],
+  software: V0_1_35_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.36" } : item),
+  changes: [{
+    title: "新增车型导入向导：上传 .glb 就能上线一台车",
+    desc: "首页右下角车型条末尾新增「＋」进导入向导：拖入 .glb（单文件 ≤ 250MB）→ 服务端体检（列出导出器、材质、贴图与实际尺寸，Draco / Meshopt / KTX2 压缩过的模型会被拒收并给出改法）→ 在预览里摆正朝向、勾选轮子材质 → 保存进车型条。\n车型素材只放服务器 uploads 卷（public/uploads/mclaren/models/），参数写进同目录的 showroom.json，两者都不进 Git、不进镜像 —— 换车不用改代码、不用重新发版；往卷里直接丢 .glb 也会自动出现在导入页里等人调参数。\n导入页把「内置 + 手动导入」的每辆车列成一张卡：改参数、传封面、拖动排序（顺序就是首页右下角车型条的顺序）、移出清单、删除并删文件；车型条上的新素材仍然按需加载（悬停预热、就绪后再切），不会因为多了几辆车就变慢。",
+    kind: "feature"
+  }, {
+    title: "内置车也能换封面，导入页的顺序不再跳回默认",
+    desc: "三处修复。\n一、内置的 MCL35M 以前整块卡片都没有封面入口，后端也直接拒绝（「内置车型不支持自定义封面」）；现在封面记在 showroom.json 的 builtinMeta 里，卡片上的「传封面 / 换封面 / 去封面」与导入车完全一致，素材与渲染参数仍随仓库分发。\n二、导入页以前按「内置 + 登记表原顺序」渲染，拖动排序确实写进了 showroom.json，但刷新又排回原样 —— 表现就是「最后一辆 1991 拖上去又掉下来」；现在导入页与首页车型条读同一份顺序（同一个排序函数），拖上去就是真的上去了。\n三、保存顺序时内置车的 id 会被过滤掉，于是它掉出顺序表、被排到最后（首页车型条里 MCL35M 曾因此被挤到末位）；现在内置车也留在顺序表里，首次生成登记表时排在最前。\n实测（隔离环境）：顺序保存为 mp46 / mcl35m / gulf2022 / mp45 后，登记表 order 与首页清单完全一致；内置车封面写入 builtinMeta、换封面删旧文件、去封面清空且不误删 glb。",
+    kind: "fix"
+  }, {
+    title: "导入页卡面按临界高度显示，操作胶囊排成一行",
+    desc: "卡面上的白色区域改成按卡宽的百分比定高：52% 是「车不被切」的临界点 —— 封面按宽度铺满卡面时可见的纵向窗口 = 卡宽 × 52%，再小一点车头 / 轮胎就被裁掉；原来固定的 118px 在 360px 宽的卡上只有 33%，上下各切掉约 26%。\n卡面上缘压 48px 渐变，封面是白底照片时「⠿ / 内置 / 年份」角标也不会看不见（以前白底封面上角标是白字白底）。\n卡片下方的操作胶囊收窄（11px 字、更小的内边距），桌面三列宽度下同一行显示全（改参数 / 换封面 / 去封面 / 移出清单 / 删除并删文件），窄屏才换行；车型清单上方那段说明文字去掉。",
+    kind: "fix"
+  }]
+};
+
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_35_ENTRY,
   V0_1_34_ENTRY,
   V0_1_33_ENTRY,
   V0_1_32_ENTRY,

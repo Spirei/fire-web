@@ -13,7 +13,9 @@ import type { ShowcaseConfig } from "../types";
 export const MCL35M_SHOWCASE: ShowcaseConfig = {
   assets: {
     // ?v= 是给浏览器长缓存用的版本号：换了模型 / 贴图就把数字 +1，
-    // 否则浏览器会一直用本地那份（服务端对 /mclaren/* 返回 immutable）
+    // 否则浏览器会一直用本地那份（服务端对这些路径返回 immutable）。
+    // 这一辆是随仓库分发的默认车（别人克隆/部署后开箱就有车可看），所以放在 public/mclaren/；
+    // 其余车型一律手动导入 uploads 卷（public/uploads/mclaren/models/，不进 Git 也不进镜像）
     model: "/mclaren/mcl35m.glb?v=1",
     // Poly Haven CC0 环境贴图：夜（moonless golf）+ 昼（studio small 09）
     envNight: "/mclaren/moonless_golf_1k.hdr?v=1",
