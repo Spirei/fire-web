@@ -144,10 +144,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     { at: 0.78, idx: "05", name: "科技", head: ["两百个传感器，", "一个方向盘。"], copy: ["车在说话，", "车库在听。"], cap: "收车回库" }
   ],
 
-  parts: [
-    { title: "前翼", value: "三层翼片 · 外洗气流", pos: [1.05, 0.24, 2.35], from: 0.28, rev: false },
-    { title: "侧箱", value: "木瓜橙 · 散热进气", pos: [1.1, 0.55, 0.5], from: 0.34, rev: false },
-    { title: "尾翼", value: "DRS · 2021 规格", pos: [-0.25, 1, -2.55], from: 0.4, rev: true },
-    { title: "轮胎", value: "P ZERO · 18 英寸", pos: [-1, 0.36, -1.35], from: 0.44, rev: true }
-  ]
+  // 部件标注（前翼/侧箱/尾翼/轮胎）先去掉：特写时压在车身上反而干扰观感。
+  // 引擎仍支持 parts 配置，想要标注时按同样的格式补回来即可。
+  parts: []
 };

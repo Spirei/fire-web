@@ -302,5 +302,7 @@ export interface ShowcaseHandle {
     /** 看门狗触发次数（软恢复 / 重建），排查白屏用 */
     watchdogHits: number;
     rebuilds: number;
+    /** 关键事件日志（上下文丢失、看门狗动作、异常尺寸等） */
+    log: string[];
   };
 }

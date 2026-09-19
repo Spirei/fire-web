@@ -17,7 +17,7 @@ const RPM_TICKS = 20;
 export default function ShowcaseStage({ config, className = "" }: { config: ShowcaseConfig; className?: string }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasWrapRef = useRef<HTMLDivElement | null>(null);
   const markRef = useRef<HTMLDivElement | null>(null);
   const kmhRef = useRef<HTMLSpanElement | null>(null);
   const gearRef = useRef<HTMLSpanElement | null>(null);
@@ -40,6 +40,7 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
   const handleRef = useRef<ShowcaseHandle | null>(null);
   // WebGL 上下文丢了就重建一次场景（重建计数用作 key，触发重新挂载）
   const [rebuild, setRebuild] = useState(0);
+  const [retry, setRetry] = useState(0);
   // 第二次重建开始主动降级：贴图最长边收到 2048（4K 贴图约占 236MB 显存），换取稳定
   const degraded = rebuild >= 2;
   const [error, setError] = useState<string | null>(null);
@@ -58,10 +59,17 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
   }, []);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const wrap = canvasWrapRef.current;
     const stage = stageRef.current;
     const scroll = scrollRef.current;
-    if (!canvas || !stage || !scroll) return;
+    if (!wrap || !stage || !scroll) return;
+
+    // 每次实例化都新建 canvas：WebGL 上下文一旦丢失，同一个 canvas 上的上下文无法复活，
+    // 复用 canvas 会导致「重建也还是白屏」。换新 canvas 才是真正可恢复的。
+    const canvas = document.createElement("canvas");
+    canvas.className = "sc-canvas";
+    canvas.setAttribute("aria-label", `${config.watermark ?? "3D"} 3D 展示`);
+    wrap.appendChild(canvas);
 
     let cancelled = false;
     let handle: ShowcaseHandle | null = null;
@@ -111,21 +119,35 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
           (window as unknown as { __mcl?: ShowcaseHandle | null }).__mcl = handle;
         }
       } catch (err) {
+        // 上下文创建失败（例如同时打开太多 WebGL 页面）时不要就此放弃，隔一会儿再试一次
         setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled && rebuild < 4) {
+          window.setTimeout(() => {
+            if (!cancelled) setRebuild((n) => n + 1);
+          }, 1200);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
+      const win = window as unknown as { __mcl?: ShowcaseHandle | null; __mclDiag?: unknown };
+      if (process.env.NODE_ENV !== "production") {
+        // 保留最后一次诊断快照，白屏之后仍能取到数据
+        try {
+          win.__mclDiag = handle?.debug();
+        } catch {
+          /* 忽略 */
+        }
+        if (win.__mcl === handle) win.__mcl = null;
+      }
       handle?.dispose();
+      canvas.remove();
       handle = null;
       handleRef.current = null;
-      if (process.env.NODE_ENV !== "production") {
-        (window as unknown as { __mcl?: ShowcaseHandle | null }).__mcl = null;
-      }
       if (fadeTimer.current) window.clearTimeout(fadeTimer.current);
     };
-  }, [config, handlePhase, rebuild, degraded]);
+  }, [config, handlePhase, rebuild, degraded, retry]);
 
   // 首帧之后再读站点主题（服务端首帧固定深色，避免水合不一致）
   const themeRef = useRef<"dark" | "light">("dark");
@@ -187,7 +209,7 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
     <div className={`showcase ${theme === "light" ? "light" : ""} ${className}`}>
       <div className="sc-scroll" ref={scrollRef}>
         <div className="sc-stage" ref={stageRef}>
-          <canvas className="sc-canvas" ref={canvasRef} aria-label={`${config.watermark ?? "3D"} 3D 展示`} />
+          <div className="sc-canvas-wrap" ref={canvasWrapRef} />
           <div className="sc-watermark" ref={markRef}>
             {config.watermark}
           </div>

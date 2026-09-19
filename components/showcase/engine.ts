@@ -154,6 +154,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       ? new Set((new URLSearchParams(location.search).get("mcloff") || "").split(",").filter(Boolean))
       : new Set<string>();
 
+  // 关键事件日志（最多留 8 条），debug() 里带出来，白屏后也能追溯
+  const eventLog: string[] = [];
+  const logEvent = (msg: string) => {
+    eventLog.push(`${new Date().toISOString().slice(11, 19)} ${msg}`);
+    if (eventLog.length > 8) eventLog.shift();
+  };
+
   /** 深浅色：深色＝夜间隧道（默认），浅色＝明亮摄影棚 */
   let theme: "dark" | "light" = "dark";
 
@@ -1552,7 +1559,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 关键防线：显示器休眠/唤醒、窗口最小化还原时，浏览器可能在一帧里给出 0 或 NaN 的尺寸，
     // 一旦让它写进 camera.aspect，投影矩阵就会变成 Infinity/NaN，
     // 再经 HalfFloat 后期放大成一整屏白（GPU 把 NaN 写成 255）。这里直接拒绝异常尺寸。
-    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 2 || h < 2) return;
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 2 || h < 2) {
+      logEvent(`resize 拒绝异常尺寸 ${w}x${h}`);
+      return;
+    }
     w = Math.round(w);
     h = Math.round(h);
     // 尺寸与倍率都没变就别重建渲染目标（composer / 泛光一共要重建二十来个，每次都是明显卡顿）
@@ -1827,10 +1837,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 这里接管事件：丢失时阻止默认行为以便恢复，恢复或连续报错时让上层重建场景。
   const onContextLost = (e: Event) => {
     e.preventDefault();
+    logEvent("webgl context lost");
     armWatchdog();
     options.onContextLost?.();
   };
   const onContextRestored = () => {
+    logEvent("webgl context restored");
     options.onContextLost?.();
   };
   canvas.addEventListener("webglcontextlost", onContextLost);
@@ -1912,11 +1924,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         if (softTries < 2) {
           // 先做一次“软恢复”：多数白屏是尺寸/投影矩阵被写坏，重新算一次尺寸就能回来
           softTries += 1;
+          logEvent(`watchdog: 整屏异常，第 ${watchdogHits} 次软恢复`);
           console.warn(`[showcase] 检测到异常画面（整屏发白或全黑），第 ${watchdogHits} 次软恢复`);
           resize(true);
         } else {
           softTries = 0;
           rebuilds += 1;
+          logEvent(`watchdog: 软恢复无效，第 ${rebuilds} 次重建`);
           console.warn(`[showcase] 软恢复无效，第 ${rebuilds} 次重建场景`);
           options.onContextLost?.();
         }
@@ -2080,7 +2094,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     jsMs: +jsAvg.toFixed(2),
     /** 看门狗触发次数（软恢复 / 重建），排查白屏用 */
     watchdogHits,
-    rebuilds
+    rebuilds,
+    /** 关键事件日志（上下文丢失、看门狗动作、异常尺寸等） */
+    log: [...eventLog]
   })
 };
 }

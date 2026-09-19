@@ -76,6 +76,11 @@ html:has(.showcase) body {
   background: #050506;
 }
 
+.sc-canvas-wrap {
+  position: absolute;
+  inset: 0;
+}
+
 .sc-canvas {
   display: block;
   width: 100%;
