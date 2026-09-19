@@ -113,6 +113,7 @@ function normalizeConfig(config: ShowcaseConfig) {
               barIntensity: tunnel?.barIntensity ?? 1,
               lanes: tunnel?.lanes ?? [],
               barSegment: tunnel?.barSegment ?? 13,
+              dof: tunnel?.dof ?? 1.2,
               auxCount: tunnel?.auxCount ?? 18,
               auxOpacity: tunnel?.auxOpacity ?? 1
             }
@@ -146,7 +147,10 @@ function barGlsl(bars: ShowcaseLightBar[], tone: "gold" | "white", scale = 1) {
   const list = bars.filter((b) => b.tone === tone);
   if (list.length === 0) return "0.0";
   return list
-    .map((b) => `barLine(ang, ${((b.angle * Math.PI) / 180).toFixed(5)}, ${((b.width * Math.PI) / 180).toFixed(5)})`)
+    .map(
+      (b) =>
+        `${b.style === "bar" ? "barRect" : "barLine"}(ang, ${((b.angle * Math.PI) / 180).toFixed(5)}, ${((b.width * Math.PI) / 180).toFixed(5)})`
+    )
     .join(" + ") + (scale !== 1 ? ` * ${scale}` : "");
 }
 
@@ -675,8 +679,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     : "lane = 0.0;";
   const goldBars = barGlsl(barTune, "gold");
   const whiteBars = barGlsl(barTune, "white");
-  const goldCores = barGlsl(barTune, "gold", 0.27);
-  const whiteCores = barGlsl(barTune, "white", 0.26);
+  const goldCores = barGlsl(barTune.filter((b) => b.style !== "bar"), "gold", 0.27);
+  const whiteCores = barGlsl(barTune.filter((b) => b.style !== "bar"), "white", 0.26);
   const streakFrag = `
     uniform float uTime; uniform float uSpeed; uniform float uOpacity; uniform vec3 uTint; uniform sampler2D tNoise;
     uniform float uBars; uniform vec3 uGold; uniform vec3 uWhite; uniform float uDash;
@@ -686,6 +690,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     float barLine(float ang, float target, float w){
       float d = abs(fract((ang - target) / TAU + 0.5) - 0.5) * TAU;
       return smoothstep(w, 0.0, d);
+    }
+    float barRect(float ang, float target, float w){
+      float d = abs(fract((ang - target) / TAU + 0.5) - 0.5) * TAU;
+      return smoothstep(w, w * 0.86, d);
     }
     void main(){
       float ang = vUv.x * TAU;
@@ -872,19 +880,32 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       uLaneColor: { value: new THREE.Color(laneList[0]?.color ?? "#9aa6b4") },
       uAuxCount: { value: CFG.speed.tunnel?.auxCount ?? 18 },
       uAuxOpacity: { value: CFG.speed.tunnel?.auxOpacity ?? 1 },
-      uLightMode: { value: 0 }
+      uLightMode: { value: 0 },
+      // 景深强度：0 = 全锐利，1.3 左右接近参考视频里边缘发虚的观感
+      uDof: { value: CFG.speed.tunnel?.dof ?? 1.2 }
     },
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: `
       uniform sampler2D tDiffuse; uniform float uTime; uniform float uStrength; uniform float uSpeed;
       uniform vec2 uCenter; uniform float uAspect; uniform vec3 uGold; uniform vec3 uWhite; uniform float uIntensity;
       uniform vec4 uCarBox;   // 车在屏幕上的包围盒：xy 中心、zw 半尺寸（uv）
-      uniform vec3 uLaneColor; uniform float uAuxCount; uniform float uAuxOpacity; uniform float uLightMode;
+      uniform vec3 uLaneColor; uniform float uAuxCount; uniform float uAuxOpacity; uniform float uLightMode; uniform float uDof;
       varying vec2 vUv;
       const float TAU = 6.28318530718;
+      // 景深：光条越远离消失点越"失焦"（角宽变大、峰值变低），靠近消失点则保持锐利
+      float gRadius;
+      float gDof;
       float barLine(float ang, float target, float w){
         float d = abs(fract((ang - target) / TAU + 0.5) - 0.5) * TAU;
-        return smoothstep(w * 3.0, 0.0, d) * 0.12 + smoothstep(w, 0.0, d);
+        float wDof = w * (1.0 + gRadius * gDof);
+        float soft = smoothstep(wDof * 3.0, 0.0, d) * 0.12 + smoothstep(wDof, 0.0, d);
+        return soft / (1.0 + gRadius * gDof * 0.55);
+      }
+      // 矩形光条：平顶、边缘只有很窄的过渡（参考视频左右两侧那两根黄色长方形）
+      float barRect(float ang, float target, float w){
+        float d = abs(fract((ang - target) / TAU + 0.5) - 0.5) * TAU;
+        float wDof = w * (1.0 + gRadius * gDof);
+        return smoothstep(wDof, wDof * 0.86, d) / (1.0 + gRadius * gDof * 0.3);
       }
       float hash11(float p){ return fract(sin(p * 127.1) * 43758.5453); }
       void main(){
@@ -895,6 +916,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         float r = length(d);
         float ang = atan(d.y, d.x);
         // 靠近消失点淡出；外侧不再衰减（参考视频里亮线一直延伸到画面边缘）
+        gRadius = r;
+        gDof = uDof;
         float radial = smoothstep(0.05, 0.3, r);
         float goldMask = 0.0;
         float whiteMask = 0.0;
@@ -1421,6 +1444,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     if (!dragging) {
       // 松手后的惯性：速度按帧衰减，且俯仰每帧都夹在范围内（之前漏夹会把镜头甩飞）
       const decay = Math.pow(0.9, dt * 60);
+      if (racingAmt > 0.01) {
+        // 冲刺中：把用户拖出来的偏航/俯仰收回去，保证车始终正对隧道方向
+        userYaw *= Math.pow(0.86, dt * 60);
+        userPitch *= Math.pow(0.86, dt * 60);
+        userYawVel = 0;
+        userPitchVel = 0;
+      }
       userYaw += userYawVel * 0.35;
       userYawVel *= decay;
       if (Math.abs(userYawVel) < 0.002) userYawVel = 0;
@@ -1472,7 +1502,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     carRoot.position.y = Math.sin(elapsed * 0.7) * 0.004 - sp * 0.022;
     carRoot.rotation.z = -sp * 0.014;
     // 冲刺时车头略微偏出去，形成参考视频里那种车尾偏左的 3/4 视角
-    carRoot.rotation.y = Math.sin(elapsed * 0.25) * 0.006 + racingAmt * 0.02;
+    carRoot.rotation.y = Math.sin(elapsed * 0.25) * 0.006;   // 冲刺时不再加偏角：车头正对隧道方向
     // 轮胎跟着「当前车速」转：静止浏览时车速是 0 所以不转；
     // 松手后画面会看到轮胎继续带着转、随车速一起慢下来才停（参考视频就是这样）。
     const spin = speed * 0.62 * dt;
@@ -1501,7 +1531,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     floorUniforms.uSpeed.value = sps;
     floorUniforms.uFlow.value = sps * sps * (CFG.speed.floorFlow ?? 1);
     // 浅色主题下地面保持深色工作台：反射降下来，否则亮背景经法线扰动会变成一片噪点灰
-    floorUniforms.uReflectIntensity.value = (light ? 0.6 : CFG.ground.reflectIntensity) * (1 - clamp(sps * 0.3, 0, 0.35)) + sps * 0.1;
+    // 冲刺（隧道里）没有倒影：反射强度随速度衰减到 0，地面变成一块暗面
+    floorUniforms.uReflectIntensity.value = (light ? 0.6 : CFG.ground.reflectIntensity) * (1 - clamp(sps * 2.0, 0, 1));
     // 浅色主题：反射与法线扰动都压低，地面保持干净的深色工作台
     // 浅色主题下反射再压一档、模糊级别再高一级，避免亮背景经法线扰动形成麻点
     floorUniforms.uMixBase.value = light ? 0.32 : 0.46;
@@ -1825,6 +1856,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     dragX = e.clientX;
     const dy = e.clientY - dragY;
     dragY = e.clientY;
+    // 冲刺中不接收拖拽：否则镜头被转偏，车会跑出轨道、看起来在天上飞。
+    // 基准点仍要跟着指针走，否则松开空格那一刻会一次结算掉整段位移，镜头瞬间被甩飞。
+    if (racing) return;
     userYaw -= dx * 0.3;
     userYawVel = -dx * 0.3;
     // 上下拖：向上拖 = 升高视角俯视，向下拖 = 降低视角平视/略微仰视
@@ -2189,6 +2223,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     yaw: +userYaw.toFixed(1),
     pitch: +userPitch.toFixed(2),
     wheelAngle: wheelPivots[0]?.[0] ? +wheelPivots[0][0].angle.toFixed(2) : 0,
+    /** 地面倒影当前强度：冲刺（隧道行驶）时应为 0 */
+    reflect: +floorUniforms.uReflectIntensity.value.toFixed(3),
+    /** 车身高度与偏航（度）：用来确认车没有离地、没有偏出轨道 */
+    carY: +carRoot.position.y.toFixed(3),
+    carYaw: +((carRoot.rotation.y * 180) / Math.PI).toFixed(2),
     buffer: [canvas.width, canvas.height],
     reflection: reflectRT.width,
     textures: renderer.info.memory.textures,

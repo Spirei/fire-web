@@ -37,6 +37,8 @@ export interface ShowcaseLightBar {
   width: number;
   /** 暖金（上下两条）或冷白（内侧四条） */
   tone: "gold" | "white";
+  /** "bar" = 矩形光条（平顶、边缘略带过渡，像灯管）；不传则是普通细线 */
+  style?: "line" | "bar";
 }
 
 export interface ShowcasePhase {
@@ -185,6 +187,8 @@ export interface ShowcaseConfig {
           vanish?: [number, number];
           /** 地面车道线（参考视频里从画面左下/右下斜向消失点的灰色标线） */
           lanes?: Array<{ angle: number; width: number; opacity?: number; dash?: number; color?: string }>;
+          /** 景深强度：光条越远离消失点越虚（0 = 全锐利，默认 1.2） */
+          dof?: number;
           /** 主光条切段密度：越大段越短（默认 13 ≈ 每条被切成十几段） */
           barSegment?: number;
           /** 辅助虚线的条数（均匀分布在整个圆周上，随机宽度与流动相位） */
@@ -317,6 +321,11 @@ export interface ShowcaseHandle {
     pitch: number;
     /** 轮胎累计转角（弧度），用来确认松手后还在带着转 */
     wheelAngle: number;
+    /** 地面倒影强度：冲刺时衰减到 0（隧道里没有倒影） */
+    reflect: number;
+    /** 车身高度与偏航（度），用来确认车没有离地 / 偏出轨道 */
+    carY: number;
+    carYaw: number;
     /** 看门狗触发次数（软恢复 / 重建），排查白屏用 */
     watchdogHits: number;
     rebuilds: number;
