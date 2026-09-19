@@ -39,6 +39,12 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [musicOn, setMusicOn] = useState(false);
   const [musicReady, setMusicReady] = useState(true);
+  // 360° 环视（自动绕车）与影棚（明亮摄影棚）：两个胶囊以前只是文字，现在是真的开关
+  const [orbit, setOrbit] = useState(false);
+  const [studio, setStudio] = useState(false);
+  // 引擎是异步创建的，点得比它早就先把状态存下来，创建完再补上
+  const orbitRef = useRef(false);
+  const studioRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const handleRef = useRef<ShowcaseHandle | null>(null);
   // WebGL 上下文丢了就重建一次场景（重建计数用作 key，触发重新挂载）
@@ -116,6 +122,9 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
           onError: (message) => setError(message)
         });
         handle.setTheme(themeRef.current);
+        // 引擎是异步创建的：创建前点过的「360° 环视 / 影棚」要补上
+        handle.setOrbit(orbitRef.current);
+        handle.setStudio(studioRef.current);
         handleRef.current = handle;
         // 开发环境留一个调试句柄，方便按进度截图与排查（生产不会写）
         if (process.env.NODE_ENV !== "production") {
@@ -227,6 +236,41 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
     setThemeCookie(next === "dark");
     handleRef.current?.setTheme(next);
   }, []);
+
+  /** 360° 环视：自动绕车旋转，再点一次平滑回到叙事机位 */
+  const toggleOrbit = useCallback(() => {
+    setOrbit((prev) => {
+      const next = !prev;
+      orbitRef.current = next;
+      handleRef.current?.setOrbit(next);
+      return next;
+    });
+  }, []);
+
+  /** 影棚：只切 3D 场景的光与背景（明亮摄影棚），不动深浅色主题 */
+  const toggleStudio = useCallback(() => {
+    setStudio((prev) => {
+      const next = !prev;
+      studioRef.current = next;
+      handleRef.current?.setStudio(next);
+      return next;
+    });
+  }, []);
+
+  /** 底部章节导航：滚到该章节的进度（滚动本身驱动叙事，所以直接滚页面即可） */
+  const goPhase = useCallback(
+    (index: number) => {
+      const el = scrollRef.current;
+      const stage = stageRef.current;
+      if (!el || !stage) return;
+      const total = Math.max(1, el.offsetHeight - stage.offsetHeight);
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const at = config.phases[index]?.at ?? 0;
+      // 多滚一点点：进度是弹簧跟随，正好停在章节边界上会判定为上一章
+      window.scrollTo({ top: top + total * Math.min(0.999, at + 0.006), behavior: "smooth" });
+    },
+    [config.phases]
+  );
 
   // 背景音乐：默认不播放（浏览器不允许自动播放），点图标才播；循环、音量 0.45。
   // 开关记在 localStorage，下次进来会在首次交互后自动续播。
@@ -347,8 +391,9 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
     nav: config.ui?.nav ?? ["CAR", "AERO", "POWER", "TYRES", "TECH"]
   };
 
+  // 影棚（明亮摄影棚）下画面是亮的，HUD 文字要跟着换成浅色系，否则白字压在白底上看不见
   return (
-    <div className={`showcase ${theme === "light" ? "light" : ""} ${className}`}>
+    <div className={`showcase ${theme === "light" || studio ? "light" : ""} ${className}`}>
       <div className="sc-scroll" ref={scrollRef}>
         <div className="sc-stage" ref={stageRef}>
           <div className="sc-canvas-wrap" ref={canvasWrapRef} />
@@ -428,20 +473,32 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
             </p>
 
             <div className="sc-row sc-left-foot">
-              <span className="sc-pill">
+              <button
+                type="button"
+                className={`sc-pill${orbit ? " on" : ""}`}
+                onClick={toggleOrbit}
+                aria-pressed={orbit}
+                title={orbit ? "停止自动环视" : "自动绕车环视一圈"}
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
                   <path d="M12 5c5 0 9 4.5 9 7s-4 7-9 7-9-4.5-9-7 4-7 9-7z" />
                   <circle cx="12" cy="12" r="2.6" />
                 </svg>
                 {ui.view360}
-              </span>
-              <span className="sc-pill">
+              </button>
+              <button
+                type="button"
+                className={`sc-pill${studio ? " on" : ""}`}
+                onClick={toggleStudio}
+                aria-pressed={studio}
+                title={studio ? "回到夜间隧道光照" : "切到明亮摄影棚光照"}
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
                   <circle cx="12" cy="12" r="4" />
                   <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
                 </svg>
                 {ui.studio}
-              </span>
+              </button>
               <button
                 type="button"
                 className="sc-pill sc-zoom-mode"
@@ -509,8 +566,16 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
               <span>{ui.zoomHint}</span>
             </div>
             <div className="sc-row sc-nav">
-              {ui.nav.map((item) => (
-                <span key={item}>▴ {item}</span>
+              {ui.nav.map((item, i) => (
+                <button
+                  type="button"
+                  key={item}
+                  className={phase === i ? "on" : undefined}
+                  onClick={() => goPhase(i)}
+                  aria-label={`跳到第 ${i + 1} 章 ${item}`}
+                >
+                  ▴ {item}
+                </button>
               ))}
             </div>
             <div className="sc-row sc-meta-l">{ui.metaLeft}</div>

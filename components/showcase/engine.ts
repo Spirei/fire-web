@@ -142,7 +142,8 @@ function normalizeConfig(config: ShowcaseConfig) {
     lights: config.lights ?? [],
     ui: {
       liveData: config.ui?.liveData ?? "LIVE DATA",
-      liveDeploying: config.ui?.liveDeploying ?? "LIVE DATA · DEPLOYING"
+      liveDeploying: config.ui?.liveDeploying ?? "LIVE DATA · DEPLOYING",
+      orbitSpeed: config.ui?.orbitSpeed ?? 0.55
     },
     phases: config.phases,
     parts: config.parts ?? []
@@ -1456,6 +1457,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 上下拖拽的俯仰偏移：把「相机高度」换算成仰角后再叠加，这样上下拖是真抬头/俯视
   let userPitch = 0;
   let userPitchVel = 0;
+  /** 360° 环视：自动绕车旋转（角速度由 ui.orbitSpeed 给，默认约 0.5 弧度/秒） */
+  let orbitOn = false;
+  let orbitYaw = 0;
+  /** 影棚：环境切到明亮摄影棚（与深浅色主题独立，供「影棚」胶囊使用） */
+  let studioOn = false;
   // 用户缩放：滚轮（⌘/Ctrl + 滚轮或触控板捏合）与按钮都改这个倍率，用来放大看细节
   const MIN_ZOOM = CFG.zoom.min;
   const MAX_ZOOM = CFG.zoom.max;
@@ -1478,10 +1484,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 环境：夜 → 昼（窗口与强度由 preset 给；参考视频里整段 hero 都是夜景，只在收尾略微提亮）
     // 浅色主题直接顶到白天环境；深色主题按叙事窗口在夜→昼之间过渡
     const narrativeDay = seg(p, CFG.environment.nightToDay[0], CFG.environment.nightToDay[1]) * CFG.environment.dayIntensity;
-    const envWeight = theme === "light" ? 1 : narrativeDay;
+    const envWeight = theme === "light" || studioOn ? 1 : narrativeDay;
     updateEnv(envWeight);
     const day = envWeight;
-    const light = theme === "light";
+    const light = theme === "light" || studioOn;
     // 参考图里冲刺时车身反而更亮：速度越高，暖色轮廓光与主光一起加码
     const speedLight = clamp(speed / CFG.speed.maxSpeed, 0, 1) ** 2;
     // 参考视频里高速时车身是明亮的木瓜色（实测车身核心色 ≈ 224,155,72、亮度 0.88），
@@ -1522,9 +1528,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       if (Math.abs(userPitchVel) < 0.00002) userPitchVel = 0;
     }
     zoom += (zoomTarget - zoom) * clamp(dt * 8, 0, 1);
+    // 360° 环视：自动绕车旋转（松开后平滑回到叙事机位）
+    if (orbitOn) {
+      orbitYaw += dt * (CFG.ui?.orbitSpeed ?? 0.55);
+    } else if (orbitYaw !== 0) {
+      orbitYaw *= Math.pow(0.02, dt);
+      if (Math.abs(orbitYaw) < 0.002) orbitYaw = 0;
+    }
     // 冲刺时镜头顺隧道方向跟随：方位角平滑绕到车尾正后方，机位与注视点随车往隧道深处推进，
     // 因此消失点始终在画面中心，车开走时不会被甩到画面外。
-    const azBase = camState.az + userYaw;
+    const azBase = camState.az + userYaw + (orbitYaw * 180) / Math.PI;
     const azDelta = ((CFG.speed.chaseAzimuth - azBase + 540) % 360) - 180;
     const az = ((azBase + azDelta * racingAmt * 0.85) * Math.PI) / 180;
     const follow = carTravel * racingAmt;   // 轻微跟随；跟太多车就一直很大，隧道感会消失
@@ -2317,6 +2330,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     setTheme: (next: "dark" | "light") => {
       theme = next;
     },
+    /** 360° 环视：自动绕车一圈，再点一次平滑回到叙事机位 */
+    setOrbit: (on: boolean) => {
+      orbitOn = on;
+    },
+    /** 影棚：把环境切到明亮摄影棚（不改深浅色主题，只影响 3D 场景的光与背景） */
+    setStudio: (on: boolean) => {
+      studioOn = on;
+    },
     setProgress: (p: number, settle = 0) => {
       const steps = Math.max(1, Math.round(settle * 60));
       for (let i = 0; i < steps; i += 1) render(p, 1 / 60);
@@ -2341,6 +2362,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     /** 车道保持：自动量出的车头偏角（度，对齐前）与当前横向偏移（米） */
     laneHeading: +laneHeadingDeg.toFixed(2),
     laneOffset: +carLateral.toFixed(3),
+    /** 360° 环视 / 影棚当前是否打开（界面按钮要显示状态） */
+    orbit: orbitOn,
+    studio: studioOn,
     buffer: [canvas.width, canvas.height],
     reflection: reflectRT.width,
     textures: renderer.info.memory.textures,

@@ -240,6 +240,23 @@ html:has(.showcase) body {
   letter-spacing: 0.18em;
   color: var(--sc-ink);
   backdrop-filter: blur(6px);
+  /* HUD 整层是 pointer-events: none，可点元素要各自打开 */
+  pointer-events: auto;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.sc-pill:hover {
+  background: var(--sc-panel-hover);
+  border-color: rgba(255, 128, 0, 0.55);
+  color: var(--sc-ink-strong);
+}
+
+.sc-pill.on {
+  background: rgba(255, 128, 0, 0.22);
+  border-color: rgba(255, 128, 0, 0.7);
+  color: var(--sc-ink-strong);
 }
 
 .sc-pill svg {
@@ -463,9 +480,25 @@ html:has(.showcase) body {
   color: var(--sc-faint);
 }
 
-.sc-nav u {
-  text-decoration: none;
-  color: #d6d6da;
+/* 章节导航：可点，点了滚到对应章节 */
+.sc-nav button {
+  pointer-events: auto;
+  cursor: pointer;
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  transition: color 0.2s ease;
+}
+
+.sc-nav button:hover {
+  color: var(--sc-ink-strong);
+}
+
+.sc-nav button.on {
+  color: #ff8000;
 }
 
 .sc-meta-l {

@@ -264,6 +264,8 @@ export interface ShowcaseConfig {
     zoomMode?: string;
     view360?: string;
     studio?: string;
+    /** 360° 环视的自动旋转角速度（弧度/秒，默认 0.55 ≈ 32°/秒） */
+    orbitSpeed?: number;
     loading?: string;
     metaLeft?: string;
     metaRight?: string;
@@ -316,6 +318,10 @@ export interface ShowcaseHandle {
   dispose: () => void;
   /** 切换深浅色：深色＝夜间隧道，浅色＝明亮摄影棚 */
   setTheme: (theme: "dark" | "light") => void;
+  /** 360° 环视：自动绕车旋转（再调一次关闭并回到叙事机位） */
+  setOrbit: (on: boolean) => void;
+  /** 影棚：3D 场景切到明亮摄影棚（不改深浅色主题） */
+  setStudio: (on: boolean) => void;
   /** 手动设置滚动进度（调试 / 截图用） */
   setProgress: (p: number, settle?: number) => void;
   /** 调试用：当前平滑后的进度、速度、渲染倍率、冲刺与缩放状态 */
@@ -347,6 +353,9 @@ export interface ShowcaseHandle {
     /** 车道保持：自动量出的车头偏角（度）与当前横向偏移（米） */
     laneHeading: number;
     laneOffset: number;
+    /** 360° 环视 / 影棚开关状态 */
+    orbit: boolean;
+    studio: boolean;
     /** 看门狗触发次数（软恢复 / 重建），排查白屏用 */
     watchdogHits: number;
     rebuilds: number;
