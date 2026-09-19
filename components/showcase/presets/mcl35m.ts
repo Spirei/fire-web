@@ -166,6 +166,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     zoomMode: "缩放",
     view360: "360° 环视",
     studio: "影棚",
+    pinCamera: "固定机位",
     loading: "正在加载模型",
     metaLeft: "MCL35M / 2021 · FORMULA 1",
     metaRight: "WEBGL 展示",

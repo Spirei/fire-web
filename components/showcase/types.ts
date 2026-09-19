@@ -264,6 +264,8 @@ export interface ShowcaseConfig {
     zoomMode?: string;
     view360?: string;
     studio?: string;
+    /** 「固定机位」按钮文案 */
+    pinCamera?: string;
     /** 360° 环视的自动旋转角速度（弧度/秒，默认 0.55 ≈ 32°/秒） */
     orbitSpeed?: number;
     loading?: string;

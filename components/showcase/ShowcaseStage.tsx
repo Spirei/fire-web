@@ -426,6 +426,7 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
     zoomMode: config.ui?.zoomMode ?? "ZOOM",
     view360: config.ui?.view360 ?? "360° VIEW",
     studio: config.ui?.studio ?? "STUDIO",
+    pinCamera: config.ui?.pinCamera ?? "PIN CAMERA",
     loading: config.ui?.loading ?? "LOADING MODEL",
     metaLeft: config.ui?.metaLeft ?? "MCL35M / 2021 · FORMULA 1",
     metaRight: config.ui?.metaRight ?? "WEBGL SHOWCASE",
@@ -559,33 +560,21 @@ export default function ShowcaseStage({ config, className = "" }: { config: Show
               <button type="button" className="sc-zoom" ref={zoomInRef} title="放大看细节（⌘/Ctrl + 滚轮）" aria-label="放大">
                 ＋
               </button>
-              {/* 置顶机位：默认隐藏，鼠标划过胶囊才出现；置顶后刷新 / 重开都回到这一帧 */}
+              {/* 固定机位：图标 + 文字。点一下把当前视角固定下来（有底色），再点一下取消（底色消失） */}
               <button
                 type="button"
                 className={`sc-pill sc-pin${pinnedPose ? " on" : ""}`}
-                onClick={pinCurrentPose}
+                onClick={pinnedPose ? clearPinnedPose : pinCurrentPose}
                 aria-pressed={Boolean(pinnedPose)}
-                title={pinnedPose ? "更新置顶机位：把当前视角存为默认" : "把当前视角置顶为默认机位（刷新后回到这里）"}
+                title={pinnedPose ? "已固定当前机位：再点一下取消固定" : "把当前视角固定为默认机位（刷新后回到这里）"}
+                aria-label={pinnedPose ? "取消固定机位" : "固定当前机位"}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
                   <path d="M12 17v5" />
                   <path d="M8 3h8l-1 6 3 3v2H6v-2l3-3-1-6z" />
                 </svg>
-                {pinnedPose ? "已置顶" : "置顶机位"}
+                {ui.pinCamera}
               </button>
-              {pinnedPose && (
-                <button
-                  type="button"
-                  className="sc-pill sc-pin sc-pin-clear"
-                  onClick={clearPinnedPose}
-                  title="解除置顶，回到开场机位"
-                  aria-label="解除置顶"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-                    <path d="M6 6l12 12M18 6L6 18" />
-                  </svg>
-                </button>
-              )}
             </div>
 
             <div className="sc-row sc-tele">

@@ -14,6 +14,9 @@
   --sc-faintest: #62626a;
   --sc-panel: rgba(255, 255, 255, 0.03);
   --sc-panel-hover: rgba(255, 255, 255, 0.1);
+  /* 胶囊「已开启」的中性底色（不要橙色，太抢眼） */
+  --sc-active: rgba(255, 255, 255, 0.18);
+  --sc-active-line: rgba(255, 255, 255, 0.42);
   --sc-watermark: rgba(255, 255, 255, 0.045);
   --sc-vignette: radial-gradient(70% 62% at 50% 52%, transparent 0%, rgba(0, 0, 0, 0.55) 72%, rgba(0, 0, 0, 0.86) 100%),
     linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, transparent 22%, transparent 76%, rgba(0, 0, 0, 0.6) 100%);
@@ -32,6 +35,8 @@
   --sc-faintest: #6d747c;
   --sc-panel: rgba(20, 24, 30, 0.04);
   --sc-panel-hover: rgba(20, 24, 30, 0.1);
+  --sc-active: rgba(20, 24, 30, 0.14);
+  --sc-active-line: rgba(20, 24, 30, 0.4);
   --sc-watermark: rgba(20, 24, 30, 0.07);
   --sc-vignette: radial-gradient(72% 64% at 50% 52%, transparent 0%, rgba(20, 24, 30, 0.06) 72%, rgba(20, 24, 30, 0.16) 100%);
 }
@@ -249,44 +254,30 @@ html:has(.showcase) body {
 
 .sc-pill:hover {
   background: var(--sc-panel-hover);
-  border-color: rgba(255, 128, 0, 0.55);
+  border-color: var(--sc-active-line);
   color: var(--sc-ink-strong);
 }
 
 .sc-pill.on {
-  background: rgba(255, 128, 0, 0.22);
-  border-color: rgba(255, 128, 0, 0.7);
+  background: var(--sc-active);
+  border-color: var(--sc-active-line);
   color: var(--sc-ink-strong);
 }
 
-/* 置顶机位：常驻在左下角胶囊里（之前默认隐藏、要划过才出现，结果找不到） */
+/* 置顶机位：左下角一个图标按钮（点一下置顶当前视角，再点一下解除） */
 .sc-pin {
-  opacity: 1;
-  transform: none;
   pointer-events: auto;
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, opacity 0.18s ease;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
-/* 已置顶时用橙色高亮，和 360°/影棚 的开关状态一致 */
+/* 已固定时只用中性底色 + 亮字，不用橙色 */
 .sc-pin.on {
-  background: rgba(255, 128, 0, 0.22);
-  border-color: rgba(255, 128, 0, 0.7);
+  background: var(--sc-active);
+  border-color: var(--sc-active-line);
   color: var(--sc-ink-strong);
 }
 
-/* 解除置顶：只留一个图标按钮，别把左下角挤到中间导航上 */
-.sc-pin-clear {
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  justify-content: center;
-}
 
-.sc-pin-clear svg {
-  width: 12px;
-  height: 12px;
-  opacity: 0.9;
-}
 
 .sc-pill svg {
   width: 11px;
@@ -329,8 +320,8 @@ html:has(.showcase) body {
 }
 
 .sc-zoom-mode.on {
-  background: rgba(255, 128, 0, 0.22);
-  border-color: rgba(255, 128, 0, 0.7);
+  background: var(--sc-active);
+  border-color: var(--sc-active-line);
   color: var(--sc-ink-strong);
 }
 
