@@ -108,10 +108,12 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       barIntensity: 1.75,
       // 跑道线：内侧蓝线（左右跑道边线）＋ 跑道上的短白标线（一条条掠过镜头，速度感来自它）
       lanes: [
-        { angle: 205, width: 0.26, opacity: 1.05, color: "#9dc0ff", dash: 2 },
-        { angle: 335, width: 0.26, opacity: 1.05, color: "#9dc0ff", dash: 2 },
-        { angle: 256, width: 0.3, opacity: 0.95, color: "#e9effb", dash: 4 },
-        { angle: 284, width: 0.3, opacity: 0.95, color: "#e9effb", dash: 4 }
+        // 内侧蓝线：紧贴跑道两侧（最靠里），连续虚线
+        { angle: 240, width: 0.3, opacity: 1.15, color: "#9dc0ff" },
+        { angle: 300, width: 0.3, opacity: 1.15, color: "#9dc0ff" },
+        // 跑道上流动的短白标线（一条条掠过镜头，负责速度感与远近感）
+        { angle: 262, width: 0.28, opacity: 0.95, color: "#e9effb", dash: 4 },
+        { angle: 278, width: 0.28, opacity: 0.95, color: "#e9effb", dash: 4 }
       ],
       // 隧道壁上的浅虚线：只留很淡的一层做质感，别抢主体（主体只有 4 条黄线 + 2 条蓝线）
       auxCount: 26,
@@ -122,11 +124,11 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       //   中间：跑道，不放光条
       // 角度约定 0°=右、90°=上、180°=左、270°=下。
       bars: [
-        // 每侧 2 条黄线：上黄略粗、下黄略细（参考图里上黄更亮更宽、下黄是一条细虚线），左右镜像
-        { angle: 155, width: 0.62, tone: "gold", style: "bar" },   // 左上墙带（细）
-        { angle: 25, width: 0.8, tone: "gold", style: "bar" },    // 右上墙带（粗）
-        { angle: 235, width: 0.62, tone: "gold", style: "bar" },   // 左下墙带（细）
-        { angle: 305, width: 0.8, tone: "gold", style: "bar" }    // 右下墙带（粗）
+        // 每侧 2 条黄线 = 墙面（上黄 + 下黄，关于水平轴对称），左右镜像；蓝线更靠里（见上面的 lanes）
+        { angle: 150, width: 1.0, tone: "gold", style: "bar" },    // 左上墙
+        { angle: 210, width: 1.0, tone: "gold", style: "bar" },    // 左下墙
+        { angle: 30, width: 1.0, tone: "gold", style: "bar" },     // 右上墙
+        { angle: 330, width: 1.0, tone: "gold", style: "bar" }     // 右下墙
       ]
     }
   },
