@@ -1081,10 +1081,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         vec2 d = (vUv - uCenter) * vec2(uAspect, 1.0);
         float r = length(d);
         float ang = atan(d.y, d.x);
-        // 靠近消失点淡出；外侧不再衰减（参考视频里亮线一直延伸到画面边缘）
+        // 靠近消失点淡出；外侧不再衰减（参考视频里亮线一直延伸到画面边缘）。
+        // 收得比原来更靠里（0.03-0.2）：参考在消失点周围是一圈密集的短线段（starburst），
+        // 原来 0.05-0.3 的淡出让最里面那圈几乎看不见，看着反而比参考稀
         gRadius = r;
         gDof = uDof;
-        float radial = smoothstep(0.05, 0.3, r);
+        float radial = smoothstep(0.03, 0.2, r);
         float goldMask = 0.0;
         float whiteMask = 0.0;
         ${lineAngles.map((b) => `${b.gold ? "goldMask" : "whiteMask"} += barLine(ang, ${b.a.toFixed(5)}, ${b.w.toFixed(5)});`).join("\n        ")}
@@ -1113,7 +1115,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         float mirror = mod(uAuxCount * 0.5 - slot, uAuxCount);
         float symSlot = min(slot, mirror);
         float h = hash11(symSlot + 3.7);
-        float slotW = (0.06 + h * 0.14);                       // 占槽宽的比例（越小越细）
+        float slotW = (0.08 + h * 0.18);                       // 占槽宽的比例（越小越细）
         float slotDist = min(inSlot, 1.0 - inSlot) * TAU / uAuxCount;
         float slotMax = slotW * (TAU / uAuxCount) * 0.5;
         float auxLine = smoothstep(slotMax, 0.0, slotDist) * step(0.34, hash11(symSlot + 11.3));
@@ -1124,8 +1126,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         vec3 laneCol = vec3(0.0);
         ${laneCode}
         // 跑道线要比壁面虚线更亮，否则「跑道」读不出来
-        float laneAux = lane * 0.62 + aux * 0.2;
-        laneCol += uWhite * aux * 0.09;
+        float laneAux = lane * 0.62 + aux * 0.55;
+        laneCol += uWhite * aux * 0.3;
         // 车道线与辅助虚线：和主光条一样受车体遮挡与强度控制
         float laneAll = laneAux * (1.0 - hide) * uStrength * uIntensity;
         if (!(laneAll == laneAll)) laneAll = 0.0;   // NaN 兜底
@@ -1998,7 +2000,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     lightLinesPass.uniforms.uTime.value = elapsed;
     lightLinesPass.uniforms.uSpeed.value = reduced ? 0 : speed;
-    lightLinesPass.uniforms.uStrength.value = sps * sps;
+    // 隧道按速度三次方渐显：参考视频里 138 km/h 只有零星几根淡线，321 km/h 以上才铺满整屏，
+    // 用平方（早段太亮）会让中速就出现完整隧道，和参考对不上
+    lightLinesPass.uniforms.uStrength.value = sps * sps * sps;
     lightLinesPass.uniforms.uLightMode.value = light ? 1 : 0;
     lightLinesPass.enabled = sps > 0.04;   // 静止段整趟跳过，省一层全屏后期
 

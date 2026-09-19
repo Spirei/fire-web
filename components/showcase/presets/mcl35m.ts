@@ -103,7 +103,9 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       white: "#9dc0ff",
       dashes: 0.9,
 
-      barSegment: 6,
+      // 段长系数：越大单段越短。参考帧对齐消失点后量到的是「密集短段」（窗口内一条线上有 5-6 段），
+      // 原来 6 在同一位置只有 1-2 段、看着是两根长stroke，所以加密到 12
+      barSegment: 12,
       // 角度是屏幕空间角度（相对消失点）：左三 = 150°/190°/230°，右三 = 30°/350°/310°，
       // 每侧上下两条是暖金、中间那条偏白灰，对应参考视频里的六道主光条。
       vanish: [0.5, 0.46],
@@ -111,7 +113,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       // 参考视频里光条是在车右后上方汇聚，所以这里仍用固定的画面汇聚点，不用真实投影
       vanishFollow: false,
       // 光条亮度（参考里黄线是亮芯 + 窄光晕）
-      barIntensity: 1.75,
+      barIntensity: 1.6,
       // 跑道线：内侧蓝线（左右跑道边线）＋ 跑道上的短白标线（一条条掠过镜头，速度感来自它）
       lanes: [
         // 内侧蓝线：紧贴跑道两侧（最靠里），连续虚线
@@ -121,9 +123,11 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
         { angle: 262, width: 0.28, opacity: 0.95, color: "#e9effb", dash: 4 },
         { angle: 278, width: 0.28, opacity: 0.95, color: "#e9effb", dash: 4 }
       ],
-      // 隧道壁上的浅虚线：只留很淡的一层做质感，别抢主体（主体只有 4 条黄线 + 2 条蓝线）
-      auxCount: 26,
-      auxOpacity: 0.3,
+      // 隧道壁上的细线：参考视频里高速段（321/334 km/h）是一整片「细长线」铺满画面，
+      // 单根比主光条细得多（约 1/3）、数量多（每个角落能看到 5-8 根），所以槽位加密、透明度提高；
+      // 低速时整层随速度平方淡入（uStrength = speed²），静止 / 起步阶段看不到
+      auxCount: 30,
+      auxOpacity: 0.55,
       // 主体只有这些，左右镜像：
       //   外侧：每侧 2 条黄线（上黄 + 下黄，关于水平轴对称）
       //   内侧：每侧 1 条蓝线（跑道边线，见上面的 lanes）
@@ -131,10 +135,18 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       // 角度约定 0°=右、90°=上、180°=左、270°=下。
       bars: [
         // 每侧 2 条黄线 = 墙面（上黄 + 下黄，关于水平轴对称），左右镜像；蓝线更靠里（见上面的 lanes）
-        { angle: 150, width: 1.0, tone: "gold", style: "bar" },    // 左上墙
-        { angle: 210, width: 1.0, tone: "gold", style: "bar" },    // 左下墙
-        { angle: 30, width: 1.0, tone: "gold", style: "bar" },     // 右上墙
-        { angle: 330, width: 1.0, tone: "gold", style: "bar" }     // 右下墙
+        // 宽度按参考帧量出来的细线：原来 1.0° 在 1600 宽画面上接近 14px（一根很粗的管子），
+        // 参考里同样的位置只有 6-8px 的亮芯 + 很窄的光晕；0.38° 又偏细，取 0.46°
+        { angle: 150, width: 0.46, tone: "gold", style: "bar" },    // 左上墙
+        { angle: 210, width: 0.46, tone: "gold", style: "bar" },    // 左下墙
+        { angle: 30, width: 0.46, tone: "gold", style: "bar" },     // 右上墙
+        { angle: 330, width: 0.46, tone: "gold", style: "bar" },    // 右下墙
+        // 参考帧里除了暖金墙线，还有几条「接近水平、更长更亮」的冷白线（左右各一对、上下各一条），
+        // 少这一组时整片隧道只有金色，观感比参考单薄
+        { angle: 168, width: 0.34, tone: "white", style: "bar" },   // 左上冷白
+        { angle: 192, width: 0.34, tone: "white", style: "bar" },   // 左下冷白
+        { angle: 12, width: 0.34, tone: "white", style: "bar" },    // 右上冷白
+        { angle: 348, width: 0.34, tone: "white", style: "bar" }    // 右下冷白
       ]
     }
   },
