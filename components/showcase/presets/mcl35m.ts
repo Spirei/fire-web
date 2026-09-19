@@ -108,32 +108,22 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       // 参考画面里光条像素占 1.9%，我们只有 0.55%，所以条数、宽度、亮度一起加
       barIntensity: 1.75,
       // 地面车道线：比主光条更宽更暗的长虚线，专门做隧道地面的纵深
-      // 路面边线（细而暗：参考里能看到的斜向标线），太宽会在屏幕上变成横带，所以宽度只给 0.18°
+      // 内侧蓝线 = 跑道左右边线：贴着跑道的两条细蓝线（最外侧才是黄条），亮度给足才读得出来
       lanes: [
-        { angle: 194, width: 0.18, opacity: 0.6, color: "#8f9aa8" },
-        { angle: 346, width: 0.18, opacity: 0.6, color: "#8f9aa8" }
+        { angle: 205, width: 0.26, opacity: 1.05, color: "#9dc0ff" },
+        { angle: 335, width: 0.26, opacity: 1.05, color: "#9dc0ff" }
       ],
       // 隧道壁上的大量浅虚线
       auxCount: 26,
       auxOpacity: 1.15,
       bars: [
-        // 隧道是左右对称的：光条按镜像成对出现（角度 a 与 180° − a 成对、宽度与颜色一致）。
-        // 角度约定 0°=右、90°=上、180°=左、270°=下；三条宽条对应参考里右侧那组，左侧是它的镜像。
-        { angle: 59, width: 1.7, tone: "gold", style: "bar" },     // 右上 · 黄色宽条
-        { angle: 121, width: 1.7, tone: "gold", style: "bar" },    // 左上 · 黄色宽条（镜像）
-        { angle: 317, width: 1.9, tone: "white", style: "bar" },   // 右内下 · 蓝色宽条
-        { angle: 223, width: 1.9, tone: "white", style: "bar" },   // 左内下 · 蓝色宽条（镜像）
-        { angle: 296, width: 1.3, tone: "gold", style: "bar" },    // 右下 · 黄色宽条
-        { angle: 244, width: 1.3, tone: "gold", style: "bar" },    // 左下 · 黄色宽条（镜像）
-        // 细线同样左右成对
-        { angle: 25, width: 0.5, tone: "gold" },
-        { angle: 155, width: 0.5, tone: "gold" },
-        { angle: 340, width: 0.5, tone: "white" },
-        { angle: 200, width: 0.5, tone: "white" },
-        { angle: 68, width: 0.7, tone: "gold" },
-        { angle: 112, width: 0.7, tone: "gold" },
-        { angle: 2, width: 0.5, tone: "white" },
-        { angle: 178, width: 0.5, tone: "white" }
+        // 结构（左右镜像、中间留空）：
+        //   左：最外侧黄宽条（145°）＋ 内侧蓝线（跑道左边线，见上面的 lanes）
+        //   中：跑道，不放任何亮线
+        //   右：最外侧黄宽条（35°）＋ 内侧蓝线（跑道右边线）
+        // 角度约定 0°=右、90°=上、180°=左、270°=下，所以“外”远离 270°、“内”靠近 270°
+        { angle: 155, width: 1.8, tone: "gold", style: "bar" },   // 左外 · 黄色宽条
+        { angle: 25, width: 1.8, tone: "gold", style: "bar" }     // 右外 · 黄色宽条
       ]
     }
   },

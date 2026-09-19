@@ -978,8 +978,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         float laneMask = lane * laneDash;
         float laneAux = 0.0;
         vec3 laneCol = vec3(0.0);
-        laneAux += laneMask * 0.38 + aux * 0.2;
-        laneCol += uLaneColor * laneMask * 0.3 + uWhite * aux * 0.09;
+        // 内侧蓝线（跑道边线）要比壁面虚线更亮，否则「跑道」读不出来
+        laneAux += laneMask * 0.6 + aux * 0.2;
+        laneCol += uLaneColor * laneMask * 0.52 + uWhite * aux * 0.09;
         // 车道线与辅助虚线：和主光条一样受车体遮挡与强度控制
         float laneAll = laneAux * (1.0 - hide) * uStrength * uIntensity;
         if (!(laneAll == laneAll)) laneAll = 0.0;   // NaN 兜底
