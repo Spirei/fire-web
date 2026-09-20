@@ -21,8 +21,10 @@ view.attach(root);
 assert.equal(wheel.children.length, 0, 'native must not allocate extra meshes');
 view.set('overlay', '#00ff00');
 const overlay = wheel.children[0];
-assert.notEqual(overlay.geometry, geometry, 'sparse panels get a denser display-only wire geometry');
-assert(overlay.geometry.getAttribute('position').count > geometry.getAttribute('position').count);
+assert.notEqual(overlay.geometry, geometry, 'refined source triangles are removed from the base wire layer');
+assert.equal(overlay.geometry.getIndex().count, 0, 'replacement detail does not overlap the original sparse edges');
+assert.equal(overlay.children.length, 1, 'sparse panels get a local display-only detail layer');
+assert(overlay.children[0].geometry.getAttribute('position').count > geometry.getAttribute('position').count);
 assert.equal(wheel.material, paint);
 assert.equal(overlay.material.side, THREE.DoubleSide, 'thin wings need wire lines on both faces');
 for (const angle of [0, .5, 2, 4]) {
@@ -35,12 +37,14 @@ for (const mode of ['overlay','wireframe']) for (const color of ['#000000','#ccc
  view.set(mode, color);
  assert.equal(overlay.material.color.getHexString(), color.slice(1));
  assert.equal(wheel.children.length, 1, 'color changes must not grow geometry');
+ assert.equal(overlay.children[0].material.color.getHexString(), color.slice(1));
 }
 view.set('wireframe', '#00ff00');
 assert.equal(wheel.material.colorWrite, false);
 assert.equal(overlay.material.wireframe, true);
 assert.equal(overlay.visible, true);
 assert.equal(overlay.material.color.getHexString(), '00ff00');
+assert.equal(overlay.children[0].material, overlay.material, 'detail layer follows pure-wire material');
 view.set('native', '#00ff00');
 assert.equal(wheel.material, paint);
 view.set('wireframe', '#00ff00');
@@ -65,6 +69,68 @@ const skinRoot = new THREE.Group(); skinRoot.add(skin);
 skinView.attach(skinRoot); skinView.set('overlay', '#00ff00');
 assert.equal(skin.children[0].geometry, skinGeometry, 'skinned geometry keeps vertex weights and original topology');
 skinView.dispose();
+const denseView = m.exports.createWireframeView();
+const denseGeometry = new THREE.BufferGeometry();
+denseGeometry.setAttribute('position', new THREE.Float32BufferAttribute([0,0,0, 2,0,0, 0,2,0, 0.01,0,0], 3));
+const denseIndex = new Uint32Array(600003);
+denseIndex.set([0, 1, 2]); // one sparse endplate triangle inside a >200k-triangle combined mesh
+for (let i = 3; i < denseIndex.length; i += 3) denseIndex.set([0, 3, 0], i);
+denseGeometry.setIndex(new THREE.BufferAttribute(denseIndex, 1));
+const denseMesh = new THREE.Mesh(denseGeometry, paint);
+const denseRoot = new THREE.Group(); denseRoot.add(denseMesh);
+denseView.attach(denseRoot); denseView.set('overlay', '#00ff00');
+assert.equal(denseMesh.children[0].children.length, 1, 'large combined meshes still tessellate their sparse endplate triangles');
+denseView.dispose(); denseGeometry.dispose();
+const mirrorView = m.exports.createWireframeView();
+const mirrorGeometry = new THREE.BufferGeometry();
+mirrorGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
+  0,0,0, 2,0,0, 0,1,0,
+  0,0,0, -2,0,0, 0,1,0
+], 3));
+const mirrorMesh = new THREE.Mesh(mirrorGeometry, paint), mirrorRoot = new THREE.Group(); mirrorRoot.add(mirrorMesh);
+mirrorView.attach(mirrorRoot); mirrorView.set('overlay', '#00ff00');
+const mirrorPosition = mirrorMesh.children[0].children[0].geometry.getAttribute('position');
+assert.equal(mirrorPosition.count % 6, 0, 'mirrored source triangles receive the same subdivision count');
+const half = mirrorPosition.count / 2;
+for (let i = 0; i < half; i += 1) {
+ assert(Math.abs(mirrorPosition.getX(i) + mirrorPosition.getX(i + half)) < 1e-7, 'left/right detail x coordinates mirror exactly');
+ assert(Math.abs(mirrorPosition.getY(i) - mirrorPosition.getY(i + half)) < 1e-7, 'left/right detail y coordinates stay aligned');
+ assert(Math.abs(mirrorPosition.getZ(i) - mirrorPosition.getZ(i + half)) < 1e-7, 'left/right detail z coordinates stay aligned');
+}
+mirrorView.dispose(); mirrorGeometry.dispose();
+const trimView = m.exports.createWireframeView();
+const trimGeometry = new THREE.BufferGeometry();
+const trimPositions = [];
+const trimIndices = [];
+const addBox = (cx, sx, sy, sz) => {
+ const start = trimPositions.length / 3;
+ for (const x of [-sx / 2, sx / 2]) for (const y of [-sy / 2, sy / 2]) for (const z of [-sz / 2, sz / 2]) trimPositions.push(cx + x, y, z);
+ const faces = [0,2,3,0,3,1, 4,5,7,4,7,6, 0,1,5,0,5,4, 2,6,7,2,7,3, 0,4,6,0,6,2, 1,3,7,1,7,5];
+ trimIndices.push(...faces.map((value) => value + start));
+};
+addBox(0, .2, .2, .2); // ordinary model part remains wired
+addBox(1, .02, .08, .6); // thin, elongated, disconnected endplate trim stays solid without green overlay
+trimGeometry.setAttribute('position', new THREE.Float32BufferAttribute(trimPositions, 3));
+trimGeometry.setIndex(trimIndices);
+const trimMesh = new THREE.Mesh(trimGeometry, paint), trimRoot = new THREE.Group(); trimRoot.add(trimMesh);
+trimView.attach(trimRoot); trimView.set('overlay', '#00ff00');
+assert.notEqual(trimMesh.children[0].geometry, trimGeometry, 'thin disconnected rear-wing trim gets a display-only filtered wire index');
+assert.equal(trimMesh.children[0].geometry.getIndex().count, 0, 'refined main part moves out of the base layer with no duplicate edges');
+assert.equal(trimMesh.children[0].children[0].geometry.getAttribute('position').count, 12 * 16 * 3, 'main part remains wired while the cucumber-like trim outline is omitted');
+assert.equal(trimGeometry.getIndex().count, 72, 'solid source topology is never modified');
+trimView.dispose(); trimGeometry.dispose();
+const connectedView = m.exports.createWireframeView();
+const connectedGeometry = new THREE.BufferGeometry();
+connectedGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
+  0,0,0, 2,1,1, 0,1,0, // one long triangle at an arbitrary 3D angle
+  .05,0,0, 0,.05,0       // a tiny triangle connected only by vertex 0
+], 3));
+connectedGeometry.setIndex([0,1,2, 0,3,4]);
+const connectedMesh = new THREE.Mesh(connectedGeometry, paint), connectedRoot = new THREE.Group(); connectedRoot.add(connectedMesh);
+connectedView.attach(connectedRoot); connectedView.set('overlay', '#00ff00');
+const connectedDetail = connectedMesh.children[0].children[0].geometry.getAttribute('position');
+assert.equal(connectedDetail.count, 2 * 16 * 3, 'every face in an arbitrarily oriented sparse component shares one capped subdivision level');
+connectedView.dispose(); connectedGeometry.dispose();
 console.log('PASS six colors, wheel transforms, hidden meshes, original/multi-material restoration, shared palette, model switch and disposal');
 // Exercise the engine's real inspector transition: entering must not overwrite the home pose.
 const engine = fs.readFileSync('components/showcase/engine.ts', 'utf8');
