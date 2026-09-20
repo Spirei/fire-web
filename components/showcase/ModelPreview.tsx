@@ -12,10 +12,13 @@ import type { ShowcaseConfig, ShowcaseHandle } from "./types";
 export default function ModelPreview({
   config,
   onDebug,
-  showWireframe = false
+  showWireframe = false,
+  explore = false
 }: {
   config: ShowcaseConfig;
   showWireframe?: boolean;
+  /** 使用模型展示同款探索镜头：全角度环视、平移、推进与双击聚焦。 */
+  explore?: boolean;
   onDebug?: (info: {
     carBox: number[];
     carBoxRaw: number[];
@@ -28,6 +31,7 @@ export default function ModelPreview({
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [ready, setReady] = useState(false);
+  const handleRef = useRef<ShowcaseHandle | null>(null);
   const onDebugRef = useRef(onDebug);
   onDebugRef.current = onDebug;
 
@@ -90,6 +94,8 @@ export default function ModelPreview({
           return;
         }
         handle = created;
+        handleRef.current = created;
+        if (explore) created.setInspector(true);
         if (showWireframe) created.setWireframe("overlay", "#00ff00");
       })
       .catch((err) => {
@@ -97,13 +103,20 @@ export default function ModelPreview({
       });
     return () => {
       disposed = true;
+      handleRef.current = null;
       handle?.dispose();
       canvas.remove();
     };
-  }, [config, showWireframe]);
+  }, [config, explore, showWireframe]);
 
   return (
     <div className="mp-preview" ref={wrapRef}>
+      {ready && explore && (
+        <div className="mp-explore-bar">
+          <span><b>探索镜头</b> 左键环视 · Shift / 右键平移 · 滚轮推进 · 双击聚焦</span>
+          <button type="button" className="fire-cap" onClick={() => handleRef.current?.resetCamera()}>复位镜头</button>
+        </div>
+      )}
       {!ready && !error && (
         <div className="mp-preview-loading">
           正在加载模型 {Math.round(progress * 100)}%

@@ -602,13 +602,14 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
       )}
 
       {previewFile && !error && (
-        <section className="mp-step">
+        <section className="mp-step mp-workbench">
           <h2>
-            <span>3</span> 摆正与认轮子
+            <span>3</span> 模型调校工作台
           </h2>
+          <p className="mp-workbench-intro">左侧使用模型展示同款探索镜头，自由检查车身、底盘与尾翼；右侧调整参数后，重新加载预览确认结果。</p>
           <div className="mp-tune">
             <div className="mp-preview-wrap">
-              {previewConfig && <ModelPreview key={previewKey} config={previewConfig} showWireframe onDebug={setStructure} />}
+              {previewConfig && <ModelPreview key={previewKey} config={previewConfig} showWireframe explore onDebug={setStructure} />}
               <div className="mp-preview-foot">
                 <button type="button" className="mp-ghost fire-cap" onClick={reloadPreview}>
                   重新加载预览
