@@ -1809,10 +1809,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let racingAmt = 0;   // 速度驱动的镜头混合量（轮胎 / 光条直接跟随速度）
   let carTravel = 0;   // 冲刺时车沿隧道开走的距离
   let lastRacing = false;
-  let frameCount = 0;
+  const perfStartedAt = performance.now();
+  let renderCalls = 0;
+  let reflectionRenders = 0;
+  let inspectorSkippedFrames = 0;
   let reflectDirty = true;
   // 反射是否在动：只要相机或车动过就必须逐帧更新，否则倒影会比画面慢一帧 → 看起来在抖。
-  // 完全静止时才隔帧更新（省一半绘制调用）。
+  // 完全静止时复用上一张逐像素相同的反射纹理。
   const reflectCamLast = new THREE.Vector3(1e9, 0, 0);
   let reflectTravelLast = -1;
   const reflectNeedsUpdate = () => {
@@ -1899,6 +1902,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let reflectionLite = false;
   let reflectResizedAt = -1;
   function render(p: number, dt = 0.016) {
+    renderCalls += 1;
     elapsed += dt;
 
     // 0919：约 2 秒进入高速，松手后先退光条，再回到展示机位。
@@ -2294,14 +2298,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const [rw, rh] = reflectSizeFor(camera.aspect, reflectionLite ? Math.min(512, reflectHeight * 0.5) : reflectHeight);
       reflectRT.setSize(rw, rh); reflectDirty = true;
     }
-    // 相机或车在动 → 反射必须逐帧更新（否则转动时倒影会抖）；完全静止时才隔帧更新。
+    // 相机或车在动 → 反射必须逐帧更新（否则转动时倒影会抖）；完全静止时复用上一张。
     if (!inspectorOn && floorUniforms.uReflectIntensity.value > 0.001 && reflectNeedsUpdate()) {
+      reflectionRenders += 1;
       updateReflection();
       reflectCamLast.copy(camera.position);
       reflectTravelLast = carTravel;
       reflectDirty = false;
     }
-    frameCount += 1;
     lightLinesPass.uniforms.tSceneDepth.value = composer.readBuffer.depthTexture;
     (lightLinesPass.uniforms.uWorldFromClip.value as THREE.Matrix4).multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse);
     if (inspectorOn) {
@@ -2840,6 +2844,23 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   });
   let renderErrors = 0;
   let jsAvg = 0;
+  let lastPerfHud = 0;
+  let hudLastRenderCalls = 0;
+  let hudLastReflectionRenders = 0;
+  let hudLastInspectorSkips = 0;
+  const refreshPerfHud = (now: number) => {
+    if (!qualityHud || now - lastPerfHud < 1000) return;
+    const interval = Math.max(0.001, (now - (lastPerfHud || perfStartedAt)) / 1000);
+    lastPerfHud = now;
+    qualityHud.innerHTML = [
+      `showcase · ${jsAvg.toFixed(2)} ms`,
+      `render ${((renderCalls - hudLastRenderCalls) / interval).toFixed(1)}/s · reflect ${((reflectionRenders - hudLastReflectionRenders) / interval).toFixed(1)}/s · skip ${((inspectorSkippedFrames - hudLastInspectorSkips) / interval).toFixed(1)}/s`,
+      `buffer ${canvas.width}×${canvas.height} · tex ${renderer.info.memory.textures} · geo ${renderer.info.memory.geometries}`
+    ].join("<br>");
+    hudLastRenderCalls = renderCalls;
+    hudLastReflectionRenders = reflectionRenders;
+    hudLastInspectorSkips = inspectorSkippedFrames;
+  };
 
   /**
    * 自愈看门狗：GPU 驱动回收上下文时会留下整屏发白（或全黑）的画面，
@@ -2958,7 +2979,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       dragging || touches.size > 0 || Math.abs(userYawVel) > 1e-4 || Math.abs(userPitchVel) > 1e-5 ||
       Math.abs(zoomTarget - zoom) > 1e-4 || Math.abs(pVel) > 0.0004
     );
-    if (inspectorOn && !inspectorMoving && !inspectorRenderDirty) return;
+    if (inspectorOn && !inspectorMoving && !inspectorRenderDirty) {
+      inspectorSkippedFrames += 1;
+      refreshPerfHud(now);
+      return;
+    }
     adaptQuality(frameMs);
     try {
       const jsStart = performance.now();
@@ -2966,6 +2991,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       if (inspectorOn && !inspectorMoving) inspectorRenderDirty = false;
       const jsCost = performance.now() - jsStart;
       jsAvg = jsAvg === 0 ? jsCost : jsAvg * 0.9 + jsCost * 0.1;
+      refreshPerfHud(now);
       renderErrors = 0;
       watchdog();
     } catch (err) {
@@ -3256,6 +3282,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     geometries: renderer.info.memory.geometries,
     /** 每帧脚本耗时（毫秒，渲染调用 + HUD + 相机计算，不含 GPU 执行时间） */
     jsMs: +jsAvg.toFixed(2),
+    renderFps: +(renderCalls / Math.max(0.001, (performance.now() - perfStartedAt) / 1000)).toFixed(2),
+    reflectionFps: +(reflectionRenders / Math.max(0.001, (performance.now() - perfStartedAt) / 1000)).toFixed(2),
+    inspectorSkippedFps: +(inspectorSkippedFrames / Math.max(0.001, (performance.now() - perfStartedAt) / 1000)).toFixed(2),
     /** 看门狗触发次数（软恢复 / 重建），排查白屏用 */
     watchdogHits,
     rebuilds,

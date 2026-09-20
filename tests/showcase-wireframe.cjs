@@ -170,6 +170,7 @@ assert.match(importer, /fire\.showcase\.model-workbench\.v1/, 'model workbench k
 assert.match(importer, /localStorage\.getItem\(WORKBENCH_STORAGE_KEY\)/, 'model workbench restores the active draft after reload');
 assert.match(importer, /localStorage\.setItem\(WORKBENCH_STORAGE_KEY/, 'model workbench persists unsaved tuning changes');
 assert.match(importer, /mp-restore-screen/, 'model workbench covers the server import page until the local draft is restored');
+assert.match(importer, /version: previewFile/, 'parameter tuning keeps a stable asset cache key instead of redownloading the same GLB');
 assert.match(preview, /setInspectRegion\(activeRegion/, 'live preview rebuild restores the selected tuning region');
 assert.doesNotMatch(preview, /\[config, explore, onPartSelect/, 'live tuning reuses the existing WebGL scene instead of rebuilding it');
 assert.match(preview, /handle\.setModel\(\{ asset: config\.assets\.model, model: config\.model \}\)/, 'live tuning swaps the model in the existing renderer');

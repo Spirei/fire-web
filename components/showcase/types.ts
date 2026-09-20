@@ -435,6 +435,10 @@ export interface ShowcaseHandle {
     geometries: number;
     /** 每帧脚本耗时（毫秒，不含 GPU 执行时间） */
     jsMs: number;
+    /** 诊断计数：实际渲染、倒影渲染、工作台跳过的重复帧（每秒平均）。 */
+    renderFps: number;
+    reflectionFps: number;
+    inspectorSkippedFps: number;
     /** 用户拖拽的偏航（度）与俯仰偏移（弧度） */
     yaw: number;
     pitch: number;

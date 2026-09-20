@@ -329,7 +329,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
     // 预览只依赖「会影响建模结构」的参数：朝向、车长、轮子、贴图上限
     return buildImportedConfig({
       file: previewFile,
-      version: previewKey,
+      // 参数变化不会改变 GLB 文件本身；保持素材 URL 稳定，避免同一份大模型被当成新版本反复下载和改写缓存。
+      version: previewFile,
       params: {
         length: previewParams.length,
         yaw: previewParams.yaw,
@@ -345,7 +346,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         wireframe: previewParams.wireframe
       }
     });
-    // previewKey 用来在参数稳定后重建引擎
+    // previewKey 只用于显式触发一次原地重载，素材缓存键始终跟文件名绑定。
   }, [previewFile, previewKey, previewParams]);
 
   const previewIsCurrent = useMemo(() => JSON.stringify(params) === JSON.stringify(previewParams), [params, previewParams]);
