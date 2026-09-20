@@ -88,7 +88,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     // 镜头与注视点一起左移，车落在画面约 0.42 处。
     chaseLateral: -0.8,
     chaseCamera: { radius: 11.8, height: 3.7, targetY: 1.2, fov: 34 },
-    response: { acceleration: 1.45, braking: 1.7 },
+    response: { acceleration: 1.05, braking: 1.65 },
     // 车身流光与地面流光在参考视频里没有（高速时车身是暗的），置 0 去掉这两处多余光源
     flowStrength: 0,
     floorFlow: 0,
@@ -97,58 +97,35 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     tunnel: {
       radius: 26,
       length: 120,
-      // 左右各三条主光条（60° 均分）：上下两条暖金、内侧四条冷白。
-      // 颜色按参考视频逐点取样后做了偏色中性化，宽度按视频量出来约 0.5°。
-      // 外道浅黄（取样核心 #D0813F~#BB7611，按亮线观感提高明度后的浅黄）
-      gold: "#ffbe63",
-      // 内道浅蓝（取样核心 #4679D5~#6D89D3）
-      white: "#9dc0ff",
-      dashes: 0.5,
-      dof: 0.35,
-
-      // 段长系数：越大单段越短。参考帧对齐消失点后量到的是「密集短段」（窗口内一条线上有 5-6 段），
-      // 原来 6 在同一位置只有 1-2 段、看着是两根长stroke，所以加密到 12
-      barSegment: 12,
-      // 角度是屏幕空间角度（相对消失点）：左三 = 150°/190°/230°，右三 = 30°/350°/310°，
-      // 每侧上下两条是暖金、中间那条偏白灰，对应参考视频里的六道主光条。
-      vanish: [0.62, 0.60],
-      // 对齐参考片高速构图：车在左下，光条汇聚在右上。
-      vanishFollow: false,
-      // 光条亮度（参考里黄线是亮芯 + 窄光晕）
-      barIntensity: 1.35,
-      // 跑道线：内侧蓝线（左右跑道边线）＋ 跑道上的短白标线（一条条掠过镜头，速度感来自它）
-      lanes: [
-        // 内侧蓝线：紧贴跑道两侧（最靠里），连续虚线
-        { angle: 240, width: 0.3, opacity: 1.15, color: "#9dc0ff" },
-        { angle: 300, width: 0.3, opacity: 1.15, color: "#9dc0ff" },
-        // 跑道上流动的短白标线（一条条掠过镜头，负责速度感与远近感）
-        { angle: 262, width: 0.42, opacity: 0.95, color: "#e9effb", dash: 4 },
-        { angle: 278, width: 0.42, opacity: 0.95, color: "#e9effb", dash: 4 }
+      // download.png (541×377)：拟合四条黄线，按各自局部坐标保存，非镜像布局。
+      // 每个采样区排除了红色标注框；数据与误差见 docs/showcase-tunnel-reference.md。
+      referenceAspect: 541 / 377,
+      surfaces: [
+        { from: 165.9386, to: 194.0015, color: "#010104", opacity: 0.65 },
+        { from: 316.1346, to: 405.2193, color: "#000002", opacity: 0.65 },
+        { from: 194.0015, to: 198.6359, color: "#010103", opacity: 0.65 },
+        { from: 278.9903, to: 316.1346, color: "#000001", opacity: 0.65 }
       ],
-      // 隧道壁上的细线：参考视频里高速段（321/334 km/h）是一整片「细长线」铺满画面，
-      // 单根比主光条细得多（约 1/3）、数量多（每个角落能看到 5-8 根），所以槽位加密、透明度提高；
-      // 中速淡入、高速增强，静止完全关闭。
-      auxCount: 30,
-      auxOpacity: 0.55,
-      // 主体只有这些，左右镜像：
-      //   外侧：每侧 2 条黄线（上黄 + 下黄，关于水平轴对称）
-      //   内侧：每侧 1 条蓝线（跑道边线，见上面的 lanes）
-      //   中间：跑道，不放光条
-      // 角度约定 0°=右、90°=上、180°=左、270°=下。
+      gold: "#a6926d",
+      white: "#6c6c76",
+      dashes: 0,
+      dof: 0,
+      barSegment: 7,
+      vanish: [0.683030, 0.621390],
+      vanishFollow: false,
+      barIntensity: 1,
+      lanes: [
+        // 左路肩在画面边缘仅约 23px 高，右路肩明显较宽，蓝线接近竖直。
+        { angle: 198.6359, width: 0.15, origin: [0.652572, 0.620690], color: "#6c6c76", opacity: 1, dash: 3 },
+        { angle: 278.9903, width: 0.82, origin: [0.681746, 0.620690], color: "#568092", opacity: 1, dash: 3 }
+      ],
+      auxCount: 42,
+      auxOpacity: 0.34,
       bars: [
-        // 每侧 2 条黄线 = 墙面（上黄 + 下黄，关于水平轴对称），左右镜像；蓝线更靠里（见上面的 lanes）
-        // 宽度按参考帧量出来的细线：原来 1.0° 在 1600 宽画面上接近 14px（一根很粗的管子），
-        // 参考里同样的位置只有 6-8px 的亮芯 + 很窄的光晕；0.38° 又偏细，取 0.46°
-        { angle: 160, width: 0.46, tone: "gold", style: "bar" },    // 左上墙
-        { angle: 210, width: 0.46, tone: "gold", style: "bar" },    // 左下墙
-        { angle: 20, width: 0.46, tone: "gold", style: "bar" },     // 右上墙
-        { angle: 330, width: 0.46, tone: "gold", style: "bar" },    // 右下墙
-        // 参考帧里除了暖金墙线，还有几条「接近水平、更长更亮」的冷白线（左右各一对、上下各一条），
-        // 少这一组时整片隧道只有金色，观感比参考单薄
-        { angle: 168, width: 0.34, tone: "white", style: "bar" },   // 左上冷白
-        { angle: 192, width: 0.34, tone: "white", style: "bar" },   // 左下冷白
-        { angle: 12, width: 0.34, tone: "white", style: "bar" },    // 右上冷白
-        { angle: 348, width: 0.34, tone: "white", style: "bar" }    // 右下冷白
+        { angle: 165.9386, width: 0.23, origin: [0.694463, 0.620690], color: "#a6926d", tone: "gold", style: "bar" },
+        { angle: 194.0015, width: 0.28, origin: [0.683206, 0.620690], color: "#9f8366", tone: "gold", style: "bar" },
+        { angle: 45.2193, width: 0.55, origin: [0.683543, 0.620690], color: "#9e7f57", tone: "gold", style: "bar" },
+        { angle: 316.1346, width: 0.68, origin: [0.681065, 0.620690], color: "#836d51", tone: "gold", style: "bar" }
       ]
     }
   },

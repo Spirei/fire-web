@@ -102,6 +102,5 @@ export default function HomePage() {
   `model.wheelPattern`（匹配轮子材质名，例如 `rims|tyres`、`Tyre`、`wheels`）、
   `wheelAxis` / `wheelLateral` / `wheelLongitudinal`（轮子自转轴与左右 / 前后判断轴）、
   `maxTextureSize`（贴图很大的模型收到 2048 省显存）。
-- 轮子有两种建模方式：一个材质盖四个轮子（本车，引擎按象限拆成四个）与一个网格一个轮子
-  （Gulf / MP4 系列，引擎按网格跨度自动识别为单轮）。识别错时表现为轮子被切碎。
+- 轮胎网格可能包含单轮、一对或四轮；按每个网格自身坐标中的跨度和圆形截面判断，仅拆存在多轮的轴。MP4/5 前后轮分别位于不同父节点，不能混用其他网格的中线；共用轮胎材质的悬挂保持原状。测量、遮挡和速度验证详见 [隧道参考记录](showcase-tunnel-reference.md)。
 - 选中的车型记在 `fire:showcase:model`（刷新保持）；排查缩放 / 朝向可以看 `__mcl.debug().carBox`。

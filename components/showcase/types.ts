@@ -39,6 +39,9 @@ export interface ShowcaseLightBar {
   tone: "gold" | "white";
   /** "bar" = 矩形光条（平顶、边缘略带过渡，像灯管）；不传则是普通细线 */
   style?: "line" | "bar";
+  /** 从参考帧测量的独立颜色与消失线起点（屏幕 UV，Y 向上）。 */
+  color?: string;
+  origin?: [number, number];
 }
 
 export interface ShowcasePhase {
@@ -236,6 +239,10 @@ export interface ShowcaseConfig {
       | {
           radius?: number;
           length?: number;
+          /** 保持参考画幅里的墙 / 路面占比；不传时按当前画幅的像素角度计算。 */
+          referenceAspect?: number;
+          /** 两条边线之间的墙面 / 路肩，角度与主光条使用相同坐标。 */
+          surfaces?: Array<{ from: number; to: number; color: string; opacity: number }>;
           /** 主光条（不传则只有很浅的虚线） */
           bars?: ShowcaseLightBar[];
           /** 消失点在画面里的位置（默认 0.5 / 0.47） */
@@ -243,7 +250,7 @@ export interface ShowcaseConfig {
           /** 消失点跟随隧道轴的真实投影（默认开启；关掉则固定用 vanish 的画面位置） */
           vanishFollow?: boolean;
           /** 地面车道线（参考视频里从画面左下/右下斜向消失点的灰色标线） */
-          lanes?: Array<{ angle: number; width: number; opacity?: number; dash?: number; color?: string }>;
+          lanes?: Array<{ angle: number; width: number; opacity?: number; dash?: number; color?: string; origin?: [number, number] }>;
           /** 景深强度：光条越远离消失点越虚（0 = 全锐利，默认 1.2） */
           dof?: number;
           /** 主光条切段密度：越大段越短（默认 13 ≈ 每条被切成十几段） */

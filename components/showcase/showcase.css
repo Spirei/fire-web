@@ -129,6 +129,7 @@ html:has(.showcase.light) body {
   inset: 0;
   pointer-events: none;
   background: var(--sc-vignette);
+  opacity: calc(1 - var(--sc-tunnel, 0));
 }
 
 .sc-watermark {
