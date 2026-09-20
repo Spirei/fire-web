@@ -124,6 +124,12 @@ export default function ModelPreview({
     };
   }, [config, explore, onPartSelect, partRegions, showWireframe]);
 
+  // 参数防抖更新会重建引擎；恢复当前大类，避免调一个数后选区突然丢失、全车重新变绿。
+  useEffect(() => {
+    if (!ready || !activeRegion) return;
+    handleRef.current?.setInspectRegion(activeRegion as "overall" | "body" | "aero" | "wheels" | "cockpit");
+  }, [activeRegion, ready]);
+
   return (
     <div className="mp-preview" ref={wrapRef}>
       {explore && partRegions.map(region => (
