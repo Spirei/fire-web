@@ -147,6 +147,10 @@ cleanView.dispose(); cleanGeometry.dispose();
 console.log('PASS six colors, wheel transforms, hidden meshes, original/multi-material restoration, shared palette, model switch and disposal');
 // Exercise the engine's real inspector transition: entering must not overwrite the home pose.
 const engine = fs.readFileSync('components/showcase/engine.ts', 'utf8');
+const importer = fs.readFileSync('components/showcase/ModelImporter.tsx', 'utf8');
+assert.match(importer, /fire\.showcase\.model-workbench\.v1/, 'model workbench keeps a versioned local draft');
+assert.match(importer, /localStorage\.getItem\(WORKBENCH_STORAGE_KEY\)/, 'model workbench restores the active draft after reload');
+assert.match(importer, /localStorage\.setItem\(WORKBENCH_STORAGE_KEY/, 'model workbench persists unsaved tuning changes');
 assert.match(engine, /const INSPECTOR_MIN_ZOOM = 0\.015;/, 'inspector must permit cockpit-scale zoom');
 assert.match(engine, /const INSPECTOR_MAX_ZOOM = 400;/, 'inspector must permit Sketchfab-scale zoom out');
 assert.match(engine, /clamp\(r \* 0\.003, 0\.0015, 0\.08\)/, 'near plane follows close camera distance');

@@ -54,6 +54,7 @@ interface ImportedModelRow {
 }
 
 const MAX_UPLOAD_BYTES = 250 * 1024 * 1024;
+const WORKBENCH_STORAGE_KEY = "fire.showcase.model-workbench.v1";
 type TuneRegion = "overall" | "body" | "aero" | "wheels" | "cockpit";
 const TUNE_REGIONS: Array<{ id: TuneRegion; label: string; hint: string; color: string; pos: [number, number, number] }> = [
   { id: "overall", label: "整体", hint: "尺寸与朝向", color: "#ffffff", pos: [0.5, 1.02, 0.5] },
@@ -158,11 +159,63 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   const [tuneRegion, setTuneRegion] = useState<TuneRegion>("overall");
   const [pickedPart, setPickedPart] = useState<{ mesh: string; materials: string[] } | null>(null);
   const [wireTuneOpen, setWireTuneOpen] = useState(false);
+  const [workbenchHydrated, setWorkbenchHydrated] = useState(false);
   const bodyTuneRef = useRef<HTMLLabelElement | null>(null);
   const wireTuneRef = useRef<HTMLDetailsElement | null>(null);
   const wheelTuneRef = useRef<HTMLDivElement | null>(null);
 
+  // 工作台是独立编辑环境：刷新、HMR 或临时离开页面后恢复当前车型与未保存参数。
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(WORKBENCH_STORAGE_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw) as {
+          editingId?: string | null;
+          previewFile?: string;
+          meta?: { id: string; label: string; note: string };
+          params?: ShowcaseModelParams;
+          wheelPick?: string[];
+          tuneRegion?: TuneRegion;
+          wireTuneOpen?: boolean;
+        };
+        const row = draft.editingId ? existing.find(item => item.id === draft.editingId && item.present !== false) : null;
+        const file = row?.file ?? draft.previewFile;
+        if (file && draft.meta?.id && draft.params) {
+          const restored = normalizeWireframeParams(draft.params);
+          setEditingId(row?.id ?? null);
+          setPreviewFile(file);
+          setMeta(draft.meta);
+          setParams(restored);
+          setPreviewParams(restored);
+          setWheelPick(Array.isArray(draft.wheelPick) ? draft.wheelPick : []);
+          setTuneRegion(TUNE_REGIONS.some(region => region.id === draft.tuneRegion) ? draft.tuneRegion! : "overall");
+          setWireTuneOpen(Boolean(draft.wireTuneOpen));
+          setPreviewKey(prev => prev + 1);
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(WORKBENCH_STORAGE_KEY);
+    } finally {
+      setWorkbenchHydrated(true);
+    }
+  }, [existing]);
+
+  useEffect(() => {
+    if (!workbenchHydrated) return;
+    if (!previewFile) {
+      window.localStorage.removeItem(WORKBENCH_STORAGE_KEY);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      window.localStorage.setItem(WORKBENCH_STORAGE_KEY, JSON.stringify({
+        editingId, previewFile, meta, params, wheelPick, tuneRegion, wireTuneOpen
+      }));
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [editingId, meta, params, previewFile, tuneRegion, wheelPick, wireTuneOpen, workbenchHydrated]);
+
   const reset = useCallback(() => {
+    window.localStorage.removeItem(WORKBENCH_STORAGE_KEY);
     setReport(null);
     setError(null);
     setProgress(0);
