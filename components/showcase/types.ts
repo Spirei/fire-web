@@ -68,6 +68,9 @@ export interface ShowcasePart {
   rev: boolean;
 }
 
+/** 首页展示台地面圆盘：原刻度盘或 0919 参考视频里的赛道点阵盘。 */
+export type ShowcaseDiscStyle = "chrono" | "track";
+
 /**
  * 导入车型可调的渲染参数（存在 uploads 卷的 showroom.json 里）。
  * 与 ShowcaseConfig.model 同义，但只保留「换车时需要动」的那几项。
@@ -383,6 +386,8 @@ export interface ShowcaseHandle {
   setOrbit: (on: boolean) => void;
   setInspector: (on: boolean) => void;
   setWireframe: (mode: import("./wireframe").WireframeMode, color: string) => void;
+  /** 原地切换地面圆盘，不重建模型、镜头或 WebGL 场景。 */
+  setDiscStyle: (style: ShowcaseDiscStyle) => void;
   setFreeCamera: (on: boolean) => void;
   resetCamera: () => void;
   /** 影棚：3D 场景切到明亮摄影棚（不改深浅色主题） */

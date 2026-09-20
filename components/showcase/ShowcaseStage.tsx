@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ShowcaseConfig, ShowcaseHandle } from "./types";
+import type { ShowcaseConfig, ShowcaseDiscStyle, ShowcaseHandle } from "./types";
 import { setThemeCookie } from "@/lib/theme";
 import { usePersistedState } from "@/lib/usePersistedState";
 import type { WireframeMode } from "./wireframe";
@@ -19,6 +19,7 @@ const RPM_TICKS = 20;
 const PIN_KEY = "fire:showcase:pose";
 const WIRE_MODE_KEY = "fire:showcase:wire-mode";
 const WIRE_COLOR_KEY = "fire:showcase:wire-color";
+const DISC_STYLE_KEY = "fire:showcase:disc-style";
 type ShowcasePose = { p: number; yaw: number; pitch: number; zoom: number };
 
 /**
@@ -127,6 +128,15 @@ export default function ShowcaseStage({
     handleRef.current?.setWireframe(mode, color);
   };
   const [studio, setStudio] = useState(false);
+  const [discStyle, setDiscStyle] = usePersistedState<ShowcaseDiscStyle>(DISC_STYLE_KEY, "chrono");
+  const discStyleRef = useRef<ShowcaseDiscStyle>(discStyle);
+  discStyleRef.current = discStyle;
+  const toggleDiscStyle = () => {
+    const next: ShowcaseDiscStyle = discStyleRef.current === "chrono" ? "track" : "chrono";
+    discStyleRef.current = next;
+    setDiscStyle(next);
+    handleRef.current?.setDiscStyle(next);
+  };
   // 引擎是异步创建的，点得比它早就先把状态存下来，创建完再补上
   const orbitRef = useRef(false);
   const studioRef = useRef(false);
@@ -327,6 +337,7 @@ export default function ShowcaseStage({
         handle.setOrbit(orbitRef.current);
         handle.setFreeCamera(freeCameraRef.current);
         handle.setWireframe(wireRef.current.mode, wireRef.current.color);
+        handle.setDiscStyle(discStyleRef.current);
         handle.setStudio(studioRef.current);
         // 置顶机位：刷新 / 重建后直接把镜头放回用户存下的角度（滚动位置由下面的滚动守护负责）
         const pinned = pinnedPoseRef.current;
@@ -942,6 +953,21 @@ export default function ShowcaseStage({
                   <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
                 </svg>
                 {ui.studio}
+              </button>
+              <button
+                type="button"
+                className={`sc-pill fire-cap${discStyle === "track" ? " on" : ""}`}
+                onClick={toggleDiscStyle}
+                aria-pressed={discStyle === "track"}
+                title={discStyle === "track" ? "切换到原有刻度圆盘" : "切换到视频赛道圆盘"}
+                aria-label={discStyle === "track" ? "当前为赛道圆盘，切换到刻度圆盘" : "当前为刻度圆盘，切换到赛道圆盘"}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <ellipse cx="12" cy="12" rx="9" ry="5.5" />
+                  <path d="M5.5 10.3c2.3 1 4.5 1.5 6.5 1.5s4.2-.5 6.5-1.5" strokeDasharray="1.4 2.2" />
+                  <path d="M7.4 14.8c1.6.5 3.1.8 4.6.8s3-.3 4.6-.8" opacity=".65" />
+                </svg>
+                {discStyle === "track" ? "赛道盘" : "刻度盘"}
               </button>
               <button
                 type="button"

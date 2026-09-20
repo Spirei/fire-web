@@ -26,6 +26,7 @@ import { coastStep, boundedZoom, wheelPixels } from "./interaction";
 import type {
   ShowcaseCameraKey,
   ShowcaseConfig,
+  ShowcaseDiscStyle,
   ShowcaseHandle,
   ShowcaseLightBar,
   ShowcaseOptions
@@ -650,7 +651,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   scene.add(groundFx);
   let ringUniformsRef: { uSweep: { value: number }; uSpeed: { value: number }; uTime: { value: number }; uFade?: { value: number } } | null = null;
   const ringOutlineMats: THREE.MeshBasicMaterial[] = [];
-  const ringOutlines: THREE.Mesh[] = [];
+  let discStyle: ShowcaseDiscStyle = "chrono";
+  const chronoDisc = new THREE.Group();
+  const trackDisc = new THREE.Group();
+  trackDisc.visible = false;
+  groundFx.add(chronoDisc, trackDisc);
 
   const pool = new THREE.Mesh(
     new THREE.PlaneGeometry(34, 34),
@@ -718,8 +723,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const m = mesh.material as THREE.MeshBasicMaterial;
       m.userData.baseOpacity = m.opacity;
       ringOutlineMats.push(m);
-      ringOutlines.push(mesh);
-      groundFx.add(mesh);
+      chronoDisc.add(mesh);
     });
     const ringUniforms = {
       uSweep: { value: 0 },
@@ -775,9 +779,75 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     mesh.instanceMatrix.needsUpdate = true;
     mesh.renderOrder = 3;
     mesh.frustumCulled = false;
-    groundFx.add(mesh);
+    chronoDisc.add(mesh);
     ring = mesh;
     ringUniformsRef = ringUniforms;
+
+    /*
+     * 0919 参考视频圆盘：三条同心赛道线由短划点阵拼成，局部断开，右后方有一段较亮的引导弧。
+     * 单独成组，因此与原刻度盘切换时不用重建场景，也不会动到车、镜头和倒影。
+     */
+    const trackColor = ringColor.clone().lerp(new THREE.Color("#f0dfca"), 0.3);
+    const dashGeo = new THREE.BoxGeometry(0.095, 0.003, 0.018);
+    [RING_R - 0.32, RING_R + 0.03, RING_R + 0.4].forEach((radius, lane) => {
+      const count = 176 + lane * 16;
+      const mat = new THREE.MeshBasicMaterial({
+        color: trackColor,
+        transparent: true,
+        opacity: 0.12 + lane * 0.025,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      mat.userData.baseOpacity = mat.opacity;
+      ringOutlineMats.push(mat);
+      const visible: number[] = [];
+      for (let i = 0; i < count; i += 1) {
+        const unit = i / count;
+        // 不同车道错开缺口，避免形成机械、完整的钟面圆；前缘保留得更完整以托住车身。
+        const gap = lane === 0
+          ? (unit > 0.58 && unit < 0.69)
+          : lane === 1
+            ? (unit > 0.08 && unit < 0.17) || (unit > 0.72 && unit < 0.78)
+            : (unit > 0.35 && unit < 0.43);
+        if (!gap && (i + lane) % (lane === 1 ? 3 : 2) !== 0) visible.push(i);
+      }
+      const dashes = new THREE.InstancedMesh(dashGeo, mat, visible.length);
+      const matrix = new THREE.Matrix4();
+      const position = new THREE.Vector3();
+      const quaternion = new THREE.Quaternion();
+      const scale = new THREE.Vector3();
+      visible.forEach((sourceIndex, instanceIndex) => {
+        const angle = (sourceIndex / count) * Math.PI * 2;
+        position.set(Math.sin(angle) * radius, 0.012 + lane * 0.0008, Math.cos(angle) * radius);
+        quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+        const pulse = sourceIndex % 17 === 0 ? 1.9 : sourceIndex % 7 === 0 ? 1.35 : 1;
+        scale.set(pulse, 1, 1);
+        matrix.compose(position, quaternion, scale);
+        dashes.setMatrixAt(instanceIndex, matrix);
+      });
+      dashes.instanceMatrix.needsUpdate = true;
+      dashes.frustumCulled = false;
+      dashes.renderOrder = 3;
+      trackDisc.add(dashes);
+    });
+    const guideMaterial = new THREE.MeshBasicMaterial({
+      color: trackColor.clone().lerp(new THREE.Color("#fff7ec"), 0.55),
+      transparent: true,
+      opacity: 0.32,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    guideMaterial.userData.baseOpacity = guideMaterial.opacity;
+    ringOutlineMats.push(guideMaterial);
+    const guide = new THREE.Mesh(
+      new THREE.RingGeometry(RING_R + 0.37, RING_R + 0.385, 72, 1, Math.PI * 0.06, Math.PI * 0.48),
+      guideMaterial
+    );
+    guide.rotation.x = -Math.PI / 2;
+    guide.position.y = 0.014;
+    guide.renderOrder = 3;
+    trackDisc.add(guide);
   }
 
   /* ---------- 3) 速度线隧道：纯片元着色器 ---------- */
@@ -2034,8 +2104,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       // 行驶时退出展示台刻度环，避免看起来带着大圆盘前进。
       const ringFade = 1 - seg(sps, 0.04, 0.28);
       // 这是展示台的刻度参照，随车辆跟随机位保留在车下，不遗留在起步点。
-      if (ring) ring.position.z = carTravel;
-      ringOutlines.forEach(mesh => { mesh.position.z = carTravel; });
+      chronoDisc.position.z = carTravel;
+      trackDisc.position.z = carTravel;
       if (ringUniformsRef.uFade) ringUniformsRef.uFade.value = ringFade;
       ringOutlineMats.forEach((m) => {
         m.opacity = (m.userData.baseOpacity as number) * ringFade;
@@ -2990,6 +3060,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       wireframeMode = mode;
       wireframeView.set(mode, color);
       if (mode === "native") reflectDirty = true;
+    },
+    setDiscStyle: (style) => {
+      discStyle = style;
+      chronoDisc.visible = discStyle === "chrono";
+      trackDisc.visible = discStyle === "track";
     },
     setFreeCamera: (on: boolean) => {
       if (freeCamera === on) return;
