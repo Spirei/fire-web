@@ -1,10 +1,11 @@
 "use client";
 
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ShowcaseConfig, ShowcaseHandle } from "./types";
 import { setThemeCookie } from "@/lib/theme";
 import { usePersistedState } from "@/lib/usePersistedState";
 import type { WireframeMode } from "./wireframe";
+import LiquidGlassControl from "@/components/LiquidGlassControl";
 import MusicIcon from "./MusicIcon";
 import "./showcase.css";
 import "./capsule.css";
@@ -757,19 +758,14 @@ export default function ShowcaseStage({
                   <div className="sc-wire-heading"><div><h3>模型展示</h3><p>每一处细节，自由探索。</p></div><button type="button" aria-label="关闭线框设置" onClick={() => toggleWirePanel(false)}>
                     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8" /></svg>
                   </button></div>
-                  <div className="sc-wire-modes" role="group" aria-label="显示模式" style={{ "--glass-index": ["native", "overlay", "wireframe"].indexOf(wireMode) } as CSSProperties}>
-                    <span className="sc-mode-lens" aria-hidden="true"><i key={wireMode} /></span>
-                    {([["native", "原生"], ["overlay", "叠加线框"], ["wireframe", "纯线框"]] as const).map(([mode, label]) =>
-                      <button type="button" key={mode} aria-pressed={wireMode === mode} onClick={() => changeWire(mode)}>{label}</button>)}
-                  </div>
+                  <LiquidGlassControl label="显示模式" index={["native", "overlay", "wireframe"].indexOf(wireMode)}
+                    onChange={index => changeWire((["native", "overlay", "wireframe"] as const)[index])}
+                    items={[{ label: "原生" }, { label: "叠加线框" }, { label: "纯线框" }]} />
                   <div className="sc-wire-color-label"><span>线框颜色</span><span>{WIRE_COLORS.find(([, color]) => color === wireColor)?.[0]}</span></div>
-                  <div className={`sc-wire-colors${wireMode === "native" ? " is-native" : ""}`} role="group" aria-label="线框颜色"
-                    style={{ "--glass-color-index": WIRE_COLORS.findIndex(([, color]) => color === wireColor) } as CSSProperties}>
-                    <span className="sc-color-lens" aria-hidden="true"><i key={wireColor} /></span>
-                    {WIRE_COLORS.map(([label, color]) => <button type="button" key={color}
-                      title={label} aria-label={`${label}线框`} aria-pressed={wireMode !== "native" && wireColor === color}
-                      onClick={() => changeWire(wireMode === "native" ? "overlay" : wireMode, color)}><span style={{ background: color }} /></button>)}
-                  </div>
+                  <LiquidGlassControl label="线框颜色" swatches inactive={wireMode === "native"}
+                    index={WIRE_COLORS.findIndex(([, color]) => color === wireColor)}
+                    onChange={index => changeWire(wireMode === "native" ? "overlay" : wireMode, WIRE_COLORS[index][1])}
+                    items={WIRE_COLORS.map(([label, color]) => ({ label: `${label}线框`, color }))} />
                   <p className="sc-wire-help">拖拽环视 <span>·</span> 滚轮或双指缩放</p>
                   <button type="button" className="sc-inspector-reset" onClick={() => handleRef.current?.resetCamera()}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8a6 6 0 1 1 0 4M4 4v4h4" /></svg>重置视角</button>
                 </div>}

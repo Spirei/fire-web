@@ -20,6 +20,7 @@ import SiteFavicon from "@/components/SiteFavicon";
 import PaletteProvider from "@/components/PaletteProvider";
 import { PALETTE_KEY, paletteVariables, resolvePalette } from "@/lib/palettes";
 import "@/styles/palettes.css";
+import "@/styles/liquid-glass.css";
 import AppDialogHost from "@/components/AppDialogHost";
 
 export async function generateMetadata(): Promise<Metadata> {
