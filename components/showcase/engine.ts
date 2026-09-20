@@ -445,10 +445,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     uMipBias: { value: 1 },
     // 天际线接色：远处地面渐变成背景色，避免地面与背景在水平线上出现一条硬边
     uHorizon: { value: new THREE.Color(0x0a0b0d) },
-    uHorizonMix: { value: 0.85 }
+    uHorizonMix: { value: 0.85 },
+    uHorizonPower: { value: 3 }
   };
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(140, 140),
+    // 冲刺镜头会沿隧道前看数百米；140 米地面会在画面中段露出远端边界，
+    // 浅色背景下尤其像一整片云雾。平面只有两个三角形，扩到远裁剪面之外没有额外几何成本。
+    new THREE.PlaneGeometry(800, 800),
     new THREE.ShaderMaterial({
       uniforms: floorUniforms,
       vertexShader: `
@@ -465,7 +468,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         uniform sampler2D tReflect; uniform sampler2D tNormal; uniform sampler2D tRough;
         uniform vec3 uColor; uniform float uReflectIntensity; uniform float uSpeed; uniform float uTime; uniform float uFlow;
       uniform float uMixBase; uniform float uMixFres; uniform float uNormalAmount; uniform float uMipBias;
-        uniform vec3 uHorizon; uniform float uHorizonMix;
+        uniform vec3 uHorizon; uniform float uHorizonMix; uniform float uHorizonPower;
         varying vec4 vWorld; varying vec4 vReflect; varying vec3 vView;
         float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float vnoise(vec2 p){
@@ -491,11 +494,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           vec3 upView = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
           float fres = pow(1.0 - clamp(dot(upView, viewDir), 0.0, 1.0), 4.0);
           vec3 col = uColor;
-          col = mix(col, refl * uReflectIntensity, clamp(uMixBase + fres * uMixFres, 0.0, 1.0));
+          // 反射强度归零时必须保留地面本色。旧公式仍按 uMixBase 把地面混向黑色反射贴图，
+          // 浅色冲刺因此会出现深灰色“墙”；现在混合权重随反射强度一起退场。
+          float reflectBlend = clamp(uMixBase + fres * uMixFres, 0.0, 1.0) * clamp(uReflectIntensity, 0.0, 1.0);
+          col = mix(col, refl * max(uReflectIntensity, 1.0), reflectBlend);
           // 越贴近天际线（掠射）越靠背景色：浅色模式下原来地面比背景暗一档，交界处能看到一条横线
           // 只压「极掠射」那一条带（fres 再取一次幂）：以前整块中景地面都被洗向天际线色，
           // 车身倒影正好落在那一段、被冲成一片灰雾，看着就是「糊」。现在中景保住反射细节，接缝照旧看不到。
-          col = mix(col, uHorizon, clamp(pow(fres, 2.0) * uHorizonMix, 0.0, 1.0));
+          // 浅色冲刺时二次幂会把天际线接色扩成大片乳白雾团；提高幂次，只在真正贴近地平线的窄带接色。
+          col = mix(col, uHorizon, clamp(pow(fres, uHorizonPower) * uHorizonMix, 0.0, 1.0));
           // 流光：高速时地面上掠过的暖色光带
           float band = vnoise(vec2(vWorld.x * 0.32, vWorld.z * 0.06 + uTime * (0.6 + uSpeed * 0.5)));
           band = pow(max(band - 0.7, 0.0) * 3.2, 2.0);
@@ -1184,6 +1191,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         float radial = smoothstep(0.03, 0.2, r);
         // 透视深度与屏幕半径成反比：统一世界速度，近端快速拉长，远端密集。
         vec3 mainLight = vec3(0.0);
+        float warmLight = 0.0;
         ${lineAngles.map((b, i) => `{
           vec2 railD = (vUv - ${b.origin ? `vec2(${b.origin[0].toFixed(6)}, ${b.origin[1].toFixed(6)})` : "uCenter"}) * vec2(uAspect, 1.0);
           float line = barRect(atan(railD.y, railD.x), ${b.a.toFixed(5)}, ${b.w.toFixed(5)});
@@ -1191,6 +1199,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           float f = fract(phase);
           float dash = smoothstep(0.02, 0.05, f) * (1.0 - smoothstep(0.58, 0.65, f));
           mainLight += vec3(${b.color.r.toFixed(5)}, ${b.color.g.toFixed(5)}, ${b.color.b.toFixed(5)}) * line * dash;
+          ${b.gold ? "warmLight += line * dash;" : ""}
         }`).join("\n        ")}
         // 复用场景深度，只遮实际车体；包围框内的空白和路面继续显示线条。
         vec2 carQ = (vUv - uCarBox.xy) / max(uCarBox.zw, vec2(1e-4));
@@ -1229,8 +1238,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           * radial * (1.0 - hide) * uStrength * uIntensity;
         // 两种主题保持相同空间 / 节奏，浅底用可辨识的冷暖色暗线。
         float mask = max(glow.r, max(glow.g, glow.b));
-        vec3 dayLine = mix(vec3(0.16, 0.23, 0.34), vec3(0.38, 0.24, 0.10),
-          clamp((glow.r - glow.b) * 2.0, 0.0, 1.0));
+        // 亮底不能沿用夜景的“加亮”方式，否则所有线都会被白底洗成灰色。
+        // 以冷蓝 / 暖橙两套实色压到画面上，并从原始光条色差判断所属色系。
+        // 色系由线条配置决定，不能按最终像素亮度猜：暖色线在远端变淡后，红蓝差趋近 0，
+        // 旧判断会把同一根橙线的尾部误判成蓝色。
+        float warmSignal = step(0.00001, warmLight);
+        vec3 dayLine = mix(vec3(0.36, 0.53, 0.70), vec3(0.82, 0.52, 0.31), warmSignal);
         float degrees = mod(ang * 360.0 / TAU + 360.0, 360.0);
         vec3 roadBase = base.rgb;
         ${(TUNNEL?.surfaces ?? []).map(surface => {
@@ -1243,7 +1256,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           }`;
         }).join("\n")}
         vec3 outRgb = uLightMode > 0.5
-          ? mix(base.rgb, dayLine, clamp(mask, 0.0, 0.85))
+          ? mix(base.rgb, dayLine, clamp(mask * 1.25, 0.0, 0.74))
           : roadBase + glow;
         gl_FragColor = vec4(outRgb, base.a);
       }`
@@ -2082,6 +2095,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 天际线接色：浅色背景（#dfe3e8 一带）与夜间背景（近黑）各自接自己的底色
     floorUniforms.uHorizon.value.set(light ? 0xe7ecf2 : 0x090a0c);
     floorUniforms.uHorizonMix.value = light ? 1 : 0.9;
+    floorUniforms.uHorizonPower.value = light ? 8 : 3;
     flowUniforms.uFlowTime.value = elapsed;
     flowUniforms.uFlowStrength.value = sps * sps * CFG.speed.flowStrength;
     tunnelUniforms.uTime.value = roadTravel / CFG.speed.maxSpeed;
@@ -2176,7 +2190,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     scene.background = light ? backdropLight : backdrop;
     scene.backgroundIntensity = light ? 1 : 0.85 + narrativeDay * 0.35;
     // 浅色/影棚：地面跟着背景走亮灰（冲刺时反射会关掉，地面若仍是深色就会和背景断开、底部深色字也看不清）
-    floorUniforms.uColor.value.set(light ? 0xc9ced5 : 0x0b0c0e);
+    floorUniforms.uColor.value.set(light ? 0xd5d9de : 0x0b0c0e);
 
     // HUD
     // HUD 写入都做变更判断：每帧几十次 DOM 写会让浏览器反复重排（滚动发涩的另一个来源）
