@@ -140,6 +140,18 @@ assert.equal(connectedDetail.count, 2 * 16 * 3, 'every face in an arbitrarily or
 connectedView.configure({ maxDepth: 1, maxEdge: .14 });
 assert.equal(connectedMesh.children[0].children[0].geometry.getAttribute('position').count, 2 * 4 * 3, 'import tuning rebuilds the live wire view with the selected density');
 connectedView.dispose(); connectedGeometry.dispose();
+const seamGeometry = new THREE.BufferGeometry();
+seamGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
+  0,0,0, .1,0,0, 2,.5,0,       // long half of one wing panel
+  0,0,0, .1,0,0, 0,.1,0        // adjoining face duplicates both seam vertices (UV / normal split)
+], 3));
+seamGeometry.setIndex([0,1,2, 3,4,5]);
+const seamMesh = new THREE.Mesh(seamGeometry, paint), seamRoot = new THREE.Group(); seamRoot.add(seamMesh);
+const seamView = m.exports.createWireframeView({ maxDepth: 2, maxEdge: .25, filterThinTrim: false });
+seamView.attach(seamRoot); seamView.set('overlay', '#00ff00');
+assert.equal(seamMesh.children[0].children[0].geometry.getAttribute('position').count, 2 * 16 * 3,
+  'position-identical seam vertices are welded for component analysis so an MP4/6 wing subdivides as one panel');
+seamView.dispose(); seamGeometry.dispose();
 const cleanGeometry = new THREE.BufferGeometry();
 cleanGeometry.setAttribute('position', new THREE.Float32BufferAttribute([0,0,0, 1,0,0, 1,1,0, 0,1,0], 3));
 cleanGeometry.setIndex([0,1,2, 0,2,3]);

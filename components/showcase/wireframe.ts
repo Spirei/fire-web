@@ -90,7 +90,18 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
     // 实体继续显示，只从线框索引中剔除，避免三条细长外轮廓看成悬空的“黄瓜”。
     if (index && position.count < 250_000) {
       const parent = new Int32Array(position.count);
+      const canonical = new Int32Array(position.count);
+      const positionOwner = new Map<string, number>();
       for (let i = 0; i < parent.length; i += 1) parent[i] = i;
+      // MP4/6 的翼片在 UV / 法线接缝处复制了近一半顶点，同一块薄板因此在索引拓扑里
+      // 被切成大量孤立三角形。只在连通性分析中按位置焊接；渲染几何、UV 与法线保持原样。
+      for (let i = 0; i < position.count; i += 1) {
+        a.fromBufferAttribute(position, i);
+        const key = `${Math.round(a.x * 1e5)},${Math.round(a.y * 1e5)},${Math.round(a.z * 1e5)}`;
+        const owner = positionOwner.get(key);
+        canonical[i] = owner ?? i;
+        if (owner === undefined) positionOwner.set(key, i);
+      }
       const find = (value: number) => {
         let current = value;
         while (parent[current] !== current) { parent[current] = parent[parent[current]]; current = parent[current]; }
@@ -102,12 +113,12 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
       };
       for (let triangle = 0; triangle < triangles; triangle += 1) {
         const ai = index.getX(triangle * 3), bi = index.getX(triangle * 3 + 1), ci = index.getX(triangle * 3 + 2);
-        union(ai, bi); union(ai, ci);
+        union(canonical[ai], canonical[bi]); union(canonical[ai], canonical[ci]);
       }
       const components = new Map<number, { triangles: number; min: THREE.Vector3; max: THREE.Vector3; longestEdgeSq: number }>();
       triangleComponents = new Int32Array(triangles);
       for (let triangle = 0; triangle < triangles; triangle += 1) {
-        const ai = index.getX(triangle * 3), rootId = find(ai);
+        const ai = index.getX(triangle * 3), rootId = find(canonical[ai]);
         triangleComponents[triangle] = rootId;
         let component = components.get(rootId);
         if (!component) {
