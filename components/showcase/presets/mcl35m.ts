@@ -103,7 +103,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       surfaces: [
         { from: 165.9386, to: 194.0015, color: "#010104", opacity: 0.65 },
         { from: 316.1346, to: 405.2193, color: "#000002", opacity: 0.65 },
-        { from: 194.0015, to: 198.6359, color: "#010103", opacity: 0.65 },
+        { from: 194.0015, to: 197.7645, color: "#010103", opacity: 0.65 },
         { from: 278.9903, to: 316.1346, color: "#000001", opacity: 0.65 }
       ],
       gold: "#a6926d",
@@ -116,7 +116,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       barIntensity: 1,
       lanes: [
         // 左路肩在画面边缘仅约 23px 高，右路肩明显较宽，蓝线接近竖直。
-        { angle: 198.6359, width: 0.15, origin: [0.652572, 0.620690], color: "#6c6c76", opacity: 1, dash: 3 },
+        { angle: 197.7645, width: 0.15, origin: [0.683206, 0.620690], color: "#6e6d78", tailColor: "#32363d", opacity: 1, dash: 3 },
         { angle: 278.9903, width: 0.82, origin: [0.681746, 0.620690], color: "#568092", opacity: 1, dash: 3 }
       ],
       auxCount: 42,

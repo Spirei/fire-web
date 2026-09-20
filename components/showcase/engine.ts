@@ -643,6 +643,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   scene.add(groundFx);
   let ringUniformsRef: { uSweep: { value: number }; uSpeed: { value: number }; uTime: { value: number }; uFade?: { value: number } } | null = null;
   const ringOutlineMats: THREE.MeshBasicMaterial[] = [];
+  const ringOutlines: THREE.Mesh[] = [];
 
   const pool = new THREE.Mesh(
     new THREE.PlaneGeometry(34, 34),
@@ -710,6 +711,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const m = mesh.material as THREE.MeshBasicMaterial;
       m.userData.baseOpacity = m.opacity;
       ringOutlineMats.push(m);
+      ringOutlines.push(mesh);
       groundFx.add(mesh);
     });
     const ringUniforms = {
@@ -835,20 +837,22 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         .map((l, i) => {
           const a = ((l.angle * Math.PI) / 180).toFixed(5);
           const w = ((l.width * Math.PI) / 180).toFixed(5);
-          const seg = (LANE_SEG_SCALE_NUM * (l.dash ?? 1)).toFixed(2);
+          const seg = (LANE_SEG_SCALE_NUM * (l.dash ?? 1) * 0.16).toFixed(3);
           const duty = l.dash ?? 1;
           const on = duty >= 2 ? [0.02, 0.05, 0.58, 0.65] : [0.02, 0.08, 0.62, 0.70];
-          const flow = (0.4 + (l.dash ?? 1) * 0.42 + i * 0.05).toFixed(2);
+          const flow = (Number(seg) * 3.5).toFixed(3);
           const col = new THREE.Color(l.color ?? "#8f9aa8").convertLinearToSRGB();
+          const tail = new THREE.Color(l.tailColor ?? l.color ?? "#8f9aa8").convertLinearToSRGB();
           const fade = (l.opacity ?? 0.6).toFixed(3);
           return `{
             vec2 laneD = (vUv - ${l.origin ? `vec2(${l.origin[0].toFixed(6)}, ${l.origin[1].toFixed(6)})` : "uCenter"}) * vec2(uAspect, 1.0);
             float laneR = length(laneD);
             float lm = barRect(atan(laneD.y, laneD.x), ${a}, ${w}) * ${fade};
-            float lp = log(1.0 + laneR * 5.0) * ${seg} - uTime * (${flow} + 2.55);
+            float lp = ${seg} / max(laneR, 0.025) + uTime * ${flow} + ${(i * 0.371).toFixed(3)};
             float ld = smoothstep(${on[0]}, ${on[1]}, fract(lp)) * (1.0 - smoothstep(${on[2]}, ${on[3]}, fract(lp)));
             lane += lm * ld;
-            laneCol += vec3(${col.r.toFixed(3)}, ${col.g.toFixed(3)}, ${col.b.toFixed(3)}) * lm * ld;
+            laneCol += mix(vec3(${col.r.toFixed(5)}, ${col.g.toFixed(5)}, ${col.b.toFixed(5)}),
+              vec3(${tail.r.toFixed(5)}, ${tail.g.toFixed(5)}, ${tail.b.toFixed(5)}), smoothstep(0.2, 0.58, fract(lp))) * lm * ld;
           }`;
         })
         .join("\n        ")
@@ -1101,12 +1105,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         gRadius = r;
         gDof = uDof;
         float radial = smoothstep(0.03, 0.2, r);
-        // 每道灯独立错相；log 径向深度使近处段长、远处段密，全部向外流动。
+        // 透视深度与屏幕半径成反比：统一世界速度，近端快速拉长，远端密集。
         vec3 mainLight = vec3(0.0);
         ${lineAngles.map((b, i) => `{
           vec2 railD = (vUv - ${b.origin ? `vec2(${b.origin[0].toFixed(6)}, ${b.origin[1].toFixed(6)})` : "uCenter"}) * vec2(uAspect, 1.0);
           float line = barRect(atan(railD.y, railD.x), ${b.a.toFixed(5)}, ${b.w.toFixed(5)});
-          float phase = log(1.0 + length(railD) * 5.0) * ${SEG_SCALE} * 0.48 - uTime * 2.74 + ${(i * 0.371).toFixed(3)};
+          float phase = ${SEG_SCALE} * 0.12 / max(length(railD), 0.025) + uTime * ${SEG_SCALE} * 0.42 + ${(i * 0.371).toFixed(3)};
           float f = fract(phase);
           float dash = smoothstep(0.02, 0.05, f) * (1.0 - smoothstep(0.58, 0.65, f));
           mainLight += vec3(${b.color.r.toFixed(5)}, ${b.color.g.toFixed(5)}, ${b.color.b.toFixed(5)}) * line * dash;
@@ -1135,8 +1139,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         float auxAA = max(fwidth(slotDist), 0.0001);
         float auxLine = (1.0 - smoothstep(max(0.0, slotMax - auxAA), slotMax + auxAA, slotDist))
           * min(1.0, slotMax / auxAA) * step(0.24, hash11(symSlot + 11.3));
-        float auxPhase = fract(log(1.0 + r * 5.0) * (3.2 + h * 2.6) - uTime * 2.15 + h * 3.0);
-        float auxDash = smoothstep(0.08, 0.58, auxPhase) * (1.0 - smoothstep(0.64, 0.70, auxPhase));
+        float auxDepth = 0.5 + h * 0.3;
+        float auxPhase = fract(auxDepth / max(r, 0.025) + uTime * auxDepth * 3.5 + h * 3.0);
+        float auxDash = smoothstep(0.02, 0.06, auxPhase) * (1.0 - smoothstep(0.10, 0.70, auxPhase));
         float upperWall = smoothstep(-0.06, 0.02, d.y);
         float aux = auxLine * auxDash * (0.4 + h * 0.6) * uAuxOpacity * upperWall;
         // 跑道线：逐条画（每条自带颜色 / 段长 / 流动速度），见上面的 laneCode
@@ -1951,8 +1956,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       ringUniformsRef.uTime.value = elapsed;
       ringUniformsRef.uSpeed.value = sps;
       ringUniformsRef.uSweep.value = elapsed * (0.05 + sps * 0.22);
-      // 冲刺时圆圈与两条椭圆线一起淡出：参考视频里车一开走，身后就没有圈了
-      const ringFade = 1 - seg(sps, 0.08, 0.48);
+      // 参考 17 秒高速帧仍可见淡刻度环，保留一层低亮度空间参照。
+      const ringFade = 1 - seg(sps, 0.08, 0.48) * 0.82;
+      // 这是展示台的刻度参照，随车辆跟随机位保留在车下，不遗留在起步点。
+      if (ring) ring.position.z = carTravel;
+      ringOutlines.forEach(mesh => { mesh.position.z = carTravel; });
       if (ringUniformsRef.uFade) ringUniformsRef.uFade.value = ringFade;
       ringOutlineMats.forEach((m) => {
         m.opacity = (m.userData.baseOpacity as number) * ringFade;

@@ -250,7 +250,7 @@ export interface ShowcaseConfig {
           /** 消失点跟随隧道轴的真实投影（默认开启；关掉则固定用 vanish 的画面位置） */
           vanishFollow?: boolean;
           /** 地面车道线（参考视频里从画面左下/右下斜向消失点的灰色标线） */
-          lanes?: Array<{ angle: number; width: number; opacity?: number; dash?: number; color?: string; origin?: [number, number] }>;
+          lanes?: Array<{ angle: number; width: number; opacity?: number; dash?: number; color?: string; tailColor?: string; origin?: [number, number] }>;
           /** 景深强度：光条越远离消失点越虚（0 = 全锐利，默认 1.2） */
           dof?: number;
           /** 主光条切段密度：越大段越短（默认 13 ≈ 每条被切成十几段） */

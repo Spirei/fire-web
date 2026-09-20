@@ -22,7 +22,7 @@ near(ll.y(92)-ul.y(92),140.2833);
 near(lr.y(474)-ur.y(474),206.4485);
 near(lr.x(292)-br.x(292),131.0793);
 assert.deepEqual(tunnel.bars.map(b=>b.color),['#a6926d','#9f8366','#9e7f57','#836d51']);
-assert.deepEqual(tunnel.lanes.map(b=>b.color),['#6c6c76','#568092']);
+assert.deepEqual(tunnel.lanes.map(b=>b.color),['#6e6d78','#568092']);
 assert.equal(tunnel.referenceAspect,W/H);
 console.log('PASS reference rail coordinates, asymmetric gaps, six sampled colors');
 // Reference video sampled every 0.25s after the first rise, with 0.25s onset uncertainty.
@@ -32,3 +32,9 @@ const rmse=Math.sqrt(error.reduce((a,v)=>a+v*v,0)/error.length);
 assert(rmse<12,'Acceleration must stay close to the reference telemetry');
 assert(Math.abs(Math.exp(-speed.response.braking*.25)-174/263)<.02);
 console.log(`PASS reference acceleration / braking (sampled RMSE ${rmse.toFixed(1)} km/h)`);
+
+// Left shoulder may narrow toward the vanishing point, but must never cross its yellow edge.
+for (let x=0; x<=350; x++) assert(bl.y(x)>ll.y(x), `Left rails cross at x=${x}`);
+assert.equal(tunnel.lanes[0].tailColor, '#32363d');
+near(bl.y(92),231.9424);
+console.log('PASS left shoulder stays separate and retains sampled core / tail colors');
