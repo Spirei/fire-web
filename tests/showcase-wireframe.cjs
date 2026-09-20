@@ -68,6 +68,12 @@ skinView.dispose();
 console.log('PASS six colors, wheel transforms, hidden meshes, original/multi-material restoration, shared palette, model switch and disposal');
 // Exercise the engine's real inspector transition: entering must not overwrite the home pose.
 const engine = fs.readFileSync('components/showcase/engine.ts', 'utf8');
+assert.match(engine, /const INSPECTOR_MIN_ZOOM = 0\.015;/, 'inspector must permit cockpit-scale zoom');
+assert.match(engine, /const INSPECTOR_MAX_ZOOM = 400;/, 'inspector must permit Sketchfab-scale zoom out');
+assert.match(engine, /clamp\(r \* 0\.003, 0\.0015, 0\.08\)/, 'near plane follows close camera distance');
+assert.match(engine, /inspectorViewLight\.position\.copy\(camera\.position\)/, 'view light follows camera for underside highlights');
+assert.match(engine, /const baseElev = Math\.atan2\(Math\.max\(0\.2, h\) - targetY, baseRadius\)/, 'dolly keeps a fixed orbit ray instead of curving toward target');
+assert.match(engine, /if \(inspectorOn\) \{ badFrames = 0; softTries = 0; return; \}/, 'white inspector canvas must not trip the render watchdog');
 const transition = engine.slice(engine.indexOf('    setInspector: (on) => {'), engine.indexOf('    setWireframe: (mode, color)'));
 const transitionModule = new Module(__filename, module);
 transitionModule.paths = module.paths;
@@ -84,12 +90,13 @@ module.exports = () => {
  const focusTarget = new THREE.Vector3(1,2,3), focusOffset = focusTarget.clone();
  const camera = new THREE.PerspectiveCamera(30, 1, .1, 400);
  const api = { ${transition} };
- return { set: api.setInspector, state: () => ({ inspectorOn, freeCamera, orbitOn, orbitYaw, racing, speed, userYaw, userPitch, zoomTarget, far: camera.far, focus: focusTarget.toArray() }) };
+ return { set: api.setInspector, state: () => ({ inspectorOn, freeCamera, orbitOn, orbitYaw, racing, speed, userYaw, userPitch, zoomTarget, near: camera.near, far: camera.far, focus: focusTarget.toArray() }) };
 };`, {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText, __filename);
 const inspector = transitionModule.exports();
 const before = inspector.state();
 inspector.set(true);
 assert.equal(inspector.state().far, 5000);
+assert.equal(inspector.state().near, .01);
 assert.equal(inspector.state().racing, false);
 assert.equal(inspector.state().freeCamera, true);
 assert.equal(inspector.state().userYaw, -18, 'inspector enters at configured home yaw');
@@ -98,5 +105,5 @@ assert.equal(inspector.state().zoomTarget, 1.25, 'inspector enters at configured
 inspector.set(true); // repeated open must not overwrite saved state
 inspector.set(false);
 const after = inspector.state();
-for (const key of ['freeCamera','orbitOn','orbitYaw','userYaw','userPitch','zoomTarget','far','focus']) assert.deepEqual(after[key], before[key]);
+for (const key of ['freeCamera','orbitOn','orbitYaw','userYaw','userPitch','zoomTarget','near','far','focus']) assert.deepEqual(after[key], before[key]);
 console.log('PASS inspector isolates racing and restores camera, orbit, focus and clipping range');

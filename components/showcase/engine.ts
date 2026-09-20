@@ -22,7 +22,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { fetchAssetBuffer } from "./assetCache";
 import { splitWheelGeometry } from "./wheels";
 import { createWireframeView } from "./wireframe";
-import { coastStep, boundedZoom } from "./interaction";
+import { coastStep, boundedZoom, wheelPixels } from "./interaction";
 import type {
   ShowcaseCameraKey,
   ShowcaseConfig,
@@ -272,6 +272,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const fillLight = new THREE.DirectionalLight(0x9fc4ff, 0.32);
   fillLight.position.set(-4, 3, 7);
   scene.add(fillLight);
+  // 模型查看器专用观察灯：跟随相机，为座舱、悬挂和底盘提供类似 Sketchfab 的观察方向高光。
+  // 只在查看器开启时点亮，不改变首页叙事与冲刺的既有布光。
+  const inspectorViewLight = new THREE.PointLight(0xf4f7ff, 0, 18, 1.45);
+  const inspectorUnderLight = new THREE.HemisphereLight(0xffffff, 0xb8c5dc, 0);
+  scene.add(inspectorViewLight, inspectorUnderLight);
 
   /* ---------- 1) 双 HDR 环境：FBO 混合 ---------- */
   const pmrem = new THREE.PMREMGenerator(renderer);
@@ -1766,6 +1771,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 用户缩放：滚轮（⌘/Ctrl + 滚轮或触控板捏合）与按钮都改这个倍率，用来放大看细节
   const MIN_ZOOM = CFG.zoom.min;
   const MAX_ZOOM = CFG.zoom.max;
+  const INSPECTOR_MIN_ZOOM = 0.015;
+  const INSPECTOR_MAX_ZOOM = 400;
   let freeCamera = false;
   let inspectorOn = false;
   let inspectorProgress = START_P;
@@ -1776,7 +1783,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const focusRay = new THREE.Raycaster();
   const focusPointer = new THREE.Vector2();
   const zoomLimit = () => {
-    if (inspectorOn) return 80;
+    if (inspectorOn) return INSPECTOR_MAX_ZOOM;
     if (!freeCamera) return MAX_ZOOM;
     const base = CAM_KEYS[0];
     const fit = camera.aspect < CFG.camera.fitMinAspect
@@ -1839,6 +1846,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 主光相应加一点，整车亮度基本不变，只是高光不再聚成一块
     rimLight.intensity = (light ? 0.6 : 0.58) + day * 0.26 + seg(p, 0.42, 0.5) * 0.14 + speedLight * 0.12;
     fillLight.intensity = 0.36 + day * 0.24 + speedLight * 0.52;
+    inspectorViewLight.intensity = inspectorOn ? 1.15 : 0;
+    inspectorUnderLight.intensity = inspectorOn ? 0.42 : 0;
 
     // 相机
     camAt(p);
@@ -1849,7 +1858,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const pitchStep = coastStep(userPitchVel, dt);
       userYaw += yawStep.distance;
       userYawVel = Math.abs(yawStep.velocity) < 0.05 ? 0 : yawStep.velocity;
-      const [pitchMin, pitchMax] = inspectorOn ? [-1.5, 1.5] : [-0.55, 0.95];
+      const [pitchMin, pitchMax] = inspectorOn ? [-Math.PI, Math.PI] : [-0.55, 0.95];
       userPitch = clamp(userPitch + pitchStep.distance, pitchMin, pitchMax);
       userPitchVel = Math.abs(pitchStep.velocity) < 0.0005 ? 0 : pitchStep.velocity;
     }
@@ -1888,14 +1897,23 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const fitAspect = CFG.camera.fitMinAspect;
     const fit = camera.aspect < fitAspect ? clamp(fitAspect / camera.aspect, 1, CFG.camera.fitMaxPullback) : 1;
     const chase = CFG.speed.chaseCamera;
-    const r = THREE.MathUtils.lerp(camState.r * zoom, chase.radius, racingAmt) * Math.pow(fit, 0.8);
+    const fitRadius = Math.pow(fit, 0.8);
+    const baseRadius = THREE.MathUtils.lerp(camState.r, chase.radius, racingAmt) * fitRadius;
+    const r = THREE.MathUtils.lerp(camState.r * zoom, chase.radius, racingAmt) * fitRadius;
     const h = THREE.MathUtils.lerp(camState.h, chase.height, racingAmt);
     const targetY = THREE.MathUtils.lerp(camState.ty, chase.targetY, racingAmt);
     // 关键帧给的是高度，换成仰角后才能和用户的上下拖拽相加；
     // 最终仰角夹在 3° 到 66° 之间：既能贴地看侧面，也不会穿到地面下或翻过头顶。
-    const baseElev = Math.atan2(Math.max(0.2, h) - targetY, r);
+    // 缩放必须沿当前相机 → 轨道焦点的射线直线推进。旧实现用缩放后的 r 重算角度，
+    // 越靠近俯仰越低，从车头/车尾进入时会明显走弧线；基准角只由未缩放机位决定。
+    const baseElev = Math.atan2(Math.max(0.2, h) - targetY, baseRadius);
     // 模型展示允许相机越过地平线进入车底；叙事模式仍锁在地面以上，避免穿过隧道路面。
-    const elev = clamp(baseElev + userPitch * (1 - racingAmt), inspectorOn ? -1.5 : 0.05, inspectorOn ? 1.5 : 1.15);
+    if (inspectorOn) {
+      // 边界约束的是实际仰角，而非叠在初始机位上的用户偏移。
+      const limitedPitch = clamp(baseElev + userPitch, -1.56, 1.56) - baseElev;
+      if (limitedPitch !== userPitch) { userPitch = limitedPitch; userPitchVel = 0; }
+    }
+    const elev = clamp(baseElev + userPitch * (1 - racingAmt), inspectorOn ? -1.56 : 0.05, inspectorOn ? 1.56 : 1.15);
     const horizontal = Math.cos(elev) * r;
     camPos.set(Math.sin(az) * horizontal + chaseLat, targetY + Math.sin(elev) * r, Math.cos(az) * horizontal + follow);
     lookAt.set(camState.tx * (1 - racingAmt) + chaseLat, targetY, camState.tz * (1 - racingAmt) + follow);
@@ -1917,6 +1935,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     shakeOffset.lerp(shakeTarget, clamp(dt * CFG.camera.shakeSmoothing, 0, 1));
     camera.position.copy(camPos).add(shakeOffset);
     camera.lookAt(lookAt);
+    // 超近距离要随镜头距离收近裁剪面，否则固定 0.1 会在进入座舱前切掉方向盘和内饰。
+    // 拉远时恢复较大的 near，保持 400 倍远景下的深度精度。
+    const desiredNear = inspectorOn ? clamp(r * 0.003, 0.0015, 0.08) : 0.1;
+    const desiredFar = inspectorOn ? Math.max(5000, r * 2 + CFG.model.length * 2) : 400;
+    if (Math.abs(camera.near - desiredNear) > 0.0001 || camera.far !== desiredFar) {
+      camera.near = desiredNear;
+      camera.far = desiredFar;
+      camera.updateProjectionMatrix();
+    }
+    inspectorViewLight.position.copy(camera.position);
     if (Math.abs(camera.fov - camState.fovEff) > 0.02) {
       camera.fov += (camState.fovEff - camera.fov) * clamp(dt * 3, 0, 1);
       camera.updateProjectionMatrix();
@@ -2374,6 +2402,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let dragY = 0;
   let dragTime = 0;
   let dragPointer: number | null = null;
+  let dragPan = false;
+  let dragZoom = false;
   const touches = new Map<number, { x: number; y: number }>();
   let tapX = 0, tapY = 0, tapDownAt = 0, tapTravel = 0;
   let lastTapX = 0, lastTapY = 0;
@@ -2409,13 +2439,29 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       for (let o: THREE.Object3D | null = h.object; o && o !== carRoot; o = o.parent) if (!o.visible) return false;
       return true;
     });
-    if (!hit) return;
+    if (!hit) {
+      if (inspectorOn) applyZoom(1 / 0.65);
+      return;
+    }
     focusTarget.copy(hit.point).sub(lookAt).add(focusOffset);
-    zoomTarget = Math.max(MIN_ZOOM, zoomTarget * 0.65);
+    zoomTarget = inspectorOn
+      ? clamp(zoom * hit.distance / Math.max(0.0001, camera.position.distanceTo(lookAt)) * 0.65, INSPECTOR_MIN_ZOOM, INSPECTOR_MAX_ZOOM)
+      : Math.max(MIN_ZOOM, zoomTarget * 0.65);
+    userYawVel = 0; userPitchVel = 0;
+  };
+  const panCamera = (dx: number, dy: number) => {
+    const distance = Math.max(0.01, camera.position.distanceTo(lookAt));
+    const worldPerPixel = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * distance /
+      Math.max(1, canvas.clientHeight || 720);
+    camera.updateMatrixWorld();
+    carHalfA.setFromMatrixColumn(camera.matrixWorld, 0);
+    carHalfB.setFromMatrixColumn(camera.matrixWorld, 1);
+    focusTarget.addScaledVector(carHalfA, -dx * worldPerPixel).addScaledVector(carHalfB, dy * worldPerPixel);
+    focusOffset.copy(focusTarget);
     userYawVel = 0; userPitchVel = 0;
   };
   const onCanvasDown = (e: PointerEvent) => {
-    if (e.button !== 0) return;
+    if (![0, 1, 2].includes(e.button) || (!freeCamera && e.button !== 0)) return;
     if (e.pointerType === "touch") {
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size > 1) {
@@ -2425,6 +2471,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     dragging = true; dragPointer = e.pointerId;
     dragByTouch = e.pointerType === "touch";
+    dragPan = freeCamera && !dragByTouch && (e.shiftKey || e.button === 1 || e.button === 2);
+    dragZoom = freeCamera && !dragByTouch && !dragPan && e.button === 0 && (e.ctrlKey || e.metaKey);
     dragX = tapX = e.clientX; dragY = tapY = e.clientY;
     dragTime = tapDownAt = performance.now(); tapTravel = 0;
     userYawVel = 0; userPitchVel = 0;
@@ -2443,13 +2491,24 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 冲刺中不接收拖拽：否则镜头被转偏，车会跑出轨道、看起来在天上飞。
     // 基准点仍要跟着指针走，否则松开空格那一刻会一次结算掉整段位移，镜头瞬间被甩飞。
     if (racing) return;
+    // Sketchfab 风格轨道相机：Shift / 中键 / 右键拖动平移轨道焦点。
+    if (dragPan) {
+      panCamera(dx, dy);
+      return;
+    }
+    // Ctrl / ⌘ + 左键上下拖动沿视线 dolly，与滚轮共用同一距离范围。
+    if (dragZoom) {
+      applyZoom(Math.exp(dy * 0.008));
+      userYawVel = 0; userPitchVel = 0;
+      return;
+    }
     // 手指（触屏）：只吃横向位移，竖向留给页面滚动，避免「想滚页面却在俯仰」
     const gain = dragByTouch ? 0.42 : 0.3;
     userYaw -= dx * gain;
     userYawVel = clamp(-dx * gain / sampleDt, -240, 240);
     if (dragByTouch && !freeCamera) return;
     // 鼠标上下拖：向上拖 = 升高视角俯视，向下拖 = 降低视角平视/略微仰视
-    const [pitchMin, pitchMax] = inspectorOn ? [-1.5, 1.5] : [-0.55, 0.95];
+    const [pitchMin, pitchMax] = inspectorOn ? [-Math.PI, Math.PI] : [-0.55, 0.95];
     userPitch = clamp(userPitch + dy * 0.0035, pitchMin, pitchMax);
     userPitchVel = clamp(dy * 0.0035 / sampleDt, -2, 2);
   };
@@ -2462,16 +2521,18 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         focusAt(e.clientX, e.clientY); lastTapAt = 0; lastTouchFocusAt = now;
       } else { lastTapAt = now; lastTapX = e.clientX; lastTapY = e.clientY; }
     } else lastTapAt = 0;
-    dragging = false; dragByTouch = false; dragPointer = null;
+    dragging = false; dragByTouch = false; dragPan = false; dragZoom = false; dragPointer = null;
     if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
   };
   const cancelInteraction = () => {
-    dragging = false; dragPointer = null; touches.clear();
+    dragging = false; dragPan = false; dragZoom = false; dragPointer = null; touches.clear();
     userYawVel = 0; userPitchVel = 0; lastTapAt = 0;
   };
   window.addEventListener("blur", cancelInteraction);
   cleanups.push(() => window.removeEventListener("blur", cancelInteraction));
   canvas.addEventListener("pointerdown", onCanvasDown);
+  const stopContextMenu = (e: MouseEvent) => { if (freeCamera) e.preventDefault(); };
+  canvas.addEventListener("contextmenu", stopContextMenu);
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onDragEnd);
   // 浏览器接管滚动 / 捏合放大时会发 pointercancel，这里要结束拖拽状态，
@@ -2479,6 +2540,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   window.addEventListener("pointercancel", onDragEnd);
   cleanups.push(() => {
     canvas.removeEventListener("pointerdown", onCanvasDown);
+    canvas.removeEventListener("contextmenu", stopContextMenu);
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onDragEnd);
     window.removeEventListener("pointercancel", onDragEnd);
@@ -2486,6 +2548,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   // 缩放：⌘/Ctrl + 滚轮（触控板捏合同样走这里）、按钮、双击复位
   const applyZoom = (factor: number) => {
+    if (!Number.isFinite(factor) || factor <= 0) return;
+    if (inspectorOn) {
+      // 查看器不在边界前减速：连续滚轮可以真正进入座舱，也能把整车缩成远处的小模型。
+      zoomTarget = clamp(zoomTarget * factor, INSPECTOR_MIN_ZOOM, INSPECTOR_MAX_ZOOM);
+      return;
+    }
     zoomTarget = boundedZoom(zoomTarget, factor, MIN_ZOOM, zoomLimit());
   };
   let zoomMode = false;
@@ -2500,7 +2568,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     if (!withModifier && !zoomMode && !freeCamera) return;
     e.preventDefault();
     // 往下滚 = 拉远，往上滚 / 双指张开 = 推近看细节
-    applyZoom(Math.exp(e.deltaY * CFG.zoom.wheelStep));
+    applyZoom(Math.exp(wheelPixels(e.deltaY, e.deltaMode, canvas.clientHeight) * CFG.zoom.wheelStep));
   };
   const onDoubleClick = (e: MouseEvent) => {
     if (performance.now() - lastTouchFocusAt < 500) return;
@@ -2546,15 +2614,22 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let pinchBase = 0;
   const onTouchMove = (e: PointerEvent) => {
     if (e.pointerType !== "touch" || !touches.has(e.pointerId)) return;
+    const previous = touches.get(e.pointerId)!;
+    if (inspectorOn && touches.size === 2 && !racing) {
+      // 每个指针事件贡献双指中心位移的一半，同时保留捏合缩放。
+      panCamera((e.clientX - previous.x) / 2, (e.clientY - previous.y) / 2);
+    }
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (touches.size !== 2) return;
+    if (touches.size !== 2 || racing) return;
     const d = pointerDistance();
     if (!pinchBase) {
       pinchBase = d;
       return;
     }
     if (d > 1 && pinchBase > 1) {
-      zoomTarget = boundedZoom(zoomTarget, pinchBase / d, MIN_ZOOM, zoomLimit());
+      zoomTarget = inspectorOn
+        ? clamp(zoomTarget * (pinchBase / d), INSPECTOR_MIN_ZOOM, INSPECTOR_MAX_ZOOM)
+        : boundedZoom(zoomTarget, pinchBase / d, MIN_ZOOM, zoomLimit());
       pinchBase = d;
     }
   };
@@ -2649,6 +2724,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   function watchdog() {
     checkCameraFinite();
+    // 查看器的浅灰画布在极近/极远位置可能五个采样点都接近纯白，这是正常构图，不是 WebGL 白屏。
+    if (inspectorOn) { badFrames = 0; softTries = 0; return; }
     const now = performance.now();
     if (now > probeUntil) return;
     if (now - lastProbe < 500) return;
@@ -2897,6 +2974,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       }
       userYawVel = 0; userPitchVel = 0;
       camera.far = on ? 5000 : 400;
+      camera.near = on ? 0.01 : 0.1;
       camera.updateProjectionMatrix();
     },
     setWireframe: (mode, color) => wireframeView.set(mode, color),
@@ -2923,11 +3001,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         userYawVel = 0;
       }
       if (typeof pose.pitch === "number" && Number.isFinite(pose.pitch)) {
-        userPitch = clamp(pose.pitch, inspectorOn ? -1.5 : -0.55, inspectorOn ? 1.5 : 0.95);
+        userPitch = clamp(pose.pitch, inspectorOn ? -Math.PI : -0.55, inspectorOn ? Math.PI : 0.95);
         userPitchVel = 0;
       }
       if (typeof pose.zoom === "number" && Number.isFinite(pose.zoom)) {
-        zoom = clamp(pose.zoom, MIN_ZOOM, MAX_ZOOM);
+        zoom = inspectorOn
+          ? clamp(pose.zoom, INSPECTOR_MIN_ZOOM, INSPECTOR_MAX_ZOOM)
+          : clamp(pose.zoom, MIN_ZOOM, MAX_ZOOM);
         zoomTarget = zoom;
       }
     },
@@ -2953,6 +3033,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     tunnelStrength: +lightLinesPass.uniforms.uStrength.value.toFixed(3),
     tunnelEnabled: lightLinesPass.enabled,
     camera: camera.position.toArray(),
+    target: lookAt.toArray(),
+    inspector: inspectorOn,
+    clipping: [camera.near, camera.far],
     carScreenBox: lightLinesPass.uniforms.uCarBox.value.toArray(),
     zoom: +zoom.toFixed(2),
     theme,

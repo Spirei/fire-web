@@ -363,7 +363,7 @@ export default function ShowcaseStage({
   // 置顶机位变化就同步给引擎：双击复位回到用户置顶的那一帧（没置顶时传 null = 回到中立角度）
   useEffect(() => {
     handleRef.current?.setHomePose(
-      pinnedPose ? { yaw: pinnedPose.yaw, pitch: pinnedPose.pitch, zoom: pinnedPose.zoom } : null
+      pinnedPose ? { p: pinnedPose.p, yaw: pinnedPose.yaw, pitch: pinnedPose.pitch, zoom: pinnedPose.zoom } : null
     );
   }, [pinnedPose]);
 
@@ -809,7 +809,7 @@ export default function ShowcaseStage({
                       })}
                     </div>
                   </div>}
-                  <p className="sc-wire-help">拖拽环视 <span>·</span> 滚轮或双指缩放</p>
+                  <p className="sc-wire-help">左键环视 <span>·</span> Shift / 右键或双指平移 <span>·</span> 滚轮 / 捏合缩放<br />双击车身聚焦 <span>·</span> 双击背景拉远</p>
                   <button type="button" className="sc-inspector-reset" onClick={() => handleRef.current?.resetCamera()}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8a6 6 0 1 1 0 4M4 4v4h4" /></svg>重置视角</button>
                 </div>}
               </div>

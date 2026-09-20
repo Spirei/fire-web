@@ -15,3 +15,10 @@ export function boundedZoom(value: number, factor: number, min: number, max: num
   if (delta < 0 && next - min < 0.002) return min;
   return next;
 }
+
+/** Normalize mouse wheels (lines/pages) and trackpads (pixels) to the same dolly scale. */
+export function wheelPixels(delta: number, mode: number, viewportHeight: number) {
+  if (!Number.isFinite(delta)) return 0;
+  const pixels = delta * (mode === 1 ? 16 : mode === 2 ? Math.max(1, viewportHeight) : 1);
+  return Math.max(-1000, Math.min(1000, pixels));
+}
