@@ -4127,7 +4127,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_35_ENTRY.frontend],
   software: V0_1_35_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.36" } : item),
   changes: [
-    { title: "Liquid Glass 改为长按接管透镜", kind: "feature", desc: "普通悬停保持安静；鼠标或触屏持续按住 320ms 后才鼓起透镜，拖动时放大内容并呈现边缘折射与色散，松手吸附到最近选项。短按直接选择，激活前移动超过 8px 会取消长按，避免误触；模式与六色色珠共用同一交互。" }, {
+    { title: "Liquid Glass 长按透镜流畅度与清晰度修复", kind: "fix", desc: "长按 320ms 后由同一个动画时钟驱动鼓起、跟随、内容放大和松手吸附，拖动不再触发 React 重绘或反复启动 CSS 过渡。隐藏透镜下重复文字，移除整片灰色和文字彩边，仅保留轻微边缘折射与色散；激活前拖走取消选择，支持减少动态效果。" }, {
     title: "全站配色与统一玻璃材质",
     desc: "设置新增独立配色组，提供中性灰、Liquid Glass、海盐蓝、松林绿、琥珀纸、暮光紫六套深浅配色；原窗口风格入口改为全站配色入口。首页胶囊、模型面板、车型导入、后台卡片与导航共用颜色和材质变量，玻璃效果随配色选择切换；保留行情涨跌与模型原色。个人选择通过偏好 Cookie 与本地存储保存，服务端首帧生效并同步同源标签。",
     kind: "feature"

@@ -1,35 +1,32 @@
 /* Reference: LIQUID GLASS.mp4, 1206 × 382 at 60 fps. A clear rail and a raised drag lens. */
-.lg-control { --lg-travel: .32s cubic-bezier(.2,.9,.3,1); position: relative; padding: 4px; border-radius: 999px; background: rgb(var(--site-ink) / .055); isolation: isolate; touch-action: pan-y; user-select: none; }
+.lg-control { --lg-lift: 0; --lg-zoom: 1; position: relative; padding: 4px; border-radius: 999px; background: rgb(var(--site-ink) / .055); isolation: isolate; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
 .lg-track { display: grid; grid-template-columns: repeat(var(--lg-count), minmax(0, 1fr)); }
 .lg-track button, .lg-copy-item { display: flex; align-items: center; justify-content: center; gap: 5px; height: 44px; min-width: 0; border-radius: 999px; font-size: 11px; font-weight: 550; color: rgb(var(--site-ink)); white-space: nowrap; }
 .lg-track button { position: relative; z-index: 1; cursor: pointer; }
+.lg-original { display: flex; align-items: center; justify-content: center; gap: 5px; color: inherit; }
 .lg-track button svg, .lg-copy-item svg { width: 15px; height: 15px; flex: none; }
 .lg-track button[aria-pressed="true"] { color: rgb(var(--site-accent)); }
 .lg-track button:focus-visible { outline: 2px solid rgb(var(--site-accent)); outline-offset: 3px; }
-.lg-lens { position: absolute; inset: 4px auto 4px 4px; width: calc((100% - 8px) / var(--lg-count)); pointer-events: none; transform: translateX(calc(var(--lg-position) * 100%)); transition: transform var(--lg-travel); }
-.lg-lens-body { position: absolute; inset: 0; border-radius: 999px; background: rgb(var(--site-surface) / .85); box-shadow: 0 1px 4px #00000012; transition: transform .24s cubic-bezier(.2,.8,.25,1), background .2s, box-shadow .24s; }
-.lg-magnify, .lg-refraction { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; opacity: 0; transition: opacity .12s; }
-.lg-copy-track { display: grid; grid-template-columns: repeat(var(--lg-count), minmax(0,1fr)); width: calc(var(--lg-count) * 100%); height: 100%; transform: translateX(calc(var(--lg-position) * -100% / var(--lg-count))); transition: transform var(--lg-travel); }
-.lg-copy-item { height: 100%; color: #008bdc; }
+.lg-lens { position: absolute; top: 4px; left: 4px; width: var(--lg-width, calc((100% - 8px) / var(--lg-count))); height: var(--lg-height, 44px); pointer-events: none; opacity: var(--lg-visible, 1); transform: translate3d(var(--lg-x, 0px), var(--lg-y, 0px), 0); }
+.lg-lens-body { position: absolute; inset: 0; border-radius: 999px; background: rgb(var(--site-surface) / .85); box-shadow: 0 1px 4px #00000012; }
+.lg-copy-window { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; visibility: hidden; }
+.lg-magnify { position: absolute; inset: 0; transform: scale(var(--lg-zoom)); transform-origin: center; }
+.lg-copy-track { position: absolute; top: 50%; left: 0; display: grid; grid-template-columns: repeat(var(--lg-count), minmax(0,1fr)); width: var(--lg-track-width); height: 44px; transform: translate3d(var(--lg-copy-x, 0px), -50%, 0); }
+.lg-copy-item { height: 44px; color: #008bdc; }
 .lg-swatch { display: block; width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 1px #0002; }
 .lg-filter-defs { position: absolute; pointer-events: none; }
-.lg-inactive .lg-lens { opacity: 0; }
 .lg-optical { background: rgb(var(--site-surface) / .24); border: 1px solid rgb(var(--site-surface) / .75); box-shadow: inset 0 1px 0 #ffffffb0, inset 0 -1px 1px #0000000c, 0 2px 8px #00000005; -webkit-backdrop-filter: blur(3px) saturate(1.1); backdrop-filter: blur(3px) saturate(1.1); touch-action: none; }
-.lg-optical .lg-lens-body { background: rgb(var(--site-ink) / .075); box-shadow: none; }
+.lg-optical .lg-lens-body { background: color-mix(in srgb, rgb(var(--site-ink) / .065), rgb(var(--site-surface) / .72) calc(var(--lg-lift) * 100%)); box-shadow: 0 0 0 .5px rgb(var(--site-ink) / calc(var(--lg-lift) * .12)), inset 0 1px 1px rgb(255 255 255 / calc(var(--lg-lift) * .95)), inset 0 -1px 1px rgb(255 255 255 / calc(var(--lg-lift) * .8)), 0 5px 12px rgb(0 0 0 / calc(var(--lg-lift) * .10)); }
 .lg-optical .lg-track button[aria-pressed="true"] { color: #008bdc; }
-.lg-optical.lg-active { --lg-travel: .075s linear; }
-.lg-optical.lg-active .lg-lens { z-index: 3; }
-.lg-optical.lg-active .lg-lens-body { transform: scale(1.2,1.42); background: rgb(var(--site-surface) / .72); box-shadow: inset 0 1px 1px #fffffff0, inset 0 -1px 1px #ffffffc8, inset 1px 0 1px #ffffffa8, 0 0 0 .65px #747a8238, 0 7px 15px #0000001c; }
-.lg-optical.lg-active .lg-magnify, .lg-optical.lg-active .lg-refraction { opacity: 1; }
-.lg-optical.lg-active .lg-magnify { transform: scale(1.085,1.045); }
-.lg-optical .lg-lens-body::after { content: ""; position: absolute; inset: -1px; padding: 1.2px; border-radius: inherit; pointer-events: none; opacity: 0; background: conic-gradient(from 110deg, transparent 0 20%, #43f4ff 21%, #7e70ff 23%, #ff80ce 25%, #fff895 27%, transparent 30% 70%, #c5f6ff 74%, #fff9b4 77%, transparent 80%); -webkit-mask: linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; transition: opacity .15s; }
-.lg-optical.lg-active .lg-lens-body::after { opacity: .58; }
+.lg-optical[data-raised="true"] .lg-lens { z-index: 3; will-change: transform; }
+.lg-optical[data-raised="true"] .lg-track { -webkit-mask-image: linear-gradient(90deg, #000 0 var(--lg-cut-left), transparent var(--lg-cut-left) var(--lg-cut-right), #000 var(--lg-cut-right)); mask-image: linear-gradient(90deg, #000 0 var(--lg-cut-left), transparent var(--lg-cut-left) var(--lg-cut-right), #000 var(--lg-cut-right)); }
+.lg-optical[data-raised="true"] .lg-copy-window { visibility: visible; }
+.lg-optical .lg-lens-body::after { content: ""; position: absolute; inset: 0; padding: .7px; border-radius: inherit; pointer-events: none; opacity: calc(var(--lg-lift) * .42); background: conic-gradient(from 110deg, transparent 0 20%, #80dfe8 21%, #b8aafa 23%, #efb6db 25%, #f6e9b8 27%, transparent 30% 70%, #d7f6fa 74%, #f5ebc9 77%, transparent 80%); -webkit-mask: linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
 .lg-colors { margin-top: 8px; }
-.lg-optical.lg-colors .lg-lens-body { background: #ffffff35; box-shadow: inset 0 1px 1px #fff9,0 1px 3px #0001; }
+.lg-optical.lg-colors:not([data-raised="true"]) .lg-lens-body { background: #ffffff35; box-shadow: inset 0 1px 1px #fff9,0 1px 3px #0001; }
 @media (prefers-reduced-motion: reduce) {
   .lg-control *, .lg-control *::after { transition: none !important; }
-  .lg-optical.lg-active .lg-lens-body { transform: none; }
-  .lg-optical.lg-active .lg-magnify { transform: none; }
+  .lg-magnify { filter: none !important; }
 }
 @media (prefers-contrast: more) { .lg-control { background: rgb(var(--site-surface)); border: 1px solid rgb(var(--site-edge)); } }
 /* Shared clear-glass surface, rather than the previous opaque frosted panel. */

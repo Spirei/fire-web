@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { glassDisplacement, glassPosition } from "@/lib/liquidGlass";
+import { glassDisplacement, glassFrame, glassPosition, stepGlassSpring } from "@/lib/liquidGlass";
 import { useSitePalette } from "./PaletteProvider";
+
 export interface GlassItem { label: string; icon?: ReactNode; color?: string }
 const LONG_PRESS_MS = 320;
 const PRESS_SLOP_PX = 8;
-/** Same visible track inside/outside the moving lens; no duplicated interactive controls. */
+
 export default function LiquidGlassControl({ items, index, onChange, label, swatches = false, inactive = false }: {
   items: readonly GlassItem[]; index: number; onChange: (index: number) => void; label: string; swatches?: boolean; inactive?: boolean;
 }) {
@@ -13,95 +14,141 @@ export default function LiquidGlassControl({ items, index, onChange, label, swat
   const glass = palette === "liquid";
   const id = useId().replace(/:/g, "");
   const ref = useRef<HTMLDivElement>(null);
-  const pointer = useRef<number | null>(null);
-  const positionRef = useRef(index);
-  const heldRef = useRef(false);
-  const pressOrigin = useRef({ x: 0, y: 0 });
-  const pressX = useRef(0);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [position, setPosition] = useState(index);
-  const [held, setHeld] = useState(false);
   const [map, setMap] = useState("");
-  useEffect(() => { if (pointer.current === null) { positionRef.current = index; setPosition(index); } }, [index]);
-  useEffect(() => {
-    if (!glass || !ref.current) return;
-    const update = () => {
-      const bounds = ref.current!.getBoundingClientRect();
-      const width = Math.max(2, Math.round((bounds.width - 8) / items.length));
-      const height = Math.max(2, Math.round(bounds.height - 8));
-      const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (ctx) { const pixels = ctx.createImageData(width,height); pixels.data.set(glassDisplacement(width,height)); ctx.putImageData(pixels,0,0); setMap(canvas.toDataURL()); }
+  const current = useRef({ index, onChange, glass, inactive, count: items.length });
+  current.current = { index, onChange, glass, inactive, count: items.length };
+  const motion = useRef({
+    x: { value: index, velocity: 0 }, lift: { value: 0, velocity: 0 }, target: index,
+    raised: false, pointer: null as number | null, pressX: 0, pressY: 0, lastX: 0, cancelled: false,
+    bounds: { left: 0, top: 0, width: 1, height: 44 }, slot: 1,
+    timer: null as ReturnType<typeof setTimeout> | null, raf: 0, lastTime: 0, reduced: false,
+  });
+
+  const paint = () => {
+    const el = ref.current, m = motion.current;
+    if (!el) return;
+    const f = glassFrame(m.x.value, m.lift.value, m.x.velocity, m.slot, m.bounds.height);
+    const optical = current.current.glass && f.lift > .002;
+    el.dataset.raised = optical ? "true" : "false";
+    el.dataset.dragging = m.raised ? "true" : "false";
+    const values: Record<string, string> = {
+      "--lg-x": `${f.left}px`, "--lg-y": `${f.top}px`, "--lg-width": `${f.width}px`, "--lg-height": `${f.height}px`,
+      "--lg-track-width": `${m.slot * current.current.count}px`, "--lg-copy-x": `${f.copyX}px`,
+      "--lg-zoom": `${f.zoom}`, "--lg-lift": `${f.lift}`,
+      "--lg-cut-left": `${Math.max(0, f.left + 2)}px`, "--lg-cut-right": `${Math.max(0, f.left + f.width - 2)}px`,
     };
-    const observer = new ResizeObserver(update); observer.observe(ref.current); update();
-    return () => observer.disconnect();
-  }, [glass,items.length]);
-  const updatePosition = (x: number) => {
-    const r = ref.current!.getBoundingClientRect();
-    const p = glassPosition(x, r.left + 4, r.width - 8, items.length);
-    positionRef.current = p; setPosition(p);
+    for (const [key, value] of Object.entries(values)) el.style.setProperty(key, value);
+    el.style.setProperty("--lg-visible", current.current.inactive && !optical ? "0" : "1");
   };
-  const clearLongPress = () => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-    longPressTimer.current = null;
+  const tick = (time: number) => {
+    const m = motion.current;
+    const dt = m.lastTime ? (time - m.lastTime) / 1000 : 1 / 60;
+    m.lastTime = time;
+    m.x = stepGlassSpring(m.x, m.target, dt, m.raised ? 48 : 28);
+    m.lift = stepGlassSpring(m.lift, m.raised ? 1 : 0, dt, m.raised ? 27 : 24);
+    const done = Math.abs(m.x.value - m.target) < .0001 && Math.abs(m.x.velocity) < .001 && Math.abs(m.lift.value - (m.raised ? 1 : 0)) < .0001 && Math.abs(m.lift.velocity) < .001;
+    if (done) { m.x = { value: m.target, velocity: 0 }; m.lift = { value: m.raised ? 1 : 0, velocity: 0 }; }
+    paint();
+    m.raf = done ? 0 : requestAnimationFrame(tick);
+    if (done) m.lastTime = 0;
   };
-  const cancel = () => {
-    clearLongPress(); pointer.current = null; heldRef.current = false; setHeld(false);
-    positionRef.current = index; setPosition(index);
+  const animate = () => {
+    const m = motion.current;
+    if (m.reduced) {
+      m.x = { value: m.target, velocity: 0 }; m.lift = { value: 0, velocity: 0 }; paint(); return;
+    }
+    if (!m.raf) m.raf = requestAnimationFrame(tick);
   };
-  useEffect(() => { window.addEventListener("blur", cancel); return () => window.removeEventListener("blur", cancel); }, [index]);
-  useEffect(() => () => clearLongPress(), []);
-  useEffect(() => { if (!glass) cancel(); }, [glass]);
-  const content = (item: GlassItem) => <>{item.color ? <i className="lg-swatch" style={{ backgroundColor: item.color }} /> : <>{item.icon}<span>{item.label}</span></>}</>;
-  return <div ref={ref} className={`lg-control${glass ? " lg-optical" : ""}${swatches ? " lg-colors" : ""}${held ? " lg-active" : ""}${inactive && !held ? " lg-inactive" : ""}`}
-    role="group" aria-label={label} style={{ "--lg-count": items.length, "--lg-position": position } as CSSProperties}
+  const clearPressTimer = () => {
+    if (motion.current.timer !== null) clearTimeout(motion.current.timer);
+    motion.current.timer = null;
+  };
+  const release = () => {
+    const m = motion.current, pointer = m.pointer;
+    m.pointer = null; m.raised = false; clearPressTimer();
+    if (pointer !== null && ref.current?.hasPointerCapture(pointer)) ref.current.releasePointerCapture(pointer);
+  };
+  const cancel = () => { release(); motion.current.target = current.current.index; animate(); };
+  const positionAt = (x: number) => {
+    const m = motion.current;
+    return glassPosition(x, m.bounds.left, m.bounds.width, current.current.count);
+  };
+
+  useEffect(() => {
+    if (motion.current.pointer === null) { motion.current.target = index; animate(); }
+  }, [index, inactive]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      const r = el.getBoundingClientRect(), border = el.clientLeft;
+      const width = el.clientWidth - 8, height = el.clientHeight - 8;
+      if (width <= 0 || height <= 0 || !items.length) return;
+      motion.current.bounds = { left: r.left + border + 4, top: r.top + border + 4, width, height };
+      motion.current.slot = width / items.length;
+      if (glass) {
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(2, Math.round(width / items.length)); canvas.height = Math.max(2, height);
+        const ctx = canvas.getContext("2d");
+        if (ctx) { const pixels = ctx.createImageData(canvas.width, canvas.height); pixels.data.set(glassDisplacement(canvas.width, canvas.height)); ctx.putImageData(pixels, 0, 0); setMap(canvas.toDataURL()); }
+      }
+      paint();
+    };
+    const observer = new ResizeObserver(update); observer.observe(el); update();
+    const media = matchMedia("(prefers-reduced-motion: reduce)");
+    const reduce = () => { motion.current.reduced = media.matches; cancelAnimationFrame(motion.current.raf); motion.current.raf = 0; motion.current.lastTime = 0; animate(); };
+    motion.current.reduced = media.matches;
+    media.addEventListener("change", reduce);
+    window.addEventListener("blur", cancel);
+    window.addEventListener("resize", cancel);
+    if (!glass) cancel();
+    return () => { observer.disconnect(); media.removeEventListener("change", reduce); window.removeEventListener("blur", cancel); window.removeEventListener("resize", cancel); clearPressTimer(); cancelAnimationFrame(motion.current.raf); motion.current.raf = 0; };
+  }, [glass, items.length]);
+
+  const content = (item: GlassItem) => item.color ? <i className="lg-swatch" style={{ backgroundColor: item.color }} /> : <>{item.icon}<span>{item.label}</span></>;
+  return <div ref={ref} className={`lg-control${glass ? " lg-optical" : ""}${swatches ? " lg-colors" : ""}`}
+    role="group" aria-label={label} style={{ "--lg-count": items.length, "--lg-visible": inactive ? 0 : 1 } as CSSProperties}
     onPointerDown={event => {
-      if (!glass || pointer.current !== null || !event.isPrimary || event.button !== 0) return;
-      pointer.current = event.pointerId; pressOrigin.current = { x: event.clientX, y: event.clientY }; pressX.current = event.clientX;
-      ref.current?.setPointerCapture(event.pointerId); clearLongPress();
-      longPressTimer.current = setTimeout(() => {
-        if (pointer.current !== event.pointerId) return;
-        heldRef.current = true; setHeld(true); updatePosition(pressX.current);
+      const m = motion.current;
+      if (!glass || m.pointer !== null || !event.isPrimary || event.button !== 0) return;
+      const el = ref.current!, r = el.getBoundingClientRect();
+      m.bounds.left = r.left + el.clientLeft + 4; m.bounds.top = r.top + el.clientTop + 4;
+      m.pointer = event.pointerId; m.pressX = m.lastX = event.clientX; m.pressY = event.clientY; m.cancelled = false;
+      el.setPointerCapture(event.pointerId);
+      const pointer = event.pointerId;
+      m.timer = setTimeout(() => {
+        m.timer = null;
+        if (m.pointer !== pointer || m.cancelled) return;
+        m.raised = true; m.target = positionAt(m.lastX); animate();
       }, LONG_PRESS_MS);
     }}
     onPointerMove={event => {
-      if (pointer.current !== event.pointerId) return;
-      pressX.current = event.clientX;
-      if (heldRef.current) updatePosition(event.clientX);
-      else if (Math.hypot(event.clientX - pressOrigin.current.x, event.clientY - pressOrigin.current.y) > PRESS_SLOP_PX) clearLongPress();
+      const m = motion.current;
+      if (m.pointer !== event.pointerId) return;
+      m.lastX = event.clientX;
+      if (m.raised) { m.target = positionAt(event.clientX); animate(); }
+      else if (Math.hypot(event.clientX - m.pressX, event.clientY - m.pressY) > PRESS_SLOP_PX) { m.cancelled = true; clearPressTimer(); }
     }}
     onPointerUp={event => {
-      if(pointer.current !== event.pointerId) return;
-      clearLongPress();
-      const bounds = ref.current!.getBoundingClientRect();
-      const selected = heldRef.current
-        ? Math.round(positionRef.current)
-        : Math.round(glassPosition(event.clientX, bounds.left + 4, bounds.width - 8, items.length));
-      pointer.current = null; heldRef.current = false; setHeld(false); setPosition(selected); positionRef.current = selected;
-      if(ref.current?.hasPointerCapture(event.pointerId)) ref.current.releasePointerCapture(event.pointerId);
-      onChange(selected);
+      const m = motion.current;
+      if (m.pointer !== event.pointerId) return;
+      const inside = event.clientX >= m.bounds.left - 4 && event.clientX <= m.bounds.left + m.bounds.width + 4 && event.clientY >= m.bounds.top - 4 && event.clientY <= m.bounds.top + m.bounds.height + 4;
+      if (!m.raised && (m.cancelled || !inside)) { cancel(); return; }
+      const selected = Math.round(positionAt(event.clientX));
+      release(); m.target = selected; animate(); current.current.onChange(selected);
     }}
-    onPointerCancel={cancel} onLostPointerCapture={() => { if(pointer.current !== null) cancel(); }}>
-    <div className="lg-track">{items.map((item,i) => <button type="button" key={item.label} aria-label={item.label} aria-pressed={!inactive && index === i}
-      onClick={event => { if (!glass || event.detail === 0) onChange(i); }}>{content(item)}</button>)}</div>
-    <div className="lg-lens" aria-hidden="true" inert>
-      <div className="lg-lens-body">
-        <div className="lg-refraction" style={map ? { backdropFilter: `url(#${id}-optics)`, WebkitBackdropFilter: `url(#${id}-optics)` } : undefined} />
-        <div className="lg-magnify" style={map ? { filter: `url(#${id}-optics)` } : undefined}>
-          <div className="lg-copy-track">{items.map(item => <span className="lg-copy-item" key={item.label}>{content(item)}</span>)}</div>
-        </div>
-      </div>
-    </div>
+    onPointerCancel={cancel} onLostPointerCapture={() => { if (motion.current.pointer !== null) cancel(); }}>
+    <div className="lg-track">{items.map((item, i) => <button type="button" key={item.label} aria-label={item.label} aria-pressed={!inactive && index === i}
+      onClick={event => { if (!glass || event.detail === 0) { motion.current.target = i; animate(); onChange(i); } }}><span className="lg-original">{content(item)}</span></button>)}</div>
+    <div className="lg-lens" aria-hidden="true" inert><div className="lg-lens-body">
+      <div className="lg-copy-window"><div className="lg-magnify" style={glass && map ? { filter: `url(#${id}-rim)` } : undefined}>
+        <div className="lg-copy-track">{items.map(item => <span className="lg-copy-item" key={item.label}>{content(item)}</span>)}</div>
+      </div></div>
+    </div></div>
     {glass && map && <svg className="lg-filter-defs" aria-hidden="true" width="0" height="0"><defs>
-      <filter id={`${id}-optics`} x="-12%" y="-20%" width="124%" height="140%" colorInterpolationFilters="sRGB">
+      <filter id={`${id}-rim`} x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
         <feImage href={map} x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" result="rim" />
-        <feDisplacementMap in="SourceGraphic" in2="rim" scale="9" xChannelSelector="R" yChannelSelector="G" result="red" />
-        <feDisplacementMap in="SourceGraphic" in2="rim" scale="7" xChannelSelector="R" yChannelSelector="G" result="green" />
-        <feDisplacementMap in="SourceGraphic" in2="rim" scale="5" xChannelSelector="R" yChannelSelector="G" result="blue" />
-        <feColorMatrix in="red" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r" />
-        <feColorMatrix in="green" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g" />
-        <feColorMatrix in="blue" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b" />
-        <feBlend in="r" in2="g" mode="screen" result="rg" /><feBlend in="rg" in2="b" mode="screen" />
+        <feDisplacementMap in="SourceGraphic" in2="rim" scale="1.6" xChannelSelector="R" yChannelSelector="G" />
       </filter>
     </defs></svg>}
   </div>;
