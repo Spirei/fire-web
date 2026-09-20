@@ -158,6 +158,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     raceActive: "松手减速",
     raceCap: "追赶极限",
     raceHint: "按住 空格 或 长按按钮",
+    raceHintTouch: "长按按钮发车",
     dragHint: "↻ 拖拽环视 · 上下俯仰",
     zoomHint: "⌘ / Ctrl + 滚轮缩放",
     touchHint: "横滑环视 · 双指缩放 · 双击复位",

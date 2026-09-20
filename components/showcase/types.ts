@@ -305,6 +305,8 @@ export interface ShowcaseConfig {
     raceActive?: string;
     raceCap?: string;
     raceHint?: string;
+    /** 触屏版发车提示（手机 / 平板上没有空格键） */
+    raceHintTouch?: string;
     dragHint?: string;
     zoomHint?: string;
     /** 手机端手势提示（横滑环视 / 双指缩放 / 双击复位） */
@@ -390,7 +392,7 @@ export interface ShowcaseHandle {
   /** 应用机位：刷新或重建后回到用户置顶的角度（滚动位置由组件负责） */
   applyPose: (pose: { yaw?: number; pitch?: number; zoom?: number }) => void;
   /** 用户置顶的机位：双击复位回到这里（null = 没置顶，回到中立角度） */
-  setHomePose: (pose: { yaw?: number; pitch?: number; zoom?: number } | null) => void;
+  setHomePose: (pose: { p?: number; yaw?: number; pitch?: number; zoom?: number } | null) => void;
   /** 手动设置滚动进度（调试 / 截图用） */
   setProgress: (p: number, settle?: number) => void;
   /** 调试用：当前平滑后的进度、速度、渲染倍率、冲刺与缩放状态 */

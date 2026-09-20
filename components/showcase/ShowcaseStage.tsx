@@ -17,6 +17,8 @@ const WIRE_COLORS = [
 const RPM_TICKS = 20;
 /** 用户置顶的默认机位（进度 + 拖拽角度 + 缩放），刷新 / 重开页面都回到这里 */
 const PIN_KEY = "fire:showcase:pose";
+const WIRE_MODE_KEY = "fire:showcase:wire-mode";
+const WIRE_COLOR_KEY = "fire:showcase:wire-color";
 type ShowcasePose = { p: number; yaw: number; pitch: number; zoom: number };
 
 /**
@@ -98,8 +100,8 @@ export default function ShowcaseStage({
     setWirePanel(on); wirePanelRef.current = on;
     handleRef.current?.setInspector(on);
   };
-  const [wireMode, setWireMode] = useState<WireframeMode>("native");
-  const [wireColor, setWireColor] = useState("#00ff00");
+  const [wireMode, setWireMode] = usePersistedState<WireframeMode>(WIRE_MODE_KEY, "native");
+  const [wireColor, setWireColor] = usePersistedState(WIRE_COLOR_KEY, "#00ff00");
   const wireRef = useRef({ mode: wireMode, color: wireColor });
   const changeWire = (mode: WireframeMode, color = wireColor) => {
     setWireMode(mode); setWireColor(color);
@@ -273,7 +275,7 @@ export default function ShowcaseStage({
         if (pinned) {
           handle.applyPose(pinned);
           // 双击复位也回到这一帧（引擎自己归零会回到「不是我们设置的固定机位」）
-          handle.setHomePose({ yaw: pinned.yaw, pitch: pinned.pitch, zoom: pinned.zoom });
+          handle.setHomePose({ p: pinned.p, yaw: pinned.yaw, pitch: pinned.pitch, zoom: pinned.zoom });
         }
         handle.setInspector(wirePanelRef.current);
         handleRef.current = handle;
@@ -720,6 +722,7 @@ export default function ShowcaseStage({
     raceActive: config.ui?.raceActive ?? config.race?.label ?? "RE-ENGAGE TO SLOW",
     raceCap: config.ui?.raceCap ?? config.race?.cap ?? "CHASE THE LIMIT",
     raceHint: config.ui?.raceHint ?? "HOLD [SPACE] OR PRESS & HOLD",
+    raceHintTouch: config.ui?.raceHintTouch ?? "PRESS & HOLD",
     dragHint: config.ui?.dragHint ?? "↻ DRAG TO EXPLORE",
     zoomHint: config.ui?.zoomHint ?? "⌘ / CTRL + SCROLL TO ZOOM",
     touchHint: config.ui?.touchHint ?? "SWIPE TO LOOK · PINCH TO ZOOM · DOUBLE TAP RESET",
@@ -766,6 +769,24 @@ export default function ShowcaseStage({
                     index={WIRE_COLORS.findIndex(([, color]) => color === wireColor)}
                     onChange={index => changeWire(wireMode === "native" ? "overlay" : wireMode, WIRE_COLORS[index][1])}
                     items={WIRE_COLORS.map(([label, color]) => ({ label: `${label}线框`, color }))} />
+                  {models && models.length > 1 && <div className="sc-inspector-models" aria-label="选择展示车型">
+                    <div className="sc-wire-color-label"><span>展示车型</span><span>{models.find(item => item.id === currentModel)?.label}</span></div>
+                    <div className="sc-inspector-model-list">
+                      {models.map(item => {
+                        const loading = item.status === "loading" && item.id !== currentModel;
+                        return <button key={item.id} type="button"
+                          className={`fire-cap${item.id === currentModel ? " on" : ""}${loading ? " loading" : ""}`}
+                          aria-pressed={item.id === currentModel}
+                          onClick={() => onModelChange?.(item.id)}
+                          onPointerEnter={() => onModelIntent?.(item.id)}
+                          onFocus={() => onModelIntent?.(item.id)}
+                          onTouchStart={() => onModelIntent?.(item.id)}>
+                          <span>{item.label}</span>
+                          {loading && <i style={{ width: `${Math.round((item.progress ?? 0) * 100)}%` }} />}
+                        </button>;
+                      })}
+                    </div>
+                  </div>}
                   <p className="sc-wire-help">拖拽环视 <span>·</span> 滚轮或双指缩放</p>
                   <button type="button" className="sc-inspector-reset" onClick={() => handleRef.current?.resetCamera()}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8a6 6 0 1 1 0 4M4 4v4h4" /></svg>重置视角</button>
                 </div>}
@@ -927,7 +948,11 @@ export default function ShowcaseStage({
                 <span>{racing ? ui.raceActive : ui.raceIdle}</span>
                 <em>→</em>
               </button>
-              <div className="sc-ctr-hint">{ui.raceHint}</div>
+              <div className="sc-ctr-hint">
+                {/* 触屏没有空格键：两版文案都渲染，由 CSS 按 (hover: none) 选一版 */}
+                <span className="kbd-only">{ui.raceHint}</span>
+                <span className="touch-only">{ui.raceHintTouch}</span>
+              </div>
             </div>
 
             <div className="sc-row sc-hint-drag">

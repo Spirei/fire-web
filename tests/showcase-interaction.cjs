@@ -28,7 +28,7 @@ const harness = `module.exports = function(boundedZoom) {
  let now=1000, dragging=false, dragPointer=null, dragByTouch=false, dragX=0,dragY=0,dragTime=0;
  let tapX=0,tapY=0,tapDownAt=0,tapTravel=0,lastTapX=0,lastTapY=0,lastTapAt=0,lastTouchFocusAt=-Infinity;
  let userYaw=0,userPitch=0,userYawVel=0,userPitchVel=0,zoomTarget=1,focusCount=0;
- const touches=new Map(), freeCamera=true,racing=false,MIN_ZOOM=.55;
+ const touches=new Map(), freeCamera=true,racing=false,inspectorOn=false,MIN_ZOOM=.55;
  const zoomLimit=()=>5,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
  const performance={now:()=>now},canvas={setPointerCapture(){},hasPointerCapture(){return true},releasePointerCapture(){}};
  const focusAt=()=>{focusCount++};

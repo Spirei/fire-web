@@ -4,6 +4,8 @@ import { getAuthUser, isAdmin } from "@/lib/auth";
 import { modelUrlExists, orderRanker, readRegistry, readStoredModels, resolveOrder } from "@/lib/showcaseModels";
 import { SHOWCASE_MODELS } from "@/components/showcase/presets/models";
 import ModelImporter from "@/components/showcase/ModelImporter";
+import "@/components/showcase/model-importer.css";
+import "@/components/showcase/capsule.css";
 
 export const dynamic = "force-dynamic";
 

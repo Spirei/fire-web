@@ -7,8 +7,6 @@ import ModelPreview from "./ModelPreview";
 import { buildImportedConfig } from "./presets/models";
 import type { ShowcaseModelParams } from "./types";
 import { showToast } from "@/lib/toast";
-import "./model-importer.css";
-import "./capsule.css";
 
 /** 服务端体检报告（与 lib/glbInspect.ts 的 GlbReport 对齐） */
 export interface ImportReport {

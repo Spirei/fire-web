@@ -8,13 +8,13 @@ export function createWireframeView() {
   let color = "#00ff00";
   let root: THREE.Object3D | null = null;
   const entries: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[]; overlay: THREE.Mesh }[] = [];
-  const overlayMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false });
+  const overlayMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
   // Offset in clip space, never inflate the mesh (which separates narrow panels / wheel parts).
   overlayMaterial.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace("#include <project_vertex>",
-      "#include <project_vertex>\ngl_Position.z -= 0.00001 * gl_Position.w;");
+      "#include <project_vertex>\ngl_Position.z -= 0.00008 * gl_Position.w;");
   };
-  const pureMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false });
+  const pureMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
   pureMaterial.onBeforeCompile = overlayMaterial.onBeforeCompile;
   const depthMaterial = new THREE.MeshBasicMaterial({ colorWrite: false });
 

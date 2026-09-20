@@ -23,6 +23,7 @@ view.set('overlay', '#00ff00');
 const overlay = wheel.children[0];
 assert.equal(overlay.geometry, geometry);
 assert.equal(wheel.material, paint);
+assert.equal(overlay.material.side, THREE.DoubleSide, 'thin wings need wire lines on both faces');
 for (const angle of [0, .5, 2, 4]) {
  wheel.rotation.x = angle;
  root.updateMatrixWorld(true);
@@ -66,6 +67,8 @@ transitionModule._compile(ts.transpileModule(`
 const THREE = require('three');
 module.exports = () => {
  let inspectorOn = false, inspectorPose = null;
+ let inspectorProgress = 0, START_P = 0;
+ const homePose = { p: .42, yaw: -18, pitch: .12, zoom: 1.25 };
  let freeCamera = false, orbitOn = true, orbitYaw = 1, racing = true;
  let speed = 200, racingAmt = 1, carTravel = 5;
  let userYaw = 23, userPitch = .2, zoom = 1.6, zoomTarget = 1.6;
@@ -81,6 +84,9 @@ inspector.set(true);
 assert.equal(inspector.state().far, 5000);
 assert.equal(inspector.state().racing, false);
 assert.equal(inspector.state().freeCamera, true);
+assert.equal(inspector.state().userYaw, -18, 'inspector enters at configured home yaw');
+assert.equal(inspector.state().userPitch, .12, 'inspector enters at configured home pitch');
+assert.equal(inspector.state().zoomTarget, 1.25, 'inspector enters at configured home zoom');
 inspector.set(true); // repeated open must not overwrite saved state
 inspector.set(false);
 const after = inspector.state();

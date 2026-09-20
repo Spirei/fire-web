@@ -1768,6 +1768,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const MAX_ZOOM = CFG.zoom.max;
   let freeCamera = false;
   let inspectorOn = false;
+  let inspectorProgress = START_P;
   const inspectorBackground = new THREE.Color("#e7e7e7");
   let inspectorPose: { free: boolean; yaw: number; pitch: number; zoom: number; orbit: boolean; orbitYaw: number; focus: THREE.Vector3 } | null = null;
   const focusTarget = new THREE.Vector3();
@@ -1848,7 +1849,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const pitchStep = coastStep(userPitchVel, dt);
       userYaw += yawStep.distance;
       userYawVel = Math.abs(yawStep.velocity) < 0.05 ? 0 : yawStep.velocity;
-      userPitch = clamp(userPitch + pitchStep.distance, -0.55, 0.95);
+      const [pitchMin, pitchMax] = inspectorOn ? [-1.5, 1.5] : [-0.55, 0.95];
+      userPitch = clamp(userPitch + pitchStep.distance, pitchMin, pitchMax);
       userPitchVel = Math.abs(pitchStep.velocity) < 0.0005 ? 0 : pitchStep.velocity;
     }
     if (freeCamera) zoomTarget = Math.min(zoomTarget, zoomLimit());
@@ -1892,7 +1894,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 关键帧给的是高度，换成仰角后才能和用户的上下拖拽相加；
     // 最终仰角夹在 3° 到 66° 之间：既能贴地看侧面，也不会穿到地面下或翻过头顶。
     const baseElev = Math.atan2(Math.max(0.2, h) - targetY, r);
-    const elev = clamp(baseElev + userPitch * (1 - racingAmt), 0.05, 1.15);
+    // 模型展示允许相机越过地平线进入车底；叙事模式仍锁在地面以上，避免穿过隧道路面。
+    const elev = clamp(baseElev + userPitch * (1 - racingAmt), inspectorOn ? -1.5 : 0.05, inspectorOn ? 1.5 : 1.15);
     const horizontal = Math.cos(elev) * r;
     camPos.set(Math.sin(az) * horizontal + chaseLat, targetY + Math.sin(elev) * r, Math.cos(az) * horizontal + follow);
     lookAt.set(camState.tx * (1 - racingAmt) + chaseLat, targetY, camState.tz * (1 - racingAmt) + follow);
@@ -2312,6 +2315,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     scrollTravel = Math.max(1, el.offsetHeight - stage.offsetHeight);
   }
   function progress() {
+    if (inspectorOn) return inspectorProgress;
     if (freeCamera) return 0;
     // 只守开场这三秒：这段时间足够覆盖浏览器的滚动恢复，也不会长期影响脚本化调试（直接 scrollTo 也能工作）。
     // 用户置顶过机位时「家」不是 0 而是置顶进度，所以开场就停在那里
@@ -2382,14 +2386,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    * 双击复位要回到「用户的固定机位」，而不是引擎的中立角度 —— 以前这里一律归零，
    * 于是双击之后停在的不是用户置顶的那一帧（反馈：「回到一个非我们设置的固定机位」）。
    */
-  let homePose: { yaw: number; pitch: number; zoom: number } | null = null;
+  let homePose: { p: number; yaw: number; pitch: number; zoom: number } | null = null;
   const resetView = () => {
     focusTarget.set(0, 0, 0);
-    userYaw = inspectorOn ? 100 : freeCamera ? 0 : homePose?.yaw ?? 0;
+    userYaw = inspectorOn ? homePose?.yaw ?? 0 : freeCamera ? 0 : homePose?.yaw ?? 0;
     userYawVel = 0;
-    userPitch = inspectorOn ? 0.3 : freeCamera ? 0 : homePose?.pitch ?? 0;
+    userPitch = inspectorOn ? homePose?.pitch ?? 0 : freeCamera ? 0 : homePose?.pitch ?? 0;
     userPitchVel = 0;
-    zoomTarget = freeCamera ? 1 : homePose?.zoom ?? 1;
+    zoomTarget = inspectorOn ? homePose?.zoom ?? 1 : freeCamera ? 1 : homePose?.zoom ?? 1;
     setZoomMode(false);
     // 置顶机位还包含「进度」：交给组件把滚动位置带回去，才真的回到那一帧
     if (!freeCamera) options.onResetView?.();
@@ -2445,7 +2449,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     userYawVel = clamp(-dx * gain / sampleDt, -240, 240);
     if (dragByTouch && !freeCamera) return;
     // 鼠标上下拖：向上拖 = 升高视角俯视，向下拖 = 降低视角平视/略微仰视
-    userPitch = clamp(userPitch + dy * 0.0035, -0.55, 0.95);
+    const [pitchMin, pitchMax] = inspectorOn ? [-1.5, 1.5] : [-0.55, 0.95];
+    userPitch = clamp(userPitch + dy * 0.0035, pitchMin, pitchMax);
     userPitchVel = clamp(dy * 0.0035 / sampleDt, -2, 2);
   };
   const onDragEnd = (e: PointerEvent) => {
@@ -2879,7 +2884,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         inspectorPose = { free: freeCamera, yaw: userYaw, pitch: userPitch, zoom: zoomTarget, orbit: orbitOn, orbitYaw, focus: focusTarget.clone() };
         freeCamera = true; orbitOn = false; orbitYaw = 0;
         racing = false; speed = 0; racingAmt = 0; carTravel = 0;
-        userYaw = 100; userPitch = 0.3; zoom = zoomTarget = 1;
+        inspectorProgress = homePose?.p ?? START_P;
+        userYaw = homePose?.yaw ?? 0; userPitch = homePose?.pitch ?? 0;
+        zoom = zoomTarget = homePose?.zoom ?? 1;
         focusTarget.set(0, 0, 0); focusOffset.set(0, 0, 0);
       } else if (inspectorPose) {
         freeCamera = inspectorPose.free; orbitOn = inspectorPose.orbit; orbitYaw = inspectorPose.orbitYaw;
@@ -2916,7 +2923,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         userYawVel = 0;
       }
       if (typeof pose.pitch === "number" && Number.isFinite(pose.pitch)) {
-        userPitch = clamp(pose.pitch, -0.55, 0.95);
+        userPitch = clamp(pose.pitch, inspectorOn ? -1.5 : -0.55, inspectorOn ? 1.5 : 0.95);
         userPitchVel = 0;
       }
       if (typeof pose.zoom === "number" && Number.isFinite(pose.zoom)) {
@@ -2925,9 +2932,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       }
     },
     /** 用户置顶的机位：双击复位回到这里（传 null 表示没置顶，回到中立角度） */
-    setHomePose: (pose: { yaw?: number; pitch?: number; zoom?: number } | null) => {
+    setHomePose: (pose: { p?: number; yaw?: number; pitch?: number; zoom?: number } | null) => {
       homePose = pose
-        ? { yaw: pose.yaw ?? 0, pitch: pose.pitch ?? 0, zoom: pose.zoom ?? 1 }
+        ? { p: pose.p ?? START_P, yaw: pose.yaw ?? 0, pitch: pose.pitch ?? 0, zoom: pose.zoom ?? 1 }
         : null;
     },
     setProgress: (p: number, settle = 0) => {

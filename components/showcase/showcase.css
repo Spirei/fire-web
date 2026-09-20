@@ -428,6 +428,11 @@ html:has(.showcase.light) body {
   transform: scale(0.985);
 }
 
+/* 发车提示：默认键盘版；触屏版由下面的 (hover: none) 块切换 */
+.sc-ctr-hint .touch-only {
+  display: none;
+}
+
 .sc-ctr-hint {
   margin-top: 10px;
   font-size: 8.5px;
@@ -960,7 +965,8 @@ html:has(.showcase.light) body {
   .sc-hint-touch {
     left: 50%;
     transform: translateX(-50%);
-    bottom: 17.5vh;
+    /* 站在控制胶囊之上：胶囊在 12vh、高 40px，固定写 17.5vh 时矮屏（≤568px）会压在胶囊上 */
+    bottom: calc(12vh + 54px);
     display: block;
     font-size: 8.5px;
     letter-spacing: 0.18em;
@@ -1016,6 +1022,96 @@ html:has(.showcase.light) body {
 
 .sc-model-add:hover {
   border-style: solid;
+}
+
+/*
+ * 触屏（手机 / 平板）：按「没有悬停、没有 ⌘/Ctrl 滚轮」重排。
+ * 放在文件最后，覆盖面宽断点 —— 之前平板（>640px）走的是桌面那套：
+ * ① 提示写的是「拖拽环视 · ⌘/Ctrl + 滚轮缩放」，触屏上根本按不出来；
+ * ② 控制胶囊、提示、车型条全挤在 4.6vh 同一行，1024 宽下互相压字；
+ * ③ 章节轨道只有 12×3px 的触点，手指点不中，而且章节名只在 hover 时才显示。
+ * 用 (hover: none) and (pointer: coarse) 限定纯触屏设备：带触屏的笔记本（有鼠标）不受影响。
+ */
+@media (hover: none) and (pointer: coarse) {
+  /* 提示换成触摸版 */
+  .sc-hint-drag {
+    display: none;
+  }
+
+  .sc-hint-touch {
+    left: 50%;
+    transform: translateX(-50%);
+    /* 控制胶囊在 12vh、高 40px：提示站在它上面 */
+    bottom: calc(12vh + 56px);
+    display: block;
+    font-size: 8.5px;
+    letter-spacing: 0.18em;
+    color: var(--sc-faintest);
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  /* 发车提示换成触屏版（没有空格键） */
+  .sc-ctr-hint .kbd-only {
+    display: none;
+  }
+
+  .sc-ctr-hint .touch-only {
+    display: inline;
+  }
+
+  /* 底部三块竖排：主按钮 → 提示 → 控制胶囊 → 车型条 */
+  .sc-ctr {
+    bottom: 20vh;
+  }
+
+  .sc-left-foot {
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 12vh;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 92vw;
+  }
+
+  .sc-models {
+    left: 50%;
+    transform: translateX(-50%);
+    right: auto;
+    bottom: 6.4vh;
+    max-width: 94vw;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .sc-models::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* 车型胶囊加大触点（手指比鼠标粗） */
+  .sc-model {
+    padding: 7px 13px;
+    font-size: 10px;
+  }
+
+  /* 章节轨道：触点撑到 40px 上下，横条本身仍很细；当前章节名常显（触屏没有 hover） */
+  .sc-nav {
+    gap: 4px;
+    padding-right: 6px;
+  }
+
+  .sc-nav button {
+    padding: 11px 8px;
+  }
+
+  .sc-nav button.on .sc-nav-label {
+    opacity: 1;
+  }
+
+  .sc-nav-label {
+    right: calc(100% + 6px);
+    font-size: 10px;
+  }
 }
 
 /* 镜头入口避开遥测；自由镜头为第六项，触屏留出真实点击面积。 */
@@ -1085,6 +1181,13 @@ html:has(.showcase.light) body {
 .sc-wire-colors.is-native .sc-color-lens { opacity: 0; }
 .sc-wire-help { margin: 15px 0 13px; text-align: center; font-size: 10px; line-height: 1.6; color: var(--glass-subtle); }
 .sc-wire-help span { margin: 0 4px; opacity: .6; }
+.sc-inspector-models { margin-top: 17px; }
+.sc-inspector-models .sc-wire-color-label { margin-top: 0; }
+.sc-inspector-model-list { display: flex; gap: 6px; overflow-x: auto; padding: 2px 1px 5px; scrollbar-width: none; }
+.sc-inspector-model-list::-webkit-scrollbar { display: none; }
+.sc-inspector-model-list button { position: relative; min-height: 34px; padding: 5px 11px; overflow: hidden; font-size: 10px; }
+.sc-inspector-model-list button span { position: relative; z-index: 1; }
+.sc-inspector-model-list button i { position: absolute; left: 0; bottom: 0; height: 2px; background: currentColor; opacity: .55; transition: width .16s linear; }
 .sc-inspector-reset { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 40px; border-radius: 22px; font-size: 12px; font-weight: 500; transition: background .25s, transform .3s; }
 .sc-inspector-reset svg { width: 15px; height: 15px; }
 .sc-inspector-reset:hover { background-color: var(--glass-lens); }
