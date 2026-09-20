@@ -255,6 +255,39 @@
 
 html.mp-workbench-open { overflow: hidden; }
 
+.mp-restore-screen {
+  position: fixed;
+  z-index: 2200;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  color: rgba(226, 231, 239, 0.72);
+  background: #0b0d11;
+}
+
+.mp-restore-screen span {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(204, 204, 204, 0.22);
+  border-top-color: #cccccc;
+  border-radius: 50%;
+  animation: mp-restore-spin 0.75s linear infinite;
+}
+
+.mp-restore-screen b {
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.12em;
+}
+
+@keyframes mp-restore-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mp-restore-screen span { animation: none; }
+}
+
 .mp-workbench-head {
   display: flex;
   align-items: center;

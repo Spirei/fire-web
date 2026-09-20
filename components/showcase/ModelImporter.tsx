@@ -559,7 +559,13 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   );
 
   return (
-    <div className="mp-root">
+    <div className={`mp-root${workbenchHydrated ? "" : " mp-hydrating"}`} aria-busy={!workbenchHydrated}>
+      {!workbenchHydrated && (
+        <div className="mp-restore-screen" role="status" aria-live="polite">
+          <span />
+          <b>正在恢复模型工作台</b>
+        </div>
+      )}
       <header className="mp-head">
         <div>
           <p className="mp-kicker">车型导入</p>
