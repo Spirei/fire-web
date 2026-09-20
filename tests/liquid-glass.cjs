@@ -30,7 +30,7 @@ function mount() {
  el.props.ref.current={getBoundingClientRect:()=>({left:100,width:308}),setPointerCapture:id=>captured=id,hasPointerCapture:id=>captured===id,releasePointerCapture:()=>captured=null};
  return el.props;
 }
-const ev=(x,id=1)=>({isPrimary:true,button:0,pointerId:id,clientX:x});
+const ev=(x,id=1)=>({isPrimary:true,button:0,pointerId:id,clientX:x,clientY:20});
 let p=mount(); p.onPointerDown(ev(154));p.onPointerMove(ev(354));p.onPointerUp(ev(354));assert.deepEqual(selected,[2]);assert.equal(captured,null);
 p=mount();p.onPointerDown(ev(154));p.onPointerMove(ev(-100));p.onPointerUp(ev(-100));assert.equal(selected.at(-1),0);
 p=mount();p.onPointerDown(ev(154));p.onPointerDown(ev(354,2));p.onPointerUp(ev(354,2));assert.equal(selected.length,2,'second pointer cannot commit');p.onPointerCancel();p.onPointerUp(ev(354));assert.equal(selected.length,2,'cancel does not select');
@@ -43,6 +43,13 @@ p.onPointerLeave();assert.equal(states[0],0,'leave restores selection');assert.e
 p.onPointerEnter({...mouse(254),pointerType:'touch'});assert.equal(states[2],false,'touch has no hover');
 p.onPointerEnter(mouse(254));p.onPointerCancel();assert.equal(states[2],false,'cancel clears hover');
 p.onPointerDown(mouse(154));p.onPointerLeave();p.onPointerMove(ev(354));p.onPointerUp(ev(354));assert.equal(selected.at(-1),2,'captured drag continues outside');
+selected.pop();
+p=mount();p.onPointerEnter(mouse(154));p.onPointerMove(mouse(304));p.onPointerMove(mouse(204));p.onPointerMove(mouse(354));
+assert.equal(selected.length,2,'back-and-forth preview never commits');
+p.onPointerDown(mouse(354));p.onPointerUp(mouse(354));assert.equal(selected.at(-1),2);
+assert.equal(states[0],2);assert.equal(states[1],false);assert.equal(states[2],false,'click lands and deflates lens');
+p.onPointerMove(mouse(356));assert.equal(states[2],false,'post-click mouse jitter does not reopen lens');
+p.onPointerMove(mouse(330));assert.equal(states[2],true,'deliberate movement starts a new preview');
 selected.pop();
 palette='neutral';p=mount();p.onPointerEnter(mouse(254));assert.equal(states[2],false,'solid palette has no hover lens');p.onPointerDown(ev(354));p.onPointerUp(ev(354));assert.equal(selected.length,2,'solid palette uses normal button click');
 console.log('PASS lens symmetry, narrow swatches, clear center, drag commit, limits, cancellation and multiple pointers');

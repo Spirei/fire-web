@@ -13,6 +13,8 @@ export default function LiquidGlassControl({ items, index, onChange, label, swat
   const ref = useRef<HTMLDivElement>(null);
   const pointer = useRef<number | null>(null);
   const positionRef = useRef(index);
+  // Keep a committed lens seated until the mouse deliberately moves again.
+  const landedAt = useRef<{ x: number; y: number } | null>(null);
   const [position, setPosition] = useState(index);
   const [held, setHeld] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -37,21 +39,25 @@ export default function LiquidGlassControl({ items, index, onChange, label, swat
     const p = glassPosition(x, r.left + 4, r.width - 8, items.length);
     positionRef.current = p; setPosition(p);
   };
-  const cancel = () => { pointer.current = null; setHeld(false); setHovered(false); positionRef.current = index; setPosition(index); };
+  const cancel = () => { landedAt.current = null; pointer.current = null; setHeld(false); setHovered(false); positionRef.current = index; setPosition(index); };
   useEffect(() => { window.addEventListener("blur", cancel); return () => window.removeEventListener("blur", cancel); }, [index]);
   useEffect(() => { if (!glass) cancel(); }, [glass]);
   const hover = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!glass || pointer.current !== null || event.pointerType !== "mouse" || event.buttons !== 0) return;
+    if (landedAt.current) {
+      if (Math.hypot(event.clientX - landedAt.current.x, event.clientY - landedAt.current.y) < 6) return;
+      landedAt.current = null;
+    }
     setHovered(true); updatePosition(event.clientX);
   };
   const content = (item: GlassItem) => <>{item.color ? <i className="lg-swatch" style={{ backgroundColor: item.color }} /> : <>{item.icon}<span>{item.label}</span></>}</>;
   return <div ref={ref} className={`lg-control${glass ? " lg-optical" : ""}${swatches ? " lg-colors" : ""}${active ? " lg-active" : ""}${inactive && !active ? " lg-inactive" : ""}`}
     role="group" aria-label={label} style={{ "--lg-count": items.length, "--lg-position": position } as CSSProperties}
-    onPointerDown={event => { if (!glass || pointer.current !== null || !event.isPrimary || event.button !== 0) return; pointer.current = event.pointerId; ref.current?.setPointerCapture(event.pointerId); setHeld(true); updatePosition(event.clientX); }}
+    onPointerDown={event => { if (!glass || pointer.current !== null || !event.isPrimary || event.button !== 0) return; landedAt.current = null; pointer.current = event.pointerId; ref.current?.setPointerCapture(event.pointerId); setHeld(true); updatePosition(event.clientX); }}
     onPointerEnter={hover}
     onPointerMove={event => { if (pointer.current === event.pointerId) updatePosition(event.clientX); else hover(event); }}
     onPointerLeave={() => { if (pointer.current === null) cancel(); else setHovered(false); }}
-    onPointerUp={event => { if(pointer.current !== event.pointerId) return; const selected = Math.round(positionRef.current); pointer.current = null; setHeld(false); setPosition(selected); positionRef.current = selected; if(ref.current?.hasPointerCapture(event.pointerId)) ref.current.releasePointerCapture(event.pointerId); onChange(selected); }}
+    onPointerUp={event => { if(pointer.current !== event.pointerId) return; const selected = Math.round(positionRef.current); pointer.current = null; setHeld(false); setHovered(false); landedAt.current = event.pointerType === "mouse" ? { x: event.clientX, y: event.clientY } : null; setPosition(selected); positionRef.current = selected; if(ref.current?.hasPointerCapture(event.pointerId)) ref.current.releasePointerCapture(event.pointerId); onChange(selected); }}
     onPointerCancel={cancel} onLostPointerCapture={() => { if(pointer.current !== null) cancel(); }}>
     <div className="lg-track">{items.map((item,i) => <button type="button" key={item.label} aria-label={item.label} aria-pressed={!inactive && index === i}
       onClick={event => { if (!glass || event.detail === 0) onChange(i); }}>{content(item)}</button>)}</div>

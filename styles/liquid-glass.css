@@ -1,15 +1,15 @@
 /* Reference: LIQUID GLASS.mp4, 1206 × 382 at 60 fps. A clear rail and a raised drag lens. */
-.lg-control { position: relative; padding: 4px; border-radius: 999px; background: rgb(var(--site-ink) / .055); isolation: isolate; touch-action: pan-y; user-select: none; }
+.lg-control { --lg-travel: .32s cubic-bezier(.2,.9,.3,1); position: relative; padding: 4px; border-radius: 999px; background: rgb(var(--site-ink) / .055); isolation: isolate; touch-action: pan-y; user-select: none; }
 .lg-track { display: grid; grid-template-columns: repeat(var(--lg-count), minmax(0, 1fr)); }
 .lg-track button, .lg-copy-item { display: flex; align-items: center; justify-content: center; gap: 5px; height: 44px; min-width: 0; border-radius: 999px; font-size: 11px; font-weight: 550; color: rgb(var(--site-ink)); white-space: nowrap; }
 .lg-track button { position: relative; z-index: 1; cursor: pointer; }
 .lg-track button svg, .lg-copy-item svg { width: 15px; height: 15px; flex: none; }
 .lg-track button[aria-pressed="true"] { color: rgb(var(--site-accent)); }
 .lg-track button:focus-visible { outline: 2px solid rgb(var(--site-accent)); outline-offset: 3px; }
-.lg-lens { position: absolute; inset: 4px auto 4px 4px; width: calc((100% - 8px) / var(--lg-count)); pointer-events: none; transform: translateX(calc(var(--lg-position) * 100%)); transition: transform .32s cubic-bezier(.2,.9,.3,1); }
+.lg-lens { position: absolute; inset: 4px auto 4px 4px; width: calc((100% - 8px) / var(--lg-count)); pointer-events: none; transform: translateX(calc(var(--lg-position) * 100%)); transition: transform var(--lg-travel); }
 .lg-lens-body { position: absolute; inset: 0; border-radius: 999px; background: rgb(var(--site-surface) / .85); box-shadow: 0 1px 4px #00000012; transition: transform .24s cubic-bezier(.2,.8,.25,1), background .2s, box-shadow .24s; }
 .lg-magnify, .lg-refraction { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; opacity: 0; transition: opacity .12s; }
-.lg-copy-track { display: grid; grid-template-columns: repeat(var(--lg-count), minmax(0,1fr)); width: calc(var(--lg-count) * 100%); height: 100%; transform: translateX(calc(var(--lg-position) * -100% / var(--lg-count))); }
+.lg-copy-track { display: grid; grid-template-columns: repeat(var(--lg-count), minmax(0,1fr)); width: calc(var(--lg-count) * 100%); height: 100%; transform: translateX(calc(var(--lg-position) * -100% / var(--lg-count))); transition: transform var(--lg-travel); }
 .lg-copy-item { height: 100%; color: #008bdc; }
 .lg-swatch { display: block; width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 1px #0002; }
 .lg-filter-defs { position: absolute; pointer-events: none; }
@@ -17,7 +17,8 @@
 .lg-optical { background: rgb(var(--site-surface) / .24); border: 1px solid rgb(var(--site-surface) / .75); box-shadow: inset 0 1px 0 #ffffffb0, inset 0 -1px 1px #0000000c, 0 2px 8px #00000005; -webkit-backdrop-filter: blur(3px) saturate(1.1); backdrop-filter: blur(3px) saturate(1.1); touch-action: none; }
 .lg-optical .lg-lens-body { background: rgb(var(--site-ink) / .075); box-shadow: none; }
 .lg-optical .lg-track button[aria-pressed="true"] { color: #008bdc; }
-.lg-optical.lg-active .lg-lens { z-index: 3; transition: none; }
+.lg-optical.lg-active { --lg-travel: .085s linear; }
+.lg-optical.lg-active .lg-lens { z-index: 3; }
 .lg-optical.lg-active .lg-lens-body { transform: scale(1.14,1.34); background: rgb(var(--site-surface) / .8); box-shadow: inset 0 1px 1px #fffffff0, inset 0 -1px 1px #ffffffd0, inset 1px 0 1px #ffffffb0, 0 0 0 .65px #747a8245, 0 5px 12px #00000018; }
 .lg-optical.lg-active .lg-magnify, .lg-optical.lg-active .lg-refraction { opacity: 1; }
 .lg-optical.lg-active .lg-magnify { transform: scale(1.04,1); }
