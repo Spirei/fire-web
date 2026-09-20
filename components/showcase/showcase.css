@@ -752,7 +752,8 @@ html:has(.showcase.light) body {
   text-shadow: 0 1px 5px var(--sc-bg);
   font-variant-numeric: tabular-nums;
 }
-.showcase.sc-inspecting .sc-position-coordinate { right: 3.4vw; bottom: 3.2vh; color: #676b75; text-shadow: 0 1px 4px #fff; }
+.showcase.sc-inspecting .sc-position-coordinate { right: 3.4vw; bottom: 3.2vh; }
+.showcase.light.sc-inspecting .sc-position-coordinate { color: #676b75; text-shadow: 0 1px 4px #fff; }
 
 .sc-models-cap {
   font-size: 8.5px;
@@ -1046,6 +1047,7 @@ html:has(.showcase.light) body {
 .sc-model-add:hover {
   border-style: solid;
 }
+.sc-model-add-icon { width: 14px; height: 14px; flex: none; }
 
 /*
  * 触屏（手机 / 平板）：按「没有悬停、没有 ⌘/Ctrl 滚轮」重排。
@@ -1211,10 +1213,12 @@ html:has(.showcase.light) body {
 .sc-inspector-model-list button { position: relative; min-height: 34px; padding: 5px 11px; overflow: hidden; font-size: 10px; }
 .sc-inspector-model-list button span { position: relative; z-index: 1; }
 .sc-inspector-model-list button i { position: absolute; left: 0; bottom: 0; height: 2px; background: currentColor; opacity: .55; transition: width .16s linear; }
-.sc-inspector-reset { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 40px; border-radius: 22px; font-size: 12px; font-weight: 500; transition: background .25s, transform .3s; }
+.sc-inspector-actions { display: grid; grid-template-columns: 1fr auto; gap: 7px; }
+.sc-inspector-reset, .sc-inspector-exit { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; border: 1px solid var(--glass-edge); border-radius: 22px; color: var(--glass-ink); background: var(--glass-track); font-size: 12px; font-weight: 500; transition: background .25s, transform .3s; }
+.sc-inspector-exit { padding: 0 15px; }
 .sc-inspector-reset svg { width: 15px; height: 15px; }
-.sc-inspector-reset:hover { background-color: var(--glass-lens); }
-.sc-inspector-reset:active { transform: scale(.97); }
+.sc-inspector-reset:hover, .sc-inspector-exit:hover { background-color: var(--glass-lens); }
+.sc-inspector-reset:active, .sc-inspector-exit:active { transform: scale(.97); }
 .sc-wire-control button:focus-visible { outline: 2px solid #1677df; outline-offset: 3px; }
 @keyframes sc-glass-open { from { opacity: 0; transform: translateY(-8px) scale(.92); filter: blur(3px); } to { opacity: 1; transform: none; filter: blur(0); } }
 @keyframes sc-glass-flex { 0% { transform: scale(1); } 35% { transform: scale(1.1,.9); filter: brightness(1.12); } 70% { transform: scale(.98,1.03); } 100% { transform: scale(1); } }

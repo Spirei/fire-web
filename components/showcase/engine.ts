@@ -1776,7 +1776,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let freeCamera = false;
   let inspectorOn = false;
   let inspectorProgress = START_P;
-  const inspectorBackground = new THREE.Color("#e7e7e7");
+  const inspectorBackgroundLight = new THREE.Color("#e7e7e7");
+  const inspectorBackgroundDark = new THREE.Color("#090b0f");
   let inspectorPose: { free: boolean; yaw: number; pitch: number; zoom: number; orbit: boolean; orbitYaw: number; focus: THREE.Vector3 } | null = null;
   const focusTarget = new THREE.Vector3();
   const focusOffset = new THREE.Vector3();
@@ -2194,11 +2195,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     lightLinesPass.uniforms.tSceneDepth.value = composer.readBuffer.depthTexture;
     (lightLinesPass.uniforms.uWorldFromClip.value as THREE.Matrix4).multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse);
     if (inspectorOn) {
-      // A neutral model-only canvas; direct rendering preserves unlit wire colors.
+      // 模型展示跟随首页深浅主题；直接渲染保留纯线框颜色，不经过后期调色。
       const background = scene.background;
       const hidden = scene.children.filter(child => child !== carRoot && !(child as THREE.Light).isLight && child.visible);
       hidden.forEach(child => { child.visible = false; });
-      scene.background = inspectorBackground;
+      scene.background = theme === "light" || studioOn ? inspectorBackgroundLight : inspectorBackgroundDark;
       renderer.setRenderTarget(null);
       renderer.render(scene, camera);
       scene.background = background;

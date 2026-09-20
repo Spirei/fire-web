@@ -44,7 +44,11 @@ html:root[data-palette] .sv-win-root.sv-orca {
   --sv-input: rgb(var(--site-surface)); --sv-surface-2: rgb(var(--site-soft)); --sv-hover-bg: rgb(var(--site-accent) / .09);
   --sv-ring: rgb(var(--site-accent) / .2); --sv-card-shadow: var(--material-shadow);
 }
-/* The model-only canvas is always light; its controls resolve the light palette locally. */
+/* 3D 舞台有独立主题：不能被站点 html 的深浅状态反向覆盖。 */
+html:root[data-palette] .showcase:not(.light) {
+  --site-bg: var(--site-bg-dark); --site-surface: var(--site-surface-dark); --site-ink: var(--site-ink-dark);
+  --site-muted: var(--site-muted-dark); --site-accent: var(--site-accent-dark); --site-edge: var(--site-edge-dark); --site-soft: var(--site-soft-dark);
+}
 html:root[data-palette] .showcase.light {
   --site-bg: var(--site-bg-light); --site-surface: var(--site-surface-light); --site-ink: var(--site-ink-light);
   --site-muted: var(--site-muted-light); --site-accent: var(--site-accent-light); --site-edge: var(--site-edge-light); --site-soft: var(--site-soft-light);

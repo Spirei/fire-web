@@ -94,11 +94,29 @@ export default function ShowcaseStage({
   const [orbit, setOrbit] = useState(false);
   const [freeCamera, setFreeCamera] = useState(false);
   const freeCameraRef = useRef(false);
+  const [inspector, setInspector] = useState(false);
+  const inspectorRef = useRef(false);
   const [wirePanel, setWirePanel] = useState(false);
   const wirePanelRef = useRef(false);
-  const toggleWirePanel = (on: boolean) => {
+  const setWirePanelOpen = (on: boolean) => {
     setWirePanel(on); wirePanelRef.current = on;
-    handleRef.current?.setInspector(on);
+  };
+  const enterInspector = () => {
+    setInspector(true); inspectorRef.current = true;
+    setWirePanelOpen(true);
+    handleRef.current?.setInspector(true);
+  };
+  const exitInspector = () => {
+    setWirePanelOpen(false);
+    setInspector(false); inspectorRef.current = false;
+    handleRef.current?.setInspector(false);
+  };
+  const toggleInspectorPanel = () => {
+    if (!inspectorRef.current) {
+      enterInspector();
+      return;
+    }
+    setWirePanelOpen(!wirePanelRef.current);
   };
   const [wireMode, setWireMode] = usePersistedState<WireframeMode>(WIRE_MODE_KEY, "native");
   const [wireColor, setWireColor] = usePersistedState(WIRE_COLOR_KEY, "#00ff00");
@@ -144,8 +162,7 @@ export default function ShowcaseStage({
     if (!wirePanel) return;
     const close = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setWirePanel(false); wirePanelRef.current = false;
-        handleRef.current?.setInspector(false);
+        setWirePanelOpen(false);
       }
     };
     window.addEventListener("keydown", close);
@@ -318,7 +335,7 @@ export default function ShowcaseStage({
           // 双击复位也回到这一帧（引擎自己归零会回到「不是我们设置的固定机位」）
           handle.setHomePose({ p: pinned.p, yaw: pinned.yaw, pitch: pinned.pitch, zoom: pinned.zoom });
         }
-        handle.setInspector(wirePanelRef.current);
+        handle.setInspector(inspectorRef.current);
         handleRef.current = handle;
         // 记下这一轮挂的是哪辆车：之后 config 里只有车型变了就原地换车，不重建场景
         appliedModelRef.current = JSON.stringify({ a: cfg.assets.model, m: cfg.model ?? null });
@@ -778,7 +795,7 @@ export default function ShowcaseStage({
 
   // 影棚（明亮摄影棚）下画面是亮的，HUD 文字要跟着换成浅色系，否则白字压在白底上看不见
   return (
-    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio || wirePanel ? "light" : ""} ${wirePanel ? "sc-inspecting" : ""} ${className}`}>
+    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio ? "light" : ""} ${inspector ? "sc-inspecting" : ""} ${className}`}>
       <div className="sc-scroll" ref={scrollRef}>
         <div className="sc-stage" ref={stageRef}>
           <div className="sc-canvas-wrap" ref={canvasWrapRef} />
@@ -791,17 +808,18 @@ export default function ShowcaseStage({
           <div className="sc-hud">
             <div className="sc-row sc-tools">
               <div className="sc-wire-control" onKeyDown={(event) => {
-                if (event.key === "Escape") { toggleWirePanel(false); event.currentTarget.querySelector("button")?.focus(); }
+                if (event.key === "Escape" && wirePanelRef.current) { setWirePanelOpen(false); event.currentTarget.querySelector("button")?.focus(); }
               }}>
-                <button type="button" className={`sc-tool sc-glass-trigger${wirePanel ? " on" : ""}`}
-                  aria-label="模型展示" title="模型展示" aria-expanded={wirePanel}
-                  onClick={() => toggleWirePanel(!wirePanel)}>
+                <button type="button" className={`sc-tool sc-glass-trigger${inspector ? " on" : ""}`}
+                  aria-label="模型展示" title={inspector ? (wirePanel ? "隐藏模型设置" : "显示模型设置") : "进入模型展示"}
+                  aria-expanded={wirePanel} aria-pressed={inspector}
+                  onClick={toggleInspectorPanel}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
                     <path d="m12 2 9 5v10l-9 5-9-5V7Zm0 0v20M3 7l18 10M21 7 3 17M3 7l9 5 9-5M3 17l9-5 9 5" />
                   </svg><span>模型</span>
                 </button>
                 {wirePanel && <div className="sc-wire-panel" role="group" aria-label="线框显示设置">
-                  <div className="sc-wire-heading"><div><h3>模型展示</h3><p>每一处细节，自由探索。</p></div><button type="button" aria-label="关闭线框设置" onClick={() => toggleWirePanel(false)}>
+                  <div className="sc-wire-heading"><div><h3>模型展示</h3><p>每一处细节，自由探索。</p></div><button type="button" aria-label="隐藏模型设置" onClick={() => setWirePanelOpen(false)}>
                     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8" /></svg>
                   </button></div>
                   <LiquidGlassControl label="显示模式" index={["native", "overlay", "wireframe"].indexOf(wireMode)}
@@ -831,7 +849,10 @@ export default function ShowcaseStage({
                     </div>
                   </div>}
                   <p className="sc-wire-help">左键环视 <span>·</span> Shift / 右键或双指平移 <span>·</span> 滚轮 / 捏合缩放<br />双击车身聚焦 <span>·</span> 双击背景拉远</p>
-                  <button type="button" className="sc-inspector-reset" onClick={() => handleRef.current?.resetCamera()}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8a6 6 0 1 1 0 4M4 4v4h4" /></svg>重置视角</button>
+                  <div className="sc-inspector-actions">
+                    <button type="button" className="sc-inspector-reset" onClick={() => handleRef.current?.resetCamera()}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8a6 6 0 1 1 0 4M4 4v4h4" /></svg>重置视角</button>
+                    <button type="button" className="sc-inspector-exit" onClick={exitInspector}>退出展示</button>
+                  </div>
                 </div>}
               </div>
               {musicReady && (
@@ -1065,7 +1086,7 @@ export default function ShowcaseStage({
                     title="导入车型（.glb 放进 uploads 卷，不进仓库）"
                     aria-label="导入车型"
                   >
-                    <span className="sc-model-label">＋</span>
+                    <svg className="sc-model-add-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>
                   </button>
                 )}
               </div>
