@@ -1859,6 +1859,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const INSPECTOR_MAX_ZOOM = 400;
   let freeCamera = false;
   let inspectorOn = false;
+  const modelCameraOn = () => freeCamera || inspectorOn;
   let inspectorProgress = START_P;
   const inspectorBackgroundLight = new THREE.Color("#e7e7e7");
   const inspectorBackgroundDark = new THREE.Color("#090b0f");
@@ -1868,7 +1869,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const focusRay = new THREE.Raycaster();
   const focusPointer = new THREE.Vector2();
   const zoomLimit = () => {
-    if (inspectorOn) return INSPECTOR_MAX_ZOOM;
+    if (modelCameraOn()) return INSPECTOR_MAX_ZOOM;
     if (!freeCamera) return MAX_ZOOM;
     const base = CAM_KEYS[0];
     const fit = camera.aspect < CFG.camera.fitMinAspect
@@ -1946,7 +1947,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const pitchStep = coastStep(userPitchVel, dt);
       userYaw += yawStep.distance;
       userYawVel = Math.abs(yawStep.velocity) < 0.05 ? 0 : yawStep.velocity;
-      const [pitchMin, pitchMax] = inspectorOn ? [-Math.PI, Math.PI] : [-0.55, 0.95];
+      const [pitchMin, pitchMax] = modelCameraOn() ? [-Math.PI, Math.PI] : [-0.55, 0.95];
       userPitch = clamp(userPitch + pitchStep.distance, pitchMin, pitchMax);
       userPitchVel = Math.abs(pitchStep.velocity) < 0.0005 ? 0 : pitchStep.velocity;
     }
@@ -1996,12 +1997,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 越靠近俯仰越低，从车头/车尾进入时会明显走弧线；基准角只由未缩放机位决定。
     const baseElev = Math.atan2(Math.max(0.2, h) - targetY, baseRadius);
     // 模型展示允许相机越过地平线进入车底；叙事模式仍锁在地面以上，避免穿过隧道路面。
-    if (inspectorOn) {
+    if (modelCameraOn()) {
       // 边界约束的是实际仰角，而非叠在初始机位上的用户偏移。
       const limitedPitch = clamp(baseElev + userPitch, -1.56, 1.56) - baseElev;
       if (limitedPitch !== userPitch) { userPitch = limitedPitch; userPitchVel = 0; }
     }
-    const elev = clamp(baseElev + userPitch * (1 - racingAmt), inspectorOn ? -1.56 : 0.05, inspectorOn ? 1.56 : 1.15);
+    const elev = clamp(baseElev + userPitch * (1 - racingAmt), modelCameraOn() ? -1.56 : 0.05, modelCameraOn() ? 1.56 : 1.15);
     viewAzimuth = (THREE.MathUtils.radToDeg(az) % 360 + 360) % 360;
     viewElevation = THREE.MathUtils.radToDeg(elev);
     viewDistance = r;
@@ -2028,8 +2029,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     camera.lookAt(lookAt);
     // 超近距离要随镜头距离收近裁剪面，否则固定 0.1 会在进入座舱前切掉方向盘和内饰。
     // 拉远时恢复较大的 near，保持 400 倍远景下的深度精度。
-    const desiredNear = inspectorOn ? clamp(r * 0.003, 0.0015, 0.08) : 0.1;
-    const desiredFar = inspectorOn ? Math.max(5000, r * 2 + CFG.model.length * 2) : 400;
+    const desiredNear = modelCameraOn() ? clamp(r * 0.003, 0.0015, 0.08) : 0.1;
+    const desiredFar = modelCameraOn() ? Math.max(5000, r * 2 + CFG.model.length * 2) : 400;
     if (Math.abs(camera.near - desiredNear) > 0.0001 || camera.far !== desiredFar) {
       camera.near = desiredNear;
       camera.far = desiredFar;
@@ -2533,11 +2534,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       return true;
     });
     if (!hit) {
-      if (inspectorOn) applyZoom(1 / 0.65);
+      if (modelCameraOn()) applyZoom(1 / 0.65);
       return;
     }
     focusTarget.copy(hit.point).sub(lookAt).add(focusOffset);
-    zoomTarget = inspectorOn
+    zoomTarget = modelCameraOn()
       ? clamp(zoom * hit.distance / Math.max(0.0001, camera.position.distanceTo(lookAt)) * 0.65, INSPECTOR_MIN_ZOOM, INSPECTOR_MAX_ZOOM)
       : Math.max(MIN_ZOOM, zoomTarget * 0.65);
     userYawVel = 0; userPitchVel = 0;
@@ -2601,7 +2602,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     userYawVel = clamp(-dx * gain / sampleDt, -240, 240);
     if (dragByTouch && !freeCamera) return;
     // 鼠标上下拖：向上拖 = 升高视角俯视，向下拖 = 降低视角平视/略微仰视
-    const [pitchMin, pitchMax] = inspectorOn ? [-Math.PI, Math.PI] : [-0.55, 0.95];
+    const [pitchMin, pitchMax] = modelCameraOn() ? [-Math.PI, Math.PI] : [-0.55, 0.95];
     userPitch = clamp(userPitch + dy * 0.0035, pitchMin, pitchMax);
     userPitchVel = clamp(dy * 0.0035 / sampleDt, -2, 2);
   };
@@ -2642,7 +2643,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 缩放：⌘/Ctrl + 滚轮（触控板捏合同样走这里）、按钮、双击复位
   const applyZoom = (factor: number) => {
     if (!Number.isFinite(factor) || factor <= 0) return;
-    if (inspectorOn) {
+    if (modelCameraOn()) {
       // 查看器不在边界前减速：连续滚轮可以真正进入座舱，也能把整车缩成远处的小模型。
       zoomTarget = clamp(zoomTarget * factor, INSPECTOR_MIN_ZOOM, INSPECTOR_MAX_ZOOM);
       return;
@@ -2708,7 +2709,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const onTouchMove = (e: PointerEvent) => {
     if (e.pointerType !== "touch" || !touches.has(e.pointerId)) return;
     const previous = touches.get(e.pointerId)!;
-    if (inspectorOn && touches.size === 2 && !racing) {
+    if (modelCameraOn() && touches.size === 2 && !racing) {
       // 每个指针事件贡献双指中心位移的一半，同时保留捏合缩放。
       panCamera((e.clientX - previous.x) / 2, (e.clientY - previous.y) / 2);
     }
@@ -2720,7 +2721,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       return;
     }
     if (d > 1 && pinchBase > 1) {
-      zoomTarget = inspectorOn
+      zoomTarget = modelCameraOn()
         ? clamp(zoomTarget * (pinchBase / d), INSPECTOR_MIN_ZOOM, INSPECTOR_MAX_ZOOM)
         : boundedZoom(zoomTarget, pinchBase / d, MIN_ZOOM, zoomLimit());
       pinchBase = d;
@@ -2818,7 +2819,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   function watchdog() {
     checkCameraFinite();
     // 查看器的浅灰画布在极近/极远位置可能五个采样点都接近纯白，这是正常构图，不是 WebGL 白屏。
-    if (inspectorOn) { badFrames = 0; softTries = 0; return; }
+    if (modelCameraOn()) { badFrames = 0; softTries = 0; return; }
     const now = performance.now();
     if (now > probeUntil) return;
     if (now - lastProbe < 500) return;
@@ -3103,11 +3104,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         userYawVel = 0;
       }
       if (typeof pose.pitch === "number" && Number.isFinite(pose.pitch)) {
-        userPitch = clamp(pose.pitch, inspectorOn ? -Math.PI : -0.55, inspectorOn ? Math.PI : 0.95);
+        userPitch = clamp(pose.pitch, modelCameraOn() ? -Math.PI : -0.55, modelCameraOn() ? Math.PI : 0.95);
         userPitchVel = 0;
       }
       if (typeof pose.zoom === "number" && Number.isFinite(pose.zoom)) {
-        zoom = inspectorOn
+        zoom = modelCameraOn()
           ? clamp(pose.zoom, INSPECTOR_MIN_ZOOM, INSPECTOR_MAX_ZOOM)
           : clamp(pose.zoom, MIN_ZOOM, MAX_ZOOM);
         zoomTarget = zoom;

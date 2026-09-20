@@ -1052,9 +1052,9 @@ export default function ShowcaseStage({
 
             <div className="sc-row sc-hint-drag">
               <span>{ui.dragHint}</span>
-              <span>{freeCamera ? "自由镜头 · 滚轮缩放 · 双击车身聚焦" : ui.zoomHint}</span>
+              <span>{freeCamera ? "模型镜头 · Shift / 中键 / 右键平移 · 滚轮推进 · 双击聚焦" : ui.zoomHint}</span>
             </div>
-            <div className="sc-row sc-hint-touch">{freeCamera ? "单指环视 · 双指缩放 · 双击车身聚焦" : ui.touchHint}</div>
+            <div className="sc-row sc-hint-touch">{freeCamera ? "单指环视 · 双指平移缩放 · 双击聚焦" : ui.touchHint}</div>
             {/* 章节导航：右侧竖排指示器（短横条 + 当前章节更长更亮），悬停 / 键盘聚焦显示章节名 */}
             <div className="sc-row sc-nav">
               {ui.nav.map((item, i) => (
@@ -1073,7 +1073,7 @@ export default function ShowcaseStage({
                 </button>
               ))}
               <button type="button" className={`sc-free-camera${freeCamera ? " on" : ""}`}
-                aria-label="自由镜头" aria-pressed={freeCamera}
+                aria-label="模型展示镜头" aria-pressed={freeCamera}
                 onClick={() => {
                   const next = !freeCamera;
                   setFreeCamera(next); freeCameraRef.current = next;
@@ -1081,10 +1081,10 @@ export default function ShowcaseStage({
                   handleRef.current?.setOrbit(false);
                   handleRef.current?.setFreeCamera(next);
                 }}>
-                <span className="sc-nav-label">自由镜头</span>
+                <span className="sc-nav-label">模型镜头</span>
                 <span className="sc-nav-tick" aria-hidden="true" />
               </button>
-              {freeCamera && <button type="button" className="sc-camera-reset" onClick={() => handleRef.current?.resetCamera()} aria-label="重置自由镜头">复位</button>}
+              {freeCamera && <button type="button" className="sc-camera-reset" onClick={() => handleRef.current?.resetCamera()} aria-label="重置模型镜头">复位</button>}
             </div>
             {models && models.length > 0 && (models.length > 1 || onImport) && (
               <div className="sc-row sc-models">
