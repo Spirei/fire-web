@@ -1481,6 +1481,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const wireframeView = createWireframeView(CFG.model.wireframe);
   let wireframeMode: "native" | "overlay" | "wireframe" = "native";
   let mountedCar: THREE.Object3D | null = null;
+  let modelSwitchSequence = 0;
 
   /**
    * 把一辆车挂进 carRoot：尺寸归一化、材质规则、贴图上限、清漆 / 发光、拆轮子、车道朝向、包围盒。
@@ -1822,7 +1823,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     if (camMoved || carMoved || reflectDirty) return true;
     // 环视 / 拖拽惯性期间也强制逐帧（这时镜头动得很慢，靠位置差判断会漏）
     if (orbitOn || Math.abs(userYawVel) > 1e-4 || Math.abs(userPitchVel) > 1e-5 || Math.abs(zoomTarget - zoom) > 1e-4) return true;
-    return frameCount % 2 === 0;
+    // 相机、车辆和场景都没变化时，上一张反射纹理仍是逐像素相同的结果；不要再隔帧重画整场景。
+    return false;
   };
   let lastLit = -1;
   let lastMarkP = -1;
@@ -1851,6 +1853,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const INSPECTOR_MAX_ZOOM = 400;
   let freeCamera = false;
   let inspectorOn = false;
+  // 工作台静止时保留最后一帧；交互期间仍按显示器刷新率、原像素比连续渲染。
+  // 这只消除重复帧，不改画布分辨率、贴图、线框几何或材质质量。
+  let inspectorRenderDirty = true;
+  const invalidateInspector = () => { inspectorRenderDirty = true; };
   const modelCameraOn = () => freeCamera || inspectorOn;
   let inspectorProgress = START_P;
   const inspectorBackgroundLight = new THREE.Color("#e7e7e7");
@@ -2353,6 +2359,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 反射贴图按画面宽高比同步（换窗口比例时倒影不会又被拉糊）
     const [reflectW, reflectH] = reflectSizeFor(w / h, reflectionLite ? Math.min(512, reflectHeight * 0.5) : reflectHeight);
     if (reflectRT.width !== reflectW || reflectRT.height !== reflectH) reflectRT.setSize(reflectW, reflectH);
+    invalidateInspector();
   }
 
   /**
@@ -2538,6 +2545,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     setZoomMode(false);
     // 置顶机位还包含「进度」：交给组件把滚动位置带回去，才真的回到那一帧
     if (!freeCamera) options.onResetView?.();
+    invalidateInspector();
   };
   const focusAt = (x: number, y: number) => {
     if (!freeCamera) { resetView(); return; }
@@ -2580,6 +2588,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     });
     const region = inspectRegionOf(mesh);
     wireframeView.focus(exact ? candidate => candidate === mesh : candidate => inspectRegionOf(candidate) === region);
+    invalidateInspector();
   };
   const inspectRegionOf = (mesh: THREE.Mesh) => {
     const materials = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map(material => material?.name ?? "").join(" ");
@@ -2945,10 +2954,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       pSmooth = target;
       pVel = 0;
     }
+    const inspectorMoving = inspectorOn && (
+      dragging || touches.size > 0 || Math.abs(userYawVel) > 1e-4 || Math.abs(userPitchVel) > 1e-5 ||
+      Math.abs(zoomTarget - zoom) > 1e-4 || Math.abs(pVel) > 0.0004
+    );
+    if (inspectorOn && !inspectorMoving && !inspectorRenderDirty) return;
     adaptQuality(frameMs);
     try {
       const jsStart = performance.now();
       render(pSmooth, dt);
+      if (inspectorOn && !inspectorMoving) inspectorRenderDirty = false;
       const jsCost = performance.now() - jsStart;
       jsAvg = jsAvg === 0 ? jsCost : jsAvg * 0.9 + jsCost * 0.1;
       renderErrors = 0;
@@ -3053,15 +3068,19 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     },
     setTheme: (next: "dark" | "light") => {
       theme = next;
+      invalidateInspector();
     },
     /**
      * 原地换车：只换车身，镜头 / 地面 / 环境 / HUD 全不动 —— 不重建 WebGL 场景，所以切换过程没有空白期。
      * 素材通常已经被预热进缓存，这里剩下的主要就是解析时间；解析完成后在同一个任务里撤旧车、挂新车。
      */
     setModel: async (next: { asset: string; model?: ShowcaseConfig["model"] }) => {
+      const sequence = ++modelSwitchSequence;
       try {
         const cached = await fetchAssetBuffer(next.asset);
         const nextCar = await parseCar(cached.buffer);
+        // 连续调参可能让多次解析交叠；旧请求晚到时不得覆盖最新参数。
+        if (sequence !== modelSwitchSequence) return false;
         logEvent(`换车 ${next.asset}：来源 ${cached.mode}${cached.fromCache ? "（本地命中）" : "（网络下载）"}`);
         const previous = mountedCar;
         mountedCar = null;
@@ -3072,6 +3091,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         wireframeView.configure(CFG.model.wireframe);
         focusTarget.set(0, 0, 0);
         mountCar(nextCar);
+        invalidateInspector();
         render(progress(), 1 / 60);
         return true;
       } catch (err) {
@@ -3125,14 +3145,17 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       camera.far = on ? 5000 : 400;
       camera.near = on ? 0.01 : 0.1;
       camera.updateProjectionMatrix();
+      invalidateInspector();
     },
     setInspectRegion: (region) => {
       wireframeView.focus(!region || region === "overall" ? null : mesh => inspectRegionOf(mesh) === region);
+      invalidateInspector();
     },
     setWireframe: (mode, color) => {
       wireframeMode = mode;
       wireframeView.set(mode, color);
       if (mode === "native") reflectDirty = true;
+      invalidateInspector();
     },
     setDiscStyle: (style) => {
       discStyle = style;
@@ -3146,13 +3169,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       zoomTarget = 1;
       userYaw = 0; userPitch = 0; userYawVel = 0; userPitchVel = 0;
       if (on) { orbitOn = false; orbitYaw = 0; }
+      invalidateInspector();
     },
     setOrbit: (on: boolean) => {
       orbitOn = on;
+      invalidateInspector();
     },
     /** 影棚：把环境切到明亮摄影棚（不改深浅色主题，只影响 3D 场景的光与背景） */
     setStudio: (on: boolean) => {
       studioOn = on;
+      invalidateInspector();
     },
     /** 当前机位：置顶时把这几项一起存下来 */
     readPose: () => ({ p: +pSmooth.toFixed(4), yaw: +userYaw.toFixed(2), pitch: +userPitch.toFixed(4), zoom: +zoom.toFixed(3) }),
@@ -3171,12 +3197,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           : clamp(pose.zoom, MIN_ZOOM, MAX_ZOOM);
         zoomTarget = zoom;
       }
+      invalidateInspector();
     },
     /** 用户置顶的机位：双击复位回到这里（传 null 表示没置顶，回到中立角度） */
     setHomePose: (pose: { p?: number; yaw?: number; pitch?: number; zoom?: number } | null) => {
       homePose = pose
         ? { p: pose.p ?? START_P, yaw: pose.yaw ?? 0, pitch: pose.pitch ?? 0, zoom: pose.zoom ?? 1 }
         : null;
+      invalidateInspector();
     },
     setProgress: (p: number, settle = 0) => {
       const steps = Math.max(1, Math.round(settle * 60));

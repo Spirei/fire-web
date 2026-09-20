@@ -41,15 +41,22 @@ export default function ModelPreview({
   const [progress, setProgress] = useState(0);
   const [ready, setReady] = useState(false);
   const handleRef = useRef<ShowcaseHandle | null>(null);
+  const configRef = useRef(config);
+  const appliedConfigRef = useRef<ShowcaseConfig | null>(null);
+  const updateSequenceRef = useRef(0);
+  const activeRegionRef = useRef(activeRegion);
   const onDebugRef = useRef(onDebug);
   const markerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   onDebugRef.current = onDebug;
+  configRef.current = config;
+  activeRegionRef.current = activeRegion;
 
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
     let disposed = false;
     let handle: ShowcaseHandle | null = null;
+    const initialConfig = configRef.current;
     const canvas = document.createElement("canvas");
     canvas.className = "sc-canvas";
     wrap.appendChild(canvas);
@@ -59,7 +66,7 @@ export default function ModelPreview({
     void import("./engine")
       .then(({ createShowcaseScene }) =>
         createShowcaseScene({
-          config,
+          config: initialConfig,
           canvas,
           // 预览不接 HUD：滚动手势用容器自己，遥测 / 按钮全部留空，引擎会跳过这些更新
           hud: {
@@ -110,6 +117,7 @@ export default function ModelPreview({
         }
         handle = created;
         handleRef.current = created;
+        appliedConfigRef.current = initialConfig;
         if (explore) created.setInspector(true);
         if (showWireframe) created.setWireframe("overlay", "#00ff00");
       })
@@ -122,9 +130,31 @@ export default function ModelPreview({
       handle?.dispose();
       canvas.remove();
     };
-  }, [config, explore, onPartSelect, partRegions, showWireframe]);
+  }, [explore, onPartSelect, partRegions, showWireframe]);
 
-  // 参数防抖更新会重建引擎；恢复当前大类，避免调一个数后选区突然丢失、全车重新变绿。
+  // 调参只原地替换车身，复用 renderer、环境贴图、后期链和 WebGL context。
+  // 这样保留完整模型与原始像素倍率，同时避开每次参数稳定后重建整套 GPU 场景的停顿。
+  useEffect(() => {
+    const handle = handleRef.current;
+    if (!ready || !handle || appliedConfigRef.current === config) return;
+    const sequence = ++updateSequenceRef.current;
+    appliedConfigRef.current = config;
+    void handle.setModel({ asset: config.assets.model, model: config.model }).then((ok) => {
+      if (!ok || sequence !== updateSequenceRef.current || handleRef.current !== handle) return;
+      const region = activeRegionRef.current;
+      if (region) handle.setInspectRegion(region as "overall" | "body" | "aero" | "wheels" | "cockpit");
+      const dbg = handle.debug();
+      onDebugRef.current?.({
+        carBox: dbg.carBox,
+        carBoxRaw: dbg.carBoxRaw,
+        carMaterials: dbg.carMaterials,
+        carMeshes: dbg.carMeshes,
+        wheelGroups: dbg.wheelGroups
+      });
+    });
+  }, [config, ready]);
+
+  // 原地替换车身后恢复当前大类，避免调一个数后选区突然丢失、全车重新变绿。
   useEffect(() => {
     if (!ready || !activeRegion) return;
     handleRef.current?.setInspectRegion(activeRegion as "overall" | "body" | "aero" | "wheels" | "cockpit");

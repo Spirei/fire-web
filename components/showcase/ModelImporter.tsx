@@ -723,7 +723,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
           <p className="mp-workbench-intro">单击彩色标注点或真实网格选择参数大类；双击具体零件下钻到单个网格。参数停止输入后自动更新预览。</p>
           <div className="mp-tune">
             <div className="mp-preview-wrap">
-              {previewConfig && <ModelPreview key={previewKey} config={previewConfig} showWireframe explore
+              {previewConfig && <ModelPreview config={previewConfig} showWireframe explore
                 partRegions={TUNE_REGIONS} activeRegion={tuneRegion} onRegionSelect={(id) => selectTuneRegion(id as TuneRegion)}
                 onPartSelect={inspectPart} onDebug={setStructure} />}
               {pickedPart && <div className="mp-picked-part"><span>已选网格</span><b>{pickedPart.mesh}</b><small>{pickedPart.materials.join(" · ") || "无材质名"}</small></div>}

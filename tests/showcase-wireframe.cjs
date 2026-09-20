@@ -171,6 +171,8 @@ assert.match(importer, /localStorage\.getItem\(WORKBENCH_STORAGE_KEY\)/, 'model 
 assert.match(importer, /localStorage\.setItem\(WORKBENCH_STORAGE_KEY/, 'model workbench persists unsaved tuning changes');
 assert.match(importer, /mp-restore-screen/, 'model workbench covers the server import page until the local draft is restored');
 assert.match(preview, /setInspectRegion\(activeRegion/, 'live preview rebuild restores the selected tuning region');
+assert.doesNotMatch(preview, /\[config, explore, onPartSelect/, 'live tuning reuses the existing WebGL scene instead of rebuilding it');
+assert.match(preview, /handle\.setModel\(\{ asset: config\.assets\.model, model: config\.model \}\)/, 'live tuning swaps the model in the existing renderer');
 assert.match(engine, /const INSPECTOR_MIN_ZOOM = 0\.015;/, 'inspector must permit cockpit-scale zoom');
 assert.match(engine, /const INSPECTOR_MAX_ZOOM = 400;/, 'inspector must permit Sketchfab-scale zoom out');
 assert.match(engine, /clamp\(r \* 0\.003, 0\.0015, 0\.08\)/, 'near plane follows close camera distance');
@@ -179,6 +181,8 @@ assert.match(engine, /const baseElev = Math\.atan2\(Math\.max\(0\.2, h\) - targe
 assert.match(engine, /if \(modelCameraOn\(\)\) \{ badFrames = 0; softTries = 0; return; \}/, 'extreme model-camera framing must not trip the render watchdog');
 assert.match(engine, /floorUniforms\.uReflectIntensity\.value = wireframeMode === "native"[\s\S]*?: 0;/, 'homepage reflection must be disabled for overlay and pure wireframe modes');
 assert.match(engine, /if \(mode === "native"\) reflectDirty = true;/, 'returning to native mode must refresh the reflection texture');
+assert.doesNotMatch(engine, /return frameCount % 2 === 0;/, 'a static homepage must not rerender its full reflection scene every other frame');
+assert.match(engine, /inspectorOn && !inspectorMoving && !inspectorRenderDirty/, 'a static workbench skips redundant full-resolution frames');
 const transition = engine.slice(engine.indexOf('    setInspector: (on) => {'), engine.indexOf('    setWireframe: (mode, color)'));
 const transitionModule = new Module(__filename, module);
 transitionModule.paths = module.paths;
@@ -186,6 +190,7 @@ transitionModule._compile(ts.transpileModule(`
 const THREE = require('three');
 module.exports = () => {
  let inspectorOn = false, inspectorPose = null;
+ const invalidateInspector = () => {};
  let inspectorProgress = 0, START_P = 0;
  const homePose = { p: .42, yaw: -18, pitch: .12, zoom: 1.25 };
  let freeCamera = false, orbitOn = true, orbitYaw = 1, racing = true;
