@@ -54,6 +54,35 @@ interface ImportedModelRow {
 }
 
 const MAX_UPLOAD_BYTES = 250 * 1024 * 1024;
+const DEFAULT_WIREFRAME = {
+  enabled: true, maxEdge: 0.14, maxDepth: 2, maxComponentTriangles: 5000,
+  triangleBudget: 1_000_000, filterThinTrim: true, trimMaxTriangles: 64,
+  trimThickness: 0.04, trimWidth: 0.2, trimLength: 0.25
+} as const;
+
+function normalizeWireframeParams(params: ShowcaseModelParams): ShowcaseModelParams {
+  const source = { ...DEFAULT_WIREFRAME, ...(params.wireframe ?? {}) };
+  const clamp = (value: number, min: number, max: number, integer = false) => {
+    const finite = Number.isFinite(value) ? value : min;
+    const bounded = Math.min(max, Math.max(min, finite));
+    return integer ? Math.round(bounded) : bounded;
+  };
+  return {
+    ...params,
+    wireframe: {
+      enabled: Boolean(source.enabled),
+      maxEdge: clamp(source.maxEdge, 0.03, 1),
+      maxDepth: clamp(source.maxDepth, 1, 3, true),
+      maxComponentTriangles: clamp(source.maxComponentTriangles, 10, 50_000, true),
+      triangleBudget: clamp(source.triangleBudget, 10_000, 2_000_000, true),
+      filterThinTrim: Boolean(source.filterThinTrim),
+      trimMaxTriangles: clamp(source.trimMaxTriangles, 1, 1_000, true),
+      trimThickness: clamp(source.trimThickness, 0.001, 0.2),
+      trimWidth: clamp(source.trimWidth, 0.01, 1),
+      trimLength: clamp(source.trimLength, 0.05, 2)
+    }
+  };
+}
 
 function mb(bytes: number) {
   return `${(bytes / 1048576).toFixed(bytes > 104857600 ? 0 : 1)} MB`;
@@ -189,7 +218,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
           envMapIntensity: 1,
           wheelAxis: "x",
           wheelLateral: "x",
-          wheelLongitudinal: "y"
+          wheelLongitudinal: "y",
+          wireframe: { ...DEFAULT_WIREFRAME }
         };
         setParams(initialParams);
         setPreviewParams(initialParams);
@@ -237,7 +267,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         maxTextureSize: previewParams.maxTextureSize,
         emissiveIntensity: previewParams.emissiveIntensity,
         clearcoatRoughness: previewParams.clearcoatRoughness,
-        envMapIntensity: previewParams.envMapIntensity
+        envMapIntensity: previewParams.envMapIntensity,
+        wireframe: previewParams.wireframe
       }
     });
     // previewKey 用来在改完参数后手动重建引擎
@@ -245,10 +276,16 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
 
   const previewIsCurrent = useMemo(() => JSON.stringify(params) === JSON.stringify(previewParams), [params, previewParams]);
   const reloadPreview = useCallback(() => {
+    const normalized = normalizeWireframeParams(params);
     setStructure(null);
-    setPreviewParams(params);
+    setParams(normalized);
+    setPreviewParams(normalized);
     setPreviewKey((prev) => prev + 1);
   }, [params]);
+  const wireframe = { ...DEFAULT_WIREFRAME, ...(params.wireframe ?? {}) };
+  const setWireframeParam = <K extends keyof typeof wireframe>(key: K, value: (typeof wireframe)[K]) => {
+    setParams((prev) => ({ ...prev, wireframe: { ...DEFAULT_WIREFRAME, ...(prev.wireframe ?? {}), [key]: value } }));
+  };
 
   /** 从原始包围盒判断哪根轴朝上：车高永远是最小的那一维 */
   const upHint = useMemo(() => {
@@ -571,7 +608,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
           </h2>
           <div className="mp-tune">
             <div className="mp-preview-wrap">
-              {previewConfig && <ModelPreview key={previewKey} config={previewConfig} onDebug={setStructure} />}
+              {previewConfig && <ModelPreview key={previewKey} config={previewConfig} showWireframe onDebug={setStructure} />}
               <div className="mp-preview-foot">
                 <button type="button" className="mp-ghost fire-cap" onClick={reloadPreview}>
                   重新加载预览
@@ -696,6 +733,26 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                   onChange={(event) => setParams({ ...params, clearcoatRoughness: Number(event.target.value) })}
                 />
               </label>
+
+              <details className="mp-wire-algorithm">
+                <summary><span>尾翼线框算法</span><small>独立设置</small></summary>
+                <p>按连通件规则补线；参数随当前车型保存。修改后点击左侧“重新加载预览”。</p>
+                <div className="mp-wire-switches">
+                  <label><input type="checkbox" checked={wireframe.enabled} onChange={(event) => setWireframeParam("enabled", event.target.checked)} />启用规则补线</label>
+                  <label><input type="checkbox" checked={wireframe.filterThinTrim} onChange={(event) => setWireframeParam("filterThinTrim", event.target.checked)} />过滤细长装饰线</label>
+                </div>
+                <div className="mp-wire-grid">
+                  <label>目标边长（米）<input type="number" min="0.03" max="1" step="0.01" value={wireframe.maxEdge} onChange={(event) => setWireframeParam("maxEdge", Number(event.target.value))} /></label>
+                  <label>最大细分层级<input type="number" min="1" max="3" step="1" value={wireframe.maxDepth} onChange={(event) => setWireframeParam("maxDepth", Number(event.target.value))} /></label>
+                  <label>连通件面数上限<input type="number" min="10" max="50000" step="100" value={wireframe.maxComponentTriangles} onChange={(event) => setWireframeParam("maxComponentTriangles", Number(event.target.value))} /></label>
+                  <label>全车新增面预算<input type="number" min="10000" max="2000000" step="10000" value={wireframe.triangleBudget} onChange={(event) => setWireframeParam("triangleBudget", Number(event.target.value))} /></label>
+                  <label>装饰件面数上限<input type="number" min="1" max="1000" step="1" value={wireframe.trimMaxTriangles} onChange={(event) => setWireframeParam("trimMaxTriangles", Number(event.target.value))} /></label>
+                  <label>装饰厚度上限（米）<input type="number" min="0.001" max="0.2" step="0.005" value={wireframe.trimThickness} onChange={(event) => setWireframeParam("trimThickness", Number(event.target.value))} /></label>
+                  <label>装饰宽度上限（米）<input type="number" min="0.01" max="1" step="0.01" value={wireframe.trimWidth} onChange={(event) => setWireframeParam("trimWidth", Number(event.target.value))} /></label>
+                  <label>装饰长度下限（米）<input type="number" min="0.05" max="2" step="0.05" value={wireframe.trimLength} onChange={(event) => setWireframeParam("trimLength", Number(event.target.value))} /></label>
+                </div>
+                <button type="button" className="mp-ghost fire-cap" onClick={() => setParams((prev) => ({ ...prev, wireframe: { ...DEFAULT_WIREFRAME } }))}>恢复推荐参数</button>
+              </details>
 
               <div className="mp-wheel">
                 <p>

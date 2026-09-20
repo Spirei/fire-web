@@ -1,6 +1,31 @@
 import * as THREE from "three";
 
 export type WireframeMode = "native" | "overlay" | "wireframe";
+export interface WireframeTuning {
+  enabled?: boolean;
+  maxEdge?: number;
+  maxDepth?: number;
+  maxComponentTriangles?: number;
+  triangleBudget?: number;
+  filterThinTrim?: boolean;
+  trimMaxTriangles?: number;
+  trimThickness?: number;
+  trimWidth?: number;
+  trimLength?: number;
+}
+
+const DEFAULT_TUNING: Required<WireframeTuning> = {
+  enabled: true,
+  maxEdge: 0.14,
+  maxDepth: 2,
+  maxComponentTriangles: 5_000,
+  triangleBudget: 1_000_000,
+  filterThinTrim: true,
+  trimMaxTriangles: 64,
+  trimThickness: 0.04,
+  trimWidth: 0.2,
+  trimLength: 0.25
+};
 
 // GLB 车漆常把不透明白漆也标成 transparent。若线框与这些网格都留在默认顺序，
 // Three.js 会随镜头角度重新按距离排序：某些俯仰下白漆后画，把已经画好的线框盖掉。
@@ -8,11 +33,12 @@ export type WireframeMode = "native" | "overlay" | "wireframe";
 const WIRE_RENDER_ORDER = 8;
 
 /** Shares the source geometry and local transform, including independently rotating wheels. */
-export function createWireframeView() {
+export function createWireframeView(initialTuning?: WireframeTuning) {
+  let tuning = { ...DEFAULT_TUNING, ...initialTuning };
   let mode: WireframeMode = "native";
   let color = "#00ff00";
   let root: THREE.Object3D | null = null;
-  let tessellationBudget = 1_000_000;
+  let tessellationBudget = tuning.triangleBudget;
   const entries: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[]; overlay: THREE.Mesh; baseGeometry?: THREE.BufferGeometry; detail?: THREE.Mesh; detailGeometry?: THREE.BufferGeometry }[] = [];
   const overlayMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
   // Offset in clip space, never inflate the mesh (which separates narrow panels / wheel parts).
@@ -39,7 +65,7 @@ export function createWireframeView() {
     const scale = new THREE.Vector3();
     mesh.getWorldScale(scale);
     const worldScale = Math.max(Math.abs(scale.x), Math.abs(scale.y), Math.abs(scale.z), 1e-6);
-    const maxEdge = 0.14 / worldScale;
+    const maxEdge = tuning.maxEdge / worldScale;
     const index = geometry.getIndex();
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
     const triangles = index ? index.count / 3 : position.count / 3;
@@ -89,24 +115,24 @@ export function createWireframeView() {
       for (const [rootId, component] of components) {
         componentSize.subVectors(component.max, component.min).multiplyScalar(worldScale);
         const dimensions = [componentSize.x, componentSize.y, componentSize.z].map(Math.abs).sort((x, y) => x - y);
-        const isThinTrim = component.triangles <= 64 && dimensions[0] <= 0.04 && dimensions[1] <= 0.2 && dimensions[2] >= 0.25;
+        const isThinTrim = tuning.filterThinTrim && component.triangles <= tuning.trimMaxTriangles && dimensions[0] <= tuning.trimThickness && dimensions[1] <= tuning.trimWidth && dimensions[2] >= tuning.trimLength;
         if (isThinTrim) ignoredComponents.add(rootId);
         // Use topology rather than world-axis proportions: horizontal blades, vertical endplates and
         // curved wings all qualify as long as they are an independent, reasonably small component.
-        const isSparsePart = !isThinTrim && component.triangles <= 5_000;
+        const isSparsePart = tuning.enabled && !isThinTrim && component.triangles <= tuning.maxComponentTriangles;
         if (isSparsePart && component.longestEdgeSq > maxEdge ** 2) {
           // A whole wing component uses one quantized subdivision level. Mirrored components with tiny
           // export differences therefore receive the same topology instead of two unrelated zigzags.
           const ratio = Math.sqrt(component.longestEdgeSq) / maxEdge;
-          componentDepth.set(rootId, THREE.MathUtils.clamp(Math.ceil(Math.log2(ratio)), 1, 2));
+          componentDepth.set(rootId, THREE.MathUtils.clamp(Math.ceil(Math.log2(ratio)), 1, tuning.maxDepth));
         }
       }
     }
     if (tessellationBudget < 4) return { baseGeometry };
     const sparseTriangles: Array<[THREE.Vector3, THREE.Vector3, THREE.Vector3, number]> = [];
     const refinedTriangles = new Set<number>();
-    // 两轮规则细分最坏会把一个三角形拆成 16 个；先按剩余预算限制候选数量。
-    const candidateLimit = Math.max(1, Math.floor(tessellationBudget / 16));
+    const trianglesPerCandidate = 4 ** tuning.maxDepth;
+    const candidateLimit = Math.max(1, Math.floor(tessellationBudget / trianglesPerCandidate));
     for (let triangle = 0; triangle < triangles && sparseTriangles.length < candidateLimit; triangle += 1) {
       const ai = index ? index.getX(triangle * 3) : triangle * 3;
       const bi = index ? index.getX(triangle * 3 + 1) : triangle * 3 + 1;
@@ -115,9 +141,9 @@ export function createWireframeView() {
       const longestEdgeSq = Math.max(a.distanceToSquared(b), b.distanceToSquared(c), c.distanceToSquared(a));
       const componentId = triangleComponents?.[triangle];
       if (componentId !== undefined && ignoredComponents.has(componentId)) continue;
-      const sharedDepth = componentId !== undefined ? componentDepth.get(componentId) : undefined;
-      if (sharedDepth || longestEdgeSq > maxEdge ** 2) {
-        const depth = sharedDepth ?? THREE.MathUtils.clamp(Math.ceil(Math.log2(Math.sqrt(longestEdgeSq) / maxEdge)), 1, 2);
+      const sharedDepth = tuning.enabled && componentId !== undefined ? componentDepth.get(componentId) : undefined;
+      if (sharedDepth || (tuning.enabled && longestEdgeSq > maxEdge ** 2)) {
+        const depth = sharedDepth ?? THREE.MathUtils.clamp(Math.ceil(Math.log2(Math.sqrt(longestEdgeSq) / maxEdge)), 1, tuning.maxDepth);
         sparseTriangles.push([a.clone(), b.clone(), c.clone(), depth]);
         refinedTriangles.add(triangle);
       }
@@ -210,11 +236,18 @@ export function createWireframeView() {
     }
     entries.length = 0;
     root = null;
-    tessellationBudget = 1_000_000;
+    tessellationBudget = tuning.triangleBudget;
   }
 
   return {
     attach(next: THREE.Object3D) { detach(); root = next; apply(); },
+    configure(next: WireframeTuning | undefined) {
+      const activeRoot = root;
+      detach();
+      tuning = { ...DEFAULT_TUNING, ...next };
+      tessellationBudget = tuning.triangleBudget;
+      if (activeRoot) { root = activeRoot; apply(); }
+    },
     detach,
     set(next: WireframeMode, nextColor: string) { mode = next; color = nextColor; apply(); },
     dispose() { detach(); overlayMaterial.dispose(); pureMaterial.dispose(); depthMaterial.dispose(); },

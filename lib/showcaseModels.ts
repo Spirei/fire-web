@@ -206,6 +206,27 @@ export function sanitizeParams(input: unknown): ShowcaseModelParams {
   num("emissiveIntensity", 0, 4);
   num("clearcoatRoughness", 0, 1);
   num("envMapIntensity", 0, 3);
+  if (raw.wireframe && typeof raw.wireframe === "object") {
+    const source = raw.wireframe as Record<string, unknown>;
+    const wireframe: NonNullable<ShowcaseModelParams["wireframe"]> = {};
+    const wireNum = (key: keyof typeof wireframe, min: number, max: number, integer = false) => {
+      const value = Number(source[key]);
+      if (Number.isFinite(value) && value >= min && value <= max) {
+        (wireframe as Record<string, number>)[key] = integer ? Math.round(value) : value;
+      }
+    };
+    if (typeof source.enabled === "boolean") wireframe.enabled = source.enabled;
+    if (typeof source.filterThinTrim === "boolean") wireframe.filterThinTrim = source.filterThinTrim;
+    wireNum("maxEdge", 0.03, 1);
+    wireNum("maxDepth", 1, 3, true);
+    wireNum("maxComponentTriangles", 10, 50_000, true);
+    wireNum("triangleBudget", 10_000, 2_000_000, true);
+    wireNum("trimMaxTriangles", 1, 1_000, true);
+    wireNum("trimThickness", 0.001, 0.2);
+    wireNum("trimWidth", 0.01, 1);
+    wireNum("trimLength", 0.05, 2);
+    out.wireframe = wireframe;
+  }
   const axis = (key: "wheelAxis" | "wheelLateral" | "wheelLongitudinal") => {
     const value = String(raw[key] ?? "");
     if (AXES.has(value)) out[key] = value as "x" | "y" | "z";

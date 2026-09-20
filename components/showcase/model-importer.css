@@ -289,6 +289,30 @@
   line-height: 1.5;
 }
 
+.mp-wire-algorithm {
+  grid-column: 1 / -1;
+  padding: 12px;
+  border: 1px solid rgba(127, 137, 152, 0.3);
+  border-radius: 14px;
+  background: rgba(127, 137, 152, 0.07);
+}
+
+.mp-wire-algorithm summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 750;
+}
+
+.mp-wire-algorithm summary small { font-size: 10.5px; font-weight: 600; opacity: 0.55; }
+.mp-wire-algorithm > p { margin: 10px 0; font-size: 11px; line-height: 1.55; opacity: 0.62; }
+.mp-wire-switches { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 10px; }
+.mp-wire-switches label { flex-direction: row; align-items: center; }
+.mp-wire-switches input { width: 15px; height: 15px; padding: 0; }
+.mp-wire-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 9px; margin-bottom: 10px; }
+
 .mp-wheel {
   grid-column: 1 / -1;
 }

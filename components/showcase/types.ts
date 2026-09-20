@@ -90,6 +90,8 @@ export interface ShowcaseModelParams {
   emissiveIntensity?: number;
   clearcoatRoughness?: number;
   envMapIntensity?: number;
+  /** 模型展示线框的尾翼规则补线参数 */
+  wireframe?: import("./wireframe").WireframeTuning;
   materialRules?: Array<{ match: string; metalness?: number; roughness?: number }>;
 }
 
@@ -145,6 +147,8 @@ export interface ShowcaseConfig {
     clearcoatRoughness?: number;
     /** 环境反射强度，默认 1。调高会让夜景里的小亮点在漆面上放大成光晕 */
     envMapIntensity?: number;
+    /** 尾翼 / 稀疏部件的规则补线参数 */
+    wireframe?: import("./wireframe").WireframeTuning;
   };
   /** 昼夜环境过渡（参考视频整段 hero 都是夜景，通常把窗口放到收尾或整段保持夜色） */
   environment?: {

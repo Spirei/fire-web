@@ -132,6 +132,8 @@ const connectedMesh = new THREE.Mesh(connectedGeometry, paint), connectedRoot = 
 connectedView.attach(connectedRoot); connectedView.set('overlay', '#00ff00');
 const connectedDetail = connectedMesh.children[0].children[0].geometry.getAttribute('position');
 assert.equal(connectedDetail.count, 2 * 16 * 3, 'every face in an arbitrarily oriented sparse component shares one capped subdivision level');
+connectedView.configure({ maxDepth: 1, maxEdge: .14 });
+assert.equal(connectedMesh.children[0].children[0].geometry.getAttribute('position').count, 2 * 4 * 3, 'import tuning rebuilds the live wire view with the selected density');
 connectedView.dispose(); connectedGeometry.dispose();
 console.log('PASS six colors, wheel transforms, hidden meshes, original/multi-material restoration, shared palette, model switch and disposal');
 // Exercise the engine's real inspector transition: entering must not overwrite the home pose.

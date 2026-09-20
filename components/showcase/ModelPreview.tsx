@@ -11,9 +11,11 @@ import type { ShowcaseConfig, ShowcaseHandle } from "./types";
  */
 export default function ModelPreview({
   config,
-  onDebug
+  onDebug,
+  showWireframe = false
 }: {
   config: ShowcaseConfig;
+  showWireframe?: boolean;
   onDebug?: (info: {
     carBox: number[];
     carBoxRaw: number[];
@@ -88,6 +90,7 @@ export default function ModelPreview({
           return;
         }
         handle = created;
+        if (showWireframe) created.setWireframe("overlay", "#00ff00");
       })
       .catch((err) => {
         if (!disposed) setError(err instanceof Error ? err.message : String(err));
@@ -97,7 +100,7 @@ export default function ModelPreview({
       handle?.dispose();
       canvas.remove();
     };
-  }, [config]);
+  }, [config, showWireframe]);
 
   return (
     <div className="mp-preview" ref={wrapRef}>

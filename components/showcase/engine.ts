@@ -63,6 +63,7 @@ function normalizeModel(model: ShowcaseConfig["model"]) {
       wheelLateral: model?.wheelLateral ?? "x",
       wheelLongitudinal: model?.wheelLongitudinal ?? "y",
       maxTextureSize: model?.maxTextureSize ?? 4096,
+      wireframe: model?.wireframe,
       materialRules: (model?.materialRules ?? []).map((rule) => ({
         match: toRegExp(rule.match, /$^/),
         metalness: rule.metalness,
@@ -1477,7 +1478,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     });
 
   /** 当前挂在场景里的车（换车型时用它撤掉旧车） */
-  const wireframeView = createWireframeView();
+  const wireframeView = createWireframeView(CFG.model.wireframe);
   let wireframeMode: "native" | "overlay" | "wireframe" = "native";
   let mountedCar: THREE.Object3D | null = null;
 
@@ -3011,6 +3012,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         CFG.model = normalizeModel(next.model);
         CFG.assets = { ...CFG.assets, model: next.asset };
         unmountCar(previous);
+        wireframeView.configure(CFG.model.wireframe);
         focusTarget.set(0, 0, 0);
         mountCar(nextCar);
         render(progress(), 1 / 60);
