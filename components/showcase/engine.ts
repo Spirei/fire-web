@@ -1761,6 +1761,19 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 用户缩放：滚轮（⌘/Ctrl + 滚轮或触控板捏合）与按钮都改这个倍率，用来放大看细节
   const MIN_ZOOM = CFG.zoom.min;
   const MAX_ZOOM = CFG.zoom.max;
+  let freeCamera = false;
+  const zoomLimit = () => {
+    if (!freeCamera) return MAX_ZOOM;
+    const base = CAM_KEYS[0];
+    const fit = camera.aspect < CFG.camera.fitMinAspect
+      ? clamp(CFG.camera.fitMinAspect / camera.aspect, 1, CFG.camera.fitMaxPullback) : 1;
+    const height = canvas.clientHeight || 720;
+    // 最远仍保留至少 110px / 短边 20% 的可辨识轮廓，竖屏同时计入机位拉远与 FOV。
+    const pixels = Math.max(110, Math.min(canvas.clientWidth || 1280, height) * 0.2);
+    const fov = base.fov * Math.pow(fit, 0.45) * Math.PI / 180;
+    return clamp(CFG.model.length * 0.6 * height /
+      (2 * Math.tan(fov / 2) * pixels * base.r * Math.pow(fit, 0.8)), 1.2, 5);
+  };
   let zoom = 1;
   let zoomTarget = 1;
   let active = true;
@@ -1823,6 +1836,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       userPitchVel *= decay;
       if (Math.abs(userPitchVel) < 0.00002) userPitchVel = 0;
     }
+    if (freeCamera) zoomTarget = Math.min(zoomTarget, zoomLimit());
     zoom += (zoomTarget - zoom) * clamp(dt * 8, 0, 1);
     // 360° 环视：自动绕车旋转（松开后平滑回到叙事机位）
     if (orbitOn && racingAmt < 0.01) {
@@ -1956,8 +1970,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       ringUniformsRef.uTime.value = elapsed;
       ringUniformsRef.uSpeed.value = sps;
       ringUniformsRef.uSweep.value = elapsed * (0.05 + sps * 0.22);
-      // 参考 17 秒高速帧仍可见淡刻度环，保留一层低亮度空间参照。
-      const ringFade = 1 - seg(sps, 0.08, 0.48) * 0.82;
+      // 行驶时退出展示台刻度环，避免看起来带着大圆盘前进。
+      const ringFade = 1 - seg(sps, 0.04, 0.28);
       // 这是展示台的刻度参照，随车辆跟随机位保留在车下，不遗留在起步点。
       if (ring) ring.position.z = carTravel;
       ringOutlines.forEach(mesh => { mesh.position.z = carTravel; });
@@ -2257,6 +2271,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     scrollTravel = Math.max(1, el.offsetHeight - stage.offsetHeight);
   }
   function progress() {
+    if (freeCamera) return 0;
     // 只守开场这三秒：这段时间足够覆盖浏览器的滚动恢复，也不会长期影响脚本化调试（直接 scrollTo 也能工作）。
     // 用户置顶过机位时「家」不是 0 而是置顶进度，所以开场就停在那里
     if (!userScrolled && elapsed < 3) return START_P;
@@ -2322,14 +2337,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    */
   let homePose: { yaw: number; pitch: number; zoom: number } | null = null;
   const resetView = () => {
-    userYaw = homePose?.yaw ?? 0;
+    userYaw = freeCamera ? 0 : homePose?.yaw ?? 0;
     userYawVel = 0;
-    userPitch = homePose?.pitch ?? 0;
+    userPitch = freeCamera ? 0 : homePose?.pitch ?? 0;
     userPitchVel = 0;
-    zoomTarget = homePose?.zoom ?? 1;
+    zoomTarget = freeCamera ? 1 : homePose?.zoom ?? 1;
     setZoomMode(false);
     // 置顶机位还包含「进度」：交给组件把滚动位置带回去，才真的回到那一帧
-    options.onResetView?.();
+    if (!freeCamera) options.onResetView?.();
   };
   const onCanvasDown = (e: PointerEvent) => {
     // 触屏双击复位（手机上 dblclick 不可靠，自己判时间间隔）
@@ -2360,7 +2375,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const gain = dragByTouch ? 0.42 : 0.3;
     userYaw -= dx * gain;
     userYawVel = -dx * gain;
-    if (dragByTouch) return;
+    if (dragByTouch && !freeCamera) return;
     // 鼠标上下拖：向上拖 = 升高视角俯视，向下拖 = 降低视角平视/略微仰视
     userPitch = clamp(userPitch + dy * 0.0035, -0.55, 0.95);
     userPitchVel = dy * 0.0035;
@@ -2384,7 +2399,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   // 缩放：⌘/Ctrl + 滚轮（触控板捏合同样走这里）、按钮、双击复位
   const applyZoom = (factor: number) => {
-    zoomTarget = clamp(zoomTarget * factor, MIN_ZOOM, MAX_ZOOM);
+    zoomTarget = clamp(zoomTarget * factor, MIN_ZOOM, zoomLimit());
   };
   let zoomMode = false;
   const setZoomMode = (on: boolean) => {
@@ -2395,7 +2410,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const onWheel = (e: WheelEvent) => {
     const withModifier = e.ctrlKey || e.metaKey || e.altKey || e.shiftKey;
     // 打开缩放模式后普通滚轮 / 触控板双指滚动就是缩放，不再滚动页面（触屏仍可单指上下滑动）
-    if (!withModifier && !zoomMode) return;
+    if (!withModifier && !zoomMode && !freeCamera) return;
     e.preventDefault();
     // 往下滚 = 拉远，往上滚 / 双指张开 = 推近看细节
     applyZoom(Math.exp(e.deltaY * CFG.zoom.wheelStep));
@@ -2449,7 +2464,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       pinchBase = d;
       return;
     }
-    zoomTarget = clamp(pinchStart * (pinchBase / d), MIN_ZOOM, MAX_ZOOM);
+    zoomTarget = clamp(pinchStart * (pinchBase / d), MIN_ZOOM, zoomLimit());
   };
   const onTouchEnd = (e: PointerEvent) => {
     if (e.pointerType !== "touch") return;
@@ -2759,6 +2774,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       }
     },
     /** 360° 环视：自动绕车一圈，再点一次平滑回到叙事机位 */
+    setFreeCamera: (on: boolean) => {
+      if (freeCamera === on) return;
+      freeCamera = on;
+      zoomTarget = 1;
+      userYaw = 0; userPitch = 0; userYawVel = 0; userPitchVel = 0;
+      if (on) { orbitOn = false; orbitYaw = 0; }
+    },
     setOrbit: (on: boolean) => {
       orbitOn = on;
     },

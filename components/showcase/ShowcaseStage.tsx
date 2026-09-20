@@ -84,6 +84,8 @@ export default function ShowcaseStage({
   const [waveLive, setWaveLive] = useState(false);
   // 360° 环视（自动绕车）与影棚（明亮摄影棚）：两个胶囊以前只是文字，现在是真的开关
   const [orbit, setOrbit] = useState(false);
+  const [freeCamera, setFreeCamera] = useState(false);
+  const freeCameraRef = useRef(false);
   const [studio, setStudio] = useState(false);
   // 引擎是异步创建的，点得比它早就先把状态存下来，创建完再补上
   const orbitRef = useRef(false);
@@ -232,6 +234,7 @@ export default function ShowcaseStage({
         handle.setTheme(themeRef.current);
         // 引擎是异步创建的：创建前点过的「360° 环视 / 影棚」要补上
         handle.setOrbit(orbitRef.current);
+        handle.setFreeCamera(freeCameraRef.current);
         handle.setStudio(studioRef.current);
         // 置顶机位：刷新 / 重建后直接把镜头放回用户存下的角度（滚动位置由下面的滚动守护负责）
         const pinned = pinnedPoseRef.current;
@@ -427,6 +430,9 @@ export default function ShowcaseStage({
   /** 底部章节导航：滚到该章节的进度（滚动本身驱动叙事，所以直接滚页面即可） */
   const goPhase = useCallback(
     (index: number) => {
+      setFreeCamera(false);
+      freeCameraRef.current = false;
+      handleRef.current?.setFreeCamera(false);
       const el = scrollRef.current;
       const stage = stageRef.current;
       if (!el || !stage) return;
@@ -694,7 +700,7 @@ export default function ShowcaseStage({
 
   // 影棚（明亮摄影棚）下画面是亮的，HUD 文字要跟着换成浅色系，否则白字压在白底上看不见
   return (
-    <div className={`showcase ${theme === "light" || studio ? "light" : ""} ${className}`}>
+    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio ? "light" : ""} ${className}`}>
       <div className="sc-scroll" ref={scrollRef}>
         <div className="sc-stage" ref={stageRef}>
           <div className="sc-canvas-wrap" ref={canvasWrapRef} />
@@ -867,19 +873,19 @@ export default function ShowcaseStage({
 
             <div className="sc-row sc-hint-drag">
               <span>{ui.dragHint}</span>
-              <span>{ui.zoomHint}</span>
+              <span>{freeCamera ? "自由镜头 · 滚轮缩放 · 双击复位" : ui.zoomHint}</span>
             </div>
-            <div className="sc-row sc-hint-touch">{ui.touchHint}</div>
+            <div className="sc-row sc-hint-touch">{freeCamera ? "单指环视 · 双指缩放 · 双击复位" : ui.touchHint}</div>
             {/* 章节导航：右侧竖排指示器（短横条 + 当前章节更长更亮），悬停 / 键盘聚焦显示章节名 */}
             <div className="sc-row sc-nav">
               {ui.nav.map((item, i) => (
                 <button
                   type="button"
                   key={item}
-                  className={phase === i ? "on" : undefined}
+                  className={!freeCamera && phase === i ? "on" : undefined}
                   onClick={() => goPhase(i)}
                   aria-label={`跳到第 ${i + 1} 章 ${item}`}
-                  aria-current={phase === i ? "true" : undefined}
+                  aria-current={!freeCamera && phase === i ? "true" : undefined}
                 >
                   <span className="sc-nav-label" aria-hidden="true">
                     {item}
@@ -887,6 +893,18 @@ export default function ShowcaseStage({
                   <span className="sc-nav-tick" aria-hidden="true" />
                 </button>
               ))}
+              <button type="button" className={`sc-free-camera${freeCamera ? " on" : ""}`}
+                aria-label="自由镜头" aria-pressed={freeCamera}
+                onClick={() => {
+                  const next = !freeCamera;
+                  setFreeCamera(next); freeCameraRef.current = next;
+                  setOrbit(false); orbitRef.current = false;
+                  handleRef.current?.setOrbit(false);
+                  handleRef.current?.setFreeCamera(next);
+                }}>
+                <span className="sc-nav-label">自由镜头</span>
+                <span className="sc-nav-tick" aria-hidden="true" />
+              </button>
             </div>
             {models && models.length > 0 && (models.length > 1 || onImport) && (
               <div className="sc-row sc-models">

@@ -1017,3 +1017,30 @@ html:has(.showcase.light) body {
 .sc-model-add:hover {
   border-style: solid;
 }
+
+/* 镜头入口避开遥测；自由镜头为第六项，触屏留出真实点击面积。 */
+.sc-nav { top: 64%; gap: 12px; }
+.sc-nav button { min-height: 24px; min-width: 40px; }
+.sc-free-camera { margin-top: 6px; }
+.sc-free-camera .sc-nav-tick { border: 1px solid currentColor; background: transparent; height: 8px; }
+.sc-free-camera .sc-nav-label { opacity: 1; }
+.showcase.light .sc-nav { color: #343c49; }
+.showcase.light .sc-nav button { color: #505b69; }
+.showcase.light .sc-nav button.on { color: #111827; }
+@media (max-width: 1024px) {
+  .sc-nav { top: 63%; gap: 2px; }
+  .sc-hint-drag { display: none; }
+  .sc-hint-touch { display: block; left: 50%; transform: translateX(-50%); bottom: calc(12vh + 54px); font-size: 9px; white-space: nowrap; text-align: center; }
+  .sc-nav button { min-height: 36px; min-width: 44px; padding: 4px 6px; }
+}
+@media (max-width: 640px) {
+  .sc-nav { top: 55%; gap: 0; right: 3vw; }
+  .sc-nav button { min-height: 40px; }
+  .sc-nav-label { font-size: 9px; }
+}
+@media (max-height: 540px) {
+  .sc-nav { top: 57%; gap: 0; }
+  .sc-nav button { min-height: 24px; padding: 2px 6px; }
+}
+
+.showcase.sc-free canvas { touch-action: none; }
