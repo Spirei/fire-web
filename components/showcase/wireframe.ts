@@ -2,6 +2,11 @@ import * as THREE from "three";
 
 export type WireframeMode = "native" | "overlay" | "wireframe";
 
+// GLB 车漆常把不透明白漆也标成 transparent。若线框与这些网格都留在默认顺序，
+// Three.js 会随镜头角度重新按距离排序：某些俯仰下白漆后画，把已经画好的线框盖掉。
+// 统一把展示线框放到车身透明层之后；深度测试仍开启，所以不会透出背面的结构。
+const WIRE_RENDER_ORDER = 8;
+
 /** Shares the source geometry and local transform, including independently rotating wheels. */
 export function createWireframeView() {
   let mode: WireframeMode = "native";
@@ -170,6 +175,7 @@ export function createWireframeView() {
         overlay.matrix.identity();
         overlay.matrixAutoUpdate = true;
         overlay.material = overlayMaterial;
+        overlay.renderOrder = WIRE_RENDER_ORDER;
         overlay.castShadow = false;
         overlay.receiveShadow = false;
         overlay.raycast = () => {};
@@ -177,6 +183,7 @@ export function createWireframeView() {
         if (wire.detailGeometry) {
           detail = new THREE.Mesh(wire.detailGeometry, overlayMaterial);
           detail.name = "showcase-wire-detail";
+          detail.renderOrder = WIRE_RENDER_ORDER;
           detail.raycast = () => {};
           overlay.add(detail);
         }
