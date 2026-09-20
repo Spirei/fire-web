@@ -1047,34 +1047,69 @@ html:has(.showcase.light) body {
 
 .sc-nav .sc-camera-reset { min-height: 28px; font-size: 10px; margin-top: 2px; padding: 4px 8px; border: 1px solid var(--sc-line); border-radius: 6px; background: var(--sc-panel); }
 
-/* Model inspector: theme-local because the showcase can override the page theme. */
-.sc-wire-control { position: relative; pointer-events: auto; }
-.sc-wire-panel { position: absolute; top: calc(100% + 10px); right: 0; width: 264px; padding: 14px; border: 1px solid #ffffff29; border-radius: 14px; background: #15171cf5; color: #eef0f4; box-shadow: 0 12px 40px #0005; z-index: 20; }
-.sc-wire-heading { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 8px; }
-.sc-wire-heading button { width: 32px; height: 32px; font-size: 20px; }
-.sc-wire-modes { display: flex; gap: 4px; }
-.sc-wire-modes button { flex: 1; min-height: 36px; border: 1px solid #ffffff24; border-radius: 7px; font-size: 11px; }
-.sc-wire-modes button[aria-pressed="true"] { background: #ffffff1f; border-color: #eea464; }
-.sc-wire-colors { display: flex; justify-content: space-between; margin-top: 10px; }
-.sc-wire-colors button { width: 36px; height: 38px; display: grid; place-items: center; border-radius: 7px; border: 1px solid transparent; }
-.sc-wire-colors button[aria-pressed="true"] { border-color: currentColor; }
-.sc-wire-colors span { width: 22px; height: 22px; border: 1px solid #ffffff65; border-radius: 4px; }
-.sc-wire-panel p { margin: 9px 0 0; font-size: 10px; opacity: .7; }
-.sc-wire-panel button:focus-visible { outline: 2px solid #eea464; outline-offset: 2px; }
-.showcase.light .sc-wire-panel { background: #fffffff7; color: #25282e; border-color: #0002; }
-.showcase.light .sc-wire-modes button { border-color: #0003; }
-.showcase.light .sc-wire-modes button[aria-pressed="true"] { background: #e9e6e2; border-color: #a74e13; }
-.showcase.light .sc-wire-colors span { border-color: #0005; }
+/* Liquid Glass-inspired inspector: local glass surfaces, no continuous animation. */
+.sc-wire-control { position: relative; pointer-events: auto; --glass-ink: #f6f7f9; --glass-subtle: #c1c4cc; --glass-surface: #26283170; --glass-edge: #ffffff38; --glass-lens: #ffffff28; --glass-track: #00000020; }
+.showcase.light .sc-wire-control { --glass-ink: #202229; --glass-subtle: #646771; --glass-surface: #f8f9fc60; --glass-edge: #ffffffb8; --glass-lens: #ffffff70; --glass-track: #656a7c0e; }
+.sc-glass-trigger, .sc-wire-panel, .sc-inspector-reset {
+  color: var(--glass-ink); border: 1px solid var(--glass-edge);
+  background: linear-gradient(145deg, #ffffff25, #ffffff05 48%, #ffffff18), var(--glass-surface);
+  -webkit-backdrop-filter: blur(22px) saturate(1.65); backdrop-filter: blur(22px) saturate(1.65);
+  box-shadow: inset 0 1px 0 #ffffff75, inset 0 -1px 0 #ffffff20, 0 6px 18px #00000012;
+}
+.sc-glass-trigger { width: auto; min-width: 72px; height: 36px; gap: 6px; padding: 0 12px; border-radius: 24px; font-size: 12px; font-weight: 550; letter-spacing: .02em; transition: transform .3s cubic-bezier(.2,.8,.2,1), background .3s, box-shadow .3s; }
+.sc-glass-trigger:hover { background-color: var(--glass-lens); box-shadow: inset 0 1px 0 #fff9, 0 8px 22px #0002; }
+.sc-glass-trigger:active { transform: scale(.94); }
+.sc-wire-panel { position: absolute; top: calc(100% + 12px); right: 0; width: 304px; padding: 20px; border-radius: 28px; z-index: 20; isolation: isolate; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif; letter-spacing: 0; box-shadow: inset 0 1px 1px #ffffffa0, inset 0 -1px 1px #ffffff55, 0 18px 48px #24273324, 0 3px 8px #2427330c; transform-origin: calc(100% - 30px) top; animation: sc-glass-open .38s cubic-bezier(.2,.85,.25,1) both; }
+.sc-wire-panel::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: linear-gradient(120deg, #fff3, transparent 35% 70%, #fff2); z-index: -1; }
+.sc-wire-heading { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 19px; }
+.sc-wire-heading h3 { margin: 0; font-size: 18px; line-height: 1.35; font-weight: 600; letter-spacing: -.03em; }
+.sc-wire-heading p { margin: 5px 0 0; color: var(--glass-subtle); font-size: 11px; line-height: 1.5; }
+.sc-wire-heading button { flex: 0 0 32px; height: 32px; margin: -4px -4px 0 8px; display: grid; place-items: center; border-radius: 50%; background: var(--glass-track); transition: background .2s, transform .2s; }
+.sc-wire-heading button:hover { background: var(--glass-lens); }
+.sc-wire-heading button:active { transform: scale(.9); }
+.sc-wire-heading svg { width: 18px; height: 18px; }
+.sc-wire-modes { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); padding: 4px; border-radius: 24px; background: var(--glass-track); box-shadow: inset 0 1px 3px #0000000c; }
+.sc-wire-modes button { position: relative; z-index: 1; min-height: 38px; border-radius: 20px; font-size: 12px; font-weight: 500; color: var(--glass-subtle); transition: color .25s, transform .25s; }
+.sc-wire-modes button[aria-pressed="true"] { color: var(--glass-ink); font-weight: 600; }
+.sc-wire-modes button:active { transform: scale(.95); }
+.sc-mode-lens { position: absolute; inset: 4px auto 4px 4px; width: calc((100% - 8px) / 3); transform: translateX(calc(var(--glass-index) * 100%)); transition: transform .52s cubic-bezier(.22, 1.12, .28, 1); pointer-events: none; }
+.sc-mode-lens i, .sc-color-lens i { display: block; width: 100%; height: 100%; border-radius: 22px; border: 1px solid var(--glass-edge); background: linear-gradient(155deg, #ffffff70, #ffffff08 52%, #ffffff32), var(--glass-lens); box-shadow: inset 0 1px 1px #ffffffd0, inset 0 -1px 1px #ffffff80, 0 3px 8px #24273318; -webkit-backdrop-filter: blur(7px) saturate(1.8); backdrop-filter: blur(7px) saturate(1.8); animation: sc-glass-flex .52s ease-out; }
+.sc-wire-color-label { display: flex; justify-content: space-between; margin: 20px 2px 8px; font-size: 11px; font-weight: 500; }
+.sc-wire-color-label span:last-child { color: var(--glass-subtle); font-weight: 400; }
+.sc-wire-colors { position: relative; display: grid; grid-template-columns: repeat(6, 1fr); padding: 2px; border-radius: 24px; }
+.sc-wire-colors button { position: relative; z-index: 1; width: 100%; height: 42px; display: grid; place-items: center; border-radius: 50%; }
+.sc-wire-colors button > span { width: 23px; height: 23px; border: 1px solid #00000020; border-radius: 50%; box-shadow: inset 0 1px 2px #ffffff70, 0 2px 4px #00000012; transition: transform .32s cubic-bezier(.2,1.4,.4,1); }
+.sc-wire-colors button:hover > span { transform: scale(1.12); }
+.sc-wire-colors button:active > span { transform: scale(.9); }
+.sc-color-lens { position: absolute; inset: 2px auto 2px 2px; width: calc((100% - 4px) / 6); transform: translateX(calc(var(--glass-color-index) * 100%)); transition: transform .48s cubic-bezier(.22,1.12,.28,1), opacity .2s; pointer-events: none; }
+.sc-wire-colors.is-native .sc-color-lens { opacity: 0; }
+.sc-wire-help { margin: 15px 0 13px; text-align: center; font-size: 10px; line-height: 1.6; color: var(--glass-subtle); }
+.sc-wire-help span { margin: 0 4px; opacity: .6; }
+.sc-inspector-reset { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 40px; border-radius: 22px; font-size: 12px; font-weight: 500; transition: background .25s, transform .3s; }
+.sc-inspector-reset svg { width: 15px; height: 15px; }
+.sc-inspector-reset:hover { background-color: var(--glass-lens); }
+.sc-inspector-reset:active { transform: scale(.97); }
+.sc-wire-control button:focus-visible { outline: 2px solid #1677df; outline-offset: 3px; }
+@keyframes sc-glass-open { from { opacity: 0; transform: translateY(-8px) scale(.92); filter: blur(3px); } to { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes sc-glass-flex { 0% { transform: scale(1); } 35% { transform: scale(1.1,.9); filter: brightness(1.12); } 70% { transform: scale(.98,1.03); } 100% { transform: scale(1); } }
 @media (pointer: coarse) {
-  .sc-wire-colors button { min-height: 44px; }
-  .sc-wire-modes button { min-height: 44px; }
+  .sc-glass-trigger { min-height: 44px; }
+  .sc-wire-colors button, .sc-wire-modes button, .sc-inspector-reset { min-height: 44px; }
+  .sc-wire-heading button { flex-basis: 40px; height: 40px; }
 }
 @media (max-width: 600px) {
-  .sc-wire-panel { position: fixed; top: max(64px, calc(env(safe-area-inset-top) + 58px)); right: 12px; width: min(264px, calc(100vw - 24px)); }
+  .sc-wire-panel { position: fixed; top: max(68px, calc(env(safe-area-inset-top) + 60px)); right: 12px; width: min(304px, calc(100vw - 24px)); padding: 18px; }
 }
-
+@media (max-height: 500px) { .sc-wire-panel { max-height: calc(100dvh - 76px); overflow-y: auto; } }
+@media (prefers-reduced-motion: reduce) {
+  .sc-wire-panel, .sc-mode-lens i, .sc-color-lens i { animation: none; }
+  .sc-wire-control *, .sc-wire-control *::before { transition: none !important; }
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .sc-wire-panel { background: #303139; }
+  .showcase.light .sc-wire-panel { background: #f2f3f5; }
+}
 .sc-inspecting .sc-watermark, .sc-inspecting .sc-vignette,
 .sc-inspecting .sc-hud > .sc-row:not(.sc-tools),
 .sc-inspecting .sc-tools > button { display: none !important; }
 .sc-inspecting .sc-tools { z-index: 30; }
-.sc-inspector-reset { margin-top: 10px; min-height: 36px; width: 100%; border: 1px solid #0003; border-radius: 7px; font-size: 11px; }

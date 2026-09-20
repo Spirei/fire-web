@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ShowcaseConfig, ShowcaseHandle } from "./types";
 import { setThemeCookie } from "@/lib/theme";
 import { usePersistedState } from "@/lib/usePersistedState";
@@ -746,26 +746,32 @@ export default function ShowcaseStage({
               <div className="sc-wire-control" onKeyDown={(event) => {
                 if (event.key === "Escape") { toggleWirePanel(false); event.currentTarget.querySelector("button")?.focus(); }
               }}>
-                <button type="button" className={`sc-tool fire-cap${wireMode !== "native" ? " on" : ""}`}
+                <button type="button" className={`sc-tool sc-glass-trigger${wirePanel ? " on" : ""}`}
                   aria-label="模型展示" title="模型展示" aria-expanded={wirePanel}
                   onClick={() => toggleWirePanel(!wirePanel)}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
                     <path d="m12 2 9 5v10l-9 5-9-5V7Zm0 0v20M3 7l18 10M21 7 3 17M3 7l9 5 9-5M3 17l9-5 9 5" />
-                  </svg>
+                  </svg><span>模型</span>
                 </button>
                 {wirePanel && <div className="sc-wire-panel" role="group" aria-label="线框显示设置">
-                  <div className="sc-wire-heading"><span>模型展示</span><button type="button" aria-label="关闭线框设置" onClick={() => toggleWirePanel(false)}>×</button></div>
-                  <div className="sc-wire-modes">
+                  <div className="sc-wire-heading"><div><h3>模型展示</h3><p>每一处细节，自由探索。</p></div><button type="button" aria-label="关闭线框设置" onClick={() => toggleWirePanel(false)}>
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8" /></svg>
+                  </button></div>
+                  <div className="sc-wire-modes" role="group" aria-label="显示模式" style={{ "--glass-index": ["native", "overlay", "wireframe"].indexOf(wireMode) } as CSSProperties}>
+                    <span className="sc-mode-lens" aria-hidden="true"><i key={wireMode} /></span>
                     {([["native", "原生"], ["overlay", "叠加线框"], ["wireframe", "纯线框"]] as const).map(([mode, label]) =>
                       <button type="button" key={mode} aria-pressed={wireMode === mode} onClick={() => changeWire(mode)}>{label}</button>)}
                   </div>
-                  <div className="sc-wire-colors" role="group" aria-label="叠加线框颜色">
+                  <div className="sc-wire-color-label"><span>线框颜色</span><span>{WIRE_COLORS.find(([, color]) => color === wireColor)?.[0]}</span></div>
+                  <div className={`sc-wire-colors${wireMode === "native" ? " is-native" : ""}`} role="group" aria-label="线框颜色"
+                    style={{ "--glass-color-index": WIRE_COLORS.findIndex(([, color]) => color === wireColor) } as CSSProperties}>
+                    <span className="sc-color-lens" aria-hidden="true"><i key={wireColor} /></span>
                     {WIRE_COLORS.map(([label, color]) => <button type="button" key={color}
-                      title={label} aria-label={`${label}线框`} aria-pressed={wireMode === "overlay" && wireColor === color}
-                      onClick={() => changeWire("overlay", color)}><span style={{ background: color }} /></button>)}
+                      title={label} aria-label={`${label}线框`} aria-pressed={wireMode !== "native" && wireColor === color}
+                      onClick={() => changeWire(wireMode === "native" ? "overlay" : wireMode, color)}><span style={{ background: color }} /></button>)}
                   </div>
-                  <p>拖拽环视 · 滚轮 / 双指缩放</p>
-                  <button type="button" className="sc-inspector-reset" onClick={() => handleRef.current?.resetCamera()}>重置视角</button>
+                  <p className="sc-wire-help">拖拽环视 <span>·</span> 滚轮或双指缩放</p>
+                  <button type="button" className="sc-inspector-reset" onClick={() => handleRef.current?.resetCamera()}><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8a6 6 0 1 1 0 4M4 4v4h4" /></svg>重置视角</button>
                 </div>}
               </div>
               {musicReady && (

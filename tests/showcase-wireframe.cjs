@@ -29,8 +29,8 @@ for (const angle of [0, .5, 2, 4]) {
  assert.deepEqual(overlay.matrixWorld.elements, wheel.matrixWorld.elements, 'wire must follow the complete wheel transform');
 }
 assert.equal(hidden.visible, false);
-for (const color of ['#000000','#cccccc','#ff0000','#0000ff','#00ff00','#ffff00']) {
- view.set('overlay', color);
+for (const mode of ['overlay','wireframe']) for (const color of ['#000000','#cccccc','#ff0000','#0000ff','#00ff00','#ffff00']) {
+ view.set(mode, color);
  assert.equal(overlay.material.color.getHexString(), color.slice(1));
  assert.equal(wheel.children.length, 1, 'color changes must not grow geometry');
 }
@@ -38,10 +38,7 @@ view.set('wireframe', '#00ff00');
 assert.equal(wheel.material.colorWrite, false);
 assert.equal(overlay.material.wireframe, true);
 assert.equal(overlay.visible, true);
-view.setLight(true);
-assert.equal(overlay.material.color.getHexString(), '111111');
-view.setLight(false);
-assert.equal(overlay.material.color.getHexString(), 'd4d7dc');
+assert.equal(overlay.material.color.getHexString(), '00ff00');
 view.set('native', '#00ff00');
 assert.equal(wheel.material, paint);
 view.set('wireframe', '#00ff00');
@@ -59,7 +56,7 @@ view.dispose();
 assert.equal(nextMesh.material, nextPaint);
 assert.equal(nextMesh.children.length, 0);
 assert.equal(geometryDisposed, false, 'controller does not own model geometry');
-console.log('PASS six colors, wheel transforms, hidden meshes, original/multi-material restoration, theme, model switch and disposal');
+console.log('PASS six colors, wheel transforms, hidden meshes, original/multi-material restoration, shared palette, model switch and disposal');
 // Exercise the engine's real inspector transition: entering must not overwrite the home pose.
 const engine = fs.readFileSync('components/showcase/engine.ts', 'utf8');
 const transition = engine.slice(engine.indexOf('    setInspector: (on) => {'), engine.indexOf('    setWireframe: (mode, color)'));

@@ -1829,7 +1829,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     updateEnv(envWeight);
     const day = envWeight;
     const light = theme === "light" || studioOn || inspectorOn;
-    wireframeView.setLight(light);
     // 参考图里冲刺时车身反而更亮：速度越高，暖色轮廓光与主光一起加码
     const speedLight = clamp(speed / CFG.speed.maxSpeed, 0, 1) ** 2;
     // 参考视频里高速时车身是明亮的木瓜色（实测车身核心色 ≈ 224,155,72、亮度 0.88），

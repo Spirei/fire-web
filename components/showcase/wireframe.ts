@@ -6,7 +6,6 @@ export type WireframeMode = "native" | "overlay" | "wireframe";
 export function createWireframeView() {
   let mode: WireframeMode = "native";
   let color = "#00ff00";
-  let light = false;
   let root: THREE.Object3D | null = null;
   const entries: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[]; overlay: THREE.Mesh }[] = [];
   const overlayMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false });
@@ -41,7 +40,7 @@ export function createWireframeView() {
       }
     }
     overlayMaterial.color.set(color);
-    pureMaterial.color.set(light ? "#111111" : "#d4d7dc");
+    pureMaterial.color.set(color);
     for (const { mesh, original, overlay } of entries) {
       mesh.material = mode === "wireframe" ? depthMaterial : original;
       overlay.material = mode === "wireframe" ? pureMaterial : overlayMaterial;
@@ -62,7 +61,6 @@ export function createWireframeView() {
     attach(next: THREE.Object3D) { detach(); root = next; apply(); },
     detach,
     set(next: WireframeMode, nextColor: string) { mode = next; color = nextColor; apply(); },
-    setLight(next: boolean) { if (light !== next) { light = next; apply(); } },
     dispose() { detach(); overlayMaterial.dispose(); pureMaterial.dispose(); depthMaterial.dispose(); },
   };
 }
