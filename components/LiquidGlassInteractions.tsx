@@ -46,14 +46,18 @@ export default function LiquidGlassInteractions({ enabled }: { enabled: boolean 
       if (!layer || !copy || !source?.isConnected) { cancel(); return; }
       const dt = lastTime ? Math.min((time-lastTime)/1000, .064) : 1/60; lastTime = time;
       pulse = Math.max(0, pulse-dt);
-      const targetLift = held ? 1 : pulse > 0 ? .8 : 0;
+      const targetLift = held ? 1 : pulse > 0 ? .92 : 0;
       x = stepGlassSpring(x, tx, dt, held ? 48 : 28); y = stepGlassSpring(y, ty, dt, 38);
       w = stepGlassSpring(w, tw, dt, 38); h = stepGlassSpring(h, th, dt, 38);
-      lift = stepGlassSpring(lift, targetLift, dt, targetLift ? 38 : 24);
-      const raised = Math.max(0, Math.min(1,lift.value)), width = w.value*(1+.16*raised), height=h.value*(1+.3*raised);
+      lift = stepGlassSpring(lift, targetLift, dt, targetLift ? 42 : 26);
+      const raised = Math.max(0, Math.min(1,lift.value));
+      const speedX=Math.min(Math.abs(x.velocity)/1300,1),speedY=Math.min(Math.abs(y.velocity)/1300,1),motion=Math.max(speedX,speedY);
+      const width = w.value*(1+.14*raised+.09*speedX*raised-.025*speedY*raised);
+      const height=h.value*(1+.26*raised+.09*speedY*raised-.025*speedX*raised);
       const left=x.value-width/2, top=y.value-height/2;
       Object.assign(layer.style,{width:`${width}px`,height:`${height}px`,transform:`translate3d(${left}px,${top}px,0)`,opacity:String(Math.min(1,raised*10))});
       layer.style.setProperty('--lg-zoom',String(1+.16*raised));
+      layer.style.setProperty('--lg-speed',String(motion));
       copy.style.transform=`translate3d(${rect.left-left}px,${rect.top-top}px,0)`;
       const a=Math.max(0,left-rect.left), b=Math.max(0,top-rect.top), c=Math.min(rect.width,left-rect.left+width), d=Math.min(rect.height,top-rect.top+height);
       // Cut out the original beneath the magnified copy; no double text.
@@ -99,7 +103,7 @@ export default function LiquidGlassInteractions({ enabled }: { enabled: boolean 
       }
       const from=boxes.find(b=>b.el.matches('[aria-selected="true"], [aria-pressed="true"], [data-active="true"], .seg-active, .is-active')) ?? boxes.find(b=>b.el===el)!;
       targetBox(from.rect); x=spring(tx);y=spring(ty);w=spring(tw);h=spring(th);lift=spring(0);
-      targetBox(boxes.find(b=>b.el===el)!.rect);held=long;pulse=long?0:.14;
+      targetBox(boxes.find(b=>b.el===el)!.rect);held=long;pulse=long?0:.24;
       if(long)move(lastX,lastY);
       raf=requestAnimationFrame(tick);
     };

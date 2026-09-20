@@ -45,9 +45,9 @@ export default function LiquidGlassControl({ items, index, onChange, label, swat
     const dt = m.lastTime ? (time - m.lastTime) / 1000 : 1 / 60;
     m.lastTime = time;
     m.pulse = Math.max(0, m.pulse - dt);
-    const liftTarget = m.raised ? 1 : m.pulse > 0 ? .8 : 0;
+    const liftTarget = m.raised ? 1 : m.pulse > 0 ? .92 : 0;
     m.x = stepGlassSpring(m.x, m.target, dt, m.raised ? 48 : 28);
-    m.lift = stepGlassSpring(m.lift, liftTarget, dt, liftTarget ? 38 : 24);
+    m.lift = stepGlassSpring(m.lift, liftTarget, dt, liftTarget ? 42 : 26);
     const done = m.pulse === 0 && Math.abs(m.x.value - m.target) < .0001 && Math.abs(m.x.velocity) < .001 && Math.abs(m.lift.value - liftTarget) < .0001 && Math.abs(m.lift.velocity) < .001;
     if (done) { m.x = { value: m.target, velocity: 0 }; m.lift = { value: liftTarget, velocity: 0 }; }
     paint();
@@ -138,12 +138,12 @@ export default function LiquidGlassControl({ items, index, onChange, label, swat
       const inside = event.clientX >= m.bounds.left - 4 && event.clientX <= m.bounds.left + m.bounds.width + 4 && event.clientY >= m.bounds.top - 4 && event.clientY <= m.bounds.top + m.bounds.height + 4;
       if (!m.raised && (m.cancelled || !inside)) { cancel(); return; }
       const selected = Math.round(positionAt(event.clientX));
-      if (!m.raised) m.pulse = .14;
+      if (!m.raised) m.pulse = .24;
       release(); m.target = selected; animate(); current.current.onChange(selected);
     }}
     onPointerCancel={cancel} onLostPointerCapture={() => { if (motion.current.pointer !== null) cancel(); }}>
     <div className="lg-track">{items.map((item, i) => <button type="button" key={item.label} aria-label={item.label} aria-pressed={!inactive && index === i}
-      onClick={event => { if (!glass || event.detail === 0) { motion.current.target = i; motion.current.pulse = glass ? .14 : 0; animate(); onChange(i); } }}><span className="lg-original">{content(item)}</span></button>)}</div>
+      onClick={event => { if (!glass || event.detail === 0) { motion.current.target = i; motion.current.pulse = glass ? .24 : 0; animate(); onChange(i); } }}><span className="lg-original">{content(item)}</span></button>)}</div>
     <div className="lg-lens" aria-hidden="true" inert><div className="lg-lens-body">
       <div className="lg-copy-window"><div className="lg-magnify" style={glass && map ? { filter: `url(#${id}-rim)` } : undefined}>
         <div className="lg-copy-track">{items.map(item => <span className="lg-copy-item" key={item.label}>{content(item)}</span>)}</div>

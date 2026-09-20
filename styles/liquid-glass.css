@@ -30,9 +30,10 @@
 }
 @media (prefers-contrast: more) { .lg-control { background: rgb(var(--site-surface)); border: 1px solid rgb(var(--site-edge)); } }
 /* Shared clear-glass surface, rather than the previous opaque frosted panel. */
-.lg-global-lens { position:fixed; left:0; top:0; z-index:2147483000; pointer-events:none; overflow:hidden; border-radius:999px; opacity:0; background:rgb(var(--site-surface) / .72); border:.5px solid rgb(var(--site-surface) / .8); box-shadow:inset 0 1px 1px #fff9,0 5px 12px #00000018; will-change:transform; }
+.lg-global-lens { position:fixed; left:0; top:0; z-index:2147483000; pointer-events:none; overflow:hidden; border-radius:999px; opacity:0; background:rgb(var(--site-surface) / .70); border:.5px solid rgb(var(--site-surface) / .82); box-shadow:inset 0 1px 1px #fffc,inset 0 -1px 1px #ffffff70,0 5px 13px #00000018; will-change:transform,width,height; }
 .lg-global-magnify { position:absolute; inset:0; transform:scale(var(--lg-zoom,1)); transform-origin:center; }
-.lg-global-lens::after { content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:inset .6px 0 .6px #8edee877,inset -.6px 0 .6px #d6a9e755; }
+.lg-global-lens::before { content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(155deg,#ffffff7a 0%,transparent 34% 70%,#ffffff35 100%);opacity:calc(.5 + var(--lg-speed,0) * .25); }
+.lg-global-lens::after { content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:inset calc(.55px + var(--lg-speed,0) * .45px) 0 .7px #75dfec88,inset calc(-.55px - var(--lg-speed,0) * .45px) 0 .7px #dba6ed66; }
 html:root[data-material="glass"] :is([data-glass-group],[role="tablist"],.settings-primary-subnav,.asset-library-tabs,.chart-settings-segmented) { touch-action:pan-y; }
 html:root[data-material="glass"] :is(button.fire-cap,button.rounded-full,button[role="tab"],.settings-primary-pill,.sc-inspector-reset,.sc-glass-trigger) { background-color:var(--material-fill); -webkit-backdrop-filter:var(--material-blur);backdrop-filter:var(--material-blur); }
 html:root[data-material="glass"] .settings-primary-pill .pill-ripple { display:none; }
