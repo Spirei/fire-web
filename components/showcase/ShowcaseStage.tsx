@@ -821,6 +821,7 @@ export default function ShowcaseStage({
                 {inspector && <button type="button" className="sc-tool sc-inspector-home"
                   aria-label="返回首页" title="返回首页" onClick={exitInspector}>
                   <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m12.5 5-5 5 5 5M8 10h7" /></svg>
+                  <span>返回</span>
                 </button>}
                 {wirePanel && <div className="sc-wire-panel" role="group" aria-label="线框显示设置">
                   <div className="sc-wire-heading"><div><h3>模型展示</h3><p>每一处细节，自由探索。</p></div><button type="button" aria-label="隐藏模型设置" onClick={() => setWirePanelOpen(false)}>
