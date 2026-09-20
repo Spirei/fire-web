@@ -7,18 +7,18 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#6b7280",
-          hover: "#e9ebee",
-          light: "#f1f3f5",
-          deep: "#3f4652"
+          DEFAULT: "rgb(var(--site-accent) / <alpha-value>)",
+          hover: "rgb(var(--site-soft) / <alpha-value>)",
+          light: "rgb(var(--site-soft) / <alpha-value>)",
+          deep: "rgb(var(--site-accent) / <alpha-value>)"
         },
-        ink: "#0a0e19",
-        "ink-2": "#404754",
-        muted: "#6b7280",
-        faint: "#9aa1ab",
-        edge: "#dfe2e8",
-        "edge-strong": "#c9ced8",
-        "bg-gray": "#f7f8fa",
+        ink: "rgb(var(--site-ink) / <alpha-value>)",
+        "ink-2": "rgb(var(--site-ink) / <alpha-value>)",
+        muted: "rgb(var(--site-muted) / <alpha-value>)",
+        faint: "rgb(var(--site-muted) / <alpha-value>)",
+        edge: "rgb(var(--site-edge) / <alpha-value>)",
+        "edge-strong": "rgb(var(--site-edge) / <alpha-value>)",
+        "bg-gray": "rgb(var(--site-bg) / <alpha-value>)",
         up: "#e23d3d",
         down: "#0fa07b",
         "up-bg": "#fdeeee",

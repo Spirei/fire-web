@@ -4127,6 +4127,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_35_ENTRY.frontend],
   software: V0_1_35_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.36" } : item),
   changes: [{
+    title: "全站配色与统一玻璃材质",
+    desc: "设置新增独立配色组，提供中性灰、Liquid Glass、海盐蓝、松林绿、琥珀纸、暮光紫六套深浅配色；原窗口风格入口改为全站配色入口。首页胶囊、模型面板、车型导入、后台卡片与导航共用颜色和材质变量，玻璃效果随配色选择切换；保留行情涨跌与模型原色。个人选择通过偏好 Cookie 与本地存储保存，服务端首帧生效并同步同源标签。",
+    kind: "feature"
+  }, {
     title: "纯线框支持六色，模型面板采用流动玻璃效果",
     desc: "纯线框与叠加线框共用六色，换色保留当前模式，跨模式沿用选择。模型展示面板重新排版，使用半透明玻璃、边缘高光和圆形色珠；模式及颜色切换使用连续滑动、轻微拉伸回弹的选中胶囊，补充手机触控、减少动态效果与背景模糊降级适配。",
     kind: "feature"

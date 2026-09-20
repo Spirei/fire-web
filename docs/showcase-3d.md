@@ -119,4 +119,4 @@ export default function HomePage() {
 
 参考：Sketchfab [Model Inspector](https://sketchfab.com/blogs/community/inspect-models-and-textures-like-never-before/) 与 [Viewer API](https://sketchfab.com/developers/viewer/functions)。独立本地实现不依赖其服务。回归：`node tests/showcase-wireframe.cjs`。
 
-显示面板采用 Liquid Glass 风格：半透明背景模糊、边缘高光、圆形色珠；模式与颜色的选中玻璃层沿轨道移动，切换时短暂拉伸回弹，静止后停止动画。减少动态效果时禁用过渡；不支持背景模糊时使用实色兜底。该实现为网页 CSS 材质，不依赖 Apple 原生框架。
+显示面板材质现在跟随设置 → 配色，统一规范见 `docs/site-palettes.md`；选择 Liquid Glass 时采用玻璃风格：半透明背景模糊、边缘高光、圆形色珠；模式与颜色的选中玻璃层沿轨道移动，切换时短暂拉伸回弹，静止后停止动画。减少动态效果时禁用过渡；不支持背景模糊时使用实色兜底。该实现为网页 CSS 材质，不依赖 Apple 原生框架。

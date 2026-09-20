@@ -17,6 +17,9 @@ import FileDropAnywhere from "@/components/FileDropAnywhere";
 import { PrefsProvider } from "@/lib/prefsContext";
 import { PREFS_COOKIE, parsePrefsCookie } from "@/lib/prefsCookie";
 import SiteFavicon from "@/components/SiteFavicon";
+import PaletteProvider from "@/components/PaletteProvider";
+import { PALETTE_KEY, paletteVariables, resolvePalette } from "@/lib/palettes";
+import "@/styles/palettes.css";
 import AppDialogHost from "@/components/AppDialogHost";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -41,6 +44,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // 服务端首帧直接用它渲染，客户端首帧也是同一个值 —— 刷新不会再先闪默认值、再跳回用户的选择。
   const prefs = parsePrefsCookie(cookieStore.get(PREFS_COOKIE)?.value);
   const settings = getSiteSettings();
+  const palette = resolvePalette(prefs[PALETTE_KEY]);
   return (
     /* 禁止整页翻译：翻译器会在水合前改写服务端 HTML（连 title 属性都会改，比如把「繁體」改成「繁体」），
        客户端水合时读到的还是原文，于是报 "Hydration failed because the server rendered text didn't match the client"。
@@ -52,7 +56,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       suppressHydrationWarning
       translate="no"
       className={dark ? "dark notranslate" : "notranslate"}
-      style={{ backgroundColor: dark ? "#0a0e19" : "#ffffff" }}
+      data-palette={palette.id}
+      data-material={palette.glass ? "glass" : "solid"}
+      style={paletteVariables(palette.id)}
     >
       <head>
         {/* Google 翻译（含 Chrome 内置翻译）看到这一条就不再动这个页面 */}
@@ -75,15 +81,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="font-sans">
         <PrefsProvider initialPrefs={prefs}>
-          <SiteFavicon initialIcon={settings.ico} />
-          <PwaRegister />
-          {/* 全站拖拽上传：文件拖进页面就近落到最近的上传入口 */}
-          <FileDropAnywhere />
-          <TimeMachine />
-          <SiteBg />
-          <LoginModal />
-          <AppDialogHost />
-          {children}
+          <PaletteProvider>
+            <SiteFavicon initialIcon={settings.ico} />
+            <PwaRegister />
+            {/* 全站拖拽上传：文件拖进页面就近落到最近的上传入口 */}
+            <FileDropAnywhere />
+            <TimeMachine />
+            <SiteBg />
+            <LoginModal />
+            <AppDialogHost />
+            {children}
+          </PaletteProvider>
         </PrefsProvider>
       </body>
     </html>

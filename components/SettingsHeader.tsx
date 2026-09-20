@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 const ICON_PATHS: Record<string, React.ReactNode> = {
+  palette: (<><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a3 3 0 0 0 3-3 9 9 0 0 0-9-8Z" /><circle cx="7" cy="10" r=".7" /><circle cx="11" cy="7" r=".7" /><circle cx="16" cy="8" r=".7" /></>),
   site: (
     <>
       <circle cx="12" cy="12" r="9" />

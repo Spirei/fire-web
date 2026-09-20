@@ -87,6 +87,7 @@ const ICON_NAMES: Record<string, string> = {
   api: "接口",
   cron: "定时",
   about: "关于",
+  palette: "全站配色",
   trade: "交易",
   fire: "fire",
   search: "搜索",
@@ -99,11 +100,11 @@ const ICON_NAMES: Record<string, string> = {
 export const DEFAULT_ICONS: { code: string; name: string; url: string }[] = [
   "settings", "holdings", "assets", "watchlist", "global", "earnings", "celebs", "activities",
   "users", "attachments", "library", "site", "sitemanage", "stocks", "profile", "database",
-  "api", "cron", "about", "trade", "fire", "search", "plus", "refresh", "close", "check"
+  "api", "cron", "about", "palette", "trade", "fire", "search", "plus", "refresh", "close", "check"
 ].map((code) => ({
   code,
   name: ICON_NAMES[code] ?? code, // 名称按素材库编辑时可改
-  url: `/uploads/asset/icon/${code}.svg`
+  url: code === "palette" ? "/icons/palette.svg" : `/uploads/asset/icon/${code}.svg`
 }));
 
 /** 进入「图标」类目时补齐缺失的内置图标（按 code 逐条补齐，幂等，不覆盖已有素材） */

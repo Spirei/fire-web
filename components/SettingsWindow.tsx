@@ -3,27 +3,12 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { CURRENT_VERSION } from "@/lib/versions";
 
-/** 设置页视觉版本（对应 public/mockups 预览稿）：调色盘下拉切换，选中后整体换肤 */
-const SETTINGS_VERSIONS: { key: string; label: string; swatches: string[] }[] = [
-  { key: "orca", label: "Orca 中性灰", swatches: ["#f5f5f5", "#ffffff", "#0a0a0a"] },
-  { key: "v1", label: "V1 富途橙", swatches: ["#171c26", "#ffffff", "#ff9828"] },
-  { key: "v5", label: "V5 Notion", swatches: ["#f7f6f3", "#ffffff", "#37352f"] },
-  { key: "v7", label: "V7 Claude", swatches: ["#211f1b", "#f5f4ef", "#d97757"] },
-  { key: "v14", label: "V14 极简风", swatches: ["#26262b", "#1c1c1c", "#b4b8ff"] },
-  { key: "v16", label: "V16 极简青绿", swatches: ["#0e1714", "#ffffff", "#0e9f7e"] },
-  { key: "v17", label: "V17 石墨黑金", swatches: ["#101013", "#fffdf8", "#c9a45c"] },
-  { key: "okx", label: "OKX 风", swatches: ["#0b0e11", "#ffffff", "#00b7ff"] },
-  { key: "binance", label: "币安风", swatches: ["#0b0e11", "#ffffff", "#f0b90b"] }
-];
-
 /**
  * 设置桌面窗口（页面内嵌形态）：无遮罩、不悬浮，
  * 默认 960px 宽、靠左，按住标题栏可拖动，位置自动保存。默认皮肤为 Orca 中性灰。
  */
 export default function SettingsWindow({ children }: { children: ReactNode }) {
   const [futuOnline, setFutuOnline] = useState<boolean | null>(null);
-  const [variant, setVariant] = useState<string>("orca");
-  const [variantOpen, setVariantOpen] = useState(false);
   const [fixed, setFixed] = useState<boolean>(false);
   const [editing, setEditing] = useState(false);
   // auto=true 表示当前分区是「常驻可编辑 + 自动保存」（如站点信息），标题栏不再显示铅笔/完成
@@ -67,16 +52,6 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
       }
     } catch {
       /* 忽略损坏的本地位置 */
-    }
-  }, []);
-
-  // 挂载后再恢复已保存主题：避免服务端固定 sv-v14、客户端读到 localStorage 不一致而水合报错
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("fire:settings-version");
-      if (saved && SETTINGS_VERSIONS.some((v) => v.key === saved)) setVariant(saved);
-    } catch {
-      /* 忽略 */
     }
   }, []);
 
@@ -127,16 +102,6 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
     setDragging(true);
   }
 
-  function pickVariant(key: string) {
-    setVariant(key);
-    setVariantOpen(false);
-    try {
-      localStorage.setItem("fire:settings-version", key);
-    } catch {
-      /* 忽略 */
-    }
-  }
-
   function toggleFixed() {
     setFixed((f) => {
       const next = !f;
@@ -163,7 +128,7 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className={`sv-win-root sv-${variant} w-full max-w-[960px]`} style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}>
+    <div className={`sv-win-root sv-orca w-full max-w-[960px]`} style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}>
       <div className="sw-window flex h-[min(780px,calc(100vh-120px))] flex-col overflow-hidden rounded-[10px] border shadow-[0_12px_40px_rgba(0,0,0,.12)]">
         {/* 窗口标题栏 */}
         <div
@@ -217,49 +182,9 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
                 <path d="M12 14v6" />
               </svg>
             </button>
-            {/* 风格切换（V1 / V5 / V7 / V14 / V16） */}
-            <span className="sv-variant relative">
-              <button
-                type="button"
-                onClick={() => setVariantOpen((o) => !o)}
-                title="风格切换"
-                aria-label="风格切换"
-                className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-white/10"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                  <path d="m12 3 8.2 4.6L12 12.2 3.8 7.6Z" />
-                  <path d="m3.8 12.3 8.2 4.6 8.2-4.6" opacity="0.72" />
-                  <path d="m3.8 16.9 8.2 4.6 8.2-4.6" opacity="0.45" />
-                </svg>
-              </button>
-              {variantOpen && (
-                <div className="sv-menu absolute right-0 top-full z-50 mt-1.5 w-44 overflow-hidden rounded-xl border py-1 shadow-pop">
-                  {SETTINGS_VERSIONS.map((v) => (
-                    <button
-                      key={v.key}
-                      type="button"
-                      onClick={() => pickVariant(v.key)}
-                      className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-[12px] transition-colors ${variant === v.key ? "font-semibold" : ""}`}
-                    >
-                      <span className="flex h-4 w-7 flex-none items-center overflow-hidden rounded-[4px] border border-black/10 dark:border-white/15">
-                        {v.swatches.map((c, i) => (
-                          <i key={i} className="h-full flex-1" style={{ backgroundColor: c }} />
-                        ))}
-                      </span>
-                      {(() => {
-                        const m = v.label.match(/^(V\d+)\s+(.*)$/);
-                        return m ? (
-                          <><span className="font-serif">{m[1]}</span><span> {m[2]}</span></>
-                        ) : (
-                          v.label
-                        );
-                      })()}
-                      {variant === v.key && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="ml-auto h-3 w-3"><path d="m5 13 4 4L19 7" /></svg>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </span>
+            <button type="button" title="全站配色" aria-label="全站配色" onClick={() => window.dispatchEvent(new Event("fire:open-palette"))} className="flex h-6 w-6 items-center justify-center rounded-md">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-4 w-4" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a3 3 0 0 0 3-3 9 9 0 0 0-9-8Z"/><circle cx="7" cy="10" r=".7"/><circle cx="11" cy="7" r=".7"/><circle cx="16" cy="8" r=".7"/></svg>
+            </button>
             <span className="text-[10.5px] opacity-70">v{CURRENT_VERSION.version.replace(/^v/, "")}</span>
           </span>
         </div>

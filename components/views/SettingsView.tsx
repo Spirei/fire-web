@@ -9,6 +9,7 @@ import { showToast } from "@/lib/toast";
 import { appConfirm, appPrompt } from "@/lib/appDialog";
 import AppSelect from "@/components/AppSelect";
 import { copyText } from "@/lib/clipboard";
+import PaletteSettings from "@/components/PaletteSettings";
 import SettingsHeader, { SettingsSection, SubNavIcon } from "@/components/SettingsHeader";
 import { LOGO_FONT_LABELS, logoFontClass } from "@/lib/logoFont";
 import MarketIcon from "@/components/MarketIcon";
@@ -50,7 +51,7 @@ interface Props {
   initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "groups" | "markets" | "marketLabels">;
 }
 
-const SETTINGS_SUB_KEYS = ["site", "features", "stocks", "api", "profile", "totp", "database", "cron", "about"] as const;
+const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "database", "cron", "about"] as const;
 type SubKey = (typeof SETTINGS_SUB_KEYS)[number];
 function isSettingsSub(value: string | undefined | null): value is SubKey {
   return Boolean(value && (SETTINGS_SUB_KEYS as readonly string[]).includes(value));
@@ -61,6 +62,7 @@ const ADMIN_SUB_KEYS = new Set<SubKey>(["site", "features", "stocks", "database"
 
 /** ⌘K 命令搜索索引：关键词 → 子分类 + 锚点 */
 const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; groupLabel: string; keywords: string }[] = [
+  { sub: "palette", anchor: "palette", label: "全站配色", groupLabel: "配色", keywords: "配色 主题 Liquid Glass 玻璃 海盐 松林 琥珀 暮光" },
   { sub: "site", anchor: "info", label: "站点信息", groupLabel: "网站", keywords: "网站 标题 域名 注册 页脚 简介" },
   { sub: "site", anchor: "appearance", label: "网站形象", groupLabel: "网站", keywords: "图标 logo 字体 背景 形象 favicon 图片" },
   { sub: "site", anchor: "ticker", label: "首页指数", groupLabel: "网站", keywords: "指数 轮换 首页 ticker 行情条" },
@@ -262,6 +264,7 @@ function SubPill({
 }
 
 const SUB_NAV: { key: SubKey; label: string }[] = [
+  { key: "palette", label: "配色" },
   { key: "site", label: "网站设置" },
   { key: "features", label: "功能" },
   { key: "stocks", label: "股票设置" },
@@ -274,6 +277,7 @@ const SUB_NAV: { key: SubKey; label: string }[] = [
 ];
 
 const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: string }[] }[] = [
+  { label: "配色", items: [{ key: "palette", label: "全站配色", desc: "全站颜色与材质" }] },
   {
     label: "站点",
     items: [
@@ -788,6 +792,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarMsg, setAvatarMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [nickMsg, setNickMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  useEffect(() => {
+    const openPalette = () => { setSub("palette"); setActiveAnchor("palette"); syncSettingsUrl("palette", "palette"); };
+    window.addEventListener("fire:open-palette", openPalette);
+    return () => window.removeEventListener("fire:open-palette", openPalette);
+  }, []);
   const [versionOpen, setVersionOpen] = useState(false);
   const tabDragIndex = useRef<number | null>(null);
   const groupDragIndex = useRef<number | null>(null);
@@ -1372,8 +1381,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }, [activeAnchor]);
   // 把「当前分区是否在编辑」广播给标题栏（铅笔 ↔ 完成图标切换）
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent("fire:settings-edit-state", { detail: { editing: activeEditState, auto: activeAnchor === "info" } }));
-  }, [activeEditState]);
+    window.dispatchEvent(new CustomEvent("fire:settings-edit-state", { detail: { editing: activeEditState, auto: ["info", "palette"].includes(activeAnchor) } }));
+  }, [activeEditState, activeAnchor]);
   const saveActiveEditRef = useRef<() => Promise<void>>(async () => {});
   const savingEditRef = useRef(false);
   async function saveActiveEdit() {
@@ -2164,7 +2173,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         {/* 内容头部 */}
         <div className="sw-page-head flex flex-none items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate">{activePageMeta?.label || activeSubMeta?.label} · {activeAnchor === "info" ? "修改自动保存" : activeEditState ? "正在编辑" : "只读浏览"}</p>
+            <p className="truncate">{activePageMeta?.label || activeSubMeta?.label} · {activeAnchor === "palette" ? "选择即时生效" : activeAnchor === "info" ? "修改自动保存" : activeEditState ? "正在编辑" : "只读浏览"}</p>
           </div>
         </div>
 
@@ -2181,6 +2190,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </div>
             )}
             {/* ===== 网站设置 ===== */}
+            {sub === "palette" && <PaletteSettings />}
             {sub === "site" && isAdminUser && (
               <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-5">

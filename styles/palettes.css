@@ -1,0 +1,181 @@
+/* Site color + material contract. Light/dark channels are supplied by palettes.ts at SSR. */
+:root[data-palette] {
+  --site-bg: var(--site-bg-light); --site-surface: var(--site-surface-light);
+  --site-ink: var(--site-ink-light); --site-muted: var(--site-muted-light);
+  --site-accent: var(--site-accent-light); --site-edge: var(--site-edge-light); --site-soft: var(--site-soft-light);
+  --material-fill: rgb(var(--site-surface)); --material-edge: rgb(var(--site-edge));
+  --material-blur: none; --material-shadow: 0 2px 12px rgb(var(--site-ink) / .04);
+  --material-highlight: transparent; --material-radius: 18px;
+  background-color: rgb(var(--site-bg)) !important; color: rgb(var(--site-ink));
+}
+:root.dark[data-palette] {
+  --site-bg: var(--site-bg-dark); --site-surface: var(--site-surface-dark);
+  --site-ink: var(--site-ink-dark); --site-muted: var(--site-muted-dark);
+  --site-accent: var(--site-accent-dark); --site-edge: var(--site-edge-dark); --site-soft: var(--site-soft-dark);
+}
+:root[data-material="glass"] {
+  --material-fill: rgb(var(--site-surface) / .65); --material-edge: rgb(var(--site-surface) / .72);
+  --material-blur: blur(22px) saturate(1.65); --material-highlight: #ffffff35;
+  --material-shadow: inset 0 1px 1px #ffffff60, inset 0 -1px 1px #ffffff20, 0 12px 36px rgb(var(--site-ink) / .1);
+  --material-radius: 24px;
+}
+/* Main semantic surfaces; content imagery and financial up/down colors keep their meaning. */
+html:root[data-palette] body { background-color: rgb(var(--site-bg)); color: rgb(var(--site-ink)); }
+html:root[data-palette] :is(.app-shell-root, .showcase-import) { background-color: rgb(var(--site-bg)); color: rgb(var(--site-ink)); }
+html:root[data-palette] :is(.bg-white, .card) { background-color: var(--material-fill); }
+html:root[data-palette] .bg-bg-gray { background-color: rgb(var(--site-bg)); }
+html:root[data-palette] :is(.bg-brand-hover, .bg-brand-light) { background-color: rgb(var(--site-soft)); }
+html:root[data-palette] :is(.text-ink, .text-ink-2) { color: rgb(var(--site-ink)); }
+html:root[data-palette] :is(.text-muted, .text-faint) { color: rgb(var(--site-muted)); }
+html:root[data-palette] :is(.text-brand, .text-brand-deep) { color: rgb(var(--site-accent)); }
+html:root[data-palette] :is(.border-edge, .border-edge-strong, .card) { border-color: rgb(var(--site-edge)); }
+html:root[data-palette] :is(.btn-dark, .seg-active) { background: rgb(var(--site-accent)); color: rgb(var(--site-surface)); }
+html:root[data-palette] :is(.btn-brand, .btn-soft) { background: var(--material-fill); color: rgb(var(--site-ink)); border-color: var(--material-edge); }
+html:root[data-material="glass"] :is(.card, .btn-brand, .btn-soft, .settings-subnav, .sw-window, .sw-card) {
+  -webkit-backdrop-filter: var(--material-blur); backdrop-filter: var(--material-blur); box-shadow: var(--material-shadow);
+}
+html:root[data-material="glass"] .card { border-radius: var(--material-radius); }
+/* Retire window-only palette overrides: the settings window inherits the same site tokens. */
+html:root[data-palette] .sv-win-root.sv-orca {
+  --sv-shell: rgb(var(--site-soft)); --sv-shell-hover: rgb(var(--site-edge));
+  --sv-bg: rgb(var(--site-bg)); --sv-border: rgb(var(--site-edge)); --sv-border-strong: rgb(var(--site-edge));
+  --sv-text: rgb(var(--site-ink)); --sv-text-2: rgb(var(--site-muted)); --sv-text-3: rgb(var(--site-muted)); --sv-text-4: rgb(var(--site-muted) / .8);
+  --sv-accent: rgb(var(--site-accent)); --sv-card: var(--material-fill); --sv-card-border: var(--material-edge);
+  --sv-input: rgb(var(--site-surface)); --sv-surface-2: rgb(var(--site-soft)); --sv-hover-bg: rgb(var(--site-accent) / .09);
+  --sv-ring: rgb(var(--site-accent) / .2); --sv-card-shadow: var(--material-shadow);
+}
+/* The model-only canvas is always light; its controls resolve the light palette locally. */
+html:root[data-palette] .showcase.light {
+  --site-bg: var(--site-bg-light); --site-surface: var(--site-surface-light); --site-ink: var(--site-ink-light);
+  --site-muted: var(--site-muted-light); --site-accent: var(--site-accent-light); --site-edge: var(--site-edge-light); --site-soft: var(--site-soft-light);
+}
+html:root[data-palette] :is(.showcase, .showcase-import) { --sc-accent: rgb(var(--site-accent)); }
+html:root[data-palette] .mp-root { color: rgb(var(--site-ink)); }
+html:root[data-palette] :is(.mp-step, .mp-report, .mp-model-card, .mp-model-row) { background: var(--material-fill); border-color: var(--material-edge); box-shadow: var(--material-shadow); -webkit-backdrop-filter: var(--material-blur); backdrop-filter: var(--material-blur); }
+html:root[data-palette] .mp-form :is(input, select) { background: rgb(var(--site-surface)); color: rgb(var(--site-ink)); border-color: rgb(var(--site-edge)); }
+html:root[data-palette] :is(.fire-cap, .sc-wire-control) {
+  --cap-ink: rgb(var(--site-ink)); --cap-ink-strong: rgb(var(--site-ink)); --cap-line: var(--material-edge); --cap-fill: var(--material-fill);
+  --cap-hover-line: rgb(var(--site-accent) / .6); --cap-on-line: rgb(var(--site-accent) / .45);
+  --cap-on-from: rgb(var(--site-soft) / .9); --cap-on-to: rgb(var(--site-surface) / .5); --cap-on-ring: rgb(var(--site-accent) / .08); --cap-on-glow: rgb(var(--site-accent) / .12);
+  --glass-ink: rgb(var(--site-ink)); --glass-subtle: rgb(var(--site-muted)); --glass-surface: var(--material-fill);
+  --glass-edge: var(--material-edge); --glass-lens: rgb(var(--site-surface) / .65); --glass-track: rgb(var(--site-accent) / .09);
+}
+html:root[data-palette] :is(.fire-cap, .sc-wire-panel, .sc-glass-trigger, .sc-inspector-reset) {
+  background: linear-gradient(145deg, var(--material-highlight), transparent 65%), var(--material-fill);
+  border-color: var(--material-edge); -webkit-backdrop-filter: var(--material-blur); backdrop-filter: var(--material-blur); box-shadow: var(--material-shadow);
+}
+html:root[data-palette] .fire-cap:is(.on, .fire-cap-primary, [aria-pressed="true"]) { background: rgb(var(--site-soft) / .85); border-color: rgb(var(--site-accent) / .5); }
+html:root[data-material="solid"] :is(.sc-mode-lens i, .sc-color-lens i) { background: rgb(var(--site-surface)); border-color: rgb(var(--site-edge)); box-shadow: 0 2px 5px #0001; backdrop-filter: none; animation: none; }
+html:root[data-material="solid"] .sc-wire-panel::before { display: none; }
+.site-palette-settings { padding: 8px 0 24px; }
+.site-palette-settings > header { display: flex; justify-content: space-between; gap: 20px; align-items: center; margin-bottom: 24px; }
+.site-palette-settings h2 { margin: 0 0 8px; font-size: 22px; font-weight: 650; letter-spacing: -.03em; color: rgb(var(--site-ink)); }
+.site-palette-settings header p, .site-palette-foot { font-size: 12px; line-height: 1.7; color: rgb(var(--site-muted)); }
+.site-palette-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+.site-palette-option { padding: 10px; border: 1px solid rgb(var(--site-edge)); border-radius: 20px; background: var(--material-fill); text-align: left; color: rgb(var(--site-ink)); transition: border-color .2s, box-shadow .2s, transform .2s; }
+.site-palette-option:hover { transform: translateY(-2px); border-color: rgb(var(--site-accent)); }
+.site-palette-option[aria-pressed="true"] { border-color: rgb(var(--site-accent)); box-shadow: 0 0 0 2px rgb(var(--site-accent) / .18); }
+.site-palette-option:focus-visible { outline: 2px solid rgb(var(--site-accent)); outline-offset: 3px; }
+.site-palette-preview { position: relative; display: block; height: 108px; overflow: hidden; border-radius: 12px; }
+.site-palette-mini-side { position: absolute; inset: 0 auto 0 0; width: 25%; padding: 20px 10px; }
+.site-palette-mini-side i { display: block; height: 5px; margin-bottom: 12px; background: currentColor; opacity: .3; border-radius: 10px; }
+.site-palette-mini-side i:first-child { opacity: 1; }
+.site-palette-mini-card { position: absolute; inset: 18px 22px 20px 34%; border: 1px solid; border-radius: 10px; box-shadow: 0 5px 12px #0000000b; padding: 14px; }
+.site-palette-mini-card i { display: block; height: 5px; margin-bottom: 9px; background: currentColor; opacity: .15; border-radius: 9px; }
+.site-palette-mini-card i:first-child { width: 40%; opacity: 1; }
+.site-palette-night { position: absolute; width: 56px; height: 38px; right: 8px; bottom: 8px; border: 1px solid; border-radius: 9px; padding: 14px; box-shadow: 0 3px 8px #0002; }
+.site-palette-night i { display: block; height: 5px; border-radius: 4px; }
+.site-palette-name { display: flex; justify-content: space-between; gap: 8px; margin: 12px 4px 5px; font-size: 13px; font-weight: 650; }
+.site-palette-name > span { font-size: 10px; font-weight: 400; color: rgb(var(--site-muted)); }
+.site-palette-note { display: block; margin: 0 4px 6px; font-size: 10px; line-height: 1.6; color: rgb(var(--site-muted)); }
+.site-palette-foot { margin-top: 20px; }
+@media (max-width: 460px) { .site-palette-grid { gap: 10px; } .site-palette-preview { height: 86px; } .site-palette-option { padding: 7px; } }
+@media (prefers-reduced-motion: reduce) { .site-palette-option { transition: none; } }
+@supports not (backdrop-filter: blur(1px)) { :root[data-material="glass"] { --material-fill: rgb(var(--site-surface)); } }
+
+/* Re-evaluate material channels inside the deliberately light model inspector. */
+html:root[data-palette] .showcase.light {
+  --material-fill: rgb(var(--site-surface)); --material-edge: rgb(var(--site-edge));
+  --material-shadow: 0 2px 12px rgb(var(--site-ink) / .04);
+}
+html:root[data-material="glass"] .showcase.light {
+  --material-fill: rgb(var(--site-surface) / .65); --material-edge: rgb(var(--site-surface) / .72);
+  --material-shadow: inset 0 1px 1px #ffffff60, inset 0 -1px 1px #ffffff20, 0 12px 36px rgb(var(--site-ink) / .1);
+}
+
+html:root[data-palette] .bg-bg-gray\/5 { background-color: rgb(var(--site-bg) / 0.05); }
+html:root[data-palette] .bg-bg-gray\/10 { background-color: rgb(var(--site-bg) / 0.1); }
+html:root[data-palette] .bg-bg-gray\/15 { background-color: rgb(var(--site-bg) / 0.15); }
+html:root[data-palette] .bg-bg-gray\/20 { background-color: rgb(var(--site-bg) / 0.2); }
+html:root[data-palette] .bg-bg-gray\/25 { background-color: rgb(var(--site-bg) / 0.25); }
+html:root[data-palette] .bg-bg-gray\/30 { background-color: rgb(var(--site-bg) / 0.3); }
+html:root[data-palette] .bg-bg-gray\/35 { background-color: rgb(var(--site-bg) / 0.35); }
+html:root[data-palette] .bg-bg-gray\/40 { background-color: rgb(var(--site-bg) / 0.4); }
+html:root[data-palette] .bg-bg-gray\/45 { background-color: rgb(var(--site-bg) / 0.45); }
+html:root[data-palette] .bg-bg-gray\/50 { background-color: rgb(var(--site-bg) / 0.5); }
+html:root[data-palette] .bg-bg-gray\/55 { background-color: rgb(var(--site-bg) / 0.55); }
+html:root[data-palette] .bg-bg-gray\/60 { background-color: rgb(var(--site-bg) / 0.6); }
+html:root[data-palette] .bg-bg-gray\/65 { background-color: rgb(var(--site-bg) / 0.65); }
+html:root[data-palette] .bg-bg-gray\/70 { background-color: rgb(var(--site-bg) / 0.7); }
+html:root[data-palette] .bg-bg-gray\/75 { background-color: rgb(var(--site-bg) / 0.75); }
+html:root[data-palette] .bg-bg-gray\/80 { background-color: rgb(var(--site-bg) / 0.8); }
+html:root[data-palette] .bg-bg-gray\/85 { background-color: rgb(var(--site-bg) / 0.85); }
+html:root[data-palette] .bg-bg-gray\/88 { background-color: rgb(var(--site-bg) / 0.88); }
+html:root[data-palette] .bg-bg-gray\/90 { background-color: rgb(var(--site-bg) / 0.9); }
+html:root[data-palette] .bg-bg-gray\/95 { background-color: rgb(var(--site-bg) / 0.95); }
+html:root[data-palette] .bg-white\/5 { background-color: rgb(var(--site-surface) / 0.05); }
+html:root[data-palette] .bg-white\/10 { background-color: rgb(var(--site-surface) / 0.1); }
+html:root[data-palette] .bg-white\/15 { background-color: rgb(var(--site-surface) / 0.15); }
+html:root[data-palette] .bg-white\/20 { background-color: rgb(var(--site-surface) / 0.2); }
+html:root[data-palette] .bg-white\/25 { background-color: rgb(var(--site-surface) / 0.25); }
+html:root[data-palette] .bg-white\/30 { background-color: rgb(var(--site-surface) / 0.3); }
+html:root[data-palette] .bg-white\/35 { background-color: rgb(var(--site-surface) / 0.35); }
+html:root[data-palette] .bg-white\/40 { background-color: rgb(var(--site-surface) / 0.4); }
+html:root[data-palette] .bg-white\/45 { background-color: rgb(var(--site-surface) / 0.45); }
+html:root[data-palette] .bg-white\/50 { background-color: rgb(var(--site-surface) / 0.5); }
+html:root[data-palette] .bg-white\/55 { background-color: rgb(var(--site-surface) / 0.55); }
+html:root[data-palette] .bg-white\/60 { background-color: rgb(var(--site-surface) / 0.6); }
+html:root[data-palette] .bg-white\/65 { background-color: rgb(var(--site-surface) / 0.65); }
+html:root[data-palette] .bg-white\/70 { background-color: rgb(var(--site-surface) / 0.7); }
+html:root[data-palette] .bg-white\/75 { background-color: rgb(var(--site-surface) / 0.75); }
+html:root[data-palette] .bg-white\/80 { background-color: rgb(var(--site-surface) / 0.8); }
+html:root[data-palette] .bg-white\/85 { background-color: rgb(var(--site-surface) / 0.85); }
+html:root[data-palette] .bg-white\/88 { background-color: rgb(var(--site-surface) / 0.88); }
+html:root[data-palette] .bg-white\/90 { background-color: rgb(var(--site-surface) / 0.9); }
+html:root[data-palette] .bg-white\/95 { background-color: rgb(var(--site-surface) / 0.95); }
+html:root[data-palette] .bg-brand-light\/5 { background-color: rgb(var(--site-soft) / 0.05); }
+html:root[data-palette] .bg-brand-light\/10 { background-color: rgb(var(--site-soft) / 0.1); }
+html:root[data-palette] .bg-brand-light\/15 { background-color: rgb(var(--site-soft) / 0.15); }
+html:root[data-palette] .bg-brand-light\/20 { background-color: rgb(var(--site-soft) / 0.2); }
+html:root[data-palette] .bg-brand-light\/25 { background-color: rgb(var(--site-soft) / 0.25); }
+html:root[data-palette] .bg-brand-light\/30 { background-color: rgb(var(--site-soft) / 0.3); }
+html:root[data-palette] .bg-brand-light\/35 { background-color: rgb(var(--site-soft) / 0.35); }
+html:root[data-palette] .bg-brand-light\/40 { background-color: rgb(var(--site-soft) / 0.4); }
+html:root[data-palette] .bg-brand-light\/45 { background-color: rgb(var(--site-soft) / 0.45); }
+html:root[data-palette] .bg-brand-light\/50 { background-color: rgb(var(--site-soft) / 0.5); }
+html:root[data-palette] .bg-brand-light\/55 { background-color: rgb(var(--site-soft) / 0.55); }
+html:root[data-palette] .bg-brand-light\/60 { background-color: rgb(var(--site-soft) / 0.6); }
+html:root[data-palette] .bg-brand-light\/65 { background-color: rgb(var(--site-soft) / 0.65); }
+html:root[data-palette] .bg-brand-light\/70 { background-color: rgb(var(--site-soft) / 0.7); }
+html:root[data-palette] .bg-brand-light\/75 { background-color: rgb(var(--site-soft) / 0.75); }
+html:root[data-palette] .bg-brand-light\/80 { background-color: rgb(var(--site-soft) / 0.8); }
+html:root[data-palette] .bg-brand-light\/85 { background-color: rgb(var(--site-soft) / 0.85); }
+html:root[data-palette] .bg-brand-light\/88 { background-color: rgb(var(--site-soft) / 0.88); }
+html:root[data-palette] .bg-brand-light\/90 { background-color: rgb(var(--site-soft) / 0.9); }
+html:root[data-palette] .bg-brand-light\/95 { background-color: rgb(var(--site-soft) / 0.95); }
+html:root[data-palette] .hover\:bg-bg-gray:hover, html:root[data-palette] .hover\:bg-brand-hover:hover { background-color: rgb(var(--site-soft)); }
+/* Shell, navigation and record surfaces predate semantic Tailwind colors. */
+html:root[data-palette] :is(.app-shell-main, .records-app, .records-content) { background: rgb(var(--site-bg)); }
+html:root[data-palette] :is(.app-shell-header, .site-header, .fire-sidebar-panel) {
+  background: var(--material-fill); border-color: var(--material-edge); color: rgb(var(--site-ink));
+  -webkit-backdrop-filter: var(--material-blur); backdrop-filter: var(--material-blur); box-shadow: var(--material-shadow);
+}
+html:root[data-palette] .fire-sidebar-panel::before { display: none; }
+html:root[data-palette] .fire-sidebar-section-label { color: rgb(var(--site-muted)); }
+html:root[data-palette] .fire-sidebar-item-active { background: rgb(var(--site-soft)); color: rgb(var(--site-accent)); border-color: rgb(var(--site-accent) / .2); }
+html:root[data-palette] .divide-edge > :not([hidden]) ~ :not([hidden]) { border-color: rgb(var(--site-edge)); }
+html:root[data-palette] body { background-image: linear-gradient(rgb(var(--site-bg) / .9), rgb(var(--site-bg) / .9)), var(--site-bg-image, none); }
+/* Destructive actions keep a semantic red across every palette. */
+html:root[data-palette] .fire-cap-danger { --cap-ink: #b23a2a; --cap-ink-strong: #9c2f20; border-color: #b23a2a66; }
+html:root.dark[data-palette] .fire-cap-danger { --cap-ink: #e8867a; --cap-ink-strong: #ff9c8f; border-color: #e8867a66; }
+html:root.dark[data-palette] .showcase.light .fire-cap-danger { --cap-ink: #b23a2a; --cap-ink-strong: #9c2f20; }
