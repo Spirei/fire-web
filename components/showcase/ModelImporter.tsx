@@ -18,12 +18,14 @@ export interface ImportReport {
   notes: string[];
   info: {
     generator: string;
-    materials: Array<{ name: string; emissive?: number[]; emissiveStrength?: number; clearcoat?: number; clearcoatRoughness?: number; roughness?: number; metallic?: number; alphaMode?: string }>;
+    materials: Array<{ name: string; emissive?: number[]; emissiveStrength?: number; clearcoat?: number; clearcoatRoughness?: number; roughness?: number; metallic?: number; alphaMode?: string; baseColorTexture?: boolean }>;
     images: Array<{ name: string; mime: string; bytes: number; width?: number; height?: number }>;
     maxImageSize: number;
     imageBytes: number;
     meshes: Array<{ name: string; primitives: number; materials: string[] }>;
     nodeCount: number;
+    totalVertices: number;
+    totalTriangles: number;
     animations: number;
     skins: number;
     extensionsUsed: string[];
@@ -46,6 +48,7 @@ interface ImportedModelRow {
   cover?: string;
   params: ShowcaseModelParams;
   updatedAt: string;
+  present?: boolean;
   /** 随仓库分发的内置车（素材在 public/mclaren/），不能删也不能改文件 */
   builtin?: boolean;
 }
@@ -101,6 +104,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
 
   const [meta, setMeta] = useState({ id: "", label: "", note: "" });
   const [params, setParams] = useState<ShowcaseModelParams>({});
+  /** 预览只使用用户明确确认过的一份参数，避免每敲一个数字都重新解析几十到几百 MB 的 GLB。 */
+  const [previewParams, setPreviewParams] = useState<ShowcaseModelParams>({});
   const [previewKey, setPreviewKey] = useState(0);
   const [structure, setStructure] = useState<{
     carBox: number[];
@@ -125,6 +130,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
 
   const upload = useCallback(
     (file: File) => {
+      xhrRef.current?.abort();
       reset();
       if (!/\.glb$/i.test(file.name)) {
         setError("只支持 .glb 单文件：.gltf + 贴图文件夹无法在这里导入");
@@ -165,7 +171,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         }
         const data = payload.report;
         setReport(data);
-        setPreviewFile(data.file);
+        setPreviewFile(payload.file ?? data.file);
         setEditingId(null);
         setMeta({
           id: payload.suggested?.id ?? slugify(name),
@@ -175,7 +181,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         setWheelPick(
           data.suggestions.materialNames.filter((material) => /wheel|tyre|tire|rim/i.test(material))
         );
-        setParams({
+        const initialParams: ShowcaseModelParams = {
           length: 5.6,
           maxTextureSize: data.suggestions.maxTextureSize,
           emissiveIntensity: data.suggestions.emissiveIntensity,
@@ -184,16 +190,24 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
           wheelAxis: "x",
           wheelLateral: "x",
           wheelLongitudinal: "y"
-        });
+        };
+        setParams(initialParams);
+        setPreviewParams(initialParams);
       };
       xhr.onerror = () => {
         setUploading(false);
         setError("上传中断：检查网络或容器是否允许大文件");
       };
+      xhr.onabort = () => {
+        setUploading(false);
+        xhrRef.current = null;
+      };
       xhr.send(file);
     },
     [reset]
   );
+
+  useEffect(() => () => xhrRef.current?.abort(), []);
 
   // 轮子材质多选 → wheelPattern（转成正则源码，转义特殊字符）
   useEffect(() => {
@@ -213,21 +227,28 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
       file: previewFile,
       version: previewKey,
       params: {
-        length: params.length,
-        yaw: params.yaw,
-        pitch: params.pitch,
-        wheelPattern: params.wheelPattern,
-        wheelAxis: params.wheelAxis,
-        wheelLateral: params.wheelLateral,
-        wheelLongitudinal: params.wheelLongitudinal,
-        maxTextureSize: params.maxTextureSize,
-        emissiveIntensity: params.emissiveIntensity,
-        clearcoatRoughness: params.clearcoatRoughness,
-        envMapIntensity: params.envMapIntensity
+        length: previewParams.length,
+        yaw: previewParams.yaw,
+        pitch: previewParams.pitch,
+        wheelPattern: previewParams.wheelPattern,
+        wheelAxis: previewParams.wheelAxis,
+        wheelLateral: previewParams.wheelLateral,
+        wheelLongitudinal: previewParams.wheelLongitudinal,
+        maxTextureSize: previewParams.maxTextureSize,
+        emissiveIntensity: previewParams.emissiveIntensity,
+        clearcoatRoughness: previewParams.clearcoatRoughness,
+        envMapIntensity: previewParams.envMapIntensity
       }
     });
     // previewKey 用来在改完参数后手动重建引擎
-  }, [params, previewFile, previewKey]);
+  }, [previewFile, previewKey, previewParams]);
+
+  const previewIsCurrent = useMemo(() => JSON.stringify(params) === JSON.stringify(previewParams), [params, previewParams]);
+  const reloadPreview = useCallback(() => {
+    setStructure(null);
+    setPreviewParams(params);
+    setPreviewKey((prev) => prev + 1);
+  }, [params]);
 
   /** 从原始包围盒判断哪根轴朝上：车高永远是最小的那一维 */
   const upHint = useMemo(() => {
@@ -239,12 +260,14 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
     return { axis: "X" as const, text: "X 轴朝上（模型可能躺倒了，需要绕 X 轴修正）" };
   }, [structure]);
 
-  const wheelsOk = structure ? structure.wheelGroups >= 4 : false;
+  const wheelsOk = structure ? structure.wheelGroups > 0 : false;
+  const idValid = /^[a-z0-9][a-z0-9_-]{1,40}$/.test(meta.id);
+  const idConflict = existing.find((row) => row.id === meta.id && row.id !== editingId);
 
   /** 轮子候选材质：优先用预览里真实加载出来的材质名（编辑已有车型时也能拿到） */
   const materialOptions = useMemo(() => {
-    if (structure?.carMaterials?.length) return structure.carMaterials;
-    return report?.suggestions.materialNames ?? [];
+    const source = structure?.carMaterials?.length ? structure.carMaterials : (report?.suggestions.materialNames ?? []);
+    return [...new Set(source)];
   }, [report, structure]);
 
   const save = useCallback(async () => {
@@ -281,6 +304,10 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
 
   const removeModel = useCallback(
     async (row: ImportedModelRow, withFile: boolean) => {
+      const prompt = withFile
+        ? `确定删除“${row.label}”并永久删除 GLB 文件？此操作无法撤销。`
+        : `确定将“${row.label}”移出车型清单？GLB 文件会保留在 uploads 卷。`;
+      if (!window.confirm(prompt)) return;
       const response = await fetch(`/api/showcase/models/${row.id}${withFile ? "?file=1" : ""}`, { method: "DELETE" });
       if (!response.ok) {
         const payload = (await response.json()) as { error?: string };
@@ -288,9 +315,10 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         return;
       }
       setNotice(`已删除车型 ${row.label}${withFile ? "（素材文件一并删除）" : "（素材文件保留在 uploads 卷）"}`);
+      if (editingId === row.id) reset();
       router.refresh();
     },
-    [router]
+    [editingId, reset, router]
   );
 
   /** 卡片按当前顺序排（内置车也在顺序表里，可以拖到任意位置） */
@@ -416,6 +444,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         </h2>
         <div
           className={`mp-drop${dragging ? " on" : ""}`}
+          role="button"
+          tabIndex={uploading ? -1 : 0}
           onDragOver={(event) => {
             event.preventDefault();
             setDragging(true);
@@ -427,12 +457,16 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             const file = event.dataTransfer.files?.[0];
             if (file) upload(file);
           }}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => { if (!uploading) inputRef.current?.click(); }}
+          onKeyDown={(event) => {
+            if (!uploading && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); inputRef.current?.click(); }
+          }}
         >
           <input
             ref={inputRef}
             type="file"
             accept=".glb"
+            disabled={uploading}
             hidden
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -471,6 +505,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                 网格 {report.info.meshes.length} · 材质 {report.info.materials.length} · 贴图 {report.info.images.length}（最大{" "}
                 {report.info.maxImageSize || "?"}px）
               </span>
+              <span>顶点 {report.info.totalVertices.toLocaleString()} · 三角面 {report.info.totalTriangles.toLocaleString()} · 节点 {report.info.nodeCount}</span>
+              {(report.info.animations > 0 || report.info.skins > 0) && <span>动画 {report.info.animations} · 蒙皮 {report.info.skins}</span>}
             </div>
             {report.errors.length > 0 && (
               <ul className="mp-list bad">
@@ -505,10 +541,10 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                   </tr>
                 </thead>
                 <tbody>
-                  {report.info.materials.map((material) => (
-                    <tr key={material.name}>
+                  {report.info.materials.map((material, index) => (
+                    <tr key={`${material.name}-${index}`}>
                       <td>{material.name}</td>
-                      <td>{report.info.images.length ? "—" : "无贴图"}</td>
+                      <td>{material.baseColorTexture ? "基础色贴图" : "—"}</td>
                       <td>
                         {material.metallic ?? 1} / {material.roughness ?? 1}
                       </td>
@@ -537,13 +573,13 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             <div className="mp-preview-wrap">
               {previewConfig && <ModelPreview key={previewKey} config={previewConfig} onDebug={setStructure} />}
               <div className="mp-preview-foot">
-                <button type="button" className="mp-ghost fire-cap" onClick={() => setPreviewKey((prev) => prev + 1)}>
+                <button type="button" className="mp-ghost fire-cap" onClick={reloadPreview}>
                   重新加载预览
                 </button>
                 {structure && (
                   <span>
                     原始包围盒 {structure.carBoxRaw.join(" × ")} · 归一化后 {structure.carBox.join(" × ")} 米 ·{" "}
-                    {structure.wheelGroups >= 4 ? `识别到 ${structure.wheelGroups} 个轮子` : "没认出轮子"}
+                    {wheelsOk ? `识别到 ${structure.wheelGroups} 组轮子网格` : "没认出轮子"}
                   </span>
                 )}
               </div>
@@ -553,7 +589,9 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             <div className="mp-form">
               <label>
                 车型代号（英文，用于本地偏好与接口）
-                <input value={meta.id} onChange={(event) => setMeta({ ...meta, id: event.target.value.toLowerCase() })} placeholder="mp4-5" />
+                <input disabled={editingId !== null} value={meta.id} onChange={(event) => setMeta({ ...meta, id: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "") })} placeholder="mp4-5" />
+                {!idValid && <small className="mp-field-error">请输入 2–40 位英文小写、数字、- 或 _</small>}
+                {idConflict && <small className="mp-field-error">代号已被“{idConflict.label}”使用</small>}
               </label>
               <label>
                 车型名称（显示在车型条上）
@@ -582,6 +620,26 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                   value={params.yaw ?? 0}
                   onChange={(event) => setParams({ ...params, yaw: Number(event.target.value) })}
                 />
+              </label>
+              <label>
+                上下修正（度）：绕 X 轴
+                <input
+                  type="number"
+                  step="15"
+                  min="-180"
+                  max="180"
+                  value={params.pitch ?? 0}
+                  onChange={(event) => setParams({ ...params, pitch: Number(event.target.value) })}
+                />
+              </label>
+              <label>
+                轮子旋转轴
+                <select
+                  value={params.wheelAxis ?? "x"}
+                  onChange={(event) => setParams({ ...params, wheelAxis: event.target.value as "x" | "y" | "z" })}
+                >
+                  <option value="x">X</option><option value="y">Y</option><option value="z">Z</option>
+                </select>
               </label>
               <label>
                 前后轴：纵向轴
@@ -661,6 +719,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                   ))}
                 </div>
               </div>
+              {!previewIsCurrent && <div className="mp-preview-stale">参数已修改，请点击“按当前参数重载预览”确认效果后再保存。</div>}
             </div>
           </div>
         </section>
@@ -676,13 +735,13 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             之后再调参数不用重新上传，改完再点一次保存即可。
           </p>
           <div className="mp-save-row">
-            <button type="button" className="mp-primary fire-cap fire-cap-primary" onClick={() => void save()} disabled={saving || !meta.id || !meta.label}>
+            <button type="button" className="mp-primary fire-cap fire-cap-primary" onClick={() => void save()} disabled={saving || !idValid || Boolean(idConflict) || !meta.label.trim() || !structure || !previewIsCurrent}>
               {saving ? "保存中…" : "保存车型"}
             </button>
             <button
               type="button"
               className="mp-ghost fire-cap"
-              onClick={() => setPreviewKey((prev) => prev + 1)}
+              onClick={reloadPreview}
               disabled={saving}
             >
               按当前参数重载预览
@@ -770,11 +829,13 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                     ? "预设写在 presets/mcl35m.ts"
                     : `长 ${row.params.length ?? "-"} m · 朝向 ${row.params.yaw ?? 0}° · 轮子 ${row.params.wheelPattern ?? "未指定"}`}
                 </span>
+                {row.present === false && <span className="text-[11px] font-semibold text-[#d97706]">素材文件缺失，请重新上传后再上线</span>}
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 lg:flex-nowrap lg:overflow-x-auto lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:hidden">
                   {!row.builtin && (
                     <button
                       type="button"
                       className="fire-cap px-2 py-1 text-[11px] font-semibold"
+                      disabled={row.present === false}
                       onClick={() => {
                         setEditingId(row.id);
                         setSavedId(null);
@@ -784,6 +845,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                         setPreviewFile(row.file);
                         setMeta({ id: row.id, label: row.label, note: row.note });
                         setParams(row.params);
+                        setPreviewParams(row.params);
                         setWheelPick(
                           row.params.wheelPattern
                             ? row.params.wheelPattern.split("|").map((part) => part.replace(/\\/g, ""))

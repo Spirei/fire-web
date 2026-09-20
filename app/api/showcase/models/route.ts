@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { readJsonBody } from "@/lib/requestBody";
 import { getAuthUser, isAdmin, isTrustedMutationRequest } from "@/lib/auth";
-import { listShowcaseOptions, upsertStoredModel, validModelFile, validModelId } from "@/lib/showcaseModels";
+import { ensureRegistry, listShowcaseOptions, upsertStoredModel, validModelFile, validModelId } from "@/lib/showcaseModels";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +41,9 @@ export async function POST(request: Request) {
   const file = String(body.file ?? "").trim();
   if (!validModelId(id)) return NextResponse.json({ error: "车型代号只能用 a-z、0-9、-、_（2-40 位）" }, { status: 400 });
   if (!validModelFile(file)) return NextResponse.json({ error: "素材文件名不合法（只支持 .glb）" }, { status: 400 });
+  if (ensureRegistry().some((item) => item.id === id)) {
+    return NextResponse.json({ error: "车型代号已存在；请换一个代号，或在车型清单中点“改参数”" }, { status: 409 });
+  }
   try {
     const entry = upsertStoredModel({
       id,

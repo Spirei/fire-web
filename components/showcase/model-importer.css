@@ -267,6 +267,28 @@
   color: inherit;
 }
 
+.mp-form input:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.mp-field-error {
+  color: #ff9c8f;
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.mp-preview-stale {
+  grid-column: 1 / -1;
+  padding: 9px 11px;
+  border: 1px solid rgba(243, 201, 139, 0.4);
+  border-radius: 10px;
+  background: rgba(243, 201, 139, 0.08);
+  color: #f3c98b;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
 .mp-wheel {
   grid-column: 1 / -1;
 }

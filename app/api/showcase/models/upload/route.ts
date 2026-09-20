@@ -3,7 +3,7 @@ import path from "path";
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin, isTrustedMutationRequest } from "@/lib/auth";
 import { inspectGlb } from "@/lib/glbInspect";
-import { MODELS_DIR, validModelFile } from "@/lib/showcaseModels";
+import { MODELS_DIR, draftModelFile, validModelFile } from "@/lib/showcaseModels";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
 
@@ -72,7 +72,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `文件超过 ${Math.round(MAX_BYTES / 1048576)}MB 上限` }, { status: 413 });
   }
   fs.mkdirSync(MODELS_DIR, { recursive: true });
-  const dest = path.join(MODELS_DIR, rawName);
+  // 先落草稿：只有完成预览并点“保存上线”才会原子改名进正式清单；放弃操作不会误上线或覆盖旧车。
+  const draftName = draftModelFile(rawName);
+  const dest = path.join(MODELS_DIR, draftName);
   // 临时名带随机后缀：同名并发上传不会互相写同一个 .part（否则可能双双落成半截文件）
   const tmp = `${dest}.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.part`;
   let bytes = 0;
@@ -99,8 +101,8 @@ export async function POST(request: Request) {
   await fs.promises.rename(tmp, dest);
   logSecurityEvent(request, user.id, "showcase_model_upload", `${rawName}:${bytes}`);
   return NextResponse.json({
-    file: rawName,
-    url: `/uploads/mclaren/models/${encodeURIComponent(rawName)}`,
+    file: draftName,
+    url: `/uploads/mclaren/models/${encodeURIComponent(draftName)}`,
     bytes,
     suggested: {
       id: slugFromFile(rawName),

@@ -732,6 +732,22 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.ok(Array.isArray(published.models));
     assert.equal(published.stored, undefined);
   });
+  await test('showcase 上传草稿不会提前上线，保存后原子转正，移出清单不会自动复活', () => {
+    const store = require(path.join(root, 'lib/showcaseModels.ts'));
+    fs.mkdirSync(store.MODELS_DIR, { recursive: true });
+    const draft = store.draftModelFile(`${'future-car-'.repeat(9)}.glb`);
+    assert(store.validModelFile(draft));
+    fs.writeFileSync(path.join(store.MODELS_DIR, draft), Buffer.from('draft'));
+    assert(!store.ensureRegistry().some((item) => item.file === draft));
+    const saved = store.upsertStoredModel({ id: 'future-car', label: 'Future Car', file: draft, params: { wheelPattern: '[invalid' } });
+    assert(!store.isDraftModelFile(saved.file));
+    assert(fs.existsSync(path.join(store.MODELS_DIR, saved.file)));
+    assert.equal(saved.params.wheelPattern, undefined);
+    store.removeStoredModel('future-car');
+    assert(!store.ensureRegistry().some((item) => item.id === 'future-car'));
+    assert(fs.existsSync(path.join(store.MODELS_DIR, saved.file)), '移出清单保留 GLB');
+    assert.throws(() => store.upsertStoredModel({ id: 'mcl35m', label: 'duplicate', file: saved.file }), /内置车型重复/);
+  });
   await test('entrypoint: unwritable data volume fails loudly, failing seed does not block startup', () => {
     const { spawnSync } = require('node:child_process');
     const entrypoint = path.join(root, 'scripts/entrypoint.sh');

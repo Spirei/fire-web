@@ -50,6 +50,8 @@ export interface GlbReport {
     imageBytes: number;
     meshes: Array<{ name: string; primitives: number; materials: string[] }>;
     nodeCount: number;
+    totalVertices: number;
+    totalTriangles: number;
     animations: number;
     skins: number;
     extensionsUsed: string[];
@@ -173,6 +175,7 @@ export async function inspectGlb(absPath: string, displayName?: string): Promise
     const MAX_ENTRIES = 400;
     const take = <T,>(list: unknown): T[] => (Array.isArray(list) ? (list.slice(0, MAX_ENTRIES) as T[]) : []);
     const views = take<{ byteOffset?: number; byteLength?: number }>(gltf.bufferViews);
+    const accessors = take<{ count?: number }>(gltf.accessors);
     const images: GlbImageInfo[] = [];
     for (const [i, img] of take<Record<string, any>>(gltf.images).entries()) {
       const view = typeof img.bufferView === "number" ? views[img.bufferView] : undefined;
@@ -213,10 +216,28 @@ export async function inspectGlb(absPath: string, displayName?: string): Promise
       }
       return { name: String(mesh.name ?? "未命名网格"), primitives: (mesh.primitives ?? []).length, materials: [...mats] };
     });
+    let totalVertices = 0;
+    let totalTriangles = 0;
+    let unsupportedPrimitives = 0;
+    for (const mesh of take<Record<string, any>>(gltf.meshes)) {
+      for (const primitive of take<Record<string, any>>(mesh.primitives)) {
+        const positionAccessor = accessors[Number(primitive.attributes?.POSITION)];
+        const vertices = Math.max(0, Number(positionAccessor?.count ?? 0));
+        totalVertices += vertices;
+        const mode = Number(primitive.mode ?? 4);
+        if (mode !== 4) { unsupportedPrimitives += 1; continue; }
+        const indexAccessor = accessors[Number(primitive.indices)];
+        totalTriangles += Math.floor(Math.max(0, Number(indexAccessor?.count ?? vertices)) / 3);
+      }
+    }
     const maxImageSize = images.reduce((max, img) => Math.max(max, img.width ?? 0, img.height ?? 0), 0);
     const imageBytes = images.reduce((sum, img) => sum + (img.bytes ?? 0), 0);
     const extensionsUsed: string[] = gltf.extensionsUsed ?? [];
     const extensionsRequired: string[] = gltf.extensionsRequired ?? [];
+    const externalResources = [
+      ...take<Record<string, any>>(gltf.buffers),
+      ...take<Record<string, any>>(gltf.images)
+    ].filter((item) => typeof item.uri === "string" && !item.uri.startsWith("data:"));
 
     for (const key of [...extensionsRequired, ...extensionsUsed]) {
       const hint = BLOCKING_EXTENSIONS[key];
@@ -225,6 +246,10 @@ export async function inspectGlb(absPath: string, displayName?: string): Promise
     if (opened.length !== stat.size) {
       notes.push(`文件头记录长度 ${opened.length} 字节、实际 ${stat.size} 字节，通常是导出中断，建议重新导出。`);
     }
+    if (externalResources.length) errors.push(`发现 ${externalResources.length} 个外部文件引用；请导出“嵌入资源”的单文件 GLB，否则贴图或网格上线后会丢失。`);
+    if (unsupportedPrimitives) warnings.push(`有 ${unsupportedPrimitives} 个图元不是三角面，模型展示与线框可能忽略这些线 / 点图元。`);
+    if (totalTriangles > 1_500_000) warnings.push(`模型约 ${(totalTriangles / 1_000_000).toFixed(1)} 百万三角面，手机和平板可能卡顿；建议减面到 150 万以下。`);
+    if ((gltf.nodes ?? []).length > 2500) warnings.push(`节点数 ${(gltf.nodes ?? []).length} 偏多，切换车型和首次挂载可能出现停顿；建议合并静态零件。`);
     if (maxImageSize > 4096) {
       warnings.push(`贴图最长边 ${maxImageSize}px，超过 4096 会被自动压到 4096（显存与加载时间都会翻倍）。`);
     }
@@ -279,6 +304,8 @@ export async function inspectGlb(absPath: string, displayName?: string): Promise
         imageBytes,
         meshes,
         nodeCount: Array.isArray(gltf.nodes) ? gltf.nodes.length : 0,
+        totalVertices,
+        totalTriangles,
         animations: (gltf.animations ?? []).length,
         skins: (gltf.skins ?? []).length,
         extensionsUsed,

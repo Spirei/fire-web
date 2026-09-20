@@ -16,6 +16,7 @@ export const SHOWROOM_DIR = path.join(process.cwd(), "public", "uploads", "mclar
 export const MODELS_DIR = path.join(SHOWROOM_DIR, "models");
 export const COVERS_DIR = path.join(SHOWROOM_DIR, "covers");
 const REGISTRY_FILE = path.join(SHOWROOM_DIR, "showroom.json");
+const DRAFT_PREFIX = ".draft-";
 
 export type { ShowcaseModelParams } from "@/components/showcase/types";
 
@@ -106,9 +107,18 @@ const KNOWN_FILES: Record<string, { id: string; label: string; note: string; par
 /** 目录里现成的 .glb（手动 scp / docker cp 进去的也算），登记表没记的补一条默认参数 */
 function discoverModelFiles(): string[] {
   try {
+    // 网页上传先落为草稿；未保存的草稿一天后清理，不能被“手动放入目录”的自动发现提前上线。
+    const now = Date.now();
+    for (const name of fs.readdirSync(MODELS_DIR)) {
+      if (!name.startsWith(DRAFT_PREFIX)) continue;
+      try {
+        const abs = path.join(MODELS_DIR, name);
+        if (now - fs.statSync(abs).mtimeMs > 24 * 60 * 60 * 1000) fs.unlinkSync(abs);
+      } catch { /* 文件可能正被另一请求处理 */ }
+    }
     return fs
       .readdirSync(MODELS_DIR)
-      .filter((name) => validModelFile(name))
+      .filter((name) => validModelFile(name) && !isDraftModelFile(name))
       .sort();
   } catch {
     return [];
@@ -124,11 +134,13 @@ function discoverModelFiles(): string[] {
 export function ensureRegistry() {
   const files = discoverModelFiles();
   const existed = fs.existsSync(REGISTRY_FILE);
-  const current = existed ? readStoredModels() : [];
+  const registry = existed ? readRegistry() : { models: [], ignoredFiles: [] };
+  const current = registry.models;
   const known = new Set(current.map((model) => model.file));
+  const ignored = new Set(registry.ignoredFiles);
   const now = new Date().toISOString();
   const added: StoredShowcaseModel[] = files
-    .filter((file) => !known.has(file))
+    .filter((file) => !known.has(file) && !ignored.has(file))
     .map((file) => {
       const preset = KNOWN_FILES[file];
       return {
@@ -165,6 +177,16 @@ export function validModelFile(name: string) {
   return /^[A-Za-z0-9._-]{1,120}\.glb$/.test(name) && !name.includes("..");
 }
 
+export function isDraftModelFile(name: string) {
+  return name.startsWith(DRAFT_PREFIX) && validModelFile(name);
+}
+
+/** 上传接口使用：草稿能预览，但在“保存上线”之前不会进入自动发现清单。 */
+export function draftModelFile(name: string) {
+  const stem = name.replace(/\.glb$/i, "").slice(0, 86) || "model";
+  return `${DRAFT_PREFIX}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}--${stem}.glb`;
+}
+
 export function validModelId(id: string) {
   return /^[a-z0-9][a-z0-9_-]{1,40}$/.test(id);
 }
@@ -191,7 +213,10 @@ export function sanitizeParams(input: unknown): ShowcaseModelParams {
   axis("wheelAxis");
   axis("wheelLateral");
   axis("wheelLongitudinal");
-  if (typeof raw.wheelPattern === "string" && raw.wheelPattern.trim() && raw.wheelPattern.length <= 200) {
+  const validPattern = (value: string) => {
+    try { new RegExp(value, "i"); return true; } catch { return false; }
+  };
+  if (typeof raw.wheelPattern === "string" && raw.wheelPattern.trim() && raw.wheelPattern.length <= 200 && validPattern(raw.wheelPattern.trim())) {
     out.wheelPattern = raw.wheelPattern.trim();
   }
   if (Array.isArray(raw.materialRules)) {
@@ -200,7 +225,7 @@ export function sanitizeParams(input: unknown): ShowcaseModelParams {
       .map((rule) => {
         const r = (rule ?? {}) as Record<string, unknown>;
         const match = typeof r.match === "string" ? r.match.trim().slice(0, 120) : "";
-        if (!match) return null;
+        if (!match || !validPattern(match)) return null;
         const item: { match: string; metalness?: number; roughness?: number } = { match };
         const metalness = Number(r.metalness);
         const roughness = Number(r.roughness);
@@ -221,12 +246,15 @@ interface RegistryFile {
   models: StoredShowcaseModel[];
   /** 内置车的少量可改项（素材在仓库里，参数写在代码里，目前只允许换封面） */
   builtinMeta?: Record<string, { cover?: string }>;
+  /** 选择“移出清单但保留文件”的素材；自动发现必须跳过，否则刷新后会重新上线。 */
+  ignoredFiles?: string[];
 }
 
 export function readRegistry(): {
   order: string[];
   models: StoredShowcaseModel[];
   builtinMeta: Record<string, { cover?: string }>;
+  ignoredFiles: string[];
 } {
   try {
     const raw = JSON.parse(fs.readFileSync(REGISTRY_FILE, "utf8")) as Partial<RegistryFile>;
@@ -234,9 +262,10 @@ export function readRegistry(): {
     const models = list.filter((item) => item && validModelId(item.id) && validModelFile(item.file));
     const order = (Array.isArray(raw.order) ? raw.order : []).filter((id) => typeof id === "string" && validModelId(id));
     const builtinMeta = raw.builtinMeta && typeof raw.builtinMeta === "object" ? raw.builtinMeta : {};
-    return { order, models, builtinMeta };
+    const ignoredFiles = (Array.isArray(raw.ignoredFiles) ? raw.ignoredFiles : []).filter((file) => typeof file === "string" && validModelFile(file));
+    return { order, models, builtinMeta, ignoredFiles };
   } catch {
-    return { order: [], models: [], builtinMeta: {} };
+    return { order: [], models: [], builtinMeta: {}, ignoredFiles: [] };
   }
 }
 
@@ -247,10 +276,11 @@ export function readStoredModels(): StoredShowcaseModel[] {
 export function writeStoredModels(
   models: StoredShowcaseModel[],
   order?: string[],
-  builtinMeta?: Record<string, { cover?: string }>
+  builtinMeta?: Record<string, { cover?: string }>,
+  ignoredFiles?: string[]
 ) {
   fs.mkdirSync(SHOWROOM_DIR, { recursive: true });
-  const tmp = `${REGISTRY_FILE}.tmp`;
+  const tmp = `${REGISTRY_FILE}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   const ids = models.map((model) => model.id);
   const previous = readRegistry();
   // 顺序表里不再存在的 id 丢掉；新加的车型补到末尾（保持「新导入的排在最后」）
@@ -261,7 +291,7 @@ export function writeStoredModels(
   const finalOrder = [...kept, ...ids.filter((id) => !kept.includes(id))];
   fs.writeFileSync(
     tmp,
-    JSON.stringify({ version: 1, order: finalOrder, models, builtinMeta: builtinMeta ?? previous.builtinMeta ?? {} }, null, 2),
+    JSON.stringify({ version: 1, order: finalOrder, models, builtinMeta: builtinMeta ?? previous.builtinMeta ?? {}, ignoredFiles: ignoredFiles ?? previous.ignoredFiles }, null, 2),
     "utf8"
   );
   fs.renameSync(tmp, REGISTRY_FILE);
@@ -418,18 +448,30 @@ export function upsertStoredModel(input: {
   params?: ShowcaseModelParams;
 }): StoredShowcaseModel {
   if (!validModelId(input.id)) throw new Error("车型代号只能用 a-z、0-9、-、_");
+  if (SHOWCASE_MODELS.some((item) => item.id === input.id)) throw new Error("车型代号与内置车型重复，请换一个代号");
   if (!validModelFile(input.file)) throw new Error("素材文件名不合法");
-  if (!modelFileExists(input.file)) throw new Error("素材文件不在 uploads 卷里，请重新上传");
   const label = input.label.trim().slice(0, 24);
   if (!label) throw new Error("请填写车型名称");
+  let file = input.file;
+  if (isDraftModelFile(file)) {
+    const original = file.split("--").slice(1).join("--") || "model.glb";
+    const stem = original.replace(/\.glb$/i, "").slice(0, 86) || "model";
+    let finalName = `${stem}.glb`;
+    let serial = 1;
+    while (modelFileExists(finalName)) finalName = `${stem}-${serial++}.glb`;
+    fs.renameSync(path.join(MODELS_DIR, file), path.join(MODELS_DIR, finalName));
+    file = finalName;
+  }
+  if (!modelFileExists(file)) throw new Error("素材文件不在 uploads 卷里，请重新上传");
   const now = new Date().toISOString();
   const models = ensureRegistry();
   const index = models.findIndex((item) => item.id === input.id);
+  const previousFile = index >= 0 ? models[index].file : undefined;
   const entry: StoredShowcaseModel = {
     id: input.id,
     label,
     note: (input.note ?? "").trim().slice(0, 24),
-    file: input.file,
+    file,
     params: sanitizeParams(input.params ?? {}),
     createdAt: index >= 0 ? models[index].createdAt : now,
     updatedAt: now
@@ -437,14 +479,21 @@ export function upsertStoredModel(input: {
   if (index >= 0) models[index] = entry;
   else models.push(entry);
   writeStoredModels(models);
+  if (previousFile && previousFile !== file && !models.some((item, i) => i !== index && item.file === previousFile)) {
+    try { fs.unlinkSync(path.join(MODELS_DIR, previousFile)); } catch { /* 旧文件可能已手动移走 */ }
+  }
   return entry;
 }
 
 export function removeStoredModel(id: string, options: { deleteFile?: boolean } = {}) {
   const models = ensureRegistry();
+  const registry = readRegistry();
   const entry = models.find((item) => item.id === id);
   if (!entry) throw new Error("车型不存在");
-  writeStoredModels(models.filter((item) => item.id !== id));
+  const ignoredFiles = options.deleteFile
+    ? registry.ignoredFiles.filter((file) => file !== entry.file)
+    : [...new Set([...registry.ignoredFiles, entry.file])];
+  writeStoredModels(models.filter((item) => item.id !== id), undefined, undefined, ignoredFiles);
   if (options.deleteFile) {
     try {
       fs.unlinkSync(path.join(MODELS_DIR, entry.file));
