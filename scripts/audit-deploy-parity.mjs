@@ -76,7 +76,7 @@ requireText("Docker 构建上下文", dockerignore, [
   "!data/celebs-cache.json",
   "!data/earnings-cache/*.json"
 ]);
-requireText("上传资源路由", uploadRoute, ["resource-default", "defaultAbs", "fs.readFileSync(source)"]);
+requireText("上传资源路由", uploadRoute, ["resource-default", "defaultAbs", "fs.createReadStream(source)"]);
 requireText("素材播种", assetsModule, ["resource-default", "ensureBrokerAssets", "ensureCategoryAssets"]);
 
 requireText("部署者自行提供素材", dockerignore, ["public/uploads/**", "!public/uploads/.gitkeep"]);

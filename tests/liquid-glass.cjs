@@ -22,6 +22,10 @@ for(const [w,h] of [[84,44],[42,44],[44,44],[24,44]]) {
 }
 let palette='liquid', selected=[], captured=null;
 let states=[];
+let timers=[];
+global.setTimeout=fn=>{timers.push(fn);return timers.length};
+global.clearTimeout=id=>{timers[id-1]=null};
+const fireTimers=()=>{const pending=timers;timers=[];for(const fn of pending)fn?.()};
 const react={useEffect:()=>{},useId:()=>':test:',useRef:value=>({current:value}),useState:value=>{ const i=states.length;states.push(value);return [value,next=>states[i]=next]; }};
 const Control=load('components/LiquidGlassControl.tsx',{'react':react,'@/lib/liquidGlass':optics,'./PaletteProvider':{useSitePalette:()=>({palette})}}).default;
 function mount() {
@@ -31,25 +35,12 @@ function mount() {
  return el.props;
 }
 const ev=(x,id=1)=>({isPrimary:true,button:0,pointerId:id,clientX:x,clientY:20});
-let p=mount(); p.onPointerDown(ev(154));p.onPointerMove(ev(354));p.onPointerUp(ev(354));assert.deepEqual(selected,[2]);assert.equal(captured,null);
-p=mount();p.onPointerDown(ev(154));p.onPointerMove(ev(-100));p.onPointerUp(ev(-100));assert.equal(selected.at(-1),0);
-p=mount();p.onPointerDown(ev(154));p.onPointerDown(ev(354,2));p.onPointerUp(ev(354,2));assert.equal(selected.length,2,'second pointer cannot commit');p.onPointerCancel();p.onPointerUp(ev(354));assert.equal(selected.length,2,'cancel does not select');
-p=mount();p.onPointerDown(ev(154));p.onLostPointerCapture();p.onPointerUp(ev(354));assert.equal(selected.length,2);
-p=mount(); const mouse=x=>({...ev(x),pointerType:'mouse',buttons:0});
-p.onPointerEnter(mouse(154));assert.equal(states[2],true,'hover raises lens');
-p.onPointerMove(mouse(304));assert.equal(states[0],1.5,'hover follows continuously between options');
-p.onPointerUp(mouse(304));assert.equal(selected.length,2,'hover cannot select');
-p.onPointerLeave();assert.equal(states[0],0,'leave restores selection');assert.equal(states[2],false);
-p.onPointerEnter({...mouse(254),pointerType:'touch'});assert.equal(states[2],false,'touch has no hover');
-p.onPointerEnter(mouse(254));p.onPointerCancel();assert.equal(states[2],false,'cancel clears hover');
-p.onPointerDown(mouse(154));p.onPointerLeave();p.onPointerMove(ev(354));p.onPointerUp(ev(354));assert.equal(selected.at(-1),2,'captured drag continues outside');
-selected.pop();
-p=mount();p.onPointerEnter(mouse(154));p.onPointerMove(mouse(304));p.onPointerMove(mouse(204));p.onPointerMove(mouse(354));
-assert.equal(selected.length,2,'back-and-forth preview never commits');
-p.onPointerDown(mouse(354));p.onPointerUp(mouse(354));assert.equal(selected.at(-1),2);
-assert.equal(states[0],2);assert.equal(states[1],false);assert.equal(states[2],false,'click lands and deflates lens');
-p.onPointerMove(mouse(356));assert.equal(states[2],false,'post-click mouse jitter does not reopen lens');
-p.onPointerMove(mouse(330));assert.equal(states[2],true,'deliberate movement starts a new preview');
-selected.pop();
-palette='neutral';p=mount();p.onPointerEnter(mouse(254));assert.equal(states[2],false,'solid palette has no hover lens');p.onPointerDown(ev(354));p.onPointerUp(ev(354));assert.equal(selected.length,2,'solid palette uses normal button click');
-console.log('PASS lens symmetry, narrow swatches, clear center, drag commit, limits, cancellation and multiple pointers');
+let p=mount();
+assert.equal(p.onPointerEnter,undefined,'plain hover has no lens interaction');
+p.onPointerDown(ev(354));p.onPointerUp(ev(354));assert.deepEqual(selected,[2],'short click selects without raising lens');assert.equal(states[1],false);assert.equal(captured,null);
+p=mount();p.onPointerDown(ev(154));fireTimers();assert.equal(states[1],true,'long press raises lens');p.onPointerMove(ev(304));assert.equal(states[0],1.5,'active lens follows continuously');p.onPointerMove(ev(204));p.onPointerMove(ev(354));assert.equal(selected.length,1,'drag preview does not commit');p.onPointerUp(ev(354));assert.equal(selected.at(-1),2,'release snaps and commits');assert.equal(states[1],false);
+p=mount();p.onPointerDown(ev(154));p.onPointerMove(ev(180));fireTimers();assert.equal(states[1],false,'movement beyond slop cancels long press');p.onPointerUp(ev(354));assert.equal(selected.at(-1),2,'cancelled long press remains a short selection');
+p=mount();p.onPointerDown(ev(154));p.onPointerDown(ev(354,2));p.onPointerUp(ev(354,2));assert.equal(selected.length,3,'second pointer cannot commit');p.onPointerCancel();fireTimers();p.onPointerUp(ev(354));assert.equal(selected.length,3,'cancel does not select');
+p=mount();p.onPointerDown(ev(154));p.onLostPointerCapture();fireTimers();p.onPointerUp(ev(354));assert.equal(selected.length,3,'lost capture cancels press');
+palette='neutral';p=mount();p.onPointerDown(ev(354));p.onPointerUp(ev(354));assert.equal(selected.length,3,'solid palette uses normal button click');
+console.log('PASS lens symmetry, clear center, short click, long-press activation, drag snap, slop, cancellation and multiple pointers');

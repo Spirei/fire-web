@@ -32,6 +32,8 @@ const deploymentFiles = new Set([
 // 四色门侧栏运行必需的 4 个素材：体积极小、缺任意一个侧栏入口会先闪再消失，
 // 已获准随公开仓库分发（其余 public/uploads、二进制素材仍然禁止入库）。
 const publicMediaAllowlist = new Set([
+  // 配色设置入口的内置矢量图标，属于产品源码，不是用户上传或部署私有素材。
+  "public/icons/palette.svg",
   "public/uploads/feature/four-door/window.png",
   "public/uploads/feature/four-door/dial.png",
   "public/uploads/feature/four-door/pointer.png",
