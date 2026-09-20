@@ -21,7 +21,8 @@ view.attach(root);
 assert.equal(wheel.children.length, 0, 'native must not allocate extra meshes');
 view.set('overlay', '#00ff00');
 const overlay = wheel.children[0];
-assert.equal(overlay.geometry, geometry);
+assert.notEqual(overlay.geometry, geometry, 'sparse panels get a denser display-only wire geometry');
+assert(overlay.geometry.getAttribute('position').count > geometry.getAttribute('position').count);
 assert.equal(wheel.material, paint);
 assert.equal(overlay.material.side, THREE.DoubleSide, 'thin wings need wire lines on both faces');
 for (const angle of [0, .5, 2, 4]) {

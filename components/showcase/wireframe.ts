@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { TessellateModifier } from "three/examples/jsm/modifiers/TessellateModifier.js";
 
 export type WireframeMode = "native" | "overlay" | "wireframe";
 
@@ -7,7 +8,7 @@ export function createWireframeView() {
   let mode: WireframeMode = "native";
   let color = "#00ff00";
   let root: THREE.Object3D | null = null;
-  const entries: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[]; overlay: THREE.Mesh }[] = [];
+  const entries: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[]; overlay: THREE.Mesh; overlayGeometry?: THREE.BufferGeometry }[] = [];
   const overlayMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
   // Offset in clip space, never inflate the mesh (which separates narrow panels / wheel parts).
   overlayMaterial.onBeforeCompile = (shader) => {
@@ -18,6 +19,36 @@ export function createWireframeView() {
   pureMaterial.onBeforeCompile = overlayMaterial.onBeforeCompile;
   const depthMaterial = new THREE.MeshBasicMaterial({ colorWrite: false });
 
+  /**
+   * 部分导入车型用两三个超大三角形承载贴花 / 端板。直接打开 wireframe 只会画三角形边，
+   * 视觉上就像整块没有被线网包裹。只为这些长边面片生成细分后的展示几何；原模型几何、UV
+   * 和材质完全不改，已经足够密的轮胎与车身也不会被重复细分。
+   */
+  function wireGeometry(mesh: THREE.Mesh) {
+    const geometry = mesh.geometry as THREE.BufferGeometry;
+    const position = geometry.getAttribute("position");
+    if (!position || position.count < 3) return { geometry };
+    mesh.updateWorldMatrix(true, false);
+    const scale = new THREE.Vector3();
+    mesh.getWorldScale(scale);
+    const worldScale = Math.max(Math.abs(scale.x), Math.abs(scale.y), Math.abs(scale.z), 1e-6);
+    const maxEdge = 0.14 / worldScale;
+    const index = geometry.getIndex();
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const triangles = index ? index.count / 3 : position.count / 3;
+    let sparse = false;
+    for (let triangle = 0; triangle < triangles && !sparse; triangle += 1) {
+      const ai = index ? index.getX(triangle * 3) : triangle * 3;
+      const bi = index ? index.getX(triangle * 3 + 1) : triangle * 3 + 1;
+      const ci = index ? index.getX(triangle * 3 + 2) : triangle * 3 + 2;
+      a.fromBufferAttribute(position, ai); b.fromBufferAttribute(position, bi); c.fromBufferAttribute(position, ci);
+      sparse = a.distanceToSquared(b) > maxEdge ** 2 || b.distanceToSquared(c) > maxEdge ** 2 || c.distanceToSquared(a) > maxEdge ** 2;
+    }
+    if (!sparse) return { geometry };
+    const generated = new TessellateModifier(maxEdge, 3).modify(geometry);
+    return { geometry: generated, owned: generated };
+  }
+
   function apply() {
     if (root && mode !== "native" && !entries.length) {
       const meshes: THREE.Mesh[] = [];
@@ -25,6 +56,8 @@ export function createWireframeView() {
       for (const mesh of meshes) {
         // Hidden source wheel meshes remain hidden; only the split wheel parts are shown.
         const overlay = mesh.clone(false);
+        const wire = wireGeometry(mesh);
+        overlay.geometry = wire.geometry;
         overlay.name = "showcase-wire-overlay";
         overlay.position.set(0, 0, 0);
         overlay.quaternion.identity();
@@ -36,7 +69,7 @@ export function createWireframeView() {
         overlay.receiveShadow = false;
         overlay.raycast = () => {};
         mesh.add(overlay);
-        entries.push({ mesh, original: mesh.material, overlay });
+        entries.push({ mesh, original: mesh.material, overlay, overlayGeometry: wire.owned });
       }
     }
     overlayMaterial.color.set(color);
@@ -49,9 +82,10 @@ export function createWireframeView() {
   }
 
   function detach() {
-    for (const { mesh, original, overlay } of entries) {
+    for (const { mesh, original, overlay, overlayGeometry } of entries) {
       mesh.material = original;
       mesh.remove(overlay);
+      overlayGeometry?.dispose();
     }
     entries.length = 0;
     root = null;
