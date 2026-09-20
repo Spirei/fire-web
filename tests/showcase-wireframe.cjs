@@ -38,7 +38,7 @@ assert.equal(hidden.visible, false);
 for (const mode of ['overlay','wireframe']) for (const color of ['#000000','#cccccc','#ff0000','#0000ff','#00ff00','#ffff00']) {
  view.set(mode, color);
  assert.equal(overlay.material.color.getHexString(), color.slice(1));
- assert.equal(wheel.children.length, 2, 'color changes must not grow geometry beyond the live overlay and muted-outline layers');
+ assert.equal(wheel.children.length, 1, 'color changes must not grow geometry');
  assert.equal(overlay.children[0].material.color.getHexString(), color.slice(1));
 }
 view.set('wireframe', '#00ff00');

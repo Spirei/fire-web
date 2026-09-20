@@ -44,7 +44,7 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
   let root: THREE.Object3D | null = null;
   let focusFilter: ((mesh: THREE.Mesh) => boolean) | null = null;
   let tessellationBudget = tuning.triangleBudget;
-  const entries: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[]; overlay: THREE.Mesh | THREE.LineSegments; overlayGeometry?: THREE.BufferGeometry; mutedOverlay: THREE.LineSegments; mutedGeometry: THREE.BufferGeometry; baseGeometry?: THREE.BufferGeometry; detail?: THREE.Mesh; detailGeometry?: THREE.BufferGeometry }[] = [];
+  const entries: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[]; overlay: THREE.Mesh | THREE.LineSegments; overlayGeometry?: THREE.BufferGeometry; baseGeometry?: THREE.BufferGeometry; detail?: THREE.Mesh; detailGeometry?: THREE.BufferGeometry }[] = [];
   const overlayMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
   const overlayLineMaterial = new THREE.LineBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false });
   // Offset in clip space, never inflate the mesh (which separates narrow panels / wheel parts).
@@ -57,7 +57,9 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
   pureMaterial.onBeforeCompile = overlayMaterial.onBeforeCompile;
   const pureLineMaterial = new THREE.LineBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false });
   pureLineMaterial.onBeforeCompile = overlayMaterial.onBeforeCompile;
-  const mutedLineMaterial = new THREE.LineBasicMaterial({ color: 0x9aa6b7, transparent: true, opacity: 0.72, depthWrite: false, toneMapped: false });
+  const mutedMaterial = new THREE.MeshBasicMaterial({ wireframe: true, color: 0xcccccc, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+  mutedMaterial.onBeforeCompile = overlayMaterial.onBeforeCompile;
+  const mutedLineMaterial = new THREE.LineBasicMaterial({ color: 0xcccccc, depthWrite: false, toneMapped: false });
   mutedLineMaterial.onBeforeCompile = overlayMaterial.onBeforeCompile;
   const depthMaterial = new THREE.MeshBasicMaterial({ colorWrite: false });
 
@@ -219,14 +221,6 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
         overlay.renderOrder = WIRE_RENDER_ORDER;
         overlay.castShadow = false;
         overlay.receiveShadow = false;
-        const mutedGeometry = new THREE.EdgesGeometry(sourceGeometry, Math.min(8, tuning.edgeThreshold));
-        const mutedOverlay = new THREE.LineSegments(mutedGeometry, mutedLineMaterial);
-        mutedOverlay.name = "showcase-wire-muted";
-        mutedOverlay.position.set(0, 0, 0);
-        mutedOverlay.quaternion.identity();
-        mutedOverlay.scale.set(1, 1, 1);
-        mutedOverlay.renderOrder = WIRE_RENDER_ORDER;
-        mutedOverlay.visible = false;
         overlay.raycast = () => {};
         let detail: THREE.Mesh | undefined;
         if (wire.detailGeometry) {
@@ -237,36 +231,34 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
           overlay.add(detail);
         }
         mesh.add(overlay);
-        mesh.add(mutedOverlay);
-        entries.push({ mesh, original: mesh.material, overlay, overlayGeometry, mutedOverlay, mutedGeometry, baseGeometry: wire.baseGeometry, detail, detailGeometry: wire.detailGeometry });
+        entries.push({ mesh, original: mesh.material, overlay, overlayGeometry, baseGeometry: wire.baseGeometry, detail, detailGeometry: wire.detailGeometry });
       }
     }
     overlayMaterial.color.set(color);
     overlayLineMaterial.color.set(color);
     pureMaterial.color.set(color);
     pureLineMaterial.color.set(color);
-    for (const { mesh, original, overlay, mutedOverlay, detail } of entries) {
+    for (const { mesh, original, overlay, detail } of entries) {
       const muted = focusFilter ? !focusFilter(mesh) : false;
       mesh.material = muted || mode === "wireframe" ? depthMaterial : original;
-      overlay.material = overlay instanceof THREE.LineSegments
+      overlay.material = muted
+        ? overlay instanceof THREE.LineSegments ? mutedLineMaterial : mutedMaterial
+        : overlay instanceof THREE.LineSegments
           ? mode === "wireframe" ? pureLineMaterial : overlayLineMaterial
           : mode === "wireframe" ? pureMaterial : overlayMaterial;
       if (detail) {
-        detail.material = mode === "wireframe" ? pureMaterial : overlayMaterial;
-        detail.visible = !muted;
+        detail.material = muted ? mutedMaterial : mode === "wireframe" ? pureMaterial : overlayMaterial;
+        detail.visible = true;
       }
-      overlay.visible = mode !== "native" && !muted;
-      mutedOverlay.visible = mode !== "native" && muted;
+      overlay.visible = mode !== "native";
     }
   }
 
   function detach() {
-    for (const { mesh, original, overlay, overlayGeometry, mutedOverlay, mutedGeometry, baseGeometry, detailGeometry } of entries) {
+    for (const { mesh, original, overlay, overlayGeometry, baseGeometry, detailGeometry } of entries) {
       mesh.material = original;
       mesh.remove(overlay);
-      mesh.remove(mutedOverlay);
       overlayGeometry?.dispose();
-      mutedGeometry.dispose();
       baseGeometry?.dispose();
       detailGeometry?.dispose();
     }
@@ -287,6 +279,6 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
     detach,
     set(next: WireframeMode, nextColor: string) { mode = next; color = nextColor; apply(); },
     focus(next: ((mesh: THREE.Mesh) => boolean) | null) { focusFilter = next; apply(); },
-    dispose() { detach(); overlayMaterial.dispose(); overlayLineMaterial.dispose(); pureMaterial.dispose(); pureLineMaterial.dispose(); mutedLineMaterial.dispose(); depthMaterial.dispose(); },
+    dispose() { detach(); overlayMaterial.dispose(); overlayLineMaterial.dispose(); pureMaterial.dispose(); pureLineMaterial.dispose(); mutedMaterial.dispose(); mutedLineMaterial.dispose(); depthMaterial.dispose(); },
   };
 }
