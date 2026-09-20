@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import type { ShowcaseConfig, ShowcaseHandle } from "./types";
 
 /**
@@ -13,12 +14,20 @@ export default function ModelPreview({
   config,
   onDebug,
   showWireframe = false,
-  explore = false
+  explore = false,
+  onPartSelect,
+  partRegions = [],
+  activeRegion,
+  onRegionSelect
 }: {
   config: ShowcaseConfig;
   showWireframe?: boolean;
   /** 使用模型展示同款探索镜头：全角度环视、平移、推进与双击聚焦。 */
   explore?: boolean;
+  onPartSelect?: (part: { mesh: string; materials: string[]; position: [number, number, number] }) => void;
+  partRegions?: Array<{ id: string; label: string; color: string; pos: [number, number, number] }>;
+  activeRegion?: string;
+  onRegionSelect?: (id: string) => void;
   onDebug?: (info: {
     carBox: number[];
     carBoxRaw: number[];
@@ -33,6 +42,7 @@ export default function ModelPreview({
   const [ready, setReady] = useState(false);
   const handleRef = useRef<ShowcaseHandle | null>(null);
   const onDebugRef = useRef(onDebug);
+  const markerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   onDebugRef.current = onDebug;
 
   useEffect(() => {
@@ -63,7 +73,11 @@ export default function ModelPreview({
             teleFoot: null,
             mark: null,
             raceBtn: null,
-            labels: []
+            labels: [],
+            inspectMarkers: partRegions.flatMap(region => {
+              const el = markerRefs.current[region.id];
+              return el ? [{ el, pos: region.pos }] : [];
+            })
           },
           startProgress: 0,
           onProgress: (ratio) => {
@@ -83,6 +97,7 @@ export default function ModelPreview({
               });
             }
           },
+          onInspectPart: onPartSelect,
           onError: (message) => {
             if (!disposed) setError(message);
           }
@@ -107,10 +122,25 @@ export default function ModelPreview({
       handle?.dispose();
       canvas.remove();
     };
-  }, [config, explore, showWireframe]);
+  }, [config, explore, onPartSelect, partRegions, showWireframe]);
 
   return (
     <div className="mp-preview" ref={wrapRef}>
+      {explore && partRegions.map(region => (
+        <button
+          key={region.id}
+          ref={element => { markerRefs.current[region.id] = element; }}
+          type="button"
+          className={`mp-car-marker${activeRegion === region.id ? " on" : ""}`}
+          style={{ "--marker-color": region.color } as CSSProperties}
+          onClick={() => {
+            handleRef.current?.setInspectRegion(region.id as "overall" | "body" | "aero" | "wheels" | "cockpit");
+            onRegionSelect?.(region.id);
+          }}
+          aria-label={`${region.label}参数`}
+          title={`打开${region.label}参数`}
+        ><span /><b>{region.label}</b></button>
+      ))}
       {ready && explore && (
         <div className="mp-explore-bar">
           <span><b>探索镜头</b> 左键环视 · Shift / 右键平移 · 滚轮推进 · 双击聚焦</span>

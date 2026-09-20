@@ -54,10 +54,19 @@ interface ImportedModelRow {
 }
 
 const MAX_UPLOAD_BYTES = 250 * 1024 * 1024;
+type TuneRegion = "overall" | "body" | "aero" | "wheels" | "cockpit";
+const TUNE_REGIONS: Array<{ id: TuneRegion; label: string; hint: string; color: string; pos: [number, number, number] }> = [
+  { id: "overall", label: "整体", hint: "尺寸与朝向", color: "#ffffff", pos: [0.5, 1.02, 0.5] },
+  { id: "body", label: "车身", hint: "贴图与漆面", color: "#ff5c65", pos: [0.5, 0.58, 0.57] },
+  { id: "aero", label: "尾翼", hint: "线框精调", color: "#b779ff", pos: [0.5, 0.86, 0.08] },
+  { id: "wheels", label: "轮组", hint: "识别与转轴", color: "#42a5ff", pos: [0.08, 0.3, 0.72] },
+  { id: "cockpit", label: "座舱", hint: "网格与材质", color: "#ffb23f", pos: [0.5, 0.88, 0.46] }
+];
 const DEFAULT_WIREFRAME = {
   enabled: true, maxEdge: 0.14, maxDepth: 2, maxComponentTriangles: 5000,
   triangleBudget: 1_000_000, filterThinTrim: true, trimMaxTriangles: 64,
-  trimThickness: 0.04, trimWidth: 0.2, trimLength: 0.25
+  trimThickness: 0.04, trimWidth: 0.2, trimLength: 0.25,
+  cleanBaseEdges: false, edgeThreshold: 12
 } as const;
 
 function normalizeWireframeParams(params: ShowcaseModelParams): ShowcaseModelParams {
@@ -79,7 +88,9 @@ function normalizeWireframeParams(params: ShowcaseModelParams): ShowcaseModelPar
       trimMaxTriangles: clamp(source.trimMaxTriangles, 1, 1_000, true),
       trimThickness: clamp(source.trimThickness, 0.001, 0.2),
       trimWidth: clamp(source.trimWidth, 0.01, 1),
-      trimLength: clamp(source.trimLength, 0.05, 2)
+      trimLength: clamp(source.trimLength, 0.05, 2),
+      cleanBaseEdges: Boolean(source.cleanBaseEdges),
+      edgeThreshold: clamp(source.edgeThreshold, 0, 90)
     }
   };
 }
@@ -133,7 +144,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
 
   const [meta, setMeta] = useState({ id: "", label: "", note: "" });
   const [params, setParams] = useState<ShowcaseModelParams>({});
-  /** 预览只使用用户明确确认过的一份参数，避免每敲一个数字都重新解析几十到几百 MB 的 GLB。 */
+  /** 预览使用防抖后的参数：连续输入期间不重载，停下后自动更新。 */
   const [previewParams, setPreviewParams] = useState<ShowcaseModelParams>({});
   const [previewKey, setPreviewKey] = useState(0);
   const [structure, setStructure] = useState<{
@@ -144,6 +155,12 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
     wheelGroups: number;
   } | null>(null);
   const [wheelPick, setWheelPick] = useState<string[]>([]);
+  const [tuneRegion, setTuneRegion] = useState<TuneRegion>("overall");
+  const [pickedPart, setPickedPart] = useState<{ mesh: string; materials: string[] } | null>(null);
+  const [wireTuneOpen, setWireTuneOpen] = useState(false);
+  const bodyTuneRef = useRef<HTMLLabelElement | null>(null);
+  const wireTuneRef = useRef<HTMLDetailsElement | null>(null);
+  const wheelTuneRef = useRef<HTMLDivElement | null>(null);
 
   const reset = useCallback(() => {
     setReport(null);
@@ -238,6 +255,10 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   );
 
   useEffect(() => () => xhrRef.current?.abort(), []);
+  useEffect(() => {
+    document.documentElement.classList.toggle("mp-workbench-open", Boolean(previewFile));
+    return () => document.documentElement.classList.remove("mp-workbench-open");
+  }, [previewFile]);
 
   // 轮子材质多选 → wheelPattern（转成正则源码，转义特殊字符）
   useEffect(() => {
@@ -271,7 +292,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         wireframe: previewParams.wireframe
       }
     });
-    // previewKey 用来在改完参数后手动重建引擎
+    // previewKey 用来在参数稳定后重建引擎
   }, [previewFile, previewKey, previewParams]);
 
   const previewIsCurrent = useMemo(() => JSON.stringify(params) === JSON.stringify(previewParams), [params, previewParams]);
@@ -282,10 +303,38 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
     setPreviewParams(normalized);
     setPreviewKey((prev) => prev + 1);
   }, [params]);
+  useEffect(() => {
+    if (!previewFile || JSON.stringify(params) === JSON.stringify(previewParams)) return;
+    const timer = window.setTimeout(reloadPreview, 350);
+    return () => window.clearTimeout(timer);
+  }, [params, previewFile, previewParams, reloadPreview]);
   const wireframe = { ...DEFAULT_WIREFRAME, ...(params.wireframe ?? {}) };
   const setWireframeParam = <K extends keyof typeof wireframe>(key: K, value: (typeof wireframe)[K]) => {
     setParams((prev) => ({ ...prev, wireframe: { ...DEFAULT_WIREFRAME, ...(prev.wireframe ?? {}), [key]: value } }));
   };
+  const setWireframeNumber = (key: keyof typeof DEFAULT_WIREFRAME, raw: string) => {
+    if (raw.trim() === "") return;
+    const value = Number(raw);
+    if (Number.isFinite(value)) setWireframeParam(key, value as never);
+  };
+  const selectTuneRegion = useCallback((region: TuneRegion, part?: { mesh: string; materials: string[] }) => {
+    setTuneRegion(region);
+    setPickedPart(part ?? null);
+    if (region === "aero") setWireTuneOpen(true);
+    const target = region === "aero" ? wireTuneRef.current : region === "wheels" ? wheelTuneRef.current : bodyTuneRef.current;
+    window.setTimeout(() => target?.scrollIntoView({ behavior: "smooth", block: "center" }), 20);
+  }, []);
+  const inspectPart = useCallback((part: { mesh: string; materials: string[] }) => {
+    const name = `${part.mesh} ${part.materials.join(" ")}`.toLowerCase();
+    const region: TuneRegion = /tyre|tire|wheel|rim/.test(name)
+      ? "wheels"
+      : /wing|spoiler|aero|diffuser/.test(name)
+        ? "aero"
+        : /seat|cockpit|steer|tach|pedal|dash/.test(name)
+          ? "cockpit"
+          : "body";
+    selectTuneRegion(region, part);
+  }, [selectTuneRegion]);
 
   /** 从原始包围盒判断哪根轴朝上：车高永远是最小的那一维 */
   const upHint = useMemo(() => {
@@ -603,16 +652,25 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
 
       {previewFile && !error && (
         <section className="mp-step mp-workbench">
-          <h2>
-            <span>3</span> 模型调校工作台
-          </h2>
-          <p className="mp-workbench-intro">左侧使用模型展示同款探索镜头，自由检查车身、底盘与尾翼；右侧调整参数后，重新加载预览确认结果。</p>
+          <div className="mp-workbench-head">
+            <div><p>MODEL WORKBENCH</p><h2>模型调校工作台 <small>{meta.label || fileName}</small></h2></div>
+            <div className="mp-workbench-actions">
+              <button type="button" className="mp-ghost fire-cap" onClick={reset}>返回车型清单</button>
+              <button type="button" className="mp-primary fire-cap fire-cap-primary" onClick={() => void save()} disabled={saving || !idValid || Boolean(idConflict) || !meta.label.trim() || !structure || !previewIsCurrent}>
+                {saving ? "保存中…" : "保存参数"}
+              </button>
+            </div>
+          </div>
+          <p className="mp-workbench-intro">单击彩色标注点或真实网格选择参数大类；双击具体零件下钻到单个网格。参数停止输入后自动更新预览。</p>
           <div className="mp-tune">
             <div className="mp-preview-wrap">
-              {previewConfig && <ModelPreview key={previewKey} config={previewConfig} showWireframe explore onDebug={setStructure} />}
+              {previewConfig && <ModelPreview key={previewKey} config={previewConfig} showWireframe explore
+                partRegions={TUNE_REGIONS} activeRegion={tuneRegion} onRegionSelect={(id) => selectTuneRegion(id as TuneRegion)}
+                onPartSelect={inspectPart} onDebug={setStructure} />}
+              {pickedPart && <div className="mp-picked-part"><span>已选网格</span><b>{pickedPart.mesh}</b><small>{pickedPart.materials.join(" · ") || "无材质名"}</small></div>}
               <div className="mp-preview-foot">
                 <button type="button" className="mp-ghost fire-cap" onClick={reloadPreview}>
-                  重新加载预览
+                  立即更新预览
                 </button>
                 {structure && (
                   <span>
@@ -625,7 +683,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             </div>
 
             <div className="mp-form">
-              <label>
+              <label ref={bodyTuneRef}>
                 车型代号（英文，用于本地偏好与接口）
                 <input disabled={editingId !== null} value={meta.id} onChange={(event) => setMeta({ ...meta, id: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "") })} placeholder="mp4-5" />
                 {!idValid && <small className="mp-field-error">请输入 2–40 位英文小写、数字、- 或 _</small>}
@@ -735,27 +793,29 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                 />
               </label>
 
-              <details className="mp-wire-algorithm">
+              <details ref={wireTuneRef} className="mp-wire-algorithm" open={wireTuneOpen} onToggle={(event) => setWireTuneOpen(event.currentTarget.open)}>
                 <summary><span>尾翼线框算法</span><small>独立设置</small></summary>
-                <p>按连通件规则补线；参数随当前车型保存。修改后点击左侧“重新加载预览”。</p>
+                <p>按连通件规则补线；参数随当前车型保存，停止输入后自动更新预览。</p>
                 <div className="mp-wire-switches">
                   <label><input type="checkbox" checked={wireframe.enabled} onChange={(event) => setWireframeParam("enabled", event.target.checked)} />启用规则补线</label>
                   <label><input type="checkbox" checked={wireframe.filterThinTrim} onChange={(event) => setWireframeParam("filterThinTrim", event.target.checked)} />过滤细长装饰线</label>
+                  <label><input type="checkbox" checked={wireframe.cleanBaseEdges} onChange={(event) => setWireframeParam("cleanBaseEdges", event.target.checked)} />清理共面三角边</label>
                 </div>
                 <div className="mp-wire-grid">
-                  <label>目标边长（米）<input type="number" min="0.03" max="1" step="0.01" value={wireframe.maxEdge} onChange={(event) => setWireframeParam("maxEdge", Number(event.target.value))} /></label>
-                  <label>最大细分层级<input type="number" min="1" max="3" step="1" value={wireframe.maxDepth} onChange={(event) => setWireframeParam("maxDepth", Number(event.target.value))} /></label>
-                  <label>连通件面数上限<input type="number" min="10" max="50000" step="100" value={wireframe.maxComponentTriangles} onChange={(event) => setWireframeParam("maxComponentTriangles", Number(event.target.value))} /></label>
-                  <label>全车新增面预算<input type="number" min="10000" max="2000000" step="10000" value={wireframe.triangleBudget} onChange={(event) => setWireframeParam("triangleBudget", Number(event.target.value))} /></label>
-                  <label>装饰件面数上限<input type="number" min="1" max="1000" step="1" value={wireframe.trimMaxTriangles} onChange={(event) => setWireframeParam("trimMaxTriangles", Number(event.target.value))} /></label>
-                  <label>装饰厚度上限（米）<input type="number" min="0.001" max="0.2" step="0.005" value={wireframe.trimThickness} onChange={(event) => setWireframeParam("trimThickness", Number(event.target.value))} /></label>
-                  <label>装饰宽度上限（米）<input type="number" min="0.01" max="1" step="0.01" value={wireframe.trimWidth} onChange={(event) => setWireframeParam("trimWidth", Number(event.target.value))} /></label>
-                  <label>装饰长度下限（米）<input type="number" min="0.05" max="2" step="0.05" value={wireframe.trimLength} onChange={(event) => setWireframeParam("trimLength", Number(event.target.value))} /></label>
+                  <label>目标边长（米）<input type="number" min="0.03" max="1" step="0.01" value={wireframe.maxEdge} onChange={(event) => setWireframeNumber("maxEdge", event.target.value)} /></label>
+                  <label>最大细分层级<input type="number" min="1" max="3" step="1" value={wireframe.maxDepth} onChange={(event) => setWireframeNumber("maxDepth", event.target.value)} /></label>
+                  <label>连通件面数上限<input type="number" min="10" max="50000" step="100" value={wireframe.maxComponentTriangles} onChange={(event) => setWireframeNumber("maxComponentTriangles", event.target.value)} /></label>
+                  <label>全车新增面预算<input type="number" min="10000" max="2000000" step="10000" value={wireframe.triangleBudget} onChange={(event) => setWireframeNumber("triangleBudget", event.target.value)} /></label>
+                  <label>装饰件面数上限<input type="number" min="1" max="1000" step="1" value={wireframe.trimMaxTriangles} onChange={(event) => setWireframeNumber("trimMaxTriangles", event.target.value)} /></label>
+                  <label>装饰厚度上限（米）<input type="number" min="0.001" max="0.2" step="0.005" value={wireframe.trimThickness} onChange={(event) => setWireframeNumber("trimThickness", event.target.value)} /></label>
+                  <label>装饰宽度上限（米）<input type="number" min="0.01" max="1" step="0.01" value={wireframe.trimWidth} onChange={(event) => setWireframeNumber("trimWidth", event.target.value)} /></label>
+                  <label>装饰长度下限（米）<input type="number" min="0.05" max="2" step="0.05" value={wireframe.trimLength} onChange={(event) => setWireframeNumber("trimLength", event.target.value)} /></label>
+                  <label>折角保留阈值（度）<input type="number" min="0" max="90" step="1" value={wireframe.edgeThreshold} onChange={(event) => setWireframeNumber("edgeThreshold", event.target.value)} /></label>
                 </div>
                 <button type="button" className="mp-ghost fire-cap" onClick={() => setParams((prev) => ({ ...prev, wireframe: { ...DEFAULT_WIREFRAME } }))}>恢复推荐参数</button>
               </details>
 
-              <div className="mp-wheel">
+              <div ref={wheelTuneRef} className="mp-wheel">
                 <p>
                   轮子材质（勾中才会自转；一个材质盖四个轮子时，引擎会按象限拆开）
                   {!wheelsOk && <em>当前没认出轮子，请至少勾一项</em>}
@@ -777,7 +837,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                   ))}
                 </div>
               </div>
-              {!previewIsCurrent && <div className="mp-preview-stale">参数已修改，请点击“按当前参数重载预览”确认效果后再保存。</div>}
+              {!previewIsCurrent && <div className="mp-preview-stale">参数已修改，正在自动更新预览…</div>}
             </div>
           </div>
         </section>
@@ -802,7 +862,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
               onClick={reloadPreview}
               disabled={saving}
             >
-              按当前参数重载预览
+              立即更新预览
             </button>
           </div>
         </section>

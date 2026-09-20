@@ -243,16 +243,46 @@
 }
 
 .mp-workbench {
-  padding: 20px;
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  overflow: auto;
+  padding: 22px 24px 28px;
+  border: 0;
+  border-radius: 0;
+  background: #0b0d11;
 }
 
+html.mp-workbench-open { overflow: hidden; }
+
+.mp-workbench-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 8px;
+}
+
+.mp-workbench-head p { margin: 0 0 5px; font-size: 9px; letter-spacing: 0.28em; opacity: 0.45; }
+.mp-workbench-head h2 { margin: 0; font-size: 17px; }
+.mp-workbench-head h2 small { margin-left: 8px; font-size: 11px; font-weight: 500; opacity: 0.52; }
+.mp-workbench-actions { display: flex; gap: 8px; }
+
 .mp-workbench-intro {
-  margin: -6px 0 18px;
+  margin: 0 0 14px;
   max-width: 820px;
   font-size: 12px;
   line-height: 1.65;
   opacity: 0.62;
 }
+
+.mp-workbench .mp-tune {
+  grid-template-columns: minmax(560px, 1.55fr) minmax(400px, 0.85fr);
+  min-height: calc(100vh - 116px);
+}
+
+.mp-workbench .mp-preview { height: calc(100vh - 158px); min-height: 560px; }
+.mp-workbench .mp-form { max-height: calc(100vh - 144px); overflow: auto; padding: 2px 8px 18px 2px; scrollbar-width: thin; }
 
 .mp-explore-bar {
   position: absolute;
@@ -277,6 +307,105 @@
 
 .mp-explore-bar b { margin-right: 9px; color: #fff; letter-spacing: 0.08em; }
 .mp-explore-bar button { flex: none; padding: 6px 10px; color: inherit; font: inherit; pointer-events: auto; }
+
+.mp-car-marker {
+  --marker-color: #fff;
+  position: absolute;
+  z-index: 5;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--marker-color);
+  font: 650 9px/1.2 inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: filter 0.18s ease;
+}
+
+.mp-car-marker > span {
+  position: absolute;
+  inset: 5px;
+  border: 1px solid rgba(255,255,255,0.92);
+  border-radius: 50%;
+  background: var(--marker-color);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--marker-color) 80%, transparent);
+}
+
+.mp-car-marker::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border: 1px solid color-mix(in srgb, var(--marker-color) 62%, transparent);
+  border-radius: 50%;
+  animation: mp-marker-pulse 2.2s ease-out infinite;
+}
+
+.mp-car-marker > b {
+  position: absolute;
+  left: 25px;
+  top: 50%;
+  min-width: max-content;
+  padding: 6px 9px;
+  transform: translateY(-50%) translateX(-4px);
+  border: 1px solid color-mix(in srgb, var(--marker-color) 34%, rgba(255,255,255,0.12));
+  border-radius: 8px;
+  background: rgba(10, 13, 18, 0.76);
+  color: #f4f6fa;
+  font: 650 9px/1.2 inherit;
+  letter-spacing: 0.1em;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  backdrop-filter: blur(12px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.mp-car-marker > b::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  width: 9px;
+  height: 1px;
+  background: var(--marker-color);
+}
+
+.mp-car-marker:hover,
+.mp-car-marker.on { filter: brightness(1.18); }
+.mp-car-marker:hover > b,
+.mp-car-marker.on > b { opacity: 1; transform: translateY(-50%) translateX(0); }
+.mp-car-marker.on > span { inset: 4px; }
+
+@keyframes mp-marker-pulse {
+  0% { transform: scale(.55); opacity: .85; }
+  72%, 100% { transform: scale(1.35); opacity: 0; }
+}
+
+.mp-picked-part {
+  position: absolute;
+  z-index: 5;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  min-width: 150px;
+  max-width: 240px;
+  padding: 7px 10px;
+  border: 1px solid rgba(220, 230, 245, 0.16);
+  border-radius: 11px;
+  background: rgba(8, 10, 14, 0.68);
+  color: #dce2ec;
+  backdrop-filter: blur(14px);
+  pointer-events: none;
+}
+
+.mp-picked-part span { font-size: 8.5px; letter-spacing: 0.13em; opacity: 0.5; }
+.mp-picked-part b,
+.mp-picked-part small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-picked-part b { margin-top: 2px; font-size: 10.5px; }
+.mp-picked-part small { margin-top: 1px; font-size: 9px; opacity: 0.58; }
 
 .mp-hint {
   font-size: 11.5px;
@@ -448,14 +577,23 @@
 
   .mp-preview-wrap { position: static; }
   .mp-explore-bar span { max-width: 240px; }
+  .mp-workbench { position: fixed; }
+  .mp-workbench .mp-tune { grid-template-columns: 1fr; }
+  .mp-workbench .mp-preview { height: min(58vh, 600px); min-height: 380px; }
+  .mp-workbench .mp-form { max-height: none; overflow: visible; }
 }
 
 @media (max-width: 560px) {
   .mp-workbench { padding: 14px; }
+  .mp-workbench-head { align-items: flex-start; }
+  .mp-workbench-head h2 small { display: block; margin: 3px 0 0; }
+  .mp-workbench-actions { flex-direction: column-reverse; }
   .mp-preview { height: 54vh; min-height: 320px; border-radius: 14px; }
   .mp-explore-bar { align-items: flex-end; }
   .mp-explore-bar span { max-width: 190px; }
   .mp-explore-bar span b { display: block; margin: 0 0 2px; }
+  .mp-car-marker > b { display: none; }
+  .mp-picked-part { display: none; }
 }
 
 /* 浅色主题：导入页是后台页面，跟随全局深浅色 */

@@ -12,6 +12,8 @@ export interface WireframeTuning {
   trimThickness?: number;
   trimWidth?: number;
   trimLength?: number;
+  cleanBaseEdges?: boolean;
+  edgeThreshold?: number;
 }
 
 const DEFAULT_TUNING: Required<WireframeTuning> = {
@@ -24,7 +26,9 @@ const DEFAULT_TUNING: Required<WireframeTuning> = {
   trimMaxTriangles: 64,
   trimThickness: 0.04,
   trimWidth: 0.2,
-  trimLength: 0.25
+  trimLength: 0.25,
+  cleanBaseEdges: false,
+  edgeThreshold: 12
 };
 
 // GLB 车漆常把不透明白漆也标成 transparent。若线框与这些网格都留在默认顺序，
@@ -38,16 +42,23 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
   let mode: WireframeMode = "native";
   let color = "#00ff00";
   let root: THREE.Object3D | null = null;
+  let focusFilter: ((mesh: THREE.Mesh) => boolean) | null = null;
   let tessellationBudget = tuning.triangleBudget;
-  const entries: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[]; overlay: THREE.Mesh; baseGeometry?: THREE.BufferGeometry; detail?: THREE.Mesh; detailGeometry?: THREE.BufferGeometry }[] = [];
+  const entries: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[]; overlay: THREE.Mesh | THREE.LineSegments; overlayGeometry?: THREE.BufferGeometry; mutedOverlay: THREE.LineSegments; mutedGeometry: THREE.BufferGeometry; baseGeometry?: THREE.BufferGeometry; detail?: THREE.Mesh; detailGeometry?: THREE.BufferGeometry }[] = [];
   const overlayMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+  const overlayLineMaterial = new THREE.LineBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false });
   // Offset in clip space, never inflate the mesh (which separates narrow panels / wheel parts).
   overlayMaterial.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace("#include <project_vertex>",
       "#include <project_vertex>\ngl_Position.z -= 0.00008 * gl_Position.w;");
   };
+  overlayLineMaterial.onBeforeCompile = overlayMaterial.onBeforeCompile;
   const pureMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
   pureMaterial.onBeforeCompile = overlayMaterial.onBeforeCompile;
+  const pureLineMaterial = new THREE.LineBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false });
+  pureLineMaterial.onBeforeCompile = overlayMaterial.onBeforeCompile;
+  const mutedLineMaterial = new THREE.LineBasicMaterial({ color: 0x9aa6b7, transparent: true, opacity: 0.72, depthWrite: false, toneMapped: false });
+  mutedLineMaterial.onBeforeCompile = overlayMaterial.onBeforeCompile;
   const depthMaterial = new THREE.MeshBasicMaterial({ colorWrite: false });
 
   /**
@@ -191,19 +202,31 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
       root.traverse((object) => { if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh); });
       for (const mesh of meshes) {
         // Hidden source wheel meshes remain hidden; only the split wheel parts are shown.
-        const overlay = mesh.clone(false);
         const wire = wireGeometry(mesh);
-        overlay.geometry = wire.baseGeometry ?? mesh.geometry;
+        const sourceGeometry = wire.baseGeometry ?? mesh.geometry;
+        const overlayGeometry = tuning.cleanBaseEdges ? new THREE.EdgesGeometry(sourceGeometry, tuning.edgeThreshold) : undefined;
+        const overlay = overlayGeometry
+          ? new THREE.LineSegments(overlayGeometry, overlayLineMaterial)
+          : mesh.clone(false);
+        if (!overlayGeometry) (overlay as THREE.Mesh).geometry = sourceGeometry;
         overlay.name = "showcase-wire-overlay";
         overlay.position.set(0, 0, 0);
         overlay.quaternion.identity();
         overlay.scale.set(1, 1, 1);
         overlay.matrix.identity();
         overlay.matrixAutoUpdate = true;
-        overlay.material = overlayMaterial;
+        overlay.material = overlayGeometry ? overlayLineMaterial : overlayMaterial;
         overlay.renderOrder = WIRE_RENDER_ORDER;
         overlay.castShadow = false;
         overlay.receiveShadow = false;
+        const mutedGeometry = new THREE.EdgesGeometry(sourceGeometry, Math.min(8, tuning.edgeThreshold));
+        const mutedOverlay = new THREE.LineSegments(mutedGeometry, mutedLineMaterial);
+        mutedOverlay.name = "showcase-wire-muted";
+        mutedOverlay.position.set(0, 0, 0);
+        mutedOverlay.quaternion.identity();
+        mutedOverlay.scale.set(1, 1, 1);
+        mutedOverlay.renderOrder = WIRE_RENDER_ORDER;
+        mutedOverlay.visible = false;
         overlay.raycast = () => {};
         let detail: THREE.Mesh | undefined;
         if (wire.detailGeometry) {
@@ -214,23 +237,36 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
           overlay.add(detail);
         }
         mesh.add(overlay);
-        entries.push({ mesh, original: mesh.material, overlay, baseGeometry: wire.baseGeometry, detail, detailGeometry: wire.detailGeometry });
+        mesh.add(mutedOverlay);
+        entries.push({ mesh, original: mesh.material, overlay, overlayGeometry, mutedOverlay, mutedGeometry, baseGeometry: wire.baseGeometry, detail, detailGeometry: wire.detailGeometry });
       }
     }
     overlayMaterial.color.set(color);
+    overlayLineMaterial.color.set(color);
     pureMaterial.color.set(color);
-    for (const { mesh, original, overlay, detail } of entries) {
-      mesh.material = mode === "wireframe" ? depthMaterial : original;
-      overlay.material = mode === "wireframe" ? pureMaterial : overlayMaterial;
-      if (detail) detail.material = mode === "wireframe" ? pureMaterial : overlayMaterial;
-      overlay.visible = mode !== "native";
+    pureLineMaterial.color.set(color);
+    for (const { mesh, original, overlay, mutedOverlay, detail } of entries) {
+      const muted = focusFilter ? !focusFilter(mesh) : false;
+      mesh.material = muted || mode === "wireframe" ? depthMaterial : original;
+      overlay.material = overlay instanceof THREE.LineSegments
+          ? mode === "wireframe" ? pureLineMaterial : overlayLineMaterial
+          : mode === "wireframe" ? pureMaterial : overlayMaterial;
+      if (detail) {
+        detail.material = mode === "wireframe" ? pureMaterial : overlayMaterial;
+        detail.visible = !muted;
+      }
+      overlay.visible = mode !== "native" && !muted;
+      mutedOverlay.visible = mode !== "native" && muted;
     }
   }
 
   function detach() {
-    for (const { mesh, original, overlay, baseGeometry, detailGeometry } of entries) {
+    for (const { mesh, original, overlay, overlayGeometry, mutedOverlay, mutedGeometry, baseGeometry, detailGeometry } of entries) {
       mesh.material = original;
       mesh.remove(overlay);
+      mesh.remove(mutedOverlay);
+      overlayGeometry?.dispose();
+      mutedGeometry.dispose();
       baseGeometry?.dispose();
       detailGeometry?.dispose();
     }
@@ -250,6 +286,7 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
     },
     detach,
     set(next: WireframeMode, nextColor: string) { mode = next; color = nextColor; apply(); },
-    dispose() { detach(); overlayMaterial.dispose(); pureMaterial.dispose(); depthMaterial.dispose(); },
+    focus(next: ((mesh: THREE.Mesh) => boolean) | null) { focusFilter = next; apply(); },
+    dispose() { detach(); overlayMaterial.dispose(); overlayLineMaterial.dispose(); pureMaterial.dispose(); pureLineMaterial.dispose(); mutedLineMaterial.dispose(); depthMaterial.dispose(); },
   };
 }

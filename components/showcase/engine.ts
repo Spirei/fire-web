@@ -2260,6 +2260,26 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       }
     });
 
+    // 导入工作台部位点：锚点保存在车身包围盒的归一化坐标里，先转到当前车身世界坐标，
+    // 再投影到画布，因此环视、缩放、平移时圆点会一直贴在对应部位上。
+    if (inspectorOn && !carLocalBox.isEmpty()) {
+      hud.inspectMarkers?.forEach((marker) => {
+        carHalfD.set(
+          THREE.MathUtils.lerp(carLocalBox.min.x, carLocalBox.max.x, marker.pos[0]),
+          THREE.MathUtils.lerp(carLocalBox.min.y, carLocalBox.max.y, marker.pos[1]),
+          THREE.MathUtils.lerp(carLocalBox.min.z, carLocalBox.max.z, marker.pos[2])
+        );
+        carRoot.localToWorld(carHalfD);
+        carHalfD.project(camera);
+        const visible = carHalfD.z >= -1 && carHalfD.z <= 1;
+        marker.el.style.opacity = visible ? "1" : "0";
+        if (visible) {
+          marker.el.style.left = `${((carHalfD.x * 0.5 + 0.5) * canvas.clientWidth).toFixed(1)}px`;
+          marker.el.style.top = `${((-carHalfD.y * 0.5 + 0.5) * canvas.clientHeight).toFixed(1)}px`;
+        }
+      });
+    } else hud.inspectMarkers?.forEach(marker => { marker.el.style.opacity = "0"; });
+
     // 交互时只降低倒影采样尺寸，仍逐帧更新；主体渲染分辨率不变。
     if (dragging || touches.size > 0 || Math.abs(zoomTarget - zoom) > 0.01 || Math.abs(userYawVel) > 0.5 || Math.abs(userPitchVel) > 0.005) interactionUntil = elapsed + 0.25;
     const wantsLite = elapsed < interactionUntil;
@@ -2540,6 +2560,35 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       : Math.max(MIN_ZOOM, zoomTarget * 0.65);
     userYawVel = 0; userPitchVel = 0;
   };
+  const inspectAt = (x: number, y: number, exact = false) => {
+    if (!inspectorOn || !options.onInspectPart) return;
+    const rect = canvas.getBoundingClientRect();
+    focusPointer.set((x - rect.left) / rect.width * 2 - 1, 1 - (y - rect.top) / rect.height * 2);
+    camera.updateMatrixWorld(); carRoot.updateMatrixWorld(true);
+    focusRay.setFromCamera(focusPointer, camera);
+    const hit = focusRay.intersectObject(carRoot, true).find(candidate => {
+      for (let o: THREE.Object3D | null = candidate.object; o && o !== carRoot; o = o.parent) if (!o.visible) return false;
+      return true;
+    });
+    if (!hit) return;
+    const mesh = hit.object as THREE.Mesh;
+    const source = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+    options.onInspectPart({
+      mesh: mesh.name || mesh.parent?.name || "未命名网格",
+      materials: source.map(material => material.name || "未命名材质"),
+      position: [hit.point.x, hit.point.y, hit.point.z]
+    });
+    const region = inspectRegionOf(mesh);
+    wireframeView.focus(exact ? candidate => candidate === mesh : candidate => inspectRegionOf(candidate) === region);
+  };
+  const inspectRegionOf = (mesh: THREE.Mesh) => {
+    const materials = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map(material => material?.name ?? "").join(" ");
+    const name = `${mesh.name} ${materials}`.toLowerCase();
+    if (/tyre|tire|wheel|rim/.test(name)) return "wheels";
+    if (/wing|spoiler|aero|diffuser/.test(name)) return "aero";
+    if (/seat|cockpit|steer|tach|pedal|dash/.test(name)) return "cockpit";
+    return "body";
+  };
   const panCamera = (dx: number, dy: number) => {
     const distance = Math.max(0.01, camera.position.distanceTo(lookAt));
     const worldPerPixel = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * distance /
@@ -2608,10 +2657,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const now = performance.now();
     if (e.type === "pointercancel" || now - dragTime > 80) { userYawVel = 0; userPitchVel = 0; }
     if (dragByTouch && e.type === "pointerup" && touches.size === 1 && tapTravel < 8 && now - tapDownAt < 250) {
+      inspectAt(e.clientX, e.clientY);
       if (now - lastTapAt < 320 && Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < 24) {
+        inspectAt(e.clientX, e.clientY, true);
         focusAt(e.clientX, e.clientY); lastTapAt = 0; lastTouchFocusAt = now;
       } else { lastTapAt = now; lastTapX = e.clientX; lastTapY = e.clientY; }
-    } else lastTapAt = 0;
+    } else {
+      if (!dragByTouch && e.type === "pointerup" && tapTravel < 5 && now - tapDownAt < 300) inspectAt(e.clientX, e.clientY);
+      lastTapAt = 0;
+    }
     dragging = false; dragByTouch = false; dragPan = false; dragZoom = false; dragPointer = null;
     if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
   };
@@ -2663,7 +2717,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   const onDoubleClick = (e: MouseEvent) => {
     if (performance.now() - lastTouchFocusAt < 500) return;
-    if (!(e as MouseEvent & { sourceCapabilities?: { firesTouchEvents: boolean } }).sourceCapabilities?.firesTouchEvents) focusAt(e.clientX, e.clientY);
+    if (!(e as MouseEvent & { sourceCapabilities?: { firesTouchEvents: boolean } }).sourceCapabilities?.firesTouchEvents) {
+      inspectAt(e.clientX, e.clientY, true);
+      focusAt(e.clientX, e.clientY);
+    }
   };
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("dblclick", onDoubleClick);
@@ -3068,6 +3125,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       camera.far = on ? 5000 : 400;
       camera.near = on ? 0.01 : 0.1;
       camera.updateProjectionMatrix();
+    },
+    setInspectRegion: (region) => {
+      wireframeView.focus(!region || region === "overall" ? null : mesh => inspectRegionOf(mesh) === region);
     },
     setWireframe: (mode, color) => {
       wireframeMode = mode;

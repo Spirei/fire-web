@@ -217,6 +217,7 @@ export function sanitizeParams(input: unknown): ShowcaseModelParams {
     };
     if (typeof source.enabled === "boolean") wireframe.enabled = source.enabled;
     if (typeof source.filterThinTrim === "boolean") wireframe.filterThinTrim = source.filterThinTrim;
+    if (typeof source.cleanBaseEdges === "boolean") wireframe.cleanBaseEdges = source.cleanBaseEdges;
     wireNum("maxEdge", 0.03, 1);
     wireNum("maxDepth", 1, 3, true);
     wireNum("maxComponentTriangles", 10, 50_000, true);
@@ -225,6 +226,7 @@ export function sanitizeParams(input: unknown): ShowcaseModelParams {
     wireNum("trimThickness", 0.001, 0.2);
     wireNum("trimWidth", 0.01, 1);
     wireNum("trimLength", 0.05, 2);
+    wireNum("edgeThreshold", 0, 90);
     out.wireframe = wireframe;
   }
   const axis = (key: "wheelAxis" | "wheelLateral" | "wheelLongitudinal") => {

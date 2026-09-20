@@ -352,6 +352,8 @@ export interface ShowcaseHud {
   zoomMode?: HTMLElement | null;
   /** 部件标注元素（位置由引擎每帧投影更新） */
   labels: { el: HTMLElement; from: number; pos: [number, number, number] }[];
+  /** 导入工作台的彩色部位点；pos 是车身包围盒内 0–1 的归一化位置。 */
+  inspectMarkers?: { el: HTMLElement; pos: [number, number, number] }[];
 }
 
 export interface ShowcaseOptions {
@@ -364,6 +366,8 @@ export interface ShowcaseOptions {
   onProgress?: (ratio: number) => void;
   /** 就绪（可以隐藏 loading） */
   onReady?: () => void;
+  /** 模型展示中单击真实网格：供导入工作台跳到对应部位参数。 */
+  onInspectPart?: (part: { mesh: string; materials: string[]; position: [number, number, number] }) => void;
   /** 章节切换 */
   onPhase?: (index: number) => void;
   /** 冲刺状态变化（按住空格 / 按住按钮） */
@@ -389,6 +393,8 @@ export interface ShowcaseHandle {
   /** 360° 环视：自动绕车旋转（再调一次关闭并回到叙事机位） */
   setOrbit: (on: boolean) => void;
   setInspector: (on: boolean) => void;
+  /** 模型调校时聚焦一个大类；其他部件退成低透明灰线框，null/overall 恢复整车。 */
+  setInspectRegion: (region: "overall" | "body" | "aero" | "wheels" | "cockpit" | null) => void;
   setWireframe: (mode: import("./wireframe").WireframeMode, color: string) => void;
   /** 原地切换地面圆盘，不重建模型、镜头或 WebGL 场景。 */
   setDiscStyle: (style: ShowcaseDiscStyle) => void;

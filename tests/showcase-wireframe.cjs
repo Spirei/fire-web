@@ -38,7 +38,7 @@ assert.equal(hidden.visible, false);
 for (const mode of ['overlay','wireframe']) for (const color of ['#000000','#cccccc','#ff0000','#0000ff','#00ff00','#ffff00']) {
  view.set(mode, color);
  assert.equal(overlay.material.color.getHexString(), color.slice(1));
- assert.equal(wheel.children.length, 1, 'color changes must not grow geometry');
+ assert.equal(wheel.children.length, 2, 'color changes must not grow geometry beyond the live overlay and muted-outline layers');
  assert.equal(overlay.children[0].material.color.getHexString(), color.slice(1));
 }
 view.set('wireframe', '#00ff00');
@@ -135,6 +135,15 @@ assert.equal(connectedDetail.count, 2 * 16 * 3, 'every face in an arbitrarily or
 connectedView.configure({ maxDepth: 1, maxEdge: .14 });
 assert.equal(connectedMesh.children[0].children[0].geometry.getAttribute('position').count, 2 * 4 * 3, 'import tuning rebuilds the live wire view with the selected density');
 connectedView.dispose(); connectedGeometry.dispose();
+const cleanGeometry = new THREE.BufferGeometry();
+cleanGeometry.setAttribute('position', new THREE.Float32BufferAttribute([0,0,0, 1,0,0, 1,1,0, 0,1,0], 3));
+cleanGeometry.setIndex([0,1,2, 0,2,3]);
+const cleanMesh = new THREE.Mesh(cleanGeometry, paint), cleanRoot = new THREE.Group(); cleanRoot.add(cleanMesh);
+const cleanView = m.exports.createWireframeView({ enabled: false, cleanBaseEdges: true, edgeThreshold: 1 });
+cleanView.attach(cleanRoot); cleanView.set('overlay', '#00ff00');
+assert.equal(cleanMesh.children[0].isLineSegments, true, 'clean-base mode renders threshold edges instead of every triangle edge');
+assert.equal(cleanMesh.children[0].geometry.getAttribute('position').count, 8, 'coplanar diagonal is removed while the four panel edges remain');
+cleanView.dispose(); cleanGeometry.dispose();
 console.log('PASS six colors, wheel transforms, hidden meshes, original/multi-material restoration, shared palette, model switch and disposal');
 // Exercise the engine's real inspector transition: entering must not overwrite the home pose.
 const engine = fs.readFileSync('components/showcase/engine.ts', 'utf8');
