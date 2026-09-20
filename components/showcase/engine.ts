@@ -1807,6 +1807,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const camPos = new THREE.Vector3();
   const lookAt = new THREE.Vector3();
   const projected = new THREE.Vector3();
+  let viewAzimuth = 0;
+  let viewElevation = 0;
+  let viewDistance = 0;
 
   let interactionUntil = 0;
   let reflectionLite = false;
@@ -1914,6 +1917,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       if (limitedPitch !== userPitch) { userPitch = limitedPitch; userPitchVel = 0; }
     }
     const elev = clamp(baseElev + userPitch * (1 - racingAmt), inspectorOn ? -1.56 : 0.05, inspectorOn ? 1.56 : 1.15);
+    viewAzimuth = (THREE.MathUtils.radToDeg(az) % 360 + 360) % 360;
+    viewElevation = THREE.MathUtils.radToDeg(elev);
+    viewDistance = r;
     const horizontal = Math.cos(elev) * r;
     camPos.set(Math.sin(az) * horizontal + chaseLat, targetY + Math.sin(elev) * r, Math.cos(az) * horizontal + follow);
     lookAt.set(camState.tx * (1 - racingAmt) + chaseLat, targetY, camState.tz * (1 - racingAmt) + follow);
@@ -3023,7 +3029,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       render(p, 1 / 60);
     },
   debug: () => ({
-    progress: +pSmooth.toFixed(3),
+    progress: +pSmooth.toFixed(4),
     speed: +speed.toFixed(2),
     scale: renderScale,
     racing,
@@ -3036,8 +3042,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     target: lookAt.toArray(),
     inspector: inspectorOn,
     clipping: [camera.near, camera.far],
+    viewAzimuth: +viewAzimuth.toFixed(2),
+    viewElevation: +viewElevation.toFixed(2),
+    viewDistance: +viewDistance.toFixed(3),
     carScreenBox: lightLinesPass.uniforms.uCarBox.value.toArray(),
-    zoom: +zoom.toFixed(2),
+    zoom: +zoom.toFixed(3),
     theme,
     yaw: +userYaw.toFixed(1),
     pitch: +userPitch.toFixed(2),

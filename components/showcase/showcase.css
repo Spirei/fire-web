@@ -737,6 +737,23 @@ html:has(.showcase.light) body {
   gap: 6px;
 }
 
+/* 构图诊断坐标：首页与模型展示共用，截图即可按水平角、俯仰角与页面进度复现机位。 */
+.sc-position-coordinate {
+  position: absolute;
+  right: 3.4vw;
+  bottom: calc(4.6vh + 38px);
+  z-index: 12;
+  pointer-events: none;
+  color: var(--sc-dim);
+  font: 500 9px/1.35 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: .035em;
+  text-align: right;
+  white-space: pre-line;
+  text-shadow: 0 1px 5px var(--sc-bg);
+  font-variant-numeric: tabular-nums;
+}
+.showcase.sc-inspecting .sc-position-coordinate { right: 3.4vw; bottom: 3.2vh; color: #676b75; text-shadow: 0 1px 4px #fff; }
+
 .sc-models-cap {
   font-size: 8.5px;
   letter-spacing: 0.26em;
@@ -934,6 +951,12 @@ html:has(.showcase.light) body {
     font-size: 10px;
     letter-spacing: 0.12em;
     white-space: nowrap;
+  }
+
+  .sc-position-coordinate {
+    right: 4vw;
+    bottom: calc(12vh + 104px);
+    font-size: 8px;
   }
 
   /* 章节导航：右侧竖排指示器在手机上保持竖排，横条收窄一点；章节名仍靠悬停 / 聚焦显示 */

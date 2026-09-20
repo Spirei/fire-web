@@ -403,6 +403,15 @@ export interface ShowcaseHandle {
     racing: boolean;
     travel: number;
     zoom: number;
+    /** 当前相机与观察焦点的世界坐标 */
+    camera: number[];
+    target: number[];
+    inspector: boolean;
+    clipping: number[];
+    /** 当前最终观察角：水平角 / 俯仰角（度）与相机到焦点距离，可直接复现构图 */
+    viewAzimuth: number;
+    viewElevation: number;
+    viewDistance: number;
     theme: "dark" | "light";
     /** 实际绘制缓冲尺寸 / 反射贴图边长 / 贴图与几何体数量（排查显存用） */
     buffer: [number, number];

@@ -120,6 +120,26 @@ export default function ShowcaseStage({
   }, [pinnedPose]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const handleRef = useRef<ShowcaseHandle | null>(null);
+  const coordinateRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    let frame = 0;
+    let lastPaint = 0;
+    const paint = (now: number) => {
+      if (now - lastPaint >= 160) {
+        lastPaint = now;
+        const el = coordinateRef.current;
+        const handle = handleRef.current;
+        if (el && handle) {
+          const data = handle.debug();
+          const title = `${data.inspector ? "模型展示" : "首页"} · ${models?.find(item => item.id === currentModel)?.label ?? config.watermark ?? "车型"}`;
+          el.textContent = `${title}\n水平角 ${data.viewAzimuth.toFixed(2)}°  俯仰角 ${data.viewElevation.toFixed(2)}°\n缩放 ${data.zoom.toFixed(3)}  距离 ${data.viewDistance.toFixed(3)}  页面 ${data.progress.toFixed(4)}`;
+        }
+      }
+      frame = window.requestAnimationFrame(paint);
+    };
+    frame = window.requestAnimationFrame(paint);
+    return () => window.cancelAnimationFrame(frame);
+  }, [config.watermark, currentModel, models]);
   useEffect(() => {
     if (!wirePanel) return;
     const close = (event: KeyboardEvent) => {
@@ -766,6 +786,7 @@ export default function ShowcaseStage({
             {config.watermark}
           </div>
           <div className="sc-vignette" />
+          <div className="sc-position-coordinate" ref={coordinateRef} aria-label="车型观察角度坐标" aria-live="off" />
 
           <div className="sc-hud">
             <div className="sc-row sc-tools">
