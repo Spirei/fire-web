@@ -21,9 +21,11 @@ for(const [w,h] of [[84,44],[42,44],[44,44],[24,44]]) {
  assert.equal(at(Math.floor(w/2),Math.floor(h/2),0),128,'clear lens center');
 }
 let palette='liquid', selected=[], captured=null;
-const react={useEffect:()=>{},useId:()=>':test:',useRef:value=>({current:value}),useState:value=>[value,()=>{}]};
+let states=[];
+const react={useEffect:()=>{},useId:()=>':test:',useRef:value=>({current:value}),useState:value=>{ const i=states.length;states.push(value);return [value,next=>states[i]=next]; }};
 const Control=load('components/LiquidGlassControl.tsx',{'react':react,'@/lib/liquidGlass':optics,'./PaletteProvider':{useSitePalette:()=>({palette})}}).default;
 function mount() {
+ states=[];
  const el=Control({items:[{label:'native'},{label:'overlay'},{label:'wire'}],index:0,onChange:i=>selected.push(i),label:'mode'});
  el.props.ref.current={getBoundingClientRect:()=>({left:100,width:308}),setPointerCapture:id=>captured=id,hasPointerCapture:id=>captured===id,releasePointerCapture:()=>captured=null};
  return el.props;
@@ -33,5 +35,14 @@ let p=mount(); p.onPointerDown(ev(154));p.onPointerMove(ev(354));p.onPointerUp(e
 p=mount();p.onPointerDown(ev(154));p.onPointerMove(ev(-100));p.onPointerUp(ev(-100));assert.equal(selected.at(-1),0);
 p=mount();p.onPointerDown(ev(154));p.onPointerDown(ev(354,2));p.onPointerUp(ev(354,2));assert.equal(selected.length,2,'second pointer cannot commit');p.onPointerCancel();p.onPointerUp(ev(354));assert.equal(selected.length,2,'cancel does not select');
 p=mount();p.onPointerDown(ev(154));p.onLostPointerCapture();p.onPointerUp(ev(354));assert.equal(selected.length,2);
-palette='neutral';p=mount();p.onPointerDown(ev(354));p.onPointerUp(ev(354));assert.equal(selected.length,2,'solid palette uses normal button click');
+p=mount(); const mouse=x=>({...ev(x),pointerType:'mouse',buttons:0});
+p.onPointerEnter(mouse(154));assert.equal(states[2],true,'hover raises lens');
+p.onPointerMove(mouse(304));assert.equal(states[0],1.5,'hover follows continuously between options');
+p.onPointerUp(mouse(304));assert.equal(selected.length,2,'hover cannot select');
+p.onPointerLeave();assert.equal(states[0],0,'leave restores selection');assert.equal(states[2],false);
+p.onPointerEnter({...mouse(254),pointerType:'touch'});assert.equal(states[2],false,'touch has no hover');
+p.onPointerEnter(mouse(254));p.onPointerCancel();assert.equal(states[2],false,'cancel clears hover');
+p.onPointerDown(mouse(154));p.onPointerLeave();p.onPointerMove(ev(354));p.onPointerUp(ev(354));assert.equal(selected.at(-1),2,'captured drag continues outside');
+selected.pop();
+palette='neutral';p=mount();p.onPointerEnter(mouse(254));assert.equal(states[2],false,'solid palette has no hover lens');p.onPointerDown(ev(354));p.onPointerUp(ev(354));assert.equal(selected.length,2,'solid palette uses normal button click');
 console.log('PASS lens symmetry, narrow swatches, clear center, drag commit, limits, cancellation and multiple pointers');

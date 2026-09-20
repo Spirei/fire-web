@@ -17,18 +17,18 @@
 .lg-optical { background: rgb(var(--site-surface) / .24); border: 1px solid rgb(var(--site-surface) / .75); box-shadow: inset 0 1px 0 #ffffffb0, inset 0 -1px 1px #0000000c, 0 2px 8px #00000005; -webkit-backdrop-filter: blur(3px) saturate(1.1); backdrop-filter: blur(3px) saturate(1.1); touch-action: none; }
 .lg-optical .lg-lens-body { background: rgb(var(--site-ink) / .075); box-shadow: none; }
 .lg-optical .lg-track button[aria-pressed="true"] { color: #008bdc; }
-.lg-optical.lg-held .lg-lens { z-index: 3; transition: none; }
-.lg-optical.lg-held .lg-lens-body { transform: scale(1.14,1.34); background: rgb(var(--site-surface) / .8); box-shadow: inset 0 1px 1px #fffffff0, inset 0 -1px 1px #ffffffd0, inset 1px 0 1px #ffffffb0, 0 0 0 .65px #747a8245, 0 5px 12px #00000018; }
-.lg-optical.lg-held .lg-magnify, .lg-optical.lg-held .lg-refraction { opacity: 1; }
-.lg-optical.lg-held .lg-magnify { transform: scale(1.04,1); }
+.lg-optical.lg-active .lg-lens { z-index: 3; transition: none; }
+.lg-optical.lg-active .lg-lens-body { transform: scale(1.14,1.34); background: rgb(var(--site-surface) / .8); box-shadow: inset 0 1px 1px #fffffff0, inset 0 -1px 1px #ffffffd0, inset 1px 0 1px #ffffffb0, 0 0 0 .65px #747a8245, 0 5px 12px #00000018; }
+.lg-optical.lg-active .lg-magnify, .lg-optical.lg-active .lg-refraction { opacity: 1; }
+.lg-optical.lg-active .lg-magnify { transform: scale(1.04,1); }
 .lg-optical .lg-lens-body::after { content: ""; position: absolute; inset: -1px; padding: 1.2px; border-radius: inherit; pointer-events: none; opacity: 0; background: conic-gradient(from 110deg, transparent 0 20%, #43f4ff 21%, #7e70ff 23%, #ff80ce 25%, #fff895 27%, transparent 30% 70%, #c5f6ff 74%, #fff9b4 77%, transparent 80%); -webkit-mask: linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; transition: opacity .15s; }
-.lg-optical.lg-held .lg-lens-body::after { opacity: .72; }
+.lg-optical.lg-active .lg-lens-body::after { opacity: .72; }
 .lg-colors { margin-top: 8px; }
 .lg-optical.lg-colors .lg-lens-body { background: #ffffff35; box-shadow: inset 0 1px 1px #fff9,0 1px 3px #0001; }
 @media (prefers-reduced-motion: reduce) {
   .lg-control *, .lg-control *::after { transition: none !important; }
-  .lg-optical.lg-held .lg-lens-body { transform: none; }
-  .lg-optical.lg-held .lg-magnify { transform: none; }
+  .lg-optical.lg-active .lg-lens-body { transform: none; }
+  .lg-optical.lg-active .lg-magnify { transform: none; }
 }
 @media (prefers-contrast: more) { .lg-control { background: rgb(var(--site-surface)); border: 1px solid rgb(var(--site-edge)); } }
 /* Shared clear-glass surface, rather than the previous opaque frosted panel. */

@@ -4127,7 +4127,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_35_ENTRY.frontend],
   software: V0_1_35_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.36" } : item),
   changes: [
-    { title: "参考视频重做 Liquid Glass 透镜", kind: "feature", desc: "模型展示的模式与六色控件支持按住鼓起、连续拖动、内容放大和边缘色散，松开吸附选项；共用清透玻璃材质同步到首页、导入与设置，保留深浅色和非玻璃配色。支持指针取消、键盘操作与减少动态效果。" }, {
+    { title: "Liquid Glass 透镜支持悬停与拖动", kind: "feature", desc: "鼠标未按下时划过模式或色珠即可跟随放大与折射，移出恢复已选位置，悬停不提交选择。模型展示的模式与六色控件支持按住鼓起、连续拖动、内容放大和边缘色散，松开吸附选项；共用清透玻璃材质同步到首页、导入与设置，保留深浅色和非玻璃配色。支持指针取消、键盘操作与减少动态效果。" }, {
     title: "全站配色与统一玻璃材质",
     desc: "设置新增独立配色组，提供中性灰、Liquid Glass、海盐蓝、松林绿、琥珀纸、暮光紫六套深浅配色；原窗口风格入口改为全站配色入口。首页胶囊、模型面板、车型导入、后台卡片与导航共用颜色和材质变量，玻璃效果随配色选择切换；保留行情涨跌与模型原色。个人选择通过偏好 Cookie 与本地存储保存，服务端首帧生效并同步同源标签。",
     kind: "feature"
