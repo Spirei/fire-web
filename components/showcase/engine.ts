@@ -122,6 +122,8 @@ function normalizeConfig(config: ShowcaseConfig) {
       launchTravel: config.speed.launchTravel ?? 11,
       chaseAzimuth: config.speed.chaseAzimuth ?? 180,
       chaseLateral: config.speed.chaseLateral ?? 0,
+      chaseCamera: config.speed.chaseCamera ?? { radius: 11.8, height: 3.7, targetY: 1.2, fov: 34 },
+      response: config.speed.response ?? { acceleration: 1.45, braking: 1.7 },
       flowStrength: config.speed.flowStrength ?? 0.28,
       floorFlow: config.speed.floorFlow ?? 1,
       laneKeep: {
@@ -820,7 +822,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const barTune = TUNNEL?.bars ?? [];
   // 主光条 / 车道线切成短段的密度（越大段越短）
   const SEG_SCALE = (CFG.speed.tunnel?.barSegment ?? 13).toFixed(1);
-  const LANE_SEG_SCALE_NUM = (CFG.speed.tunnel?.barSegment ?? 13) * 0.3;
+  const LANE_SEG_SCALE_NUM = (CFG.speed.tunnel?.barSegment ?? 13) * 0.075;
   const laneList = CFG.speed.tunnel?.lanes ?? [];
   // 跑道线逐条生成：每条自带颜色 / 宽度 / 不透明度 / 段长（dash 越大段越短）/ 流动速度。
   // dash 取 1 是随镜头一路延伸的长虚线（跑道边线），取 3 以上是路面短标线 ——
@@ -838,7 +840,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           const fade = (l.opacity ?? 0.6).toFixed(3);
           return `{
             float lm = barLine(ang, ${a}, ${w}) * ${fade};
-            float lp = pow(max(r, 0.0), 1.3) * ${seg} - uTime * (${flow} + uSpeed * 0.075);
+            float lp = log(1.0 + r * 5.0) * ${seg} - uTime * (${flow} + 2.55);
             float ld = smoothstep(${on[0]}, ${on[1]}, fract(lp)) * (1.0 - smoothstep(${on[2]}, ${on[3]}, fract(lp)));
             lane += lm * ld;
             laneCol += vec3(${col.r.toFixed(3)}, ${col.g.toFixed(3)}, ${col.b.toFixed(3)}) * lm * ld;
@@ -880,7 +882,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         mask += gold * 0.6 + goldCore * 0.32 + white * 0.42 + whiteCore * 0.24;
       }
       // 其余是很浅的虚线：噪声贴图沿轴拉伸并滚动
-      vec2 nUv = vec2(vUv.x * 48.0, vUv.y * 0.32 - uTime * (0.15 + uSpeed * 0.035));
+      vec2 nUv = vec2(vUv.x * 48.0, vUv.y * 0.32 - uTime * 1.34);
       vec3 s = texture2D(tNoise, nUv).rgb;
       float dash = smoothstep(0.86, 0.99, s.r) * 0.34 * uDash;
       col += mix(vec3(0.52, 0.58, 0.72), vec3(0.92, 0.94, 1.0), s.g) * dash;
@@ -1090,24 +1092,18 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         gRadius = r;
         gDof = uDof;
         float radial = smoothstep(0.03, 0.2, r);
-        float goldMask = 0.0;
-        float whiteMask = 0.0;
-        ${lineAngles.map((b) => `${b.gold ? "goldMask" : "whiteMask"} += barLine(ang, ${b.a.toFixed(5)}, ${b.w.toFixed(5)});`).join("\n        ")}
-        // 参考视频里每条光条都不是连续的，而是「长条短段」：量到单段约 120-200px、段间空隙约 30-60px，
-        // 所以段内占空比给到 0.85 左右（之前只有三分之一，看着是一颗颗小疙瘩）。段沿径向往镜头流动。
-        // 远近：段长随「离消失点的距离」放大（越靠镜头段越长、越靠消失点越短），
-        // 于是同一组光条在画面上有明确的空间尺度，不会像贴在玻璃上的一层线
-        float segPos = pow(max(r, 0.0), 1.3) * ${SEG_SCALE} - uTime * (0.7 + uSpeed * 0.06);
-        float segIdx = floor(segPos);
-        float segF = fract(segPos);
-        float segMask = smoothstep(0.02, 0.07, segF) * (1.0 - smoothstep(0.8, 0.95, segF));
-        float segRand = 0.65 + 0.7 * hash11(segIdx * 1.37);
-        float flow = (0.72 + 0.28 * sin(r * 26.0 - uTime * (2.0 + uSpeed * 0.35))) * segMask * segRand;
-        // 车体遮挡：参考视频里光条是从车后面去的，不要画在车身上
+        // 每道灯独立错相；log 径向深度使近处段长、远处段密，全部向外流动。
+        vec3 mainLight = vec3(0.0);
+        ${lineAngles.map((b, i) => `{
+          float line = barLine(ang, ${b.a.toFixed(5)}, ${b.w.toFixed(5)});
+          float phase = log(1.0 + r * 5.0) * ${SEG_SCALE} * 0.48 - uTime * 2.74 + ${(i * 0.371).toFixed(3)};
+          float f = fract(phase);
+          float dash = smoothstep(0.02, 0.07, f) * (1.0 - smoothstep(0.72, 0.90, f));
+          mainLight += ${b.gold ? "uGold" : "uWhite * 0.7"} * line * dash;
+        }`).join("\n        ")}
+        // 保守遮住本帧车体投影，光条从车后穿过，不给涂装叠色。
         vec2 carQ = (vUv - uCarBox.xy) / max(uCarBox.zw, vec2(1e-4));
-        float hide = 1.0 - smoothstep(0.8, 1.12, length(carQ));
-        float mask = (goldMask + whiteMask * 0.85) * radial * flow * (1.0 - hide) * uStrength * uIntensity;
-        vec3 col = uGold * goldMask + uWhite * whiteMask;
+        float hide = 1.0 - smoothstep(0.92, 1.08, max(abs(carQ.x), abs(carQ.y)));
         // 隧道壁上的细虚线：按角度均匀分槽，每槽随机宽度 / 亮度 / 相位。
         // 参考视频里这些线是「细而长」的（宽约 3-5px、长 120-200px），所以槽内宽度收窄、切段拉长。
         // 隧道左右对称：槽号取其与镜像槽的较小值再哈希，两侧的宽度与相位因此完全一致
@@ -1118,30 +1114,25 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         float mirror = mod(uAuxCount * 0.5 - slot, uAuxCount);
         float symSlot = min(slot, mirror);
         float h = hash11(symSlot + 3.7);
-        float slotW = (0.08 + h * 0.18);                       // 占槽宽的比例（越小越细）
+        float slotW = (0.014 + h * 0.025);                       // 占槽宽的比例（越小越细）
         float slotDist = min(inSlot, 1.0 - inSlot) * TAU / uAuxCount;
         float slotMax = slotW * (TAU / uAuxCount) * 0.5;
         float auxLine = smoothstep(slotMax, 0.0, slotDist) * step(0.34, hash11(symSlot + 11.3));
-        float auxDash = smoothstep(0.32, 0.84, fract(r * (2.2 + h * 2.6) - uTime * (0.5 + uSpeed * 0.03) + h * 3.0));
+        float auxDash = smoothstep(0.32, 0.84, fract(log(1.0 + r * 5.0) * (2.2 + h * 2.6) - uTime * 1.52 + h * 3.0));
         float aux = auxLine * auxDash * (0.25 + h * 0.75) * uAuxOpacity;
         // 跑道线：逐条画（每条自带颜色 / 段长 / 流动速度），见上面的 laneCode
         float lane = 0.0;
         vec3 laneCol = vec3(0.0);
         ${laneCode}
-        // 跑道线要比壁面虚线更亮，否则「跑道」读不出来
-        float laneAux = lane * 0.62 + aux * 0.55;
-        laneCol += uWhite * aux * 0.3;
-        // 车道线与辅助虚线：和主光条一样受车体遮挡与强度控制
-        float laneAll = laneAux * (1.0 - hide) * uStrength * uIntensity;
-        if (!(laneAll == laneAll)) laneAll = 0.0;   // NaN 兜底
-        mask += laneAll;
-        col += laneCol;
-        if (!(mask == mask)) mask = 0.0;
-        // 深色主题：光条加色发光；浅色主题：亮背景上加色看不见，改成把光条压成深色线条（像白天隧道里的暗条纹）
-        // 浅色主题：光条画成深色线条，并且对比拉满（亮背景上对比不足就等于看不见）
+        vec3 glow = (mainLight + laneCol * 0.8 + uWhite * aux * 0.3)
+          * radial * (1.0 - hide) * uStrength * uIntensity;
+        // 两种主题保持相同空间 / 节奏，浅底用可辨识的冷暖色暗线。
+        float mask = max(glow.r, max(glow.g, glow.b));
+        vec3 dayLine = mix(vec3(0.16, 0.23, 0.34), vec3(0.38, 0.24, 0.10),
+          clamp((glow.r - glow.b) * 2.0, 0.0, 1.0));
         vec3 outRgb = uLightMode > 0.5
-          ? mix(base.rgb, vec3(0.10, 0.12, 0.16), clamp(mask * 1.6, 0.0, 1.0))
-          : base.rgb + col * mask;
+          ? mix(base.rgb, dayLine, clamp(mask, 0.0, 0.85))
+          : base.rgb + glow;
         gl_FragColor = vec4(outRgb, base.a);
       }`
   });
@@ -1228,7 +1219,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let carMeshNames: string[] = [];
   let carWheelGroups = 0;
   const wheelPivots: Array<
-    Array<{ mesh: THREE.Mesh; angle: number; rot: THREE.Matrix4; t1: THREE.Matrix4; t2: THREE.Matrix4 }>
+    Array<{ mesh: THREE.Mesh; center: THREE.Vector3; angle: number; rot: THREE.Matrix4; t1: THREE.Matrix4; t2: THREE.Matrix4 }>
   > = [];
   const bodyMaterials: THREE.MeshStandardMaterial[] = [];
 
@@ -1236,14 +1227,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   function splitWheels(mesh: THREE.Mesh, midLateral: number, midLong: number, lateralAxis: number, longAxis: number) {
     const geo = mesh.geometry;
     // 有的模型是「一个材质盖四个轮子」（本车），有的是「一个网格一个轮子」（Gulf / MP4 系列）。
-    // 先用网格自身的跨度区分：纵向没有明显长于横向的就是单轮，整体绕自身中心转；
-    // 否则按象限拆成四个轮子。
+    // 用垂直于车轴 / 车长的直径区分单轮与多轮，不能拿车长 / 车宽比判断：
+    // MCL35M 的四轮合并网格比例约 2.1，旧阈值 2.2 会把四轮当成一个轮子公转。
     if (geo.boundingBox === null) geo.computeBoundingBox();
     const bb = geo.boundingBox;
     if (bb) {
       const latSize = bb.max.getComponent(lateralAxis) - bb.min.getComponent(lateralAxis);
       const longSize = bb.max.getComponent(longAxis) - bb.min.getComponent(longAxis);
-      if (longSize < latSize * 2.2) {
+      const heightAxis = [0, 1, 2].find(axis => axis !== lateralAxis && axis !== longAxis) ?? 2;
+      const diameter = bb.max.getComponent(heightAxis) - bb.min.getComponent(heightAxis);
+      if (diameter > 0 && latSize < diameter * 1.6 && longSize < diameter * 1.6) {
         const single = new Map<number, { geometry: THREE.BufferGeometry; center: THREE.Vector3 }>();
         single.set(0, { geometry: geo, center: bb.getCenter(new THREE.Vector3()) });
         return single;
@@ -1251,21 +1244,22 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     const idx = geo.index;
     const pos = geo.attributes.position as THREE.BufferAttribute;
-    if (!idx || !pos) return new Map<number, { geometry: THREE.BufferGeometry; center: THREE.Vector3 }>();
+    if (!pos) return new Map<number, { geometry: THREE.BufferGeometry; center: THREE.Vector3 }>();
+    const vertexIndex = (i: number) => idx ? idx.getX(i) : i;
     const buckets = new Map<number, number[]>();
     const a = new THREE.Vector3();
     const b = new THREE.Vector3();
     const c = new THREE.Vector3();
-    for (let i = 0; i < idx.count; i += 3) {
-      a.fromBufferAttribute(pos, idx.getX(i));
-      b.fromBufferAttribute(pos, idx.getX(i + 1));
-      c.fromBufferAttribute(pos, idx.getX(i + 2));
+    for (let i = 0; i < (idx?.count ?? pos.count); i += 3) {
+      a.fromBufferAttribute(pos, vertexIndex(i));
+      b.fromBufferAttribute(pos, vertexIndex(i + 1));
+      c.fromBufferAttribute(pos, vertexIndex(i + 2));
       const cl = (a.getComponent(lateralAxis) + b.getComponent(lateralAxis) + c.getComponent(lateralAxis)) / 3;
       const cf = (a.getComponent(longAxis) + b.getComponent(longAxis) + c.getComponent(longAxis)) / 3;
       const key = (cl > midLateral ? 1 : 0) + (cf > midLong ? 2 : 0);
       const list = buckets.get(key);
-      if (list) list.push(idx.getX(i), idx.getX(i + 1), idx.getX(i + 2));
-      else buckets.set(key, [idx.getX(i), idx.getX(i + 1), idx.getX(i + 2)]);
+      if (list) list.push(vertexIndex(i), vertexIndex(i + 1), vertexIndex(i + 2));
+      else buckets.set(key, [vertexIndex(i), vertexIndex(i + 1), vertexIndex(i + 2)]);
     }
     const out = new Map<number, { geometry: THREE.BufferGeometry; center: THREE.Vector3 }>();
     buckets.forEach((indices, key) => {
@@ -1518,6 +1512,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         splitWheels(mesh, midLateral, midLong, lateralAxis, longAxis).forEach((part, key) => {
           const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.Material;
           const m = new THREE.Mesh(part.geometry, material);
+          mesh.updateMatrix();
+          m.matrix.copy(mesh.matrix);
           m.matrixAutoUpdate = false;
           m.frustumCulled = false;
           // 必须挂在原来的父节点下：模型原始坐标是 Z 轴朝上，靠父节点的 -90° 旋转才立起来，
@@ -1527,9 +1523,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           if (!wheelPivots[key]) wheelPivots[key] = [];
           wheelPivots[key].push({
             mesh: m,
+            center: part.center.clone(),
             angle: 0,
             rot: new THREE.Matrix4(),
-            t1: new THREE.Matrix4().makeTranslation(x, y, z),
+            t1: mesh.matrix.clone().multiply(new THREE.Matrix4().makeTranslation(x, y, z)),
             t2: new THREE.Matrix4().makeTranslation(-x, -y, -z)
           });
         });
@@ -1550,7 +1547,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         wheelPivots.forEach((parts, key) => {
           const end = key >> 1;   // splitWheels 用「纵向位」区分前后轴
           parts.forEach((w) => {
-            w.mesh.getWorldPosition(probe);
+            probe.copy(w.center).applyMatrix4(w.mesh.matrixWorld);
             carRoot.worldToLocal(probe);
             axleSum[end].add(probe);
             axleCount[end] += 1;
@@ -1713,8 +1710,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   let speed = 0;
   let elapsed = 0;
+  let roadTravel = 0; // 积分速度，变速时光条相位连续，不用 elapsed × 当前速度。
   let racing = false;
-  let racingAmt = 0;   // 冲刺状态的平滑量：镜头、轮胎、光条都跟它走
+  let racingAmt = 0;   // 速度驱动的镜头混合量（轮胎 / 光条直接跟随速度）
   let carTravel = 0;   // 冲刺时车沿隧道开走的距离
   let lastRacing = false;
   let frameCount = 0;
@@ -1735,6 +1733,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   let lastLit = -1;
   let lastMarkP = -1;
+  let lastMarkRace = -1;
   let lastRaceClass: boolean | null = null;
   const labelPos: Array<{ x: number; y: number; opacity?: number } | undefined> = [];
   let userYaw = 0;
@@ -1771,6 +1770,22 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   function render(p: number, dt = 0.016) {
     elapsed += dt;
 
+    // 0919：约 2 秒进入高速，松手后先退光条，再回到展示机位。
+    const targetSpeed = racing ? CFG.speed.maxSpeed : 0;
+    const response = racing ? CFG.speed.response.acceleration : CFG.speed.response.braking;
+    const previousSpeed = speed;
+    speed += (targetSpeed - speed) * (1 - Math.exp(-dt * response));
+    if (!racing && speed < 0.015) speed = 0;
+    roadTravel += (previousSpeed + speed) * 0.5 * dt;
+    const sp = clamp(speed / CFG.speed.maxSpeed, 0, 1);
+    const chaseTarget = reduced ? 0 : seg(sp, 0.035, 0.86);
+    racingAmt += (chaseTarget - racingAmt) * (1 - Math.exp(-dt * 5.5));
+    if (racing !== lastRacing) {
+      lastRacing = racing;
+      options.onRacing?.(racing);
+    }
+    carTravel += (racingAmt * CFG.speed.launchTravel - carTravel) * (1 - Math.exp(-dt * 3));
+
     // 环境：夜 → 昼（窗口与强度由 preset 给；参考视频里整段 hero 都是夜景，只在收尾略微提亮）
     // 浅色主题直接顶到白天环境；深色主题按叙事窗口在夜→昼之间过渡
     const narrativeDay = seg(p, CFG.environment.nightToDay[0], CFG.environment.nightToDay[1]) * CFG.environment.dayIntensity;
@@ -1788,30 +1803,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     rimLight.intensity = (light ? 0.6 : 0.58) + day * 0.26 + seg(p, 0.42, 0.5) * 0.14 + speedLight * 0.12;
     fillLight.intensity = 0.36 + day * 0.24 + speedLight * 0.52;
 
-    // 速度只由冲刺（按住空格 / 按住按钮）驱动：参考视频里滚动的过程中表一直是 000，
-    // 只有在发车后才爬升，松开后回落 —— 滚动只负责镜头与舞台。
-    const targetSpeed = racing ? CFG.speed.maxSpeed * 1.02 : 0;
-    speed += (targetSpeed - speed) * clamp(dt * (racing ? 2.4 : 1.0), 0, 1);
-    const sp = clamp(speed / CFG.speed.maxSpeed, 0, 1);
-    racingAmt += ((racing ? 1 : 0) - racingAmt) * clamp(dt * 2.2, 0, 1);
-    if (racing !== lastRacing) {
-      lastRacing = racing;
-      options.onRacing?.(racing);
-    }
-
     // 相机
     camAt(p);
     // 拖拽环视：角度直接跟手，松手后带着惯性继续转，可以无限圈 360° 环视
     if (!dragging) {
       // 松手后的惯性：速度按帧衰减，且俯仰每帧都夹在范围内（之前漏夹会把镜头甩飞）
       const decay = Math.pow(0.9, dt * 60);
-      if (racingAmt > 0.01) {
-        // 冲刺中：把用户拖出来的偏航/俯仰收回去，保证车始终正对隧道方向
-        userYaw *= Math.pow(0.86, dt * 60);
-        userPitch *= Math.pow(0.86, dt * 60);
-        userYawVel = 0;
-        userPitchVel = 0;
-      }
       userYaw += userYawVel * 0.35;
       userYawVel *= decay;
       if (Math.abs(userYawVel) < 0.002) userYawVel = 0;
@@ -1821,17 +1818,19 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     zoom += (zoomTarget - zoom) * clamp(dt * 8, 0, 1);
     // 360° 环视：自动绕车旋转（松开后平滑回到叙事机位）
-    if (orbitOn) {
+    if (orbitOn && racingAmt < 0.01) {
       orbitYaw += dt * (CFG.ui?.orbitSpeed ?? 0.55);
-    } else if (orbitYaw !== 0) {
+    } else if (!orbitOn && orbitYaw !== 0) {
       orbitYaw *= Math.pow(0.02, dt);
       if (Math.abs(orbitYaw) < 0.002) orbitYaw = 0;
     }
     // 冲刺时镜头顺隧道方向跟随：方位角平滑绕到车尾正后方，机位与注视点随车往隧道深处推进，
     // 因此消失点始终在画面中心，车开走时不会被甩到画面外。
     const azBase = camState.az + userYaw + (orbitYaw * 180) / Math.PI;
-    const azDelta = ((CFG.speed.chaseAzimuth - azBase + 540) % 360) - 180;
-    const az = ((azBase + azDelta * racingAmt * 0.85) * Math.PI) / 180;
+    // 中速先转到正后方，再落到偏后 3/4；停下时保留用户原先拖拽的姿态。
+    const chaseAz = THREE.MathUtils.lerp(180, CFG.speed.chaseAzimuth, seg(sp, 0.5, 0.94));
+    const azDelta = (((chaseAz - azBase) % 360 + 540) % 360) - 180;
+    const az = ((azBase + azDelta * racingAmt) * Math.PI) / 180;
     // 镜头角速度（弧度/秒）→ 倒影淡出系数：1.6 rad/s（约 92°/秒）视为最快。
     // 注意：鼠标事件是一阵一阵来的，逐帧量出来的角速度快慢交替，直接喂给系数的话
     // 倒影会跟着一明一暗（连续旋转时看起来就是频闪）。所以先对「角速度」本身做低通，
@@ -1843,27 +1842,28 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       motionFade += (target - motionFade) * clamp(dt * 3.5, 0, 1);
     }
     lastAzRad = az;
-    const follow = carTravel * racingAmt;   // 轻微跟随；跟太多车就一直很大，隧道感会消失
+    const follow = carTravel;
     // 冲刺时机位整体右移（镜头与注视点同向平移，视线方向不变）：车因此落在画面左侧、
     // 光条汇聚点在其右 —— 参考视频就是这个构图，之前车正好压在汇聚点上，左右关系是反的
     const chaseLat = (CFG.speed.chaseLateral ?? 0) * racingAmt;
     // 竖屏 / 窄屏时水平视野会变窄，这里按宽高比把相机拉远、视角放宽，保证整车进画面
     const fitAspect = CFG.camera.fitMinAspect;
     const fit = camera.aspect < fitAspect ? clamp(fitAspect / camera.aspect, 1, CFG.camera.fitMaxPullback) : 1;
-    const r = (camState.r - sp * 1.5) * Math.pow(fit, 0.8) * zoom;
-    const h = camState.h - sp * 0.22;
-    const targetY = camState.ty + sp * 0.05;
+    const chase = CFG.speed.chaseCamera;
+    const r = THREE.MathUtils.lerp(camState.r * zoom, chase.radius, racingAmt) * Math.pow(fit, 0.8);
+    const h = THREE.MathUtils.lerp(camState.h, chase.height, racingAmt);
+    const targetY = THREE.MathUtils.lerp(camState.ty, chase.targetY, racingAmt);
     // 关键帧给的是高度，换成仰角后才能和用户的上下拖拽相加；
     // 最终仰角夹在 3° 到 66° 之间：既能贴地看侧面，也不会穿到地面下或翻过头顶。
     const baseElev = Math.atan2(Math.max(0.2, h) - targetY, r);
-    const elev = clamp(baseElev + userPitch, 0.05, 1.15);
+    const elev = clamp(baseElev + userPitch * (1 - racingAmt), 0.05, 1.15);
     const horizontal = Math.cos(elev) * r;
-    camPos.set(Math.sin(az) * horizontal + chaseLat, targetY + Math.sin(elev) * r, Math.cos(az) * horizontal + follow * 0.22);
-    lookAt.set(camState.tx + chaseLat, targetY, camState.tz + follow * 0.34);
-    camState.fovEff = camState.fov * Math.pow(fit, 0.45);
+    camPos.set(Math.sin(az) * horizontal + chaseLat, targetY + Math.sin(elev) * r, Math.cos(az) * horizontal + follow);
+    lookAt.set(camState.tx * (1 - racingAmt) + chaseLat, targetY, camState.tz * (1 - racingAmt) + follow);
+    camState.fovEff = THREE.MathUtils.lerp(camState.fov, chase.fov, racingAmt) * Math.pow(fit, 0.45);
 
     // fbm 晃动：三个轴各自随机错开频率，高速才明显
-    const shakeAmp = reduced ? 0 : (sp * sp * CFG.camera.shakeAmount + 0.02) * 0.6;
+    const shakeAmp = reduced ? 0 : sp * sp * CFG.camera.shakeAmount * 0.16;
     shakeTarget.set(
       fbm2(elapsed * 0.5 + SHAKE_SEED[0], 3.1) * shakeAmp,
       fbm2(elapsed * 0.5 + SHAKE_SEED[1], 7.7) * shakeAmp * 0.8,
@@ -1877,9 +1877,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       camera.updateProjectionMatrix();
     }
 
-    // 车：加速时下沉、轻微前倾，轮胎自转
-    // 冲刺时车顺着隧道开走（镜头锁定，车越来越小），松开后回到原位
-    carTravel += (racingAmt * CFG.speed.launchTravel - carTravel) * clamp(dt * 1.1, 0, 1);
+    // 车：轻微下沉、轮胎自转；位移与镜头使用同帧 carTravel。
     // 车道保持：横向偏移与车头偏角每帧平滑收回隧道中心线，车不会越跑越偏
     if (laneKeepOn) {
       const back = clamp(dt * laneKeepStrength, 0, 1);
@@ -1888,10 +1886,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     carRoot.position.x = carLateral;
     carRoot.position.z = carTravel;
-    carRoot.position.y = Math.sin(elapsed * 0.7) * 0.004 - sp * 0.022;
+    carRoot.position.y = -sp * 0.012;
     carRoot.rotation.z = -sp * 0.014;
-    // 车头始终对着隧道方向：只保留极轻微的自然摆动，外加车道保持的残余修正量
-    carRoot.rotation.y = Math.sin(elapsed * 0.25) * 0.006 + carHeadingOffset;
+    // 车头沿隧道方向，只保留车道保持的残余修正量。
+    carRoot.rotation.y = carHeadingOffset;
     // 轮胎跟着「当前车速」转：静止浏览时车速是 0 所以不转；
     // 松手后画面会看到轮胎继续带着转、随车速一起慢下来才停（参考视频就是这样）。
     const spin = speed * 0.62 * dt;
@@ -1922,7 +1920,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 冲刺（隧道里）没有倒影：反射强度随速度衰减到 0，地面变成一块暗面。
     // 浅色/影棚下反射不再打折（原来 0.6 倍 + 与底色五五开，车身倒影会比车身暗一大截、颜色也对不上）
     floorUniforms.uReflectIntensity.value =
-      (light ? 0.72 : CFG.ground.reflectIntensity) * (1 - clamp(sps * 2.0, 0, 1)) * (1 - motionFade * 0.45);
+      (light ? 0.72 : CFG.ground.reflectIntensity) * (1 - seg(sps, 0.12, 0.55)) * (1 - motionFade * 0.45);
     // 浅色/影棚：反射占比给足，车身与倒影同色；法线扰动仍压低，避免亮背景经扰动出现麻点
     floorUniforms.uMixBase.value = light ? 0.62 : 0.46;
     floorUniforms.uMixFres.value = light ? 0.5 : 1.05;
@@ -1933,12 +1931,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     floorUniforms.uHorizonMix.value = light ? 1 : 0.9;
     flowUniforms.uFlowTime.value = elapsed;
     flowUniforms.uFlowStrength.value = sps * sps * CFG.speed.flowStrength;
-    tunnelUniforms.uTime.value = elapsed;
+    tunnelUniforms.uTime.value = roadTravel / CFG.speed.maxSpeed;
     tunnelUniforms.uSpeed.value = reduced ? 0 : speed;
-    tunnelUniforms.uOpacity.value = 0.46 + sps * 0.3;
-    tunnel2Uniforms.uTime.value = elapsed * 0.75;
+    tunnelUniforms.uOpacity.value = sps ** 3 * 0.28;
+    tunnel2Uniforms.uTime.value = roadTravel / CFG.speed.maxSpeed * 0.75;
     tunnel2Uniforms.uSpeed.value = reduced ? 0 : speed * 0.8;
-    tunnel2Uniforms.uOpacity.value = sps * 0.35;
+    tunnel2Uniforms.uOpacity.value = sps ** 3 * 0.12;
     if (shardUniformsRef && shardMesh) {
       shardUniformsRef.uTime.value = elapsed;
       shardUniformsRef.uSpeed.value = reduced ? 0 : speed;
@@ -1951,7 +1949,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       ringUniformsRef.uSpeed.value = sps;
       ringUniformsRef.uSweep.value = elapsed * (0.05 + sps * 0.22);
       // 冲刺时圆圈与两条椭圆线一起淡出：参考视频里车一开走，身后就没有圈了
-      const ringFade = 1 - clamp(racingAmt * 1.6, 0, 1);
+      const ringFade = 1 - seg(sps, 0.08, 0.48);
       if (ringUniformsRef.uFade) ringUniformsRef.uFade.value = ringFade;
       ringOutlineMats.forEach((m) => {
         m.opacity = (m.userData.baseOpacity as number) * ringFade;
@@ -1966,6 +1964,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     if (tunnel) tunnel.visible = tunnelOn;
     if (accent) accent.visible = tunnelOn;
 
+    // 后期遮挡用本帧矩阵；屏幕 UV 的 Y 向上，与 NDC 一致。
+    carRoot.updateMatrixWorld(true);
+    camera.updateMatrixWorld(true);
     // 主光条：只在有速度时出现（滚动浏览时表是 0，不会亮）
     if (sps > 0.04) {
       // 车的屏幕包围盒：把车模包围盒的 8 个角投影到屏幕上再取包围矩形，
@@ -1984,7 +1985,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       }
       if (cornersOk) {
         const cx = (minX + maxX) / 4 + 0.5;
-        const cy = -(minY + maxY) / 4 * 0.5 + 0.5;
+        const cy = (minY + maxY) / 4 + 0.5;
         const hx = (maxX - minX) / 4 + 0.012;
         const hy = (maxY - minY) / 4 + 0.02;
         (lightLinesPass.uniforms.uCarBox.value as THREE.Vector4).set(cx, cy, hx, hy);
@@ -2001,13 +2002,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         }
       }
     }
-    lightLinesPass.uniforms.uTime.value = elapsed;
+    lightLinesPass.uniforms.uTime.value = roadTravel / CFG.speed.maxSpeed;
     lightLinesPass.uniforms.uSpeed.value = reduced ? 0 : speed;
-    // 隧道按速度三次方渐显：参考视频里 138 km/h 只有零星几根淡线，321 km/h 以上才铺满整屏，
-    // 用平方（早段太亮）会让中速就出现完整隧道，和参考对不上
-    lightLinesPass.uniforms.uStrength.value = sps * sps * sps;
+    // 中速只有淡线，高速才铺满；松手后比镜头回位更早退去。
+    lightLinesPass.uniforms.uStrength.value = sps * sps * seg(sps, 0.14, 0.72);
     lightLinesPass.uniforms.uLightMode.value = light ? 1 : 0;
-    lightLinesPass.enabled = sps > 0.04;   // 静止段整趟跳过，省一层全屏后期
+    lightLinesPass.enabled = !!TUNNEL && sps > 0.04 && !off.has("tunnel");   // 静止段整趟跳过，省一层全屏后期
 
     // 后期：拖影只在高速时才有意义，静止段直接关掉这一整趟全屏后期
     smearPass.uniforms.uChroma.value = sps * CFG.post.smearChroma;
@@ -2053,10 +2053,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       lastPhase = phase;
       options.onPhase?.(phase);
     }
-    if (hud.mark && Math.abs(p - lastMarkP) > 0.002) {
+    if (hud.mark && (Math.abs(p - lastMarkP) > 0.002 || Math.abs(racingAmt - lastMarkRace) > 0.002)) {
       lastMarkP = p;
+      lastMarkRace = racingAmt;
       hud.mark.style.transform = `translate(-50%, -50%) scale(${1 + p * 0.1 + sps * 0.04})`;
-      hud.mark.style.opacity = String(0.75 + sps * 0.5);
+      hud.mark.style.opacity = String(0.75 - racingAmt * 0.42);
     }
     if (racing !== lastRaceClass) {
       lastRaceClass = racing;
@@ -2281,12 +2282,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   hud.raceBtn?.addEventListener("pointerdown", onRaceDown);
   window.addEventListener("pointerup", onPointerUp);
+  window.addEventListener("pointercancel", onPointerUp);
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", onPointerUp);
   cleanups.push(() => {
     hud.raceBtn?.removeEventListener("pointerdown", onRaceDown);
     window.removeEventListener("pointerup", onPointerUp);
+    window.removeEventListener("pointercancel", onPointerUp);
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
     window.removeEventListener("blur", onPointerUp);
@@ -2781,6 +2784,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     scale: renderScale,
     racing,
     travel: +carTravel.toFixed(2),
+    chase: +racingAmt.toFixed(3),
+    roadTravel: +roadTravel.toFixed(3),
+    tunnelStrength: +lightLinesPass.uniforms.uStrength.value.toFixed(3),
+    tunnelEnabled: lightLinesPass.enabled,
+    camera: camera.position.toArray(),
+    carScreenBox: lightLinesPass.uniforms.uCarBox.value.toArray(),
     zoom: +zoom.toFixed(2),
     theme,
     yaw: +userYaw.toFixed(1),

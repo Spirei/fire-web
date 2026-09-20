@@ -191,6 +191,10 @@ export interface ShowcaseConfig {
      * 参考视频里车在画面左侧、光条汇聚点在其右，靠这一项对齐。
      */
     chaseLateral?: number;
+    /** 独立冲刺机位，不随起步时所在章节 / 用户缩放改变。高度与注视点相对车所在路面。 */
+    chaseCamera?: { radius: number; height: number; targetY: number; fov: number };
+    /** 加速 / 松手减速的响应系数（每秒）。 */
+    response?: { acceleration: number; braking: number };
     /**
      * 车道保持：把车从横向偏移与车头偏角里平滑拉回隧道中心线，避免「越跑越偏」。
      * 默认开启；autoHeading 会用前后轴连线自动量出车头方向并一次性摆正（不同来源的模型朝向不一）。

@@ -81,12 +81,14 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
 
   speed: {
     maxSpeed: 34,
-    topKmh: 355,
+    topKmh: 340,
     launchTravel: 7.5,
-    // 正后方跟车（跑道中线）：光条汇聚点与车都在画面正中，车就落在跑道正中
-    chaseAzimuth: 180,
-    // 机位左移 0.6 米：车落在画面偏左（参考里车心约 0.42），但仍在跑道中线上行驶
-    chaseLateral: -0.6,
+    // 参考 0919：先绕到正后方，再落在左后 3/4；车偏左、消失点偏右上。
+    chaseAzimuth: 205,
+    // 镜头与注视点一起左移，车落在画面约 0.42 处。
+    chaseLateral: -0.8,
+    chaseCamera: { radius: 11.8, height: 3.7, targetY: 1.2, fov: 34 },
+    response: { acceleration: 1.45, braking: 1.7 },
     // 车身流光与地面流光在参考视频里没有（高速时车身是暗的），置 0 去掉这两处多余光源
     flowStrength: 0,
     floorFlow: 0,
@@ -101,31 +103,31 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
       gold: "#ffbe63",
       // 内道浅蓝（取样核心 #4679D5~#6D89D3）
       white: "#9dc0ff",
-      dashes: 0.9,
+      dashes: 0.5,
+      dof: 0.35,
 
       // 段长系数：越大单段越短。参考帧对齐消失点后量到的是「密集短段」（窗口内一条线上有 5-6 段），
       // 原来 6 在同一位置只有 1-2 段、看着是两根长stroke，所以加密到 12
       barSegment: 12,
       // 角度是屏幕空间角度（相对消失点）：左三 = 150°/190°/230°，右三 = 30°/350°/310°，
       // 每侧上下两条是暖金、中间那条偏白灰，对应参考视频里的六道主光条。
-      vanish: [0.5, 0.46],
-      // 冲刺机位是车尾偏左的 3/4（方位角 212°），真实消失点会跑到画面很右侧；
-      // 参考视频里光条是在车右后上方汇聚，所以这里仍用固定的画面汇聚点，不用真实投影
+      vanish: [0.62, 0.60],
+      // 对齐参考片高速构图：车在左下，光条汇聚在右上。
       vanishFollow: false,
       // 光条亮度（参考里黄线是亮芯 + 窄光晕）
-      barIntensity: 1.6,
+      barIntensity: 1.35,
       // 跑道线：内侧蓝线（左右跑道边线）＋ 跑道上的短白标线（一条条掠过镜头，速度感来自它）
       lanes: [
         // 内侧蓝线：紧贴跑道两侧（最靠里），连续虚线
         { angle: 240, width: 0.3, opacity: 1.15, color: "#9dc0ff" },
         { angle: 300, width: 0.3, opacity: 1.15, color: "#9dc0ff" },
         // 跑道上流动的短白标线（一条条掠过镜头，负责速度感与远近感）
-        { angle: 262, width: 0.28, opacity: 0.95, color: "#e9effb", dash: 4 },
-        { angle: 278, width: 0.28, opacity: 0.95, color: "#e9effb", dash: 4 }
+        { angle: 262, width: 0.42, opacity: 0.95, color: "#e9effb", dash: 4 },
+        { angle: 278, width: 0.42, opacity: 0.95, color: "#e9effb", dash: 4 }
       ],
       // 隧道壁上的细线：参考视频里高速段（321/334 km/h）是一整片「细长线」铺满画面，
       // 单根比主光条细得多（约 1/3）、数量多（每个角落能看到 5-8 根），所以槽位加密、透明度提高；
-      // 低速时整层随速度平方淡入（uStrength = speed²），静止 / 起步阶段看不到
+      // 中速淡入、高速增强，静止完全关闭。
       auxCount: 30,
       auxOpacity: 0.55,
       // 主体只有这些，左右镜像：
@@ -137,9 +139,9 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
         // 每侧 2 条黄线 = 墙面（上黄 + 下黄，关于水平轴对称），左右镜像；蓝线更靠里（见上面的 lanes）
         // 宽度按参考帧量出来的细线：原来 1.0° 在 1600 宽画面上接近 14px（一根很粗的管子），
         // 参考里同样的位置只有 6-8px 的亮芯 + 很窄的光晕；0.38° 又偏细，取 0.46°
-        { angle: 150, width: 0.46, tone: "gold", style: "bar" },    // 左上墙
+        { angle: 160, width: 0.46, tone: "gold", style: "bar" },    // 左上墙
         { angle: 210, width: 0.46, tone: "gold", style: "bar" },    // 左下墙
-        { angle: 30, width: 0.46, tone: "gold", style: "bar" },     // 右上墙
+        { angle: 20, width: 0.46, tone: "gold", style: "bar" },     // 右上墙
         { angle: 330, width: 0.46, tone: "gold", style: "bar" },    // 右下墙
         // 参考帧里除了暖金墙线，还有几条「接近水平、更长更亮」的冷白线（左右各一对、上下各一条），
         // 少这一组时整片隧道只有金色，观感比参考单薄
