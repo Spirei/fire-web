@@ -21,6 +21,7 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { fetchAssetBuffer } from "./assetCache";
 import { splitWheelGeometry } from "./wheels";
+import { coastStep, boundedZoom } from "./interaction";
 import type {
   ShowcaseCameraKey,
   ShowcaseConfig,
@@ -1762,6 +1763,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const MIN_ZOOM = CFG.zoom.min;
   const MAX_ZOOM = CFG.zoom.max;
   let freeCamera = false;
+  const focusTarget = new THREE.Vector3();
+  const focusOffset = new THREE.Vector3();
+  const focusRay = new THREE.Raycaster();
+  const focusPointer = new THREE.Vector2();
   const zoomLimit = () => {
     if (!freeCamera) return MAX_ZOOM;
     const base = CAM_KEYS[0];
@@ -1787,6 +1792,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const lookAt = new THREE.Vector3();
   const projected = new THREE.Vector3();
 
+  let interactionUntil = 0;
+  let reflectionLite = false;
+  let reflectResizedAt = -1;
   function render(p: number, dt = 0.016) {
     elapsed += dt;
 
@@ -1828,16 +1836,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 拖拽环视：角度直接跟手，松手后带着惯性继续转，可以无限圈 360° 环视
     if (!dragging) {
       // 松手后的惯性：速度按帧衰减，且俯仰每帧都夹在范围内（之前漏夹会把镜头甩飞）
-      const decay = Math.pow(0.9, dt * 60);
-      userYaw += userYawVel * 0.35;
-      userYawVel *= decay;
-      if (Math.abs(userYawVel) < 0.002) userYawVel = 0;
-      userPitch = clamp(userPitch + userPitchVel * 0.35, -0.55, 0.95);
-      userPitchVel *= decay;
-      if (Math.abs(userPitchVel) < 0.00002) userPitchVel = 0;
+      const yawStep = coastStep(userYawVel, dt);
+      const pitchStep = coastStep(userPitchVel, dt);
+      userYaw += yawStep.distance;
+      userYawVel = Math.abs(yawStep.velocity) < 0.05 ? 0 : yawStep.velocity;
+      userPitch = clamp(userPitch + pitchStep.distance, -0.55, 0.95);
+      userPitchVel = Math.abs(pitchStep.velocity) < 0.0005 ? 0 : pitchStep.velocity;
     }
     if (freeCamera) zoomTarget = Math.min(zoomTarget, zoomLimit());
-    zoom += (zoomTarget - zoom) * clamp(dt * 8, 0, 1);
+    zoom += (zoomTarget - zoom) * (1 - Math.exp(-dt * 10));
     // 360° 环视：自动绕车旋转（松开后平滑回到叙事机位）
     if (orbitOn && racingAmt < 0.01) {
       orbitYaw += dt * (CFG.ui?.orbitSpeed ?? 0.55);
@@ -1882,6 +1889,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     camPos.set(Math.sin(az) * horizontal + chaseLat, targetY + Math.sin(elev) * r, Math.cos(az) * horizontal + follow);
     lookAt.set(camState.tx * (1 - racingAmt) + chaseLat, targetY, camState.tz * (1 - racingAmt) + follow);
     camState.fovEff = THREE.MathUtils.lerp(camState.fov, chase.fov, racingAmt) * Math.pow(fit, 0.45);
+
+    focusOffset.lerp(focusTarget, 1 - Math.exp(-dt * 10));
+    if (freeCamera) {
+      carHalfC.copy(focusOffset).multiplyScalar(1 - racingAmt);
+      camPos.add(carHalfC); lookAt.add(carHalfC);
+    }
 
     // fbm 晃动：三个轴各自随机错开频率，高速才明显
     const shakeAmp = reduced ? 0 : sp * sp * CFG.camera.shakeAmount * 0.16;
@@ -2117,6 +2130,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       }
     });
 
+    // 交互时只降低倒影采样尺寸，仍逐帧更新；主体渲染分辨率不变。
+    if (dragging || touches.size > 0 || Math.abs(zoomTarget - zoom) > 0.01 || Math.abs(userYawVel) > 0.5 || Math.abs(userPitchVel) > 0.005) interactionUntil = elapsed + 0.25;
+    const wantsLite = elapsed < interactionUntil;
+    if (wantsLite !== reflectionLite && elapsed - reflectResizedAt > 0.25) {
+      reflectionLite = wantsLite; reflectResizedAt = elapsed;
+      const [rw, rh] = reflectSizeFor(camera.aspect, reflectionLite ? Math.min(512, reflectHeight * 0.5) : reflectHeight);
+      reflectRT.setSize(rw, rh); reflectDirty = true;
+    }
     // 相机或车在动 → 反射必须逐帧更新（否则转动时倒影会抖）；完全静止时才隔帧更新。
     if (floorUniforms.uReflectIntensity.value > 0.001 && reflectNeedsUpdate()) {
       updateReflection();
@@ -2168,7 +2189,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     camera.updateProjectionMatrix();
     (lightLinesPass.uniforms.uAspect.value as number) = CFG.speed.tunnel?.referenceAspect ?? w / h;
     // 反射贴图按画面宽高比同步（换窗口比例时倒影不会又被拉糊）
-    const [reflectW, reflectH] = reflectSizeFor(w / h, reflectHeight);
+    const [reflectW, reflectH] = reflectSizeFor(w / h, reflectionLite ? Math.min(512, reflectHeight * 0.5) : reflectHeight);
     if (reflectRT.width !== reflectW || reflectRT.height !== reflectH) reflectRT.setSize(reflectW, reflectH);
   }
 
@@ -2327,9 +2348,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let dragging = false;
   let dragX = 0;
   let dragY = 0;
+  let dragTime = 0;
+  let dragPointer: number | null = null;
+  const touches = new Map<number, { x: number; y: number }>();
+  let tapX = 0, tapY = 0, tapDownAt = 0, tapTravel = 0;
+  let lastTapX = 0, lastTapY = 0;
   /** 当前手势是不是手指（触屏）：手指横滑转车、竖滑留给页面滚动，不做俯仰 */
   let dragByTouch = false;
   let lastTapAt = 0;
+  let lastTouchFocusAt = -Infinity;
   /**
    * 用户置顶的机位（由组件通过 setHomePose 传进来）。
    * 双击复位要回到「用户的固定机位」，而不是引擎的中立角度 —— 以前这里一律归零，
@@ -2337,6 +2364,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    */
   let homePose: { yaw: number; pitch: number; zoom: number } | null = null;
   const resetView = () => {
+    focusTarget.set(0, 0, 0);
     userYaw = freeCamera ? 0 : homePose?.yaw ?? 0;
     userYawVel = 0;
     userPitch = freeCamera ? 0 : homePose?.pitch ?? 0;
@@ -2346,24 +2374,44 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 置顶机位还包含「进度」：交给组件把滚动位置带回去，才真的回到那一帧
     if (!freeCamera) options.onResetView?.();
   };
+  const focusAt = (x: number, y: number) => {
+    if (!freeCamera) { resetView(); return; }
+    if (racing || racingAmt > 0.05) return;
+    const rect = canvas.getBoundingClientRect();
+    focusPointer.set((x - rect.left) / rect.width * 2 - 1, 1 - (y - rect.top) / rect.height * 2);
+    camera.updateMatrixWorld(); carRoot.updateMatrixWorld(true);
+    focusRay.setFromCamera(focusPointer, camera);
+    const hit = focusRay.intersectObject(carRoot, true).find(h => {
+      for (let o: THREE.Object3D | null = h.object; o && o !== carRoot; o = o.parent) if (!o.visible) return false;
+      return true;
+    });
+    if (!hit) return;
+    focusTarget.copy(hit.point).sub(lookAt).add(focusOffset);
+    zoomTarget = Math.max(MIN_ZOOM, zoomTarget * 0.65);
+    userYawVel = 0; userPitchVel = 0;
+  };
   const onCanvasDown = (e: PointerEvent) => {
-    // 触屏双击复位（手机上 dblclick 不可靠，自己判时间间隔）
+    if (e.button !== 0) return;
     if (e.pointerType === "touch") {
-      const now = performance.now();
-      if (now - lastTapAt < 320) {
-        resetView();
-        lastTapAt = 0;
-        return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size > 1) {
+        dragging = false; dragPointer = null; lastTapAt = 0;
+        userYawVel = 0; userPitchVel = 0; return;
       }
-      lastTapAt = now;
     }
-    dragging = true;
+    dragging = true; dragPointer = e.pointerId;
     dragByTouch = e.pointerType === "touch";
-    dragX = e.clientX;
-    dragY = e.clientY;
+    dragX = tapX = e.clientX; dragY = tapY = e.clientY;
+    dragTime = tapDownAt = performance.now(); tapTravel = 0;
+    userYawVel = 0; userPitchVel = 0;
+    canvas.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: PointerEvent) => {
-    if (!dragging) return;
+    if (!dragging || e.pointerId !== dragPointer || touches.size > 1) return;
+    const now = performance.now();
+    const sampleDt = Math.max(0.001, Math.min(0.1, (now - dragTime) / 1000));
+    dragTime = now;
+    tapTravel = Math.max(tapTravel, Math.hypot(e.clientX - tapX, e.clientY - tapY));
     const dx = e.clientX - dragX;
     dragX = e.clientX;
     const dy = e.clientY - dragY;
@@ -2374,16 +2422,30 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 手指（触屏）：只吃横向位移，竖向留给页面滚动，避免「想滚页面却在俯仰」
     const gain = dragByTouch ? 0.42 : 0.3;
     userYaw -= dx * gain;
-    userYawVel = -dx * gain;
+    userYawVel = clamp(-dx * gain / sampleDt, -240, 240);
     if (dragByTouch && !freeCamera) return;
     // 鼠标上下拖：向上拖 = 升高视角俯视，向下拖 = 降低视角平视/略微仰视
     userPitch = clamp(userPitch + dy * 0.0035, -0.55, 0.95);
-    userPitchVel = dy * 0.0035;
+    userPitchVel = clamp(dy * 0.0035 / sampleDt, -2, 2);
   };
-  const onDragEnd = () => {
-    dragging = false;
-    dragByTouch = false;
+  const onDragEnd = (e: PointerEvent) => {
+    if (e.pointerId !== dragPointer) return;
+    const now = performance.now();
+    if (e.type === "pointercancel" || now - dragTime > 80) { userYawVel = 0; userPitchVel = 0; }
+    if (dragByTouch && e.type === "pointerup" && touches.size === 1 && tapTravel < 8 && now - tapDownAt < 250) {
+      if (now - lastTapAt < 320 && Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < 24) {
+        focusAt(e.clientX, e.clientY); lastTapAt = 0; lastTouchFocusAt = now;
+      } else { lastTapAt = now; lastTapX = e.clientX; lastTapY = e.clientY; }
+    } else lastTapAt = 0;
+    dragging = false; dragByTouch = false; dragPointer = null;
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
   };
+  const cancelInteraction = () => {
+    dragging = false; dragPointer = null; touches.clear();
+    userYawVel = 0; userPitchVel = 0; lastTapAt = 0;
+  };
+  window.addEventListener("blur", cancelInteraction);
+  cleanups.push(() => window.removeEventListener("blur", cancelInteraction));
   canvas.addEventListener("pointerdown", onCanvasDown);
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onDragEnd);
@@ -2399,7 +2461,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   // 缩放：⌘/Ctrl + 滚轮（触控板捏合同样走这里）、按钮、双击复位
   const applyZoom = (factor: number) => {
-    zoomTarget = clamp(zoomTarget * factor, MIN_ZOOM, zoomLimit());
+    zoomTarget = boundedZoom(zoomTarget, factor, MIN_ZOOM, zoomLimit());
   };
   let zoomMode = false;
   const setZoomMode = (on: boolean) => {
@@ -2415,7 +2477,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 往下滚 = 拉远，往上滚 / 双指张开 = 推近看细节
     applyZoom(Math.exp(e.deltaY * CFG.zoom.wheelStep));
   };
-  const onDoubleClick = () => resetView();
+  const onDoubleClick = (e: MouseEvent) => {
+    if (performance.now() - lastTouchFocusAt < 500) return;
+    if (!(e as MouseEvent & { sourceCapabilities?: { firesTouchEvents: boolean } }).sourceCapabilities?.firesTouchEvents) focusAt(e.clientX, e.clientY);
+  };
   canvas.addEventListener("wheel", onWheel, { passive: false });
   canvas.addEventListener("dblclick", onDoubleClick);
   cleanups.push(() => {
@@ -2443,12 +2508,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   });
 
   // 触屏双指捏合
-  const touches = new Map<number, { x: number; y: number }>();
-  let pinchStart = 0;
+
   const onTouchDown = (e: PointerEvent) => {
     if (e.pointerType !== "touch") return;
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (touches.size === 2) pinchStart = zoomTarget;
+    if (touches.size === 2) { pinchBase = pointerDistance(); }
   };
   const pointerDistance = () => {
     const [a, b] = [...touches.values()];
@@ -2464,11 +2528,22 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       pinchBase = d;
       return;
     }
-    zoomTarget = clamp(pinchStart * (pinchBase / d), MIN_ZOOM, zoomLimit());
+    if (d > 1 && pinchBase > 1) {
+      zoomTarget = boundedZoom(zoomTarget, pinchBase / d, MIN_ZOOM, zoomLimit());
+      pinchBase = d;
+    }
   };
   const onTouchEnd = (e: PointerEvent) => {
     if (e.pointerType !== "touch") return;
+    const wasPinching = touches.size > 1;
     touches.delete(e.pointerId);
+    if (!wasPinching) { pinchBase = 0; return; }
+    dragging = false; dragPointer = null; userYawVel = 0; userPitchVel = 0;
+    if (touches.size === 1) {
+      const [id, point] = [...touches][0];
+      dragPointer = id; dragging = true; dragByTouch = true;
+      dragX = point.x; dragY = point.y; dragTime = performance.now(); tapTravel = 100;
+    }
     if (touches.size < 2) pinchBase = 0;
   };
   // 两指按下时阻止浏览器接管（canvas 是 touch-action: pan-y，单指竖滑仍可滚页面）
@@ -2477,14 +2552,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   canvas.addEventListener("touchstart", onTouchStartCapture, { passive: false });
   canvas.addEventListener("pointerdown", onTouchDown);
-  canvas.addEventListener("pointermove", onTouchMove);
-  canvas.addEventListener("pointerup", onTouchEnd);
-  canvas.addEventListener("pointercancel", onTouchEnd);
+  window.addEventListener("pointermove", onTouchMove);
+  window.addEventListener("pointerup", onTouchEnd);
+  window.addEventListener("pointercancel", onTouchEnd);
   cleanups.push(() => {
     canvas.removeEventListener("pointerdown", onTouchDown);
-    canvas.removeEventListener("pointermove", onTouchMove);
-    canvas.removeEventListener("pointerup", onTouchEnd);
-    canvas.removeEventListener("pointercancel", onTouchEnd);
+    window.removeEventListener("pointermove", onTouchMove);
+    window.removeEventListener("pointerup", onTouchEnd);
+    window.removeEventListener("pointercancel", onTouchEnd);
   });
 
   /* ---------- 9) 上下文丢失 / 恢复 ---------- */
@@ -2743,6 +2818,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         CFG.model = normalizeModel(next.model);
         CFG.assets = { ...CFG.assets, model: next.asset };
         unmountCar(previous);
+        focusTarget.set(0, 0, 0);
         mountCar(nextCar);
         render(progress(), 1 / 60);
         return true;
@@ -2774,9 +2850,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       }
     },
     /** 360° 环视：自动绕车一圈，再点一次平滑回到叙事机位 */
+    resetCamera: resetView,
     setFreeCamera: (on: boolean) => {
       if (freeCamera === on) return;
       freeCamera = on;
+      focusTarget.set(0, 0, 0);
       zoomTarget = 1;
       userYaw = 0; userPitch = 0; userYawVel = 0; userPitchVel = 0;
       if (on) { orbitOn = false; orbitYaw = 0; }

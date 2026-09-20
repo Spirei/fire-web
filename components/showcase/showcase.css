@@ -1044,3 +1044,5 @@ html:has(.showcase.light) body {
 }
 
 .showcase.sc-free canvas { touch-action: none; }
+
+.sc-nav .sc-camera-reset { min-height: 28px; font-size: 10px; margin-top: 2px; padding: 4px 8px; border: 1px solid var(--sc-line); border-radius: 6px; background: var(--sc-panel); }
