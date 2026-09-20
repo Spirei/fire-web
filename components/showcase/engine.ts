@@ -659,6 +659,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let ringUniformsRef: { uSweep: { value: number }; uSpeed: { value: number }; uTime: { value: number }; uFade?: { value: number } } | null = null;
   const ringOutlineMats: THREE.MeshBasicMaterial[] = [];
   let discStyle: ShowcaseDiscStyle = "chrono";
+  let trackDiscFraming = 0;
   const chronoDisc = new THREE.Group();
   const trackDisc = new THREE.Group();
   trackDisc.visible = false;
@@ -791,70 +792,60 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     ringUniformsRef = ringUniforms;
 
     /*
-     * 0919 参考视频圆盘：三条同心赛道线由短划点阵拼成，局部断开，右后方有一段较亮的引导弧。
-     * 单独成组，因此与原刻度盘切换时不用重建场景，也不会动到车、镜头和倒影。
+     * 0919 原片圆盘：逐帧量得外径约为车身投影的 1.6 倍，由两条完整细环与 72 格
+     * 向内的径向刻度组成。原片合成后的亮线约 RGB(31,34,38)，对应冷灰源色叠到黑底；
+     * 不是三条米金色切向点阵。单独成组，仍可与原刻度盘原地切换。
      */
-    const trackColor = ringColor.clone().lerp(new THREE.Color("#f0dfca"), 0.3);
-    const dashGeo = new THREE.BoxGeometry(0.095, 0.003, 0.018);
-    [RING_R - 0.32, RING_R + 0.03, RING_R + 0.4].forEach((radius, lane) => {
-      const count = 176 + lane * 16;
-      const mat = new THREE.MeshBasicMaterial({
-        color: trackColor,
+    const VIDEO_DISC_RADIUS = RING_R * (4.25 / 3.3);
+    const videoDiscColor = new THREE.Color("#aeb5bc");
+    [
+      { radius: VIDEO_DISC_RADIUS - 0.07, width: 0.0025, opacity: 0.11 },
+      { radius: VIDEO_DISC_RADIUS, width: 0.0035, opacity: 0.2 }
+    ].forEach(({ radius, width, opacity }) => {
+      const outline = ellipseOutline(radius, radius, width, opacity, videoDiscColor.getHex());
+      const material = outline.material as THREE.MeshBasicMaterial;
+      material.userData.baseOpacity = material.opacity;
+      ringOutlineMats.push(material);
+      trackDisc.add(outline);
+    });
+    const videoTickCount = 72;
+    const tickTypes = [
+      { every: 6, exclude: 0, length: 0.3, width: 0.022, opacity: 0.34 },
+      { every: 3, exclude: 6, length: 0.18, width: 0.018, opacity: 0.22 },
+      { every: 1, exclude: 3, length: 0.1, width: 0.014, opacity: 0.14 }
+    ];
+    const videoTickAxis = new THREE.Vector3(0, 0, 1);
+    tickTypes.forEach(({ every, exclude, length, width, opacity }, level) => {
+      const indices = Array.from({ length: videoTickCount }, (_, index) => index)
+        .filter(index => index % every === 0 && (!exclude || index % exclude !== 0));
+      const geometry = new THREE.BoxGeometry(width, 0.003, length);
+      const material = new THREE.MeshBasicMaterial({
+        color: videoDiscColor,
         transparent: true,
-        opacity: 0.12 + lane * 0.025,
+        opacity,
         blending: THREE.AdditiveBlending,
         depthWrite: false
       });
-      mat.userData.baseOpacity = mat.opacity;
-      ringOutlineMats.push(mat);
-      const visible: number[] = [];
-      for (let i = 0; i < count; i += 1) {
-        const unit = i / count;
-        // 不同车道错开缺口，避免形成机械、完整的钟面圆；前缘保留得更完整以托住车身。
-        const gap = lane === 0
-          ? (unit > 0.58 && unit < 0.69)
-          : lane === 1
-            ? (unit > 0.08 && unit < 0.17) || (unit > 0.72 && unit < 0.78)
-            : (unit > 0.35 && unit < 0.43);
-        if (!gap && (i + lane) % (lane === 1 ? 3 : 2) !== 0) visible.push(i);
-      }
-      const dashes = new THREE.InstancedMesh(dashGeo, mat, visible.length);
+      material.userData.baseOpacity = material.opacity;
+      ringOutlineMats.push(material);
+      const ticks = new THREE.InstancedMesh(geometry, material, indices.length);
       const matrix = new THREE.Matrix4();
       const position = new THREE.Vector3();
       const quaternion = new THREE.Quaternion();
-      const scale = new THREE.Vector3();
-      visible.forEach((sourceIndex, instanceIndex) => {
-        const angle = (sourceIndex / count) * Math.PI * 2;
-        position.set(Math.sin(angle) * radius, 0.012 + lane * 0.0008, Math.cos(angle) * radius);
-        quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
-        const pulse = sourceIndex % 17 === 0 ? 1.9 : sourceIndex % 7 === 0 ? 1.35 : 1;
-        scale.set(pulse, 1, 1);
-        matrix.compose(position, quaternion, scale);
-        dashes.setMatrixAt(instanceIndex, matrix);
+      indices.forEach((sourceIndex, instanceIndex) => {
+        const angle = (sourceIndex / videoTickCount) * Math.PI * 2;
+        const direction = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
+        position.copy(direction).multiplyScalar(VIDEO_DISC_RADIUS - length / 2);
+        position.y = 0.012 + level * 0.0006;
+        quaternion.setFromUnitVectors(videoTickAxis, direction);
+        matrix.compose(position, quaternion, new THREE.Vector3(1, 1, 1));
+        ticks.setMatrixAt(instanceIndex, matrix);
       });
-      dashes.instanceMatrix.needsUpdate = true;
-      dashes.frustumCulled = false;
-      dashes.renderOrder = 3;
-      trackDisc.add(dashes);
+      ticks.instanceMatrix.needsUpdate = true;
+      ticks.frustumCulled = false;
+      ticks.renderOrder = 3;
+      trackDisc.add(ticks);
     });
-    const guideMaterial = new THREE.MeshBasicMaterial({
-      color: trackColor.clone().lerp(new THREE.Color("#fff7ec"), 0.55),
-      transparent: true,
-      opacity: 0.32,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.DoubleSide
-    });
-    guideMaterial.userData.baseOpacity = guideMaterial.opacity;
-    ringOutlineMats.push(guideMaterial);
-    const guide = new THREE.Mesh(
-      new THREE.RingGeometry(RING_R + 0.37, RING_R + 0.385, 72, 1, Math.PI * 0.06, Math.PI * 0.48),
-      guideMaterial
-    );
-    guide.rotation.x = -Math.PI / 2;
-    guide.position.y = 0.014;
-    guide.renderOrder = 3;
-    trackDisc.add(guide);
   }
 
   /* ---------- 3) 速度线隧道：纯片元着色器 ---------- */
@@ -1987,10 +1978,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const fit = camera.aspect < fitAspect ? clamp(fitAspect / camera.aspect, 1, CFG.camera.fitMaxPullback) : 1;
     const chase = CFG.speed.chaseCamera;
     const fitRadius = Math.pow(fit, 0.8);
-    const baseRadius = THREE.MathUtils.lerp(camState.r, chase.radius, racingAmt) * fitRadius;
-    const r = THREE.MathUtils.lerp(camState.r * zoom, chase.radius, racingAmt) * fitRadius;
+    // 原片的完整圆盘外径约为车身投影 1.6 倍；当前首页近景若沿用同一镜头会把外环切出画面。
+    // 选择视频圆盘时平滑拉远 34%，冲刺或进入自由 / 模型镜头时自然退回原机位。
+    const trackFrameTarget = discStyle === "track" && !freeCamera && !inspectorOn ? 1 - racingAmt : 0;
+    trackDiscFraming += (trackFrameTarget - trackDiscFraming) * (1 - Math.exp(-dt * 5));
+    const trackPullback = 1 + trackDiscFraming * 0.34;
+    const baseRadius = THREE.MathUtils.lerp(camState.r, chase.radius, racingAmt) * fitRadius * trackPullback;
+    const r = THREE.MathUtils.lerp(camState.r * zoom, chase.radius, racingAmt) * fitRadius * trackPullback;
     const h = THREE.MathUtils.lerp(camState.h, chase.height, racingAmt);
-    const targetY = THREE.MathUtils.lerp(camState.ty, chase.targetY, racingAmt);
+    const targetY = THREE.MathUtils.lerp(camState.ty, chase.targetY, racingAmt) - trackDiscFraming * 0.45;
     // 关键帧给的是高度，换成仰角后才能和用户的上下拖拽相加；
     // 最终仰角夹在 3° 到 66° 之间：既能贴地看侧面，也不会穿到地面下或翻过头顶。
     // 缩放必须沿当前相机 → 轨道焦点的射线直线推进。旧实现用缩放后的 r 重算角度，
