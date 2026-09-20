@@ -74,6 +74,8 @@ assert.match(engine, /clamp\(r \* 0\.003, 0\.0015, 0\.08\)/, 'near plane follows
 assert.match(engine, /inspectorViewLight\.position\.copy\(camera\.position\)/, 'view light follows camera for underside highlights');
 assert.match(engine, /const baseElev = Math\.atan2\(Math\.max\(0\.2, h\) - targetY, baseRadius\)/, 'dolly keeps a fixed orbit ray instead of curving toward target');
 assert.match(engine, /if \(inspectorOn\) \{ badFrames = 0; softTries = 0; return; \}/, 'white inspector canvas must not trip the render watchdog');
+assert.match(engine, /floorUniforms\.uReflectIntensity\.value = wireframeMode === "native"[\s\S]*?: 0;/, 'homepage reflection must be disabled for overlay and pure wireframe modes');
+assert.match(engine, /if \(mode === "native"\) reflectDirty = true;/, 'returning to native mode must refresh the reflection texture');
 const transition = engine.slice(engine.indexOf('    setInspector: (on) => {'), engine.indexOf('    setWireframe: (mode, color)'));
 const transitionModule = new Module(__filename, module);
 transitionModule.paths = module.paths;

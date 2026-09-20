@@ -1404,6 +1404,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   /** 当前挂在场景里的车（换车型时用它撤掉旧车） */
   const wireframeView = createWireframeView();
+  let wireframeMode: "native" | "overlay" | "wireframe" = "native";
   let mountedCar: THREE.Object3D | null = null;
 
   /**
@@ -2000,8 +2001,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     floorUniforms.uFlow.value = sps * sps * (CFG.speed.floorFlow ?? 1);
     // 冲刺（隧道里）没有倒影：反射强度随速度衰减到 0，地面变成一块暗面。
     // 浅色/影棚下反射不再打折（原来 0.6 倍 + 与底色五五开，车身倒影会比车身暗一大截、颜色也对不上）
-    floorUniforms.uReflectIntensity.value =
-      (light ? 0.72 : CFG.ground.reflectIntensity) * (1 - seg(sps, 0.12, 0.55)) * (1 - motionFade * 0.45);
+    floorUniforms.uReflectIntensity.value = wireframeMode === "native"
+      ? (light ? 0.72 : CFG.ground.reflectIntensity) * (1 - seg(sps, 0.12, 0.55)) * (1 - motionFade * 0.45)
+      : 0;
     // 浅色/影棚：反射占比给足，车身与倒影同色；法线扰动仍压低，避免亮背景经扰动出现麻点
     floorUniforms.uMixBase.value = light ? 0.62 : 0.46;
     floorUniforms.uMixFres.value = light ? 0.5 : 1.05;
@@ -2984,7 +2986,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       camera.near = on ? 0.01 : 0.1;
       camera.updateProjectionMatrix();
     },
-    setWireframe: (mode, color) => wireframeView.set(mode, color),
+    setWireframe: (mode, color) => {
+      wireframeMode = mode;
+      wireframeView.set(mode, color);
+      if (mode === "native") reflectDirty = true;
+    },
     setFreeCamera: (on: boolean) => {
       if (freeCamera === on) return;
       freeCamera = on;
