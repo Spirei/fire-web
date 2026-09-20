@@ -8,6 +8,7 @@ export function createWireframeView() {
   let mode: WireframeMode = "native";
   let color = "#00ff00";
   let root: THREE.Object3D | null = null;
+  let tessellationBudget = 1_000_000;
   const entries: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[]; overlay: THREE.Mesh; overlayGeometry?: THREE.BufferGeometry }[] = [];
   const overlayMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
   // Offset in clip space, never inflate the mesh (which separates narrow panels / wheel parts).
@@ -28,6 +29,8 @@ export function createWireframeView() {
     const geometry = mesh.geometry as THREE.BufferGeometry;
     const position = geometry.getAttribute("position");
     if (!position || position.count < 3) return { geometry };
+    // 蒙皮 / 变形目标依赖逐顶点权重；TessellateModifier 不会插值这些属性，保持原拓扑才不会错位。
+    if ((mesh as THREE.SkinnedMesh).isSkinnedMesh || Object.keys(geometry.morphAttributes).length > 0) return { geometry };
     mesh.updateWorldMatrix(true, false);
     const scale = new THREE.Vector3();
     mesh.getWorldScale(scale);
@@ -36,6 +39,8 @@ export function createWireframeView() {
     const index = geometry.getIndex();
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
     const triangles = index ? index.count / 3 : position.count / 3;
+    // 已经很密的单网格无需再生成展示副本，也避免未来导入极端模型时占满显存。
+    if (triangles >= 200_000 || tessellationBudget <= triangles) return { geometry };
     let sparse = false;
     for (let triangle = 0; triangle < triangles && !sparse; triangle += 1) {
       const ai = index ? index.getX(triangle * 3) : triangle * 3;
@@ -45,7 +50,11 @@ export function createWireframeView() {
       sparse = a.distanceToSquared(b) > maxEdge ** 2 || b.distanceToSquared(c) > maxEdge ** 2 || c.distanceToSquared(a) > maxEdge ** 2;
     }
     if (!sparse) return { geometry };
-    const generated = new TessellateModifier(maxEdge, 3).modify(geometry);
+    let iterations = 3;
+    while (iterations > 0 && triangles * 4 ** iterations > tessellationBudget) iterations -= 1;
+    if (iterations === 0) return { geometry };
+    const generated = new TessellateModifier(maxEdge, iterations).modify(geometry);
+    tessellationBudget -= Math.max(0, generated.getAttribute("position").count / 3 - triangles);
     return { geometry: generated, owned: generated };
   }
 
@@ -89,6 +98,7 @@ export function createWireframeView() {
     }
     entries.length = 0;
     root = null;
+    tessellationBudget = 1_000_000;
   }
 
   return {

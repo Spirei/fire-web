@@ -58,6 +58,13 @@ view.dispose();
 assert.equal(nextMesh.material, nextPaint);
 assert.equal(nextMesh.children.length, 0);
 assert.equal(geometryDisposed, false, 'controller does not own model geometry');
+const skinView = m.exports.createWireframeView();
+const skinGeometry = new THREE.BoxGeometry(1, 1, 1);
+const skin = new THREE.SkinnedMesh(skinGeometry, paint);
+const skinRoot = new THREE.Group(); skinRoot.add(skin);
+skinView.attach(skinRoot); skinView.set('overlay', '#00ff00');
+assert.equal(skin.children[0].geometry, skinGeometry, 'skinned geometry keeps vertex weights and original topology');
+skinView.dispose();
 console.log('PASS six colors, wheel transforms, hidden meshes, original/multi-material restoration, shared palette, model switch and disposal');
 // Exercise the engine's real inspector transition: entering must not overwrite the home pose.
 const engine = fs.readFileSync('components/showcase/engine.ts', 'utf8');
