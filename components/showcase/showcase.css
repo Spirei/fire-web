@@ -1046,3 +1046,35 @@ html:has(.showcase.light) body {
 .showcase.sc-free canvas { touch-action: none; }
 
 .sc-nav .sc-camera-reset { min-height: 28px; font-size: 10px; margin-top: 2px; padding: 4px 8px; border: 1px solid var(--sc-line); border-radius: 6px; background: var(--sc-panel); }
+
+/* Model inspector: theme-local because the showcase can override the page theme. */
+.sc-wire-control { position: relative; pointer-events: auto; }
+.sc-wire-panel { position: absolute; top: calc(100% + 10px); right: 0; width: 264px; padding: 14px; border: 1px solid #ffffff29; border-radius: 14px; background: #15171cf5; color: #eef0f4; box-shadow: 0 12px 40px #0005; z-index: 20; }
+.sc-wire-heading { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 8px; }
+.sc-wire-heading button { width: 32px; height: 32px; font-size: 20px; }
+.sc-wire-modes { display: flex; gap: 4px; }
+.sc-wire-modes button { flex: 1; min-height: 36px; border: 1px solid #ffffff24; border-radius: 7px; font-size: 11px; }
+.sc-wire-modes button[aria-pressed="true"] { background: #ffffff1f; border-color: #eea464; }
+.sc-wire-colors { display: flex; justify-content: space-between; margin-top: 10px; }
+.sc-wire-colors button { width: 36px; height: 38px; display: grid; place-items: center; border-radius: 7px; border: 1px solid transparent; }
+.sc-wire-colors button[aria-pressed="true"] { border-color: currentColor; }
+.sc-wire-colors span { width: 22px; height: 22px; border: 1px solid #ffffff65; border-radius: 4px; }
+.sc-wire-panel p { margin: 9px 0 0; font-size: 10px; opacity: .7; }
+.sc-wire-panel button:focus-visible { outline: 2px solid #eea464; outline-offset: 2px; }
+.showcase.light .sc-wire-panel { background: #fffffff7; color: #25282e; border-color: #0002; }
+.showcase.light .sc-wire-modes button { border-color: #0003; }
+.showcase.light .sc-wire-modes button[aria-pressed="true"] { background: #e9e6e2; border-color: #a74e13; }
+.showcase.light .sc-wire-colors span { border-color: #0005; }
+@media (pointer: coarse) {
+  .sc-wire-colors button { min-height: 44px; }
+  .sc-wire-modes button { min-height: 44px; }
+}
+@media (max-width: 600px) {
+  .sc-wire-panel { position: fixed; top: max(64px, calc(env(safe-area-inset-top) + 58px)); right: 12px; width: min(264px, calc(100vw - 24px)); }
+}
+
+.sc-inspecting .sc-watermark, .sc-inspecting .sc-vignette,
+.sc-inspecting .sc-hud > .sc-row:not(.sc-tools),
+.sc-inspecting .sc-tools > button { display: none !important; }
+.sc-inspecting .sc-tools { z-index: 30; }
+.sc-inspector-reset { margin-top: 10px; min-height: 36px; width: 100%; border: 1px solid #0003; border-radius: 7px; font-size: 11px; }

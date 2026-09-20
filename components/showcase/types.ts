@@ -379,6 +379,8 @@ export interface ShowcaseHandle {
   setModel: (next: { asset: string; model?: ShowcaseConfig["model"] }) => Promise<boolean>;
   /** 360° 环视：自动绕车旋转（再调一次关闭并回到叙事机位） */
   setOrbit: (on: boolean) => void;
+  setInspector: (on: boolean) => void;
+  setWireframe: (mode: import("./wireframe").WireframeMode, color: string) => void;
   setFreeCamera: (on: boolean) => void;
   resetCamera: () => void;
   /** 影棚：3D 场景切到明亮摄影棚（不改深浅色主题） */

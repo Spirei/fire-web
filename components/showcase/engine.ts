@@ -21,6 +21,7 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { fetchAssetBuffer } from "./assetCache";
 import { splitWheelGeometry } from "./wheels";
+import { createWireframeView } from "./wireframe";
 import { coastStep, boundedZoom } from "./interaction";
 import type {
   ShowcaseCameraKey,
@@ -1397,6 +1398,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     });
 
   /** 当前挂在场景里的车（换车型时用它撤掉旧车） */
+  const wireframeView = createWireframeView();
   let mountedCar: THREE.Object3D | null = null;
 
   /**
@@ -1594,11 +1596,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     carRoot.updateMatrixWorld(true);
     buildShardField(car);
     mountedCar = car;
+    wireframeView.attach(car);
   }
 
   /** 撤掉上一辆车：车身 / 拆出来的轮子 / 几何体 / 材质 / 模型自带贴图全部释放，并清空与车身绑定的缓存 */
   function unmountCar(car: THREE.Object3D | null) {
     if (!car) return;
+    wireframeView.detach();
     car.parent?.remove(car);
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
@@ -1763,11 +1767,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const MIN_ZOOM = CFG.zoom.min;
   const MAX_ZOOM = CFG.zoom.max;
   let freeCamera = false;
+  let inspectorOn = false;
+  const inspectorBackground = new THREE.Color("#e7e7e7");
+  let inspectorPose: { free: boolean; yaw: number; pitch: number; zoom: number; orbit: boolean; orbitYaw: number; focus: THREE.Vector3 } | null = null;
   const focusTarget = new THREE.Vector3();
   const focusOffset = new THREE.Vector3();
   const focusRay = new THREE.Raycaster();
   const focusPointer = new THREE.Vector2();
   const zoomLimit = () => {
+    if (inspectorOn) return 80;
     if (!freeCamera) return MAX_ZOOM;
     const base = CAM_KEYS[0];
     const fit = camera.aspect < CFG.camera.fitMinAspect
@@ -1817,10 +1825,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 环境：夜 → 昼（窗口与强度由 preset 给；参考视频里整段 hero 都是夜景，只在收尾略微提亮）
     // 浅色主题直接顶到白天环境；深色主题按叙事窗口在夜→昼之间过渡
     const narrativeDay = seg(p, CFG.environment.nightToDay[0], CFG.environment.nightToDay[1]) * CFG.environment.dayIntensity;
-    const envWeight = theme === "light" || studioOn ? 1 : narrativeDay;
+    const envWeight = theme === "light" || studioOn || inspectorOn ? 1 : narrativeDay;
     updateEnv(envWeight);
     const day = envWeight;
-    const light = theme === "light" || studioOn;
+    const light = theme === "light" || studioOn || inspectorOn;
+    wireframeView.setLight(light);
     // 参考图里冲刺时车身反而更亮：速度越高，暖色轮廓光与主光一起加码
     const speedLight = clamp(speed / CFG.speed.maxSpeed, 0, 1) ** 2;
     // 参考视频里高速时车身是明亮的木瓜色（实测车身核心色 ≈ 224,155,72、亮度 0.88），
@@ -2139,7 +2148,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       reflectRT.setSize(rw, rh); reflectDirty = true;
     }
     // 相机或车在动 → 反射必须逐帧更新（否则转动时倒影会抖）；完全静止时才隔帧更新。
-    if (floorUniforms.uReflectIntensity.value > 0.001 && reflectNeedsUpdate()) {
+    if (!inspectorOn && floorUniforms.uReflectIntensity.value > 0.001 && reflectNeedsUpdate()) {
       updateReflection();
       reflectCamLast.copy(camera.position);
       reflectTravelLast = carTravel;
@@ -2148,7 +2157,19 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     frameCount += 1;
     lightLinesPass.uniforms.tSceneDepth.value = composer.readBuffer.depthTexture;
     (lightLinesPass.uniforms.uWorldFromClip.value as THREE.Matrix4).multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse);
-    composer.render();
+    if (inspectorOn) {
+      // A neutral model-only canvas; direct rendering preserves unlit wire colors.
+      const background = scene.background;
+      const hidden = scene.children.filter(child => child !== carRoot && !(child as THREE.Light).isLight && child.visible);
+      hidden.forEach(child => { child.visible = false; });
+      scene.background = inspectorBackground;
+      renderer.setRenderTarget(null);
+      renderer.render(scene, camera);
+      scene.background = background;
+      hidden.forEach(child => { child.visible = true; });
+    } else {
+      composer.render();
+    }
   }
 
   let lastResizeKey = "";
@@ -2309,7 +2330,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   cleanups.push(() => scrollIntentEvents.forEach((name) => window.removeEventListener(name, markUserScroll)));
 
   const press = (on: boolean) => {
-    racing = on;
+    racing = on && !inspectorOn;
   };
   const onRaceDown = (e: Event) => {
     e.preventDefault();
@@ -2365,9 +2386,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let homePose: { yaw: number; pitch: number; zoom: number } | null = null;
   const resetView = () => {
     focusTarget.set(0, 0, 0);
-    userYaw = freeCamera ? 0 : homePose?.yaw ?? 0;
+    userYaw = inspectorOn ? 100 : freeCamera ? 0 : homePose?.yaw ?? 0;
     userYawVel = 0;
-    userPitch = freeCamera ? 0 : homePose?.pitch ?? 0;
+    userPitch = inspectorOn ? 0.3 : freeCamera ? 0 : homePose?.pitch ?? 0;
     userPitchVel = 0;
     zoomTarget = freeCamera ? 1 : homePose?.zoom ?? 1;
     setZoomMode(false);
@@ -2772,6 +2793,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   return {
     dispose: () => {
+      wireframeView.dispose();
       cleanups.forEach((fn) => fn());
       io.disconnect();
       ro.disconnect();
@@ -2851,6 +2873,27 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     },
     /** 360° 环视：自动绕车一圈，再点一次平滑回到叙事机位 */
     resetCamera: resetView,
+    setInspector: (on) => {
+      if (on === inspectorOn) return;
+      inspectorOn = on;
+      if (on) {
+        inspectorPose = { free: freeCamera, yaw: userYaw, pitch: userPitch, zoom: zoomTarget, orbit: orbitOn, orbitYaw, focus: focusTarget.clone() };
+        freeCamera = true; orbitOn = false; orbitYaw = 0;
+        racing = false; speed = 0; racingAmt = 0; carTravel = 0;
+        userYaw = 100; userPitch = 0.3; zoom = zoomTarget = 1;
+        focusTarget.set(0, 0, 0); focusOffset.set(0, 0, 0);
+      } else if (inspectorPose) {
+        freeCamera = inspectorPose.free; orbitOn = inspectorPose.orbit; orbitYaw = inspectorPose.orbitYaw;
+        userYaw = inspectorPose.yaw; userPitch = inspectorPose.pitch;
+        zoom = zoomTarget = inspectorPose.zoom;
+        focusTarget.copy(inspectorPose.focus); focusOffset.copy(inspectorPose.focus);
+        inspectorPose = null;
+      }
+      userYawVel = 0; userPitchVel = 0;
+      camera.far = on ? 5000 : 400;
+      camera.updateProjectionMatrix();
+    },
+    setWireframe: (mode, color) => wireframeView.set(mode, color),
     setFreeCamera: (on: boolean) => {
       if (freeCamera === on) return;
       freeCamera = on;

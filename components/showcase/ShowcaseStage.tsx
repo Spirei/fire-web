@@ -4,10 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ShowcaseConfig, ShowcaseHandle } from "./types";
 import { setThemeCookie } from "@/lib/theme";
 import { usePersistedState } from "@/lib/usePersistedState";
+import type { WireframeMode } from "./wireframe";
 import MusicIcon from "./MusicIcon";
 import "./showcase.css";
 import "./capsule.css";
 
+const WIRE_COLORS = [
+  ["黑色", "#000000"], ["浅灰", "#cccccc"], ["红色", "#ff0000"],
+  ["蓝色", "#0000ff"], ["绿色", "#00ff00"], ["黄色", "#ffff00"],
+] as const;
 const RPM_TICKS = 20;
 /** 用户置顶的默认机位（进度 + 拖拽角度 + 缩放），刷新 / 重开页面都回到这里 */
 const PIN_KEY = "fire:showcase:pose";
@@ -86,6 +91,20 @@ export default function ShowcaseStage({
   const [orbit, setOrbit] = useState(false);
   const [freeCamera, setFreeCamera] = useState(false);
   const freeCameraRef = useRef(false);
+  const [wirePanel, setWirePanel] = useState(false);
+  const wirePanelRef = useRef(false);
+  const toggleWirePanel = (on: boolean) => {
+    setWirePanel(on); wirePanelRef.current = on;
+    handleRef.current?.setInspector(on);
+  };
+  const [wireMode, setWireMode] = useState<WireframeMode>("native");
+  const [wireColor, setWireColor] = useState("#00ff00");
+  const wireRef = useRef({ mode: wireMode, color: wireColor });
+  const changeWire = (mode: WireframeMode, color = wireColor) => {
+    setWireMode(mode); setWireColor(color);
+    wireRef.current = { mode, color };
+    handleRef.current?.setWireframe(mode, color);
+  };
   const [studio, setStudio] = useState(false);
   // 引擎是异步创建的，点得比它早就先把状态存下来，创建完再补上
   const orbitRef = useRef(false);
@@ -98,6 +117,17 @@ export default function ShowcaseStage({
   }, [pinnedPose]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const handleRef = useRef<ShowcaseHandle | null>(null);
+  useEffect(() => {
+    if (!wirePanel) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setWirePanel(false); wirePanelRef.current = false;
+        handleRef.current?.setInspector(false);
+      }
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [wirePanel]);
   // WebGL 上下文丢了就重建一次场景（重建计数用作 key，触发重新挂载）
   const [rebuild, setRebuild] = useState(0);
   const [retry, setRetry] = useState(0);
@@ -235,6 +265,7 @@ export default function ShowcaseStage({
         // 引擎是异步创建的：创建前点过的「360° 环视 / 影棚」要补上
         handle.setOrbit(orbitRef.current);
         handle.setFreeCamera(freeCameraRef.current);
+        handle.setWireframe(wireRef.current.mode, wireRef.current.color);
         handle.setStudio(studioRef.current);
         // 置顶机位：刷新 / 重建后直接把镜头放回用户存下的角度（滚动位置由下面的滚动守护负责）
         const pinned = pinnedPoseRef.current;
@@ -243,6 +274,7 @@ export default function ShowcaseStage({
           // 双击复位也回到这一帧（引擎自己归零会回到「不是我们设置的固定机位」）
           handle.setHomePose({ yaw: pinned.yaw, pitch: pinned.pitch, zoom: pinned.zoom });
         }
+        handle.setInspector(wirePanelRef.current);
         handleRef.current = handle;
         // 记下这一轮挂的是哪辆车：之后 config 里只有车型变了就原地换车，不重建场景
         appliedModelRef.current = JSON.stringify({ a: cfg.assets.model, m: cfg.model ?? null });
@@ -700,7 +732,7 @@ export default function ShowcaseStage({
 
   // 影棚（明亮摄影棚）下画面是亮的，HUD 文字要跟着换成浅色系，否则白字压在白底上看不见
   return (
-    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio ? "light" : ""} ${className}`}>
+    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio || wirePanel ? "light" : ""} ${wirePanel ? "sc-inspecting" : ""} ${className}`}>
       <div className="sc-scroll" ref={scrollRef}>
         <div className="sc-stage" ref={stageRef}>
           <div className="sc-canvas-wrap" ref={canvasWrapRef} />
@@ -711,6 +743,31 @@ export default function ShowcaseStage({
 
           <div className="sc-hud">
             <div className="sc-row sc-tools">
+              <div className="sc-wire-control" onKeyDown={(event) => {
+                if (event.key === "Escape") { toggleWirePanel(false); event.currentTarget.querySelector("button")?.focus(); }
+              }}>
+                <button type="button" className={`sc-tool fire-cap${wireMode !== "native" ? " on" : ""}`}
+                  aria-label="模型展示" title="模型展示" aria-expanded={wirePanel}
+                  onClick={() => toggleWirePanel(!wirePanel)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+                    <path d="m12 2 9 5v10l-9 5-9-5V7Zm0 0v20M3 7l18 10M21 7 3 17M3 7l9 5 9-5M3 17l9-5 9 5" />
+                  </svg>
+                </button>
+                {wirePanel && <div className="sc-wire-panel" role="group" aria-label="线框显示设置">
+                  <div className="sc-wire-heading"><span>模型展示</span><button type="button" aria-label="关闭线框设置" onClick={() => toggleWirePanel(false)}>×</button></div>
+                  <div className="sc-wire-modes">
+                    {([["native", "原生"], ["overlay", "叠加线框"], ["wireframe", "纯线框"]] as const).map(([mode, label]) =>
+                      <button type="button" key={mode} aria-pressed={wireMode === mode} onClick={() => changeWire(mode)}>{label}</button>)}
+                  </div>
+                  <div className="sc-wire-colors" role="group" aria-label="叠加线框颜色">
+                    {WIRE_COLORS.map(([label, color]) => <button type="button" key={color}
+                      title={label} aria-label={`${label}线框`} aria-pressed={wireMode === "overlay" && wireColor === color}
+                      onClick={() => changeWire("overlay", color)}><span style={{ background: color }} /></button>)}
+                  </div>
+                  <p>拖拽环视 · 滚轮 / 双指缩放</p>
+                  <button type="button" className="sc-inspector-reset" onClick={() => handleRef.current?.resetCamera()}>重置视角</button>
+                </div>}
+              </div>
               {musicReady && (
                 <button
                   type="button"
