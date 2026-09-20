@@ -4119,7 +4119,7 @@ export const V0_1_35_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_36_ENTRY: VersionEntry = {
   ...V0_1_35_ENTRY,
   version: "v0.1.36",
   date: "2026-09-20",
@@ -4228,11 +4228,25 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   }]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_36_ENTRY,
+  version: "v0.1.37",
+  date: "2026-09-21",
+  summary: "修复模型展示恢复失败后卡在加载 100% 的状态，提供明确失败提示与重新加载入口。",
+  software: V0_1_36_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.37" } : item),
+  changes: [{
+    title: "模型展示恢复失败不再停留在加载 100%",
+    desc: "场景恢复达到自动重试上限时明确提示失败并提供重新加载；每轮重新计数加载进度，下载完成但尚未解析时不提前显示 100%。同一场景的重复异常只触发一次恢复，已失效场景的延迟进度、就绪和错误回调不会覆盖新场景。",
+    kind: "fix"
+  }]
+};
+
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_36_ENTRY,
   V0_1_35_ENTRY,
   V0_1_34_ENTRY,
   V0_1_33_ENTRY,

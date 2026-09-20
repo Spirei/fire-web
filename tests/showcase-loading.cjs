@@ -1,0 +1,62 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const ts = require('typescript');
+// Run the component's actual scene callbacks with controlled React state setters.
+const source = fs.readFileSync(process.argv[2] || 'components/showcase/ShowcaseStage.tsx', 'utf8');
+const ast = ts.createSourceFile('ShowcaseStage.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let options;
+function visit(node) {
+  if (ts.isCallExpression(node) && node.expression.getText(ast) === 'createShowcaseScene') options = node.arguments[0];
+  ts.forEachChild(node, visit);
+}
+visit(ast);
+assert(options, 'component must create a scene');
+const names = ['onProgress', 'onReady', 'onContextLost', 'onError'];
+const callbacks = options.properties.filter(p => names.includes(p.name?.getText(ast))).map(p => p.getText(ast)).join(',\n');
+const js = ts.transpileModule(`module.exports = function(rebuild) {
+ let cancelled = false, recoveryRequested = false;
+ const state = { ready: true, ratio: 1, error: null, rebuild, drops: 0 };
+ const setReady = v => state.ready = v;
+ const setLoadRatio = v => state.ratio = v;
+ const setError = v => state.error = v;
+ const setRebuild = update => state.rebuild = update(state.rebuild);
+ const dropFreeze = () => state.drops++;
+ return { state, cancel: () => cancelled = true, callbacks: {${callbacks}} };
+};`, {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
+const mod = {exports:{}};
+new Function('module', js)(mod);
+const make = mod.exports;
+const capped = make(4);
+capped.callbacks.onContextLost();
+assert(capped.state.error, 'exhausted recovery must show an actionable error, never an endless 100% loader');
+assert.equal(capped.state.ratio, 0);
+assert.equal(capped.state.rebuild, 4);
+capped.callbacks.onReady();
+assert.equal(capped.state.ready, false, 'late ready from the failed scene cannot dismiss its error');
+for (let n = 0; n < 4; n++) {
+ const attempt = make(n);
+ attempt.callbacks.onContextLost();
+ assert.equal(attempt.state.rebuild, n + 1);
+ assert.equal(attempt.state.ratio, 0);
+ attempt.callbacks.onContextLost();
+ assert.equal(attempt.state.rebuild, n + 1, 'lost/restored and repeated render failures count once per scene');
+ attempt.callbacks.onProgress(1);
+ attempt.callbacks.onReady();
+ attempt.callbacks.onError('late error');
+ assert.equal(attempt.state.ready, false);
+ assert.equal(attempt.state.ratio, 0);
+ assert.equal(attempt.state.error, null);
+}
+const loaded = make(0);
+loaded.callbacks.onProgress(1);
+assert.equal(loaded.state.ratio, .99, 'bytes received is not model ready');
+loaded.callbacks.onReady();
+assert.equal(loaded.state.ratio, 1);
+assert.equal(loaded.state.ready, true);
+assert.equal(loaded.state.drops, 1);
+const stale = make(0);
+stale.cancel();
+const before = {...stale.state};
+for (const [name, arg] of [['onProgress',.5],['onReady'],['onError','obsolete'],['onContextLost']]) stale.callbacks[name](arg);
+assert.deepEqual(stale.state, before, 'disposed scene callbacks cannot overwrite current loading state');
+console.log('PASS recovery cap, duplicate failures, late callbacks, download/ready distinction, successful completion');

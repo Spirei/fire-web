@@ -214,7 +214,11 @@ export default function ShowcaseStage({
     }
 
     let cancelled = false;
+    let recoveryRequested = false;
     let handle: ShowcaseHandle | null = null;
+    setReady(false);
+    setLoadRatio(0);
+    setError(null);
 
     (async () => {
       try {
@@ -245,8 +249,15 @@ export default function ShowcaseStage({
               .map((part, i) => ({ el: labelRefs.current[i], from: part.from, pos: part.pos }))
               .filter((item): item is { el: HTMLDivElement; from: number; pos: [number, number, number] } => Boolean(item.el))
           },
-          onProgress: (ratio) => setLoadRatio(ratio),
+          onProgress: (ratio) => {
+            if (cancelled || recoveryRequested) return;
+            // 下载完成后还要解析贴图、挂载模型；只有 onReady 才表示整轮就绪。
+            setLoadRatio(Math.min(0.99, Math.max(0, ratio)));
+          },
           onReady: () => {
+            if (cancelled || recoveryRequested) return;
+            setLoadRatio(1);
+            setError(null);
             setReady(true);
             dropFreeze();
           },
@@ -258,11 +269,21 @@ export default function ShowcaseStage({
             if (pinnedPoseRef.current) window.scrollTo({ top: homeTop(), behavior: "smooth" });
           },
           onContextLost: () => {
-            if (cancelled) return;
+            if (cancelled || recoveryRequested) return;
+            recoveryRequested = true;
             setReady(false);
-            setRebuild((n) => (n > 3 ? n : n + 1));
+            setLoadRatio(0);
+            if (rebuild >= 4) {
+              setError("模型显示暂时无法恢复，请重试");
+              return;
+            }
+            setError(null);
+            setRebuild((n) => n + 1);
           },
-          onError: (message) => setError(message)
+          onError: (message) => {
+            if (cancelled || recoveryRequested) return;
+            setError(message);
+          }
         });
         handle.setTheme(themeRef.current);
         // 引擎是异步创建的：创建前点过的「360° 环视 / 影棚」要补上
@@ -294,6 +315,7 @@ export default function ShowcaseStage({
           (window as unknown as { __mcl?: ShowcaseHandle | null }).__mcl = handle;
         }
       } catch (err) {
+        if (cancelled || recoveryRequested) return;
         // 上下文创建失败（例如同时打开太多 WebGL 页面）时不要就此放弃，隔一会儿再试一次
         setError(err instanceof Error ? err.message : String(err));
         if (!cancelled && rebuild < 4) {
@@ -1047,7 +1069,12 @@ export default function ShowcaseStage({
           {!ready && (
             <div className="sc-loading" style={{ opacity: error ? 1 : 0.9 }}>
               <span className={error ? "sc-loading-error" : undefined}>{error ?? ui.loading}</span>
-              {!error && (
+              {error ? (
+                <button type="button" className="fire-cap mt-4" onClick={() => {
+                  setRebuild(0);
+                  setRetry((n) => n + 1);
+                }}>重新加载</button>
+              ) : (
                 <>
                   <span className="sc-loading-bar">
                     <i style={{ width: `${Math.round(loadRatio * 100)}%` }} />
