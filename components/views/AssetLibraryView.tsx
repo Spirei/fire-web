@@ -2179,7 +2179,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <p className="text-xs font-bold text-muted">新增主流券商</p>
                   </div>
-                  <div className="mb-2.5 flex flex-wrap gap-1.5">
+                  <div data-glass-group className="mb-2.5 flex flex-wrap gap-1.5">
                     {MAIN_BROKERS.map((sec) => (
                       <button
                         key={sec.region}

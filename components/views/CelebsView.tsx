@@ -1178,7 +1178,7 @@ function ReturnAnalysis({ celeb }: { celeb: Celeb }) {
       {expanded && (
         <>
           {/* 区间切换 */}
-          <div className="mt-3 flex w-fit gap-1 rounded-full border border-edge bg-bg-gray/50 p-1 dark:bg-white/[0.04]">
+          <div data-glass-group className="mt-3 flex w-fit gap-1 rounded-full border border-edge bg-bg-gray/50 p-1 dark:bg-white/[0.04]">
             {CHART_RANGES.map((r) => (
               <button
                 key={r.key}

@@ -47,8 +47,19 @@ p.onPointerUp(ev(354));advance(1000);assert.deepEqual(selected,[2]);assert.equal
 p=mount();p.onPointerDown(ev(154));p.onPointerMove(ev(180));advance(500);assert.equal(refs[2].current.raised,false);p.onPointerUp(ev(354));assert.equal(selected.length,0,'cancelled drag cannot accidentally select');
 p=mount();p.onPointerDown(ev(154));p.onPointerDown(ev(354,2));p.onPointerUp(ev(354,2));assert.equal(selected.length,0);p.onPointerCancel();advance(600);assert.equal(selected.length,0);assert.equal(captured,null);
 p=mount();p.onPointerDown(ev(154));p.onLostPointerCapture();advance(600);p.onPointerUp(ev(354));assert.equal(selected.length,0);
+p=mount();p.onPointerDown(ev(354));advance(60);p.onPointerUp(ev(354));assert.deepEqual(selected,[2],'short click commits immediately');advance(90);assert(refs[2].current.lift.value>.3,'short click briefly raises lens');advance(1000);assert.equal(refs[2].current.lift.value,0,'click lens returns to rest');
 p=mount();refs[2].current.reduced=true;p.onPointerDown(ev(154));advance(321);p.onPointerMove(ev(354));assert.equal(refs[2].current.x.value,2);assert.equal(refs[2].current.lift.value,0);p.onPointerUp(ev(354));assert.deepEqual(selected,[2]);
 palette='neutral';p=mount();p.onPointerDown(ev(354));p.onPointerUp(ev(354));assert.equal(selected.length,0);
+for(const solid of ['neutral','ocean','forest','amber','dusk']){
+ palette=solid;p=mount();p.children[0].props.children[2].props.onClick({detail:1});
+ assert.deepEqual(selected,[2]);assert.equal(refs[2].current.lift.value,0);assert.equal(timers.size,0,`${solid} has no glass animation`);
+}
+let cleanup;
+const listeners=new Set();const events={addEventListener:(name,fn)=>listeners.add(fn),removeEventListener:(name,fn)=>listeners.delete(fn)};
+global.document={...events};global.window={...events};global.matchMedia=()=>({...events,matches:true});
+const GlobalGlass=load('components/LiquidGlassInteractions.tsx',{'react':{useEffect:fn=>{cleanup=fn()}},'@/lib/liquidGlass':optics}).default;
+GlobalGlass({enabled:false});assert.equal(listeners.size,0,'solid palette installs no global handlers');
+GlobalGlass({enabled:true});assert(listeners.size>0);cleanup();assert.equal(listeners.size,0,'palette change removes every global handler');
 for(const hz of [30,60,90,120,144,240]){
  let x={value:0,velocity:0};for(let i=0;i<hz;i++)x=optics.stepGlassSpring(x,2,1/hz,28);
  assert(Math.abs(x.value-2)<1e-8,`refresh-independent settling ${hz}Hz`);

@@ -4128,6 +4128,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   software: V0_1_35_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.36" } : item),
   changes: [
     { title: "Liquid Glass 长按透镜流畅度与清晰度修复", kind: "fix", desc: "长按 320ms 后由同一个动画时钟驱动鼓起、跟随、内容放大和松手吸附，拖动不再触发 React 重绘或反复启动 CSS 过渡。隐藏透镜下重复文字，移除整片灰色和文字彩边，仅保留轻微边缘折射与色散；激活前拖走取消选择，支持减少动态效果。" }, {
+    title: "Liquid Glass 点击与长按全站统一",
+    desc: "参考 0920 视频加入点击后短暂鼓起、放大、收回的节奏；长按仍持续浮起并跟随，松手选择。全站按钮及设置、素材库、财务、财报筛选等切换组接入共用交互，仅 Liquid Glass 配色启用，切换其他配色立即清理动画。保留拖拽排序、输入及减少动态效果行为。",
+    kind: "feature"
+  }, {
     title: "全站配色与统一玻璃材质",
     desc: "设置新增独立配色组，提供中性灰、Liquid Glass、海盐蓝、松林绿、琥珀纸、暮光紫六套深浅配色；原窗口风格入口改为全站配色入口。首页胶囊、模型面板、车型导入、后台卡片与导航共用颜色和材质变量，玻璃效果随配色选择切换；保留行情涨跌与模型原色。个人选择通过偏好 Cookie 与本地存储保存，服务端首帧生效并同步同源标签。",
     kind: "feature"

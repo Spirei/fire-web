@@ -100,7 +100,7 @@ export default function VersionModal({
 
         {/* 版本切换（未来多版本时启用） */}
         {VERSIONS.length > 1 && (
-          <div className="mb-5 flex flex-wrap gap-2">
+          <div data-glass-group className="mb-5 flex flex-wrap gap-2">
             {VERSIONS.map((v) => (
               <button
                 key={v.version}

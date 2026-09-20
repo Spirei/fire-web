@@ -569,7 +569,7 @@ export default function LibraryAttachmentsView() {
     <div className="flex flex-col gap-4">
       <div className="card overflow-hidden p-0">
         <div className="flex flex-wrap items-center gap-3 p-3">
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div data-glass-group className="flex flex-wrap items-center gap-1.5">
             {CATS.map((c) => (
               <button
                 key={c.key}
@@ -596,7 +596,7 @@ export default function LibraryAttachmentsView() {
           </div>
         </div>
         {cat === "stock" && (
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-edge bg-[#f8f9fb] px-3 py-2.5 dark:bg-white/[0.025]">
+          <div data-glass-group className="flex flex-wrap items-center gap-1.5 border-t border-edge bg-[#f8f9fb] px-3 py-2.5 dark:bg-white/[0.025]">
             <span className="mr-1 text-[11px] font-semibold text-faint">股票市场</span>
             <button
               type="button"

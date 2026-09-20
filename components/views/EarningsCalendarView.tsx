@@ -187,7 +187,7 @@ function PillGroup({
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <span className="mr-0.5 text-[11px] font-semibold text-faint">{label}</span>
-      <div className="flex min-w-0 max-w-full flex-wrap gap-0.5 rounded-xl border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
+      <div data-glass-group className="flex min-w-0 max-w-full flex-wrap gap-0.5 rounded-xl border border-edge-strong bg-bg-gray/60 p-0.5 text-[11px] font-semibold">
         {options.map((o) => (
           <button
             key={o.key}

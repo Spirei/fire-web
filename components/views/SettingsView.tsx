@@ -10,6 +10,7 @@ import { appConfirm, appPrompt } from "@/lib/appDialog";
 import AppSelect from "@/components/AppSelect";
 import { copyText } from "@/lib/clipboard";
 import PaletteSettings from "@/components/PaletteSettings";
+import { useSitePalette } from "@/components/PaletteProvider";
 import SettingsHeader, { SettingsSection, SubNavIcon } from "@/components/SettingsHeader";
 import { LOGO_FONT_LABELS, logoFontClass } from "@/lib/logoFont";
 import MarketIcon from "@/components/MarketIcon";
@@ -195,11 +196,13 @@ function SubPill({
   label: string;
   onClick: () => void;
 }) {
+  const { palette } = useSitePalette();
   const ref = useRef<HTMLButtonElement | null>(null);
   const [hovered, setHovered] = useState(false);
   const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
 
   function handleMove(e: ReactMouseEvent<HTMLButtonElement>) {
+    if (palette === "liquid") return;
     const el = ref.current;
     if (!el) return;
     if (!el.classList.contains("tracking")) el.classList.add("tracking");
@@ -220,7 +223,7 @@ function SubPill({
 
   function handleClick(e: ReactMouseEvent<HTMLButtonElement>) {
     const el = ref.current;
-    if (el) {
+    if (el && palette !== "liquid") {
       const rect = el.getBoundingClientRect();
       const id = Date.now() + Math.random();
       const x = e.clientX - rect.left;

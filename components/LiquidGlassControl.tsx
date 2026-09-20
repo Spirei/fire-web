@@ -19,7 +19,7 @@ export default function LiquidGlassControl({ items, index, onChange, label, swat
   current.current = { index, onChange, glass, inactive, count: items.length };
   const motion = useRef({
     x: { value: index, velocity: 0 }, lift: { value: 0, velocity: 0 }, target: index,
-    raised: false, pointer: null as number | null, pressX: 0, pressY: 0, lastX: 0, cancelled: false,
+    raised: false, pulse: 0, pointer: null as number | null, pressX: 0, pressY: 0, lastX: 0, cancelled: false,
     bounds: { left: 0, top: 0, width: 1, height: 44 }, slot: 1,
     timer: null as ReturnType<typeof setTimeout> | null, raf: 0, lastTime: 0, reduced: false,
   });
@@ -44,17 +44,20 @@ export default function LiquidGlassControl({ items, index, onChange, label, swat
     const m = motion.current;
     const dt = m.lastTime ? (time - m.lastTime) / 1000 : 1 / 60;
     m.lastTime = time;
+    m.pulse = Math.max(0, m.pulse - dt);
+    const liftTarget = m.raised ? 1 : m.pulse > 0 ? .8 : 0;
     m.x = stepGlassSpring(m.x, m.target, dt, m.raised ? 48 : 28);
-    m.lift = stepGlassSpring(m.lift, m.raised ? 1 : 0, dt, m.raised ? 27 : 24);
-    const done = Math.abs(m.x.value - m.target) < .0001 && Math.abs(m.x.velocity) < .001 && Math.abs(m.lift.value - (m.raised ? 1 : 0)) < .0001 && Math.abs(m.lift.velocity) < .001;
-    if (done) { m.x = { value: m.target, velocity: 0 }; m.lift = { value: m.raised ? 1 : 0, velocity: 0 }; }
+    m.lift = stepGlassSpring(m.lift, liftTarget, dt, liftTarget ? 38 : 24);
+    const done = m.pulse === 0 && Math.abs(m.x.value - m.target) < .0001 && Math.abs(m.x.velocity) < .001 && Math.abs(m.lift.value - liftTarget) < .0001 && Math.abs(m.lift.velocity) < .001;
+    if (done) { m.x = { value: m.target, velocity: 0 }; m.lift = { value: liftTarget, velocity: 0 }; }
     paint();
     m.raf = done ? 0 : requestAnimationFrame(tick);
     if (done) m.lastTime = 0;
   };
   const animate = () => {
     const m = motion.current;
-    if (m.reduced) {
+    if (m.reduced || !current.current.glass) {
+      m.pulse = 0;
       m.x = { value: m.target, velocity: 0 }; m.lift = { value: 0, velocity: 0 }; paint(); return;
     }
     if (!m.raf) m.raf = requestAnimationFrame(tick);
@@ -68,7 +71,7 @@ export default function LiquidGlassControl({ items, index, onChange, label, swat
     m.pointer = null; m.raised = false; clearPressTimer();
     if (pointer !== null && ref.current?.hasPointerCapture(pointer)) ref.current.releasePointerCapture(pointer);
   };
-  const cancel = () => { release(); motion.current.target = current.current.index; animate(); };
+  const cancel = () => { release(); motion.current.pulse = 0; motion.current.target = current.current.index; animate(); };
   const positionAt = (x: number) => {
     const m = motion.current;
     return glassPosition(x, m.bounds.left, m.bounds.width, current.current.count);
@@ -135,11 +138,12 @@ export default function LiquidGlassControl({ items, index, onChange, label, swat
       const inside = event.clientX >= m.bounds.left - 4 && event.clientX <= m.bounds.left + m.bounds.width + 4 && event.clientY >= m.bounds.top - 4 && event.clientY <= m.bounds.top + m.bounds.height + 4;
       if (!m.raised && (m.cancelled || !inside)) { cancel(); return; }
       const selected = Math.round(positionAt(event.clientX));
+      if (!m.raised) m.pulse = .14;
       release(); m.target = selected; animate(); current.current.onChange(selected);
     }}
     onPointerCancel={cancel} onLostPointerCapture={() => { if (motion.current.pointer !== null) cancel(); }}>
     <div className="lg-track">{items.map((item, i) => <button type="button" key={item.label} aria-label={item.label} aria-pressed={!inactive && index === i}
-      onClick={event => { if (!glass || event.detail === 0) { motion.current.target = i; animate(); onChange(i); } }}><span className="lg-original">{content(item)}</span></button>)}</div>
+      onClick={event => { if (!glass || event.detail === 0) { motion.current.target = i; motion.current.pulse = glass ? .14 : 0; animate(); onChange(i); } }}><span className="lg-original">{content(item)}</span></button>)}</div>
     <div className="lg-lens" aria-hidden="true" inert><div className="lg-lens-body">
       <div className="lg-copy-window"><div className="lg-magnify" style={glass && map ? { filter: `url(#${id}-rim)` } : undefined}>
         <div className="lg-copy-track">{items.map(item => <span className="lg-copy-item" key={item.label}>{content(item)}</span>)}</div>

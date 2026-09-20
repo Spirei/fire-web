@@ -17,6 +17,6 @@ export default function PaletteSettings() {
         <span className="site-palette-note">{p.note}</span>
       </button>)}
     </div>
-    <p className="site-palette-foot">每套配色均支持深浅模式。选择即时生效并在当前浏览器保存；行情涨跌色保持原有含义。</p>
+    <p className="site-palette-foot">每套配色均支持深浅模式。Liquid Glass 同时开启全站点击鼓起与长按透镜，切换其他配色即关闭。选择即时生效并在当前浏览器保存；行情涨跌色保持原有含义。</p>
   </section>;
 }
