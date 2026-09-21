@@ -13,6 +13,7 @@
     "smoke:ci": "bash scripts/smoke-ci.sh",
     "test:review": "node tests/site-review.cjs",
     "clean:caches": "node scripts/clean-next-cache.mjs",
+    "showcase:gpu": "node scripts/build-showcase-gpu.mjs",
     "showcase:previews": "node scripts/build-showcase-previews.mjs",
     "clean:dsstore": "find .. -name .DS_Store -not -path '*/node_modules/*' -delete && echo '已清理 .DS_Store'"
   },

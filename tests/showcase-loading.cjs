@@ -13,7 +13,7 @@ visit(ast);
 assert(options, 'component must create a scene');
 const names = ['onProgress', 'onReady', 'onContextLost', 'onError'];
 const callbacks = options.properties.filter(p => names.includes(p.name?.getText(ast))).map(p => p.getText(ast)).join(',\n');
-const js = ts.transpileModule(`module.exports = function(rebuild) {
+const js = ts.transpileModule(`module.exports = function(rebuild, constrained = false) {
  let cancelled = false, recoveryRequested = false;
  const state = { ready: true, ratio: 1, error: null, rebuild, drops: 0 };
  const setReady = v => state.ready = v;
@@ -21,6 +21,11 @@ const js = ts.transpileModule(`module.exports = function(rebuild) {
  const setError = v => state.error = v;
  const setRebuild = update => state.rebuild = update(state.rebuild);
  const dropFreeze = () => state.drops++;
+ const finishLoad = () => {}; const loadToken = '';
+ const constrainedGraphics = () => constrained;
+ const textureQualityRef = { current: 'original' }, wireRef = { current: {mode:'native'} }, inspectorRef = {current:false};
+ const setTextureQuality = v => state.quality = v;
+ const setWireMode = () => {}; const setInspector = () => {}; const setWirePanelOpen = () => {}; const setMemoryNotice = () => {};
  return { state, cancel: () => cancelled = true, callbacks: {${callbacks}} };
 };`, {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
 const mod = {exports:{}};
@@ -47,6 +52,11 @@ for (let n = 0; n < 4; n++) {
  assert.equal(attempt.state.ratio, 0);
  assert.equal(attempt.state.error, null);
 }
+const mobile = make(1, true);
+mobile.callbacks.onContextLost();
+assert(mobile.state.error);
+assert.equal(mobile.state.rebuild, 1, 'mobile recovery must stop after one conservative retry');
+const firstMobile = make(0, true); firstMobile.callbacks.onContextLost(); assert.equal(firstMobile.state.quality, 'fast');
 const loaded = make(0);
 loaded.callbacks.onProgress(1);
 assert.equal(loaded.state.ratio, .99, 'bytes received is not model ready');

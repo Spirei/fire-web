@@ -104,6 +104,8 @@ export interface ShowcaseConfig {
     model: string;
     /** 首页快速可交互版本；进入模型展示后无缝升级到 model。 */
     previewModel?: string;
+    /** 保留源贴图尺寸的 UASTC GPU 压缩副本（原文件仍保留）。 */
+    gpuModel?: string;
     /** 夜间环境贴图（HDR） */
     envNight: string;
     /** 日间环境贴图（HDR） */
@@ -372,6 +374,8 @@ export interface ShowcaseOptions {
   onProgress?: (ratio: number) => void;
   /** 就绪（可以隐藏 loading） */
   onReady?: () => void;
+  /** 实际贴图上限低于所选档位时，向界面说明设备内存适配。 */
+  onTextureBudget?: (limit: number | null) => void;
   /** 模型展示中单击真实网格：供导入工作台跳到对应部位参数。 */
   onInspectPart?: (part: { mesh: string; materials: string[]; position: [number, number, number] }) => void;
   /** 章节切换 */

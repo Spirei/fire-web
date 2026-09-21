@@ -464,6 +464,17 @@ export function listShowcaseOptions(): ShowcaseModelOption[] {
     if (fs.existsSync(path.join(PREVIEWS_DIR, previewFile))) {
       config.assets.previewModel = `/uploads/mclaren/previews/${encodeURIComponent(previewFile)}?v=${version}`;
     }
+    // 优化副本与原文件同尺寸贴图；原文件变化后旧副本不再下发。
+    const gpuFile = `${model.file.replace(/\.glb$/i, "")}-uastc.glb`;
+    const gpuPath = path.join(SHOWROOM_DIR, "gpu", gpuFile);
+    try {
+      const manifest = JSON.parse(fs.readFileSync(`${gpuPath}.json`, "utf8"));
+      const original = fs.statSync(path.join(MODELS_DIR, model.file));
+      const gpu = fs.statSync(gpuPath);
+      if (manifest.sourceBytes === original.size && manifest.sourceMtimeMs === original.mtimeMs && gpu.size === manifest.outputBytes) {
+        config.assets.gpuModel = `/uploads/mclaren/gpu/${encodeURIComponent(gpuFile)}?v=${gpu.mtimeMs}`;
+      }
+    } catch { /* 未生成保清晰度副本时保留原始资源。 */ }
     return {
       id: model.id,
       label: model.label,

@@ -4302,8 +4302,13 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   version: "v0.1.38",
   date: "2026-09-22",
   summary: "首页单屏适配覆盖桌面与平板，修复页面滚动条并统一镜头导航。",
+  frontend: [...V0_1_37_ENTRY.frontend, { name: "KTX2 / UASTC", version: "KTX-Software 4.4.2", desc: "保留源贴图尺寸的高质量 GPU 压缩 · Three.js 转码加载" }],
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [{
+    title: "MP4/5 原画加载内存与恢复保护",
+    desc: "手机和平板切换大模型时先释放旧车、串行解码贴图，并丢弃和释放过期加载结果；图形上下文异常仅自动恢复一次流畅模式，异常重开也避免再次直接加载原画。新增保留几何与 4K 源尺寸的 KTX2/UASTC 显示副本，原文件不变；GPU 压缩属于高质量有损，未静默把原画缩为低分辨率。",
+    kind: "fix"
+  }, {
     title: "修复新上传车型工作台预览 400",
     desc: "车型素材在静态文件匹配前交给动态路由读取，避免 .draft- 草稿被当作隐藏文件拦截；已有上传草稿刷新即可继续预览，保留路径校验、分段读取与保存后上线机制。",
     kind: "fix"

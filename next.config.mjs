@@ -45,13 +45,14 @@ const nextConfig = {
     const csp = isProd
       ? [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline'",
+          "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
           "style-src 'self' 'unsafe-inline'",
           // blob: 给 GLTFLoader 解析模型内嵌贴图用：three 走 ImageBitmapLoader（fetch(blob:) → createImageBitmap），
           // 因此 connect-src 必须放行 blob:；img-src 一并放行，兼容走 <img src=blob:> 的老浏览器。
           "img-src 'self' data: blob: https:",
           "font-src 'self' data:",
           "connect-src 'self' blob:",
+          "worker-src 'self' blob:",
           "object-src 'none'",
           "base-uri 'self'",
           "form-action 'self'",
@@ -64,6 +65,7 @@ const nextConfig = {
           "img-src 'self' data: blob: https:",
           "font-src 'self' data:",
           "connect-src 'self' ws: blob:",
+          "worker-src 'self' blob:",
           "object-src 'none'",
           "base-uri 'self'",
           "form-action 'self'",

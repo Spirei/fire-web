@@ -12,6 +12,7 @@
  * 本文件不含任何车型相关常量。它只在浏览器里被动态 import，不会进入首屏包。
  */
 import * as THREE from "three";
+import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
@@ -21,6 +22,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { fetchAssetBuffer } from "./assetCache";
+import { constrainedGraphics, textureLimit, queueModelLoad, budgetImageDecoding, disposeModel, decodedTextureBytes } from "./modelMemory";
 import { splitWheelGeometry } from "./wheels";
 import { createWireframeView } from "./wireframe";
 import { coastStep, boundedZoom, wheelPixels } from "./interaction";
@@ -203,6 +205,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   /** 开场进度：用户置顶过机位时从这里起步（0 = 内置开场机位） */
   const START_P = Math.min(1, Math.max(0, options.startProgress ?? 0));
   const cleanups: Array<() => void> = [];
+  let disposed = false;
+  const memoryConstrained = constrainedGraphics();
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   // 排查性能用：?mcloff=reflect,bloom,tunnel,floor,car 可逐项关掉效果（只影响诊断，不影响正常访问）
   const off =
@@ -226,7 +230,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 这里给整屏输出封一个像素上限，超了就降倍率（分辨率换稳定）。
   // 清晰度优先：预算放宽到约 4K（8M 像素），像素比允许到设备原生 2 倍。
   // 这个值仍远低于「整屏按 dpr 铺满」的 33M 像素（那才是之前白屏的显存来源）。
-  const MAX_OUTPUT_PIXELS = 8_000_000;
+  const MAX_OUTPUT_PIXELS = memoryConstrained ? 3_000_000 : 8_000_000;
   const originalResolution = () => CFG.model.maxTextureSize > 4096;
   const desiredPixelRatio = () => Math.min(window.devicePixelRatio || 1, originalResolution() ? 3 : 2);
   const MIN_PIXEL_RATIO = 0.7;
@@ -238,6 +242,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 参考项目 su7 的渲染器是 antialias:false（后期链路里 MSAA 用不上，只会多占显存），保持一致
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
   renderer.setPixelRatio(budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, desiredPixelRatio()));
+  const ktxLoader = new KTX2Loader().setTranscoderPath("/vendor/basis/").setWorkerLimit(1).detectSupport(renderer);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = CFG.post.exposure;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -343,8 +348,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let dayEnv: THREE.DataTexture | null = null;
   let dayEnvLoading: Promise<void> | null = null;
   function ensureDayEnvironment() {
-    if (dayEnv || dayEnvLoading) return dayEnvLoading;
+    if (disposed || dayEnv || dayEnvLoading) return dayEnvLoading;
     dayEnvLoading = hdr.loadAsync(CFG.assets.envDay).then((day) => {
+      if (disposed) { day.dispose(); return; }
       day.mapping = THREE.EquirectangularReflectionMapping;
       dayEnv = day;
       envMixMat.uniforms.uEnv2.value = day;
@@ -1453,17 +1459,47 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
 
   // 车模走 IndexedDB 缓存：首次下载并写入，之后刷新直接读本地，不再重新下 20 MB
-  const loader = new GLTFLoader();
-  loader.setMeshoptDecoder(MeshoptDecoder);
-  const parseCar = (buffer: ArrayBuffer) =>
-    new Promise<THREE.Object3D>((resolve, reject) => {
-      loader.parse(
-        buffer,
-        "",
-        (gltf) => resolve(gltf.scene),
-        (err: unknown) => reject(err instanceof Error ? err : new Error(String(err ?? "模型解析失败")))
-      );
-    });
+  const parseCar = async (buffer: ArrayBuffer, model: ShowcaseConfig["model"], current: () => boolean) => {
+    const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
+    loader.setKTX2Loader(ktxLoader);
+    let releaseImages: (() => void) | undefined;
+    let parseFailed = false;
+    let imageError: unknown;
+    const valid = () => current() && !parseFailed;
+    loader.register(parser => ({
+      name: "SHOWCASE_texture_budget",
+      beforeRoot: () => {
+        const requested = model?.maxTextureSize ?? 4096;
+        const compressed = parser.json.extensionsRequired?.includes("KHR_texture_basisu");
+        const decodedBytes = !compressed && memoryConstrained && requested > 4096 ? decodedTextureBytes(buffer) : 0;
+        if (memoryConstrained && requested > 4096 && !compressed && (decodedBytes === null || decodedBytes > 128 * 1024 * 1024)) {
+          throw new Error("此模型原画需先生成保留原尺寸的 GPU 压缩资源；已停止加载以保护页面");
+        }
+        if (compressed && !["WEBGL_compressed_texture_astc", "EXT_texture_compression_bptc", "WEBGL_compressed_texture_s3tc", "WEBGL_compressed_texture_etc"].some(extension => renderer.extensions.has(extension))) {
+          throw new Error("当前设备不支持此模型的 GPU 压缩纹理，请使用流畅模式");
+        }
+        const limit = textureLimit(requested, renderer.capabilities.maxTextureSize, parser.json.images?.length ?? 0, memoryConstrained);
+        if (current()) options.onTextureBudget?.(!compressed && limit < requested ? limit : null);
+        releaseImages = budgetImageDecoding(parser, limit, valid, error => { imageError ??= error; parseFailed = true; });
+        return null;
+      }
+    }));
+    try {
+      const gltf = await loader.parseAsync(buffer, "");
+      if (imageError) { disposeModel(gltf.scene); throw imageError; }
+      if (!current()) {
+        disposeModel(gltf.scene);
+        releaseImages?.();
+        return null;
+      }
+      return gltf.scene;
+    } catch (error) {
+      parseFailed = true;
+      releaseImages?.();
+      throw error;
+    }
+  };
 
   /** 当前挂在场景里的车（换车型时用它撤掉旧车） */
   const wireframeView = createWireframeView(CFG.model.wireframe, true, () => invalidateInspector());
@@ -1496,7 +1532,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const maxTex = Math.min(CFG.model.maxTextureSize, renderer.capabilities.maxTextureSize);
       const clampTexture = (tex: THREE.Texture | null | undefined) => {
         const img = tex?.image as { width?: number; height?: number } | undefined;
-        if (!tex || !img?.width || !img?.height) return;
+        if (!tex || (tex as THREE.CompressedTexture).isCompressedTexture || !img?.width || !img?.height) return;
         const longest = Math.max(img.width, img.height);
         if (longest <= maxTex) return;
         const ratio = maxTex / longest;
@@ -1681,23 +1717,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     if (!car) return;
     wireframeView.detach();
     car.parent?.remove(car);
-    const geometries = new Set<THREE.BufferGeometry>();
-    const materials = new Set<THREE.Material>();
-    car.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      if (mesh.geometry) geometries.add(mesh.geometry);
-      (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((m) => {
-        if (m) materials.add(m);
-      });
-    });
-    geometries.forEach((g) => g.dispose());
-    materials.forEach((m) => {
-      // 只释放模型自带的贴图：环境贴图是场景共享的，跟着材质 dispose 会把新车也一起弄花
-      const maps = m as unknown as Record<string, THREE.Texture | null | undefined>;
-      ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap"].forEach((key) => maps[key]?.dispose?.());
-      m.dispose();
-    });
+    disposeModel(car);
     wheelPivots.length = 0;
     bodyMaterials.length = 0;
     carWheelGroups = 0;
@@ -1709,27 +1729,29 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     laneHeadingDeg = 0;
   }
 
-  /** 取素材（走 IndexedDB 缓存）→ 解析 → 挂车；首次加载与换车型共用一条路径 */
-  async function loadCar(asset: string, model: ShowcaseConfig["model"], onRatio?: (ratio: number) => void) {
-    const cached = await fetchAssetBuffer(asset, onRatio);
-    logEvent(`车模来源 ${cached.mode}${cached.fromCache ? "（本地命中）" : "（网络下载）"}`);
-    const car = await parseCar(cached.buffer);
-    mountCar(car);
-    return car;
-  }
-
-  void (async () => {
+  let modelReady = false;
+  const reportModelReady = () => {
+    if (!modelReady) { modelReady = true; loadDone += 1; }
+    reportProgress();
+  };
+  const initialSequence = ++modelSwitchSequence;
+  void queueModelLoad(async () => {
+    const current = () => !disposed && initialSequence === modelSwitchSequence;
     try {
-      await loadCar(CFG.assets.model, CFG.model, (ratio) => reportProgress(ratio));
-      loadDone += 1;
-      reportProgress();
+      if (!current()) return;
+      const cached = await fetchAssetBuffer(CFG.assets.model, ratio => { if (current()) reportProgress(ratio); });
+      if (!current()) return;
+      const car = await parseCar(cached.buffer, CFG.model, current);
+      if (!car) return;
+      mountCar(car);
       resize();
       render(progress(), 1 / 60);
+      reportModelReady();
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err ?? "");
-      options.onError?.(message || "模型加载失败");
+      if (!current()) return;
+      options.onError?.(err instanceof Error ? err.message : String(err ?? "模型加载失败"));
     }
-  })();
+  });
 
   /* ---------- 7) 滚动编排 ---------- */
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
@@ -3127,6 +3149,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 首屏只加载当前需要的夜间环境；浅色、影棚和模型展示首次启用前再取日间 HDR。
   hdr.loadAsync(CFG.assets.envNight)
     .then((night) => {
+      if (disposed) { night.dispose(); return; }
       night.mapping = THREE.EquirectangularReflectionMapping;
       nightEnv = night;
       envMixMat.uniforms.uEnv1.value = night;
@@ -3144,6 +3167,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   return {
     dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      modelSwitchSequence += 1;
+      unmountCar(mountedCar);
+      mountedCar = null;
       wireframeView.dispose();
       cleanups.forEach((fn) => fn());
       io.disconnect();
@@ -3169,6 +3197,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       backdrop.dispose();
       backdropLight.dispose();
       renderer.dispose();
+      // 不在转码中途终止 worker，否则未完成 Promise 会阻塞串行加载队列。
+      void queueModelLoad(async () => { ktxLoader.dispose(); });
       try {
         renderer.forceContextLoss();
       } catch {
@@ -3181,44 +3211,50 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       invalidateInspector();
     },
     /**
-     * 原地换车：只换车身，镜头 / 地面 / 环境 / HUD 全不动 —— 不重建 WebGL 场景，所以切换过程没有空白期。
-     * 素材通常已经被预热进缓存，这里剩下的主要就是解析时间；解析完成后在同一个任务里撤旧车、挂新车。
+     * 原地换车：只换车身，镜头 / 地面 / 环境 / HUD 全不动，不重建 WebGL 场景。
+     * 受限设备先释放旧车再解码；桌面保留旧车直到新车解析完成。
      */
-    setModel: async (next: { asset: string; model?: ShowcaseConfig["model"] }) => {
+    setModel: (next: { asset: string; model?: ShowcaseConfig["model"] }) => {
       const sequence = ++modelSwitchSequence;
-      try {
-        const cached = await fetchAssetBuffer(next.asset);
-        const nextCar = await parseCar(cached.buffer);
-        // 连续调参可能让多次解析交叠；旧请求晚到时不得覆盖最新参数。
-        if (sequence !== modelSwitchSequence) return false;
-        logEvent(`换车 ${next.asset}：来源 ${cached.mode}${cached.fromCache ? "（本地命中）" : "（网络下载）"}`);
-        const previous = mountedCar;
-        mountedCar = null;
-        // 先把配置换成新车（车长 / 朝向 / 材质规则 / 轮子都读 CFG.model），再撤旧挂新
-        const previousTextureLimit = CFG.model.maxTextureSize;
-        CFG.model = normalizeModel(next.model);
-        if (previousTextureLimit !== CFG.model.maxTextureSize) {
-          wantedScale = desiredPixelRatio();
-          renderScale = budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, originalResolution() ? wantedScale : Math.min(wantedScale, 1.5));
-          qualityChanges = 0;
-          frameCost = 0; frameSamples = 0; lastAdapt = performance.now();
-          renderer.setPixelRatio(renderScale);
-          composer.setPixelRatio(renderScale);
-          resize(true);
+      const current = () => !disposed && sequence === modelSwitchSequence;
+      return queueModelLoad(async () => {
+        let nextCar: THREE.Object3D | null = null;
+        try {
+          if (!current()) return false;
+          // 低内存设备先释放旧车，不能在旧贴图仍驻留时解码另一整辆车。
+          if (memoryConstrained) { unmountCar(mountedCar); mountedCar = null; }
+          const cached = await fetchAssetBuffer(next.asset);
+          if (!current()) return false;
+          nextCar = await parseCar(cached.buffer, next.model, current);
+          if (!nextCar) return false;
+          const previousTextureLimit = CFG.model.maxTextureSize;
+          unmountCar(mountedCar);
+          mountedCar = null;
+          CFG.model = normalizeModel(next.model);
+          CFG.assets = { ...CFG.assets, model: next.asset };
+          if (previousTextureLimit !== CFG.model.maxTextureSize) {
+            wantedScale = desiredPixelRatio();
+            renderScale = budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, originalResolution() ? wantedScale : Math.min(wantedScale, 1.5));
+            qualityChanges = 0;
+            frameCost = 0; frameSamples = 0; lastAdapt = performance.now();
+            renderer.setPixelRatio(renderScale);
+            composer.setPixelRatio(renderScale);
+            resize(true);
+          }
+          wireframeView.configure(CFG.model.wireframe);
+          focusTarget.set(0, 0, 0);
+          mountCar(nextCar);
+          nextCar = null;
+          invalidateInspector();
+          render(progress(), 1 / 60);
+          reportModelReady();
+          return true;
+        } catch (err) {
+          if (nextCar) disposeModel(nextCar);
+          if (current()) options.onError?.(err instanceof Error ? err.message : String(err ?? "换车失败"));
+          return false;
         }
-        CFG.assets = { ...CFG.assets, model: next.asset };
-        unmountCar(previous);
-        wireframeView.configure(CFG.model.wireframe);
-        focusTarget.set(0, 0, 0);
-        mountCar(nextCar);
-        invalidateInspector();
-        render(progress(), 1 / 60);
-        return true;
-      } catch (err) {
-        // 失败就把旧车留在画面上（mountedCar 没动），只报错
-        options.onError?.(err instanceof Error ? err.message : String(err ?? "换车失败"));
-        return false;
-      }
+      });
     },
     updateModelMaterials: (next) => {
       const normalized = normalizeModel(next);
