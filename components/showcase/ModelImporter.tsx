@@ -1022,7 +1022,6 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
               </div>
               {wheelSearch && !materialOptions.some(name => name.toLowerCase().includes(wheelSearch.trim().toLowerCase())) && <p className="mp-empty">没有匹配的材质，已选项目仍然保留</p>}
               {previewPending && previewStatus !== "error" && <div className="mp-preview-stale" role="status">{validationError ?? "正在更新预览并识别轮子…"}</div>}
-              <div className="mp-form-save"><span>{statusText}</span><button type="button" className="fire-cap mp-primary fire-cap-primary" disabled={saveBlocked} onClick={() => void save()}>{saveLabel}</button></div>
             </fieldset>
           </div>
         </section>, document.body

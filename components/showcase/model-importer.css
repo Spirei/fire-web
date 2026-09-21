@@ -700,8 +700,6 @@ html.mp-workbench-open { overflow: hidden; }
 .mp-form .mp-wheel-list label { flex-direction: row; min-width: 0; max-width: 100%; opacity: 1; }
 .mp-wheel-list label span { overflow-wrap: anywhere; }
 .mp-form .mp-wheel-list input { flex: none; width: 14px; height: 14px; min-height: 0; margin: 0; padding: 0; }
-.mp-form-save { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-top: 1px solid rgba(127,137,152,.24); padding-top: 16px; margin-top: 4px; }
-.mp-form-save span { font-size: 11px; opacity: .65; }
 .mp-empty { grid-column: 1 / -1; font-size: 12px; opacity: .65; }
 .mp-preview-stale { background: rgba(127,137,152,.08); border-color: rgba(127,137,152,.24); color: inherit; }
 .mp-preview-error { flex-direction: column; gap: 16px; background: rgba(9,11,15,.88); z-index: 8; color: #ffb4a9; }
@@ -729,6 +727,5 @@ html.mp-workbench-open { overflow: hidden; }
   .mp-wheel-list { flex-wrap: wrap; overflow: visible; }
   .mp-workbench .mp-wheel-tools input { flex-basis: 100%; }
   .mp-workbench .mp-wheel-list label { padding: 9px 11px; }
-  .mp-form-save { align-items: stretch; flex-direction: column; }
   .mp-resume { align-items: stretch; flex-direction: column; }
 }
