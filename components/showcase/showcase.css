@@ -1352,6 +1352,12 @@ html:has(.showcase.light) body {
   .sc-hint-drag { display: none; }
   .sc-hint-touch { display: block; left: 50%; transform: translateX(-50%); bottom: calc(12vh + 54px); font-size: 9px; white-space: nowrap; text-align: center; }
   .sc-nav button { min-height: 36px; min-width: 44px; padding: 4px 6px; }
+
+  /* 竖屏和平板只保留关键遥测，避免完整仪表挤占车辆与标题区域。 */
+  .sc-tele { width: 120px; }
+  .sc-tele-cap, .sc-ticks, .sc-ers, .sc-tele-foot { display: none; }
+  .sc-kmh { font-size: clamp(30px, 4.5vw, 42px); }
+  .sc-line-row { margin-top: 9px; }
 }
 @media (max-width: 640px) {
   .sc-nav { top: 55%; gap: 0; right: 3vw; }
