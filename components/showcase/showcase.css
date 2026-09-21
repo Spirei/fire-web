@@ -89,7 +89,12 @@ html:has(.showcase.light) body {
   top: var(--sc-header);
   height: calc(100svh - var(--sc-header));
   overflow: hidden;
-  background: #050506;
+  background: var(--sc-bg);
+}
+
+.sc-canvas-wrap,
+.sc-canvas {
+  background: var(--sc-bg);
 }
 
 .sc-canvas-wrap {

@@ -328,6 +328,7 @@ export default function ShowcaseStage({
           : (cfg.assets.previewModel ?? cfg.assets.model);
         handle = createShowcaseScene({
           canvas,
+          initialTheme: themeRef.current,
           config: degraded
             ? { ...cfg, assets: { ...cfg.assets, model: initialAsset }, model: { ...qualityModel(cfg.model), maxTextureSize: Math.min(2048, TEXTURE_QUALITY[textureQualityRef.current].size) } }
             : { ...cfg, assets: { ...cfg.assets, model: initialAsset }, model: qualityModel(cfg.model) },

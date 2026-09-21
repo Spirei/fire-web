@@ -216,8 +216,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     if (eventLog.length > 8) eventLog.shift();
   };
 
-  /** 深浅色：深色＝夜间隧道（默认），浅色＝明亮摄影棚 */
-  let theme: "dark" | "light" = "dark";
+  /** 深浅色首帧直接沿用服务端主题，浅色刷新不先清成黑色。 */
+  let theme: "dark" | "light" = options.initialTheme ?? "dark";
 
   /* ---------- 渲染器 / 相机 ---------- */
   // 像素预算：EffectComposer 会建两块 HalfFloat 的 RT（后来还要泛光的多级），
@@ -238,6 +238,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = CFG.post.exposure;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.setClearColor(theme === "light" ? 0xf4f6f9 : 0x050506, 1);
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 400);
@@ -261,7 +262,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const backdrop = makeBackdrop([[0, "#191c22"], [0.42, "#0b0c0f"], [0.72, "#070708"], [1, "#030303"]]);
   // 浅色主题：明亮摄影棚背景
   const backdropLight = makeBackdrop([[0, "#ffffff"], [0.4, "#f6f8fa"], [0.72, "#eceff4"], [1, "#e2e7ee"]]);
-  scene.background = backdrop;
+  scene.background = theme === "light" ? backdropLight : backdrop;
 
   /* ---------- 灯光：环境贴图为主，补三盏软灯让车身读得出来 ---------- */
   const keyLight = new THREE.DirectionalLight(0xfff6ee, 0.72);
@@ -3173,6 +3174,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     },
     setTheme: (next: "dark" | "light") => {
       theme = next;
+      renderer.setClearColor(next === "light" ? 0xf4f6f9 : 0x050506, 1);
       invalidateInspector();
     },
     /**

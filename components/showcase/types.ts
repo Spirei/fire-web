@@ -362,6 +362,8 @@ export interface ShowcaseOptions {
   canvas: HTMLCanvasElement;
   hud: ShowcaseHud;
   config: ShowcaseConfig;
+  /** WebGL 创建前的首帧主题，避免浅色页面先清成黑色再切换。 */
+  initialTheme?: "dark" | "light";
   /** 开场进度（0–1）：用户置顶过机位时从这里起步，避免先落到 0 再弹回置顶处 */
   startProgress?: number;
   /** 加载进度 0–1（模型 + 环境贴图） */

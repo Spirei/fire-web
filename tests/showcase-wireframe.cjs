@@ -204,6 +204,9 @@ assert.match(stage, /className="sc-row sc-texture-quality"/, 'texture quality re
 assert.match(stage, /setModel\(\{ asset: current\.assets\.model/, 'entering model inspection promotes the preview to the full model');
 assert.match(engine, /if \(envWeight > 0\.02\) void ensureDayEnvironment\(\)/, 'day HDR waits until the visible mode actually needs it');
 assert.match(engine, /createWireframeView\(CFG\.model\.wireframe, true/, 'showcase wireframes are split across frames');
+assert.match(engine, /options\.initialTheme \?\? "dark"/, 'WebGL scene uses the server theme before its first frame');
+assert.match(engine, /setClearColor\(theme === "light" \? 0xf4f6f9 : 0x050506/, 'WebGL clear color matches the initial theme');
+assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.sc-stage \{[\s\S]*?background: var\(--sc-bg\)/, 'showcase stage does not expose a hard-coded black loading frame');
 assert.match(previewRoute, /isAdmin\(user\)/, 'preview generation remains admin-only');
 assert.match(previewRoute, /isTrustedMutationRequest\(request\)/, 'preview generation rejects cross-origin mutations');
 assert.match(previewRoute, /build-showcase-previews\.mjs/, 'preview generation button runs the bounded local optimizer');
