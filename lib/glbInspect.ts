@@ -69,10 +69,6 @@ export interface GlbReport {
 const BLOCKING_EXTENSIONS: Record<string, string> = {
   KHR_draco_mesh_compression:
     "几何体用了 Draco 压缩，浏览器需要额外解码器。导出时关掉 Draco，或用 gltf-transform 解压后再导入。",
-  EXT_meshopt_compression:
-    "几何体用了 Meshopt 压缩，浏览器需要额外解码器。导出时关掉 Meshopt 压缩后再导入。",
-  KHR_texture_basisu: "贴图是 KTX2/Basis 压缩格式，展示台不带解码器。导出时改成 PNG/JPG 贴图。",
-  EXT_texture_webp: "贴图用了 WebP 扩展格式（部分浏览器解码失败），建议导出 PNG/JPG 版本。",
   EXT_mesh_gpu_instancing:
     "模型用了 GPU 实例化扩展，展示台无法保证每个实例的线框与轮子变换正确。请导出前把实例转换为普通网格。"
 };

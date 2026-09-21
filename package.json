@@ -13,12 +13,9 @@
     "smoke:ci": "bash scripts/smoke-ci.sh",
     "test:review": "node tests/site-review.cjs",
     "clean:caches": "node scripts/clean-next-cache.mjs",
-    "showcase:gpu": "node scripts/build-showcase-gpu.mjs",
-    "showcase:previews": "node scripts/build-showcase-previews.mjs",
-    "clean:dsstore": "find .. -name .DS_Store -not -path '*/node_modules/*' -delete && echo '已清理 .DS_Store'"
+    "clean:dsstore": "find .. -name .DS_Store -not -path '*/node_modules/*' -delete && echo '\u5df2\u6e05\u7406 .DS_Store'"
   },
   "dependencies": {
-    "@gltf-transform/cli": "^4.5.0",
     "@tabler/icons-react": "^3.46.0",
     "better-sqlite3": "^13.0.2",
     "echarts": "^6.1.0",

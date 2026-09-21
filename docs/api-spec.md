@@ -652,8 +652,7 @@ Authorization: Bearer <token>
 | PUT | `/api/showcase/models/order` | 保存首页车型排列顺序 | 管理员 |
 | POST | `/api/showcase/models/cover?id={id}&name={image}` | 上传车型封面，最大 6MB | 管理员 |
 | DELETE | `/api/showcase/models/cover?id={id}` | 移除自定义封面 | 管理员 |
-| POST | `/api/showcase/models/previews` | 按指定车型异步生成首页轻量预览 | 管理员 |
-| GET | `/api/showcase/models/previews` | 查询预览生成任务状态 | 管理员 |
+| POST | `/api/showcase/models/preview-upload?id=<id>` | 上传本地工具导出的首页轻量预览 | 管理员 |
 
 ### GLB 体检与保存
 
@@ -702,60 +701,11 @@ Content-Type: application/json
 
 排序成功返回 `{ order }`；请求体上限 64KB。封面上传把 PNG、JPG 或 WebP 原始二进制放在请求体中，查询参数传车型 `id` 与原始文件名 `name`，成功返回 `{ cover }`；封面上限 6MB，并验证文件内容与扩展名一致。删除车型默认只移出清单并保留素材，传 `?file=1` 时同时删除 uploads 卷内的 GLB，成功返回 `{ removed, fileDeleted }`。
 
-### 生成首页预览
+### 上传本地首页预览
 
-预览接口只生成首页所需的轻量 `.glb`；模型展示与工作台继续读取原始高清模型。任务在服务端异步执行，客户端启动后应轮询状态，不需要维持一个长请求。
+`POST /api/showcase/models/preview-upload?id=<车型ID>`，裸 GLB 请求体，`Content-Type: model/gltf-binary`。仅管理员、同源写入，单 IP 每小时 30 次，上限 32 MiB（包括没有 Content-Length 的流式请求）。体检成功后原子替换预览，失败保留旧预览；支持内置和导入车型。返回 `{ "preview": "/uploads/mclaren/previews/...glb?v=..." }`。
 
-#### 启动生成任务
-
-```http
-POST /api/showcase/models/previews
-Cookie: fire_session=<admin-session>
-Content-Type: application/json
-
-{ "id": "mp46" }
-```
-
-返回 HTTP `202`。必须指定单个车型 `id`，未指定返回 `400`，不会批量生成；已有任务运行时返回 `409`，同时返回当前任务的 `id`、`jobId` 和状态；同车型可继续查询此任务，不新开转码。
-
-```json
-{
-  "status": "running",
-  "id": "mp46",
-  "jobId": "<job-id>",
-  "count": 0,
-  "startedAt": 1789948800000
-}
-```
-
-生成所选车型的轻量首页预览，并自动检测大模型，必要时生成保留源尺寸的 GPU 副本。原文件与用户画质偏好不变；有效副本直接复用。
-
-仅管理员可调用，并校验同源写请求。单 IP 每小时最多启动 6 次、全站每小时最多 12 次；超过限制返回 HTTP `429` 与 `{ "error": "生成操作过于频繁，请稍后再试" }`。
-
-#### 查询任务状态
-
-```http
-GET /api/showcase/models/previews?jobId=<job-id>
-Cookie: fire_session=<admin-session>
-Cache-Control: no-cache
-```
-
-`phase` 返回 scan/preview/gpu/complete/done/error，`model` 返回当前车型；`gpuCount`/`gpuReused` 为 GPU 副本成功/复用数，`reused` 为预览复用数，`failed` 为失败数，检测后提供 `fileBytes`、`textureBytes`、`textureCount` 和 `needsGpu`，分别表示原文件大小、贴图展开估算、贴图数量及是否需要 GPU 副本。最多运行 60 分钟，GPU 压缩失败也返回 error，保留已完成资源以便重试。
-
-`status` 取值为 `idle`、`running`、`done` 或 `error`。完成时 `count` 为本次生成数量（单车型为 1），并返回 `finishedAt`；传入的 `jobId` 与当前任务不一致时返回 `409`；失败时返回截断后的 `error` 信息。建议运行期间每秒轮询一次，进入 `done` 或 `error` 后停止。
-
-```json
-{
-  "status": "done",
-  "id": "mp46",
-  "jobId": "<job-id>",
-  "count": 1,
-  "startedAt": 1789948800000,
-  "finishedAt": 1789948824000
-}
-```
-
-该接口沿用现有 Web 管理端的裸 JSON 响应格式，不属于对移动端公开的 `/api/v1/**` 契约。
+模型高清优化版通过原有车型导入流程上传；KTX2、Meshopt 和 WebP 由现有查看器读取。压缩已迁到独立本地工具，原 `/api/showcase/models/previews` 生成/查询接口已移除，不再启动后台任务。
 
 ## 7. 快速上手（移动端）
 

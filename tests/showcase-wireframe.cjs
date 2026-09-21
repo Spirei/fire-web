@@ -164,7 +164,7 @@ const engine = fs.readFileSync('components/showcase/engine.ts', 'utf8');
 const importer = fs.readFileSync('components/showcase/ModelImporter.tsx', 'utf8');
 const preview = fs.readFileSync('components/showcase/ModelPreview.tsx', 'utf8');
 const stage = fs.readFileSync('components/showcase/ShowcaseStage.tsx', 'utf8');
-const previewRoute = fs.readFileSync('app/api/showcase/models/previews/route.ts', 'utf8');
+const previewRoute = fs.readFileSync('app/api/showcase/models/preview-upload/route.ts', 'utf8');
 const apiSpec = fs.readFileSync('docs/api-spec.md', 'utf8');
 assert.match(importer, /fire\.showcase\.model-workbench\.v1/, 'model workbench keeps a versioned local draft');
 assert.match(importer, /localStorage\.getItem\(WORKBENCH_STORAGE_KEY\)/, 'model workbench restores the active draft after reload');
@@ -218,11 +218,11 @@ assert.match(engine, /createWireframeView\(CFG\.model\.wireframe, true/, 'showca
 assert.match(engine, /options\.initialTheme \?\? "dark"/, 'WebGL scene uses the server theme before its first frame');
 assert.match(engine, /setClearColor\(theme === "light" \? 0xf4f6f9 : 0x050506/, 'WebGL clear color matches the initial theme');
 assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.sc-stage \{[\s\S]*?background: var\(--sc-bg\)/, 'showcase stage does not expose a hard-coded black loading frame');
-assert.match(previewRoute, /isAdmin\(user\)/, 'preview generation remains admin-only');
-assert.match(previewRoute, /isTrustedMutationRequest\(request\)/, 'preview generation rejects cross-origin mutations');
-assert.match(previewRoute, /build-showcase-previews\.mjs/, 'preview generation button runs the bounded local optimizer');
-assert.match(apiSpec, /POST \/api\/showcase\/models\/previews/, 'preview generation API is documented');
-assert.match(apiSpec, /GET \/api\/showcase\/models\/previews/, 'preview job status API is documented');
+assert.match(previewRoute, /isAdmin\(user\)/, 'preview upload remains admin-only');
+assert.match(previewRoute, /isTrustedMutationRequest\(request\)/, 'preview upload rejects cross-origin mutations');
+assert.doesNotMatch(previewRoute, /child_process|build-showcase|spawn\(/, 'website never runs a model encoder');
+assert.match(apiSpec, /POST \/api\/showcase\/models\/preview-upload/, 'local preview upload API is documented');
+assert(!fs.existsSync('app/api/showcase/models/previews/route.ts'), 'server generation endpoint removed');
 for (const endpoint of [
   '/api/showcase/models/upload',
   '/api/showcase/models/{id}',

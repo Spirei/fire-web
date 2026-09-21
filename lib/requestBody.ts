@@ -26,6 +26,10 @@ async function limitedBytes(body: ReadableStream<Uint8Array> | null, declared: s
   return bytes;
 }
 
+export function readBinaryBody(request: Request, maxBytes: number) {
+  return limitedBytes(request.body, request.headers.get("content-length"), maxBytes);
+}
+
 export function readLimitedResponseBytes(response: Response, maxBytes: number) {
   return limitedBytes(response.body, response.headers.get("content-length"), maxBytes);
 }

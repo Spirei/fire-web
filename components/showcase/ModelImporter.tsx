@@ -1,6 +1,5 @@
 "use client";
 
-import { generationDetail as formatGenerationDetail, readGenerationStatus } from "./generationProgress";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -156,9 +155,9 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
     finally { visibilityBusyRef.current = false; setVisibilityBusy(null); }
   };
   const [coverBusy, setCoverBusy] = useState<string | null>(null);
-  const [previewGenerating, setPreviewGenerating] = useState<string | null>(null);
-  const [generationDetail, setGenerationDetail] = useState("");
-  const previewGeneratingRef = useRef(false);
+  const [previewUploadBusy, setPreviewUploadBusy] = useState<string | null>(null);
+  const previewInputRef = useRef<HTMLInputElement | null>(null);
+  const previewTargetRef = useRef<string | null>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -208,41 +207,20 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   const wireTuneRef = useRef<HTMLDetailsElement | null>(null);
   const wheelTuneRef = useRef<HTMLDivElement | null>(null);
 
-  const generatePreviews = async (row: ImportedModelRow) => {
-    if (previewGeneratingRef.current) return;
-    previewGeneratingRef.current = true;
-    setPreviewGenerating(row.id);
-    setGenerationDetail("正在检测文件与贴图…");
-    try {
-      const response = await fetch("/api/showcase/models/previews", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: row.id }) });
-      const payload = await response.json().catch(() => ({}));
-      const resumeExisting = response.status === 409 && payload.status === "running" && payload.id === row.id && typeof payload.jobId === "string";
-      if (!response.ok && !resumeExisting) {
-        showToast(payload.error ?? "预览版本生成失败", "err");
-        return;
-      }
-      let result = payload;
-      const deadline = Date.now() + 61 * 60 * 1000;
-      while (result.status === "running" && Date.now() < deadline) {
-        await new Promise((resolve) => window.setTimeout(resolve, 1000));
-        result = await readGenerationStatus(payload.jobId, attempt => {
-          setGenerationDetail(`查询进度暂时中断，正在重连（${attempt}/4）`);
-        });
-        setGenerationDetail(formatGenerationDetail(result));
-      }
-      if (result.status !== "done") {
-        showToast(result.error ?? "预览版本生成超时，请稍后重试", "err");
-        router.refresh();
-        return;
-      }
-      showToast(`“${row.label}”处理完成：${result.reused ? "复用已有预览" : "已生成预览"}${result.gpuCount ? (result.gpuReused ? "，复用 GPU 副本" : "，已生成 GPU 副本") : "，无需额外 GPU 压缩"}`);
-      router.refresh();
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "暂时无法查询进度，后台任务可能仍在运行", "err");
-    } finally {
-      previewGeneratingRef.current = false;
-      setPreviewGenerating(null);
+  const uploadLocalPreview = async (file: File) => {
+    const id = previewTargetRef.current;
+    if (!id || previewUploadBusy) return;
+    if (!file.name.toLowerCase().endsWith(".glb") || file.size > 32 * 1024 * 1024) {
+      showToast("请选择本地工具导出的首页预览 GLB（不超过 32 MiB）", "err"); return;
     }
+    setPreviewUploadBusy(id);
+    try {
+      const response = await fetch(`/api/showcase/models/preview-upload?id=${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "model/gltf-binary" }, body: file });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "上传失败");
+      showToast("首页预览已上传"); router.refresh();
+    } catch (error) { showToast(error instanceof Error ? error.message : "预览上传失败", "err"); }
+    finally { setPreviewUploadBusy(null); }
   };
 
   // 工作台是独立编辑环境：刷新、HMR 或临时离开页面后恢复当前车型与未保存参数。
@@ -1061,8 +1039,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         <h2>
           <span>·</span> 车型清单
         </h2>
-        <p className="mt-3 text-xs leading-5 text-muted dark:text-white/55">在车型卡片上生成首页轻量预览，同时检测大模型并生成保留源贴图尺寸的高质量副本；只处理选中车型，不改变画质选择。</p>
-        {previewGenerating && <p className="mt-2 text-xs text-muted" role="status">{generationDetail}</p>}
+        <p className="mt-3 text-xs leading-5 text-muted dark:text-white/55">先用本地模型工具导出文件，将高清优化版作为车型导入，再在对应卡片上传首页轻量预览。网站只保存和显示文件，不进行压缩。</p>
+        <input ref={previewInputRef} type="file" accept=".glb" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadLocalPreview(file); }} />
         {/* 封面文件选择：卡片上的「传封面」统一走这个隐藏输入 */}
         <input
           ref={coverInputRef}
@@ -1146,8 +1124,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                       </>}
                     </svg>
                   </button>
-                  <button type="button" className="fire-cap px-2 py-1 text-[11px] font-semibold" disabled={previewGenerating !== null || row.present === false} onClick={() => void generatePreviews(row)}>
-                    {previewGenerating === row.id ? "正在生成预览…" : row.previewReady ? "重新生成预览" : "生成首页预览"}
+                  <button type="button" className="fire-cap px-2 py-1 text-[11px] font-semibold" disabled={previewUploadBusy !== null || row.present === false} onClick={() => { previewTargetRef.current = row.id; previewInputRef.current?.click(); }}>
+                    {previewUploadBusy === row.id ? "正在上传…" : row.previewReady ? "替换首页预览" : "上传首页预览"}
                   </button>
                   {!row.builtin && (
                     <button

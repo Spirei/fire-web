@@ -1,0 +1,4 @@
+node_modules/
+output/
+*.app/
+.DS_Store

@@ -55,7 +55,7 @@ export async function inspectSource(input) {
       width = imageBytes.readUInt32LE(20); height = imageBytes.readUInt32LE(24); compressed++;
     } else ({ width, height } = await sharp(imageBytes).metadata());
     if (!width || !height) throw new Error('无法读取贴图尺寸');
-    textures.push({ width, height });
+    textures.push({ width, height, compressed: image.mimeType === "image/ktx2" });
     for (let w = width, h = height;; w = Math.max(1, w >> 1), h = Math.max(1, h >> 1)) {
       rgbaBytes += w * h * 4;
       if (w === 1 && h === 1) break;
@@ -71,16 +71,4 @@ export function writeManifest(output, identity, extra) {
     fs.writeFileSync(temp, JSON.stringify({ ...identity, outputBytes: fs.statSync(output).size, outputSha256: fileSha256(output), ...extra, generatedAt: new Date().toISOString() }, null, 2));
     fs.renameSync(temp, `${output}.json`);
   } finally { fs.rmSync(temp, { force: true }); }
-}
-export function acquireGenerationLock(root) {
-  const file = path.join(root, 'data', 'showcase-generation.lock');
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  try {
-    const pid = Number(fs.readFileSync(file, 'utf8'));
-    try { process.kill(pid, 0); throw new Error('车型生成任务正在运行，请稍后查看状态'); }
-    catch (error) { if (error.code !== 'ESRCH') throw error; }
-    fs.unlinkSync(file);
-  } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  fs.writeFileSync(file, String(process.pid), { flag: 'wx' });
-  return () => { try { if (fs.readFileSync(file, 'utf8') === String(process.pid)) fs.unlinkSync(file); } catch { /* already removed */ } };
 }

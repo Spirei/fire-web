@@ -813,38 +813,28 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(fs.existsSync(path.join(store.MODELS_DIR, saved.file)), '移出清单保留 GLB');
     assert.throws(() => store.upsertStoredModel({ id: 'mcl35m', label: 'duplicate', file: saved.file }), /内置车型重复/);
   });
-  await test('showcase 按车型生成预览，不触碰其他车型并隔离任务状态', async () => {
+  await test('showcase 本地预览上传权限、隔离、文件限制与失败保留', async () => {
     const store = require(path.join(root, 'lib/showcaseModels.ts'));
-    const route = require(path.join(root, 'app/api/showcase/models/previews/route.ts'));
-    const call = (role, body) => request(role, body, 'POST');
-    assert.equal((await route.POST(call('user',{id:'mcl35m'}))).status,403);
-    assert.equal((await route.POST(call('admin',{}))).status,400);
-    assert.equal((await route.POST(call('admin',{id:'../bad'}))).status,400);
-    assert.equal((await route.POST(call('admin',{id:'missing-car'}))).status,404);
-    fs.mkdirSync('scripts',{recursive:true}); fs.mkdirSync('node_modules/.bin',{recursive:true}); fs.mkdirSync('public/mclaren',{recursive:true});
-    fs.writeFileSync('public/mclaren/mcl35m.glb','builtin');
-    fs.writeFileSync('public/mclaren/mcl35m-preview.glb','unchanged builtin');
-    for (const id of ['preview-one','preview-two']) {
-      fs.writeFileSync(path.join(store.MODELS_DIR,`${id}.glb`),id);
-      store.upsertStoredModel({id,label:id,file:`${id}.glb`});
-    }
-    fs.mkdirSync(store.PREVIEWS_DIR,{recursive:true});
-    const untouched=path.join(store.PREVIEWS_DIR,'preview-two-preview.glb'); fs.writeFileSync(untouched,'unchanged second');
-    fs.writeFileSync('scripts/build-showcase-previews.mjs',`await new Promise(r=>setTimeout(r,150)); await import(${JSON.stringify(require('node:url').pathToFileURL(path.join(root,'scripts/build-showcase-previews.mjs')).href)});`);
-    fs.writeFileSync('node_modules/.bin/gltf-transform',`#!${process.execPath}\nconst fs=require('fs');fs.appendFileSync('preview-invocations.log',JSON.stringify(process.argv.slice(2))+'\\n');fs.copyFileSync(process.argv[3],process.argv[4]);\n`,{mode:0o755});
-    const response=await route.POST(call('admin',{id:'preview-one'})); assert.equal(response.status,202); const started=await response.json();
-    assert.equal(started.id,'preview-one'); assert(started.jobId);
-    assert.equal((await route.POST(call('admin',{id:'preview-two'}))).status,409);
-    let status;
-    for(let attempt=0;attempt<100;attempt++) { status=await (await route.GET(request('admin'))).json(); if(status.status!=='running') break; await new Promise(r=>setTimeout(r,20)); }
-    assert.equal(status.status,'done',status.error); assert.equal(status.count,1); assert.equal(status.id,'preview-one');
-    const invocations=fs.readFileSync('preview-invocations.log','utf8');
-    assert(invocations.includes('preview-one.glb')); assert(!invocations.includes('preview-two.glb')); assert(!invocations.includes('mcl35m.glb'));
-    assert.equal(fs.readFileSync(untouched,'utf8'),'unchanged second');
-    assert.equal(fs.readFileSync('public/mclaren/mcl35m-preview.glb','utf8'),'unchanged builtin');
-    assert.equal(fs.readFileSync(path.join(store.PREVIEWS_DIR,'preview-one-preview.glb'),'utf8'),'preview-one');
-    const wrong=new Request('http://localhost:3000/api/showcase/models/previews?jobId=wrong',{headers:{cookie:`fire_session=${tokens.admin}`}});
-    assert.equal((await route.GET(wrong)).status,409);
+    const route = require(path.join(root, 'app/api/showcase/models/preview-upload/route.ts'));
+    const json = Buffer.from(JSON.stringify({ asset:{version:'2.0'}, buffers:[{byteLength:36}], bufferViews:[{buffer:0,byteLength:36}], accessors:[{bufferView:0,componentType:5126,count:3,type:'VEC3',min:[0,0,0],max:[1,1,0]}], materials:[{name:'body'}], meshes:[{primitives:[{attributes:{POSITION:0},material:0}]}], nodes:[{mesh:0}], scenes:[{nodes:[0]}], scene:0 }));
+    const padded=Math.ceil(json.length/4)*4, glb=Buffer.alloc(28+padded+36);
+    glb.writeUInt32LE(0x46546c67,0); glb.writeUInt32LE(2,4); glb.writeUInt32LE(glb.length,8); glb.writeUInt32LE(padded,12); glb.writeUInt32LE(0x4e4f534a,16); glb.fill(32,20,20+padded); json.copy(glb,20); glb.writeUInt32LE(36,20+padded); glb.writeUInt32LE(0x004e4942,24+padded);
+    const call=(role,id,body=glb,extra={})=>new Request(`http://localhost:3000/api/showcase/models/preview-upload?id=${encodeURIComponent(id)}`,{method:'POST',headers:{cookie:`fire_session=${tokens[role]}`,...extra},body});
+    assert.equal((await route.POST(call('user','mcl35m'))).status,403);
+    assert.equal((await route.POST(call('admin','../bad'))).status,404);
+    assert.equal((await route.POST(call('admin','missing-car'))).status,404);
+    fs.mkdirSync(store.MODELS_DIR,{recursive:true}); fs.mkdirSync(store.PREVIEWS_DIR,{recursive:true});
+    for(const id of ['preview-one','preview-two']) { fs.writeFileSync(path.join(store.MODELS_DIR,`${id}.glb`),glb); store.upsertStoredModel({id,label:id,file:`${id}.glb`}); }
+    const target=path.join(store.PREVIEWS_DIR,'preview-one-preview.glb'), untouched=path.join(store.PREVIEWS_DIR,'preview-two-preview.glb'); fs.writeFileSync(untouched,'untouched');
+    const uploaded = await route.POST(call('admin','preview-one')); assert.equal(uploaded.status,200,await uploaded.text());
+    assert.deepEqual(fs.readFileSync(target),glb); assert.equal(fs.readFileSync(untouched,'utf8'),'untouched');
+    assert.equal((await route.POST(call('admin','preview-one',Buffer.from('broken')))).status,400);
+    assert.deepEqual(fs.readFileSync(target),glb,'failed upload preserves previous preview');
+    assert.equal((await route.POST(call('admin','preview-one',glb,{'content-length':String(33*1024*1024)}))).status,413);
+    assert.equal((await route.POST(call('admin','preview-one',Buffer.alloc(33*1024*1024)))).status,413,'streaming body limit applies without Content-Length');
+    assert(!fs.readdirSync(store.PREVIEWS_DIR).some(file=>file.startsWith('.')),'temporary files removed');
+    assert.equal((await route.POST(call('admin','mcl35m'))).status,200);
+    assert(fs.existsSync(path.join(store.PREVIEWS_DIR,'builtin-mcl35m-preview.glb')));
     for(const id of ['preview-one','preview-two']) store.removeStoredModel(id,{deleteFile:true});
   });
   await test('showcase 首页隐藏持久化、权限校验、恢复及全部隐藏不预载', async () => {

@@ -70,3 +70,6 @@ public/icons
 public/maps-world.json
 
 app/favicon.ico
+
+# 独立本地模型工具，不进入网站构建与镜像
+tools/model-optimizer
