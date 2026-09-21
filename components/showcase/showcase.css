@@ -1632,8 +1632,11 @@ html:has(.showcase.light) body {
   .sc-tele { top: max(8.5vh, calc(env(safe-area-inset-top) + 48px)); }
   .sc-tools { top: max(12px, env(safe-area-inset-top)); }
 
-  .sc-ctr { bottom: max(19vh, calc(env(safe-area-inset-bottom) + 132px)); }
-  .sc-hint-touch { bottom: max(13vh, calc(env(safe-area-inset-bottom) + 82px)); }
+  /* 起步键落到独立的底部操作区，别压住车身、倒影和圆盘。 */
+  .sc-ctr { bottom: max(52px, calc(env(safe-area-inset-bottom) + 42px)); }
+  .sc-ctr-cap, .sc-ctr-hint { display: none; }
+  .sc-ctr .sc-race { padding: 11px 17px; background: rgba(25, 17, 12, 0.78); }
+  .sc-hint-touch { bottom: max(106px, calc(env(safe-area-inset-bottom) + 96px)); }
 
   .showcase:not(.sc-inspecting) .sc-left-foot.sc-side-left { left: 4vw; bottom: 5.2vh; }
   .showcase:not(.sc-inspecting) .sc-models.sc-side-right { right: 4vw; bottom: 5.2vh; }

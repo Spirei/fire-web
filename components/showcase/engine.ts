@@ -684,6 +684,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let trackDiscFraming = 0;
   const chronoDisc = new THREE.Group();
   const trackDisc = new THREE.Group();
+  chronoDisc.visible = !mobileViewer();
   trackDisc.visible = false;
   groundFx.add(chronoDisc, trackDisc);
 
@@ -849,6 +850,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         depthWrite: false
       });
       material.userData.baseOpacity = material.opacity;
+      material.userData.mobileOpacity = level === 2 ? 0 : 1;
       ringOutlineMats.push(material);
       const ticks = new THREE.InstancedMesh(geometry, material, indices.length);
       const matrix = new THREE.Matrix4();
@@ -1937,6 +1939,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   function render(p: number, dt = 0.016) {
     renderCalls += 1;
     elapsed += dt;
+    const mobilePresentation = mobileViewer();
 
     // 0919：约 2 秒进入高速，松手后先退光条，再回到展示机位。
     const targetSpeed = racing ? CFG.speed.maxSpeed : 0;
@@ -2162,19 +2165,22 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       ringUniformsRef.uSweep.value = elapsed * (0.05 + sps * 0.22);
       // 行驶时退出展示台刻度环，避免看起来带着大圆盘前进。
       const ringFade = 1 - seg(sps, 0.04, 0.28);
+      const discReady = !mobilePresentation || mountedCar !== null;
       // 这是展示台的刻度参照，随车辆跟随机位保留在车下，不遗留在起步点。
       chronoDisc.position.z = carTravel;
       trackDisc.position.z = carTravel;
+      chronoDisc.visible = discReady && discStyle === "chrono";
+      trackDisc.visible = discReady && discStyle === "track";
       if (ringUniformsRef.uFade) ringUniformsRef.uFade.value = ringFade;
       ringOutlineMats.forEach((m) => {
-        m.opacity = (m.userData.baseOpacity as number) * ringFade;
+        m.opacity = (m.userData.baseOpacity as number) * ringFade * (mobilePresentation ? (m.userData.mobileOpacity ?? 1) : 1);
         m.visible = ringFade > 0.02;
       });
     }
-    (pool.material as THREE.MeshBasicMaterial).opacity = CFG.ground.pool * (1 - seg(sps, 0.08, 0.5));
+    (pool.material as THREE.MeshBasicMaterial).opacity = mobilePresentation ? 0 : CFG.ground.pool * (1 - seg(sps, 0.08, 0.5));
     // 浅色/影棚：亮底上黑影更刺眼，接触阴影再压一档
-    (contact.material as THREE.MeshBasicMaterial).opacity = light ? 0.45 : 0.7;
-    if (ring) ring.visible = p > 0.12 || sps > 0.05;
+    (contact.material as THREE.MeshBasicMaterial).opacity = mobilePresentation && !mountedCar ? 0 : light ? 0.45 : 0.7;
+    if (ring) ring.visible = !mobilePresentation && (p > 0.12 || sps > 0.05);
     const tunnelOn = !!CFG.speed.tunnel && speed > 0.6 && !off.has("tunnel");
     if (tunnel) tunnel.visible = tunnelOn;
     if (accent) accent.visible = tunnelOn;
@@ -2496,7 +2502,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let scrollOrigin = 0;
   let scrollTravel = 1;
   let mobileProgress = START_P;
-  const mobileViewer = () => window.matchMedia("(max-width: 640px), (max-height: 500px) and (pointer: coarse)").matches;
+  function mobileViewer() {
+    return window.matchMedia("(max-width: 640px), (max-height: 500px) and (pointer: coarse)").matches;
+  }
   /**
    * 用户是否已经自己滚动过。浏览器可能在挂载之后才把上次的滚动位置写回来（会话恢复、
    * 重新打开标签页、从别的页面回来），那条路径会把「刷新后的默认机位」换成当时那个机位。
@@ -3305,8 +3313,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     },
     setDiscStyle: (style) => {
       discStyle = style;
-      chronoDisc.visible = discStyle === "chrono";
-      trackDisc.visible = discStyle === "track";
+      const ready = !mobileViewer() || mountedCar !== null;
+      chronoDisc.visible = ready && discStyle === "chrono";
+      trackDisc.visible = ready && discStyle === "track";
     },
     setFreeCamera: (on: boolean) => {
       if (freeCamera === on) return;
