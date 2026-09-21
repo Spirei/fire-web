@@ -272,6 +272,8 @@ interface RegistryFile {
   builtinMeta?: Record<string, { cover?: string }>;
   /** 选择“移出清单但保留文件”的素材；自动发现必须跳过，否则刷新后会重新上线。 */
   ignoredFiles?: string[];
+  /** 首页隐藏车型：保留文件与参数，但不下发到首页。 */
+  hiddenIds?: string[];
 }
 
 export function readRegistry(): {
@@ -279,6 +281,7 @@ export function readRegistry(): {
   models: StoredShowcaseModel[];
   builtinMeta: Record<string, { cover?: string }>;
   ignoredFiles: string[];
+  hiddenIds: string[];
 } {
   try {
     const raw = JSON.parse(fs.readFileSync(REGISTRY_FILE, "utf8")) as Partial<RegistryFile>;
@@ -287,9 +290,10 @@ export function readRegistry(): {
     const order = (Array.isArray(raw.order) ? raw.order : []).filter((id) => typeof id === "string" && validModelId(id));
     const builtinMeta = raw.builtinMeta && typeof raw.builtinMeta === "object" ? raw.builtinMeta : {};
     const ignoredFiles = (Array.isArray(raw.ignoredFiles) ? raw.ignoredFiles : []).filter((file) => typeof file === "string" && validModelFile(file));
-    return { order, models, builtinMeta, ignoredFiles };
+    const hiddenIds = (Array.isArray(raw.hiddenIds) ? raw.hiddenIds : []).filter((id) => typeof id === "string" && validModelId(id));
+    return { order, models, builtinMeta, ignoredFiles, hiddenIds };
   } catch {
-    return { order: [], models: [], builtinMeta: {}, ignoredFiles: [] };
+    return { order: [], models: [], builtinMeta: {}, ignoredFiles: [], hiddenIds: [] };
   }
 }
 
@@ -301,7 +305,8 @@ export function writeStoredModels(
   models: StoredShowcaseModel[],
   order?: string[],
   builtinMeta?: Record<string, { cover?: string }>,
-  ignoredFiles?: string[]
+  ignoredFiles?: string[],
+  hiddenIds?: string[]
 ) {
   fs.mkdirSync(SHOWROOM_DIR, { recursive: true });
   const tmp = `${REGISTRY_FILE}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
@@ -316,13 +321,23 @@ export function writeStoredModels(
   try {
     fs.writeFileSync(
       tmp,
-      JSON.stringify({ version: 1, order: finalOrder, models, builtinMeta: builtinMeta ?? previous.builtinMeta ?? {}, ignoredFiles: ignoredFiles ?? previous.ignoredFiles }, null, 2),
+      JSON.stringify({ version: 1, order: finalOrder, models, builtinMeta: builtinMeta ?? previous.builtinMeta ?? {}, ignoredFiles: ignoredFiles ?? previous.ignoredFiles, hiddenIds: (hiddenIds ?? previous.hiddenIds).filter(id => usable.has(id)) }, null, 2),
       "utf8"
     );
     fs.renameSync(tmp, REGISTRY_FILE);
   } finally {
     fs.rmSync(tmp, { force: true });
   }
+}
+
+/** 隐藏不删除附件，内置与导入车型共用同一份持久化设置。 */
+export function setModelHidden(id: string, hidden: boolean) {
+  const models = ensureRegistry();
+  if (![...SHOWCASE_MODELS, ...models].some(model => model.id === id)) throw new Error("车型不存在");
+  const hiddenIds = new Set(readRegistry().hiddenIds);
+  if (hidden) hiddenIds.add(id); else hiddenIds.delete(id);
+  writeStoredModels(models, undefined, undefined, undefined, [...hiddenIds]);
+  return { id, hidden };
 }
 
 /** 调整展示顺序（首页车型条按这个顺序排） */
@@ -447,8 +462,8 @@ export function modelUrlExists(url: string) {
 export function listShowcaseOptions(): ShowcaseModelOption[] {
   // 先把登记表补齐（首次访问会新建），再读顺序 —— 否则第一次渲染拿不到 order 会排成另一个样子
   const stored = ensureRegistry();
-  const { order, builtinMeta } = readRegistry();
-  const builtin: ShowcaseModelOption[] = SHOWCASE_MODELS.map((item) => {
+  const { order, builtinMeta, hiddenIds } = readRegistry();
+  const builtin: ShowcaseModelOption[] = SHOWCASE_MODELS.filter(item => !hiddenIds.includes(item.id)).map((item) => {
     const cover = builtinMeta[item.id]?.cover ?? "";
     return {
       id: item.id,
@@ -461,7 +476,7 @@ export function listShowcaseOptions(): ShowcaseModelOption[] {
       config: item.config
     };
   });
-  const imported: ShowcaseModelOption[] = stored.slice().map((model) => {
+  const imported: ShowcaseModelOption[] = stored.filter(model => !hiddenIds.includes(model.id)).map((model) => {
     const version = Date.parse(model.updatedAt) || 1;
     const config = buildImportedConfig({ file: model.file, version, params: model.params });
     const previewFile = `${model.file.replace(/\.glb$/i, "")}-preview.glb`;

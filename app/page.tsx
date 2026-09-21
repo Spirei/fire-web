@@ -14,7 +14,7 @@ import { headers } from "next/headers";
 export default async function HomePage() {
   const all = listShowcaseOptions();
   const present = all.filter((item) => item.present);
-  const models = (present.length ? present : all.slice(0, 1)).map(({ id, label, note, config }) => ({
+  const models = present.map(({ id, label, note, config }) => ({
     id,
     label,
     note,

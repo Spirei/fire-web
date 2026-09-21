@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { readJsonBody } from "@/lib/requestBody";
 import { getAuthUser, isAdmin, isTrustedMutationRequest } from "@/lib/auth";
-import { ensureRegistry, removeStoredModel, sanitizeParams, upsertStoredModel, validModelId } from "@/lib/showcaseModels";
+import { ensureRegistry, setModelHidden, removeStoredModel, sanitizeParams, upsertStoredModel, validModelId } from "@/lib/showcaseModels";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -57,5 +57,20 @@ export async function DELETE(request: Request, ctx: { params: Promise<{ id: stri
     return NextResponse.json({ removed: entry.id, fileDeleted: withFile });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "删除失败" }, { status: 400 });
+  }
+}
+
+/** 首页显隐；隐藏车型不进入首页清单和预载。 */
+export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
+  const blocked = guard(request);
+  if (blocked) return blocked;
+  const { id } = await ctx.params;
+  if (!validModelId(id)) return NextResponse.json({ error: "车型不存在" }, { status: 404 });
+  try {
+    const body = await readJsonBody(request, 1024) as { hidden?: unknown } | null;
+    if (typeof body?.hidden !== "boolean") return NextResponse.json({ error: "hidden 必须是布尔值" }, { status: 400 });
+    return NextResponse.json(setModelHidden(id, body.hidden));
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "保存失败" }, { status: 400 });
   }
 }

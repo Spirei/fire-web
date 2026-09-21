@@ -52,6 +52,7 @@ interface ImportedModelRow {
   updatedAt: string;
   present?: boolean;
   previewReady?: boolean;
+  hidden?: boolean;
   /** 随仓库分发的内置车（素材在 public/mclaren/），不能删也不能改文件 */
   builtin?: boolean;
 }
@@ -133,6 +134,26 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   const orderSavingRef = useRef(false);
   const [orderSaving, setOrderSaving] = useState(false);
   useEffect(() => { if (!orderSavingRef.current) setOrder(existing.map(row => row.id)); }, [existing]);
+  const [visibilityBusy, setVisibilityBusy] = useState<string | null>(null);
+  const visibilityBusyRef = useRef(false);
+  const [visibility, setVisibility] = useState<Record<string, boolean>>({});
+  const toggleVisibility = async (row: ImportedModelRow) => {
+    if (visibilityBusyRef.current) return;
+    visibilityBusyRef.current = true;
+    setVisibilityBusy(row.id);
+    const hidden = !(visibility[row.id] ?? row.hidden ?? false);
+    try {
+      const response = await fetch(`/api/showcase/models/${row.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hidden })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "保存失败");
+      setVisibility(previous => ({ ...previous, [row.id]: hidden }));
+      showToast(hidden ? "已从首页隐藏，不再预载此车型" : "已恢复首页显示");
+      router.refresh();
+    } catch (error) { showToast(error instanceof Error ? error.message : "保存失败，请重试", "err"); }
+    finally { visibilityBusyRef.current = false; setVisibilityBusy(null); }
+  };
   const [coverBusy, setCoverBusy] = useState<string | null>(null);
   const [previewGenerating, setPreviewGenerating] = useState(false);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
@@ -1112,9 +1133,19 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                     ? "内置车型 · 开箱即用"
                     : `长 ${row.params.length ?? "-"} m · 朝向 ${row.params.yaw ?? 0}° · 轮子 ${row.params.wheelPattern && row.params.wheelPattern !== "(?!)" ? "已配置" : "未配置"}`}
                 </span>
+                {(visibility[row.id] ?? row.hidden) && <span className="text-[11px] text-muted dark:text-white/55">首页已隐藏 · 不参与预载</span>}
                 {row.present === false && <span className="text-[11px] font-semibold text-[#d97706]">素材文件缺失，请重新上传后再上线</span>}
                 {row.present !== false && <span className={`text-[11px] font-semibold ${row.previewReady ? "text-[#22a06b]" : "text-[#d97706]"}`}>{row.previewReady ? "首页预览已生成" : "尚未生成首页预览"}</span>}
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 lg:flex-nowrap lg:overflow-x-auto lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:hidden">
+                  <button type="button" className="fire-cap inline-flex h-8 w-8 shrink-0 items-center justify-center p-0" disabled={visibilityBusy !== null}
+                    title={(visibility[row.id] ?? row.hidden) ? "恢复首页显示" : "首页隐藏（不参与预载）"}
+                    aria-label={(visibility[row.id] ?? row.hidden) ? "恢复首页显示" : "首页隐藏"}
+                    aria-busy={visibilityBusy === row.id} aria-pressed={visibility[row.id] ?? row.hidden ?? false} onClick={() => void toggleVisibility(row)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                      {(visibility[row.id] ?? row.hidden) ? <path d="m4 4 16 16" /> : <circle cx="12" cy="12" r="2.6" />}
+                    </svg>
+                  </button>
                   {!row.builtin && (
                     <button
                       type="button"

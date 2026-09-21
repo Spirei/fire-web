@@ -37,7 +37,7 @@ export default async function ShowcaseImportPage() {
     );
   }
   cleanupOrphanFiles({ scope: "showcase-unsaved" });
-  const { order, builtinMeta } = readRegistry();
+  const { order, builtinMeta, hiddenIds } = readRegistry();
   // 清单里连内置那辆一起列出来：首页有几辆，这里就显示几行，不会对不上
   const builtin = SHOWCASE_MODELS.map((item) => {
     // 内置车的封面同样可以换：文件存在才用，缺失就回退成车型代号占位
@@ -61,6 +61,7 @@ export default async function ShowcaseImportPage() {
       updatedAt: "",
       present: modelUrlExists(item.config.assets.model),
       previewReady: Boolean(item.config.assets.previewModel && modelUrlExists(item.config.assets.previewModel)),
+      hidden: hiddenIds.includes(item.id),
       builtin: true
     };
   });
@@ -77,6 +78,7 @@ export default async function ShowcaseImportPage() {
       updatedAt: model.updatedAt,
       present: modelFileExists(model.file),
       previewReady: modelPreviewExists(model.file),
+      hidden: hiddenIds.includes(model.id),
       builtin: false
     }))
   ];

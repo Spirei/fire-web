@@ -813,6 +813,35 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(fs.existsSync(path.join(store.MODELS_DIR, saved.file)), '移出清单保留 GLB');
     assert.throws(() => store.upsertStoredModel({ id: 'mcl35m', label: 'duplicate', file: saved.file }), /内置车型重复/);
   });
+  await test('showcase 首页隐藏持久化、权限校验、恢复及全部隐藏不预载', async () => {
+    const store = require(path.join(root, 'lib/showcaseModels.ts'));
+    const route = require(path.join(root, 'app/api/showcase/models/[id]/route.ts'));
+    const list = require(path.join(root, 'app/api/showcase/models/route.ts'));
+    const context = id => ({ params: Promise.resolve({ id }) });
+    fs.writeFileSync(path.join(store.MODELS_DIR, 'visibility-test.glb'), 'fixture');
+    const model = store.upsertStoredModel({ id: 'visibility-test', label: 'Visibility', file: 'visibility-test.glb' });
+    assert.equal((await route.PATCH(request(null, {hidden:true}, 'PATCH'), context(model.id))).status, 401);
+    assert.equal((await route.PATCH(request('user', {hidden:true}, 'PATCH'), context(model.id))).status, 403);
+    assert.equal((await route.PATCH(request('admin', {hidden:'true'}, 'PATCH'), context(model.id))).status, 400);
+    const foreign = new Request('http://localhost:3000/api/showcase/models/visibility-test', { method:'PATCH', headers:{cookie:`fire_session=${tokens.admin}`,origin:'https://untrusted.example','Content-Type':'application/json'},body:JSON.stringify({hidden:true}) });
+    assert([401,403].includes((await route.PATCH(foreign, context(model.id))).status), 'untrusted origin is rejected');
+    const before = store.listShowcaseOptions().map(item => item.id);
+    for (const id of before) assert.equal((await route.PATCH(request('admin', {hidden:true}, 'PATCH'), context(id))).status,200);
+    assert.deepEqual(store.listShowcaseOptions(), []);
+    assert.deepEqual((await (await list.GET()).json()).models, []);
+    assert(fs.existsSync(path.join(store.MODELS_DIR, model.file)), 'hidden files are retained');
+    assert(store.readStoredModels().some(item => item.id === model.id), 'hidden models remain editable');
+    store.upsertStoredModel({ ...model, label:'Edited while hidden' });
+    store.saveModelOrder([...before].reverse());
+    assert.deepEqual(store.listShowcaseOptions(), [], 'editing and reordering cannot unhide models');
+    assert(store.readRegistry().hiddenIds.includes('mcl35m'), 'builtin visibility persists too');
+    for (const id of before) assert.equal((await route.PATCH(request('admin', {hidden:false}, 'PATCH'), context(id))).status,200);
+    assert.deepEqual(store.listShowcaseOptions().map(item=>item.id), [...before].reverse());
+    store.removeStoredModel(model.id, {deleteFile:true});
+    const home = fs.readFileSync(path.join(root,'components/showcase/HomeShowcase.tsx'),'utf8');
+    assert(home.indexOf('if (!current) return') < home.indexOf('<ShowcaseStage'), 'empty list renders without mounting the scene');
+    assert(!fs.readFileSync(path.join(root,'app/page.tsx'),'utf8').includes('all.slice(0, 1)'), 'no hidden/default fallback');
+  });
   await test('entrypoint: unwritable data volume fails loudly, failing seed does not block startup', () => {
     const { spawnSync } = require('node:child_process');
     const entrypoint = path.join(root, 'scripts/entrypoint.sh');

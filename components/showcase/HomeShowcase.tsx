@@ -128,6 +128,13 @@ export default function HomeShowcase({
     [list, progress, status]
   );
 
+  if (!current) return (
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-bg-gray p-6 text-ink dark:bg-[#111722] dark:text-white">
+      <h1 className="text-xl">暂无展示车型</h1>
+      {canImport && <button type="button" className="rounded-full border border-edge bg-white px-5 py-2 text-sm dark:border-white/20 dark:bg-white/10" onClick={() => router.push("/showcase/import")}>管理车型</button>}
+    </main>
+  );
+
   return (
     <ShowcaseStage
       config={current.config}

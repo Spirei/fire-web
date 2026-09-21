@@ -760,3 +760,7 @@ Cache-Control: no-cache
 `totalCost`、`totalMarket`、`totalPnl` 和 `byMarket` 内金额均使用响应 `currency`，不得再次按市场本币换算。
 优先实时行情，缺失时用记录价格；`valuation` 返回每条记录的 `id`、`source`（quote/record）和 `at`。
 无法换算的记录列入 `unconverted`，此时 `complete=false`，客户端应提示汇总不完整。
+
+### 车型首页显隐
+
+`PATCH /api/showcase/models/{id}`（管理员）接收 `{ "hidden": true }`，设为 `false` 恢复首页显示。内置和导入车型均支持；设置写入车型登记表，隐藏不删除文件或参数。首页及公开车型清单排除隐藏车型，不加载或预载其模型；全部隐藏时显示空状态。
