@@ -4304,6 +4304,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "首页单屏适配覆盖桌面与平板，修复页面滚动条并统一镜头导航。",
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [{
+    title: "隧道跟随空间镜头与触屏持续驾驶",
+    desc: "隧道光条按相机射线投影到路面、侧墙和顶棚，随行驶距离推进并使用场景深度遮挡车身；触屏起步按钮改为点按保持行驶、再次点按减速，行驶时可切换镜头，切出窗口停止加速。",
+    kind: "fix"
+  }, {
     title: "首页单屏适配覆盖桌面与平板",
     desc: "移除桌面与平板仍保留的 6.2 屏滚动容器，所有尺寸统一使用动态视口高度，消除首页右侧滚动条。章节导航与置顶机位直接驱动镜头进度，桌面滚轮继续切换镜头；横竖屏切换不再跳回旧章节，其他页面和面板的正常滚动保留。",
     kind: "fix"

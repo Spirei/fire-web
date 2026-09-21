@@ -1160,6 +1160,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       uStrength: { value: 0 },
       tSceneDepth: { value: null },
       uWorldFromClip: { value: new THREE.Matrix4() },
+      uCameraPosition: { value: new THREE.Vector3() },
+      uRoadTravel: { value: 0 },
       uSpeed: { value: 0 },
       uCenter: { value: new THREE.Vector2(CFG.speed.tunnel?.vanish?.[0] ?? 0.5, CFG.speed.tunnel?.vanish?.[1] ?? 0.47) },
       uAspect: { value: 1.78 },
@@ -1179,6 +1181,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     fragmentShader: `
       uniform sampler2D tDiffuse; uniform float uTime; uniform float uStrength; uniform float uSpeed;
       uniform sampler2D tSceneDepth; uniform mat4 uWorldFromClip;
+      uniform vec3 uCameraPosition; uniform float uRoadTravel;
       uniform vec2 uCenter; uniform float uAspect; uniform vec2 uTunnelFrame; uniform vec3 uGold; uniform vec3 uWhite; uniform float uIntensity;
       uniform vec4 uCarBox;   // 车在屏幕上的包围盒：xy 中心、zw 半尺寸（uv）
       uniform vec3 uLaneColor; uniform float uAuxCount; uniform float uAuxOpacity; uniform float uLightMode; uniform float uDof;
@@ -1201,91 +1204,40 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         return (1.0 - smoothstep(max(0.0, wDof - aa), wDof + aa, d)) / (1.0 + gRadius * gDof * 0.3);
       }
       float hash11(float p){ return fract(sin(p * 127.1) * 43758.5453); }
+      float stripe(float distance,float width){
+        float aa=max(fwidth(distance),.008);
+        return 1.-smoothstep(width,width+aa,abs(distance));
+      }
+      vec3 spatialTunnel(vec3 base){
+        vec4 farPoint=uWorldFromClip*vec4(vUv*2.-1.,1.,1.);
+        vec3 ray=normalize(farPoint.xyz/farPoint.w-uCameraPosition);
+        float t=10000.; float face=0.;
+        // 完整隧道截面：路面、两侧墙壁及顶棚，所有光条沿同一条世界 Z 轴延伸。
+        if(ray.y<-.00001){float q=-uCameraPosition.y/ray.y;if(q>0.&&q<t){t=q;face=0.;}}
+        if(ray.y>.00001){float q=(26.-uCameraPosition.y)/ray.y;if(q>0.&&q<t){t=q;face=1.;}}
+        if(abs(ray.x)>.00001){float q=(sign(ray.x)*26.-uCameraPosition.x)/ray.x;if(q>0.&&q<t){t=q;face=2.;}}
+        vec3 hit=uCameraPosition+ray*t;
+        float depth=texture2D(tSceneDepth,vUv).x;
+        vec4 scenePoint=uWorldFromClip*vec4(vUv*2.-1.,depth*2.-1.,1.);
+        float occluded=step(.03,scenePoint.y/scenePoint.w)*(1.-step(.99999,depth))
+          *(1.-step(t-.1,length(scenePoint.xyz/scenePoint.w-uCameraPosition)));
+        float axis=face<1.5?hit.x:hit.y-13.;
+        float phase=mod(hit.z+uRoadTravel,9.);
+        float aa=max(fwidth(hit.z),.025);
+        float dash=smoothstep(0.,aa,phase)*(1.-smoothstep(4.,4.+aa,phase));
+        float lane=face<.5?stripe(abs(hit.x)-3.,.045)*dash:0.;
+        float rail=face<.5?stripe(abs(hit.x)-7.,.08):stripe(abs(axis)-9.,.09);
+        float aux=stripe(mod(axis+1.5,3.)-1.5,.018)*dash*.18;
+        float fade=(1.-smoothstep(120.,450.,t))*(1.-occluded)*uStrength*uIntensity;
+        vec3 glow=(vec3(.337,.502,.573)*lane+uGold*rail*dash+uWhite*aux)*fade;
+        float weight=clamp(max(glow.r,max(glow.g,glow.b)),0.,.75);
+        vec3 day=mix(vec3(.36,.53,.70),vec3(.72,.55,.38),step(.01,rail));
+        return uLightMode>.5?mix(base,day,weight):base+glow;
+      }
       void main(){
         vec4 base = texture2D(tDiffuse, vUv);
         if (uStrength <= 0.001) { gl_FragColor = base; return; }
-        // 竖屏稍微展开赛道并收回消失点，给车和左侧路肩留下间距；遮挡仍用真实屏幕坐标。
-        vec2 tunnelUv = vec2(uCenter.x + (vUv.x - uTunnelFrame.x) / uTunnelFrame.y, vUv.y);
-        // 用像素比例还原真实屏幕角度，宽屏也不会把线压扁
-        vec2 d = (tunnelUv - uCenter) * vec2(uAspect, 1.0);
-        float r = length(d);
-        float ang = atan(d.y, d.x);
-        // 靠近消失点淡出；外侧不再衰减（参考视频里亮线一直延伸到画面边缘）。
-        // 收得比原来更靠里（0.03-0.2）：参考在消失点周围是一圈密集的短线段（starburst），
-        // 原来 0.05-0.3 的淡出让最里面那圈几乎看不见，看着反而比参考稀
-        gRadius = r;
-        gDof = uDof;
-        float radial = smoothstep(0.03, 0.2, r);
-        // 透视深度与屏幕半径成反比：统一世界速度，近端快速拉长，远端密集。
-        vec3 mainLight = vec3(0.0);
-        float warmLight = 0.0;
-        ${lineAngles.map((b, i) => `{
-          vec2 railD = (tunnelUv - ${b.origin ? `vec2(${b.origin[0].toFixed(6)}, ${b.origin[1].toFixed(6)})` : "uCenter"}) * vec2(uAspect, 1.0);
-          float line = barRect(atan(railD.y, railD.x), ${b.a.toFixed(5)}, ${b.w.toFixed(5)});
-          float phase = ${SEG_SCALE} * 0.12 / max(length(railD), 0.025) + uTime * ${SEG_SCALE} * 0.42 + ${(i * 0.371).toFixed(3)};
-          float f = fract(phase);
-          float dash = smoothstep(0.02, 0.05, f) * (1.0 - smoothstep(0.58, 0.65, f));
-          mainLight += vec3(${b.color.r.toFixed(5)}, ${b.color.g.toFixed(5)}, ${b.color.b.toFixed(5)}) * line * dash;
-          ${b.gold ? "warmLight += line * dash;" : ""}
-        }`).join("\n        ")}
-        // 复用场景深度，只遮实际车体；包围框内的空白和路面继续显示线条。
-        vec2 carQ = (vUv - uCarBox.xy) / max(uCarBox.zw, vec2(1e-4));
-        float hide = 0.0;
-        if (max(abs(carQ.x), abs(carQ.y)) < 1.0) {
-          float depth = texture2D(tSceneDepth, vUv).x;
-          vec4 world = uWorldFromClip * vec4(vUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-          hide = step(0.025, world.y / world.w) * (1.0 - step(0.99999, depth));
-        }
-        // 隧道壁上的细虚线：按角度均匀分槽，每槽随机宽度 / 亮度 / 相位。
-        // 参考视频里这些线是「细而长」的（宽约 3-5px、长 120-200px），所以槽内宽度收窄、切段拉长。
-        // 隧道左右对称：槽号取其与镜像槽的较小值再哈希，两侧的宽度与相位因此完全一致
-        float slotF = ang / TAU * uAuxCount;
-        float slot = floor(slotF);
-        float inSlot = fract(slotF);
-        // 横向镜像对应角度 180° − ang，换算到槽号就是 N/2 − slot（N 为偶数）
-        float mirror = mod(uAuxCount * 0.5 - slot, uAuxCount);
-        float symSlot = min(slot, mirror);
-        float h = hash11(symSlot + 3.7);
-        float slotW = (0.014 + h * 0.025);                       // 占槽宽的比例（越小越细）
-        float slotDist = min(inSlot, 1.0 - inSlot) * TAU / uAuxCount;
-        float slotMax = slotW * (TAU / uAuxCount) * 0.5;
-        float auxAA = max(fwidth(slotDist), 0.0001);
-        float auxLine = (1.0 - smoothstep(max(0.0, slotMax - auxAA), slotMax + auxAA, slotDist))
-          * min(1.0, slotMax / auxAA) * step(0.24, hash11(symSlot + 11.3));
-        float auxDepth = 0.5 + h * 0.3;
-        float auxPhase = fract(auxDepth / max(r, 0.025) + uTime * auxDepth * 3.5 + h * 3.0);
-        float auxDash = smoothstep(0.02, 0.06, auxPhase) * (1.0 - smoothstep(0.10, 0.70, auxPhase));
-        float upperWall = smoothstep(-0.06, 0.02, d.y);
-        float aux = auxLine * auxDash * (0.4 + h * 0.6) * uAuxOpacity * upperWall;
-        // 跑道线：逐条画（每条自带颜色 / 段长 / 流动速度），见上面的 laneCode
-        float lane = 0.0;
-        vec3 laneCol = vec3(0.0);
-        ${laneCode}
-        vec3 glow = (mainLight + laneCol + uWhite * aux)
-          * radial * (1.0 - hide) * uStrength * uIntensity;
-        // 两种主题保持相同空间 / 节奏，浅底用可辨识的冷暖色暗线。
-        float mask = max(glow.r, max(glow.g, glow.b));
-        // 亮底不能沿用夜景的“加亮”方式，否则所有线都会被白底洗成灰色。
-        // 以冷蓝 / 暖橙两套实色压到画面上，并从原始光条色差判断所属色系。
-        // 色系由线条配置决定，不能按最终像素亮度猜：暖色线在远端变淡后，红蓝差趋近 0，
-        // 旧判断会把同一根橙线的尾部误判成蓝色。
-        float warmSignal = step(0.00001, warmLight);
-        vec3 dayLine = mix(vec3(0.36, 0.53, 0.70), vec3(0.82, 0.52, 0.31), warmSignal);
-        float degrees = mod(ang * 360.0 / TAU + 360.0, 360.0);
-        vec3 roadBase = base.rgb;
-        ${(TUNNEL?.surfaces ?? []).map(surface => {
-          const color = new THREE.Color(surface.color).convertLinearToSRGB();
-          return `{
-            float sector = mod(degrees - ${surface.from.toFixed(5)} + 360.0, 360.0);
-            float inside = 1.0 - step(${(surface.to - surface.from).toFixed(5)}, sector);
-            roadBase = mix(roadBase, vec3(${color.r.toFixed(5)}, ${color.g.toFixed(5)}, ${color.b.toFixed(5)}),
-              inside * radial * (1.0 - hide) * uStrength * ${(surface.opacity).toFixed(3)} * (1.0 - uLightMode));
-          }`;
-        }).join("\n")}
-        vec3 outRgb = uLightMode > 0.5
-          ? mix(base.rgb, dayLine, clamp(mask * 1.25, 0.0, 0.74))
-          : roadBase + glow;
-        gl_FragColor = vec4(outRgb, base.a);
+        gl_FragColor=vec4(spatialTunnel(base.rgb),base.a);
       }`
   });
   const composer = new EffectComposer(renderer);
@@ -2263,6 +2215,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       racingAmt * (1 - classicCameraBlend) * (1 - topCameraBlend)
     );
     lightLinesPass.uniforms.uSpeed.value = reduced ? 0 : speed;
+    lightLinesPass.uniforms.uRoadTravel.value = roadTravel;
+    (lightLinesPass.uniforms.uCameraPosition.value as THREE.Vector3).copy(camera.position);
     // 中速只有淡线，高速才铺满；松手后比镜头回位更早退去。
     lightLinesPass.uniforms.uStrength.value = seg(sps, 0.14, 0.9) ** 2;
     lightLinesPass.uniforms.uLightMode.value = light ? 1 : 0;
@@ -2549,11 +2503,19 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const press = (on: boolean) => {
     racing = on && !inspectorOn;
   };
+  let touchCruising = false;
   const onRaceDown = (e: Event) => {
     e.preventDefault();
+    if ((e as PointerEvent).pointerType === "touch" || window.matchMedia("(pointer: coarse)").matches) {
+      touchCruising = !racing;
+      press(touchCruising);
+      return;
+    }
     press(true);
   };
   const onPointerUp = (event: Event) => {
+    if (event.type === "blur") { touchCruising = false; press(false); return; }
+    if (touchCruising) return;
     // 第二根手指切换行驶镜头时，别把仍按住的起步键误当作松开。
     if ((event.target as Element | null)?.closest?.(".sc-drive-camera")) return;
     press(false);

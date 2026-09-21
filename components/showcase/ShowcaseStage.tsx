@@ -1108,13 +1108,14 @@ export default function ShowcaseStage({
                 onContextMenu={(event) => event.preventDefault()}
                 onSelect={(event) => event.preventDefault()}
                 onDragStart={(event) => event.preventDefault()}>
-                <span>{racing ? ui.raceActive : ui.raceIdle}</span>
+                <span className="kbd-only">{racing ? ui.raceActive : ui.raceIdle}</span>
+                <span className="touch-only">{racing ? "点按减速" : "点按起步"}</span>
                 <em>→</em>
               </button>
               <div className="sc-ctr-hint">
                 {/* 触屏没有空格键：两版文案都渲染，由 CSS 按 (hover: none) 选一版 */}
                 <span className="kbd-only">{ui.raceHint}</span>
-                <span className="touch-only">{ui.raceHintTouch}</span>
+                <span className="touch-only">点按保持行驶 · 可自由切换镜头</span>
               </div>
             </div>
 

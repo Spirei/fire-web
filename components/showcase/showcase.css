@@ -516,6 +516,11 @@ html:has(.showcase) body {
 .sc-race.on {
   transform: scale(0.985);
 }
+.sc-race .touch-only { display: none; }
+@media (pointer: coarse) {
+  .sc-race .kbd-only { display: none; }
+  .sc-race .touch-only { display: inline; }
+}
 
 /* 发车提示：默认键盘版；触屏版由下面的 (hover: none) 块切换 */
 .sc-ctr-hint .touch-only {
@@ -1672,6 +1677,8 @@ html:has(.showcase) body {
   right: 3.4vw;
   bottom: 8.5vh;
   pointer-events: auto;
+  display: grid;
+  gap: 6px;
 }
 .sc-drive-camera-toggle {
   display: inline-flex;
