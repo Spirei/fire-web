@@ -155,7 +155,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
     finally { visibilityBusyRef.current = false; setVisibilityBusy(null); }
   };
   const [coverBusy, setCoverBusy] = useState<string | null>(null);
-  const [previewGenerating, setPreviewGenerating] = useState(false);
+  const [previewGenerating, setPreviewGenerating] = useState<string | null>(null);
+  const previewGeneratingRef = useRef(false);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -205,11 +206,12 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   const wireTuneRef = useRef<HTMLDetailsElement | null>(null);
   const wheelTuneRef = useRef<HTMLDivElement | null>(null);
 
-  const generatePreviews = async () => {
-    if (previewGenerating) return;
-    setPreviewGenerating(true);
+  const generatePreviews = async (row: ImportedModelRow) => {
+    if (previewGeneratingRef.current) return;
+    previewGeneratingRef.current = true;
+    setPreviewGenerating(row.id);
     try {
-      const response = await fetch("/api/showcase/models/previews", { method: "POST" });
+      const response = await fetch("/api/showcase/models/previews", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: row.id }) });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         showToast(payload.error ?? "预览版本生成失败", "err");
@@ -219,7 +221,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
       const deadline = Date.now() + 9 * 60 * 1000;
       while (result.status === "running" && Date.now() < deadline) {
         await new Promise((resolve) => window.setTimeout(resolve, 1000));
-        const statusResponse = await fetch("/api/showcase/models/previews", { cache: "no-store" });
+        const statusResponse = await fetch(`/api/showcase/models/previews?jobId=${encodeURIComponent(payload.jobId)}`, { cache: "no-store" });
         result = await statusResponse.json().catch(() => ({ status: "error", error: "无法读取生成状态" }));
         if (!statusResponse.ok) break;
       }
@@ -227,12 +229,13 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         showToast(result.error ?? "预览版本生成超时，请稍后重试", "err");
         return;
       }
-      showToast(`已生成 ${result.count ?? 0} 个首页预览版本`);
+      showToast(`已生成“${row.label}”的首页预览`);
       router.refresh();
     } catch {
       showToast("预览版本生成失败：网络异常", "err");
     } finally {
-      setPreviewGenerating(false);
+      previewGeneratingRef.current = false;
+      setPreviewGenerating(null);
     }
   };
 
@@ -1052,12 +1055,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         <h2>
           <span>·</span> 车型清单
         </h2>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-edge bg-bg-gray/45 px-4 py-3 dark:border-white/10 dark:bg-white/[0.035]">
-          <p className="text-xs leading-5 text-muted dark:text-white/55">批量生成首页轻量模型；模型展示和工作台仍使用原始高清版本。</p>
-          <button type="button" className={`mp-primary fire-cap fire-cap-primary${previewGenerating ? " on" : ""}`} onClick={() => void generatePreviews()} disabled={previewGenerating}>
-            {previewGenerating ? "正在生成预览…" : "生成首页预览"}
-          </button>
-        </div>
+        <p className="mt-3 text-xs leading-5 text-muted dark:text-white/55">在车型卡片上单独生成首页轻量预览，只处理选中的车型；模型展示和工作台仍使用原始高清版本。</p>
         {/* 封面文件选择：卡片上的「传封面」统一走这个隐藏输入 */}
         <input
           ref={coverInputRef}
@@ -1145,6 +1143,9 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                       <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
                       {(visibility[row.id] ?? row.hidden) ? <path d="m4 4 16 16" /> : <circle cx="12" cy="12" r="2.6" />}
                     </svg>
+                  </button>
+                  <button type="button" className="fire-cap px-2 py-1 text-[11px] font-semibold" disabled={previewGenerating !== null || row.present === false} onClick={() => void generatePreviews(row)}>
+                    {previewGenerating === row.id ? "正在生成预览…" : row.previewReady ? "重新生成预览" : "生成首页预览"}
                   </button>
                   {!row.builtin && (
                     <button

@@ -652,7 +652,7 @@ Authorization: Bearer <token>
 | PUT | `/api/showcase/models/order` | 保存首页车型排列顺序 | 管理员 |
 | POST | `/api/showcase/models/cover?id={id}&name={image}` | 上传车型封面，最大 6MB | 管理员 |
 | DELETE | `/api/showcase/models/cover?id={id}` | 移除自定义封面 | 管理员 |
-| POST | `/api/showcase/models/previews` | 异步启动首页轻量预览批量生成 | 管理员 |
+| POST | `/api/showcase/models/previews` | 按指定车型异步生成首页轻量预览 | 管理员 |
 | GET | `/api/showcase/models/previews` | 查询预览生成任务状态 | 管理员 |
 
 ### GLB 体检与保存
@@ -711,13 +711,18 @@ Content-Type: application/json
 ```http
 POST /api/showcase/models/previews
 Cookie: fire_session=<admin-session>
+Content-Type: application/json
+
+{ "id": "mp46" }
 ```
 
-返回 HTTP `202`。没有任务运行时创建新任务；已有任务运行时直接返回同一任务，不会并行重复压缩。
+返回 HTTP `202`。必须指定单个车型 `id`，未指定返回 `400`，不会批量生成；已有任务运行时返回 `409`。
 
 ```json
 {
   "status": "running",
+  "id": "mp46",
+  "jobId": "<job-id>",
   "count": 0,
   "startedAt": 1789948800000
 }
@@ -728,17 +733,19 @@ Cookie: fire_session=<admin-session>
 #### 查询任务状态
 
 ```http
-GET /api/showcase/models/previews
+GET /api/showcase/models/previews?jobId=<job-id>
 Cookie: fire_session=<admin-session>
 Cache-Control: no-cache
 ```
 
-`status` 取值为 `idle`、`running`、`done` 或 `error`。完成时 `count` 是可用预览模型数量，并返回 `finishedAt`；失败时返回截断后的 `error` 信息。建议运行期间每秒轮询一次，进入 `done` 或 `error` 后停止。
+`status` 取值为 `idle`、`running`、`done` 或 `error`。完成时 `count` 为本次生成数量（单车型为 1），并返回 `finishedAt`；传入的 `jobId` 与当前任务不一致时返回 `409`；失败时返回截断后的 `error` 信息。建议运行期间每秒轮询一次，进入 `done` 或 `error` 后停止。
 
 ```json
 {
   "status": "done",
-  "count": 4,
+  "id": "mp46",
+  "jobId": "<job-id>",
+  "count": 1,
   "startedAt": 1789948800000,
   "finishedAt": 1789948824000
 }
