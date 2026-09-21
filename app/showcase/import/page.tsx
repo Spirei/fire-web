@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
+import { cleanupOrphanFiles } from "@/lib/fileCleanup";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { modelFileExists, modelPreviewExists, modelUrlExists, orderRanker, readRegistry, readStoredModels, resolveOrder } from "@/lib/showcaseModels";
 import { SHOWCASE_MODELS } from "@/components/showcase/presets/models";
@@ -35,6 +36,7 @@ export default async function ShowcaseImportPage() {
       </main>
     );
   }
+  cleanupOrphanFiles({ scope: "showcase-unsaved" });
   const { order, builtinMeta } = readRegistry();
   // 清单里连内置那辆一起列出来：首页有几辆，这里就显示几行，不会对不上
   const builtin = SHOWCASE_MODELS.map((item) => {

@@ -173,8 +173,8 @@ assert.match(importer, /mp-restore-screen/, 'model workbench covers the server i
 assert.match(importer, /version: previewFile/, 'parameter tuning keeps a stable asset cache key instead of redownloading the same GLB');
 assert.match(preview, /setInspectRegion\(activeRegion/, 'live preview rebuild restores the selected tuning region');
 assert.doesNotMatch(preview, /\[config, explore, onPartSelect/, 'live tuning reuses the existing WebGL scene instead of rebuilding it');
-assert.match(preview, /handle\.setModel\(\{ asset: config\.assets\.model, model: config\.model \}\)/, 'live tuning swaps the model in the existing renderer');
-assert.match(preview, /handle\.updateModelMaterials\(config\.model\)/, 'material-only tuning updates the mounted car without reparsing GLB');
+assert.match(fs.readFileSync("components/showcase/previewUpdates.ts", "utf8"), /handle\.setModel\(\{ asset: next\.assets\.model, model: next\.model \}\)/, 'live tuning swaps the model in the existing renderer');
+assert.match(fs.readFileSync("components/showcase/previewUpdates.ts", "utf8"), /handle\.updateModelMaterials\(next\.model\)/, 'material-only tuning updates the mounted car without reparsing GLB');
 assert.match(engine, /const INSPECTOR_MIN_ZOOM = 0\.015;/, 'inspector must permit cockpit-scale zoom');
 assert.match(engine, /const INSPECTOR_MAX_ZOOM = 400;/, 'inspector must permit Sketchfab-scale zoom out');
 assert.match(engine, /clamp\(r \* 0\.003, 0\.0015, 0\.08\)/, 'near plane follows close camera distance');

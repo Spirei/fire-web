@@ -760,6 +760,43 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal((await read('symlink.glb')).status, 404);
     fs.unlinkSync(path.join(store.MODELS_DIR, 'symlink.glb'));
   });
+  await test('showcase 体检不留附件，保存成功才落盘，失败与旧草稿均清理', async () => {
+    const route = require(path.join(root, 'app/api/showcase/models/upload/route.ts'));
+    const store = require(path.join(root, 'lib/showcaseModels.ts'));
+    const { cleanupOrphanFiles } = require(path.join(root, 'lib/fileCleanup.ts'));
+    const json = Buffer.from(JSON.stringify({ asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [] }], materials: [{ name: 'tire' }], meshes: [{ primitives: [] }] }));
+    const chunk = Buffer.alloc(Math.ceil(json.length / 4) * 4, 32); json.copy(chunk);
+    const glb = Buffer.alloc(20 + chunk.length); glb.writeUInt32LE(0x46546c67, 0); glb.writeUInt32LE(2, 4); glb.writeUInt32LE(glb.length, 8); glb.writeUInt32LE(chunk.length, 12); glb.writeUInt32LE(0x4e4f534a, 16); chunk.copy(glb, 20);
+    const metadata = { id: 'retention-test', label: 'Retention', note: '', params: { length: 5.6 } };
+    const call = (meta, bytes = glb) => route.POST(new Request('http://localhost:3000/api/showcase/models/upload?name=retention.glb', { method: 'POST', headers: { cookie: `fire_session=${tokens.admin}`, ...(meta ? { 'x-showcase-model': encodeURIComponent(JSON.stringify(meta)) } : {}) }, body: bytes }));
+    const list = () => fs.existsSync(store.MODELS_DIR) ? fs.readdirSync(store.MODELS_DIR).sort() : [];
+    const before = list(); const tempDirs = [];
+    const mkdtemp = fs.promises.mkdtemp;
+    fs.promises.mkdtemp = async (...args) => { const dir = await mkdtemp(...args); tempDirs.push(dir); return dir; };
+    try {
+      const inspected = await call(); assert.equal(inspected.status, 200);
+      assert.equal((await inspected.json()).url, undefined, 'inspection cannot expose a stored draft URL');
+      assert.deepEqual(list(), before, 'successful inspection retains no uploaded GLB');
+      assert.equal((await call(null, Buffer.from('invalid'))).status, 400);
+      assert.equal((await call({ ...metadata, params: { length: 0 } })).status, 400);
+      assert.deepEqual(list(), before, 'invalid upload and invalid save retain no attachment');
+      const rename = fs.renameSync;
+      fs.renameSync = (from, to) => { if (String(to).endsWith('showroom.json')) throw new Error('simulated registry failure'); return rename(from, to); };
+      try { assert.equal((await call(metadata)).status, 400); } finally { fs.renameSync = rename; }
+      assert.deepEqual(list(), before, 'failed registry commit rolls back the copied model');
+      const saved = await call(metadata); assert.equal(saved.status, 200);
+      const { model } = await saved.json();
+      assert.deepEqual(fs.readFileSync(path.join(store.MODELS_DIR, model.file)), glb);
+      assert(store.readStoredModels().some(item => item.id === model.id && item.file === model.file));
+      assert.equal((await call(metadata)).status, 400);
+      assert.deepEqual(list(), [...before, model.file].sort(), 'duplicate save cannot retain another file');
+      fs.writeFileSync(path.join(store.MODELS_DIR, '.draft-old--unsaved.glb'), glb);
+      assert.equal(cleanupOrphanFiles({ scope: 'showcase-unsaved' }).removed, 1);
+      assert(fs.existsSync(path.join(store.MODELS_DIR, model.file)), 'cleanup preserves saved models');
+      assert(tempDirs.every(dir => !fs.existsSync(dir)), 'all inspection and save temp directories are removed');
+      store.removeStoredModel(model.id, { deleteFile: true });
+    } finally { fs.promises.mkdtemp = mkdtemp; }
+  });
   await test('showcase 上传草稿不会提前上线，保存后原子转正，移出清单不会自动复活', () => {
     const store = require(path.join(root, 'lib/showcaseModels.ts'));
     fs.mkdirSync(store.MODELS_DIR, { recursive: true });

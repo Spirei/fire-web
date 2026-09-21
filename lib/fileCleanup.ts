@@ -113,7 +113,27 @@ export function organizeAssetFiles(): number {
 }
 
 /* 清理孤立文件：扫描 public/uploads 下未被任何记录引用的文件（历史遗留 / 替换后残留） */
-export function cleanupOrphanFiles(): { removed: number; failed: number } {
+export function cleanupOrphanFiles(options: { scope?: "showcase-unsaved" } = {}): { removed: number; failed: number } {
+  if (options.scope === "showcase-unsaved") {
+    const root = path.join(PUBLIC_DIR, "uploads", "mclaren");
+    const models = path.join(root, "models");
+    const saved = new Set<string>();
+    try {
+      const registry = JSON.parse(fs.readFileSync(path.join(root, "showroom.json"), "utf8"));
+      if (!Array.isArray(registry.models)) return { removed: 0, failed: 1 };
+      for (const model of registry.models) if (typeof model?.file === "string") saved.add(model.file);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") return { removed: 0, failed: 1 };
+    }
+    let removed = 0; let failed = 0;
+    if (!fs.existsSync(models)) return { removed, failed };
+    for (const entry of fs.readdirSync(models, { withFileTypes: true })) {
+      // 只清理旧导入流程生成的未保存附件，不碰原始素材、正式车型或其他目录。
+      if (!entry.isFile() || !/^\.draft-.*\.(glb|part)$/.test(entry.name) || saved.has(entry.name)) continue;
+      try { fs.unlinkSync(path.join(models, entry.name)); removed++; } catch { failed++; }
+    }
+    return { removed, failed };
+  }
   const db = getDb();
   const refs = new Set<string>();
   const addRef = (url: string | null | undefined) => {
@@ -155,6 +175,8 @@ export function cleanupOrphanFiles(): { removed: number; failed: number } {
         // 卡面清单原图目录整棵跳过：卡面库直接从 manifest.json 读这些文件，
         // 数据库里没有任何引用，扫下去会整目录被当孤立文件清掉
         if (ent.name === "cards" && path.basename(dir) === "uploads") continue;
+        // 车型由 showroom.json 管理，不能按通用素材库的数据库引用判定为孤立文件。
+        if (ent.name === "mclaren" && path.basename(dir) === "uploads") continue;
         walk(full);
         continue;
       }

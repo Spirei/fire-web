@@ -5698,3 +5698,9 @@ button.PhotoView-Slider__toolbarIcon {
   .assistant-trace-toolbar { overflow-x:auto; scrollbar-width:none; }
   .assistant-trace-toolbar::-webkit-scrollbar { display:none; }
 }
+/* 模型导入工作台：与浅色管理页对应的深色提示。 */
+.dark .mp-status-row { color: #a6afbc; }
+.dark .mp-wheel em { color: #f3c98b; }
+.dark .mp-field-error { color: #ff9c8f; }
+
+.dark .mp-workbench.mp-root { background: #111722; color: #e8eaee; }

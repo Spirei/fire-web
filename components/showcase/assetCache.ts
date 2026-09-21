@@ -134,7 +134,7 @@ function pruneOld(db: IDBDatabase, keepKey: string): Promise<void> {
  * 读取素材字节流：先查 IndexedDB，没有再走网络；网络结果会静默写入缓存。
  * onProgress 只在网络下载阶段回调（0–1）。
  */
-export type AssetCacheMode = "cache-api" | "indexeddb" | "network";
+export type AssetCacheMode = "cache-api" | "indexeddb" | "network" | "temporary";
 
 /** 同一个 URL 的下载只跑一次：预取与真正加载共用同一条请求 */
 const inflight = new Map<string, Promise<{ buffer: ArrayBuffer; fromCache: boolean; mode: AssetCacheMode }>>();
@@ -176,6 +176,15 @@ async function loadAsset(
   absUrl: string,
   onProgress?: (ratio: number) => void
 ): Promise<{ buffer: ArrayBuffer; fromCache: boolean; mode: AssetCacheMode }> {
+
+  // 未保存模型只在当前页面预览，禁止写入 Cache Storage / IndexedDB。
+  if (absUrl.startsWith("blob:")) {
+    const response = await fetch(absUrl);
+    if (!response.ok) throw new Error("临时模型已释放，请重新选择文件");
+    const buffer = await response.arrayBuffer();
+    onProgress?.(1);
+    return { buffer, fromCache: false, mode: "temporary" };
+  }
 
   // 1) HTTPS（线上）：Cache Storage
   const cachedByApi = await readFromCacheApi(absUrl);

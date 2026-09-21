@@ -672,3 +672,63 @@ html.mp-workbench-open { overflow: hidden; }
   background: #fff;
   border-color: rgba(16, 20, 28, 0.16);
 }
+
+/* 工作台独立挂在 body，桌面两栏各自滚动，窄屏自然向下阅读。 */
+.mp-workbench.mp-root {
+  max-width: none;
+  margin: 0;
+  display: block;
+  background: #0b0d11;
+  color: #e8eaee;
+}
+.mp-workbench .mp-tune { grid-template-columns: minmax(0, 1.5fr) minmax(360px, .85fr); min-height: 0; }
+.mp-workbench .mp-preview { height: calc(100dvh - 238px); min-height: 340px; }
+.mp-workbench .mp-preview-wrap { min-width: 0; position: relative; top: auto; }
+.mp-workbench .mp-form { min-width: 0; margin: 0; border: 0; max-height: calc(100dvh - 182px); grid-auto-rows: max-content; align-content: start; }
+.mp-workbench-head h2 { min-width: 0; flex-wrap: wrap; }
+.mp-workbench-head h2 small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-workbench-actions { flex: none; }
+.mp-status-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; font-size: 11px; line-height: 1.6; margin: 10px 0; color: #a6afbc; }
+.mp-section-title { grid-column: 1 / -1; font-size: 13px; font-weight: 650; display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0 0; }
+.mp-section-title small { font-size: 11px; font-weight: 400; opacity: .6; }
+.mp-section-nav { grid-column: 1 / -1; display: flex; gap: 6px; overflow-x: auto; min-height: 36px; }
+.mp-section-nav .mp-ghost { font-size: 11px; padding: 7px 12px; }
+.mp-wheel-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.mp-wheel-tools input { min-width: 0; flex: 1 1 150px; }
+.mp-wheel-tools span { font-size: 11px; opacity: .65; }
+.mp-wheel-tools .mp-ghost { padding: 7px 12px; font-size: 11px; }
+.mp-form .mp-wheel-list label { flex-direction: row; min-width: 0; max-width: 100%; opacity: 1; }
+.mp-wheel-list label span { overflow-wrap: anywhere; }
+.mp-form .mp-wheel-list input { flex: none; width: 14px; height: 14px; min-height: 0; margin: 0; padding: 0; }
+.mp-form-save { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-top: 1px solid rgba(127,137,152,.24); padding-top: 16px; margin-top: 4px; }
+.mp-form-save span { font-size: 11px; opacity: .65; }
+.mp-empty { grid-column: 1 / -1; font-size: 12px; opacity: .65; }
+.mp-preview-stale { background: rgba(127,137,152,.08); border-color: rgba(127,137,152,.24); color: inherit; }
+.mp-preview-error { flex-direction: column; gap: 16px; background: rgba(9,11,15,.88); z-index: 8; color: #ffb4a9; }
+.mp-cancel { margin-top: 16px; }
+.mp-resume { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.mp-resume p { font-size: 12px; opacity: .65; margin: 5px 0 0; }
+.mp-workbench > .mp-error { margin: 8px 0; }
+:root:not(.dark) .mp-workbench.mp-root { background: #f6f7f9; color: #1c1f24; }
+:root:not(.dark) .mp-status-row { color: #596373; }
+:root:not(.dark) .mp-wheel em { color: #8a5611; }
+:root:not(.dark) .mp-field-error { color: #b83226; }
+@media (max-width: 1080px) {
+  .mp-workbench .mp-tune { grid-template-columns: minmax(0, 1fr); }
+  .mp-workbench .mp-preview { height: min(54dvh, 600px); min-height: 300px; }
+  .mp-workbench .mp-form { max-height: none; overflow: visible; }
+  .mp-workbench-head { position: sticky; top: -22px; z-index: 10; padding: 10px 0; background: inherit; }
+}
+@media (max-width: 560px) {
+  .mp-workbench.mp-root { padding: max(12px, env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom)); }
+  .mp-workbench-head { top: -12px; }
+  .mp-workbench-head h2 { font-size: 16px; }
+  .mp-workbench-actions button { font-size: 12px; padding: 8px 10px; }
+  .mp-workbench .mp-preview { height: 42dvh; min-height: 280px; }
+  .mp-workbench .mp-form { padding: 0; grid-template-columns: minmax(0, 1fr); }
+  .mp-wheel-list { flex-wrap: wrap; overflow: visible; }
+  .mp-workbench .mp-wheel-tools input { flex-basis: 100%; }
+  .mp-workbench .mp-wheel-list label { padding: 9px 11px; }
+  .mp-form-save { align-items: stretch; flex-direction: column; }
+  .mp-resume { align-items: stretch; flex-direction: column; }
+}

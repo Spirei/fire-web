@@ -313,12 +313,16 @@ export function writeStoredModels(
   const usable = new Set([...ids, ...builtinIds]);
   const kept = (order ?? previous.order).filter((id) => usable.has(id));
   const finalOrder = [...kept, ...ids.filter((id) => !kept.includes(id))];
-  fs.writeFileSync(
-    tmp,
-    JSON.stringify({ version: 1, order: finalOrder, models, builtinMeta: builtinMeta ?? previous.builtinMeta ?? {}, ignoredFiles: ignoredFiles ?? previous.ignoredFiles }, null, 2),
-    "utf8"
-  );
-  fs.renameSync(tmp, REGISTRY_FILE);
+  try {
+    fs.writeFileSync(
+      tmp,
+      JSON.stringify({ version: 1, order: finalOrder, models, builtinMeta: builtinMeta ?? previous.builtinMeta ?? {}, ignoredFiles: ignoredFiles ?? previous.ignoredFiles }, null, 2),
+      "utf8"
+    );
+    fs.renameSync(tmp, REGISTRY_FILE);
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
 }
 
 /** 调整展示顺序（首页车型条按这个顺序排） */

@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import ModelPreview from "./ModelPreview";
+import { createPortal } from "react-dom";
+import ModelPreview, { type PreviewStatus } from "./ModelPreview";
+import { matchingWheelMaterials, suggestWheelMaterials, validateWorkbench, wheelSelectionPattern } from "./workbenchUtils";
 import { buildImportedConfig } from "./presets/models";
 import type { ShowcaseModelParams } from "./types";
 import { showToast } from "@/lib/toast";
@@ -128,6 +130,9 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   /** 卡片顺序：拖动后本地先变，再写服务端（首页车型条照这个顺序排） */
   const [order, setOrder] = useState(() => existing.map((row) => row.id));
   const [dragId, setDragId] = useState<string | null>(null);
+  const orderSavingRef = useRef(false);
+  const [orderSaving, setOrderSaving] = useState(false);
+  useEffect(() => { if (!orderSavingRef.current) setOrder(existing.map(row => row.id)); }, [existing]);
   const [coverBusy, setCoverBusy] = useState<string | null>(null);
   const [previewGenerating, setPreviewGenerating] = useState(false);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
@@ -138,12 +143,23 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   const [report, setReport] = useState<ImportReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [savedId, setSavedId] = useState<string | null>(null);
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+  const [workbenchOpen, setWorkbenchOpen] = useState(true);
+  const [previewStatus, setPreviewStatus] = useState<PreviewStatus>("loading");
+  const [wheelSearch, setWheelSearch] = useState("");
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const workbenchRef = useRef<HTMLElement | null>(null);
+  const savingRef = useRef(false);
+  const restoredOnceRef = useRef(false);
+  const pendingWheelPatternRef = useRef<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /** 正在编辑的已登记车型（null = 新导入）；编辑时不重新上传，直接改参数 */
   const [editingId, setEditingId] = useState<string | null>(null);
   /** 预览用的素材文件名：新上传=刚上传的文件，编辑已有=那一行的文件 */
   const [previewFile, setPreviewFile] = useState<string | null>(null);
+  const selectedFileRef = useRef<File | null>(null);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
+  useEffect(() => () => { if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl); }, [localPreviewUrl]);
 
   const [meta, setMeta] = useState({ id: "", label: "", note: "" });
   const [params, setParams] = useState<ShowcaseModelParams>({});
@@ -201,11 +217,15 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
 
   // 工作台是独立编辑环境：刷新、HMR 或临时离开页面后恢复当前车型与未保存参数。
   useEffect(() => {
+    if (restoredOnceRef.current) return;
+    restoredOnceRef.current = true;
     try {
       const raw = window.localStorage.getItem(WORKBENCH_STORAGE_KEY);
       if (raw) {
         const draft = JSON.parse(raw) as {
           editingId?: string | null;
+          workbenchOpen?: boolean;
+          savedSnapshot?: string | null;
           previewFile?: string;
           meta?: { id: string; label: string; note: string };
           params?: ShowcaseModelParams;
@@ -214,22 +234,30 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
           wireTuneOpen?: boolean;
         };
         const row = draft.editingId ? existing.find(item => item.id === draft.editingId && item.present !== false) : null;
-        const file = row?.file ?? draft.previewFile;
+        const file = row?.file;
+        if (!row) {
+          try { window.localStorage.removeItem(WORKBENCH_STORAGE_KEY); } catch { /* 清理附件不依赖浏览器存储可用。 */ }
+          setNotice("未保存的附件不保留，请重新选择模型文件");
+        }
         if (file && draft.meta?.id && draft.params) {
           const restored = normalizeWireframeParams(draft.params);
           setEditingId(row?.id ?? null);
+          setWorkbenchOpen(draft.workbenchOpen !== false);
+          const saved = draft.savedSnapshot ? JSON.parse(draft.savedSnapshot) as { meta: typeof meta; params: ShowcaseModelParams } : null;
+          setSavedSnapshot(saved ? JSON.stringify({ meta: saved.meta, params: normalizeWireframeParams(saved.params) }) : null);
           setPreviewFile(file);
           setMeta(draft.meta);
           setParams(restored);
           setPreviewParams(restored);
-          setWheelPick(Array.isArray(draft.wheelPick) ? draft.wheelPick : []);
+          if (Array.isArray(draft.wheelPick)) setWheelPick(draft.wheelPick);
+          else pendingWheelPatternRef.current = restored.wheelPattern ?? "(?!)";
           setTuneRegion(TUNE_REGIONS.some(region => region.id === draft.tuneRegion) ? draft.tuneRegion! : "overall");
           setWireTuneOpen(Boolean(draft.wireTuneOpen));
           setPreviewKey(prev => prev + 1);
         }
       }
     } catch {
-      window.localStorage.removeItem(WORKBENCH_STORAGE_KEY);
+      try { window.localStorage.removeItem(WORKBENCH_STORAGE_KEY); } catch { /* 清理附件不依赖浏览器存储可用。 */ }
     } finally {
       setWorkbenchHydrated(true);
     }
@@ -237,35 +265,43 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
 
   useEffect(() => {
     if (!workbenchHydrated) return;
-    if (!previewFile) {
-      window.localStorage.removeItem(WORKBENCH_STORAGE_KEY);
+    if (!previewFile || !editingId) {
+      try { window.localStorage.removeItem(WORKBENCH_STORAGE_KEY); } catch { /* 清理附件不依赖浏览器存储可用。 */ }
       return;
     }
     const timer = window.setTimeout(() => {
-      window.localStorage.setItem(WORKBENCH_STORAGE_KEY, JSON.stringify({
-        editingId, previewFile, meta, params, wheelPick, tuneRegion, wireTuneOpen
-      }));
+      try {
+        window.localStorage.setItem(WORKBENCH_STORAGE_KEY, JSON.stringify({
+          editingId, previewFile, meta, params, wheelPick, tuneRegion, wireTuneOpen, workbenchOpen, savedSnapshot
+        }));
+        setDraftError(null);
+      } catch { setDraftError("浏览器无法保存草稿，离开前请保存车型"); }
     }, 150);
     return () => window.clearTimeout(timer);
-  }, [editingId, meta, params, previewFile, tuneRegion, wheelPick, wireTuneOpen, workbenchHydrated]);
+  }, [editingId, meta, params, previewFile, tuneRegion, wheelPick, wireTuneOpen, workbenchHydrated, workbenchOpen, savedSnapshot]);
 
   const reset = useCallback(() => {
-    window.localStorage.removeItem(WORKBENCH_STORAGE_KEY);
+    try { window.localStorage.removeItem(WORKBENCH_STORAGE_KEY); } catch { /* 清理附件不依赖浏览器存储可用。 */ }
     setReport(null);
     setError(null);
     setProgress(0);
     setFileName("");
     setStructure(null);
     setWheelPick([]);
-    setSavedId(null);
+    setSavedSnapshot(null);
     setPreviewFile(null);
+    selectedFileRef.current = null;
+    setLocalPreviewUrl(null);
+    setWorkbenchOpen(true);
+    setWheelSearch("");
+    setMaterialCatalog(null);
+    pendingWheelPatternRef.current = null;
     setEditingId(null);
   }, []);
 
   const upload = useCallback(
     (file: File) => {
-      xhrRef.current?.abort();
-      reset();
+      if (uploading) return;
       if (!/\.glb$/i.test(file.name)) {
         setError("只支持 .glb 单文件：.gltf + 贴图文件夹无法在这里导入");
         return;
@@ -274,17 +310,26 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         setError(`文件 ${mb(file.size)} 超过 ${Math.round(MAX_UPLOAD_BYTES / 1048576)}MB 上限`);
         return;
       }
-      const name = file.name.replace(/[^A-Za-z0-9._-]/g, "_");
+      reset();
+      const name = file.name.replace(/[^A-Za-z0-9._-]/g, "_").replace(/\.glb$/i, ".glb");
       setFileName(name);
       setUploading(true);
       const xhr = new XMLHttpRequest();
       xhrRef.current = xhr;
+      xhr.timeout = 600_000;
+      const fail = (message: string) => {
+        if (xhrRef.current !== xhr) return;
+        xhrRef.current = null;
+        setUploading(false);
+        setError(message);
+      };
       xhr.open("POST", `/api/showcase/models/upload?name=${encodeURIComponent(name)}`);
       xhr.setRequestHeader("Content-Type", "model/gltf-binary");
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) setProgress(event.loaded / event.total);
       };
       xhr.onload = () => {
+        if (xhrRef.current !== xhr) return;
         setUploading(false);
         xhrRef.current = null;
         let payload: { error?: string; report?: ImportReport; file?: string; suggested?: { id: string; label: string; note: string } } = {};
@@ -299,23 +344,25 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
           if (payload.report) setReport(payload.report);
           return;
         }
-        if (!payload.report) {
+        if (!payload.report || !payload.file) {
           setError("没有拿到体检报告");
           return;
         }
         const data = payload.report;
         setReport(data);
-        setPreviewFile(payload.file ?? data.file);
+        selectedFileRef.current = file;
+        setLocalPreviewUrl(URL.createObjectURL(file));
+        setPreviewFile(payload.file);
         setEditingId(null);
         setMeta({
           id: payload.suggested?.id ?? slugify(name),
           label: payload.suggested?.label ?? prettyLabel(name),
           note: payload.suggested?.note ?? ""
         });
-        setWheelPick(
-          data.suggestions.materialNames.filter((material) => /wheel|tyre|tire|rim/i.test(material))
-        );
+        const suggestedWheels = suggestWheelMaterials(data.suggestions.materialNames);
+        setWheelPick(suggestedWheels);
         const initialParams: ShowcaseModelParams = {
+          wheelPattern: wheelSelectionPattern(suggestedWheels),
           length: 5.6,
           maxTextureSize: data.suggestions.maxTextureSize,
           emissiveIntensity: data.suggestions.emissiveIntensity,
@@ -329,40 +376,37 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         setParams(initialParams);
         setPreviewParams(initialParams);
       };
-      xhr.onerror = () => {
-        setUploading(false);
-        setError("上传中断：检查网络或容器是否允许大文件");
-      };
+      xhr.onerror = () => fail("上传中断，请检查网络后重试");
+      xhr.ontimeout = () => fail("上传或体检超时，请重试");
       xhr.onabort = () => {
-        setUploading(false);
+        if (xhrRef.current !== xhr) return;
         xhrRef.current = null;
+        setUploading(false);
+        setNotice("已取消上传，可以重新选择模型");
       };
       xhr.send(file);
     },
-    [reset]
+    [reset, uploading]
   );
 
   useEffect(() => () => xhrRef.current?.abort(), []);
   useEffect(() => {
-    document.documentElement.classList.toggle("mp-workbench-open", Boolean(previewFile));
+    document.documentElement.classList.toggle("mp-workbench-open", Boolean(previewFile && workbenchOpen));
+    if (previewFile && workbenchOpen) workbenchRef.current?.focus();
     return () => document.documentElement.classList.remove("mp-workbench-open");
-  }, [previewFile]);
+  }, [previewFile, workbenchOpen]);
 
-  // 轮子材质多选 → wheelPattern（转成正则源码，转义特殊字符）
-  useEffect(() => {
-    setParams((prev) => {
-      const pattern = wheelPick.length
-        ? wheelPick.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
-        : undefined;
-      if (prev.wheelPattern === pattern) return prev;
-      return { ...prev, wheelPattern: pattern };
-    });
-  }, [wheelPick]);
+
+  const updateWheelPick = (names: string[]) => {
+    pendingWheelPatternRef.current = null;
+    setWheelPick(names);
+    setParams(previous => ({ ...previous, wheelPattern: wheelSelectionPattern(names) }));
+  };
 
   const previewConfig = useMemo(() => {
     if (!previewFile) return null;
     // 预览只依赖「会影响建模结构」的参数：朝向、车长、轮子、贴图上限
-    return buildImportedConfig({
+    const config = buildImportedConfig({
       file: previewFile,
       // 参数变化不会改变 GLB 文件本身；保持素材 URL 稳定，避免同一份大模型被当成新版本反复下载和改写缓存。
       version: previewFile,
@@ -381,9 +425,12 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         wireframe: previewParams.wireframe
       }
     });
+    if (localPreviewUrl) config.assets.model = localPreviewUrl;
+    return config;
     // previewKey 只用于显式触发一次原地重载，素材缓存键始终跟文件名绑定。
-  }, [previewFile, previewKey, previewParams]);
+  }, [previewFile, previewKey, previewParams, localPreviewUrl]);
 
+  const validationError = validateWorkbench(meta, params);
   const previewIsCurrent = useMemo(() => JSON.stringify(params) === JSON.stringify(previewParams), [params, previewParams]);
   const reloadPreview = useCallback(() => {
     const normalized = normalizeWireframeParams(params);
@@ -393,10 +440,10 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
     setPreviewKey((prev) => prev + 1);
   }, [params]);
   useEffect(() => {
-    if (!previewFile || JSON.stringify(params) === JSON.stringify(previewParams)) return;
+    if (!previewFile || !workbenchOpen || validationError || JSON.stringify(params) === JSON.stringify(previewParams)) return;
     const timer = window.setTimeout(reloadPreview, 350);
     return () => window.clearTimeout(timer);
-  }, [params, previewFile, previewParams, reloadPreview]);
+  }, [params, previewFile, previewParams, reloadPreview, workbenchOpen, validationError]);
   const wireframe = { ...DEFAULT_WIREFRAME, ...(params.wireframe ?? {}) };
   const setWireframeParam = <K extends keyof typeof wireframe>(key: K, value: (typeof wireframe)[K]) => {
     setParams((prev) => ({ ...prev, wireframe: { ...DEFAULT_WIREFRAME, ...(prev.wireframe ?? {}), [key]: value } }));
@@ -436,15 +483,15 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   }, [structure]);
 
   const wheelsOk = structure ? structure.wheelGroups > 0 : false;
-  const previewPending = !previewIsCurrent || !structure;
-  const wheelWarning = previewPending
+  const previewPending = !previewIsCurrent || !structure || previewStatus === "loading";
+  const wheelWarning = previewPending || previewStatus === "error"
     ? null
     : !wheelPick.length
       ? "请选择轮子材质"
       : !wheelsOk
         ? "已勾选材质，但未识别到可旋转轮子，请检查材质及前后轴、左右轴设置"
         : null;
-  const idValid = /^[a-z0-9][a-z0-9_-]{1,40}$/.test(meta.id);
+  const idValid = /^[a-z0-9][a-z0-9_-]{1,39}$/.test(meta.id);
   const idConflict = existing.find((row) => row.id === meta.id && row.id !== editingId);
 
   /** 轮子候选材质：优先用预览里真实加载出来的材质名（编辑已有车型时也能拿到） */
@@ -457,39 +504,64 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   const receiveStructure = useCallback((info: NonNullable<typeof structure>) => {
     setStructure(info);
     if (previewFile) setMaterialCatalog({ file: previewFile, names: info.carMaterials });
+    if (pendingWheelPatternRef.current !== null) {
+      setWheelPick(matchingWheelMaterials(info.carMaterials, pendingWheelPatternRef.current));
+      pendingWheelPatternRef.current = null;
+    }
   }, [previewFile]);
 
-  const save = useCallback(async () => {
-    const file = report?.file ?? previewFile;
-    if (!file) return;
+  const currentSnapshot = JSON.stringify({ meta, params });
+  const dirty = savedSnapshot !== currentSnapshot;
+  const saveBlocked = saving || Boolean(validationError) || Boolean(idConflict) || previewPending || previewStatus !== "ready" || !dirty;
+  const saveLabel = saving ? "保存中…" : !dirty ? "已保存" : editingId ? "保存修改" : "保存并加入车型条";
+  const statusText = saving ? "正在保存车型…" : validationError ?? (idConflict ? "车型代号已被使用，请修改代号" :
+    previewStatus === "error" ? "预览失败，参数已保留，请重试" : previewPending ? "正在更新预览…" : !dirty ? "已保存到车型条" : "预览已就绪 · 修改尚未保存");
+
+  const save = async () => {
+    if (!previewFile || saveBlocked || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setError(null);
     try {
-      // 新导入 → 新增登记；从清单里点「改参数」进来 → 改的是同一条记录
-      const response = await fetch(editingId ? `/api/showcase/models/${editingId}` : "/api/showcase/models", {
+      if (!editingId && !selectedFileRef.current) throw new Error("临时附件已释放，请重新选择模型文件");
+      const response = await fetch(editingId ? `/api/showcase/models/${editingId}` : `/api/showcase/models/upload?name=${encodeURIComponent(previewFile)}`, {
         method: editingId ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: meta.id,
-          label: meta.label,
-          note: meta.note,
-          file,
-          params: { ...params, pitch: params.pitch }
-        })
+        headers: editingId ? { "Content-Type": "application/json" } : {
+          "Content-Type": "model/gltf-binary",
+          "X-Showcase-Model": encodeURIComponent(JSON.stringify({ ...meta, params }))
+        },
+        body: editingId ? JSON.stringify({ ...meta, params }) : selectedFileRef.current
       });
-      const payload = (await response.json()) as { error?: string; model?: ImportedModelRow };
-      if (!response.ok) {
-        setError(payload.error ?? "保存失败");
-        return;
-      }
-      setSavedId(payload.model?.id ?? meta.id);
-      setNotice(`已保存车型 ${payload.model?.label ?? meta.label}，回首页就能在车型条里看到它`);
-    } catch {
-      setError("保存失败：网络异常");
+      const payload = await response.json() as { error?: string; model?: ImportedModelRow };
+      if (!response.ok || !payload.model) throw new Error(payload.error ?? "保存失败，请重试");
+      const model = payload.model;
+      const savedMeta = { id: model.id, label: model.label, note: model.note };
+      setEditingId(model.id);
+      selectedFileRef.current = null;
+      setLocalPreviewUrl(null);
+      setPreviewFile(model.file);
+      setMeta(savedMeta);
+      setParams(model.params);
+      setPreviewParams(model.params);
+      setReport(null);
+      setSavedSnapshot(JSON.stringify({ meta: savedMeta, params: model.params }));
+      setNotice(`已保存“${model.label}”，首页车型条已同步`);
+      // 草稿转正会改文件名：立即持久化，刷新不能再请求已不存在的草稿路径。
+      try { window.localStorage.setItem(WORKBENCH_STORAGE_KEY, JSON.stringify({
+        editingId: model.id, previewFile: model.file, meta: savedMeta, params: model.params,
+        wheelPick, tuneRegion, wireTuneOpen, workbenchOpen: true,
+        savedSnapshot: JSON.stringify({ meta: savedMeta, params: model.params })
+      })); } catch { setDraftError("车型已保存，但浏览器无法保留工作台草稿"); }
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "保存失败：网络异常";
+      if (!editingId) reset();
+      setError(editingId ? message : `${message}；未保存附件已释放，请重新选择文件`);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
-  }, [editingId, meta, params, previewFile, report]);
+  };
 
   const removeModel = useCallback(
     async (row: ImportedModelRow, withFile: boolean) => {
@@ -516,53 +588,41 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
     return [...existing].sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999));
   }, [existing, order]);
 
-  const persistOrder = useCallback(
-    async (ids: string[]) => {
-      try {
-        const response = await fetch("/api/showcase/models/order", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids })
-        });
-        if (!response.ok) {
-          const payload = (await response.json()) as { error?: string };
-          showToast(payload.error ?? "顺序保存失败", "err");
-          return;
-        }
-        showToast("顺序已保存，首页车型条同步");
-        router.refresh();
-      } catch {
-        showToast("顺序保存失败：网络异常", "err");
-      }
-    },
-    [router]
-  );
-
-  /** 拖动排序：拖到某张卡上就插到它前面 */
-  const moveCard = useCallback(
-    (targetId: string) => {
-      if (!dragId || dragId === targetId) return;
-      setOrder((prev) => {
-        const list = prev.filter((id) => id !== dragId);
-        const at = list.indexOf(targetId);
-        list.splice(at < 0 ? list.length : at, 0, dragId);
-        void persistOrder(list);
-        return list;
+  const persistOrder = async (ids: string[]) => {
+    if (orderSavingRef.current || ids.join("|") === order.join("|")) return;
+    const previous = order;
+    orderSavingRef.current = true;
+    setOrderSaving(true);
+    setOrder(ids);
+    try {
+      const response = await fetch("/api/showcase/models/order", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids })
       });
-    },
-    [dragId, persistOrder]
-  );
-
-  /** 拖到队尾：拖到某张卡上只会插到它前面，所以「排到最后」需要单独一个落点 */
-  const moveToEnd = useCallback(() => {
-    if (!dragId) return;
-    setOrder((prev) => {
-      if (prev[prev.length - 1] === dragId) return prev;
-      const list = [...prev.filter((id) => id !== dragId), dragId];
-      void persistOrder(list);
-      return list;
-    });
-  }, [dragId, persistOrder]);
+      if (!response.ok) {
+        const payload = await response.json();
+        throw new Error(payload.error ?? "顺序保存失败");
+      }
+      showToast("顺序已保存，首页车型条同步");
+      router.refresh();
+    } catch (err) {
+      setOrder(previous);
+      showToast(err instanceof Error ? err.message : "顺序保存失败：网络异常", "err");
+    } finally {
+      orderSavingRef.current = false;
+      setOrderSaving(false);
+    }
+  };
+  const moveCard = (targetId: string) => {
+    if (!dragId || dragId === targetId || orderSavingRef.current) return;
+    const list = order.filter(id => id !== dragId);
+    const at = list.indexOf(targetId);
+    list.splice(at < 0 ? list.length : at, 0, dragId);
+    void persistOrder(list);
+  };
+  const moveToEnd = () => {
+    if (!dragId || orderSavingRef.current) return;
+    void persistOrder([...order.filter(id => id !== dragId), dragId]);
+  };
 
   const uploadCover = useCallback(
     async (id: string, file: File) => {
@@ -609,7 +669,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   );
 
   return (
-    <div className={`mp-root${workbenchHydrated ? "" : " mp-hydrating"}`} aria-busy={!workbenchHydrated}>
+    <div className={`mp-root${workbenchHydrated ? "" : " mp-hydrating"}`} aria-busy={!workbenchHydrated} inert={Boolean(previewFile && workbenchOpen)}>
       {!workbenchHydrated && (
         <div className="mp-restore-screen" role="status" aria-live="polite">
           <span />
@@ -621,8 +681,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
           <p className="mp-kicker">车型导入</p>
           <h1>导入一台车</h1>
           <p className="mp-sub">
-            模型只放在服务器 uploads 卷（<code>public/uploads/mclaren/models/</code>），不进 Git、不进镜像。
-            上传后会先做一轮体检，再在预览里摆正、认轮子，最后写进车型条。
+            选择 GLB，检查模型并调整朝向与轮子。只有保存成功才保留附件；取消、离开或保存失败都会释放临时文件。
           </p>
         </div>
         <Link className="mp-back fire-cap" href="/">
@@ -630,7 +689,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         </Link>
       </header>
 
-      {notice && <div className="mp-notice">{notice}</div>}
+      {previewFile && !workbenchOpen && <section className="mp-step mp-resume"><div><b>{meta.label || "当前车型"}</b><p>已保存车型的调参草稿已保留，可继续编辑。</p></div><button type="button" className="fire-cap mp-primary fire-cap-primary" onClick={() => { setStructure(null); setPreviewStatus("loading"); setWorkbenchOpen(true); }}>继续调校</button></section>}
+      {notice && <div className="mp-notice" role="status">{notice}</div>}
       {error && <div className="mp-error">{error}</div>}
 
       <section className="mp-step">
@@ -650,7 +710,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             event.preventDefault();
             setDragging(false);
             const file = event.dataTransfer.files?.[0];
-            if (file) upload(file);
+            if (file && !uploading) upload(file);
           }}
           onClick={() => { if (!uploading) inputRef.current?.click(); }}
           onKeyDown={(event) => {
@@ -675,7 +735,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
               <div className="mp-bar">
                 <span style={{ width: `${Math.round(progress * 100)}%` }} />
               </div>
-              <small>上传中 {Math.round(progress * 100)}%（大模型请耐心等待，离开页面会中断）</small>
+              <small role="status">{progress >= 1 ? "上传完成，正在检查模型与贴图…" : `上传中 ${Math.round(progress * 100)}% · 离开页面会中断`}</small>
             </div>
           ) : (
             <>
@@ -684,6 +744,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             </>
           )}
         </div>
+        {uploading && <button type="button" className="fire-cap mp-ghost mp-cancel" onClick={() => xhrRef.current?.abort()}>取消上传</button>}
       </section>
 
       {report && (
@@ -759,26 +820,28 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         </section>
       )}
 
-      {previewFile && !error && (
-        <section className="mp-step mp-workbench">
+      {previewFile && workbenchOpen && workbenchHydrated && createPortal(
+        <section ref={workbenchRef} tabIndex={-1} className="mp-root mp-workbench" role="dialog" aria-modal="true" aria-label="模型调校工作台">
           <div className="mp-workbench-head">
             <div><p>MODEL WORKBENCH</p><h2>模型调校工作台 <small>{meta.label || fileName}</small></h2></div>
             <div className="mp-workbench-actions">
-              <button type="button" className="mp-ghost fire-cap" onClick={reset}>返回车型清单</button>
-              <button type="button" className="mp-primary fire-cap fire-cap-primary" onClick={() => void save()} disabled={saving || !idValid || Boolean(idConflict) || !meta.label.trim() || !structure || !previewIsCurrent}>
-                {saving ? "保存中…" : "保存参数"}
+              <button type="button" className="mp-ghost fire-cap" disabled={saving} onClick={() => { if (!editingId) reset(); setWorkbenchOpen(false); router.refresh(); }}>返回车型清单</button>
+              <button type="button" className="mp-primary fire-cap fire-cap-primary" onClick={() => void save()} disabled={saveBlocked}>
+                {saveLabel}
               </button>
             </div>
           </div>
+          <div className="mp-status-row" role="status"><span>{statusText}</span><span>{draftError ?? (editingId ? "未保存参数暂存于此浏览器" : "临时预览 · 离开即释放附件")}</span></div>
+          {error && <div className="mp-error" role="alert">{error}</div>}
           <p className="mp-workbench-intro">单击彩色标注点或真实网格选择参数大类；双击具体零件下钻到单个网格。参数停止输入后自动更新预览。</p>
           <div className="mp-tune">
             <div className="mp-preview-wrap">
               {previewConfig && <ModelPreview config={previewConfig} showWireframe explore
                 partRegions={TUNE_REGIONS} activeRegion={tuneRegion} onRegionSelect={(id) => selectTuneRegion(id as TuneRegion)}
-                onPartSelect={inspectPart} onDebug={receiveStructure} />}
+                onPartSelect={inspectPart} onDebug={receiveStructure} onStatus={setPreviewStatus} />}
               {pickedPart && <div className="mp-picked-part"><span>已选网格</span><b>{pickedPart.mesh}</b><small>{pickedPart.materials.join(" · ") || "无材质名"}</small></div>}
               <div className="mp-preview-foot">
-                <button type="button" className="mp-ghost fire-cap" onClick={reloadPreview}>
+                <button type="button" className="mp-ghost fire-cap" disabled={saving || Boolean(validationError)} onClick={reloadPreview}>
                   立即更新预览
                 </button>
                 {structure && (
@@ -791,21 +854,29 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
               {upHint && <div className="mp-hint">朝向判断：{upHint.text}</div>}
             </div>
 
-            <div className="mp-form">
+            <fieldset className="mp-form" disabled={saving}>
+              <legend className="sr-only">车型参数</legend>
+              <h3 className="mp-section-title">基本信息 <small>保存后显示在首页车型条</small></h3>
+              <nav className="mp-section-nav" aria-label="调参分类">
+                <button type="button" className="fire-cap mp-ghost" onClick={() => selectTuneRegion("body")}>基础参数</button>
+                <button type="button" className="fire-cap mp-ghost" onClick={() => selectTuneRegion("aero")}>线框调校</button>
+                <button type="button" className="fire-cap mp-ghost" onClick={() => selectTuneRegion("wheels")}>轮子材质</button>
+              </nav>
               <label ref={bodyTuneRef}>
-                车型代号（英文，用于本地偏好与接口）
-                <input disabled={editingId !== null} value={meta.id} onChange={(event) => setMeta({ ...meta, id: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "") })} placeholder="mp4-5" />
+                车型代号（英文）
+                <input maxLength={40} disabled={editingId !== null} value={meta.id} onChange={(event) => setMeta({ ...meta, id: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "") })} placeholder="mp4-5" />
                 {!idValid && <small className="mp-field-error">请输入 2–40 位英文小写、数字、- 或 _</small>}
                 {idConflict && <small className="mp-field-error">代号已被“{idConflict.label}”使用</small>}
               </label>
               <label>
                 车型名称（显示在车型条上）
-                <input value={meta.label} onChange={(event) => setMeta({ ...meta, label: event.target.value })} placeholder="MP4/5" />
+                <input maxLength={24} value={meta.label} onChange={(event) => setMeta({ ...meta, label: event.target.value })} placeholder="MP4/5" />
               </label>
               <label>
                 年份 / 说明
-                <input value={meta.note} onChange={(event) => setMeta({ ...meta, note: event.target.value })} placeholder="1989" />
+                <input maxLength={24} value={meta.note} onChange={(event) => setMeta({ ...meta, note: event.target.value })} placeholder="1989" />
               </label>
+              <h3 className="mp-section-title">尺寸与朝向 <small>按模型坐标设置</small></h3>
               <label>
                 车长（米）：决定归一化比例，真车 4.6 / 5.6
                 <input
@@ -868,6 +939,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                   <option value="z">Z</option>
                 </select>
               </label>
+              <h3 className="mp-section-title">贴图与漆面 <small>按需调节细节</small></h3>
               <label>
                 贴图上限（像素）：4K 模型选 2048 更省显存
                 <input
@@ -929,52 +1001,31 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                   轮子材质（勾中才会自转；一个材质盖四个轮子时，引擎会按象限拆开）
                   {wheelWarning && <em>{wheelWarning}</em>}
                 </p>
+                <div className="mp-wheel-tools">
+                  <input aria-label="搜索轮子材质" placeholder="搜索材质名称" value={wheelSearch} onChange={event => setWheelSearch(event.target.value)} />
+                  <span>已选 {wheelPick.length} / {materialOptions.length}</span>
+                  <button type="button" className="fire-cap mp-ghost" disabled={!materialOptions.length} onClick={() => updateWheelPick(suggestWheelMaterials(materialOptions))}>推荐选择</button>
+                  <button type="button" className="fire-cap mp-ghost" disabled={!wheelPick.length} onClick={() => updateWheelPick([])}>清空</button>
+                </div>
                 <div className="mp-wheel-list">
-                  {materialOptions.map((material) => (
+                  {materialOptions.filter(name => name.toLowerCase().includes(wheelSearch.trim().toLowerCase())).map((material) => (
                     <label key={material} className={wheelPick.includes(material) ? "on" : ""}>
                       <input
                         type="checkbox"
                         checked={wheelPick.includes(material)}
-                        onChange={(event) =>
-                          setWheelPick((prev) =>
-                            event.target.checked ? [...prev, material] : prev.filter((name) => name !== material)
-                          )
-                        }
+                        onChange={(event) => updateWheelPick(event.target.checked ? [...wheelPick, material] : wheelPick.filter(name => name !== material))}
                       />
                       <span>{material}</span>
                     </label>
                   ))}
                 </div>
               </div>
-              {previewPending && <div className="mp-preview-stale" role="status">正在更新预览并识别轮子…</div>}
-            </div>
+              {wheelSearch && !materialOptions.some(name => name.toLowerCase().includes(wheelSearch.trim().toLowerCase())) && <p className="mp-empty">没有匹配的材质，已选项目仍然保留</p>}
+              {previewPending && previewStatus !== "error" && <div className="mp-preview-stale" role="status">{validationError ?? "正在更新预览并识别轮子…"}</div>}
+              <div className="mp-form-save"><span>{statusText}</span><button type="button" className="fire-cap mp-primary fire-cap-primary" disabled={saveBlocked} onClick={() => void save()}>{saveLabel}</button></div>
+            </fieldset>
           </div>
-        </section>
-      )}
-
-      {previewFile && !error && (
-        <section className="mp-step mp-save">
-          <h2>
-            <span>4</span> 保存并上线
-          </h2>
-          <p>
-            保存后会写进 uploads 卷的 <code>showroom.json</code>，首页车型条末尾就会出现这辆车；
-            之后再调参数不用重新上传，改完再点一次保存即可。
-          </p>
-          <div className="mp-save-row">
-            <button type="button" className="mp-primary fire-cap fire-cap-primary" onClick={() => void save()} disabled={saving || !idValid || Boolean(idConflict) || !meta.label.trim() || !structure || !previewIsCurrent}>
-              {saving ? "保存中…" : "保存车型"}
-            </button>
-            <button
-              type="button"
-              className="mp-ghost fire-cap"
-              onClick={reloadPreview}
-              disabled={saving}
-            >
-              立即更新预览
-            </button>
-          </div>
-        </section>
+        </section>, document.body
       )}
 
       <section className="mp-step">
@@ -1005,7 +1056,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
           {orderedRows.map((row) => (
             <article
               key={row.id}
-              draggable
+              draggable={!orderSaving}
               onDragStart={() => setDragId(row.id)}
               onDragEnd={() => setDragId(null)}
               onDragOver={(event) => event.preventDefault()}
@@ -1059,8 +1110,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                 </code>
                 <span className="text-[11px] text-faint dark:text-white/40">
                   {row.builtin
-                    ? "预设写在 presets/mcl35m.ts"
-                    : `长 ${row.params.length ?? "-"} m · 朝向 ${row.params.yaw ?? 0}° · 轮子 ${row.params.wheelPattern ?? "未指定"}`}
+                    ? "内置车型 · 开箱即用"
+                    : `长 ${row.params.length ?? "-"} m · 朝向 ${row.params.yaw ?? 0}° · 轮子 ${row.params.wheelPattern && row.params.wheelPattern !== "(?!)" ? "已配置" : "未配置"}`}
                 </span>
                 {row.present === false && <span className="text-[11px] font-semibold text-[#d97706]">素材文件缺失，请重新上传后再上线</span>}
                 {row.present !== false && <span className={`text-[11px] font-semibold ${row.previewReady ? "text-[#22a06b]" : "text-[#d97706]"}`}>{row.previewReady ? "首页预览已生成" : "尚未生成首页预览"}</span>}
@@ -1072,19 +1123,22 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                       disabled={row.present === false}
                       onClick={() => {
                         setEditingId(row.id);
-                        setSavedId(null);
+                        setWorkbenchOpen(true);
+                        setPreviewStatus("loading");
+                        setStructure(null);
+                        setWheelSearch("");
+                        setSavedSnapshot(JSON.stringify({ meta: { id: row.id, label: row.label, note: row.note }, params: row.params }));
                         setNotice(null);
                         setError(null);
                         setReport(null);
+                        selectedFileRef.current = null;
+                        setLocalPreviewUrl(null);
                         setPreviewFile(row.file);
                         setMeta({ id: row.id, label: row.label, note: row.note });
                         setParams(row.params);
                         setPreviewParams(row.params);
-                        setWheelPick(
-                          row.params.wheelPattern
-                            ? row.params.wheelPattern.split("|").map((part) => part.replace(/\\/g, ""))
-                            : []
-                        );
+                        pendingWheelPatternRef.current = row.params.wheelPattern ?? "(?!)";
+                        setWheelPick([]);
                         setPreviewKey((prev) => prev + 1);
                       }}
                     >
