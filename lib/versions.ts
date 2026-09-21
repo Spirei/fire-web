@@ -4304,6 +4304,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "首页单屏适配覆盖桌面与平板，修复页面滚动条并统一镜头导航。",
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [{
+    title: "手机模型展示工具条与面板交互优化",
+    desc: "进入模型展示后工具条保持右上角定位，模型与返回文字保持单行。点击面板外部即可收起，模型按钮可重新展开，内部选择不会误关闭；Escape 收起后焦点回到模型按钮，并统一窄屏面板断点。",
+    kind: "fix"
+  }, {
     title: "展示台按钮保持单行与简洁章节刻度",
     desc: "起步和减速按钮禁止文字换行、压缩；模型展示的返回按钮恢复文字按钮宽度，不再被图标尺寸挤成两行。右侧章节刻度排除全局玻璃点击效果，保持原有细线与高亮。",
     kind: "fix"

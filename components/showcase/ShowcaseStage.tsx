@@ -136,6 +136,7 @@ export default function ShowcaseStage({
   const inspectorRef = useRef(false);
   const [wirePanel, setWirePanel] = useState(false);
   const wirePanelRef = useRef(false);
+  const wireControlRef = useRef<HTMLDivElement | null>(null);
   const setWirePanelOpen = (on: boolean) => {
     setWirePanel(on); wirePanelRef.current = on;
   };
@@ -254,13 +255,23 @@ export default function ShowcaseStage({
   }, [config.watermark, currentModel, models]);
   useEffect(() => {
     if (!wirePanel) return;
-    const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !wireControlRef.current?.contains(event.target)) {
         setWirePanelOpen(false);
       }
     };
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setWirePanelOpen(false);
+        wireControlRef.current?.querySelector<HTMLButtonElement>(".sc-glass-trigger")?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", closeOutside, true);
     window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside, true);
+      window.removeEventListener("keydown", close);
+    };
   }, [wirePanel]);
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
@@ -874,7 +885,7 @@ export default function ShowcaseStage({
 
           <div className="sc-hud">
             <div className="sc-row sc-tools">
-              <div className="sc-wire-control" onKeyDown={(event) => {
+              <div className="sc-wire-control" ref={wireControlRef} onKeyDown={(event) => {
                 if (event.key === "Escape" && wirePanelRef.current) { setWirePanelOpen(false); event.currentTarget.querySelector("button")?.focus(); }
               }}>
                 <button type="button" className={`sc-tool sc-glass-trigger${inspector ? " on" : ""}`}

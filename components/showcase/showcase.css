@@ -1460,7 +1460,7 @@ html:has(.showcase) body {
   .sc-wire-colors button, .sc-wire-modes button, .sc-inspector-reset { min-height: 44px; }
   .sc-wire-heading button { flex-basis: 40px; height: 40px; }
 }
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .sc-wire-panel { position: fixed; top: max(68px, calc(env(safe-area-inset-top) + 60px)); right: 12px; width: min(304px, calc(100vw - 24px)); padding: 18px; }
 }
 @media (max-height: 500px) { .sc-wire-panel { max-height: calc(100dvh - 76px); overflow-y: auto; } }
@@ -1648,11 +1648,7 @@ html:has(.showcase) body {
     overscroll-behavior: contain;
   }
 
-  .showcase.sc-inspecting .sc-tools {
-    left: 12px;
-    right: 12px;
-    top: max(8px, env(safe-area-inset-top));
-  }
+  /* 进入展示后沿用右上角工具条定位，返回按钮向左展开。 */
 }
 
 /* 加速时把展示层收起，仅保留车辆、遥测和松手控制。 */
