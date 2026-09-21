@@ -839,6 +839,7 @@ html:has(.showcase.light) body {
 
 .sc-quality-option {
   position: relative;
+  pointer-events: auto;
   min-width: 40px;
   min-height: 24px;
   padding: 0;
