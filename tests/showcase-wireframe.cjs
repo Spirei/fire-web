@@ -192,6 +192,12 @@ assert.match(fs.readFileSync('components/showcase/wireframe.ts', 'utf8'), /gener
 assert.match(stage, /inspectorRef\.current \? wireRef\.current\.mode : "native"/, 'homepage never eagerly rebuilds a persisted inspector wireframe');
 assert.match(stage, /setWireframe\("native", wireRef\.current\.color\)/, 'leaving model inspection removes its extra wireframe draw layer');
 assert.match(stage, /cfg\.assets\.previewModel \?\? cfg\.assets\.model/, 'homepage mounts the lightweight model before the full inspector asset');
+assert.match(stage, /fire:showcase:texture-quality/, 'homepage texture quality persists across reloads');
+assert.match(stage, /fast: \{ label: "流畅", badge: "1K", size: 1024 \}/, 'fast quality uses 1K textures');
+assert.match(stage, /balanced: \{ label: "均衡", badge: "2K", size: 2048 \}/, 'balanced quality uses 2K textures');
+assert.match(stage, /fine: \{ label: "精细", badge: "4K", size: 4096 \}/, 'fine quality uses 4K textures');
+assert.match(stage, /original: \{ label: "原画", badge: "RAW", size: 16384 \}/, 'original quality preserves 8K source textures');
+assert.match(stage, /textureQuality !== "fast" \? config\.assets\.model/, 'higher texture modes load the original model instead of the 1K preview');
 assert.match(stage, /setModel\(\{ asset: current\.assets\.model/, 'entering model inspection promotes the preview to the full model');
 assert.match(engine, /if \(envWeight > 0\.02\) void ensureDayEnvironment\(\)/, 'day HDR waits until the visible mode actually needs it');
 assert.match(engine, /createWireframeView\(CFG\.model\.wireframe, true/, 'showcase wireframes are split across frames');

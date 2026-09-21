@@ -20,6 +20,14 @@ const PIN_KEY = "fire:showcase:pose";
 const WIRE_MODE_KEY = "fire:showcase:wire-mode";
 const WIRE_COLOR_KEY = "fire:showcase:wire-color";
 const DISC_STYLE_KEY = "fire:showcase:disc-style";
+const TEXTURE_QUALITY_KEY = "fire:showcase:texture-quality";
+type TextureQuality = "fast" | "balanced" | "fine" | "original";
+const TEXTURE_QUALITY: Record<TextureQuality, { label: string; badge: string; size: number }> = {
+  fast: { label: "流畅", badge: "1K", size: 1024 },
+  balanced: { label: "均衡", badge: "2K", size: 2048 },
+  fine: { label: "精细", badge: "4K", size: 4096 },
+  original: { label: "原画", badge: "RAW", size: 16384 }
+};
 type ShowcasePose = { p: number; yaw: number; pitch: number; zoom: number };
 
 /**
@@ -109,10 +117,10 @@ export default function ShowcaseStage({
     // 首页先用轻量模型获得很快的可交互首帧；进入展示后在后台换回完整模型。
     // 完整模型挂好后再生成线框，避免对低清、高清各算一遍边线。
     const current = configRef.current;
-    const fullKey = JSON.stringify({ a: current.assets.model, m: current.model ?? null });
+    const fullKey = JSON.stringify({ a: current.assets.model, m: current.model ?? null, q: textureQualityRef.current });
     const promote = appliedModelRef.current === fullKey
       ? Promise.resolve(true)
-      : handleRef.current?.setModel({ asset: current.assets.model, model: current.model }) ?? Promise.resolve(false);
+      : handleRef.current?.setModel({ asset: current.assets.model, model: qualityModel(current.model) }) ?? Promise.resolve(false);
     void promote.then((ok) => {
       if (ok) appliedModelRef.current = fullKey;
       window.requestAnimationFrame(() => {
@@ -125,6 +133,14 @@ export default function ShowcaseStage({
     setInspector(false); inspectorRef.current = false;
     handleRef.current?.setWireframe("native", wireRef.current.color);
     handleRef.current?.setInspector(false);
+    if (textureQualityRef.current === "fast") {
+      const current = configRef.current;
+      const asset = current.assets.previewModel ?? current.assets.model;
+      const key = JSON.stringify({ a: asset, m: current.model ?? null, q: textureQualityRef.current });
+      void handleRef.current?.setModel({ asset, model: qualityModel(current.model) }).then((ok) => {
+        if (ok) appliedModelRef.current = key;
+      });
+    }
   };
   const toggleInspectorPanel = () => {
     if (!inspectorRef.current) {
@@ -151,6 +167,13 @@ export default function ShowcaseStage({
     setDiscStyle(next);
     handleRef.current?.setDiscStyle(next);
   };
+  const [textureQuality, setTextureQuality] = usePersistedState<TextureQuality>(TEXTURE_QUALITY_KEY, "fast");
+  const textureQualityRef = useRef<TextureQuality>(textureQuality);
+  textureQualityRef.current = textureQuality;
+  const qualityModel = useCallback((model: ShowcaseConfig["model"]) => ({
+    ...model,
+    maxTextureSize: TEXTURE_QUALITY[textureQualityRef.current].size
+  }), []);
   // 引擎是异步创建的，点得比它早就先把状态存下来，创建完再补上
   const orbitRef = useRef(false);
   const studioRef = useRef(false);
@@ -216,7 +239,11 @@ export default function ShowcaseStage({
    * 车型签名：素材 + 车型参数。只有这一串变化时走「原地换车」（引擎不重建、镜头不动、不出现空白期）；
    * 其余字段（镜头 / 灯光 / 地面 / 文案）变了才重建整个场景。
    */
-  const modelKey = useMemo(() => JSON.stringify({ a: config.assets.previewModel ?? config.assets.model, m: config.model ?? null }), [config]);
+  const modelKey = useMemo(() => JSON.stringify({
+    a: textureQuality !== "fast" ? config.assets.model : (config.assets.previewModel ?? config.assets.model),
+    m: config.model ?? null,
+    q: textureQuality
+  }), [config, textureQuality]);
   /** 外壳签名 = 去掉车型之后剩下的配置：变了才需要重建场景 */
   const shellKey = useMemo(() => {
     // 车型相关的两块（素材地址 + 车型参数）都要排掉，只留镜头 / 灯光 / 地面 / 文案这些「外壳」
@@ -285,12 +312,14 @@ export default function ShowcaseStage({
       try {
         const { createShowcaseScene } = await import("./engine");
         if (cancelled) return;
-        const initialAsset = inspectorRef.current ? cfg.assets.model : (cfg.assets.previewModel ?? cfg.assets.model);
+        const initialAsset = inspectorRef.current || textureQualityRef.current !== "fast"
+          ? cfg.assets.model
+          : (cfg.assets.previewModel ?? cfg.assets.model);
         handle = createShowcaseScene({
           canvas,
           config: degraded
-            ? { ...cfg, assets: { ...cfg.assets, model: initialAsset }, model: { ...cfg.model, maxTextureSize: 2048 } }
-            : { ...cfg, assets: { ...cfg.assets, model: initialAsset } },
+            ? { ...cfg, assets: { ...cfg.assets, model: initialAsset }, model: { ...qualityModel(cfg.model), maxTextureSize: Math.min(2048, TEXTURE_QUALITY[textureQualityRef.current].size) } }
+            : { ...cfg, assets: { ...cfg.assets, model: initialAsset }, model: qualityModel(cfg.model) },
           // 置顶机位：引擎直接从置顶进度起步，不会先落到开场机位再弹回来
           startProgress: pinnedPoseRef.current?.p ?? 0,
           hud: {
@@ -365,13 +394,15 @@ export default function ShowcaseStage({
         handle.setInspector(inspectorRef.current);
         handleRef.current = handle;
         // 记下这一轮挂的是哪辆车：之后 config 里只有车型变了就原地换车，不重建场景
-        appliedModelRef.current = JSON.stringify({ a: initialAsset, m: cfg.model ?? null });
+        appliedModelRef.current = JSON.stringify({ a: initialAsset, m: cfg.model ?? null, q: textureQualityRef.current });
         const now = configRef.current;
-        const nowAsset = inspectorRef.current ? now.assets.model : (now.assets.previewModel ?? now.assets.model);
-        const nowKey = JSON.stringify({ a: nowAsset, m: now.model ?? null });
+        const nowAsset = inspectorRef.current || textureQualityRef.current !== "fast"
+          ? now.assets.model
+          : (now.assets.previewModel ?? now.assets.model);
+        const nowKey = JSON.stringify({ a: nowAsset, m: now.model ?? null, q: textureQualityRef.current });
         if (nowKey !== appliedModelRef.current) {
           // 创建期间用户已经切了车：等引擎挂完这一次再补一次原地换车
-          void handle.setModel({ asset: nowAsset, model: now.model }).then((ok) => {
+          void handle.setModel({ asset: nowAsset, model: qualityModel(now.model) }).then((ok) => {
             if (ok) appliedModelRef.current = nowKey;
           });
         }
@@ -423,7 +454,7 @@ export default function ShowcaseStage({
     // 依赖里放的是「外壳签名」：只有镜头 / 灯光 / 地面 / 文案这些变了才重建场景，
     // 单纯换车型走下面的 setModel（原地换车，不重建、不空白）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shellKey, handlePhase, rebuild, degraded, retry, homeTop]);
+  }, [shellKey, handlePhase, rebuild, degraded, retry, homeTop, qualityModel]);
 
   // 置顶机位变化就同步给引擎：双击复位回到用户置顶的那一帧（没置顶时传 null = 回到中立角度）
   useEffect(() => {
@@ -440,12 +471,14 @@ export default function ShowcaseStage({
     const previous = appliedModelRef.current;
     appliedModelRef.current = modelKey;
     const next = configRef.current;
-    const asset = inspectorRef.current ? next.assets.model : (next.assets.previewModel ?? next.assets.model);
-    void handle.setModel({ asset, model: next.model }).then((ok) => {
+    const asset = inspectorRef.current || textureQualityRef.current !== "fast"
+      ? next.assets.model
+      : (next.assets.previewModel ?? next.assets.model);
+    void handle.setModel({ asset, model: qualityModel(next.model) }).then((ok) => {
       // 失败（素材取不到 / 解析失败）就把标记退回去，下次变更还能重试
       if (!ok) appliedModelRef.current = previous;
     });
-  }, [modelKey]);
+  }, [modelKey, qualityModel]);
 
   // 刷新时浏览器会恢复上次的滚动位置（会话恢复、从别的页面回来、重新打开标签页都会触发），
   // 而这次恢复常常发生在我们重置之后 —— 于是「刷新」有时停在当时那个机位（车头朝左的侧视），
@@ -1104,6 +1137,26 @@ export default function ShowcaseStage({
               </button>
               {freeCamera && <button type="button" className="sc-camera-reset" onClick={() => handleRef.current?.resetCamera()} aria-label="重置模型镜头">复位</button>}
             </div>
+            {!inspector && (
+              <div className="sc-row sc-texture-quality" role="group" aria-label="纹理质量">
+                <span className="sc-quality-cap">纹理</span>
+                {(Object.entries(TEXTURE_QUALITY) as Array<[TextureQuality, (typeof TEXTURE_QUALITY)[TextureQuality]]>).map(([key, option]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`sc-quality-option fire-cap${textureQuality === key ? " on" : ""}`}
+                    aria-pressed={textureQuality === key}
+                    title={key === "original" ? "原画纹理 · 保留源模型贴图尺寸" : `${option.label}纹理 · 最长边 ${option.badge}`}
+                    onClick={() => {
+                      textureQualityRef.current = key;
+                      setTextureQuality(key);
+                    }}
+                  >
+                    {option.label}<small>{option.badge}</small>
+                  </button>
+                ))}
+              </div>
+            )}
             {models && models.length > 0 && (models.length > 1 || onImport) && (
               <div className="sc-row sc-models">
                 <span className="sc-models-cap">车型</span>

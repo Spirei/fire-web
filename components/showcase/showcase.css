@@ -737,6 +737,35 @@ html:has(.showcase.light) body {
   gap: 6px;
 }
 
+/* 首页左下角三档纹理质量：只改变车模贴图上限，选择会持久化。 */
+.sc-texture-quality {
+  left: 3.4vw;
+  bottom: 4.6vh;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sc-quality-cap {
+  margin-right: 2px;
+  color: var(--sc-faintest);
+  font-size: 8.5px;
+  letter-spacing: .26em;
+}
+
+.sc-quality-option {
+  padding: 5px 9px;
+  font-size: 9px;
+  letter-spacing: .12em;
+}
+
+.sc-quality-option small {
+  margin-left: 4px;
+  font: 500 7px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0;
+  opacity: .5;
+}
+
 /* 构图诊断坐标：首页与模型展示共用，截图即可按水平角、俯仰角与页面进度复现机位。 */
 .sc-position-coordinate {
   position: absolute;
@@ -952,6 +981,22 @@ html:has(.showcase.light) body {
     font-size: 10px;
     letter-spacing: 0.12em;
     white-space: nowrap;
+  }
+
+  .sc-texture-quality {
+    left: 4vw;
+    top: 3.5vh;
+    bottom: auto;
+    max-width: 92vw;
+  }
+
+  .sc-quality-cap {
+    display: none;
+  }
+
+  .sc-quality-option {
+    padding: 6px 9px;
+    font-size: 9px;
   }
 
   .sc-position-coordinate {
