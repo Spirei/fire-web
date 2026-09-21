@@ -212,6 +212,12 @@ assert.match(previewRoute, /isTrustedMutationRequest\(request\)/, 'preview gener
 assert.match(previewRoute, /build-showcase-previews\.mjs/, 'preview generation button runs the bounded local optimizer');
 assert.match(apiSpec, /POST \/api\/showcase\/models\/previews/, 'preview generation API is documented');
 assert.match(apiSpec, /GET \/api\/showcase\/models\/previews/, 'preview job status API is documented');
+for (const endpoint of [
+  '/api/showcase/models/upload',
+  '/api/showcase/models/{id}',
+  '/api/showcase/models/order',
+  '/api/showcase/models/cover'
+]) assert.ok(apiSpec.includes(endpoint), `${endpoint} is documented`);
 const transition = engine.slice(engine.indexOf('    setInspector: (on) => {'), engine.indexOf('    setWireframe: (mode, color)'));
 const transitionModule = new Module(__filename, module);
 transitionModule.paths = module.paths;

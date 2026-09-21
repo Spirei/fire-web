@@ -154,8 +154,6 @@ Web 端继续使用 httpOnly Cookie 会话，两种方式等价，`GET /api/v1/a
 | 方法 | 路径 | 说明 | 鉴权 |
 | --- | --- | --- | --- |
 | GET | `/api/v1/settings/public` | 公开站点设置（标题 / 图标 / Logo / 注册开关） | 无 |
-| POST | `/api/showcase/models/previews` | 异步启动首页车型轻量预览批量生成任务 | 管理员 |
-| GET | `/api/showcase/models/previews` | 查询当前预览生成任务状态 | 管理员 |
 
 ## 6.8 券商 Brokers（数据模型）
 
@@ -640,11 +638,73 @@ Authorization: Bearer <token>
 
 支持 USD / HKD / CNY 多币种现金账本。GET 返回各币种 `balances` 与当前用户的资金记录；POST 字段为 `currency`、`type(opening|deposit|withdrawal|adjustment)`、`amount`、`direction(1|-1)`、`note`、`occurredAt`；DELETE 只能删除当前用户自己的记录。资金记录随网站数据导出/导入迁移。
 
-## 6.20 首页车型轻量预览 Showcase Model Previews
+## 6.20 车型展示管理 Showcase Models
 
-该接口供车型导入设置页使用。它只生成首页所需的轻量 `.glb`；模型展示与工作台继续读取原始高清模型。任务在服务端异步执行，客户端启动后应轮询状态，不需要维持一个长请求。
+车型导入设置页的上传、参数保存、排序、封面、删除和预览生成全部通过以下 API 完成。除公开清单外，写操作都要求管理员 Cookie 会话、可信同源请求并受频率限制。模型文件通过 `/uploads/**` 静态地址与浏览器 Cache Storage / IndexedDB 加载；镜头、圆盘、线框颜色和部位选择属于逐帧交互，不经过 API。
 
-### 启动生成任务
+| 方法 | 路径 | 说明 | 鉴权 |
+| --- | --- | --- | --- |
+| GET | `/api/showcase/models` | 读取首页可用车型清单与公开渲染配置 | 无 |
+| POST | `/api/showcase/models/upload?name={file.glb}` | 上传并体检 GLB 草稿，最大 260MB | 管理员 |
+| POST | `/api/showcase/models` | 保存新车型及参数并正式上线 | 管理员 |
+| PUT | `/api/showcase/models/{id}` | 更新车型名称、年份和渲染参数 | 管理员 |
+| DELETE | `/api/showcase/models/{id}?file=1` | 移出车型；`file=1` 同时删除 GLB | 管理员 |
+| PUT | `/api/showcase/models/order` | 保存首页车型排列顺序 | 管理员 |
+| POST | `/api/showcase/models/cover?id={id}&name={image}` | 上传车型封面，最大 6MB | 管理员 |
+| DELETE | `/api/showcase/models/cover?id={id}` | 移除自定义封面 | 管理员 |
+| POST | `/api/showcase/models/previews` | 异步启动首页轻量预览批量生成 | 管理员 |
+| GET | `/api/showcase/models/previews` | 查询预览生成任务状态 | 管理员 |
+
+### 上传 GLB 草稿
+
+```http
+POST /api/showcase/models/upload?name=mp4-6.glb
+Content-Type: model/gltf-binary
+Cookie: fire_session=<admin-session>
+
+<原始 GLB 二进制请求体>
+```
+
+服务端以流式方式写入草稿，不把整份文件读进内存；随后检查 GLB 结构、扩展、网格和贴图。通过后返回 `{ file, url, bytes, suggested, report }`，未通过返回 HTTP `422` 并删除草稿。只接受安全文件名的 `.glb`，单文件上限 260MB；单 IP 每小时 20 次，全站每小时 40 次。
+
+### 新建与更新车型参数
+
+```http
+POST /api/showcase/models
+Content-Type: application/json
+
+{
+  "id": "mp4-6",
+  "label": "MP4/6",
+  "note": "1991",
+  "file": "draft-example.glb",
+  "params": {
+    "length": 4.4,
+    "yaw": 0,
+    "pitch": 0,
+    "wheelPattern": "wheel|tyre"
+  }
+}
+```
+
+新建成功返回 `{ model }`，并将对应草稿原子转为正式模型。修改已有导入车型使用 `PUT /api/showcase/models/{id}`，body 可包含 `label`、`note`、`params`；文件名不可通过更新接口替换。请求体上限 256KB，每小时最多 60 次。内置车型不能通过该接口改参数。
+
+### 排序、封面与删除
+
+```http
+PUT /api/showcase/models/order
+Content-Type: application/json
+
+{ "ids": ["mcl35m", "mp4-6", "mp4-5"] }
+```
+
+排序成功返回 `{ order }`；请求体上限 64KB。封面上传把 PNG、JPG 或 WebP 原始二进制放在请求体中，查询参数传车型 `id` 与原始文件名 `name`，成功返回 `{ cover }`；封面上限 6MB，并验证文件内容与扩展名一致。删除车型默认只移出清单并保留素材，传 `?file=1` 时同时删除 uploads 卷内的 GLB，成功返回 `{ removed, fileDeleted }`。
+
+### 生成首页预览
+
+预览接口只生成首页所需的轻量 `.glb`；模型展示与工作台继续读取原始高清模型。任务在服务端异步执行，客户端启动后应轮询状态，不需要维持一个长请求。
+
+#### 启动生成任务
 
 ```http
 POST /api/showcase/models/previews
@@ -663,7 +723,7 @@ Cookie: fire_session=<admin-session>
 
 仅管理员可调用，并校验同源写请求。单 IP 每小时最多启动 6 次、全站每小时最多 12 次；超过限制返回 HTTP `429` 与 `{ "error": "生成操作过于频繁，请稍后再试" }`。
 
-### 查询任务状态
+#### 查询任务状态
 
 ```http
 GET /api/showcase/models/previews
