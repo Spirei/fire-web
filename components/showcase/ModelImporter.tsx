@@ -49,6 +49,7 @@ interface ImportedModelRow {
   params: ShowcaseModelParams;
   updatedAt: string;
   present?: boolean;
+  previewReady?: boolean;
   /** 随仓库分发的内置车（素材在 public/mclaren/），不能删也不能改文件 */
   builtin?: boolean;
 }
@@ -128,6 +129,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   const [order, setOrder] = useState(() => existing.map((row) => row.id));
   const [dragId, setDragId] = useState<string | null>(null);
   const [coverBusy, setCoverBusy] = useState<string | null>(null);
+  const [previewGenerating, setPreviewGenerating] = useState(false);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -163,6 +165,37 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   const bodyTuneRef = useRef<HTMLLabelElement | null>(null);
   const wireTuneRef = useRef<HTMLDetailsElement | null>(null);
   const wheelTuneRef = useRef<HTMLDivElement | null>(null);
+
+  const generatePreviews = async () => {
+    if (previewGenerating) return;
+    setPreviewGenerating(true);
+    try {
+      const response = await fetch("/api/showcase/models/previews", { method: "POST" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        showToast(payload.error ?? "预览版本生成失败", "err");
+        return;
+      }
+      let result = payload;
+      const deadline = Date.now() + 9 * 60 * 1000;
+      while (result.status === "running" && Date.now() < deadline) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        const statusResponse = await fetch("/api/showcase/models/previews", { cache: "no-store" });
+        result = await statusResponse.json().catch(() => ({ status: "error", error: "无法读取生成状态" }));
+        if (!statusResponse.ok) break;
+      }
+      if (result.status !== "done") {
+        showToast(result.error ?? "预览版本生成超时，请稍后重试", "err");
+        return;
+      }
+      showToast(`已生成 ${result.count ?? 0} 个首页预览版本`);
+      router.refresh();
+    } catch {
+      showToast("预览版本生成失败：网络异常", "err");
+    } finally {
+      setPreviewGenerating(false);
+    }
+  };
 
   // 工作台是独立编辑环境：刷新、HMR 或临时离开页面后恢复当前车型与未保存参数。
   useEffect(() => {
@@ -932,6 +965,12 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         <h2>
           <span>·</span> 车型清单
         </h2>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-edge bg-bg-gray/45 px-4 py-3 dark:border-white/10 dark:bg-white/[0.035]">
+          <p className="text-xs leading-5 text-muted dark:text-white/55">批量生成首页轻量模型；模型展示和工作台仍使用原始高清版本。</p>
+          <button type="button" className={`mp-primary fire-cap fire-cap-primary${previewGenerating ? " on" : ""}`} onClick={() => void generatePreviews()} disabled={previewGenerating}>
+            {previewGenerating ? "正在生成预览…" : "生成首页预览"}
+          </button>
+        </div>
         {/* 封面文件选择：卡片上的「传封面」统一走这个隐藏输入 */}
         <input
           ref={coverInputRef}
@@ -1008,6 +1047,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                     : `长 ${row.params.length ?? "-"} m · 朝向 ${row.params.yaw ?? 0}° · 轮子 ${row.params.wheelPattern ?? "未指定"}`}
                 </span>
                 {row.present === false && <span className="text-[11px] font-semibold text-[#d97706]">素材文件缺失，请重新上传后再上线</span>}
+                {row.present !== false && <span className={`text-[11px] font-semibold ${row.previewReady ? "text-[#22a06b]" : "text-[#d97706]"}`}>{row.previewReady ? "首页预览已生成" : "尚未生成首页预览"}</span>}
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 lg:flex-nowrap lg:overflow-x-auto lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:hidden">
                   {!row.builtin && (
                     <button

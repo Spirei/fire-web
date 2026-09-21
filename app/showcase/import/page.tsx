@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { getAuthUser, isAdmin } from "@/lib/auth";
-import { modelFileExists, modelUrlExists, orderRanker, readRegistry, readStoredModels, resolveOrder } from "@/lib/showcaseModels";
+import { modelFileExists, modelPreviewExists, modelUrlExists, orderRanker, readRegistry, readStoredModels, resolveOrder } from "@/lib/showcaseModels";
 import { SHOWCASE_MODELS } from "@/components/showcase/presets/models";
 import ModelImporter from "@/components/showcase/ModelImporter";
 import "@/components/showcase/model-importer.css";
@@ -58,6 +58,7 @@ export default async function ShowcaseImportPage() {
       },
       updatedAt: "",
       present: modelUrlExists(item.config.assets.model),
+      previewReady: Boolean(item.config.assets.previewModel && modelUrlExists(item.config.assets.previewModel)),
       builtin: true
     };
   });
@@ -73,6 +74,7 @@ export default async function ShowcaseImportPage() {
       params: model.params,
       updatedAt: model.updatedAt,
       present: modelFileExists(model.file),
+      previewReady: modelPreviewExists(model.file),
       builtin: false
     }))
   ];

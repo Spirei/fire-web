@@ -416,6 +416,16 @@ export function modelFileExists(file: string) {
   }
 }
 
+export function modelPreviewExists(file: string) {
+  if (!validModelFile(file)) return false;
+  const preview = `${file.replace(/\.glb$/i, "")}-preview.glb`;
+  try {
+    return fs.statSync(path.join(PREVIEWS_DIR, preview)).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /** 模型素材是否真的在磁盘上：内置车在 public/mclaren/，导入车在 uploads 卷 models/ */
 export function modelUrlExists(url: string) {
   const clean = decodeURIComponent(url.split("?")[0] ?? "");

@@ -17,6 +17,7 @@
     "clean:dsstore": "find .. -name .DS_Store -not -path '*/node_modules/*' -delete && echo '已清理 .DS_Store'"
   },
   "dependencies": {
+    "@gltf-transform/cli": "^4.5.0",
     "@tabler/icons-react": "^3.46.0",
     "better-sqlite3": "^13.0.2",
     "echarts": "^6.1.0",
@@ -35,7 +36,6 @@
     "undici": "^8.10.0"
   },
   "devDependencies": {
-    "@gltf-transform/cli": "^4.5.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "22.10.7",
     "@types/pg": "^8.20.3",

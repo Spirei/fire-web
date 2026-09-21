@@ -154,6 +154,8 @@ Web 端继续使用 httpOnly Cookie 会话，两种方式等价，`GET /api/v1/a
 | 方法 | 路径 | 说明 | 鉴权 |
 | --- | --- | --- | --- |
 | GET | `/api/v1/settings/public` | 公开站点设置（标题 / 图标 / Logo / 注册开关） | 无 |
+| POST | `/api/showcase/models/previews` | 异步启动首页车型轻量预览批量生成任务 | 管理员 |
+| GET | `/api/showcase/models/previews` | 查询当前预览生成任务状态 | 管理员 |
 
 ## 6.8 券商 Brokers（数据模型）
 
@@ -637,6 +639,50 @@ Authorization: Bearer <token>
 ```
 
 支持 USD / HKD / CNY 多币种现金账本。GET 返回各币种 `balances` 与当前用户的资金记录；POST 字段为 `currency`、`type(opening|deposit|withdrawal|adjustment)`、`amount`、`direction(1|-1)`、`note`、`occurredAt`；DELETE 只能删除当前用户自己的记录。资金记录随网站数据导出/导入迁移。
+
+## 6.20 首页车型轻量预览 Showcase Model Previews
+
+该接口供车型导入设置页使用。它只生成首页所需的轻量 `.glb`；模型展示与工作台继续读取原始高清模型。任务在服务端异步执行，客户端启动后应轮询状态，不需要维持一个长请求。
+
+### 启动生成任务
+
+```http
+POST /api/showcase/models/previews
+Cookie: fire_session=<admin-session>
+```
+
+返回 HTTP `202`。没有任务运行时创建新任务；已有任务运行时直接返回同一任务，不会并行重复压缩。
+
+```json
+{
+  "status": "running",
+  "count": 0,
+  "startedAt": 1789948800000
+}
+```
+
+仅管理员可调用，并校验同源写请求。单 IP 每小时最多启动 6 次、全站每小时最多 12 次；超过限制返回 HTTP `429` 与 `{ "error": "生成操作过于频繁，请稍后再试" }`。
+
+### 查询任务状态
+
+```http
+GET /api/showcase/models/previews
+Cookie: fire_session=<admin-session>
+Cache-Control: no-cache
+```
+
+`status` 取值为 `idle`、`running`、`done` 或 `error`。完成时 `count` 是可用预览模型数量，并返回 `finishedAt`；失败时返回截断后的 `error` 信息。建议运行期间每秒轮询一次，进入 `done` 或 `error` 后停止。
+
+```json
+{
+  "status": "done",
+  "count": 4,
+  "startedAt": 1789948800000,
+  "finishedAt": 1789948824000
+}
+```
+
+该接口沿用现有 Web 管理端的裸 JSON 响应格式，不属于对移动端公开的 `/api/v1/**` 契约。
 
 ## 7. 快速上手（移动端）
 
