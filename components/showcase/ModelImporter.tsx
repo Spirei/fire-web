@@ -157,6 +157,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
     carMeshes: string[];
     wheelGroups: number;
   } | null>(null);
+  // 原地更新期间 structure 会清空，材质目录仍属于同一份 GLB，不能跟着消失。
+  const [materialCatalog, setMaterialCatalog] = useState<{ file: string; names: string[] } | null>(null);
   const [wheelPick, setWheelPick] = useState<string[]>([]);
   const [tuneRegion, setTuneRegion] = useState<TuneRegion>("overall");
   const [pickedPart, setPickedPart] = useState<{ mesh: string; materials: string[] } | null>(null);
@@ -434,14 +436,28 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   }, [structure]);
 
   const wheelsOk = structure ? structure.wheelGroups > 0 : false;
+  const previewPending = !previewIsCurrent || !structure;
+  const wheelWarning = previewPending
+    ? null
+    : !wheelPick.length
+      ? "请选择轮子材质"
+      : !wheelsOk
+        ? "已勾选材质，但未识别到可旋转轮子，请检查材质及前后轴、左右轴设置"
+        : null;
   const idValid = /^[a-z0-9][a-z0-9_-]{1,40}$/.test(meta.id);
   const idConflict = existing.find((row) => row.id === meta.id && row.id !== editingId);
 
   /** 轮子候选材质：优先用预览里真实加载出来的材质名（编辑已有车型时也能拿到） */
   const materialOptions = useMemo(() => {
-    const source = structure?.carMaterials?.length ? structure.carMaterials : (report?.suggestions.materialNames ?? []);
+    const source = materialCatalog?.file === previewFile
+      ? materialCatalog.names
+      : (report?.suggestions.materialNames ?? []);
     return [...new Set(source)];
-  }, [report, structure]);
+  }, [materialCatalog, previewFile, report]);
+  const receiveStructure = useCallback((info: NonNullable<typeof structure>) => {
+    setStructure(info);
+    if (previewFile) setMaterialCatalog({ file: previewFile, names: info.carMaterials });
+  }, [previewFile]);
 
   const save = useCallback(async () => {
     const file = report?.file ?? previewFile;
@@ -759,7 +775,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             <div className="mp-preview-wrap">
               {previewConfig && <ModelPreview config={previewConfig} showWireframe explore
                 partRegions={TUNE_REGIONS} activeRegion={tuneRegion} onRegionSelect={(id) => selectTuneRegion(id as TuneRegion)}
-                onPartSelect={inspectPart} onDebug={setStructure} />}
+                onPartSelect={inspectPart} onDebug={receiveStructure} />}
               {pickedPart && <div className="mp-picked-part"><span>已选网格</span><b>{pickedPart.mesh}</b><small>{pickedPart.materials.join(" · ") || "无材质名"}</small></div>}
               <div className="mp-preview-foot">
                 <button type="button" className="mp-ghost fire-cap" onClick={reloadPreview}>
@@ -911,7 +927,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
               <div ref={wheelTuneRef} className="mp-wheel">
                 <p>
                   轮子材质（勾中才会自转；一个材质盖四个轮子时，引擎会按象限拆开）
-                  {!wheelsOk && <em>当前没认出轮子，请至少勾一项</em>}
+                  {wheelWarning && <em>{wheelWarning}</em>}
                 </p>
                 <div className="mp-wheel-list">
                   {materialOptions.map((material) => (
@@ -930,7 +946,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                   ))}
                 </div>
               </div>
-              {!previewIsCurrent && <div className="mp-preview-stale">参数已修改，正在自动更新预览…</div>}
+              {previewPending && <div className="mp-preview-stale" role="status">正在更新预览并识别轮子…</div>}
             </div>
           </div>
         </section>
