@@ -942,7 +942,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           const tail = new THREE.Color(l.tailColor ?? l.color ?? "#8f9aa8").convertLinearToSRGB();
           const fade = (l.opacity ?? 0.6).toFixed(3);
           return `{
-            vec2 laneD = (vUv - ${l.origin ? `vec2(${l.origin[0].toFixed(6)}, ${l.origin[1].toFixed(6)})` : "uCenter"}) * vec2(uAspect, 1.0);
+            vec2 laneD = (tunnelUv - ${l.origin ? `vec2(${l.origin[0].toFixed(6)}, ${l.origin[1].toFixed(6)})` : "uCenter"}) * vec2(uAspect, 1.0);
             float laneR = length(laneD);
             float lm = barRect(atan(laneD.y, laneD.x), ${a}, ${w}) * ${fade};
             float lp = ${seg} / max(laneR, 0.025) + uTime * ${flow} + ${(i * 0.371).toFixed(3)};
@@ -1152,6 +1152,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       uSpeed: { value: 0 },
       uCenter: { value: new THREE.Vector2(CFG.speed.tunnel?.vanish?.[0] ?? 0.5, CFG.speed.tunnel?.vanish?.[1] ?? 0.47) },
       uAspect: { value: 1.78 },
+      uTunnelFrame: { value: new THREE.Vector2(CFG.speed.tunnel?.vanish?.[0] ?? 0.5, 1) },
       uGold: { value: new THREE.Color(CFG.speed.tunnel?.gold ?? "#ffc266").convertLinearToSRGB() },
       uWhite: { value: new THREE.Color(CFG.speed.tunnel?.white ?? "#ccdcfa").convertLinearToSRGB() },
       uIntensity: { value: CFG.speed.tunnel?.barIntensity ?? 1 },
@@ -1167,7 +1168,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     fragmentShader: `
       uniform sampler2D tDiffuse; uniform float uTime; uniform float uStrength; uniform float uSpeed;
       uniform sampler2D tSceneDepth; uniform mat4 uWorldFromClip;
-      uniform vec2 uCenter; uniform float uAspect; uniform vec3 uGold; uniform vec3 uWhite; uniform float uIntensity;
+      uniform vec2 uCenter; uniform float uAspect; uniform vec2 uTunnelFrame; uniform vec3 uGold; uniform vec3 uWhite; uniform float uIntensity;
       uniform vec4 uCarBox;   // 车在屏幕上的包围盒：xy 中心、zw 半尺寸（uv）
       uniform vec3 uLaneColor; uniform float uAuxCount; uniform float uAuxOpacity; uniform float uLightMode; uniform float uDof;
       varying vec2 vUv;
@@ -1192,8 +1193,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       void main(){
         vec4 base = texture2D(tDiffuse, vUv);
         if (uStrength <= 0.001) { gl_FragColor = base; return; }
+        // 竖屏稍微展开赛道并收回消失点，给车和左侧路肩留下间距；遮挡仍用真实屏幕坐标。
+        vec2 tunnelUv = vec2(uCenter.x + (vUv.x - uTunnelFrame.x) / uTunnelFrame.y, vUv.y);
         // 用像素比例还原真实屏幕角度，宽屏也不会把线压扁
-        vec2 d = (vUv - uCenter) * vec2(uAspect, 1.0);
+        vec2 d = (tunnelUv - uCenter) * vec2(uAspect, 1.0);
         float r = length(d);
         float ang = atan(d.y, d.x);
         // 靠近消失点淡出；外侧不再衰减（参考视频里亮线一直延伸到画面边缘）。
@@ -1206,7 +1209,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         vec3 mainLight = vec3(0.0);
         float warmLight = 0.0;
         ${lineAngles.map((b, i) => `{
-          vec2 railD = (vUv - ${b.origin ? `vec2(${b.origin[0].toFixed(6)}, ${b.origin[1].toFixed(6)})` : "uCenter"}) * vec2(uAspect, 1.0);
+          vec2 railD = (tunnelUv - ${b.origin ? `vec2(${b.origin[0].toFixed(6)}, ${b.origin[1].toFixed(6)})` : "uCenter"}) * vec2(uAspect, 1.0);
           float line = barRect(atan(railD.y, railD.x), ${b.a.toFixed(5)}, ${b.w.toFixed(5)});
           float phase = ${SEG_SCALE} * 0.12 / max(length(railD), 0.025) + uTime * ${SEG_SCALE} * 0.42 + ${(i * 0.371).toFixed(3)};
           float f = fract(phase);
@@ -1993,11 +1996,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       orbitYaw *= Math.pow(0.02, dt);
       if (Math.abs(orbitYaw) < 0.002) orbitYaw = 0;
     }
-    // 冲刺时镜头顺隧道方向跟随：方位角平滑绕到车尾正后方，机位与注视点随车往隧道深处推进，
-    // 因此消失点始终在画面中心，车开走时不会被甩到画面外。
+    // 冲刺时镜头顺隧道方向跟随；竖屏收小桌面的斜后方夹角，
+    // 避免透视让车尾贴左墙、车头跨向右侧车道。
     const azBase = camState.az + userYaw + (orbitYaw * 180) / Math.PI;
     // 中速先转到正后方，再落到偏后 3/4；停下时保留用户原先拖拽的姿态。
-    const chaseAz = THREE.MathUtils.lerp(180, CFG.speed.chaseAzimuth, seg(sp, 0.5, 0.94));
+    const tunnelRefAspect = CFG.speed.tunnel?.referenceAspect ?? CFG.camera.fitMinAspect;
+    const portraitFraming = clamp((tunnelRefAspect - camera.aspect) / Math.max(0.01, tunnelRefAspect - 0.75), 0, 1);
+    const chaseAngle = 180 + (CFG.speed.chaseAzimuth - 180) * (1 - portraitFraming * 0.84);
+    const chaseAz = THREE.MathUtils.lerp(180, chaseAngle, seg(sp, 0.5, 0.94));
     const azDelta = (((chaseAz - azBase) % 360 + 540) % 360) - 180;
     const az = ((azBase + azDelta * racingAmt) * Math.PI) / 180;
     // 镜头角速度（弧度/秒）→ 倒影淡出系数：1.6 rad/s（约 92°/秒）视为最快。
@@ -2391,6 +2397,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     (lightLinesPass.uniforms.uAspect.value as number) = CFG.speed.tunnel?.referenceAspect ?? w / h;
+    const referenceAspect = CFG.speed.tunnel?.referenceAspect ?? w / h;
+    const portraitBlend = clamp((referenceAspect - w / h) / Math.max(0.01, referenceAspect - 0.75), 0, 1);
+    (lightLinesPass.uniforms.uTunnelFrame.value as THREE.Vector2).set(
+      THREE.MathUtils.lerp(CFG.speed.tunnel?.vanish?.[0] ?? 0.5, 0.64, portraitBlend),
+      THREE.MathUtils.lerp(1, 1.12, portraitBlend)
+    );
     // 反射贴图按画面宽高比同步（换窗口比例时倒影不会又被拉糊）
     const [reflectW, reflectH] = reflectSizeFor(w / h, reflectionLite ? Math.min(512, reflectHeight * 0.5) : reflectHeight);
     if (reflectRT.width !== reflectW || reflectRT.height !== reflectH) reflectRT.setSize(reflectW, reflectH);
