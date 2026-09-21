@@ -435,6 +435,8 @@ export interface ShowcaseHandle {
     reflection: number;
     textures: number;
     geometries: number;
+    /** 线框构建诊断：同步构建耗时、网格层数与额外 GPU 缓冲字节。 */
+    wireframe: { buildMs: number; entries: number; generatedBytes: number };
     /** 每帧脚本耗时（毫秒，不含 GPU 执行时间） */
     jsMs: number;
     /** EXT_disjoint_timer_query_webgl2 测得的 GPU 帧耗时；设备不支持时为 0。 */

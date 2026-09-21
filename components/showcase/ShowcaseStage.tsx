@@ -106,10 +106,16 @@ export default function ShowcaseStage({
     setInspector(true); inspectorRef.current = true;
     setWirePanelOpen(true);
     handleRef.current?.setInspector(true);
+    // 首页始终保持原生材质；进入模型展示后才创建用户选择的线框几何。
+    // 放到下一帧，让面板和镜头先完成首帧，避免 MP4/6 边线分析阻塞点击反馈。
+    window.requestAnimationFrame(() => {
+      if (inspectorRef.current) handleRef.current?.setWireframe(wireRef.current.mode, wireRef.current.color);
+    });
   };
   const exitInspector = () => {
     setWirePanelOpen(false);
     setInspector(false); inspectorRef.current = false;
+    handleRef.current?.setWireframe("native", wireRef.current.color);
     handleRef.current?.setInspector(false);
   };
   const toggleInspectorPanel = () => {
@@ -125,7 +131,7 @@ export default function ShowcaseStage({
   const changeWire = (mode: WireframeMode, color = wireColor) => {
     setWireMode(mode); setWireColor(color);
     wireRef.current = { mode, color };
-    handleRef.current?.setWireframe(mode, color);
+    if (inspectorRef.current) handleRef.current?.setWireframe(mode, color);
   };
   const [studio, setStudio] = useState(false);
   const [discStyle, setDiscStyle] = usePersistedState<ShowcaseDiscStyle>(DISC_STYLE_KEY, "chrono");
@@ -336,7 +342,8 @@ export default function ShowcaseStage({
         // 引擎是异步创建的：创建前点过的「360° 环视 / 影棚」要补上
         handle.setOrbit(orbitRef.current);
         handle.setFreeCamera(freeCameraRef.current);
-        handle.setWireframe(wireRef.current.mode, wireRef.current.color);
+        // 线框只属于模型展示；刷新首页时即使记住了上次的线框偏好，也不提前构建重型边线几何。
+        handle.setWireframe(inspectorRef.current ? wireRef.current.mode : "native", wireRef.current.color);
         handle.setDiscStyle(discStyleRef.current);
         handle.setStudio(studioRef.current);
         // 置顶机位：刷新 / 重建后直接把镜头放回用户存下的角度（滚动位置由下面的滚动守护负责）

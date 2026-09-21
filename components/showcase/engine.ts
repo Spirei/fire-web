@@ -2862,7 +2862,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     qualityHud.innerHTML = [
       `showcase · CPU ${jsAvg.toFixed(2)} ms · GPU ${gpuAvg ? gpuAvg.toFixed(2) : "—"} ms`,
       `render ${((renderCalls - hudLastRenderCalls) / interval).toFixed(1)}/s · reflect ${((reflectionRenders - hudLastReflectionRenders) / interval).toFixed(1)}/s · skip ${((inspectorSkippedFrames + homepageSkippedFrames - hudLastInspectorSkips) / interval).toFixed(1)}/s`,
-      `buffer ${canvas.width}×${canvas.height} · tex ${renderer.info.memory.textures} · geo ${renderer.info.memory.geometries}`
+      `buffer ${canvas.width}×${canvas.height} · tex ${renderer.info.memory.textures} · geo ${renderer.info.memory.geometries}`,
+      `wire ${wireframeView.stats().buildMs.toFixed(1)} ms · ${(wireframeView.stats().generatedBytes / 1048576).toFixed(1)} MB`
     ].join("<br>");
     hudLastRenderCalls = renderCalls;
     hudLastReflectionRenders = reflectionRenders;
@@ -3353,6 +3354,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     reflection: reflectRT.width,
     textures: renderer.info.memory.textures,
     geometries: renderer.info.memory.geometries,
+    wireframe: wireframeView.stats(),
     /** 每帧脚本耗时（毫秒，渲染调用 + HUD + 相机计算，不含 GPU 执行时间） */
     jsMs: +jsAvg.toFixed(2),
     gpuMs: +gpuAvg.toFixed(2),

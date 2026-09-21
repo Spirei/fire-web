@@ -44,6 +44,8 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
   let root: THREE.Object3D | null = null;
   let focusFilter: ((mesh: THREE.Mesh) => boolean) | null = null;
   let tessellationBudget = tuning.triangleBudget;
+  let lastBuildMs = 0;
+  let generatedBytes = 0;
   const entries: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[]; overlay: THREE.Mesh | THREE.LineSegments; mutedOverlay: THREE.Mesh; overlayGeometry?: THREE.BufferGeometry; baseGeometry?: THREE.BufferGeometry; detail?: THREE.Mesh; detailGeometry?: THREE.BufferGeometry }[] = [];
   const overlayMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
   const overlayLineMaterial = new THREE.LineBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false });
@@ -227,6 +229,7 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
 
   function apply() {
     if (root && mode !== "native" && !entries.length) {
+      const buildStartedAt = performance.now();
       const meshes: THREE.Mesh[] = [];
       root.traverse((object) => { if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh); });
       for (const mesh of meshes) {
@@ -275,6 +278,15 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
         mesh.add(mutedOverlay);
         entries.push({ mesh, original: mesh.material, overlay, mutedOverlay, overlayGeometry, baseGeometry: wire.baseGeometry, detail, detailGeometry: wire.detailGeometry });
       }
+      lastBuildMs = performance.now() - buildStartedAt;
+      const bytes = (geometry?: THREE.BufferGeometry) => {
+        if (!geometry) return 0;
+        let total = geometry.getIndex()?.array.byteLength ?? 0;
+        for (const attribute of Object.values(geometry.attributes)) total += attribute.array.byteLength;
+        return total;
+      };
+      generatedBytes = entries.reduce((total, entry) => total + bytes(entry.overlayGeometry) +
+        (entry.baseGeometry?.getIndex()?.array.byteLength ?? 0) + bytes(entry.detailGeometry), 0);
     }
     overlayMaterial.color.set(color);
     overlayLineMaterial.color.set(color);
@@ -307,6 +319,7 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
     entries.length = 0;
     root = null;
     tessellationBudget = tuning.triangleBudget;
+    generatedBytes = 0;
   }
 
   return {
@@ -321,6 +334,7 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
     detach,
     set(next: WireframeMode, nextColor: string) { mode = next; color = nextColor; apply(); },
     focus(next: ((mesh: THREE.Mesh) => boolean) | null) { focusFilter = next; apply(); },
+    stats() { return { buildMs: lastBuildMs, entries: entries.length, generatedBytes }; },
     dispose() { detach(); overlayMaterial.dispose(); overlayLineMaterial.dispose(); pureMaterial.dispose(); pureLineMaterial.dispose(); mutedMaterial.dispose(); depthMaterial.dispose(); },
   };
 }

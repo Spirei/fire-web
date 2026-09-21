@@ -163,6 +163,7 @@ console.log('PASS six colors, wheel transforms, hidden meshes, original/multi-ma
 const engine = fs.readFileSync('components/showcase/engine.ts', 'utf8');
 const importer = fs.readFileSync('components/showcase/ModelImporter.tsx', 'utf8');
 const preview = fs.readFileSync('components/showcase/ModelPreview.tsx', 'utf8');
+const stage = fs.readFileSync('components/showcase/ShowcaseStage.tsx', 'utf8');
 assert.match(importer, /fire\.showcase\.model-workbench\.v1/, 'model workbench keeps a versioned local draft');
 assert.match(importer, /localStorage\.getItem\(WORKBENCH_STORAGE_KEY\)/, 'model workbench restores the active draft after reload');
 assert.match(importer, /localStorage\.setItem\(WORKBENCH_STORAGE_KEY/, 'model workbench persists unsaved tuning changes');
@@ -186,6 +187,8 @@ assert.match(engine, /1000 \/ 32/, 'idle homepage reuses the previous full-resol
 assert.match(engine, /EXT_disjoint_timer_query_webgl2/, 'GPU frame timing is collected through the WebGL2 timer-query extension');
 assert.match(engine, /updateModelMaterials:/, 'engine exposes a material-only live tuning path');
 assert.match(fs.readFileSync('components/showcase/wireframe.ts', 'utf8'), /generated\.setIndex\(generatedIndices\)/, 'refined wire geometry shares indexed vertices');
+assert.match(stage, /inspectorRef\.current \? wireRef\.current\.mode : "native"/, 'homepage never eagerly rebuilds a persisted inspector wireframe');
+assert.match(stage, /setWireframe\("native", wireRef\.current\.color\)/, 'leaving model inspection removes its extra wireframe draw layer');
 const transition = engine.slice(engine.indexOf('    setInspector: (on) => {'), engine.indexOf('    setWireframe: (mode, color)'));
 const transitionModule = new Module(__filename, module);
 transitionModule.paths = module.paths;
