@@ -1760,19 +1760,39 @@ html:has(.showcase) body {
   .showcase.sc-immersive .sc-drive-camera-options button { min-height: 44px; }
 }
 
-/* 行驶控制靠右上边缘，让出车尾所在的画面中央。 */
+/* 行驶操作集中在右下：减速在上、视角在下，避开中央车尾。 */
 .showcase.sc-immersive .sc-ctr {
   left: auto;
   right: max(3.4vw, env(safe-area-inset-right));
-  top: max(24px, calc(env(safe-area-inset-top) + 12px));
-  bottom: auto;
+  top: auto;
+  bottom: calc(8.5vh + 52px);
   transform: none;
   text-align: right;
 }
 .showcase.sc-immersive .sc-ctr-cap,
 .showcase.sc-immersive .sc-ctr-hint { display: none; }
-.showcase.sc-immersive .sc-race { padding: 10px 14px; font-size: 11px; }
+.showcase.sc-immersive .sc-race {
+  width: 132px;
+  min-height: 44px;
+  justify-content: center;
+  padding: 10px 12px;
+  font-size: 11px;
+}
+.showcase.sc-immersive .sc-drive-camera { width: 132px; }
+.showcase.sc-immersive .sc-drive-camera-toggle { width: 100%; min-height: 44px; justify-content: center; }
+.showcase.sc-immersive .sc-drive-camera-options { bottom: calc(100% + 60px); }
+/* 隐藏的页脚原先仍占高度，导致遥测可见底边比按钮高。 */
+.showcase.sc-immersive .sc-tele-cap,
+.showcase.sc-immersive .sc-tele-foot { display: none; }
 
 @media (max-width: 640px), (max-height: 500px) and (pointer: coarse) {
-  .showcase.sc-immersive .sc-ctr { right: calc(env(safe-area-inset-right) + 24px); }
+  .showcase.sc-immersive .sc-ctr {
+    right: calc(env(safe-area-inset-right) + 24px);
+    bottom: calc(env(safe-area-inset-bottom) + 76px);
+  }
+  .showcase.sc-immersive .sc-race,
+  .showcase.sc-immersive .sc-drive-camera { width: 124px; }
+  .showcase.sc-immersive .sc-drive-camera-options {
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 180px);
+  }
 }
