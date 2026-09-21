@@ -2,19 +2,26 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), ts = require('typescript'), Module = require('node:module');
 const m = new Module(__filename, module);
 m._compile(ts.transpileModule(fs.readFileSync('components/showcase/modelMemory.ts','utf8'), { compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020} }).outputText,__filename);
-const {decodedTextureBytes,textureLimit,queueModelLoad,budgetImageDecoding,disposeModel,beginHeavyLoad,finishHeavyLoad,interruptedHeavyLoad}=m.exports;
+const {requiresOriginalGpu,rememberWorkingQuality,recoveryQuality,textureLimit,queueModelLoad,budgetImageDecoding,disposeModel}=m.exports;
 class Canvas {constructor(){this.width=1;this.height=1}getContext(){return {drawImage(){}}}}
 global.HTMLCanvasElement=Canvas;global.document={createElement:()=>new Canvas()};
 const entries=new Map();global.sessionStorage={getItem:k=>entries.get(k)??null,setItem:(k,v)=>entries.set(k,v),removeItem:k=>entries.delete(k)};
 (async()=>{
-const imageHeader = Buffer.alloc(24); imageHeader.writeUInt32BE(0x89504e47); imageHeader.writeUInt32BE(4096,16); imageHeader.writeUInt32BE(4096,20);
-const jsonString=JSON.stringify({images:[{bufferView:0}],bufferViews:[{buffer:0,byteLength:24}]});
-const json=Buffer.from(jsonString+' '.repeat((4-jsonString.length%4)%4));
-const glb=Buffer.alloc(28+json.length+24);glb.writeUInt32LE(0x46546c67);glb.writeUInt32LE(json.length,12);json.copy(glb,20);imageHeader.copy(glb,28+json.length);
-assert.equal(decodedTextureBytes(glb.buffer.slice(glb.byteOffset,glb.byteOffset+glb.length)),4096*4096*4*4/3,'budget comes from pixels, not compressed bytes');
-assert.equal(decodedTextureBytes(new ArrayBuffer(2)),null,'unknown images must not bypass original memory guard');
-assert.equal(textureLimit(16384,8192,16,true),8192,'RAW must never silently become 1K');
-assert.equal(textureLimit(2048,8192,16,true),1024,'lower presets respect aggregate budget');
+for(const requested of [1024,2048,4096,16384]) assert.equal(textureLimit(requested,16384),requested,'selected quality must not be reduced by touch hardware');
+assert.equal(textureLimit(16384,8192),8192,'only actual GPU capability caps the source size');
+for(const file of ['mclaren_mp45__formula_1.glb','mclaren_mp45__formula_1-uastc.glb']) {
+  for(const quality of [1024,2048,4096]) assert.equal(requiresOriginalGpu('/uploads/mclaren/models/'+file+'?v=1',quality,true),false);
+  assert.equal(requiresOriginalGpu('/uploads/mclaren/models/'+file+'?v=1',16384,true),true);
+  assert.equal(requiresOriginalGpu('/uploads/mclaren/models/'+file+'?v=1',16384,false),false);
+}
+for(const file of ['gulf_mclaren_f1_2022_car.glb','mclaren_mp46.glb','mcl35m.glb','uploaded-model.glb']) assert.equal(requiresOriginalGpu('/uploads/'+file,16384,true),false,'other cars retain original quality');
+assert.equal(recoveryQuality('unknown','original'),null,'never invent a successful 1K fallback');
+rememberWorkingQuality('mp45','balanced');rememberWorkingQuality('mp45','fine');rememberWorkingQuality('mp45','original');
+assert.equal(recoveryQuality('mp45','original'),'fine');
+assert.equal(recoveryQuality('mp45','fine'),'balanced','repeated failure must skip already failed qualities');
+assert.equal(recoveryQuality('mp45','balanced'),null,'stop after verified candidates are exhausted');
+assert.equal(recoveryQuality('other-car','original'),null,'successful qualities cannot leak between models');
+rememberWorkingQuality('mp45','fine');assert.equal(recoveryQuality('mp45','original'),'fine','manual successful retry restores eligibility');
 let running=0,max=0;
 const jobs=Array.from({length:4},()=>queueModelLoad(async()=>{max=Math.max(max,++running);await new Promise(r=>setTimeout(r,5));running--}));
 await Promise.all(jobs);assert.equal(max,1,'only one model decode across scenes');
@@ -38,8 +45,5 @@ let geometry=0,material=0,texture=0,image=0;
 const tex={isTexture:true,image:{close(){image++}},dispose(){texture++}};
 disposeModel({traverse(fn){fn({geometry:{dispose(){geometry++}},material:{map:tex,normalMap:tex,dispose(){material++}}})}});
 assert.deepEqual([geometry,material,texture,image],[1,1,1,1]);
-const old=beginHeavyLoad('mp45'),newest=beginHeavyLoad('mp45');finishHeavyLoad(old);assert.equal(interruptedHeavyLoad('mp45'),true,'stale success cannot clear latest guard');
-const done=beginHeavyLoad('mp45');finishHeavyLoad(done);assert.equal(interruptedHeavyLoad('mp45'),false);
-beginHeavyLoad('mp45');assert.equal(interruptedHeavyLoad('other'),false);assert.equal(interruptedHeavyLoad('mp45'),true);
-console.log('PASS serial model/image decoding, shared image release, cancellation, RAW dimensions, interrupted-load guard');
+console.log('PASS serial model/image decoding, shared image release, cancellation, all quality dimensions, MP4/5-only protection');
 })().catch(e=>{console.error(e);process.exit(1)});

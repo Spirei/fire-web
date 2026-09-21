@@ -7,7 +7,7 @@ import { usePersistedState } from "@/lib/usePersistedState";
 import type { WireframeMode } from "./wireframe";
 import LiquidGlassControl from "@/components/LiquidGlassControl";
 import MusicIcon from "./MusicIcon";
-import { constrainedGraphics, beginHeavyLoad, finishHeavyLoad, interruptedHeavyLoad } from "./modelMemory";
+import { constrainedGraphics, rememberWorkingQuality, recoveryQuality } from "./modelMemory";
 import "./showcase.css";
 import "./capsule.css";
 
@@ -108,10 +108,6 @@ export default function ShowcaseStage({
   const [qualityError, setQualityError] = useState(false);
   const [textureLimitNotice, setTextureLimitNotice] = useState<number | null>(null);
   const [memoryNotice, setMemoryNotice] = useState<string | null>(null);
-  const markHeavyLoad = useCallback(() => constrainedGraphics() ? beginHeavyLoad(configRef.current.assets.model) : "", []);
-  const finishLoad = useCallback((token: string) => {
-    if (token) window.setTimeout(() => finishHeavyLoad(token), 5000);
-  }, []);
   const [racing, setRacing] = useState(false);
   const [driving, setDriving] = useState(false);
   const [driveCamera, setDriveCamera] = useState<ShowcaseDriveCamera>("follow");
@@ -154,7 +150,6 @@ export default function ShowcaseStage({
     // 首页先用轻量模型获得很快的可交互首帧；进入展示后在后台换回完整模型。
     // 完整模型挂好后再生成线框，避免对低清、高清各算一遍边线。
     const current = configRef.current;
-    const loadToken = markHeavyLoad();
     const switchId = ++qualitySwitchRef.current;
     setQualityLoading(true);
     const fullKey = JSON.stringify({ a: (textureQualityRef.current === "original" ? current.assets.gpuModel ?? current.assets.model : current.assets.model), m: current.model ?? null, q: textureQualityRef.current });
@@ -162,7 +157,6 @@ export default function ShowcaseStage({
       ? Promise.resolve(true)
       : handleRef.current?.setModel({ asset: (textureQualityRef.current === "original" ? current.assets.gpuModel ?? current.assets.model : current.assets.model), model: qualityModel(current.model) }) ?? Promise.resolve(false);
     void promote.then((ok) => {
-      if (ok) finishLoad(loadToken);
       if (switchId !== qualitySwitchRef.current) return;
       setQualityLoading(false);
       if (ok) appliedModelRef.current = fullKey;
@@ -238,14 +232,8 @@ export default function ShowcaseStage({
     maxTextureSize: TEXTURE_QUALITY[textureQualityRef.current].size
   }), []);
   useEffect(() => {
-    if (!constrainedGraphics() || !interruptedHeavyLoad(configRef.current.assets.model)) return;
-    textureQualityRef.current = "fast";
-    setTextureQuality("fast");
-    wireRef.current.mode = "native";
-    setWireMode("native");
-    setMemoryNotice("上次高清加载中断，已恢复流畅模式，可重新选择画质");
-    // 只在页面重新挂载时读取，不能把本轮正在加载的标记当作上次崩溃。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 旧版把正常刷新 / 取消加载误判为崩溃。清除旧标记，不改写画质偏好。
+    try { sessionStorage.removeItem("fire:showcase:pending-heavy-load"); } catch { /* 存储不可用 */ }
   }, []);
   // 引擎是异步创建的，点得比它早就先把状态存下来，创建完再补上
   const orbitRef = useRef(false);
@@ -310,8 +298,6 @@ export default function ShowcaseStage({
   // WebGL 上下文丢了就重建一次场景（重建计数用作 key，触发重新挂载）
   const [rebuild, setRebuild] = useState(0);
   const [retry, setRetry] = useState(0);
-  // 第二次重建开始主动降级：贴图最长边收到 2048（4K 贴图约占 236MB 显存），换取稳定
-  const degraded = rebuild >= 2;
   const [error, setError] = useState<string | null>(null);
   const phaseRef = useRef(0);
   const fadeTimer = useRef<number | null>(null);
@@ -394,13 +380,10 @@ export default function ShowcaseStage({
         const initialAsset = inspectorRef.current || textureQualityRef.current !== "fast" || wireRef.current.mode !== "native"
           ? (textureQualityRef.current === "original" ? cfg.assets.gpuModel ?? cfg.assets.model : cfg.assets.model)
           : (cfg.assets.previewModel ?? cfg.assets.model);
-        const loadToken = textureQualityRef.current !== "fast" || inspectorRef.current ? markHeavyLoad() : "";
         handle = createShowcaseScene({
           canvas,
           initialTheme: themeRef.current,
-          config: degraded
-            ? { ...cfg, assets: { ...cfg.assets, model: initialAsset }, model: { ...qualityModel(cfg.model), maxTextureSize: Math.min(2048, TEXTURE_QUALITY[textureQualityRef.current].size) } }
-            : { ...cfg, assets: { ...cfg.assets, model: initialAsset }, model: qualityModel(cfg.model) },
+          config: { ...cfg, assets: { ...cfg.assets, model: initialAsset }, model: qualityModel(cfg.model) },
           // 置顶机位：引擎直接从置顶进度起步，不会先落到开场机位再弹回来
           startProgress: pinnedPoseRef.current?.p ?? 0,
           hud: {
@@ -431,7 +414,7 @@ export default function ShowcaseStage({
             setLoadRatio(1);
             setError(null);
             setReady(true);
-            finishLoad(loadToken);
+            rememberWorkingQuality(configRef.current.assets.model, textureQualityRef.current);
             dropFreeze();
           },
           onTextureBudget: limit => { if (!cancelled && !recoveryRequested) setTextureLimitNotice(limit); },
@@ -450,19 +433,19 @@ export default function ShowcaseStage({
             recoveryRequested = true;
             setReady(false);
             setLoadRatio(0);
-            if (rebuild >= (constrainedGraphics() ? 1 : 4)) {
-              setError("模型显示暂时无法恢复，请重试");
+            const fallback = recoveryQuality(configRef.current.assets.model, textureQualityRef.current);
+            if (!fallback || rebuild >= 4) {
+              setError("模型显示中断，未找到其他已成功加载的画质；请手动重试");
               return;
             }
-            // 首次失去上下文就退回轻量车，不再连续重解同一份原画。
-            textureQualityRef.current = "fast";
-            setTextureQuality("fast");
+            textureQualityRef.current = fallback;
+            setTextureQuality(fallback);
             wireRef.current.mode = "native";
             setWireMode("native");
             inspectorRef.current = false;
             setInspector(false);
             setWirePanelOpen(false);
-            setMemoryNotice("设备图形内存不足，已恢复流畅模式");
+            setMemoryNotice(`模型显示异常，已恢复此前加载成功的${TEXTURE_QUALITY[fallback].label}画质`);
             setError(null);
             setRebuild((n) => n + 1);
           },
@@ -552,7 +535,7 @@ export default function ShowcaseStage({
     // 依赖里放的是「外壳签名」：只有镜头 / 灯光 / 地面 / 文案这些变了才重建场景，
     // 单纯换车型走下面的 setModel（原地换车，不重建、不空白）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shellKey, handlePhase, rebuild, degraded, retry, qualityModel]);
+  }, [shellKey, handlePhase, rebuild, retry, qualityModel]);
 
   // 置顶机位变化就同步给引擎：双击复位回到用户置顶的那一帧（没置顶时传 null = 回到中立角度）
   useEffect(() => {
@@ -572,7 +555,6 @@ export default function ShowcaseStage({
     const handle = handleRef.current;
     if (!handle) return;
     const previous = appliedModelRef.current;
-    const loadToken = textureQualityRef.current !== "fast" || inspectorRef.current ? markHeavyLoad() : "";
     const switchId = ++qualitySwitchRef.current;
     appliedModelRef.current = targetKey;
     setQualityLoading(true);
@@ -581,7 +563,6 @@ export default function ShowcaseStage({
       if (switchId !== qualitySwitchRef.current) return;
       // 失败（素材取不到 / 解析失败）就把标记退回去，下次变更还能重试
       if (!ok) appliedModelRef.current = previous;
-      else finishLoad(loadToken);
       setQualityLoading(false);
       setQualityError(!ok);
     });
@@ -1328,17 +1309,20 @@ export default function ShowcaseStage({
             <div className="sc-loading" style={{ opacity: error ? 1 : 0.9 }}>
               <span className={error ? "sc-loading-error" : undefined}>{error ?? ui.loading}</span>
               {error ? (
-                <button type="button" className="fire-cap mt-4" onClick={() => {
-                  textureQualityRef.current = "fast";
-                  setTextureQuality("fast");
-                  wireRef.current.mode = "native";
-                  setWireMode("native");
-                  inspectorRef.current = false;
-                  setInspector(false);
-                  setWirePanelOpen(false);
-                  setRebuild(0);
-                  setRetry((n) => n + 1);
-                }}>以流畅模式重新加载</button>
+                <div className="flex flex-wrap justify-center gap-3">
+                  <button type="button" className="fire-cap mt-4" onClick={() => { setRebuild(0); setRetry((n) => n + 1); }}>重新加载当前画质</button>
+                  <button type="button" className="fire-cap mt-4" onClick={() => {
+                    textureQualityRef.current = "fast";
+                    setTextureQuality("fast");
+                    wireRef.current.mode = "native";
+                    setWireMode("native");
+                    inspectorRef.current = false;
+                    setInspector(false);
+                    setWirePanelOpen(false);
+                    setRebuild(0);
+                    setRetry((n) => n + 1);
+                  }}>以流畅模式重新加载</button>
+                </div>
               ) : (
                 <>
                   <span className="sc-loading-bar">

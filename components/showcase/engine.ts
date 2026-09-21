@@ -22,7 +22,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { fetchAssetBuffer } from "./assetCache";
-import { constrainedGraphics, textureLimit, queueModelLoad, budgetImageDecoding, disposeModel, decodedTextureBytes } from "./modelMemory";
+import { constrainedGraphics, textureLimit, queueModelLoad, budgetImageDecoding, disposeModel, requiresOriginalGpu } from "./modelMemory";
 import { splitWheelGeometry } from "./wheels";
 import { createWireframeView } from "./wireframe";
 import { coastStep, boundedZoom, wheelPixels } from "./interaction";
@@ -230,7 +230,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 这里给整屏输出封一个像素上限，超了就降倍率（分辨率换稳定）。
   // 清晰度优先：预算放宽到约 4K（8M 像素），像素比允许到设备原生 2 倍。
   // 这个值仍远低于「整屏按 dpr 铺满」的 33M 像素（那才是之前白屏的显存来源）。
-  const MAX_OUTPUT_PIXELS = memoryConstrained ? 3_000_000 : 8_000_000;
+  const MAX_OUTPUT_PIXELS = 8_000_000;
   const originalResolution = () => CFG.model.maxTextureSize > 4096;
   const desiredPixelRatio = () => Math.min(window.devicePixelRatio || 1, originalResolution() ? 3 : 2);
   const MIN_PIXEL_RATIO = 0.7;
@@ -1459,7 +1459,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
 
   // 车模走 IndexedDB 缓存：首次下载并写入，之后刷新直接读本地，不再重新下 20 MB
-  const parseCar = async (buffer: ArrayBuffer, model: ShowcaseConfig["model"], current: () => boolean) => {
+  const parseCar = async (buffer: ArrayBuffer, model: ShowcaseConfig["model"], current: () => boolean, asset: string) => {
     const loader = new GLTFLoader();
     loader.setMeshoptDecoder(MeshoptDecoder);
     loader.setKTX2Loader(ktxLoader);
@@ -1472,14 +1472,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       beforeRoot: () => {
         const requested = model?.maxTextureSize ?? 4096;
         const compressed = parser.json.extensionsRequired?.includes("KHR_texture_basisu");
-        const decodedBytes = !compressed && memoryConstrained && requested > 4096 ? decodedTextureBytes(buffer) : 0;
-        if (memoryConstrained && requested > 4096 && !compressed && (decodedBytes === null || decodedBytes > 128 * 1024 * 1024)) {
-          throw new Error("此模型原画需先生成保留原尺寸的 GPU 压缩资源；已停止加载以保护页面");
+        if (!compressed && requiresOriginalGpu(asset, requested, memoryConstrained)) {
+          throw new Error("MP4/5 原画需先生成保留原尺寸的 GPU 压缩资源；当前画质选择已保留");
         }
         if (compressed && !["WEBGL_compressed_texture_astc", "EXT_texture_compression_bptc", "WEBGL_compressed_texture_s3tc", "WEBGL_compressed_texture_etc"].some(extension => renderer.extensions.has(extension))) {
           throw new Error("当前设备不支持此模型的 GPU 压缩纹理，请使用流畅模式");
         }
-        const limit = textureLimit(requested, renderer.capabilities.maxTextureSize, parser.json.images?.length ?? 0, memoryConstrained);
+        const limit = textureLimit(requested, renderer.capabilities.maxTextureSize);
         if (current()) options.onTextureBudget?.(!compressed && limit < requested ? limit : null);
         releaseImages = budgetImageDecoding(parser, limit, valid, error => { imageError ??= error; parseFailed = true; });
         return null;
@@ -1741,7 +1740,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       if (!current()) return;
       const cached = await fetchAssetBuffer(CFG.assets.model, ratio => { if (current()) reportProgress(ratio); });
       if (!current()) return;
-      const car = await parseCar(cached.buffer, CFG.model, current);
+      const car = await parseCar(cached.buffer, CFG.model, current, CFG.assets.model);
       if (!car) return;
       mountCar(car);
       resize();
@@ -3225,7 +3224,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           if (memoryConstrained) { unmountCar(mountedCar); mountedCar = null; }
           const cached = await fetchAssetBuffer(next.asset);
           if (!current()) return false;
-          nextCar = await parseCar(cached.buffer, next.model, current);
+          nextCar = await parseCar(cached.buffer, next.model, current, next.asset);
           if (!nextCar) return false;
           const previousTextureLimit = CFG.model.maxTextureSize;
           unmountCar(mountedCar);

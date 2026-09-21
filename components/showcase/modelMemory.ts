@@ -1,7 +1,7 @@
 import type { Object3D, Material, Texture, BufferGeometry } from "three";
 import type { GLTFParser } from "three/addons/loaders/GLTFLoader.js";
 
-/** iPad 搭配鼠标时 primary pointer 可变成 fine，仍必须使用触屏内存预算。 */
+/** iPad 搭配鼠标时 primary pointer 可变成 fine，仍需识别为触屏设备控制加载峰值。 */
 export function constrainedGraphics(): boolean {
   if (typeof navigator === "undefined") return false;
   const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
@@ -10,50 +10,42 @@ export function constrainedGraphics(): boolean {
     || (typeof memory === "number" && memory <= 4);
 }
 
-/** 限制整辆车的解码像素总量，不能只检查 GPU 支持的单张纹理尺寸。 */
-export function textureLimit(requested: number, hardware: number, images: number, constrained: boolean): number {
-  // 原画不偷偷缩图；受限设备通过 GPU 压缩资源保留原尺寸。
-  if (requested > 4096) return Math.min(requested, hardware);
-  const budget = constrained ? 16 * 1024 * 1024 : Infinity;
-  const perImage = Math.sqrt(budget / Math.max(1, images));
-  const limit = Math.min(requested, hardware, constrained ? 2048 : Infinity, perImage);
-  return Math.max(1, 2 ** Math.floor(Math.log2(Math.max(1, limit))));
+/** 所有档位尊重用户选择，只服从 GPU 的真实硬件尺寸上限。 */
+export function textureLimit(requested: number, hardware: number): number {
+  return Math.min(requested, hardware);
 }
 
-/** PNG / JPEG 的像素预算只读文件头，不先解码大图；未知格式交给调用方保守处理。 */
-export function decodedTextureBytes(buffer: ArrayBuffer): number | null {
+/** 仅已确认有问题的 MP4/5 原画需要移动端 GPU 压缩副本。 */
+export function requiresOriginalGpu(asset: string, requested: number, constrained: boolean): boolean {
+  return constrained && requested > 4096 && /(?:^|\/)mclaren_mp45__formula_1(?:-uastc)?\.glb(?:[?#]|$)/i.test(asset);
+}
+
+type Quality = "fast" | "balanced" | "fine" | "original";
+type QualityHistory = { working: Quality[]; failed: Quality[] };
+const QUALITY_HISTORY_KEY = "fire:showcase:working-quality:";
+function qualityHistory(asset: string): QualityHistory {
   try {
-    const view = new DataView(buffer);
-    if (view.getUint32(0, true) !== 0x46546c67) return null;
-    const length = view.getUint32(12, true);
-    const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, length)));
-    const bin = 20 + length + 8;
-    let bytes = 0;
-    for (const image of json.images ?? []) {
-      const range = json.bufferViews?.[image.bufferView];
-      if (!range || (range.buffer ?? 0) !== 0) return null;
-      const data = new DataView(buffer, bin + (range.byteOffset ?? 0), range.byteLength);
-      let width = 0, height = 0;
-      if (data.getUint32(0) === 0x89504e47) {
-        width = data.getUint32(16); height = data.getUint32(20);
-      } else if (data.getUint16(0) === 0xffd8) {
-        let offset = 2;
-        while (offset + 4 < data.byteLength) {
-          if (data.getUint8(offset++) !== 0xff) return null;
-          while (data.getUint8(offset) === 0xff) offset++;
-          const marker = data.getUint8(offset++);
-          if ([0xc0,0xc1,0xc2,0xc3,0xc5,0xc6,0xc7,0xc9,0xca,0xcb,0xcd,0xce,0xcf].includes(marker)) {
-            height = data.getUint16(offset + 3); width = data.getUint16(offset + 5); break;
-          }
-          if (marker === 0xda || marker === 0xd9) break;
-          offset += data.getUint16(offset);
-        }
-      }
-      if (!width || !height) return null;
-      bytes += width * height * 4 * 4 / 3; // RGBA + 完整 mip 链的保守估算
-    }
-    return bytes;
-  } catch { return null; }
+    const value = JSON.parse(sessionStorage.getItem(QUALITY_HISTORY_KEY + asset) ?? "null");
+    const valid = (q: unknown): q is Quality => ["fast", "balanced", "fine", "original"].includes(q as string);
+    return { working: (value?.working ?? []).filter(valid), failed: (value?.failed ?? []).filter(valid) };
+  } catch { return { working: [], failed: [] }; }
+}
+function saveQualityHistory(asset: string, value: QualityHistory) {
+  try { sessionStorage.setItem(QUALITY_HISTORY_KEY + asset, JSON.stringify(value)); } catch { /* 无成功记录就提示重试，不猜测低画质 */ }
+}
+/** 只有模型成功挂载并渲染后，才登记这辆车实际可用的画质。 */
+export function rememberWorkingQuality(asset: string, quality: Quality) {
+  const history = qualityHistory(asset);
+  history.working = [quality, ...history.working.filter(q => q !== quality)].slice(0, 4);
+  history.failed = history.failed.filter(q => q !== quality);
+  saveQualityHistory(asset, history);
+}
+/** 仅由已确认的图形上下文/渲染异常调用；普通刷新绝不调用。 */
+export function recoveryQuality(asset: string, failed: Quality): Quality | null {
+  const history = qualityHistory(asset);
+  if (!history.failed.includes(failed)) history.failed.push(failed);
+  saveQualityHistory(asset, history);
+  return history.working.find(q => !history.failed.includes(q)) ?? null;
 }
 
 /** 跨场景串行：旧场景未完成的解码不能与重建 / 下一辆车同时抢内存。 */
@@ -143,24 +135,4 @@ export function budgetImageDecoding(parser: GLTFParser, limit: number, current: 
     return task;
   };
   return () => releaseTextures(loaded);
-}
-
-const LOAD_GUARD_KEY = "fire:showcase:pending-heavy-load";
-export function beginHeavyLoad(asset: string): string {
-  const token = `${Date.now()}:${Math.random()}`;
-  try { sessionStorage.setItem(LOAD_GUARD_KEY, JSON.stringify({ asset, token })); } catch { /* 隐私模式仍可正常加载 */ }
-  return token;
-}
-export function finishHeavyLoad(token: string) {
-  try {
-    if (JSON.parse(sessionStorage.getItem(LOAD_GUARD_KEY) ?? "null")?.token === token) sessionStorage.removeItem(LOAD_GUARD_KEY);
-  } catch { /* 存储不可用 */ }
-}
-export function interruptedHeavyLoad(asset: string): boolean {
-  try {
-    const pending = JSON.parse(sessionStorage.getItem(LOAD_GUARD_KEY) ?? "null");
-    if (pending?.asset !== asset) return false;
-    sessionStorage.removeItem(LOAD_GUARD_KEY);
-    return true;
-  } catch { return false; }
 }

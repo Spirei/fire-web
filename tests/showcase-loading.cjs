@@ -13,7 +13,7 @@ visit(ast);
 assert(options, 'component must create a scene');
 const names = ['onProgress', 'onReady', 'onContextLost', 'onError'];
 const callbacks = options.properties.filter(p => names.includes(p.name?.getText(ast))).map(p => p.getText(ast)).join(',\n');
-const js = ts.transpileModule(`module.exports = function(rebuild, constrained = false) {
+const js = ts.transpileModule(`module.exports = function(rebuild, fallback = 'fine') {
  let cancelled = false, recoveryRequested = false;
  const state = { ready: true, ratio: 1, error: null, rebuild, drops: 0 };
  const setReady = v => state.ready = v;
@@ -21,8 +21,10 @@ const js = ts.transpileModule(`module.exports = function(rebuild, constrained = 
  const setError = v => state.error = v;
  const setRebuild = update => state.rebuild = update(state.rebuild);
  const dropFreeze = () => state.drops++;
- const finishLoad = () => {}; const loadToken = '';
- const constrainedGraphics = () => constrained;
+ const recoveryQuality = () => fallback;
+ const rememberWorkingQuality = (asset, quality) => state.working = quality;
+ const configRef = {current:{assets:{model:'fixture.glb'}}};
+ const TEXTURE_QUALITY = {original:{size:16384,label:'RAW'},fine:{size:4096,label:'4K'},balanced:{size:2048,label:'2K'},fast:{size:1024,label:'1K'}};
  const textureQualityRef = { current: 'original' }, wireRef = { current: {mode:'native'} }, inspectorRef = {current:false};
  const setTextureQuality = v => state.quality = v;
  const setWireMode = () => {}; const setInspector = () => {}; const setWirePanelOpen = () => {}; const setMemoryNotice = () => {};
@@ -52,11 +54,11 @@ for (let n = 0; n < 4; n++) {
  assert.equal(attempt.state.ratio, 0);
  assert.equal(attempt.state.error, null);
 }
-const mobile = make(1, true);
-mobile.callbacks.onContextLost();
-assert(mobile.state.error);
-assert.equal(mobile.state.rebuild, 1, 'mobile recovery must stop after one conservative retry');
-const firstMobile = make(0, true); firstMobile.callbacks.onContextLost(); assert.equal(firstMobile.state.quality, 'fast');
+const unknown = make(0, null); unknown.callbacks.onContextLost();
+assert(unknown.state.error); assert.equal(unknown.state.quality, undefined,'no verified fallback must never guess 1K');
+assert.equal(unknown.state.rebuild,0,'no repeated loading of a failed quality');
+const known = make(0, 'balanced'); known.callbacks.onContextLost();assert.equal(known.state.quality,'balanced','only an actual rendering failure may roll back to a proven quality');
+const ordinaryError = make(0, 'balanced'); ordinaryError.callbacks.onError('HTTP 404');assert.equal(ordinaryError.state.quality,undefined,'ordinary load failures preserve the preference');
 const loaded = make(0);
 loaded.callbacks.onProgress(1);
 assert.equal(loaded.state.ratio, .99, 'bytes received is not model ready');
