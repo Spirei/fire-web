@@ -1344,6 +1344,12 @@ html:has(.showcase.light) body {
 
 .showcase.sc-free canvas { touch-action: none; }
 
+/* 模型展示是独立探索视图，不需要继承首页 620vh 的叙事滚动轨道。 */
+.showcase.sc-inspecting .sc-scroll {
+  height: 100svh;
+  height: 100dvh;
+}
+
 .sc-nav .sc-camera-reset { min-height: 28px; font-size: 10px; margin-top: 2px; padding: 4px 8px; border: 1px solid var(--sc-line); border-radius: 6px; background: var(--sc-panel); }
 
 /* Liquid Glass-inspired inspector: local glass surfaces, no continuous animation. */
@@ -1556,8 +1562,61 @@ html:has(.showcase.light) body {
   border-bottom-color: var(--sc-active-line);
 }
 @media (max-width: 640px) {
+  .showcase {
+    min-height: 100svh;
+    min-height: 100dvh;
+    overflow-x: clip;
+  }
+
+  /* 手机滚动距离压缩一档；章节仍按 0–1 进度完整播放，末章后不再拖出大段空场。 */
+  .showcase:not(.sc-inspecting) .sc-scroll {
+    height: 500svh;
+    height: 500dvh;
+  }
+
+  .sc-stage {
+    height: calc(100svh - var(--sc-header));
+    height: calc(100dvh - var(--sc-header));
+  }
+
+  .sc-sec { top: max(10vh, calc(env(safe-area-inset-top) + 54px)); }
+  .sc-headline { top: max(14vh, calc(env(safe-area-inset-top) + 78px)); }
+  .sc-copy { top: max(25vh, calc(env(safe-area-inset-top) + 154px)); max-width: 48vw; }
+  .sc-tele { top: max(8.5vh, calc(env(safe-area-inset-top) + 48px)); }
+  .sc-tools { top: max(12px, env(safe-area-inset-top)); }
+
+  .sc-ctr { bottom: max(19vh, calc(env(safe-area-inset-bottom) + 132px)); }
+  .sc-hint-touch { bottom: max(13vh, calc(env(safe-area-inset-bottom) + 82px)); }
+
   .showcase:not(.sc-inspecting) .sc-left-foot.sc-side-left { left: 4vw; bottom: 5.2vh; }
   .showcase:not(.sc-inspecting) .sc-models.sc-side-right { right: 4vw; bottom: 5.2vh; }
+  .showcase:not(.sc-inspecting) .sc-left-foot.sc-side-left,
+  .showcase:not(.sc-inspecting) .sc-models.sc-side-right {
+    bottom: max(14px, calc(env(safe-area-inset-bottom) + 8px));
+    max-width: 92vw;
+  }
+  .showcase:not(.sc-inspecting) .sc-drawer-content {
+    max-width: calc(92vw - 58px);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .showcase:not(.sc-inspecting) .sc-drawer-content::-webkit-scrollbar { display: none; }
   .sc-drawer-toggle { min-width: 58px; height: 30px; }
   .sc-drawer-toggle svg { display: none; }
+
+  .sc-position-coordinate { display: none; }
+
+  .sc-wire-panel {
+    top: max(62px, calc(env(safe-area-inset-top) + 52px));
+    max-height: calc(100dvh - max(76px, calc(env(safe-area-inset-top) + 64px)) - env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .showcase.sc-inspecting .sc-tools {
+    left: 12px;
+    right: 12px;
+    top: max(8px, env(safe-area-inset-top));
+  }
 }

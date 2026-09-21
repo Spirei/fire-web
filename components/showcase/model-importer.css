@@ -617,13 +617,40 @@ html.mp-workbench-open { overflow: hidden; }
 }
 
 @media (max-width: 560px) {
-  .mp-workbench { padding: 14px; }
-  .mp-workbench-head { align-items: flex-start; }
+  .showcase-import { min-height: 100svh; min-height: 100dvh; overflow-x: clip; }
+  .mp-root { padding: 20px 14px calc(48px + env(safe-area-inset-bottom)); gap: 16px; }
+  .mp-head { align-items: flex-start; gap: 10px; }
+  .mp-head h1 { font-size: 23px; }
+  .mp-sub { font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+  .mp-back { padding: 9px 12px; white-space: nowrap; }
+  .mp-step { padding: 14px; border-radius: 14px; overflow: hidden; }
+  .mp-drop { min-height: 154px; padding: 22px 12px; justify-content: center; }
+  .mp-table { display: block; overflow-x: auto; white-space: nowrap; scrollbar-width: thin; }
+  .mp-primary, .mp-ghost, .mp-danger, .mp-back { min-height: 44px; }
+
+  .mp-workbench {
+    padding: max(12px, env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom));
+    overscroll-behavior: contain;
+  }
+  .mp-workbench-head { align-items: flex-start; display: grid; grid-template-columns: minmax(0, 1fr); }
   .mp-workbench-head h2 small { display: block; margin: 3px 0 0; }
-  .mp-workbench-actions { flex-direction: column-reverse; }
-  .mp-preview { height: 54vh; min-height: 320px; border-radius: 14px; }
-  .mp-explore-bar { align-items: flex-end; }
-  .mp-explore-bar span { max-width: 190px; }
+  .mp-workbench-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .mp-workbench-actions button { width: 100%; min-height: 44px; }
+  .mp-workbench-intro { margin-bottom: 10px; font-size: 11px; }
+  .mp-workbench .mp-tune { gap: 14px; min-height: 0; }
+  .mp-workbench .mp-preview,
+  .mp-preview { height: clamp(300px, 46dvh, 430px); min-height: 300px; border-radius: 14px; }
+  .mp-preview-foot { align-items: flex-start; flex-direction: column; }
+  .mp-preview-foot button { min-height: 42px; }
+  .mp-preview-foot span { line-height: 1.5; overflow-wrap: anywhere; }
+  .mp-form { grid-template-columns: minmax(0, 1fr); gap: 11px; }
+  .mp-form input, .mp-form select { min-height: 44px; font-size: 16px; }
+  .mp-wire-grid { grid-template-columns: minmax(0, 1fr); }
+  .mp-wire-switches { flex-direction: column; gap: 9px; }
+  .mp-wheel-list { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+  .mp-wheel-list label { flex: none; min-height: 40px; }
+  .mp-explore-bar { left: 8px; right: 8px; bottom: 8px; align-items: flex-end; padding: 8px 9px; }
+  .mp-explore-bar span { max-width: min(190px, 58vw); }
   .mp-explore-bar span b { display: block; margin: 0 0 2px; }
   .mp-car-marker > b { display: none; }
   .mp-picked-part { display: none; }
