@@ -1487,6 +1487,74 @@ html:has(.showcase.light) body {
   max-width: 82vw;
   overflow: visible;
 }
+
+/* 展开态继续沿用边缘轨道语言：去掉一排独立胶囊，只留下文字、图标与细底线。 */
+.showcase:not(.sc-inspecting) .sc-drawer-content {
+  gap: 3px;
+}
+.showcase:not(.sc-inspecting) .sc-drawer-content .fire-cap {
+  min-height: 29px;
+  padding: 0 8px;
+  border: 0 !important;
+  border-bottom: 1px solid transparent !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  color: var(--sc-mute);
+  opacity: .72;
+  transition: color .2s ease, opacity .2s ease, border-color .2s ease, transform .2s ease;
+}
+.showcase:not(.sc-inspecting) .sc-drawer-content .fire-cap:hover,
+.showcase:not(.sc-inspecting) .sc-drawer-content .fire-cap:focus-visible {
+  color: var(--sc-ink-strong);
+  opacity: 1;
+  border-bottom-color: var(--sc-line) !important;
+}
+.showcase:not(.sc-inspecting) .sc-drawer-content .fire-cap.on,
+.showcase:not(.sc-inspecting) .sc-drawer-content .fire-cap[aria-pressed="true"] {
+  color: var(--sc-ink-strong);
+  opacity: 1;
+  border-bottom-color: var(--sc-active-line) !important;
+}
+.showcase:not(.sc-inspecting) .sc-drawer-content .fire-cap:active {
+  transform: translateY(1px);
+}
+.showcase:not(.sc-inspecting) .sc-drawer-content .sc-zoom {
+  width: 26px;
+  padding: 0;
+  font-size: 14px;
+}
+.showcase:not(.sc-inspecting) .sc-drawer-content .sc-model {
+  padding-inline: 9px;
+}
+.showcase:not(.sc-inspecting) .sc-drawer-content .sc-models-cap {
+  display: none;
+}
+
+/* 模型镜头下的复位入口与右侧刻度共用轻量文字态，不再单独悬浮成按钮。 */
+.sc-nav .sc-camera-reset {
+  min-width: 40px;
+  min-height: 24px;
+  margin-top: 3px;
+  padding: 0 1px 3px;
+  border: 0;
+  border-bottom: 1px solid var(--sc-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--sc-mute);
+  font-size: 8px;
+  letter-spacing: .18em;
+  opacity: .7;
+  transition: color .2s ease, opacity .2s ease, border-color .2s ease;
+}
+.sc-nav .sc-camera-reset:hover,
+.sc-nav .sc-camera-reset:focus-visible {
+  color: var(--sc-ink-strong);
+  opacity: 1;
+  border-bottom-color: var(--sc-active-line);
+}
 @media (max-width: 640px) {
   .showcase:not(.sc-inspecting) .sc-left-foot.sc-side-left { left: 4vw; bottom: 5.2vh; }
   .showcase:not(.sc-inspecting) .sc-models.sc-side-right { right: 4vw; bottom: 5.2vh; }
