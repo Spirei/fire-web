@@ -16,17 +16,30 @@ export function sourceUnchanged(input, identity) {
   const current = sourceIdentity(input);
   return current.sourceBytes === identity.sourceBytes && current.sourceMtimeMs === identity.sourceMtimeMs;
 }
+export function fileSha256(file) {
+  const fd = fs.openSync(file, 'r'), hash = crypto.createHash('sha256');
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  try {
+    let count;
+    while ((count = fs.readSync(fd, buffer, 0, buffer.length, null)) > 0) hash.update(buffer.subarray(0, count));
+    return hash.digest('hex');
+  } finally { fs.closeSync(fd); }
+}
 export function validDerivative(input, output, mode, sourceSha256) {
   try {
     const manifest = JSON.parse(fs.readFileSync(`${output}.json`, 'utf8'));
     return sourceUnchanged(input, manifest) && fs.statSync(output).size === manifest.outputBytes
-      && manifest.mode === mode && (!sourceSha256 || manifest.sourceSha256 === sourceSha256);
+      && manifest.mode === mode && (!sourceSha256 || manifest.sourceSha256 === sourceSha256)
+      && typeof manifest.outputSha256 === "string" && fileSha256(output) === manifest.outputSha256;
   } catch { return false; }
 }
 export async function inspectSource(input) {
   const identity = sourceIdentity(input), bytes = fs.readFileSync(input);
-  if (bytes.readUInt32LE(0) !== 0x46546c67 || bytes.readUInt32LE(4) !== 2) throw new Error('无效 GLB 文件');
+  if (bytes.length < 28 || bytes.readUInt32LE(8) !== bytes.length || bytes.readUInt32LE(16) !== 0x4e4f534a || bytes.readUInt32LE(0) !== 0x46546c67 || bytes.readUInt32LE(4) !== 2) throw new Error('无效 GLB 文件');
   const jsonLength = bytes.readUInt32LE(12);
+  if (jsonLength % 4 || jsonLength > bytes.length - 28) throw new Error("无效 GLB JSON 区块");
+  const binHeader = 20 + jsonLength;
+  if (bytes.readUInt32LE(binHeader + 4) !== 0x004e4942 || bytes.readUInt32LE(binHeader) !== bytes.length - binHeader - 8) throw new Error("无效 GLB BIN 区块");
   const json = JSON.parse(bytes.subarray(20, 20 + jsonLength).toString());
   const binStart = 28 + jsonLength;
   let rgbaBytes = 0, compressed = 0;
@@ -55,7 +68,7 @@ export async function inspectSource(input) {
 export function writeManifest(output, identity, extra) {
   const temp = `${output}.json.${process.pid}.tmp`;
   try {
-    fs.writeFileSync(temp, JSON.stringify({ ...identity, outputBytes: fs.statSync(output).size, ...extra, generatedAt: new Date().toISOString() }, null, 2));
+    fs.writeFileSync(temp, JSON.stringify({ ...identity, outputBytes: fs.statSync(output).size, outputSha256: fileSha256(output), ...extra, generatedAt: new Date().toISOString() }, null, 2));
     fs.renameSync(temp, `${output}.json`);
   } finally { fs.rmSync(temp, { force: true }); }
 }

@@ -39,6 +39,7 @@ export async function generatePreviews({ root = process.cwd(), id, onProgress = 
       try {
         emit('scan');
         const identity = await inspectSource(job.input);
+        emit("scan", { fileBytes: identity.sourceBytes, textureBytes: identity.rgbaBytes, textureCount: identity.textures.length, needsGpu: identity.needsGpu });
         if (validDerivative(job.input, job.output, PREVIEW_MODE, identity.sourceSha256)) summary.reused++;
         else {
           emit('preview', { fileBytes: identity.sourceBytes, textureBytes: identity.rgbaBytes });

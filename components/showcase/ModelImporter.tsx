@@ -1,5 +1,6 @@
 "use client";
 
+import { generationDetail as formatGenerationDetail, readGenerationStatus } from "./generationProgress";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -215,7 +216,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
     try {
       const response = await fetch("/api/showcase/models/previews", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: row.id }) });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
+      const resumeExisting = response.status === 409 && payload.status === "running" && payload.id === row.id && typeof payload.jobId === "string";
+      if (!response.ok && !resumeExisting) {
         showToast(payload.error ?? "预览版本生成失败", "err");
         return;
       }
@@ -223,21 +225,20 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
       const deadline = Date.now() + 61 * 60 * 1000;
       while (result.status === "running" && Date.now() < deadline) {
         await new Promise((resolve) => window.setTimeout(resolve, 1000));
-        const statusResponse = await fetch(`/api/showcase/models/previews?jobId=${encodeURIComponent(payload.jobId)}`, { cache: "no-store" });
-        result = await statusResponse.json().catch(() => ({ status: "error", error: "无法读取生成状态" }));
-        if (!statusResponse.ok) break;
-        const phase = ({ scan: "检测文件与贴图", preview: "生成首页预览", gpu: "生成保留源尺寸的 GPU 副本", complete: "处理完成" } as Record<string, string>)[result.phase] ?? "处理中";
-        setGenerationDetail(`${result.model ? `${result.model} · ` : ""}${phase}（预览 ${result.count ?? 0}/${result.total ?? "—"}，GPU 副本 ${result.gpuCount ?? 0}）`);
+        result = await readGenerationStatus(payload.jobId, attempt => {
+          setGenerationDetail(`查询进度暂时中断，正在重连（${attempt}/4）`);
+        });
+        setGenerationDetail(formatGenerationDetail(result));
       }
       if (result.status !== "done") {
         showToast(result.error ?? "预览版本生成超时，请稍后重试", "err");
         router.refresh();
         return;
       }
-      showToast(`已生成“${row.label}”的首页预览${result.gpuCount ? "及保留源尺寸的 GPU 副本" : ""}`);
+      showToast(`“${row.label}”处理完成：${result.reused ? "复用已有预览" : "已生成预览"}${result.gpuCount ? (result.gpuReused ? "，复用 GPU 副本" : "，已生成 GPU 副本") : "，无需额外 GPU 压缩"}`);
       router.refresh();
-    } catch {
-      showToast("预览版本生成失败：网络异常", "err");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "暂时无法查询进度，后台任务可能仍在运行", "err");
     } finally {
       previewGeneratingRef.current = false;
       setPreviewGenerating(null);

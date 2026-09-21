@@ -11,7 +11,7 @@ import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
 
-type PreviewJob = { phase?: string; gpuCount?: number; gpuReused?: number; reused?: number; failed?: number; total?: number; model?: string; fileBytes?: number; textureBytes?: number; status: "idle" | "running" | "done" | "error"; count: number; id?: string; jobId?: string; error?: string; startedAt?: number; finishedAt?: number };
+type PreviewJob = { textureCount?: number; needsGpu?: boolean; phase?: string; gpuCount?: number; gpuReused?: number; reused?: number; failed?: number; total?: number; model?: string; fileBytes?: number; textureBytes?: number; status: "idle" | "running" | "done" | "error"; count: number; id?: string; jobId?: string; error?: string; startedAt?: number; finishedAt?: number };
 const runtime = globalThis as typeof globalThis & { __showcasePreviewJob?: PreviewJob };
 const job = () => runtime.__showcasePreviewJob ?? (runtime.__showcasePreviewJob = { status: "idle", count: 0 });
 
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   const builtin = SHOWCASE_MODELS.find(model => model.id === id);
   const stored = readStoredModels().find(model => model.id === id);
   if (!(builtin ? modelUrlExists(builtin.config.assets.model) : stored && modelFileExists(stored.file))) return NextResponse.json({ error: "车型不存在或素材缺失" }, { status: 404 });
-  if (job().status === "running") return NextResponse.json({ error: "已有车型正在生成预览，请完成后再试" }, { status: 409 });
+  if (job().status === "running") return NextResponse.json({ ...job(), error: "已有车型正在生成预览，请完成后再试" }, { status: 409 });
   if (!rateLimit(`showcase-previews:${clientIp(request)}`, 6, 60 * 60 * 1000) || !rateLimitGlobal("showcase-previews", 12, 60 * 60 * 1000)) {
     return NextResponse.json({ error: "生成操作过于频繁，请稍后再试" }, { status: 429 });
   }

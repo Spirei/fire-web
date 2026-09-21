@@ -4305,6 +4305,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_37_ENTRY.frontend, { name: "KTX2 / UASTC", version: "KTX-Software 4.4.2", desc: "保留源贴图尺寸的高质量 GPU 压缩 · Three.js 转码加载" }],
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [{
+    title: "大模型副本完整性与生成进度优化",
+    desc: "生成副本增加分块 SHA-256 校验，发现同尺寸损坏文件也会重新生成；拒绝截断或结构异常的 GLB。进度显示文件大小、贴图占用与耗时，网络波动自动重连，重复点击同一车型可接回原任务，完成提示区分新生成和复用，不改变画质偏好。",
+    kind: "fix"
+  }, {
     title: "首页预览自动检测并压缩大模型",
     desc: "按车型生成首页预览时同步检测文件与贴图内存，达到阈值自动生成保留源尺寸和几何的 GPU 副本；校验原文件并复用有效副本，显示检测及转码进度，失败明确报错。生产镜像内置编码工具，不修改画质选择。",
     kind: "fix"

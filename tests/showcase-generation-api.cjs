@@ -21,7 +21,8 @@ new Function('require', 'module', 'exports', source)(id => mocks[id] ?? require(
     const request = () => new Request('http://localhost/api/showcase/models/previews', { method: 'POST', body: JSON.stringify({ id: 'mcl35m' }) });
     admin = false; assert.equal((await mod.exports.POST(request())).status, 403); admin = true;
     const started = await mod.exports.POST(request()); assert.equal(started.status, 202); assert.deepEqual(args.slice(-2), ['--id', 'mcl35m']);
-    assert.equal((await mod.exports.POST(request())).status, 409);
+    const concurrent = await mod.exports.POST(request());
+    assert.equal(concurrent.status, 409); assert.equal(concurrent.body.jobId, started.body.jobId); assert.equal(concurrent.body.id, "mcl35m");
     const get = () => mod.exports.GET(new Request(`http://localhost/api/showcase/models/previews?jobId=${started.body.jobId}`));
     child.stdout.write('SHOWCASE_PRO'); child.stdout.write('GRESS {"phase":"gpu","model":"MCL35M","count":1,"gpuCount":0}\n');
     assert.equal((await get()).body.phase, 'gpu');

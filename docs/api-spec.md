@@ -716,7 +716,7 @@ Content-Type: application/json
 { "id": "mp46" }
 ```
 
-返回 HTTP `202`。必须指定单个车型 `id`，未指定返回 `400`，不会批量生成；已有任务运行时返回 `409`。
+返回 HTTP `202`。必须指定单个车型 `id`，未指定返回 `400`，不会批量生成；已有任务运行时返回 `409`，同时返回当前任务的 `id`、`jobId` 和状态；同车型可继续查询此任务，不新开转码。
 
 ```json
 {
@@ -740,7 +740,7 @@ Cookie: fire_session=<admin-session>
 Cache-Control: no-cache
 ```
 
-`phase` 返回 scan/preview/gpu/complete/done/error，`model` 返回当前车型；`gpuCount`/`gpuReused` 为 GPU 副本成功/复用数，`reused` 为预览复用数，`failed` 为失败数，检测后提供 `fileBytes` 和 `textureBytes`。最多运行 60 分钟，GPU 压缩失败也返回 error，保留已完成资源以便重试。
+`phase` 返回 scan/preview/gpu/complete/done/error，`model` 返回当前车型；`gpuCount`/`gpuReused` 为 GPU 副本成功/复用数，`reused` 为预览复用数，`failed` 为失败数，检测后提供 `fileBytes`、`textureBytes`、`textureCount` 和 `needsGpu`，分别表示原文件大小、贴图展开估算、贴图数量及是否需要 GPU 副本。最多运行 60 分钟，GPU 压缩失败也返回 error，保留已完成资源以便重试。
 
 `status` 取值为 `idle`、`running`、`done` 或 `error`。完成时 `count` 为本次生成数量（单车型为 1），并返回 `finishedAt`；传入的 `jobId` 与当前任务不一致时返回 `409`；失败时返回截断后的 `error` 信息。建议运行期间每秒轮询一次，进入 `done` 或 `error` 后停止。
 
