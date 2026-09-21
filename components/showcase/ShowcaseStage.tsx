@@ -106,10 +106,18 @@ export default function ShowcaseStage({
     setInspector(true); inspectorRef.current = true;
     setWirePanelOpen(true);
     handleRef.current?.setInspector(true);
-    // 首页始终保持原生材质；进入模型展示后才创建用户选择的线框几何。
-    // 放到下一帧，让面板和镜头先完成首帧，避免 MP4/6 边线分析阻塞点击反馈。
-    window.requestAnimationFrame(() => {
-      if (inspectorRef.current) handleRef.current?.setWireframe(wireRef.current.mode, wireRef.current.color);
+    // 首页先用轻量模型获得很快的可交互首帧；进入展示后在后台换回完整模型。
+    // 完整模型挂好后再生成线框，避免对低清、高清各算一遍边线。
+    const current = configRef.current;
+    const fullKey = JSON.stringify({ a: current.assets.model, m: current.model ?? null });
+    const promote = appliedModelRef.current === fullKey
+      ? Promise.resolve(true)
+      : handleRef.current?.setModel({ asset: current.assets.model, model: current.model }) ?? Promise.resolve(false);
+    void promote.then((ok) => {
+      if (ok) appliedModelRef.current = fullKey;
+      window.requestAnimationFrame(() => {
+        if (inspectorRef.current) handleRef.current?.setWireframe(wireRef.current.mode, wireRef.current.color);
+      });
     });
   };
   const exitInspector = () => {
@@ -208,13 +216,13 @@ export default function ShowcaseStage({
    * 车型签名：素材 + 车型参数。只有这一串变化时走「原地换车」（引擎不重建、镜头不动、不出现空白期）；
    * 其余字段（镜头 / 灯光 / 地面 / 文案）变了才重建整个场景。
    */
-  const modelKey = useMemo(() => JSON.stringify({ a: config.assets.model, m: config.model ?? null }), [config]);
+  const modelKey = useMemo(() => JSON.stringify({ a: config.assets.previewModel ?? config.assets.model, m: config.model ?? null }), [config]);
   /** 外壳签名 = 去掉车型之后剩下的配置：变了才需要重建场景 */
   const shellKey = useMemo(() => {
     // 车型相关的两块（素材地址 + 车型参数）都要排掉，只留镜头 / 灯光 / 地面 / 文案这些「外壳」
     const { assets, model: _model, ...rest } = config;
     void _model;
-    return JSON.stringify({ ...rest, assets: { ...assets, model: null } });
+    return JSON.stringify({ ...rest, assets: { ...assets, model: null, previewModel: null } });
   }, [config]);
 
   /**
@@ -277,11 +285,12 @@ export default function ShowcaseStage({
       try {
         const { createShowcaseScene } = await import("./engine");
         if (cancelled) return;
+        const initialAsset = inspectorRef.current ? cfg.assets.model : (cfg.assets.previewModel ?? cfg.assets.model);
         handle = createShowcaseScene({
           canvas,
           config: degraded
-            ? { ...cfg, model: { ...cfg.model, maxTextureSize: 2048 } }
-            : cfg,
+            ? { ...cfg, assets: { ...cfg.assets, model: initialAsset }, model: { ...cfg.model, maxTextureSize: 2048 } }
+            : { ...cfg, assets: { ...cfg.assets, model: initialAsset } },
           // 置顶机位：引擎直接从置顶进度起步，不会先落到开场机位再弹回来
           startProgress: pinnedPoseRef.current?.p ?? 0,
           hud: {
@@ -356,12 +365,13 @@ export default function ShowcaseStage({
         handle.setInspector(inspectorRef.current);
         handleRef.current = handle;
         // 记下这一轮挂的是哪辆车：之后 config 里只有车型变了就原地换车，不重建场景
-        appliedModelRef.current = JSON.stringify({ a: cfg.assets.model, m: cfg.model ?? null });
+        appliedModelRef.current = JSON.stringify({ a: initialAsset, m: cfg.model ?? null });
         const now = configRef.current;
-        const nowKey = JSON.stringify({ a: now.assets.model, m: now.model ?? null });
+        const nowAsset = inspectorRef.current ? now.assets.model : (now.assets.previewModel ?? now.assets.model);
+        const nowKey = JSON.stringify({ a: nowAsset, m: now.model ?? null });
         if (nowKey !== appliedModelRef.current) {
           // 创建期间用户已经切了车：等引擎挂完这一次再补一次原地换车
-          void handle.setModel({ asset: now.assets.model, model: now.model }).then((ok) => {
+          void handle.setModel({ asset: nowAsset, model: now.model }).then((ok) => {
             if (ok) appliedModelRef.current = nowKey;
           });
         }
@@ -430,7 +440,8 @@ export default function ShowcaseStage({
     const previous = appliedModelRef.current;
     appliedModelRef.current = modelKey;
     const next = configRef.current;
-    void handle.setModel({ asset: next.assets.model, model: next.model }).then((ok) => {
+    const asset = inspectorRef.current ? next.assets.model : (next.assets.previewModel ?? next.assets.model);
+    void handle.setModel({ asset, model: next.model }).then((ok) => {
       // 失败（素材取不到 / 解析失败）就把标记退回去，下次变更还能重试
       if (!ok) appliedModelRef.current = previous;
     });

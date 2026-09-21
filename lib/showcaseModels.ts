@@ -14,6 +14,7 @@ import { SHOWCASE_MODELS, buildImportedConfig } from "@/components/showcase/pres
 
 export const SHOWROOM_DIR = path.join(process.cwd(), "public", "uploads", "mclaren");
 export const MODELS_DIR = path.join(SHOWROOM_DIR, "models");
+export const PREVIEWS_DIR = path.join(SHOWROOM_DIR, "previews");
 export const COVERS_DIR = path.join(SHOWROOM_DIR, "covers");
 const REGISTRY_FILE = path.join(SHOWROOM_DIR, "showroom.json");
 const DRAFT_PREFIX = ".draft-";
@@ -446,17 +447,23 @@ export function listShowcaseOptions(): ShowcaseModelOption[] {
       config: item.config
     };
   });
-  const imported: ShowcaseModelOption[] = stored
-    .slice()
-    .map((model) => ({
+  const imported: ShowcaseModelOption[] = stored.slice().map((model) => {
+    const version = Date.parse(model.updatedAt) || 1;
+    const config = buildImportedConfig({ file: model.file, version, params: model.params });
+    const previewFile = `${model.file.replace(/\.glb$/i, "")}-preview.glb`;
+    if (fs.existsSync(path.join(PREVIEWS_DIR, previewFile))) {
+      config.assets.previewModel = `/uploads/mclaren/previews/${encodeURIComponent(previewFile)}?v=${version}`;
+    }
+    return {
       id: model.id,
       label: model.label,
       note: model.note,
       builtin: false,
       present: modelFileExists(model.file),
       cover: model.cover && modelUrlExists(model.cover) ? model.cover : "",
-      config: buildImportedConfig({ file: model.file, version: Date.parse(model.updatedAt) || 1, params: model.params })
-    }));
+      config
+    };
+  });
   const all = [...builtin, ...imported];
   const rank = orderRanker(resolveOrder(order, stored.map((model) => model.id)));
   return all.sort((a, b) => rank(a.id) - rank(b.id));

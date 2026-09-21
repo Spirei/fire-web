@@ -69,7 +69,8 @@ export default function HomeShowcase({
       const model = list.find((item) => item.id === id);
       if (!model || id === modelId || status[id] === "ready" || status[id] === "loading") return;
       const onProgress = attachProgress(id);
-      void prefetchAsset(model.config.assets.model, onProgress).catch(() => {
+      const preview = model.config.assets.previewModel ?? model.config.assets.model;
+      void prefetchAsset(preview, onProgress).catch(() => {
         setStatus((prev) => ({ ...prev, [id]: "idle" }));
       });
     },
@@ -81,16 +82,18 @@ export default function HomeShowcase({
       if (id === modelId) return;
       const model = list.find((item) => item.id === id);
       if (!model) return;
-      if (status[id] === "ready" || (await isAssetCached(model.config.assets.model))) {
+      const preview = model.config.assets.previewModel ?? model.config.assets.model;
+      if (status[id] === "ready" || (await isAssetCached(preview))) {
         setStatus((prev) => ({ ...prev, [id]: "ready" }));
         setModelId(id);
+        if (preview !== model.config.assets.model) void prefetchAsset(model.config.assets.model).catch(() => {});
         return;
       }
       // 还没就绪：先把当前这辆留在画面上，等素材到位再切
       pendingRef.current = id;
       const onProgress = attachProgress(id);
       try {
-        await fetchAssetBuffer(model.config.assets.model, onProgress);
+        await fetchAssetBuffer(preview, onProgress);
       } catch {
         pendingRef.current = null;
         setStatus((prev) => ({ ...prev, [id]: "idle" }));
@@ -100,6 +103,7 @@ export default function HomeShowcase({
       pendingRef.current = null;
       setStatus((prev) => ({ ...prev, [id]: "ready" }));
       setModelId(id);
+      if (preview !== model.config.assets.model) void prefetchAsset(model.config.assets.model).catch(() => {});
     },
     [attachProgress, list, modelId, setModelId, status]
   );

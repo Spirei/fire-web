@@ -189,6 +189,10 @@ assert.match(engine, /updateModelMaterials:/, 'engine exposes a material-only li
 assert.match(fs.readFileSync('components/showcase/wireframe.ts', 'utf8'), /generated\.setIndex\(generatedIndices\)/, 'refined wire geometry shares indexed vertices');
 assert.match(stage, /inspectorRef\.current \? wireRef\.current\.mode : "native"/, 'homepage never eagerly rebuilds a persisted inspector wireframe');
 assert.match(stage, /setWireframe\("native", wireRef\.current\.color\)/, 'leaving model inspection removes its extra wireframe draw layer');
+assert.match(stage, /cfg\.assets\.previewModel \?\? cfg\.assets\.model/, 'homepage mounts the lightweight model before the full inspector asset');
+assert.match(stage, /setModel\(\{ asset: current\.assets\.model/, 'entering model inspection promotes the preview to the full model');
+assert.match(engine, /if \(envWeight > 0\.02\) void ensureDayEnvironment\(\)/, 'day HDR waits until the visible mode actually needs it');
+assert.match(engine, /createWireframeView\(CFG\.model\.wireframe, true/, 'showcase wireframes are split across frames');
 const transition = engine.slice(engine.indexOf('    setInspector: (on) => {'), engine.indexOf('    setWireframe: (mode, color)'));
 const transitionModule = new Module(__filename, module);
 transitionModule.paths = module.paths;

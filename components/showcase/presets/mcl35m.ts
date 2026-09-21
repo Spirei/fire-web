@@ -17,6 +17,7 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
     // 这一辆是随仓库分发的默认车（别人克隆/部署后开箱就有车可看），所以放在 public/mclaren/；
     // 其余车型一律手动导入 uploads 卷（public/uploads/mclaren/models/，不进 Git 也不进镜像）
     model: "/mclaren/mcl35m.glb?v=1",
+    previewModel: "/mclaren/mcl35m-preview.glb?v=1",
     // Poly Haven CC0 环境贴图：夜（moonless golf）+ 昼（studio small 09）
     envNight: "/mclaren/moonless_golf_1k.hdr?v=1",
     envDay: "/mclaren/studio_small_09_1k.hdr?v=1"

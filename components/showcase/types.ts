@@ -100,6 +100,8 @@ export interface ShowcaseConfig {
   assets: {
     /** glb / gltf 路径 */
     model: string;
+    /** 首页快速可交互版本；进入模型展示后无缝升级到 model。 */
+    previewModel?: string;
     /** 夜间环境贴图（HDR） */
     envNight: string;
     /** 日间环境贴图（HDR） */

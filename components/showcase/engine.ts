@@ -13,6 +13,7 @@
  */
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
@@ -333,6 +334,25 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let envPmrem: THREE.WebGLRenderTarget | null = null;
   let envApplied = -1;
   let envReady = false;
+  const hdr = new HDRLoader();
+  let nightEnv: THREE.DataTexture | null = null;
+  let dayEnv: THREE.DataTexture | null = null;
+  let dayEnvLoading: Promise<void> | null = null;
+  function ensureDayEnvironment() {
+    if (dayEnv || dayEnvLoading) return dayEnvLoading;
+    dayEnvLoading = hdr.loadAsync(CFG.assets.envDay).then((day) => {
+      day.mapping = THREE.EquirectangularReflectionMapping;
+      dayEnv = day;
+      envMixMat.uniforms.uEnv2.value = day;
+      envApplied = -1;
+      reflectDirty = true;
+      invalidateInspector();
+    }).catch((err) => {
+      dayEnvLoading = null;
+      options.onError?.(`日间环境贴图加载失败：${String(err?.message ?? err)}`);
+    });
+    return dayEnvLoading;
+  }
   function updateEnv(weight: number) {
     if (!envReady) return;                       // 环境贴图没加载完就别渲染全屏四边形
     const w = Math.round(weight * 10) / 10;      // 量化，避免每帧重跑 PMREM
@@ -1458,7 +1478,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     shardUniformsRef = shardUniforms;
   }
 
-  const loadTotal = 3;   // 两个 HDR + 一个模型
+  const loadTotal = 2;   // 夜间 HDR + 当前轻量模型；日间 HDR 在需要前再加载
   let loadDone = 0;
   const reportProgress = (partial = 0) => {
     options.onProgress?.(Math.min(1, (loadDone + partial) / loadTotal));
@@ -1467,6 +1487,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   // 车模走 IndexedDB 缓存：首次下载并写入，之后刷新直接读本地，不再重新下 20 MB
   const loader = new GLTFLoader();
+  loader.setMeshoptDecoder(MeshoptDecoder);
   const parseCar = (buffer: ArrayBuffer) =>
     new Promise<THREE.Object3D>((resolve, reject) => {
       loader.parse(
@@ -1478,7 +1499,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     });
 
   /** 当前挂在场景里的车（换车型时用它撤掉旧车） */
-  const wireframeView = createWireframeView(CFG.model.wireframe);
+  const wireframeView = createWireframeView(CFG.model.wireframe, true, () => invalidateInspector());
   let wireframeMode: "native" | "overlay" | "wireframe" = "native";
   let mountedCar: THREE.Object3D | null = null;
   let modelSwitchSequence = 0;
@@ -1931,6 +1952,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 浅色主题直接顶到白天环境；深色主题按叙事窗口在夜→昼之间过渡
     const narrativeDay = seg(p, CFG.environment.nightToDay[0], CFG.environment.nightToDay[1]) * CFG.environment.dayIntensity;
     const envWeight = theme === "light" || studioOn || inspectorOn ? 1 : narrativeDay;
+    if (envWeight > 0.02) void ensureDayEnvironment();
     updateEnv(envWeight);
     const day = envWeight;
     const light = theme === "light" || studioOn || inspectorOn;
@@ -3098,16 +3120,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   ro.observe(hud.scroll);
   cleanups.push(() => ro.disconnect());
 
-  // 先加载环境贴图，再启动，避免首帧全黑
-  const hdr = new HDRLoader();
-  Promise.all([hdr.loadAsync(CFG.assets.envDay), hdr.loadAsync(CFG.assets.envNight)])
-    .then(([day, night]) => {
-      day.mapping = night.mapping = THREE.EquirectangularReflectionMapping;
+  // 首屏只加载当前需要的夜间环境；浅色、影棚和模型展示首次启用前再取日间 HDR。
+  hdr.loadAsync(CFG.assets.envNight)
+    .then((night) => {
+      night.mapping = THREE.EquirectangularReflectionMapping;
+      nightEnv = night;
       envMixMat.uniforms.uEnv1.value = night;
-      envMixMat.uniforms.uEnv2.value = day;
+      envMixMat.uniforms.uEnv2.value = night;
       envReady = true;
       updateEnv(0);
-      loadDone += 2;
+      loadDone += 1;
       reportProgress();
       resize();
       render(progress(), 1 / 60);
@@ -3137,6 +3159,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       envMixTarget.dispose();
       envBlurTarget.dispose();
       envPmrem?.dispose();
+      nightEnv?.dispose();
+      dayEnv?.dispose();
       pmrem.dispose();
       backdrop.dispose();
       backdropLight.dispose();

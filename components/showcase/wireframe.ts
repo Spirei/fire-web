@@ -37,7 +37,7 @@ const DEFAULT_TUNING: Required<WireframeTuning> = {
 const WIRE_RENDER_ORDER = 8;
 
 /** Shares the source geometry and local transform, including independently rotating wheels. */
-export function createWireframeView(initialTuning?: WireframeTuning) {
+export function createWireframeView(initialTuning?: WireframeTuning, deferBuild = false, onBuildProgress?: () => void) {
   let tuning = { ...DEFAULT_TUNING, ...initialTuning };
   let mode: WireframeMode = "native";
   let color = "#00ff00";
@@ -46,6 +46,10 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
   let tessellationBudget = tuning.triangleBudget;
   let lastBuildMs = 0;
   let generatedBytes = 0;
+  let buildQueue: THREE.Mesh[] = [];
+  let buildIndex = 0;
+  let buildScheduled = false;
+  let buildToken = 0;
   const entries: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[]; overlay: THREE.Mesh | THREE.LineSegments; mutedOverlay: THREE.Mesh; overlayGeometry?: THREE.BufferGeometry; baseGeometry?: THREE.BufferGeometry; detail?: THREE.Mesh; detailGeometry?: THREE.BufferGeometry }[] = [];
   const overlayMaterial = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
   const overlayLineMaterial = new THREE.LineBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false });
@@ -227,12 +231,15 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
     return { baseGeometry, detailGeometry: generated };
   }
 
-  function apply() {
-    if (root && mode !== "native" && !entries.length) {
-      const buildStartedAt = performance.now();
-      const meshes: THREE.Mesh[] = [];
-      root.traverse((object) => { if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh); });
-      for (const mesh of meshes) {
+  const bytes = (geometry?: THREE.BufferGeometry) => {
+    if (!geometry) return 0;
+    let total = geometry.getIndex()?.array.byteLength ?? 0;
+    for (const attribute of Object.values(geometry.attributes)) total += attribute.array.byteLength;
+    return total;
+  };
+
+  function buildMesh(mesh: THREE.Mesh) {
+        const startedAt = performance.now();
         // Hidden source wheel meshes remain hidden; only the split wheel parts are shown.
         const wire = wireGeometry(mesh);
         const sourceGeometry = wire.baseGeometry ?? mesh.geometry;
@@ -277,17 +284,11 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
         mesh.add(overlay);
         mesh.add(mutedOverlay);
         entries.push({ mesh, original: mesh.material, overlay, mutedOverlay, overlayGeometry, baseGeometry: wire.baseGeometry, detail, detailGeometry: wire.detailGeometry });
-      }
-      lastBuildMs = performance.now() - buildStartedAt;
-      const bytes = (geometry?: THREE.BufferGeometry) => {
-        if (!geometry) return 0;
-        let total = geometry.getIndex()?.array.byteLength ?? 0;
-        for (const attribute of Object.values(geometry.attributes)) total += attribute.array.byteLength;
-        return total;
-      };
-      generatedBytes = entries.reduce((total, entry) => total + bytes(entry.overlayGeometry) +
-        (entry.baseGeometry?.getIndex()?.array.byteLength ?? 0) + bytes(entry.detailGeometry), 0);
-    }
+        lastBuildMs += performance.now() - startedAt;
+        generatedBytes += bytes(overlayGeometry) + (wire.baseGeometry?.getIndex()?.array.byteLength ?? 0) + bytes(wire.detailGeometry);
+  }
+
+  function applyVisuals() {
     overlayMaterial.color.set(color);
     overlayLineMaterial.color.set(color);
     pureMaterial.color.set(color);
@@ -307,7 +308,40 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
     }
   }
 
+  function scheduleBuild() {
+    if (!deferBuild || buildScheduled || mode === "native" || buildIndex >= buildQueue.length) return;
+    buildScheduled = true;
+    const token = buildToken;
+    requestAnimationFrame(() => {
+      buildScheduled = false;
+      if (token !== buildToken || mode === "native" || !root) return;
+      // 每帧最多占约 6ms；大模型的数百个网格分批完成，拖动和面板动画不会被整批边线阻塞。
+      const sliceStartedAt = performance.now();
+      do {
+        buildMesh(buildQueue[buildIndex++]);
+      } while (buildIndex < buildQueue.length && performance.now() - sliceStartedAt < 6);
+      applyVisuals();
+      onBuildProgress?.();
+      if (buildIndex < buildQueue.length) scheduleBuild();
+    });
+  }
+
+  function apply() {
+    if (root && mode !== "native" && buildQueue.length === 0) {
+      root.traverse((object) => { if ((object as THREE.Mesh).isMesh) buildQueue.push(object as THREE.Mesh); });
+      lastBuildMs = 0;
+      generatedBytes = 0;
+    }
+    if (root && mode !== "native" && buildIndex < buildQueue.length) {
+      if (deferBuild) scheduleBuild();
+      else while (buildIndex < buildQueue.length) buildMesh(buildQueue[buildIndex++]);
+    }
+    applyVisuals();
+  }
+
   function detach() {
+    buildToken += 1;
+    buildScheduled = false;
     for (const { mesh, original, overlay, mutedOverlay, overlayGeometry, baseGeometry, detailGeometry } of entries) {
       mesh.material = original;
       mesh.remove(overlay);
@@ -317,6 +351,8 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
       detailGeometry?.dispose();
     }
     entries.length = 0;
+    buildQueue = [];
+    buildIndex = 0;
     root = null;
     tessellationBudget = tuning.triangleBudget;
     generatedBytes = 0;
