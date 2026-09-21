@@ -732,6 +732,34 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.ok(Array.isArray(published.models));
     assert.equal(published.stored, undefined);
   });
+  await test('showcase 隐藏草稿与正式模型经动态路由读取，保留 Range 与路径防护', async () => {
+    const store = require(path.join(root, 'lib/showcaseModels.ts'));
+    const route = require(path.join(root, 'app/api/showcase/model-files/[file]/route.ts'));
+    const config = (await import(path.join(root, 'next.config.mjs'))).default;
+    const rules = (await config.rewrites()).beforeFiles;
+    assert(rules.some(rule => rule.source === '/uploads/mclaren/models/:file' && rule.destination === '/api/showcase/model-files/:file'), '必须在 public 静态文件匹配之前接管草稿请求');
+    fs.mkdirSync(store.MODELS_DIR, { recursive: true });
+    const bytes = Buffer.from('glTF-preview-regression');
+    const read = (file, range) => route.GET(new Request('http://localhost:3000/api/showcase/model-files/test', { headers: range ? { range } : {} }), { params: Promise.resolve({ file }) });
+    for (const file of [store.draftModelFile('preview.glb'), 'published-preview.glb']) {
+      fs.writeFileSync(path.join(store.MODELS_DIR, file), bytes);
+      const full = await read(file);
+      assert.equal(full.status, 200);
+      assert.equal(full.headers.get('content-type'), 'model/gltf-binary');
+      assert.deepEqual(Buffer.from(await full.arrayBuffer()), bytes);
+      const partial = await read(file, 'bytes=0-3');
+      assert.equal(partial.status, 206);
+      assert.equal(partial.headers.get('content-range'), `bytes 0-3/${bytes.length}`);
+      assert.equal(await partial.text(), 'glTF');
+      fs.unlinkSync(path.join(store.MODELS_DIR, file));
+    }
+    for (const file of ['../outside.glb', 'nested/model.glb', 'showroom.json']) assert.equal((await read(file)).status, 400);
+    assert.equal((await read('missing.glb')).status, 404);
+    fs.writeFileSync(path.join(temp, 'outside.glb'), bytes);
+    fs.symlinkSync(path.join(temp, 'outside.glb'), path.join(store.MODELS_DIR, 'symlink.glb'));
+    assert.equal((await read('symlink.glb')).status, 404);
+    fs.unlinkSync(path.join(store.MODELS_DIR, 'symlink.glb'));
+  });
   await test('showcase 上传草稿不会提前上线，保存后原子转正，移出清单不会自动复活', () => {
     const store = require(path.join(root, 'lib/showcaseModels.ts'));
     fs.mkdirSync(store.MODELS_DIR, { recursive: true });

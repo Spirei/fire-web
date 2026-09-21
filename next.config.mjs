@@ -32,7 +32,13 @@ const nextConfig = {
   },
   // 局域网访问开发资源（避免 cross-origin 警告，Next 未来大版本将强制要求）
   allowedDevOrigins,
-  async rewrites() { return { beforeFiles: [{ source: "/uploads/reports/:path*", destination: "/api/private-reports/:path*" }] }; },
+  async rewrites() {
+    return { beforeFiles: [
+      { source: "/uploads/reports/:path*", destination: "/api/private-reports/:path*" },
+      // 草稿以 .draft- 开头；必须先走动态读取，否则 public 静态服务拒绝隐藏文件并返回 400。
+      { source: "/uploads/mclaren/models/:file", destination: "/api/showcase/model-files/:file" }
+    ] };
+  },
   async headers() {
     const isProd = process.env.NODE_ENV === "production";
     // 生产更严格；开发模式放行 HMR（ws）与 source-map 所需
