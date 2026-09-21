@@ -189,15 +189,15 @@ assert.match(engine, /1000 \/ 32/, 'idle homepage reuses the previous full-resol
 assert.match(engine, /EXT_disjoint_timer_query_webgl2/, 'GPU frame timing is collected through the WebGL2 timer-query extension');
 assert.match(engine, /updateModelMaterials:/, 'engine exposes a material-only live tuning path');
 assert.match(fs.readFileSync('components/showcase/wireframe.ts', 'utf8'), /generated\.setIndex\(generatedIndices\)/, 'refined wire geometry shares indexed vertices');
-assert.match(stage, /inspectorRef\.current \? wireRef\.current\.mode : "native"/, 'homepage never eagerly rebuilds a persisted inspector wireframe');
-assert.match(stage, /setWireframe\("native", wireRef\.current\.color\)/, 'leaving model inspection removes its extra wireframe draw layer');
+assert.match(stage, /handle\.setWireframe\(wireRef\.current\.mode, wireRef\.current\.color\)/, 'homepage restores the selected model appearance');
+assert.doesNotMatch(stage, /setWireframe\("native", wireRef\.current\.color\)/, 'leaving model inspection preserves its wireframe appearance');
 assert.match(stage, /cfg\.assets\.previewModel \?\? cfg\.assets\.model/, 'homepage mounts the lightweight model before the full inspector asset');
 assert.match(stage, /fire:showcase:texture-quality/, 'homepage texture quality persists across reloads');
 assert.match(stage, /fast: \{ label: "流畅", badge: "1K", size: 1024 \}/, 'fast quality uses 1K textures');
 assert.match(stage, /balanced: \{ label: "均衡", badge: "2K", size: 2048 \}/, 'balanced quality uses 2K textures');
 assert.match(stage, /fine: \{ label: "精细", badge: "4K", size: 4096 \}/, 'fine quality uses 4K textures');
 assert.match(stage, /original: \{ label: "原画", badge: "RAW", size: 16384 \}/, 'original quality preserves 8K source textures');
-assert.match(stage, /textureQuality !== "fast" \? config\.assets\.model/, 'higher texture modes load the original model instead of the 1K preview');
+assert.match(stage, /textureQuality !== "fast" \|\| wireMode !== "native" \? config\.assets\.model/, 'higher texture modes and wireframe appearances use the complete model');
 assert.match(stage, /showcase-left-controls/, 'homepage control capsules use a collapsible left drawer');
 assert.match(stage, /showcase-model-controls/, 'homepage model capsules use a collapsible right drawer');
 assert.match(stage, /className="sc-row sc-texture-quality"/, 'texture quality remains independent below the homepage copy');
@@ -270,3 +270,8 @@ assert.match(homeSource, /matchMedia\("\(pointer: coarse\)"\)\.matches\) return;
 assert.match(fs.readFileSync('components/showcase/engine.ts', 'utf8'), /Math\.min\(CFG\.model\.maxTextureSize, renderer\.capabilities\.maxTextureSize\)/, 'original textures respect the device WebGL limit');
 assert.match(stageSource, /qualityError && <button[^>]*className="sc-quality-retry"/, 'failed quality switches expose a retry control');
 console.log('PASS mobile high-quality loading avoids duplicate caches and unsupported textures');
+
+assert.match(stageSource, /if \(textureQualityRef\.current === "fast" && wireRef\.current\.mode === "native"\)/, 'leaving model inspection only restores the light preview in native mode');
+assert.match(stageSource, /handle\.setWireframe\(wireRef\.current\.mode, wireRef\.current\.color\)/, 'a saved model appearance is restored on the homepage');
+assert.doesNotMatch(stageSource, /handleRef\.current\?\.setWireframe\("native", wireRef\.current\.color\)/, 'returning home does not erase the selected model appearance');
+console.log('PASS model appearance survives leaving inspection and reloading the homepage');

@@ -136,9 +136,10 @@ export default function ShowcaseStage({
   const exitInspector = () => {
     setWirePanelOpen(false);
     setInspector(false); inspectorRef.current = false;
-    handleRef.current?.setWireframe("native", wireRef.current.color);
     handleRef.current?.setInspector(false);
-    if (textureQualityRef.current === "fast") {
+    // 展示里选的叠加 / 纯线框也是首页的当前形态；不能在返回时强制清成原生。
+    // 线框需要完整网格，只有原生 + 流畅档才回到轻量预览模型。
+    if (textureQualityRef.current === "fast" && wireRef.current.mode === "native") {
       const current = configRef.current;
       const asset = current.assets.previewModel ?? current.assets.model;
       const key = JSON.stringify({ a: asset, m: current.model ?? null, q: textureQualityRef.current });
@@ -157,6 +158,11 @@ export default function ShowcaseStage({
   const [wireMode, setWireMode] = usePersistedState<WireframeMode>(WIRE_MODE_KEY, "native");
   const [wireColor, setWireColor] = usePersistedState(WIRE_COLOR_KEY, "#00ff00");
   const wireRef = useRef({ mode: wireMode, color: wireColor });
+  // 本地偏好在挂载后恢复；每次渲染同步 ref，并把恢复后的形态补到已创建的场景。
+  wireRef.current = { mode: wireMode, color: wireColor };
+  useEffect(() => {
+    handleRef.current?.setWireframe(wireMode, wireColor);
+  }, [wireMode, wireColor]);
   const changeWire = (mode: WireframeMode, color = wireColor) => {
     setWireMode(mode); setWireColor(color);
     wireRef.current = { mode, color };
@@ -254,10 +260,10 @@ export default function ShowcaseStage({
    * 其余字段（镜头 / 灯光 / 地面 / 文案）变了才重建整个场景。
    */
   const modelKey = useMemo(() => JSON.stringify({
-    a: textureQuality !== "fast" ? config.assets.model : (config.assets.previewModel ?? config.assets.model),
+    a: textureQuality !== "fast" || wireMode !== "native" ? config.assets.model : (config.assets.previewModel ?? config.assets.model),
     m: config.model ?? null,
     q: textureQuality
-  }), [config, textureQuality]);
+  }), [config, textureQuality, wireMode]);
   /** 外壳签名 = 去掉车型之后剩下的配置：变了才需要重建场景 */
   const shellKey = useMemo(() => {
     // 车型相关的两块（素材地址 + 车型参数）都要排掉，只留镜头 / 灯光 / 地面 / 文案这些「外壳」
@@ -326,7 +332,7 @@ export default function ShowcaseStage({
       try {
         const { createShowcaseScene } = await import("./engine");
         if (cancelled) return;
-        const initialAsset = inspectorRef.current || textureQualityRef.current !== "fast"
+        const initialAsset = inspectorRef.current || textureQualityRef.current !== "fast" || wireRef.current.mode !== "native"
           ? cfg.assets.model
           : (cfg.assets.previewModel ?? cfg.assets.model);
         handle = createShowcaseScene({
@@ -395,8 +401,7 @@ export default function ShowcaseStage({
         // 引擎是异步创建的：创建前点过的「360° 环视 / 影棚」要补上
         handle.setOrbit(orbitRef.current);
         handle.setFreeCamera(freeCameraRef.current);
-        // 线框只属于模型展示；刷新首页时即使记住了上次的线框偏好，也不提前构建重型边线几何。
-        handle.setWireframe(inspectorRef.current ? wireRef.current.mode : "native", wireRef.current.color);
+        handle.setWireframe(wireRef.current.mode, wireRef.current.color);
         handle.setDiscStyle(discStyleRef.current);
         handle.setStudio(studioRef.current);
         // 置顶机位：刷新 / 重建后直接把镜头放回用户存下的角度（滚动位置由下面的滚动守护负责）
@@ -411,7 +416,7 @@ export default function ShowcaseStage({
         // 记下这一轮挂的是哪辆车：之后 config 里只有车型变了就原地换车，不重建场景
         appliedModelRef.current = JSON.stringify({ a: initialAsset, m: cfg.model ?? null, q: textureQualityRef.current });
         const now = configRef.current;
-        const nowAsset = inspectorRef.current || textureQualityRef.current !== "fast"
+        const nowAsset = inspectorRef.current || textureQualityRef.current !== "fast" || wireRef.current.mode !== "native"
           ? now.assets.model
           : (now.assets.previewModel ?? now.assets.model);
         const nowKey = JSON.stringify({ a: nowAsset, m: now.model ?? null, q: textureQualityRef.current });
@@ -480,18 +485,19 @@ export default function ShowcaseStage({
 
   // 换车型：原地换车（引擎、镜头、地面、HUD 都不动），切换过程没有空白期
   useEffect(() => {
-    if (appliedModelRef.current === null || appliedModelRef.current === modelKey) return;
+    const next = configRef.current;
+    const asset = inspectorRef.current || textureQualityRef.current !== "fast" || wireRef.current.mode !== "native"
+      ? next.assets.model
+      : (next.assets.previewModel ?? next.assets.model);
+    const targetKey = JSON.stringify({ a: asset, m: next.model ?? null, q: textureQualityRef.current });
+    if (appliedModelRef.current === null || appliedModelRef.current === targetKey) return;
     const handle = handleRef.current;
     if (!handle) return;
     const previous = appliedModelRef.current;
     const switchId = ++qualitySwitchRef.current;
-    appliedModelRef.current = modelKey;
+    appliedModelRef.current = targetKey;
     setQualityLoading(true);
     setQualityError(false);
-    const next = configRef.current;
-    const asset = inspectorRef.current || textureQualityRef.current !== "fast"
-      ? next.assets.model
-      : (next.assets.previewModel ?? next.assets.model);
     void handle.setModel({ asset, model: qualityModel(next.model) }).then((ok) => {
       if (switchId !== qualitySwitchRef.current || inspectorRef.current) return;
       // 失败（素材取不到 / 解析失败）就把标记退回去，下次变更还能重试
