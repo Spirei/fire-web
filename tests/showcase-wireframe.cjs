@@ -202,6 +202,7 @@ assert.match(stage, /showcase-left-controls/, 'homepage control capsules use a c
 assert.match(stage, /showcase-model-controls/, 'homepage model capsules use a collapsible right drawer');
 assert.match(stage, /className="sc-row sc-texture-quality"/, 'texture quality remains independent below the homepage copy');
 assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.sc-quality-option \{[\s\S]*?pointer-events: auto;/, 'texture quality rail remains clickable inside the pointer-transparent HUD');
+assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.sc-drawer-toggle \{[\s\S]*?pointer-events: auto;/, 'edge drawer toggles remain clickable inside the pointer-transparent HUD');
 assert.match(stage, /setModel\(\{ asset: current\.assets\.model/, 'entering model inspection promotes the preview to the full model');
 assert.match(engine, /if \(envWeight > 0\.02\) void ensureDayEnvironment\(\)/, 'day HDR waits until the visible mode actually needs it');
 assert.match(engine, /createWireframeView\(CFG\.model\.wireframe, true/, 'showcase wireframes are split across frames');

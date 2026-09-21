@@ -258,6 +258,7 @@ html:has(.showcase.light) body {
 }
 
 .sc-drawer-toggle {
+  pointer-events: auto;
   min-width: 66px;
   height: 31px;
   padding: 0 3px;
