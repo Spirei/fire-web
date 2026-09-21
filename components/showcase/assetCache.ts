@@ -31,14 +31,16 @@ async function readFromCacheApi(url: string): Promise<ArrayBuffer | null> {
   }
 }
 
-async function writeToCacheApi(url: string, response: Response): Promise<void> {
-  if (!cacheApiAvailable()) return;
+async function writeToCacheApi(url: string, response: Response): Promise<boolean> {
+  if (!cacheApiAvailable()) return false;
   try {
     const cache = await caches.open(CACHE_NAME);
     await cache.put(url, response);
+    return true;
   } catch (err) {
     // 配额不足、响应不可克隆等情况忽略（仍可用 IndexedDB 或下次重下），但要把原因打出来便于排查
     console.warn("[showcase] Cache Storage 写入失败:", err);
+    return false;
   }
 }
 
@@ -225,11 +227,13 @@ async function loadAsset(
   // 写缓存：用已经读到的字节流构造一个响应再 put。
   // 直接把下载中的流式响应 put 进 Cache Storage 会报 "network error"（实测 23 MB 的车模必失败）。
   if (buffer.byteLength > 0) {
-    await writeToCacheApi(absUrl, new Response(buffer, {
+    const cachedByApi = await writeToCacheApi(absUrl, new Response(buffer, {
       headers: { "Content-Type": contentType, "Cache-Control": "max-age=31536000" }
     }));
-    await pruneCacheApi(absUrl);
-    if (db) {
+    if (cachedByApi) await pruneCacheApi(absUrl);
+    // HTTPS 手机浏览器里同时写 Cache Storage 与 IndexedDB 会把 65–106 MB 车模
+    // 保留两份；高清贴图解析时尤其容易触发内存回收或 WebGL 上下文丢失。
+    if (db && !cachedByApi) {
       await writeEntry(db, absUrl, buffer);
       await pruneOld(db, absUrl);
     }

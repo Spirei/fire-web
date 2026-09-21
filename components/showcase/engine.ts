@@ -1525,7 +1525,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       car.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
 
       // 贴图尺寸上限：默认 4096（等于不动），大贴图模型可在 preset 里调到 2048 省一半以上显存
-      const maxTex = CFG.model.maxTextureSize;
+      // 原画模式尊重设备实际可上传的单张纹理上限；部分手机 WebGL 只支持 4K/8K。
+      // 超过 MAX_TEXTURE_SIZE 直接上传会让整车渲染失败，而等比缩小仍保留该设备的最高原生清晰度。
+      const maxTex = Math.min(CFG.model.maxTextureSize, renderer.capabilities.maxTextureSize);
       const clampTexture = (tex: THREE.Texture | null | undefined) => {
         const img = tex?.image as { width?: number; height?: number } | undefined;
         if (!tex || !img?.width || !img?.height) return;

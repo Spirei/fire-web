@@ -261,3 +261,12 @@ inspector.set(false);
 const after = inspector.state();
 for (const key of ['freeCamera','orbitOn','orbitYaw','userYaw','userPitch','zoomTarget','near','far','focus']) assert.deepEqual(after[key], before[key]);
 console.log('PASS inspector isolates racing and restores camera, orbit, focus and clipping range');
+
+const cacheSource = fs.readFileSync('components/showcase/assetCache.ts', 'utf8');
+const homeSource = fs.readFileSync('components/showcase/HomeShowcase.tsx', 'utf8');
+const stageSource = fs.readFileSync('components/showcase/ShowcaseStage.tsx', 'utf8');
+assert.match(cacheSource, /if \(db && !cachedByApi\)/, 'large models are stored in one browser cache, not twice');
+assert.match(homeSource, /matchMedia\("\(pointer: coarse\)"\)\.matches\) return;/, 'touch devices do not prefetch the full model while displaying a preview');
+assert.match(fs.readFileSync('components/showcase/engine.ts', 'utf8'), /Math\.min\(CFG\.model\.maxTextureSize, renderer\.capabilities\.maxTextureSize\)/, 'original textures respect the device WebGL limit');
+assert.match(stageSource, /qualityError && <button[^>]*className="sc-quality-retry"/, 'failed quality switches expose a retry control');
+console.log('PASS mobile high-quality loading avoids duplicate caches and unsupported textures');

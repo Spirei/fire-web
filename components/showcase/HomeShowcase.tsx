@@ -17,6 +17,14 @@ export interface HomeShowcaseModel {
   config: ShowcaseConfig;
 }
 
+function prefetchFullModel(model: HomeShowcaseModel) {
+  if (!model.config.assets.previewModel || model.config.assets.previewModel === model.config.assets.model) return;
+  // 触屏设备没有 hover 预热窗口；选完预览车再并发下载 100 MB 原模，
+  // 会与首页 4K/RAW 切换争夺内存。完整模型在真正选择高清或进入模型展示时加载。
+  if (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches) return;
+  void prefetchAsset(model.config.assets.model).catch(() => {});
+}
+
 /**
  * 首页展示台 + 右下角车型切换。
  *
@@ -86,7 +94,7 @@ export default function HomeShowcase({
       if (status[id] === "ready" || (await isAssetCached(preview))) {
         setStatus((prev) => ({ ...prev, [id]: "ready" }));
         setModelId(id);
-        if (preview !== model.config.assets.model) void prefetchAsset(model.config.assets.model).catch(() => {});
+        prefetchFullModel(model);
         return;
       }
       // 还没就绪：先把当前这辆留在画面上，等素材到位再切
@@ -103,7 +111,7 @@ export default function HomeShowcase({
       pendingRef.current = null;
       setStatus((prev) => ({ ...prev, [id]: "ready" }));
       setModelId(id);
-      if (preview !== model.config.assets.model) void prefetchAsset(model.config.assets.model).catch(() => {});
+      prefetchFullModel(model);
     },
     [attachProgress, list, modelId, setModelId, status]
   );

@@ -838,6 +838,21 @@ html:has(.showcase.light) body {
   display: none;
 }
 
+.sc-quality-status,
+.sc-quality-retry {
+  pointer-events: auto;
+  max-width: 106px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--sc-ink);
+  font-size: 9px;
+  line-height: 1.5;
+  letter-spacing: .08em;
+  text-align: left;
+}
+.sc-quality-retry { cursor: pointer; color: var(--sc-papaya); }
+
 .sc-quality-option {
   position: relative;
   pointer-events: auto;

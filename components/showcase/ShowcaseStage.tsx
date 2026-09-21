@@ -88,11 +88,14 @@ export default function ShowcaseStage({
   configRef.current = config;
   /** 已经应用到场景里的车型签名：和当前 config 不一致时走原地换车（不重建场景） */
   const appliedModelRef = useRef<string | null>(null);
+  const qualitySwitchRef = useRef(0);
 
   const [phase, setPhase] = useState(0);
   const [textVisible, setTextVisible] = useState(true);
   const [loadRatio, setLoadRatio] = useState(0);
   const [ready, setReady] = useState(false);
+  const [qualityLoading, setQualityLoading] = useState(false);
+  const [qualityError, setQualityError] = useState(false);
   const [racing, setRacing] = useState(false);
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
@@ -481,14 +484,20 @@ export default function ShowcaseStage({
     const handle = handleRef.current;
     if (!handle) return;
     const previous = appliedModelRef.current;
+    const switchId = ++qualitySwitchRef.current;
     appliedModelRef.current = modelKey;
+    setQualityLoading(true);
+    setQualityError(false);
     const next = configRef.current;
     const asset = inspectorRef.current || textureQualityRef.current !== "fast"
       ? next.assets.model
       : (next.assets.previewModel ?? next.assets.model);
     void handle.setModel({ asset, model: qualityModel(next.model) }).then((ok) => {
+      if (switchId !== qualitySwitchRef.current || inspectorRef.current) return;
       // 失败（素材取不到 / 解析失败）就把标记退回去，下次变更还能重试
       if (!ok) appliedModelRef.current = previous;
+      setQualityLoading(false);
+      setQualityError(!ok);
     });
   }, [modelKey, qualityModel]);
 
@@ -1158,6 +1167,11 @@ export default function ShowcaseStage({
             {!inspector && (
               <div className="sc-row sc-texture-quality" role="group" aria-label="纹理质量">
                 <span className="sc-quality-cap" aria-hidden="true">纹理</span>
+                {qualityLoading && <span className="sc-quality-status" role="status">加载高清模型…</span>}
+                {qualityError && <button type="button" className="sc-quality-retry" onClick={() => {
+                  setQualityError(false);
+                  setRetry((n) => n + 1);
+                }}>加载失败 · 重试</button>}
                 {(Object.entries(TEXTURE_QUALITY) as Array<[TextureQuality, (typeof TEXTURE_QUALITY)[TextureQuality]]>).map(([key, option]) => (
                   <button
                     key={key}
