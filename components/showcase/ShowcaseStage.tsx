@@ -1123,7 +1123,10 @@ export default function ShowcaseStage({
 
             <div className="sc-row sc-ctr">
               <div className="sc-ctr-cap">{racing ? ui.raceCap : current.cap}</div>
-              <button type="button" className="sc-race" ref={raceRef}>
+              <button type="button" className="sc-race" ref={raceRef}
+                onContextMenu={(event) => event.preventDefault()}
+                onSelect={(event) => event.preventDefault()}
+                onDragStart={(event) => event.preventDefault()}>
                 <span>{racing ? ui.raceActive : ui.raceIdle}</span>
                 <em>→</em>
               </button>

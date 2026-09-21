@@ -275,3 +275,8 @@ assert.match(stageSource, /if \(textureQualityRef\.current === "fast" && wireRef
 assert.match(stageSource, /handle\.setWireframe\(wireRef\.current\.mode, wireRef\.current\.color\)/, 'a saved model appearance is restored on the homepage');
 assert.doesNotMatch(stageSource, /handleRef\.current\?\.setWireframe\("native", wireRef\.current\.color\)/, 'returning home does not erase the selected model appearance');
 console.log('PASS model appearance survives leaving inspection and reloading the homepage');
+
+const showcaseCss = fs.readFileSync('components/showcase/showcase.css', 'utf8');
+assert.match(showcaseCss, /\.sc-race \{[\s\S]*?touch-action: none;[\s\S]*?-webkit-user-select: none;[\s\S]*?-webkit-touch-callout: none;/, 'holding the race button does not select text or open the mobile callout');
+assert.match(showcaseCss, /\.sc-ctr \{[\s\S]*?-webkit-user-select: none;/, 'race caption cannot be accidentally selected while holding the button');
+console.log('PASS mobile long-press racing suppresses text selection');
