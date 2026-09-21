@@ -1149,7 +1149,7 @@ export default function ShowcaseStage({
             </div>
             <div className="sc-row sc-hint-touch">{freeCamera ? "单指环视 · 双指平移缩放 · 双击聚焦" : ui.touchHint}</div>
             {/* 章节导航：右侧竖排指示器（短横条 + 当前章节更长更亮），悬停 / 键盘聚焦显示章节名 */}
-            <div className="sc-row sc-nav">
+            <div className="sc-row sc-nav" data-glass-ignore>
               {ui.nav.map((item, i) => (
                 <button
                   type="button"

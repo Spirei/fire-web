@@ -4304,6 +4304,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "首页单屏适配覆盖桌面与平板，修复页面滚动条并统一镜头导航。",
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [{
+    title: "展示台按钮保持单行与简洁章节刻度",
+    desc: "起步和减速按钮禁止文字换行、压缩；模型展示的返回按钮恢复文字按钮宽度，不再被图标尺寸挤成两行。右侧章节刻度排除全局玻璃点击效果，保持原有细线与高亮。",
+    kind: "fix"
+  }, {
     title: "隧道跟随空间镜头与触屏持续驾驶",
     desc: "隧道光条按相机射线投影到路面、侧墙和顶棚，随行驶距离推进并使用场景深度遮挡车身；触屏起步按钮改为点按保持行驶、再次点按减速，行驶时可切换镜头，切出窗口停止加速。",
     kind: "fix"

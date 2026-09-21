@@ -487,6 +487,8 @@ html:has(.showcase) body {
 }
 
 .sc-race {
+  flex: none;
+  white-space: nowrap;
   pointer-events: auto;
   touch-action: none;
   user-select: none;
@@ -516,6 +518,7 @@ html:has(.showcase) body {
 .sc-race.on {
   transform: scale(0.985);
 }
+.sc-race > span, .sc-race > em { flex: none; }
 .sc-race .touch-only { display: none; }
 @media (pointer: coarse) {
   .sc-race .kbd-only { display: none; }
@@ -1502,9 +1505,12 @@ html:has(.showcase) body {
   color: var(--sc-mute);
   transition: color .2s ease, background-color .2s ease, transform .2s ease;
 }
-.showcase .sc-tools .sc-glass-trigger {
+.showcase .sc-tools .sc-glass-trigger,
+.showcase .sc-tools .sc-inspector-home {
   width: auto;
   min-width: 62px;
+  flex: none;
+  white-space: nowrap;
   padding: 0 7px;
   font-size: 10px;
   letter-spacing: .08em;
