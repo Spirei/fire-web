@@ -187,11 +187,25 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
       baseGeometry.setIndex(filtered);
     }
     if (!sparseTriangles.length) return { baseGeometry };
+    // 细分后用索引几何共享相邻三角形的顶点。线框轮廓完全相同，但 MP4/6 尾翼不再为
+    // 每个三角形复制三个 position，深度 2 时顶点内存通常可降到原来的约 1/3。
     const generatedPositions: number[] = [];
+    const generatedIndices: number[] = [];
+    const generatedVertex = new Map<string, number>();
+    let emittedTriangles = 0;
+    const vertexIndex = (point: THREE.Vector3) => {
+      const key = `${Math.round(point.x * 1e7)},${Math.round(point.y * 1e7)},${Math.round(point.z * 1e7)}`;
+      const existing = generatedVertex.get(key);
+      if (existing !== undefined) return existing;
+      const next = generatedPositions.length / 3;
+      generatedPositions.push(point.x, point.y, point.z);
+      generatedVertex.set(key, next);
+      return next;
+    };
     const midpoint = (p: THREE.Vector3, q: THREE.Vector3) => new THREE.Vector3().addVectors(p, q).multiplyScalar(0.5);
     const emit = (p: THREE.Vector3, q: THREE.Vector3, r: THREE.Vector3, depth: number) => {
       // 尾翼同一连通薄板固定使用相同层级；每轮四等分保持三角形形状与左右镜像关系。
-      if (depth > 0 && generatedPositions.length / 9 + 4 <= tessellationBudget) {
+      if (depth > 0 && emittedTriangles + 4 <= tessellationBudget) {
         const pq = midpoint(p, q), qr = midpoint(q, r), rp = midpoint(r, p);
         emit(p, pq, rp, depth - 1);
         emit(pq, q, qr, depth - 1);
@@ -199,13 +213,15 @@ export function createWireframeView(initialTuning?: WireframeTuning) {
         emit(pq, qr, rp, depth - 1);
         return;
       }
-      generatedPositions.push(p.x, p.y, p.z, q.x, q.y, q.z, r.x, r.y, r.z);
+      generatedIndices.push(vertexIndex(p), vertexIndex(q), vertexIndex(r));
+      emittedTriangles += 1;
     };
     for (const [p, q, r, depth] of sparseTriangles) emit(p, q, r, depth);
     if (!generatedPositions.length) return { baseGeometry };
     const generated = new THREE.BufferGeometry();
     generated.setAttribute("position", new THREE.Float32BufferAttribute(generatedPositions, 3));
-    tessellationBudget -= generatedPositions.length / 9;
+    generated.setIndex(generatedIndices);
+    tessellationBudget -= emittedTriangles;
     return { baseGeometry, detailGeometry: generated };
   }
 

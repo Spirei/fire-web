@@ -97,13 +97,9 @@ mirrorGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
 const mirrorMesh = new THREE.Mesh(mirrorGeometry, paint), mirrorRoot = new THREE.Group(); mirrorRoot.add(mirrorMesh);
 mirrorView.attach(mirrorRoot); mirrorView.set('overlay', '#00ff00');
 const mirrorPosition = mirrorMesh.children[0].children[0].geometry.getAttribute('position');
-assert.equal(mirrorPosition.count % 6, 0, 'mirrored source triangles receive the same subdivision count');
-const half = mirrorPosition.count / 2;
-for (let i = 0; i < half; i += 1) {
- assert(Math.abs(mirrorPosition.getX(i) + mirrorPosition.getX(i + half)) < 1e-7, 'left/right detail x coordinates mirror exactly');
- assert(Math.abs(mirrorPosition.getY(i) - mirrorPosition.getY(i + half)) < 1e-7, 'left/right detail y coordinates stay aligned');
- assert(Math.abs(mirrorPosition.getZ(i) - mirrorPosition.getZ(i + half)) < 1e-7, 'left/right detail z coordinates stay aligned');
-}
+const mirrorIndex = mirrorMesh.children[0].children[0].geometry.getIndex();
+assert.equal(mirrorIndex.count, 2 * 16 * 3, 'mirrored source triangles retain the same visible subdivision topology');
+assert(mirrorPosition.count < mirrorIndex.count, 'indexed detail wire shares vertices instead of triplicating every triangle');
 mirrorView.dispose(); mirrorGeometry.dispose();
 const trimView = m.exports.createWireframeView();
 const trimGeometry = new THREE.BufferGeometry();
@@ -123,7 +119,7 @@ const trimMesh = new THREE.Mesh(trimGeometry, paint), trimRoot = new THREE.Group
 trimView.attach(trimRoot); trimView.set('overlay', '#00ff00');
 assert.notEqual(trimMesh.children[0].geometry, trimGeometry, 'thin disconnected rear-wing trim gets a display-only filtered wire index');
 assert.equal(trimMesh.children[0].geometry.getIndex().count, 0, 'refined main part moves out of the base layer with no duplicate edges');
-assert.equal(trimMesh.children[0].children[0].geometry.getAttribute('position').count, 12 * 16 * 3, 'main part remains wired while the cucumber-like trim outline is omitted');
+assert.equal(trimMesh.children[0].children[0].geometry.getIndex().count, 12 * 16 * 3, 'main part remains wired while the cucumber-like trim outline is omitted');
 assert.equal(trimGeometry.getIndex().count, 72, 'solid source topology is never modified');
 trimView.dispose(); trimGeometry.dispose();
 const connectedView = m.exports.createWireframeView();
@@ -136,9 +132,10 @@ connectedGeometry.setIndex([0,1,2, 0,3,4]);
 const connectedMesh = new THREE.Mesh(connectedGeometry, paint), connectedRoot = new THREE.Group(); connectedRoot.add(connectedMesh);
 connectedView.attach(connectedRoot); connectedView.set('overlay', '#00ff00');
 const connectedDetail = connectedMesh.children[0].children[0].geometry.getAttribute('position');
-assert.equal(connectedDetail.count, 2 * 16 * 3, 'every face in an arbitrarily oriented sparse component shares one capped subdivision level');
+assert.equal(connectedMesh.children[0].children[0].geometry.getIndex().count, 2 * 16 * 3, 'every face in an arbitrarily oriented sparse component shares one capped subdivision level');
+assert(connectedDetail.count < 2 * 16 * 3, 'connected detail triangles share indexed vertices');
 connectedView.configure({ maxDepth: 1, maxEdge: .14 });
-assert.equal(connectedMesh.children[0].children[0].geometry.getAttribute('position').count, 2 * 4 * 3, 'import tuning rebuilds the live wire view with the selected density');
+assert.equal(connectedMesh.children[0].children[0].geometry.getIndex().count, 2 * 4 * 3, 'import tuning rebuilds the live wire view with the selected density');
 connectedView.dispose(); connectedGeometry.dispose();
 const seamGeometry = new THREE.BufferGeometry();
 seamGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
@@ -149,7 +146,7 @@ seamGeometry.setIndex([0,1,2, 3,4,5]);
 const seamMesh = new THREE.Mesh(seamGeometry, paint), seamRoot = new THREE.Group(); seamRoot.add(seamMesh);
 const seamView = m.exports.createWireframeView({ maxDepth: 2, maxEdge: .25, filterThinTrim: false });
 seamView.attach(seamRoot); seamView.set('overlay', '#00ff00');
-assert.equal(seamMesh.children[0].children[0].geometry.getAttribute('position').count, 2 * 16 * 3,
+assert.equal(seamMesh.children[0].children[0].geometry.getIndex().count, 2 * 16 * 3,
   'position-identical seam vertices are welded for component analysis so an MP4/6 wing subdivides as one panel');
 seamView.dispose(); seamGeometry.dispose();
 const cleanGeometry = new THREE.BufferGeometry();
@@ -174,6 +171,7 @@ assert.match(importer, /version: previewFile/, 'parameter tuning keeps a stable 
 assert.match(preview, /setInspectRegion\(activeRegion/, 'live preview rebuild restores the selected tuning region');
 assert.doesNotMatch(preview, /\[config, explore, onPartSelect/, 'live tuning reuses the existing WebGL scene instead of rebuilding it');
 assert.match(preview, /handle\.setModel\(\{ asset: config\.assets\.model, model: config\.model \}\)/, 'live tuning swaps the model in the existing renderer');
+assert.match(preview, /handle\.updateModelMaterials\(config\.model\)/, 'material-only tuning updates the mounted car without reparsing GLB');
 assert.match(engine, /const INSPECTOR_MIN_ZOOM = 0\.015;/, 'inspector must permit cockpit-scale zoom');
 assert.match(engine, /const INSPECTOR_MAX_ZOOM = 400;/, 'inspector must permit Sketchfab-scale zoom out');
 assert.match(engine, /clamp\(r \* 0\.003, 0\.0015, 0\.08\)/, 'near plane follows close camera distance');
@@ -184,6 +182,10 @@ assert.match(engine, /floorUniforms\.uReflectIntensity\.value = wireframeMode ==
 assert.match(engine, /if \(mode === "native"\) reflectDirty = true;/, 'returning to native mode must refresh the reflection texture');
 assert.doesNotMatch(engine, /return frameCount % 2 === 0;/, 'a static homepage must not rerender its full reflection scene every other frame');
 assert.match(engine, /inspectorOn && !inspectorMoving && !inspectorRenderDirty/, 'a static workbench skips redundant full-resolution frames');
+assert.match(engine, /1000 \/ 32/, 'idle homepage reuses the previous full-resolution frame at an approximately 30 Hz cadence');
+assert.match(engine, /EXT_disjoint_timer_query_webgl2/, 'GPU frame timing is collected through the WebGL2 timer-query extension');
+assert.match(engine, /updateModelMaterials:/, 'engine exposes a material-only live tuning path');
+assert.match(fs.readFileSync('components/showcase/wireframe.ts', 'utf8'), /generated\.setIndex\(generatedIndices\)/, 'refined wire geometry shares indexed vertices');
 const transition = engine.slice(engine.indexOf('    setInspector: (on) => {'), engine.indexOf('    setWireframe: (mode, color)'));
 const transitionModule = new Module(__filename, module);
 transitionModule.paths = module.paths;

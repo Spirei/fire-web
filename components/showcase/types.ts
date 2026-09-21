@@ -390,6 +390,8 @@ export interface ShowcaseHandle {
    * 素材会走同一套缓存；解析失败时旧车留在画面上并返回 false。
    */
   setModel: (next: { asset: string; model?: ShowcaseConfig["model"] }) => Promise<boolean>;
+  /** 只更新材质参数，不重新解析 GLB 或重建线框/轮组。 */
+  updateModelMaterials: (model?: ShowcaseConfig["model"]) => void;
   /** 360° 环视：自动绕车旋转（再调一次关闭并回到叙事机位） */
   setOrbit: (on: boolean) => void;
   setInspector: (on: boolean) => void;
@@ -435,6 +437,8 @@ export interface ShowcaseHandle {
     geometries: number;
     /** 每帧脚本耗时（毫秒，不含 GPU 执行时间） */
     jsMs: number;
+    /** EXT_disjoint_timer_query_webgl2 测得的 GPU 帧耗时；设备不支持时为 0。 */
+    gpuMs: number;
     /** 诊断计数：实际渲染、倒影渲染、工作台跳过的重复帧（每秒平均）。 */
     renderFps: number;
     reflectionFps: number;

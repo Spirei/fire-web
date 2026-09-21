@@ -1534,6 +1534,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         if (mesh.name && meshNames.size < 200) meshNames.add(mesh.name);
         // 按 preset 的规则修正材质参数（不同模型自带参数差别很大：轮胎不该是金属，碳纤维别太像镜子）
         if (mat?.isMeshStandardMaterial) {
+          if (!mat.userData.showcaseMaterialBase) mat.userData.showcaseMaterialBase = {
+            envMapIntensity: mat.envMapIntensity,
+            emissiveIntensity: mat.emissiveIntensity,
+            clearcoatRoughness: (mat as THREE.MeshPhysicalMaterial).clearcoatRoughness ?? 0
+          };
           CFG.model.materialRules.forEach((rule) => {
             if (!rule.match.test(name)) return;
             if (rule.metalness !== undefined) mat.metalness = rule.metalness;
@@ -1813,6 +1818,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let renderCalls = 0;
   let reflectionRenders = 0;
   let inspectorSkippedFrames = 0;
+  let homepageSkippedFrames = 0;
   let reflectDirty = true;
   // 反射是否在动：只要相机或车动过就必须逐帧更新，否则倒影会比画面慢一帧 → 看起来在抖。
   // 完全静止时复用上一张逐像素相同的反射纹理。
@@ -2076,7 +2082,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       })
     );
     bodyMaterials.forEach((m) => {
-      m.envMapIntensity = 1.25 - sp * 0.12;
+      m.envMapIntensity = CFG.model.envMapIntensity * (1 - sp * 0.096);
     });
     carLights.forEach((item) => {
       const on = item.mode === "always" ? 1 : racingAmt;
@@ -2844,6 +2850,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   });
   let renderErrors = 0;
   let jsAvg = 0;
+  let gpuAvg = 0;
   let lastPerfHud = 0;
   let hudLastRenderCalls = 0;
   let hudLastReflectionRenders = 0;
@@ -2853,13 +2860,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const interval = Math.max(0.001, (now - (lastPerfHud || perfStartedAt)) / 1000);
     lastPerfHud = now;
     qualityHud.innerHTML = [
-      `showcase · ${jsAvg.toFixed(2)} ms`,
-      `render ${((renderCalls - hudLastRenderCalls) / interval).toFixed(1)}/s · reflect ${((reflectionRenders - hudLastReflectionRenders) / interval).toFixed(1)}/s · skip ${((inspectorSkippedFrames - hudLastInspectorSkips) / interval).toFixed(1)}/s`,
+      `showcase · CPU ${jsAvg.toFixed(2)} ms · GPU ${gpuAvg ? gpuAvg.toFixed(2) : "—"} ms`,
+      `render ${((renderCalls - hudLastRenderCalls) / interval).toFixed(1)}/s · reflect ${((reflectionRenders - hudLastReflectionRenders) / interval).toFixed(1)}/s · skip ${((inspectorSkippedFrames + homepageSkippedFrames - hudLastInspectorSkips) / interval).toFixed(1)}/s`,
       `buffer ${canvas.width}×${canvas.height} · tex ${renderer.info.memory.textures} · geo ${renderer.info.memory.geometries}`
     ].join("<br>");
     hudLastRenderCalls = renderCalls;
     hudLastReflectionRenders = reflectionRenders;
-    hudLastInspectorSkips = inspectorSkippedFrames;
+    hudLastInspectorSkips = inspectorSkippedFrames + homepageSkippedFrames;
   };
 
   /**
@@ -2868,6 +2875,34 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    * 正常画面（哪怕在最亮的高速段）不会 5 个点同时接近纯白，因此不会误判。
    */
   const gl = renderer.getContext();
+  const gl2 = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext ? gl : null;
+  const gpuTimerExt = gl2?.getExtension("EXT_disjoint_timer_query_webgl2") as { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null;
+  const gpuQueries: WebGLQuery[] = [];
+  const pollGpuTimers = () => {
+    if (!gl2 || !gpuTimerExt) return;
+    while (gpuQueries.length && gl2.getQueryParameter(gpuQueries[0], gl2.QUERY_RESULT_AVAILABLE)) {
+      const query = gpuQueries.shift()!;
+      const disjoint = gl2.getParameter(gpuTimerExt.GPU_DISJOINT_EXT);
+      const ms = Number(gl2.getQueryParameter(query, gl2.QUERY_RESULT)) / 1e6;
+      gl2.deleteQuery(query);
+      if (!disjoint && Number.isFinite(ms)) gpuAvg = gpuAvg === 0 ? ms : gpuAvg * 0.85 + ms * 0.15;
+    }
+  };
+  const beginGpuTimer = () => {
+    if (!gl2 || !gpuTimerExt || gpuQueries.length >= 4) return null;
+    const query = gl2.createQuery();
+    if (!query) return null;
+    gl2.beginQuery(gpuTimerExt.TIME_ELAPSED_EXT, query);
+    return query;
+  };
+  const endGpuTimer = (query: WebGLQuery | null) => {
+    if (!query || !gl2 || !gpuTimerExt) return;
+    gl2.endQuery(gpuTimerExt.TIME_ELAPSED_EXT);
+    gpuQueries.push(query);
+  };
+  cleanups.push(() => {
+    if (gl2) gpuQueries.splice(0).forEach(query => gl2.deleteQuery(query));
+  });
   const probe = new Uint8Array(4);
   let badFrames = 0;
   let softTries = 0;
@@ -2953,6 +2988,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
 
   /* ---------- 10) 渲染循环：不可见时暂停 ---------- */
   let last = performance.now();
+  let lastRenderAt = last;
+  let lastHomepageRender = 0;
   let pSmooth = START_P;
   let pVel = 0;
   const tick = () => {
@@ -2979,15 +3016,28 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       dragging || touches.size > 0 || Math.abs(userYawVel) > 1e-4 || Math.abs(userPitchVel) > 1e-5 ||
       Math.abs(zoomTarget - zoom) > 1e-4 || Math.abs(pVel) > 0.0004
     );
+    const homepageMoving = !inspectorOn && (
+      dragging || touches.size > 0 || orbitOn || racing || speed > 0.01 || racingAmt > 0.001 ||
+      Math.abs(userYawVel) > 1e-4 || Math.abs(userPitchVel) > 1e-5 || Math.abs(zoomTarget - zoom) > 1e-4 || Math.abs(pVel) > 0.0004
+    );
+    // 首页静止时复用上一帧画布，3D 主体以 30Hz 更新仪表/圆盘动画；交互立刻恢复显示器满帧。
+    if (!inspectorOn && !homepageMoving && now - lastHomepageRender < 1000 / 32) {
+      homepageSkippedFrames += 1;
+      refreshPerfHud(now);
+      return;
+    }
     if (inspectorOn && !inspectorMoving && !inspectorRenderDirty) {
       inspectorSkippedFrames += 1;
       refreshPerfHud(now);
       return;
     }
     adaptQuality(frameMs);
+    pollGpuTimers();
+    const gpuQuery = beginGpuTimer();
     try {
       const jsStart = performance.now();
-      render(pSmooth, dt);
+      const renderDt = Math.min(Math.max((now - lastRenderAt) / 1000, 0), 0.05);
+      render(pSmooth, renderDt);
       if (inspectorOn && !inspectorMoving) inspectorRenderDirty = false;
       const jsCost = performance.now() - jsStart;
       jsAvg = jsAvg === 0 ? jsCost : jsAvg * 0.9 + jsCost * 0.1;
@@ -3002,6 +3052,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         renderer.setAnimationLoop(null);
         options.onContextLost?.();
       }
+    } finally {
+      endGpuTimer(gpuQuery);
+      lastRenderAt = now;
+      if (!inspectorOn) lastHomepageRender = now;
     }
   };
   renderer.setAnimationLoop(tick);
@@ -3125,6 +3179,25 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         options.onError?.(err instanceof Error ? err.message : String(err ?? "换车失败"));
         return false;
       }
+    },
+    updateModelMaterials: (next) => {
+      const normalized = normalizeModel(next);
+      CFG.model.emissiveIntensity = normalized.emissiveIntensity;
+      CFG.model.clearcoatRoughness = normalized.clearcoatRoughness;
+      CFG.model.envMapIntensity = normalized.envMapIntensity;
+      bodyMaterials.forEach((material) => {
+        const base = material.userData.showcaseMaterialBase as { envMapIntensity?: number; emissiveIntensity?: number; clearcoatRoughness?: number } | undefined;
+        material.envMapIntensity = normalized.envMapIntensity;
+        if (material.emissive && (material.emissive.r > 0.01 || material.emissive.g > 0.01 || material.emissive.b > 0.01)) {
+          material.emissiveIntensity = Math.min(base?.emissiveIntensity ?? material.emissiveIntensity ?? 1, normalized.emissiveIntensity);
+        }
+        const physical = material as THREE.MeshPhysicalMaterial;
+        if (physical.clearcoat && physical.clearcoat > 0) {
+          physical.clearcoatRoughness = Math.max(base?.clearcoatRoughness ?? 0, normalized.clearcoatRoughness);
+        }
+        material.needsUpdate = true;
+      });
+      invalidateInspector();
     },
     /**
      * 冻结当前这一帧（换车型时当背景板用）：先补渲染一帧，再同步拷进一张 2D canvas。
@@ -3282,9 +3355,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     geometries: renderer.info.memory.geometries,
     /** 每帧脚本耗时（毫秒，渲染调用 + HUD + 相机计算，不含 GPU 执行时间） */
     jsMs: +jsAvg.toFixed(2),
+    gpuMs: +gpuAvg.toFixed(2),
     renderFps: +(renderCalls / Math.max(0.001, (performance.now() - perfStartedAt) / 1000)).toFixed(2),
     reflectionFps: +(reflectionRenders / Math.max(0.001, (performance.now() - perfStartedAt) / 1000)).toFixed(2),
-    inspectorSkippedFps: +(inspectorSkippedFrames / Math.max(0.001, (performance.now() - perfStartedAt) / 1000)).toFixed(2),
+    inspectorSkippedFps: +((inspectorSkippedFrames + homepageSkippedFrames) / Math.max(0.001, (performance.now() - perfStartedAt) / 1000)).toFixed(2),
     /** 看门狗触发次数（软恢复 / 重建），排查白屏用 */
     watchdogHits,
     rebuilds,
