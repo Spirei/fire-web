@@ -246,6 +246,58 @@ html:has(.showcase.light) body {
   gap: 8px;
 }
 
+/* 桌面端左右贴边抽屉：默认只留一枚窄标签，展开后向画面内侧释放胶囊组。 */
+.sc-side-drawer {
+  z-index: 15;
+  align-items: center;
+}
+
+.sc-drawer-toggle {
+  min-width: 66px;
+  height: 31px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--sc-mute);
+  font-size: 9px;
+  letter-spacing: .16em;
+  white-space: nowrap;
+}
+
+.sc-drawer-toggle svg { width: 13px; height: 13px; opacity: .75; }
+.sc-drawer-toggle i { font: 400 15px/1 sans-serif; opacity: .55; transition: transform .3s ease; }
+.sc-side-left.open .sc-drawer-toggle i { transform: rotate(180deg); }
+.sc-side-right.open .sc-drawer-toggle i { transform: rotate(180deg); }
+
+.sc-drawer-content {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-8px);
+  transition: max-width .42s cubic-bezier(.22,.8,.22,1), opacity .22s ease, transform .35s ease, visibility 0s linear .42s;
+}
+
+.sc-side-left.open .sc-drawer-content,
+.sc-side-right.open .sc-drawer-content {
+  max-width: min(76vw, 760px);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+  transition-delay: 0s;
+}
+
+.sc-side-right { flex-direction: row-reverse; }
+.sc-side-right .sc-drawer-content { transform: translateX(8px); }
+.sc-side-right.open .sc-drawer-content { transform: translateX(0); }
+
 /* 文字胶囊（环视 / 影棚 / ZOOM / 固定机位）：尺寸与排版在这里，观感走 fire-cap */
 .sc-pill {
   display: flex;
@@ -740,31 +792,89 @@ html:has(.showcase.light) body {
 /* 首页左下角三档纹理质量：只改变车模贴图上限，选择会持久化。 */
 .sc-texture-quality {
   left: 3.4vw;
-  bottom: 4.6vh;
+  top: 64%;
+  bottom: auto;
   display: flex;
-  align-items: center;
-  gap: 5px;
+  width: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding-left: 8px;
+  transform: translateY(-50%);
+}
+
+.sc-texture-quality::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -6px;
+  bottom: -6px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--sc-line);
 }
 
 .sc-quality-cap {
-  margin-right: 2px;
-  color: var(--sc-faintest);
-  font-size: 8.5px;
-  letter-spacing: .26em;
+  display: none;
 }
 
 .sc-quality-option {
-  padding: 5px 9px;
-  font-size: 9px;
-  letter-spacing: .12em;
+  position: relative;
+  min-width: 40px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  color: var(--sc-faint);
+  cursor: pointer;
+  transition: color .2s ease;
 }
 
-.sc-quality-option small {
-  margin-left: 4px;
+.sc-quality-tick {
+  display: block;
+  width: 16px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: .5;
+  transition: width .24s cubic-bezier(.4,0,.2,1), opacity .24s ease;
+}
+
+.sc-quality-label {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--sc-ink-strong);
+  font-size: 9.5px;
+  letter-spacing: .18em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+}
+
+.sc-quality-label small {
+  margin-left: 3px;
   font: 500 7px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0;
-  opacity: .5;
+  opacity: .55;
 }
+
+.sc-quality-option:hover,
+.sc-quality-option:focus-visible { color: var(--sc-ink); }
+.sc-quality-option:hover .sc-quality-tick,
+.sc-quality-option:focus-visible .sc-quality-tick { width: 24px; opacity: .85; }
+.sc-quality-option:hover .sc-quality-label,
+.sc-quality-option:focus-visible .sc-quality-label,
+.sc-quality-option.on .sc-quality-label { opacity: 1; }
+.sc-quality-option.on { color: var(--sc-ink-strong); }
+.sc-quality-option.on .sc-quality-tick { width: 32px; opacity: 1; }
+.sc-quality-option:focus { outline: none; }
+.sc-quality-option:focus-visible .sc-quality-tick { outline: 2px solid var(--sc-active-line); outline-offset: 3px; }
 
 /* 构图诊断坐标：首页与模型展示共用，截图即可按水平角、俯仰角与页面进度复现机位。 */
 .sc-position-coordinate {
@@ -985,19 +1095,21 @@ html:has(.showcase.light) body {
 
   .sc-texture-quality {
     left: 4vw;
-    top: 3.5vh;
+    top: 63%;
     bottom: auto;
+    width: auto;
     max-width: 92vw;
-  }
-
-  .sc-quality-cap {
-    display: none;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
   }
 
   .sc-quality-option {
-    padding: 6px 9px;
-    font-size: 9px;
+    min-height: 40px;
+    padding: 8px;
   }
+
+  .sc-quality-label { left: calc(100% + 6px); font-size: 10px; }
 
   .sc-position-coordinate {
     right: 4vw;
@@ -1103,6 +1215,16 @@ html:has(.showcase.light) body {
  * 用 (hover: none) and (pointer: coarse) 限定纯触屏设备：带触屏的笔记本（有鼠标）不受影响。
  */
 @media (hover: none) and (pointer: coarse) {
+  .sc-drawer-toggle { display: none; }
+  .sc-side-drawer .sc-drawer-content {
+    max-width: none;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    overflow: visible;
+    transform: none;
+  }
+  .sc-side-right { flex-direction: row; }
   /* 提示换成触摸版 */
   .sc-hint-drag {
     display: none;

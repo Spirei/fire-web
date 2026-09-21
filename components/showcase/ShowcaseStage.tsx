@@ -94,6 +94,8 @@ export default function ShowcaseStage({
   const [loadRatio, setLoadRatio] = useState(0);
   const [ready, setReady] = useState(false);
   const [racing, setRacing] = useState(false);
+  const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(initialTheme);
   const [musicOn, setMusicOn] = useState(false);
   const [musicReady, setMusicReady] = useState(true);
@@ -215,6 +217,15 @@ export default function ShowcaseStage({
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [wirePanel]);
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || wirePanelRef.current) return;
+      setLeftDrawerOpen(false);
+      setRightDrawerOpen(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, []);
   // WebGL 上下文丢了就重建一次场景（重建计数用作 key，触发重新挂载）
   const [rebuild, setRebuild] = useState(0);
   const [retry, setRetry] = useState(0);
@@ -978,7 +989,12 @@ export default function ShowcaseStage({
               ))}
             </p>
 
-            <div className="sc-row sc-left-foot">
+            <div className={`sc-row sc-left-foot sc-side-drawer sc-side-left${leftDrawerOpen ? " open" : ""}`}>
+              <button type="button" className="sc-drawer-toggle fire-cap" onClick={() => { setLeftDrawerOpen((open) => !open); setRightDrawerOpen(false); }} aria-expanded={leftDrawerOpen} aria-controls="showcase-left-controls">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M4 6h12M4 10h8M4 14h10" /></svg>
+                <span>控制</span><i aria-hidden="true">›</i>
+              </button>
+              <div className="sc-drawer-content" id="showcase-left-controls">
               <button
                 type="button"
                 className={`sc-pill fire-cap${orbit ? " on" : ""}`}
@@ -1054,6 +1070,7 @@ export default function ShowcaseStage({
                 </svg>
                 {ui.pinCamera}
               </button>
+              </div>
             </div>
 
             <div className="sc-row sc-tele">
@@ -1139,12 +1156,12 @@ export default function ShowcaseStage({
             </div>
             {!inspector && (
               <div className="sc-row sc-texture-quality" role="group" aria-label="纹理质量">
-                <span className="sc-quality-cap">纹理</span>
+                <span className="sc-quality-cap" aria-hidden="true">纹理</span>
                 {(Object.entries(TEXTURE_QUALITY) as Array<[TextureQuality, (typeof TEXTURE_QUALITY)[TextureQuality]]>).map(([key, option]) => (
                   <button
                     key={key}
                     type="button"
-                    className={`sc-quality-option fire-cap${textureQuality === key ? " on" : ""}`}
+                    className={`sc-quality-option${textureQuality === key ? " on" : ""}`}
                     aria-pressed={textureQuality === key}
                     title={key === "original" ? "原画纹理 · 保留源模型贴图尺寸" : `${option.label}纹理 · 最长边 ${option.badge}`}
                     onClick={() => {
@@ -1152,13 +1169,19 @@ export default function ShowcaseStage({
                       setTextureQuality(key);
                     }}
                   >
-                    {option.label}<small>{option.badge}</small>
+                    <span className="sc-quality-label">{option.label} <small>{option.badge}</small></span>
+                    <span className="sc-quality-tick" aria-hidden="true" />
                   </button>
                 ))}
               </div>
             )}
             {models && models.length > 0 && (models.length > 1 || onImport) && (
-              <div className="sc-row sc-models">
+              <div className={`sc-row sc-models sc-side-drawer sc-side-right${rightDrawerOpen ? " open" : ""}`}>
+                <button type="button" className="sc-drawer-toggle fire-cap" onClick={() => { setRightDrawerOpen((open) => !open); setLeftDrawerOpen(false); }} aria-expanded={rightDrawerOpen} aria-controls="showcase-model-controls">
+                  <i aria-hidden="true">‹</i><span>车型</span>
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M3 13h14M5 13l2-5h6l2 5M6 13v2M14 13v2" /></svg>
+                </button>
+                <div className="sc-drawer-content" id="showcase-model-controls">
                 <span className="sc-models-cap">车型</span>
                 {models.map((item) => {
                   const loading = item.status === "loading" && item.id !== currentModel;
@@ -1191,6 +1214,7 @@ export default function ShowcaseStage({
                     <svg className="sc-model-add-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>
                   </button>
                 )}
+                </div>
               </div>
             )}
           </div>

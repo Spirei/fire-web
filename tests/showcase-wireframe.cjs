@@ -198,6 +198,9 @@ assert.match(stage, /balanced: \{ label: "均衡", badge: "2K", size: 2048 \}/, 
 assert.match(stage, /fine: \{ label: "精细", badge: "4K", size: 4096 \}/, 'fine quality uses 4K textures');
 assert.match(stage, /original: \{ label: "原画", badge: "RAW", size: 16384 \}/, 'original quality preserves 8K source textures');
 assert.match(stage, /textureQuality !== "fast" \? config\.assets\.model/, 'higher texture modes load the original model instead of the 1K preview');
+assert.match(stage, /showcase-left-controls/, 'homepage control capsules use a collapsible left drawer');
+assert.match(stage, /showcase-model-controls/, 'homepage model capsules use a collapsible right drawer');
+assert.match(stage, /className="sc-row sc-texture-quality"/, 'texture quality remains independent below the homepage copy');
 assert.match(stage, /setModel\(\{ asset: current\.assets\.model/, 'entering model inspection promotes the preview to the full model');
 assert.match(engine, /if \(envWeight > 0\.02\) void ensureDayEnvironment\(\)/, 'day HDR waits until the visible mode actually needs it');
 assert.match(engine, /createWireframeView\(CFG\.model\.wireframe, true/, 'showcase wireframes are split across frames');
