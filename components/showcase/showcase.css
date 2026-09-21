@@ -1353,16 +1353,27 @@ html:has(.showcase.light) body {
   .sc-hint-touch { display: block; left: 50%; transform: translateX(-50%); bottom: calc(12vh + 54px); font-size: 9px; white-space: nowrap; text-align: center; }
   .sc-nav button { min-height: 36px; min-width: 44px; padding: 4px 6px; }
 
-  /* 竖屏和平板只保留关键遥测，避免完整仪表挤占车辆与标题区域。 */
-  .sc-tele { width: 120px; }
-  .sc-tele-cap, .sc-ticks, .sc-ers, .sc-tele-foot { display: none; }
-  .sc-kmh { font-size: clamp(30px, 4.5vw, 42px); }
-  .sc-line-row { margin-top: 9px; }
+  /* 完整遥测在窄屏收紧尺寸，保留转速和能量反馈。 */
+  .sc-tele { width: 150px; }
+  .sc-kmh { font-size: clamp(34px, 5vw, 48px); }
+  .sc-tele-cap { margin-bottom: 8px; }
+  .sc-line-row { margin-top: 11px; }
+  .sc-ticks { gap: 2px; margin-top: 7px; }
+  .sc-ticks span { width: 3px; height: 7px; }
+  .sc-ers { margin-top: 8px; }
+  .sc-tele-foot { margin-top: 8px; }
 }
 @media (max-width: 640px) {
   .sc-nav { top: 55%; gap: 0; right: 3vw; }
   .sc-nav button { min-height: 40px; }
   .sc-nav-label { font-size: 9px; }
+  .sc-tele { width: min(42vw, 150px); }
+  .sc-tele-cap, .sc-ticks, .sc-ers, .sc-tele-foot { display: flex; }
+  .sc-ers { display: block; }
+  .sc-kmh { font-size: clamp(32px, 9vw, 42px); }
+  .sc-unit { font-size: 8px; letter-spacing: 0.12em; }
+  .sc-line-row { margin-top: 9px; }
+  .sc-tele-foot { font-size: 8px; letter-spacing: 0.1em; justify-content: flex-end; white-space: nowrap; }
 }
 @media (max-height: 540px) {
   .sc-nav { top: 57%; gap: 0; }
