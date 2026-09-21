@@ -1731,19 +1731,33 @@ html:has(.showcase) body {
 .showcase.light .sc-drive-camera-toggle,
 .showcase.light .sc-drive-camera-options { background: rgba(245, 247, 250, .94); }
 
-@media (max-width: 640px) {
+/* 手机行驶 HUD：两侧共用底线，中央留给车辆，边距叠加安全区。 */
+@media (max-width: 640px), (max-height: 500px) and (pointer: coarse) {
   .showcase.sc-immersive .sc-tele {
-    left: 4vw;
+    left: calc(env(safe-area-inset-left) + 24px);
     right: auto;
     top: auto;
-    bottom: max(18vh, calc(env(safe-area-inset-bottom) + 150px));
+    bottom: calc(env(safe-area-inset-bottom) + 24px);
+    width: 104px;
     text-align: left;
   }
   .showcase.sc-immersive .sc-speed-wrap { text-align: left; }
-  .sc-drive-camera {
-    right: 4vw;
-    bottom: max(16vh, calc(env(safe-area-inset-bottom) + 112px));
+  .showcase.sc-immersive .sc-drive-camera {
+    right: calc(env(safe-area-inset-right) + 24px);
+    bottom: calc(env(safe-area-inset-bottom) + 24px);
   }
+  .showcase.sc-immersive .sc-drive-camera-toggle {
+    min-height: 44px;
+    gap: 7px;
+    padding: 10px 12px;
+    letter-spacing: .08em;
+  }
+  .showcase.sc-immersive .sc-drive-camera-options {
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 136px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .showcase.sc-immersive .sc-drive-camera-options button { min-height: 44px; }
 }
 
 /* 行驶控制靠右上边缘，让出车尾所在的画面中央。 */
@@ -1758,3 +1772,7 @@ html:has(.showcase) body {
 .showcase.sc-immersive .sc-ctr-cap,
 .showcase.sc-immersive .sc-ctr-hint { display: none; }
 .showcase.sc-immersive .sc-race { padding: 10px 14px; font-size: 11px; }
+
+@media (max-width: 640px), (max-height: 500px) and (pointer: coarse) {
+  .showcase.sc-immersive .sc-ctr { right: calc(env(safe-area-inset-right) + 24px); }
+}
