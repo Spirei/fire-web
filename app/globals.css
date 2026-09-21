@@ -5704,3 +5704,12 @@ button.PhotoView-Slider__toolbarIcon {
 .dark .mp-field-error { color: #ff9c8f; }
 
 .dark .mp-workbench.mp-root { background: #111722; color: #e8eaee; }
+
+.dark .mp-visibility-toggle { color: #a6afbc; background: transparent; }
+.dark .mp-visibility-toggle:hover { color: #edf0f5; background: rgba(166, 175, 188, .1); }
+
+/* 导入页和工作台沿用首页展示台的深色中性调色。 */
+.dark .showcase-import { background: #050506; }
+.dark .mp-root { --mp-bg: #050506; --mp-panel: rgba(255,255,255,.025); --mp-ink: #f4f4f5; --mp-muted: #9a9a9e; --mp-line: rgba(255,255,255,.14); --mp-active: rgba(255,255,255,.42); color: var(--mp-ink); }
+.dark .mp-workbench.mp-root { background: var(--mp-bg); color: var(--mp-ink); }
+.dark .mp-root .mp-danger { color: #dc8d84; }

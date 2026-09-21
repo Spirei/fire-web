@@ -78,6 +78,7 @@ export default function ModelPreview({
       .then(({ createShowcaseScene }) =>
         createShowcaseScene({
           config: initialConfig,
+          initialTheme: document.documentElement.classList.contains("dark") ? "dark" : "light",
           canvas,
           // 预览不接 HUD：滚动手势用容器自己，遥测 / 按钮全部留空，引擎会跳过这些更新
           hud: {

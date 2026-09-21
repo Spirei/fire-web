@@ -729,3 +729,75 @@ html.mp-workbench-open { overflow: hidden; }
   .mp-workbench .mp-wheel-list label { padding: 9px 11px; }
   .mp-resume { align-items: stretch; flex-direction: column; }
 }
+
+.mp-visibility-toggle { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #657080; transition: color .15s, background .15s; }
+.mp-visibility-toggle svg { width: 19px; height: 19px; }
+.mp-visibility-toggle:hover { color: #222b37; background: rgba(100, 110, 125, .09); }
+.mp-visibility-toggle:disabled { opacity: .4; cursor: wait; }
+
+/* 与首页一致的中性背景、细线分区及文字轨道操作。覆盖管理页的全局玻璃材质。 */
+.mp-root {
+  --mp-bg: #f4f6f9;
+  --mp-panel: rgba(20, 24, 30, .025);
+  --mp-ink: #14181e;
+  --mp-muted: #5f656d;
+  --mp-line: rgba(20, 24, 30, .16);
+  --mp-active: rgba(20, 24, 30, .48);
+  color: var(--mp-ink);
+}
+:root:not(.dark) .showcase-import { background: #f4f6f9; }
+:root .mp-workbench.mp-root { background: var(--mp-bg); color: var(--mp-ink); }
+.mp-root .mp-head { padding-bottom: 22px; border-bottom: 1px solid var(--mp-line); }
+.mp-root .mp-head h1 { font-size: clamp(27px, 3vw, 38px); font-weight: 400; letter-spacing: -.035em; }
+.mp-root .mp-kicker { font-size: 9px; letter-spacing: .28em; color: var(--mp-muted); opacity: 1; }
+.mp-root .mp-sub { color: var(--mp-muted); opacity: 1; }
+.mp-root .mp-step { padding: 20px 0; border: 0 !important; border-bottom: 1px solid var(--mp-line) !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; backdrop-filter: none !important; }
+.mp-root .mp-step h2 { font-size: 13px; font-weight: 500; letter-spacing: .12em; }
+.mp-root .mp-step h2 span { width: auto; border: 0; border-radius: 0; font: 11px ui-monospace, monospace; color: var(--mp-muted); margin-right: 4px; }
+.mp-root .mp-drop { border: 1px dashed var(--mp-line); border-radius: 2px; background: var(--mp-panel); padding-block: 38px; }
+.mp-root .mp-drop:hover, .mp-root .mp-drop.on { border-color: var(--mp-active); background: var(--mp-panel); }
+.mp-root .mp-model-card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--mp-line) !important; border-radius: 2px !important; background: transparent !important; box-shadow: none !important; backdrop-filter: none !important; transition: border-color .2s; }
+.mp-root .mp-model-card:hover { border-color: var(--mp-active) !important; }
+.mp-root .mp-model-card.is-dragging { opacity: .55; }
+.mp-root .mp-model-card > div:first-child { background: var(--mp-panel) !important; border-bottom: 1px solid var(--mp-line); }
+.mp-root .mp-model-card .rounded-full { border-radius: 2px; }
+.mp-root .mp-model-card code { color: var(--mp-muted); font-size: 10px; }
+.mp-root .mp-model-card .fire-cap { padding-inline: 6px; font-size: 10.5px; }
+.mp-root .fire-cap { border: 0 !important; border-bottom: 1px solid transparent !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; color: var(--mp-muted); font-weight: 450; letter-spacing: .03em; min-height: 32px; transition: color .2s, border-color .2s; }
+.mp-root .fire-cap::before, .mp-root .fire-cap::after { display: none !important; }
+.mp-root .fire-cap:hover:not(:disabled), .mp-root .fire-cap.on { color: var(--mp-ink); border-bottom-color: var(--mp-active) !important; }
+.mp-root .fire-cap-primary { color: var(--mp-ink); border-bottom-color: var(--mp-active) !important; font-weight: 550; }
+.mp-root .fire-cap:disabled { opacity: .38; }
+.mp-root .mp-danger { color: #b74d44; }
+.mp-root .mp-workbench-head { border-bottom: 1px solid var(--mp-line); padding-bottom: 14px; background: var(--mp-bg); }
+.mp-root .mp-workbench-head h2 { font-weight: 450; letter-spacing: .035em; }
+.mp-root .mp-status-row { color: var(--mp-muted); font-size: 10px; letter-spacing: .04em; }
+.mp-root .mp-preview { border: 1px solid var(--mp-line); border-radius: 2px; box-shadow: none; }
+.mp-root .mp-section-title { border-top: 1px solid var(--mp-line); padding-top: 18px; margin-top: 12px; font-weight: 500; font-size: 12px; letter-spacing: .08em; }
+.mp-root .mp-section-title:first-of-type { border: 0; padding-top: 0; margin-top: 4px; }
+.mp-root .mp-section-nav { gap: 14px; }
+.mp-root .mp-form input, .mp-root .mp-form select { border: 0 !important; border-bottom: 1px solid var(--mp-line) !important; border-radius: 0 !important; background: var(--mp-panel) !important; box-shadow: none !important; color: var(--mp-ink); }
+.mp-root .mp-form input:hover, .mp-root .mp-form select:hover { border-bottom-color: var(--mp-active) !important; }
+.mp-root .mp-wire-algorithm { border: 1px solid var(--mp-line); border-radius: 2px; background: transparent; }
+.mp-root .mp-wire-algorithm summary { font-weight: 500; }
+.mp-root .mp-wheel-list label { border-radius: 2px; border-color: var(--mp-line); background: transparent; }
+.mp-root .mp-wheel-list label:has(input:checked) { background: var(--mp-panel); border-color: var(--mp-active); }
+.mp-root .mp-explore-bar { border: 0; border-top: 1px solid rgba(255,255,255,.14); border-radius: 0; background: rgba(5,5,6,.84); box-shadow: none; backdrop-filter: none; }
+.mp-root .mp-explore-bar .fire-cap { color: #f4f4f5; }
+.mp-root .mp-notice, .mp-root .mp-error, .mp-root .mp-preview-stale { border-radius: 2px; }
+.mp-root .mp-visibility-toggle { color: var(--mp-muted); border-radius: 0; background: transparent; }
+.mp-root .mp-visibility-toggle:hover { color: var(--mp-ink); background: transparent; }
+@media(max-width:560px) {
+  .mp-root .mp-head { gap: 12px; padding-bottom: 16px; }
+  .mp-root .mp-step { padding-block: 16px; }
+  .mp-root .mp-model-card .fire-cap { min-height: 36px; }
+  .mp-root .mp-workbench-head { padding-bottom: 10px; }
+}
+
+.mp-root .mp-restore-screen { background: var(--mp-bg); color: var(--mp-muted); }
+.mp-root .mp-preview { background: var(--mp-bg); }
+.mp-root .mp-step > .rounded-2xl { border-radius: 2px; }
+.mp-root .mp-picked-part { border-radius: 2px; background: var(--mp-bg); border: 1px solid var(--mp-line); color: var(--mp-ink); box-shadow: none; }
+.mp-root .mp-car-marker > b { border-radius: 2px; }
+:root:not(.dark) .mp-root .mp-explore-bar { background: rgba(244,246,249,.92); color: var(--mp-ink); border-top-color: var(--mp-line); }
+:root:not(.dark) .mp-root .mp-explore-bar .fire-cap { color: var(--mp-muted); }

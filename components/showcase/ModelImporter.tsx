@@ -1082,11 +1082,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                 event.preventDefault();
                 moveCard(row.id);
               }}
-              className={`flex flex-col overflow-hidden rounded-2xl border bg-white shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-edge-strong hover:shadow-pop dark:bg-[#16181d] ${
-                dragId === row.id
-                  ? "border-edge-strong opacity-70 dark:border-white/30"
-                  : "border-edge dark:border-white/10"
-              }`}
+              className={`mp-model-card${dragId === row.id ? " is-dragging" : ""}`}
             >
               {/* 卡面：没自定义封面时用车型代号占位；模型缩略图要现场加载上百 MB 的 glb，太重不在这里做。
                   高度按卡面宽度的百分比给（aspect = 100 / 52）：52% 是「车不被切」的临界点 ——
@@ -1101,11 +1097,6 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                     {row.label}
                   </span>
                 )}
-                {/* 封面上缘压一层浅渐变：封面是白底照片时，左上的拖动柄与角标也能看清（48px 不压到车） */}
-                <span
-                  className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-black/40 to-transparent"
-                  aria-hidden="true"
-                />
                 <span
                   className="absolute left-2 top-2 flex h-7 w-7 cursor-grab items-center justify-center rounded-full bg-black/55 text-[13px] text-white backdrop-blur active:cursor-grabbing"
                   title="拖动排序（首页车型条会同步）"
@@ -1135,13 +1126,17 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                 {row.present === false && <span className="text-[11px] font-semibold text-[#d97706]">素材文件缺失，请重新上传后再上线</span>}
                 {row.present !== false && <span className={`text-[11px] font-semibold ${row.previewReady ? "text-[#22a06b]" : "text-[#d97706]"}`}>{row.previewReady ? "首页预览已生成" : "尚未生成首页预览"}</span>}
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 lg:flex-nowrap lg:overflow-x-auto lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:hidden">
-                  <button type="button" className="fire-cap inline-flex h-8 w-8 shrink-0 items-center justify-center p-0" disabled={visibilityBusy !== null}
+                  <button type="button" className="mp-visibility-toggle" disabled={visibilityBusy !== null}
                     title={(visibility[row.id] ?? row.hidden) ? "恢复首页显示" : "首页隐藏（不参与预载）"}
                     aria-label={(visibility[row.id] ?? row.hidden) ? "恢复首页显示" : "首页隐藏"}
                     aria-busy={visibilityBusy === row.id} aria-pressed={visibility[row.id] ?? row.hidden ?? false} onClick={() => void toggleVisibility(row)}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
-                      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-                      {(visibility[row.id] ?? row.hidden) ? <path d="m4 4 16 16" /> : <circle cx="12" cy="12" r="2.6" />}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      {(visibility[row.id] ?? row.hidden) ? <>
+                        <path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.3A10 10 0 0 1 12 5c5.5 0 9 7 9 7a17 17 0 0 1-2.2 3.2M6.2 6.2C3.6 8.3 2 12 2 12s4 7 10 7a9.5 9.5 0 0 0 5-1.6" />
+                      </> : <>
+                        <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </>}
                     </svg>
                   </button>
                   <button type="button" className="fire-cap px-2 py-1 text-[11px] font-semibold" disabled={previewGenerating !== null || row.present === false} onClick={() => void generatePreviews(row)}>
