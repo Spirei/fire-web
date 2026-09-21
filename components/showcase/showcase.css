@@ -614,8 +614,8 @@ html:has(.showcase.light) body {
   pointer-events: none;
 }
 
-.sc-nav button:hover .sc-nav-label,
-.sc-nav button:focus-visible .sc-nav-label {
+.sc-nav button:focus-visible .sc-nav-label,
+.sc-nav button.sc-label-peek .sc-nav-label {
   opacity: 1;
 }
 
@@ -910,9 +910,8 @@ html:has(.showcase.light) body {
 .sc-quality-option:focus-visible { color: var(--sc-ink); }
 .sc-quality-option:hover .sc-quality-tick,
 .sc-quality-option:focus-visible .sc-quality-tick { width: 24px; opacity: .85; }
-.sc-quality-option:hover .sc-quality-label,
 .sc-quality-option:focus-visible .sc-quality-label,
-.sc-quality-option.on .sc-quality-label { opacity: 1; }
+.sc-quality-option.sc-label-peek .sc-quality-label { opacity: 1; }
 .sc-quality-option.on { color: var(--sc-ink-strong); }
 .sc-quality-option.on .sc-quality-tick { width: 32px; opacity: 1; }
 .sc-quality-option:focus { outline: none; }
@@ -1318,7 +1317,7 @@ html:has(.showcase.light) body {
     font-size: 10px;
   }
 
-  /* 章节轨道：触点撑到 40px 上下，横条本身仍很细；当前章节名常显（触屏没有 hover） */
+  /* 章节轨道：触点撑到 40px 上下，横条本身仍很细。 */
   .sc-nav {
     gap: 4px;
     padding-right: 6px;
@@ -1326,10 +1325,6 @@ html:has(.showcase.light) body {
 
   .sc-nav button {
     padding: 11px 8px;
-  }
-
-  .sc-nav button.on .sc-nav-label {
-    opacity: 1;
   }
 
   .sc-nav-label {
@@ -1343,7 +1338,6 @@ html:has(.showcase.light) body {
 .sc-nav button { min-height: 24px; min-width: 40px; }
 .sc-free-camera { margin-top: 6px; }
 .sc-free-camera .sc-nav-tick { border: 0; background: currentColor; height: 3px; border-radius: 0; }
-.sc-free-camera .sc-nav-label { opacity: 1; }
 .showcase.light .sc-nav { color: #343c49; }
 .showcase.light .sc-nav button { color: #505b69; }
 .showcase.light .sc-nav button.on { color: #111827; }
@@ -1676,4 +1670,97 @@ html:has(.showcase.light) body {
   html:has(.showcase) body { height: 100%; overflow: hidden; overscroll-behavior: none; }
   .showcase, .showcase .sc-scroll { height: 100dvh; overflow: hidden; }
   .showcase .sc-canvas { touch-action: none; }
+}
+
+/* 加速时把展示层收起，仅保留车辆、遥测和松手控制。 */
+.showcase.sc-immersive .sc-watermark,
+.showcase.sc-immersive .sc-position-coordinate,
+.showcase.sc-immersive .sc-tools,
+.showcase.sc-immersive .sc-kicker,
+.showcase.sc-immersive .sc-sec,
+.showcase.sc-immersive .sc-headline,
+.showcase.sc-immersive .sc-copy,
+.showcase.sc-immersive .sc-left-foot,
+.showcase.sc-immersive .sc-models,
+.showcase.sc-immersive .sc-nav,
+.showcase.sc-immersive .sc-texture-quality,
+.showcase.sc-immersive .sc-hint-drag,
+.showcase.sc-immersive .sc-hint-touch,
+.showcase.sc-immersive .sc-part,
+.showcase.sc-immersive .sc-ctr-cap,
+.showcase.sc-immersive .sc-ctr-hint,
+.showcase.sc-immersive .sc-tele-cap,
+.showcase.sc-immersive .sc-tele-foot {
+  opacity: 0 !important;
+  visibility: hidden;
+  pointer-events: none !important;
+}
+
+.sc-drive-camera {
+  right: 3.4vw;
+  bottom: 8.5vh;
+  pointer-events: auto;
+}
+.sc-drive-camera-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--sc-line);
+  border-radius: 4px;
+  background: rgba(10, 12, 15, .55);
+  color: var(--sc-ink-strong);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: .14em;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.sc-drive-camera-toggle span { color: var(--sc-papaya); font-size: 15px; line-height: 1; }
+.sc-drive-camera-toggle i { color: var(--sc-mute); font-size: 9px; font-style: normal; }
+.sc-drive-camera-toggle:hover,
+.sc-drive-camera-toggle:focus-visible { border-color: var(--sc-papaya); }
+.sc-drive-camera-options {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  display: grid;
+  gap: 3px;
+  min-width: 112px;
+  padding: 5px;
+  border: 1px solid var(--sc-line);
+  border-radius: 5px;
+  background: rgba(10, 12, 15, .9);
+}
+.sc-drive-camera-options button {
+  padding: 8px 11px;
+  border: 0;
+  background: transparent;
+  color: var(--sc-ink);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-align: left;
+  cursor: pointer;
+}
+.sc-drive-camera-options button.on,
+.sc-drive-camera-options button:hover,
+.sc-drive-camera-options button:focus-visible { color: var(--sc-papaya); background: rgba(255, 128, 0, .1); }
+.showcase.light .sc-drive-camera-toggle,
+.showcase.light .sc-drive-camera-options { background: rgba(245, 247, 250, .94); }
+
+@media (max-width: 640px) {
+  .showcase.sc-immersive .sc-tele {
+    left: 4vw;
+    right: auto;
+    top: auto;
+    bottom: max(18vh, calc(env(safe-area-inset-bottom) + 150px));
+    text-align: left;
+  }
+  .showcase.sc-immersive .sc-speed-wrap { text-align: left; }
+  .sc-drive-camera {
+    right: 4vw;
+    bottom: max(16vh, calc(env(safe-area-inset-bottom) + 112px));
+  }
 }

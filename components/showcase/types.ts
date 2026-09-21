@@ -6,6 +6,8 @@
  */
 
 /** 相机关键帧：方位角 0° = 正对车头，90° = 车身左侧，180° = 车尾 */
+export type ShowcaseDriveCamera = "follow" | "left" | "right" | "top" | "classic";
+
 export interface ShowcaseCameraKey {
   /** 进入该机位的滚动进度 0–1 */
   p: number;
@@ -69,7 +71,7 @@ export interface ShowcasePart {
 }
 
 /** 首页展示台地面圆盘：原刻度盘或 0919 参考视频里的赛道点阵盘。 */
-export type ShowcaseDiscStyle = "chrono" | "track";
+export type ShowcaseDiscStyle = "none" | "chrono" | "track";
 
 /**
  * 导入车型可调的渲染参数（存在 uploads 卷的 showroom.json 里）。
@@ -376,6 +378,8 @@ export interface ShowcaseOptions {
   onPhase?: (index: number) => void;
   /** 冲刺状态变化（按住空格 / 按住按钮） */
   onRacing?: (racing: boolean) => void;
+  /** 行驶或减速尚未结束，用于精简页面 HUD。 */
+  onDriving?: (driving: boolean) => void;
   /** WebGL 上下文丢失（显存吃紧、驱动回收）：上层重建一次场景即可恢复 */
   onContextLost?: () => void;
   /** 双击复位：引擎已把角度 / 缩放调到置顶机位，这里由组件把滚动位置带回置顶进度 */
@@ -404,6 +408,8 @@ export interface ShowcaseHandle {
   setWireframe: (mode: import("./wireframe").WireframeMode, color: string) => void;
   /** 原地切换地面圆盘，不重建模型、镜头或 WebGL 场景。 */
   setDiscStyle: (style: ShowcaseDiscStyle) => void;
+  /** 行驶镜头：正后方跟随，或保留原来的斜后方动态镜头。 */
+  setDriveCamera: (mode: ShowcaseDriveCamera) => void;
   setFreeCamera: (on: boolean) => void;
   resetCamera: () => void;
   /** 影棚：3D 场景切到明亮摄影棚（不改深浅色主题） */

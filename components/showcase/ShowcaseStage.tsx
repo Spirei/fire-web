@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ShowcaseConfig, ShowcaseDiscStyle, ShowcaseHandle } from "./types";
+import type { ShowcaseConfig, ShowcaseDiscStyle, ShowcaseDriveCamera, ShowcaseHandle } from "./types";
 import { setThemeCookie } from "@/lib/theme";
 import { usePersistedState } from "@/lib/usePersistedState";
 import type { WireframeMode } from "./wireframe";
@@ -15,11 +15,20 @@ const WIRE_COLORS = [
   ["蓝色", "#0000ff"], ["绿色", "#00ff00"], ["黄色", "#ffff00"],
 ] as const;
 const RPM_TICKS = 20;
+const DRIVE_CAMERA_OPTIONS: Array<{ key: ShowcaseDriveCamera; label: string }> = [
+  { key: "follow", label: "车尾跟随" },
+  { key: "left", label: "左侧" },
+  { key: "right", label: "右侧" },
+  { key: "top", label: "俯视" },
+  { key: "classic", label: "原镜头" },
+];
 /** 用户置顶的默认机位（进度 + 拖拽角度 + 缩放），刷新 / 重开页面都回到这里 */
 const PIN_KEY = "fire:showcase:pose";
 const WIRE_MODE_KEY = "fire:showcase:wire-mode";
 const WIRE_COLOR_KEY = "fire:showcase:wire-color";
 const DISC_STYLE_KEY = "fire:showcase:disc-style";
+const DISC_CHOSEN_KEY = "fire:showcase:disc-chosen";
+const DISC_LABELS: Record<ShowcaseDiscStyle, string> = { none: "无圆盘", chrono: "刻度盘", track: "赛道盘" };
 const TEXTURE_QUALITY_KEY = "fire:showcase:texture-quality";
 type TextureQuality = "fast" | "balanced" | "fine" | "original";
 const TEXTURE_QUALITY: Record<TextureQuality, { label: string; badge: string; size: number }> = {
@@ -97,6 +106,21 @@ export default function ShowcaseStage({
   const [qualityLoading, setQualityLoading] = useState(false);
   const [qualityError, setQualityError] = useState(false);
   const [racing, setRacing] = useState(false);
+  const [driving, setDriving] = useState(false);
+  const [driveCamera, setDriveCamera] = useState<ShowcaseDriveCamera>("follow");
+  const driveCameraRef = useRef<ShowcaseDriveCamera>("follow");
+  const [driveCameraOpen, setDriveCameraOpen] = useState(false);
+  useEffect(() => { if (!racing && !driving) setDriveCameraOpen(false); }, [racing, driving]);
+  const [selectionHint, setSelectionHint] = useState<string | null>(null);
+  const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showSelectionHint = useCallback((key: string) => {
+    if (selectionTimerRef.current) clearTimeout(selectionTimerRef.current);
+    setSelectionHint(key);
+    selectionTimerRef.current = setTimeout(() => setSelectionHint(null), 2400);
+  }, []);
+  useEffect(() => () => {
+    if (selectionTimerRef.current) clearTimeout(selectionTimerRef.current);
+  }, []);
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(initialTheme);
@@ -170,14 +194,26 @@ export default function ShowcaseStage({
   };
   const [studio, setStudio] = useState(false);
   const [discStyle, setDiscStyle] = usePersistedState<ShowcaseDiscStyle>(DISC_STYLE_KEY, "chrono");
+  const [discChosen, setDiscChosen] = usePersistedState(DISC_CHOSEN_KEY, false);
+  const [mobileDiscDefault, setMobileDiscDefault] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 640px), (max-height: 500px) and (pointer: coarse)");
+    const update = () => setMobileDiscDefault(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  const activeDiscStyle: ShowcaseDiscStyle = !discChosen && discStyle === "chrono" && mobileDiscDefault ? "none" : discStyle;
   const discStyleRef = useRef<ShowcaseDiscStyle>(discStyle);
-  discStyleRef.current = discStyle;
+  discStyleRef.current = activeDiscStyle;
   const toggleDiscStyle = () => {
-    const next: ShowcaseDiscStyle = discStyleRef.current === "chrono" ? "track" : "chrono";
+    const next: ShowcaseDiscStyle = discStyleRef.current === "chrono" ? "track" : discStyleRef.current === "track" ? "none" : "chrono";
     discStyleRef.current = next;
+    setDiscChosen(true);
     setDiscStyle(next);
     handleRef.current?.setDiscStyle(next);
   };
+  useEffect(() => { handleRef.current?.setDiscStyle(activeDiscStyle); }, [activeDiscStyle]);
   const [textureQuality, setTextureQuality] = usePersistedState<TextureQuality>(TEXTURE_QUALITY_KEY, "fast");
   const textureQualityRef = useRef<TextureQuality>(textureQuality);
   textureQualityRef.current = textureQuality;
@@ -291,6 +327,7 @@ export default function ShowcaseStage({
     const stage = stageRef.current;
     const scroll = scrollRef.current;
     if (!wrap || !stage || !scroll) return;
+    setDriving(false);
     const cfg = configRef.current;
 
     // 每次实例化都新建 canvas：WebGL 上下文一旦丢失，同一个 canvas 上的上下文无法复活，
@@ -375,6 +412,7 @@ export default function ShowcaseStage({
           },
           onPhase: handlePhase,
           onRacing: (on) => setRacing(on),
+          onDriving: (on) => setDriving(on),
           onResetView: () => {
             // 双击复位：置顶机位是「进度 + 角度 + 缩放」，角度引擎已经调好，
             // 这里把滚动位置带回置顶进度，才真的回到用户置顶的那一帧
@@ -406,6 +444,7 @@ export default function ShowcaseStage({
         handle.setFreeCamera(freeCameraRef.current);
         handle.setWireframe(wireRef.current.mode, wireRef.current.color);
         handle.setDiscStyle(discStyleRef.current);
+        handle.setDriveCamera(driveCameraRef.current);
         handle.setStudio(studioRef.current);
         // 置顶机位：刷新 / 重建后直接把镜头放回用户存下的角度（滚动位置由下面的滚动守护负责）
         const pinned = pinnedPoseRef.current;
@@ -616,6 +655,7 @@ export default function ShowcaseStage({
   /** 章节导航：手机单屏直接设置进度，宽屏仍由滚动驱动叙事。 */
   const goPhase = useCallback(
     (index: number) => {
+      showSelectionHint(`phase:${index}`);
       setFreeCamera(false);
       freeCameraRef.current = false;
       handleRef.current?.setFreeCamera(false);
@@ -632,7 +672,7 @@ export default function ShowcaseStage({
       // 多滚一点点：进度是弹簧跟随，正好停在章节边界上会判定为上一章
       window.scrollTo({ top: top + total * Math.min(0.999, at + 0.006), behavior: "smooth" });
     },
-    [config.phases]
+    [config.phases, showSelectionHint]
   );
 
   /** 置顶当前机位：把此刻的进度 / 角度 / 缩放存下来，刷新后回到这里 */
@@ -891,7 +931,7 @@ export default function ShowcaseStage({
 
   // 影棚（明亮摄影棚）下画面是亮的，HUD 文字要跟着换成浅色系，否则白字压在白底上看不见
   return (
-    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio ? "light" : ""} ${inspector ? "sc-inspecting" : ""} ${className}`}>
+    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio ? "light" : ""} ${inspector ? "sc-inspecting" : ""} ${racing || driving ? "sc-immersive" : ""} ${className}`}>
       <div className="sc-scroll" ref={scrollRef}>
         <div className="sc-stage" ref={stageRef}>
           <div className="sc-canvas-wrap" ref={canvasWrapRef} />
@@ -1046,18 +1086,21 @@ export default function ShowcaseStage({
               </button>
               <button
                 type="button"
-                className={`sc-pill fire-cap${discStyle === "track" ? " on" : ""}`}
+                className={`sc-pill fire-cap${activeDiscStyle !== "none" ? " on" : ""}`}
                 onClick={toggleDiscStyle}
-                aria-pressed={discStyle === "track"}
-                title={discStyle === "track" ? "切换到原有刻度圆盘" : "切换到视频赛道圆盘"}
-                aria-label={discStyle === "track" ? "当前为赛道圆盘，切换到刻度圆盘" : "当前为刻度圆盘，切换到赛道圆盘"}
+                title={`当前${DISC_LABELS[activeDiscStyle]} · 点击切换`}
+                aria-label={`圆盘：${DISC_LABELS[activeDiscStyle]}，点击切换`}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
                   <ellipse cx="12" cy="12" rx="9" ry="5.5" />
-                  <path d="M5.5 10.3c2.3 1 4.5 1.5 6.5 1.5s4.2-.5 6.5-1.5" strokeDasharray="1.4 2.2" />
-                  <path d="M7.4 14.8c1.6.5 3.1.8 4.6.8s3-.3 4.6-.8" opacity=".65" />
+                  {activeDiscStyle === "none" ? <path d="M5 19 19 5" /> : (
+                    <>
+                      <path d="M5.5 10.3c2.3 1 4.5 1.5 6.5 1.5s4.2-.5 6.5-1.5" strokeDasharray="1.4 2.2" />
+                      <path d="M7.4 14.8c1.6.5 3.1.8 4.6.8s3-.3 4.6-.8" opacity=".65" />
+                    </>
+                  )}
                 </svg>
-                {discStyle === "track" ? "赛道盘" : "刻度盘"}
+                {DISC_LABELS[activeDiscStyle]}
               </button>
               <button
                 type="button"
@@ -1144,6 +1187,30 @@ export default function ShowcaseStage({
               </div>
             </div>
 
+            {(racing || driving) && !inspector && (
+              <div className="sc-row sc-drive-camera">
+                {driveCameraOpen && <div className="sc-drive-camera-options" role="group" aria-label="行驶镜头视角">
+                  {DRIVE_CAMERA_OPTIONS.map(({ key, label }) => <button
+                    type="button" key={key} className={driveCamera === key ? "on" : ""}
+                    aria-pressed={driveCamera === key}
+                    onClick={() => {
+                      driveCameraRef.current = key;
+                      setDriveCamera(key);
+                      handleRef.current?.setDriveCamera(key);
+                      setDriveCameraOpen(false);
+                    }}
+                  >{label}</button>)}
+                </div>}
+                <button type="button" className="sc-drive-camera-toggle" aria-expanded={driveCameraOpen}
+                  aria-label={`行驶镜头：${DRIVE_CAMERA_OPTIONS.find((option) => option.key === driveCamera)?.label}，选择视角`}
+                  onClick={() => setDriveCameraOpen((open) => !open)}>
+                  <span aria-hidden="true">◎</span>
+                  {DRIVE_CAMERA_OPTIONS.find((option) => option.key === driveCamera)?.label}
+                  <i aria-hidden="true">{driveCameraOpen ? "收起" : "视角"}</i>
+                </button>
+              </div>
+            )}
+
             <div className="sc-row sc-hint-drag">
               <span>{ui.dragHint}</span>
               <span>{freeCamera ? "自由镜头 · Shift / 中键 / 右键平移 · 滚轮推进 · 双击聚焦" : ui.zoomHint}</span>
@@ -1155,7 +1222,7 @@ export default function ShowcaseStage({
                 <button
                   type="button"
                   key={item}
-                  className={!freeCamera && phase === i ? "on" : undefined}
+                  className={`${!freeCamera && phase === i ? "on" : ""}${selectionHint === `phase:${i}` ? " sc-label-peek" : ""}`}
                   onClick={() => goPhase(i)}
                   aria-label={`跳到第 ${i + 1} 章 ${item}`}
                   aria-current={!freeCamera && phase === i ? "true" : undefined}
@@ -1166,9 +1233,10 @@ export default function ShowcaseStage({
                   <span className="sc-nav-tick" aria-hidden="true" />
                 </button>
               ))}
-              <button type="button" className={`sc-free-camera${freeCamera ? " on" : ""}`}
+              <button type="button" className={`sc-free-camera${freeCamera ? " on" : ""}${selectionHint === "camera" ? " sc-label-peek" : ""}`}
                 aria-label="自由镜头" aria-pressed={freeCamera}
                 onClick={() => {
+                  showSelectionHint("camera");
                   const next = !freeCamera;
                   setFreeCamera(next); freeCameraRef.current = next;
                   setOrbit(false); orbitRef.current = false;
@@ -1192,10 +1260,11 @@ export default function ShowcaseStage({
                   <button
                     key={key}
                     type="button"
-                    className={`sc-quality-option${textureQuality === key ? " on" : ""}`}
+                    className={`sc-quality-option${textureQuality === key ? " on" : ""}${selectionHint === `quality:${key}` ? " sc-label-peek" : ""}`}
                     aria-pressed={textureQuality === key}
                     title={key === "original" ? "原画纹理 · 保留源模型贴图尺寸" : `${option.label}纹理 · 最长边 ${option.badge}`}
                     onClick={() => {
+                      showSelectionHint(`quality:${key}`);
                       textureQualityRef.current = key;
                       setTextureQuality(key);
                     }}

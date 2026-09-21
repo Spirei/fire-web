@@ -28,6 +28,7 @@ import type {
   ShowcaseCameraKey,
   ShowcaseConfig,
   ShowcaseDiscStyle,
+  ShowcaseDriveCamera,
   ShowcaseHandle,
   ShowcaseLightBar,
   ShowcaseOptions
@@ -226,6 +227,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 清晰度优先：预算放宽到约 4K（8M 像素），像素比允许到设备原生 2 倍。
   // 这个值仍远低于「整屏按 dpr 铺满」的 33M 像素（那才是之前白屏的显存来源）。
   const MAX_OUTPUT_PIXELS = 8_000_000;
+  const originalResolution = () => CFG.model.maxTextureSize > 4096;
+  const desiredPixelRatio = () => Math.min(window.devicePixelRatio || 1, originalResolution() ? 3 : 2);
   const MIN_PIXEL_RATIO = 0.7;
   const budgetRatio = (w: number, h: number, wanted: number) => {
     const area = Math.max(1, w * h);
@@ -234,7 +237,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   // 参考项目 su7 的渲染器是 antialias:false（后期链路里 MSAA 用不上，只会多占显存），保持一致
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
-  renderer.setPixelRatio(budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, Math.min(window.devicePixelRatio || 1, 2)));
+  renderer.setPixelRatio(budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, desiredPixelRatio()));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = CFG.post.exposure;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -681,6 +684,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let ringUniformsRef: { uSweep: { value: number }; uSpeed: { value: number }; uTime: { value: number }; uFade?: { value: number } } | null = null;
   const ringOutlineMats: THREE.MeshBasicMaterial[] = [];
   let discStyle: ShowcaseDiscStyle = "chrono";
+  let driveCamera: ShowcaseDriveCamera = "follow";
+  let driveAzimuth = 180;
+  let driveRadiusScale = 0.66;
+  let driveHeightScale = 0.78;
+  let classicCameraBlend = 0;
+  let topCameraBlend = 0;
   let trackDiscFraming = 0;
   const chronoDisc = new THREE.Group();
   const trackDisc = new THREE.Group();
@@ -1577,7 +1586,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
             const tex = (mat as unknown as Record<string, THREE.Texture | null>)[key];
             clampTexture(tex);
             // 掠射角下没有各向异性过滤，车身上的字母会糊成一片；开到设备上限的一半更清楚
-            if (tex) tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+            if (tex) tex.anisotropy = Math.min(originalResolution() ? 16 : 8, renderer.capabilities.getMaxAnisotropy());
           });
           // 环境反射强度：1.25 时夜景里的小亮点在亮漆上会被放大成一团光晕，收到 1.0 更接近实车
           mat.envMapIntensity = CFG.model.envMapIntensity;
@@ -1843,6 +1852,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let racingAmt = 0;   // 速度驱动的镜头混合量（轮胎 / 光条直接跟随速度）
   let carTravel = 0;   // 冲刺时车沿隧道开走的距离
   let lastRacing = false;
+  let lastDriving = false;
   const perfStartedAt = performance.now();
   let renderCalls = 0;
   let reflectionRenders = 0;
@@ -1955,6 +1965,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       lastRacing = racing;
       options.onRacing?.(racing);
     }
+    const drivingNow = !inspectorOn && (racing || speed > CFG.speed.maxSpeed * 0.035);
+    if (drivingNow !== lastDriving) {
+      lastDriving = drivingNow;
+      options.onDriving?.(drivingNow);
+    }
     carTravel += (racingAmt * CFG.speed.launchTravel - carTravel) * (1 - Math.exp(-dt * 3));
 
     // 环境：夜 → 昼（窗口与强度由 preset 给；参考视频里整段 hero 都是夜景，只在收尾略微提亮）
@@ -2006,7 +2021,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const tunnelRefAspect = CFG.speed.tunnel?.referenceAspect ?? CFG.camera.fitMinAspect;
     const portraitFraming = clamp((tunnelRefAspect - camera.aspect) / Math.max(0.01, tunnelRefAspect - 0.75), 0, 1);
     const chaseAngle = 180 + (CFG.speed.chaseAzimuth - 180) * (1 - portraitFraming * 0.84);
-    const chaseAz = THREE.MathUtils.lerp(180, chaseAngle, seg(sp, 0.5, 0.94));
+    const cameraEase = 1 - Math.exp(-dt * 4.5);
+    classicCameraBlend += ((driveCamera === "classic" ? 1 : 0) - classicCameraBlend) * cameraEase;
+    topCameraBlend += ((driveCamera === "top" ? 1 : 0) - topCameraBlend) * cameraEase;
+    const targetAz = driveCamera === "left" ? 105 : driveCamera === "right" ? 255
+      : driveCamera === "classic" ? THREE.MathUtils.lerp(180, chaseAngle, seg(sp, 0.5, 0.94)) : 180;
+    const driveAzDelta = (((targetAz - driveAzimuth) % 360 + 540) % 360) - 180;
+    driveAzimuth += driveAzDelta * cameraEase;
+    const chaseAz = driveAzimuth;
     const azDelta = (((chaseAz - azBase) % 360 + 540) % 360) - 180;
     const az = ((azBase + azDelta * racingAmt) * Math.PI) / 180;
     // 镜头角速度（弧度/秒）→ 倒影淡出系数：1.6 rad/s（约 92°/秒）视为最快。
@@ -2023,20 +2045,29 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const follow = carTravel;
     // 冲刺时机位整体右移（镜头与注视点同向平移，视线方向不变）：车因此落在画面左侧、
     // 光条汇聚点在其右 —— 参考视频就是这个构图，之前车正好压在汇聚点上，左右关系是反的
-    const chaseLat = (CFG.speed.chaseLateral ?? 0) * racingAmt;
+    const chaseLat = (CFG.speed.chaseLateral ?? 0) * racingAmt * classicCameraBlend;
     // 竖屏 / 窄屏时水平视野会变窄，这里按宽高比把相机拉远、视角放宽，保证整车进画面
     const fitAspect = CFG.camera.fitMinAspect;
     const fit = camera.aspect < fitAspect ? clamp(fitAspect / camera.aspect, 1, CFG.camera.fitMaxPullback) : 1;
     const chase = CFG.speed.chaseCamera;
+    // 跟随镜头需要明显靠近车尾；原镜头完整保留 preset 机位。
+    const radiusTarget = driveCamera === "classic" ? 1 : driveCamera === "top" ? 0.9
+      : driveCamera === "follow" ? 0.66 : 0.82;
+    const heightTarget = driveCamera === "classic" ? 1 : driveCamera === "top" ? 1.3
+      : driveCamera === "follow" ? 0.78 : 0.9;
+    driveRadiusScale += (radiusTarget - driveRadiusScale) * cameraEase;
+    driveHeightScale += (heightTarget - driveHeightScale) * cameraEase;
+    const driveRadius = chase.radius * driveRadiusScale;
+    const driveHeight = chase.height * driveHeightScale;
     const fitRadius = Math.pow(fit, 0.8);
     // 原片的完整圆盘外径约为车身投影 1.6 倍；当前首页近景若沿用同一镜头会把外环切出画面。
     // 选择视频圆盘时平滑拉远 34%，冲刺或进入自由 / 模型镜头时自然退回原机位。
     const trackFrameTarget = discStyle === "track" && !freeCamera && !inspectorOn ? 1 - racingAmt : 0;
     trackDiscFraming += (trackFrameTarget - trackDiscFraming) * (1 - Math.exp(-dt * 5));
     const trackPullback = 1 + trackDiscFraming * 0.34;
-    const baseRadius = THREE.MathUtils.lerp(camState.r, chase.radius, racingAmt) * fitRadius * trackPullback;
-    const r = THREE.MathUtils.lerp(camState.r * zoom, chase.radius, racingAmt) * fitRadius * trackPullback;
-    const h = THREE.MathUtils.lerp(camState.h, chase.height, racingAmt);
+    const baseRadius = THREE.MathUtils.lerp(camState.r, driveRadius, racingAmt) * fitRadius * trackPullback;
+    const r = THREE.MathUtils.lerp(camState.r * zoom, driveRadius, racingAmt) * fitRadius * trackPullback;
+    const h = THREE.MathUtils.lerp(camState.h, driveHeight, racingAmt);
     const targetY = THREE.MathUtils.lerp(camState.ty, chase.targetY, racingAmt) - trackDiscFraming * 0.45;
     // 关键帧给的是高度，换成仰角后才能和用户的上下拖拽相加；
     // 最终仰角夹在 3° 到 66° 之间：既能贴地看侧面，也不会穿到地面下或翻过头顶。
@@ -2049,7 +2080,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const limitedPitch = clamp(baseElev + userPitch, -1.56, 1.56) - baseElev;
       if (limitedPitch !== userPitch) { userPitch = limitedPitch; userPitchVel = 0; }
     }
-    const elev = clamp(baseElev + userPitch * (1 - racingAmt), modelCameraOn() ? -1.56 : 0.05, modelCameraOn() ? 1.56 : 1.15);
+    const elev = clamp(THREE.MathUtils.lerp(baseElev, 1.12, topCameraBlend * racingAmt) + userPitch * (1 - racingAmt), modelCameraOn() ? -1.56 : 0.05, modelCameraOn() ? 1.56 : 1.15);
     viewAzimuth = (THREE.MathUtils.radToDeg(az) % 360 + 360) % 360;
     viewElevation = THREE.MathUtils.radToDeg(elev);
     viewDistance = r;
@@ -2224,6 +2255,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       }
     }
     lightLinesPass.uniforms.uTime.value = roadTravel / CFG.speed.maxSpeed;
+    // 正后方跟随时，车与隧道轴都压在画面中线；窄屏不沿用原镜头的偏右消失点。
+    const tunnelFrame = lightLinesPass.uniforms.uTunnelFrame.value as THREE.Vector2;
+    tunnelFrame.x = THREE.MathUtils.lerp(
+      THREE.MathUtils.lerp(CFG.speed.tunnel?.vanish?.[0] ?? 0.5, 0.64, portraitFraming),
+      0.5,
+      racingAmt * (1 - classicCameraBlend) * (1 - topCameraBlend)
+    );
     lightLinesPass.uniforms.uSpeed.value = reduced ? 0 : speed;
     // 中速只有淡线，高速才铺满；松手后比镜头回位更早退去。
     lightLinesPass.uniforms.uStrength.value = seg(sps, 0.14, 0.9) ** 2;
@@ -2379,6 +2417,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     w = Math.round(w);
     h = Math.round(h);
+    wantedScale = desiredPixelRatio();
     // 尺寸与倍率都没变就别重建渲染目标（composer / 泛光一共要重建二十来个，每次都是明显卡顿）
     const key = `${w}x${h}@${renderScale.toFixed(2)}:${wantedScale.toFixed(2)}`;
     if (!force && key === lastResizeKey) return;
@@ -2386,7 +2425,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     budgetedScale = budgetRatio(w, h, wantedScale);
     reflectDirty = true;
     measureScroll();
-    if (renderScale > budgetedScale) {
+    if (originalResolution() || renderScale > budgetedScale) {
       renderScale = budgetedScale;
       renderer.setPixelRatio(renderScale);
       composer.setPixelRatio(renderScale);
@@ -2420,8 +2459,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    * 帧耗时偏高就降倍率（最低 0.75），长时间流畅再慢慢升回去（最高 1.6），
    * 这样高分屏与集成显卡都能保住流畅度。
    */
-  const wantedScale = Math.min(window.devicePixelRatio || 1, 2);
-  let renderScale = Math.min(wantedScale, 1.5);
+  let wantedScale = desiredPixelRatio();
+  let renderScale = originalResolution() ? budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, wantedScale) : Math.min(wantedScale, 1.5);
   // 画质下限：低分屏绝不低于 1.0（原生），高分屏最低按 1.2 倍的 CSS 像素渲染，
   // 这样自动降级也不会出现「糊」的情况。
   const minScale = Math.max(0.95, Math.min(1, 1.9 / Math.max(1, window.devicePixelRatio || 1)));
@@ -2445,6 +2484,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   composer.setPixelRatio(renderScale);
 
   function adaptQuality(frameMs: number) {
+    // 原画是用户明确选择清晰度：锁住预算内的原生分辨率，不因帧耗时悄悄降采样。
+    if (originalResolution()) { frameCost = 0; frameSamples = 0; return; }
     frameCost += frameMs;
     frameSamples += 1;
     if (frameSamples < 20) return;
@@ -2464,6 +2505,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     frameCost = 0;
     frameSamples = 0;
     lastAdapt = now;
+    if (qualityChanges > 6) return;
     // 只在明显掉帧时降、长时间很稳才升，避免来回抖动反复重建 RT（那也是显存压力来源）
     if (avg > 26 && renderScale > minScale) {
       renderScale = Math.max(minScale, renderScale - 0.15);
@@ -2474,7 +2516,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     } else {
       return;
     }
-    if (qualityChanges > 6) return;
     qualityChanges += 1;
     if (qualityHud) {
       qualityHud.innerHTML = [
@@ -2543,7 +2584,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     e.preventDefault();
     press(true);
   };
-  const onPointerUp = () => press(false);
+  const onPointerUp = (event: Event) => {
+    // 第二根手指切换行驶镜头时，别把仍按住的起步键误当作松开。
+    if ((event.target as Element | null)?.closest?.(".sc-drive-camera")) return;
+    press(false);
+  };
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.code === "Space" && !isTyping()) {
       e.preventDefault();
@@ -3220,7 +3265,17 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         const previous = mountedCar;
         mountedCar = null;
         // 先把配置换成新车（车长 / 朝向 / 材质规则 / 轮子都读 CFG.model），再撤旧挂新
+        const previousTextureLimit = CFG.model.maxTextureSize;
         CFG.model = normalizeModel(next.model);
+        if (previousTextureLimit !== CFG.model.maxTextureSize) {
+          wantedScale = desiredPixelRatio();
+          renderScale = budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, originalResolution() ? wantedScale : Math.min(wantedScale, 1.5));
+          qualityChanges = 0;
+          frameCost = 0; frameSamples = 0; lastAdapt = performance.now();
+          renderer.setPixelRatio(renderScale);
+          composer.setPixelRatio(renderScale);
+          resize(true);
+        }
         CFG.assets = { ...CFG.assets, model: next.asset };
         unmountCar(previous);
         wireframeView.configure(CFG.model.wireframe);
@@ -3317,6 +3372,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       chronoDisc.visible = ready && discStyle === "chrono";
       trackDisc.visible = ready && discStyle === "track";
     },
+    setDriveCamera: (mode) => { driveCamera = mode; },
     setFreeCamera: (on: boolean) => {
       if (freeCamera === on) return;
       freeCamera = on;
