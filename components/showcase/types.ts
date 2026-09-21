@@ -339,9 +339,9 @@ export interface ShowcaseConfig {
 }
 
 export interface ShowcaseHud {
-  /** 滚动长度容器（决定滚动推进区间） */
+  /** 查看器容器（用于尺寸观察） */
   scroll: HTMLElement;
-  /** 粘性舞台 */
+  /** 单屏舞台 */
   stage: HTMLElement;
   kmh: HTMLElement | null;
   gear: HTMLElement | null;
@@ -382,7 +382,7 @@ export interface ShowcaseOptions {
   onDriving?: (driving: boolean) => void;
   /** WebGL 上下文丢失（显存吃紧、驱动回收）：上层重建一次场景即可恢复 */
   onContextLost?: () => void;
-  /** 双击复位：引擎已把角度 / 缩放调到置顶机位，这里由组件把滚动位置带回置顶进度 */
+  /** 双击复位：引擎已把角度 / 缩放调到置顶机位，这里由组件恢复置顶章节进度 */
   onResetView?: () => void;
   onError?: (message: string) => void;
 }
@@ -416,11 +416,11 @@ export interface ShowcaseHandle {
   setStudio: (on: boolean) => void;
   /** 读取当前机位（进度 / 偏航 / 俯仰 / 缩放），用于「置顶当前机位」 */
   readPose: () => { p: number; yaw: number; pitch: number; zoom: number };
-  /** 应用机位：刷新或重建后回到用户置顶的角度（滚动位置由组件负责） */
+  /** 应用机位：刷新或重建后回到用户置顶的角度（章节进度由 setProgress 设置） */
   applyPose: (pose: { yaw?: number; pitch?: number; zoom?: number }) => void;
   /** 用户置顶的机位：双击复位回到这里（null = 没置顶，回到中立角度） */
   setHomePose: (pose: { p?: number; yaw?: number; pitch?: number; zoom?: number } | null) => void;
-  /** 手动设置滚动进度（调试 / 截图用） */
+  /** 设置章节进度（导航、复位与调试共用） */
   setProgress: (p: number, settle?: number) => void;
   /** 调试用：当前平滑后的进度、速度、渲染倍率、冲刺与缩放状态 */
   debug: () => {

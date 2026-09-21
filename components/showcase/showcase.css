@@ -25,6 +25,9 @@
   --sc-vignette: radial-gradient(70% 62% at 50% 52%, transparent 0%, rgba(0, 0, 0, 0.55) 72%, rgba(0, 0, 0, 0.86) 100%),
     linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, transparent 22%, transparent 76%, rgba(0, 0, 0, 0.6) 100%);
   background: var(--sc-bg);
+  height: 100svh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 /* 浅色：明亮摄影棚 */
@@ -79,15 +82,23 @@ html:has(.showcase.light) body {
   background-color: #f4f6f9 !important;
 }
 
+/* 首页所有尺寸共用单屏查看器，不能只在手机断点锁住页面。 */
+html:has(.showcase),
+html:has(.showcase) body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .sc-scroll {
   position: relative;
-  height: 620vh;
+  height: 100%;
 }
 
 .sc-stage {
-  position: sticky;
+  position: relative;
   top: var(--sc-header);
-  height: calc(100svh - var(--sc-header));
+  height: calc(100% - var(--sc-header));
   overflow: hidden;
   background: var(--sc-bg);
 }
@@ -106,8 +117,8 @@ html:has(.showcase.light) body {
   display: block;
   width: 100%;
   height: 100%;
-  /* 横向拖拽用于 360° 环视，纵向留给页面滚动，触屏才不会卡住滑动 */
-  touch-action: pan-y;
+  /* 画布手势交给查看器，面板与车型列表仍由各自容器滚动。 */
+  touch-action: none;
 }
 
 /*
@@ -1376,12 +1387,6 @@ html:has(.showcase.light) body {
 
 .showcase.sc-free canvas { touch-action: none; }
 
-/* 模型展示是独立探索视图，不需要继承首页 620vh 的叙事滚动轨道。 */
-.showcase.sc-inspecting .sc-scroll {
-  height: 100svh;
-  height: 100dvh;
-}
-
 .sc-nav .sc-camera-reset { min-height: 28px; font-size: 10px; margin-top: 2px; padding: 4px 8px; border: 1px solid var(--sc-line); border-radius: 6px; background: var(--sc-panel); }
 
 /* Liquid Glass-inspired inspector: local glass surfaces, no continuous animation. */
@@ -1594,32 +1599,6 @@ html:has(.showcase.light) body {
   border-bottom-color: var(--sc-active-line);
 }
 @media (max-width: 640px) {
-  html:has(.showcase),
-  html:has(.showcase) body {
-    height: 100%;
-    overflow: hidden;
-    overscroll-behavior: none;
-  }
-
-  .showcase {
-    height: 100svh;
-    height: 100dvh;
-    overflow: hidden;
-  }
-
-  /* 手机查看器保持单屏，章节改由右侧导航切换，拖动画布不会滚出空白。 */
-  .showcase .sc-scroll {
-    height: 100svh;
-    height: 100dvh;
-  }
-
-  .showcase .sc-canvas { touch-action: none; }
-
-  .sc-stage {
-    height: calc(100svh - var(--sc-header));
-    height: calc(100dvh - var(--sc-header));
-  }
-
   .sc-sec { top: max(10vh, calc(env(safe-area-inset-top) + 54px)); }
   .sc-headline { top: max(14vh, calc(env(safe-area-inset-top) + 78px)); }
   .sc-copy { top: max(25vh, calc(env(safe-area-inset-top) + 154px)); max-width: 48vw; }
@@ -1663,13 +1642,6 @@ html:has(.showcase.light) body {
     right: 12px;
     top: max(8px, env(safe-area-inset-top));
   }
-}
-
-@media (max-height: 500px) and (pointer: coarse) {
-  html:has(.showcase),
-  html:has(.showcase) body { height: 100%; overflow: hidden; overscroll-behavior: none; }
-  .showcase, .showcase .sc-scroll { height: 100dvh; overflow: hidden; }
-  .showcase .sc-canvas { touch-action: none; }
 }
 
 /* 加速时把展示层收起，仅保留车辆、遥测和松手控制。 */

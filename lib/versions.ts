@@ -4228,7 +4228,7 @@ export const V0_1_36_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_37_ENTRY: VersionEntry = {
   ...V0_1_36_ENTRY,
   version: "v0.1.37",
   date: "2026-09-21",
@@ -4297,11 +4297,26 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   }]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_37_ENTRY,
+  version: "v0.1.38",
+  date: "2026-09-22",
+  summary: "首页单屏适配覆盖桌面与平板，修复页面滚动条并统一镜头导航。",
+  software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
+  changes: [{
+    title: "首页单屏适配覆盖桌面与平板",
+    desc: "移除桌面与平板仍保留的 6.2 屏滚动容器，所有尺寸统一使用动态视口高度，消除首页右侧滚动条。章节导航与置顶机位直接驱动镜头进度，桌面滚轮继续切换镜头；横竖屏切换不再跳回旧章节，其他页面和面板的正常滚动保留。",
+    kind: "fix"
+  }]
+};
+
+
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_37_ENTRY,
   V0_1_36_ENTRY,
   V0_1_35_ENTRY,
   V0_1_34_ENTRY,

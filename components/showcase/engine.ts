@@ -2424,7 +2424,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     lastResizeKey = key;
     budgetedScale = budgetRatio(w, h, wantedScale);
     reflectDirty = true;
-    measureScroll();
     if (originalResolution() || renderScale > budgetedScale) {
       renderScale = budgetedScale;
       renderer.setPixelRatio(renderScale);
@@ -2535,48 +2534,18 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     resize();
   }
 
-  /** 滚动进度：用「滚动容器已经划过多少」来算，粘性舞台高度变化时自动正确 */
-  /**
-   * 滚动几何只在必须时测量；帧循环里只用 window.scrollY（读它不会触发布局），
-   * 避免「每帧写 HUD → 每帧读布局」这种强制同步布局（那是滚动发涩的常见原因）。
-   */
-  let scrollOrigin = 0;
-  let scrollTravel = 1;
-  let mobileProgress = START_P;
+  // 单屏查看器的章节进度独立保存，窗口缩放、旋转及滚动恢复都不改变机位。
+  let viewerProgress = START_P;
   function mobileViewer() {
     return window.matchMedia("(max-width: 640px), (max-height: 500px) and (pointer: coarse)").matches;
-  }
-  /**
-   * 用户是否已经自己滚动过。浏览器可能在挂载之后才把上次的滚动位置写回来（会话恢复、
-   * 重新打开标签页、从别的页面回来），那条路径会把「刷新后的默认机位」换成当时那个机位。
-   * 因此用户没自己滚动之前，进度一律按 0 处理 —— 这是组件侧「钉住滚动位置」之外的第二道防线。
-   */
-  let userScrolled = false;
-  function measureScroll() {
-    const el = hud.scroll;
-    const stage = hud.stage;
-    scrollOrigin = el.getBoundingClientRect().top + window.scrollY;
-    scrollTravel = Math.max(1, el.offsetHeight - stage.offsetHeight);
   }
   function progress() {
     if (inspectorOn) return inspectorProgress;
     if (freeCamera) return 0;
-    if (mobileViewer()) return mobileProgress;
-    // 只守开场这三秒：这段时间足够覆盖浏览器的滚动恢复，也不会长期影响脚本化调试（直接 scrollTo 也能工作）。
-    // 用户置顶过机位时「家」不是 0 而是置顶进度，所以开场就停在那里
-    if (!userScrolled && elapsed < 3) return START_P;
-    return clamp((window.scrollY - scrollOrigin) / scrollTravel, 0, 1);
+    return viewerProgress;
   }
 
   /* ---------- 8) 交互：按住冲刺 / 拖拽环视 ---------- */
-  // 用户一有滚动意图（滚轮 / 触摸 / 键盘 / 按下指针）就把进度控制权交出去
-  const markUserScroll = () => {
-    userScrolled = true;
-  };
-  const scrollIntentEvents: Array<keyof WindowEventMap> = ["wheel", "touchstart", "keydown", "pointerdown"];
-  scrollIntentEvents.forEach((name) => window.addEventListener(name, markUserScroll, { passive: true }));
-  cleanups.push(() => scrollIntentEvents.forEach((name) => window.removeEventListener(name, markUserScroll)));
-
   const press = (on: boolean) => {
     racing = on && !inspectorOn;
   };
@@ -2628,7 +2597,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const touches = new Map<number, { x: number; y: number }>();
   let tapX = 0, tapY = 0, tapDownAt = 0, tapTravel = 0;
   let lastTapX = 0, lastTapY = 0;
-  /** 当前手势是不是手指（触屏）：手指横滑转车、竖滑留给页面滚动，不做俯仰 */
+  /** 当前手势是不是手指（触屏）：手机和平板都由画布处理环视与俯仰 */
   let dragByTouch = false;
   let lastTapAt = 0;
   let lastTouchFocusAt = -Infinity;
@@ -2646,7 +2615,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     userPitchVel = 0;
     zoomTarget = inspectorOn ? homePose?.zoom ?? 1 : freeCamera ? 1 : homePose?.zoom ?? 1;
     setZoomMode(false);
-    // 置顶机位还包含「进度」：交给组件把滚动位置带回去，才真的回到那一帧
+    // 置顶机位还包含「进度」：交给组件恢复章节进度，才真的回到那一帧
     if (!freeCamera) options.onResetView?.();
     invalidateInspector();
   };
@@ -2754,15 +2723,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       userYawVel = 0; userPitchVel = 0;
       return;
     }
-    // 手机上画布独占拖动：水平环视、垂直俯仰；桌面叙事仍可纵向滚动。
-    const mobileDrag = dragByTouch && mobileViewer();
-    const gain = dragByTouch ? (mobileDrag ? 0.24 : 0.42) : 0.3;
+    // 手机和平板统一单屏手势：水平环视、垂直俯仰。
+    const gain = dragByTouch ? 0.24 : 0.3;
     userYaw -= dx * gain;
     userYawVel = clamp(-dx * gain / sampleDt, -180, 180);
-    if (dragByTouch && !freeCamera && !mobileDrag) return;
     // 鼠标上下拖：向上拖 = 升高视角俯视，向下拖 = 降低视角平视/略微仰视
     const [pitchMin, pitchMax] = modelCameraOn() ? [-Math.PI, Math.PI] : [-0.55, 0.95];
-    const pitchGain = mobileDrag ? 0.0025 : 0.0035;
+    const pitchGain = dragByTouch ? 0.0025 : 0.0035;
     userPitch = clamp(userPitch + dy * pitchGain, pitchMin, pitchMax);
     userPitchVel = clamp(dy * pitchGain / sampleDt, -2, 2);
   };
@@ -2823,9 +2790,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   const onWheel = (e: WheelEvent) => {
     const withModifier = e.ctrlKey || e.metaKey || e.altKey || e.shiftKey;
-    // 打开缩放模式后普通滚轮 / 触控板双指滚动就是缩放，不再滚动页面（触屏仍可单指上下滑动）
-    if (!withModifier && !zoomMode && !freeCamera) return;
     e.preventDefault();
+    // 普通滚轮仍可浏览章节，但只更新镜头进度，不制造数屏高的文档。
+    if (!withModifier && !zoomMode && !freeCamera) {
+      viewerProgress = clamp(viewerProgress + wheelPixels(e.deltaY, e.deltaMode, canvas.clientHeight) / Math.max(1, hud.stage.clientHeight * 5.2), 0, 1);
+      return;
+    }
     // 往下滚 = 拉远，往上滚 / 双指张开 = 推近看细节
     applyZoom(Math.exp(wheelPixels(e.deltaY, e.deltaMode, canvas.clientHeight) * CFG.zoom.wheelStep));
   };
@@ -2908,7 +2878,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     if (touches.size < 2) pinchBase = 0;
   };
-  // 平板仍允许单指滚动章节；双指缩放始终由画布处理。手机由 touch-action: none 独占手势。
+  // 所有触屏尺寸的画布都独占手势；双指缩放同时阻止浏览器原生缩放。
   const onTouchStartCapture = (e: TouchEvent) => {
     if (e.touches.length >= 2) e.preventDefault();
   };
@@ -3173,7 +3143,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       last = performance.now();
       armWatchdog();
       resize();
-      measureScroll();
       render(pSmooth, 1 / 60);
     }
   };
@@ -3187,7 +3156,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     requestAnimationFrame(() => {
       resizeQueued = false;
       resize();
-      measureScroll();
     });
   });
   ro.observe(canvas);
@@ -3418,7 +3386,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       invalidateInspector();
     },
     setProgress: (p: number, settle = 0) => {
-      if (mobileViewer()) mobileProgress = clamp(p, 0, 1);
+      viewerProgress = clamp(p, 0, 1);
       const steps = Math.max(1, Math.round(settle * 60));
       for (let i = 0; i < steps; i += 1) render(p, 1 / 60);
       render(p, 1 / 60);

@@ -6,7 +6,7 @@ import { readThemeFromCookieHeader } from "@/lib/theme";
 import { headers } from "next/headers";
 
 /**
- * 首页：整页是 3D 展示台（滚动叙事）。
+ * 首页：整页是单屏 3D 展示台（章节导航 / 滚轮切换镜头）。
  *
  * 车型清单 = 内置（MCL35M 随仓库分发）+ 手动导入（uploads 卷里的 showroom.json）。
  * 素材缺失的车型直接不进清单，避免访客看到点不动的空车型。

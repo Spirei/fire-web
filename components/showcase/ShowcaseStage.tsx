@@ -308,20 +308,6 @@ export default function ShowcaseStage({
     return JSON.stringify({ ...rest, assets: { ...assets, model: null, previewModel: null } });
   }, [config]);
 
-  /**
-   * 首页的「固定机位」= 用户置顶的那一帧；没置顶就是开场（进度 0）。
-   * 每帧都从 ref 取（置顶值可能晚一拍才从存储里读出来），所以不缓存成常量。
-   * 开场的滚动守护与双击复位共用这一个。
-   */
-  const homeTop = useCallback(() => {
-    const el = scrollRef.current;
-    const stage = stageRef.current;
-    if (!el || !stage) return 0;
-    const total = Math.max(1, el.offsetHeight - stage.offsetHeight);
-    const at = pinnedPoseRef.current?.p ?? 0;
-    return el.getBoundingClientRect().top + window.scrollY + total * at;
-  }, []);
-
   useEffect(() => {
     const wrap = canvasWrapRef.current;
     const stage = stageRef.current;
@@ -415,10 +401,9 @@ export default function ShowcaseStage({
           onDriving: (on) => setDriving(on),
           onResetView: () => {
             // 双击复位：置顶机位是「进度 + 角度 + 缩放」，角度引擎已经调好，
-            // 这里把滚动位置带回置顶进度，才真的回到用户置顶的那一帧
+            // 这里同步章节进度，才真的回到用户置顶的那一帧
             if (pinnedPoseRef.current) {
-              if (window.matchMedia("(max-width: 640px), (max-height: 500px) and (pointer: coarse)").matches) handleRef.current?.setProgress(pinnedPoseRef.current.p);
-              else window.scrollTo({ top: homeTop(), behavior: "smooth" });
+              handleRef.current?.setProgress(pinnedPoseRef.current.p);
             }
           },
           onContextLost: () => {
@@ -516,7 +501,7 @@ export default function ShowcaseStage({
     // 依赖里放的是「外壳签名」：只有镜头 / 灯光 / 地面 / 文案这些变了才重建场景，
     // 单纯换车型走下面的 setModel（原地换车，不重建、不空白）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shellKey, handlePhase, rebuild, degraded, retry, homeTop, qualityModel]);
+  }, [shellKey, handlePhase, rebuild, degraded, retry, qualityModel]);
 
   // 置顶机位变化就同步给引擎：双击复位回到用户置顶的那一帧（没置顶时传 null = 回到中立角度）
   useEffect(() => {
@@ -548,51 +533,6 @@ export default function ShowcaseStage({
       setQualityError(!ok);
     });
   }, [modelKey, qualityModel]);
-
-  // 刷新时浏览器会恢复上次的滚动位置（会话恢复、从别的页面回来、重新打开标签页都会触发），
-  // 而这次恢复常常发生在我们重置之后 —— 于是「刷新」有时停在当时那个机位（车头朝左的侧视），
-  // 有时才是默认机位（车头朝右的车尾 3/4），看着像默认姿势一直调不好。
-  // 做法：关掉滚动恢复，并在开场把滚动位置持续钉在顶部（最多 12 秒）；
-  // 用户一旦自己滚动（滚轮 / 触摸 / 键盘 / 按住滚动条）立刻交还控制权，之后不再干预。
-  useEffect(() => {
-    const prev = typeof history !== "undefined" && "scrollRestoration" in history ? history.scrollRestoration : null;
-    try {
-      if (prev !== null) history.scrollRestoration = "manual";
-    } catch {
-      /* 忽略 */
-    }
-    const mountAt = performance.now();
-    window.scrollTo(0, homeTop());
-
-    let released = false;
-    const release = () => {
-      released = true;
-    };
-    const releaseEvents: Array<keyof WindowEventMap> = ["wheel", "touchstart", "pointerdown", "mousedown", "keydown"];
-    releaseEvents.forEach((name) => window.addEventListener(name, release, { passive: true }));
-
-    let raf = 0;
-    const pinTop = () => {
-      // 钉到「用户自己滚动」为止；模型异常慢时最多钉 12 秒，避免长期占着页面
-      const expired = performance.now() > mountAt + 12000;
-      if (released || expired) return;
-      if (Math.abs(window.scrollY - homeTop()) > 1) window.scrollTo(0, homeTop());
-      raf = window.requestAnimationFrame(pinTop);
-    };
-    raf = window.requestAnimationFrame(pinTop);
-
-    return () => {
-      window.cancelAnimationFrame(raf);
-      releaseEvents.forEach((name) => window.removeEventListener(name, release));
-      if (prev !== null) {
-        try {
-          history.scrollRestoration = prev;
-        } catch {
-          /* 忽略 */
-        }
-      }
-    };
-  }, [homeTop]);
 
   /**
    * 主题首帧由服务端给（主题 cookie），所以浅色用户刷新时不会先渲染一屏深色再切过来。
@@ -652,25 +592,16 @@ export default function ShowcaseStage({
     });
   }, []);
 
-  /** 章节导航：手机单屏直接设置进度，宽屏仍由滚动驱动叙事。 */
+  /** 章节导航：所有尺寸直接设置进度，与页面滚动位置解耦。 */
   const goPhase = useCallback(
     (index: number) => {
       showSelectionHint(`phase:${index}`);
       setFreeCamera(false);
       freeCameraRef.current = false;
       handleRef.current?.setFreeCamera(false);
-      const el = scrollRef.current;
-      const stage = stageRef.current;
-      if (!el || !stage) return;
-      const total = Math.max(1, el.offsetHeight - stage.offsetHeight);
-      const top = el.getBoundingClientRect().top + window.scrollY;
       const at = config.phases[index]?.at ?? 0;
-      if (window.matchMedia("(max-width: 640px), (max-height: 500px) and (pointer: coarse)").matches) {
-        handleRef.current?.setProgress(Math.min(0.999, at + 0.006));
-        return;
-      }
-      // 多滚一点点：进度是弹簧跟随，正好停在章节边界上会判定为上一章
-      window.scrollTo({ top: top + total * Math.min(0.999, at + 0.006), behavior: "smooth" });
+      // 越过边界一点：进度有平滑跟随，避免仍被判为上一章。
+      handleRef.current?.setProgress(Math.min(0.999, at + 0.006));
     },
     [config.phases, showSelectionHint]
   );
