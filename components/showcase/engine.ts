@@ -2495,6 +2495,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    */
   let scrollOrigin = 0;
   let scrollTravel = 1;
+  let mobileProgress = START_P;
+  const mobileViewer = () => window.matchMedia("(max-width: 640px), (max-height: 500px) and (pointer: coarse)").matches;
   /**
    * 用户是否已经自己滚动过。浏览器可能在挂载之后才把上次的滚动位置写回来（会话恢复、
    * 重新打开标签页、从别的页面回来），那条路径会把「刷新后的默认机位」换成当时那个机位。
@@ -2510,6 +2512,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   function progress() {
     if (inspectorOn) return inspectorProgress;
     if (freeCamera) return 0;
+    if (mobileViewer()) return mobileProgress;
     // 只守开场这三秒：这段时间足够覆盖浏览器的滚动恢复，也不会长期影响脚本化调试（直接 scrollTo 也能工作）。
     // 用户置顶过机位时「家」不是 0 而是置顶进度，所以开场就停在那里
     if (!userScrolled && elapsed < 3) return START_P;
@@ -2698,15 +2701,17 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       userYawVel = 0; userPitchVel = 0;
       return;
     }
-    // 手指（触屏）：只吃横向位移，竖向留给页面滚动，避免「想滚页面却在俯仰」
-    const gain = dragByTouch ? 0.42 : 0.3;
+    // 手机上画布独占拖动：水平环视、垂直俯仰；桌面叙事仍可纵向滚动。
+    const mobileDrag = dragByTouch && mobileViewer();
+    const gain = dragByTouch ? (mobileDrag ? 0.24 : 0.42) : 0.3;
     userYaw -= dx * gain;
-    userYawVel = clamp(-dx * gain / sampleDt, -240, 240);
-    if (dragByTouch && !freeCamera) return;
+    userYawVel = clamp(-dx * gain / sampleDt, -180, 180);
+    if (dragByTouch && !freeCamera && !mobileDrag) return;
     // 鼠标上下拖：向上拖 = 升高视角俯视，向下拖 = 降低视角平视/略微仰视
     const [pitchMin, pitchMax] = modelCameraOn() ? [-Math.PI, Math.PI] : [-0.55, 0.95];
-    userPitch = clamp(userPitch + dy * 0.0035, pitchMin, pitchMax);
-    userPitchVel = clamp(dy * 0.0035 / sampleDt, -2, 2);
+    const pitchGain = mobileDrag ? 0.0025 : 0.0035;
+    userPitch = clamp(userPitch + dy * pitchGain, pitchMin, pitchMax);
+    userPitchVel = clamp(dy * pitchGain / sampleDt, -2, 2);
   };
   const onDragEnd = (e: PointerEvent) => {
     if (e.pointerId !== dragPointer) return;
@@ -2850,7 +2855,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     if (touches.size < 2) pinchBase = 0;
   };
-  // 两指按下时阻止浏览器接管（canvas 是 touch-action: pan-y，单指竖滑仍可滚页面）
+  // 平板仍允许单指滚动章节；双指缩放始终由画布处理。手机由 touch-action: none 独占手势。
   const onTouchStartCapture = (e: TouchEvent) => {
     if (e.touches.length >= 2) e.preventDefault();
   };
@@ -2860,6 +2865,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   window.addEventListener("pointerup", onTouchEnd);
   window.addEventListener("pointercancel", onTouchEnd);
   cleanups.push(() => {
+    canvas.removeEventListener("touchstart", onTouchStartCapture);
     canvas.removeEventListener("pointerdown", onTouchDown);
     window.removeEventListener("pointermove", onTouchMove);
     window.removeEventListener("pointerup", onTouchEnd);
@@ -3347,6 +3353,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       invalidateInspector();
     },
     setProgress: (p: number, settle = 0) => {
+      if (mobileViewer()) mobileProgress = clamp(p, 0, 1);
       const steps = Math.max(1, Math.round(settle * 60));
       for (let i = 0; i < steps; i += 1) render(p, 1 / 60);
       render(p, 1 / 60);

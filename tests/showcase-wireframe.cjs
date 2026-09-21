@@ -208,7 +208,9 @@ assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.sc-
 assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.sc-free-camera \.sc-nav-tick \{[^}]*height: 3px;[^}]*border-radius: 0;/, 'free-camera selector uses the same straight rail mark as chapter navigation');
 assert.match(fs.readFileSync('components/showcase/ShowcaseStage.tsx', 'utf8'), /aria-label="自由镜头"[\s\S]*?<span className="sc-nav-label">自由镜头<\/span>/, 'free-camera control uses the concise label consistently');
 assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.showcase\.sc-inspecting \.sc-scroll \{[\s\S]*?height: 100dvh;/, 'model inspection removes the homepage narrative scroll tail');
-assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.showcase:not\(\.sc-inspecting\) \.sc-scroll \{[\s\S]*?height: 500dvh;/, 'mobile homepage keeps the full narrative in a shorter scroll track');
+assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.showcase \.sc-scroll \{[\s\S]*?height: 100dvh;/, 'mobile homepage uses one viewport without a scroll tail');
+assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.showcase \.sc-canvas \{ touch-action: none; \}/, 'mobile canvas owns drag gestures instead of scrolling the page');
+assert.match(engine, /if \(mobileViewer\(\)\) return mobileProgress;/, 'mobile chapter progress does not depend on page scroll');
 assert.match(fs.readFileSync('components/showcase/model-importer.css', 'utf8'), /@media \(max-width: 560px\)[\s\S]*?\.mp-form \{ grid-template-columns: minmax\(0, 1fr\);/, 'mobile workbench presents tuning fields in one readable column');
 assert.match(stage, /setModel\(\{ asset: current\.assets\.model/, 'entering model inspection promotes the preview to the full model');
 assert.match(engine, /if \(envWeight > 0\.02\) void ensureDayEnvironment\(\)/, 'day HDR waits until the visible mode actually needs it');

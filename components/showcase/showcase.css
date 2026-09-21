@@ -1600,17 +1600,26 @@ html:has(.showcase.light) body {
   border-bottom-color: var(--sc-active-line);
 }
 @media (max-width: 640px) {
-  .showcase {
-    min-height: 100svh;
-    min-height: 100dvh;
-    overflow-x: clip;
+  html:has(.showcase),
+  html:has(.showcase) body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
-  /* 手机滚动距离压缩一档；章节仍按 0–1 进度完整播放，末章后不再拖出大段空场。 */
-  .showcase:not(.sc-inspecting) .sc-scroll {
-    height: 500svh;
-    height: 500dvh;
+  .showcase {
+    height: 100svh;
+    height: 100dvh;
+    overflow: hidden;
   }
+
+  /* 手机查看器保持单屏，章节改由右侧导航切换，拖动画布不会滚出空白。 */
+  .showcase .sc-scroll {
+    height: 100svh;
+    height: 100dvh;
+  }
+
+  .showcase .sc-canvas { touch-action: none; }
 
   .sc-stage {
     height: calc(100svh - var(--sc-header));
@@ -1657,4 +1666,11 @@ html:has(.showcase.light) body {
     right: 12px;
     top: max(8px, env(safe-area-inset-top));
   }
+}
+
+@media (max-height: 500px) and (pointer: coarse) {
+  html:has(.showcase),
+  html:has(.showcase) body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  .showcase, .showcase .sc-scroll { height: 100dvh; overflow: hidden; }
+  .showcase .sc-canvas { touch-action: none; }
 }

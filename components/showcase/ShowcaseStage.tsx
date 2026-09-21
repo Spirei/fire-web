@@ -378,7 +378,10 @@ export default function ShowcaseStage({
           onResetView: () => {
             // 双击复位：置顶机位是「进度 + 角度 + 缩放」，角度引擎已经调好，
             // 这里把滚动位置带回置顶进度，才真的回到用户置顶的那一帧
-            if (pinnedPoseRef.current) window.scrollTo({ top: homeTop(), behavior: "smooth" });
+            if (pinnedPoseRef.current) {
+              if (window.matchMedia("(max-width: 640px), (max-height: 500px) and (pointer: coarse)").matches) handleRef.current?.setProgress(pinnedPoseRef.current.p);
+              else window.scrollTo({ top: homeTop(), behavior: "smooth" });
+            }
           },
           onContextLost: () => {
             if (cancelled || recoveryRequested) return;
@@ -610,7 +613,7 @@ export default function ShowcaseStage({
     });
   }, []);
 
-  /** 底部章节导航：滚到该章节的进度（滚动本身驱动叙事，所以直接滚页面即可） */
+  /** 章节导航：手机单屏直接设置进度，宽屏仍由滚动驱动叙事。 */
   const goPhase = useCallback(
     (index: number) => {
       setFreeCamera(false);
@@ -622,6 +625,10 @@ export default function ShowcaseStage({
       const total = Math.max(1, el.offsetHeight - stage.offsetHeight);
       const top = el.getBoundingClientRect().top + window.scrollY;
       const at = config.phases[index]?.at ?? 0;
+      if (window.matchMedia("(max-width: 640px), (max-height: 500px) and (pointer: coarse)").matches) {
+        handleRef.current?.setProgress(Math.min(0.999, at + 0.006));
+        return;
+      }
       // 多滚一点点：进度是弹簧跟随，正好停在章节边界上会判定为上一章
       window.scrollTo({ top: top + total * Math.min(0.999, at + 0.006), behavior: "smooth" });
     },
