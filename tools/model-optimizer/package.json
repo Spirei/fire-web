@@ -7,8 +7,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node app.mjs --gui",
-    "test": "node tests/showcase-generation.mjs && node tests/export.mjs"
+    "start": "node bootstrap.mjs",
+    "test": "node tests/showcase-generation.mjs && node tests/export.mjs && node tests/platform.mjs && node tests/server.mjs"
   },
   "dependencies": {
     "@gltf-transform/cli": "4.5.0",

@@ -151,7 +151,7 @@ export default function HomePage() {
 
 ### 本地导出与上传
 
-双击 `tools/model-optimizer/启动模型工具.command`，选择原始 GLB 和导出目录。依赖在本机独立安装，编码不进入网站或 Docker；用户数据不上传给第三方。导出高清优化版及 1K 首页预览，原文件保留。达到原有阈值才生成保留贴图尺寸、几何的 UASTC；未达到阈值则复制原文件作为高清版。
+在 `tools/model-optimizer` 目录执行 `npm start`，Mac 与 Windows 共用本地网页：选择原始 GLB，完成后下载结果。依赖在本机独立安装，编码不进入网站或 Docker；用户数据不上传给第三方。导出高清优化版及 1K 首页预览，原文件保留。达到原有阈值才生成保留贴图尺寸、几何的 UASTC；未达到阈值则复制原文件作为高清版。
 
 先在网站正常导入 `*-optimized.glb`，保存后在同车型卡点击“上传首页预览”，选择 `*-preview.glb`。网站只做管理员鉴权、大小限制、GLB 结构体检与保存，不调用编码器。KTX2/Meshopt/WebP 已有显示支持，因此体检接受这些格式；仍拒绝未支持的 Draco、GPU 实例化及外链资源。
 

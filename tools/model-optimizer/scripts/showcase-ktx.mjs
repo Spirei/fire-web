@@ -1,4 +1,4 @@
-/** Pinned official KTX runtime. Kept outside public/Git; never installed system-wide. */
+/** Pinned official runtime: user cache on macOS/Linux, official installer on Windows. */
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -7,7 +7,9 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const VERSION = '4.4.2';
-const RELEASES = {
+export const RELEASES = {
+  "win32-x64": ["Windows-x64.exe", "1f323b0fec19794f5e6c0425a61d4b1da396872a10be862d105f4f4b2d2957fe"],
+  "win32-arm64": ["Windows-arm64.exe", "86d6edba47f3df597f3b9bceda6e4da8b4205b43c8386519e1c0d2ce804c4284"],
   'darwin-arm64': ['Darwin-arm64.pkg', '500bd8f9d63358c3f3a0d83b724c8574436a72c37dc0e4bad90ec1ca38032c3c'],
   'darwin-x64': ['Darwin-x86_64.pkg', 'efecc685ab891a6e119a9fdc8cbe038e135f9a367eb2f5d8a059553f947f1fea'],
   'linux-arm64': ['Linux-arm64.tar.bz2', '60382e7b842177b8048bd58ccdc770383f8ef65b94452a25d3afdb55f2405c5a'],
@@ -17,17 +19,34 @@ function run(command, args, env = process.env) {
   const result = spawnSync(command, args, { env, encoding: 'utf8', timeout: 120000 });
   if (result.status !== 0) throw new Error(`${command}: ${(result.stderr || result.error?.message || 'failed').slice(-500)}`);
 }
-function environment(directory) {
-  return { ...process.env, PATH: `${path.join(directory, 'bin')}${path.delimiter}${process.env.PATH ?? ''}`, LD_LIBRARY_PATH: `${path.join(directory, 'lib')}:${process.env.LD_LIBRARY_PATH ?? ''}` };
+export function environment(directory, base = process.env, platform = process.platform) {
+  const env = { ...base }, windows = platform === 'win32';
+  const pathKeys = Object.keys(env).filter(key => windows ? key.toLowerCase() === 'path' : key === 'PATH');
+  const inherited = pathKeys.map(key => env[key]).filter(Boolean).join(windows ? ';' : ':');
+  pathKeys.forEach(key => delete env[key]);
+  const join = windows ? path.win32.join : path.join;
+  env.PATH = `${join(directory, 'bin')}${windows ? ';' : ':'}${inherited}`;
+  if (!windows) env.LD_LIBRARY_PATH = `${join(directory, 'lib')}:${base.LD_LIBRARY_PATH ?? ''}`;
+  return env;
+}
+function installedWindowsRuntime() {
+  for (const root of [process.env.ProgramW6432, process.env.ProgramFiles, process.env['ProgramFiles(x86)']].filter(Boolean)) {
+    const candidate = environment(path.join(root, 'KTX-Software'));
+    if (available(candidate)) return candidate;
+  }
 }
 function available(env) {
-  const result = spawnSync('ktx', ['--version'], { env, encoding: 'utf8', timeout: 10000 });
+  const result = spawnSync(process.platform === 'win32' ? 'ktx.exe' : 'ktx', ['--version'], { env, encoding: 'utf8', timeout: 10000 });
   return result.status === 0 && /(?:^|\s)v?4\.[4-9]\./.test(result.stdout);
 }
-export async function ensureKtx(directory = path.join(os.homedir(), '.cache', 'fire-tools', `ktx-${VERSION}-${process.platform}-${process.arch}`), installOnly = false) {
+export async function ensureKtx(directory = path.join(os.homedir(), '.cache', 'fire-tools', `ktx-${VERSION}-${process.platform}-${process.arch}`), installOnly = false, onProgress = console.log) {
   const env = environment(directory);
-  if (fs.existsSync(path.join(directory, 'bin', 'ktx')) && available(env)) return env;
+  if (fs.existsSync(path.join(directory, 'bin', process.platform === 'win32' ? 'ktx.exe' : 'ktx')) && available(env)) return env;
   if (!installOnly && available(process.env)) return process.env;
+  if (process.platform === 'win32') {
+    const installed = installedWindowsRuntime();
+    if (installed) return installed;
+  }
   const release = RELEASES[`${process.platform}-${process.arch}`];
   if (!release) throw new Error('当前平台请先安装 KTX-Software 4.4+ 并加入 PATH');
   fs.mkdirSync(path.dirname(directory), { recursive: true });
@@ -39,6 +58,16 @@ export async function ensureKtx(directory = path.join(os.homedir(), '.cache', 'f
     const bytes = Buffer.from(await response.arrayBuffer());
     if (crypto.createHash('sha256').update(bytes).digest('hex') !== release[1]) throw new Error('KTX 工具 SHA-256 校验失败');
     const archive = path.join(staging, filename); fs.writeFileSync(archive, bytes);
+    if (process.platform === 'win32') {
+      onProgress('首次使用 KTX：将打开已校验的官方安装向导，请允许系统授权并使用默认安装目录。');
+      const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', '$p = Start-Process -FilePath $env:FIRE_KTX_INSTALLER -Verb RunAs -Wait -PassThru; exit $p.ExitCode'], {
+        env: { ...process.env, FIRE_KTX_INSTALLER: archive }, stdio: 'inherit', timeout: 600000, windowsHide: true
+      });
+      if (result.status !== 0) throw new Error('KTX 安装未完成或已取消，请完成安装后重新运行');
+      const installed = installedWindowsRuntime();
+      if (!installed) throw new Error('未找到 KTX，请使用默认安装目录，或把自定义安装目录的 bin 加入 PATH 后重新启动工具');
+      return installed;
+    }
     const output = path.join(staging, 'runtime'); fs.mkdirSync(output);
     if (process.platform === 'darwin') {
       const expanded = path.join(staging, 'expanded');
