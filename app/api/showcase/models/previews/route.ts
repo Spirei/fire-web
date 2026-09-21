@@ -2,18 +2,16 @@ import { randomUUID } from "node:crypto";
 import { readJsonBody } from "@/lib/requestBody";
 import { SHOWCASE_MODELS } from "@/components/showcase/presets/models";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin, isTrustedMutationRequest } from "@/lib/auth";
 import { modelFileExists, modelUrlExists, readStoredModels, validModelId } from "@/lib/showcaseModels";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 600;
+export const maxDuration = 3600;
 
-const run = promisify(execFile);
-type PreviewJob = { status: "idle" | "running" | "done" | "error"; count: number; id?: string; jobId?: string; error?: string; startedAt?: number; finishedAt?: number };
+type PreviewJob = { phase?: string; gpuCount?: number; gpuReused?: number; reused?: number; failed?: number; total?: number; model?: string; fileBytes?: number; textureBytes?: number; status: "idle" | "running" | "done" | "error"; count: number; id?: string; jobId?: string; error?: string; startedAt?: number; finishedAt?: number };
 const runtime = globalThis as typeof globalThis & { __showcasePreviewJob?: PreviewJob };
 const job = () => runtime.__showcasePreviewJob ?? (runtime.__showcasePreviewJob = { status: "idle", count: 0 });
 
@@ -50,15 +48,45 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "生成操作过于频繁，请稍后再试" }, { status: 429 });
   }
   runtime.__showcasePreviewJob = { status: "running", count: 0, id, jobId: randomUUID(), startedAt: Date.now() };
-  void run(process.execPath, [path.join(process.cwd(), "scripts", "build-showcase-previews.mjs"), "--id", id], {
-      cwd: process.cwd(),
-      timeout: 9 * 60 * 1000,
-      maxBuffer: 8 * 1024 * 1024
-    }).then(() => {
-    runtime.__showcasePreviewJob = { ...job(), status: "done", count: 1, finishedAt: Date.now() };
-  }).catch((err) => {
-    const detail = err instanceof Error ? err.message : String(err);
-    runtime.__showcasePreviewJob = { ...job(), status: "error", count: 0, error: `生成失败：${detail.slice(0, 300)}`, startedAt: job().startedAt, finishedAt: Date.now() };
+  const jobId = runtime.__showcasePreviewJob.jobId;
+  const child = spawn(process.execPath, [path.join(process.cwd(), "scripts", "build-showcase-previews.mjs"), "--id", id], {
+    cwd: process.cwd(), detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"]
+  });
+  let pending = "", detail = "";
+  const timer = setTimeout(() => {
+    detail = "生成任务超过 60 分钟，已停止；原模型和已完成副本保留";
+    try { if (child.pid && process.platform !== "win32") process.kill(-child.pid, "SIGTERM"); else child.kill(); }
+    catch { child.kill(); }
+  }, 60 * 60 * 1000);
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => {
+    if (job().jobId !== jobId) return;
+    pending += chunk;
+    const lines = pending.split("\n"); pending = lines.pop() ?? "";
+    if (pending.length > 8192) pending = pending.slice(-8192);
+    for (const line of lines) {
+      if (!line.startsWith("SHOWCASE_PROGRESS ")) continue;
+      try {
+        const progress = JSON.parse(line.slice("SHOWCASE_PROGRESS ".length));
+        runtime.__showcasePreviewJob = { ...job(), ...progress, status: "running" };
+      } catch { /* 普通转码日志不影响任务状态 */ }
+    }
+  });
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string) => { detail = (detail + chunk).slice(-2000); });
+  child.on("error", (error) => {
+    clearTimeout(timer);
+    if (job().jobId !== jobId) return;
+    runtime.__showcasePreviewJob = { ...job(), status: "error", error: `生成失败：${error.message}`, finishedAt: Date.now() };
+  });
+  child.on("close", (code) => {
+    clearTimeout(timer);
+    if (job().jobId !== jobId) return;
+    if (code === 0 && job().phase === "done") {
+      runtime.__showcasePreviewJob = { ...job(), status: "done", finishedAt: Date.now() };
+    } else {
+      runtime.__showcasePreviewJob = { ...job(), status: "error", error: job().error || `生成失败：${detail.slice(-500) || "转码进程未完成"}`, finishedAt: Date.now() };
+    }
   });
   return NextResponse.json(runtime.__showcasePreviewJob, { status: 202 });
 }

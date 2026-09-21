@@ -4305,6 +4305,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_37_ENTRY.frontend, { name: "KTX2 / UASTC", version: "KTX-Software 4.4.2", desc: "保留源贴图尺寸的高质量 GPU 压缩 · Three.js 转码加载" }],
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [{
+    title: "首页预览自动检测并压缩大模型",
+    desc: "按车型生成首页预览时同步检测文件与贴图内存，达到阈值自动生成保留源尺寸和几何的 GPU 副本；校验原文件并复用有效副本，显示检测及转码进度，失败明确报错。生产镜像内置编码工具，不修改画质选择。",
+    kind: "fix"
+  }, {
     title: "恢复手机与平板的画质选择和刷新记忆",
     desc: "撤回把手机和平板的 2K、4K 按总贴图预算压成 1K 的限制，恢复原画输出预算；正常刷新、加载中刷新和普通下载失败都不再改写画质偏好。仅 MP4/5 原画保留针对性的移动端 GPU 压缩保护。只有确认图形渲染异常时，才回滚到同一车型最近成功加载且尚未失败的画质；没有成功记录就提示重试，不统一退回 1K。",
     kind: "fix"

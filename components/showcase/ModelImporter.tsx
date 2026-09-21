@@ -156,6 +156,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   };
   const [coverBusy, setCoverBusy] = useState<string | null>(null);
   const [previewGenerating, setPreviewGenerating] = useState<string | null>(null);
+  const [generationDetail, setGenerationDetail] = useState("");
   const previewGeneratingRef = useRef(false);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -210,6 +211,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
     if (previewGeneratingRef.current) return;
     previewGeneratingRef.current = true;
     setPreviewGenerating(row.id);
+    setGenerationDetail("正在检测文件与贴图…");
     try {
       const response = await fetch("/api/showcase/models/previews", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: row.id }) });
       const payload = await response.json().catch(() => ({}));
@@ -218,18 +220,21 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         return;
       }
       let result = payload;
-      const deadline = Date.now() + 9 * 60 * 1000;
+      const deadline = Date.now() + 61 * 60 * 1000;
       while (result.status === "running" && Date.now() < deadline) {
         await new Promise((resolve) => window.setTimeout(resolve, 1000));
         const statusResponse = await fetch(`/api/showcase/models/previews?jobId=${encodeURIComponent(payload.jobId)}`, { cache: "no-store" });
         result = await statusResponse.json().catch(() => ({ status: "error", error: "无法读取生成状态" }));
         if (!statusResponse.ok) break;
+        const phase = ({ scan: "检测文件与贴图", preview: "生成首页预览", gpu: "生成保留源尺寸的 GPU 副本", complete: "处理完成" } as Record<string, string>)[result.phase] ?? "处理中";
+        setGenerationDetail(`${result.model ? `${result.model} · ` : ""}${phase}（预览 ${result.count ?? 0}/${result.total ?? "—"}，GPU 副本 ${result.gpuCount ?? 0}）`);
       }
       if (result.status !== "done") {
         showToast(result.error ?? "预览版本生成超时，请稍后重试", "err");
+        router.refresh();
         return;
       }
-      showToast(`已生成“${row.label}”的首页预览`);
+      showToast(`已生成“${row.label}”的首页预览${result.gpuCount ? "及保留源尺寸的 GPU 副本" : ""}`);
       router.refresh();
     } catch {
       showToast("预览版本生成失败：网络异常", "err");
@@ -1055,7 +1060,8 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         <h2>
           <span>·</span> 车型清单
         </h2>
-        <p className="mt-3 text-xs leading-5 text-muted dark:text-white/55">在车型卡片上单独生成首页轻量预览，只处理选中的车型；模型展示和工作台仍使用原始高清版本。</p>
+        <p className="mt-3 text-xs leading-5 text-muted dark:text-white/55">在车型卡片上生成首页轻量预览，同时检测大模型并生成保留源贴图尺寸的高质量副本；只处理选中车型，不改变画质选择。</p>
+        {previewGenerating && <p className="mt-2 text-xs text-muted" role="status">{generationDetail}</p>}
         {/* 封面文件选择：卡片上的「传封面」统一走这个隐藏输入 */}
         <input
           ref={coverInputRef}

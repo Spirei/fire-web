@@ -458,6 +458,23 @@ export function modelUrlExists(url: string) {
   }
 }
 
+function generatedPreviewUrl(file: string): string | undefined {
+  try { return `/uploads/mclaren/previews/${encodeURIComponent(file)}?v=${fs.statSync(path.join(PREVIEWS_DIR, file)).mtimeMs}`; }
+  catch { return undefined; }
+}
+
+/** 仅使用与当前原文件匹配的已校验 GPU 副本。 */
+function gpuModelUrl(input: string, gpuFile: string): string | undefined {
+  const gpuPath = path.join(SHOWROOM_DIR, "gpu", gpuFile);
+  try {
+    const manifest = JSON.parse(fs.readFileSync(`${gpuPath}.json`, "utf8"));
+    const original = fs.statSync(input), gpu = fs.statSync(gpuPath);
+    if (manifest.sourceBytes === original.size && manifest.sourceMtimeMs === original.mtimeMs && gpu.size === manifest.outputBytes) {
+      return `/uploads/mclaren/gpu/${encodeURIComponent(gpuFile)}?v=${gpu.mtimeMs}`;
+    }
+  } catch { /* 尚未生成或副本过期，保留原资源。 */ }
+}
+
 /** 首页用的完整车型清单：按登记表里的展示顺序排（内置车也在顺序表里，可以拖到任意位置） */
 export function listShowcaseOptions(): ShowcaseModelOption[] {
   // 先把登记表补齐（首次访问会新建），再读顺序 —— 否则第一次渲染拿不到 order 会排成另一个样子
@@ -473,7 +490,10 @@ export function listShowcaseOptions(): ShowcaseModelOption[] {
       present: modelUrlExists(item.config.assets.model),
       // 封面文件可能被手动删掉，取不到就回到车型代号占位
       cover: cover && modelUrlExists(cover) ? cover : "",
-      config: item.config
+      config: { ...item.config, assets: { ...item.config.assets,
+        previewModel: generatedPreviewUrl(`builtin-${item.id}-preview.glb`) ?? item.config.assets.previewModel,
+        gpuModel: gpuModelUrl(path.join(process.cwd(), "public", item.config.assets.model.split("?")[0]), `builtin-${item.id}-uastc.glb`)
+      } }
     };
   });
   const imported: ShowcaseModelOption[] = stored.filter(model => !hiddenIds.includes(model.id)).map((model) => {
@@ -481,19 +501,9 @@ export function listShowcaseOptions(): ShowcaseModelOption[] {
     const config = buildImportedConfig({ file: model.file, version, params: model.params });
     const previewFile = `${model.file.replace(/\.glb$/i, "")}-preview.glb`;
     if (fs.existsSync(path.join(PREVIEWS_DIR, previewFile))) {
-      config.assets.previewModel = `/uploads/mclaren/previews/${encodeURIComponent(previewFile)}?v=${version}`;
+      config.assets.previewModel = `/uploads/mclaren/previews/${encodeURIComponent(previewFile)}?v=${fs.statSync(path.join(PREVIEWS_DIR, previewFile)).mtimeMs}`;
     }
-    // 优化副本与原文件同尺寸贴图；原文件变化后旧副本不再下发。
-    const gpuFile = `${model.file.replace(/\.glb$/i, "")}-uastc.glb`;
-    const gpuPath = path.join(SHOWROOM_DIR, "gpu", gpuFile);
-    try {
-      const manifest = JSON.parse(fs.readFileSync(`${gpuPath}.json`, "utf8"));
-      const original = fs.statSync(path.join(MODELS_DIR, model.file));
-      const gpu = fs.statSync(gpuPath);
-      if (manifest.sourceBytes === original.size && manifest.sourceMtimeMs === original.mtimeMs && gpu.size === manifest.outputBytes) {
-        config.assets.gpuModel = `/uploads/mclaren/gpu/${encodeURIComponent(gpuFile)}?v=${gpu.mtimeMs}`;
-      }
-    } catch { /* 未生成保清晰度副本时保留原始资源。 */ }
+    config.assets.gpuModel = gpuModelUrl(path.join(MODELS_DIR, model.file), `${model.file.replace(/\.glb$/i, "")}-uastc.glb`);
     return {
       id: model.id,
       label: model.label,

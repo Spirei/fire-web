@@ -71,11 +71,15 @@ COPY scripts/entrypoint.sh /app/entrypoint.sh
 # OpenD 桥接依赖必须随 GHCR 生产镜像提供；否则线上容器虽能连通 11111，
 # Node spawn("python3") 仍会因运行时缺少 Python 直接报 ENOENT。
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 python3-venv && \
+    apt-get install -y --no-install-recommends python3 python3-venv bzip2 libgomp1 && \
     python3 -m venv /opt/futu-venv && \
     /opt/futu-venv/bin/pip install --no-cache-dir -r /app/scripts/requirements-futu.txt && \
     rm -rf /var/lib/apt/lists/*
 ENV PATH="/opt/futu-venv/bin:${PATH}"
+# 首页预览生成同时需要 GPU 纹理编码器；构建期下载固定版本并校验 SHA-256。
+RUN node /app/scripts/showcase-ktx.mjs /opt/fire-ktx
+ENV PATH="/opt/fire-ktx/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/fire-ktx/lib"
 RUN chmod +x /app/entrypoint.sh
 
 # 运行期数据与上传占位（由 compose volume 挂载覆盖）

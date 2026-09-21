@@ -38,7 +38,10 @@ export async function verifyGpuDerivative(source, compressed) {
   let rgbaBytes = 0, blockBytes = 0;
   const textures = [];
   for (let i = 0; i < at.length; i++) {
-    const { width, height } = await sharp(Buffer.from(at[i].getImage())).metadata();
+    const sourceImage = Buffer.from(at[i].getImage());
+    const { width, height } = at[i].getMimeType() === "image/ktx2"
+      ? { width: sourceImage.readUInt32LE(20), height: sourceImage.readUInt32LE(24) }
+      : await sharp(sourceImage).metadata();
     assert.equal(bt[i].getMimeType(), 'image/ktx2');
     const ktx = Buffer.from(bt[i].getImage());
     assert.equal(ktx.readUInt32LE(20), width, `texture ${i} width changed`);
