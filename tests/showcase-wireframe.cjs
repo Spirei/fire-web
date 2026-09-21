@@ -205,6 +205,8 @@ assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.sc-
 assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.sc-drawer-toggle \{[\s\S]*?pointer-events: auto;/, 'edge drawer toggles remain clickable inside the pointer-transparent HUD');
 assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.sc-drawer-content \.fire-cap \{[\s\S]*?border-radius: 0 !important;[\s\S]*?background: transparent !important;/, 'expanded edge drawers use the same linear visual language as their rails');
 assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.sc-nav \.sc-camera-reset \{[\s\S]*?border-radius: 0;[\s\S]*?background: transparent;/, 'camera reset remains a lightweight rail action instead of a floating capsule');
+assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.sc-free-camera \.sc-nav-tick \{[^}]*height: 3px;[^}]*border-radius: 0;/, 'free-camera selector uses the same straight rail mark as chapter navigation');
+assert.match(fs.readFileSync('components/showcase/ShowcaseStage.tsx', 'utf8'), /aria-label="自由镜头"[\s\S]*?<span className="sc-nav-label">自由镜头<\/span>/, 'free-camera control uses the concise label consistently');
 assert.match(stage, /setModel\(\{ asset: current\.assets\.model/, 'entering model inspection promotes the preview to the full model');
 assert.match(engine, /if \(envWeight > 0\.02\) void ensureDayEnvironment\(\)/, 'day HDR waits until the visible mode actually needs it');
 assert.match(engine, /createWireframeView\(CFG\.model\.wireframe, true/, 'showcase wireframes are split across frames');

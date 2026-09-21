@@ -1321,7 +1321,7 @@ html:has(.showcase.light) body {
 .sc-nav { top: 64%; gap: 12px; }
 .sc-nav button { min-height: 24px; min-width: 40px; }
 .sc-free-camera { margin-top: 6px; }
-.sc-free-camera .sc-nav-tick { border: 1px solid currentColor; background: transparent; height: 8px; }
+.sc-free-camera .sc-nav-tick { border: 0; background: currentColor; height: 3px; border-radius: 0; }
 .sc-free-camera .sc-nav-label { opacity: 1; }
 .showcase.light .sc-nav { color: #343c49; }
 .showcase.light .sc-nav button { color: #505b69; }
