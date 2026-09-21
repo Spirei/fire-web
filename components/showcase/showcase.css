@@ -260,19 +260,33 @@ html:has(.showcase.light) body {
 .sc-drawer-toggle {
   min-width: 66px;
   height: 31px;
-  padding: 0 10px;
+  padding: 0 3px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--sc-line);
+  background: transparent;
   color: var(--sc-mute);
   font-size: 9px;
   letter-spacing: .16em;
   white-space: nowrap;
+  cursor: pointer;
+  transition: color .2s ease, border-color .2s ease, padding .25s ease;
 }
 
 .sc-drawer-toggle svg { width: 13px; height: 13px; opacity: .75; }
 .sc-drawer-toggle i { font: 400 15px/1 sans-serif; opacity: .55; transition: transform .3s ease; }
+.sc-drawer-toggle:hover,
+.sc-drawer-toggle:focus-visible { color: var(--sc-ink-strong); border-color: var(--sc-active-line); }
+.sc-drawer-toggle:focus { outline: none; }
+.sc-drawer-toggle:focus-visible { outline: 1px solid var(--sc-active-line); outline-offset: 4px; }
+.sc-side-left .sc-drawer-toggle { justify-content: flex-start; }
+.sc-side-right .sc-drawer-toggle { justify-content: flex-end; }
+.sc-side-left.open .sc-drawer-toggle,
+.sc-side-right.open .sc-drawer-toggle { color: var(--sc-ink-strong); border-color: var(--sc-active-line); }
 .sc-side-left.open .sc-drawer-toggle i { transform: rotate(180deg); }
 .sc-side-right.open .sc-drawer-toggle i { transform: rotate(180deg); }
 
@@ -1220,16 +1234,6 @@ html:has(.showcase.light) body {
  * 用 (hover: none) and (pointer: coarse) 限定纯触屏设备：带触屏的笔记本（有鼠标）不受影响。
  */
 @media (hover: none) and (pointer: coarse) {
-  .sc-drawer-toggle { display: none; }
-  .sc-side-drawer .sc-drawer-content {
-    max-width: none;
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-    overflow: visible;
-    transform: none;
-  }
-  .sc-side-right { flex-direction: row; }
   /* 提示换成触摸版 */
   .sc-hint-drag {
     display: none;
@@ -1419,3 +1423,71 @@ html:has(.showcase.light) body {
 .sc-inspecting .sc-hud > .sc-row:not(.sc-tools),
 .sc-inspecting .sc-tools > button { display: none !important; }
 .sc-inspecting .sc-tools { z-index: 30; }
+
+/* 右上角改为一条轻量工具栏：去掉三个各自悬浮的胶囊，与左右轨道、底部贴边标签统一。 */
+.showcase .sc-tools {
+  gap: 3px;
+  padding: 0 2px 5px;
+}
+.showcase .sc-tools::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--sc-line) 14%, var(--sc-line) 86%, transparent);
+}
+.showcase .sc-tools .sc-tool {
+  min-width: 31px;
+  width: 31px;
+  height: 31px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  color: var(--sc-mute);
+  transition: color .2s ease, background-color .2s ease, transform .2s ease;
+}
+.showcase .sc-tools .sc-glass-trigger {
+  width: auto;
+  min-width: 62px;
+  padding: 0 7px;
+  font-size: 10px;
+  letter-spacing: .08em;
+}
+.showcase .sc-tools .sc-tool:hover,
+.showcase .sc-tools .sc-tool:focus-visible,
+.showcase .sc-tools .sc-tool.on {
+  color: var(--sc-ink-strong);
+  background: color-mix(in srgb, var(--sc-panel-hover) 54%, transparent) !important;
+}
+.showcase .sc-tools .sc-tool:active { transform: translateY(1px); }
+
+/* 最终定位：抽屉入口贴住左右边缘，不参与底部中心的胶囊布局。 */
+.showcase:not(.sc-inspecting) .sc-left-foot.sc-side-left {
+  left: 3.4vw;
+  right: auto;
+  bottom: 4.6vh;
+  transform: none;
+  justify-content: flex-start;
+  max-width: 82vw;
+}
+.showcase:not(.sc-inspecting) .sc-models.sc-side-right {
+  left: auto;
+  right: 3.4vw;
+  bottom: 4.6vh;
+  transform: none;
+  justify-content: flex-end;
+  max-width: 82vw;
+  overflow: visible;
+}
+@media (max-width: 640px) {
+  .showcase:not(.sc-inspecting) .sc-left-foot.sc-side-left { left: 4vw; bottom: 5.2vh; }
+  .showcase:not(.sc-inspecting) .sc-models.sc-side-right { right: 4vw; bottom: 5.2vh; }
+  .sc-drawer-toggle { min-width: 58px; height: 30px; }
+  .sc-drawer-toggle svg { display: none; }
+}

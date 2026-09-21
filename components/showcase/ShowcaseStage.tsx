@@ -991,7 +991,7 @@ export default function ShowcaseStage({
             </p>
 
             <div className={`sc-row sc-left-foot sc-side-drawer sc-side-left${leftDrawerOpen ? " open" : ""}`}>
-              <button type="button" className="sc-drawer-toggle fire-cap" onClick={() => { setLeftDrawerOpen((open) => !open); setRightDrawerOpen(false); }} aria-expanded={leftDrawerOpen} aria-controls="showcase-left-controls">
+              <button type="button" className="sc-drawer-toggle" onClick={() => { setLeftDrawerOpen((open) => !open); setRightDrawerOpen(false); }} aria-expanded={leftDrawerOpen} aria-controls="showcase-left-controls">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M4 6h12M4 10h8M4 14h10" /></svg>
                 <span>控制</span><i aria-hidden="true">›</i>
               </button>
@@ -1178,7 +1178,7 @@ export default function ShowcaseStage({
             )}
             {models && models.length > 0 && (models.length > 1 || onImport) && (
               <div className={`sc-row sc-models sc-side-drawer sc-side-right${rightDrawerOpen ? " open" : ""}`}>
-                <button type="button" className="sc-drawer-toggle fire-cap" onClick={() => { setRightDrawerOpen((open) => !open); setLeftDrawerOpen(false); }} aria-expanded={rightDrawerOpen} aria-controls="showcase-model-controls">
+                <button type="button" className="sc-drawer-toggle" onClick={() => { setRightDrawerOpen((open) => !open); setLeftDrawerOpen(false); }} aria-expanded={rightDrawerOpen} aria-controls="showcase-model-controls">
                   <i aria-hidden="true">‹</i><span>车型</span>
                   <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M3 13h14M5 13l2-5h6l2 5M6 13v2M14 13v2" /></svg>
                 </button>
