@@ -142,11 +142,21 @@ const inflight = new Map<string, Promise<{ buffer: ArrayBuffer; fromCache: boole
 /** 素材是否已经在本地缓存里（Cache Storage 或 IndexedDB），不发请求 */
 export async function isAssetCached(url: string): Promise<boolean> {
   const absUrl = typeof location !== "undefined" ? new URL(url, location.href).href : url;
-  if (await readFromCacheApi(absUrl)) return true;
+  if (cacheApiAvailable()) {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      if (await cache.match(absUrl)) return true;
+    } catch { /* 回退到 IndexedDB；仅检查条目，不复制整份模型。 */ }
+  }
   const db = await openDb();
   if (!db) return false;
-  const hit = await readEntry(db, absUrl);
-  return hit instanceof ArrayBuffer && hit.byteLength > 0;
+  return new Promise<boolean>((resolve) => {
+    try {
+      const request = db.transaction(STORE, "readonly").objectStore(STORE).count(absUrl);
+      request.onsuccess = () => resolve(request.result > 0);
+      request.onerror = () => resolve(false);
+    } catch { resolve(false); }
+  });
 }
 
 /**

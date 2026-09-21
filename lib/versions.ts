@@ -4304,7 +4304,8 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "首页单屏适配覆盖桌面与平板，修复页面滚动条并统一镜头导航。",
   frontend: [...V0_1_37_ENTRY.frontend, { name: "KTX2 / UASTC", version: "KTX-Software 4.4.2", desc: "保留源贴图尺寸的高质量 GPU 压缩 · Three.js 转码加载" }],
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
-  changes: [{
+  changes: [
+    { kind: "fix", title: "首页高清模型静默复用", desc: "记住模型版本与画质的加载成功状态，刷新后静默加载；缓存检查只查询条目，避免重复读取整份模型，失败仍可重试。" },{
     title: "大模型副本完整性与生成进度优化",
     desc: "生成副本增加分块 SHA-256 校验，发现同尺寸损坏文件也会重新生成；拒绝截断或结构异常的 GLB。进度显示文件大小、贴图占用与耗时，网络波动自动重连，重复点击同一车型可接回原任务，完成提示区分新生成和复用，不改变画质偏好。",
     kind: "fix"

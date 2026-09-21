@@ -6,6 +6,7 @@ import { setThemeCookie } from "@/lib/theme";
 import { usePersistedState } from "@/lib/usePersistedState";
 import type { WireframeMode } from "./wireframe";
 import LiquidGlassControl from "@/components/LiquidGlassControl";
+import { hasLoadedModel, rememberLoadedModel } from "./loadHistory";
 import MusicIcon from "./MusicIcon";
 import { constrainedGraphics, rememberWorkingQuality, recoveryQuality } from "./modelMemory";
 import "./showcase.css";
@@ -105,6 +106,15 @@ export default function ShowcaseStage({
   const [loadRatio, setLoadRatio] = useState(0);
   const [ready, setReady] = useState(false);
   const [qualityLoading, setQualityLoading] = useState(false);
+  const [loadingKey, setLoadingKey] = useState<string | null>(null);
+  const [noticeKey, setNoticeKey] = useState<string | null>(null);
+  useEffect(() => {
+    setNoticeKey(null);
+    if (!loadingKey || hasLoadedModel(loadingKey)) return;
+    const timer = window.setTimeout(() => setNoticeKey(loadingKey), 350);
+    return () => window.clearTimeout(timer);
+  }, [loadingKey]);
+  const showLoadingNotice = loadingKey !== null && noticeKey === loadingKey;
   const [qualityError, setQualityError] = useState(false);
   const [textureLimitNotice, setTextureLimitNotice] = useState<number | null>(null);
   const [memoryNotice, setMemoryNotice] = useState<string | null>(null);
@@ -153,13 +163,16 @@ export default function ShowcaseStage({
     const switchId = ++qualitySwitchRef.current;
     setQualityLoading(true);
     const fullKey = JSON.stringify({ a: (textureQualityRef.current === "original" ? current.assets.gpuModel ?? current.assets.model : current.assets.model), m: current.model ?? null, q: textureQualityRef.current });
+    setLoadingKey(fullKey);
     const promote = appliedModelRef.current === fullKey
       ? Promise.resolve(true)
       : handleRef.current?.setModel({ asset: (textureQualityRef.current === "original" ? current.assets.gpuModel ?? current.assets.model : current.assets.model), model: qualityModel(current.model) }) ?? Promise.resolve(false);
     void promote.then((ok) => {
       if (switchId !== qualitySwitchRef.current) return;
       setQualityLoading(false);
-      if (ok) appliedModelRef.current = fullKey;
+      setLoadingKey(null);
+      setQualityError(!ok);
+      if (ok) { appliedModelRef.current = fullKey; rememberLoadedModel(fullKey); }
       window.requestAnimationFrame(() => {
         if (inspectorRef.current) handleRef.current?.setWireframe(wireRef.current.mode, wireRef.current.color);
       });
@@ -168,6 +181,7 @@ export default function ShowcaseStage({
   const exitInspector = () => {
     qualitySwitchRef.current += 1;
     setQualityLoading(false);
+    setLoadingKey(null);
     setWirePanelOpen(false);
     setInspector(false); inspectorRef.current = false;
     handleRef.current?.setInspector(false);
@@ -380,6 +394,8 @@ export default function ShowcaseStage({
         const initialAsset = inspectorRef.current || textureQualityRef.current !== "fast" || wireRef.current.mode !== "native"
           ? (textureQualityRef.current === "original" ? cfg.assets.gpuModel ?? cfg.assets.model : cfg.assets.model)
           : (cfg.assets.previewModel ?? cfg.assets.model);
+        const initialKey = JSON.stringify({ a: initialAsset, m: cfg.model ?? null, q: textureQualityRef.current });
+        setLoadingKey(initialKey);
         handle = createShowcaseScene({
           canvas,
           initialTheme: themeRef.current,
@@ -414,6 +430,8 @@ export default function ShowcaseStage({
             setLoadRatio(1);
             setError(null);
             setReady(true);
+            rememberLoadedModel(initialKey);
+            setLoadingKey(null);
             rememberWorkingQuality(configRef.current.assets.model, textureQualityRef.current);
             dropFreeze();
           },
@@ -558,6 +576,7 @@ export default function ShowcaseStage({
     const switchId = ++qualitySwitchRef.current;
     appliedModelRef.current = targetKey;
     setQualityLoading(true);
+    setLoadingKey(targetKey);
     setQualityError(false);
     void handle.setModel({ asset, model: qualityModel(next.model) }).then((ok) => {
       if (switchId !== qualitySwitchRef.current) return;
@@ -565,6 +584,8 @@ export default function ShowcaseStage({
       if (!ok) appliedModelRef.current = previous;
       setQualityLoading(false);
       setQualityError(!ok);
+      setLoadingKey(null);
+      if (ok) rememberLoadedModel(targetKey);
     });
   }, [modelKey, qualityModel]);
 
@@ -1219,7 +1240,7 @@ export default function ShowcaseStage({
                 <span className="sc-quality-cap" aria-hidden="true">纹理</span>
                 {memoryNotice && <span className="sc-quality-status" role="status">{memoryNotice}</span>}
                 {!memoryNotice && textureLimitNotice && <span className="sc-quality-status" role="status">设备适配 · 贴图上限 {Math.round(textureLimitNotice / 1024)}K</span>}
-                {qualityLoading && <span className="sc-quality-status" role="status">加载高清模型…</span>}
+                {qualityLoading && showLoadingNotice && <span className="sc-quality-status" role="status">加载高清模型…</span>}
                 {qualityError && <button type="button" className="sc-quality-retry" onClick={() => {
                   setQualityError(false);
                   setRetry((n) => n + 1);
@@ -1304,8 +1325,8 @@ export default function ShowcaseStage({
             ))}
           </div>
 
-          {ready && inspector && qualityLoading && <div className="sc-loading" role="status" style={{ pointerEvents: "none" }}><span>正在加载模型…</span></div>}
-          {!ready && (
+          {ready && inspector && qualityLoading && showLoadingNotice && <div className="sc-loading" role="status" style={{ pointerEvents: "none" }}><span>正在加载模型…</span></div>}
+          {!ready && (error || showLoadingNotice) && (
             <div className="sc-loading" style={{ opacity: error ? 1 : 0.9 }}>
               <span className={error ? "sc-loading-error" : undefined}>{error ?? ui.loading}</span>
               {error ? (

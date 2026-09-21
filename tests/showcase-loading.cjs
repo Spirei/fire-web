@@ -21,6 +21,9 @@ const js = ts.transpileModule(`module.exports = function(rebuild, fallback = 'fi
  const setError = v => state.error = v;
  const setRebuild = update => state.rebuild = update(state.rebuild);
  const dropFreeze = () => state.drops++;
+ const initialKey = "fixture-v1-original";
+ const rememberLoadedModel = key => state.receipt = key;
+ const setLoadingKey = key => state.loadingKey = key;
  const recoveryQuality = () => fallback;
  const rememberWorkingQuality = (asset, quality) => state.working = quality;
  const configRef = {current:{assets:{model:'fixture.glb'}}};
@@ -66,6 +69,8 @@ loaded.callbacks.onReady();
 assert.equal(loaded.state.ratio, 1);
 assert.equal(loaded.state.ready, true);
 assert.equal(loaded.state.drops, 1);
+assert.equal(loaded.state.receipt, 'fixture-v1-original');
+assert.equal(loaded.state.loadingKey, null);
 const stale = make(0);
 stale.cancel();
 const before = {...stale.state};
