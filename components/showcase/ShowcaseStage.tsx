@@ -23,6 +23,7 @@ const DRIVE_CAMERA_OPTIONS: Array<{ key: ShowcaseDriveCamera; label: string }> =
   { key: "right", label: "右侧" },
   { key: "top", label: "俯视" },
   { key: "classic", label: "原镜头" },
+  { key: "free", label: "自由镜头" },
 ];
 /** 用户置顶的默认机位（进度 + 拖拽角度 + 缩放），刷新 / 重开页面都回到这里 */
 const PIN_KEY = "fire:showcase:pose";
@@ -654,6 +655,10 @@ export default function ShowcaseStage({
       setFreeCamera(false);
       freeCameraRef.current = false;
       handleRef.current?.setFreeCamera(false);
+      if (driveCameraRef.current === "free") {
+        driveCameraRef.current = "follow"; setDriveCamera("follow");
+        handleRef.current?.setDriveCamera("follow");
+      }
       const at = config.phases[index]?.at ?? 0;
       // 越过边界一点：进度有平滑跟随，避免仍被判为上一章。
       handleRef.current?.setProgress(Math.min(0.999, at + 0.006));
@@ -1183,6 +1188,9 @@ export default function ShowcaseStage({
                     onClick={() => {
                       driveCameraRef.current = key;
                       setDriveCamera(key);
+                      const free = key === "free";
+                      setFreeCamera(free); freeCameraRef.current = free;
+                      handleRef.current?.setFreeCamera(free);
                       handleRef.current?.setDriveCamera(key);
                       setDriveCameraOpen(false);
                     }}
@@ -1229,6 +1237,9 @@ export default function ShowcaseStage({
                   setOrbit(false); orbitRef.current = false;
                   handleRef.current?.setOrbit(false);
                   handleRef.current?.setFreeCamera(next);
+                  const mode = next ? "free" : "follow";
+                  driveCameraRef.current = mode; setDriveCamera(mode);
+                  handleRef.current?.setDriveCamera(mode);
                 }}>
                 <span className="sc-nav-label">自由镜头</span>
                 <span className="sc-nav-tick" aria-hidden="true" />

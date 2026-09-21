@@ -1745,3 +1745,16 @@ html:has(.showcase) body {
     bottom: max(16vh, calc(env(safe-area-inset-bottom) + 112px));
   }
 }
+
+/* 行驶控制靠右上边缘，让出车尾所在的画面中央。 */
+.showcase.sc-immersive .sc-ctr {
+  left: auto;
+  right: max(3.4vw, env(safe-area-inset-right));
+  top: max(24px, calc(env(safe-area-inset-top) + 12px));
+  bottom: auto;
+  transform: none;
+  text-align: right;
+}
+.showcase.sc-immersive .sc-ctr-cap,
+.showcase.sc-immersive .sc-ctr-hint { display: none; }
+.showcase.sc-immersive .sc-race { padding: 10px 14px; font-size: 11px; }

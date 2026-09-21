@@ -25,17 +25,20 @@ console.log('PASS identical inertia at 30–240 Hz; monotonic soft zoom, reachab
 // Exercise the actual pointer handlers with deterministic event timing, including two-pointer transitions.
 const source=fs.readFileSync('components/showcase/engine.ts','utf8');
 const dragSource=source.slice(source.indexOf('  const onCanvasDown ='),source.indexOf('  const cancelInteraction ='));
-const touchSource=source.slice(source.indexOf('  const onTouchDown ='),source.indexOf('  // 两指按下时阻止浏览器接管'));
+const touchSource=source.slice(source.indexOf('  const onTouchDown ='),source.indexOf('  const onTouchStartCapture ='));
 const doubleSource=source.slice(source.indexOf('  const onDoubleClick ='),source.indexOf('  canvas.addEventListener("wheel",'));
-const harness = `module.exports = function(boundedZoom, inspectorOn=false) {
+const harness = `module.exports = function(boundedZoom, inspectorOn=false, racing=false, driveFree=false) {
  let dragPan=false,dragZoom=false,panX=0,panY=0;
  let now=1000, dragging=false, dragPointer=null, dragByTouch=false, dragX=0,dragY=0,dragTime=0;
  let tapX=0,tapY=0,tapDownAt=0,tapTravel=0,lastTapX=0,lastTapY=0,lastTapAt=0,lastTouchFocusAt=-Infinity;
  let userYaw=0,userPitch=0,userYawVel=0,userPitchVel=0,zoomTarget=1,focusCount=0;
- const touches=new Map(), freeCamera=true,racing=false,MIN_ZOOM=.55,INSPECTOR_MIN_ZOOM=.015,INSPECTOR_MAX_ZOOM=400;
+ const touches=new Map(), freeCamera=true,MIN_ZOOM=.55,INSPECTOR_MIN_ZOOM=.015,INSPECTOR_MAX_ZOOM=400;
+ const modelCameraOn=()=>freeCamera || inspectorOn || driveFree;
+ const driveFreeOn=()=>driveFree;
  const zoomLimit=()=>5,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
  const performance={now:()=>now},canvas={setPointerCapture(){},hasPointerCapture(){return true},releasePointerCapture(){}};
  const panCamera=(x,y)=>{panX+=x;panY+=y};
+ const inspectAt=()=>{},invalidateInspector=()=>{};
  const focusAt=()=>{focusCount++};
  ${dragSource}
  ${touchSource}
@@ -53,7 +56,7 @@ h.event('pointermove',2,250,100);
 assert.equal(h.read().userYaw,0);assert.equal(h.read().userPitch,0);assert(h.read().zoomTarget<1);
 h.event('pointermove',1,90,110);assert.equal(h.read().userYaw,0);
 h.event('pointerup',2,250,100);h.event('pointermove',1,100,120);
-assert(Math.abs(h.read().userYaw+4.2)<1e-8);assert(h.read().userPitch>0);
+assert(Math.abs(h.read().userYaw+2.4)<1e-8);assert(h.read().userPitch>0);
 h.event('pointercancel',1,100,120);assert.equal(h.read().dragging,false);assert.equal(h.read().userYawVel,0);
 assert.equal(h.read().focusCount,0);
 h.event('pointerdown',3,150,150);h.event('pointerup',3,150,150);
@@ -66,14 +69,14 @@ h.event('pointerdown',5,100,100);h.event('pointermove',5,130,100);
 h.event('pointerup',5,130,100,150);assert.equal(h.read().userYawVel,0);
 console.log('PASS holding still before release does not restart inertia');
 
-const touch=hmod.exports(boundedZoom,true);
+const touch=hmod.exports(boundedZoom,true,true,true);
 touch.event('pointerdown',1,100,100);touch.event('pointerdown',2,200,100);
 touch.event('pointermove',1,130,120);touch.event('pointermove',2,230,120);
 assert.equal(touch.read().panX,30);assert.equal(touch.read().panY,20);
 assert(Math.abs(touch.read().zoomTarget-1)<1e-10);
 assert.equal(touch.read().userYaw,0);
 touch.event('pointerup',2,230,120);touch.event('pointermove',1,140,120);
-assert(Math.abs(touch.read().userYaw+4.2)<1e-8);
+assert(Math.abs(touch.read().userYaw+2.4)<1e-8);
 console.log('PASS two-finger pan preserves scale and switches back to one-finger orbit');
 
 // The actual focus handler must never jump back to the home-page minimum distance.
@@ -82,6 +85,8 @@ const focusSource=source.slice(source.indexOf('  const focusAt ='),source.indexO
 const focusModule=new Module(__filename,module);
 focusModule._compile(ts.transpileModule(`module.exports=function(THREE){
  const freeCamera=true,inspectorOn=true,racing=false,racingAmt=0,MIN_ZOOM=.55,INSPECTOR_MIN_ZOOM=.015,INSPECTOR_MAX_ZOOM=400;
+ const modelCameraOn=()=>true,driveFreeOn=()=>false;
+ const invalidateInspector=()=>{};
  let zoom=.02,zoomTarget=.02,userYawVel=1,userPitchVel=1,hitOn=true;
  const lookAt=new THREE.Vector3(),focusOffset=new THREE.Vector3(),focusTarget=new THREE.Vector3(),focusPointer=new THREE.Vector2();
  const camera={updateMatrixWorld(){},position:new THREE.Vector3(0,0,.2)};
@@ -106,10 +111,10 @@ assert.equal(mouse.read().userYaw,0);
 mouse.event('pointerup',1,130,120,16,{pointerType:'mouse',button:2});
 assert.equal(mouse.read().dragging,false);
 console.log('PASS right-drag pans the target without orbiting');
-const poleStart=source.indexOf('    if (inspectorOn) {\n      // 边界约束');
+const poleStart=source.indexOf('    if (modelCameraOn()) {\n      // 边界约束');
 const poleEnd=source.indexOf('    const elev =',poleStart);
 assert(poleStart>=0 && poleEnd>poleStart);
-const constrainPitch=new Function('baseElev','userPitch', `const inspectorOn=true;let userPitchVel=1;const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));${source.slice(poleStart,poleEnd)};return {elev:baseElev+userPitch,velocity:userPitchVel};`);
+const constrainPitch=new Function('baseElev','userPitch', `const modelCameraOn=()=>true;let userPitchVel=1;const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));${source.slice(poleStart,poleEnd)};return {elev:baseElev+userPitch,velocity:userPitchVel};`);
 for(const base of [-.4,0,.4]) for(const requested of [-3,3]) {
  const pose=constrainPitch(base,requested);
  assert(Math.abs(pose.elev-Math.sign(requested)*1.56)<1e-12);

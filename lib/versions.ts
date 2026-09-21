@@ -4305,6 +4305,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_37_ENTRY.frontend, { name: "KTX2 / UASTC", version: "KTX-Software 4.4.2", desc: "本地工具编码 · 网站 Three.js 解码显示 · 保留源贴图尺寸" }],
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [
+    { kind: "feature", title: "行驶时使用自由镜头", desc: "行驶镜头复用首页自由环视、平移、缩放与双击聚焦；减速按钮移到右上角，避免遮住车尾。" },
     { kind: "fix", title: "首页高清模型静默复用", desc: "记住模型版本与画质的加载成功状态，刷新后静默加载；缓存检查只查询条目，避免重复读取整份模型，失败仍可重试。" },{
     title: "模型压缩迁移到独立本地工具",
     desc: "Mac 双击选择 GLB，导出高清优化版和首页轻量预览后手动上传；网站删除转码接口、轮询及编码依赖，镜像不携带本地工具。保留 KTX2 显示并允许导入优化版，车型卡改为上传已生成预览，不修改用户画质偏好。",

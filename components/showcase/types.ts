@@ -6,7 +6,7 @@
  */
 
 /** 相机关键帧：方位角 0° = 正对车头，90° = 车身左侧，180° = 车尾 */
-export type ShowcaseDriveCamera = "follow" | "left" | "right" | "top" | "classic";
+export type ShowcaseDriveCamera = "follow" | "left" | "right" | "top" | "classic" | "free";
 
 export interface ShowcaseCameraKey {
   /** 进入该机位的滚动进度 0–1 */

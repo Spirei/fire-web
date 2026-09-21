@@ -1878,7 +1878,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 这只消除重复帧，不改画布分辨率、贴图、线框几何或材质质量。
   let inspectorRenderDirty = true;
   const invalidateInspector = () => { inspectorRenderDirty = true; };
-  const modelCameraOn = () => freeCamera || inspectorOn;
+  const driveFreeOn = () => driveCamera === "free" && (racing || racingAmt > 0.01);
+  let driveFreeBlend = 0;
+  const modelCameraOn = () => freeCamera || inspectorOn || driveFreeOn();
   let inspectorProgress = START_P;
   const inspectorBackgroundLight = new THREE.Color("#e7e7e7");
   const inspectorBackgroundDark = new THREE.Color("#090b0f");
@@ -1978,7 +1980,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       userPitch = clamp(userPitch + pitchStep.distance, pitchMin, pitchMax);
       userPitchVel = Math.abs(pitchStep.velocity) < 0.0005 ? 0 : pitchStep.velocity;
     }
-    if (freeCamera) zoomTarget = Math.min(zoomTarget, zoomLimit());
+    if (modelCameraOn()) zoomTarget = Math.min(zoomTarget, zoomLimit());
     zoom += (zoomTarget - zoom) * (1 - Math.exp(-dt * 10));
     // 360° 环视：自动绕车旋转（松开后平滑回到叙事机位）
     if (orbitOn && racingAmt < 0.01) {
@@ -1989,6 +1991,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     // 冲刺时镜头顺隧道方向跟随；竖屏收小桌面的斜后方夹角，
     // 避免透视让车尾贴左墙、车头跨向右侧车道。
+    driveFreeBlend += ((driveCamera === "free" ? 1 : 0) - driveFreeBlend) * (1 - Math.exp(-dt * 5));
+    const cameraBlend = racingAmt * (1 - driveFreeBlend);
     const azBase = camState.az + userYaw + (orbitYaw * 180) / Math.PI;
     // 中速先转到正后方，再落到偏后 3/4；停下时保留用户原先拖拽的姿态。
     const tunnelRefAspect = CFG.speed.tunnel?.referenceAspect ?? CFG.camera.fitMinAspect;
@@ -2003,7 +2007,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     driveAzimuth += driveAzDelta * cameraEase;
     const chaseAz = driveAzimuth;
     const azDelta = (((chaseAz - azBase) % 360 + 540) % 360) - 180;
-    const az = ((azBase + azDelta * racingAmt) * Math.PI) / 180;
+    const az = ((azBase + azDelta * cameraBlend) * Math.PI) / 180;
     // 镜头角速度（弧度/秒）→ 倒影淡出系数：1.6 rad/s（约 92°/秒）视为最快。
     // 注意：鼠标事件是一阵一阵来的，逐帧量出来的角速度快慢交替，直接喂给系数的话
     // 倒影会跟着一明一暗（连续旋转时看起来就是频闪）。所以先对「角速度」本身做低通，
@@ -2018,7 +2022,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const follow = carTravel;
     // 冲刺时机位整体右移（镜头与注视点同向平移，视线方向不变）：车因此落在画面左侧、
     // 光条汇聚点在其右 —— 参考视频就是这个构图，之前车正好压在汇聚点上，左右关系是反的
-    const chaseLat = (CFG.speed.chaseLateral ?? 0) * racingAmt * classicCameraBlend;
+    const chaseLat = (CFG.speed.chaseLateral ?? 0) * cameraBlend * classicCameraBlend;
     // 竖屏 / 窄屏时水平视野会变窄，这里按宽高比把相机拉远、视角放宽，保证整车进画面
     const fitAspect = CFG.camera.fitMinAspect;
     const fit = camera.aspect < fitAspect ? clamp(fitAspect / camera.aspect, 1, CFG.camera.fitMaxPullback) : 1;
@@ -2035,13 +2039,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const fitRadius = Math.pow(fit, 0.8);
     // 原片的完整圆盘外径约为车身投影 1.6 倍；当前首页近景若沿用同一镜头会把外环切出画面。
     // 选择视频圆盘时平滑拉远 34%，冲刺或进入自由 / 模型镜头时自然退回原机位。
-    const trackFrameTarget = discStyle === "track" && !freeCamera && !inspectorOn ? 1 - racingAmt : 0;
+    const trackFrameTarget = discStyle === "track" && !modelCameraOn() ? 1 - racingAmt : 0;
     trackDiscFraming += (trackFrameTarget - trackDiscFraming) * (1 - Math.exp(-dt * 5));
     const trackPullback = 1 + trackDiscFraming * 0.34;
-    const baseRadius = THREE.MathUtils.lerp(camState.r, driveRadius, racingAmt) * fitRadius * trackPullback;
-    const r = THREE.MathUtils.lerp(camState.r * zoom, driveRadius, racingAmt) * fitRadius * trackPullback;
-    const h = THREE.MathUtils.lerp(camState.h, driveHeight, racingAmt);
-    const targetY = THREE.MathUtils.lerp(camState.ty, chase.targetY, racingAmt) - trackDiscFraming * 0.45;
+    const baseRadius = THREE.MathUtils.lerp(camState.r, driveRadius, cameraBlend) * fitRadius * trackPullback;
+    const r = THREE.MathUtils.lerp(camState.r * zoom, driveRadius, cameraBlend) * fitRadius * trackPullback;
+    const h = THREE.MathUtils.lerp(camState.h, driveHeight, cameraBlend);
+    const targetY = THREE.MathUtils.lerp(camState.ty, chase.targetY, cameraBlend) - trackDiscFraming * 0.45;
     // 关键帧给的是高度，换成仰角后才能和用户的上下拖拽相加；
     // 最终仰角夹在 3° 到 66° 之间：既能贴地看侧面，也不会穿到地面下或翻过头顶。
     // 缩放必须沿当前相机 → 轨道焦点的射线直线推进。旧实现用缩放后的 r 重算角度，
@@ -2053,18 +2057,18 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const limitedPitch = clamp(baseElev + userPitch, -1.56, 1.56) - baseElev;
       if (limitedPitch !== userPitch) { userPitch = limitedPitch; userPitchVel = 0; }
     }
-    const elev = clamp(THREE.MathUtils.lerp(baseElev, 1.12, topCameraBlend * racingAmt) + userPitch * (1 - racingAmt), modelCameraOn() ? -1.56 : 0.05, modelCameraOn() ? 1.56 : 1.15);
+    const elev = clamp(THREE.MathUtils.lerp(baseElev, 1.12, topCameraBlend * cameraBlend) + userPitch * (1 - cameraBlend), modelCameraOn() ? -1.56 : 0.05, modelCameraOn() ? 1.56 : 1.15);
     viewAzimuth = (THREE.MathUtils.radToDeg(az) % 360 + 360) % 360;
     viewElevation = THREE.MathUtils.radToDeg(elev);
     viewDistance = r;
     const horizontal = Math.cos(elev) * r;
     camPos.set(Math.sin(az) * horizontal + chaseLat, targetY + Math.sin(elev) * r, Math.cos(az) * horizontal + follow);
-    lookAt.set(camState.tx * (1 - racingAmt) + chaseLat, targetY, camState.tz * (1 - racingAmt) + follow);
-    camState.fovEff = THREE.MathUtils.lerp(camState.fov, chase.fov, racingAmt) * Math.pow(fit, 0.45);
+    lookAt.set(camState.tx * (1 - cameraBlend) + chaseLat, targetY, camState.tz * (1 - cameraBlend) + follow);
+    camState.fovEff = THREE.MathUtils.lerp(camState.fov, chase.fov, cameraBlend) * Math.pow(fit, 0.45);
 
     focusOffset.lerp(focusTarget, 1 - Math.exp(-dt * 10));
-    if (freeCamera) {
-      carHalfC.copy(focusOffset).multiplyScalar(1 - racingAmt);
+    if (modelCameraOn()) {
+      carHalfC.copy(focusOffset).multiplyScalar(1 - cameraBlend);
       camPos.add(carHalfC); lookAt.add(carHalfC);
     }
 
@@ -2603,8 +2607,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     invalidateInspector();
   };
   const focusAt = (x: number, y: number) => {
-    if (!freeCamera) { resetView(); return; }
-    if (racing || racingAmt > 0.05) return;
+    if (!modelCameraOn()) { resetView(); return; }
+    if ((racing || racingAmt > 0.05) && !driveFreeOn()) return;
     const rect = canvas.getBoundingClientRect();
     focusPointer.set((x - rect.left) / rect.width * 2 - 1, 1 - (y - rect.top) / rect.height * 2);
     camera.updateMatrixWorld(); carRoot.updateMatrixWorld(true);
@@ -2665,7 +2669,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     userYawVel = 0; userPitchVel = 0;
   };
   const onCanvasDown = (e: PointerEvent) => {
-    if (![0, 1, 2].includes(e.button) || (!freeCamera && e.button !== 0)) return;
+    if (![0, 1, 2].includes(e.button) || (!modelCameraOn() && e.button !== 0)) return;
     if (e.pointerType === "touch") {
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size > 1) {
@@ -2675,8 +2679,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     dragging = true; dragPointer = e.pointerId;
     dragByTouch = e.pointerType === "touch";
-    dragPan = freeCamera && !dragByTouch && (e.shiftKey || e.button === 1 || e.button === 2);
-    dragZoom = freeCamera && !dragByTouch && !dragPan && e.button === 0 && (e.ctrlKey || e.metaKey);
+    dragPan = modelCameraOn() && !dragByTouch && (e.shiftKey || e.button === 1 || e.button === 2);
+    dragZoom = modelCameraOn() && !dragByTouch && !dragPan && e.button === 0 && (e.ctrlKey || e.metaKey);
     dragX = tapX = e.clientX; dragY = tapY = e.clientY;
     dragTime = tapDownAt = performance.now(); tapTravel = 0;
     userYawVel = 0; userPitchVel = 0;
@@ -2692,9 +2696,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     dragX = e.clientX;
     const dy = e.clientY - dragY;
     dragY = e.clientY;
-    // 冲刺中不接收拖拽：否则镜头被转偏，车会跑出轨道、看起来在天上飞。
+    // 固定行驶镜头不接收拖拽；自由镜头沿用模型展示的环视和平移。
     // 基准点仍要跟着指针走，否则松开空格那一刻会一次结算掉整段位移，镜头瞬间被甩飞。
-    if (racing) return;
+    if (racing && !driveFreeOn()) return;
     // Sketchfab 风格轨道相机：Shift / 中键 / 右键拖动平移轨道焦点。
     if (dragPan) {
       panCamera(dx, dy);
@@ -2740,7 +2744,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   window.addEventListener("blur", cancelInteraction);
   cleanups.push(() => window.removeEventListener("blur", cancelInteraction));
   canvas.addEventListener("pointerdown", onCanvasDown);
-  const stopContextMenu = (e: MouseEvent) => { if (freeCamera) e.preventDefault(); };
+  const stopContextMenu = (e: MouseEvent) => { if (modelCameraOn()) e.preventDefault(); };
   canvas.addEventListener("contextmenu", stopContextMenu);
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onDragEnd);
@@ -2775,7 +2779,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const withModifier = e.ctrlKey || e.metaKey || e.altKey || e.shiftKey;
     e.preventDefault();
     // 普通滚轮仍可浏览章节，但只更新镜头进度，不制造数屏高的文档。
-    if (!withModifier && !zoomMode && !freeCamera) {
+    if (!withModifier && !zoomMode && !modelCameraOn()) {
       viewerProgress = clamp(viewerProgress + wheelPixels(e.deltaY, e.deltaMode, canvas.clientHeight) / Math.max(1, hud.stage.clientHeight * 5.2), 0, 1);
       return;
     }
@@ -2830,12 +2834,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const onTouchMove = (e: PointerEvent) => {
     if (e.pointerType !== "touch" || !touches.has(e.pointerId)) return;
     const previous = touches.get(e.pointerId)!;
-    if (modelCameraOn() && touches.size === 2 && !racing) {
+    if (modelCameraOn() && touches.size === 2 && (!racing || driveFreeOn())) {
       // 每个指针事件贡献双指中心位移的一半，同时保留捏合缩放。
       panCamera((e.clientX - previous.x) / 2, (e.clientY - previous.y) / 2);
     }
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (touches.size !== 2 || racing) return;
+    if (touches.size !== 2 || (racing && !driveFreeOn())) return;
     const d = pointerDistance();
     if (!pinchBase) {
       pinchBase = d;
