@@ -702,8 +702,11 @@ export default function ShowcaseStage({
     } catch {
       /* 忽略 */
     }
-    if (saved !== "light" && saved !== "dark") return;
-    const next: "dark" | "light" = saved;
+    // Cookie 已让服务端把首页与全站首帧渲染为同一主题；旧 localStorage 不应在挂载后反向覆盖它。
+    const hasThemeCookie = document.cookie.split(";").some((part) => /^(fire_theme|stocklog_theme)=/.test(part.trim()));
+    const next: "dark" | "light" = hasThemeCookie || (saved !== "light" && saved !== "dark")
+      ? initialTheme
+      : saved;
     if (next !== themeRef.current) {
       themeRef.current = next;
       setTheme(next);
@@ -711,8 +714,9 @@ export default function ShowcaseStage({
     }
     // localStorage 与 cookie 不一致时补写 cookie，下次刷新的首帧就是同一个值
     document.documentElement.classList.toggle("dark", next === "dark");
+    try { localStorage.setItem("fire.theme", next); } catch { /* 忽略存储异常 */ }
     setThemeCookie(next === "dark");
-  }, []);
+  }, [initialTheme]);
 
   const toggleTheme = useCallback(() => {
     const next: "dark" | "light" = themeRef.current === "dark" ? "light" : "dark";

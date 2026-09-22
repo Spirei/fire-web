@@ -5,7 +5,7 @@ import Link from "next/link";
 import { TimeMachineLink } from "@/components/TimeMachine";
 import { useRouter } from "next/navigation";
 import type { User } from "@/lib/types";
-import { applySiteTheme, THEME_CHANGE_EVENT, THEME_KEY, type SiteTheme } from "@/lib/theme";
+import { applySiteTheme, THEME_CHANGE_EVENT, type SiteTheme } from "@/lib/theme";
 
 interface StockStats {
   holdings: number;
@@ -110,7 +110,7 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
 
   useEffect(() => {
     try {
-      setDark(localStorage.getItem(THEME_KEY) === "dark");
+      setDark(document.documentElement.classList.contains("dark"));
     } catch {
       /* 忽略存储异常 */
     }

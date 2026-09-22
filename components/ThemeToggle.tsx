@@ -10,15 +10,9 @@ function applyTheme(dark: boolean, emit = true) {
 
 export default function ThemeToggle() {
   const [dark, setDark] = useState(false);
-  const [ready, setReady] = useState(false);
-
   useEffect(() => {
-    try {
-      setDark(localStorage.getItem(THEME_KEY) === "dark");
-    } catch {
-      /* 忽略存储异常 */
-    }
-    setReady(true);
+    // 根布局在服务端已应用主题；此处只同步按钮状态，不能从旧本地缓存再改整页主题。
+    setDark(document.documentElement.classList.contains("dark"));
   }, []);
 
   useEffect(() => {
@@ -26,11 +20,6 @@ export default function ThemeToggle() {
     window.addEventListener(THEME_CHANGE_EVENT, sync);
     return () => window.removeEventListener(THEME_CHANGE_EVENT, sync);
   }, []);
-
-  useEffect(() => {
-    if (!ready) return;
-    applyTheme(dark, false);
-  }, [dark, ready]);
 
   const toggleTheme = () => {
     const next = !document.documentElement.classList.contains("dark");

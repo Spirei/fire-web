@@ -10,7 +10,7 @@ import "@/styles/touch.css";
 import { cookies } from "next/headers";
 import { getSiteSettings } from "@/lib/settings";
 import SiteBg from "@/components/SiteBg";
-import { THEME_COOKIE } from "@/lib/theme";
+import { readThemeFromCookieHeader } from "@/lib/theme";
 import PwaRegister from "@/components/PwaRegister";
 import LoginModal from "@/components/LoginModal";
 import FileDropAnywhere from "@/components/FileDropAnywhere";
@@ -39,8 +39,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // 服务端读取主题 Cookie：暗黑模式下 SSR 首帧即深色，避免刷新白屏
   const cookieStore = await cookies();
-  const legacyThemeCookie = "sto" + "cklog_theme";
-  const dark = cookieStore.get(THEME_COOKIE)?.value === "dark" || cookieStore.get(legacyThemeCookie)?.value === "dark";
+  // 与首页使用同一套默认值：没有主题 Cookie 的新访客首帧也是深色。
+  const dark = readThemeFromCookieHeader(cookieStore.toString()) === "dark";
   // 用户偏好（「原文 / 简体 / 繁體 / 英文」、卡包排序、图表周期 …）镜像在 cookie 里：
   // 服务端首帧直接用它渲染，客户端首帧也是同一个值 —— 刷新不会再先闪默认值、再跳回用户的选择。
   const prefs = parsePrefsCookie(cookieStore.get(PREFS_COOKIE)?.value);
@@ -76,7 +76,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* 旧品牌本地缓存迁移 + 主题防闪兜底 */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var ls=localStorage,ks=Object.keys(ls),legacy='sto'+'cklog',legacyTheme=ls.getItem(legacy+'.theme');for(var i=0;i<ks.length;i++){var k=ks[i];if(k.slice(0,legacy.length)===legacy){var n='fire'+k.slice(legacy.length);if(ls.getItem(n)===null)ls.setItem(n,ls.getItem(k));ls.removeItem(k);}}var t=ls.getItem('fire.theme')||legacyTheme,root=document.documentElement;if(t==='dark'){root.classList.add('dark');root.style.backgroundColor='#0a0e19';}else if(t==='light'){root.classList.remove('dark');root.style.backgroundColor='#f4f6f9';}var st=root.style;var sp=Number(ls.getItem('fire:asset-analysis:split-v1'));if(sp>=24&&sp<=52){st.setProperty('--asset-left-fr',sp+'fr');st.setProperty('--asset-right-fr',(100-sp)+'fr');}var tp=JSON.parse(ls.getItem('fire:trading-square-window-pos')||'null');if(tp&&typeof tp.x==='number'&&typeof tp.y==='number'&&isFinite(tp.x)&&isFinite(tp.y)&&tp.x>-10000&&tp.x<10000&&tp.y>=0){st.setProperty('--trading-x',tp.x+'px');st.setProperty('--trading-y',tp.y+'px');}}catch(e){}`
+            __html: `try{var ls=localStorage,ks=Object.keys(ls),legacy='sto'+'cklog',legacyTheme=ls.getItem(legacy+'.theme');for(var i=0;i<ks.length;i++){var k=ks[i];if(k.slice(0,legacy.length)===legacy){var n='fire'+k.slice(legacy.length);if(ls.getItem(n)===null)ls.setItem(n,ls.getItem(k));ls.removeItem(k);}}var root=document.documentElement,hasThemeCookie=/(?:^|; *)(?:fire_theme|stocklog_theme)=/.test(document.cookie);if(!hasThemeCookie){var t=ls.getItem('fire.theme')||legacyTheme;if(t==='dark'||t==='light')root.classList.toggle('dark',t==='dark');}var st=root.style;var sp=Number(ls.getItem('fire:asset-analysis:split-v1'));if(sp>=24&&sp<=52){st.setProperty('--asset-left-fr',sp+'fr');st.setProperty('--asset-right-fr',(100-sp)+'fr');}var tp=JSON.parse(ls.getItem('fire:trading-square-window-pos')||'null');if(tp&&typeof tp.x==='number'&&typeof tp.y==='number'&&isFinite(tp.x)&&isFinite(tp.y)&&tp.x>-10000&&tp.x<10000&&tp.y>=0){st.setProperty('--trading-x',tp.x+'px');st.setProperty('--trading-y',tp.y+'px');}}catch(e){}`
           }}
         />
       </head>
