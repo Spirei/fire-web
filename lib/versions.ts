@@ -4305,6 +4305,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_37_ENTRY.frontend, { name: "KTX2 / UASTC", version: "KTX-Software 4.4.2", desc: "本地工具编码 · 网站 Three.js 解码显示 · 保留源贴图尺寸" }],
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [
+    { kind: "fix", title: "手机刷新先恢复画面再升级高清", desc: "同一标签页刷新时先显示上一张成功渲染的车型画面，轻量车可操作后淡出；手机高清升级延后到首帧稳定之后，解码期间保留轻量车而不盖静态冻结图，贴图之间主动让出一帧处理触摸与绘制，减少空白、模糊与无法操作的时间。" },
     { kind: "fix", title: "深色刷新首帧统一", desc: "首页、导入页、工作台与其他页面统一从主题 Cookie 生成首帧；新访客默认深色。已有 Cookie 时不再让旧本地缓存覆盖服务端主题，主题按钮挂载时只读取已渲染状态，避免胶囊和页面短暂闪成浅色。" },
     { kind: "fix", title: "车型页面胶囊点击反馈与顶部对齐", desc: "首页右上角模型展示的图文上移 1px，与音乐和主题图标视觉居中；首页控制、车型及导入页、工作台的胶囊取消灰色外发光和触屏残留灰底，保留文字、描边与底线反馈。" },
     { kind: "fix", title: "高清升级提示改为轻量图标", desc: "首页后台加载高清车型时，将“加载高清模型…”文字改为小型旋转图标；预览车照常显示，失败时仍保留重试入口，减少画面干扰。" },

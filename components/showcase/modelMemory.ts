@@ -98,15 +98,23 @@ export function disposeModel(model: Object3D) {
 /** 原 loader 会并发解码全部 4K 图；在源图片级排队，缩完并释放原图才解下一张。
  * source 复用发生在缩图之后，法线 / 金属度等共享同一图时不会读到已关闭的 bitmap。
  */
-export function budgetImageDecoding(parser: GLTFParser, limit: number, current: () => boolean, onError?: (error: unknown) => void) {
+export function budgetImageDecoding(parser: GLTFParser, limit: number, current: () => boolean, onError?: (error: unknown) => void, yieldBetweenImages = false) {
   const original = parser.loadImageSource.bind(parser);
   const sources = new Map<number, Promise<Texture>>();
   const loaded = new Set<Texture>();
   let queue: Promise<unknown> = Promise.resolve();
+  let imageCount = 0;
   parser.loadImageSource = (index, loader) => {
     const cached = sources.get(index);
     if (cached) return cached.then(texture => texture.clone());
     const task = queue.then(async () => {
+      // 手机高清模型的贴图逐张处理，任务之间交还一帧给输入和渲染，避免连续解码锁住页面。
+      if (yieldBetweenImages && imageCount++ > 0) {
+        await new Promise<void>(resolve => {
+          if (document.hidden) window.setTimeout(resolve, 0);
+          else window.requestAnimationFrame(() => resolve());
+        });
+      }
       if (!current()) throw new Error("模型加载已取消");
       const texture = await original(index, loader);
       loaded.add(texture);

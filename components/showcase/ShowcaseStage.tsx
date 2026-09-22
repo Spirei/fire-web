@@ -33,6 +33,7 @@ const DISC_STYLE_KEY = "fire:showcase:disc-style";
 const DISC_CHOSEN_KEY = "fire:showcase:disc-chosen";
 const DISC_LABELS: Record<ShowcaseDiscStyle, string> = { none: "无圆盘", chrono: "刻度盘", track: "赛道盘" };
 const TEXTURE_QUALITY_KEY = "fire:showcase:texture-quality";
+const RESUME_FRAME_KEY = "fire:showcase:resume-frame:v1";
 type TextureQuality = "fast" | "balanced" | "fine" | "original";
 const TEXTURE_QUALITY: Record<TextureQuality, { label: string; badge: string; size: number }> = {
   fast: { label: "流畅", badge: "1K", size: 1024 },
@@ -365,6 +366,7 @@ export default function ShowcaseStage({
     if (!wrap || !stage || !scroll) return;
     setDriving(false);
     const cfg = configRef.current;
+    const resumeKey = JSON.stringify({ model: cfg.assets.model, theme: themeRef.current });
 
     // 每次实例化都新建 canvas：WebGL 上下文一旦丢失，同一个 canvas 上的上下文无法复活，
     // 复用 canvas 会导致「重建也还是白屏」。换新 canvas 才是真正可恢复的。
@@ -377,7 +379,7 @@ export default function ShowcaseStage({
     const frozen = freezeRef.current;
     freezeRef.current = null;
     /** 铺在画布上的冻结帧（可能正在淡出，所以一直留着引用，卸载时兜底移除） */
-    let freezeEl: HTMLCanvasElement | null = null;
+    let freezeEl: HTMLCanvasElement | HTMLImageElement | null = null;
     let freezeTimer: number | null = null;
     let freezeFadeTimer: number | null = null;
     const dropFreeze = () => {
@@ -388,6 +390,17 @@ export default function ShowcaseStage({
     };
     if (frozen) {
       freezeEl = frozen;
+    } else {
+      // 同一标签页刷新时先展示上一张成功渲染的画面，等轻量车真正可操作后淡出。
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(RESUME_FRAME_KEY) ?? "null") as { key?: string; image?: string } | null;
+        if (saved?.key === resumeKey && saved.image?.startsWith("data:image/jpeg;base64,")) {
+          freezeEl = new Image();
+          freezeEl.src = saved.image;
+        }
+      } catch { /* 存储受限时照常加载 3D */ }
+    }
+    if (freezeEl) {
       freezeEl.className = "sc-freeze";
       wrap.after(freezeEl);
       // 兜底：模型一直没就绪（加载失败 / 上下文异常）也不能让冻结帧一直盖着
@@ -397,6 +410,15 @@ export default function ShowcaseStage({
     let cancelled = false;
     let recoveryRequested = false;
     let handle: ShowcaseHandle | null = null;
+    let initialReady = false;
+    let upgradeTimer: number | null = null;
+    const saveResumeFrame = () => {
+      if (cancelled || !handle || !initialReady || configRef.current.assets.model !== cfg.assets.model || themeRef.current !== initialTheme) return;
+      try {
+        const shot = handle.snapshot();
+        if (shot) sessionStorage.setItem(RESUME_FRAME_KEY, JSON.stringify({ key: resumeKey, image: shot.toDataURL("image/jpeg", 0.72) }));
+      } catch { /* 截图或存储失败不影响模型交互 */ }
+    };
     setReady(false);
     setLoadRatio(0);
     setError(null);
@@ -415,7 +437,6 @@ export default function ShowcaseStage({
         const initialAsset = bootstrapPreview ? cfg.assets.previewModel! : requestedAsset;
         const initialQuality = bootstrapPreview ? "fast" : requestedQuality;
         const initialKey = JSON.stringify({ a: initialAsset, m: cfg.model ?? null, q: initialQuality });
-        let initialReady = false;
         setLoadingKey(initialKey);
         handle = createShowcaseScene({
           canvas,
@@ -456,37 +477,30 @@ export default function ShowcaseStage({
             setLoadingKey(null);
             rememberWorkingQuality(cfg.assets.model, initialQuality);
             dropFreeze();
-            if (bootstrapPreview) window.requestAnimationFrame(() => {
+            window.setTimeout(saveResumeFrame, 250);
+            // 先给手机一个真正可交互的预览窗口；高清解码不能紧贴首帧把主线程占满。
+            if (bootstrapPreview) upgradeTimer = window.setTimeout(() => window.requestAnimationFrame(() => {
               if (cancelled || recoveryRequested || !handle || handleRef.current !== handle
                 || inspectorRef.current || wireRef.current.mode !== "native"
                 || textureQualityRef.current !== requestedQuality || configRef.current.assets.model !== cfg.assets.model) return;
               const fullKey = JSON.stringify({ a: requestedAsset, m: cfg.model ?? null, q: requestedQuality });
               const switchId = ++qualitySwitchRef.current;
               appliedModelRef.current = fullKey;
-              // 受限设备换车时会先释放旧贴图；保留首帧画面，避免升级 RAW 期间车再次消失。
-              const upgradeFreeze = constrainedGraphics() ? handle.snapshot() : null;
-              if (upgradeFreeze) {
-                upgradeFreeze.className = "sc-freeze";
-                wrap.after(upgradeFreeze);
-              }
               setQualityLoading(true);
               setLoadingKey(fullKey);
               void handle.setModel({ asset: requestedAsset, model: qualityModel(cfg.model) }).then((ok) => {
-                if (upgradeFreeze) {
-                  upgradeFreeze.classList.add("out");
-                  window.setTimeout(() => upgradeFreeze.remove(), 500);
-                }
                 if (cancelled || switchId !== qualitySwitchRef.current) return;
                 if (!ok) appliedModelRef.current = initialKey;
                 else {
                   rememberLoadedModel(fullKey);
                   rememberWorkingQuality(cfg.assets.model, requestedQuality);
+                  window.setTimeout(saveResumeFrame, 250);
                 }
                 setQualityLoading(false);
                 setQualityError(!ok);
                 setLoadingKey(null);
               });
-            });
+            }), constrainedGraphics() ? 1800 : 400);
           },
           onTextureBudget: limit => { if (!cancelled && !recoveryRequested) setTextureLimitNotice(limit); },
           onPhase: handlePhase,
@@ -616,6 +630,7 @@ export default function ShowcaseStage({
       handle = null;
       handleRef.current = null;
       if (fadeTimer.current) window.clearTimeout(fadeTimer.current);
+      if (upgradeTimer !== null) window.clearTimeout(upgradeTimer);
     };
     // 依赖里放的是「外壳签名」：只有镜头 / 灯光 / 地面 / 文案这些变了才重建场景，
     // 单纯换车型走下面的 setModel（原地换车，不重建、不空白）
@@ -665,19 +680,7 @@ export default function ShowcaseStage({
         previewSucceeded = true;
         rememberLoadedModel(previewKey!);
       }
-      const freeze = previewAsset && constrainedGraphics() ? handle.snapshot() : null;
-      if (freeze) {
-        freeze.className = "sc-freeze";
-        canvasWrapRef.current?.after(freeze);
-      }
-      try {
-        return await handle.setModel({ asset, model: qualityModel(next.model) });
-      } finally {
-        if (freeze) {
-          freeze.classList.add("out");
-          window.setTimeout(() => freeze.remove(), 500);
-        }
-      }
+      return handle.setModel({ asset, model: qualityModel(next.model) });
     };
     void switchModel().then((ok) => {
       if (switchId !== qualitySwitchRef.current) return;

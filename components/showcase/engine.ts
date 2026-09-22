@@ -1480,7 +1480,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         }
         const limit = textureLimit(requested, renderer.capabilities.maxTextureSize);
         if (current()) options.onTextureBudget?.(!compressed && limit < requested ? limit : null);
-        releaseImages = budgetImageDecoding(parser, limit, valid, error => { imageError ??= error; parseFailed = true; });
+        releaseImages = budgetImageDecoding(parser, limit, valid, error => { imageError ??= error; parseFailed = true; }, memoryConstrained && asset !== CFG.assets.previewModel);
         return null;
       }
     }));
@@ -3208,8 +3208,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           // 先拿到目标字节；慢网络期间不能让手机上已经显示的车消失。
           const cached = await fetchAssetBuffer(next.asset);
           if (!current()) return false;
-          // 低内存设备解码前释放旧贴图，避免两套贴图同时占用显存。
-          if (memoryConstrained) { unmountCar(mountedCar); mountedCar = null; }
+          // 轻量预览只有很小的显存占用；升级高清时继续展示它，手机在解码期间仍可操作车身。
+          // 已经是完整模型时才提前释放旧贴图，避免两套高清贴图同时占用显存。
+          if (memoryConstrained && previousAsset !== CFG.assets.previewModel) {
+            unmountCar(mountedCar);
+            mountedCar = null;
+          }
           nextCar = await parseCar(cached.buffer, next.model, current, next.asset);
           if (!nextCar) return false;
           const previousTextureLimit = CFG.model.maxTextureSize;
