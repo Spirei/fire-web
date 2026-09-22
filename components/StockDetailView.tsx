@@ -1115,7 +1115,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
                       />
                       <div>
                         <p className={`text-[13px] ${selected ? "font-semibold text-white" : "text-ink"}`}>{cur.name}</p>
-                        <p className="mt-0.5 text-[11px] text-faint">
+                        <p className={`mt-0.5 text-[11px] ${selected ? "text-white/75" : "text-faint"}`}>
                           1 {cur.code} = {rate ? (1 / rate).toFixed(4) : "—"} USD
                         </p>
                       </div>

@@ -5713,3 +5713,27 @@ button.PhotoView-Slider__toolbarIcon {
 .dark .mp-root { --mp-bg: #050506; --mp-panel: rgba(255,255,255,.025); --mp-ink: #f4f4f5; --mp-muted: #9a9a9e; --mp-line: rgba(255,255,255,.14); --mp-active: rgba(255,255,255,.42); color: var(--mp-ink); }
 .dark .mp-workbench.mp-root { background: var(--mp-bg); color: var(--mp-ink); }
 .dark .mp-root .mp-danger { color: #dc8d84; }
+
+/* 跨页面状态文字：小字号在两种背景上都保持清楚，避免固定亮蓝/绿/橙落在浅色面板上发淡。 */
+:root:not(.dark) [class~="text-[#3297f6]"] { color: #1765ad; }
+:root.dark [class~="text-[#3297f6]"] { color: #8ec2ff; }
+:root.dark [class~="text-[#2f6fed]"] { color: #8ec2ff; }
+:root:not(.dark) [class~="text-[#0fa07b]"],
+:root:not(.dark) [class~="text-[#22a06b]"] { color: #087a5c; }
+:root.dark [class~="text-[#0fa07b]"],
+:root.dark [class~="text-[#22a06b]"] { color: #69d9b5; }
+:root:not(.dark) [class~="text-[#d97706]"] { color: #985000; }
+:root.dark [class~="text-[#d97706]"] { color: #ffc16e; }
+/* 助手运行轨迹中的灰色标签多为 9–12px，浅色面板上需要更深的灰。 */
+:root:not(.dark) [class~="text-[#858991]"],
+:root:not(.dark) [class~="text-[#8a8e95]"],
+:root:not(.dark) [class~="text-[#a0a3a8]"] { color: #626976; }
+:root:not(.dark) [class~="text-[#777b83]"] { color: #5c626e; }
+:root.dark [class~="text-[#858991]"],
+:root.dark [class~="text-[#8a8e95]"],
+:root.dark [class~="text-[#777b83]"] { color: #aeb6c2; }
+/* 助手可独立于站点切主题，按它自己的背景修正次要文字。 */
+:is(.assistant-workspace, .assistant-panel)[data-assistant-theme="light"] .text-muted { color: #606873 !important; }
+:is(.assistant-workspace, .assistant-panel)[data-assistant-theme="light"] .text-faint { color: #626b76 !important; }
+:is(.assistant-workspace, .assistant-panel)[data-assistant-theme="dark"] .text-muted { color: rgba(255, 255, 255, .72) !important; }
+:is(.assistant-workspace, .assistant-panel)[data-assistant-theme="dark"] .text-faint { color: rgba(255, 255, 255, .64) !important; }
