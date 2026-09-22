@@ -269,6 +269,9 @@ html:has(.showcase) body {
 }
 
 .sc-drawer-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
   pointer-events: auto;
   min-width: 66px;
   height: 31px;
@@ -1510,6 +1513,7 @@ html:has(.showcase) body {
 
 /* 右上角改为一条轻量工具栏：去掉三个各自悬浮的胶囊，与左右轨道、底部贴边标签统一。 */
 .showcase .sc-tools {
+  align-items: center;
   gap: 3px;
   padding: 0 2px 5px;
 }
@@ -1546,13 +1550,20 @@ html:has(.showcase) body {
   font-size: 10px;
   letter-spacing: .08em;
 }
+.showcase .sc-tools .sc-glass-trigger > svg,
+.showcase .sc-tools .sc-glass-trigger > span { transform: translateY(-1px); }
 .showcase .sc-tools .sc-tool:hover,
 .showcase .sc-tools .sc-tool:focus-visible,
 .showcase .sc-tools .sc-tool.on {
   color: var(--sc-ink-strong);
-  background: color-mix(in srgb, var(--sc-panel-hover) 54%, transparent) !important;
+  background: transparent !important;
 }
-.showcase .sc-tools .sc-tool:active { transform: translateY(1px); }
+.showcase .sc-tools .sc-tool:active { opacity: .7; }
+
+/* 首页胶囊沿用选中描边，不叠灰色材质阴影；触屏点击由文字与底线反馈。 */
+.showcase .fire-cap { box-shadow: none !important; }
+.showcase :is(button, a, [role="button"]),
+.showcase-import :is(button, a, [role="button"]) { -webkit-tap-highlight-color: transparent !important; }
 
 /* 最终定位：抽屉入口贴住左右边缘，不参与底部中心的胶囊布局。 */
 .showcase:not(.sc-inspecting) .sc-left-foot.sc-side-left {

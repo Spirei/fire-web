@@ -4305,6 +4305,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_37_ENTRY.frontend, { name: "KTX2 / UASTC", version: "KTX-Software 4.4.2", desc: "本地工具编码 · 网站 Three.js 解码显示 · 保留源贴图尺寸" }],
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [
+    { kind: "fix", title: "车型页面胶囊点击反馈与顶部对齐", desc: "首页右上角模型展示的图文上移 1px，与音乐和主题图标视觉居中；首页控制、车型及导入页、工作台的胶囊取消灰色外发光和触屏残留灰底，保留文字、描边与底线反馈。" },
     { kind: "fix", title: "高清升级提示改为轻量图标", desc: "首页后台加载高清车型时，将“加载高清模型…”文字改为小型旋转图标；预览车照常显示，失败时仍保留重试入口，减少画面干扰。" },
     { kind: "fix", title: "手机切车型先显示预览", desc: "实测线上从 MCL35M 切到 MP4/6 时按钮已选中但旧车画面超过 20 秒不变。切车改为先挂载已预取的轻量模型，随后后台升级用户选择的高清画质；新预览不再排在旧车长时间运行的高清解码队列后面，升级时保留画面。" },
     { kind: "fix", title: "手机车型失败后恢复显示", desc: "线上排查发现，手机高清升级会先卸载轻量车型，解码失败时车身留空且全屏错误层覆盖展示；改为下载期间保留旧车，失败时重新挂载已成功显示的预览。车模首帧不再等待环境贴图，环境资源异常也不清除已显示车型。" },

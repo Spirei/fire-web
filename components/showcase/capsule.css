@@ -7,7 +7,7 @@
  * 取自首页右上角音乐按钮（.sc-tool）的三态，两页的胶囊一律用这套：
  *   常态      = 极淡面板底 + 1px 细描边 + 背景模糊（不铺灰块，避免「没点也像按着」）
  *   悬停      = 底色不变，只提亮描边与字色
- *   已开启    = 玻璃渐变底 + 亮描边 + 极轻外发光（点了之后的状态、当前选中项都走这个）
+ *   已开启    = 玻璃渐变底 + 亮描边，不叠外发光（点了之后的状态、当前选中项都走这个）
  *   按下      = 轻微收缩，松开回到上一态
  *   键盘聚焦  = 只有 :focus-visible 画环，鼠标点完不留圈、不留底色
  *
@@ -17,6 +17,9 @@
  */
 
 .fire-cap {
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
   --cap-ink: #f4f4f5;
   --cap-ink-strong: #ffffff;
   --cap-line: rgba(255, 255, 255, 0.14);
@@ -55,13 +58,13 @@
   color: var(--cap-ink-strong);
 }
 
-/* 已开启 / 当前选中 / 点了之后：玻璃渐变底 + 亮描边 + 极轻外发光 */
+/* 已开启 / 当前选中 / 点了之后：玻璃渐变底 + 亮描边，不产生灰影 */
 .fire-cap.on,
 .fire-cap-primary {
   color: var(--cap-ink-strong);
   border-color: var(--cap-on-line);
   background: linear-gradient(180deg, var(--cap-on-from), var(--cap-on-to));
-  box-shadow: 0 0 0 1px var(--cap-on-ring), 0 0 14px var(--cap-on-glow);
+  box-shadow: none;
 }
 
 /* 主操作：常驻「已开启」的样子，不再另开一套配色 */
