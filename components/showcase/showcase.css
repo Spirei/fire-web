@@ -1647,7 +1647,8 @@ html:has(.showcase) body {
     align-items: flex-end;
   }
   .showcase:not(.sc-inspecting) .sc-drawer-content {
-    max-width: calc(92vw - 58px);
+    /* 两侧各留 58px 入口与间距，窄屏展开时不压住另一侧入口。 */
+    max-width: max(0px, calc(92vw - 132px));
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
