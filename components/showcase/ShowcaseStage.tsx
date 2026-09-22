@@ -137,6 +137,8 @@ export default function ShowcaseStage({
   }, []);
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  const leftDrawerRef = useRef<HTMLDivElement | null>(null);
+  const rightDrawerRef = useRef<HTMLDivElement | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(initialTheme);
   const [musicOn, setMusicOn] = useState(false);
   const [musicReady, setMusicReady] = useState(true);
@@ -301,6 +303,17 @@ export default function ShowcaseStage({
       window.removeEventListener("keydown", close);
     };
   }, [wirePanel]);
+  useEffect(() => {
+    if (!leftDrawerOpen && !rightDrawerOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return;
+      if (leftDrawerRef.current?.contains(event.target) || rightDrawerRef.current?.contains(event.target)) return;
+      setLeftDrawerOpen(false);
+      setRightDrawerOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside, true);
+    return () => document.removeEventListener("pointerdown", closeOutside, true);
+  }, [leftDrawerOpen, rightDrawerOpen]);
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || wirePanelRef.current) return;
@@ -1084,7 +1097,7 @@ export default function ShowcaseStage({
               ))}
             </p>
 
-            <div className={`sc-row sc-left-foot sc-side-drawer sc-side-left${leftDrawerOpen ? " open" : ""}`}>
+            <div ref={leftDrawerRef} className={`sc-row sc-left-foot sc-side-drawer sc-side-left${leftDrawerOpen ? " open" : ""}`}>
               <button type="button" className="sc-drawer-toggle" onClick={() => { setLeftDrawerOpen((open) => !open); setRightDrawerOpen(false); }} aria-expanded={leftDrawerOpen} aria-controls="showcase-left-controls">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M4 6h12M4 10h8M4 14h10" /></svg>
                 <span>控制</span><i aria-hidden="true">›</i>
@@ -1318,7 +1331,7 @@ export default function ShowcaseStage({
               </div>
             )}
             {models && models.length > 0 && (models.length > 1 || onImport) && (
-              <div className={`sc-row sc-models sc-side-drawer sc-side-right${rightDrawerOpen ? " open" : ""}`}>
+              <div ref={rightDrawerRef} className={`sc-row sc-models sc-side-drawer sc-side-right${rightDrawerOpen ? " open" : ""}`}>
                 <button type="button" className="sc-drawer-toggle" onClick={() => { setRightDrawerOpen((open) => !open); setLeftDrawerOpen(false); }} aria-expanded={rightDrawerOpen} aria-controls="showcase-model-controls">
                   <i aria-hidden="true">‹</i><span>车型</span>
                   <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M3 13h14M5 13l2-5h6l2 5M6 13v2M14 13v2" /></svg>
