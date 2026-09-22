@@ -1540,7 +1540,6 @@ html:has(.showcase) body {
   color: var(--sc-mute);
   transition: color .2s ease, background-color .2s ease, transform .2s ease;
 }
-.showcase .sc-tools .sc-glass-trigger,
 .showcase .sc-tools .sc-inspector-home {
   width: auto;
   min-width: 62px;
@@ -1550,15 +1549,29 @@ html:has(.showcase) body {
   font-size: 10px;
   letter-spacing: .08em;
 }
-.showcase .sc-tools .sc-glass-trigger > svg,
-.showcase .sc-tools .sc-glass-trigger > span { transform: translateY(-1px); }
+.showcase .sc-tools .sc-glass-trigger {
+  flex: none;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  border-radius: 999px !important;
+  color: var(--sc-mute);
+}
+.showcase .sc-tools .sc-glass-trigger > svg { width: 19px; height: 19px; }
 .showcase .sc-tools .sc-tool:hover,
 .showcase .sc-tools .sc-tool:focus-visible,
 .showcase .sc-tools .sc-tool.on {
   color: var(--sc-ink-strong);
   background: transparent !important;
 }
+.showcase .sc-tools .sc-glass-trigger:is(:hover, .on) {
+  color: var(--sc-ink-strong);
+  background: var(--sc-panel-hover) !important;
+}
 .showcase .sc-tools .sc-tool:active { opacity: .7; }
+@media (max-width: 700px) {
+  .showcase .sc-tools .sc-glass-trigger { width: 42px; min-width: 42px; height: 42px; }
+}
 
 /* 首页胶囊沿用选中描边，不叠灰色材质阴影；触屏点击由文字与底线反馈。 */
 .showcase .fire-cap { box-shadow: none !important; }
