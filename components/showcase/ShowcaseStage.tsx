@@ -645,10 +645,44 @@ export default function ShowcaseStage({
     setQualityLoading(true);
     setLoadingKey(targetKey);
     setQualityError(false);
-    void handle.setModel({ asset, model: qualityModel(next.model) }).then((ok) => {
+    const previewAsset = !inspectorRef.current && wireRef.current.mode === "native" && textureQualityRef.current !== "fast"
+      && next.assets.previewModel !== asset ? next.assets.previewModel : undefined;
+    const previewKey = previewAsset ? JSON.stringify({ a: previewAsset, m: next.model ?? null, q: "fast" }) : null;
+    let previewSucceeded = false;
+    const switchModel = async () => {
+      if (previewAsset) {
+        const previousFrame = constrainedGraphics() ? handle.snapshot() : null;
+        if (previousFrame) {
+          previousFrame.className = "sc-freeze";
+          canvasWrapRef.current?.after(previousFrame);
+        }
+        const previewOk = await handle.setModel({ asset: previewAsset, model: { ...next.model, maxTextureSize: TEXTURE_QUALITY.fast.size } });
+        if (previousFrame) {
+          previousFrame.classList.add("out");
+          window.setTimeout(() => previousFrame.remove(), 500);
+        }
+        if (switchId !== qualitySwitchRef.current || !previewOk) return previewOk;
+        previewSucceeded = true;
+        rememberLoadedModel(previewKey!);
+      }
+      const freeze = previewAsset && constrainedGraphics() ? handle.snapshot() : null;
+      if (freeze) {
+        freeze.className = "sc-freeze";
+        canvasWrapRef.current?.after(freeze);
+      }
+      try {
+        return await handle.setModel({ asset, model: qualityModel(next.model) });
+      } finally {
+        if (freeze) {
+          freeze.classList.add("out");
+          window.setTimeout(() => freeze.remove(), 500);
+        }
+      }
+    };
+    void switchModel().then((ok) => {
       if (switchId !== qualitySwitchRef.current) return;
       // 失败（素材取不到 / 解析失败）就把标记退回去，下次变更还能重试
-      if (!ok) appliedModelRef.current = previous;
+      if (!ok) appliedModelRef.current = previewSucceeded ? previewKey : previous;
       setQualityLoading(false);
       setQualityError(!ok);
       setLoadingKey(null);

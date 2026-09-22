@@ -1734,7 +1734,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     reportProgress();
   };
   const initialSequence = ++modelSwitchSequence;
-  void queueModelLoad(async () => {
+  const loadInitialModel = async () => {
     const current = () => !disposed && initialSequence === modelSwitchSequence;
     try {
       if (!current()) return;
@@ -1750,7 +1750,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       if (!current()) return;
       options.onError?.(err instanceof Error ? err.message : String(err ?? "模型加载失败"));
     }
-  });
+  };
+  // 用户切车时，上一辆高清车的 KTX/图片解码可能长时间占住串行队列。
+  // 首页预览体积小，允许先行解析，让新车首帧不被旧车的后台升级拖住。
+  void (CFG.assets.model.includes("-preview.glb") ? loadInitialModel() : queueModelLoad(loadInitialModel));
 
   /* ---------- 7) 滚动编排 ---------- */
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
@@ -3196,7 +3199,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     setModel: (next: { asset: string; model?: ShowcaseConfig["model"] }) => {
       const sequence = ++modelSwitchSequence;
       const current = () => !disposed && sequence === modelSwitchSequence;
-      return queueModelLoad(async () => {
+      const load = async () => {
         let nextCar: THREE.Object3D | null = null;
         const previousAsset = CFG.assets.model;
         const previousModel = { ...CFG.model };
@@ -3251,7 +3254,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           if (current()) options.onError?.(err instanceof Error ? err.message : String(err ?? "换车失败"));
           return false;
         }
-      });
+      };
+      return next.asset.includes("-preview.glb") ? load() : queueModelLoad(load);
     },
     updateModelMaterials: (next) => {
       const normalized = normalizeModel(next);
