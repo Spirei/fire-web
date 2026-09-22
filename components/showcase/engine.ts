@@ -699,6 +699,56 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let trackDiscFraming = 0;
   const chronoDisc = new THREE.Group();
   const trackDisc = new THREE.Group();
+  type DiscScreenLock = { style: ShowcaseDiscStyle; progress: number; radius: number; points: THREE.Vector2[] };
+  let discScreenLock: DiscScreenLock | null = null;
+  const resetDiscScreenLock = () => {
+    if (!discScreenLock) return;
+    discScreenLock = null;
+    for (const disc of [chronoDisc, trackDisc]) {
+      disc.matrixAutoUpdate = true;
+      disc.position.set(0, 0, 0);
+      disc.updateMatrix();
+    }
+  };
+  const captureDiscScreenLock = (progress: number) => {
+    if (discStyle === "none") return;
+    const disc = discStyle === "track" ? trackDisc : chronoDisc;
+    const radius = discStyle === "track" ? RING_R * (4.25 / 3.3) : RING_R + (RING?.longLength ?? 0);
+    camera.updateMatrixWorld();
+    disc.updateWorldMatrix(true, false);
+    const points = [new THREE.Vector3(), new THREE.Vector3(radius, 0, 0), new THREE.Vector3(-radius, 0, 0),
+      new THREE.Vector3(0, 0, radius), new THREE.Vector3(0, 0, -radius)]
+      .map(point => {
+        point.applyMatrix4(disc.matrixWorld).project(camera);
+        return new THREE.Vector2(point.x, point.y);
+      });
+    discScreenLock = { style: discStyle, progress, radius, points };
+  };
+  const updateDiscScreenLock = (progress: number) => {
+    const lock = discScreenLock;
+    if (!lock) return;
+    if (racing || racingAmt > 0.02 || modelCameraOn() || lock.style !== discStyle || Math.abs(progress - lock.progress) > 0.01) {
+      resetDiscScreenLock();
+      return;
+    }
+    camera.updateMatrixWorld();
+    const onGround = (point: THREE.Vector2) => {
+      const ray = new THREE.Vector3(point.x, point.y, 0.5).unproject(camera).sub(camera.position);
+      const distance = -camera.position.y / ray.y;
+      return distance > 0 && Number.isFinite(distance) ? ray.multiplyScalar(distance).add(camera.position) : null;
+    };
+    const [center, xPlus, xMinus, zPlus, zMinus] = lock.points.map(onGround);
+    if (!center || !xPlus || !xMinus || !zPlus || !zMinus || lock.radius < 0.01) { resetDiscScreenLock(); return; }
+    const xBasis = xPlus.sub(xMinus).multiplyScalar(0.5 / lock.radius);
+    const zBasis = zPlus.sub(zMinus).multiplyScalar(0.5 / lock.radius);
+    const disc = discStyle === "track" ? trackDisc : chronoDisc;
+    disc.matrixAutoUpdate = false;
+    disc.matrix.set(xBasis.x, 0, zBasis.x, center.x,
+                    0, 1, 0, 0,
+                    xBasis.z, 0, zBasis.z, center.z,
+                    0, 0, 0, 1);
+    disc.matrixWorldNeedsUpdate = true;
+  };
   chronoDisc.visible = !mobileViewer();
   trackDisc.visible = false;
   groundFx.add(chronoDisc, trackDisc);
@@ -2100,6 +2150,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       camera.fov += (camState.fovEff - camera.fov) * clamp(dt * 3, 0, 1);
       camera.updateProjectionMatrix();
     }
+    updateDiscScreenLock(p);
 
     // 车：轻微下沉、轮胎自转；位移与镜头使用同帧 carTravel。
     // 车道保持：横向偏移与车头偏角每帧平滑收回隧道中心线，车不会越跑越偏
@@ -2179,8 +2230,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const ringFade = 1 - seg(sps, 0.04, 0.28);
       const discReady = !mobilePresentation || mountedCar !== null;
       // 这是展示台的刻度参照，随车辆跟随机位保留在车下，不遗留在起步点。
-      chronoDisc.position.z = carTravel;
-      trackDisc.position.z = carTravel;
+      if (!discScreenLock) {
+        chronoDisc.position.z = carTravel;
+        trackDisc.position.z = carTravel;
+      }
       chronoDisc.visible = discReady && discStyle === "chrono";
       trackDisc.visible = discReady && discStyle === "track";
       if (ringUniformsRef.uFade) ringUniformsRef.uFade.value = ringFade;
@@ -2582,6 +2635,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    */
   let homePose: { p: number; yaw: number; pitch: number; zoom: number } | null = null;
   const resetView = () => {
+    resetDiscScreenLock();
     focusTarget.set(0, 0, 0);
     userYaw = inspectorOn ? homePose?.yaw ?? 0 : freeCamera ? 0 : homePose?.yaw ?? 0;
     userYawVel = 0;
@@ -2657,6 +2711,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   const onCanvasDown = (e: PointerEvent) => {
     if (![0, 1, 2].includes(e.button) || (!modelCameraOn() && e.button !== 0)) return;
+    if (!modelCameraOn() && !racing && touches.size === 0) captureDiscScreenLock(pSmooth);
     if (e.pointerType === "touch") {
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size > 1) {
@@ -3352,6 +3407,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       invalidateInspector();
     },
     setDiscStyle: (style) => {
+      resetDiscScreenLock();
       discStyle = style;
       const ready = !mobileViewer() || mountedCar !== null;
       chronoDisc.visible = ready && discStyle === "chrono";
