@@ -1644,6 +1644,7 @@ html:has(.showcase) body {
   .showcase:not(.sc-inspecting) .sc-models.sc-side-right {
     bottom: max(14px, calc(env(safe-area-inset-bottom) + 8px));
     max-width: 92vw;
+    align-items: flex-end;
   }
   .showcase:not(.sc-inspecting) .sc-drawer-content {
     max-width: calc(92vw - 58px);

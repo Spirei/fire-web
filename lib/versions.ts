@@ -4305,6 +4305,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_37_ENTRY.frontend, { name: "KTX2 / UASTC", version: "KTX-Software 4.4.2", desc: "本地工具编码 · 网站 Three.js 解码显示 · 保留源贴图尺寸" }],
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [
+    { kind: "fix", title: "手机首页底栏对齐", desc: "控制与车型抽屉入口在手机端按底边对齐，消除隐藏内容高度不同造成的 5px 错位。" },
     { kind: "fix", title: "模型展示面板深色对比度", desc: "首页独立深色模式下，模型展示面板保持深色材质与浅色文字，修复站点浅色调色板导致的白底白字。" },
     { kind: "fix", title: "车型登记表读取保护", desc: "登记表损坏或读取失败时停止车型保存，避免将已有车型参数和首页显隐设置覆盖为空清单。" },
     { kind: "fix", title: "高清模型跨设备校验", desc: "GPU 副本清单在文件修改时间发生精度变化时改用源文件 SHA-256 复核，避免部署到群晖后误判副本过期；同一文件状态的校验结果复用。" },
