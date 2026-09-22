@@ -2,13 +2,10 @@
  * 策略：页面导航与静态/上传资源网络优先（在线永远拿最新，兼容 dev 热更新），离线回退缓存；
  * /api 动态数据不拦截、跨域（行情/汇率等）不拦截。
  */
-const CACHE = "fire-pwa-v2";
+const CACHE = "fire-pwa-v3";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.add("/").catch(() => {}))
-  );
 });
 
 self.addEventListener("activate", (event) => {
@@ -41,10 +38,6 @@ self.addEventListener("fetch", (event) => {
       .catch(async () => {
         const cached = await caches.match(request);
         if (cached) return cached;
-        if (request.mode === "navigate") {
-          const shell = await caches.match("/");
-          if (shell) return shell;
-        }
         return new Response("离线模式：请恢复网络后重试", {
           status: 503,
           headers: { "Content-Type": "text/plain; charset=utf-8" }

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { IconBrandTelegram } from "@tabler/icons-react";
-import DoraemonTravel, { DORAEMON_IMAGE } from "./DoraemonTravel";
+import DoraemonTravel from "./DoraemonTravel";
 
 export function TimeMachineLink({ to, iconOnly = false }: { to: "simple" | "full"; iconOnly?: boolean }) {
   return <a href={to === "simple" ? "/simple-app" : "/records"} data-time-machine={to}
@@ -20,11 +20,6 @@ export default function TimeMachine() {
   const [error, setError] = useState("");
   const active = useRef<{ to: string; started: number; reduced: boolean } | null>(null);
   const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const image = new Image(); image.src = DORAEMON_IMAGE;
-    router.prefetch(pathname === "/simple-app" ? "/records" : "/simple-app");
-  }, [pathname, router]);
 
   useEffect(() => {
     const journey = active.current;

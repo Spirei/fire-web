@@ -4297,7 +4297,7 @@ export const V0_1_37_ENTRY: VersionEntry = {
   }]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_38_ENTRY: VersionEntry = {
   ...V0_1_37_ENTRY,
   version: "v0.1.38",
   date: "2026-09-22",
@@ -4391,11 +4391,25 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
 };
 
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_38_ENTRY,
+  version: "v0.1.39",
+  date: "2026-09-23",
+  summary: "全站按需加载资源，减少首页与后台的无关请求。",
+  software: V0_1_38_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.39" } : item),
+  changes: [
+    { kind: "fix", title: "首页无关资源按需加载", desc: "时光机插画只在点击穿越时加载；首页不再请求被舞台遮住的站点背景，1K 展示也不再提前下载高清车型。" },
+    { kind: "fix", title: "全站后台请求收敛", desc: "登录弹窗关闭时不再请求设置；后台页签只在打开时下载对应模块，不再空闲预取全部页签。PWA 首次安装不再额外请求首页 HTML。" }
+  ]
+};
+
+
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_38_ENTRY,
   V0_1_37_ENTRY,
   V0_1_36_ENTRY,
   V0_1_35_ENTRY,

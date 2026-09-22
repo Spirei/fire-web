@@ -49,22 +49,6 @@ const AssetPnlAnalysisView = dynamic(() => import("@/components/AssetPnlAnalysis
 const AssistantView = dynamic(() => import("@/components/views/AssistantView"));
 const ContextAssistant = dynamic(() => import("@/components/ContextAssistant"));
 
-const LAZY_TAB_LOADERS = [
-  () => import("@/components/views/FireView"),
-  () => import("@/components/views/ActivitiesView"),
-  () => import("@/components/views/EarningsCalendarView"),
-  () => import("@/components/views/CelebsView"),
-  () => import("@/components/views/TradingSquareView"),
-  () => import("@/components/views/SettingsView"),
-  () => import("@/components/views/UsersView"),
-  () => import("@/components/views/AssetLibraryView"),
-  () => import("@/components/views/CardLibraryView"),
-  () => import("@/components/views/AttachmentsView"),
-  () => import("@/components/views/GlobalPreviewView"),
-  () => import("@/components/AssetPnlAnalysis"),
-  () => import("@/components/views/AssistantView")
-];
-
 type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "assistant" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
 
 function NoPermission() {
@@ -190,7 +174,6 @@ export default function RecordsApp({
     const win = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
     const start = () => {
       setFloatingAssistantReady(true);
-      LAZY_TAB_LOADERS.forEach((load) => { void load(); });
     };
     if (typeof win.requestIdleCallback === "function") {
       const id = win.requestIdleCallback(start, { timeout: 2500 });

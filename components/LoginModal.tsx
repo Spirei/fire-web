@@ -30,6 +30,7 @@ export default function LoginModal() {
   }, []);
 
   useEffect(() => {
+    if (!open) return;
     fetch("/api/settings/public")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
