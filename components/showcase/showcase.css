@@ -1861,6 +1861,46 @@ html:has(.showcase) body {
 .showcase.sc-immersive .sc-tele-cap,
 .showcase.sc-immersive .sc-tele-foot { display: none; }
 
+/* 首页手动沉浸观看：只留模型和退出入口，退出按钮不跟随行驶 HUD 隐藏。 */
+.showcase.sc-view-immersive .sc-watermark,
+.showcase.sc-view-immersive .sc-vignette,
+.showcase.sc-view-immersive .sc-position-coordinate,
+.showcase.sc-view-immersive .sc-hud > :not(.sc-immersive-exit) {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.sc-immersive-exit {
+  position: absolute;
+  z-index: 35;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--sc-line);
+  border-radius: 50%;
+  background: var(--sc-panel-hover);
+  color: var(--sc-ink-strong);
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+.sc-immersive-exit svg { width: 19px; height: 19px; }
+.sc-immersive-exit:hover { background: var(--sc-active); }
+
+/* 待发车操作在桌面、平板、手机共用底部中线，车身区域始终留给模型。 */
+.showcase:not(.sc-immersive) .sc-ctr {
+  bottom: max(16px, calc(env(safe-area-inset-bottom) + 3dvh));
+}
+.showcase:not(.sc-immersive) .sc-ctr-cap,
+.showcase:not(.sc-immersive) .sc-ctr-hint { display: none; }
+@media (min-width: 641px) and (max-width: 1024px) {
+  .showcase:not(.sc-immersive) .sc-ctr {
+    bottom: 4.6vh;
+  }
+}
+
 @media (max-width: 640px), (max-height: 500px) and (pointer: coarse) {
   .showcase.sc-immersive .sc-ctr {
     right: calc(env(safe-area-inset-right) + 24px);

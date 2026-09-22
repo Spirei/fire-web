@@ -153,6 +153,13 @@ export default function ShowcaseStage({
   const [freeCamera, setFreeCamera] = useState(false);
   const freeCameraRef = useRef(false);
   const [inspector, setInspector] = useState(false);
+  const [immersiveView, setImmersiveView] = useState(false);
+  useEffect(() => {
+    if (!immersiveView) return;
+    const onEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setImmersiveView(false); };
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [immersiveView]);
   const inspectorRef = useRef(false);
   const [wirePanel, setWirePanel] = useState(false);
   const wirePanelRef = useRef(false);
@@ -161,6 +168,7 @@ export default function ShowcaseStage({
     setWirePanel(on); wirePanelRef.current = on;
   };
   const enterInspector = () => {
+    setImmersiveView(false);
     setInspector(true); inspectorRef.current = true;
     setWirePanelOpen(true);
     handleRef.current?.setInspector(true);
@@ -1033,7 +1041,7 @@ export default function ShowcaseStage({
 
   // 影棚（明亮摄影棚）下画面是亮的，HUD 文字要跟着换成浅色系，否则白字压在白底上看不见
   return (
-    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio ? "light" : ""} ${inspector ? "sc-inspecting" : ""} ${racing || driving ? "sc-immersive" : ""} ${className}`}>
+    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio ? "light" : ""} ${inspector ? "sc-inspecting" : ""} ${racing || driving ? "sc-immersive" : ""} ${immersiveView ? "sc-view-immersive" : ""} ${className}`}>
       <div className="sc-scroll" ref={scrollRef}>
         <div className="sc-stage" ref={stageRef}>
           <div className="sc-canvas-wrap" ref={canvasWrapRef} />
@@ -1044,6 +1052,9 @@ export default function ShowcaseStage({
           <div className="sc-position-coordinate" ref={coordinateRef} aria-label="车型观察角度坐标" aria-live="off" />
 
           <div className="sc-hud">
+            {immersiveView && <button type="button" className="sc-immersive-exit" onClick={() => setImmersiveView(false)} aria-label="退出沉浸式" title="退出沉浸式">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /><path d="m8 8 3 3m5-3-3 3m-5 5 3-3m5 3-3-3" /></svg>
+            </button>}
             <div className="sc-row sc-tools">
               <div className="sc-wire-control" ref={wireControlRef} onKeyDown={(event) => {
                 if (event.key === "Escape" && wirePanelRef.current) { setWirePanelOpen(false); event.currentTarget.querySelector("button")?.focus(); }
@@ -1114,6 +1125,9 @@ export default function ShowcaseStage({
                   <MusicIcon playing={musicOn} live={waveLive} />
                 </button>
               )}
+              <button type="button" className="sc-tool fire-cap" onClick={() => setImmersiveView(true)} aria-label="进入沉浸式" title="沉浸式观看">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /></svg>
+              </button>
               <button
                 type="button"
                 className="sc-tool fire-cap"
