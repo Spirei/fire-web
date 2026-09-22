@@ -19,6 +19,7 @@ const js = ts.transpileModule(`module.exports = function(rebuild, fallback = 'fi
  const cfg = {assets:{model:'fixture.glb'}};
  const initialQuality = bootstrapPreview ? 'fast' : 'original';
  const requestedQuality = 'original', requestedAsset = 'full.glb';
+ const requestedWireMode = 'native';
  const qualitySwitchRef = {current:0}, appliedModelRef = {current:'preview'};
  const handle = {setModel: next => {state.promoted = next; return Promise.resolve(true)}};
  const handleRef = {current:handle};
@@ -27,7 +28,10 @@ const js = ts.transpileModule(`module.exports = function(rebuild, fallback = 'fi
  const wrap = {after: () => {}};
  const setQualityLoading = v => state.qualityLoading = v;
  const setQualityError = v => state.qualityError = v;
- const window = {requestAnimationFrame: cb => {state.promoteFrame = cb}};
+ const window = {requestAnimationFrame: cb => {state.promoteFrame = cb}, setTimeout: (cb, delay) => {if (delay === 400) state.promoteTimer = cb}};
+ const saveResumeFrame = () => {};
+ const primeModelAsset = () => {};
+ let upgradeTimer = null;
  const state = { ready: true, ratio: 1, error: null, rebuild, drops: 0 };
  const setReady = v => state.ready = v;
  const setLoadRatio = v => state.ratio = v;
@@ -96,8 +100,10 @@ console.log('PASS recovery cap, duplicate failures, late callbacks, download/rea
 const progressive = make(0, 'fine', true);
 progressive.callbacks.onReady();
 assert.equal(progressive.state.working, 'fast', 'preview success must not falsely register RAW as working');
-assert.equal(typeof progressive.state.promoteFrame, 'function', 'full model promotion waits until after the first ready frame');
+assert.equal(typeof progressive.state.promoteTimer, 'function', 'full model promotion waits after preview readiness');
 assert.equal(progressive.state.promoted, undefined);
+progressive.state.promoteTimer();
+assert.equal(typeof progressive.state.promoteFrame, 'function', 'promotion also waits until the next animation frame');
 progressive.state.promoteFrame();
 assert.equal(progressive.state.promoted.asset, 'full.glb');
 progressive.callbacks.onReady();

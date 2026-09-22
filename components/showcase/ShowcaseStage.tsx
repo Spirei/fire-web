@@ -431,12 +431,12 @@ export default function ShowcaseStage({
         const { createShowcaseScene } = await import("./engine");
         if (cancelled) return;
         const requestedQuality = textureQualityRef.current;
+        const requestedWireMode = wireRef.current.mode;
         const requestedAsset = inspectorRef.current || requestedQuality !== "fast" || wireRef.current.mode !== "native"
           ? (textureQualityRef.current === "original" ? cfg.assets.gpuModel ?? cfg.assets.model : cfg.assets.model)
           : (cfg.assets.previewModel ?? cfg.assets.model);
-        // 所有设备先显示轻量车；手机若直接解析用户记住的 RAW，会在十多秒内一直空白。
-        const bootstrapPreview = !inspectorRef.current && wireRef.current.mode === "native"
-          && requestedQuality !== "fast" && !!cfg.assets.previewModel && cfg.assets.previewModel !== requestedAsset;
+        // 刷新保留线框偏好时也先显示轻量车；完整网格和线框构建留到可交互首帧之后。
+        const bootstrapPreview = !inspectorRef.current && !!cfg.assets.previewModel && cfg.assets.previewModel !== requestedAsset;
         const initialAsset = bootstrapPreview ? cfg.assets.previewModel! : requestedAsset;
         const initialQuality = bootstrapPreview ? "fast" : requestedQuality;
         const initialKey = JSON.stringify({ a: initialAsset, m: cfg.model ?? null, q: initialQuality });
@@ -487,7 +487,7 @@ export default function ShowcaseStage({
               primeModelAsset(requestedAsset);
               upgradeTimer = window.setTimeout(() => window.requestAnimationFrame(() => {
                 if (cancelled || recoveryRequested || !handle || handleRef.current !== handle
-                  || inspectorRef.current || wireRef.current.mode !== "native"
+                  || inspectorRef.current || wireRef.current.mode !== requestedWireMode
                   || textureQualityRef.current !== requestedQuality || configRef.current.assets.model !== cfg.assets.model) return;
                 const fullKey = JSON.stringify({ a: requestedAsset, m: cfg.model ?? null, q: requestedQuality });
                 const switchId = ++qualitySwitchRef.current;
@@ -581,7 +581,7 @@ export default function ShowcaseStage({
         appliedModelRef.current = initialKey;
         const now = configRef.current;
         const stillBootstrapping = bootstrapPreview && now.assets.model === cfg.assets.model
-          && textureQualityRef.current === requestedQuality && !inspectorRef.current && wireRef.current.mode === "native";
+          && textureQualityRef.current === requestedQuality && !inspectorRef.current && wireRef.current.mode === requestedWireMode;
         const nowAsset = stillBootstrapping ? initialAsset : inspectorRef.current || textureQualityRef.current !== "fast" || wireRef.current.mode !== "native"
           ? (textureQualityRef.current === "original" ? now.assets.gpuModel ?? now.assets.model : now.assets.model)
           : (now.assets.previewModel ?? now.assets.model);

@@ -275,6 +275,8 @@ console.log('PASS mobile high-quality loading avoids duplicate caches and unsupp
 
 assert.match(stageSource, /if \(textureQualityRef\.current === "fast" && wireRef\.current\.mode === "native"\)/, 'leaving model inspection only restores the light preview in native mode');
 assert.match(stageSource, /handle\.setWireframe\(wireRef\.current\.mode, wireRef\.current\.color\)/, 'a saved model appearance is restored on the homepage');
+assert.match(stageSource, /const bootstrapPreview = !inspectorRef\.current && !!cfg\.assets\.previewModel && cfg\.assets\.previewModel !== requestedAsset;/, 'refresh with a saved wireframe mode starts with an interactive preview');
+assert.match(stageSource, /wireRef\.current\.mode !== requestedWireMode/, 'a changed wireframe mode cancels the pending full-model promotion');
 assert.doesNotMatch(stageSource, /handleRef\.current\?\.setWireframe\("native", wireRef\.current\.color\)/, 'returning home does not erase the selected model appearance');
 console.log('PASS model appearance survives leaving inspection and reloading the homepage');
 
