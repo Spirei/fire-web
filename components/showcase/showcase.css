@@ -1619,7 +1619,7 @@ html:has(.showcase) body {
   /* 起步键落到独立的底部操作区，别压住车身、倒影和圆盘。 */
   .sc-ctr { bottom: max(52px, calc(env(safe-area-inset-bottom) + 42px)); }
   .sc-ctr-cap, .sc-ctr-hint { display: none; }
-  .sc-ctr .sc-race { padding: 11px 17px; background: rgba(25, 17, 12, 0.78); }
+  .sc-ctr .sc-race { padding: 11px 17px; }
   .sc-hint-touch { bottom: max(106px, calc(env(safe-area-inset-bottom) + 96px)); }
 
   .showcase:not(.sc-inspecting) .sc-left-foot.sc-side-left { left: 4vw; bottom: 5.2vh; }
@@ -1730,6 +1730,22 @@ html:has(.showcase) body {
 .sc-drive-camera-options button:focus-visible { color: var(--sc-papaya); background: rgba(255, 128, 0, .1); }
 .showcase.light .sc-drive-camera-toggle,
 .showcase.light .sc-drive-camera-options { background: rgba(245, 247, 250, .94); }
+
+/* 浅色摄影棚的操作控件使用同一套明亮底色，含手机起步、减速及展开菜单。 */
+.showcase.light .sc-race,
+.showcase.light .sc-race.on,
+.showcase.light .sc-race:hover {
+  background: rgba(255, 255, 255, .88);
+  color: var(--sc-ink-strong);
+}
+.showcase.light .sc-race.on,
+.showcase.light .sc-race:hover { background: rgba(255, 247, 237, .94); }
+.showcase.light .sc-drive-camera-options button.on,
+.showcase.light .sc-drive-camera-options button:hover,
+.showcase.light .sc-drive-camera-options button:focus-visible {
+  background: rgba(255, 128, 0, .12);
+  color: #9a4900;
+}
 
 /* 手机行驶 HUD：两侧共用底线，中央留给车辆，边距叠加安全区。 */
 @media (max-width: 640px), (max-height: 500px) and (pointer: coarse) {
