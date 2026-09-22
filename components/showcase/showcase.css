@@ -487,6 +487,10 @@ html:has(.showcase) body {
 }
 
 .sc-race {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  --sc-launch-fill: 0;
   flex: none;
   white-space: nowrap;
   pointer-events: auto;
@@ -507,6 +511,18 @@ html:has(.showcase) body {
   font-size: 10.5px;
   letter-spacing: 0.26em;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.sc-race::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255, 128, 0, .42), rgba(255, 170, 60, .26));
+  transform: scaleX(var(--sc-launch-fill));
+  transform-origin: left center;
+  transition: transform 100ms linear;
+  pointer-events: none;
 }
 
 .sc-race.on,
@@ -1740,6 +1756,9 @@ html:has(.showcase) body {
 }
 .showcase.light .sc-race.on,
 .showcase.light .sc-race:hover { background: rgba(255, 247, 237, .94); }
+.showcase.light .sc-race::before {
+  background: linear-gradient(90deg, rgba(255, 128, 0, .32), rgba(255, 170, 60, .19));
+}
 .showcase.light .sc-drive-camera-options button.on,
 .showcase.light .sc-drive-camera-options button:hover,
 .showcase.light .sc-drive-camera-options button:focus-visible {

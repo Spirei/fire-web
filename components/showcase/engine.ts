@@ -2302,6 +2302,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       lastRaceClass = racing;
       hud.raceBtn?.classList.toggle("on", racing);
     }
+    // 进度跟随真实车速，加速时向右填充，减速时随车速退回。
+    if (hud.raceBtn) hud.raceBtn.style.setProperty("--sc-launch-fill", sp.toFixed(3));
 
     // 部件标注：把 3D 锚点投影到屏幕
     hud.labels.forEach((part, i) => {

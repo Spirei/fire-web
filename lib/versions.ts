@@ -4305,6 +4305,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_37_ENTRY.frontend, { name: "KTX2 / UASTC", version: "KTX-Software 4.4.2", desc: "本地工具编码 · 网站 Three.js 解码显示 · 保留源贴图尺寸" }],
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [
+    { kind: "feature", title: "起步胶囊显示加速进度", desc: "胶囊填充随实际车速从左向右推进，减速时平滑退回；浅色与深色模式分别使用适配的橙色透明度。" },
     { kind: "fix", title: "浅色模式行驶按钮统一亮色", desc: "移除手机起步按钮的固定深色底，并统一浅色起步、减速与视角菜单的底色和选中态；深色模式保持原有对比度。" },
     { kind: "fix", title: "行驶操作集中到右下角", desc: "减速与视角按钮上下排列，移除遥测隐藏页脚的占位，让能量条与视角按钮的可见底边对齐，保持安全区边距。" },
     { kind: "fix", title: "手机行驶控件对齐", desc: "遥测移到左下角，视角按钮在右下角共用底线；保留 24px 安全区间距，菜单支持横屏滚动与触屏点击。" },
