@@ -1554,6 +1554,7 @@ html:has(.showcase) body {
   width: 36px;
   min-width: 36px;
   height: 36px;
+  min-height: 36px;
   border-radius: 999px !important;
   color: var(--sc-mute);
 }
@@ -1570,7 +1571,10 @@ html:has(.showcase) body {
 }
 .showcase .sc-tools .sc-tool:active { opacity: .7; }
 @media (max-width: 700px) {
-  .showcase .sc-tools .sc-glass-trigger { width: 42px; min-width: 42px; height: 42px; }
+  .showcase .sc-tools .sc-glass-trigger { width: 42px; min-width: 42px; height: 42px; min-height: 42px; }
+}
+@media (pointer: coarse) {
+  .showcase .sc-tools .sc-glass-trigger { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
 }
 
 /* 首页胶囊沿用选中描边，不叠灰色材质阴影；触屏点击由文字与底线反馈。 */
@@ -1893,17 +1897,24 @@ html:has(.showcase) body {
 .showcase:not(.sc-immersive) .sc-ctr {
   bottom: max(42px, calc(env(safe-area-inset-bottom) + 5dvh));
 }
-.showcase:not(.sc-immersive) .sc-ctr-cap {
-  display: block;
-  position: absolute;
-  top: calc(100% + 12px);
-  left: 50%;
-  width: max-content;
-  margin: 0;
-  transform: translateX(-50%);
-  white-space: nowrap;
-}
+.showcase:not(.sc-immersive) .sc-ctr-cap,
 .showcase:not(.sc-immersive) .sc-ctr-hint { display: none; }
+.showcase:not(.sc-immersive) .sc-hint-drag { bottom: 12px; }
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
+  .showcase:not(.sc-immersive) .sc-ctr .sc-hint-touch {
+    display: block;
+    position: absolute;
+    top: calc(100% + 12px);
+    bottom: auto;
+    left: 50%;
+    width: max-content;
+    max-width: min(90vw, 420px);
+    margin: 0;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    text-align: center;
+  }
+}
 @media (min-width: 641px) and (max-width: 1024px) {
   .showcase:not(.sc-immersive) .sc-ctr {
     bottom: max(36px, 4.6vh);

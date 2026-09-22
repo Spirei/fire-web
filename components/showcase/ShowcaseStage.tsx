@@ -1291,6 +1291,7 @@ export default function ShowcaseStage({
             </div>
 
             <div className="sc-row sc-ctr">
+              <div className="sc-ctr-cap">{racing ? ui.raceCap : current.cap}</div>
               <button type="button" className="sc-race" ref={raceRef}
                 onContextMenu={(event) => event.preventDefault()}
                 onSelect={(event) => event.preventDefault()}
@@ -1298,7 +1299,7 @@ export default function ShowcaseStage({
                 <span>{racing ? "点按减速" : "点按起步"}</span>
                 <em>→</em>
               </button>
-              <div className="sc-ctr-cap">{racing ? ui.raceCap : current.cap}</div>
+              <div className="sc-row sc-hint-touch">{freeCamera ? "单指环视 · 双指平移缩放 · 双击聚焦" : ui.touchHint}</div>
               <div className="sc-ctr-hint">
                 {/* 触屏没有空格键：两版文案都渲染，由 CSS 按 (hover: none) 选一版 */}
                 <span className="kbd-only">点击按钮或按空格切换行驶</span>
@@ -1337,7 +1338,6 @@ export default function ShowcaseStage({
               <span>{ui.dragHint}</span>
               <span>{freeCamera ? "自由镜头 · Shift / 中键 / 右键平移 · 滚轮推进 · 双击聚焦" : ui.zoomHint}</span>
             </div>
-            <div className="sc-row sc-hint-touch">{freeCamera ? "单指环视 · 双指平移缩放 · 双击聚焦" : ui.touchHint}</div>
             {/* 章节导航：右侧竖排指示器（短横条 + 当前章节更长更亮），悬停 / 键盘聚焦显示章节名 */}
             <div className="sc-row sc-nav" data-glass-ignore>
               {ui.nav.map((item, i) => (
