@@ -268,7 +268,7 @@ const cacheSource = fs.readFileSync('components/showcase/assetCache.ts', 'utf8')
 const homeSource = fs.readFileSync('components/showcase/HomeShowcase.tsx', 'utf8');
 const stageSource = fs.readFileSync('components/showcase/ShowcaseStage.tsx', 'utf8');
 assert.match(cacheSource, /if \(db && !cachedByApi\)/, 'large models are stored in one browser cache, not twice');
-assert.match(homeSource, /matchMedia\("\(pointer: coarse\)"\)\.matches\) return;/, 'touch devices do not prefetch the full model while displaying a preview');
+assert.match(homeSource, /matchMedia\("\(hover: hover\) and \(pointer: fine\)"\)\.matches/, 'only hover-capable pointers may prefetch the full model before selection');
 assert.match(fs.readFileSync('components/showcase/engine.ts', 'utf8'), /Math\.min\(CFG\.model\.maxTextureSize, renderer\.capabilities\.maxTextureSize\)/, 'original textures respect the device WebGL limit');
 assert.match(stageSource, /qualityError && <button[^>]*className="sc-quality-retry"/, 'failed quality switches expose a retry control');
 console.log('PASS mobile high-quality loading avoids duplicate caches and unsupported textures');

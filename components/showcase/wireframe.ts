@@ -288,12 +288,13 @@ export function createWireframeView(initialTuning?: WireframeTuning, deferBuild 
         generatedBytes += bytes(overlayGeometry) + (wire.baseGeometry?.getIndex()?.array.byteLength ?? 0) + bytes(wire.detailGeometry);
   }
 
-  function applyVisuals() {
+  function applyVisuals(startIndex = 0) {
     overlayMaterial.color.set(color);
     overlayLineMaterial.color.set(color);
     pureMaterial.color.set(color);
     pureLineMaterial.color.set(color);
-    for (const { mesh, original, overlay, mutedOverlay, detail } of entries) {
+    for (let index = startIndex; index < entries.length; index += 1) {
+      const { mesh, original, overlay, mutedOverlay, detail } = entries[index];
       const muted = focusFilter ? !focusFilter(mesh) : false;
       mesh.material = muted || mode === "wireframe" ? depthMaterial : original;
       overlay.material = overlay instanceof THREE.LineSegments
@@ -317,10 +318,12 @@ export function createWireframeView(initialTuning?: WireframeTuning, deferBuild 
       if (token !== buildToken || mode === "native" || !root) return;
       // 每帧最多占约 6ms；大模型的数百个网格分批完成，拖动和面板动画不会被整批边线阻塞。
       const sliceStartedAt = performance.now();
+      const firstNewEntry = entries.length;
       do {
         buildMesh(buildQueue[buildIndex++]);
       } while (buildIndex < buildQueue.length && performance.now() - sliceStartedAt < 6);
-      applyVisuals();
+      // 已完成的网格保持原状态；逐批只配置新网格，避免大模型上重复遍历整个线框。
+      applyVisuals(firstNewEntry);
       onBuildProgress?.();
       if (buildIndex < buildQueue.length) scheduleBuild();
     });
