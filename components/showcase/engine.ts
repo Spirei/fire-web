@@ -269,7 +269,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   const backdrop = makeBackdrop([[0, "#191c22"], [0.42, "#0b0c0f"], [0.72, "#070708"], [1, "#030303"]]);
   // 浅色主题：明亮摄影棚背景
-  const backdropLight = makeBackdrop([[0, "#ffffff"], [0.4, "#f6f8fa"], [0.72, "#eceff4"], [1, "#e2e7ee"]]);
+  const backdropLight = makeBackdrop([[0, "#ffffff"], [0.18, "#e5e8ec"], [0.35, "#d5d9de"], [1, "#d5d9de"]]);
   scene.background = theme === "light" ? backdropLight : backdrop;
 
   /* ---------- 灯光：环境贴图为主，补三盏软灯让车身读得出来 ---------- */
@@ -699,56 +699,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let trackDiscFraming = 0;
   const chronoDisc = new THREE.Group();
   const trackDisc = new THREE.Group();
-  type DiscScreenLock = { style: ShowcaseDiscStyle; progress: number; radius: number; points: THREE.Vector2[] };
-  let discScreenLock: DiscScreenLock | null = null;
-  const resetDiscScreenLock = () => {
-    if (!discScreenLock) return;
-    discScreenLock = null;
-    for (const disc of [chronoDisc, trackDisc]) {
-      disc.matrixAutoUpdate = true;
-      disc.position.set(0, 0, 0);
-      disc.updateMatrix();
-    }
-  };
-  const captureDiscScreenLock = (progress: number) => {
-    if (discStyle === "none") return;
-    const disc = discStyle === "track" ? trackDisc : chronoDisc;
-    const radius = discStyle === "track" ? RING_R * (4.25 / 3.3) : RING_R + (RING?.longLength ?? 0);
-    camera.updateMatrixWorld();
-    disc.updateWorldMatrix(true, false);
-    const points = [new THREE.Vector3(), new THREE.Vector3(radius, 0, 0), new THREE.Vector3(-radius, 0, 0),
-      new THREE.Vector3(0, 0, radius), new THREE.Vector3(0, 0, -radius)]
-      .map(point => {
-        point.applyMatrix4(disc.matrixWorld).project(camera);
-        return new THREE.Vector2(point.x, point.y);
-      });
-    discScreenLock = { style: discStyle, progress, radius, points };
-  };
-  const updateDiscScreenLock = (progress: number) => {
-    const lock = discScreenLock;
-    if (!lock) return;
-    if (racing || racingAmt > 0.02 || modelCameraOn() || lock.style !== discStyle || Math.abs(progress - lock.progress) > 0.01) {
-      resetDiscScreenLock();
-      return;
-    }
-    camera.updateMatrixWorld();
-    const onGround = (point: THREE.Vector2) => {
-      const ray = new THREE.Vector3(point.x, point.y, 0.5).unproject(camera).sub(camera.position);
-      const distance = -camera.position.y / ray.y;
-      return distance > 0 && Number.isFinite(distance) ? ray.multiplyScalar(distance).add(camera.position) : null;
-    };
-    const [center, xPlus, xMinus, zPlus, zMinus] = lock.points.map(onGround);
-    if (!center || !xPlus || !xMinus || !zPlus || !zMinus || lock.radius < 0.01) { resetDiscScreenLock(); return; }
-    const xBasis = xPlus.sub(xMinus).multiplyScalar(0.5 / lock.radius);
-    const zBasis = zPlus.sub(zMinus).multiplyScalar(0.5 / lock.radius);
-    const disc = discStyle === "track" ? trackDisc : chronoDisc;
-    disc.matrixAutoUpdate = false;
-    disc.matrix.set(xBasis.x, 0, zBasis.x, center.x,
-                    0, 1, 0, 0,
-                    xBasis.z, 0, zBasis.z, center.z,
-                    0, 0, 0, 1);
-    disc.matrixWorldNeedsUpdate = true;
-  };
   chronoDisc.visible = !mobileViewer();
   trackDisc.visible = false;
   groundFx.add(chronoDisc, trackDisc);
@@ -756,7 +706,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const pool = new THREE.Mesh(
     new THREE.PlaneGeometry(34, 34),
     new THREE.MeshBasicMaterial({
-      map: radialTexture([[0, "rgba(255,158,86,0.34)"], [0.32, "rgba(255,120,44,0.08)"], [1, "rgba(0,0,0,0)"]]),
+      // 车底环境光用中性冷灰，避免橙色光晕在镜面上铺成一大片暗红。
+      map: radialTexture([[0, "rgba(156,174,194,0.24)"], [0.32, "rgba(126,149,174,0.06)"], [1, "rgba(0,0,0,0)"]]),
       transparent: true,
       opacity: 0.3,
       blending: THREE.AdditiveBlending,
@@ -1972,9 +1923,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let viewElevation = 0;
   let viewDistance = 0;
 
-  let interactionUntil = 0;
-  let reflectionLite = false;
-  let reflectResizedAt = -1;
   function render(p: number, dt = 0.016) {
     renderCalls += 1;
     elapsed += dt;
@@ -2150,7 +2098,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       camera.fov += (camState.fovEff - camera.fov) * clamp(dt * 3, 0, 1);
       camera.updateProjectionMatrix();
     }
-    updateDiscScreenLock(p);
 
     // 车：轻微下沉、轮胎自转；位移与镜头使用同帧 carTravel。
     // 车道保持：横向偏移与车头偏角每帧平滑收回隧道中心线，车不会越跑越偏
@@ -2230,10 +2177,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const ringFade = 1 - seg(sps, 0.04, 0.28);
       const discReady = !mobilePresentation || mountedCar !== null;
       // 这是展示台的刻度参照，随车辆跟随机位保留在车下，不遗留在起步点。
-      if (!discScreenLock) {
-        chronoDisc.position.z = carTravel;
-        trackDisc.position.z = carTravel;
-      }
+      chronoDisc.position.z = carTravel;
+      trackDisc.position.z = carTravel;
       chronoDisc.visible = discReady && discStyle === "chrono";
       trackDisc.visible = discReady && discStyle === "track";
       if (ringUniformsRef.uFade) ringUniformsRef.uFade.value = ringFade;
@@ -2409,14 +2354,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       });
     } else hud.inspectMarkers?.forEach(marker => { marker.el.style.opacity = "0"; });
 
-    // 交互时只降低倒影采样尺寸，仍逐帧更新；主体渲染分辨率不变。
-    if (dragging || touches.size > 0 || Math.abs(zoomTarget - zoom) > 0.01 || Math.abs(userYawVel) > 0.5 || Math.abs(userPitchVel) > 0.005) interactionUntil = elapsed + 0.25;
-    const wantsLite = elapsed < interactionUntil;
-    if (wantsLite !== reflectionLite && elapsed - reflectResizedAt > 0.25) {
-      reflectionLite = wantsLite; reflectResizedAt = elapsed;
-      const [rw, rh] = reflectSizeFor(camera.aspect, reflectionLite ? Math.min(512, reflectHeight * 0.5) : reflectHeight);
-      reflectRT.setSize(rw, rh); reflectDirty = true;
-    }
+    // 拖动中切换反射贴图尺寸会清空 FBO，下一帧倒影突然消失又重建，表现为闪烁。
+    // 保持当前画质档的反射尺寸不变，仅在真实窗口/画质变化时调整。
     // 相机或车在动 → 反射必须逐帧更新（否则转动时倒影会抖）；完全静止时复用上一张。
     if (!inspectorOn && floorUniforms.uReflectIntensity.value > 0.001 && reflectNeedsUpdate()) {
       reflectionRenders += 1;
@@ -2486,7 +2425,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       THREE.MathUtils.lerp(1, 1.12, portraitBlend)
     );
     // 反射贴图按画面宽高比同步（换窗口比例时倒影不会又被拉糊）
-    const [reflectW, reflectH] = reflectSizeFor(w / h, reflectionLite ? Math.min(512, reflectHeight * 0.5) : reflectHeight);
+    const [reflectW, reflectH] = reflectSizeFor(w / h, reflectHeight);
     if (reflectRT.width !== reflectW || reflectRT.height !== reflectH) reflectRT.setSize(reflectW, reflectH);
     invalidateInspector();
   }
@@ -2635,7 +2574,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    */
   let homePose: { p: number; yaw: number; pitch: number; zoom: number } | null = null;
   const resetView = () => {
-    resetDiscScreenLock();
     focusTarget.set(0, 0, 0);
     userYaw = inspectorOn ? homePose?.yaw ?? 0 : freeCamera ? 0 : homePose?.yaw ?? 0;
     userYawVel = 0;
@@ -2711,7 +2649,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   const onCanvasDown = (e: PointerEvent) => {
     if (![0, 1, 2].includes(e.button) || (!modelCameraOn() && e.button !== 0)) return;
-    if (!modelCameraOn() && !racing && touches.size === 0) captureDiscScreenLock(pSmooth);
     if (e.pointerType === "touch") {
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size > 1) {
@@ -3407,7 +3344,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       invalidateInspector();
     },
     setDiscStyle: (style) => {
-      resetDiscScreenLock();
       discStyle = style;
       const ready = !mobileViewer() || mountedCar !== null;
       chronoDisc.visible = ready && discStyle === "chrono";
