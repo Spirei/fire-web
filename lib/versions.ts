@@ -4305,6 +4305,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_37_ENTRY.frontend, { name: "KTX2 / UASTC", version: "KTX-Software 4.4.2", desc: "本地工具编码 · 网站 Three.js 解码显示 · 保留源贴图尺寸" }],
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [
+    { kind: "fix", title: "手机车型失败后恢复显示", desc: "线上排查发现，手机高清升级会先卸载轻量车型，解码失败时车身留空且全屏错误层覆盖展示；改为下载期间保留旧车，失败时重新挂载已成功显示的预览。车模首帧不再等待环境贴图，环境资源异常也不清除已显示车型。" },
     { kind: "fix", title: "手机首页抽屉点外部收起", desc: "控制和车型抽屉展开后，点击车身或页面其他区域会自动收起；抽屉内操作保持可用，Escape 仍可关闭。" },
     { kind: "fix", title: "手机首页底栏对齐", desc: "控制与车型抽屉入口在手机端按底边对齐，消除隐藏内容高度不同造成的 5px 错位；窄屏展开内容预留另一侧入口空间，超出时横向滚动。" },
     { kind: "fix", title: "模型展示面板深色对比度", desc: "首页独立深色模式下，模型展示面板保持深色材质与浅色文字，修复站点浅色调色板导致的白底白字。" },

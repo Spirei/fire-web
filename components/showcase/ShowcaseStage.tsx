@@ -522,6 +522,18 @@ export default function ShowcaseStage({
           },
           onError: (message) => {
             if (cancelled || recoveryRequested) return;
+            if (message.startsWith("日间环境贴图加载失败")) {
+              console.warn("[showcase]", message);
+              return;
+            }
+            if (initialReady) {
+              // 已成功显示的车不能因为高清升级失败重新盖上全屏加载层。
+              setQualityLoading(false);
+              setQualityError(true);
+              setLoadingKey(null);
+              setMemoryNotice(message);
+              return;
+            }
             setError(message);
             setReady(false);
             setMemoryNotice(message);

@@ -1451,7 +1451,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     shardUniformsRef = shardUniforms;
   }
 
-  const loadTotal = 2;   // 夜间 HDR + 当前轻量模型；日间 HDR 在需要前再加载
+  const loadTotal = 1;   // 车模首帧决定就绪；环境贴图异步补上，不能把已显示的车卡在加载中
   let loadDone = 0;
   const reportProgress = (partial = 0) => {
     options.onProgress?.(Math.min(1, (loadDone + partial) / loadTotal));
@@ -3137,12 +3137,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       envMixMat.uniforms.uEnv2.value = night;
       envReady = true;
       updateEnv(0);
-      loadDone += 1;
-      reportProgress();
       resize();
       render(progress(), 1 / 60);
     })
-    .catch((err) => options.onError?.(`环境贴图加载失败：${String(err?.message ?? err)}`));
+    .catch((err) => console.warn("[showcase] 夜间环境贴图加载失败:", err));
 
   resize();
 
@@ -3200,12 +3198,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const current = () => !disposed && sequence === modelSwitchSequence;
       return queueModelLoad(async () => {
         let nextCar: THREE.Object3D | null = null;
+        const previousAsset = CFG.assets.model;
+        const previousModel = { ...CFG.model };
         try {
           if (!current()) return false;
-          // 低内存设备先释放旧车，不能在旧贴图仍驻留时解码另一整辆车。
-          if (memoryConstrained) { unmountCar(mountedCar); mountedCar = null; }
+          // 先拿到目标字节；慢网络期间不能让手机上已经显示的车消失。
           const cached = await fetchAssetBuffer(next.asset);
           if (!current()) return false;
+          // 低内存设备解码前释放旧贴图，避免两套贴图同时占用显存。
+          if (memoryConstrained) { unmountCar(mountedCar); mountedCar = null; }
           nextCar = await parseCar(cached.buffer, next.model, current, next.asset);
           if (!nextCar) return false;
           const previousTextureLimit = CFG.model.maxTextureSize;
@@ -3232,6 +3233,21 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           return true;
         } catch (err) {
           if (nextCar) disposeModel(nextCar);
+          // 高清模型不兼容或解码失败时，恢复刚才已成功显示的轻量车。
+          if (current() && memoryConstrained && !mountedCar) {
+            try {
+              const previous = await fetchAssetBuffer(previousAsset);
+              if (current()) {
+                const restored = await parseCar(previous.buffer, previousModel, current, previousAsset);
+                if (restored && current()) {
+                  mountCar(restored);
+                  render(progress(), 1 / 60);
+                }
+              }
+            } catch (restoreError) {
+              console.warn("[showcase] 恢复上一辆车失败:", restoreError);
+            }
+          }
           if (current()) options.onError?.(err instanceof Error ? err.message : String(err ?? "换车失败"));
           return false;
         }
