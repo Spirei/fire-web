@@ -4305,6 +4305,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_37_ENTRY.frontend, { name: "KTX2 / UASTC", version: "KTX-Software 4.4.2", desc: "本地工具编码 · 网站 Three.js 解码显示 · 保留源贴图尺寸" }],
   software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
   changes: [
+    { kind: "fix", title: "高清模型跨设备校验", desc: "GPU 副本清单在文件修改时间发生精度变化时改用源文件 SHA-256 复核，避免部署到群晖后误判副本过期；同一文件状态的校验结果复用。" },
     { kind: "fix", title: "手机首页车型预览先显示", desc: "手机与平板刷新时先显示轻量车型，RAW 高清在首帧后升级；受限设备升级时保留上一帧，避免车身再次消失。模型下载后的持久缓存改为后台写入，不再阻塞解析与显示。" },
     { kind: "fix", title: "首页高清车型预览优先显示", desc: "桌面刷新保留已选画质，先显示已生成的轻量预览，再在首帧后后台换入高清原模；避免等待大模型解析才出现车辆。低内存设备继续使用安全加载路径。" },
     { kind: "feature", title: "起步胶囊显示加速进度", desc: "胶囊填充随实际车速从左向右推进，减速时平滑退回；浅色与深色模式分别使用适配的橙色透明度。" },

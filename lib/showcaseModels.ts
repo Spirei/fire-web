@@ -9,6 +9,7 @@
  */
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import type { ShowcaseConfig, ShowcaseModelParams } from "@/components/showcase/types";
 import { SHOWCASE_MODELS, buildImportedConfig } from "@/components/showcase/presets/models";
 
@@ -464,12 +465,24 @@ function generatedPreviewUrl(file: string): string | undefined {
 }
 
 /** 仅使用与当前原文件匹配的已校验 GPU 副本。 */
+const sourceHashCache = new Map<string, { size: number; mtimeMs: number; sha256: string }>();
+function sourceSha256(input: string, size: number, mtimeMs: number): string {
+  const cached = sourceHashCache.get(input);
+  if (cached?.size === size && cached.mtimeMs === mtimeMs) return cached.sha256;
+  const sha256 = crypto.createHash("sha256").update(fs.readFileSync(input)).digest("hex");
+  sourceHashCache.set(input, { size, mtimeMs, sha256 });
+  return sha256;
+}
+
 function gpuModelUrl(input: string, gpuFile: string): string | undefined {
   const gpuPath = path.join(SHOWROOM_DIR, "gpu", gpuFile);
   try {
     const manifest = JSON.parse(fs.readFileSync(`${gpuPath}.json`, "utf8"));
     const original = fs.statSync(input), gpu = fs.statSync(gpuPath);
-    if (manifest.sourceBytes === original.size && manifest.sourceMtimeMs === original.mtimeMs && gpu.size === manifest.outputBytes) {
+    if (manifest.sourceBytes !== original.size || gpu.size !== manifest.outputBytes) return undefined;
+    const sameSource = manifest.sourceMtimeMs === original.mtimeMs
+      || (typeof manifest.sourceSha256 === "string" && sourceSha256(input, original.size, original.mtimeMs) === manifest.sourceSha256);
+    if (sameSource) {
       return `/uploads/mclaren/gpu/${encodeURIComponent(gpuFile)}?v=${gpu.mtimeMs}`;
     }
   } catch { /* 尚未生成或副本过期，保留原资源。 */ }
