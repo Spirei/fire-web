@@ -243,19 +243,20 @@ async function loadAsset(
     onProgress?.(1);
   }
 
-  // 写缓存：用已经读到的字节流构造一个响应再 put。
+  // 缓存写入不能阻塞首帧：大型 GLB 的 Cache Storage / IndexedDB 事务在手机上可能耗时数秒。
   // 直接把下载中的流式响应 put 进 Cache Storage 会报 "network error"（实测 23 MB 的车模必失败）。
   if (buffer.byteLength > 0) {
-    const cachedByApi = await writeToCacheApi(absUrl, new Response(buffer, {
-      headers: { "Content-Type": contentType, "Cache-Control": "max-age=31536000" }
-    }));
-    if (cachedByApi) await pruneCacheApi(absUrl);
-    // HTTPS 手机浏览器里同时写 Cache Storage 与 IndexedDB 会把 65–106 MB 车模
-    // 保留两份；高清贴图解析时尤其容易触发内存回收或 WebGL 上下文丢失。
-    if (db && !cachedByApi) {
-      await writeEntry(db, absUrl, buffer);
-      await pruneOld(db, absUrl);
-    }
+    void (async () => {
+      const cachedByApi = await writeToCacheApi(absUrl, new Response(buffer, {
+        headers: { "Content-Type": contentType, "Cache-Control": "max-age=31536000" }
+      }));
+      if (cachedByApi) await pruneCacheApi(absUrl);
+      // HTTPS 手机浏览器避免同时写两份 65–106 MB 车模。
+      if (db && !cachedByApi) {
+        await writeEntry(db, absUrl, buffer);
+        await pruneOld(db, absUrl);
+      }
+    })();
   }
   return { buffer, fromCache: false, mode: "network" };
 }

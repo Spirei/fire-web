@@ -396,8 +396,8 @@ export default function ShowcaseStage({
         const requestedAsset = inspectorRef.current || requestedQuality !== "fast" || wireRef.current.mode !== "native"
           ? (textureQualityRef.current === "original" ? cfg.assets.gpuModel ?? cfg.assets.model : cfg.assets.model)
           : (cfg.assets.previewModel ?? cfg.assets.model);
-        // 桌面刷新时先挂轻量车，完整车在首帧之后原地替换；画质偏好仍保持原选项。
-        const bootstrapPreview = !constrainedGraphics() && !inspectorRef.current && wireRef.current.mode === "native"
+        // 所有设备先显示轻量车；手机若直接解析用户记住的 RAW，会在十多秒内一直空白。
+        const bootstrapPreview = !inspectorRef.current && wireRef.current.mode === "native"
           && requestedQuality !== "fast" && !!cfg.assets.previewModel && cfg.assets.previewModel !== requestedAsset;
         const initialAsset = bootstrapPreview ? cfg.assets.previewModel! : requestedAsset;
         const initialQuality = bootstrapPreview ? "fast" : requestedQuality;
@@ -450,9 +450,19 @@ export default function ShowcaseStage({
               const fullKey = JSON.stringify({ a: requestedAsset, m: cfg.model ?? null, q: requestedQuality });
               const switchId = ++qualitySwitchRef.current;
               appliedModelRef.current = fullKey;
+              // 受限设备换车时会先释放旧贴图；保留首帧画面，避免升级 RAW 期间车再次消失。
+              const upgradeFreeze = constrainedGraphics() ? handle.snapshot() : null;
+              if (upgradeFreeze) {
+                upgradeFreeze.className = "sc-freeze";
+                wrap.after(upgradeFreeze);
+              }
               setQualityLoading(true);
               setLoadingKey(fullKey);
               void handle.setModel({ asset: requestedAsset, model: qualityModel(cfg.model) }).then((ok) => {
+                if (upgradeFreeze) {
+                  upgradeFreeze.classList.add("out");
+                  window.setTimeout(() => upgradeFreeze.remove(), 500);
+                }
                 if (cancelled || switchId !== qualitySwitchRef.current) return;
                 if (!ok) appliedModelRef.current = initialKey;
                 else {
@@ -1199,13 +1209,12 @@ export default function ShowcaseStage({
                 onContextMenu={(event) => event.preventDefault()}
                 onSelect={(event) => event.preventDefault()}
                 onDragStart={(event) => event.preventDefault()}>
-                <span className="kbd-only">{racing ? ui.raceActive : ui.raceIdle}</span>
-                <span className="touch-only">{racing ? "点按减速" : "点按起步"}</span>
+                <span>{racing ? "点按减速" : "点按起步"}</span>
                 <em>→</em>
               </button>
               <div className="sc-ctr-hint">
                 {/* 触屏没有空格键：两版文案都渲染，由 CSS 按 (hover: none) 选一版 */}
-                <span className="kbd-only">{ui.raceHint}</span>
+                <span className="kbd-only">点击按钮或按空格切换行驶</span>
                 <span className="touch-only">点按保持行驶 · 可自由切换镜头</span>
               </div>
             </div>

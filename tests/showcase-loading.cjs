@@ -23,6 +23,8 @@ const js = ts.transpileModule(`module.exports = function(rebuild, fallback = 'fi
  const handle = {setModel: next => {state.promoted = next; return Promise.resolve(true)}};
  const handleRef = {current:handle};
  const qualityModel = model => model;
+ const constrainedGraphics = () => false;
+ const wrap = {after: () => {}};
  const setQualityLoading = v => state.qualityLoading = v;
  const setQualityError = v => state.qualityError = v;
  const window = {requestAnimationFrame: cb => {state.promoteFrame = cb}};
