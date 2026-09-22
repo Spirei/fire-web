@@ -37,9 +37,21 @@ check "me 未登录返回 401" 401 "$(code "$BASE/api/auth/me")"
 check "错误密码被拒绝"      401 "$(code -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' -d '{"username":"demo","password":"wrong"}')"
 
 LOGIN=$(curl -s -c "$JAR_DEMO" -w '\n%{http_code}' -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' -d '{"username":"demo","password":"demo1234"}')
-check "demo 登录成功" 200 "$(echo "$LOGIN" | tail -1)"
+LOGIN_CODE=$(echo "$LOGIN" | tail -1)
+check "demo 登录成功" 200 "$LOGIN_CODE"
+if [ "$LOGIN_CODE" != 200 ]; then
+  echo "冒烟测试需要 demo/demo1234；登录失败，停止后续写入以免留下测试数据。"
+  rm -f "$JAR_DEMO" "$JAR_NEW"
+  exit 1
+fi
 ME=$(curl -s -b "$JAR_DEMO" "$BASE/api/auth/me")
 check "me 返回 demo" demo "$(echo "$ME" | python3 -c 'import json,sys; print(json.load(sys.stdin)["user"]["username"])')"
+SEED_COUNT=$(curl -s -b "$JAR_DEMO" "$BASE/api/records" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(len(data) if isinstance(data,list) else -1)')
+if [ "$SEED_COUNT" != 6 ]; then
+  echo "冒烟测试需要 demo 的 6 条种子记录（当前 $SEED_COUNT）；停止后续写入。"
+  rm -f "$JAR_DEMO" "$JAR_NEW"
+  exit 1
+fi
 
 # 登录后页面巡检：逐页确认服务端渲染没有异常（曾出现 /trading 因 SSR 访问
 # localStorage 直接 500 而测试没发现的情况，这里把主要页面都跑一遍）
