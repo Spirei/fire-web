@@ -392,15 +392,22 @@ export default function ShowcaseStage({
       try {
         const { createShowcaseScene } = await import("./engine");
         if (cancelled) return;
-        const initialAsset = inspectorRef.current || textureQualityRef.current !== "fast" || wireRef.current.mode !== "native"
+        const requestedQuality = textureQualityRef.current;
+        const requestedAsset = inspectorRef.current || requestedQuality !== "fast" || wireRef.current.mode !== "native"
           ? (textureQualityRef.current === "original" ? cfg.assets.gpuModel ?? cfg.assets.model : cfg.assets.model)
           : (cfg.assets.previewModel ?? cfg.assets.model);
-        const initialKey = JSON.stringify({ a: initialAsset, m: cfg.model ?? null, q: textureQualityRef.current });
+        // 桌面刷新时先挂轻量车，完整车在首帧之后原地替换；画质偏好仍保持原选项。
+        const bootstrapPreview = !constrainedGraphics() && !inspectorRef.current && wireRef.current.mode === "native"
+          && requestedQuality !== "fast" && !!cfg.assets.previewModel && cfg.assets.previewModel !== requestedAsset;
+        const initialAsset = bootstrapPreview ? cfg.assets.previewModel! : requestedAsset;
+        const initialQuality = bootstrapPreview ? "fast" : requestedQuality;
+        const initialKey = JSON.stringify({ a: initialAsset, m: cfg.model ?? null, q: initialQuality });
+        let initialReady = false;
         setLoadingKey(initialKey);
         handle = createShowcaseScene({
           canvas,
           initialTheme: themeRef.current,
-          config: { ...cfg, assets: { ...cfg.assets, model: initialAsset }, model: qualityModel(cfg.model) },
+          config: { ...cfg, assets: { ...cfg.assets, model: initialAsset }, model: { ...cfg.model, maxTextureSize: TEXTURE_QUALITY[initialQuality].size } },
           // 置顶机位：引擎直接从置顶进度起步，不会先落到开场机位再弹回来
           startProgress: pinnedPoseRef.current?.p ?? 0,
           hud: {
@@ -427,14 +434,36 @@ export default function ShowcaseStage({
             setLoadRatio(Math.min(0.99, Math.max(0, ratio)));
           },
           onReady: () => {
-            if (cancelled || recoveryRequested) return;
+            if (cancelled || recoveryRequested || initialReady) return;
+            initialReady = true;
             setLoadRatio(1);
             setError(null);
             setReady(true);
             rememberLoadedModel(initialKey);
             setLoadingKey(null);
-            rememberWorkingQuality(configRef.current.assets.model, textureQualityRef.current);
+            rememberWorkingQuality(cfg.assets.model, initialQuality);
             dropFreeze();
+            if (bootstrapPreview) window.requestAnimationFrame(() => {
+              if (cancelled || recoveryRequested || !handle || handleRef.current !== handle
+                || inspectorRef.current || wireRef.current.mode !== "native"
+                || textureQualityRef.current !== requestedQuality || configRef.current.assets.model !== cfg.assets.model) return;
+              const fullKey = JSON.stringify({ a: requestedAsset, m: cfg.model ?? null, q: requestedQuality });
+              const switchId = ++qualitySwitchRef.current;
+              appliedModelRef.current = fullKey;
+              setQualityLoading(true);
+              setLoadingKey(fullKey);
+              void handle.setModel({ asset: requestedAsset, model: qualityModel(cfg.model) }).then((ok) => {
+                if (cancelled || switchId !== qualitySwitchRef.current) return;
+                if (!ok) appliedModelRef.current = initialKey;
+                else {
+                  rememberLoadedModel(fullKey);
+                  rememberWorkingQuality(cfg.assets.model, requestedQuality);
+                }
+                setQualityLoading(false);
+                setQualityError(!ok);
+                setLoadingKey(null);
+              });
+            });
           },
           onTextureBudget: limit => { if (!cancelled && !recoveryRequested) setTextureLimitNotice(limit); },
           onPhase: handlePhase,
@@ -493,12 +522,14 @@ export default function ShowcaseStage({
         handle.setInspector(inspectorRef.current);
         handleRef.current = handle;
         // 记下这一轮挂的是哪辆车：之后 config 里只有车型变了就原地换车，不重建场景
-        appliedModelRef.current = JSON.stringify({ a: initialAsset, m: cfg.model ?? null, q: textureQualityRef.current });
+        appliedModelRef.current = initialKey;
         const now = configRef.current;
-        const nowAsset = inspectorRef.current || textureQualityRef.current !== "fast" || wireRef.current.mode !== "native"
+        const stillBootstrapping = bootstrapPreview && now.assets.model === cfg.assets.model
+          && textureQualityRef.current === requestedQuality && !inspectorRef.current && wireRef.current.mode === "native";
+        const nowAsset = stillBootstrapping ? initialAsset : inspectorRef.current || textureQualityRef.current !== "fast" || wireRef.current.mode !== "native"
           ? (textureQualityRef.current === "original" ? now.assets.gpuModel ?? now.assets.model : now.assets.model)
           : (now.assets.previewModel ?? now.assets.model);
-        const nowKey = JSON.stringify({ a: nowAsset, m: now.model ?? null, q: textureQualityRef.current });
+        const nowKey = JSON.stringify({ a: nowAsset, m: now.model ?? null, q: stillBootstrapping ? "fast" : textureQualityRef.current });
         if (nowKey !== appliedModelRef.current) {
           // 创建期间用户已经切了车：等引擎挂完这一次再补一次原地换车
           void handle.setModel({ asset: nowAsset, model: qualityModel(now.model) }).then((ok) => {
