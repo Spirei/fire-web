@@ -760,6 +760,26 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal((await read('symlink.glb')).status, 404);
     fs.unlinkSync(path.join(store.MODELS_DIR, 'symlink.glb'));
   });
+  await test('showcase 登记表损坏时停止保存，避免覆盖车型参数', () => {
+    const store = require(path.join(root, 'lib/showcaseModels.ts'));
+    const read = fs.readFileSync;
+    const exists = fs.existsSync;
+    let registryBody = '{invalid-json';
+    fs.existsSync = function(file) {
+      if (String(file) === path.join(store.SHOWROOM_DIR, 'showroom.json')) return true;
+      return exists.call(this, file);
+    };
+    fs.readFileSync = function(file, ...args) {
+      if (String(file) === path.join(store.SHOWROOM_DIR, 'showroom.json')) return registryBody;
+      return read.call(this, file, ...args);
+    };
+    try {
+      assert.throws(() => store.readRegistry(), /登记表读取失败/);
+      assert.throws(() => store.ensureRegistry(), /登记表读取失败/);
+      registryBody = '{"models":[{"id":"bad car","file":"car.glb"}]}';
+      assert.throws(() => store.readRegistry(), /登记表读取失败/);
+    } finally { fs.readFileSync = read; fs.existsSync = exists; }
+  });
   await test('showcase 体检不留附件，保存成功才落盘，失败与旧草稿均清理', async () => {
     const route = require(path.join(root, 'app/api/showcase/models/upload/route.ts'));
     const store = require(path.join(root, 'lib/showcaseModels.ts'));

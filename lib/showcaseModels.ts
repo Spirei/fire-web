@@ -286,15 +286,21 @@ export function readRegistry(): {
 } {
   try {
     const raw = JSON.parse(fs.readFileSync(REGISTRY_FILE, "utf8")) as Partial<RegistryFile>;
-    const list = Array.isArray(raw.models) ? raw.models : [];
-    const models = list.filter((item) => item && validModelId(item.id) && validModelFile(item.file));
+    if (!raw || !Array.isArray(raw.models) || raw.models.some((item) =>
+      !item || typeof item.id !== "string" || typeof item.file !== "string" || !validModelId(item.id) || !validModelFile(item.file))) {
+      throw new Error("车型登记表结构不正确");
+    }
+    const models = raw.models;
     const order = (Array.isArray(raw.order) ? raw.order : []).filter((id) => typeof id === "string" && validModelId(id));
     const builtinMeta = raw.builtinMeta && typeof raw.builtinMeta === "object" ? raw.builtinMeta : {};
     const ignoredFiles = (Array.isArray(raw.ignoredFiles) ? raw.ignoredFiles : []).filter((file) => typeof file === "string" && validModelFile(file));
     const hiddenIds = (Array.isArray(raw.hiddenIds) ? raw.hiddenIds : []).filter((id) => typeof id === "string" && validModelId(id));
     return { order, models, builtinMeta, ignoredFiles, hiddenIds };
-  } catch {
-    return { order: [], models: [], builtinMeta: {}, ignoredFiles: [], hiddenIds: [] };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { order: [], models: [], builtinMeta: {}, ignoredFiles: [], hiddenIds: [] };
+    }
+    throw new Error("车型登记表读取失败，请检查 showroom.json；为避免覆盖已有车型，已停止保存", { cause: error });
   }
 }
 
@@ -469,7 +475,16 @@ const sourceHashCache = new Map<string, { size: number; mtimeMs: number; sha256:
 function sourceSha256(input: string, size: number, mtimeMs: number): string {
   const cached = sourceHashCache.get(input);
   if (cached?.size === size && cached.mtimeMs === mtimeMs) return cached.sha256;
-  const sha256 = crypto.createHash("sha256").update(fs.readFileSync(input)).digest("hex");
+  const hash = crypto.createHash("sha256");
+  const fd = fs.openSync(input, "r");
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  try {
+    let count: number;
+    while ((count = fs.readSync(fd, buffer, 0, buffer.length, null)) > 0) hash.update(buffer.subarray(0, count));
+  } finally {
+    fs.closeSync(fd);
+  }
+  const sha256 = hash.digest("hex");
   sourceHashCache.set(input, { size, mtimeMs, sha256 });
   return sha256;
 }
