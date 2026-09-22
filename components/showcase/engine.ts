@@ -2374,12 +2374,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     lightLinesPass.uniforms.tSceneDepth.value = composer.readBuffer.depthTexture;
     (lightLinesPass.uniforms.uWorldFromClip.value as THREE.Matrix4).multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse);
-    if (inspectorOn) {
-      // 模型展示跟随首页深浅主题；直接渲染保留纯线框颜色，不经过后期调色。
+    if (inspectorOn || wireframeMode !== "native") {
+      // 线框直接渲染；返回首页时避免完整线段再次进入深度纹理和后期处理链。
       const background = scene.background;
-      const hidden = scene.children.filter(child => child !== carRoot && !(child as THREE.Light).isLight && child.visible);
+      const hidden = inspectorOn ? scene.children.filter(child => child !== carRoot && !(child as THREE.Light).isLight && child.visible) : [];
       hidden.forEach(child => { child.visible = false; });
-      scene.background = theme === "light" || studioOn ? inspectorBackgroundLight : inspectorBackgroundDark;
+      if (inspectorOn) scene.background = theme === "light" || studioOn ? inspectorBackgroundLight : inspectorBackgroundDark;
       renderer.setRenderTarget(null);
       renderer.render(scene, camera);
       scene.background = background;
