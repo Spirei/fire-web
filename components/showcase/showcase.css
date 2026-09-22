@@ -894,6 +894,21 @@ html:has(.showcase) body {
 }
 .sc-quality-retry { cursor: pointer; color: var(--sc-papaya); }
 
+.sc-quality-pending {
+  width: 13px;
+  height: 13px;
+  margin: 5px 0 4px 2px;
+  border: 1.5px solid var(--sc-ink);
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: .65;
+  animation: sc-quality-spin .9s linear infinite;
+}
+@keyframes sc-quality-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .sc-quality-pending { animation: none; }
+}
+
 .sc-quality-option {
   position: relative;
   pointer-events: auto;

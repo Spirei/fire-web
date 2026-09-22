@@ -1350,7 +1350,7 @@ export default function ShowcaseStage({
                 <span className="sc-quality-cap" aria-hidden="true">纹理</span>
                 {memoryNotice && <span className="sc-quality-status" role="status">{memoryNotice}</span>}
                 {!memoryNotice && textureLimitNotice && <span className="sc-quality-status" role="status">设备适配 · 贴图上限 {Math.round(textureLimitNotice / 1024)}K</span>}
-                {qualityLoading && showLoadingNotice && <span className="sc-quality-status" role="status">加载高清模型…</span>}
+                {qualityLoading && showLoadingNotice && <span className="sc-quality-pending" role="status" aria-label="正在更新高清模型" title="正在更新高清模型" />}
                 {qualityError && <button type="button" className="sc-quality-retry" onClick={() => {
                   setQualityError(false);
                   setRetry((n) => n + 1);
