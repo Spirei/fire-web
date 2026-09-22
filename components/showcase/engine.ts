@@ -1966,8 +1966,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 主光相应加一点，整车亮度基本不变，只是高光不再聚成一块
     rimLight.intensity = (light ? 0.6 : 0.58) + day * 0.26 + seg(p, 0.42, 0.5) * 0.14 + speedLight * 0.12;
     fillLight.intensity = 0.36 + day * 0.24 + speedLight * 0.52;
-    inspectorViewLight.intensity = inspectorOn ? 1.15 : 0;
-    inspectorUnderLight.intensity = inspectorOn ? 0.42 : 0;
 
     // 相机
     camAt(p);
@@ -2046,6 +2044,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const trackPullback = 1 + trackDiscFraming * 0.34;
     const baseRadius = THREE.MathUtils.lerp(camState.r, driveRadius, cameraBlend) * fitRadius * trackPullback;
     const r = THREE.MathUtils.lerp(camState.r * zoom, driveRadius, cameraBlend) * fitRadius * trackPullback;
+    // 第六组自由镜头进入车内时沿用模型展示的观察补光。原先这两盏灯只在
+    // inspectorOn 下开启，夜景中的方向盘和座舱组件因此几乎全黑。
+    const interiorFill = freeCamera && !inspectorOn ? 1 - seg(r, 0.8, 2.6) : 0;
+    inspectorViewLight.intensity = inspectorOn ? 1.15 : interiorFill * 1.15;
+    inspectorUnderLight.intensity = inspectorOn ? 0.42 : interiorFill * 0.42;
     const h = THREE.MathUtils.lerp(camState.h, driveHeight, cameraBlend);
     const targetY = THREE.MathUtils.lerp(camState.ty, chase.targetY, cameraBlend) - trackDiscFraming * 0.45;
     // 关键帧给的是高度，换成仰角后才能和用户的上下拖拽相加；
