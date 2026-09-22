@@ -7,6 +7,7 @@ import { usePersistedState } from "@/lib/usePersistedState";
 import type { WireframeMode } from "./wireframe";
 import LiquidGlassControl from "@/components/LiquidGlassControl";
 import { hasLoadedModel, rememberLoadedModel } from "./loadHistory";
+import { primeModelAsset } from "./assetCache";
 import MusicIcon from "./MusicIcon";
 import { constrainedGraphics, rememberWorkingQuality, recoveryQuality } from "./modelMemory";
 import "./showcase.css";
@@ -57,6 +58,7 @@ export default function ShowcaseStage({
   currentModel,
   onModelChange,
   onModelIntent,
+  onModelIntentEnd,
   onImport,
   initialTheme = "dark"
 }: {
@@ -75,7 +77,8 @@ export default function ShowcaseStage({
   currentModel?: string;
   onModelChange?: (id: string) => void;
   /** 悬停 / 聚焦 / 触摸按下：外层据此静默预取素材 */
-  onModelIntent?: (id: string) => void;
+  onModelIntent?: (id: string, hoverForHighQuality?: boolean) => void;
+  onModelIntentEnd?: () => void;
   /** 传了才显示车型条末尾的「＋」：点进导入向导（只有管理员会拿到这个回调） */
   onImport?: () => void;
 }) {
@@ -479,28 +482,32 @@ export default function ShowcaseStage({
             dropFreeze();
             window.setTimeout(saveResumeFrame, 250);
             // 先给手机一个真正可交互的预览窗口；高清解码不能紧贴首帧把主线程占满。
-            if (bootstrapPreview) upgradeTimer = window.setTimeout(() => window.requestAnimationFrame(() => {
-              if (cancelled || recoveryRequested || !handle || handleRef.current !== handle
-                || inspectorRef.current || wireRef.current.mode !== "native"
-                || textureQualityRef.current !== requestedQuality || configRef.current.assets.model !== cfg.assets.model) return;
-              const fullKey = JSON.stringify({ a: requestedAsset, m: cfg.model ?? null, q: requestedQuality });
-              const switchId = ++qualitySwitchRef.current;
-              appliedModelRef.current = fullKey;
-              setQualityLoading(true);
-              setLoadingKey(fullKey);
-              void handle.setModel({ asset: requestedAsset, model: qualityModel(cfg.model) }).then((ok) => {
-                if (cancelled || switchId !== qualitySwitchRef.current) return;
-                if (!ok) appliedModelRef.current = initialKey;
-                else {
-                  rememberLoadedModel(fullKey);
-                  rememberWorkingQuality(cfg.assets.model, requestedQuality);
-                  window.setTimeout(saveResumeFrame, 250);
-                }
-                setQualityLoading(false);
-                setQualityError(!ok);
-                setLoadingKey(null);
-              });
-            }), constrainedGraphics() ? 1800 : 400);
+            if (bootstrapPreview) {
+              // 网络传输与短暂交互窗口并行；到升级时复用同一份字节，不再二次读取整包缓存。
+              primeModelAsset(requestedAsset);
+              upgradeTimer = window.setTimeout(() => window.requestAnimationFrame(() => {
+                if (cancelled || recoveryRequested || !handle || handleRef.current !== handle
+                  || inspectorRef.current || wireRef.current.mode !== "native"
+                  || textureQualityRef.current !== requestedQuality || configRef.current.assets.model !== cfg.assets.model) return;
+                const fullKey = JSON.stringify({ a: requestedAsset, m: cfg.model ?? null, q: requestedQuality });
+                const switchId = ++qualitySwitchRef.current;
+                appliedModelRef.current = fullKey;
+                setQualityLoading(true);
+                setLoadingKey(fullKey);
+                void handle.setModel({ asset: requestedAsset, model: qualityModel(cfg.model) }).then((ok) => {
+                  if (cancelled || switchId !== qualitySwitchRef.current) return;
+                  if (!ok) appliedModelRef.current = initialKey;
+                  else {
+                    rememberLoadedModel(fullKey);
+                    rememberWorkingQuality(cfg.assets.model, requestedQuality);
+                    window.setTimeout(saveResumeFrame, 250);
+                  }
+                  setQualityLoading(false);
+                  setQualityError(!ok);
+                  setLoadingKey(null);
+                });
+              }), constrainedGraphics() ? 1800 : 400);
+            }
           },
           onTextureBudget: limit => { if (!cancelled && !recoveryRequested) setTextureLimitNotice(limit); },
           onPhase: handlePhase,
@@ -660,25 +667,22 @@ export default function ShowcaseStage({
     setQualityLoading(true);
     setLoadingKey(targetKey);
     setQualityError(false);
-    const previewAsset = !inspectorRef.current && wireRef.current.mode === "native" && textureQualityRef.current !== "fast"
-      && next.assets.previewModel !== asset ? next.assets.previewModel : undefined;
+    // 车型切换一律先交付可交互的轻量车；模型展示/线框随后再升级完整网格。
+    const previewAsset = next.assets.previewModel !== asset ? next.assets.previewModel : undefined;
     const previewKey = previewAsset ? JSON.stringify({ a: previewAsset, m: next.model ?? null, q: "fast" }) : null;
     let previewSucceeded = false;
     const switchModel = async () => {
       if (previewAsset) {
-        const previousFrame = constrainedGraphics() ? handle.snapshot() : null;
-        if (previousFrame) {
-          previousFrame.className = "sc-freeze";
-          canvasWrapRef.current?.after(previousFrame);
-        }
         const previewOk = await handle.setModel({ asset: previewAsset, model: { ...next.model, maxTextureSize: TEXTURE_QUALITY.fast.size } });
-        if (previousFrame) {
-          previousFrame.classList.add("out");
-          window.setTimeout(() => previousFrame.remove(), 500);
-        }
         if (switchId !== qualitySwitchRef.current || !previewOk) return previewOk;
         previewSucceeded = true;
         rememberLoadedModel(previewKey!);
+        if (constrainedGraphics()) {
+          primeModelAsset(asset);
+          // 轻量车先获得一个可操作窗口，高清传输同时进行。
+          await new Promise<void>(resolve => window.setTimeout(resolve, 650));
+          if (switchId !== qualitySwitchRef.current) return false;
+        }
       }
       return handle.setModel({ asset, model: qualityModel(next.model) });
     };
@@ -1078,8 +1082,10 @@ export default function ShowcaseStage({
                           className={`fire-cap${item.id === currentModel ? " on" : ""}${loading ? " loading" : ""}`}
                           aria-pressed={item.id === currentModel}
                           onClick={() => onModelChange?.(item.id)}
-                          onPointerEnter={() => onModelIntent?.(item.id)}
-                          onFocus={() => onModelIntent?.(item.id)}
+                          onPointerEnter={() => onModelIntent?.(item.id, true)}
+                          onPointerLeave={onModelIntentEnd}
+                          onFocus={() => onModelIntent?.(item.id, true)}
+                          onBlur={onModelIntentEnd}
                           onTouchStart={() => onModelIntent?.(item.id)}>
                           <span>{item.label}</span>
                           {loading && <i style={{ width: `${Math.round((item.progress ?? 0) * 100)}%` }} />}
@@ -1399,8 +1405,10 @@ export default function ShowcaseStage({
                       type="button"
                       className={`sc-model fire-cap${item.id === currentModel ? " on" : ""}${loading ? " loading" : ""}`}
                       onClick={() => onModelChange?.(item.id)}
-                      onPointerEnter={() => onModelIntent?.(item.id)}
-                      onFocus={() => onModelIntent?.(item.id)}
+                      onPointerEnter={() => onModelIntent?.(item.id, true)}
+                      onPointerLeave={onModelIntentEnd}
+                      onFocus={() => onModelIntent?.(item.id, true)}
+                      onBlur={onModelIntentEnd}
                       onTouchStart={() => onModelIntent?.(item.id)}
                       aria-pressed={item.id === currentModel}
                       title={item.note ? `${item.label} · ${item.note}` : item.label}
@@ -1442,7 +1450,6 @@ export default function ShowcaseStage({
             ))}
           </div>
 
-          {ready && inspector && qualityLoading && showLoadingNotice && <div className="sc-loading" role="status" style={{ pointerEvents: "none" }}><span>正在加载模型…</span></div>}
           {!ready && (error || showLoadingNotice) && (
             <div className="sc-loading" style={{ opacity: error ? 1 : 0.9 }}>
               <span className={error ? "sc-loading-error" : undefined}>{error ?? ui.loading}</span>

@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ShowcaseStage from "./ShowcaseStage";
 import { DEFAULT_SHOWCASE_MODEL } from "./presets/models";
 import type { ShowcaseConfig } from "./types";
-import { fetchAssetBuffer, isAssetCached, prefetchAsset } from "./assetCache";
+import { fetchAssetBuffer, isAssetCached, prefetchAsset, primeModelAsset } from "./assetCache";
 import { usePersistedState } from "@/lib/usePersistedState";
 
 type ModelStatus = "idle" | "loading" | "ready";
@@ -21,7 +21,7 @@ export interface HomeShowcaseModel {
  * 首页展示台 + 右下角车型切换。
  *
  * 车型素材有大有小（20 MB ～ 105 MB），所以默认只加载当前选中的那一辆：
- * 1. 鼠标划过 / 键盘聚焦 / 手指按下某个车型 → 后台静默预取（进 Cache Storage / IndexedDB）；
+ * 1. 鼠标划过 / 键盘聚焦 / 手指按下某个车型 → 静默预取轻量车；有悬停能力的设备停留片刻再预热所选高清文件；
  * 2. 点选时若已就绪立即切换；若还在下载，按钮上显示进度，等就绪再切 —— 旧车不会先消失；
  * 3. 选中的车型记在 fire:showcase:model，刷新保持（那一辆会随首屏一起加载）。
  *
@@ -44,11 +44,14 @@ export default function HomeShowcase({
   const list = useMemo(() => (models.length ? models : []), [models]);
   const fallbackId = defaultModelId ?? DEFAULT_SHOWCASE_MODEL;
   const [storedId, setModelId] = usePersistedState<string>("fire:showcase:model", fallbackId);
+  const [textureQuality] = usePersistedState<"fast" | "balanced" | "fine" | "original">("fire:showcase:texture-quality", "fast");
+  const [wireMode] = usePersistedState<"native" | "overlay" | "wireframe">("fire:showcase:wire-mode", "native");
   // 选中的车可能已经被删掉 / 素材缺失：回落到默认那辆，避免整页空白
   const modelId = list.some((item) => item.id === storedId) ? storedId : (list[0]?.id ?? fallbackId);
   const [status, setStatus] = useState<Record<string, ModelStatus>>({});
   const [progress, setProgress] = useState<Record<string, number>>({});
   const pendingRef = useRef<string | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const current = useMemo(
     () => list.find((item) => item.id === modelId) ?? list[0],
@@ -63,19 +66,33 @@ export default function HomeShowcase({
     };
   }, []);
 
-  /** 悬停 / 聚焦 / 触摸按下：静默预热，不改变当前展示 */
+  /** 悬停 / 聚焦 / 触摸按下：优先预热预览；明确悬停才准备高清，不改变当前展示。 */
   const warmUp = useCallback(
-    (id: string) => {
+    (id: string, inspectorIntent = false) => {
       const model = list.find((item) => item.id === id);
-      if (!model || id === modelId || status[id] === "ready" || status[id] === "loading") return;
+      if (!model || id === modelId) return;
+      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+      if (inspectorIntent && typeof matchMedia === "function" && matchMedia("(hover: hover) and (pointer: fine)").matches
+        && (textureQuality !== "fast" || wireMode !== "native")) {
+        hoverTimerRef.current = setTimeout(() => {
+          primeModelAsset(textureQuality === "original" ? model.config.assets.gpuModel ?? model.config.assets.model : model.config.assets.model);
+          hoverTimerRef.current = null;
+        }, 350);
+      }
+      if (status[id] === "ready" || status[id] === "loading") return;
       const onProgress = attachProgress(id);
       const preview = model.config.assets.previewModel ?? model.config.assets.model;
       void prefetchAsset(preview, onProgress).catch(() => {
         setStatus((prev) => ({ ...prev, [id]: "idle" }));
       });
     },
-    [attachProgress, list, modelId, status]
+    [attachProgress, list, modelId, status, textureQuality, wireMode]
   );
+  const cancelWarmUp = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = null;
+  }, []);
+  useEffect(() => cancelWarmUp, [cancelWarmUp]);
 
   const select = useCallback(
     async (id: string) => {
@@ -132,6 +149,7 @@ export default function HomeShowcase({
       currentModel={current.id}
       onModelChange={(id) => void select(id)}
       onModelIntent={warmUp}
+      onModelIntentEnd={cancelWarmUp}
       onImport={canImport ? () => router.push("/showcase/import") : undefined}
       initialTheme={initialTheme}
     />

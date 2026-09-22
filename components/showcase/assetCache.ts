@@ -134,14 +134,40 @@ function pruneOld(db: IDBDatabase, keepKey: string): Promise<void> {
  * 读取素材字节流：先查 IndexedDB，没有再走网络；网络结果会静默写入缓存。
  * onProgress 只在网络下载阶段回调（0–1）。
  */
-export type AssetCacheMode = "cache-api" | "indexeddb" | "network" | "temporary";
+export type AssetCacheMode = "cache-api" | "indexeddb" | "network" | "temporary" | "memory";
 
 /** 同一个 URL 的下载只跑一次：预取与真正加载共用同一条请求 */
 const inflight = new Map<string, Promise<{ buffer: ArrayBuffer; fromCache: boolean; mode: AssetCacheMode }>>();
+const primedForModel = new Map<string, Promise<{ buffer: ArrayBuffer; fromCache: boolean; mode: AssetCacheMode }>>();
+const recentPreviews = new Map<string, ArrayBuffer>();
+
+function rememberPreview(url: string, buffer: ArrayBuffer): void {
+  if (!url.includes("-preview.glb") || buffer.byteLength > 12 * 1024 * 1024) return;
+  recentPreviews.delete(url);
+  recentPreviews.set(url, buffer);
+  while (recentPreviews.size > 2) recentPreviews.delete(recentPreviews.keys().next().value!);
+  window.setTimeout(() => { if (recentPreviews.get(url) === buffer) recentPreviews.delete(url); }, 45_000);
+}
+
+/** 预览刚出现就开始传输高清字节；换模时直接接手同一份结果，避免再从持久缓存复制大文件。 */
+export function primeModelAsset(url: string): void {
+  const absUrl = typeof location !== "undefined" ? new URL(url, location.href).href : url;
+  if (primedForModel.has(absUrl)) return;
+  const task = fetchAssetBuffer(absUrl);
+  primedForModel.set(absUrl, task);
+  void task.then(() => {
+    window.setTimeout(() => {
+      if (primedForModel.get(absUrl) === task) primedForModel.delete(absUrl);
+    }, 4000);
+  }, () => {
+    if (primedForModel.get(absUrl) === task) primedForModel.delete(absUrl);
+  });
+}
 
 /** 素材是否已经在本地缓存里（Cache Storage 或 IndexedDB），不发请求 */
 export async function isAssetCached(url: string): Promise<boolean> {
   const absUrl = typeof location !== "undefined" ? new URL(url, location.href).href : url;
+  if (recentPreviews.get(absUrl)?.byteLength) return true;
   if (cacheApiAvailable()) {
     try {
       const cache = await caches.open(CACHE_NAME);
@@ -172,12 +198,24 @@ export function fetchAssetBuffer(
   onProgress?: (ratio: number) => void
 ): Promise<{ buffer: ArrayBuffer; fromCache: boolean; mode: AssetCacheMode }> {
   const absUrl = typeof location !== "undefined" ? new URL(url, location.href).href : url;
+  const recentPreview = recentPreviews.get(absUrl);
+  if (recentPreview?.byteLength) {
+    onProgress?.(1);
+    return Promise.resolve({ buffer: recentPreview, fromCache: true, mode: "memory" });
+  }
+  const primed = primedForModel.get(absUrl);
+  if (primed) {
+    primedForModel.delete(absUrl);
+    primed.then(() => onProgress?.(1), () => {});
+    return primed;
+  }
   const running = inflight.get(absUrl);
   if (running) {
     running.then(() => onProgress?.(1), () => {});
     return running;
   }
   const task = loadAsset(absUrl, onProgress).finally(() => inflight.delete(absUrl));
+  void task.then(result => rememberPreview(absUrl, result.buffer), () => {});
   inflight.set(absUrl, task);
   return task;
 }

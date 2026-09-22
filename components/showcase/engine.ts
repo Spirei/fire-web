@@ -1480,7 +1480,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         }
         const limit = textureLimit(requested, renderer.capabilities.maxTextureSize);
         if (current()) options.onTextureBudget?.(!compressed && limit < requested ? limit : null);
-        releaseImages = budgetImageDecoding(parser, limit, valid, error => { imageError ??= error; parseFailed = true; }, memoryConstrained && asset !== CFG.assets.previewModel);
+        releaseImages = budgetImageDecoding(parser, limit, valid, error => { imageError ??= error; parseFailed = true; }, memoryConstrained && asset !== CFG.assets.previewModel && !asset.includes("-preview.glb"));
         return null;
       }
     }));
@@ -1505,6 +1505,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let wireframeMode: "native" | "overlay" | "wireframe" = "native";
   let mountedCar: THREE.Object3D | null = null;
   let modelSwitchSequence = 0;
+  let modelSwitchInProgress = false;
 
   /**
    * 把一辆车挂进 carRoot：尺寸归一化、材质规则、贴图上限、清漆 / 发光、拆轮子、车道朝向、包围盒。
@@ -2467,6 +2468,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   composer.setPixelRatio(renderScale);
 
   function adaptQuality(frameMs: number) {
+    // 解码/上传模型产生的慢帧是一次性工作，不代表当前车型渲染能力下降。
+    if (modelSwitchInProgress) {
+      frameCost = 0; frameSamples = 0; lastAdapt = performance.now();
+      return;
+    }
     // 原画是用户明确选择清晰度：锁住预算内的原生分辨率，不因帧耗时悄悄降采样。
     if (originalResolution()) { frameCost = 0; frameSamples = 0; return; }
     frameCost += frameMs;
@@ -3198,6 +3204,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
      */
     setModel: (next: { asset: string; model?: ShowcaseConfig["model"] }) => {
       const sequence = ++modelSwitchSequence;
+      modelSwitchInProgress = true;
       const current = () => !disposed && sequence === modelSwitchSequence;
       const load = async () => {
         let nextCar: THREE.Object3D | null = null;
@@ -3210,7 +3217,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           if (!current()) return false;
           // 轻量预览只有很小的显存占用；升级高清时继续展示它，手机在解码期间仍可操作车身。
           // 已经是完整模型时才提前释放旧贴图，避免两套高清贴图同时占用显存。
-          if (memoryConstrained && previousAsset !== CFG.assets.previewModel) {
+          // 下一辆车先换轻量预览：即使旧车是高清，也只需额外容纳一份小预览。
+          // 保留旧车到新车可显示，下载和解码时镜头仍能旋转。
+          if (memoryConstrained && previousAsset !== CFG.assets.previewModel && !next.asset.includes("-preview.glb")) {
             unmountCar(mountedCar);
             mountedCar = null;
           }
@@ -3220,7 +3229,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           unmountCar(mountedCar);
           mountedCar = null;
           CFG.model = normalizeModel(next.model);
-          CFG.assets = { ...CFG.assets, model: next.asset };
+          CFG.assets = { ...CFG.assets, model: next.asset, previewModel: next.asset.includes("-preview.glb") ? next.asset : CFG.assets.previewModel };
           if (previousTextureLimit !== CFG.model.maxTextureSize) {
             wantedScale = desiredPixelRatio();
             renderScale = budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, originalResolution() ? wantedScale : Math.min(wantedScale, 1.5));
@@ -3257,6 +3266,11 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           }
           if (current()) options.onError?.(err instanceof Error ? err.message : String(err ?? "换车失败"));
           return false;
+        } finally {
+          if (current()) {
+            modelSwitchInProgress = false;
+            frameCost = 0; frameSamples = 0; lastAdapt = performance.now();
+          }
         }
       };
       return next.asset.includes("-preview.glb") ? load() : queueModelLoad(load);
