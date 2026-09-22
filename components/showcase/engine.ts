@@ -2530,50 +2530,26 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const press = (on: boolean) => {
     racing = on && !inspectorOn;
   };
-  let touchCruising = false;
-  const onRaceDown = (e: Event) => {
-    e.preventDefault();
-    if ((e as PointerEvent).pointerType === "touch" || window.matchMedia("(pointer: coarse)").matches) {
-      touchCruising = !racing;
-      press(touchCruising);
-      return;
-    }
-    press(true);
-  };
-  const onPointerUp = (event: Event) => {
-    if (event.type === "blur") { touchCruising = false; press(false); return; }
-    if (touchCruising) return;
-    // 第二根手指切换行驶镜头时，别把仍按住的起步键误当作松开。
-    if ((event.target as Element | null)?.closest?.(".sc-drive-camera")) return;
-    press(false);
-  };
+  const onRaceClick = () => press(!racing);
+  const onRaceBlur = () => press(false);
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.code === "Space" && !isTyping()) {
       e.preventDefault();
-      press(true);
+      if (!e.repeat) press(!racing);
     }
     if (e.key === "z" && !isTyping() && !e.metaKey && !e.ctrlKey) setZoomMode(!zoomMode);
-  };
-  const onKeyUp = (e: KeyboardEvent) => {
-    if (e.code === "Space") press(false);
   };
   const isTyping = () => {
     const el = document.activeElement;
     return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || (el as HTMLElement).isContentEditable);
   };
-  hud.raceBtn?.addEventListener("pointerdown", onRaceDown);
-  window.addEventListener("pointerup", onPointerUp);
-  window.addEventListener("pointercancel", onPointerUp);
+  hud.raceBtn?.addEventListener("click", onRaceClick);
   window.addEventListener("keydown", onKeyDown);
-  window.addEventListener("keyup", onKeyUp);
-  window.addEventListener("blur", onPointerUp);
+  window.addEventListener("blur", onRaceBlur);
   cleanups.push(() => {
-    hud.raceBtn?.removeEventListener("pointerdown", onRaceDown);
-    window.removeEventListener("pointerup", onPointerUp);
-    window.removeEventListener("pointercancel", onPointerUp);
+    hud.raceBtn?.removeEventListener("click", onRaceClick);
     window.removeEventListener("keydown", onKeyDown);
-    window.removeEventListener("keyup", onKeyUp);
-    window.removeEventListener("blur", onPointerUp);
+    window.removeEventListener("blur", onRaceBlur);
   });
 
   let dragging = false;
