@@ -163,7 +163,7 @@ export default function RecordsApp({
   // 服务端注入的股票图标表必须在「渲染期」就地预热：primeStockIconCache 只写缓存、不通知订阅者，
   // 不会打断水合；放到 useLayoutEffect 里就晚了 —— 子组件先渲染首帧（拿不到图标，画首字母），
   // 之后 effect 才补上，刷新时就会看到「图标闪一下才出来」。服务端同一份渲染路径也会带上图标，
-  // 首屏 HTML 直接就是图标（layout 里还做了 preload）。
+  // 首屏 HTML 直接就是图标；浏览器仅请求当前视图实际渲染的图片。
   useMemo(() => primeStockIconCache(initialStockIcons), [initialStockIcons]);
   useMemo(() => primeMarketIconCache(initialMarketIcons), [initialMarketIcons]);
   useMemo(() => primeNavIconCache(initialNavIcons), [initialNavIcons]);

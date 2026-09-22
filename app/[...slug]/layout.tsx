@@ -111,9 +111,6 @@ export default async function SlugLayout({
         Object.values(celebAvatars)
           .filter(Boolean)
           .map((u) => <link key={u} rel="preload" as="image" href={u} fetchPriority="high" />)}
-      {[...new Set(Object.values(initialStockIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
-      {[...new Set(Object.values(initialMarketIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
-      {[...new Set(Object.values(initialNavIcons))].map((url) => <link key={url} rel="preload" as="image" href={url} />)}
       {initialFlagIcons[currencyFlagCode] && !initialFlagIcons[currencyFlagCode].startsWith("data:") && <link rel="preload" as="image" href={initialFlagIcons[currencyFlagCode]} />}
       {initialCardCovers.map((url) => <link key={url} rel="preload" as="image" href={url} />)}
       <Toaster />

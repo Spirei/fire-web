@@ -4399,7 +4399,8 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   software: V0_1_38_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.39" } : item),
   changes: [
     { kind: "fix", title: "首页无关资源按需加载", desc: "时光机插画只在点击穿越时加载；首页不再请求被舞台遮住的站点背景，1K 展示也不再提前下载高清车型。" },
-    { kind: "fix", title: "全站后台请求收敛", desc: "登录弹窗关闭时不再请求设置；后台页签只在打开时下载对应模块，不再空闲预取全部页签。PWA 首次安装不再额外请求首页 HTML。" }
+    { kind: "fix", title: "全站后台请求收敛", desc: "登录弹窗关闭时不再请求设置；后台页签只在打开时下载对应模块，不再空闲预取全部页签。PWA 首次安装不再额外请求首页 HTML。" },
+    { kind: "fix", title: "后台图标与助手按需加载", desc: "移除后台整份股票、市场、导航图标表的预载；未打开的智能助手不再请求模型、空间、用量与偏好。时光机动画脚本在点击时才下载。" }
   ]
 };
 

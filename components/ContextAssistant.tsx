@@ -261,10 +261,11 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     if (Number.isFinite(saved) && saved >= 220 && saved <= 420) setSidebarWidth(saved);
   }, [embedded, userId]);
   useEffect(() => {
+    if (!open) return;
     void fetch("/api/assistant/models").then(response => response.ok ? response.json() : null).then(data => {
       if (Array.isArray(data?.services)) setAvailableModels(data.services);
     }).catch(() => undefined);
-  }, []);
+  }, [open]);
   useEffect(() => {
     if (!embedded || workspaceView !== "trace") return;
     const controller = new AbortController();
@@ -275,18 +276,20 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     return () => controller.abort();
   }, [embedded, workspaceView, conversationId, loading, traceRefresh]);
   useEffect(() => {
+    if (!open) return;
     void Promise.all([fetch("/api/assistant/spaces"), fetch("/api/assistant/usage")]).then(async ([spaceResponse, usageResponse]) => {
       const spaceData = spaceResponse.ok ? await spaceResponse.json() : null, usageData = usageResponse.ok ? await usageResponse.json() : null;
       if (Array.isArray(spaceData?.spaces)) setSpaces(spaceData.spaces);
       if (spaceData?.assignments&&typeof spaceData.assignments==="object") { setSpaceAssignments(spaceData.assignments); setSelectedSpace(spaceData.assignments[conversationId]||""); }
       if (usageData?.summary) setUsageSummary(usageData.summary);
     }).catch(() => undefined);
-  }, []);
+  }, [open]);
   useEffect(() => {
+    if (!open) return;
     void fetch("/api/assistant/preferences").then(response => response.ok ? response.json() : null).then(data => {
       if (data) { setMemoryEnabled(data.memoryEnabled === true); setMemory(typeof data.memory === "string" ? data.memory : ""); setSelectedModel(typeof data.selectedModel === "string" ? data.selectedModel : "auto"); }
     }).catch(() => undefined);
-  }, []);
+  }, [open]);
   useEffect(() => {
     const syncDefaultModel = (event: Event) => setSelectedModel((event as CustomEvent<string>).detail || "auto");
     window.addEventListener(ASSISTANT_MODEL_CHANGED_EVENT, syncDefaultModel);

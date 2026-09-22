@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { IconBrandTelegram } from "@tabler/icons-react";
-import DoraemonTravel from "./DoraemonTravel";
+import dynamic from "next/dynamic";
+
+const DoraemonTravel = dynamic(() => import("./DoraemonTravel"), { ssr: false });
 
 export function TimeMachineLink({ to, iconOnly = false }: { to: "simple" | "full"; iconOnly?: boolean }) {
   return <a href={to === "simple" ? "/simple-app" : "/records"} data-time-machine={to}
