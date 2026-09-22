@@ -1291,7 +1291,6 @@ export default function ShowcaseStage({
             </div>
 
             <div className="sc-row sc-ctr">
-              <div className="sc-ctr-cap">{racing ? ui.raceCap : current.cap}</div>
               <button type="button" className="sc-race" ref={raceRef}
                 onContextMenu={(event) => event.preventDefault()}
                 onSelect={(event) => event.preventDefault()}
@@ -1299,6 +1298,7 @@ export default function ShowcaseStage({
                 <span>{racing ? "点按减速" : "点按起步"}</span>
                 <em>→</em>
               </button>
+              <div className="sc-ctr-cap">{racing ? ui.raceCap : current.cap}</div>
               <div className="sc-ctr-hint">
                 {/* 触屏没有空格键：两版文案都渲染，由 CSS 按 (hover: none) 选一版 */}
                 <span className="kbd-only">点击按钮或按空格切换行驶</span>

@@ -1891,13 +1891,22 @@ html:has(.showcase) body {
 
 /* 待发车操作在桌面、平板、手机共用底部中线，车身区域始终留给模型。 */
 .showcase:not(.sc-immersive) .sc-ctr {
-  bottom: max(16px, calc(env(safe-area-inset-bottom) + 3dvh));
+  bottom: max(42px, calc(env(safe-area-inset-bottom) + 5dvh));
 }
-.showcase:not(.sc-immersive) .sc-ctr-cap,
+.showcase:not(.sc-immersive) .sc-ctr-cap {
+  display: block;
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  width: max-content;
+  margin: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
 .showcase:not(.sc-immersive) .sc-ctr-hint { display: none; }
 @media (min-width: 641px) and (max-width: 1024px) {
   .showcase:not(.sc-immersive) .sc-ctr {
-    bottom: 4.6vh;
+    bottom: max(36px, 4.6vh);
   }
 }
 
