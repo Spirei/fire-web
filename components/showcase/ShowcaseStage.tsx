@@ -42,7 +42,7 @@ const TEXTURE_QUALITY: Record<TextureQuality, { label: string; badge: string; si
   fine: { label: "精细", badge: "4K", size: 4096 },
   original: { label: "原画", badge: "RAW", size: 16384 }
 };
-type ShowcasePose = { p: number; yaw: number; pitch: number; zoom: number };
+type ShowcasePose = { p: number; yaw: number; pitch: number; zoom: number; focus?: [number, number, number]; distance?: number; elevation?: number };
 
 /**
  * 通用 3D 展示台（滚动叙事）。
@@ -111,6 +111,7 @@ export default function ShowcaseStage({
   const [loadRatio, setLoadRatio] = useState(0);
   const [ready, setReady] = useState(false);
   const [qualityLoading, setQualityLoading] = useState(false);
+  const [appliedTextureQuality, setAppliedTextureQuality] = useState<TextureQuality | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [noticeKey, setNoticeKey] = useState<string | null>(null);
   useEffect(() => {
@@ -175,6 +176,7 @@ export default function ShowcaseStage({
     // 首页先用轻量模型获得很快的可交互首帧；进入展示后在后台换回完整模型。
     // 完整模型挂好后再生成线框，避免对低清、高清各算一遍边线。
     const current = configRef.current;
+    const requestedQuality = textureQualityRef.current;
     const switchId = ++qualitySwitchRef.current;
     setQualityLoading(true);
     const fullKey = JSON.stringify({ a: (textureQualityRef.current === "original" ? current.assets.gpuModel ?? current.assets.model : current.assets.model), m: current.model ?? null, q: textureQualityRef.current });
@@ -187,7 +189,7 @@ export default function ShowcaseStage({
       setQualityLoading(false);
       setLoadingKey(null);
       setQualityError(!ok);
-      if (ok) { appliedModelRef.current = fullKey; rememberLoadedModel(fullKey); }
+      if (ok) { appliedModelRef.current = fullKey; setAppliedTextureQuality(requestedQuality); rememberLoadedModel(fullKey); }
       window.requestAnimationFrame(() => {
         if (inspectorRef.current) handleRef.current?.setWireframe(wireRef.current.mode, wireRef.current.color);
       });
@@ -207,7 +209,7 @@ export default function ShowcaseStage({
       const asset = current.assets.previewModel ?? current.assets.model;
       const key = JSON.stringify({ a: asset, m: current.model ?? null, q: textureQualityRef.current });
       void handleRef.current?.setModel({ asset, model: qualityModel(current.model) }).then((ok) => {
-        if (ok) appliedModelRef.current = key;
+        if (ok) { appliedModelRef.current = key; setAppliedTextureQuality("fast"); }
       });
     }
   };
@@ -431,6 +433,7 @@ export default function ShowcaseStage({
       } catch { /* 截图或存储失败不影响模型交互 */ }
     };
     setReady(false);
+    setAppliedTextureQuality(null);
     setLoadRatio(0);
     setError(null);
 
@@ -484,6 +487,7 @@ export default function ShowcaseStage({
             setLoadRatio(1);
             setError(null);
             setReady(true);
+            setAppliedTextureQuality(initialQuality);
             rememberLoadedModel(initialKey);
             setLoadingKey(null);
             rememberWorkingQuality(cfg.assets.model, initialQuality);
@@ -506,6 +510,7 @@ export default function ShowcaseStage({
                   if (cancelled || switchId !== qualitySwitchRef.current) return;
                   if (!ok) appliedModelRef.current = initialKey;
                   else {
+                    setAppliedTextureQuality(requestedQuality);
                     rememberLoadedModel(fullKey);
                     rememberWorkingQuality(cfg.assets.model, requestedQuality);
                     window.setTimeout(saveResumeFrame, 250);
@@ -532,6 +537,7 @@ export default function ShowcaseStage({
             if (cancelled || recoveryRequested) return;
             recoveryRequested = true;
             setReady(false);
+            setAppliedTextureQuality(null);
             setLoadRatio(0);
             const fallback = recoveryQuality(configRef.current.assets.model, textureQualityRef.current);
             if (!fallback || rebuild >= 4) {
@@ -571,6 +577,7 @@ export default function ShowcaseStage({
         handle.setTheme(themeRef.current);
         // 引擎是异步创建的：创建前点过的「360° 环视 / 影棚」要补上
         handle.setOrbit(orbitRef.current);
+        handle.setHomePose(pinnedPoseRef.current);
         handle.setFreeCamera(freeCameraRef.current);
         handle.setWireframe(wireRef.current.mode, wireRef.current.color);
         handle.setDiscStyle(discStyleRef.current);
@@ -581,7 +588,7 @@ export default function ShowcaseStage({
         if (pinned) {
           handle.applyPose(pinned);
           // 双击复位也回到这一帧（引擎自己归零会回到「不是我们设置的固定机位」）
-          handle.setHomePose({ p: pinned.p, yaw: pinned.yaw, pitch: pinned.pitch, zoom: pinned.zoom });
+          handle.setHomePose(pinned);
         }
         handle.setInspector(inspectorRef.current);
         handleRef.current = handle;
@@ -596,8 +603,9 @@ export default function ShowcaseStage({
         const nowKey = JSON.stringify({ a: nowAsset, m: now.model ?? null, q: stillBootstrapping ? "fast" : textureQualityRef.current });
         if (nowKey !== appliedModelRef.current) {
           // 创建期间用户已经切了车：等引擎挂完这一次再补一次原地换车
+          const nowQuality = textureQualityRef.current;
           void handle.setModel({ asset: nowAsset, model: qualityModel(now.model) }).then((ok) => {
-            if (ok) appliedModelRef.current = nowKey;
+            if (ok) { appliedModelRef.current = nowKey; setAppliedTextureQuality(nowQuality); }
           });
         }
         // 开发环境留一个调试句柄，方便按进度截图与排查（生产不会写）
@@ -655,28 +663,37 @@ export default function ShowcaseStage({
   // 置顶机位变化就同步给引擎：双击复位回到用户置顶的那一帧（没置顶时传 null = 回到中立角度）
   useEffect(() => {
     handleRef.current?.setHomePose(
-      pinnedPose ? { p: pinnedPose.p, yaw: pinnedPose.yaw, pitch: pinnedPose.pitch, zoom: pinnedPose.zoom } : null
+      pinnedPose
     );
   }, [pinnedPose]);
 
   // 换车型：原地换车（引擎、镜头、地面、HUD 都不动），切换过程没有空白期
   useEffect(() => {
     const next = configRef.current;
-    const asset = inspectorRef.current || textureQualityRef.current !== "fast" || wireRef.current.mode !== "native"
-      ? (textureQualityRef.current === "original" ? next.assets.gpuModel ?? next.assets.model : next.assets.model)
+    const targetQuality = textureQualityRef.current;
+    const requestedAsset = inspectorRef.current || targetQuality !== "fast" || wireRef.current.mode !== "native"
+      ? (targetQuality === "original" ? next.assets.gpuModel ?? next.assets.model : next.assets.model)
       : (next.assets.previewModel ?? next.assets.model);
-    const targetKey = JSON.stringify({ a: asset, m: next.model ?? null, q: textureQualityRef.current });
+    const previous = appliedModelRef.current;
+    const previousModel = previous ? JSON.parse(previous) as { a: string; q: TextureQuality } : null;
+    // 已显示完整车时降到 1K，优先原位缩小贴图；这样手机不会先卸下车或退成另一份预览几何。
+    const asset = targetQuality === "fast" && previousModel?.a === next.assets.model && previousModel.q !== "fast"
+      ? previousModel.a : requestedAsset;
+    const targetKey = JSON.stringify({ a: asset, m: next.model ?? null, q: targetQuality });
     if (appliedModelRef.current === null || appliedModelRef.current === targetKey) return;
     const handle = handleRef.current;
     if (!handle) return;
-    const previous = appliedModelRef.current;
+    if (!previous) return;
     const switchId = ++qualitySwitchRef.current;
     appliedModelRef.current = targetKey;
     setQualityLoading(true);
     setLoadingKey(targetKey);
     setQualityError(false);
-    // 车型切换一律先交付可交互的轻量车；模型展示/线框随后再升级完整网格。
-    const previewAsset = next.assets.previewModel !== asset ? next.assets.previewModel : undefined;
+    // 只在换车时先交付预览。同一辆车切画质应保持当前可见模型，
+    // 否则 4K → 原画也会短暂退回 1K，看起来像高清切换没有生效。
+    const previousAsset = previousModel!.a;
+    const sameCar = [next.assets.previewModel, next.assets.model, next.assets.gpuModel].includes(previousAsset);
+    const previewAsset = !sameCar && next.assets.previewModel !== asset ? next.assets.previewModel : undefined;
     const previewKey = previewAsset ? JSON.stringify({ a: previewAsset, m: next.model ?? null, q: "fast" }) : null;
     let previewSucceeded = false;
     const switchModel = async () => {
@@ -684,6 +701,7 @@ export default function ShowcaseStage({
         const previewOk = await handle.setModel({ asset: previewAsset, model: { ...next.model, maxTextureSize: TEXTURE_QUALITY.fast.size } });
         if (switchId !== qualitySwitchRef.current || !previewOk) return previewOk;
         previewSucceeded = true;
+        setAppliedTextureQuality("fast");
         rememberLoadedModel(previewKey!);
         if (constrainedGraphics()) {
           primeModelAsset(asset);
@@ -692,7 +710,7 @@ export default function ShowcaseStage({
           if (switchId !== qualitySwitchRef.current) return false;
         }
       }
-      return handle.setModel({ asset, model: qualityModel(next.model) });
+      return handle.setModel({ asset, model: { ...next.model, maxTextureSize: TEXTURE_QUALITY[targetQuality].size } });
     };
     void switchModel().then((ok) => {
       if (switchId !== qualitySwitchRef.current) return;
@@ -701,7 +719,7 @@ export default function ShowcaseStage({
       setQualityLoading(false);
       setQualityError(!ok);
       setLoadingKey(null);
-      if (ok) rememberLoadedModel(targetKey);
+      if (ok) { setAppliedTextureQuality(targetQuality); rememberLoadedModel(targetKey); }
     });
   }, [modelKey, qualityModel]);
 
@@ -793,7 +811,10 @@ export default function ShowcaseStage({
       p: +pose.p.toFixed(4),
       yaw: +pose.yaw.toFixed(2),
       pitch: +pose.pitch.toFixed(4),
-      zoom: +pose.zoom.toFixed(3)
+      zoom: +pose.zoom.toFixed(3),
+      focus: pose.focus,
+      distance: +pose.distance.toFixed(3),
+      elevation: +pose.elevation.toFixed(3)
     });
   }, [setPinnedPose]);
 
@@ -1041,7 +1062,7 @@ export default function ShowcaseStage({
 
   // 影棚（明亮摄影棚）下画面是亮的，HUD 文字要跟着换成浅色系，否则白字压在白底上看不见
   return (
-    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio ? "light" : ""} ${inspector ? "sc-inspecting" : ""} ${racing || driving ? "sc-immersive" : ""} ${immersiveView ? "sc-view-immersive" : ""} ${className}`}>
+    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio ? "light" : ""} ${inspector ? "sc-inspecting" : ""} ${racing || driving ? "sc-immersive" : ""} ${immersiveView ? "sc-view-immersive" : ""} ${leftDrawerOpen || rightDrawerOpen ? "sc-drawer-open" : ""} ${className}`}>
       <div className="sc-scroll" ref={scrollRef}>
         <div className="sc-stage" ref={stageRef}>
           <div className="sc-canvas-wrap" ref={canvasWrapRef} />
@@ -1374,21 +1395,39 @@ export default function ShowcaseStage({
               {freeCamera && <button type="button" className="sc-camera-reset" onClick={() => handleRef.current?.resetCamera()} aria-label="重置自由镜头">复位</button>}
             </div>
             {!inspector && (
-              <div className="sc-row sc-texture-quality" role="group" aria-label="纹理质量">
+              <div className="sc-row sc-texture-quality" role="group" aria-label="纹理质量" aria-busy={qualityLoading}>
                 <span className="sc-quality-cap" aria-hidden="true">纹理</span>
                 {memoryNotice && <span className="sc-quality-status" role="status">{memoryNotice}</span>}
                 {!memoryNotice && textureLimitNotice && <span className="sc-quality-status" role="status">设备适配 · 贴图上限 {Math.round(textureLimitNotice / 1024)}K</span>}
                 {qualityLoading && showLoadingNotice && <span className="sc-quality-pending" role="status" aria-label="正在更新高清模型" title="正在更新高清模型" />}
                 {qualityError && <button type="button" className="sc-quality-retry" onClick={() => {
+                  const handle = handleRef.current;
+                  if (!handle) { setRetry((n) => n + 1); return; }
                   setQualityError(false);
-                  setRetry((n) => n + 1);
+                  setMemoryNotice(null);
+                  const next = configRef.current;
+                  const targetQuality = textureQualityRef.current;
+                  const asset = targetQuality === "original" ? next.assets.gpuModel ?? next.assets.model
+                    : targetQuality === "fast" && wireRef.current.mode === "native" ? next.assets.previewModel ?? next.assets.model
+                    : next.assets.model;
+                  const key = JSON.stringify({ a: asset, m: next.model ?? null, q: targetQuality });
+                  const switchId = ++qualitySwitchRef.current;
+                  setQualityLoading(true);
+                  setLoadingKey(key);
+                  void handle.setModel({ asset, model: { ...next.model, maxTextureSize: TEXTURE_QUALITY[targetQuality].size } }).then((ok) => {
+                    if (switchId !== qualitySwitchRef.current) return;
+                    setQualityLoading(false);
+                    setLoadingKey(null);
+                    setQualityError(!ok);
+                    if (ok) { appliedModelRef.current = key; setAppliedTextureQuality(targetQuality); rememberLoadedModel(key); }
+                  });
                 }}>加载失败 · 重试</button>}
                 {(Object.entries(TEXTURE_QUALITY) as Array<[TextureQuality, (typeof TEXTURE_QUALITY)[TextureQuality]]>).map(([key, option]) => (
                   <button
                     key={key}
                     type="button"
-                    className={`sc-quality-option${textureQuality === key ? " on" : ""}${selectionHint === `quality:${key}` ? " sc-label-peek" : ""}`}
-                    aria-pressed={textureQuality === key}
+                    className={`sc-quality-option${appliedTextureQuality === key ? " on" : ""}${qualityLoading && textureQuality === key && appliedTextureQuality !== key ? " pending" : ""}${selectionHint === `quality:${key}` ? " sc-label-peek" : ""}`}
+                    aria-pressed={appliedTextureQuality === key}
                     title={key === "original" ? "原画纹理 · 保留源尺寸，优先使用高质量 GPU 压缩副本" : `${option.label}纹理 · 最长边 ${option.badge}`}
                     onClick={() => {
                       showSelectionHint(`quality:${key}`);

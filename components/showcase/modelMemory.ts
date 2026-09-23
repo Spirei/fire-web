@@ -98,7 +98,7 @@ export function disposeModel(model: Object3D) {
 /** 原 loader 会并发解码全部 4K 图；在源图片级排队，缩完并释放原图才解下一张。
  * source 复用发生在缩图之后，法线 / 金属度等共享同一图时不会读到已关闭的 bitmap。
  */
-export function budgetImageDecoding(parser: GLTFParser, limit: number, current: () => boolean, onError?: (error: unknown) => void, yieldBetweenImages = false) {
+export function budgetImageDecoding(parser: GLTFParser, limit: number, current: () => boolean, onError?: (error: unknown) => void, yieldBetweenImages = false, onSourceSize?: (size: number) => void) {
   const original = parser.loadImageSource.bind(parser);
   const sources = new Map<number, Promise<Texture>>();
   const loaded = new Set<Texture>();
@@ -119,6 +119,7 @@ export function budgetImageDecoding(parser: GLTFParser, limit: number, current: 
       const texture = await original(index, loader);
       loaded.add(texture);
       if (!current()) { releaseTextures([texture]); throw new Error("模型加载已取消"); }
+      onSourceSize?.(Math.max(texture.image?.width ?? 0, texture.image?.height ?? 0));
       if ((texture as Texture & { isCompressedTexture?: boolean }).isCompressedTexture) {
         if (Math.max(texture.image.width, texture.image.height) > limit) throw new Error("当前设备不支持源贴图尺寸，请使用流畅模式");
         return texture;

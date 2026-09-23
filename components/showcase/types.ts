@@ -418,12 +418,12 @@ export interface ShowcaseHandle {
   resetCamera: () => void;
   /** 影棚：3D 场景切到明亮摄影棚（不改深浅色主题） */
   setStudio: (on: boolean) => void;
-  /** 读取当前机位（进度 / 偏航 / 俯仰 / 缩放），用于「置顶当前机位」 */
-  readPose: () => { p: number; yaw: number; pitch: number; zoom: number };
+  /** 读取当前机位（含自由镜头焦点），用于「置顶当前机位」 */
+  readPose: () => { p: number; yaw: number; pitch: number; zoom: number; focus: [number, number, number]; distance: number; elevation: number };
   /** 应用机位：刷新或重建后回到用户置顶的角度（章节进度由 setProgress 设置） */
-  applyPose: (pose: { yaw?: number; pitch?: number; zoom?: number }) => void;
+  applyPose: (pose: { yaw?: number; pitch?: number; zoom?: number; focus?: [number, number, number] }) => void;
   /** 用户置顶的机位：双击复位回到这里（null = 没置顶，回到中立角度） */
-  setHomePose: (pose: { p?: number; yaw?: number; pitch?: number; zoom?: number } | null) => void;
+  setHomePose: (pose: { p?: number; yaw?: number; pitch?: number; zoom?: number; focus?: [number, number, number]; distance?: number; elevation?: number } | null) => void;
   /** 设置章节进度（导航、复位与调试共用） */
   setProgress: (p: number, settle?: number) => void;
   /** 调试用：当前平滑后的进度、速度、渲染倍率、冲刺与缩放状态 */

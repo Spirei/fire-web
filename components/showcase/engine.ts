@@ -76,6 +76,12 @@ function normalizeModel(model: ShowcaseConfig["model"]) {
   };
 }
 
+/** 画质上限以外的车型参数相同，才允许复用当前已挂载的模型。 */
+function modelSignature(model: ShowcaseConfig["model"]) {
+  const normalized = { ...normalizeModel(model), maxTextureSize: 0 };
+  return JSON.stringify(normalized, (_key, value) => value instanceof RegExp ? value.toString() : value);
+}
+
 /** 把 config 里的可选值补齐成引擎内部使用的常量 */
 function normalizeConfig(config: ShowcaseConfig) {
   const ring = config.ground?.ring;
@@ -1467,6 +1473,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     let releaseImages: (() => void) | undefined;
     let parseFailed = false;
     let imageError: unknown;
+    let sourceTextureMax = 0;
     const valid = () => current() && !parseFailed;
     loader.register(parser => ({
       name: "SHOWCASE_texture_budget",
@@ -1481,7 +1488,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         }
         const limit = textureLimit(requested, renderer.capabilities.maxTextureSize);
         if (current()) options.onTextureBudget?.(!compressed && limit < requested ? limit : null);
-        releaseImages = budgetImageDecoding(parser, limit, valid, error => { imageError ??= error; parseFailed = true; }, memoryConstrained && asset !== CFG.assets.previewModel && !asset.includes("-preview.glb"));
+        releaseImages = budgetImageDecoding(parser, limit, valid, error => { imageError ??= error; parseFailed = true; }, memoryConstrained && asset !== CFG.assets.previewModel && !asset.includes("-preview.glb"), size => { sourceTextureMax = Math.max(sourceTextureMax, size); });
         return null;
       }
     }));
@@ -1493,6 +1500,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         releaseImages?.();
         return null;
       }
+      gltf.scene.userData.showcaseSourceTextureMax = sourceTextureMax;
       return gltf.scene;
     } catch (error) {
       parseFailed = true;
@@ -1505,6 +1513,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const wireframeView = createWireframeView(CFG.model.wireframe, true, () => invalidateInspector());
   let wireframeMode: "native" | "overlay" | "wireframe" = "native";
   let mountedCar: THREE.Object3D | null = null;
+  let mountedSourceTextureMax = 0;
+  let mountedTextureLimit = 0;
+  let mountedModelSignature = "";
   let modelSwitchSequence = 0;
   let modelSwitchInProgress = false;
 
@@ -1513,6 +1524,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    * 首次加载与换车型共用这个函数 —— 换车型只是「撤旧车 + 挂新车」，场景 / 镜头 / 地面 / HUD 都不重建。
    */
   function mountCar(car: THREE.Object3D) {
+      mountedSourceTextureMax = car.userData.showcaseSourceTextureMax || 0;
+      mountedTextureLimit = Math.min(CFG.model.maxTextureSize, renderer.capabilities.maxTextureSize);
+      mountedModelSignature = modelSignature(CFG.model);
       car.visible = !off.has("car");
       // 不同来源的模型朝向不一致：preset 里给 yaw / pitch 做一次性修正
       if (CFG.model.yaw) car.rotation.y += (CFG.model.yaw * Math.PI) / 180;
@@ -1878,6 +1892,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   const INSPECTOR_MIN_ZOOM = 0.015;
   const INSPECTOR_MAX_ZOOM = 400;
   let freeCamera = false;
+  let freeCameraProgress = 0;
+  let freeDollyTravel = 0;
+  const freeDollyDirection = new THREE.Vector3();
   let inspectorOn = false;
   // 工作台静止时保留最后一帧；交互期间仍按显示器刷新率、原像素比连续渲染。
   // 这只消除重复帧，不改画布分辨率、贴图、线框几何或材质质量。
@@ -2047,8 +2064,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 第六组自由镜头进入车内时沿用模型展示的观察补光。原先这两盏灯只在
     // inspectorOn 下开启，夜景中的方向盘和座舱组件因此几乎全黑。
     const interiorFill = freeCamera && !inspectorOn ? 1 - seg(r, 0.8, 2.6) : 0;
-    inspectorViewLight.intensity = inspectorOn ? 1.15 : interiorFill * 1.15;
-    inspectorUnderLight.intensity = inspectorOn ? 0.42 : interiorFill * 0.42;
+    // 极近距离的点光源会把贴脸的外壳打成白块；自由镜头主要用均匀的环境补光。
+    inspectorViewLight.intensity = inspectorOn ? 1.15 : interiorFill * 0.08;
+    inspectorUnderLight.intensity = inspectorOn ? 0.42 : interiorFill * 0.9;
     const h = THREE.MathUtils.lerp(camState.h, driveHeight, cameraBlend);
     const targetY = THREE.MathUtils.lerp(camState.ty, chase.targetY, cameraBlend) - trackDiscFraming * 0.45;
     // 关键帧给的是高度，换成仰角后才能和用户的上下拖拽相加；
@@ -2090,7 +2108,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     // 超近距离要随镜头距离收近裁剪面，否则固定 0.1 会在进入座舱前切掉方向盘和内饰。
     // 拉远时恢复较大的 near，保持 400 倍远景下的深度精度。
     const desiredNear = modelCameraOn() ? clamp(r * 0.003, 0.0015, 0.08) : 0.1;
-    const desiredFar = modelCameraOn() ? Math.max(5000, r * 2 + CFG.model.length * 2) : 400;
+    // 静态近景只需覆盖车身；把 far 固定在 5000 会让毫米级内部组件失去深度精度。
+    // 行驶自由镜头仍保留远裁剪面，保证隧道可见。
+    const desiredFar = inspectorOn || freeCamera ? Math.max(100, r * 8 + CFG.model.length * 2)
+      : modelCameraOn() ? 5000 : 400;
     if (Math.abs(camera.near - desiredNear) > 0.0001 || camera.far !== desiredFar) {
       camera.near = desiredNear;
       camera.far = desiredFar;
@@ -2526,7 +2547,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   }
   function progress() {
     if (inspectorOn) return inspectorProgress;
-    if (freeCamera) return 0;
+    if (freeCamera) return freeCameraProgress;
     return viewerProgress;
   }
 
@@ -2575,20 +2596,44 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
    * 双击复位要回到「用户的固定机位」，而不是引擎的中立角度 —— 以前这里一律归零，
    * 于是双击之后停在的不是用户置顶的那一帧（反馈：「回到一个非我们设置的固定机位」）。
    */
-  let homePose: { p: number; yaw: number; pitch: number; zoom: number } | null = null;
+  let homePose: { p: number; yaw: number; pitch: number; zoom: number; focus?: [number, number, number]; distance?: number; elevation?: number } | null = null;
+  const restoreFreeHome = () => {
+    freeCameraProgress = clamp(homePose?.p ?? 0, 0, 1);
+    pSmooth = freeCameraProgress; pVel = 0;
+    camAt(freeCameraProgress);
+    trackDiscFraming = 0;
+    const fit = camera.aspect < CFG.camera.fitMinAspect
+      ? clamp(CFG.camera.fitMinAspect / camera.aspect, 1, CFG.camera.fitMaxPullback) : 1;
+    const radius = camState.r * Math.pow(fit, 0.8);
+    if (homePose?.distance && Number.isFinite(homePose.distance)) {
+      zoomTarget = clamp(homePose.distance / radius, INSPECTOR_MIN_ZOOM, INSPECTOR_MAX_ZOOM);
+    } else if (homePose && discStyle === "track") {
+      // 旧版固定机位只存缩放倍率；赛道圆盘机位曾额外拉远 34%。
+      zoomTarget = clamp(homePose.zoom * 1.34, INSPECTOR_MIN_ZOOM, INSPECTOR_MAX_ZOOM);
+    }
+    if (homePose?.elevation !== undefined && Number.isFinite(homePose.elevation)) {
+      const baseElev = Math.atan2(Math.max(0.2, camState.h) - camState.ty, radius);
+      userPitch = THREE.MathUtils.degToRad(homePose.elevation) - baseElev;
+    }
+  };
   const resetView = () => {
-    focusTarget.set(0, 0, 0);
-    userYaw = inspectorOn ? homePose?.yaw ?? 0 : freeCamera ? 0 : homePose?.yaw ?? 0;
+    freeDollyTravel = 0;
+    const savedFocus = homePose?.focus;
+    focusTarget.set(savedFocus?.[0] ?? 0, savedFocus?.[1] ?? 0, savedFocus?.[2] ?? 0);
+    focusOffset.copy(focusTarget);
+    if (freeCamera) freeCameraProgress = homePose?.p ?? 0;
+    userYaw = homePose?.yaw ?? 0;
     userYawVel = 0;
-    userPitch = inspectorOn ? homePose?.pitch ?? 0 : freeCamera ? 0 : homePose?.pitch ?? 0;
+    userPitch = homePose?.pitch ?? 0;
     userPitchVel = 0;
-    zoomTarget = inspectorOn ? homePose?.zoom ?? 1 : freeCamera ? 1 : homePose?.zoom ?? 1;
+    zoomTarget = homePose?.zoom ?? 1;
+    if (freeCamera) restoreFreeHome();
     setZoomMode(false);
     // 置顶机位还包含「进度」：交给组件恢复章节进度，才真的回到那一帧
     if (!freeCamera) options.onResetView?.();
     invalidateInspector();
   };
-  const focusAt = (x: number, y: number) => {
+  const focusAt = (x: number, y: number, zoomAfterFocus = true) => {
     if (!modelCameraOn()) { resetView(); return; }
     if ((racing || racingAmt > 0.05) && !driveFreeOn()) return;
     const rect = canvas.getBoundingClientRect();
@@ -2600,13 +2645,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       return true;
     });
     if (!hit) {
-      if (modelCameraOn()) applyZoom(1 / 0.65);
+      if (zoomAfterFocus && modelCameraOn()) applyZoom(1 / 0.65);
       return;
     }
     focusTarget.copy(hit.point).sub(lookAt).add(focusOffset);
-    zoomTarget = modelCameraOn()
-      ? clamp(zoom * hit.distance / Math.max(0.0001, camera.position.distanceTo(lookAt)) * 0.65, INSPECTOR_MIN_ZOOM, INSPECTOR_MAX_ZOOM)
-      : Math.max(MIN_ZOOM, zoomTarget * 0.65);
+    if (zoomAfterFocus) {
+      zoomTarget = modelCameraOn()
+        ? clamp(zoom * hit.distance / Math.max(0.0001, camera.position.distanceTo(lookAt)) * 0.65, INSPECTOR_MIN_ZOOM, INSPECTOR_MAX_ZOOM)
+        : Math.max(MIN_ZOOM, zoomTarget * 0.65);
+    }
     userYawVel = 0; userPitchVel = 0;
   };
   const inspectAt = (x: number, y: number, exact = false) => {
@@ -2765,8 +2812,31 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       viewerProgress = clamp(viewerProgress + wheelPixels(e.deltaY, e.deltaMode, canvas.clientHeight) / Math.max(1, hud.stage.clientHeight * 5.2), 0, 1);
       return;
     }
+    const factor = Math.exp(wheelPixels(e.deltaY, e.deltaMode, canvas.clientHeight) * CFG.zoom.wheelStep);
+    if (freeCamera && !inspectorOn) {
+      // 外部沿指针部件推进；贴近后改为平移相机和焦点，允许镜头穿过外壳。
+      // 纯轨道缩放的半径永远为正，镜头只会停在外壳表面，无法继续进入内部。
+      const nearZoom = 0.65 / Math.max(0.65, camState.r);
+      if (factor < 1 && freeDollyTravel === 0 && zoomTarget > nearZoom) focusAt(e.clientX, e.clientY, false);
+      if (factor < 1 && zoomTarget * factor < nearZoom) {
+        const beyond = Math.log(nearZoom / Math.max(zoomTarget * factor, 0.001)) * 0.65;
+        zoomTarget = nearZoom;
+        camera.getWorldDirection(freeDollyDirection);
+        const step = Math.min(0.8, beyond);
+        focusTarget.addScaledVector(freeDollyDirection, step);
+        freeDollyTravel += step;
+        return;
+      }
+      if (factor > 1 && freeDollyTravel > 0) {
+        camera.getWorldDirection(freeDollyDirection);
+        const step = Math.min(freeDollyTravel, Math.log(factor) * 0.65);
+        focusTarget.addScaledVector(freeDollyDirection, -step);
+        freeDollyTravel -= step;
+        return;
+      }
+    }
     // 往下滚 = 拉远，往上滚 / 双指张开 = 推近看细节
-    applyZoom(Math.exp(wheelPixels(e.deltaY, e.deltaMode, canvas.clientHeight) * CFG.zoom.wheelStep));
+    applyZoom(factor);
   };
   const onDoubleClick = (e: MouseEvent) => {
     if (performance.now() - lastTouchFocusAt < 500) return;
@@ -3201,6 +3271,98 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       const sequence = ++modelSwitchSequence;
       modelSwitchInProgress = true;
       const current = () => !disposed && sequence === modelSwitchSequence;
+      const nextModel = normalizeModel(next.model);
+      const nextLimit = Math.min(nextModel.maxTextureSize, renderer.capabilities.maxTextureSize);
+      // 源贴图本来就不超过两个档位的共同上限时，完整模型无需再下载、解码与重建。
+      // 例如源贴图最高 4K 的车在「精细」和「原画」之间切换，只需更新输出分辨率。
+      if (mountedCar && next.asset === CFG.assets.model && mountedSourceTextureMax > 0
+        && modelSignature(next.model) === mountedModelSignature
+        && Math.min(mountedSourceTextureMax, mountedTextureLimit) === Math.min(mountedSourceTextureMax, nextLimit)) {
+        const previousTextureLimit = CFG.model.maxTextureSize;
+        CFG.model = nextModel;
+        mountedTextureLimit = nextLimit;
+        options.onTextureBudget?.(nextLimit < nextModel.maxTextureSize ? nextLimit : null);
+        if (previousTextureLimit !== CFG.model.maxTextureSize) {
+          wantedScale = desiredPixelRatio();
+          renderScale = budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, originalResolution() ? wantedScale : Math.min(wantedScale, 1.5));
+          qualityChanges = 0;
+          frameCost = 0; frameSamples = 0; lastAdapt = performance.now();
+          renderer.setPixelRatio(renderScale);
+          composer.setPixelRatio(renderScale);
+          resize(true);
+          bodyMaterials.forEach(material => {
+            [material.map, material.normalMap, material.roughnessMap, material.metalnessMap, material.aoMap, material.emissiveMap].forEach(texture => {
+              if (texture) texture.anisotropy = Math.min(originalResolution() ? 16 : 8, renderer.capabilities.getMaxAnisotropy());
+            });
+          });
+        }
+        modelSwitchInProgress = false;
+        invalidateInspector();
+        render(progress(), 1 / 60);
+        return Promise.resolve(true);
+      }
+      if (mountedCar && next.asset === CFG.assets.model && nextLimit < mountedTextureLimit
+        && modelSignature(next.model) === mountedModelSignature) {
+        const images = new Map<CanvasImageSource & { width: number; height: number }, THREE.Texture[]>();
+        let compressed = false;
+        mountedCar.traverse(object => {
+          const mesh = object as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          materials.forEach(material => {
+            if (!material) return;
+            Object.entries(material).forEach(([key, value]) => {
+              if (key === "envMap" || !(value as THREE.Texture | undefined)?.isTexture) return;
+              const texture = value as THREE.Texture;
+              const image = texture.image as CanvasImageSource & { width: number; height: number };
+              if (!image?.width || !image?.height || Math.max(image.width, image.height) <= nextLimit) return;
+              if ((texture as THREE.CompressedTexture).isCompressedTexture) { compressed = true; return; }
+              const group = images.get(image) ?? [];
+              group.push(texture);
+              images.set(image, group);
+            });
+          });
+        });
+        if (!compressed && images.size > 0) {
+          mountedTextureLimit = nextLimit;
+          return (async () => {
+            try {
+              for (const [image, textures] of images) {
+                if (!current()) return false;
+                // 每张贴图之间让出一帧；车身始终留在场景中，触摸旋转无需等待整车重新解析。
+                await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
+                if (!current()) return false;
+                const ratio = nextLimit / Math.max(image.width, image.height);
+                const resizedCanvas = document.createElement("canvas");
+                resizedCanvas.width = Math.max(1, Math.round(image.width * ratio));
+                resizedCanvas.height = Math.max(1, Math.round(image.height * ratio));
+                const context = resizedCanvas.getContext("2d");
+                if (!context) throw new Error("设备内存不足，无法调整模型贴图");
+                context.drawImage(image, 0, 0, resizedCanvas.width, resizedCanvas.height);
+                textures.forEach(texture => { texture.image = resizedCanvas; texture.needsUpdate = true; });
+                if ("close" in image && typeof image.close === "function") image.close();
+                else if (image instanceof HTMLCanvasElement) image.width = image.height = 1;
+              }
+              if (!current()) return false;
+              CFG.model = nextModel;
+              options.onTextureBudget?.(nextLimit < nextModel.maxTextureSize ? nextLimit : null);
+              wantedScale = desiredPixelRatio();
+              renderScale = budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, originalResolution() ? wantedScale : Math.min(wantedScale, 1.5));
+              renderer.setPixelRatio(renderScale);
+              composer.setPixelRatio(renderScale);
+              resize(true);
+              invalidateInspector();
+              render(progress(), 1 / 60);
+              return true;
+            } catch (error) {
+              if (current()) options.onError?.(error instanceof Error ? error.message : String(error));
+              return false;
+            } finally {
+              if (current()) modelSwitchInProgress = false;
+            }
+          })();
+        }
+      }
       const load = async () => {
         let nextCar: THREE.Object3D | null = null;
         const previousAsset = CFG.assets.model;
@@ -3214,7 +3376,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           // 已经是完整模型时才提前释放旧贴图，避免两套高清贴图同时占用显存。
           // 下一辆车先换轻量预览：即使旧车是高清，也只需额外容纳一份小预览。
           // 保留旧车到新车可显示，下载和解码时镜头仍能旋转。
-          if (memoryConstrained && previousAsset !== CFG.assets.previewModel && !next.asset.includes("-preview.glb")) {
+          if (memoryConstrained && previousAsset !== CFG.assets.previewModel
+            && mountedTextureLimit > 1024 && !next.asset.includes("-preview.glb")) {
             unmountCar(mountedCar);
             mountedCar = null;
           }
@@ -3235,7 +3398,6 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
             resize(true);
           }
           wireframeView.configure(CFG.model.wireframe);
-          focusTarget.set(0, 0, 0);
           mountCar(nextCar);
           nextCar = null;
           invalidateInspector();
@@ -3356,9 +3518,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     setFreeCamera: (on: boolean) => {
       if (freeCamera === on) return;
       freeCamera = on;
-      focusTarget.set(0, 0, 0);
-      zoomTarget = 1;
-      userYaw = 0; userPitch = 0; userYawVel = 0; userPitchVel = 0;
+      freeDollyTravel = 0;
+      const savedFocus = on ? homePose?.focus : undefined;
+      focusTarget.set(savedFocus?.[0] ?? 0, savedFocus?.[1] ?? 0, savedFocus?.[2] ?? 0);
+      focusOffset.copy(focusTarget);
+      freeCameraProgress = on ? homePose?.p ?? 0 : 0;
+      zoomTarget = on ? homePose?.zoom ?? 1 : 1;
+      userYaw = on ? homePose?.yaw ?? 0 : 0;
+      userPitch = on ? homePose?.pitch ?? 0 : 0;
+      if (on) restoreFreeHome();
+      userYawVel = 0; userPitchVel = 0;
       if (on) { orbitOn = false; orbitYaw = 0; }
       invalidateInspector();
     },
@@ -3372,7 +3541,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       invalidateInspector();
     },
     /** 当前机位：置顶时把这几项一起存下来 */
-    readPose: () => ({ p: +pSmooth.toFixed(4), yaw: +userYaw.toFixed(2), pitch: +userPitch.toFixed(4), zoom: +zoom.toFixed(3) }),
+    readPose: () => ({ p: +pSmooth.toFixed(4), yaw: +userYaw.toFixed(2), pitch: +userPitch.toFixed(4), zoom: +zoom.toFixed(3), focus: [focusOffset.x, focusOffset.y, focusOffset.z].map(value => +value.toFixed(4)) as [number, number, number], distance: +viewDistance.toFixed(3), elevation: +viewElevation.toFixed(3) }),
     applyPose: (pose) => {
       if (typeof pose.yaw === "number" && Number.isFinite(pose.yaw)) {
         userYaw = pose.yaw;
@@ -3388,12 +3557,16 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           : clamp(pose.zoom, MIN_ZOOM, MAX_ZOOM);
         zoomTarget = zoom;
       }
+      if (pose.focus?.length === 3 && pose.focus.every(Number.isFinite)) {
+        focusTarget.fromArray(pose.focus);
+        focusOffset.copy(focusTarget);
+      }
       invalidateInspector();
     },
     /** 用户置顶的机位：双击复位回到这里（传 null 表示没置顶，回到中立角度） */
-    setHomePose: (pose: { p?: number; yaw?: number; pitch?: number; zoom?: number } | null) => {
+    setHomePose: (pose: { p?: number; yaw?: number; pitch?: number; zoom?: number; focus?: [number, number, number]; distance?: number; elevation?: number } | null) => {
       homePose = pose
-        ? { p: pose.p ?? START_P, yaw: pose.yaw ?? 0, pitch: pose.pitch ?? 0, zoom: pose.zoom ?? 1 }
+        ? { p: pose.p ?? START_P, yaw: pose.yaw ?? 0, pitch: pose.pitch ?? 0, zoom: pose.zoom ?? 1, focus: pose.focus, distance: pose.distance, elevation: pose.elevation }
         : null;
       invalidateInspector();
     },
