@@ -197,7 +197,7 @@ assert.match(stage, /fast: \{ label: "流畅", badge: "1K", size: 1024 \}/, 'fas
 assert.match(stage, /balanced: \{ label: "均衡", badge: "2K", size: 2048 \}/, 'balanced quality uses 2K textures');
 assert.match(stage, /fine: \{ label: "精细", badge: "4K", size: 4096 \}/, 'fine quality uses 4K textures');
 assert.match(stage, /original: \{ label: "原画", badge: "RAW", size: 16384 \}/, 'original quality preserves 8K source textures');
-assert.match(stage, /textureQuality !== "fast" \|\| wireMode !== "native" \? \(textureQuality === "original" \? config\.assets\.gpuModel \?\? config\.assets\.model : config\.assets\.model\)/, 'higher texture modes and wireframe appearances use the complete model');
+assert.match(stage, /textureQuality !== "fast" \|\| wireMode !== "native" \? fullQualityAsset\(config, textureQuality\)/, 'higher texture modes and wireframe appearances use the selected full model');
 assert.match(stage, /showcase-left-controls/, 'homepage control capsules use a collapsible left drawer');
 assert.match(stage, /showcase-model-controls/, 'homepage model capsules use a collapsible right drawer');
 assert.match(stage, /className="sc-row sc-texture-quality"/, 'texture quality remains independent below the homepage copy');
@@ -212,7 +212,7 @@ assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.sc-
 assert.match(fs.readFileSync('styles/palettes.css', 'utf8'), /\.showcase:not\(\.light\) \{[\s\S]*?--material-fill: rgb\(38 40 49 \/ \.9\)/, 'dark model inspector keeps a dark panel under a light site palette');
 assert.match(fs.readFileSync('components/showcase/showcase.css', 'utf8'), /\.showcase\.sc-free canvas \{ touch-action: none; \}/, 'free camera canvas owns drag gestures instead of scrolling the page');
 assert.match(fs.readFileSync('components/showcase/model-importer.css', 'utf8'), /@media \(max-width: 560px\)[\s\S]*?\.mp-form \{ grid-template-columns: minmax\(0, 1fr\);/, 'mobile workbench presents tuning fields in one readable column');
-assert.match(stage, /setModel\(\{ asset: \(textureQualityRef\.current === "original" \? current\.assets\.gpuModel \?\? current\.assets\.model : current\.assets\.model\)/, 'entering model inspection promotes the preview to the full model');
+assert.match(stage, /setModel\(\{ asset: fullAsset/, 'entering model inspection promotes the preview to the selected full model');
 assert.match(engine, /if \(envWeight > 0\.02\) void ensureDayEnvironment\(\)/, 'day HDR waits until the visible mode actually needs it');
 assert.match(engine, /createWireframeView\(CFG\.model\.wireframe, true/, 'showcase wireframes are split across frames');
 assert.match(engine, /options\.initialTheme \?\? "dark"/, 'WebGL scene uses the server theme before its first frame');

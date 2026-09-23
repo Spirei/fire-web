@@ -6,6 +6,7 @@ import ShowcaseStage from "./ShowcaseStage";
 import { DEFAULT_SHOWCASE_MODEL } from "./presets/models";
 import type { ShowcaseConfig } from "./types";
 import { fetchAssetBuffer, isAssetCached, prefetchAsset, primeModelAsset } from "./assetCache";
+import { fullQualityAsset } from "./qualityAsset";
 import { usePersistedState } from "@/lib/usePersistedState";
 
 type ModelStatus = "idle" | "loading" | "ready";
@@ -75,7 +76,7 @@ export default function HomeShowcase({
       if (inspectorIntent && typeof matchMedia === "function" && matchMedia("(hover: hover) and (pointer: fine)").matches
         && (textureQuality !== "fast" || wireMode !== "native")) {
         hoverTimerRef.current = setTimeout(() => {
-          primeModelAsset(textureQuality === "original" ? model.config.assets.gpuModel ?? model.config.assets.model : model.config.assets.model);
+          primeModelAsset(fullQualityAsset(model.config, textureQuality));
           hoverTimerRef.current = null;
         }, 350);
       }

@@ -108,6 +108,8 @@ export interface ShowcaseConfig {
     previewModel?: string;
     /** 保留源贴图尺寸的 UASTC GPU 压缩副本（原文件仍保留）。 */
     gpuModel?: string;
+    /** GPU 副本经校验的最大贴图边长，用于判断是否必须切换到压缩文件。 */
+    gpuTextureMax?: number;
     /** 夜间环境贴图（HDR） */
     envNight: string;
     /** 日间环境贴图（HDR） */
@@ -431,6 +433,9 @@ export interface ShowcaseHandle {
   setProgress: (p: number, settle?: number) => void;
   /** 调试用：当前平滑后的进度、速度、渲染倍率、冲刺与缩放状态 */
   debug: () => {
+    asset: string;
+    textureLimit: number;
+    sourceTextureMax: number;
     progress: number;
     speed: number;
     scale: number;

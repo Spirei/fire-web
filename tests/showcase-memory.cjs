@@ -25,6 +25,8 @@ rememberWorkingQuality('mp45','fine');assert.equal(recoveryQuality('mp45','origi
 let running=0,max=0;
 const jobs=Array.from({length:4},()=>queueModelLoad(async()=>{max=Math.max(max,++running);await new Promise(r=>setTimeout(r,5));running--}));
 await Promise.all(jobs);assert.equal(max,1,'only one model decode across scenes');
+await assert.rejects(queueModelLoad(() => new Promise(() => {}), 20), /高清模型解析超时/, 'stalled decoder must terminate the visible switch');
+assert.equal(await queueModelLoad(async () => 'next-model'), 'next-model', 'a timed-out decoder must not block the next quality choice');
 let calls=0,closed=0,active=0,maxDecode=0,current=true;
 const textures=[];
 const parser={loadImageSource:async()=>{calls++;maxDecode=Math.max(maxDecode,++active);await new Promise(r=>setTimeout(r,5));active--;const source={data:{width:4096,height:4096,close(){closed++}}};const t={source,get image(){return source.data},set image(i){source.data=i},clone(){return {...this,source}},dispose(){}};textures.push(t);return t}};

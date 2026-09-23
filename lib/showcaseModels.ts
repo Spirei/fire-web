@@ -490,7 +490,7 @@ function sourceSha256(input: string, size: number, mtimeMs: number): string {
   return sha256;
 }
 
-function gpuModelUrl(input: string, gpuFile: string): string | undefined {
+function gpuModelInfo(input: string, gpuFile: string): { url: string; textureMax: number } | undefined {
   const gpuPath = path.join(SHOWROOM_DIR, "gpu", gpuFile);
   try {
     const manifest = JSON.parse(fs.readFileSync(`${gpuPath}.json`, "utf8"));
@@ -499,7 +499,9 @@ function gpuModelUrl(input: string, gpuFile: string): string | undefined {
     const sameSource = manifest.sourceMtimeMs === original.mtimeMs
       || (typeof manifest.sourceSha256 === "string" && sourceSha256(input, original.size, original.mtimeMs) === manifest.sourceSha256);
     if (sameSource) {
-      return `/uploads/mclaren/gpu/${encodeURIComponent(gpuFile)}?v=${gpu.mtimeMs}`;
+      const textures = manifest.verified?.textures as Array<{ width?: number; height?: number }> | undefined;
+      const textureMax = Math.max(0, ...(textures ?? []).map(texture => Math.max(texture.width ?? 0, texture.height ?? 0)));
+      return { url: `/uploads/mclaren/gpu/${encodeURIComponent(gpuFile)}?v=${gpu.mtimeMs}`, textureMax };
     }
   } catch { /* 尚未生成或副本过期，保留原资源。 */ }
 }
@@ -511,6 +513,7 @@ export function listShowcaseOptions(): ShowcaseModelOption[] {
   const { order, builtinMeta, hiddenIds } = readRegistry();
   const builtin: ShowcaseModelOption[] = SHOWCASE_MODELS.filter(item => !hiddenIds.includes(item.id)).map((item) => {
     const cover = builtinMeta[item.id]?.cover ?? "";
+    const gpu = gpuModelInfo(path.join(process.cwd(), "public", item.config.assets.model.split("?")[0]), `builtin-${item.id}-uastc.glb`);
     return {
       id: item.id,
       label: item.label,
@@ -521,7 +524,8 @@ export function listShowcaseOptions(): ShowcaseModelOption[] {
       cover: cover && modelUrlExists(cover) ? cover : "",
       config: { ...item.config, assets: { ...item.config.assets,
         previewModel: generatedPreviewUrl(`builtin-${item.id}-preview.glb`) ?? item.config.assets.previewModel,
-        gpuModel: gpuModelUrl(path.join(process.cwd(), "public", item.config.assets.model.split("?")[0]), `builtin-${item.id}-uastc.glb`)
+        gpuModel: gpu?.url,
+        gpuTextureMax: gpu?.textureMax
       } }
     };
   });
@@ -532,7 +536,9 @@ export function listShowcaseOptions(): ShowcaseModelOption[] {
     if (fs.existsSync(path.join(PREVIEWS_DIR, previewFile))) {
       config.assets.previewModel = `/uploads/mclaren/previews/${encodeURIComponent(previewFile)}?v=${fs.statSync(path.join(PREVIEWS_DIR, previewFile)).mtimeMs}`;
     }
-    config.assets.gpuModel = gpuModelUrl(path.join(MODELS_DIR, model.file), `${model.file.replace(/\.glb$/i, "")}-uastc.glb`);
+    const gpu = gpuModelInfo(path.join(MODELS_DIR, model.file), `${model.file.replace(/\.glb$/i, "")}-uastc.glb`);
+    config.assets.gpuModel = gpu?.url;
+    config.assets.gpuTextureMax = gpu?.textureMax;
     return {
       id: model.id,
       label: model.label,

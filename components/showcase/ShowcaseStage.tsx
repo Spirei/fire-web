@@ -8,6 +8,7 @@ import type { WireframeMode } from "./wireframe";
 import LiquidGlassControl from "@/components/LiquidGlassControl";
 import { hasLoadedModel, rememberLoadedModel } from "./loadHistory";
 import { primeModelAsset } from "./assetCache";
+import { fullQualityAsset } from "./qualityAsset";
 import MusicIcon from "./MusicIcon";
 import { constrainedGraphics, rememberWorkingQuality, recoveryQuality } from "./modelMemory";
 import "./showcase.css";
@@ -197,11 +198,12 @@ export default function ShowcaseStage({
     const requestedQuality = textureQualityRef.current;
     const switchId = ++qualitySwitchRef.current;
     setQualityLoading(true);
-    const fullKey = JSON.stringify({ a: (textureQualityRef.current === "original" ? current.assets.gpuModel ?? current.assets.model : current.assets.model), m: current.model ?? null, q: textureQualityRef.current });
+    const fullAsset = fullQualityAsset(current, textureQualityRef.current);
+    const fullKey = JSON.stringify({ a: fullAsset, m: current.model ?? null, q: textureQualityRef.current });
     setLoadingKey(fullKey);
     const promote = appliedModelRef.current === fullKey
       ? Promise.resolve(true)
-      : handleRef.current?.setModel({ asset: (textureQualityRef.current === "original" ? current.assets.gpuModel ?? current.assets.model : current.assets.model), model: qualityModel(current.model) }) ?? Promise.resolve(false);
+      : handleRef.current?.setModel({ asset: fullAsset, model: qualityModel(current.model) }) ?? Promise.resolve(false);
     void promote.then((ok) => {
       if (switchId !== qualitySwitchRef.current) return;
       setQualityLoading(false);
@@ -379,7 +381,7 @@ export default function ShowcaseStage({
    * 其余字段（镜头 / 灯光 / 地面 / 文案）变了才重建整个场景。
    */
   const modelKey = useMemo(() => JSON.stringify({
-    a: textureQuality !== "fast" || wireMode !== "native" ? (textureQuality === "original" ? config.assets.gpuModel ?? config.assets.model : config.assets.model) : (config.assets.previewModel ?? config.assets.model),
+    a: textureQuality !== "fast" || wireMode !== "native" ? fullQualityAsset(config, textureQuality) : (config.assets.previewModel ?? config.assets.model),
     m: config.model ?? null,
     q: textureQuality
   }), [config, textureQuality, wireMode]);
@@ -388,7 +390,7 @@ export default function ShowcaseStage({
     // 车型相关的两块（素材地址 + 车型参数）都要排掉，只留镜头 / 灯光 / 地面 / 文案这些「外壳」
     const { assets, model: _model, ...rest } = config;
     void _model;
-    return JSON.stringify({ ...rest, assets: { ...assets, model: null, previewModel: null, gpuModel: null } });
+    return JSON.stringify({ ...rest, assets: { ...assets, model: null, previewModel: null, gpuModel: null, gpuTextureMax: null } });
   }, [config]);
 
   useEffect(() => {
@@ -464,7 +466,7 @@ export default function ShowcaseStage({
         const requestedQuality = textureQualityRef.current;
         const requestedWireMode = wireRef.current.mode;
         const requestedAsset = inspectorRef.current || requestedQuality !== "fast" || wireRef.current.mode !== "native"
-          ? (textureQualityRef.current === "original" ? cfg.assets.gpuModel ?? cfg.assets.model : cfg.assets.model)
+          ? fullQualityAsset(cfg, textureQualityRef.current)
           : (cfg.assets.previewModel ?? cfg.assets.model);
         // 刷新保留线框偏好时也先显示轻量车；完整网格和线框构建留到可交互首帧之后。
         const bootstrapPreview = !inspectorRef.current && !!cfg.assets.previewModel && cfg.assets.previewModel !== requestedAsset;
@@ -622,7 +624,7 @@ export default function ShowcaseStage({
         const stillBootstrapping = bootstrapPreview && now.assets.model === cfg.assets.model
           && textureQualityRef.current === requestedQuality && !inspectorRef.current && wireRef.current.mode === requestedWireMode;
         const nowAsset = stillBootstrapping ? initialAsset : inspectorRef.current || textureQualityRef.current !== "fast" || wireRef.current.mode !== "native"
-          ? (textureQualityRef.current === "original" ? now.assets.gpuModel ?? now.assets.model : now.assets.model)
+          ? fullQualityAsset(now, textureQualityRef.current)
           : (now.assets.previewModel ?? now.assets.model);
         const nowKey = JSON.stringify({ a: nowAsset, m: now.model ?? null, q: stillBootstrapping ? "fast" : textureQualityRef.current });
         if (nowKey !== appliedModelRef.current) {
@@ -697,7 +699,7 @@ export default function ShowcaseStage({
     const next = configRef.current;
     const targetQuality = textureQualityRef.current;
     const requestedAsset = inspectorRef.current || targetQuality !== "fast" || wireRef.current.mode !== "native"
-      ? (targetQuality === "original" ? next.assets.gpuModel ?? next.assets.model : next.assets.model)
+      ? fullQualityAsset(next, targetQuality)
       : (next.assets.previewModel ?? next.assets.model);
     const previous = appliedModelRef.current;
     const previousModel = previous ? JSON.parse(previous) as { a: string; q: TextureQuality } : null;
@@ -1448,7 +1450,7 @@ export default function ShowcaseStage({
                   setMemoryNotice(null);
                   const next = configRef.current;
                   const targetQuality = textureQualityRef.current;
-                  const asset = targetQuality === "original" ? next.assets.gpuModel ?? next.assets.model
+                  const asset = targetQuality === "original" ? fullQualityAsset(next, targetQuality)
                     : targetQuality === "fast" && wireRef.current.mode === "native" ? next.assets.previewModel ?? next.assets.model
                     : next.assets.model;
                   const key = JSON.stringify({ a: asset, m: next.model ?? null, q: targetQuality });
@@ -1469,7 +1471,7 @@ export default function ShowcaseStage({
                     type="button"
                     className={`sc-quality-option${textureQuality === key ? " on" : ""}${qualityLoading && textureQuality === key && appliedTextureQuality !== key ? " pending" : ""}${selectionHint === `quality:${key}` ? " sc-label-peek" : ""}`}
                     aria-pressed={textureQuality === key}
-                    title={key === "original" ? "原画纹理 · 保留源尺寸，优先使用高质量 GPU 压缩副本" : `${option.label}纹理 · 最长边 ${option.badge}`}
+                    title={key === "original" ? "原画纹理 · 保留源尺寸；与 4K 同源时无需重新加载" : `${option.label}纹理 · 最长边 ${option.badge}`}
                     onClick={() => {
                       setQualityNavOpen(false);
                       showSelectionHint(`quality:${key}`);

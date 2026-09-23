@@ -3441,7 +3441,18 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           }
         }
       };
-      return next.asset.includes("-preview.glb") ? load() : queueModelLoad(load);
+      if (next.asset.includes("-preview.glb")) return load();
+      // 普通大文件可能需要更长传输时间；压缩副本的 Worker 超时更早暴露。
+      const timeoutMs = next.asset.includes("/gpu/") ? 45_000 : 90_000;
+      return queueModelLoad(load, timeoutMs).catch(error => {
+        if (current()) {
+          // 某些浏览器的压缩纹理解码 Worker 会一直不返回；使过期任务失效，释放串行队列。
+          modelSwitchSequence += 1;
+          modelSwitchInProgress = false;
+          options.onError?.(error instanceof Error ? error.message : String(error));
+        }
+        return false;
+      });
     },
     updateModelMaterials: (next) => {
       const normalized = normalizeModel(next);
@@ -3588,6 +3599,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       render(p, 1 / 60);
     },
   debug: () => ({
+    asset: CFG.assets.model,
+    textureLimit: mountedTextureLimit,
+    sourceTextureMax: mountedSourceTextureMax,
     progress: +pSmooth.toFixed(4),
     speed: +speed.toFixed(2),
     scale: renderScale,

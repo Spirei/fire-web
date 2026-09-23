@@ -50,8 +50,17 @@ export function recoveryQuality(asset: string, failed: Quality): Quality | null 
 
 /** 跨场景串行：旧场景未完成的解码不能与重建 / 下一辆车同时抢内存。 */
 let modelQueue: Promise<unknown> = Promise.resolve();
-export function queueModelLoad<T>(load: () => Promise<T>): Promise<T> {
-  const task = modelQueue.then(load);
+export function queueModelLoad<T>(load: () => Promise<T>, timeoutMs = 0): Promise<T> {
+  const task = modelQueue.then(() => {
+    if (timeoutMs <= 0) return load();
+    let timer: ReturnType<typeof setTimeout>;
+    return Promise.race([
+      load(),
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("高清模型解析超时，请重试或切回 4K")), timeoutMs);
+      })
+    ]).finally(() => clearTimeout(timer));
+  });
   modelQueue = task.catch(() => {});
   return task;
 }
