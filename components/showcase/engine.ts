@@ -2390,8 +2390,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     }
     lightLinesPass.uniforms.tSceneDepth.value = composer.readBuffer.depthTexture;
     (lightLinesPass.uniforms.uWorldFromClip.value as THREE.Matrix4).multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse);
-    if (inspectorOn || wireframeMode !== "native") {
-      // 线框直接渲染；返回首页时避免完整线段再次进入深度纹理和后期处理链。
+    if (inspectorOn || (wireframeMode !== "native" && !lightLinesPass.enabled)) {
+      // 静止线框直接渲染，避开全屏后期；起步后必须经过 composer，
+      // 否则隧道主光条虽已启用却从未合成到画面中。
       const background = scene.background;
       const hidden = inspectorOn ? scene.children.filter(child => child !== carRoot && !(child as THREE.Light).isLight && child.visible) : [];
       hidden.forEach(child => { child.visible = false; });

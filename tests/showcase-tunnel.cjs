@@ -38,3 +38,23 @@ for (let x=0; x<=350; x++) assert(bl.y(x)>ll.y(x), `Left rails cross at x=${x}`)
 assert.equal(tunnel.lanes[0].tailColor, '#32363d');
 near(bl.y(92),231.9424);
 console.log('PASS left shoulder stays separate and retains sampled core / tail colors');
+
+// 线框首页静止时可跳过后期，但起步后隧道光条依赖 lightLinesPass 合成。
+// 防止性能优化再次把 overlay / wireframe 的行驶分支一同绕过 composer。
+const engine = fs.readFileSync(require('node:path').resolve('components/showcase/engine.ts'), 'utf8');
+const ast = require('typescript').createSourceFile('engine.ts', engine, require('typescript').ScriptTarget.Latest, true);
+let renderChoice;
+function findRenderChoice(node) {
+  const ts = require('typescript');
+  if (ts.isIfStatement(node) && node.elseStatement?.getText(ast).includes('composer.render()') && node.thenStatement.getText(ast).includes('renderer.render(scene, camera)')) renderChoice = node.expression.getText(ast);
+  ts.forEachChild(node, findRenderChoice);
+}
+findRenderChoice(ast);
+assert(renderChoice, 'the direct/composer render decision must exist');
+const direct = new Function('inspectorOn', 'wireframeMode', 'lightLinesPass', `return ${renderChoice}`);
+for (const mode of ['overlay', 'wireframe']) {
+  assert.equal(direct(false, mode, {enabled: false}), true, `${mode} at rest should stay on the fast direct path`);
+  assert.equal(direct(false, mode, {enabled: true}), false, `${mode} while racing must compose the tunnel`);
+}
+assert.equal(direct(true, 'wireframe', {enabled: true}), true, 'model inspector keeps its isolated direct render');
+console.log('PASS overlay and pure wireframe keep tunnel composition while racing');
