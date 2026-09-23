@@ -3265,7 +3265,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     },
     /**
      * 原地换车：只换车身，镜头 / 地面 / 环境 / HUD 全不动，不重建 WebGL 场景。
-     * 受限设备先释放旧车再解码；桌面保留旧车直到新车解析完成。
+     * 当前车始终保留到新车解析完成；切换期间仍可旋转，也不会露出空场。
      */
     setModel: (next: { asset: string; model?: ShowcaseConfig["model"] }) => {
       const sequence = ++modelSwitchSequence;
@@ -3372,15 +3372,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           // 先拿到目标字节；慢网络期间不能让手机上已经显示的车消失。
           const cached = await fetchAssetBuffer(next.asset);
           if (!current()) return false;
-          // 轻量预览只有很小的显存占用；升级高清时继续展示它，手机在解码期间仍可操作车身。
-          // 已经是完整模型时才提前释放旧贴图，避免两套高清贴图同时占用显存。
-          // 下一辆车先换轻量预览：即使旧车是高清，也只需额外容纳一份小预览。
-          // 保留旧车到新车可显示，下载和解码时镜头仍能旋转。
-          if (memoryConstrained && previousAsset !== CFG.assets.previewModel
-            && mountedTextureLimit > 1024 && !next.asset.includes("-preview.glb")) {
-            unmountCar(mountedCar);
-            mountedCar = null;
-          }
+          // 手机 / 平板也不能提前卸下当前车。解析失败或被下一次选择取消时，
+          // 旧车继续留在画面上；成功后才由下方的替换步骤释放它。
           nextCar = await parseCar(cached.buffer, next.model, current, next.asset);
           if (!nextCar) return false;
           const previousTextureLimit = CFG.model.maxTextureSize;

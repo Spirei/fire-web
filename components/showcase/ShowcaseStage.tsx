@@ -1399,7 +1399,7 @@ export default function ShowcaseStage({
                 <span className="sc-quality-cap" aria-hidden="true">纹理</span>
                 {memoryNotice && <span className="sc-quality-status" role="status">{memoryNotice}</span>}
                 {!memoryNotice && textureLimitNotice && <span className="sc-quality-status" role="status">设备适配 · 贴图上限 {Math.round(textureLimitNotice / 1024)}K</span>}
-                {qualityLoading && showLoadingNotice && <span className="sc-quality-pending" role="status" aria-label="正在更新高清模型" title="正在更新高清模型" />}
+                {qualityLoading && <span className="sc-quality-pending" role="status" aria-label="正在更新高清模型" title="正在更新高清模型" />}
                 {qualityError && <button type="button" className="sc-quality-retry" onClick={() => {
                   const handle = handleRef.current;
                   if (!handle) { setRetry((n) => n + 1); return; }
@@ -1426,8 +1426,8 @@ export default function ShowcaseStage({
                   <button
                     key={key}
                     type="button"
-                    className={`sc-quality-option${appliedTextureQuality === key ? " on" : ""}${qualityLoading && textureQuality === key && appliedTextureQuality !== key ? " pending" : ""}${selectionHint === `quality:${key}` ? " sc-label-peek" : ""}`}
-                    aria-pressed={appliedTextureQuality === key}
+                    className={`sc-quality-option${textureQuality === key ? " on" : ""}${qualityLoading && textureQuality === key && appliedTextureQuality !== key ? " pending" : ""}${selectionHint === `quality:${key}` ? " sc-label-peek" : ""}`}
+                    aria-pressed={textureQuality === key}
                     title={key === "original" ? "原画纹理 · 保留源尺寸，优先使用高质量 GPU 压缩副本" : `${option.label}纹理 · 最长边 ${option.badge}`}
                     onClick={() => {
                       showSelectionHint(`quality:${key}`);

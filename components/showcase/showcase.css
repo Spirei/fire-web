@@ -967,8 +967,8 @@ html:has(.showcase) body {
 .sc-quality-option.sc-label-peek .sc-quality-label { opacity: 1; }
 .sc-quality-option.on { color: var(--sc-ink-strong); }
 .sc-quality-option.on .sc-quality-tick { width: 32px; opacity: 1; }
-.sc-quality-option.pending { color: var(--sc-ink); }
-.sc-quality-option.pending .sc-quality-tick { width: 24px; opacity: .55; }
+.sc-quality-option.pending { color: var(--sc-ink-strong); }
+.sc-quality-option.pending .sc-quality-tick { width: 32px; opacity: 1; }
 .sc-quality-option:focus { outline: none; }
 .sc-quality-option:focus-visible .sc-quality-tick { outline: 2px solid var(--sc-active-line); outline-offset: 3px; }
 
