@@ -17,6 +17,7 @@ import FileDropAnywhere from "@/components/FileDropAnywhere";
 import { PrefsProvider } from "@/lib/prefsContext";
 import { PREFS_COOKIE, parsePrefsCookie } from "@/lib/prefsCookie";
 import SiteFavicon from "@/components/SiteFavicon";
+import { initialSiteFavicon } from "@/lib/siteFavicon";
 import PaletteProvider from "@/components/PaletteProvider";
 import { PALETTE_KEY, paletteVariables, resolvePalette } from "@/lib/palettes";
 import "@/styles/palettes.css";
@@ -25,14 +26,11 @@ import AppDialogHost from "@/components/AppDialogHost";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = getSiteSettings();
+  const icon = await initialSiteFavicon(settings.ico);
   return {
     title: settings.title,
     description: "一个轻量的股票记录网站：记录自选与持仓，自动汇总盈亏，数据保存在服务端。",
-    icons: {
-      // 刷新首帧只声明轻量静态图标，避免浏览器等待后台上传原图时短暂显示默认地球。
-      icon: "/favicon.ico",
-      shortcut: "/favicon.ico"
-    }
+    icons: { icon }
   };
 }
 
@@ -83,7 +81,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="font-sans">
         <PrefsProvider initialPrefs={prefs}>
           <PaletteProvider>
-            <SiteFavicon initialIcon={settings.ico} />
+            <SiteFavicon />
             <PwaRegister />
             {/* 全站拖拽上传：文件拖进页面就近落到最近的上传入口 */}
             <FileDropAnywhere />
