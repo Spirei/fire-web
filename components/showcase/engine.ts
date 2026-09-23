@@ -1955,7 +1955,10 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const targetSpeed = racing
       ? cruising ? cruiseTargetSpeed(CFG.speed.maxSpeed, CFG.speed.topKmh, elapsed) : CFG.speed.maxSpeed
       : 0;
-    const response = racing ? CFG.speed.response.acceleration : CFG.speed.response.braking;
+    // 起步仍按原加速曲线；巡航需要更快跟随小幅波动，否则低通后读数几乎不动。
+    const response = racing
+      ? cruising ? Math.max(6, CFG.speed.response.acceleration) : CFG.speed.response.acceleration
+      : CFG.speed.response.braking;
     const previousSpeed = speed;
     speed += (targetSpeed - speed) * (1 - Math.exp(-dt * response));
     if (!racing && speed < 0.015) speed = 0;

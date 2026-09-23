@@ -26,12 +26,14 @@ for (const topKmh of [335, 340, 350]) {
     const elapsed = frame * dt;
     if (speed >= maxSpeed * 0.985) cruising = true;
     const target = cruising ? cruiseTargetSpeed(maxSpeed, topKmh, elapsed) : maxSpeed;
-    speed += (target - speed) * (1 - Math.exp(-dt * 1.05));
+    speed += (target - speed) * (1 - Math.exp(-dt * (cruising ? 6 : 1.05)));
     if (elapsed > 15) samples.push(Math.round(speed / maxSpeed * topKmh));
   }
   assert.equal(Math.max(...samples), topKmh, 'steady cruise still reaches this car’s advertised peak');
   assert(Math.min(...samples) >= topKmh - 4 && Math.min(...samples) <= topKmh - 2, 'steady cruise moves gently near this car’s peak');
   assert(new Set(samples).size >= 3, 'speed must not stick at one or two values');
-  assert(cruiseTargetSpeed(maxSpeed, topKmh, Math.PI / 2 / 0.9) < maxSpeed);
-  console.log(`PASS ${topKmh} km/h car cruises ${Math.min(...samples)}–${Math.max(...samples)} km/h`);
+  const changes = samples.slice(1).filter((value, index) => value !== samples[index]).length;
+  assert(changes / 25 >= 2.5, 'peak speed should visibly change several times per second');
+  assert(cruiseTargetSpeed(maxSpeed, topKmh, Math.PI / 2 / 3.4) < maxSpeed);
+  console.log(`PASS ${topKmh} km/h car cruises ${Math.min(...samples)}–${Math.max(...samples)} km/h with ${(changes / 25).toFixed(1)} changes/s`);
 }
