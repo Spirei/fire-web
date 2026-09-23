@@ -2201,7 +2201,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     floorUniforms.uNormalAmount.value = light ? 0.07 : 0.1;
     floorUniforms.uMipBias.value = light ? 1.5 : 1.1;
     // 天际线接色：浅色背景（#dfe3e8 一带）与夜间背景（近黑）各自接自己的底色
-    floorUniforms.uHorizon.value.set(light ? 0xe7ecf2 : 0x090a0c);
+    floorUniforms.uHorizon.value.set(light ? 0xd5d9de : 0x090a0c);
     floorUniforms.uHorizonMix.value = light ? 1 : 0.9;
     floorUniforms.uHorizonPower.value = light ? 8 : 3;
     flowUniforms.uFlowTime.value = elapsed;
@@ -3288,6 +3288,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     setTheme: (next: "dark" | "light") => {
       theme = next;
       renderer.setClearColor(next === "light" ? 0xf4f6f9 : 0x050506, 1);
+      // 背景已换色时旧主题的反射贴图不能继续复用，否则地面会保留上一主题的亮度。
+      reflectDirty = true;
       invalidateInspector();
     },
     setTopKmh: (value: number) => {
@@ -3575,6 +3577,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     /** 影棚：把环境切到明亮摄影棚（不改深浅色主题，只影响 3D 场景的光与背景） */
     setStudio: (on: boolean) => {
       studioOn = on;
+      reflectDirty = true;
       invalidateInspector();
     },
     /** 当前机位：置顶时把这几项一起存下来 */
