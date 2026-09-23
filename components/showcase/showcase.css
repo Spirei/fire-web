@@ -613,7 +613,7 @@ html:has(.showcase) body {
   border-radius: 999px;
   background: currentColor;
   opacity: 0.5;
-  transition: width 0.24s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease;
+  transition: none;
 }
 
 .sc-nav button:hover,
@@ -629,7 +629,8 @@ html:has(.showcase) body {
 
 .sc-nav button.on .sc-nav-tick {
   width: 32px;
-  opacity: 0.5;
+  opacity: 1;
+  background: var(--sc-car-accent, var(--sc-papaya));
 }
 
 /* 章节名：悬停 / 聚焦才出现，不参与布局 */
@@ -930,7 +931,7 @@ html:has(.showcase) body {
   border-radius: 999px;
   background: currentColor;
   opacity: .5;
-  transition: width .24s cubic-bezier(.4,0,.2,1), opacity .24s ease;
+  transition: none;
 }
 
 .sc-quality-label {
@@ -961,7 +962,7 @@ html:has(.showcase) body {
 .sc-quality-option:focus-visible .sc-quality-label,
 .sc-quality-option.sc-label-peek .sc-quality-label { opacity: 1; }
 .sc-quality-option.on { color: var(--sc-faint); }
-.sc-quality-option.on .sc-quality-tick { width: 32px; opacity: .5; }
+.sc-quality-option.on .sc-quality-tick { width: 32px; opacity: 1; background: var(--sc-car-accent, var(--sc-papaya)); }
 .sc-quality-option.pending { color: var(--sc-faint); }
 .sc-quality-option.pending .sc-quality-tick { width: 32px; opacity: .5; }
 .sc-quality-option:focus { outline: none; }
@@ -1220,13 +1221,13 @@ html:has(.showcase) body {
     height: 3px;
   }
 
-  .sc-nav button.on .sc-nav-tick {
-    width: 26px;
-  }
-
   .sc-nav button:hover .sc-nav-tick,
   .sc-nav button:focus-visible .sc-nav-tick {
     width: 20px;
+  }
+
+  .sc-nav button.on .sc-nav-tick {
+    width: 26px;
   }
 
   .sc-hint-drag {
@@ -1387,7 +1388,8 @@ html:has(.showcase) body {
 .sc-nav { top: 64%; gap: 12px; }
 .sc-nav button { min-height: 24px; min-width: 40px; }
 .sc-free-camera { margin-top: 6px; }
-.sc-free-camera .sc-nav-tick { border: 0; background: currentColor; height: 3px; border-radius: 0; }
+.sc-free-camera .sc-nav-tick { border: 0; height: 3px; border-radius: 0; }
+.sc-free-camera:not(.on) .sc-nav-tick { background: currentColor; }
 .showcase.light .sc-nav { color: #343c49; }
 .showcase.light .sc-nav button { color: #505b69; }
 .showcase.light .sc-nav button.on { color: #505b69; }
@@ -1829,54 +1831,7 @@ html:has(.showcase) body {
   .showcase.sc-immersive .sc-drive-camera-options button { min-height: 44px; }
 }
 
-/* 章节刻度仅靠长度区分，不再以亮度提示当前项。触屏端按需展开，减少车身两侧的常驻线条。 */
-.sc-nav-toggle, .sc-quality-nav-toggle { display: none; }
-@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
-  .showcase .sc-nav,
-  .showcase .sc-texture-quality {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-  }
-  .showcase.sc-chapter-nav-open .sc-nav,
-  .showcase.sc-quality-nav-open .sc-texture-quality {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-  }
-  .showcase .sc-nav-toggle,
-  .showcase .sc-quality-nav-toggle {
-    display: flex;
-    right: 3vw;
-    top: 55%;
-    transform: translateY(-50%);
-    width: 44px;
-    height: 44px;
-    padding: 0 10px;
-    border: 0;
-    background: transparent;
-    color: var(--sc-faint);
-    pointer-events: auto;
-    cursor: pointer;
-    align-items: flex-end;
-    justify-content: center;
-    flex-direction: column;
-    gap: 4px;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .showcase .sc-quality-nav-toggle { left: 3vw; right: auto; align-items: flex-start; }
-  .sc-nav-toggle span { display: block; width: 12px; height: 2px; border-radius: 2px; background: currentColor; opacity: .65; }
-  .sc-nav-toggle span:nth-child(2) { width: 20px; }
-  .sc-quality-nav-toggle span { display: block; width: 12px; height: 2px; border-radius: 2px; background: currentColor; opacity: .65; }
-  .sc-quality-nav-toggle span:nth-child(2) { width: 20px; }
-  .sc-nav-toggle:focus-visible,
-  .sc-quality-nav-toggle:focus-visible { outline: 1px solid var(--sc-active-line); outline-offset: 2px; }
-  .showcase.sc-chapter-nav-open .sc-nav-toggle,
-  .showcase.sc-quality-nav-open .sc-quality-nav-toggle,
-  .showcase.sc-immersive .sc-nav-toggle,
-  .showcase.sc-immersive .sc-quality-nav-toggle { visibility: hidden; pointer-events: none; }
-  .sc-quality-toggle-spinner { position: absolute; left: 12px; top: 30px; width: 10px; height: 10px; border: 1px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: sc-quality-spin .9s linear infinite; }
-}
+/* 两侧刻度在手机、平板与桌面始终展开，选中项沿用当前车的亮色。 */
 
 /* 行驶操作集中在右下：减速在上、视角在下，避开中央车尾。 */
 .showcase.sc-immersive .sc-ctr {

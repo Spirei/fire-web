@@ -3594,9 +3594,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     },
     setProgress: (p: number, settle = 0) => {
       viewerProgress = clamp(p, 0, 1);
-      const steps = Math.max(1, Math.round(settle * 60));
-      for (let i = 0; i < steps; i += 1) render(p, 1 / 60);
-      render(p, 1 / 60);
+      // 普通章节跳转只更新目标；下一 RAF 从 pSmooth 向目标推进。
+      // 这里直接 render(p) 会先跳到目标，再被下一帧的旧 pSmooth 拉回，造成选中条闪回。
+      if (settle > 0) {
+        const steps = Math.max(1, Math.round(settle * 60));
+        for (let i = 0; i < steps; i += 1) render(p, 1 / 60);
+      }
     },
   debug: () => ({
     asset: CFG.assets.model,

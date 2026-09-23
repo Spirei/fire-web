@@ -4391,7 +4391,7 @@ export const V0_1_38_ENTRY: VersionEntry = {
 };
 
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_39_ENTRY: VersionEntry = {
   ...V0_1_38_ENTRY,
   version: "v0.1.39",
   date: "2026-09-23",
@@ -4426,12 +4426,26 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_39_ENTRY,
+  version: "v0.1.40",
+  date: "2026-09-24",
+  summary: "首页两侧刻度恢复常驻，并用车型亮色标出当前项。",
+  software: V0_1_39_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.40" } : item),
+  changes: [
+    { kind: "fix", title: "首页两侧刻度保持展开", desc: "手机和平板恢复常驻章节与画质刻度，不再需要点三横入口，也不会选中后收起。当前项保留最长线条，并按车型涂装选亮色；深浅主题均可辨认。" },
+    { kind: "fix", title: "深色主题切换同步退出明亮影棚", desc: "明亮影棚会独立强制浅色场景，导致切回深色后界面已变暗但车后背景和地面仍发白。切换深色时同步关闭影棚状态与 3D 引擎光照，避免两种状态冲突。" },
+    { kind: "fix", title: "章节刻度点击即刻切换", desc: "章节刻度选中态不再等待镜头进度与 200 毫秒文案过渡；去掉目标进度的同步预渲染，避免选中条先到目标、退回旧章节再缓慢前进。镜头只从当前位置平滑过渡。" }
+  ]
+};
+
 
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_39_ENTRY,
   V0_1_38_ENTRY,
   V0_1_37_ENTRY,
   V0_1_36_ENTRY,
