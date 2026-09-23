@@ -80,6 +80,8 @@ export type ShowcaseDiscStyle = "none" | "chrono" | "track";
 export interface ShowcaseModelParams {
   /** 归一化后的车长（米） */
   length?: number;
+  /** 本车型行驶遥测的最高时速（km/h） */
+  topKmh?: number;
   /** 模型朝向修正（度）：车头没朝 +Z 时用 */
   yaw?: number;
   pitch?: number;
@@ -402,6 +404,7 @@ export interface ShowcaseHandle {
    * 素材会走同一套缓存；解析失败时旧车留在画面上并返回 false。
    */
   setModel: (next: { asset: string; model?: ShowcaseConfig["model"] }) => Promise<boolean>;
+  setTopKmh: (value: number) => void;
   /** 只更新材质参数，不重新解析 GLB 或重建线框/轮组。 */
   updateModelMaterials: (model?: ShowcaseConfig["model"]) => void;
   /** 360° 环视：自动绕车旋转（再调一次关闭并回到叙事机位） */

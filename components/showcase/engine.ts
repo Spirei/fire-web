@@ -25,6 +25,7 @@ import { fetchAssetBuffer } from "./assetCache";
 import { constrainedGraphics, textureLimit, queueModelLoad, budgetImageDecoding, disposeModel, requiresOriginalGpu } from "./modelMemory";
 import { splitWheelGeometry } from "./wheels";
 import { createWireframeView } from "./wireframe";
+import { cruiseTargetSpeed } from "./cruiseSpeed";
 import { coastStep, boundedZoom, wheelPixels } from "./interaction";
 import type {
   ShowcaseCameraKey,
@@ -1841,6 +1842,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let elapsed = 0;
   let roadTravel = 0; // 积分速度，变速时光条相位连续，不用 elapsed × 当前速度。
   let racing = false;
+  let cruising = false;
   let racingAmt = 0;   // 速度驱动的镜头混合量（轮胎 / 光条直接跟随速度）
   let carTravel = 0;   // 冲刺时车沿隧道开走的距离
   let lastRacing = false;
@@ -1946,7 +1948,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const mobilePresentation = mobileViewer();
 
     // 0919：约 2 秒进入高速，松手后先退光条，再回到展示机位。
-    const targetSpeed = racing ? CFG.speed.maxSpeed : 0;
+    // 接近该车型的极速后才进入温和巡航：在标称最高时速下方约 3 km/h 平滑浮动，
+    // 车轮、地面流动和遥测仍共用同一个真实 speed，不单独伪造读数。
+    if (!racing) cruising = false;
+    else if (speed >= CFG.speed.maxSpeed * 0.985) cruising = true;
+    const targetSpeed = racing
+      ? cruising ? cruiseTargetSpeed(CFG.speed.maxSpeed, CFG.speed.topKmh, elapsed) : CFG.speed.maxSpeed
+      : 0;
     const response = racing ? CFG.speed.response.acceleration : CFG.speed.response.braking;
     const previousSpeed = speed;
     speed += (targetSpeed - speed) * (1 - Math.exp(-dt * response));
@@ -3263,6 +3271,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       theme = next;
       renderer.setClearColor(next === "light" ? 0xf4f6f9 : 0x050506, 1);
       invalidateInspector();
+    },
+    setTopKmh: (value: number) => {
+      if (Number.isFinite(value) && value >= 100 && value <= 500) CFG.speed.topKmh = value;
     },
     /**
      * 原地换车：只换车身，镜头 / 地面 / 环境 / HUD 全不动，不重建 WebGL 场景。

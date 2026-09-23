@@ -372,6 +372,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         const initialParams: ShowcaseModelParams = {
           wheelPattern: wheelSelectionPattern(suggestedWheels),
           length: 5.6,
+          topKmh: 340,
           maxTextureSize: data.suggestions.maxTextureSize,
           emissiveIntensity: data.suggestions.emissiveIntensity,
           clearcoatRoughness: data.suggestions.clearcoatRoughness,
@@ -895,6 +896,12 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
                   value={params.length ?? 5.6}
                   onChange={(event) => setParams({ ...params, length: Number(event.target.value) })}
                 />
+              </label>
+              <label>
+                最高时速（km/h）：首页行驶遥测上限
+                <input type="number" step="1" min="100" max="500"
+                  value={params.topKmh ?? previewConfig?.speed.topKmh ?? 340}
+                  onChange={(event) => setParams({ ...params, topKmh: Number(event.target.value) })} />
               </label>
               <label>
                 朝向修正（度）：绕 Y 轴

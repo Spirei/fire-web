@@ -202,6 +202,7 @@ export function sanitizeParams(input: unknown): ShowcaseModelParams {
     if (Number.isFinite(value) && value >= min && value <= max) (out as Record<string, number>)[key as string] = value;
   };
   num("length", 1, 12);
+  num("topKmh", 100, 500);
   num("yaw", -360, 360);
   num("pitch", -180, 180);
   num("maxTextureSize", 256, 8192);

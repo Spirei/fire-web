@@ -41,8 +41,13 @@ export function buildImportedConfig(input: {
   params?: ShowcaseModelParams;
 }): ShowcaseConfig {
   const version = input.version ?? 1;
+  // 已保存的旧车型还没有 topKmh 字段，按已知车型给一次兼容默认值；
+  // 用户在导入页设置后始终以自己保存的参数为准。
+  const legacyTopKmh = input.file === "gulf_mclaren_f1_2022_car.glb" ? 350
+    : input.file === "mclaren_mp46.glb" ? 335 : MCL35M_SHOWCASE.speed.topKmh;
   return {
     ...MCL35M_SHOWCASE,
+    speed: { ...MCL35M_SHOWCASE.speed, topKmh: input.params?.topKmh ?? legacyTopKmh },
     assets: {
       ...MCL35M_SHOWCASE.assets,
       model: `/uploads/mclaren/models/${encodeURIComponent(input.file)}?v=${version}`

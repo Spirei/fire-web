@@ -21,7 +21,7 @@ export function validateWorkbench(meta: { id: string; label: string; note: strin
   if (meta.note.length > 24) return "年份 / 说明不能超过 24 个字符";
   if (params.wheelPattern && params.wheelPattern.length > 200) return "轮子材质选择过多，请缩减选择后保存";
   const ranges: Array<[keyof ShowcaseModelParams, number, number, string]> = [
-    ["length", 1, 12, "车长"], ["yaw", -360, 360, "朝向修正"], ["pitch", -180, 180, "上下修正"],
+    ["length", 1, 12, "车长"], ["topKmh", 100, 500, "最高时速"], ["yaw", -360, 360, "朝向修正"], ["pitch", -180, 180, "上下修正"],
     ["maxTextureSize", 256, 8192, "贴图上限"], ["emissiveIntensity", 0, 4, "发光强度"], ["clearcoatRoughness", 0, 1, "清漆粗糙度"]
   ];
   for (const [key, min, max, label] of ranges) {

@@ -711,6 +711,7 @@ export default function ShowcaseStage({
         if (switchId !== qualitySwitchRef.current || !previewOk) return previewOk;
         previewSucceeded = true;
         appliedModelRef.current = previewKey;
+        handle.setTopKmh(next.speed.topKmh ?? 340);
         setAppliedTextureQuality("fast");
         rememberLoadedModel(previewKey!);
         if (constrainedGraphics()) {
@@ -730,7 +731,7 @@ export default function ShowcaseStage({
       setQualityLoading(false);
       setQualityError(!ok);
       setLoadingKey(null);
-      if (ok) { appliedModelRef.current = targetKey; setAppliedTextureQuality(targetQuality); rememberLoadedModel(targetKey); }
+      if (ok) { appliedModelRef.current = targetKey; handle.setTopKmh(next.speed.topKmh ?? 340); setAppliedTextureQuality(targetQuality); rememberLoadedModel(targetKey); }
     });
   }, [modelKey, qualityModel]);
 
