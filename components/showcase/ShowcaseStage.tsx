@@ -153,7 +153,9 @@ export default function ShowcaseStage({
   const rightDrawerRef = useRef<HTMLDivElement | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(initialTheme);
   const [musicOn, setMusicOn] = useState(false);
-  const [musicReady, setMusicReady] = useState(true);
+  const [musicLoading, setMusicLoading] = useState(false);
+  const [musicError, setMusicError] = useState(false);
+  const musicRequestRef = useRef(0);
   /** 频谱可视化是否接手（接手后关掉 CSS 兜底动画，避免动画盖住每帧的 transform） */
   const [waveLive, setWaveLive] = useState(false);
   // 360° 环视（自动绕车）与影棚（明亮摄影棚）：两个胶囊以前只是文字，现在是真的开关
@@ -540,7 +542,17 @@ export default function ShowcaseStage({
           onTextureBudget: limit => { if (!cancelled && !recoveryRequested) setTextureLimitNotice(limit); },
           onPhase: handlePhase,
           onRacing: (on) => setRacing(on),
-          onDriving: (on) => setDriving(on),
+          onDriving: (on) => {
+            setDriving(on);
+            if (!on && !inspectorRef.current) {
+              freeCameraRef.current = false;
+              driveCameraRef.current = "follow";
+              orbitRef.current = false;
+              setFreeCamera(false);
+              setDriveCamera("follow");
+              setOrbit(false);
+            }
+          },
           onResetView: () => {
             // 双击复位：置顶机位是「进度 + 角度 + 缩放」，角度引擎已经调好，
             // 这里同步章节进度，才真的回到用户置顶的那一帧
@@ -854,19 +866,14 @@ export default function ShowcaseStage({
 
   const clearPinnedPose = useCallback(() => setPinnedPose(null), [setPinnedPose]);
 
-  // 背景音乐：默认不播放（浏览器不允许自动播放），点图标才播；循环、音量 0.45。
-  // 开关记在 localStorage，下次进来会在首次交互后自动续播。
-  const MUSIC_KEY = "fire:showcase:music";
+  // 首次点击之前不创建媒体元素，也不请求音乐；再次点击复用已缓冲的音频。
   const ensureAudio = useCallback(() => {
     if (audioRef.current) return audioRef.current;
-    const audio = new Audio(config.music ?? "/uploads/mclaren/theme.mp3");
+    const audio = document.createElement("audio");
+    audio.preload = "none";
     audio.loop = true;
     audio.volume = 0.45;
-    audio.preload = "none";
-    audio.addEventListener("error", () => {
-      setMusicReady(false);
-      setMusicOn(false);
-    });
+    audio.src = config.music ?? "/uploads/mclaren/theme.mp3";
     audioRef.current = audio;
     // 开发环境留个引用，方便在控制台/自动化里检查播放状态
     if (process.env.NODE_ENV !== "production") {
@@ -971,58 +978,37 @@ export default function ShowcaseStage({
   }, []);
 
   const startMusic = useCallback(async () => {
+    const request = ++musicRequestRef.current;
+    setMusicLoading(true);
+    setMusicError(false);
     const audio = ensureAudio();
+    // 网络或解码失败后的重试仍使用同一个元素，避免重新建立 Web Audio 节点。
+    if (audio.error) audio.src = config.music ?? "/uploads/mclaren/theme.mp3";
     try {
+      // 先请求并播放；频谱节点等声音真正开始后再接，避免首击额外等待分析器初始化。
       await audio.play();
+      if (request !== musicRequestRef.current) { audio.pause(); return; }
       startWaveVisualizer(audio);
       setMusicOn(true);
-      try {
-        localStorage.setItem(MUSIC_KEY, "on");
-      } catch {
-        /* 忽略 */
-      }
     } catch {
-      setMusicOn(false);
+      if (request === musicRequestRef.current) setMusicError(true);
+    } finally {
+      if (request === musicRequestRef.current) setMusicLoading(false);
     }
-  }, [ensureAudio]);
+  }, [config.music, ensureAudio, startWaveVisualizer]);
 
   const stopMusic = useCallback(() => {
+    musicRequestRef.current += 1;
     audioRef.current?.pause();
     stopWaveVisualizer();
+    setMusicLoading(false);
     setMusicOn(false);
-    try {
-      localStorage.setItem(MUSIC_KEY, "off");
-    } catch {
-      /* 忽略 */
-    }
-  }, []);
+  }, [stopWaveVisualizer]);
 
   const toggleMusic = useCallback(() => {
-    if (musicOn) stopMusic();
+    if (musicOn || musicLoading) stopMusic();
     else void startMusic();
-  }, [musicOn, startMusic, stopMusic, stopWaveVisualizer]);
-
-  useEffect(() => {
-    let saved: string | null = null;
-    try {
-      saved = localStorage.getItem(MUSIC_KEY);
-    } catch {
-      /* 忽略 */
-    }
-    if (saved !== "on") return;
-    // 上次开着：等第一次用户交互再续播（否则被自动播放策略拦下）
-    const resume = () => {
-      void startMusic();
-      window.removeEventListener("pointerdown", resume);
-      window.removeEventListener("keydown", resume);
-    };
-    window.addEventListener("pointerdown", resume, { once: true });
-    window.addEventListener("keydown", resume, { once: true });
-    return () => {
-      window.removeEventListener("pointerdown", resume);
-      window.removeEventListener("keydown", resume);
-    };
-  }, [startMusic]);
+  }, [musicOn, musicLoading, startMusic, stopMusic]);
 
   useEffect(() => {
     // 切走标签页先暂停，回来再续上，避免后台一直响
@@ -1148,19 +1134,18 @@ export default function ShowcaseStage({
                   </div>
                 </div>}
               </div>
-              {musicReady && (
-                <button
-                  type="button"
-                  className={`sc-tool fire-cap${musicOn ? " on" : ""}`}
-                  onClick={toggleMusic}
-                  title={musicOn ? "关闭背景音乐" : "播放背景音乐"}
-                  aria-label={musicOn ? "关闭背景音乐" : "播放背景音乐"}
-                  aria-pressed={musicOn}
-                >
-                  {/* 波纹图标（waveform.mid）：配色跟随主题，播放时每根条跟着舞动 */}
-                  <MusicIcon playing={musicOn} live={waveLive} />
-                </button>
-              )}
+              <button
+                type="button"
+                className={`sc-tool sc-music-tool fire-cap${musicOn ? " on" : ""}${musicLoading ? " loading" : ""}`}
+                onClick={toggleMusic}
+                title={musicLoading ? "正在加载背景音乐，点击取消" : musicOn ? "关闭背景音乐" : musicError ? "音乐加载失败，点击重试" : "播放背景音乐"}
+                aria-label={musicLoading ? "取消加载背景音乐" : musicOn ? "关闭背景音乐" : musicError ? "重试背景音乐" : "播放背景音乐"}
+                aria-pressed={musicOn}
+                aria-busy={musicLoading}
+              >
+                <MusicIcon playing={musicOn} live={waveLive} />
+                {musicLoading && <span className="sc-music-loading" aria-hidden="true" />}
+              </button>
               <button type="button" className="sc-tool fire-cap" onClick={() => setImmersiveView(true)} aria-label="进入沉浸式" title="沉浸式观看">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /></svg>
               </button>

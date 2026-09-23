@@ -1843,6 +1843,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let roadTravel = 0; // 积分速度，变速时光条相位连续，不用 elapsed × 当前速度。
   let racing = false;
   let cruising = false;
+  let cruiseSample = 0;
+  let cruiseChangeAt = 0;
   let racingAmt = 0;   // 速度驱动的镜头混合量（轮胎 / 光条直接跟随速度）
   let carTravel = 0;   // 冲刺时车沿隧道开走的距离
   let lastRacing = false;
@@ -1947,17 +1949,22 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     elapsed += dt;
     const mobilePresentation = mobileViewer();
 
-    // 0919：约 2 秒进入高速，松手后先退光条，再回到展示机位。
-    // 接近该车型的极速后才进入温和巡航：在标称最高时速下方约 3 km/h 平滑浮动，
-    // 车轮、地面流动和遥测仍共用同一个真实 speed，不单独伪造读数。
-    if (!racing) cruising = false;
-    else if (speed >= CFG.speed.maxSpeed * 0.985) cruising = true;
+    // 起步曲线保持不变。到达各车型自己的极速后，油门目标在不定间隔内轻微变化；
+    // 物理车速、轮胎、地面流动和 HUD 使用同一个 speed，不单独编造数字。
+    if (!racing) { cruising = false; cruiseChangeAt = 0; }
+    else if (!cruising && speed >= CFG.speed.maxSpeed * 0.985) {
+      cruising = true;
+      cruiseChangeAt = 0;
+    }
+    if (cruising && elapsed >= cruiseChangeAt) {
+      cruiseSample = Math.random();
+      cruiseChangeAt = elapsed + 0.1 + Math.random() * 0.18;
+    }
     const targetSpeed = racing
-      ? cruising ? cruiseTargetSpeed(CFG.speed.maxSpeed, CFG.speed.topKmh, elapsed) : CFG.speed.maxSpeed
+      ? cruising ? cruiseTargetSpeed(CFG.speed.maxSpeed, CFG.speed.topKmh, cruiseSample) : CFG.speed.maxSpeed
       : 0;
-    // 起步仍按原加速曲线；巡航需要更快跟随小幅波动，否则低通后读数几乎不动。
     const response = racing
-      ? cruising ? Math.max(6, CFG.speed.response.acceleration) : CFG.speed.response.acceleration
+      ? cruising ? Math.max(12, CFG.speed.response.acceleration) : CFG.speed.response.acceleration
       : CFG.speed.response.braking;
     const previousSpeed = speed;
     speed += (targetSpeed - speed) * (1 - Math.exp(-dt * response));
@@ -1973,6 +1980,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const drivingNow = !inspectorOn && (racing || speed > CFG.speed.maxSpeed * 0.035);
     if (drivingNow !== lastDriving) {
       lastDriving = drivingNow;
+      if (!drivingNow && !inspectorOn) {
+        // 行驶自由镜头和起步前的临时环视都不能成为落车后的新默认机位。
+        driveCamera = "follow";
+        freeCamera = false;
+        orbitOn = false;
+        orbitYaw = 0;
+        resetView();
+      }
       options.onDriving?.(drivingNow);
     }
     carTravel += (racingAmt * CFG.speed.launchTravel - carTravel) * (1 - Math.exp(-dt * 3));

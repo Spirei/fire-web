@@ -199,6 +199,23 @@ html:has(.showcase) body {
   height: 17px;
 }
 
+.sc-music-tool { position: relative; }
+.sc-music-loading {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: sc-music-spinner .55s linear infinite;
+}
+@keyframes sc-music-spinner { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .sc-music-loading { animation: none; }
+}
+
 .sc-kicker {
   top: 3.2vh;
   left: 50%;
