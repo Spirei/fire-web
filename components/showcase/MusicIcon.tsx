@@ -15,7 +15,7 @@ const WAVE_BARS = [
 ];
 
 /** 每根条的动画相位（秒）：从左往右依次错开，兜底动画也是从左往右过 */
-const PHASE = [0.0, 0.14, 0.28, 0.42, 0.56, 0.7];
+const PHASE = [0.0, 0.08, 0.16, 0.24, 0.32, 0.4];
 
 export default function MusicIcon({ playing, live = false }: { playing: boolean; live?: boolean }) {
   // live = 频谱可视化已接手：这时关掉 CSS 兜底动画，条高完全由每帧的 transform 决定

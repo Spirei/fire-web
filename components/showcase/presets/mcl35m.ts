@@ -148,13 +148,13 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
 
   // 首页界面文案（能中文就中文，专有名词保留）
   ui: {
-    kicker: "超越极限",
-    telemetry: "实时遥测",
-    gear: "档位",
+    kicker: "速度，自有答案",
+    telemetry: "LIVE TELEMETRY",
+    gear: "GEAR",
     energy: "ERS",
-    unit: "公里/时",
-    liveData: "实时数据",
-    liveDeploying: "实时数据 · 全功率输出",
+    unit: "KM/H",
+    liveData: "LIVE DATA",
+    liveDeploying: "LIVE DATA · FULL POWER",
     raceIdle: "按住起步",
     raceActive: "松手减速",
     raceCap: "追赶极限",
@@ -172,11 +172,11 @@ export const MCL35M_SHOWCASE: ShowcaseConfig = {
   },
 
   phases: [
-    { at: 0, idx: "01", name: "车辆", head: ["为追逐", "非凡而造。"], copy: ["每一处细节都反复推敲，", "只为一种说不出的感觉。"], cap: "赛道是你的" },
-    { at: 0.2, idx: "02", name: "空气动力学", head: ["让空气", "学会听话。"], copy: ["每一条曲面都有它的任务，", "下压力上不做任何妥协。"], cap: "贴着顶点过弯" },
-    { at: 0.4, idx: "03", name: "动力单元", head: ["先释放，", "再释放一次。"], copy: ["1.6 升 V6 混动，八挡序列式，", "以及一个很大的想法。"], cap: "发车已就绪" },
-    { at: 0.58, idx: "04", name: "轮胎", head: ["圈速真正", "发生的地方。"], copy: ["四块橡胶，", "扛着整支车队的功课。"], cap: "把抓地力用满" },
-    { at: 0.78, idx: "05", name: "科技", head: ["两百个传感器，", "一个方向盘。"], copy: ["车在说话，", "车库在听。"], cap: "收车回库" }
+    { at: 0, idx: "01", name: "车辆", head: ["每一处线条，", "都指向前方。"], copy: ["从车头到车尾，", "每一处细节都为速度服务。"], cap: "赛道是你的" },
+    { at: 0.2, idx: "02", name: "空气动力学", head: ["迎风而行，", "贴地而过。"], copy: ["气流沿车身掠过，", "在高速弯中换来更稳的抓地力。"], cap: "贴着顶点过弯" },
+    { at: 0.4, idx: "03", name: "动力单元", head: ["每一次加速，", "都有回应。"], copy: ["V6 发动机与电能协同，", "出弯时，动力随心而至。"], cap: "发车已就绪" },
+    { at: 0.58, idx: "04", name: "轮胎", head: ["速度，最终要", "落在地面上。"], copy: ["四条轮胎紧贴赛道，", "把动力化作向前的每一米。"], cap: "把抓地力用满" },
+    { at: 0.78, idx: "05", name: "科技", head: ["读懂赛车，", "才能快得更稳。"], copy: ["数据记录每一圈的变化，", "下一次调整便有迹可循。"], cap: "收车回库" }
   ],
 
   // 部件标注（前翼/侧箱/尾翼/轮胎）先去掉：特写时压在车身上反而干扰观感。

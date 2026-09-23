@@ -882,13 +882,13 @@ export default function ShowcaseStage({
   const waveRafRef = useRef(0);
   const waveDataRef = useRef<Uint8Array | null>(null);
   const waveLevelRef = useRef<number[]>([0, 0, 0, 0, 0, 0]);
-  const bandMaxRef = useRef<number[]>([0.05, 0.05, 0.05, 0.05, 0.05, 0.05]);
-  const globalMaxRef = useRef(0.05);
+  const waveRawRef = useRef<number[]>([0, 0, 0, 0, 0, 0]);
 
   const stopWaveVisualizer = useCallback(() => {
     if (waveRafRef.current) window.cancelAnimationFrame(waveRafRef.current);
     waveRafRef.current = 0;
     waveLevelRef.current = [0, 0, 0, 0, 0, 0];
+    waveRawRef.current = [0, 0, 0, 0, 0, 0];
     setWaveLive(false);
     document.querySelectorAll<SVGPathElement>(".sc-wave .sc-wave-bar").forEach((bar) => {
       bar.style.transform = "";
@@ -907,8 +907,8 @@ export default function ShowcaseStage({
         // 一个 audio 元素只能建一次 MediaElementSource，所以只在这里建一次
         const source = ctx.createMediaElementSource(audio);
         const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.72;
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.28;
         source.connect(analyser);
         analyser.connect(ctx.destination);
         analyserRef.current = analyser;
@@ -929,58 +929,38 @@ export default function ShowcaseStage({
             : (waveDataRef.current = new Uint8Array(bins));
         analyser.getByteFrequencyData(data);
         const bars = document.querySelectorAll<SVGPathElement>(".sc-wave .sc-wave-bar");
-        // 频段边界覆盖 0–11 kHz（音乐能量集中区）：bin ≈ 172 Hz（44.1 kHz / fftSize 256）
-        const EDGES = [0, 2, 5, 11, 21, 38, 64];
+        // 六个频段对应鼓点、低中音、人声/旋律和高频瞬态。
+        // 只跟随真实音频，不叠加固定周期的波形，以免强拍时图标仍慢悠悠地摆动。
+        const EDGES = [0, 3, 7, 15, 30, 55, 95];
         const raws: number[] = [];
-        let sumAll = 0;
-        let countAll = 0;
         for (let i = 0; i < 6; i += 1) {
           const from = Math.min(bins - 1, EDGES[i]);
           const to = Math.max(from + 1, Math.min(bins, EDGES[i + 1]));
           let sum = 0;
           for (let k = from; k < to; k += 1) sum += data[k];
-          const raw = sum / Math.max(1, to - from) / 255;
-          raws.push(raw);
-          sumAll += raw;
-          countAll += 1;
+          raws.push(sum / (to - from) / 255);
         }
-        const globalNow = sumAll / Math.max(1, countAll);
-        // 邻近频段补值：这首歌高频几乎没有能量（第 6 段实测常年为 0），
-        // 直接用原始值会让最后一根像静止；这里让每段至少借到邻居的一部分能量
-        const leveled = raws.map((v, i) =>
-          Math.max(v, (raws[i - 1] ?? 0) * 0.62, (raws[i + 1] ?? 0) * 0.52)
-        );
-        // 每段各自的峰值（缓降）＋整首的峰值：前者保证每根都有起伏、不会像静止，
-        // 后者让「平稳段落幅度小、高潮幅度大」这件事在整体上看得出来
-        const decay = 0.995;
-        bandMaxRef.current = bandMaxRef.current.map((m, i) => Math.max(leveled[i] * 1.05, m * decay, 0.04));
-        // 频率倾斜：低音压下去（不抢戏，柱子矮）、高音补上来
-        const TILT = [0.32, 0.5, 0.72, 0.92, 1.1, 1.25];
-        const tilted = leveled.map((v, i) => v * TILT[i]);
-        const peakNow = Math.max(...tilted);
-        const globalMax = Math.max(peakNow * 1.05, globalMaxRef.current * decay, 0.05);
-        globalMaxRef.current = globalMax;
-        // 整体强度：平稳段落幅度小、高潮段落幅度大
-        const intensity = Math.min(1, Math.pow(globalNow / Math.max(globalMax * 0.6, 0.03), 0.7));
-        const now = performance.now() / 1000;
-        const next: number[] = [];
-        for (let i = 0; i < 6; i += 1) {
-          const rel = Math.pow(Math.min(1, tilted[i] / globalMax), 0.55);
-          // 从左往右推进的相位包络：每根比左边晚 0.62 弧度，整排像一道波滚过去，
-          // 幅度仍由音乐本身（rel × intensity）决定，所以换歌照样适用
-          const envelope = 0.52 + 0.48 * Math.sin(now * 2.2 - i * 0.62);
-          const target = Math.max(0, Math.min(1, rel * envelope * (0.55 + 0.45 * intensity)));
+        const previousRaw = waveRawRef.current;
+        const onsets = raws.map((raw, i) => Math.max(0, raw - (previousRaw[i] ?? 0)));
+        waveRawRef.current = raws;
+        const sharedBeat = Math.min(0.12, onsets.reduce((sum, value) => sum + value, 0) * 0.22);
+        const gains = [0.55, 0.65, 0.72, 0.82, 0.95, 1.08];
+        const next = raws.map((raw, i) => {
+          // 高频较弱，轻微补偿；只借少量邻段能量，不抹平六根条之间的节奏。
+          const band = Math.max(raw, (raws[i - 1] ?? 0) * 0.2);
+          const body = Math.max(0, band * gains[i] - 0.06) * 1.12;
+          const target = Math.min(1, body + onsets[i] * 1.2 + sharedBeat);
           const prev = waveLevelRef.current[i] ?? 0;
-          // 涨得快、落得慢：保留「平稳 / 高潮」的起伏又保持流畅
-          next.push(prev + (target - prev) * (target > prev ? 0.45 : 0.18));
-        }
+          // 约两帧到达强拍、几帧内回落，峰值不会被长时间平均掉。
+          return prev + (target - prev) * (target > prev ? 0.72 : 0.32);
+        });
         waveLevelRef.current = next;
         // 调试用：把当前各段能量写在 svg 上（?mclhud=1 或控制台可直接看）
         const svg = document.querySelector<SVGSVGElement>(".sc-wave");
         if (svg) svg.dataset.bands = next.map((v) => v.toFixed(2)).join(",");
         bars.forEach((bar, i) => {
           const v = next[i] ?? 0;
-          bar.style.transform = `scaleY(${(0.3 + v * 1.2).toFixed(3)})`;
+          bar.style.transform = `scaleY(${(0.28 + v * 1.42).toFixed(3)})`;
         });
         waveRafRef.current = window.requestAnimationFrame(tick);
       };

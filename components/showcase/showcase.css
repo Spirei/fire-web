@@ -1014,7 +1014,7 @@ html:has(.showcase) body {
 
 /* 拿不到音频频谱时用循环动画兜底；一旦频谱接手（.live）就交给每帧的 transform */
 .sc-wave.on:not(.live) .sc-wave-bar {
-  animation: sc-wave-dance 0.92s ease-in-out infinite;
+  animation: sc-wave-dance 0.58s ease-in-out infinite;
 }
 
 @keyframes sc-wave-dance {
