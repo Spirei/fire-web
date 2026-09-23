@@ -1465,12 +1465,16 @@ export default function ShowcaseStage({
                     className={`sc-quality-option${textureQuality === key ? " on" : ""}${qualityLoading && textureQuality === key && appliedTextureQuality !== key ? " pending" : ""}${selectionHint === `quality:${key}` ? " sc-label-peek" : ""}`}
                     aria-pressed={textureQuality === key}
                     title={key === "original" ? "原画纹理 · 保留源尺寸；与 4K 同源时无需重新加载" : `${option.label}纹理 · 最长边 ${option.badge}`}
+                    onPointerDown={() => {
+                      textureQualityRef.current = key;
+                      flushSync(() => setTextureQuality(key));
+                    }}
                     onClick={() => {
                       showSelectionHint(`quality:${key}`);
                       setMemoryNotice(null);
                       setTextureLimitNotice(null);
                       textureQualityRef.current = key;
-                      setTextureQuality(key);
+                      flushSync(() => setTextureQuality(key));
                     }}
                   >
                     <span className="sc-quality-label">{option.label} <small>{option.badge}</small></span>

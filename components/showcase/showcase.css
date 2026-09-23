@@ -964,7 +964,7 @@ html:has(.showcase) body {
 .sc-quality-option.on { color: var(--sc-faint); }
 .sc-quality-option.on .sc-quality-tick { width: 32px; opacity: 1; background: var(--sc-car-accent, var(--sc-papaya)); }
 .sc-quality-option.pending { color: var(--sc-faint); }
-.sc-quality-option.pending .sc-quality-tick { width: 32px; opacity: .5; }
+.sc-quality-option.pending .sc-quality-tick { width: 32px; }
 .sc-quality-option:focus { outline: none; }
 .sc-quality-option:focus-visible .sc-quality-tick { outline: 2px solid var(--sc-active-line); outline-offset: 3px; }
 
