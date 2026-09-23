@@ -104,6 +104,8 @@ export default function ShowcaseStage({
   configRef.current = config;
   /** 已经应用到场景里的车型签名：和当前 config 不一致时走原地换车（不重建场景） */
   const appliedModelRef = useRef<string | null>(null);
+  /** 正在加载的目标不能冒充已显示的车；快速反选与失败重试都以实际画面为准。 */
+  const pendingModelRef = useRef<string | null>(null);
   const qualitySwitchRef = useRef(0);
 
   const [phase, setPhase] = useState(0);
@@ -197,6 +199,7 @@ export default function ShowcaseStage({
   };
   const exitInspector = () => {
     qualitySwitchRef.current += 1;
+    pendingModelRef.current = null;
     setQualityLoading(false);
     setLoadingKey(null);
     setWirePanelOpen(false);
@@ -434,6 +437,7 @@ export default function ShowcaseStage({
     };
     setReady(false);
     setAppliedTextureQuality(null);
+    setQualityLoading(false);
     setLoadRatio(0);
     setError(null);
 
@@ -495,21 +499,24 @@ export default function ShowcaseStage({
             window.setTimeout(saveResumeFrame, 250);
             // 先给手机一个真正可交互的预览窗口；高清解码不能紧贴首帧把主线程占满。
             if (bootstrapPreview) {
+              const fullKey = JSON.stringify({ a: requestedAsset, m: cfg.model ?? null, q: requestedQuality });
+              setQualityLoading(true);
+              setLoadingKey(fullKey);
               // 网络传输与短暂交互窗口并行；到升级时复用同一份字节，不再二次读取整包缓存。
               primeModelAsset(requestedAsset);
               upgradeTimer = window.setTimeout(() => window.requestAnimationFrame(() => {
                 if (cancelled || recoveryRequested || !handle || handleRef.current !== handle
                   || inspectorRef.current || wireRef.current.mode !== requestedWireMode
                   || textureQualityRef.current !== requestedQuality || configRef.current.assets.model !== cfg.assets.model) return;
-                const fullKey = JSON.stringify({ a: requestedAsset, m: cfg.model ?? null, q: requestedQuality });
                 const switchId = ++qualitySwitchRef.current;
-                appliedModelRef.current = fullKey;
+                pendingModelRef.current = fullKey;
                 setQualityLoading(true);
                 setLoadingKey(fullKey);
                 void handle.setModel({ asset: requestedAsset, model: qualityModel(cfg.model) }).then((ok) => {
                   if (cancelled || switchId !== qualitySwitchRef.current) return;
-                  if (!ok) appliedModelRef.current = initialKey;
-                  else {
+                  pendingModelRef.current = null;
+                  if (ok) {
+                    appliedModelRef.current = fullKey;
                     setAppliedTextureQuality(requestedQuality);
                     rememberLoadedModel(fullKey);
                     rememberWorkingQuality(cfg.assets.model, requestedQuality);
@@ -594,6 +601,7 @@ export default function ShowcaseStage({
         handleRef.current = handle;
         // 记下这一轮挂的是哪辆车：之后 config 里只有车型变了就原地换车，不重建场景
         appliedModelRef.current = initialKey;
+        pendingModelRef.current = null;
         const now = configRef.current;
         const stillBootstrapping = bootstrapPreview && now.assets.model === cfg.assets.model
           && textureQualityRef.current === requestedQuality && !inspectorRef.current && wireRef.current.mode === requestedWireMode;
@@ -627,6 +635,7 @@ export default function ShowcaseStage({
     return () => {
       cancelled = true;
       qualitySwitchRef.current += 1;
+      pendingModelRef.current = null;
       // 先冻结这一帧：下一个实例（换车型 / 重建）拿它当背景板，避免中间露出空场
       try {
         const shot = !recoveryRequested ? handle?.snapshot() : null;
@@ -680,12 +689,12 @@ export default function ShowcaseStage({
     const asset = targetQuality === "fast" && previousModel?.a === next.assets.model && previousModel.q !== "fast"
       ? previousModel.a : requestedAsset;
     const targetKey = JSON.stringify({ a: asset, m: next.model ?? null, q: targetQuality });
-    if (appliedModelRef.current === null || appliedModelRef.current === targetKey) return;
+    if (appliedModelRef.current === null || appliedModelRef.current === targetKey || pendingModelRef.current === targetKey) return;
     const handle = handleRef.current;
     if (!handle) return;
     if (!previous) return;
     const switchId = ++qualitySwitchRef.current;
-    appliedModelRef.current = targetKey;
+    pendingModelRef.current = targetKey;
     setQualityLoading(true);
     setLoadingKey(targetKey);
     setQualityError(false);
@@ -701,6 +710,7 @@ export default function ShowcaseStage({
         const previewOk = await handle.setModel({ asset: previewAsset, model: { ...next.model, maxTextureSize: TEXTURE_QUALITY.fast.size } });
         if (switchId !== qualitySwitchRef.current || !previewOk) return previewOk;
         previewSucceeded = true;
+        appliedModelRef.current = previewKey;
         setAppliedTextureQuality("fast");
         rememberLoadedModel(previewKey!);
         if (constrainedGraphics()) {
@@ -714,12 +724,13 @@ export default function ShowcaseStage({
     };
     void switchModel().then((ok) => {
       if (switchId !== qualitySwitchRef.current) return;
-      // 失败（素材取不到 / 解析失败）就把标记退回去，下次变更还能重试
-      if (!ok) appliedModelRef.current = previewSucceeded ? previewKey : previous;
+      pendingModelRef.current = null;
+      // 失败时画面继续是上一辆，下一次操作仍从实际已显示的模型出发。
+      if (previewSucceeded) appliedModelRef.current = previewKey;
       setQualityLoading(false);
       setQualityError(!ok);
       setLoadingKey(null);
-      if (ok) { setAppliedTextureQuality(targetQuality); rememberLoadedModel(targetKey); }
+      if (ok) { appliedModelRef.current = targetKey; setAppliedTextureQuality(targetQuality); rememberLoadedModel(targetKey); }
     });
   }, [modelKey, qualityModel]);
 
@@ -1395,7 +1406,8 @@ export default function ShowcaseStage({
               {freeCamera && <button type="button" className="sc-camera-reset" onClick={() => handleRef.current?.resetCamera()} aria-label="重置自由镜头">复位</button>}
             </div>
             {!inspector && (
-              <div className="sc-row sc-texture-quality" role="group" aria-label="纹理质量" aria-busy={qualityLoading}>
+              <div className="sc-row sc-texture-quality" role="group" aria-label="纹理质量" aria-busy={qualityLoading}
+                data-selected-quality={textureQuality} data-applied-quality={appliedTextureQuality ?? "loading"}>
                 <span className="sc-quality-cap" aria-hidden="true">纹理</span>
                 {memoryNotice && <span className="sc-quality-status" role="status">{memoryNotice}</span>}
                 {!memoryNotice && textureLimitNotice && <span className="sc-quality-status" role="status">设备适配 · 贴图上限 {Math.round(textureLimitNotice / 1024)}K</span>}

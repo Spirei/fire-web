@@ -13,20 +13,21 @@ visit(ast);
 assert(options, 'component must create a scene');
 const names = ['onProgress', 'onReady', 'onContextLost', 'onError'];
 const callbacks = options.properties.filter(p => names.includes(p.name?.getText(ast))).map(p => p.getText(ast)).join(',\n');
-const js = ts.transpileModule(`module.exports = function(rebuild, fallback = 'fine', bootstrapPreview = false) {
+const js = ts.transpileModule(`module.exports = function(rebuild, fallback = 'fine', bootstrapPreview = false, promoteOk = true) {
  let cancelled = false, recoveryRequested = false;
  let initialReady = false;
  const cfg = {assets:{model:'fixture.glb'}};
  const initialQuality = bootstrapPreview ? 'fast' : 'original';
  const requestedQuality = 'original', requestedAsset = 'full.glb';
  const requestedWireMode = 'native';
- const qualitySwitchRef = {current:0}, appliedModelRef = {current:'preview'};
- const handle = {setModel: next => {state.promoted = next; return Promise.resolve(true)}};
+ const qualitySwitchRef = {current:0}, appliedModelRef = {current:'preview'}, pendingModelRef = {current:null};
+ const handle = {setModel: next => {state.promoted = next; return Promise.resolve(promoteOk)}};
  const handleRef = {current:handle};
  const qualityModel = model => model;
  const constrainedGraphics = () => false;
  const wrap = {after: () => {}};
  const setQualityLoading = v => state.qualityLoading = v;
+ const setAppliedTextureQuality = v => state.appliedQuality = v;
  const setQualityError = v => state.qualityError = v;
  const window = {requestAnimationFrame: cb => {state.promoteFrame = cb}, setTimeout: (cb, delay) => {if (delay === 400) state.promoteTimer = cb}};
  const saveResumeFrame = () => {};
@@ -48,7 +49,7 @@ const js = ts.transpileModule(`module.exports = function(rebuild, fallback = 'fi
  const textureQualityRef = { current: 'original' }, wireRef = { current: {mode:'native'} }, inspectorRef = {current:false};
  const setTextureQuality = v => state.quality = v;
  const setWireMode = () => {}; const setInspector = () => {}; const setWirePanelOpen = () => {}; const setMemoryNotice = () => {};
- return { state, cancel: () => cancelled = true, callbacks: {${callbacks}} };
+ return { state, appliedModelRef, pendingModelRef, cancel: () => cancelled = true, callbacks: {${callbacks}} };
 };`, {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
 const mod = {exports:{}};
 new Function('module', js)(mod);
@@ -113,4 +114,15 @@ Promise.resolve().then(() => {
  assert.equal(progressive.state.qualityError, false);
  assert.equal(progressive.state.receipt.includes('full.glb'), true);
  console.log('PASS preview-first ready and deferred RAW promotion');
+ const failed = make(0, 'fine', true, false);
+ failed.callbacks.onReady();
+ failed.state.promoteTimer();
+ failed.state.promoteFrame();
+ return Promise.resolve().then(() => {
+  assert.equal(failed.state.qualityError, true, 'failed promotion must expose retry');
+  assert.equal(failed.state.appliedQuality, 'fast', 'failed promotion keeps the visible preview quality');
+  assert.equal(failed.appliedModelRef.current, 'preview', 'failed promotion cannot claim full model is displayed');
+  assert.equal(failed.pendingModelRef.current, null, 'failed target is cleared for retry');
+  console.log('PASS failed RAW promotion leaves previous model and retry state');
+ });
 }).catch(error => { console.error(error); process.exitCode = 1; });

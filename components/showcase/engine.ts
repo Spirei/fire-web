@@ -3399,9 +3399,12 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           return true;
         } catch (err) {
           if (nextCar) disposeModel(nextCar);
-          // 高清模型不兼容或解码失败时，恢复刚才已成功显示的轻量车。
-          if (current() && memoryConstrained && !mountedCar) {
+          // 解析失败时旧车仍在；若替换挂载本身失败，所有设备都恢复上一辆。
+          if (current() && !mountedCar) {
             try {
+              CFG.model = previousModel;
+              CFG.assets = { ...CFG.assets, model: previousAsset };
+              wireframeView.configure(previousModel.wireframe);
               const previous = await fetchAssetBuffer(previousAsset);
               if (current()) {
                 const restored = await parseCar(previous.buffer, previousModel, current, previousAsset);
