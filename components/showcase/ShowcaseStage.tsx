@@ -109,6 +109,22 @@ export default function ShowcaseStage({
   const qualitySwitchRef = useRef(0);
 
   const [phase, setPhase] = useState(0);
+  const [chapterNavOpen, setChapterNavOpen] = useState(false);
+  const [qualityNavOpen, setQualityNavOpen] = useState(false);
+  const chapterNavRef = useRef<HTMLDivElement | null>(null);
+  const chapterNavToggleRef = useRef<HTMLButtonElement | null>(null);
+  const qualityNavRef = useRef<HTMLDivElement | null>(null);
+  const qualityNavToggleRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!chapterNavOpen && !qualityNavOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (chapterNavOpen && !chapterNavRef.current?.contains(target) && !chapterNavToggleRef.current?.contains(target)) setChapterNavOpen(false);
+      if (qualityNavOpen && !qualityNavRef.current?.contains(target) && !qualityNavToggleRef.current?.contains(target)) setQualityNavOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, [chapterNavOpen, qualityNavOpen]);
   const [textVisible, setTextVisible] = useState(true);
   const [loadRatio, setLoadRatio] = useState(0);
   const [ready, setReady] = useState(false);
@@ -1074,7 +1090,7 @@ export default function ShowcaseStage({
 
   // 影棚（明亮摄影棚）下画面是亮的，HUD 文字要跟着换成浅色系，否则白字压在白底上看不见
   return (
-    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio ? "light" : ""} ${inspector ? "sc-inspecting" : ""} ${racing || driving ? "sc-immersive" : ""} ${immersiveView ? "sc-view-immersive" : ""} ${leftDrawerOpen || rightDrawerOpen ? "sc-drawer-open" : ""} ${className}`}>
+    <div className={`showcase ${freeCamera ? "sc-free" : ""} ${theme === "light" || studio ? "light" : ""} ${inspector ? "sc-inspecting" : ""} ${racing || driving ? "sc-immersive" : ""} ${immersiveView ? "sc-view-immersive" : ""} ${chapterNavOpen ? "sc-chapter-nav-open" : ""} ${qualityNavOpen ? "sc-quality-nav-open" : ""} ${leftDrawerOpen || rightDrawerOpen ? "sc-drawer-open" : ""} ${className}`}>
       <div className="sc-scroll" ref={scrollRef}>
         <div className="sc-stage" ref={stageRef}>
           <div className="sc-canvas-wrap" ref={canvasWrapRef} />
@@ -1371,14 +1387,19 @@ export default function ShowcaseStage({
               <span>{ui.dragHint}</span>
               <span>{freeCamera ? "自由镜头 · Shift / 中键 / 右键平移 · 滚轮推进 · 双击聚焦" : ui.zoomHint}</span>
             </div>
-            {/* 章节导航：右侧竖排指示器（短横条 + 当前章节更长更亮），悬停 / 键盘聚焦显示章节名 */}
-            <div className="sc-row sc-nav" data-glass-ignore>
+            {/* 触屏端收起章节刻度，保留明确的展开入口。 */}
+            <button ref={chapterNavToggleRef} type="button" className="sc-row sc-nav-toggle" data-glass-ignore
+              aria-label={chapterNavOpen ? "收起章节导航" : "显示章节导航"} aria-expanded={chapterNavOpen}
+              aria-controls="showcase-chapter-nav" onClick={() => setChapterNavOpen((open) => !open)}>
+              <span aria-hidden="true" /><span aria-hidden="true" /><span aria-hidden="true" />
+            </button>
+            <div ref={chapterNavRef} id="showcase-chapter-nav" className="sc-row sc-nav" data-glass-ignore>
               {ui.nav.map((item, i) => (
                 <button
                   type="button"
                   key={item}
                   className={`${!freeCamera && phase === i ? "on" : ""}${selectionHint === `phase:${i}` ? " sc-label-peek" : ""}`}
-                  onClick={() => goPhase(i)}
+                  onClick={() => { goPhase(i); setChapterNavOpen(false); }}
                   aria-label={`跳到第 ${i + 1} 章 ${item}`}
                   aria-current={!freeCamera && phase === i ? "true" : undefined}
                 >
@@ -1391,6 +1412,7 @@ export default function ShowcaseStage({
               <button type="button" className={`sc-free-camera${freeCamera ? " on" : ""}${selectionHint === "camera" ? " sc-label-peek" : ""}`}
                 aria-label="自由镜头" aria-pressed={freeCamera}
                 onClick={() => {
+                  setChapterNavOpen(false);
                   showSelectionHint("camera");
                   const next = !freeCamera;
                   setFreeCamera(next); freeCameraRef.current = next;
@@ -1406,8 +1428,14 @@ export default function ShowcaseStage({
               </button>
               {freeCamera && <button type="button" className="sc-camera-reset" onClick={() => handleRef.current?.resetCamera()} aria-label="重置自由镜头">复位</button>}
             </div>
+            {!inspector && <button ref={qualityNavToggleRef} type="button" className="sc-row sc-quality-nav-toggle" data-glass-ignore
+              aria-label={qualityNavOpen ? "收起画质选择" : "显示画质选择"} aria-expanded={qualityNavOpen}
+              aria-controls="showcase-quality-nav" onClick={() => setQualityNavOpen((open) => !open)}>
+              <span aria-hidden="true" /><span aria-hidden="true" /><span aria-hidden="true" />
+              {qualityLoading && <i className="sc-quality-toggle-spinner" aria-label="正在更新高清模型" />}
+            </button>}
             {!inspector && (
-              <div className="sc-row sc-texture-quality" role="group" aria-label="纹理质量" aria-busy={qualityLoading}
+              <div ref={qualityNavRef} id="showcase-quality-nav" className="sc-row sc-texture-quality" role="group" aria-label="纹理质量" aria-busy={qualityLoading}
                 data-selected-quality={textureQuality} data-applied-quality={appliedTextureQuality ?? "loading"}>
                 <span className="sc-quality-cap" aria-hidden="true">纹理</span>
                 {memoryNotice && <span className="sc-quality-status" role="status">{memoryNotice}</span>}
@@ -1443,6 +1471,7 @@ export default function ShowcaseStage({
                     aria-pressed={textureQuality === key}
                     title={key === "original" ? "原画纹理 · 保留源尺寸，优先使用高质量 GPU 压缩副本" : `${option.label}纹理 · 最长边 ${option.badge}`}
                     onClick={() => {
+                      setQualityNavOpen(false);
                       showSelectionHint(`quality:${key}`);
                       setMemoryNotice(null);
                       setTextureLimitNotice(null);

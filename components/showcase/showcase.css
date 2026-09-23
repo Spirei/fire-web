@@ -282,26 +282,25 @@ html:has(.showcase) body {
   gap: 7px;
   border: 0;
   border-radius: 0;
-  border-bottom: 1px solid var(--sc-line);
   background: transparent;
   color: var(--sc-mute);
   font-size: 9px;
   letter-spacing: .16em;
   white-space: nowrap;
   cursor: pointer;
-  transition: color .2s ease, border-color .2s ease, padding .25s ease;
+  transition: color .2s ease, padding .25s ease;
 }
 
 .sc-drawer-toggle svg { width: 13px; height: 13px; opacity: .75; }
 .sc-drawer-toggle i { font: 400 15px/1 sans-serif; opacity: .55; transition: transform .3s ease; }
 .sc-drawer-toggle:hover,
-.sc-drawer-toggle:focus-visible { color: var(--sc-ink-strong); border-color: var(--sc-active-line); }
+.sc-drawer-toggle:focus-visible { color: var(--sc-ink-strong); }
 .sc-drawer-toggle:focus { outline: none; }
 .sc-drawer-toggle:focus-visible { outline: 1px solid var(--sc-active-line); outline-offset: 4px; }
 .sc-side-left .sc-drawer-toggle { justify-content: flex-start; }
 .sc-side-right .sc-drawer-toggle { justify-content: flex-end; }
 .sc-side-left.open .sc-drawer-toggle,
-.sc-side-right.open .sc-drawer-toggle { color: var(--sc-ink-strong); border-color: var(--sc-active-line); }
+.sc-side-right.open .sc-drawer-toggle { color: var(--sc-ink-strong); }
 .sc-side-left.open .sc-drawer-toggle i { transform: rotate(180deg); }
 .sc-side-right.open .sc-drawer-toggle i { transform: rotate(180deg); }
 
@@ -618,23 +617,19 @@ html:has(.showcase) body {
 }
 
 .sc-nav button:hover,
-.sc-nav button:focus-visible {
-  color: var(--sc-ink);
-}
+.sc-nav button:focus-visible { color: var(--sc-faint); }
 
 .sc-nav button:hover .sc-nav-tick,
 .sc-nav button:focus-visible .sc-nav-tick {
   width: 24px;
-  opacity: 0.85;
+  opacity: 0.5;
 }
 
-.sc-nav button.on {
-  color: var(--sc-ink-strong);
-}
+.sc-nav button.on { color: var(--sc-faint); }
 
 .sc-nav button.on .sc-nav-tick {
   width: 32px;
-  opacity: 1;
+  opacity: 0.5;
 }
 
 /* 章节名：悬停 / 聚焦才出现，不参与布局 */
@@ -960,15 +955,15 @@ html:has(.showcase) body {
 }
 
 .sc-quality-option:hover,
-.sc-quality-option:focus-visible { color: var(--sc-ink); }
+.sc-quality-option:focus-visible { color: var(--sc-faint); }
 .sc-quality-option:hover .sc-quality-tick,
-.sc-quality-option:focus-visible .sc-quality-tick { width: 24px; opacity: .85; }
+.sc-quality-option:focus-visible .sc-quality-tick { width: 24px; opacity: .5; }
 .sc-quality-option:focus-visible .sc-quality-label,
 .sc-quality-option.sc-label-peek .sc-quality-label { opacity: 1; }
-.sc-quality-option.on { color: var(--sc-ink-strong); }
-.sc-quality-option.on .sc-quality-tick { width: 32px; opacity: 1; }
-.sc-quality-option.pending { color: var(--sc-ink-strong); }
-.sc-quality-option.pending .sc-quality-tick { width: 32px; opacity: 1; }
+.sc-quality-option.on { color: var(--sc-faint); }
+.sc-quality-option.on .sc-quality-tick { width: 32px; opacity: .5; }
+.sc-quality-option.pending { color: var(--sc-faint); }
+.sc-quality-option.pending .sc-quality-tick { width: 32px; opacity: .5; }
 .sc-quality-option:focus { outline: none; }
 .sc-quality-option:focus-visible .sc-quality-tick { outline: 2px solid var(--sc-active-line); outline-offset: 3px; }
 
@@ -1395,7 +1390,7 @@ html:has(.showcase) body {
 .sc-free-camera .sc-nav-tick { border: 0; background: currentColor; height: 3px; border-radius: 0; }
 .showcase.light .sc-nav { color: #343c49; }
 .showcase.light .sc-nav button { color: #505b69; }
-.showcase.light .sc-nav button.on { color: #111827; }
+.showcase.light .sc-nav button.on { color: #505b69; }
 @media (max-width: 1024px) {
   .sc-nav { top: 63%; gap: 2px; }
   .sc-hint-drag { display: none; }
@@ -1519,15 +1514,7 @@ html:has(.showcase) body {
   gap: 3px;
   padding: 0 2px 5px;
 }
-.showcase .sc-tools::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--sc-line) 14%, var(--sc-line) 86%, transparent);
-}
+.showcase .sc-tools::after { content: none; }
 .showcase .sc-tools .sc-tool {
   min-width: 31px;
   width: 31px;
@@ -1840,6 +1827,55 @@ html:has(.showcase) body {
     overscroll-behavior: contain;
   }
   .showcase.sc-immersive .sc-drive-camera-options button { min-height: 44px; }
+}
+
+/* 章节刻度仅靠长度区分，不再以亮度提示当前项。触屏端按需展开，减少车身两侧的常驻线条。 */
+.sc-nav-toggle, .sc-quality-nav-toggle { display: none; }
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
+  .showcase .sc-nav,
+  .showcase .sc-texture-quality {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .showcase.sc-chapter-nav-open .sc-nav,
+  .showcase.sc-quality-nav-open .sc-texture-quality {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+  .showcase .sc-nav-toggle,
+  .showcase .sc-quality-nav-toggle {
+    display: flex;
+    right: 3vw;
+    top: 55%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: 44px;
+    padding: 0 10px;
+    border: 0;
+    background: transparent;
+    color: var(--sc-faint);
+    pointer-events: auto;
+    cursor: pointer;
+    align-items: flex-end;
+    justify-content: center;
+    flex-direction: column;
+    gap: 4px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .showcase .sc-quality-nav-toggle { left: 3vw; right: auto; align-items: flex-start; }
+  .sc-nav-toggle span { display: block; width: 12px; height: 2px; border-radius: 2px; background: currentColor; opacity: .65; }
+  .sc-nav-toggle span:nth-child(2) { width: 20px; }
+  .sc-quality-nav-toggle span { display: block; width: 12px; height: 2px; border-radius: 2px; background: currentColor; opacity: .65; }
+  .sc-quality-nav-toggle span:nth-child(2) { width: 20px; }
+  .sc-nav-toggle:focus-visible,
+  .sc-quality-nav-toggle:focus-visible { outline: 1px solid var(--sc-active-line); outline-offset: 2px; }
+  .showcase.sc-chapter-nav-open .sc-nav-toggle,
+  .showcase.sc-quality-nav-open .sc-quality-nav-toggle,
+  .showcase.sc-immersive .sc-nav-toggle,
+  .showcase.sc-immersive .sc-quality-nav-toggle { visibility: hidden; pointer-events: none; }
+  .sc-quality-toggle-spinner { position: absolute; left: 12px; top: 30px; width: 10px; height: 10px; border: 1px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: sc-quality-spin .9s linear infinite; }
 }
 
 /* 行驶操作集中在右下：减速在上、视角在下，避开中央车尾。 */
