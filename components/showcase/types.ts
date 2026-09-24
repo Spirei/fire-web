@@ -366,6 +366,8 @@ export interface ShowcaseHud {
   inspectMarkers?: { el: HTMLElement; pos: [number, number, number] }[];
 }
 
+export type ShowcaseLoadPhase = "waiting" | "fetching" | "decoding-cached" | "decoding-network" | "mounting";
+
 export interface ShowcaseOptions {
   canvas: HTMLCanvasElement;
   hud: ShowcaseHud;
@@ -380,6 +382,8 @@ export interface ShowcaseOptions {
   onReady?: () => void;
   /** 实际贴图上限低于所选档位时，向界面说明设备内存适配。 */
   onTextureBudget?: (limit: number | null) => void;
+  /** 换车/重试阶段；缓存命中时不会有新的网络请求，但仍会继续解析。 */
+  onModelPhase?: (phase: ShowcaseLoadPhase) => void;
   /** 模型展示中单击真实网格：供导入工作台跳到对应部位参数。 */
   onInspectPart?: (part: { mesh: string; materials: string[]; position: [number, number, number] }) => void;
   /** 章节切换 */

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import type { ShowcaseConfig, ShowcaseDiscStyle, ShowcaseDriveCamera, ShowcaseHandle } from "./types";
+import type { ShowcaseConfig, ShowcaseDiscStyle, ShowcaseDriveCamera, ShowcaseHandle, ShowcaseLoadPhase } from "./types";
 import { setThemeCookie } from "@/lib/theme";
 import { usePersistedState } from "@/lib/usePersistedState";
 import type { WireframeMode } from "./wireframe";
@@ -44,6 +44,13 @@ const TEXTURE_QUALITY: Record<TextureQuality, { label: string; badge: string; si
   balanced: { label: "均衡", badge: "2K", size: 2048 },
   fine: { label: "精细", badge: "4K", size: 4096 },
   original: { label: "原画", badge: "RAW", size: 16384 }
+};
+const QUALITY_PHASE_LABEL: Record<ShowcaseLoadPhase, string> = {
+  waiting: "等待加载队列",
+  fetching: "读取缓存或下载",
+  "decoding-cached": "缓存命中 · 正在解析",
+  "decoding-network": "下载完成 · 正在解析",
+  mounting: "正在显示模型"
 };
 type ShowcasePose = { p: number; yaw: number; pitch: number; zoom: number; focus?: [number, number, number]; distance?: number; elevation?: number };
 
@@ -118,6 +125,7 @@ export default function ShowcaseStage({
   const [loadRatio, setLoadRatio] = useState(0);
   const [ready, setReady] = useState(false);
   const [qualityLoading, setQualityLoading] = useState(false);
+  const [qualityPhase, setQualityPhase] = useState<ShowcaseLoadPhase | null>(null);
   const [appliedTextureQuality, setAppliedTextureQuality] = useState<TextureQuality | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [noticeKey, setNoticeKey] = useState<string | null>(null);
@@ -208,6 +216,7 @@ export default function ShowcaseStage({
     qualitySwitchRef.current += 1;
     pendingModelRef.current = null;
     setQualityLoading(false);
+    setQualityPhase(null);
     setLoadingKey(null);
     setWirePanelOpen(false);
     setInspector(false); inspectorRef.current = false;
@@ -447,6 +456,7 @@ export default function ShowcaseStage({
     setReady(false);
     setAppliedTextureQuality(null);
     setQualityLoading(false);
+    setQualityPhase(null);
     setLoadRatio(0);
     setError(null);
 
@@ -597,6 +607,9 @@ export default function ShowcaseStage({
             setError(message);
             setReady(false);
             setMemoryNotice(message);
+          },
+          onModelPhase: (nextPhase) => {
+            if (!cancelled && !recoveryRequested) setQualityPhase(nextPhase);
           }
         });
         handle.setTheme(themeRef.current);
@@ -1394,10 +1407,11 @@ export default function ShowcaseStage({
             </div>
             {!inspector && (
               <div className="sc-row sc-texture-quality" role="group" aria-label="纹理质量" aria-busy={qualityLoading}
-                data-selected-quality={textureQuality} data-applied-quality={appliedTextureQuality ?? "loading"}>
+                data-selected-quality={textureQuality} data-applied-quality={appliedTextureQuality ?? "loading"} data-loading-phase={qualityLoading ? qualityPhase ?? "waiting" : "idle"}>
                 <span className="sc-quality-cap" aria-hidden="true">纹理</span>
                 {memoryNotice && <span className="sc-quality-status" role="status">{memoryNotice}</span>}
-                {qualityLoading && <span className="sc-quality-pending" role="status" aria-label="正在更新高清模型" title="正在更新高清模型" />}
+                {qualityLoading && <span className="sc-quality-status" role="status">{QUALITY_PHASE_LABEL[qualityPhase ?? "waiting"]}</span>}
+                {qualityLoading && <span className="sc-quality-pending" aria-hidden="true" />}
                 {qualityError && <button type="button" className="sc-quality-retry" onClick={() => {
                   const handle = handleRef.current;
                   if (!handle) { setRetry((n) => n + 1); return; }

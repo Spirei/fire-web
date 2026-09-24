@@ -50,16 +50,25 @@ export function recoveryQuality(asset: string, failed: Quality): Quality | null 
 
 /** 跨场景串行：旧场景未完成的解码不能与重建 / 下一辆车同时抢内存。 */
 let modelQueue: Promise<unknown> = Promise.resolve();
-export function queueModelLoad<T>(load: () => Promise<T>, timeoutMs = 0): Promise<T> {
+export function queueModelLoad<T>(load: () => Promise<T>, timeoutMs = 0, signal?: AbortSignal): Promise<T> {
   const task = modelQueue.then(() => {
-    if (timeoutMs <= 0) return load();
-    let timer: ReturnType<typeof setTimeout>;
-    return Promise.race([
-      load(),
-      new Promise<T>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("高清模型解析超时，请重试或切回 4K")), timeoutMs);
-      })
-    ]).finally(() => clearTimeout(timer));
+    if (signal?.aborted) throw new Error("模型加载已取消");
+    if (timeoutMs <= 0 && !signal) return load();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+    const racers: Promise<T>[] = [load()];
+    if (timeoutMs > 0) racers.push(new Promise<T>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("高清模型解析超时，请重试或切回 4K")), timeoutMs);
+    }));
+    if (signal) racers.push(new Promise<T>((_resolve, reject) => {
+      onAbort = () => reject(new Error("模型加载已取消"));
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (signal.aborted) onAbort();
+    }));
+    return Promise.race(racers).finally(() => {
+      if (timer) clearTimeout(timer);
+      if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+    });
   });
   modelQueue = task.catch(() => {});
   return task;

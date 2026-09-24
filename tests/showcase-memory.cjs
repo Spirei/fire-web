@@ -27,6 +27,13 @@ const jobs=Array.from({length:4},()=>queueModelLoad(async()=>{max=Math.max(max,+
 await Promise.all(jobs);assert.equal(max,1,'only one model decode across scenes');
 await assert.rejects(queueModelLoad(() => new Promise(() => {}), 20), /高清模型解析超时/, 'stalled decoder must terminate the visible switch');
 assert.equal(await queueModelLoad(async () => 'next-model'), 'next-model', 'a timed-out decoder must not block the next quality choice');
+const slowGpu = new AbortController();
+assert.equal(await queueModelLoad(() => new Promise(resolve => setTimeout(() => resolve('8k-ready'), 35)), 0, slowGpu.signal), '8k-ready', 'active Gulf RAW must wait past an arbitrary loading deadline');
+const cancelledGpu = new AbortController();
+const abandoned = queueModelLoad(() => new Promise(() => {}), 0, cancelledGpu.signal);
+cancelledGpu.abort();
+await assert.rejects(abandoned, /模型加载已取消/, 'changing quality must release an indefinitely stalled RAW task');
+assert.equal(await queueModelLoad(async () => '4k-ready'), '4k-ready', 'cancelled RAW must not block the next quality');
 let calls=0,closed=0,active=0,maxDecode=0,current=true;
 const textures=[];
 const parser={loadImageSource:async()=>{calls++;maxDecode=Math.max(maxDecode,++active);await new Promise(r=>setTimeout(r,5));active--;const source={data:{width:4096,height:4096,close(){closed++}}};const t={source,get image(){return source.data},set image(i){source.data=i},clone(){return {...this,source}},dispose(){}};textures.push(t);return t}};

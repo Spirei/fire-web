@@ -1518,6 +1518,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   let mountedTextureLimit = 0;
   let mountedModelSignature = "";
   let modelSwitchSequence = 0;
+  let modelSwitchAbort: AbortController | null = null;
   let modelSwitchInProgress = false;
 
   /**
@@ -3250,6 +3251,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       if (disposed) return;
       disposed = true;
       modelSwitchSequence += 1;
+      modelSwitchAbort?.abort();
       unmountCar(mountedCar);
       mountedCar = null;
       wireframeView.dispose();
@@ -3300,6 +3302,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
      * 当前车始终保留到新车解析完成；切换期间仍可旋转，也不会露出空场。
      */
     setModel: (next: { asset: string; model?: ShowcaseConfig["model"] }) => {
+      modelSwitchAbort?.abort();
+      const abort = new AbortController();
+      modelSwitchAbort = abort;
       const sequence = ++modelSwitchSequence;
       modelSwitchInProgress = true;
       const current = () => !disposed && sequence === modelSwitchSequence;
@@ -3402,12 +3407,15 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         try {
           if (!current()) return false;
           // 先拿到目标字节；慢网络期间不能让手机上已经显示的车消失。
+          options.onModelPhase?.("fetching");
           const cached = await fetchAssetBuffer(next.asset);
           if (!current()) return false;
+          options.onModelPhase?.(cached.fromCache ? "decoding-cached" : "decoding-network");
           // 手机 / 平板也不能提前卸下当前车。解析失败或被下一次选择取消时，
           // 旧车继续留在画面上；成功后才由下方的替换步骤释放它。
           nextCar = await parseCar(cached.buffer, next.model, current, next.asset);
           if (!nextCar) return false;
+          options.onModelPhase?.("mounting");
           const previousTextureLimit = CFG.model.maxTextureSize;
           unmountCar(mountedCar);
           mountedCar = null;
@@ -3459,9 +3467,14 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         }
       };
       if (next.asset.includes("-preview.glb")) return load();
-      // 普通大文件可能需要更长传输时间；压缩副本的 Worker 超时更早暴露。
-      const timeoutMs = next.asset.includes("/gpu/") ? 45_000 : 90_000;
-      return queueModelLoad(load, timeoutMs).catch(error => {
+      options.onModelPhase?.("waiting");
+      // Gulf F1 是唯一带 8K 源贴图的车型：手机 RAW 的压缩副本约 64 MB，
+      // 下载与转码可能超过固定 45 秒。用户仍选择它时持续等待，只有真实错误才失败；
+      // 中途换车/画质或销毁场景则由 AbortSignal 立即放开串行队列；
+      // 已开始的浏览器解码不可强制终止，完成后仍由 current() 丢弃过期结果。
+      const waitForGulfRaw = /(?:^|\/)gulf_mclaren_f1_2022_car-uastc\.glb(?:[?#]|$)/i.test(next.asset);
+      const timeoutMs = waitForGulfRaw ? 0 : next.asset.includes("/gpu/") ? 45_000 : 90_000;
+      return queueModelLoad(load, timeoutMs, abort.signal).catch(error => {
         if (current()) {
           // 某些浏览器的压缩纹理解码 Worker 会一直不返回；使过期任务失效，释放串行队列。
           modelSwitchSequence += 1;
