@@ -378,6 +378,8 @@ export interface ShowcaseOptions {
   startProgress?: number;
   /** 加载进度 0–1（模型 + 环境贴图） */
   onProgress?: (ratio: number) => void;
+  /** 已解析的模型贴图数；工作台用它区分慢解析和彻底卡住。 */
+  onDecodeProgress?: (done: number, total: number) => void;
   /** 就绪（可以隐藏 loading） */
   onReady?: () => void;
   /** 实际贴图上限低于所选档位时，向界面说明设备内存适配。 */

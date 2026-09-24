@@ -1489,7 +1489,8 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
         }
         const limit = textureLimit(requested, renderer.capabilities.maxTextureSize);
         if (current()) options.onTextureBudget?.(!compressed && limit < requested ? limit : null);
-        releaseImages = budgetImageDecoding(parser, limit, valid, error => { imageError ??= error; parseFailed = true; }, memoryConstrained && asset !== CFG.assets.previewModel && !asset.includes("-preview.glb"), size => { sourceTextureMax = Math.max(sourceTextureMax, size); });
+        options.onDecodeProgress?.(0, parser.json.images?.length ?? 0);
+        releaseImages = budgetImageDecoding(parser, limit, valid, error => { imageError ??= error; parseFailed = true; }, memoryConstrained && asset !== CFG.assets.previewModel && !asset.includes("-preview.glb"), size => { sourceTextureMax = Math.max(sourceTextureMax, size); }, done => options.onDecodeProgress?.(done, parser.json.images?.length ?? 0));
         return null;
       }
     }));
@@ -1756,10 +1757,13 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
     const current = () => !disposed && initialSequence === modelSwitchSequence;
     try {
       if (!current()) return;
+      options.onModelPhase?.("fetching");
       const cached = await fetchAssetBuffer(CFG.assets.model, ratio => { if (current()) reportProgress(ratio); });
       if (!current()) return;
+      options.onModelPhase?.(cached.fromCache ? "decoding-cached" : "decoding-network");
       const car = await parseCar(cached.buffer, CFG.model, current, CFG.assets.model);
       if (!car) return;
+      options.onModelPhase?.("mounting");
       mountCar(car);
       resize();
       render(progress(), 1 / 60);
@@ -1771,7 +1775,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   };
   // 用户切车时，上一辆高清车的 KTX/图片解码可能长时间占住串行队列。
   // 首页预览体积小，允许先行解析，让新车首帧不被旧车的后台升级拖住。
-  void (CFG.assets.model.includes("-preview.glb") ? loadInitialModel() : queueModelLoad(loadInitialModel));
+  // 临时工作台文件已经在本页内存里；不要排在可能被别的高清模型解码卡住的全局队列后面。
+  const temporaryPreview = CFG.assets.model.startsWith("blob:");
+  void (temporaryPreview || CFG.assets.model.includes("-preview.glb") ? loadInitialModel() : queueModelLoad(loadInitialModel));
 
   /* ---------- 7) 滚动编排 ---------- */
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
@@ -3279,8 +3285,9 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
       backdrop.dispose();
       backdropLight.dispose();
       renderer.dispose();
-      // 不在转码中途终止 worker，否则未完成 Promise 会阻塞串行加载队列。
-      void queueModelLoad(async () => { ktxLoader.dispose(); });
+      // 临时预览不进入串行队列；重试时直接终止它的独立 worker，避免旧任务占住资源。
+      if (temporaryPreview) ktxLoader.dispose();
+      else void queueModelLoad(async () => { ktxLoader.dispose(); });
       try {
         renderer.forceContextLoss();
       } catch {
@@ -3466,7 +3473,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
           }
         }
       };
-      if (next.asset.includes("-preview.glb")) return load();
+      if (next.asset.startsWith("blob:") || next.asset.includes("-preview.glb")) return load();
       options.onModelPhase?.("waiting");
       // Gulf F1 是唯一带 8K 源贴图的车型：手机 RAW 的压缩副本约 64 MB，
       // 下载与转码可能超过固定 45 秒。用户仍选择它时持续等待，只有真实错误才失败；
