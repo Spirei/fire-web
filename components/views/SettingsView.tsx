@@ -1346,6 +1346,21 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [uploadingModelIconId, setUploadingModelIconId] = useState<string | null>(null);
   const modelDragIndexRef = useRef<number | null>(null);
   const [modelTestStates, setModelTestStates] = useState<Record<string, { state: "loading" | "ok" | "error"; text: string }>>({});
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/settings/model-test")
+      .then(response => response.ok ? response.json() : null)
+      .then((data: { tests?: Record<string, { ok: boolean; latencyMs: number; error?: string }> } | null) => {
+        if (cancelled || !data?.tests) return;
+        const restored = Object.fromEntries(Object.entries(data.tests).map(([key, result]) => [key, {
+          state: result.ok ? "ok" as const : "error" as const,
+          text: result.ok ? `${result.latencyMs}ms` : result.error || "上次测试失败"
+        }]));
+        setModelTestStates(current => ({ ...restored, ...current }));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
   const [editingTradingSquare, setEditingTradingSquare] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   // 站点信息：不再有「编辑 / 保存」两步 —— 字段常驻可编辑，改动由全局自动保存（700ms 防抖 + 胶囊提示）落库
@@ -3030,7 +3045,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     models: [site.llmModel || "deepseek-chat"]
                   }];
                   const updateServices = (next: ModelServiceConfig[]) => setSite(current => ({ ...current, modelServices: next }));
-                  const updateService = (id: string, patch: Partial<ModelServiceConfig>) => updateServices(services.map(item => item.id === id ? { ...item, ...patch } : item));
+                  const updateService = (id: string, patch: Partial<ModelServiceConfig>) => {
+                    setModelTestStates(current => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${id}:`))));
+                    updateServices(services.map(item => item.id === id ? { ...item, ...patch } : item));
+                  };
                   const reorderServices = (from: number, to: number) => {
                     if (to < 0 || to >= services.length || from === to) return;
                     const next = [...services];
@@ -3061,6 +3079,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         {services.map((service, serviceIndex) => {
                           const meta = MODEL_PROVIDERS.find(item => item.id === service.provider) || MODEL_PROVIDERS[3];
                           const configured = Boolean(service.apiKey || service.apiKeyConfigured) && Boolean(service.apiUrl) && service.models.some(Boolean);
+                          const connected = configured && service.models.filter(Boolean).every(model => modelTestStates[`${service.id}:${model}`]?.state === "ok");
                           return (
                             <article
                               key={service.id}
@@ -3077,7 +3096,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                   <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <strong className="model-service-name">{service.name || "未命名服务"}</strong>
-                                      <span className={`model-service-status ${configured ? "is-ready" : ""}`}><i />{configured ? "已配置" : "待完善"}</span>
+                                      <span className={`model-service-status ${connected ? "is-ready" : "is-disconnected"}`} title={connected ? "所有模型连接测试成功" : configured ? "已配置，但尚未全部通过连接测试" : "配置未完成"}><i />{configured ? "已配置" : "待完善"}</span>
                                     </div>
                                     <p className="truncate">{service.models.filter(Boolean).join(" → ") || "尚未添加模型"} · {meta.hint}</p>
                                   </div>

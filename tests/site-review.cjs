@@ -587,9 +587,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   await test('settings window keeps online height and hover scrollbar', () => {
     const win = fs.readFileSync(path.join(root, 'components/SettingsWindow.tsx'), 'utf8');
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
-    assert.match(win, /h-\[min\(780px,calc\(100vh-120px\)\)\]/, '设置窗口高度必须与线上一致');
+    assert.match(win, /h-\[min\(916px,calc\(100dvh-136px\)\)\]/, '设置窗口应与左侧导航等高');
     assert.match(win, /overflow-hidden">\{children\}/, '中间层不能抢走右侧滚动');
-    assert.match(css, /height:min\(780px,calc\(100vh - 120px\)\)/, 'CSS 高度必须与线上一致');
+    assert.match(css, /height:min\(916px,calc\(100dvh - 136px\)\)/, 'CSS 高度应与左侧导航一致');
     assert.match(css, /\.sv-win-root \.sw-content-scroll,\s*\.dark \.sv-win-root \.sw-content-scroll\s*\{\s*scrollbar-width:\s*auto;\s*scrollbar-color:\s*auto/, '右侧滚动条必须重置后才能划过显示');
   });
   await test('global economy places 汇率换算 to the right of 经济热图', () => {
@@ -603,13 +603,12 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   });
   await test('sidebar scrollbar stays hidden until hover (dark mode)', () => {
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
-    // Chrome 121+ 只要元素上有 scrollbar-width / scrollbar-color（全站 * 已设 thin），
-    // 就会忽略 ::-webkit-scrollbar。侧栏若再写 scrollbar-color:transparent，标准滚动条也被关掉。
-    // 必须先重置为 auto（并带 .dark 前缀压过后面的 .dark *），Chrome 才走 4px webkit 滑块。
-    assert.match(css, /\.fire-sidebar-panel,\s*\.dark \.fire-sidebar-panel\s*\{\s*scrollbar-width:\s*auto;\s*scrollbar-color:\s*auto;?\s*\}/, 'Chrome 必须把标准滚动条属性重置为 auto，且覆盖深色模式');
-    assert.match(css, /\.fire-sidebar-panel::-webkit-scrollbar-thumb,\s*\.dark \.fire-sidebar-panel::-webkit-scrollbar-thumb\s*\{\s*background:\s*transparent/, 'webkit 滑块默认透明，且覆盖深色模式');
-    assert.match(css, /\.dark \.fire-sidebar-panel:hover::-webkit-scrollbar-thumb[^{]*\{\s*background:\s*rgba\(255,\s*255,\s*255,\s*\.?0?\.26\)/, '悬停时深色 webkit 滑块要着色');
-    assert.match(css, /@supports not selector\(::-webkit-scrollbar\)[\s\S]*?\.dark \.fire-sidebar-panel:hover[^{]*\{\s*scrollbar-color:\s*rgba\(255,\s*255,\s*255,\s*\.?0?\.26\)/, 'Firefox 用 scrollbar-color 做同样的悬停显示');
+    const app = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
+    assert.match(css, /\.fire-sidebar-panel,\.dark \.fire-sidebar-panel\s*\{\s*scrollbar-width:none;/, '原生叠加滚动条必须隐藏，避免粗白条');
+    assert.match(css, /\.fire-sidebar-panel::-webkit-scrollbar,\.dark \.fire-sidebar-panel::-webkit-scrollbar\s*\{\s*display:none;/, 'WebKit 原生条也必须隐藏');
+    assert.match(css, /\.dark \.fire-sidebar-scroll-indicator\s*\{\s*background:rgba\(255,255,255,\.26\)/, '深色滑块应遵循全站 26% 白色规范');
+    assert.match(css, /\.fire-sidebar:hover \.fire-sidebar-scroll-indicator/, 'macOS 叠加式滚动条需要可见的悬停滑块');
+    assert.match(app, /sidebarScroll\.visible && <span aria-hidden="true" className="fire-sidebar-scroll-indicator"/, '只在实际可滚动时渲染滑块');
   });
   await test('client code never calls crypto.randomUUID (insecure LAN HTTP breaks it)', () => {
     const { clientRandomId } = require(path.join(root, 'lib/randomId.ts'));

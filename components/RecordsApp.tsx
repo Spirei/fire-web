@@ -31,6 +31,7 @@ import type { WatchGroup } from "@/lib/watchGroups";
 import HoldingsView from "@/components/views/HoldingsView";
 import AssetAnalysisView from "@/components/views/AssetAnalysisView";
 import FourDoorNavigator from "@/components/FourDoorNavigator";
+import { usePersistedState } from "@/lib/usePersistedState";
 
 // 持仓 / 自选 / 资产分析随壳同步渲染，避免刷新当前页被 loading 挡板盖住。
 // 其余页签按需加载，且不设 loading，所以不会再闪「加载中…」。
@@ -140,6 +141,9 @@ export default function RecordsApp({
   const loadedQuoteIdsRef = useRef(new Set<string>());
   const quoteCacheKeyRef = useRef("");
   const mobileNavRef = useRef<HTMLDivElement>(null);
+  const desktopNavRef = useRef<HTMLElement>(null);
+  const [fourDoorPinned, setFourDoorPinned] = usePersistedState("fire:four-door-pinned", false);
+  const [sidebarScroll, setSidebarScroll] = useState({ top: 0, height: 0, visible: false });
   const [userLogs, setUserLogs] = useState<SystemLog[]>(initialUserLogs);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
@@ -747,6 +751,32 @@ export default function RecordsApp({
     [sidebarTabs]
   );
 
+  const updateSidebarScroll = useCallback(() => {
+    const nav = desktopNavRef.current;
+    if (!nav) return;
+    const railHeight = nav.clientHeight;
+    const scrollable = nav.scrollHeight > railHeight + 1;
+    const visible = scrollable;
+    const height = scrollable ? Math.max(32, railHeight * railHeight / nav.scrollHeight) : 0;
+    const top = scrollable ? nav.scrollTop / (nav.scrollHeight - railHeight) * (railHeight - height) : 0;
+    setSidebarScroll(previous => previous.top === top && previous.height === height && previous.visible === visible
+      ? previous : { top, height, visible });
+  }, []);
+
+  useEffect(() => {
+    const nav = desktopNavRef.current;
+    if (!nav) return;
+    const observer = new ResizeObserver(updateSidebarScroll);
+    observer.observe(nav);
+    window.addEventListener("resize", updateSidebarScroll);
+    const frame = window.requestAnimationFrame(updateSidebarScroll);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateSidebarScroll);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [sidebarTabs, updateSidebarScroll]);
+
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia("(max-width: 1023px)").matches) return;
     const frame = window.requestAnimationFrame(() => {
@@ -795,9 +825,11 @@ export default function RecordsApp({
     <>
     <div translate="no" className="records-app notranslate flex items-start">
       {/* 桌面侧边导航 */}
-      <aside className="fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block">
-        <nav className="fire-sidebar-panel relative flex min-h-[calc(100vh-112px)] max-h-[calc(100vh-104px)] flex-col overflow-y-auto rounded-2xl px-2 pb-3">
-          <FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} />
+      <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block ${activeTab === "settings" ? "is-settings" : ""}`}>
+        <nav ref={desktopNavRef} onScroll={updateSidebarScroll} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
+          <div className={`four-door-anchor ${fourDoorPinned ? "is-pinned" : ""}`}>
+            <FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} pinned={fourDoorPinned} onTogglePinned={() => setFourDoorPinned(value => !value)} />
+          </div>
           <div className="fire-sidebar-section-label">资产</div>
           {sidebarTabs.map((t, index) => {
             const isManagement = ["users", "attachments", "library", "cards", "activities", "settings"].includes(t.key);
@@ -828,6 +860,7 @@ export default function RecordsApp({
             );
           })}
         </nav>
+        {sidebarScroll.visible && <span aria-hidden="true" className="fire-sidebar-scroll-indicator" style={{ top: sidebarScroll.top + 1, height: sidebarScroll.height }} />}
       </aside>
 
       {/* 内容区 */}

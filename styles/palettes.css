@@ -181,11 +181,16 @@ html:root[data-palette] .bg-brand-light\/95 { background-color: rgb(var(--site-s
 html:root[data-palette] .hover\:bg-bg-gray:hover, html:root[data-palette] .hover\:bg-brand-hover:hover { background-color: rgb(var(--site-soft)); }
 /* Shell, navigation and record surfaces predate semantic Tailwind colors. */
 html:root[data-palette] :is(.app-shell-main, .records-app, .records-content) { background: rgb(var(--site-bg)); }
-html:root[data-palette] :is(.app-shell-header, .site-header, .fire-sidebar-panel) {
+html:root[data-palette] :is(.app-shell-header, .site-header, .fire-sidebar) {
   background: var(--material-fill); border-color: var(--material-edge); color: rgb(var(--site-ink));
   -webkit-backdrop-filter: var(--material-blur); backdrop-filter: var(--material-blur); box-shadow: var(--material-shadow);
 }
+/* 顶栏不是卡片：深色玻璃材质的描边、阴影和半透明底色会叠出一条横线。 */
+html:root.dark[data-palette] .app-shell-header.site-header { border-bottom:0; background:rgb(var(--site-bg)); box-shadow:none; -webkit-backdrop-filter:none; backdrop-filter:none; }
 html:root[data-palette] .fire-sidebar-panel::before { display: none; }
+html:root[data-palette] .fire-sidebar::after { box-shadow: inset 0 0 0 1px var(--material-edge); }
+html:root.dark[data-palette] .fire-sidebar::after { box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+html:root[data-palette] .fire-sidebar-panel > .four-door-anchor.is-pinned { background: rgb(var(--site-surface)); }
 html:root[data-palette] .fire-sidebar-section-label { color: rgb(var(--site-muted)); }
 html:root[data-palette] .fire-sidebar-item-active { background: rgb(var(--site-soft)); color: rgb(var(--site-accent)); border-color: rgb(var(--site-accent) / .2); }
 html:root[data-palette] .divide-edge > :not([hidden]) ~ :not([hidden]) { border-color: rgb(var(--site-edge)); }

@@ -107,11 +107,15 @@ function FourDoorDial({ uid }: { uid: string }) {
 export default function FourDoorNavigator({
   activeKey,
   onSelect,
-  randomKeys = []
+  randomKeys = [],
+  pinned = false,
+  onTogglePinned
 }: {
   activeKey: string;
   onSelect: (key: string) => void;
   randomKeys?: string[];
+  pinned?: boolean;
+  onTogglePinned?: () => void;
 }) {
   const uid = useId().replace(/:/g, "");
   const initialIndex = Math.max(0, DOORS.findIndex((door) => door.key === activeKey));
@@ -305,6 +309,9 @@ export default function FourDoorNavigator({
         <button type="button" disabled={randomizing || randomKeys.filter((key) => key !== activeKey).length === 0} className="four-door-advance" aria-label={randomizing ? "正在随机选择工作区" : "随机前往工作区"} title={randomizing ? "正在选择…" : "随机前往工作区"} onClick={spinToRandomWorkspace} />
         <img className="four-door-hand" src="/uploads/feature/four-door/cursor-hand.png" alt="" aria-hidden="true" />
       </div>
+      {onTogglePinned && <button type="button" className={`four-door-pin ${pinned ? "is-pinned" : ""}`} aria-label={pinned ? "取消固定四色门" : "固定四色门"} aria-pressed={pinned} title={pinned ? "取消固定四色门" : "固定四色门"} onClick={onTogglePinned}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3h8l-1 6 3 3v2H6v-2l3-3-1-6Z" /><path d="M12 14v7" /></svg>
+      </button>}
     </div>
   );
 }

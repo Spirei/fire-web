@@ -129,7 +129,7 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
 
   return (
     <div className={`sv-win-root sv-orca w-full max-w-[960px]`} style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}>
-      <div className="sw-window flex h-[min(780px,calc(100vh-120px))] flex-col overflow-hidden rounded-[10px] border shadow-[0_12px_40px_rgba(0,0,0,.12)]">
+      <div className="sw-window flex h-[min(916px,calc(100dvh-136px))] flex-col overflow-hidden rounded-[10px] border shadow-[0_12px_40px_rgba(0,0,0,.12)]">
         {/* 窗口标题栏 */}
         <div
           onMouseDown={onTitleMouseDown}

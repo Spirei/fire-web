@@ -748,74 +748,79 @@
 
 /* 主导航与每个业务工作区之间统一保留清晰的呼吸区。 */
 .records-content { min-width:0; isolation:isolate; }
+@media (min-width:1024px) {
+  /* 工作区实际起点约 128px；底部留 8px，外框完整可见且最后一行不贴边。 */
+  .records-app { height:min(916px,calc(100dvh - 136px)); }
+  .records-content { height:100%; min-height:0; overflow-x:hidden; overflow-y:auto; }
+}
 
 /* Codex-inspired workspace navigation: translucent shell, restrained selection, clear depth from content. */
-.fire-sidebar { color: var(--ink); perspective: 1000px; }
+.fire-sidebar {
+  height:min(916px,calc(100dvh - 136px));
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.78);
+  border-radius:16px;
+  background:linear-gradient(150deg,rgba(255,255,255,.72),rgba(244,246,249,.82)),rgba(246,247,249,.78);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset -1px 0 0 rgba(30,41,59,.035),0 14px 38px rgba(30,41,59,.065);
+  color:var(--ink);
+  perspective:1000px;
+}
+.fire-sidebar::after { content:""; position:absolute; inset:0; z-index:6; border-radius:inherit; box-shadow:inset 0 0 0 1px rgba(30,41,59,.12); pointer-events:none; }
 .fire-sidebar-panel {
-  border: 1px solid rgba(255,255,255,.78);
-  background:
-    linear-gradient(150deg,rgba(255,255,255,.72),rgba(244,246,249,.82)),
-    rgba(246,247,249,.78);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.9),
-    inset -1px 0 0 rgba(30,41,59,.035),
-    0 14px 38px rgba(30,41,59,.065);
-  -webkit-backdrop-filter: blur(18px) saturate(125%);
-  backdrop-filter: blur(18px) saturate(125%);
+  height:100%;
+  border:0;
+  background:transparent;
+  box-shadow:none;
 }
-.fire-sidebar-panel::before {
-  content:"";
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-  background:linear-gradient(135deg,rgba(255,255,255,.2),transparent 46%,rgba(30,41,59,.02));
-}
+.fire-sidebar-panel::before { display:none; }
 .fire-sidebar-panel > * { position:relative; z-index:1; }
-/* 默认隐藏、划过才显示。
-   全站 `* { scrollbar-width:thin; scrollbar-color:… }` 会让 Chrome 121+ 忽略 ::-webkit-scrollbar，
-   侧栏再把 scrollbar-color 设成 transparent 等于把滚动条彻底关掉，划过也不出现。
-   这里把两项重置为 auto，Chrome 重新走 4px 的 webkit 滑块：默认透明、悬停着色。 */
-.fire-sidebar-panel,.dark .fire-sidebar-panel { scrollbar-width:auto; scrollbar-color:auto; }
-.fire-sidebar-panel::-webkit-scrollbar,.dark .fire-sidebar-panel::-webkit-scrollbar { width:4px; }
-.fire-sidebar-panel::-webkit-scrollbar-track,.dark .fire-sidebar-panel::-webkit-scrollbar-track { background:transparent; }
-.fire-sidebar-panel::-webkit-scrollbar-thumb,.dark .fire-sidebar-panel::-webkit-scrollbar-thumb { background:transparent; border-radius:999px; }
-.fire-sidebar-panel:hover::-webkit-scrollbar-thumb,.fire-sidebar-panel:focus-within::-webkit-scrollbar-thumb { background:rgba(120,130,145,.45); }
-.dark .fire-sidebar-panel:hover::-webkit-scrollbar-thumb,.dark .fire-sidebar-panel:focus-within::-webkit-scrollbar-thumb { background:rgba(255,255,255,.26); }
-@supports not selector(::-webkit-scrollbar) {
-  .fire-sidebar-panel,.dark .fire-sidebar-panel { scrollbar-width:thin; scrollbar-color:transparent transparent; }
-  .fire-sidebar-panel:hover,.fire-sidebar-panel:focus-within { scrollbar-color:rgba(120,130,145,.45) transparent; }
-  .dark .fire-sidebar-panel:hover,.dark .fire-sidebar-panel:focus-within { scrollbar-color:rgba(255,255,255,.26) transparent; }
-}
+/* macOS 的原生叠加条无法稳定按悬停显隐；只隐藏原生绘制，滚动仍由 nav 处理。 */
+.fire-sidebar-scroll-indicator { position:absolute; right:3px; z-index:2; width:4px; border-radius:999px; background:rgba(120,130,145,.45); opacity:0; pointer-events:none; transition:opacity 140ms ease; }
+.fire-sidebar:hover .fire-sidebar-scroll-indicator,.fire-sidebar:focus-within .fire-sidebar-scroll-indicator { opacity:1; }
+.dark .fire-sidebar-scroll-indicator { background:rgba(255,255,255,.26); }
+.fire-sidebar-panel,.dark .fire-sidebar-panel { scrollbar-width:none; }
+.fire-sidebar-panel::-webkit-scrollbar,.dark .fire-sidebar-panel::-webkit-scrollbar { display:none; }
 .fire-sidebar-section-label { color: #8f949d; font-size: 12px; font-weight: 600; letter-spacing: .02em; padding: 10px 12px 6px; }
 .fire-sidebar-section-label-spaced { margin-top: 12px; }
 .fire-sidebar-item { margin-bottom:5px; border:1px solid transparent; }
+.fire-sidebar-item:not(.fire-sidebar-item-active):hover { border-color:rgba(30,41,59,.13); }
 .fire-sidebar-item > svg { opacity:.78; transition:opacity 160ms ease,color 160ms ease; }
 .fire-sidebar-item:hover > svg,.fire-sidebar-item-active > svg { opacity:1; }
 .fire-sidebar-item-active {
-  border-color: rgba(30,41,59,.045);
+  border-color: rgba(30,41,59,.12);
   background: rgba(255,255,255,.68);
   box-shadow: 0 1px 3px rgba(30,41,59,.055), inset 0 1px 0 rgba(255,255,255,.66);
 }
-/* 外层只负责定位与吸顶，不画底色：圆角由 .fire-sidebar-panel 自己出，
-   否则外层这块方形底色会盖住卡片的四个圆角，左侧看起来就是硬直角。 */
+/* 圆角和底色由侧栏外壳绘制，滚动内容保持透明。 */
 .dark .fire-sidebar {
-  min-height:calc(100vh - 112px);
+  border-color:rgba(255,255,255,.18);
+  background:#1b1b1b;
+  box-shadow:0 0 0 1px rgba(255,255,255,.025),0 14px 38px rgba(0,0,0,.12);
 }
+.dark .fire-sidebar::after { box-shadow:inset 0 0 0 1px rgba(255,255,255,.18); }
+.dark .fire-sidebar-item:not(.fire-sidebar-item-active):hover { border-color:rgba(255,255,255,.14); }
 .dark .fire-sidebar-panel {
   border-color:transparent;
-  background:#1b1b1b;
+  background:transparent;
   box-shadow:none;
   -webkit-backdrop-filter:none;
   backdrop-filter:none;
 }
 .dark .fire-sidebar-panel::before { display:none; }
 .dark .fire-sidebar-item-active {
-  border-color:transparent;
+  border-color:rgba(255,255,255,.14);
   background:#393939;
   box-shadow:none;
 }
 
 /* 四色门：素材只约束在侧栏内部，业务内容宽度继续由各页面自身决定。 */
+.fire-sidebar-panel > .four-door-anchor.is-pinned {
+  position:sticky;
+  top:0;
+  z-index:5;
+  background:#f6f7f9;
+}
+.dark .fire-sidebar-panel > .four-door-anchor.is-pinned { background:#1b1b1b; }
 .four-door-zone {
   position:relative;
   display:flex;
@@ -914,8 +919,33 @@
 .four-door-sound.is-muted,.four-door-style.is-style-two { color:#666d76; background:rgba(255,255,255,.7); }
 .four-door-tool:hover { border-color:rgba(30,41,59,.16); background:rgba(255,255,255,.68); color:#343a42; }
 .four-door-tool svg { width:15px; height:15px; }
+.four-door-pin {
+  position:absolute;
+  z-index:8;
+  right:10px;
+  bottom:10px;
+  display:grid;
+  width:28px;
+  height:28px;
+  place-items:center;
+  border:1px solid rgba(30,41,59,.1);
+  border-radius:9px;
+  background:rgba(255,255,255,.38);
+  color:#7d848d;
+  cursor:pointer;
+  opacity:0;
+  pointer-events:none;
+  transform:translateY(2px);
+  transition:opacity 160ms ease,transform 160ms ease,color 160ms ease,background-color 160ms ease,border-color 160ms ease;
+}
+.four-door-pin svg { width:15px; height:15px; }
+.four-door-zone:hover .four-door-pin,.four-door-zone:focus-within .four-door-pin { opacity:1; pointer-events:auto; transform:translateY(0); }
+.four-door-pin:hover,.four-door-pin.is-pinned { border-color:rgba(30,41,59,.16); background:rgba(255,255,255,.68); color:#343a42; }
+.four-door-pin:focus-visible { outline:2px solid #6d97bc; outline-offset:2px; }
 .dark .four-door-zone { border-color:rgba(255,255,255,.065); background:radial-gradient(circle at 50% 43%,rgba(255,255,255,.045),transparent 62%); }
 .dark .four-door-tool { border-color:rgba(255,255,255,.08); background:rgba(15,16,17,.28); color:#aeb3ba; }
+.dark .four-door-pin { border-color:rgba(255,255,255,.08); background:rgba(15,16,17,.28); color:#aeb3ba; }
+.dark .four-door-pin:hover,.dark .four-door-pin.is-pinned { border-color:rgba(255,255,255,.14); background:rgba(255,255,255,.1); color:#fff; }
 .dark .four-door-sound.is-muted,.dark .four-door-style.is-style-two { border-color:rgba(255,255,255,.09); background:rgba(10,11,13,.5); color:#858b93; }
 .dark .four-door-tool:hover { border-color:rgba(255,255,255,.14); background:rgba(255,255,255,.06); color:#fff; }
 @media (prefers-reduced-motion:reduce) {
@@ -2219,6 +2249,7 @@ html.dark .watch-import-target {
 .model-service-status i,.model-key-state i { width: 6px; height: 6px; border-radius: 50%; background: #a5adba; }
 .model-service-status.is-ready { background: rgba(34, 197, 94, 0.1); color: #168447; }
 .model-service-status.is-ready i,.model-key-state.is-ready i { background: #22c55e; }
+.model-service-status.is-disconnected i { background: #ef4444; }
 .model-service-use { flex: none; color: var(--sv-text-3, #8b93a0); font-size: 11px; }
 .model-service-readonly {
   display: grid;
@@ -4687,7 +4718,7 @@ html.dark .watch-import-target {
 }
 .sv-win-root .sw-window {
   position:relative;
-  height:min(780px,calc(100vh - 120px));
+  height:min(916px,calc(100dvh - 136px));
   overflow:hidden;
   border:1px solid var(--sv-border);
   border-radius:10px;
