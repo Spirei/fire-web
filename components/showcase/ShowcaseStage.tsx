@@ -129,7 +129,6 @@ export default function ShowcaseStage({
   }, [loadingKey]);
   const showLoadingNotice = loadingKey !== null && noticeKey === loadingKey;
   const [qualityError, setQualityError] = useState(false);
-  const [textureLimitNotice, setTextureLimitNotice] = useState<number | null>(null);
   const [memoryNotice, setMemoryNotice] = useState<string | null>(null);
   const [racing, setRacing] = useState(false);
   const [driving, setDriving] = useState(false);
@@ -539,7 +538,6 @@ export default function ShowcaseStage({
               }), constrainedGraphics() ? 1800 : 400);
             }
           },
-          onTextureBudget: limit => { if (!cancelled && !recoveryRequested) setTextureLimitNotice(limit); },
           onPhase: handlePhase,
           onRacing: (on) => setRacing(on),
           onDriving: (on) => {
@@ -1399,7 +1397,6 @@ export default function ShowcaseStage({
                 data-selected-quality={textureQuality} data-applied-quality={appliedTextureQuality ?? "loading"}>
                 <span className="sc-quality-cap" aria-hidden="true">纹理</span>
                 {memoryNotice && <span className="sc-quality-status" role="status">{memoryNotice}</span>}
-                {!memoryNotice && textureLimitNotice && <span className="sc-quality-status" role="status">设备适配 · 贴图上限 {Math.round(textureLimitNotice / 1024)}K</span>}
                 {qualityLoading && <span className="sc-quality-pending" role="status" aria-label="正在更新高清模型" title="正在更新高清模型" />}
                 {qualityError && <button type="button" className="sc-quality-retry" onClick={() => {
                   const handle = handleRef.current;
@@ -1437,7 +1434,6 @@ export default function ShowcaseStage({
                     onClick={() => {
                       showSelectionHint(`quality:${key}`);
                       setMemoryNotice(null);
-                      setTextureLimitNotice(null);
                       textureQualityRef.current = key;
                       flushSync(() => setTextureQuality(key));
                     }}
