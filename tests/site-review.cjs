@@ -122,7 +122,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(!source.includes('label: "翻译配置"'));
     assert(source.includes('const input = event.currentTarget'));
     assert(source.includes('icon={item.id === service.provider ? service.icon : ""}'));
-    assert(source.includes('icon: item.id === service.provider ? service.icon : ""'));
+    assert(!source.includes('icon: item.id === service.provider ? service.icon : ""'), 'changing provider must retain the uploaded service icon');
+    assert(source.includes('<rect x="5.5" y="5.5" width="21" height="21" rx="6"/>'), 'custom provider has its own connection icon');
     assert(source.includes('`${serviceId}-${Date.now().toString(36)}`'));
     assert(source.includes('draggable={!editingModel && services.length > 1 && !blockSaving["model-order"]}'));
     assert(!source.includes('rounded-[inherit] object-cover'));
@@ -713,6 +714,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal((await settingsRoute.PUT(request('admin', { modelServices: withIcon }, 'PUT'))).status, 200);
     const savedSettings = await (await settingsRoute.GET(request('admin'))).json();
     assert.equal(savedSettings.settings.modelServices[0].icon, url, 'uploaded icon must survive settings save and reload');
+    const switched = withIcon.map((service, index) => index === 0 ? { ...service, provider: 'custom' } : service);
+    assert.equal((await settingsRoute.PUT(request('admin', { modelServices: switched }, 'PUT'))).status, 200);
+    assert.equal((await (await settingsRoute.GET(request('admin'))).json()).settings.modelServices[0].icon, url, 'changing provider must not discard uploaded icon');
     const rel = decodeURIComponent(url.replace(/^\/uploads\//, ''));
     const route = require(path.join(root, 'app/uploads/[...path]/route.ts'));
     const served = await route.GET(new Request(`http://localhost${url}`), { params: Promise.resolve({ path: rel.split('/') }) });

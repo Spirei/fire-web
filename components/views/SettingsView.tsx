@@ -590,7 +590,7 @@ function ModelProviderIcon({ provider, icon, className = "h-10 w-10" }: { provid
       ) : provider === "openai" ? (
         <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 5.2a6 6 0 0 1 10.2 4.3 6 6 0 0 1-.8 10.4A6 6 0 0 1 16 25.6a6 6 0 0 1-10.2-4.3 6 6 0 0 1 .8-10.4A6 6 0 0 1 16 5.2Z"/><path d="m10.7 9.2 10.6 6.1v7.1M21.4 9.4l-10.7 6.2v7M5.9 16h12.2"/></svg>
       ) : (
-        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2"><path d="m12 9-7 7 7 7M20 9l7 7-7 7M18.5 6l-5 20" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5.5" y="5.5" width="21" height="21" rx="6"/><circle cx="16" cy="16" r="3"/><path d="M16 9v4m0 6v4M9 16h4m6 0h4"/></svg>
       )}
     </span>
   );
@@ -3087,7 +3087,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 <div className="model-service-editor">
                                   <div className="model-provider-grid">
                                     {MODEL_PROVIDERS.map(item => (
-                                      <button key={item.id} type="button" onClick={() => updateService(service.id, { provider: item.id, icon: item.id === service.provider ? service.icon : "", name: service.name === "新模型服务" || MODEL_PROVIDERS.some(candidate => candidate.name === service.name) ? item.name : service.name, apiUrl: item.url || service.apiUrl })} className={`model-provider-option ${service.provider === item.id ? "is-active" : ""}`}>
+                                      <button key={item.id} type="button" disabled={!!uploadingModelIconId} onClick={() => updateService(service.id, { provider: item.id, name: service.name === "新模型服务" || MODEL_PROVIDERS.some(candidate => candidate.name === service.name) ? item.name : service.name, apiUrl: item.url || service.apiUrl })} className={`model-provider-option ${service.provider === item.id ? "is-active" : ""}`}>
                                         <ModelProviderIcon provider={item.id} icon={item.id === service.provider ? service.icon : ""} className="h-8 w-8" />
                                         <span><b>{item.name}</b><small>{item.hint}</small></span><i className="model-provider-check" />
                                       </button>
