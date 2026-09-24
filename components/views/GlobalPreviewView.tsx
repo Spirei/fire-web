@@ -7,7 +7,7 @@ import MarketIcon from "@/components/MarketIcon";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import CurrencySelect from "@/components/CurrencySelect";
 import { useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
-import { IconArrowsExchange, IconChartHistogram, IconMap2 } from "@tabler/icons-react";
+import { IconArrowsExchange, IconChartHistogram } from "@tabler/icons-react";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 
 interface TopAsset {
@@ -236,10 +236,6 @@ function EmptyMarketIcon() {
   );
 }
 
-const GlobalEconomyHeatmap = dynamic(() => import("@/components/GlobalEconomyHeatmap"), {
-  ssr: false,
-  loading: () => <div className="h-[520px] animate-pulse rounded-card bg-bg-gray dark:bg-white/[.04]" />
-});
 const FxConverter = dynamic(() => import("@/components/FxConverter"), {
   ssr: false,
   loading: () => <div className="h-[420px] animate-pulse rounded-card bg-bg-gray dark:bg-white/[.04]" />
@@ -445,22 +441,20 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
   );
 }
 
-type GlobalSection = "assets" | "heatmap" | "convert";
+type GlobalSection = "assets" | "convert";
 
 const GLOBAL_SECTIONS: [GlobalSection, string, string][] = [
   ["assets", "市值排行", "全球主要资产的市值、价格与走势"],
-  ["heatmap", "经济热图", "按国家比较关键宏观经济指标"],
   ["convert", "汇率换算", "输入金额，按当前汇率换算其他货币"]
 ];
 
 const SECTION_ICONS = {
   assets: IconChartHistogram,
-  heatmap: IconMap2,
   convert: IconArrowsExchange
 } as const;
 
 function parseGlobalSection(value: string | null): GlobalSection {
-  if (value === "heatmap" || value === "convert") return value;
+  if (value === "convert") return value;
   return "assets";
 }
 
@@ -508,7 +502,7 @@ export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
         ))}
       </nav>
       <div key={section} className="global-section-panel">
-        {section === "assets" ? <AssetMarketCapRanking /> : section === "heatmap" ? <GlobalEconomyHeatmap /> : <FxConverter />}
+        {section === "assets" ? <AssetMarketCapRanking /> : <FxConverter />}
       </div>
     </div>
   );

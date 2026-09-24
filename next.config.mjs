@@ -108,12 +108,6 @@ const nextConfig = {
         headers: [{ key: "Cache-Control", value: "private, max-age=30, must-revalidate" }]
       },
       {
-        // 世界地图约 3 MB（gzip 后约 1 MB），内容随版本发布而更新。
-        // 浏览器可直接复用一天，之后一周内后台校验，避免每次打开地图都阻塞首屏。
-        source: "/maps-world.json",
-        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }]
-      },
-      {
         // 默认车型（MCL35M）与两张环境贴图随仓库分发：车模放 public/mclaren/，
         // 约 23MB + 3MB，保证别人克隆或部署后开箱就有车可看。
         source: "/mclaren/:path*",

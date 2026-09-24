@@ -294,10 +294,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   });
   await test('market and country icon fallbacks never render emoji',()=>{
     const marketIcon=fs.readFileSync(path.join(root,'components/MarketIcon.tsx'),'utf8');
-    const heatmap=fs.readFileSync(path.join(root,'components/GlobalEconomyHeatmap.tsx'),'utf8');
     const assetLibrary=fs.readFileSync(path.join(root,'components/views/AssetLibraryView.tsx'),'utf8');
     const holdings=fs.readFileSync(path.join(root,'components/views/HoldingsView.tsx'),'utf8');
-    for (const source of [marketIcon,heatmap,assetLibrary]) {
+    for (const source of [marketIcon,assetLibrary]) {
       assert(!source.includes('countryFlagEmoji'));
       assert(!/[\u{1F1E6}-\u{1F1FF}]{2}/u.test(source));
     }
@@ -592,13 +591,14 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.match(css, /height:min\(916px,calc\(100dvh - 136px\)\)/, 'CSS 高度应与左侧导航一致');
     assert.match(css, /\.sv-win-root \.sw-content-scroll,\s*\.dark \.sv-win-root \.sw-content-scroll\s*\{\s*scrollbar-width:\s*auto;\s*scrollbar-color:\s*auto/, '右侧滚动条必须重置后才能划过显示');
   });
-  await test('global economy places 汇率换算 to the right of 经济热图', () => {
+  await test('global economy removes archived heatmap but keeps converter', () => {
     const view = fs.readFileSync(path.join(root, 'components/views/GlobalPreviewView.tsx'), 'utf8');
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
-    const heatmap = view.indexOf('["heatmap", "经济热图"');
     const convert = view.indexOf('["convert", "汇率换算"');
-    assert(heatmap >= 0 && convert > heatmap, '汇率换算必须紧跟经济热图之后');
-    assert.match(view, /section === "heatmap" \? <GlobalEconomyHeatmap \/> : <FxConverter \/>/);
+    assert(convert >= 0, '汇率换算入口必须保留');
+    assert(!view.includes('GlobalEconomyHeatmap'));
+    assert(!view.includes('["heatmap", "经济热图"'));
+    assert.match(view, /section === "assets" \? <AssetMarketCapRanking \/> : <FxConverter \/>/);
     assert.match(css, /\.fx-converter-card\s*\{[^}]*grid-template-columns:\s*1fr 1fr/, '汇率换算必须一排两个');
   });
   await test('sidebar scrollbar stays hidden until hover (dark mode)', () => {

@@ -1,5 +1,4 @@
-// K 线 / 柱状 / 折线 / 桑基用的核心包。地图与 SVG 渲染器见 lib/echarts-map.ts，
-// 避免持仓页把 MapChart 打进首屏。新增图表类型时按使用面补注册。
+// 按实际页面注册 K 线、柱状、折线与桑基组件，避免无关图表进入首屏包。
 import * as echarts from "echarts/core";
 import { BarChart, CandlestickChart, LineChart, SankeyChart } from "echarts/charts";
 import {
