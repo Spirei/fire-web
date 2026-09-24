@@ -708,11 +708,17 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const res = await upload.POST(new Request('http://localhost/api/upload', { method: 'POST', headers: { cookie: `fire_session=${tokens.admin}` }, body: fd }));
     assert.equal(res.status, 200);
     const { url } = await res.json();
+    const beforeServices = settings.getSiteSettings().modelServices;
+    const withIcon = beforeServices.map((service, index) => index === 0 ? { ...service, icon: url } : service);
+    assert.equal((await settingsRoute.PUT(request('admin', { modelServices: withIcon }, 'PUT'))).status, 200);
+    const savedSettings = await (await settingsRoute.GET(request('admin'))).json();
+    assert.equal(savedSettings.settings.modelServices[0].icon, url, 'uploaded icon must survive settings save and reload');
     const rel = decodeURIComponent(url.replace(/^\/uploads\//, ''));
     const route = require(path.join(root, 'app/uploads/[...path]/route.ts'));
     const served = await route.GET(new Request(`http://localhost${url}`), { params: Promise.resolve({ path: rel.split('/') }) });
     assert.equal(served.status, 200);
     assert.equal(served.headers.get('content-type'), 'image/png');
+    assert.equal((await settingsRoute.PUT(request('admin', { modelServices: beforeServices }, 'PUT'))).status, 200);
     const missing = await route.GET(new Request('http://localhost/uploads/asset/icon/not-there.png'), { params: Promise.resolve({ path: ['asset', 'icon', 'not-there.png'] }) });
     assert.equal(missing.status, 404);
   });

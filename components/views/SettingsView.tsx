@@ -1337,6 +1337,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [showAllTabs, setShowAllTabs] = useState(false);
   const [editingSources, setEditingSources] = useState(false);
   const [editingModel, setEditingModel] = useState(false);
+  const [uploadingModelIconId, setUploadingModelIconId] = useState<string | null>(null);
   const modelDragIndexRef = useRef<number | null>(null);
   const [modelTestStates, setModelTestStates] = useState<Record<string, { state: "loading" | "ok" | "error"; text: string }>>({});
   const [editingTradingSquare, setEditingTradingSquare] = useState(false);
@@ -1390,6 +1391,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const savingEditRef = useRef(false);
   async function saveActiveEdit() {
     if (savingEditRef.current || !activeEditState) return;
+    if (activeAnchor === "translation" && uploadingModelIconId) {
+      showToast("图标正在上传并保存，请稍候", "err");
+      return;
+    }
     savingEditRef.current = true;
     try {
       if (activeAnchor === "trading-square") {
@@ -3044,7 +3049,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       title="模型服务"
                       desc="按顺序调用；第 1 个模型不可用时自动回退到后续已配置模型"
                       className="settings-model-section"
-                      action={editingModel ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : <button type="button" onClick={() => { if (!site.modelServices.length) updateServices(services); setEditingModel(true); }} className="btn btn-ghost btn-sm">编辑</button>}
+                      action={editingModel ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" disabled={!!uploadingModelIconId || !!blockSaving.model} onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">{uploadingModelIconId ? "图标保存中…" : "保存"}</button></div> : <button type="button" onClick={() => { if (!site.modelServices.length) updateServices(services); setEditingModel(true); }} className="btn btn-ghost btn-sm">编辑</button>}
                     >
                       <div className="model-service-stack">
                         {services.map((service, serviceIndex) => {
@@ -3092,9 +3097,27 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                     <label className="model-field"><span>服务名称<small>会显示在上方服务列表</small></span><input className="sw-row-input" value={service.name} maxLength={50} onChange={event => updateService(service.id, { name: event.target.value })} placeholder="例如：公司代理服务" /></label>
                                     <div className="model-icon-controls">
                                       <label className="model-icon-upload">
-                                        <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={async event => { const input = event.currentTarget; const file = input.files?.[0]; if (!file) return; try { updateService(service.id, { icon: await uploadModelIcon(file, service.name, service.id) }); showToast("模型服务图标已上传"); } catch (error) { showToast(error instanceof Error ? error.message : "图标上传失败", "err"); } finally { input.value = ""; } }} />
+                                        <input type="file" disabled={!!uploadingModelIconId} accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={async event => {
+                                          const input = event.currentTarget;
+                                          const file = input.files?.[0];
+                                          if (!file || uploadingModelIconId) return;
+                                          setUploadingModelIconId(service.id);
+                                          try {
+                                            const icon = await uploadModelIcon(file, service.name, service.id);
+                                            const next = services.map(item => item.id === service.id ? { ...item, icon } : item);
+                                            updateServices(next);
+                                            // 上传成功不等于设置已保存；立即写回并以服务端回显为准。
+                                            const saved = await saveBlock("model", { modelServices: next }, "模型服务图标已保存");
+                                            if (!saved) showToast("图标已上传但未保存，请检查模型配置后重试", "err");
+                                          } catch (error) {
+                                            showToast(error instanceof Error ? error.message : "图标上传失败", "err");
+                                          } finally {
+                                            input.value = "";
+                                            setUploadingModelIconId(null);
+                                          }
+                                        }} />
                                         <ModelProviderIcon provider={service.provider} icon={service.icon} className="h-9 w-9" />
-                                        <span>{service.icon ? "更换图标" : "上传图标"}</span>
+                                        <span>{uploadingModelIconId === service.id ? "保存中…" : service.icon ? "更换图标" : "上传图标"}</span>
                                       </label>
                                       {service.icon && <button type="button" onClick={() => updateService(service.id, { icon: "" })}>恢复默认</button>}
                                     </div>
