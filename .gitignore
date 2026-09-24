@@ -3,6 +3,7 @@ node_modules/
 .cache/
 out/
 dist/
+/tools/model-optimizer/output/
 .next-dev/
 .next-dev.oldbak/
 .next-qa/

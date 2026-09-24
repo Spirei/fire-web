@@ -25,6 +25,16 @@ Windows x64/ARM64 首次处理大模型时，会下载并校验官方 KTX 4.4.2 
 
 文件 ≥50 MiB 或贴图展开 ≥256 MiB 时生成保留源尺寸和几何的 UASTC 高清版，否则复制原文件。UASTC 是高质量有损，不是逐像素无损，主要降低 GPU 贴图内存，下载文件不一定更小。每次请从原始 GLB 开始，已 GPU 压缩的输入会拒绝，以免重复有损压缩。
 
+## 外置贴图素材（AMR26 涂装包）
+
+网站导入工作台只接受自包含的 GLB。已核对的 Sketchfab「2026 Aston Martin AMR26」下载包以 Haas VF-26 几何为底稿：`source/2026_haas_vf-26.glb` 内嵌的是 1K Haas 车身图，`textures/` 另带 Aston Martin 的 4K 车身图、2K 贴花与轮毂图。先将四张图按材质名称打包，再运行本工具；不要直接把外置贴图文件夹上传到网站。
+
+```sh
+node scripts/repack-sketchfab-textures.mjs /路径/source/2026_haas_vf-26.glb /路径/textures /路径/2026-aston-martin-amr26-livery.glb
+```
+
+此脚本仅接受已核对的底稿来源，不会修改下载的原文件；输出单文件 GLB 后，在本地网页选择它即可。脚本保留原作者与底稿来源元数据。该车型的高分辨率贴图在 GPU 展开后约占 303 MiB，移动端仍须实机验证高画质承载能力。
+
 ## 分发与网站
 
 把整个 `model-optimizer` 目录给另一台电脑即可，**不要携带 node_modules 和 output**。没有分开的 Mac/Windows 前端，也不需要安装网站项目。本目录已排除在网站 Docker 构建之外；网站只保留文件上传和 KTX2/Meshopt 显示能力，不运行编码器。

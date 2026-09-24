@@ -32,7 +32,9 @@ export async function verifyGpuDerivative(source, compressed) {
     });
   });
   assert.equal(a.listNodes().length, b.listNodes().length);
-  a.listNodes().forEach((node, i) => node.getMatrix().forEach((value, j) => assert(Math.abs(value - b.listNodes()[i].getMatrix()[j]) < 1e-12, 'node transform changed')));
+  // glTF-Transform serializes source node TRS through Float32; the resulting matrix can
+  // differ by a few millionths without any visible or structural change.
+  a.listNodes().forEach((node, i) => node.getMatrix().forEach((value, j) => assert(Math.abs(value - b.listNodes()[i].getMatrix()[j]) < 1e-5, 'node transform changed')));
   const at = a.listTextures(), bt = b.listTextures();
   assert.equal(at.length, bt.length, 'texture count changed');
   let rgbaBytes = 0, blockBytes = 0;
