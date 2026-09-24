@@ -13,6 +13,15 @@ const DB_NAME = "fire-showcase-assets";
 const STORE = "files";
 const DB_VERSION = 1;
 const CACHE_NAME = "fire-showcase-assets-v1";
+const LARGE_MODEL_BYTES = 48 * 1024 * 1024;
+
+function avoidLargeCacheWrite(bytes: number): boolean {
+  if (bytes < LARGE_MODEL_BYTES || typeof navigator === "undefined") return false;
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  return (typeof matchMedia === "function" && matchMedia("(any-pointer: coarse)").matches)
+    || (navigator.maxTouchPoints > 1 && /Macintosh|iPad|iPhone|Android|Mobile/i.test(navigator.userAgent))
+    || (typeof memory === "number" && memory <= 4);
+}
 
 function cacheApiAvailable(): boolean {
   return typeof caches !== "undefined" && typeof caches.open === "function";
@@ -258,24 +267,25 @@ async function loadAsset(
   let buffer: ArrayBuffer;
   if (onProgress && total > 0 && res.body) {
     const reader = res.body.getReader();
-    const chunks: Uint8Array[] = [];
+    // 大模型按 Content-Length 预分配一次；先积攒分片再合并会在手机上
+    // 同时保留两份 60 MB+ 的 GLB，随后解析又进一步放大内存峰值。
+    let merged = new Uint8Array(total);
     let received = 0;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       if (value) {
-        chunks.push(value);
+        if (received + value.byteLength > merged.byteLength) {
+          const expanded = new Uint8Array(Math.max(received + value.byteLength, merged.byteLength * 2));
+          expanded.set(merged.subarray(0, received));
+          merged = expanded;
+        }
+        merged.set(value, received);
         received += value.byteLength;
         onProgress(Math.min(1, received / total));
       }
     }
-    const merged = new Uint8Array(received);
-    let offset = 0;
-    chunks.forEach((chunk) => {
-      merged.set(chunk, offset);
-      offset += chunk.byteLength;
-    });
-    buffer = merged.buffer;
+    buffer = received === merged.byteLength ? merged.buffer : merged.slice(0, received).buffer;
   } else {
     buffer = await res.arrayBuffer();
     onProgress?.(1);
@@ -283,7 +293,7 @@ async function loadAsset(
 
   // 缓存写入不能阻塞首帧：大型 GLB 的 Cache Storage / IndexedDB 事务在手机上可能耗时数秒。
   // 直接把下载中的流式响应 put 进 Cache Storage 会报 "network error"（实测 23 MB 的车模必失败）。
-  if (buffer.byteLength > 0) {
+  if (buffer.byteLength > 0 && !avoidLargeCacheWrite(buffer.byteLength)) {
     void (async () => {
       const cachedByApi = await writeToCacheApi(absUrl, new Response(buffer, {
         headers: { "Content-Type": contentType, "Cache-Control": "max-age=31536000" }

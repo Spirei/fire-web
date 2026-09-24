@@ -976,6 +976,15 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(!fs.readdirSync(store.PREVIEWS_DIR).some(file=>file.startsWith('.')),'temporary files removed');
     assert.equal((await route.POST(call('admin','mcl35m'))).status,200);
     assert(fs.existsSync(path.join(store.PREVIEWS_DIR,'builtin-mcl35m-preview.glb')));
+    const gpuRoute = require(path.join(root, 'app/api/showcase/models/gpu-upload/route.ts'));
+    const gpuCall=(role,id,body=glb)=>new Request(`http://localhost:3000/api/showcase/models/gpu-upload?id=${encodeURIComponent(id)}`,{method:'POST',headers:{cookie:`fire_session=${tokens[role]}`},body});
+    assert.equal((await gpuRoute.POST(gpuCall('user','preview-one'))).status,403);
+    assert.equal((await gpuRoute.POST(gpuCall('admin','../bad'))).status,404);
+    const gpuDir=path.join(store.SHOWROOM_DIR,'gpu'); fs.mkdirSync(gpuDir,{recursive:true});
+    const oldGpu=path.join(gpuDir,'preview-one-uastc.glb'); fs.writeFileSync(oldGpu,'existing validated derivative');
+    assert.equal((await gpuRoute.POST(gpuCall('admin','preview-one'))).status,422,'source GLB is not a KTX2 derivative');
+    assert.equal(fs.readFileSync(oldGpu,'utf8'),'existing validated derivative','failed upload preserves previous derivative');
+    assert(!fs.readdirSync(gpuDir).some(file=>file.startsWith('.')),'failed derivative temporary file removed');
     for(const id of ['preview-one','preview-two']) store.removeStoredModel(id,{deleteFile:true});
   });
   await test('showcase 首页隐藏持久化、权限校验、恢复及全部隐藏不预载', async () => {

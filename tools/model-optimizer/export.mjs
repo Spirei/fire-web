@@ -24,7 +24,7 @@ export async function exportModel(input, directory, { progress = console.log, pr
     progress(identity.needsGpu ? '2/2 生成保留原尺寸的高清优化版…' : '2/2 模型未达到阈值，高清版保持原文件内容…');
     if (identity.needsGpu) await gpuBuilder(input, { output: model, identity, onProgress: progress });
     else fs.copyFileSync(input, model, fs.constants.COPYFILE_EXCL);
-    fs.writeFileSync(path.join(staging, '上传说明.txt'), `1. 在网站车型导入页选择 ${path.basename(model)}，完成参数设置并保存。\n2. 在该车型卡片点击“上传首页预览”，选择 ${path.basename(preview)}。\n\n原文件：${path.basename(input)}（未修改）\n高清版${identity.needsGpu ? '使用 UASTC 高质量有损压缩，保留贴图尺寸与几何；不是逐像素无损。' : '与原文件内容一致。'}\n首页预览为 1K 轻量版，不应作为高清车型导入。\n压缩主要降低贴图 GPU 内存，下载文件不一定更小。\n`);
+    fs.writeFileSync(path.join(staging, '上传说明.txt'), `1. 在网站车型导入页选择原始 GLB，完成参数设置并保存。\n2. 在该车型卡片点击“上传首页预览”，选择 ${path.basename(preview)}。\n3. 如果生成了高清优化版，点击“上传移动端原画”，选择 ${path.basename(model)}。\n\n原文件：${path.basename(input)}（未修改）\n高清版${identity.needsGpu ? '使用 UASTC 高质量有损压缩，保留贴图尺寸；大文件可能追加 Meshopt 几何量化，保留拓扑但不是逐顶点无损。' : '与原文件内容一致。'}\n首页预览为 1K 轻量版，不应作为高清车型导入。\n`);
     fs.writeFileSync(path.join(staging, 'report.json'), JSON.stringify({ input: path.basename(input), sourceSha256: identity.sourceSha256, sourceBytes: identity.sourceBytes, textureBytes: identity.rgbaBytes, compressed: identity.needsGpu, model: path.basename(model), preview: path.basename(preview) }, null, 2));
     if (!sourceUnchanged(input, identity) || fileSha256(input) !== identity.sourceSha256) throw new Error('处理期间原文件发生变化，请重新导出');
     fs.renameSync(staging, final);

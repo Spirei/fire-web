@@ -8,6 +8,7 @@ export const GPU_FILE_THRESHOLD = 50 * 1024 * 1024;
 export const GPU_TEXTURE_THRESHOLD = 256 * 1024 * 1024;
 export const PREVIEW_MODE = 'preview-webp-1024-meshopt-v1';
 export const GPU_MODE = 'UASTC level 3, RDO off, Zstd 18';
+export const GPU_MESHOPT_MODE = 'UASTC level 3, RDO off, Zstd 18; meshopt geometry for large models';
 export function sourceIdentity(input) {
   const stat = fs.statSync(input);
   return { sourceBytes: stat.size, sourceMtimeMs: stat.mtimeMs };
