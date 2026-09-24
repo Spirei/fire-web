@@ -601,6 +601,16 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.match(view, /section === "assets" \? <AssetMarketCapRanking \/> : <FxConverter \/>/);
     assert.match(css, /\.fx-converter-card\s*\{[^}]*grid-template-columns:\s*1fr 1fr/, '汇率换算必须一排两个');
   });
+  await test('admin avatar badge does not depend on excluded deployment icons', () => {
+    const badge = fs.readFileSync(path.join(root, 'components/AdminBadge.tsx'), 'utf8');
+    const menu = fs.readFileSync(path.join(root, 'components/UserMenu.tsx'), 'utf8');
+    const users = fs.readFileSync(path.join(root, 'components/views/UsersView.tsx'), 'utf8');
+    assert.match(badge, /<svg[\s\S]*<circle[\s\S]*<path/, '角标应直接绘制完整圆形和闪电');
+    for (const source of [menu, users]) {
+      assert.match(source, /<AdminBadge\b/, '管理员头像应使用共用角标');
+      assert(!source.includes('/icons/bolt.circle.fill.svg'), '不得请求未随镜像发布的本地图标');
+    }
+  });
   await test('sidebar scrollbar stays hidden until hover (dark mode)', () => {
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
     const app = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');

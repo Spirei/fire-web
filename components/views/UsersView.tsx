@@ -7,6 +7,7 @@ import { showToast } from "@/lib/toast";
 import AppModal from "@/components/AppModal";
 import DeleteIcon from "@/components/DeleteIcon";
 import AppSelect from "@/components/AppSelect";
+import AdminBadge from "@/components/AdminBadge";
 import { appConfirm, appPrompt } from "@/lib/appDialog";
 
 interface AdminUser extends User {
@@ -59,9 +60,7 @@ function UserAvatar({ user, size = "md" }: { user: Pick<User, "username" | "avat
         </span>
       )}
       {user.role === "admin" && (
-        <img
-          src="/icons/bolt.circle.fill.svg"
-          alt="管理员"
+        <AdminBadge
           className={`absolute ${badgeCls} rounded-full ring-white dark:ring-[#151a26]`}
         />
       )}

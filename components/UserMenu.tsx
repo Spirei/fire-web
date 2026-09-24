@@ -6,6 +6,7 @@ import { TimeMachineLink } from "@/components/TimeMachine";
 import { useRouter } from "next/navigation";
 import type { User } from "@/lib/types";
 import { applySiteTheme, THEME_CHANGE_EVENT, type SiteTheme } from "@/lib/theme";
+import AdminBadge from "@/components/AdminBadge";
 
 interface StockStats {
   holdings: number;
@@ -189,9 +190,7 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
             </span>
           )}
           {user.role === "admin" && (
-            <img
-              src="/icons/bolt.circle.fill.svg"
-              alt="管理员"
+            <AdminBadge
               className="absolute -bottom-[1px] -right-[1px] h-[10px] w-[10px] rounded-full ring-[1px] ring-white transition-shadow duration-300 dark:ring-[#151a26]"
             />
           )}
