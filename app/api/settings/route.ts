@@ -60,7 +60,7 @@ export async function PUT(request: Request) {
   let modelServices = undefined;
   if (body.modelServices !== undefined) {
     if (!Array.isArray(body.modelServices)) return NextResponse.json({ error: "模型服务格式无效" }, { status: 400 });
-    if (body.modelServices.some((item: unknown) => !item || typeof item !== "object" || !["deepseek", "openai", "custom"].includes(String((item as { provider?: unknown }).provider)))) {
+    if (body.modelServices.some((item: unknown) => !item || typeof item !== "object" || !["deepseek", "openai", "jev", "custom"].includes(String((item as { provider?: unknown }).provider)))) {
       return NextResponse.json({ error: "模型服务提供方无效" }, { status: 400 });
     }
     const incoming = normalizeModelServices(body.modelServices);
@@ -69,7 +69,7 @@ export async function PUT(request: Request) {
     const previous = new Map(previousSettings.modelServices.map(item => [item.id, item]));
     modelServices = incoming.map(item => ({
       ...item,
-      apiKey: item.apiKey || previous.get(item.id)?.apiKey || (item.id === "legacy-primary" ? previousSettings.llmApiKey || previousSettings.deepseekApiKey : "")
+      apiKey: item.apiKey || (previous.get(item.id)?.provider === item.provider ? previous.get(item.id)?.apiKey : "") || (item.id === "legacy-primary" && item.provider !== "jev" ? previousSettings.llmApiKey || previousSettings.deepseekApiKey : "")
     }));
     for (const item of modelServices) {
       if (!item.name || !item.models.length) return NextResponse.json({ error: "每个模型服务都需要名称和至少一个模型" }, { status: 400 });

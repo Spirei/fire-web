@@ -299,7 +299,7 @@ export interface SiteSettings {
 export interface ModelServiceConfig {
   id: string;
   name: string;
-  provider: "deepseek" | "openai" | "custom";
+  provider: "deepseek" | "openai" | "jev" | "custom";
   icon: string;
   apiUrl: string;
   apiKey: string;

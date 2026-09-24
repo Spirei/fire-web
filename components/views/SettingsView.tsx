@@ -567,10 +567,11 @@ const DEFAULT_SETTINGS: SiteSettings = {
   ticker: DEFAULT_TICKER
 };
 
-type ModelProviderId = "deepseek" | "openai" | "custom";
+type ModelProviderId = "deepseek" | "openai" | "jev" | "custom";
 const MODEL_PROVIDERS: Array<{ id: ModelProviderId; name: string; hint: string; color: string; url: string }> = [
   { id: "deepseek", name: "DeepSeek", hint: "官方 API", color: "#4d6bfe", url: "https://api.deepseek.com/chat/completions" },
   { id: "openai", name: "OpenAI", hint: "官方 API", color: "#10a37f", url: "https://api.openai.com/v1/chat/completions" },
+  { id: "jev", name: "Jev", hint: "结构化决策", color: "#7c3aed", url: "https://api.typesafe.ai/v1/systemone" },
   { id: "custom", name: "自定义服务", hint: "OpenAI 兼容", color: "#64748b", url: "" }
 ];
 
@@ -578,17 +579,20 @@ function normalizedModelProvider(value: string): ModelProviderId {
   const provider = String(value || "").toLowerCase();
   if (provider.includes("deepseek")) return "deepseek";
   if (provider === "openai") return "openai";
+  if (provider === "jev") return "jev";
   return "custom";
 }
 
 function ModelProviderIcon({ provider, icon, className = "h-10 w-10" }: { provider: ModelProviderId; icon?: string; className?: string }) {
-  const meta = MODEL_PROVIDERS.find((item) => item.id === provider) || MODEL_PROVIDERS[2];
+  const meta = MODEL_PROVIDERS.find((item) => item.id === provider) || MODEL_PROVIDERS[3];
   return (
     <span className={`model-provider-icon ${className}`} style={{ "--model-color": meta.color } as React.CSSProperties} aria-hidden="true">
       {icon ? <SafeAssetImage src={icon} alt="" className="h-full w-full object-contain" style={{ width: "100%", height: "100%" }} fallback={null} /> : provider === "deepseek" ? (
         <svg viewBox="0 0 32 32"><path d="M5.2 17.2c3.7-1 5.4-3.8 5.8-8.1 2 3 4.8 4.7 8.7 4.9 2.4.1 4.5-.5 6.2-1.7-.6 5.9-4.9 10.7-11.1 11.4-4.5.5-8.1-1.4-9.6-6.5Z"/><path d="M20.2 10.6c1.8-2.2 4.3-2.8 7.1-1.7-1.2 2.7-3.5 4-6.9 3.7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
       ) : provider === "openai" ? (
         <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 5.2a6 6 0 0 1 10.2 4.3 6 6 0 0 1-.8 10.4A6 6 0 0 1 16 25.6a6 6 0 0 1-10.2-4.3 6 6 0 0 1 .8-10.4A6 6 0 0 1 16 5.2Z"/><path d="m10.7 9.2 10.6 6.1v7.1M21.4 9.4l-10.7 6.2v7M5.9 16h12.2"/></svg>
+      ) : provider === "jev" ? (
+        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 7h14v11a7 7 0 0 1-14 0"/><path d="M14 12h9M9 18h7"/></svg>
       ) : (
         <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5.5" y="5.5" width="21" height="21" rx="6"/><circle cx="16" cy="16" r="3"/><path d="M16 9v4m0 6v4M9 16h4m6 0h4"/></svg>
       )}
@@ -934,7 +938,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       const res = await fetch("/api/settings/model-test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ serviceId: service.id, apiUrl: service.apiUrl, apiKey: service.apiKey, model })
+        body: JSON.stringify({ serviceId: service.id, provider: service.provider, apiUrl: service.apiUrl, apiKey: service.apiKey, model })
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "测试失败");
@@ -3047,13 +3051,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       id="translation"
                       icon="model"
                       title="模型服务"
-                      desc="按顺序调用；第 1 个模型不可用时自动回退到后续已配置模型"
+                      desc="配置聊天模型与 Jev 决策模型；聊天模型按顺序回退"
                       className="settings-model-section"
                       action={editingModel ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" disabled={!!uploadingModelIconId || !!blockSaving.model} onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">{uploadingModelIconId ? "图标保存中…" : "保存"}</button></div> : <button type="button" onClick={() => { if (!site.modelServices.length) updateServices(services); setEditingModel(true); }} className="btn btn-ghost btn-sm">编辑</button>}
                     >
                       <div className="model-service-stack">
                         {services.map((service, serviceIndex) => {
-                          const meta = MODEL_PROVIDERS.find(item => item.id === service.provider) || MODEL_PROVIDERS[2];
+                          const meta = MODEL_PROVIDERS.find(item => item.id === service.provider) || MODEL_PROVIDERS[3];
                           const configured = Boolean(service.apiKey || service.apiKeyConfigured) && Boolean(service.apiUrl) && service.models.some(Boolean);
                           return (
                             <article
@@ -3076,7 +3080,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                     <p className="truncate">{service.models.filter(Boolean).join(" → ") || "尚未添加模型"} · {meta.hint}</p>
                                   </div>
                                 </div>
-                                {!editingModel ? <span className="model-service-use">{blockSaving["model-order"] ? "保存排序…" : `优先级 ${serviceIndex + 1}`}</span> : (
+                                {!editingModel ? <span className="model-service-use">{service.provider === "jev" ? "决策专用" : blockSaving["model-order"] ? "保存排序…" : `优先级 ${serviceIndex + 1}`}</span> : (
                                   <div className="model-order-actions">
                                     <button type="button" className="is-danger" onClick={() => updateServices(services.filter(item => item.id !== service.id))} disabled={services.length === 1} aria-label="删除服务"><DeleteIcon className="h-4 w-4" /></button>
                                   </div>
@@ -3087,7 +3091,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 <div className="model-service-editor">
                                   <div className="model-provider-grid">
                                     {MODEL_PROVIDERS.map(item => (
-                                      <button key={item.id} type="button" disabled={!!uploadingModelIconId} onClick={() => updateService(service.id, { provider: item.id, name: service.name === "新模型服务" || MODEL_PROVIDERS.some(candidate => candidate.name === service.name) ? item.name : service.name, apiUrl: item.url || service.apiUrl })} className={`model-provider-option ${service.provider === item.id ? "is-active" : ""}`}>
+                                      <button key={item.id} type="button" disabled={!!uploadingModelIconId} onClick={() => updateService(service.id, { provider: item.id, name: service.name === "新模型服务" || MODEL_PROVIDERS.some(candidate => candidate.name === service.name) ? item.name : service.name, apiUrl: item.url || service.apiUrl, apiKey: item.id === service.provider ? service.apiKey : "", apiKeyConfigured: item.id === service.provider ? service.apiKeyConfigured : false, models: item.id === "jev" && service.provider !== "jev" ? ["jev-latest"] : service.provider === "jev" && item.id !== "jev" ? [""] : service.models })} className={`model-provider-option ${service.provider === item.id ? "is-active" : ""}`}>
                                         <ModelProviderIcon provider={item.id} icon={item.id === service.provider ? service.icon : ""} className="h-8 w-8" />
                                         <span><b>{item.name}</b><small>{item.hint}</small></span><i className="model-provider-check" />
                                       </button>
@@ -3122,15 +3126,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                       {service.icon && <button type="button" onClick={() => updateService(service.id, { icon: "" })}>恢复默认</button>}
                                     </div>
                                   </div>
-                                  <label className="model-field"><span>API 地址<small>OpenAI 兼容的 Chat Completions 地址</small></span><input className="sw-row-input" value={service.apiUrl} onChange={event => updateService(service.id, { apiUrl: event.target.value })} placeholder="https://api.example.com/v1/chat/completions" autoComplete="off" /></label>
+                                  <label className="model-field"><span>API 地址<small>{service.provider === "jev" ? "TypeSafe System One 决策接口" : "OpenAI 兼容的 Chat Completions 地址"}</small></span><input className="sw-row-input" value={service.apiUrl} onChange={event => updateService(service.id, { apiUrl: event.target.value })} placeholder={service.provider === "jev" ? "https://api.typesafe.ai/v1/systemone" : "https://api.example.com/v1/chat/completions"} autoComplete="off" /></label>
                                   <label className="model-field"><span>API 密钥<small>留空不会覆盖已保存密钥</small></span><div className="relative min-w-0 flex-1"><input className="sw-row-input !w-full pr-24" type="password" autoComplete="new-password" value={service.apiKey} onChange={event => updateService(service.id, { apiKey: event.target.value })} placeholder={service.apiKeyConfigured ? "已配置，输入新值可替换" : "输入 API Key"} /><span className={`model-key-state ${service.apiKey || service.apiKeyConfigured ? "is-ready" : ""}`}><i />{service.apiKey || service.apiKeyConfigured ? "已保护" : "未配置"}</span></div></label>
                                   <div>
-                                    <div className="model-list-heading"><span>模型与回退顺序<small>从上到下依次尝试</small></span><button type="button" onClick={() => updateService(service.id, { models: [...service.models, ""] })}><b>＋</b> 添加模型</button></div>
+                                    <div className="model-list-heading"><span>{service.provider === "jev" ? "决策模型" : "模型与回退顺序"}<small>{service.provider === "jev" ? "测试连接使用结构化判断请求；不参与聊天与翻译回退" : "从上到下依次尝试"}</small></span><button type="button" onClick={() => updateService(service.id, { models: [...service.models, ""] })}><b>＋</b> 添加模型</button></div>
                                     <div className="model-list">
                                       {service.models.map((model, modelIndex) => (
                                         <div className="model-row" key={`${service.id}-${modelIndex}`}>
                                           <span className="model-priority">{modelIndex + 1}</span>
-                                          <input className="sw-row-input" value={model} maxLength={160} onChange={event => updateService(service.id, { models: service.models.map((item, index) => index === modelIndex ? event.target.value : item) })} placeholder="模型 ID" />
+                                          <input className="sw-row-input" value={model} maxLength={160} onChange={event => updateService(service.id, { models: service.models.map((item, index) => index === modelIndex ? event.target.value : item) })} placeholder={service.provider === "jev" ? "jev-latest" : "模型 ID"} />
                                           <button type="button" className={`model-test-button is-${modelTestStates[`${service.id}:${model}`]?.state || "idle"}`} onClick={() => { void testModelService(service, model); }} disabled={!model || modelTestStates[`${service.id}:${model}`]?.state === "loading"} title={modelTestStates[`${service.id}:${model}`]?.text || "测试模型连接"}>{modelTestStates[`${service.id}:${model}`]?.state === "loading" ? "…" : modelTestStates[`${service.id}:${model}`]?.state === "ok" ? "✓" : modelTestStates[`${service.id}:${model}`]?.state === "error" ? "!" : "测试"}</button>
                                           <button type="button" onClick={() => { const next=[...service.models]; const [item]=next.splice(modelIndex,1); next.splice(modelIndex-1,0,item); updateService(service.id,{models:next}); }} disabled={modelIndex === 0} aria-label="模型上移">↑</button>
                                           <button type="button" onClick={() => { const next=[...service.models]; const [item]=next.splice(modelIndex,1); next.splice(modelIndex+1,0,item); updateService(service.id,{models:next}); }} disabled={modelIndex === service.models.length - 1} aria-label="模型下移">↓</button>
@@ -3151,8 +3155,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             </article>
                           );
                         })}
-                        {editingModel && <button type="button" className="model-add-service" onClick={addService}><b>＋</b><span>添加模型服务<small>接入其他 OpenAI 兼容提供方</small></span></button>}
-                        <div className="model-privacy-note"><SubNavIcon name="key" className="h-4 w-4" /><span>API 密钥只保存在服务端。调用失败、超时或返回空内容时，会按上方顺序继续尝试下一个模型。</span></div>
+                        {editingModel && <button type="button" className="model-add-service" onClick={addService}><b>＋</b><span>添加模型服务<small>接入聊天或决策模型</small></span></button>}
+                        <div className="model-privacy-note"><SubNavIcon name="key" className="h-4 w-4" /><span>API 密钥只保存在服务端。聊天模型按顺序回退；Jev 仅用于结构化决策配置与连接测试。</span></div>
                       </div>
                     </SettingsSection>
                   );

@@ -6,7 +6,7 @@ import { readLimitedJson, readLimitedResponseJson, RequestBodyTooLargeError } fr
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { setModelHealth } from "@/lib/modelHealth";
 
-type TestBody = { serviceId?: string; apiUrl?: string; apiKey?: string; model?: string };
+type TestBody = { serviceId?: string; provider?: string; apiUrl?: string; apiKey?: string; model?: string };
 
 export async function POST(request: Request) {
   const user = getAuthUser(request);
@@ -24,8 +24,12 @@ export async function POST(request: Request) {
   const serviceId = String(body?.serviceId || "").trim();
   const saved = getSiteSettings().modelServices.find(item => item.id === serviceId);
   const apiUrl = validateAssistantEndpoint(String(body?.apiUrl || saved?.apiUrl || "").trim());
-  const apiKey = String(body?.apiKey || saved?.apiKey || "").trim();
   const model = String(body?.model || "").trim().slice(0, 160);
+  const provider = String(body?.provider || saved?.provider || "");
+  const apiKey = String(body?.apiKey || (saved?.provider === provider ? saved.apiKey : "") || "").trim();
+  if (provider !== "jev" && provider !== "deepseek" && provider !== "openai" && provider !== "custom") {
+    return NextResponse.json({ error: "模型提供方无效" }, { status: 400 });
+  }
   if (!apiUrl) return NextResponse.json({ error: "API 地址无效或不安全" }, { status: 400 });
   if (!apiKey || apiKey.length > 500) return NextResponse.json({ error: "请先配置 API 密钥" }, { status: 400 });
   if (!model) return NextResponse.json({ error: "请填写模型 ID" }, { status: 400 });
@@ -35,14 +39,19 @@ export async function POST(request: Request) {
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, temperature: 0, max_tokens: 8, messages: [{ role: "user", content: "只回复 OK" }] }),
+      body: JSON.stringify(provider === "jev"
+        ? { model, state: "The quote source returned a timeout.", questions: { needs_review: { type: "noul", instructions: "Did the quote source time out?" } } }
+        : { model, temperature: 0, max_tokens: 8, messages: [{ role: "user", content: "只回复 OK" }] }),
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(12_000)]),
       redirect: "manual",
       cache: "no-store"
     });
-    const data = await readLimitedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(response, 256 * 1024).catch(() => null);
+    const data = await readLimitedResponseJson<{ choices?: Array<{ message?: { content?: string } }>; answers?: { needs_review?: { type?: string; noul?: number } } }>(response, 256 * 1024).catch(() => null);
     if (!response.ok) { setModelHealth(serviceId, model, { ok: false, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: `HTTP ${response.status}` }); return NextResponse.json({ error: `连接失败（HTTP ${response.status}）` }, { status: 502 }); }
-    if (!data?.choices?.[0]?.message?.content) { setModelHealth(serviceId, model, { ok: false, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: "incompatible" }); return NextResponse.json({ error: "接口已响应，但格式不兼容" }, { status: 502 }); }
+    const compatible = provider === "jev"
+      ? data?.answers?.needs_review?.type === "noul" && typeof data.answers.needs_review.noul === "number" && data.answers.needs_review.noul >= 0 && data.answers.needs_review.noul <= 1
+      : Boolean(data?.choices?.[0]?.message?.content);
+    if (!compatible) { setModelHealth(serviceId, model, { ok: false, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: "incompatible" }); return NextResponse.json({ error: "接口已响应，但格式不兼容" }, { status: 502 }); }
     const latencyMs = Date.now() - started;
     setModelHealth(serviceId, model, { ok: true, latencyMs, checkedAt: new Date().toISOString() });
     return NextResponse.json({ ok: true, latencyMs });

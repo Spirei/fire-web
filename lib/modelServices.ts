@@ -1,7 +1,7 @@
 import type { ModelServiceConfig, SiteSettings } from "./types";
 import { validateAssistantEndpoint } from "./assistantSecurity";
 
-const PROVIDERS = new Set(["deepseek", "openai", "custom"]);
+const PROVIDERS = new Set(["deepseek", "openai", "jev", "custom"]);
 
 export function normalizeModelServices(value: unknown): ModelServiceConfig[] {
   if (!Array.isArray(value)) return [];
@@ -19,7 +19,7 @@ export function normalizeModelServices(value: unknown): ModelServiceConfig[] {
       : [];
     return [{
       id,
-      name: String(item.name || (provider === "deepseek" ? "DeepSeek" : provider === "openai" ? "OpenAI" : "自定义服务")).trim().slice(0, 50),
+      name: String(item.name || (provider === "deepseek" ? "DeepSeek" : provider === "openai" ? "OpenAI" : provider === "jev" ? "Jev" : "自定义服务")).trim().slice(0, 50),
       provider,
       icon: String(item.icon || "").trim().slice(0, 500),
       apiUrl: String(item.apiUrl || "").trim().slice(0, 2048),
@@ -45,7 +45,7 @@ export function configuredModelServices(settings: SiteSettings): ModelServiceCon
 }
 
 export function modelAttempts(settings: SiteSettings, preferred?: { serviceId?: string; model?: string }) {
-  const all = configuredModelServices(settings).flatMap(service => {
+  const all = configuredModelServices(settings).filter(service => service.provider !== "jev").flatMap(service => {
     const apiUrl = validateAssistantEndpoint(service.apiUrl);
     if (!apiUrl || !service.apiKey) return [];
     return service.models.map(model => ({ service, apiUrl, model }));

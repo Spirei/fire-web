@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const user = getAuthUser(request);
   if (!user) return Response.json({ error: "未登录" }, { status: 401 });
-  const services = configuredModelServices(getSiteSettings()).flatMap((service, serviceIndex) =>
+  const services = configuredModelServices(getSiteSettings()).filter(service => service.provider !== "jev").flatMap((service, serviceIndex) =>
     service.models.map((model, modelIndex) => ({
       serviceId: service.id,
       serviceName: service.name,

@@ -115,6 +115,28 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       assert.equal(observed.auth,'Bearer SECRET_BACKUP');assert.equal(observed.body.model,'backup-fast');
     } finally { global.fetch=offline; }
   });
+  await test('Jev saves securely, tests typed decisions, and stays out of chat fallback', async () => {
+    const jev={id:'jev-decisions',name:'Jev',provider:'jev',icon:'',apiUrl:'https://api.typesafe.ai/v1/systemone',apiKey:'SECRET_JEV',models:['jev-latest']};
+    const existing=settings.getSiteSettings().modelServices;
+    assert.equal((await settingsRoute.PUT(request('admin',{modelServices:[...existing,jev]},'PUT'))).status,200);
+    const client=await (await settingsRoute.GET(request('admin'))).json();
+    assert(!JSON.stringify(client).includes('SECRET_JEV'));
+    assert.equal(client.settings.modelServices.find(item=>item.id==='jev-decisions').apiKeyConfigured,true);
+    const {modelAttempts}=require(path.join(root,'lib/modelServices.ts'));
+    assert(!modelAttempts(settings.getSiteSettings()).some(item=>item.service.provider==='jev'));
+    const modelTestRoute=require(path.join(root,'app/api/settings/model-test/route.ts'));
+    const offline=global.fetch;let observed;
+    global.fetch=async(url,init)=>{observed={url,auth:init.headers.Authorization,body:JSON.parse(init.body)};return new Response(JSON.stringify({model:'jev-latest',answers:{needs_review:{type:'noul',noul:0.98}},usage:{input_tokens:20,output_tokens:1}}),{status:200,headers:{'Content-Type':'application/json'}});};
+    try {
+      const req=new Request('http://localhost:3000/api/settings/model-test',{method:'POST',headers:{cookie:`fire_session=${tokens.admin}`,'Content-Type':'application/json'},body:JSON.stringify({serviceId:'jev-decisions',provider:'jev',model:'jev-latest'})});
+      const res=await modelTestRoute.POST(req);
+      assert.equal(res.status,200);
+      assert.equal(observed.auth,'Bearer SECRET_JEV');
+      assert.equal(observed.url,'https://api.typesafe.ai/v1/systemone');
+      assert.equal(observed.body.questions.needs_review.type,'noul');
+      assert(!('messages' in observed.body));
+    } finally { global.fetch=offline; }
+  });
   await test('model service navigation and provider icons stay explicit', () => {
     const source=fs.readFileSync(path.join(root,'components/views/SettingsView.tsx'),'utf8');
     assert(source.includes('label: "模型服务"'));
