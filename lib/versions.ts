@@ -4426,7 +4426,7 @@ export const V0_1_39_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_40_ENTRY: VersionEntry = {
   ...V0_1_39_ENTRY,
   version: "v0.1.40",
   date: "2026-09-24",
@@ -4451,12 +4451,24 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_40_ENTRY,
+  version: "v0.1.41",
+  date: "2026-09-25",
+  summary: "模型服务图标上传与配置保存合为一次操作，失败不留文件。",
+  software: V0_1_40_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.41" } : item),
+  changes: [
+    { kind: "fix", title: "模型服务图标原子保存", desc: "上传前检查模型服务配置；上传和图标关联在同一服务端请求完成，失败时回收新文件。浏览器里确认不点保存切换 OpenAI、DeepSeek、自定义服务再切回，已上传图标地址始终保持。" }
+  ]
+};
+
 
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_40_ENTRY,
   V0_1_39_ENTRY,
   V0_1_38_ENTRY,
   V0_1_37_ENTRY,

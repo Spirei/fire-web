@@ -29,6 +29,27 @@ export function normalizeModelServices(value: unknown): ModelServiceConfig[] {
   });
 }
 
+/** 与设置接口共用同一套校验和密钥继承规则，避免图标上传绕过配置检查。 */
+export function prepareModelServices(value: unknown, previous: SiteSettings): ModelServiceConfig[] {
+  if (!Array.isArray(value)) throw new Error("模型服务格式无效");
+  if (value.some(item => !item || typeof item !== "object" || !PROVIDERS.has(String(item.provider)))) {
+    throw new Error("模型服务提供方无效");
+  }
+  const incoming = normalizeModelServices(value);
+  if (incoming.length !== value.length) throw new Error("模型服务格式无效");
+  const saved = new Map(previous.modelServices.map(item => [item.id, item]));
+  return incoming.map(item => {
+    const service = {
+      ...item,
+      apiKey: item.apiKey || (saved.get(item.id)?.provider === item.provider ? saved.get(item.id)?.apiKey : "") || (item.id === "legacy-primary" && item.provider !== "jev" ? previous.llmApiKey || previous.deepseekApiKey : "")
+    };
+    if (!service.name || !service.models.length) throw new Error("每个模型服务都需要名称和至少一个模型");
+    if (!validateAssistantEndpoint(service.apiUrl)) throw new Error(`${service.name} 的 API 地址无效或不安全`);
+    if (service.icon && !/^\/uploads\/(?:asset\/icon|logo)\//.test(service.icon)) throw new Error(`${service.name} 的图标路径无效`);
+    return service;
+  });
+}
+
 export function configuredModelServices(settings: SiteSettings): ModelServiceConfig[] {
   const services = normalizeModelServices(settings.modelServices);
   if (services.length) return services;

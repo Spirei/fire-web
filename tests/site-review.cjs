@@ -146,7 +146,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(source.includes('icon={item.id === service.provider ? service.icon : ""}'));
     assert(!source.includes('icon: item.id === service.provider ? service.icon : ""'), 'changing provider must retain the uploaded service icon');
     assert(source.includes('<rect x="5.5" y="5.5" width="21" height="21" rx="6"/>'), 'custom provider has its own connection icon');
-    assert(source.includes('`${serviceId}-${Date.now().toString(36)}`'));
+    assert(source.includes('serviceId.slice(0, 20)'), 'model icon upload code must stay within the asset code length limit');
     assert(source.includes('draggable={!editingModel && services.length > 1 && !blockSaving["model-order"]}'));
     assert(!source.includes('rounded-[inherit] object-cover'));
   });
@@ -747,6 +747,30 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal((await settingsRoute.PUT(request('admin', { modelServices: beforeServices }, 'PUT'))).status, 200);
     const missing = await route.GET(new Request('http://localhost/uploads/asset/icon/not-there.png'), { params: Promise.resolve({ path: ['asset', 'icon', 'not-there.png'] }) });
     assert.equal(missing.status, 404);
+  });
+  await test('model icon upload saves atomically and rejects invalid configuration without a file', async () => {
+    const route = require(path.join(root, 'app/api/settings/model-icon/route.ts'));
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR9sAAAAASUVORK5CYII=', 'base64');
+    const before = settings.getSiteSettings().modelServices;
+    const files = () => fs.readdirSync(path.join(temp, 'public/uploads/asset/icon')).length;
+    const makeRequest = (services, code) => {
+      const fd = new FormData();
+      fd.set('kind', 'asset'); fd.set('folder', 'icon'); fd.set('name', 'Test Model'); fd.set('code', code);
+      fd.set('serviceId', before[0].id); fd.set('modelServices', JSON.stringify(services));
+      fd.set('file', new File([png], 'icon.png', { type: 'image/png' }));
+      return new Request('http://localhost/api/settings/model-icon', { method: 'POST', headers: { cookie: `fire_session=${tokens.admin}` }, body: fd });
+    };
+    const originalCount = files();
+    const invalid = await route.POST(makeRequest(before.map((s, i) => i === 0 ? { ...s, apiUrl: 'file:///bad' } : s), 'INVALID-MODEL'));
+    assert.equal(invalid.status, 400);
+    assert.equal(files(), originalCount, 'invalid settings must not leave uploaded files');
+    const saved = await route.POST(makeRequest(before, `MODEL-${Date.now().toString(36)}`));
+    assert.equal(saved.status, 200);
+    const { url } = await saved.json();
+    assert.equal(settings.getSiteSettings().modelServices[0].icon, url);
+    assert.equal(fs.existsSync(path.join(temp, 'public', decodeURIComponent(url).replace(/^\//, ''))), true);
+    assert.equal((await (await settingsRoute.GET(request('admin'))).json()).settings.modelServices[0].icon, url);
+    assert.equal((await settingsRoute.PUT(request('admin', { modelServices: before }, 'PUT'))).status, 200);
   });
   await test('showcase 写接口限管理员：普通用户改不了首页车型条', async () => {
     const uploadRoute = require(path.join(root, 'app/api/showcase/models/upload/route.ts'));

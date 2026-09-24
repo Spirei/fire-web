@@ -5,7 +5,7 @@ import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getSiteSettings, normalizeFutuHost, updateSiteSettings } from "@/lib/settings";
 import { syncRecordGroups } from "@/lib/brokers";
 import { localPathOf, removeFileIfUnused } from "@/lib/fileCleanup";
-import { normalizeModelServices } from "@/lib/modelServices";
+import { prepareModelServices } from "@/lib/modelServices";
 import { validateAssistantEndpoint } from "@/lib/assistantSecurity";
 import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 
@@ -59,23 +59,8 @@ export async function PUT(request: Request) {
 
   let modelServices = undefined;
   if (body.modelServices !== undefined) {
-    if (!Array.isArray(body.modelServices)) return NextResponse.json({ error: "模型服务格式无效" }, { status: 400 });
-    if (body.modelServices.some((item: unknown) => !item || typeof item !== "object" || !["deepseek", "openai", "jev", "custom"].includes(String((item as { provider?: unknown }).provider)))) {
-      return NextResponse.json({ error: "模型服务提供方无效" }, { status: 400 });
-    }
-    const incoming = normalizeModelServices(body.modelServices);
-    if (incoming.length !== body.modelServices.length) return NextResponse.json({ error: "模型服务格式无效" }, { status: 400 });
-    const previousSettings = getSiteSettings();
-    const previous = new Map(previousSettings.modelServices.map(item => [item.id, item]));
-    modelServices = incoming.map(item => ({
-      ...item,
-      apiKey: item.apiKey || (previous.get(item.id)?.provider === item.provider ? previous.get(item.id)?.apiKey : "") || (item.id === "legacy-primary" && item.provider !== "jev" ? previousSettings.llmApiKey || previousSettings.deepseekApiKey : "")
-    }));
-    for (const item of modelServices) {
-      if (!item.name || !item.models.length) return NextResponse.json({ error: "每个模型服务都需要名称和至少一个模型" }, { status: 400 });
-      if (!validateAssistantEndpoint(item.apiUrl)) return NextResponse.json({ error: `${item.name} 的 API 地址无效或不安全` }, { status: 400 });
-      if (item.icon && !/^\/uploads\/(?:asset\/icon|logo)\//.test(item.icon)) return NextResponse.json({ error: `${item.name} 的图标路径无效` }, { status: 400 });
-    }
+    try { modelServices = prepareModelServices(body.modelServices, getSiteSettings()); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "模型服务格式无效" }, { status: 400 }); }
   }
 
   const before = getSiteSettings();

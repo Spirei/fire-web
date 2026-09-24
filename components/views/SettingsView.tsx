@@ -917,18 +917,20 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     }
   }
 
-  async function uploadModelIcon(file: File, name: string, serviceId: string): Promise<string> {
+  async function uploadModelIcon(file: File, name: string, serviceId: string, services: ModelServiceConfig[]): Promise<SiteSettings> {
     const fd = new FormData();
     fd.set("kind", "asset");
     fd.set("folder", "icon");
     fd.set("name", name || "模型服务");
     // 服务与上传批次共同组成文件名，避免不同服务共享 URL 或命中旧图片缓存。
-    fd.set("code", `${serviceId}-${Date.now().toString(36)}`);
+    fd.set("code", `${serviceId.slice(0, 20)}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+    fd.set("serviceId", serviceId);
+    fd.set("modelServices", JSON.stringify(services));
     fd.set("file", file);
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    const res = await fetch("/api/settings/model-icon", { method: "POST", body: fd });
     const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.url) throw new Error(data?.error || "图标上传失败");
-    return data.url as string;
+    if (!res.ok || !data?.url || !data?.settings) throw new Error(data?.error || "图标上传失败");
+    return data.settings as SiteSettings;
   }
 
   async function testModelService(service: ModelServiceConfig, model: string) {
@@ -3107,12 +3109,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                           if (!file || uploadingModelIconId) return;
                                           setUploadingModelIconId(service.id);
                                           try {
-                                            const icon = await uploadModelIcon(file, service.name, service.id);
-                                            const next = services.map(item => item.id === service.id ? { ...item, icon } : item);
-                                            updateServices(next);
-                                            // 上传成功不等于设置已保存；立即写回并以服务端回显为准。
-                                            const saved = await saveBlock("model", { modelServices: next }, "模型服务图标已保存");
-                                            if (!saved) showToast("图标已上传但未保存，请检查模型配置后重试", "err");
+                                            const settings = await uploadModelIcon(file, service.name, service.id, services);
+                                            setSite(current => ({ ...current, ...settings, llmApiKey: current.llmApiKey }));
+                                            captureSaved(settings);
+                                            showToast("模型服务图标已保存");
                                           } catch (error) {
                                             showToast(error instanceof Error ? error.message : "图标上传失败", "err");
                                           } finally {
