@@ -620,6 +620,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(!material.includes('.lg-global-lens') && !material.includes('button.rounded-full'), '玻璃效果不能覆盖普通圆按钮或头像');
     assert.match(material, /data-material="glass"\] :is\(\.fire-cap,\.settings-primary-pill/, '胶囊仍保留玻璃材质');
     assert(!/data-material="glass"\] :is\(\.card,/.test(palette), '卡片不能附加玻璃材质');
+    assert.match(palette, /data-palette="liquid"\] \.sv-win-root\.sv-orca\s*\{\s*--sv-shell:\s*rgb\(var\(--site-bg\)\);\s*--sv-shell-hover:\s*rgb\(var\(--site-surface\)\)/, 'Liquid Glass 设置导航应与正文同底色');
     assert(!menu.includes('scale-[1.4]') && !menu.includes('open ? "ring-2 ring-white"'), '头像菜单打开后不应放大或加亮圈');
   });
   await test('sidebar scrollbar stays hidden until hover (dark mode)', () => {

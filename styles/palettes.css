@@ -40,6 +40,10 @@ html:root[data-palette] .sv-win-root.sv-orca {
   --sv-input: rgb(var(--site-surface)); --sv-surface-2: rgb(var(--site-soft)); --sv-hover-bg: rgb(var(--site-accent) / .09);
   --sv-ring: rgb(var(--site-accent) / .2); --sv-card-shadow: 0 2px 12px rgb(var(--site-ink) / .04);
 }
+/* Liquid Glass 的设置导航与正文共用底色，仅用较浅的卡片色区分悬停/选中。 */
+html:root[data-palette="liquid"] .sv-win-root.sv-orca {
+  --sv-shell: rgb(var(--site-bg)); --sv-shell-hover: rgb(var(--site-surface));
+}
 /* 3D 舞台有独立主题：不能被站点 html 的深浅状态反向覆盖。 */
 html:root[data-palette] .showcase:not(.light) {
   --site-bg: var(--site-bg-dark); --site-surface: var(--site-surface-dark); --site-ink: var(--site-ink-dark);
