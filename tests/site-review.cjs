@@ -611,6 +611,17 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       assert(!source.includes('/icons/bolt.circle.fill.svg'), '不得请求未随镜像发布的本地图标');
     }
   });
+  await test('Liquid Glass stays on capsules without persistent click halo', () => {
+    const provider = fs.readFileSync(path.join(root, 'components/PaletteProvider.tsx'), 'utf8');
+    const material = fs.readFileSync(path.join(root, 'styles/liquid-glass.css'), 'utf8');
+    const palette = fs.readFileSync(path.join(root, 'styles/palettes.css'), 'utf8');
+    const menu = fs.readFileSync(path.join(root, 'components/UserMenu.tsx'), 'utf8');
+    assert(!provider.includes('LiquidGlassInteractions'), '全站按钮不能安装点击透镜');
+    assert(!material.includes('.lg-global-lens') && !material.includes('button.rounded-full'), '玻璃效果不能覆盖普通圆按钮或头像');
+    assert.match(material, /data-material="glass"\] :is\(\.fire-cap,\.settings-primary-pill/, '胶囊仍保留玻璃材质');
+    assert(!/data-material="glass"\] :is\(\.card,/.test(palette), '卡片不能附加玻璃材质');
+    assert(!menu.includes('scale-[1.4]') && !menu.includes('open ? "ring-2 ring-white"'), '头像菜单打开后不应放大或加亮圈');
+  });
   await test('sidebar scrollbar stays hidden until hover (dark mode)', () => {
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
     const app = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');

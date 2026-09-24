@@ -174,18 +174,16 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
           }
           setOpen((v) => !v);
         }}
-        className={`group relative z-[60] flex items-center rounded-full p-0.5 transition-all duration-300 ease-[cubic-bezier(.34,1.56,.64,1)] ${
-          open ? "scale-[1.4]" : "hover:scale-[1.18]"
-        }`}
+        className="group relative z-[60] flex items-center rounded-full p-0.5 transition-transform duration-300 ease-[cubic-bezier(.34,1.56,.64,1)] hover:scale-[1.18]"
         style={{ transformOrigin: "top center" }}
         aria-label="账号菜单"
         aria-expanded={open}
       >
         <span className="relative inline-flex">
           {avatarSrc ? (
-            <img src={avatarSrc} alt={`${user.username} 头像`} className={`h-10 w-10 rounded-full object-cover shadow-[0_2px_10px_rgba(0,0,0,.2)] transition-shadow duration-300 ${open ? "ring-2 ring-white" : "ring-2 ring-white/80 group-hover:ring-white"}`} />
+            <img src={avatarSrc} alt={`${user.username} 头像`} className="h-10 w-10 rounded-full object-cover shadow-[0_2px_10px_rgba(0,0,0,.2)] ring-2 ring-white/80 transition-shadow duration-300 group-hover:ring-white" />
           ) : (
-            <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-light text-[13px] font-bold text-brand-deep shadow-[0_2px_10px_rgba(0,0,0,.2)] transition-shadow duration-300 dark:bg-[#2b313c] dark:text-white ${open ? "ring-2 ring-white" : "ring-2 ring-white/80 group-hover:ring-white"}`}>
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-light text-[13px] font-bold text-brand-deep shadow-[0_2px_10px_rgba(0,0,0,.2)] ring-2 ring-white/80 transition-shadow duration-300 group-hover:ring-white dark:bg-[#2b313c] dark:text-white">
               {displayName.slice(0, 1).toUpperCase()}
             </span>
           )}

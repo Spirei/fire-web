@@ -54,12 +54,11 @@ for(const solid of ['neutral','ocean','forest','amber','dusk']){
  palette=solid;p=mount();p.children[0].props.children[2].props.onClick({detail:1});
  assert.deepEqual(selected,[2]);assert.equal(refs[2].current.lift.value,0);assert.equal(timers.size,0,`${solid} has no glass animation`);
 }
-let cleanup;
-const listeners=new Set();const events={addEventListener:(name,fn)=>listeners.add(fn),removeEventListener:(name,fn)=>listeners.delete(fn)};
-global.document={...events};global.window={...events};global.matchMedia=()=>({...events,matches:true});
-const GlobalGlass=load('components/LiquidGlassInteractions.tsx',{'react':{useEffect:fn=>{cleanup=fn()}},'@/lib/liquidGlass':optics}).default;
-GlobalGlass({enabled:false});assert.equal(listeners.size,0,'solid palette installs no global handlers');
-GlobalGlass({enabled:true});assert(listeners.size>0);cleanup();assert.equal(listeners.size,0,'palette change removes every global handler');
+const provider=fs.readFileSync('components/PaletteProvider.tsx','utf8');
+const css=fs.readFileSync('styles/liquid-glass.css','utf8');
+assert(!provider.includes('LiquidGlassInteractions'),'palette must not install global click effects');
+assert(!css.includes('.lg-global-lens'),'global click lens must not be styled');
+assert(!css.includes('button.rounded-full'),'avatar and ordinary rounded buttons must not inherit glass material');
 for(const hz of [30,60,90,120,144,240]){
  let x={value:0,velocity:0};for(let i=0;i<hz;i++)x=optics.stepGlassSpring(x,2,1/hz,28);
  assert(Math.abs(x.value-2)<1e-8,`refresh-independent settling ${hz}Hz`);
@@ -68,4 +67,4 @@ for(let i=0;i<600;i++){
  const f=optics.glassFrame(i/300,Math.sin(i/100)**2,Math.cos(i/20)*8,84.66,44);
  assert(Math.abs(f.left+f.copyX)<1e-10,'every frame shares content origin');assert(f.height>=44 && f.height<=57.2+1e-9);assert(f.width>=84.66 && f.width<105);
 }
-console.log('PASS 600 alignment frames, 30–240Hz spring, zero drag renders, activation threshold, snap, cleanup, cancelled gesture, reduced motion');
+console.log('PASS capsule optics, 600 alignment frames, 30–240Hz spring, zero drag renders, activation threshold, snap, cancelled gesture, reduced motion; no global click lens');

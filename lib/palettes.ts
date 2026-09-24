@@ -5,7 +5,7 @@ export const SITE_PALETTES = [
   { id: "neutral", name: "中性灰", note: "安静克制，让内容成为主角", glass: false,
     light: ["#f5f6f8", "#ffffff", "#20242c", "#606875", "#525d70", "#dce0e7", "#eceff3"],
     dark: ["#111318", "#1b1f27", "#edf0f6", "#aab2c0", "#bac7dd", "#343b47", "#282e39"] },
-  { id: "liquid", name: "Liquid Glass", note: "通透银白，全站点击鼓起与长按透镜", glass: true,
+  { id: "liquid", name: "Liquid Glass", note: "通透银白，仅为胶囊保留玻璃材质", glass: true,
     light: ["#e9edf4", "#f8faff", "#202735", "#59687e", "#2d65b8", "#c7d2e3", "#dbe7f8"],
     dark: ["#101724", "#1d2a3c", "#eef5ff", "#afc0d8", "#9bc4ff", "#3a4d68", "#293f5d"] },
   { id: "ocean", name: "海盐蓝", note: "冷白与深海蓝，清晰而理性", glass: false,
