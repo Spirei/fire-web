@@ -4458,7 +4458,9 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "模型服务图标上传与配置保存合为一次操作，失败不留文件。",
   software: V0_1_40_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.41" } : item),
   changes: [
-    { kind: "fix", title: "模型服务图标原子保存", desc: "上传前检查模型服务配置；上传和图标关联在同一服务端请求完成，失败时回收新文件。浏览器里确认不点保存切换 OpenAI、DeepSeek、自定义服务再切回，已上传图标地址始终保持。" }
+    { kind: "fix", title: "模型服务图标原子保存", desc: "上传前检查模型服务配置；上传和图标关联在同一服务端请求完成，失败时回收新文件。" },
+    { kind: "fix", title: "模型图标按提供方隔离并消除刷新闪现", desc: "DeepSeek、OpenAI、Jev 和自定义服务各自保存上传图标，切换时只显示对应提供方的图标；自定义服务的默认图标改为圆形虚线加号。模型服务配置进入服务端首帧，刷新时直接显示已保存图标。" },
+    { kind: "fix", title: "模型连接测试反馈更紧凑", desc: "测试成功后在按钮内显示勾选与耗时，不再另起一行显示连接成功；失败仍显示原因和重试入口，深浅色同步适配。" }
   ]
 };
 

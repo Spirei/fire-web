@@ -133,8 +133,12 @@ export async function PUT(request: Request) {
     syncRecordGroups(before.groups, settings.groups);
   }
   if (modelServices) {
-    const activeIcons = new Set(settings.modelServices.map(item => item.icon).filter(Boolean));
-    before.modelServices.forEach(item => { if (item.icon && !activeIcons.has(item.icon)) removeFileIfUnused(item.icon); });
+    const activeIcons = new Set(settings.modelServices.flatMap(item => [item.icon, ...Object.values(item.icons || {})]).filter(Boolean));
+    before.modelServices.forEach(item => {
+      for (const icon of new Set([item.icon, ...Object.values(item.icons || {})])) {
+        if (icon && !activeIcons.has(icon)) removeFileIfUnused(icon);
+      }
+    });
   }
   // 网站形象 / 站点 Logo 替换后删除旧本地文件，保留唯一（不堆积 ico / background / logo）
   ["ico", "homepageBg", "siteLogo"].forEach((k) => {

@@ -143,9 +143,11 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(source.includes('function ModelProviderIcon'));
     assert(!source.includes('label: "翻译配置"'));
     assert(source.includes('const input = event.currentTarget'));
-    assert(source.includes('icon={item.id === service.provider ? service.icon : ""}'));
-    assert(!source.includes('icon: item.id === service.provider ? service.icon : ""'), 'changing provider must retain the uploaded service icon');
-    assert(source.includes('<rect x="5.5" y="5.5" width="21" height="21" rx="6"/>'), 'custom provider has its own connection icon');
+    assert(source.includes('icon={service.icons?.[item.id] || ""}'), 'provider cards use their own uploaded icon');
+    assert(source.includes('icon: service.icons?.[item.id] || ""'), 'switching provider restores only its own icon');
+    assert(source.includes('r="12.5" strokeDasharray="3 3"'), 'custom provider uses a dashed circular plus by default');
+    const layout=fs.readFileSync(path.join(root,'app/[...slug]/layout.tsx'),'utf8');
+    assert(layout.includes('modelServices: clientSettings(settings, isAdmin(user)).modelServices'), 'server first frame must have redacted model icons');
     assert(source.includes('serviceId.slice(0, 20)'), 'model icon upload code must stay within the asset code length limit');
     assert(source.includes('draggable={!editingModel && services.length > 1 && !blockSaving["model-order"]}'));
     assert(!source.includes('rounded-[inherit] object-cover'));
@@ -764,6 +766,12 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const invalid = await route.POST(makeRequest(before.map((s, i) => i === 0 ? { ...s, apiUrl: 'file:///bad' } : s), 'INVALID-MODEL'));
     assert.equal(invalid.status, 400);
     assert.equal(files(), originalCount, 'invalid settings must not leave uploaded files');
+    const branded = await route.POST(makeRequest(before.map((s, i) => i === 0 ? { ...s, provider: 'openai' } : s), 'BRANDED-MODEL'));
+    assert.equal(branded.status, 200);
+    const brandedUrl=(await branded.json()).url;
+    assert.equal(settings.getSiteSettings().modelServices[0].icons.openai, brandedUrl);
+    assert.equal(settings.getSiteSettings().modelServices[0].icons.custom, undefined);
+    assert.equal((await settingsRoute.PUT(request('admin', { modelServices: before }, 'PUT'))).status, 200);
     const saved = await route.POST(makeRequest(before, `MODEL-${Date.now().toString(36)}`));
     assert.equal(saved.status, 200);
     const { url } = await saved.json();
@@ -771,6 +779,20 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(fs.existsSync(path.join(temp, 'public', decodeURIComponent(url).replace(/^\//, ''))), true);
     assert.equal((await (await settingsRoute.GET(request('admin'))).json()).settings.modelServices[0].icon, url);
     assert.equal((await settingsRoute.PUT(request('admin', { modelServices: before }, 'PUT'))).status, 200);
+  });
+  await test('model icons are isolated by provider', () => {
+    const { normalizeModelServices } = require(path.join(root, 'lib/modelServices.ts'));
+    const base={id:'service',name:'Model',icon:'/uploads/asset/icon/custom.png',apiUrl:'https://example.com',apiKey:'',models:['model']};
+    for (const provider of ['deepseek','openai','jev']) {
+      assert.equal(normalizeModelServices([{...base,provider}])[0].icon,'');
+    }
+    assert.equal(normalizeModelServices([{...base,provider:'custom'}])[0].icon,base.icon);
+    const icons={deepseek:'/uploads/asset/icon/deepseek.png',openai:'/uploads/asset/icon/openai.png',custom:'/uploads/asset/icon/custom.png'};
+    for (const provider of ['deepseek','openai','custom']) {
+      const normalized=normalizeModelServices([{...base,provider,icons}])[0];
+      assert.equal(normalized.icon,icons[provider]);
+      assert.deepEqual(normalized.icons,icons);
+    }
   });
   await test('showcase 写接口限管理员：普通用户改不了首页车型条', async () => {
     const uploadRoute = require(path.join(root, 'app/api/showcase/models/upload/route.ts'));

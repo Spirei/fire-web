@@ -2264,9 +2264,10 @@ html.dark .watch-import-target {
 .model-list-heading button:hover { background: color-mix(in srgb, var(--sv-accent, #16a085) 7%, transparent); }
 .model-list-heading button b { font-size: 16px; line-height: 1; }
 .model-list { display: flex; flex-direction: column; gap: 7px; }
-.model-row { display: grid; grid-template-columns: 28px minmax(0,1fr) 46px 28px 28px 28px; align-items: center; gap: 5px; }
-.model-row .model-test-button { width: 46px; color: var(--sv-accent, #168b78); font-size: 10px; font-weight: 700; }
-.model-row .model-test-button.is-ok { border-color: rgba(34,197,94,.28); background: rgba(34,197,94,.07); color: #168447; }
+.model-row { display: grid; grid-template-columns: 28px minmax(0,1fr) 68px 28px 28px 28px; align-items: center; gap: 5px; }
+.model-row .model-test-button { width: 68px; gap: 4px; color: var(--sv-accent, #168b78); font-size: 10px; font-weight: 700; white-space: nowrap; }
+.model-row .model-test-button.is-ok { border-color: rgba(34,197,94,.28); background: rgba(34,197,94,.07); color: #168447; font-variant-numeric: tabular-nums; }
+.dark .model-row .model-test-button.is-ok { border-color: rgba(74,222,128,.35); background: rgba(74,222,128,.1); color: #86efac; }
 .model-row .model-test-button.is-error { border-color: rgba(239,68,68,.25); background: rgba(239,68,68,.06); color: #dc2626; }
 .model-test-result { grid-column: 2 / -1; margin-top: -1px; color: var(--sv-text-3, #8b93a0); font-size: 10px; }
 .model-test-result.is-ok { color: #168447; }
@@ -2290,8 +2291,8 @@ html.dark .watch-import-target {
   .model-identity-row { grid-template-columns: 1fr; align-items: stretch; }
   .model-icon-upload { width: fit-content; }
   .model-icon-controls { justify-content: flex-start; }
-  .model-row { grid-template-columns: 24px minmax(0,1fr) 42px 28px 28px 28px; }
-  .model-row .model-test-button { width: 42px; }
+  .model-row { grid-template-columns: 24px minmax(0,1fr) 62px 28px 28px 28px; }
+  .model-row .model-test-button { width: 62px; }
   .model-list-heading small { display: block; margin: 2px 0 0; }
 }
 

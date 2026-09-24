@@ -49,7 +49,7 @@ interface Props {
   onTabsChange: (tabs: TabConfig[]) => void;
   initialSub?: string;
   /** 服务端首帧设置快照，避免刷新时先渲染默认开关再回落到真实值 */
-  initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "groups" | "markets" | "marketLabels">;
+  initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "groups" | "markets" | "marketLabels" | "modelServices">;
 }
 
 const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "database", "cron", "about"] as const;
@@ -594,7 +594,7 @@ function ModelProviderIcon({ provider, icon, className = "h-10 w-10" }: { provid
       ) : provider === "jev" ? (
         <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 7h14v11a7 7 0 0 1-14 0"/><path d="M14 12h9M9 18h7"/></svg>
       ) : (
-        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5.5" y="5.5" width="21" height="21" rx="6"/><circle cx="16" cy="16" r="3"/><path d="M16 9v4m0 6v4M9 16h4m6 0h4"/></svg>
+        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="16" cy="16" r="12.5" strokeDasharray="3 3"/><path d="M16 10v12M10 16h12"/></svg>
       )}
     </span>
   );
@@ -3093,8 +3093,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 <div className="model-service-editor">
                                   <div className="model-provider-grid">
                                     {MODEL_PROVIDERS.map(item => (
-                                      <button key={item.id} type="button" disabled={!!uploadingModelIconId} onClick={() => updateService(service.id, { provider: item.id, name: service.name === "新模型服务" || MODEL_PROVIDERS.some(candidate => candidate.name === service.name) ? item.name : service.name, apiUrl: item.url || service.apiUrl, apiKey: item.id === service.provider ? service.apiKey : "", apiKeyConfigured: item.id === service.provider ? service.apiKeyConfigured : false, models: item.id === "jev" && service.provider !== "jev" ? ["jev-latest"] : service.provider === "jev" && item.id !== "jev" ? [""] : service.models })} className={`model-provider-option ${service.provider === item.id ? "is-active" : ""}`}>
-                                        <ModelProviderIcon provider={item.id} icon={item.id === service.provider ? service.icon : ""} className="h-8 w-8" />
+                                      <button key={item.id} type="button" disabled={!!uploadingModelIconId} onClick={() => updateService(service.id, { provider: item.id, name: service.name === "新模型服务" || MODEL_PROVIDERS.some(candidate => candidate.name === service.name) ? item.name : service.name, apiUrl: item.url || service.apiUrl, icon: service.icons?.[item.id] || "", apiKey: item.id === service.provider ? service.apiKey : "", apiKeyConfigured: item.id === service.provider ? service.apiKeyConfigured : false, models: item.id === "jev" && service.provider !== "jev" ? ["jev-latest"] : service.provider === "jev" && item.id !== "jev" ? [""] : service.models })} className={`model-provider-option ${service.provider === item.id ? "is-active" : ""}`}>
+                                        <ModelProviderIcon provider={item.id} icon={service.icons?.[item.id] || ""} className="h-8 w-8" />
                                         <span><b>{item.name}</b><small>{item.hint}</small></span><i className="model-provider-check" />
                                       </button>
                                     ))}
@@ -3123,7 +3123,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                         <ModelProviderIcon provider={service.provider} icon={service.icon} className="h-9 w-9" />
                                         <span>{uploadingModelIconId === service.id ? "保存中…" : service.icon ? "更换图标" : "上传图标"}</span>
                                       </label>
-                                      {service.icon && <button type="button" onClick={() => updateService(service.id, { icon: "" })}>恢复默认</button>}
+                                      {service.icon && <button type="button" onClick={() => updateService(service.id, { icon: "", icons: { ...service.icons, [service.provider]: "" } })}>恢复默认</button>}
                                     </div>
                                   </div>
                                   <label className="model-field"><span>API 地址<small>{service.provider === "jev" ? "TypeSafe System One 决策接口" : "OpenAI 兼容的 Chat Completions 地址"}</small></span><input className="sw-row-input" value={service.apiUrl} onChange={event => updateService(service.id, { apiUrl: event.target.value })} placeholder={service.provider === "jev" ? "https://api.typesafe.ai/v1/systemone" : "https://api.example.com/v1/chat/completions"} autoComplete="off" /></label>
@@ -3135,11 +3135,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                         <div className="model-row" key={`${service.id}-${modelIndex}`}>
                                           <span className="model-priority">{modelIndex + 1}</span>
                                           <input className="sw-row-input" value={model} maxLength={160} onChange={event => updateService(service.id, { models: service.models.map((item, index) => index === modelIndex ? event.target.value : item) })} placeholder={service.provider === "jev" ? "jev-latest" : "模型 ID"} />
-                                          <button type="button" className={`model-test-button is-${modelTestStates[`${service.id}:${model}`]?.state || "idle"}`} onClick={() => { void testModelService(service, model); }} disabled={!model || modelTestStates[`${service.id}:${model}`]?.state === "loading"} title={modelTestStates[`${service.id}:${model}`]?.text || "测试模型连接"}>{modelTestStates[`${service.id}:${model}`]?.state === "loading" ? "…" : modelTestStates[`${service.id}:${model}`]?.state === "ok" ? "✓" : modelTestStates[`${service.id}:${model}`]?.state === "error" ? "!" : "测试"}</button>
+                                          <button type="button" className={`model-test-button is-${modelTestStates[`${service.id}:${model}`]?.state || "idle"}`} onClick={() => { void testModelService(service, model); }} disabled={!model || modelTestStates[`${service.id}:${model}`]?.state === "loading"} title={modelTestStates[`${service.id}:${model}`]?.state === "ok" ? `连接成功，耗时 ${modelTestStates[`${service.id}:${model}`].text}；点击重新测试` : modelTestStates[`${service.id}:${model}`]?.text || "测试模型连接"}>{modelTestStates[`${service.id}:${model}`]?.state === "loading" ? "…" : modelTestStates[`${service.id}:${model}`]?.state === "ok" ? <><span aria-hidden="true">✓</span><span>{modelTestStates[`${service.id}:${model}`].text}</span></> : modelTestStates[`${service.id}:${model}`]?.state === "error" ? "重试" : "测试"}</button>
                                           <button type="button" onClick={() => { const next=[...service.models]; const [item]=next.splice(modelIndex,1); next.splice(modelIndex-1,0,item); updateService(service.id,{models:next}); }} disabled={modelIndex === 0} aria-label="模型上移">↑</button>
                                           <button type="button" onClick={() => { const next=[...service.models]; const [item]=next.splice(modelIndex,1); next.splice(modelIndex+1,0,item); updateService(service.id,{models:next}); }} disabled={modelIndex === service.models.length - 1} aria-label="模型下移">↓</button>
                                           <button type="button" onClick={() => updateService(service.id, { models: service.models.filter((_, index) => index !== modelIndex) })} disabled={service.models.length === 1} aria-label="删除模型"><DeleteIcon className="h-4 w-4" /></button>
-                                          {modelTestStates[`${service.id}:${model}`] && modelTestStates[`${service.id}:${model}`].state !== "loading" && <span className={`model-test-result is-${modelTestStates[`${service.id}:${model}`].state}`}>{modelTestStates[`${service.id}:${model}`].state === "ok" ? `连接成功 · ${modelTestStates[`${service.id}:${model}`].text}` : modelTestStates[`${service.id}:${model}`].text}</span>}
+                                          {modelTestStates[`${service.id}:${model}`]?.state === "error" && <span className="model-test-result is-error">{modelTestStates[`${service.id}:${model}`].text}</span>}
                                         </div>
                                       ))}
                                     </div>

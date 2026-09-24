@@ -10,6 +10,14 @@ export function normalizeModelServices(value: unknown): ModelServiceConfig[] {
     if (!raw || typeof raw !== "object") return [];
     const item = raw as Record<string, unknown>;
     const provider = PROVIDERS.has(String(item.provider)) ? String(item.provider) as ModelServiceConfig["provider"] : "custom";
+    const icons: NonNullable<ModelServiceConfig["icons"]> = {};
+    if (item.icons && typeof item.icons === "object" && !Array.isArray(item.icons)) {
+      for (const [key, value] of Object.entries(item.icons)) {
+        if (PROVIDERS.has(key) && typeof value === "string" && value.trim()) icons[key as ModelServiceConfig["provider"]] = value.trim().slice(0, 500);
+      }
+    }
+    // 旧版单图标没有来源标记；仅自定义服务可安全继承，避免品牌间串图。
+    if (provider === "custom" && !icons.custom && typeof item.icon === "string") icons.custom = item.icon.trim().slice(0, 500);
     const fallbackId = `model-service-${index + 1}`;
     let id = String(item.id || fallbackId).trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || fallbackId;
     while (seen.has(id)) id = `${fallbackId}-${seen.size + 1}`;
@@ -21,7 +29,8 @@ export function normalizeModelServices(value: unknown): ModelServiceConfig[] {
       id,
       name: String(item.name || (provider === "deepseek" ? "DeepSeek" : provider === "openai" ? "OpenAI" : provider === "jev" ? "Jev" : "自定义服务")).trim().slice(0, 50),
       provider,
-      icon: String(item.icon || "").trim().slice(0, 500),
+      icon: icons[provider] || "",
+      icons,
       apiUrl: String(item.apiUrl || "").trim().slice(0, 2048),
       apiKey: String(item.apiKey || "").trim().slice(0, 500),
       models
@@ -46,6 +55,7 @@ export function prepareModelServices(value: unknown, previous: SiteSettings): Mo
     if (!service.name || !service.models.length) throw new Error("每个模型服务都需要名称和至少一个模型");
     if (!validateAssistantEndpoint(service.apiUrl)) throw new Error(`${service.name} 的 API 地址无效或不安全`);
     if (service.icon && !/^\/uploads\/(?:asset\/icon|logo)\//.test(service.icon)) throw new Error(`${service.name} 的图标路径无效`);
+    if (Object.values(service.icons || {}).some(icon => icon && !/^\/uploads\/(?:asset\/icon|logo)\//.test(icon))) throw new Error(`${service.name} 的图标路径无效`);
     return service;
   });
 }

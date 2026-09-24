@@ -38,8 +38,8 @@ export function urlReferenced(url: string): boolean {
   const modelRow = db.prepare("SELECT value FROM site_settings WHERE key = 'modelServices'").get() as { value?: string } | undefined;
   let modelServiceRef = 0;
   try {
-    const services = JSON.parse(modelRow?.value || "[]") as Array<{ icon?: string }>;
-    if (services.some(item => item?.icon === url)) modelServiceRef = 1;
+    const services = JSON.parse(modelRow?.value || "[]") as Array<{ icon?: string; icons?: Record<string, string> }>;
+    if (services.some(item => item?.icon === url || Object.values(item?.icons || {}).includes(url))) modelServiceRef = 1;
   } catch { /* malformed settings do not count as references */ }
   const u = (db.prepare("SELECT COUNT(*) AS c FROM users WHERE avatar = ?").get(url) as { c: number }).c;
   const c = (db.prepare("SELECT COUNT(*) AS c FROM celebs WHERE avatar = ?").get(url) as { c: number }).c;
@@ -148,7 +148,10 @@ export function cleanupOrphanFiles(options: { scope?: "showcase-unsaved" } = {})
   ).forEach((r) => addRef(r.value));
   try {
     const row = db.prepare("SELECT value FROM site_settings WHERE key = 'modelServices'").get() as { value?: string } | undefined;
-    (JSON.parse(row?.value || "[]") as Array<{ icon?: string }>).forEach(item => addRef(item?.icon));
+    (JSON.parse(row?.value || "[]") as Array<{ icon?: string; icons?: Record<string, string> }>).forEach(item => {
+      addRef(item?.icon);
+      Object.values(item?.icons || {}).forEach(addRef);
+    });
   } catch { /* 无效模型服务配置忽略 */ }
   try {
     const avatars = JSON.parse(fs.readFileSync(CELEB_AVATARS_FILE, "utf8")) as Record<string, string>;

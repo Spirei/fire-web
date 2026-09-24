@@ -117,7 +117,7 @@ export default function RecordsApp({
   initialUserLogs: SystemLog[];
   initialAssistantHistory?: import("@/lib/assistantHistory").AssistantHistoryState;
   initialFundBalances: Record<string, number>;
-  initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled">;
+  initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices">;
   initialStockIcons: Record<string, string>;
   initialMarketIcons?: Record<string, string>;
   initialNavIcons?: Record<string, string>;

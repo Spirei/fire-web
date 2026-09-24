@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { getSiteSettings } from "@/lib/settings";
 import { getCelebAvatars } from "@/lib/celebsData";
-import { LEGACY_SESSION_COOKIE, SESSION_COOKIE, getUserByToken, needsSetup } from "@/lib/auth";
+import { LEGACY_SESSION_COOKIE, SESSION_COOKIE, getUserByToken, isAdmin, needsSetup } from "@/lib/auth";
+import { clientSettings } from "@/lib/settingsClient";
 import { listRecords, listSecurityLogs } from "@/lib/store";
 import RecordsApp from "@/components/RecordsApp";
 import UserMenu from "@/components/UserMenu";
@@ -155,7 +156,8 @@ export default async function SlugLayout({
             marketBadges: settings.marketBadges,
             marketBadgesVisible: settings.marketBadgesVisible,
             allowRegister: settings.allowRegister,
-            translationEnabled: settings.translationEnabled
+            translationEnabled: settings.translationEnabled,
+            modelServices: clientSettings(settings, isAdmin(user)).modelServices
           }}
         />
         </CurrencyProvider>

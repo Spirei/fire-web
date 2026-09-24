@@ -301,6 +301,7 @@ export interface ModelServiceConfig {
   name: string;
   provider: "deepseek" | "openai" | "jev" | "custom";
   icon: string;
+  icons?: Partial<Record<"deepseek" | "openai" | "jev" | "custom", string>>;
   apiUrl: string;
   apiKey: string;
   apiKeyConfigured?: boolean;

@@ -21,7 +21,8 @@ export async function POST(request: Request) {
   let services;
   try {
     services = prepareModelServices(JSON.parse(String(form.get("modelServices") || "")), before);
-    if (!services.some(item => item.id === serviceId)) throw new Error("模型服务不存在");
+    const target = services.find(item => item.id === serviceId);
+    if (!target) throw new Error("模型服务不存在");
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "模型服务格式无效" }, { status: 400 });
   }
@@ -29,10 +30,14 @@ export async function POST(request: Request) {
   let url = "";
   try {
     ({ url } = await saveUpload(request));
-    const next = services.map(item => item.id === serviceId ? { ...item, icon: url } : item);
+    const next = services.map(item => item.id === serviceId ? { ...item, icon: url, icons: { ...item.icons, [item.provider]: url } } : item);
     const settings = updateSiteSettings({ modelServices: next });
-    const activeIcons = new Set(settings.modelServices.map(item => item.icon).filter(Boolean));
-    before.modelServices.forEach(item => { if (item.icon && !activeIcons.has(item.icon)) removeFileIfUnused(item.icon); });
+    const activeIcons = new Set(settings.modelServices.flatMap(item => [item.icon, ...Object.values(item.icons || {})]).filter(Boolean));
+    before.modelServices.forEach(item => {
+      for (const icon of new Set([item.icon, ...Object.values(item.icons || {})])) {
+        if (icon && !activeIcons.has(icon)) removeFileIfUnused(icon);
+      }
+    });
     return NextResponse.json({ url, settings: clientSettings(settings, true) });
   } catch (error) {
     if (url) removeFileIfUnused(url);
