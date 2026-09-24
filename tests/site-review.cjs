@@ -53,6 +53,28 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal((await settingsRoute.GET(request())).status, 401);
     assert.equal((await settingsRoute.PUT(request('user', {assetMarketOrder:['HK','US']},'PUT'))).status,403);
   });
+  await test('FIRE manual asset records keep their baseline, percentage and account isolation', async () => {
+    const route = require(path.join(root, 'app/api/v1/fire-settings/route.ts'));
+    const { fireAssetChange } = require(path.join(root, 'lib/fireAssetHistory.ts'));
+    const req = (role, body) => new Request('http://localhost:3000/api/v1/fire-settings', {
+      method: body ? 'PUT' : 'GET',
+      headers: { ...(role ? { cookie: `fire_session=${tokens[role]}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {})
+    });
+    assert.equal((await route.PUT(req(null, { fire: {}, assetRecord: { amountBase: 100, amountUsd: 100, currency: 'USD' } }))).status, 401);
+    assert.equal((await route.PUT(req('user', { fire: {}, assetRecord: { amountBase: -1, amountUsd: -1, currency: 'USD' } }))).status, 400);
+    const baseline = await route.PUT(req('user', { fire: { currentInput: '700' }, assetRecord: { amountBase: 700, amountUsd: 100, currency: 'CNY' } }));
+    assert.equal(baseline.status, 200);
+    assert.equal((await baseline.json()).assetHistory.length, 1);
+    const second = await route.PUT(req('user', { fire: { currentInput: '770', assetHistory: [] }, assetRecord: { amountBase: 770, amountUsd: 110, currency: 'CNY' } }));
+    assert.equal(second.status, 200);
+    const history = (await second.json()).assetHistory;
+    assert.equal(history.length, 2);
+    assert(Math.abs(fireAssetChange(history[0].amountUsd, history[1].amountUsd) - 10) < 1e-9);
+    await route.PUT(req('user', { fire: { currentInput: '770', assetHistory: [] } }));
+    assert.equal((await (await route.GET(req('user'))).json()).fire.assetHistory.length, 2, 'ordinary autosave must preserve asset history');
+    assert.deepEqual((await (await route.GET(req('other'))).json()).fire, {}, 'another account must not see the records');
+  });
   await test('model service validates provider, URL and model id', async () => {
     assert.equal((await settingsRoute.PUT(request('admin', {llmApiUrl:'file:///etc/passwd'},'PUT'))).status,400);
     assert.equal((await settingsRoute.PUT(request('admin', {llmModel:'x'.repeat(161)},'PUT'))).status,400);

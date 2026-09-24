@@ -2,6 +2,7 @@ import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { getUserFire, setUserFire } from "@/lib/fireStore";
+import { validFireAssetAmount } from "@/lib/fireAssetHistory";
 import { rateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +43,16 @@ export async function PUT(request: Request) {
   if (Buffer.byteLength(JSON.stringify(fire), "utf8") > MAX_FIRE_BYTES) {
     return NextResponse.json({ error: "数据过大" }, { status: 400 });
   }
-  setUserFire(user.id, fire);
-  return NextResponse.json({ ok: true });
+  let assetRecord;
+  if (body?.assetRecord != null) {
+    const amountBase = Number(body.assetRecord.amountBase);
+    const amountUsd = Number(body.assetRecord.amountUsd);
+    const currency = String(body.assetRecord.currency ?? "");
+    if (!validFireAssetAmount(amountBase, amountUsd, currency)) {
+      return NextResponse.json({ error: "请输入有效的当前资产" }, { status: 400 });
+    }
+    assetRecord = { recordedAt: new Date().toISOString(), amountBase, amountUsd, currency };
+  }
+  const assetHistory = setUserFire(user.id, fire, assetRecord);
+  return NextResponse.json({ ok: true, assetHistory });
 }

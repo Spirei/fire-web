@@ -8,6 +8,8 @@ import { CURRENCIES, type CurrencyCode } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
 import FireReefCurrent from "@/components/FireReefCurrent";
 import { fmtMoneyAdaptive } from "@/lib/format";
+import FireAssetHeatmap from "@/components/FireAssetHeatmap";
+import { readFireAssetHistory, type FireAssetRecord } from "@/lib/fireAssetHistory";
 
 const CURRENCY_OPTIONS: { value: CurrencyCode; label: string; code: CurrencyCode; market: string; flag: string }[] = CURRENCIES.map((c) => ({
   value: c.code,
@@ -44,6 +46,10 @@ function lsGet(key: string, fallback: string) {
 }
 function lsSet(key: string, v: string) {
   try { localStorage.setItem(key, v); } catch { /* 忽略 */ }
+}
+function localAssetHistory() {
+  try { return readFireAssetHistory(JSON.parse(lsGet("fire:fire-asset-history", "[]"))); }
+  catch { return []; }
 }
 
 /** FIRE 页主货币的默认值（用户改过就以 usePersistedState 读到的为准，刷新不再先闪人民币） */
@@ -458,6 +464,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   const savedCurrent = lsGet("fire:fire-current-ovr", "");
   const [currentInput, setCurrentInput] = useState(() => savedCurrent || String(Math.round(currentAssets * baseRate)));
   const currentDirty = useRef(Boolean(savedCurrent && Number(savedCurrent) !== 0));
+  const currentInputEdited = useRef(false);
   const effCurUsd = currentDirty.current && Number(currentInput) > 0 ? Number(currentInput) / (baseRate || 1) : currentAssets;
   const curAssets = effCurUsd * curRate;
   const curCost = costAssets * baseRate; // 主货币：总成本/原始资产
@@ -596,6 +603,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
     dirty: { current: boolean; passive: boolean; original: boolean; years: boolean; table: boolean; currentRow: boolean; fireTarget: boolean };
   } | null>(null);
   function startEdit() {
+    currentInputEdited.current = false;
     editSnapshot.current = {
       annualExpense, withdrawalRate, annualReturn, inflation, savingsRate,
       fireTargetBase, currentInput, passiveInput, originalInput, yearsInput,
@@ -609,6 +617,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
     setEditing(true);
   }
   function cancelEdit() {
+    currentInputEdited.current = false;
     const s = editSnapshot.current;
     if (s) {
       setAnnualExpense(s.annualExpense); setWithdrawalRate(s.withdrawalRate); setAnnualReturn(s.annualReturn);
@@ -639,14 +648,20 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
 
   // —— 跨设备同步：把 FIRE 手填配置存到服务端（按用户），登录同一账号任何设备一致 ——
   const [serverLoaded, setServerLoaded] = useState(false);
+  const [storageMode, setStorageMode] = useState<"server" | "guest" | "unavailable">("unavailable");
+  const [assetHistory, setAssetHistory] = useState<FireAssetRecord[]>([]);
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     let alive = true;
     fetch("/api/v1/fire-settings")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
+      .then(async (r) => ({ status: r.status, data: r.ok ? await r.json() : null }))
+      .then(({ status, data }) => {
         if (!alive) return;
-        if (d?.fire && typeof d.fire === "object") {
-          const f = d.fire as Record<string, unknown>;
+        if (status === 200 && data?.fire && typeof data.fire === "object") {
+          setStorageMode("server");
+          const f = data.fire as Record<string, unknown>;
+          setAssetHistory(readFireAssetHistory(f.assetHistory));
           if (typeof f.annualExpense === "number") setAnnualExpense(Number(f.annualExpense) || annualExpense);
           if (typeof f.withdrawalRate === "number") setWithdrawalRate(Number(f.withdrawalRate) || withdrawalRate);
           if (typeof f.annualReturn === "number") setAnnualReturn(Number(f.annualReturn) || annualReturn);
@@ -679,13 +694,57 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
             setBaseCurrency(loadedDefault);
             setDisplayCurrency(loadedDefault);
           }
+        } else if (status === 401) {
+          setStorageMode("guest");
+          setAssetHistory(localAssetHistory());
         }
         setServerLoaded(true);
       })
-      .catch(() => {});
+      .catch(() => { if (alive) setServerLoaded(true); });
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function saveEdit() {
+    if (saving) return;
+    setSaveError("");
+    const amountBase = Number(currentInput);
+    const assetRecord = currentInputEdited.current
+      ? { amountBase, amountUsd: amountBase / baseRate, currency: baseCurrency }
+      : undefined;
+    if (assetRecord && (!Number.isFinite(assetRecord.amountUsd) || assetRecord.amountUsd <= 0)) {
+      setSaveError("请输入大于零的当前资产");
+      return;
+    }
+    const payload = { annualExpense, withdrawalRate, annualReturn, inflation, savingsRate, fireTargetBase, fireTargetUsd, currentInput: currentDirty.current ? currentInput : null, passiveInput, originalInput, yearsInput, displayCurrency, baseCurrency, tableRows };
+    if (storageMode === "unavailable") {
+      setSaveError("暂时无法连接资产记录服务，请稍后重试");
+      return;
+    }
+    if (storageMode === "guest") {
+      if (assetRecord) {
+        const next = [...assetHistory, { ...assetRecord, recordedAt: new Date().toISOString() }].slice(-1500);
+        setAssetHistory(next);
+        lsSet("fire:fire-asset-history", JSON.stringify(next));
+      }
+      currentInputEdited.current = false;
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch("/api/v1/fire-settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fire: payload, assetRecord }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "保存失败，请重试");
+      setAssetHistory(readFireAssetHistory(data.assetHistory));
+      currentInputEdited.current = false;
+      setEditing(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "保存失败，请重试");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // 【跨年落账】检测到新年（比上次结算年大）时，把刚结束的那一年用当前实时值快照固化
   const lastSettledRef = useRef<number>(Number(lsGet("fire:fire-settled", "0")) || 0);
@@ -725,13 +784,13 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
 
   // 防抖保存：任一配置变化后 600ms 写回服务端
   useEffect(() => {
-    if (!serverLoaded || editing) return;
+    if (!serverLoaded || editing || storageMode !== "server") return;
     const t = setTimeout(() => {
       const payload = { annualExpense, withdrawalRate, annualReturn, inflation, savingsRate, fireTargetBase, fireTargetUsd, currentInput: currentDirty.current ? currentInput : null, passiveInput, originalInput, yearsInput, displayCurrency, baseCurrency, tableRows };
       fetch("/api/v1/fire-settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fire: payload }) }).catch(() => {});
     }, 600);
     return () => clearTimeout(t);
-  }, [serverLoaded, editing, annualExpense, withdrawalRate, annualReturn, inflation, savingsRate, fireTargetBase, fireTargetUsd, currentInput, passiveInput, originalInput, yearsInput, displayCurrency, baseCurrency, tableRows]);
+  }, [serverLoaded, editing, storageMode, annualExpense, withdrawalRate, annualReturn, inflation, savingsRate, fireTargetBase, fireTargetUsd, currentInput, passiveInput, originalInput, yearsInput, displayCurrency, baseCurrency, tableRows]);
 
   const inputCls =
     "w-full rounded-lg border border-edge bg-white px-2.5 py-1.5 text-sm text-ink-2 outline-none transition-colors focus:border-brand dark:border-edge-strong dark:bg-[#1c1c1e] dark:text-white";
@@ -823,10 +882,11 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => (editing ? setEditing(false) : startEdit())}
+              onClick={() => (editing ? void saveEdit() : startEdit())}
+              disabled={saving}
               className={`fire-edit-button inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium ${editing ? "fire-save-btn text-white" : "border border-edge bg-white text-ink-2 hover:bg-bg-gray dark:border-edge-strong dark:bg-[#1c1c1e] dark:text-white dark:hover:bg-[#26282e]"}`}
             >
-              {editing ? "保存" : "编辑"}
+              {saving ? "保存中…" : editing ? "保存" : "编辑"}
             </button>
             {editing && (
               <button
@@ -840,6 +900,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
             )}
           </div>
         </div>
+        {saveError && <p className="mt-2 text-right text-xs text-red-500" role="alert">{saveError}</p>}
       </div>
       {/* 顶部圆气泡：Apple 风格玻璃水球，水位随 FIRE 进度升降、缓慢呼吸 */}
       <div className="mb-10 flex flex-col items-center">
@@ -995,11 +1056,11 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
             <label className={labelCls}>当前资产</label>
             {editing ? (
               <div className="flex items-center gap-1">
-                <input type="number" value={currentInput} onChange={(e) => { currentDirty.current = true; setCurrentInput(e.target.value); }} className={inputCls} />
+                <input type="number" value={currentInput} onChange={(e) => { currentDirty.current = true; currentInputEdited.current = true; setCurrentInput(e.target.value); }} className={inputCls} />
                 {currentDirty.current && (
                   <button
                     type="button"
-                    onClick={() => { currentDirty.current = false; setCurrentInput(String(Math.round(currentAssets * baseRate))); }}
+                    onClick={() => { currentDirty.current = false; currentInputEdited.current = false; setCurrentInput(String(Math.round(currentAssets * baseRate))); }}
                     title="恢复为真实资产"
                     className="flex-none rounded-md border border-edge px-2 py-1 text-[11px] text-muted transition-colors hover:border-edge-strong hover:text-ink-2 dark:border-edge-strong"
                   >
@@ -1181,6 +1242,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
           1 USD = {Number(curRate.toFixed(4))} {displayCurrency} · 更新于 {new Date(ratesAt).getFullYear()}.{new Date(ratesAt).getMonth() + 1}.{new Date(ratesAt).getDate()}
         </span>
       </div>
+      <FireAssetHeatmap history={assetHistory} />
     </div>
   );
 }
