@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "NEXT_DIST_DIR=.next-dev next dev -H 0.0.0.0 -p 3000",
+    "prebuild": "node scripts/generate-showcase-ktx-worker.mjs",
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p 3000",
     "audit:public": "node scripts/audit-public-repo.mjs",

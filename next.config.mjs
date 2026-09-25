@@ -84,6 +84,12 @@ const nextConfig = {
         ]
       },
       {
+        source: "/vendor/basis/showcase-ktx-worker.js",
+        headers: [
+          { key: "Content-Security-Policy", value: "default-src 'none'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; connect-src 'self'; object-src 'none'" }
+        ]
+      },
+      {
         source: "/uploads/:path*",
         headers: [
           { key: "Content-Security-Policy", value: "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'" },

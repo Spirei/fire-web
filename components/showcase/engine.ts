@@ -12,7 +12,7 @@
  * 本文件不含任何车型相关常量。它只在浏览器里被动态 import，不会进入首屏包。
  */
 import * as THREE from "three";
-import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
+import { ShowcaseKTX2Loader } from "./ktxLoader";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
@@ -249,7 +249,7 @@ export function createShowcaseScene(options: ShowcaseOptions): ShowcaseHandle {
   // 参考项目 su7 的渲染器是 antialias:false（后期链路里 MSAA 用不上，只会多占显存），保持一致
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
   renderer.setPixelRatio(budgetRatio(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, desiredPixelRatio()));
-  const ktxLoader = new KTX2Loader().setTranscoderPath("/vendor/basis/").setWorkerLimit(1).detectSupport(renderer);
+  const ktxLoader = new ShowcaseKTX2Loader().setWorkerLimit(1).detectSupport(renderer);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = CFG.post.exposure;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
