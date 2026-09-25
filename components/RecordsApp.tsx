@@ -26,15 +26,15 @@ import { primeFlagIconCache, primeMarketIconCache, primeNavIconCache, primeStock
 import { pickStockIcon } from "@/lib/stockIconKey";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
-import WatchlistView from "@/components/views/WatchlistView";
 import type { WatchGroup } from "@/lib/watchGroups";
-import HoldingsView from "@/components/views/HoldingsView";
-import AssetAnalysisView from "@/components/views/AssetAnalysisView";
 import FourDoorNavigator from "@/components/FourDoorNavigator";
 import { usePersistedState } from "@/lib/usePersistedState";
 
-// 持仓 / 自选 / 资产分析随壳同步渲染，避免刷新当前页被 loading 挡板盖住。
-// 其余页签按需加载，且不设 loading，所以不会再闪「加载中…」。
+// 默认保留服务端渲染：刷新当前页仍随 HTML 直接呈现内容；仅客户端代码按页签拆包。
+// 不设 loading 挡板，切换页签时也不显示整屏「加载中…」。
+const WatchlistView = dynamic(() => import("@/components/views/WatchlistView"));
+const HoldingsView = dynamic(() => import("@/components/views/HoldingsView"));
+const AssetAnalysisView = dynamic(() => import("@/components/views/AssetAnalysisView"));
 const FireView = dynamic(() => import("@/components/views/FireView"));
 const ActivitiesView = dynamic(() => import("@/components/views/ActivitiesView"));
 const EarningsCalendarView = dynamic(() => import("@/components/views/EarningsCalendarView"));
