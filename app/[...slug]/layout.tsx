@@ -80,7 +80,8 @@ export default async function SlugLayout({
   const initialRecords = listRecords(user.id);
   // 自选股分组随记录一并进入服务端首屏，避免刷新时客户端请求完成前只显示“全部”。
   const initialWatchGroups = tab.key === "watchlist" ? listWatchGroups(user.id) : [];
-  const initialUserLogs = listSecurityLogs(200, user.id);
+  // 日志只在日志页首屏使用；其他页进入日志时再按需读取。
+  const initialUserLogs = tab.key === "activities" ? listSecurityLogs(200, user.id) : [];
   const initialAssistantHistory = getAssistantHistoryState(user.id);
   // 资金余额与持仓记录一起进入首屏，避免切到“我的持仓”时先按 0 现金计算、随后再跳到完整净资产。
   const initialFundBalances = fundState(user.id).balances;

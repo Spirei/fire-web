@@ -149,6 +149,7 @@ export default function RecordsApp({
   const [userLogs, setUserLogs] = useState<SystemLog[]>(initialUserLogs);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
+  const skipInitialActivityFetchRef = useRef(initialTab === "activities");
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
   const [navReady, setNavReady] = useState(true);
   const [settingsSub, setSettingsSub] = useState<string | null>(null);
@@ -273,6 +274,16 @@ export default function RecordsApp({
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "activities") return;
+    // 直达日志页已有服务端首屏数据，其他页切入日志时才请求。
+    if (skipInitialActivityFetchRef.current) {
+      skipInitialActivityFetchRef.current = false;
+      return;
+    }
+    reloadActivities();
+  }, [activeTab, reloadActivities]);
 
   const reloadSettings = useCallback(() => {
     fetch("/api/settings")
