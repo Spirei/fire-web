@@ -67,6 +67,26 @@ export function fxCurrencyMeta(code: string): { label: string; symbol: string; i
   return { label, symbol, iso: "" };
 }
 
+/** 新增菜单按货币主要使用地区归类；接口返回的新代码仍可落在「其他」。 */
+export const FX_CONTINENTS = ["亚洲", "欧洲", "北美洲", "南美洲", "大洋洲", "非洲", "其他"] as const;
+export type FxContinent = typeof FX_CONTINENTS[number];
+
+const FX_CONTINENT_CODES: Record<Exclude<FxContinent, "其他">, readonly string[]> = {
+  亚洲: ["AED", "CNY", "HKD", "IDR", "ILS", "INR", "JPY", "KRW", "MOP", "MYR", "PHP", "SAR", "SGD", "THB", "TRY", "TWD", "VND"],
+  欧洲: ["BGN", "CHF", "CZK", "DKK", "EUR", "GBP", "HUF", "ISK", "NOK", "PLN", "RON", "RSD", "RUB", "SEK", "UAH"],
+  北美洲: ["CAD", "MXN", "USD"],
+  南美洲: ["ARS", "BOB", "BRL", "CLP", "COP", "PEN", "UYU"],
+  大洋洲: ["AUD", "FJD", "NZD", "PGK"],
+  非洲: ["EGP", "GHS", "KES", "MAD", "NGN", "TND", "ZAR"]
+};
+
+export function fxContinent(code: string): FxContinent {
+  for (const continent of FX_CONTINENTS) {
+    if (continent !== "其他" && FX_CONTINENT_CODES[continent].includes(code)) return continent;
+  }
+  return "其他";
+}
+
 export function isFxCurrency(value: unknown): value is FxCurrency {
   return typeof value === "string" && /^[A-Z]{3}$/.test(value);
 }

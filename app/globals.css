@@ -3995,6 +3995,8 @@ html.dark .watch-import-target {
 .fx-converter-add:hover,.fx-converter-refresh:hover { background:#f3f5f8; color:#1f2937; }
 .fx-converter-refresh:disabled { opacity:.55; cursor:wait; }
 .fx-converter-add-menu { position:absolute; z-index:30; top:34px; left:0; width:215px; max-height:300px; overflow-y:auto; padding:5px; border:1px solid #d8dde5; border-radius:12px; background:#fff; box-shadow:0 12px 32px rgb(15 23 42 / 15%); }
+.fx-converter-add-group + .fx-converter-add-group { margin-top:4px; border-top:1px solid #eef0f3; padding-top:4px; }
+.fx-converter-add-heading { position:sticky; top:-5px; z-index:1; padding:6px 8px 3px; background:#fff; color:#8b93a0; font-size:10px; font-weight:700; letter-spacing:.06em; }
 .fx-converter-add-menu button { display:flex; align-items:center; gap:8px; width:100%; min-height:34px; padding:5px 8px; border-radius:7px; text-align:left; font-size:12px; color:#253044; }
 .fx-converter-add-menu button:hover { background:#f3f5f8; }
 .fx-converter-add-menu button small { margin-left:auto; color:#8992a0; }
@@ -4006,6 +4008,8 @@ html.dark .watch-import-target {
 .dark .fx-converter-add,.dark .fx-converter-refresh { border-color:#39414e; background:#171b22; color:#a2adba; }
 .dark .fx-converter-add:hover,.dark .fx-converter-refresh:hover,.dark .fx-converter-add-menu button:hover { background:#252c36; color:#f0f3f7; }
 .dark .fx-converter-add-menu { border-color:#39414e; background:#171b22; box-shadow:0 12px 32px rgb(0 0 0 / 35%); }
+.dark .fx-converter-add-group + .fx-converter-add-group { border-top-color:#303844; }
+.dark .fx-converter-add-heading { background:#171b22; color:#8d98a8; }
 .dark .fx-converter-add-menu button { color:#e9edf3; }
 .dark .fx-converter-code-mark { background:#303844; color:#d5deea; }
 .dark .fx-converter-remove:hover { background:#303844; color:#f0f3f7; }

@@ -9,7 +9,9 @@ import { showToast } from "@/lib/toast";
 import {
   FX_CURRENCIES,
   FX_EXTRA_CURRENCIES,
+  FX_CONTINENTS,
   fxCurrencyMeta,
+  fxContinent,
   type FxCurrency,
   amountToDraft,
   convertAmount,
@@ -70,6 +72,7 @@ export default function FxConverter() {
   const [rateError, setRateError] = useState("");
   const codes = normalizeFxOrder(savedOrder);
   const addable = [...new Set([...FX_EXTRA_CURRENCIES, ...quoted])].filter(code => code !== "USD" && !codes.includes(code) && (code === "MOP" || (rates[code] ?? 0) > 0)).sort((a, b) => a.localeCompare(b));
+  const addableByContinent = FX_CONTINENTS.map(continent => ({ continent, items: addable.filter(code => fxContinent(code) === continent) })).filter(group => group.items.length > 0);
   const inputRefs = useRef<Partial<Record<FxCurrency, HTMLInputElement | null>>>({});
   const addMenuRef = useRef<HTMLDivElement | null>(null);
   const dragFrom = useRef<number | null>(null);
@@ -181,7 +184,7 @@ export default function FxConverter() {
             <button type="button" className="fx-converter-add" onClick={() => setAdding(value => !value)} aria-label="新增货币" title="新增货币" aria-expanded={adding}><IconPlus size={15} stroke={1.8} /></button>
             <button type="button" className="fx-converter-refresh" onClick={() => void loadRates(true)} disabled={refreshing} aria-label="刷新汇率" title="刷新汇率"><IconRefresh size={15} stroke={1.8} className={refreshing ? "animate-spin" : ""} /></button>
             {adding && <div className="fx-converter-add-menu" role="menu" aria-label="可新增货币">
-              {addable.map(code => { const meta = fxCurrencyMeta(code); return <button key={code} type="button" role="menuitem" onClick={() => { setSavedOrder([...codes, code]); setAdding(false); }}>{meta.iso ? <CurrencyFlag market={meta.iso} size={18} /> : <span className="fx-converter-code-mark">{code.slice(0, 1)}</span>}<span>{meta.label}</span><small>{code}</small></button>; })}
+              {addableByContinent.map(group => <div key={group.continent} role="group" aria-label={group.continent} className="fx-converter-add-group"><div className="fx-converter-add-heading">{group.continent}</div>{group.items.map(code => { const meta = fxCurrencyMeta(code); return <button key={code} type="button" role="menuitem" onClick={() => { setSavedOrder([...codes, code]); setAdding(false); }}>{meta.iso ? <CurrencyFlag market={meta.iso} size={18} /> : <span className="fx-converter-code-mark">{code.slice(0, 1)}</span>}<span>{meta.label}</span><small>{code}</small></button>; })}</div>)}
               {!addable.length && <span className="fx-converter-add-empty">暂无更多可添加货币；刷新汇率后可查看接口支持的币种</span>}
             </div>}
           </div>
