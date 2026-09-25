@@ -1,4 +1,26 @@
 services:
+  fire-model-worker:
+    image: ${GHCR_IMAGE:?请在 .env 中设置 GHCR_IMAGE}-model-worker:${IMAGE_TAG:-latest}
+    container_name: fire-model-worker
+    restart: unless-stopped
+    init: true
+    network_mode: none
+    environment:
+      NODE_ENV: production
+      UV_THREADPOOL_SIZE: "2"
+    volumes:
+      - ${UPLOADS_DIR:-./uploads}:/app/public/uploads
+    cpus: 2.0
+    mem_limit: 8g
+    pids_limit: 128
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.scope: "fire"
+
   fire:
     # 在 .env 中设置 GHCR_IMAGE，例如 ghcr.io/your-github-name/fire-web。
     image: ${GHCR_IMAGE:?请在 .env 中设置 GHCR_IMAGE}:${IMAGE_TAG:-latest}

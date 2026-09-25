@@ -39,6 +39,12 @@
 .mpl-step-foot strong { color: var(--mpl-ink); font-size: 11px; font-weight: 730; }
 .mpl-step-foot a { display: inline-flex; gap: 7px; margin-left: auto; color: var(--mpl-accent); font-size: 11px; font-weight: 750; }
 .mpl-command { display: inline-block; max-width: calc(100% - 51px); margin: 13px 0 0 51px; padding: 7px 9px; border: 1px solid var(--mpl-line); border-radius: 4px; background: var(--mpl-surface-soft); color: var(--mpl-ink); font-size: 10px; overflow-wrap: anywhere; }
+.mpl-methods { display: flex; gap: 8px; margin: 18px 0 0 51px; }
+.mpl-methods button { min-height: 35px; padding: 0 15px; border: 1px solid var(--mpl-line); border-radius: 5px; background: var(--mpl-surface-soft); color: var(--mpl-muted); font-size: 11px; font-weight: 700; cursor: pointer; }
+.mpl-methods button.is-active { border-color: var(--mpl-accent); background: var(--mpl-surface); color: var(--mpl-ink); }
+.mpl-job { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 18px; padding: 12px; border: 1px dashed var(--mpl-strong-line); color: var(--mpl-ink); font-size: 11px; }
+.mpl-job button { padding: 6px 10px; border: 1px solid var(--mpl-line); border-radius: 4px; background: var(--mpl-surface-soft); font-weight: 700; }
+.mpl-job small { color: var(--mpl-muted); }
 .mpl-page .mp-pipeline { position: relative; width: 100%; max-width: none; margin: 0; padding: 0; gap: 48px; color: var(--mpl-ink); }
 .mpl-page .mp-pipeline::after { content: "↓"; position: absolute; left: calc(50% - 11px); bottom: -44px; z-index: 1; display: grid; place-items: center; width: 22px; height: 22px; background: var(--mpl-bg); color: var(--mpl-accent); font-size: 19px; line-height: 1; }
 .mpl-page .mp-pipeline::before { content: ""; position: absolute; left: 50%; bottom: -48px; height: 48px; border-left: 1px dashed var(--mpl-strong-line); }
@@ -82,6 +88,7 @@
   .mpl-step-detail, .mpl-step-foot { margin-left: 0; }
   .mpl-step-detail { margin-top: 14px; margin-bottom: 16px; }
   .mpl-command { max-width: 100%; margin-left: 0; }
+  .mpl-methods { margin-left: 0; }
   .mpl-page .mp-pipeline { gap: 43px; }
   .mpl-page .mp-pipeline::before { height: 43px; bottom: -43px; }
   .mpl-page .mp-pipeline::after { bottom: -40px; }

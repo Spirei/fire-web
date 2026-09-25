@@ -38,7 +38,7 @@ node scripts/repack-sketchfab-textures.mjs /路径/source/2026_haas_vf-26.glb /�
 
 ## 分发与网站
 
-把整个 `model-optimizer` 目录给另一台电脑即可，**不要携带 node_modules 和 output**。没有分开的 Mac/Windows 前端，也不需要安装网站项目。本目录已排除在网站 Docker 构建之外；网站只保留文件上传和 KTX2/Meshopt 显示能力，不运行编码器。
+把整个 `model-optimizer` 目录给另一台电脑即可，**不要携带 node_modules 和 output**。没有分开的 Mac/Windows 前端，也不需要安装网站项目。网站主镜像仍排除本目录、不运行编码器；线上「群晖处理」另用本目录的 `Dockerfile` 构建独立 worker 镜像，共享 uploads 卷并串行处理。本机工具与 worker 使用同一套导出逻辑，互不依赖。
 
 命令行批处理仍可使用 `node app.mjs --input /路径/car.glb --output /路径/导出目录`。运行测试：`npm test`。
 

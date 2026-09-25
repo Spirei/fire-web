@@ -42,7 +42,7 @@ export interface ImportReport {
   };
 }
 
-interface ImportedModelRow {
+export interface ImportedModelRow {
   id: string;
   label: string;
   note: string;
@@ -123,7 +123,9 @@ function prettyLabel(name: string) {
     .slice(0, 24);
 }
 
-export default function ModelImporter({ existing, mode = "manage" }: { existing: ImportedModelRow[]; mode?: "manage" | "pipeline" }) {
+type ProcessingJob = { id: string; status: "queued" | "running" | "done" | "failed" | "cancelled"; message: string; updatedAt: string; preview?: boolean; gpu?: boolean };
+
+export default function ModelImporter({ existing, mode = "manage", processingMethod = "local" }: { existing: ImportedModelRow[]; mode?: "manage" | "pipeline"; processingMethod?: "local" | "online" }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
@@ -131,6 +133,52 @@ export default function ModelImporter({ existing, mode = "manage" }: { existing:
   /** 卡片顺序：拖动后本地先变，再写服务端（首页车型条照这个顺序排） */
   const [order, setOrder] = useState(() => existing.map((row) => row.id));
   const [pipelineTarget, setPipelineTarget] = useState(() => existing.find((row) => !row.builtin)?.id ?? existing[0]?.id ?? "");
+  const [processingJob, setProcessingJob] = useState<ProcessingJob | null>(null);
+  const [processingBusy, setProcessingBusy] = useState(false);
+  const completedJobRef = useRef<string | null>(null);
+  const currentPipelineTarget = existing.some(row => row.id === pipelineTarget) ? pipelineTarget : (existing.find(row => !row.builtin)?.id ?? "");
+  useEffect(() => {
+    if (mode !== "pipeline" || !currentPipelineTarget) return;
+    let active = true;
+    setProcessingJob(null);
+    const refresh = async () => {
+      try {
+        const response = await fetch(`/api/showcase/models/process?modelId=${encodeURIComponent(currentPipelineTarget)}`, { cache: "no-store" });
+        const payload = await response.json();
+        if (active && response.ok) {
+          setProcessingJob(payload.job ?? null);
+          if (payload.job?.status === "done" && completedJobRef.current !== payload.job.id) {
+            completedJobRef.current = payload.job.id;
+            router.refresh();
+          }
+        }
+      } catch { /* Network reconnects on the next poll. */ }
+    };
+    void refresh();
+    const timer = setInterval(() => void refresh(), 4000);
+    return () => { active = false; clearInterval(timer); };
+  }, [mode, currentPipelineTarget, router]);
+  const startProcessing = async (modelId: string) => {
+    setProcessingBusy(true);
+    try {
+      const response = await fetch("/api/showcase/models/process", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ modelId }) });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "无法加入队列");
+      setProcessingJob(payload.job);
+      showToast("群晖处理已排队");
+    } catch (cause) { showToast(cause instanceof Error ? cause.message : "排队失败", "err"); }
+    finally { setProcessingBusy(false); }
+  };
+  const cancelProcessing = async () => {
+    if (!processingJob) return;
+    setProcessingBusy(true);
+    try {
+      const response = await fetch("/api/showcase/models/process", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: processingJob.id }) });
+      if (!response.ok) throw new Error("取消失败");
+      setProcessingJob({ ...processingJob, message: "正在取消…" });
+    } catch { showToast("取消失败", "err"); }
+    finally { setProcessingBusy(false); }
+  };
   const [dragId, setDragId] = useState<string | null>(null);
   const orderSavingRef = useRef(false);
   const [orderSaving, setOrderSaving] = useState(false);
@@ -576,7 +624,10 @@ export default function ModelImporter({ existing, mode = "manage" }: { existing:
       setReport(null);
       setSavedSnapshot(JSON.stringify({ meta: savedMeta, params: model.params }));
       setNotice(`已保存“${model.label}”，首页车型条已同步`);
-      if (mode === "pipeline") setPipelineTarget(model.id);
+      if (mode === "pipeline") {
+        setPipelineTarget(model.id);
+        if (processingMethod === "online" && !editingId) void startProcessing(model.id);
+      }
       // 草稿转正会改文件名：立即持久化，刷新不能再请求已不存在的草稿路径。
       try { window.localStorage.setItem(WORKBENCH_STORAGE_KEY, JSON.stringify({
         editingId: model.id, previewFile: model.file, meta: savedMeta, params: model.params,
@@ -1080,12 +1131,18 @@ export default function ModelImporter({ existing, mode = "manage" }: { existing:
           <span>{mode === "pipeline" ? "06" : "·"}</span> {mode === "pipeline" ? "上传附件" : "车型清单"}
         </h2>
         {mode === "pipeline" ? <>
-          <p className="mpl-step-empty">选择已保存车型，上传 1K 预览与可选的高清副本。</p>
+          <p className="mpl-step-empty">选择已保存车型；群晖可自动生成，本机产物仍可手动上传。</p>
           <label className="mpl-model-picker">车型
-            <select value={existing.some((row) => row.id === pipelineTarget) ? pipelineTarget : (orderedRows[0]?.id ?? "")} onChange={(event) => setPipelineTarget(event.target.value)}>
+            <select value={currentPipelineTarget} onChange={(event) => setPipelineTarget(event.target.value)}>
               {orderedRows.map((row) => <option key={row.id} value={row.id}>{row.label}</option>)}
             </select>
           </label>
+          {currentPipelineTarget && <div className="mpl-job" aria-live="polite">
+            <button type="button" disabled={processingBusy || processingJob?.status === "running" || processingJob?.status === "queued" || Boolean(existing.find(row => row.id === currentPipelineTarget)?.builtin)} onClick={() => void startProcessing(currentPipelineTarget)}>{processingBusy ? "请稍候…" : processingJob?.status === "failed" || processingJob?.status === "cancelled" ? "重试群晖处理" : "群晖生成附件"}</button>
+            <span>{processingJob?.message ?? "尚未提交在线处理"}</span>
+            {processingJob?.status === "queued" && <small>等待处理容器；若长时间无进展，请检查容器状态</small>}
+            {(processingJob?.status === "queued" || processingJob?.status === "running") && <button type="button" disabled={processingBusy} onClick={() => void cancelProcessing()}>取消</button>}
+          </div>}
         </> : <p className="mt-3 text-xs leading-5 text-muted dark:text-white/55">原始车型单独保存；本地工具生成的首页预览与移动端原画副本，可在对应卡片分别上传。网站只校验和保存文件，不在线压缩。</p>}
         <input ref={previewInputRef} type="file" accept=".glb" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadLocalPreview(file); }} />
         <input ref={gpuInputRef} type="file" accept=".glb" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadGpuDerivative(file); }} />

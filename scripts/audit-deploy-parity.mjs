@@ -9,6 +9,8 @@ const entrypoint = read("scripts/entrypoint.sh");
 const uploadRoute = read("app/uploads/[...path]/route.ts");
 const assetsModule = read("lib/assets.ts");
 const dockerignore = read(".dockerignore");
+const workerDockerfile = read("tools/model-optimizer/Dockerfile");
+const imageWorkflow = read(".github/workflows/docker-publish.yml");
 
 const failures = [];
 function requireText(label, text, needles) {
@@ -34,6 +36,9 @@ const sharedCompose = [
   "http://127.0.0.1:3000/api/settings/public"
 ];
 requireText("GHCR Compose", ghcrCompose, sharedCompose);
+requireText("模型处理独立容器", ghcrCompose, ["fire-model-worker:", "-model-worker:${IMAGE_TAG:-latest}", "network_mode: none", "cpus: 2.0", "mem_limit: 8g", "pids_limit: 128"]);
+requireText("模型处理镜像", workerDockerfile, ["npm ci --omit=dev", "sha256sum -c -", "USER node", 'CMD ["node", "online-worker.mjs"]']);
+requireText("模型处理镜像发布", imageWorkflow, ["Model worker metadata", "Build and push model worker", "context: ./tools/model-optimizer"]);
 requireText("GHCR 受限容器更新", ghcrCompose, [
   "containrrr/watchtower:1.7.1",
   "WATCHTOWER_HTTP_API_UPDATE: \"true\"",

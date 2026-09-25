@@ -112,6 +112,7 @@ docker compose -f docker-compose.ghcr.yml up -d --force-recreate
 - 如果端口 3000 被占用，在 `.env` 设置 `HOST_PORT=3001`，无需修改 Compose 文件。
 
 ## 数据持久化与备份
+- 车型流程页选择「群晖处理」时，`fire-model-worker` 使用独立 GHCR 镜像，与 `fire` 共用 uploads 卷；需要先拉取并启动两个容器。队列和状态在 `uploads/mclaren/processing/jobs/`，处理容器没有对外端口、限制 2 CPU / 8 GiB；可用 `docker logs fire-model-worker` 排查任务。保留「本机工具」作为低资源或镜像暂不可用时的路径。若 `IMAGE_TAG` 固定为某个 `sha-…` 标签，两张镜像需同版本标签。
 - **SQLite 数据库 / 附件 / 备份 / 缓存** → `/volume1/docker/fire/data/`（挂载到 `/app/data`）。
 - **上传素材**（图标 / 头像 / 截图）→ `/volume1/docker/fire/uploads/`（挂载到 `/app/public/uploads`）。
 - **插图 / 字体 / 图标 / 分享图** → `/volume1/docker/fire/{images,fonts,icons,share}/`（只读挂载到 `/app/public/` 下同名目录，见「1d」）。
