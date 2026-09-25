@@ -5830,16 +5830,14 @@ button.PhotoView-Slider__toolbarIcon {
   border-radius: 19px;
   background: transparent;
   box-shadow: 0 32px 90px rgba(0,0,0,0);
-  transform: scale(.96);
-  transition: background-color .36s ease-out, border-color .36s ease-out, box-shadow .36s ease-out, transform .5s cubic-bezier(.22,1,.36,1);
+  transition: background-color .36s ease-out, border-color .36s ease-out, box-shadow .36s ease-out;
 }
 .card-wander-modal[data-revealed]:not([data-closing]) {
   border-color: rgba(255,255,255,.13);
   background: #1b2024;
   box-shadow: 0 32px 90px rgba(0,0,0,.6);
-  transform: scale(1);
 }
-.card-wander-preview-stage { opacity: 0; transition: opacity .16s ease-out; }
+.card-wander-preview-stage { opacity: 0; }
 .card-wander-modal[data-landed]:not([data-closing]) .card-wander-preview-stage { opacity: 1; }
 .card-wander-preview-controls, .card-wander-modal-heading, .card-wander-modal-actions {
   opacity: 0;
@@ -5854,7 +5852,7 @@ button.PhotoView-Slider__toolbarIcon {
 .card-wander-modal[data-closing] .card-wander-preview-controls,
 .card-wander-modal[data-closing] .card-wander-modal-heading,
 .card-wander-modal[data-closing] .card-wander-modal-actions { opacity: 0; transform: translateY(6px); transition-delay: 0s; transition-duration: .16s; }
-.card-wander-modal[data-closing] .card-wander-preview-stage { opacity: 0; transition-duration: .16s; }
+.card-wander-modal[data-closing] .card-wander-preview-stage { opacity: 0; }
 .card-wander-preview-stage { position: relative; display: grid; place-items: center; min-height: 410px; margin: 0 16px; overflow: hidden; border-radius: 17px; background: #101317; view-transition-name: card-wander-stage; }
 .card-wander-preview-stage[data-mode="showcase"] { min-height: 0; background: transparent; overflow: visible; }
 .card-wander-preview-stage[data-mode="wallet"] { display: flex; justify-content: center; align-items: flex-start; }
@@ -5882,9 +5880,9 @@ button.PhotoView-Slider__toolbarIcon {
   transition: transform .22s ease-out;
   will-change: transform;
 }
-.card-wander-effect:not([data-pointer-active]) .card-wander-effect-tilt { animation: card-wander-effect-idle 9s ease-in-out infinite alternate; }
+.card-wander-modal[data-landed]:not([data-closing]) .card-wander-effect:not([data-pointer-active]) .card-wander-effect-tilt { animation: card-wander-effect-idle 9s ease-in-out infinite alternate; }
 @keyframes card-wander-effect-idle {
-  from { transform: rotateX(-2deg) rotateY(2.5deg) scale(1.008); }
+  from { transform: none; }
   to { transform: rotateX(2.5deg) rotateY(-2deg) scale(1.008); }
 }
 .card-wander-modal-image { display: block; width: 100%; height: 100%; object-fit: contain; }

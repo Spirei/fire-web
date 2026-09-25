@@ -166,7 +166,9 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
       { transform: closing ? "none" : wallTransform, borderRadius: closing ? "17px" : "10px" },
       { transform: closing ? wallTransform : "none", borderRadius: closing ? "10px" : "17px" }
     ], { duration: closing ? 500 : 620, easing: "cubic-bezier(.22,1,.36,1)", fill: "forwards" });
-    return animation.finished.catch(() => undefined).finally(() => {
+    return animation.finished.then(() => {
+      if (!closing && !previewClosingRef.current && modalRef.current) modalRef.current.dataset.landed = "true";
+    }).catch(() => undefined).finally(() => {
       shell.remove();
       if (flightRef.current === flight) flightRef.current = null;
     });
@@ -376,14 +378,8 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     const revealTimer = window.setTimeout(() => {
       if (alive && !previewClosingRef.current && modalRef.current) modalRef.current.dataset.revealed = "true";
     }, 250);
-    const landTimer = window.setTimeout(() => {
-      if (alive && !previewClosingRef.current && modalRef.current) modalRef.current.dataset.landed = "true";
-    }, 540);
-    void flyCard(from, to, selectedCard.image).then(() => {
-      if (!alive || previewClosingRef.current || !modalRef.current) return;
-      modalRef.current.dataset.landed = "true";
-    });
-    return () => { alive = false; window.clearTimeout(revealTimer); window.clearTimeout(landTimer); };
+    void flyCard(from, to, selectedCard.image);
+    return () => { alive = false; window.clearTimeout(revealTimer); };
   }, [selected?.key]);
 
   useEffect(() => () => restoreSourceTile(), []);
@@ -493,7 +489,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     driftAnchorRef.current = { x: positionRef.current.x, y: positionRef.current.y };
   };
   const onEffectPointerMove = (event: PointerEvent<HTMLButtonElement>) => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!modalRef.current?.hasAttribute("data-landed") || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
     const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
