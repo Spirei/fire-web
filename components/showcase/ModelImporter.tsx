@@ -125,20 +125,33 @@ function prettyLabel(name: string) {
 
 type ProcessingJob = { id: string; status: "queued" | "running" | "done" | "failed" | "cancelled"; message: string; updatedAt: string; preview?: boolean; gpu?: boolean };
 
-export default function ModelImporter({ existing, mode = "manage", processingMethod = "local" }: { existing: ImportedModelRow[]; mode?: "manage" | "pipeline"; processingMethod?: "local" | "online" }) {
+type BookStage = "upload" | "inspect" | "tune" | "assets" | "maintain" | "none";
+
+export default function ModelImporter({ existing, mode = "manage", processingMethod = "local", bookStage = "none", focusModelId, onInspected, onSaved, onRemoved }: {
+  existing: ImportedModelRow[];
+  mode?: "manage" | "pipeline" | "book";
+  processingMethod?: "local" | "online";
+  bookStage?: BookStage;
+  focusModelId?: string;
+  onInspected?: () => void;
+  onSaved?: (id: string) => void;
+  onRemoved?: (id: string) => void;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const coverTargetRef = useRef<string | null>(null);
   /** 卡片顺序：拖动后本地先变，再写服务端（首页车型条照这个顺序排） */
   const [order, setOrder] = useState(() => existing.map((row) => row.id));
-  const [pipelineTarget, setPipelineTarget] = useState(() => existing.find((row) => !row.builtin)?.id ?? existing[0]?.id ?? "");
+  const [pipelineTarget, setPipelineTarget] = useState(() => focusModelId && existing.some(row => row.id === focusModelId) ? focusModelId : existing.find((row) => !row.builtin)?.id ?? existing[0]?.id ?? "");
   const [processingJob, setProcessingJob] = useState<ProcessingJob | null>(null);
   const [processingBusy, setProcessingBusy] = useState(false);
   const completedJobRef = useRef<string | null>(null);
-  const currentPipelineTarget = existing.some(row => row.id === pipelineTarget) ? pipelineTarget : (existing.find(row => !row.builtin)?.id ?? "");
+  const currentPipelineTarget = mode === "book"
+    ? (focusModelId && existing.some(row => row.id === focusModelId) ? focusModelId : "")
+    : existing.some(row => row.id === pipelineTarget) ? pipelineTarget : (existing.find(row => !row.builtin)?.id ?? "");
   useEffect(() => {
-    if (mode !== "pipeline" || !currentPipelineTarget) return;
+    if ((mode !== "pipeline" && mode !== "book") || !currentPipelineTarget) return;
     let active = true;
     setProcessingJob(null);
     const refresh = async () => {
@@ -310,6 +323,9 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
           tuneRegion?: TuneRegion;
           wireTuneOpen?: boolean;
         };
+        // A book may only restore the draft for that exact volume. The shared
+        // workbench draft can belong to a different car (or a new upload).
+        if (mode === "book" && (!focusModelId || draft.editingId !== focusModelId)) return;
         const row = draft.editingId ? existing.find(item => item.id === draft.editingId && item.present !== false) : null;
         const file = row?.file;
         if (!row) {
@@ -338,10 +354,11 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
     } finally {
       setWorkbenchHydrated(true);
     }
-  }, [existing]);
+  }, [existing, focusModelId, mode]);
 
   useEffect(() => {
     if (!workbenchHydrated) return;
+    if (mode === "book" && (!focusModelId || editingId !== focusModelId)) return;
     if (!previewFile || !editingId) {
       try { window.localStorage.removeItem(WORKBENCH_STORAGE_KEY); } catch { /* 清理附件不依赖浏览器存储可用。 */ }
       return;
@@ -355,7 +372,7 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
       } catch { setDraftError("浏览器无法保存草稿，离开前请保存车型"); }
     }, 150);
     return () => window.clearTimeout(timer);
-  }, [editingId, meta, params, previewFile, tuneRegion, wheelPick, wireTuneOpen, workbenchHydrated, workbenchOpen, savedSnapshot]);
+  }, [editingId, focusModelId, meta, mode, params, previewFile, tuneRegion, wheelPick, wireTuneOpen, workbenchHydrated, workbenchOpen, savedSnapshot]);
 
   const reset = useCallback(() => {
     try { window.localStorage.removeItem(WORKBENCH_STORAGE_KEY); } catch { /* 清理附件不依赖浏览器存储可用。 */ }
@@ -453,6 +470,7 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
         };
         setParams(initialParams);
         setPreviewParams(initialParams);
+        if (mode === "book") { setWorkbenchOpen(false); onInspected?.(); }
       };
       xhr.onerror = () => fail("上传中断，请检查网络后重试");
       xhr.ontimeout = () => fail("上传或体检超时，请重试");
@@ -464,7 +482,7 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
       };
       xhr.send(file);
     },
-    [reset, uploading]
+    [reset, uploading, mode, onInspected]
   );
 
   useEffect(() => () => xhrRef.current?.abort(), []);
@@ -624,17 +642,19 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
       setReport(null);
       setSavedSnapshot(JSON.stringify({ meta: savedMeta, params: model.params }));
       setNotice(`已保存“${model.label}”，首页车型条已同步`);
-      if (mode === "pipeline") {
+      if (mode === "pipeline" || mode === "book") {
         setPipelineTarget(model.id);
         if (processingMethod === "online" && !editingId) void startProcessing(model.id);
       }
       // 草稿转正会改文件名：立即持久化，刷新不能再请求已不存在的草稿路径。
+      if (mode === "book") setWorkbenchOpen(false);
       try { window.localStorage.setItem(WORKBENCH_STORAGE_KEY, JSON.stringify({
         editingId: model.id, previewFile: model.file, meta: savedMeta, params: model.params,
-        wheelPick, tuneRegion, wireTuneOpen, workbenchOpen: true,
+        wheelPick, tuneRegion, wireTuneOpen, workbenchOpen: mode !== "book",
         savedSnapshot: JSON.stringify({ meta: savedMeta, params: model.params })
       })); } catch { setDraftError("车型已保存，但浏览器无法保留工作台草稿"); }
       router.refresh();
+      onSaved?.(model.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : "保存失败：网络异常";
       if (!editingId) reset();
@@ -660,8 +680,9 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
       setNotice(`已删除车型 ${row.label}${withFile ? "（素材文件一并删除）" : "（素材文件保留在 uploads 卷）"}`);
       if (editingId === row.id) reset();
       router.refresh();
+      onRemoved?.(row.id);
     },
-    [editingId, reset, router]
+    [editingId, onRemoved, reset, router]
   );
 
   /** 卡片按当前顺序排（内置车也在顺序表里，可以拖到任意位置） */
@@ -750,8 +771,29 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
     [router]
   );
 
+  const openEditor = (row: ImportedModelRow) => {
+    setEditingId(row.id);
+    setWorkbenchOpen(true);
+    setPreviewStatus("loading");
+    setStructure(null);
+    setWheelSearch("");
+    setSavedSnapshot(JSON.stringify({ meta: { id: row.id, label: row.label, note: row.note }, params: row.params }));
+    setNotice(null);
+    setError(null);
+    setReport(null);
+    selectedFileRef.current = null;
+    setLocalPreviewUrl(null);
+    setPreviewFile(row.file);
+    setMeta({ id: row.id, label: row.label, note: row.note });
+    setParams(row.params);
+    setPreviewParams(row.params);
+    pendingWheelPatternRef.current = row.params.wheelPattern ?? "(?!)";
+    setWheelPick([]);
+    setPreviewKey((prev) => prev + 1);
+  };
+
   return (
-    <div className={`mp-root${mode === "pipeline" ? " mp-pipeline" : ""}${workbenchHydrated ? "" : " mp-hydrating"}`} aria-busy={!workbenchHydrated} inert={Boolean(previewFile && workbenchOpen)}>
+    <div className={`mp-root${mode === "pipeline" ? " mp-pipeline" : ""}${mode === "book" ? " mp-book" : ""}${workbenchHydrated ? "" : " mp-hydrating"}`} data-book-stage={mode === "book" ? bookStage : undefined} aria-busy={!workbenchHydrated} inert={Boolean(previewFile && workbenchOpen)}>
       {!workbenchHydrated && (
         <div className="mp-restore-screen" role="status" aria-live="polite">
           <span />
@@ -776,9 +818,9 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
       {notice && <div className="mp-notice" role="status">{notice}</div>}
       {error && <div className="mp-error">{error}</div>}
 
-      <section className={`mp-step${mode === "pipeline" ? " mpl-pipeline-step" : ""}`} id="upload">
+      <section className={`mp-step${mode === "pipeline" ? " mpl-pipeline-step" : ""}`} id="upload" hidden={mode === "book" && bookStage !== "upload"}>
         <h2>
-          <span>{mode === "pipeline" ? "03" : "1"}</span> {mode === "pipeline" ? "上传原件" : "选文件"}
+          <span>{mode === "pipeline" ? "03" : "1"}</span> {mode === "pipeline" || mode === "book" ? "上传原件" : "选文件"}
         </h2>
         <div
           className={`mp-drop${dragging ? " on" : ""}`}
@@ -823,15 +865,15 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
           ) : (
             <>
               <b>把 .glb 拖进来，或点这里选择文件</b>
-              <small>{mode === "pipeline" ? "原始 GLB · 最大 250 MiB" : "单文件 ≤ 250MB；这里选择原始 GLB，高清压缩副本在车型卡片单独上传"}</small>
+              <small>{mode === "pipeline" || mode === "book" ? "原始 GLB · 最大 250 MiB" : "单文件 ≤ 250MB；这里选择原始 GLB，高清压缩副本在车型卡片单独上传"}</small>
             </>
           )}
         </div>
         {uploading && <button type="button" className="fire-cap mp-ghost mp-cancel" onClick={() => xhrRef.current?.abort()}>取消上传</button>}
       </section>
 
-      {(report || mode === "pipeline") && (
-        <section className={`mp-step${mode === "pipeline" ? " mpl-pipeline-step" : ""}`} id="inspect">
+      {(report || mode === "pipeline" || mode === "book") && (
+        <section className={`mp-step${mode === "pipeline" ? " mpl-pipeline-step" : ""}`} id="inspect" hidden={mode === "book" && bookStage !== "inspect"}>
           <h2>
             <span>{mode === "pipeline" ? "04" : "2"}</span> 体检报告
           </h2>
@@ -905,11 +947,15 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
         </section>
       )}
 
-      {mode === "pipeline" && <section className="mp-step mpl-pipeline-step" id="tune">
+      {(mode === "pipeline" || mode === "book") && <section className={`mp-step${mode === "pipeline" ? " mpl-pipeline-step" : ""}`} id="tune" hidden={mode === "book" && bookStage !== "tune"}>
         <h2><span>05</span> 调校并保存</h2>
         <p className="mpl-step-empty">确认朝向、轮胎与贴图；预览加载成功后保存。</p>
-        <button type="button" className="fire-cap fire-cap-primary" disabled={!previewFile || !workbenchHydrated} onClick={() => { setPreviewStatus("loading"); setWorkbenchOpen(true); }}>
-          {previewFile ? "打开模型工作台" : "先上传原件"}
+        <button type="button" className="fire-cap fire-cap-primary" disabled={(!previewFile && !(mode === "book" && existing.some(row => row.id === currentPipelineTarget && !row.builtin))) || !workbenchHydrated} onClick={() => {
+          const row = mode === "book" ? existing.find(item => item.id === currentPipelineTarget && !item.builtin) : undefined;
+          if (row && !selectedFileRef.current) openEditor(row);
+          else { setPreviewStatus("loading"); setWorkbenchOpen(true); }
+        }}>
+          {previewFile || mode === "book" && existing.some(row => row.id === currentPipelineTarget && !row.builtin) ? "打开模型工作台" : "先上传原件"}
         </button>
       </section>}
 
@@ -1126,18 +1172,18 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
         </section>, document.body
       )}
 
-      <section className={`mp-step${mode === "pipeline" ? " mpl-pipeline-step" : ""}`} id="model-list">
+      <section className={`mp-step${mode === "pipeline" ? " mpl-pipeline-step" : ""}`} id="model-list" hidden={mode === "book" && bookStage !== "assets" && bookStage !== "maintain"}>
         <h2>
-          <span>{mode === "pipeline" ? "06" : "·"}</span> {mode === "pipeline" ? "上传附件" : "车型清单"}
+          <span>{mode === "pipeline" ? "06" : "·"}</span> {mode === "pipeline" ? "上传附件" : mode === "book" ? bookStage === "maintain" ? "发行维护" : "预览与原画副本" : "车型清单"}
         </h2>
-        {mode === "pipeline" ? <>
-          <p className="mpl-step-empty">选择已保存车型；群晖可自动生成，本机产物仍可手动上传。</p>
-          <label className="mpl-model-picker">车型
+        {mode === "pipeline" || mode === "book" ? <>
+          <p className="mpl-step-empty">{mode === "book" && bookStage === "maintain" ? "封面与上线状态单独维护；移除或删除前请确认用途。" : "群晖可自动生成附件，本机产物仍可手动上传。"}</p>
+          {mode === "pipeline" && <label className="mpl-model-picker">车型
             <select value={currentPipelineTarget} onChange={(event) => setPipelineTarget(event.target.value)}>
               {orderedRows.map((row) => <option key={row.id} value={row.id}>{row.label}</option>)}
             </select>
-          </label>
-          {currentPipelineTarget && <div className="mpl-job" aria-live="polite">
+          </label>}
+          {bookStage !== "maintain" && currentPipelineTarget && (mode !== "book" || processingMethod === "online" || processingJob) && <div className="mpl-job" aria-live="polite">
             <button type="button" disabled={processingBusy || processingJob?.status === "running" || processingJob?.status === "queued" || Boolean(existing.find(row => row.id === currentPipelineTarget)?.builtin)} onClick={() => void startProcessing(currentPipelineTarget)}>{processingBusy ? "请稍候…" : processingJob?.status === "failed" || processingJob?.status === "cancelled" ? "重试群晖处理" : "群晖生成附件"}</button>
             <span>{processingJob?.message ?? "尚未提交在线处理"}</span>
             {processingJob?.status === "queued" && <small>等待处理容器；若长时间无进展，请检查容器状态</small>}
@@ -1161,7 +1207,7 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
           }}
         />
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {(mode === "pipeline" ? orderedRows.filter((row) => row.id === (existing.some((item) => item.id === pipelineTarget) ? pipelineTarget : orderedRows[0]?.id)) : orderedRows).map((row) => (
+          {(mode !== "manage" ? orderedRows.filter((row) => row.id === currentPipelineTarget) : orderedRows).map((row) => (
             <article
               key={row.id}
               draggable={mode === "manage" && !orderSaving}
@@ -1188,7 +1234,7 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
                   </span>
                 )}
                 <span
-                  className="absolute left-2 top-2 flex h-7 w-7 cursor-grab items-center justify-center rounded-full bg-black/55 text-[13px] text-white backdrop-blur active:cursor-grabbing"
+                  className={`absolute left-2 top-2 flex h-7 w-7 cursor-grab items-center justify-center rounded-full bg-black/55 text-[13px] text-white backdrop-blur active:cursor-grabbing${mode === "book" ? " mp-book-drag-handle" : ""}`}
                   title="拖动排序（首页车型条会同步）"
                   aria-hidden="true"
                 >
@@ -1216,7 +1262,7 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
                 {row.present === false && <span className="text-[11px] font-semibold text-[#d97706]">素材文件缺失，请重新上传后再上线</span>}
                 {row.present !== false && <span className={`text-[11px] font-semibold ${row.previewReady ? "text-[#22a06b]" : "text-[#d97706]"}`}>{row.previewReady ? "首页预览已生成" : "尚未生成首页预览"}</span>}
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 lg:flex-nowrap lg:overflow-x-auto lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:hidden">
-                  <button type="button" className="mp-visibility-toggle" disabled={visibilityBusy !== null}
+                  <button type="button" className="mp-visibility-toggle mp-maintain-action" disabled={visibilityBusy !== null}
                     title={(visibility[row.id] ?? row.hidden) ? "恢复首页显示" : "首页隐藏（不参与预载）"}
                     aria-label={(visibility[row.id] ?? row.hidden) ? "恢复首页显示" : "首页隐藏"}
                     aria-busy={visibilityBusy === row.id} aria-pressed={visibility[row.id] ?? row.hidden ?? false} onClick={() => void toggleVisibility(row)}>
@@ -1229,37 +1275,18 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
                       </>}
                     </svg>
                   </button>
-                  <button type="button" className="fire-cap px-2 py-1 text-[11px] font-semibold" disabled={previewUploadBusy !== null || row.present === false} onClick={() => { previewTargetRef.current = row.id; previewInputRef.current?.click(); }}>
+                  <button type="button" className="fire-cap mp-asset-action px-2 py-1 text-[11px] font-semibold" disabled={previewUploadBusy !== null || row.present === false} onClick={() => { previewTargetRef.current = row.id; previewInputRef.current?.click(); }}>
                     {previewUploadBusy === row.id ? "正在上传…" : row.previewReady ? "替换首页预览" : "上传首页预览"}
                   </button>
-                  <button type="button" className="fire-cap px-2 py-1 text-[11px] font-semibold" disabled={gpuUploadBusy !== null || row.present === false} onClick={() => { gpuTargetRef.current = row.id; gpuInputRef.current?.click(); }}>
+                  <button type="button" className="fire-cap mp-asset-action px-2 py-1 text-[11px] font-semibold" disabled={gpuUploadBusy !== null || row.present === false} onClick={() => { gpuTargetRef.current = row.id; gpuInputRef.current?.click(); }}>
                     {gpuUploadBusy === row.id ? "正在上传…" : "上传移动端原画"}
                   </button>
                   {!row.builtin && (
                     <button
                       type="button"
-                      className="fire-cap px-2 py-1 text-[11px] font-semibold"
+                      className="fire-cap mp-maintain-action px-2 py-1 text-[11px] font-semibold"
                       disabled={row.present === false}
-                      onClick={() => {
-                        setEditingId(row.id);
-                        setWorkbenchOpen(true);
-                        setPreviewStatus("loading");
-                        setStructure(null);
-                        setWheelSearch("");
-                        setSavedSnapshot(JSON.stringify({ meta: { id: row.id, label: row.label, note: row.note }, params: row.params }));
-                        setNotice(null);
-                        setError(null);
-                        setReport(null);
-                        selectedFileRef.current = null;
-                        setLocalPreviewUrl(null);
-                        setPreviewFile(row.file);
-                        setMeta({ id: row.id, label: row.label, note: row.note });
-                        setParams(row.params);
-                        setPreviewParams(row.params);
-                        pendingWheelPatternRef.current = row.params.wheelPattern ?? "(?!)";
-                        setWheelPick([]);
-                        setPreviewKey((prev) => prev + 1);
-                      }}
+                      onClick={() => openEditor(row)}
                     >
                       改参数
                     </button>
@@ -1268,7 +1295,7 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
                   <button
                     type="button"
                     /* 上传中显示标准的「已开启」态：点一下之后有明确反馈 */
-                    className={`fire-cap px-2 py-1 text-[11px] font-semibold${coverBusy === row.id ? " on" : ""}`}
+                    className={`fire-cap mp-maintain-action px-2 py-1 text-[11px] font-semibold${coverBusy === row.id ? " on" : ""}`}
                     disabled={coverBusy === row.id}
                     onClick={() => {
                       coverTargetRef.current = row.id;
@@ -1280,7 +1307,7 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
                   {row.cover && (
                     <button
                       type="button"
-                      className={`fire-cap px-2 py-1 text-[11px] font-semibold${coverBusy === row.id ? " on" : ""}`}
+                      className={`fire-cap mp-maintain-action px-2 py-1 text-[11px] font-semibold${coverBusy === row.id ? " on" : ""}`}
                       disabled={coverBusy === row.id}
                       onClick={() => void clearCover(row.id)}
                     >
@@ -1293,14 +1320,14 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
                     <>
                       <button
                         type="button"
-                        className="fire-cap px-2 py-1 text-[11px] font-semibold"
+                        className="fire-cap mp-maintain-action px-2 py-1 text-[11px] font-semibold"
                         onClick={() => void removeModel(row, false)}
                       >
                         移出清单
                       </button>
                       <button
                         type="button"
-                        className="fire-cap fire-cap-danger px-2 py-1 text-[11px] font-semibold"
+                        className="fire-cap fire-cap-danger mp-maintain-action px-2 py-1 text-[11px] font-semibold"
                         onClick={() => void removeModel(row, true)}
                       >
                         删除并删文件

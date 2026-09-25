@@ -1,0 +1,217 @@
+/* A self-contained editorial archive. The gallery deliberately keeps its ink-black
+   stage in both site themes, like the reference film; the opened book is warm paper. */
+.mbl, .mbl * { box-sizing: border-box; }
+.mbl {
+  --mbl-stage: #111210;
+  --mbl-paper: #eee9db;
+  --mbl-ink: #292b29;
+  --mbl-muted: #797d75;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--mbl-stage);
+  color: #e9e8e0;
+  font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  overflow: hidden;
+}
+.mbl button { cursor: pointer; }
+.mbl button:disabled { cursor: not-allowed; }
+.mbl :focus-visible { outline: 2px solid #f1d9ac; outline-offset: 4px; }
+.mbl-header, .mbl-footer { width: min(1440px, calc(100% - 72px)); margin-inline: auto; display: flex; align-items: center; justify-content: space-between; }
+.mbl-header { min-height: 76px; border-bottom: 1px solid #383a36; }
+.mbl-brand { font-size: 15px; font-weight: 800; letter-spacing: .025em; color: #efeee7; text-decoration: none; }
+.mbl-brand span { letter-spacing: .18em; }
+.mbl-brand i { margin: 0 14px; color: #656960; font-style: normal; font-weight: 400; }
+.mbl-brand:not(span) { white-space: nowrap; }
+.mbl-header-right { display: flex; align-items: center; gap: 28px; font-size: 11px; letter-spacing: .14em; color: #979b91; }
+.mbl-header-right a { color: #d4d3c8; text-decoration: none; letter-spacing: .04em; }
+.mbl-header-right a:hover { color: white; }
+.mbl-footer { min-height: 52px; border-top: 1px solid #383a36; font-size: 10px; color: #82867d; letter-spacing: .16em; }
+
+.mbl-library { flex: 1; width: min(1440px, 100%); margin-inline: auto; display: flex; flex-direction: column; justify-content: center; min-height: min(760px, calc(100dvh - 128px)); padding: 34px 36px 62px; }
+.mbl-library-title { display: flex; flex-direction: column; gap: 12px; margin: 0 0 35px; }
+.mbl-library-title p, .mbl-library-title > span { margin: 0; color: #8c9288; font-size: 11px; letter-spacing: .18em; }
+.mbl-library-title h1 { margin: 0; font-size: clamp(42px, 5.4vw, 78px); line-height: 1.1; font-family: Georgia, "Songti SC", serif; font-weight: 400; letter-spacing: -.06em; }
+.mbl-library-title h1 span { color: #e94332; }
+.mbl-library-title > span { letter-spacing: .12em; font-size: 12px; }
+.mbl-shelf-scroll { overflow-x: auto; overflow-y: visible; padding-top: 58px; scrollbar-width: none; }
+.mbl-shelf-scroll::-webkit-scrollbar { display: none; }
+.mbl-shelf { position: relative; display: flex; justify-content: center; align-items: flex-end; min-width: max-content; min-height: min(575px, 58dvh); padding: 0 35px 9px; border-bottom: 7px solid #262724; box-shadow: inset 0 -1px 0 #4b4c45, 0 13px 0 #141512, 0 19px 25px #0009; }
+.mbl-shelf::after { position: absolute; bottom: -16px; left: 0; right: 0; height: 10px; content: ""; background: linear-gradient(#0e0f0d, transparent); pointer-events: none; }
+.mbl-spine { flex: none; position: relative; display: block; width: var(--spine-width); height: var(--spine-height); max-height: min(530px, 56dvh); padding: 0; border: 1px solid var(--spine-edge); border-right-color: #1118; border-radius: 2px 3px 0 0; background: var(--spine-bg); color: var(--spine-ink); box-shadow: inset 3px 0 5px #fff5, inset -4px 0 5px #0004, 3px 0 3px #0009; transform-origin: bottom; transition: transform .35s cubic-bezier(.2,.85,.2,1), box-shadow .3s; }
+.mbl-spine:nth-child(3n) { transform: rotate(-.8deg); }
+.mbl-spine:nth-child(5n) { transform: rotate(1deg); }
+.mbl-spine:hover, .mbl-spine:focus-visible { transform: translateY(-23px) rotate(0); z-index: 2; box-shadow: inset 3px 0 5px #fff5, inset -4px 0 5px #0004, 7px 18px 18px #0009; }
+.mbl-spine-rule { position: absolute; top: 20px; left: 25%; right: 25%; height: 3px; border-top: 1px solid currentColor; border-bottom: 1px solid currentColor; opacity: .65; }
+.mbl-spine-title { position: absolute; top: 53px; left: 50%; transform: translateX(-50%); writing-mode: vertical-rl; text-orientation: mixed; white-space: nowrap; font-family: Georgia, "Songti SC", serif; font-size: clamp(15px, 1.4vw, 23px); letter-spacing: .065em; line-height: 1.15; font-weight: 600; }
+.mbl-spine-title.is-long { font-size: 14px; letter-spacing: 0; }
+.mbl-spine:nth-child(2n) .mbl-spine-title { transform: translateX(-50%) rotate(180deg); }
+.mbl-spine-number { position: absolute; bottom: 16px; left: 0; right: 0; font-size: 10px; letter-spacing: .12em; opacity: .72; }
+.mbl-spine-peek { position: absolute; bottom: calc(100% + 12px); left: 50%; width: 150px; min-height: 90px; padding: 7px; transform: translate(-50%, 8px); pointer-events: none; opacity: 0; background: #ebe7d8; color: #242824; box-shadow: 0 13px 30px #000a; transition: opacity .2s, transform .2s; }
+.mbl-spine:hover .mbl-spine-peek, .mbl-spine:focus-visible .mbl-spine-peek { opacity: 1; transform: translate(-50%, 0); }
+.mbl-spine-peek img { display: block; width: 100%; aspect-ratio: 1.7; object-fit: cover; }
+.mbl-spine-peek b { display: grid; place-items: center; min-height: 60px; font: 23px Georgia, serif; overflow: hidden; }
+.mbl-spine-peek small { display: block; margin-top: 5px; font-size: 8px; letter-spacing: .16em; text-align: left; }
+.mbl-spine-new { --spine-width: 68px; --spine-height: 435px; --spine-bg: #252824; --spine-edge: #596054; --spine-ink: #e9e5da; border: 1px dashed #778072; color: #e6e4d7; margin-left: 12px; }
+.mbl-spine-new > span { display: block; font-size: 27px; font-weight: 200; line-height: 1; }
+.mbl-spine-new small { display: block; margin: 14px auto 0; writing-mode: vertical-rl; letter-spacing: .17em; font-size: 9px; }
+.mbl-shelf-caption { display: flex; justify-content: space-between; margin: 28px 34px 0; color: #757a71; font-size: 10px; letter-spacing: .16em; }
+
+.mbl-reader { flex: 1; min-height: calc(100dvh - 128px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 19px 22px 25px; }
+.mbl-reader-top { width: min(1180px, 100%); display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 8px 17px; font-size: 10px; color: #9da196; letter-spacing: .15em; }
+.mbl-reader-top button { border: 0; background: none; color: #e6e2d7; padding: 6px 0; font-size: 12px; letter-spacing: .04em; }
+.mbl-reader-top button:hover { color: white; }
+.mbl-reader-top span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mbl-book { position: relative; width: min(1180px, 100%); min-height: min(690px, calc(100dvh - 235px)); background: #e8e2d3; color: var(--mbl-ink); box-shadow: 0 4px 0 #aaa393, 0 8px 0 #c4bdae, 0 18px 44px #000b; perspective: 1600px; }
+.mbl-book.is-cover { width: min(454px, 100%); min-height: min(680px, calc(100dvh - 235px)); background: var(--book-color); box-shadow: 5px 5px 0 #48443a, 9px 10px 0 #cfc6b4, 0 24px 70px #000b; }
+.mbl-cover { min-height: inherit; display: flex; flex-direction: column; border: 1px solid var(--cover-edge); border-left: 13px solid var(--cover-edge); color: var(--book-ink); background: var(--book-color); box-shadow: inset 3px 0 8px #fff7, inset -3px 0 8px #0003; }
+.mbl-cover-art { flex: 1; display: grid; place-items: center; min-height: 0; padding: 20px; }
+.mbl-cover-art img { display: block; max-width: 100%; max-height: min(510px, calc(100dvh - 375px)); width: 100%; object-fit: contain; box-shadow: 0 13px 28px #0005; }
+.mbl-cover-typography { width: 100%; min-height: 430px; display: flex; flex-direction: column; justify-content: center; text-align: left; border-top: 2px solid currentColor; border-bottom: 2px solid currentColor; padding: 16px 7%; }
+.mbl-cover-typography > span, .mbl-cover-typography i { font: normal 11px Arial, sans-serif; letter-spacing: .2em; }
+.mbl-cover-typography strong { display: block; overflow-wrap: anywhere; font-family: Georgia, "Songti SC", serif; font-size: clamp(44px, 5vw, 75px); font-weight: 400; letter-spacing: -.05em; line-height: 1.04; margin: auto 0; }
+.mbl-cover-footer { display: flex; justify-content: space-between; padding: 16px 25px 20px; font-size: 9px; font-weight: 700; letter-spacing: .18em; }
+.mbl-spread { min-height: inherit; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); background: var(--mbl-paper); }
+.mbl-page { min-width: 0; height: min(690px, calc(100dvh - 235px)); min-height: 550px; display: flex; flex-direction: column; padding: 34px 43px 27px; position: relative; }
+.mbl-page-left { background: linear-gradient(90deg, #e7e1d2, #f3efe3 92%, #d4cdbd); }
+.mbl-page-right { background: linear-gradient(90deg, #d5cebd, #f5f0e4 8%, #ece6d8); }
+.mbl-page-kicker, .mbl-page-foot { display: flex; justify-content: space-between; gap: 12px; font-size: 9px; font-weight: 700; letter-spacing: .14em; color: #7c8075; }
+.mbl-page-foot { margin-top: auto; padding-top: 18px; border-top: 1px solid #afa99c; }
+.mbl-chapter { margin-top: auto; }
+.mbl-chapter-index { font-family: Georgia, serif; font-size: 14px; color: #929080; }
+.mbl-chapter p { margin: 28px 0 8px; color: #b54f3c; font-size: 12px; letter-spacing: .21em; font-weight: 700; }
+.mbl-chapter h2 { margin: 0; font-family: Georgia, "Songti SC", serif; font-size: clamp(62px, 8vw, 112px); font-weight: 400; letter-spacing: -.08em; line-height: 1.07; }
+.mbl-chapter h2 i { color: #bc523c; font-style: normal; }
+.mbl-chapter-rule { width: 100%; height: 1px; background: #9f9b8d; margin-top: 28px; }
+.mbl-chapter-copy { max-width: 360px; margin: 35px 0 auto; }
+.mbl-chapter-copy p { font-family: Georgia, "Songti SC", serif; font-size: 23px; margin: 0 0 16px; }
+.mbl-chapter-copy span { color: #777a70; font-size: 13px; line-height: 1.9; }
+.mbl-page-content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 25px 3px 15px 0; }
+.mbl-fold { position: absolute; left: calc(50% - 10px); top: 0; bottom: 0; width: 20px; pointer-events: none; background: linear-gradient(90deg, #0000, #6d665022 30%, #554b3544 49%, #fff7 53%, #0000); }
+.mbl-turn-sheet { position: absolute; inset: 0 0 0 50%; width: 50%; transform-origin: left center; transform-style: preserve-3d; pointer-events: none; z-index: 4; animation: mbl-turn-next .55s cubic-bezier(.3,.08,.22,1) forwards; filter: drop-shadow(-8px 5px 10px #0004); }
+.mbl-turn-sheet > span { position: absolute; inset: 0; backface-visibility: hidden; background: linear-gradient(90deg, #d5cebd, #f7f2e6 9%, #eae4d6); }
+.mbl-turn-sheet > span:last-child { transform: rotateY(180deg); background: linear-gradient(90deg, #ede7d8, #f5f0e4 85%, #d5cebd); }
+.mbl-book.is-turning-previous .mbl-turn-sheet { left: 0; transform-origin: right center; animation-name: mbl-turn-previous; }
+@keyframes mbl-turn-next { from { transform: rotateY(0); } to { transform: rotateY(-180deg); } }
+@keyframes mbl-turn-previous { from { transform: rotateY(0); } to { transform: rotateY(180deg); } }
+.mbl-reader-controls { display: flex; align-items: center; justify-content: center; gap: 28px; margin: 20px 0 11px; }
+.mbl-reader-controls button { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #585b52; background: transparent; color: #f0ede1; font-size: 19px; transition: background .2s, color .2s, transform .2s; }
+.mbl-reader-controls button:not(:disabled):hover { background: #eee9db; color: #242722; transform: scale(1.08); }
+.mbl-reader-controls button:disabled { opacity: .28; }
+.mbl-reader-controls > span { min-width: 120px; text-align: center; font-size: 11px; letter-spacing: .13em; }
+.mbl-reader-controls i { font-style: normal; color: #777e72; }
+.mbl-chapter-dots { display: flex; gap: 9px; }
+.mbl-chapter-dots button { width: 16px; height: 3px; padding: 0; border: 0; background: #5b5f56; transition: width .2s, background .2s; }
+.mbl-chapter-dots button.active { width: 28px; background: #eee9db; }
+.mbl-denied { min-height: 100dvh; display: grid; place-content: center; gap: 12px; text-align: center; background: #111210; color: #e9e8e0; }
+.mbl-denied h1, .mbl-denied p { margin: 0; }
+.mbl-denied a { color: #e9e8e0; }
+
+/* The imported real controls live inside paper rather than a second dark dashboard. */
+.mbl .mbl-importer-mount[hidden], .mbl .mp-book > .mp-step[hidden] { display: none !important; }
+.mbl .mp-book.mp-root { --mp-ink: #292b29; --mp-muted: #73786e; --mp-line: #beb9aa; --mp-panel: #e6e0d2; --mp-active: #ad4a39; max-width: none; padding: 0; gap: 0; color: #292b29; background: transparent; }
+.mbl .mp-book .mp-step { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.mbl .mp-book .mp-step h2 { font-family: Georgia, "Songti SC", serif; font-size: 24px; font-weight: 400; letter-spacing: -.02em; }
+.mbl .mp-book .mp-step h2 span { width: 24px; height: 24px; font: 11px Arial, sans-serif; }
+.mbl .mp-book .mp-drop { min-height: 225px; justify-content: center; border: 1px dashed #979b8e; border-radius: 0; background: #f8f4e9; }
+.mbl .mp-book .mp-drop:hover { border-color: #b54f3c; background: #fff9ef; }
+.mbl .mp-book .mp-drop b { font-size: 14px; }
+.mbl .mp-book .mp-drop small, .mbl .mp-book .mpl-step-empty { color: #777a70; font-size: 11px; line-height: 1.7; }
+.mbl .mp-book .mp-report-head { color: #60645b; }
+.mbl .mp-book .mp-list.bad { color: #a43d30; }
+.mbl .mp-book .mp-list.warn { color: #94612e; }
+.mbl .mp-book .mp-table { font-size: 11px; }
+.mbl .mp-book .mp-table th, .mbl .mp-book .mp-table td { border-color: #c8c1b2; }
+.mbl .mp-book .mp-model-card { max-width: none; width: 100%; border-color: #b9b5a7 !important; background: #f2eee3 !important; }
+.mbl .mp-book #model-list > .grid { display: block; }
+.mbl .mp-book .mp-model-card > div:first-child { display: none; }
+.mbl .mp-book .mp-model-card > div:nth-child(2) { padding: 15px; }
+.mbl .mp-book .mp-model-card .text-muted, .mbl .mp-book .mp-model-card .text-faint { color: #61675d !important; }
+.mbl .mp-book .mp-model-card .fire-cap, .mbl .mp-book .fire-cap { color: #29302a; background: transparent; border: 1px solid #a5aa9d; box-shadow: none; }
+.mbl .mp-book .mp-model-card .fire-cap:hover, .mbl .mp-book .fire-cap:hover { border-color: #b54f3c; background: #f9f3e8; color: #202721; }
+.mbl .mp-book[data-book-stage="assets"] .mp-maintain-action, .mbl .mp-book[data-book-stage="maintain"] .mp-asset-action { display: none !important; }
+.mbl .mp-book[data-book-stage="maintain"] .mp-model-card > div:nth-child(2) { gap: 9px; }
+.mbl .mp-book .mpl-job { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 12px 0; color: #565d52; font-size: 11px; }
+.mbl .mp-book .mpl-job button { border: 1px solid #92998b; padding: 7px 10px; background: #f6f2e8; color: #242a25; }
+.mbl .mp-book .mp-notice, .mbl .mp-book .mp-error { color: #923e34; }
+
+.mbl-existing-source { display: flex; flex-direction: column; gap: 13px; margin-top: 23px; }
+.mbl-existing-source > span, .mbl-inspection-intro > span, .mbl-method > span { color: #b34e3b; font-size: 10px; font-weight: 700; letter-spacing: .16em; }
+.mbl-existing-source h3 { margin: 0; font: 40px Georgia, "Songti SC", serif; overflow-wrap: anywhere; }
+.mbl-existing-source p { margin: 0; padding: 15px 0; border-block: 1px solid #b9b5a7; font-size: 13px; overflow-wrap: anywhere; }
+.mbl-source-status { font-size: 12px; color: #46735d; }
+.mbl-existing-source small { color: #85897f; line-height: 1.7; }
+.mbl-inspection { display: flex; flex-direction: column; gap: 15px; }
+.mbl-inspection-intro { display: flex; flex-direction: column; gap: 8px; }
+.mbl-inspection-intro strong { font: 25px Georgia, serif; overflow-wrap: anywhere; }
+.mbl-inspection-intro small { color: #7c8176; }
+.mbl-paper-button, .mbl-proof a, .mbl-locked button { width: fit-content; border: 1px solid #a6aa9e; padding: 9px 15px; background: transparent; color: #2d302b; font-size: 12px; text-decoration: none; }
+.mbl-paper-button:hover, .mbl-proof a:hover, .mbl-locked button:hover { border-color: #af4b3b; }
+.mbl-alert { color: #aa4839; font-size: 12px; }
+.mbl-inspection-result { padding-top: 10px; border-top: 1px solid #afa99c; }
+.mbl-inspection-result > p:first-child { display: flex; justify-content: space-between; gap: 10px; font-size: 15px; font-weight: 700; }
+.mbl-result-ok { color: #42745a; }.mbl-result-bad { color: #ac4938; }
+.mbl-metrics { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #afa99c; border-left: 1px solid #afa99c; }
+.mbl-metrics span { display: flex; flex-direction: column; gap: 4px; padding: 9px; border-right: 1px solid #afa99c; border-bottom: 1px solid #afa99c; color: #81857b; font-size: 10px; }
+.mbl-metrics b { color: #2e342d; font-size: 16px; }
+.mbl-report-line { font-size: 11px; line-height: 1.7; color: #9c4c3a; }
+.mbl-report-details { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 0; }
+.mbl-report-details span { border: 1px solid #c4c0b5; padding: 3px 5px; font-size: 10px; }
+.mbl-method { display: flex; flex-direction: column; gap: 12px; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid #bcb6a9; }
+.mbl-method > div { display: flex; gap: 8px; }
+.mbl-method button { flex: 1; border: 1px solid #adb1a4; padding: 10px; color: #384036; background: transparent; }
+.mbl-method button.active { border-color: #ad4935; color: #892e25; background: #f5e7db; }
+.mbl-method button:disabled { opacity: .4; }
+.mbl-method p { margin: 0; color: #70776d; font-size: 11px; line-height: 1.7; }
+.mbl-method code { display: block; overflow-wrap: anywhere; padding-top: 7px; color: #3f4c41; }
+.mbl-proof { display: flex; flex-direction: column; gap: 0; }
+.mbl-proof h3 { font: 31px Georgia, "Songti SC", serif; margin: 0 0 24px; }
+.mbl-proof > button { width: 100%; display: grid; grid-template-columns: 35px 1fr auto; gap: 10px; padding: 14px 0; border: 0; border-top: 1px solid #b4b1a5; background: transparent; text-align: left; font-size: 12px; color: #2b302a; }
+.mbl-proof > button:not(:disabled):hover { background: #ece6d8; }
+.mbl-proof > button span { color: #b54f3c; }.mbl-proof > button b { font-weight: 500; }.mbl-proof > button em { color: #989d91; font-size: 10px; font-style: normal; }
+.mbl-proof > button[aria-pressed="true"] em { color: #4e775c; }
+.mbl-proof p { color: #777c72; line-height: 1.7; font-size: 11px; margin: 20px 0; }
+.mbl-locked { display: flex; flex-direction: column; align-items: flex-start; gap: 15px; margin-top: 50px; }
+.mbl-locked > span { font-size: 45px; color: #b0503d; }
+.mbl-locked h3 { font: 28px Georgia, "Songti SC", serif; margin: 0; }.mbl-locked p { color: #777c72; font-size: 12px; line-height: 1.8; }
+
+@media (max-width: 850px) {
+  .mbl-header, .mbl-footer { width: calc(100% - 32px); }
+  .mbl-library { padding-inline: 15px; }
+  .mbl-shelf { justify-content: flex-start; }
+  .mbl-page { padding: 25px; }
+  .mbl-chapter h2 { font-size: clamp(50px, 8vw, 75px); }
+  .mbl-chapter-copy p { font-size: 19px; }
+}
+@media (max-width: 620px) {
+  .mbl-header { min-height: 62px; }.mbl-header-right > span { display: none; }
+  .mbl-brand { font-size: 12px; }.mbl-brand i { margin: 0 5px; }
+  .mbl-library { justify-content: flex-start; min-height: calc(100dvh - 114px); padding-top: 52px; }
+  .mbl-library-title { margin-bottom: 12px; }
+  .mbl-library-title h1 { font-size: 50px; }
+  .mbl-shelf-scroll { padding-top: 85px; }
+  .mbl-shelf { min-height: min(520px, 59dvh); padding-left: 15px; padding-right: 15px; }
+  .mbl-shelf-caption { margin-inline: 8px; }.mbl-shelf-caption span:last-child { display: none; }
+  .mbl-reader { min-height: calc(100dvh - 114px); padding: 16px 12px 22px; justify-content: flex-start; }
+  .mbl-reader-top { padding-inline: 0; font-size: 9px; }.mbl-reader-top span:nth-child(2) { max-width: 42%; }
+  .mbl-book { min-height: 0; }
+  .mbl-book.is-cover { min-height: min(650px, calc(100dvh - 205px)); }
+  .mbl-cover-typography { min-height: min(430px, 48dvh); }
+  .mbl-spread { display: flex; flex-direction: column; }
+  .mbl-page { height: auto; min-height: 0; padding: 24px 24px 20px; }
+  .mbl-page-left { background: linear-gradient(#f0eadb, #e9e3d5); }
+  .mbl-page-right { min-height: 420px; background: #f1ecdf; }
+  .mbl-chapter { margin-top: 31px; }
+  .mbl-chapter p { margin-top: 15px; }.mbl-chapter h2 { font-size: 52px; }
+  .mbl-chapter-rule { margin-top: 14px; }
+  .mbl-chapter-copy { margin: 18px 0 25px; }.mbl-chapter-copy p { font-size: 18px; margin-bottom: 7px; }.mbl-chapter-copy span { font-size: 11px; }
+  .mbl-page-content { max-height: none; overflow: visible; padding: 22px 0 35px; }
+  .mbl-fold { display: none; }
+  .mbl-turn-sheet { display: none; }
+  .mbl-reader-controls { margin-top: 24px; }
+  .mbl-footer { min-height: 48px; }.mbl-footer span:last-child { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mbl-spine, .mbl-spine-peek, .mbl-reader-controls button, .mbl-chapter-dots button { transition: none; }
+  .mbl-turn-sheet { display: none; }
+}
