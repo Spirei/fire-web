@@ -91,6 +91,7 @@ function withFireTab(tabs: TabConfig[]): TabConfig[] {
 
 export default function RecordsApp({
   initialTab,
+  initialVersion,
   initialSymbol,
   initialCelebAvatars,
   initialUser,
@@ -110,6 +111,7 @@ export default function RecordsApp({
   initialTradingFilter = null
 }: {
   initialTab: string;
+  initialVersion: string;
   initialSymbol?: string;
   initialCelebAvatars?: Record<string, string>;
   initialUser: User;
@@ -956,7 +958,7 @@ export default function RecordsApp({
           {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView initialCdnEnabled={initialSettings.stockIconCdn} initialAssets={initialAssetLibrary?.assets} initialTotal={initialAssetLibrary?.total} /> : <NoPermission />)}
           {activeTab === "cards" && <CardLibraryView initial={initialCardLibrary} />}
           {activeTab === "settings" && (
-            <SettingsWindow>{settingsPanel}</SettingsWindow>
+            <SettingsWindow version={initialVersion}>{settingsPanel}</SettingsWindow>
           )}
         </div>
       </div>

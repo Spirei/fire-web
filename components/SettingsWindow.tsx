@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { CURRENT_VERSION } from "@/lib/versions";
 
 /**
  * 设置桌面窗口（页面内嵌形态）：无遮罩、不悬浮，
  * 默认 960px 宽、靠左，按住标题栏可拖动，位置自动保存。默认皮肤为 Orca 中性灰。
  */
-export default function SettingsWindow({ children }: { children: ReactNode }) {
+export default function SettingsWindow({ children, version }: { children: ReactNode; version: string }) {
   const [futuOnline, setFutuOnline] = useState<boolean | null>(null);
   const [fixed, setFixed] = useState<boolean>(false);
   const [editing, setEditing] = useState(false);
@@ -185,7 +184,7 @@ export default function SettingsWindow({ children }: { children: ReactNode }) {
             <button type="button" title="全站配色" aria-label="全站配色" onClick={() => window.dispatchEvent(new Event("fire:open-palette"))} className="flex h-6 w-6 items-center justify-center rounded-md">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-4 w-4" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a3 3 0 0 0 3-3 9 9 0 0 0-9-8Z"/><circle cx="7" cy="10" r=".7"/><circle cx="11" cy="7" r=".7"/><circle cx="16" cy="8" r=".7"/></svg>
             </button>
-            <span className="text-[10.5px] opacity-70">v{CURRENT_VERSION.version.replace(/^v/, "")}</span>
+            <span className="text-[10.5px] opacity-70">v{version.replace(/^v/, "")}</span>
           </span>
         </div>
 

@@ -21,6 +21,7 @@ import { fundState } from "@/lib/fundState";
 import { listWatchGroups } from "@/lib/watchGroupsStore";
 import { getAssistantHistoryState } from "@/lib/assistantHistory";
 import { readTradingSquareSnapshot } from "@/lib/tradingSquareSnapshot";
+import { CURRENT_VERSION } from "@/lib/versions";
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +132,7 @@ export default async function SlugLayout({
         <CurrencyProvider initialCurrency={currencyCookie ?? null}>
         <RecordsApp
           initialTab={tab.key}
+          initialVersion={CURRENT_VERSION.version}
           initialSymbol={initialSymbol}
           initialCelebAvatars={celebAvatars}
           initialUser={user}
