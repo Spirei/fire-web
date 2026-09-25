@@ -111,8 +111,9 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   const effectRectRef = useRef<DOMRect | null>(null);
   const effectPressRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
+  const [zoomEffect, setZoomEffect] = useState<PreviewEffect>("gloss");
   const zoomRef = useRef<HTMLDivElement>(null);
-  const zoomImageRef = useRef<HTMLImageElement>(null);
+  const zoomImageRef = useRef<HTMLDivElement>(null);
   const zoomCloseRef = useRef<HTMLButtonElement>(null);
   const zoomClosingRef = useRef(false);
 
@@ -433,6 +434,11 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     return { left, top, width: Math.max(1, Math.min(source.right, viewport.right) - left), height: Math.max(1, Math.min(source.bottom, viewport.bottom) - top) };
   }
 
+  function openZoom() {
+    setZoomEffect(PREVIEW_EFFECTS[Math.floor(Math.random() * PREVIEW_EFFECTS.length)].key);
+    setZoomOpen(true);
+  }
+
   async function closeZoom() {
     if (zoomClosingRef.current) return;
     const source = getZoomSourceRect();
@@ -597,7 +603,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
               if (press && Math.abs(event.clientX - press.x) + Math.abs(event.clientY - press.y) > 8) press.moved = true;
             }} onPointerUp={() => { window.setTimeout(() => { effectPressRef.current = null; }, 0); }} onPointerLeave={onEffectPointerLeave} onClick={() => {
               if (effectPressRef.current?.moved) return;
-              setZoomOpen(true);
+              openZoom();
             }}>
               <div ref={effectTiltRef} className="card-wander-effect-tilt">
                 <img className="card-wander-modal-image" src={selectedCard.image} alt={selectedCard.name} draggable={false} />
@@ -636,7 +642,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
               if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
               window.setTimeout(() => { actualDragRef.current = null; }, 0);
             }} onPointerCancel={() => { actualDragRef.current = null; }}>
-              <button ref={zoomSourceRef} type="button" className="card-wander-actual-card" aria-label={`放大查看 ${selectedCard.name} 原图`} onClick={() => { if (!actualDragRef.current?.moved) setZoomOpen(true); }}>
+              <button ref={zoomSourceRef} type="button" className="card-wander-actual-card" aria-label={`放大查看 ${selectedCard.name} 原图`} onClick={() => { if (!actualDragRef.current?.moved) openZoom(); }}>
                 <img src={selectedCard.image} alt={selectedCard.name} draggable={false} onLoad={() => {
                   const region = actualRef.current;
                   if (!region) return;
@@ -697,7 +703,10 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
       )}
       {zoomOpen && selectedCard && (
         <div ref={zoomRef} className="card-wander-zoom-backdrop" role="dialog" aria-modal="true" aria-label={`放大查看 ${selectedCard.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) void closeZoom(); }}>
-          <img ref={zoomImageRef} className="card-wander-zoom-image" src={selectedCard.image} alt={selectedCard.name} draggable={false} />
+          <div ref={zoomImageRef} className="card-wander-zoom-card" data-effect={zoomEffect}>
+            <img className="card-wander-zoom-image" src={selectedCard.image} alt={selectedCard.name} draggable={false} />
+            <span className="card-wander-effect-sheen" aria-hidden="true" />
+          </div>
           <button ref={zoomCloseRef} type="button" className="card-wander-zoom-close" onClick={() => void closeZoom()}><span aria-hidden="true">×</span> 关闭</button>
         </div>
       )}
