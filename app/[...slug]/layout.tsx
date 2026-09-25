@@ -106,7 +106,7 @@ export default async function SlugLayout({
   const initialTradingFilter = tab.key === "trading" ? (cookieStore.get("fire_trading_square_filter")?.value ?? null) : null;
 
   return (
-    <div className="app-shell-root min-h-screen bg-page">
+    <div className="app-shell-root flex min-h-[100dvh] flex-col bg-page">
       {/* 名人持仓与交易广场都会用到名人头像：HTML 阶段并行预加载，刷新时人物不闪现文字占位 */}
       {(tab.key === "celebs" || tab.key === "trading") &&
         Object.values(celebAvatars)
@@ -127,7 +127,7 @@ export default async function SlugLayout({
         </div>
       </header>
 
-      <main className="app-shell-main py-14">
+      <main className="app-shell-main flex-1 py-14">
         <CurrencyProvider initialCurrency={currencyCookie ?? null}>
         <RecordsApp
           initialTab={tab.key}

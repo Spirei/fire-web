@@ -4451,7 +4451,7 @@ export const V0_1_40_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_41_ENTRY: VersionEntry = {
   ...V0_1_40_ENTRY,
   version: "v0.1.41",
   date: "2026-09-25",
@@ -4488,12 +4488,24 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_41_ENTRY,
+  version: "v0.1.42",
+  date: "2026-09-26",
+  summary: "后台页面随可视高度自适应，页脚下方不再留空白。",
+  software: V0_1_41_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.42" } : item),
+  changes: [
+    { kind: "fix", title: "后台页面底部自适应", desc: "应用壳层改为使用动态视口高度的纵向弹性布局，主内容自动填满页脚前的剩余空间；在高窗口、缩放或移动浏览器地址栏变化时，页脚下方不再露出空白区域。" }
+  ]
+};
+
 
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_41_ENTRY,
   V0_1_40_ENTRY,
   V0_1_39_ENTRY,
   V0_1_38_ENTRY,
