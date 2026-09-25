@@ -127,15 +127,17 @@ type ProcessingJob = { id: string; status: "queued" | "running" | "done" | "fail
 
 type BookStage = "upload" | "inspect" | "tune" | "assets" | "maintain" | "none";
 
-export default function ModelImporter({ existing, mode = "manage", processingMethod = "local", bookStage = "none", focusModelId, onInspected, onSaved, onRemoved }: {
+export default function ModelImporter({ existing, mode = "manage", processingMethod = "local", bookStage = "none", focusModelId, onInspected, onRetryUpload, onSaved, onRemoved, onDraftStateChange }: {
   existing: ImportedModelRow[];
   mode?: "manage" | "pipeline" | "book";
   processingMethod?: "local" | "online";
   bookStage?: BookStage;
   focusModelId?: string;
   onInspected?: () => void;
+  onRetryUpload?: () => void;
   onSaved?: (id: string) => void;
   onRemoved?: (id: string) => void;
+  onDraftStateChange?: (unsaved: boolean) => void;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -245,6 +247,9 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
   const [editingId, setEditingId] = useState<string | null>(null);
   /** 预览用的素材文件名：新上传=刚上传的文件，编辑已有=那一行的文件 */
   const [previewFile, setPreviewFile] = useState<string | null>(null);
+  useEffect(() => {
+    if (mode === "book") onDraftStateChange?.(Boolean(previewFile && !editingId));
+  }, [editingId, mode, onDraftStateChange, previewFile]);
   const selectedFileRef = useRef<File | null>(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   useEffect(() => () => { if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl); }, [localPreviewUrl]);
@@ -435,7 +440,12 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
         }
         if (xhr.status >= 400) {
           setError(payload.error ?? `上传失败（${xhr.status}）`);
-          if (payload.report) setReport(payload.report);
+          if (payload.report) {
+            setReport(payload.report);
+            // A rejected GLB still has a useful structural report. In the
+            // book flow the report lives on the next page, so reveal it.
+            if (mode === "book") onInspected?.();
+          }
           return;
         }
         if (!payload.report || !payload.file) {
@@ -911,6 +921,7 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
                 ))}
               </ul>
             )}
+            {mode === "book" && !previewFile && <button type="button" className="mbl-paper-button" onClick={onRetryUpload}>返回上一页，重新上传原件 ↗</button>}
             <details>
               <summary>材质与贴图明细</summary>
               <table className="mp-table">

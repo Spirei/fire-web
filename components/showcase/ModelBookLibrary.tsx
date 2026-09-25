@@ -80,10 +80,14 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
   const [bookId, setBookId] = useState(initialBookId);
   const [page, setPage] = useState(initialPage);
   const [turn, setTurn] = useState<Turn>(null);
+  const [shelfDragging, setShelfDragging] = useState(false);
+  const [unsavedDraft, setUnsavedDraft] = useState(false);
   const [method, setMethod] = usePersistedState<"local" | "online">("fire:showcase:processing-method", "local");
   const [qa, setQa] = usePersistedState<Record<string, boolean[]>>("fire:showcase:qa-checks", {});
   const timers = useRef<number[]>([]);
   const touchX = useRef<number | null>(null);
+  const shelfDrag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  const shelfDragUntil = useRef(0);
   const book = existing.find((item) => item.id === bookId);
   const isNew = bookId === "new";
   const selected = Boolean(book || isNew);
@@ -105,39 +109,61 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
     setPage(nextPage);
     syncUrl(id, nextPage);
   }, [syncUrl]);
+  const confirmDiscard = useCallback(() => window.confirm("原件尚未保存，离开画册后需要重新上传。确定离开吗？"), []);
+  const leaveTo = useCallback((id: string, nextPage: number) => {
+    const discarding = bookId === "new" && unsavedDraft && (id !== "new" || nextPage === 0);
+    if (discarding && !confirmDiscard()) return;
+    if (discarding) setUnsavedDraft(false);
+    goTo(id, nextPage);
+  }, [bookId, confirmDiscard, goTo, unsavedDraft]);
   const flip = useCallback((direction: "next" | "previous") => {
     if (turn || !selected) return;
     const next = Math.min(CHAPTERS.length - 1, Math.max(0, page + (direction === "next" ? 1 : -1)));
     if (next === page) return;
+    if (isNew && unsavedDraft && next === 0) {
+      if (!confirmDiscard()) return;
+      setUnsavedDraft(false);
+    }
     if (window.matchMedia("(prefers-reduced-motion: reduce), (max-width: 620px)").matches) { goTo(bookId, next); return; }
     setTurn(direction);
     timers.current.push(window.setTimeout(() => { setPage(next); syncUrl(bookId, next); }, 265));
     timers.current.push(window.setTimeout(() => setTurn(null), 560));
-  }, [bookId, goTo, page, selected, syncUrl, turn]);
+  }, [bookId, confirmDiscard, goTo, isNew, page, selected, syncUrl, turn, unsavedDraft]);
   useEffect(() => {
     const pop = () => {
       const query = new URLSearchParams(window.location.search);
       const id = query.get("book") ?? "";
+      const nextPage = Math.min(6, Math.max(0, Number(query.get("page")) || 0));
+      if (bookId === "new" && unsavedDraft && (id !== "new" || nextPage === 0)) {
+        if (!confirmDiscard()) { syncUrl(bookId, page); return; }
+        setUnsavedDraft(false);
+      }
       setBookId(id === "new" || existing.some((item) => item.id === id) ? id : "");
-      setPage(Math.min(6, Math.max(0, Number(query.get("page")) || 0)));
+      setPage(nextPage);
       setTurn(null);
     };
     window.addEventListener("popstate", pop);
     return () => { window.removeEventListener("popstate", pop); timers.current.forEach(window.clearTimeout); };
-  }, [existing]);
+  }, [bookId, confirmDiscard, existing, page, syncUrl, unsavedDraft]);
+  useEffect(() => {
+    if (bookId !== "new" || !unsavedDraft) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [bookId, unsavedDraft]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (!selected || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLElement && event.target.isContentEditable) return;
-      if (event.key === "Escape") goTo("", 0);
+      if (event.key === "Escape") leaveTo("", 0);
       if (event.key === "ArrowRight") flip("next");
       if (event.key === "ArrowLeft") flip("previous");
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [flip, goTo, selected]);
+  }, [flip, leaveTo, selected]);
   useEffect(() => { window.scrollTo(0, 0); }, [bookId, page]);
 
-  const handleSaved = useCallback((id: string) => { goTo(id, page === 6 ? 6 : 4); router.refresh(); }, [goTo, page, router]);
+  const handleSaved = useCallback((id: string) => { setUnsavedDraft(false); goTo(id, page === 6 ? 6 : 4); router.refresh(); }, [goTo, page, router]);
   const importerStage = isNew ? stageForPage(page) : page === 3 || page === 4 || page === 6 ? stageForPage(page) : "none";
   const qaChecks = qa[bookId] ?? [];
   const toggleQa = (index: number) => setQa((previous) => {
@@ -148,13 +174,42 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
 
   return <main className="mbl" style={{ "--book-color": palette.cover, "--book-ink": palette.ink } as React.CSSProperties}>
     <header className="mbl-header">
-      <Link href="/" className="mbl-brand" aria-label="返回 Fire 首页">F<span>IRE</span><i> / </i>MODEL LIBRARY</Link>
-      <div className="mbl-header-right"><span>{String(existing.length).padStart(2, "0")} VOLUMES</span><Link href="/showcase/import">管理台 ↗</Link></div>
+      <Link href="/" className="mbl-brand" aria-label="返回 Fire 首页" onClick={(event) => { if (bookId === "new" && unsavedDraft && !confirmDiscard()) event.preventDefault(); }}>F<span>IRE</span><i> / </i>MODEL LIBRARY</Link>
+      <div className="mbl-header-right"><span>{String(existing.length).padStart(2, "0")} VOLUMES</span><Link href="/showcase/import" onClick={(event) => { if (bookId === "new" && unsavedDraft && !confirmDiscard()) event.preventDefault(); }}>管理台 ↗</Link></div>
     </header>
 
     {!selected ? <section className="mbl-library" aria-labelledby="library-title">
       <div className="mbl-library-title"><p>THE ARCHIVE · FIRE SHOWCASE</p><h1 id="library-title">车型画册<span>.</span></h1><span>每台车，都是一段从原件到发布的故事。</span></div>
-      <div className="mbl-shelf-scroll"><div className="mbl-shelf" aria-label="车型书架">
+      <div
+        className={`mbl-shelf-scroll${shelfDragging ? " is-dragging" : ""}`}
+        aria-label="横向滚动书架"
+        tabIndex={0}
+        onPointerDown={(event) => {
+          if (event.pointerType !== "mouse" || event.button !== 0 || event.currentTarget.scrollWidth <= event.currentTarget.clientWidth) return;
+          shelfDrag.current = { x: event.clientX, left: event.currentTarget.scrollLeft, moved: false };
+        }}
+        onPointerMove={(event) => {
+          const drag = shelfDrag.current;
+          if (!drag) return;
+          const distance = event.clientX - drag.x;
+          if (Math.abs(distance) > 5) { drag.moved = true; setShelfDragging(true); }
+          if (drag.moved) { event.preventDefault(); event.currentTarget.scrollLeft = drag.left - distance; }
+        }}
+        onPointerUp={() => {
+          if (shelfDrag.current?.moved) shelfDragUntil.current = Date.now() + 180;
+          shelfDrag.current = null;
+          setShelfDragging(false);
+        }}
+        onPointerLeave={() => {
+          if (shelfDrag.current?.moved) shelfDragUntil.current = Date.now() + 180;
+          shelfDrag.current = null;
+          setShelfDragging(false);
+        }}
+        onPointerCancel={() => { shelfDrag.current = null; setShelfDragging(false); }}
+        onClickCapture={(event) => {
+          if (Date.now() < shelfDragUntil.current) { event.preventDefault(); event.stopPropagation(); }
+        }}
+      ><div className="mbl-shelf" aria-label="车型书架">
         {existing.map((model, index) => { const color = COLORS[index % COLORS.length]; return <button key={model.id} type="button" className="mbl-spine" onClick={() => goTo(model.id, 0)} style={{ "--spine-bg": color.cover, "--spine-ink": color.ink, "--spine-edge": color.edge, "--spine-height": `${color.height}px`, "--spine-width": `${color.width}px` } as React.CSSProperties} aria-label={`打开 ${model.label} 车型画册`}>
           <span className="mbl-spine-rule" aria-hidden="true" /><span className={`mbl-spine-title${model.label.length > 16 ? " is-long" : ""}`}>{model.label}</span><span className="mbl-spine-number">{String(index + 1).padStart(2, "0")}</span>
           <span className="mbl-spine-peek" aria-hidden="true">{model.cover ? <img src={model.cover} alt="" /> : <b>{model.label}</b>}<small>{model.note || "MODEL ARCHIVE"}</small></span>
@@ -163,10 +218,13 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
       </div></div>
       <div className="mbl-shelf-caption"><span>SELECT A VOLUME TO OPEN</span><span>← DRAG TO EXPLORE →</span></div>
     </section> : <section className="mbl-reader" aria-label={`${label} 车型画册`} onTouchStart={(event) => { touchX.current = event.touches[0]?.clientX ?? null; }} onTouchEnd={(event) => { if (touchX.current === null) return; const delta = (event.changedTouches[0]?.clientX ?? touchX.current) - touchX.current; touchX.current = null; if (Math.abs(delta) > 90) flip(delta < 0 ? "next" : "previous"); }}>
-      <div className="mbl-reader-top"><button type="button" onClick={() => goTo("", 0)}>← 返回书架</button><span>FIRE / {label.toUpperCase()}</span><span>{String(page + 1).padStart(2, "0")} / {String(CHAPTERS.length).padStart(2, "0")}</span></div>
+      <div className="mbl-reader-top"><button type="button" onClick={() => leaveTo("", 0)}>← 返回书架</button><span>FIRE / {label.toUpperCase()}</span><span>{String(page + 1).padStart(2, "0")} / {String(CHAPTERS.length).padStart(2, "0")}</span></div>
       <div className={`mbl-book${page === 0 ? " is-cover" : ""}${turn ? ` is-turning-${turn}` : ""}`}>
         {page === 0 ? <div className="mbl-cover" style={{ "--cover-edge": palette.edge } as React.CSSProperties}>
-          <div className="mbl-cover-art">{book?.cover ? <img src={book.cover} alt={`${label} 封面`} /> : <div className="mbl-cover-typography"><span>FIRE · MOTOR ARCHIVE</span><strong>{label}</strong><i>{book?.note || "THE NEW EDITION"}</i></div>}</div>
+          <div className={`mbl-cover-art${book?.cover ? " has-image" : ""}`}>{book?.cover ? <>
+            <div className="mbl-cover-heading"><span>FIRE · MOTOR ARCHIVE</span><strong>{label}</strong><i>{book.note || "A MODEL MONOGRAPH"}</i></div>
+            <div className="mbl-cover-image"><img src={book.cover} alt={`${label} 封面`} /></div>
+          </> : <div className="mbl-cover-typography"><span>FIRE · MOTOR ARCHIVE</span><strong>{label}</strong><i>{book?.note || "THE NEW EDITION"}</i></div>}</div>
           <div className="mbl-cover-footer"><span>THE COMPLETE MODEL STORY</span><span>VOL. {String(book ? existing.indexOf(book) + 1 : existing.length + 1).padStart(2, "0")}</span></div>
         </div> : <div className="mbl-spread">
           <div className="mbl-page mbl-page-left">
@@ -192,7 +250,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
               {page === 5 && <div className="mbl-proof"><h3>逐档验收</h3>{["1K · 首页预览", "2K · 细节", "4K · 高清", "RAW · 原画", "刷新 · 失败重试"].map((item, index) => <button key={item} type="button" disabled={!book || book.present === false} aria-pressed={Boolean(qaChecks[index])} onClick={() => toggleQa(index)}><span>{String(index + 1).padStart(2, "0")}</span><b>{item}</b><em>{qaChecks[index] ? "✓ 本机已确认" : "○ 待人工确认"}</em></button>)}<p>逐项在目标设备看到真实画面后再勾选；记录只保存在当前浏览器，不代表服务器自动验收。</p><Link href="/">打开首页验收 ↗</Link></div>}
               {isNew && (page === 4 || page === 5 || page === 6) && <div className="mbl-locked"><span>↗</span><h3>先完成调校与保存</h3><p>保存成功后，附件与发布后维护会自动关联到新车型。</p><button type="button" onClick={() => goTo("new", 3)}>回到调校页</button></div>}
               <div className="mbl-importer-mount" hidden={!([1, 2, 3, 4, 6].includes(page) && (isNew || Boolean(book)) && !(isNew && page >= 4) && !(book?.builtin && page === 3))}>
-                <ModelImporter key={bookId} existing={existing} mode="book" processingMethod={effectiveMethod} bookStage={importerStage} focusModelId={book?.id} onInspected={() => goTo(bookId, 2)} onSaved={handleSaved} onRemoved={() => goTo("", 0)} />
+                <ModelImporter key={bookId} existing={existing} mode="book" processingMethod={effectiveMethod} bookStage={importerStage} focusModelId={book?.id} onInspected={() => goTo(bookId, 2)} onRetryUpload={() => goTo(bookId, 1)} onSaved={handleSaved} onRemoved={() => goTo("", 0)} onDraftStateChange={setUnsavedDraft} />
               </div>
             </div>
             <div className="mbl-page-foot"><span>{CHAPTERS[page].en}</span><span>{String(page * 2 + 1).padStart(2, "0")}</span></div>
@@ -202,7 +260,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
         {turn && <div className="mbl-turn-sheet" aria-hidden="true"><span /><span /></div>}
       </div>
       <nav className="mbl-reader-controls" aria-label="书页导航"><button type="button" onClick={() => flip("previous")} disabled={page === 0 || Boolean(turn)} aria-label="上一页">←</button><span>{CHAPTERS[page].era} <i>·</i> {CHAPTERS[page].label}</span><button type="button" onClick={() => flip("next")} disabled={page === CHAPTERS.length - 1 || Boolean(turn)} aria-label="下一页">→</button></nav>
-      <div className="mbl-chapter-dots" aria-label="快速跳转章节">{CHAPTERS.map((chapter, index) => <button key={chapter.en} type="button" onClick={() => goTo(bookId, index)} className={index === page ? "active" : ""} aria-current={index === page ? "page" : undefined} aria-label={`跳到${chapter.label}`} title={chapter.label} />)}</div>
+      <div className="mbl-chapter-dots" aria-label="快速跳转章节">{CHAPTERS.map((chapter, index) => <button key={chapter.en} type="button" onClick={() => leaveTo(bookId, index)} className={index === page ? "active" : ""} aria-current={index === page ? "page" : undefined} aria-label={`跳到${chapter.label}`} title={chapter.label} />)}</div>
     </section>}
     <footer className="mbl-footer"><span>FIRE ARCHIVE © 2026</span><span>MODELS, KEPT IN MOTION.</span></footer>
   </main>;
