@@ -5859,8 +5859,6 @@ button.PhotoView-Slider__toolbarIcon {
 ::view-transition-old(card-wander-stage), ::view-transition-new(card-wander-stage) { animation-duration: .52s; animation-timing-function: cubic-bezier(.22,1,.36,1); }
 ::view-transition-group(card-wander-card) { animation-duration: .56s; animation-timing-function: cubic-bezier(.22,1,.36,1); }
 .card-wander-effect {
-  --effect-x: 50%;
-  --effect-y: 50%;
   position: relative;
   width: 100%;
   margin: 0;
@@ -5876,27 +5874,26 @@ button.PhotoView-Slider__toolbarIcon {
   overflow: hidden;
   border-radius: inherit;
   background: #292e36;
-  transform-style: preserve-3d;
-  transition: transform .22s ease-out;
+  transition: transform .24s cubic-bezier(.22,1,.36,1);
   will-change: transform;
 }
-.card-wander-modal[data-landed]:not([data-closing]) .card-wander-effect:not([data-pointer-active]) .card-wander-effect-tilt { animation: card-wander-effect-idle 9s ease-in-out infinite alternate; }
-@keyframes card-wander-effect-idle {
-  from { transform: none; }
-  to { transform: rotateX(2.5deg) rotateY(-2deg) scale(1.008); }
-}
+.card-wander-effect[data-pointer-active] .card-wander-effect-tilt { transition-duration: .09s; }
 .card-wander-modal-image { display: block; width: 100%; height: 100%; object-fit: contain; }
 .card-wander-effect-sheen,
 .card-wander-effect-glare,
-.card-wander-effect-spec { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
-.card-wander-effect-glare { background: radial-gradient(circle at var(--effect-x) var(--effect-y), rgba(255,255,255,.5), rgba(255,255,255,.12) 25%, transparent 52%, rgba(0,0,0,.28)); mix-blend-mode: soft-light; }
-.card-wander-effect-spec { background: radial-gradient(34% 55% at var(--effect-x) var(--effect-y), rgba(255,255,255,.22), transparent 72%); mix-blend-mode: screen; }
-.card-wander-preview-stage[data-effect="gloss"] .card-wander-effect-sheen { background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.18) 50%, transparent 58%); background-size: 200% 100%; mix-blend-mode: screen; animation: card-wander-effect-sweep 6s ease-in-out infinite alternate; }
-.card-wander-preview-stage[data-effect="holo"] .card-wander-effect-sheen { background: repeating-linear-gradient(120deg, #df4949 0%, #e3a53b 3.5%, #90c841 7%, #33cca6 10.5%, #4d99e6 14%, #9f68df 17.5%, #e052a5 21%, #df4949 24.5%); background-size: 170% 170%; opacity: .28; mix-blend-mode: hard-light; animation: card-wander-effect-rainbow 8s linear infinite alternate; }
-.card-wander-preview-stage[data-effect="metal"] .card-wander-effect-sheen { background: linear-gradient(98deg, #454b54 0%, #7b848e 22%, #c3bfb6 38%, #75808a 50%, #535a65 64%, #afa9a1 80%, #4e555f 100%); background-size: 180% 100%; opacity: .46; mix-blend-mode: overlay; animation: card-wander-effect-sweep 7s ease-in-out infinite alternate; }
-.card-wander-effect[data-effect="metal"] .card-wander-effect-spec { background: radial-gradient(13% 150% at var(--effect-x) var(--effect-y), rgba(255,255,255,.52), rgba(255,255,255,.16) 45%, transparent 100%); }
-@keyframes card-wander-effect-sweep { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
-@keyframes card-wander-effect-rainbow { from { background-position: 0 0; } to { background-position: 100% 100%; } }
+.card-wander-effect-spec { position: absolute; border-radius: inherit; pointer-events: none; will-change: transform; }
+.card-wander-effect-sheen { inset: -35% -40%; }
+.card-wander-effect-glare, .card-wander-effect-spec { top: 50%; left: 50%; translate: -50% -50%; border-radius: 50%; transition: transform .24s cubic-bezier(.22,1,.36,1); }
+.card-wander-effect[data-pointer-active] .card-wander-effect-glare,
+.card-wander-effect[data-pointer-active] .card-wander-effect-spec { transition-duration: .09s; }
+.card-wander-effect-glare { width: 85%; aspect-ratio: 1; background: radial-gradient(circle at center, rgba(255,255,255,.2), rgba(255,255,255,.05) 27%, transparent 60%); }
+.card-wander-effect-spec { width: 35%; height: 80%; background: radial-gradient(ellipse at center, rgba(255,255,255,.22), transparent 60%); }
+.card-wander-preview-stage[data-effect="gloss"] .card-wander-effect-sheen { background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.18) 50%, transparent 58%); mix-blend-mode: screen; animation: card-wander-effect-sweep 6s ease-in-out infinite alternate; }
+.card-wander-preview-stage[data-effect="holo"] .card-wander-effect-sheen { background: repeating-linear-gradient(120deg, #df4949 0%, #e3a53b 3.5%, #90c841 7%, #33cca6 10.5%, #4d99e6 14%, #9f68df 17.5%, #e052a5 21%, #df4949 24.5%); opacity: .28; mix-blend-mode: hard-light; animation: card-wander-effect-rainbow 8s linear infinite alternate; }
+.card-wander-preview-stage[data-effect="metal"] .card-wander-effect-sheen { background: linear-gradient(98deg, #454b54 0%, #7b848e 22%, #c3bfb6 38%, #75808a 50%, #535a65 64%, #afa9a1 80%, #4e555f 100%); opacity: .46; mix-blend-mode: overlay; animation: card-wander-effect-sweep 7s ease-in-out infinite alternate; }
+.card-wander-effect[data-effect="metal"] .card-wander-effect-spec { background: radial-gradient(ellipse at center, rgba(255,255,255,.52), rgba(255,255,255,.16) 30%, transparent 60%); }
+@keyframes card-wander-effect-sweep { from { transform: translate3d(-14%,0,0); } to { transform: translate3d(14%,0,0); } }
+@keyframes card-wander-effect-rainbow { from { transform: translate3d(-8%,-5%,0); } to { transform: translate3d(8%,5%,0); } }
 .card-wander-wallet { position: relative; flex: none; width: 260px; height: 452px; margin-top: 16px; overflow: hidden; border: 5px solid #34393f; border-radius: 39px; background: #060709; box-shadow: 0 12px 40px #000b, inset 0 0 0 2px #050607; color: #f6f7f9; transition: translate .74s cubic-bezier(.22,1,.36,1); }
 .card-wander-wallet[data-payment="true"] { translate: 0 -65px; }
 .card-wander-wallet-island { position: absolute; z-index: 2; top: 7px; left: 50%; width: 70px; height: 18px; transform: translateX(-50%); border-radius: 999px; background: #050607; }
@@ -6004,7 +6001,7 @@ button.PhotoView-Slider__toolbarIcon {
 @media (prefers-reduced-motion: reduce) {
   .card-wander-world, .card-wander-wall, .card-wander-tile, .card-wander-modal, .card-wander-modal-backdrop, .card-wander-zoom-backdrop { animation: none; }
   .card-wander-tile, .card-wander-pill, .card-wander-shuffle { transition: none; }
-  .card-wander-effect-tilt, .card-wander-effect-sheen { animation: none !important; transition: none; }
+  .card-wander-effect-tilt, .card-wander-effect-sheen, .card-wander-effect-glare, .card-wander-effect-spec { animation: none !important; transition: none; }
   .card-wander-wallet, .card-wander-wallet-card, .card-wander-wallet-stack, .card-wander-seg-thumb { animation: none !important; transition: none !important; }
   .card-wander-wallet-reader-ring, .card-wander-wallet-face { animation: none !important; }
   .card-wander-modal, .card-wander-preview-stage, .card-wander-preview-controls, .card-wander-modal-heading, .card-wander-modal-actions { transition: none !important; }

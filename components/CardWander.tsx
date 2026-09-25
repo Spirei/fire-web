@@ -104,6 +104,11 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   const actualRef = useRef<HTMLDivElement>(null);
   const actualDragRef = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
   const effectTiltRef = useRef<HTMLDivElement>(null);
+  const effectGlareRef = useRef<HTMLSpanElement>(null);
+  const effectSpecRef = useRef<HTMLSpanElement>(null);
+  const effectFrameRef = useRef<number | null>(null);
+  const effectPointRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const effectRectRef = useRef<DOMRect | null>(null);
   const effectPressRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
   const zoomRef = useRef<HTMLDivElement>(null);
@@ -382,7 +387,18 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     return () => { alive = false; window.clearTimeout(revealTimer); };
   }, [selected?.key]);
 
-  useEffect(() => () => restoreSourceTile(), []);
+  useEffect(() => () => {
+    restoreSourceTile();
+    if (effectFrameRef.current !== null) window.cancelAnimationFrame(effectFrameRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (previewMode === "showcase") return;
+    if (effectFrameRef.current !== null) window.cancelAnimationFrame(effectFrameRef.current);
+    effectFrameRef.current = null;
+    effectPointRef.current = null;
+    effectRectRef.current = null;
+  }, [previewMode]);
 
   useLayoutEffect(() => {
     if (previewMode !== "actual" || !selectedCard) return;
@@ -490,19 +506,33 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   };
   const onEffectPointerMove = (event: PointerEvent<HTMLButtonElement>) => {
     if (!modalRef.current?.hasAttribute("data-landed") || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const rect = event.currentTarget.getBoundingClientRect();
+    const rect = effectRectRef.current ?? event.currentTarget.getBoundingClientRect();
+    effectRectRef.current = rect;
     const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
     const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-    event.currentTarget.style.setProperty("--effect-x", `${(x * 100).toFixed(1)}%`);
-    event.currentTarget.style.setProperty("--effect-y", `${(y * 100).toFixed(1)}%`);
-    if (effectTiltRef.current) effectTiltRef.current.style.transform = `rotateX(${((0.5 - y) * 12).toFixed(2)}deg) rotateY(${((x - 0.5) * 13).toFixed(2)}deg) scale(1.025)`;
+    effectPointRef.current = { x, y, width: rect.width, height: rect.height };
     event.currentTarget.dataset.pointerActive = "true";
+    if (effectFrameRef.current !== null) return;
+    effectFrameRef.current = window.requestAnimationFrame(() => {
+      effectFrameRef.current = null;
+      const point = effectPointRef.current;
+      if (!point) return;
+      const { x, y, width, height } = point;
+      if (effectTiltRef.current) effectTiltRef.current.style.transform = `rotateX(${((0.5 - y) * 12).toFixed(2)}deg) rotateY(${((x - 0.5) * 13).toFixed(2)}deg)`;
+      const reflection = `translate3d(${((x - 0.5) * width).toFixed(1)}px, ${((y - 0.5) * height).toFixed(1)}px, 0)`;
+      if (effectGlareRef.current) effectGlareRef.current.style.transform = reflection;
+      if (effectSpecRef.current) effectSpecRef.current.style.transform = reflection;
+    });
   };
   const onEffectPointerLeave = (event: PointerEvent<HTMLButtonElement>) => {
-    event.currentTarget.style.setProperty("--effect-x", "50%");
-    event.currentTarget.style.setProperty("--effect-y", "50%");
+    if (effectFrameRef.current !== null) window.cancelAnimationFrame(effectFrameRef.current);
+    effectFrameRef.current = null;
+    effectPointRef.current = null;
+    effectRectRef.current = null;
     delete event.currentTarget.dataset.pointerActive;
     if (effectTiltRef.current) effectTiltRef.current.style.transform = "";
+    if (effectGlareRef.current) effectGlareRef.current.style.transform = "";
+    if (effectSpecRef.current) effectSpecRef.current.style.transform = "";
   };
 
   return (
@@ -561,7 +591,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
         <div className="card-wander-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) void closePreview(); }}>
           <div ref={modalRef} className="card-wander-modal" role="dialog" aria-modal="true" aria-labelledby="card-wander-modal-title">
             <div className="card-wander-preview-stage" data-mode={previewMode} data-effect={previewEffect}>
-            {previewMode === "showcase" && <button ref={zoomSourceRef} type="button" className="card-wander-effect" data-effect={previewEffect} aria-label={`放大查看 ${selectedCard.name} 原图`} onPointerDown={(event) => { effectPressRef.current = { x: event.clientX, y: event.clientY, moved: false }; }} onPointerMove={(event) => {
+            {previewMode === "showcase" && <button ref={zoomSourceRef} type="button" className="card-wander-effect" data-effect={previewEffect} aria-label={`放大查看 ${selectedCard.name} 原图`} onPointerEnter={(event) => { effectRectRef.current = event.currentTarget.getBoundingClientRect(); }} onPointerDown={(event) => { effectPressRef.current = { x: event.clientX, y: event.clientY, moved: false }; }} onPointerMove={(event) => {
               onEffectPointerMove(event);
               const press = effectPressRef.current;
               if (press && Math.abs(event.clientX - press.x) + Math.abs(event.clientY - press.y) > 8) press.moved = true;
@@ -572,8 +602,8 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
               <div ref={effectTiltRef} className="card-wander-effect-tilt">
                 <img className="card-wander-modal-image" src={selectedCard.image} alt={selectedCard.name} draggable={false} />
                 <span className="card-wander-effect-sheen" aria-hidden="true" />
-                <span className="card-wander-effect-glare" aria-hidden="true" />
-                <span className="card-wander-effect-spec" aria-hidden="true" />
+                <span ref={effectGlareRef} className="card-wander-effect-glare" aria-hidden="true" />
+                <span ref={effectSpecRef} className="card-wander-effect-spec" aria-hidden="true" />
               </div>
             </button>}
             {previewMode === "wallet" && <div className="card-wander-wallet" data-payment={walletPayment}>
