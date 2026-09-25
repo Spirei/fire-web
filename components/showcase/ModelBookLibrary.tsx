@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ModelImporter, { type ImportedModelRow, type ImportReport } from "./ModelImporter";
+import { modelAccent } from "./modelAccent";
 import { usePersistedState } from "@/lib/usePersistedState";
+import { showToast } from "@/lib/toast";
 
 const CHAPTERS = [
   { label: "封面", en: "COVER", era: "车型档案" },
@@ -16,19 +18,24 @@ const CHAPTERS = [
   { label: "维护", en: "AFTER RELEASE", era: "发布后" }
 ] as const;
 
-const COLORS = [
-  { cover: "#e8e4d6", ink: "#202328", edge: "#b5ae93", height: 380, width: 68 },
-  { cover: "#a8cdd5", ink: "#173139", edge: "#6d99a6", height: 475, width: 57 },
-  { cover: "#bd493a", ink: "#fff4e4", edge: "#91352f", height: 338, width: 54 },
-  { cover: "#ed312a", ink: "#ffe8d2", edge: "#9c2b2b", height: 393, width: 68 },
-  { cover: "#eb006b", ink: "#fff7e9", edge: "#aa0753", height: 455, width: 59 },
-  { cover: "#f1e7d0", ink: "#1a2222", edge: "#b9ab8f", height: 530, width: 65 },
-  { cover: "#1b54a6", ink: "#f6e9d0", edge: "#163c73", height: 474, width: 56 },
-  { cover: "#e2c0ac", ink: "#342626", edge: "#ab8574", height: 405, width: 61 },
-  { cover: "#4d8eb5", ink: "#f8e2df", edge: "#336481", height: 494, width: 67 },
-  { cover: "#353d41", ink: "#e7c7ae", edge: "#1d2527", height: 408, width: 64 },
-  { cover: "#c4c984", ink: "#252c22", edge: "#899257", height: 344, width: 54 }
+const BOOK_SIZES = [
+  { height: 380, width: 68 }, { height: 475, width: 57 }, { height: 338, width: 54 },
+  { height: 393, width: 68 }, { height: 455, width: 59 }, { height: 530, width: 65 },
+  { height: 474, width: 56 }, { height: 405, width: 61 }
 ];
+
+function bookTheme(model?: ImportedModelRow) {
+  if (!model) return { cover: "#e8e4d6", ink: "#202328", edge: "#b5ae93", pattern: "lines" };
+  const identity = `${model.id} ${model.label} ${model.file}`.toLowerCase();
+  const accent = modelAccent(encodeURIComponent(model.file));
+  if (identity.includes("gulf")) return { cover: "#76b6c9", ink: "#173746", edge: "#467d91", pattern: "gulf" };
+  if (identity.includes("amr") || identity.includes("aston")) return { cover: "#14564e", ink: "#e8e2cd", edge: "#0c3935", pattern: "racing" };
+  if (identity.includes("mp45") || identity.includes("mp4/5")) return { cover: "#db3e32", ink: "#fff2df", edge: "#9b302b", pattern: "chevron" };
+  if (identity.includes("mp46") || identity.includes("mp4/6")) return { cover: "#f3ecda", ink: "#2c2b27", edge: "#c5b9a5", pattern: "redband" };
+  if (identity.includes("mcl39")) return { cover: "#f18a27", ink: "#242d31", edge: "#ba5919", pattern: "papaya" };
+  if (identity.includes("mcl35")) return { cover: "#e87723", ink: "#253642", edge: "#a84e1c", pattern: "arcs" };
+  return { cover: accent, ink: "#fff2df", edge: "#985126", pattern: "lines" };
+}
 
 type Turn = "next" | "previous" | null;
 type Stage = "upload" | "inspect" | "tune" | "assets" | "maintain" | "none";
@@ -81,6 +88,14 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
   const [page, setPage] = useState(initialPage);
   const [turn, setTurn] = useState<Turn>(null);
   const [shelfDragging, setShelfDragging] = useState(false);
+  const [orderedIds, setOrderedIds] = useState(() => existing.map((item) => item.id));
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; after: boolean } | null>(null);
+  const [orderSaving, setOrderSaving] = useState(false);
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [hoverX, setHoverX] = useState(0);
+  const [coverBusy, setCoverBusy] = useState(false);
+  const [bookDragging, setBookDragging] = useState(false);
   const [unsavedDraft, setUnsavedDraft] = useState(false);
   const [method, setMethod] = usePersistedState<"local" | "online">("fire:showcase:processing-method", "local");
   const [qa, setQa] = usePersistedState<Record<string, boolean[]>>("fire:showcase:qa-checks", {});
@@ -88,12 +103,68 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
   const touchX = useRef<number | null>(null);
   const shelfDrag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
   const shelfDragUntil = useRef(0);
+  const orderSavingRef = useRef(false);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+  const shelfScrollRef = useRef<HTMLDivElement | null>(null);
+  const mouseTurnStart = useRef<{ x: number; y: number } | null>(null);
   const book = existing.find((item) => item.id === bookId);
   const isNew = bookId === "new";
   const selected = Boolean(book || isNew);
   const effectiveMethod = book?.builtin ? "local" : method;
-  const palette = book ? COLORS[existing.findIndex((item) => item.id === book.id) % COLORS.length] : COLORS[0];
+  const palette = bookTheme(book);
   const label = book?.label ?? "未命名车型";
+  const orderedBooks = orderedIds.map((id) => existing.find((item) => item.id === id)).filter((item): item is ImportedModelRow => Boolean(item));
+  const hoveredBook = existing.find((item) => item.id === hoverId);
+
+  useEffect(() => { if (!orderSavingRef.current) setOrderedIds(existing.map((item) => item.id)); }, [existing]);
+  useEffect(() => () => { timers.current.forEach(window.clearTimeout); }, []);
+
+  const saveOrder = useCallback(async (ids: string[]) => {
+    if (orderSavingRef.current || ids.join("|") === orderedIds.join("|")) return;
+    const previous = orderedIds;
+    orderSavingRef.current = true;
+    setOrderSaving(true);
+    setOrderedIds(ids);
+    try {
+      const response = await fetch("/api/showcase/models/order", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "排序保存失败");
+      showToast("顺序已保存，首页车型条同步");
+      router.refresh();
+    } catch (cause) {
+      setOrderedIds(previous);
+      showToast(cause instanceof Error ? cause.message : "排序保存失败", "err");
+    } finally {
+      orderSavingRef.current = false;
+      setOrderSaving(false);
+    }
+  }, [orderedIds, router]);
+
+  const moveBook = useCallback((sourceId: string, targetId: string, after: boolean) => {
+    if (sourceId === targetId || orderSavingRef.current) return;
+    const next = orderedIds.filter((id) => id !== sourceId);
+    const at = next.indexOf(targetId);
+    next.splice(at < 0 ? next.length : at + Number(after), 0, sourceId);
+    void saveOrder(next);
+  }, [orderedIds, saveOrder]);
+
+  const uploadBookCover = useCallback(async (file: File) => {
+    if (!book) return;
+    setCoverBusy(true);
+    try {
+      const response = await fetch(`/api/showcase/models/cover?id=${encodeURIComponent(book.id)}&name=${encodeURIComponent(file.name)}`, {
+        method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "封面上传失败");
+      showToast("封面已更新");
+      router.refresh();
+    } catch (cause) {
+      showToast(cause instanceof Error ? cause.message : "封面上传失败", "err");
+    } finally { setCoverBusy(false); }
+  }, [book, router]);
 
   const syncUrl = useCallback((id: string, nextPage: number) => {
     const url = new URL(window.location.href);
@@ -143,7 +214,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
       setTurn(null);
     };
     window.addEventListener("popstate", pop);
-    return () => { window.removeEventListener("popstate", pop); timers.current.forEach(window.clearTimeout); };
+    return () => window.removeEventListener("popstate", pop);
   }, [bookId, confirmDiscard, existing, page, syncUrl, unsavedDraft]);
   useEffect(() => {
     if (bookId !== "new" || !unsavedDraft) return;
@@ -181,11 +252,13 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
     {!selected ? <section className="mbl-library" aria-labelledby="library-title">
       <div className="mbl-library-title"><p>THE ARCHIVE · FIRE SHOWCASE</p><h1 id="library-title">车型画册<span>.</span></h1><span>每台车，都是一段从原件到发布的故事。</span></div>
       <div
+        ref={shelfScrollRef}
         className={`mbl-shelf-scroll${shelfDragging ? " is-dragging" : ""}`}
         aria-label="横向滚动书架"
+        aria-busy={orderSaving}
         tabIndex={0}
         onPointerDown={(event) => {
-          if (event.pointerType !== "mouse" || event.button !== 0 || event.currentTarget.scrollWidth <= event.currentTarget.clientWidth) return;
+          if (event.pointerType !== "mouse" || event.button !== 0 || event.currentTarget.scrollWidth <= event.currentTarget.clientWidth || (event.target instanceof Element && event.target.closest(".mbl-spine"))) return;
           shelfDrag.current = { x: event.clientX, left: event.currentTarget.scrollLeft, moved: false };
         }}
         onPointerMove={(event) => {
@@ -210,17 +283,69 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
           if (Date.now() < shelfDragUntil.current) { event.preventDefault(); event.stopPropagation(); }
         }}
       ><div className="mbl-shelf" aria-label="车型书架">
-        {existing.map((model, index) => { const color = COLORS[index % COLORS.length]; return <button key={model.id} type="button" className="mbl-spine" onClick={() => goTo(model.id, 0)} style={{ "--spine-bg": color.cover, "--spine-ink": color.ink, "--spine-edge": color.edge, "--spine-height": `${color.height}px`, "--spine-width": `${color.width}px` } as React.CSSProperties} aria-label={`打开 ${model.label} 车型画册`}>
-          <span className="mbl-spine-rule" aria-hidden="true" /><span className={`mbl-spine-title${model.label.length > 16 ? " is-long" : ""}`}>{model.label}</span><span className="mbl-spine-number">{String(index + 1).padStart(2, "0")}</span>
-          <span className="mbl-spine-peek" aria-hidden="true">{model.cover ? <img src={model.cover} alt="" /> : <b>{model.label}</b>}<small>{model.note || "MODEL ARCHIVE"}</small></span>
+        {orderedBooks.map((model, index) => { const color = bookTheme(model); const size = BOOK_SIZES[index % BOOK_SIZES.length]; return <button key={model.id} type="button" draggable={!orderSaving} data-pattern={color.pattern} className={`mbl-spine${dragId === model.id ? " is-dragged" : ""}${dropTarget?.id === model.id ? ` is-drop-${dropTarget.after ? "after" : "before"}` : ""}`} onClick={() => { if (Date.now() >= shelfDragUntil.current) goTo(model.id, 0); }} onKeyDown={(event) => {
+          if (!event.altKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+          event.preventDefault();
+          const nextIndex = index + (event.key === "ArrowRight" ? 1 : -1);
+          const target = orderedBooks[nextIndex];
+          if (target) moveBook(model.id, target.id, nextIndex > index);
+        }} onPointerEnter={(event) => {
+          if (event.pointerType !== "mouse" || dragId) return;
+          const shelf = shelfScrollRef.current?.getBoundingClientRect();
+          const rect = event.currentTarget.getBoundingClientRect();
+          setHoverX(Math.max(75, Math.min((shelf?.width ?? rect.width) - 75, rect.left + rect.width / 2 - (shelf?.left ?? 0))));
+          setHoverId(model.id);
+        }} onPointerLeave={() => setHoverId((current) => current === model.id ? null : current)} onFocus={(event) => {
+          const shelf = shelfScrollRef.current?.getBoundingClientRect();
+          const rect = event.currentTarget.getBoundingClientRect();
+          setHoverX(Math.max(75, Math.min((shelf?.width ?? rect.width) - 75, rect.left + rect.width / 2 - (shelf?.left ?? 0))));
+          setHoverId(model.id);
+        }} onBlur={() => setHoverId((current) => current === model.id ? null : current)} onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", model.id);
+          shelfDrag.current = null;
+          setShelfDragging(false);
+          setHoverId(null);
+          setDragId(model.id);
+        }} onDragOver={(event) => {
+          if (!dragId || dragId === model.id) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          const rect = event.currentTarget.getBoundingClientRect();
+          const after = event.clientX > rect.left + rect.width / 2;
+          setDropTarget((current) => current?.id === model.id && current.after === after ? current : { id: model.id, after });
+        }} onDrop={(event) => {
+          event.preventDefault();
+          const source = dragId ?? event.dataTransfer.getData("text/plain");
+          if (source) moveBook(source, model.id, event.clientX > event.currentTarget.getBoundingClientRect().left + event.currentTarget.getBoundingClientRect().width / 2);
+          shelfDragUntil.current = Date.now() + 250;
+          setDragId(null); setDropTarget(null);
+        }} onDragEnd={() => { shelfDragUntil.current = Date.now() + 250; setDragId(null); setDropTarget(null); }} style={{ "--spine-bg": color.cover, "--spine-ink": color.ink, "--spine-edge": color.edge, "--spine-height": `${size.height}px`, "--spine-width": `${size.width}px` } as React.CSSProperties} aria-label={`打开 ${model.label} 车型画册，拖动可排序`}>
+          <span className="mbl-spine-rule" aria-hidden="true" /><span className={`mbl-spine-title${model.label.length > 16 ? " is-long" : ""}`}>{model.label}</span><span className="mbl-spine-number">{String(index + 1).padStart(2, "0")}</span><span className="mbl-spine-grip" aria-hidden="true">⠿</span>
         </button>; })}
-        <button type="button" className="mbl-spine mbl-spine-new" onClick={() => goTo("new", 0)} aria-label="新建车型画册"><span>＋</span><small>NEW<br />VOLUME</small></button>
+        <button type="button" className="mbl-spine mbl-spine-new" onClick={() => goTo("new", 0)} onDragOver={(event) => { if (dragId) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); if (dragId) moveBook(dragId, orderedIds.at(-1) ?? dragId, true); setDragId(null); setDropTarget(null); }} aria-label="新建车型画册"><span>＋</span><small>NEW<br />VOLUME</small></button>
       </div></div>
-      <div className="mbl-shelf-caption"><span>SELECT A VOLUME TO OPEN</span><span>← DRAG TO EXPLORE →</span></div>
+      <div className="mbl-shelf-preview" aria-live="polite">{hoveredBook && !dragId && <div className="mbl-preview-stack" style={{ left: `${hoverX}px`, "--preview-color": bookTheme(hoveredBook).cover, "--preview-ink": bookTheme(hoveredBook).ink } as React.CSSProperties}><div className="mbl-preview-cover">{hoveredBook.cover ? <img src={hoveredBook.cover} alt={`${hoveredBook.label} 封面预览`} /> : <strong>{hoveredBook.label}</strong>}</div><small>{hoveredBook.label} <span>· {hoveredBook.note || "车型档案"}</span></small></div>}</div>
+      <div className="mbl-shelf-caption" aria-live="polite"><span>{String(orderedBooks.length).padStart(2, "0")} VOLUMES / ONE SHELF</span><span>{orderSaving ? "正在保存顺序…" : "拖动排序 · 点击阅读"}</span></div>
     </section> : <section className="mbl-reader" aria-label={`${label} 车型画册`} onTouchStart={(event) => { touchX.current = event.touches[0]?.clientX ?? null; }} onTouchEnd={(event) => { if (touchX.current === null) return; const delta = (event.changedTouches[0]?.clientX ?? touchX.current) - touchX.current; touchX.current = null; if (Math.abs(delta) > 90) flip(delta < 0 ? "next" : "previous"); }}>
       <div className="mbl-reader-top"><button type="button" onClick={() => leaveTo("", 0)}>← 返回书架</button><span>FIRE / {label.toUpperCase()}</span><span>{String(page + 1).padStart(2, "0")} / {String(CHAPTERS.length).padStart(2, "0")}</span></div>
-      <div className={`mbl-book${page === 0 ? " is-cover" : ""}${turn ? ` is-turning-${turn}` : ""}`}>
-        {page === 0 ? <div className="mbl-cover" style={{ "--cover-edge": palette.edge } as React.CSSProperties}>
+      <div className={`mbl-book${page === 0 ? " is-cover" : ""}${turn ? ` is-turning-${turn}` : ""}${bookDragging ? " is-dragging" : ""}`} onPointerDown={(event) => {
+        if (event.pointerType !== "mouse" || event.button !== 0 || turn || (event.target instanceof Element && event.target.closest("button, a, input, textarea, select, [contenteditable], .mbl-page-content"))) return;
+        mouseTurnStart.current = { x: event.clientX, y: event.clientY };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }} onPointerMove={(event) => {
+        if (!mouseTurnStart.current) return;
+        if (Math.abs(event.clientX - mouseTurnStart.current.x) > 8) setBookDragging(true);
+      }} onPointerUp={(event) => {
+        const start = mouseTurnStart.current;
+        mouseTurnStart.current = null;
+        setBookDragging(false);
+        if (!start) return;
+        const dx = event.clientX - start.x;
+        const dy = event.clientY - start.y;
+        if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.4) flip(dx < 0 ? "next" : "previous");
+      }} onPointerCancel={() => { mouseTurnStart.current = null; setBookDragging(false); }}>
+        {page === 0 ? <div className="mbl-cover" data-pattern={palette.pattern} style={{ "--cover-edge": palette.edge } as React.CSSProperties}>
           <div className={`mbl-cover-art${book?.cover ? " has-image" : ""}`}>{book?.cover ? <>
             <div className="mbl-cover-heading"><span>FIRE · MOTOR ARCHIVE</span><strong>{label}</strong><i>{book.note || "A MODEL MONOGRAPH"}</i></div>
             <div className="mbl-cover-image"><img src={book.cover} alt={`${label} 封面`} /></div>
@@ -241,7 +366,8 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
             <div className="mbl-page-foot"><span>{label}</span><span>{String(page * 2).padStart(2, "0")}</span></div>
           </div>
           <div className="mbl-page mbl-page-right">
-            <div className="mbl-page-kicker"><span>MODEL / {bookId.toUpperCase()}</span><span>{shortDate(book?.updatedAt ?? "")}</span></div>
+            <div className="mbl-page-kicker"><span>MODEL / {bookId.toUpperCase()}</span><div className="mbl-page-kicker-actions"><span>{shortDate(book?.updatedAt ?? "")}</span>{book && <button type="button" className="mbl-cover-action" title={book.cover ? "更换车型封面" : "设置车型封面"} aria-label={book.cover ? "更换车型封面" : "设置车型封面"} disabled={coverBusy} onClick={() => coverInputRef.current?.click()}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="m4 17 5-4 3 2 4-5 4 5"/></svg></button>}</div></div>
+            <input ref={coverInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadBookCover(file); }} />
             <div className="mbl-page-content">
               {page === 1 && book && <div className="mbl-existing-source"><span>FILE ON RECORD</span><h3>{book.label}</h3><p>{book.file}</p><div className="mbl-source-status">{book.present === false ? "● 原件缺失" : "● 原件已入库"}</div><small>已保存车型的原件不会在此页被覆盖。需要调参请翻到「调校」。</small></div>}
               {page === 2 && book && <ReadonlyInspection model={book} />}
@@ -258,6 +384,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
           <div className="mbl-fold" aria-hidden="true" />
         </div>}
         {turn && <div className="mbl-turn-sheet" aria-hidden="true"><span /><span /></div>}
+        {page < CHAPTERS.length - 1 && <button type="button" className="mbl-corner-next" onClick={() => flip("next")} disabled={Boolean(turn)} aria-label="翻到下一页" title="翻到下一页"><span aria-hidden="true">↗</span></button>}
       </div>
       <nav className="mbl-reader-controls" aria-label="书页导航"><button type="button" onClick={() => flip("previous")} disabled={page === 0 || Boolean(turn)} aria-label="上一页">←</button><span>{CHAPTERS[page].era} <i>·</i> {CHAPTERS[page].label}</span><button type="button" onClick={() => flip("next")} disabled={page === CHAPTERS.length - 1 || Boolean(turn)} aria-label="下一页">→</button></nav>
       <div className="mbl-chapter-dots" aria-label="快速跳转章节">{CHAPTERS.map((chapter, index) => <button key={chapter.en} type="button" onClick={() => leaveTo(bookId, index)} className={index === page ? "active" : ""} aria-current={index === page ? "page" : undefined} aria-label={`跳到${chapter.label}`} title={chapter.label} />)}</div>
