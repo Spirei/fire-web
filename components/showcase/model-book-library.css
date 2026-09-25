@@ -28,17 +28,17 @@
 .mbl-header-right a:hover { color: white; }
 .mbl-footer { min-height: 52px; border-top: 1px solid #383a36; font-size: 10px; color: #82867d; letter-spacing: .16em; }
 
-.mbl-library { flex: 1; width: min(1440px, 100%); margin-inline: auto; display: flex; flex-direction: column; justify-content: center; min-height: min(760px, calc(100dvh - 128px)); padding: 34px 36px 62px; }
-.mbl-library-title { display: flex; flex-direction: column; gap: 12px; margin: 0 0 35px; }
+.mbl-library { flex: 1; width: min(1440px, 100%); margin-inline: auto; display: flex; flex-direction: column; justify-content: center; min-height: min(760px, calc(100dvh - 128px)); padding: 14px 36px 22px; }
+.mbl-library-title { display: flex; flex-direction: column; gap: 12px; margin: 0 0 20px; }
 .mbl-library-title p, .mbl-library-title > span { margin: 0; color: #8c9288; font-size: 11px; letter-spacing: .18em; }
 .mbl-library-title h1 { margin: 0; font-size: clamp(42px, 5.4vw, 78px); line-height: 1.1; font-family: Georgia, "Songti SC", serif; font-weight: 400; letter-spacing: -.06em; }
 .mbl-library-title h1 span { color: #e94332; }
 .mbl-library-title > span { letter-spacing: .12em; font-size: 12px; }
-.mbl-shelf-scroll { overflow-x: auto; overflow-y: visible; padding-top: 58px; scrollbar-width: none; }
+.mbl-shelf-scroll { overflow-x: auto; overflow-y: visible; padding-top: 24px; scrollbar-width: none; }
 .mbl-shelf-scroll::-webkit-scrollbar { display: none; }
-.mbl-shelf { position: relative; display: flex; justify-content: center; align-items: flex-end; min-width: max-content; min-height: min(575px, 58dvh); padding: 0 35px 9px; border-bottom: 7px solid #262724; box-shadow: inset 0 -1px 0 #4b4c45, 0 13px 0 #141512, 0 19px 25px #0009; }
+.mbl-shelf { position: relative; display: flex; justify-content: center; align-items: flex-end; min-width: max-content; padding: 0 35px 9px; border-bottom: 7px solid #262724; box-shadow: inset 0 -1px 0 #4b4c45, 0 13px 0 #141512, 0 19px 25px #0009; }
 .mbl-shelf::after { position: absolute; bottom: -16px; left: 0; right: 0; height: 10px; content: ""; background: linear-gradient(#0e0f0d, transparent); pointer-events: none; }
-.mbl-spine { flex: none; position: relative; display: block; width: var(--spine-width); height: var(--spine-height); max-height: min(530px, 56dvh); padding: 0; border: 1px solid var(--spine-edge); border-right-color: #1118; border-radius: 2px 3px 0 0; background: var(--spine-bg); color: var(--spine-ink); box-shadow: inset 3px 0 5px #fff5, inset -4px 0 5px #0004, 3px 0 3px #0009; transform-origin: bottom; transition: transform .35s cubic-bezier(.2,.85,.2,1), box-shadow .3s; }
+.mbl-spine { flex: none; position: relative; display: block; width: var(--spine-width); height: min(var(--spine-height), max(220px, calc(100dvh - 400px))); padding: 0; border: 1px solid var(--spine-edge); border-right-color: #1118; border-radius: 2px 3px 0 0; background: var(--spine-bg); color: var(--spine-ink); box-shadow: inset 3px 0 5px #fff5, inset -4px 0 5px #0004, 3px 0 3px #0009; transform-origin: bottom; transition: transform .35s cubic-bezier(.2,.85,.2,1), box-shadow .3s; }
 .mbl-spine:nth-child(3n) { transform: rotate(-.8deg); }
 .mbl-spine:nth-child(5n) { transform: rotate(1deg); }
 .mbl-spine:hover, .mbl-spine:focus-visible { transform: translateY(-23px) rotate(0); z-index: 2; box-shadow: inset 3px 0 5px #fff5, inset -4px 0 5px #0004, 7px 18px 18px #0009; }
@@ -55,7 +55,7 @@
 .mbl-spine-new { --spine-width: 68px; --spine-height: 435px; --spine-bg: #252824; --spine-edge: #596054; --spine-ink: #e9e5da; border: 1px dashed #778072; color: #e6e4d7; margin-left: 12px; }
 .mbl-spine-new > span { display: block; font-size: 27px; font-weight: 200; line-height: 1; }
 .mbl-spine-new small { display: block; margin: 14px auto 0; writing-mode: vertical-rl; letter-spacing: .17em; font-size: 9px; }
-.mbl-shelf-caption { display: flex; justify-content: space-between; margin: 28px 34px 0; color: #757a71; font-size: 10px; letter-spacing: .16em; }
+.mbl-shelf-caption { display: flex; justify-content: space-between; margin: 17px 34px 0; color: #757a71; font-size: 10px; letter-spacing: .16em; }
 
 .mbl-reader { flex: 1; min-height: calc(100dvh - 128px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 19px 22px 25px; }
 .mbl-reader-top { width: min(1180px, 100%); display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 8px 17px; font-size: 10px; color: #9da196; letter-spacing: .15em; }
