@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type RefObject, type WheelEvent } from "react";
+import { flushSync } from "react-dom";
 import { selectWanderCards } from "@/lib/cardWander";
 
 export interface WanderCard {
@@ -26,8 +27,10 @@ const COLUMNS = 12;
 const ROWS = 18;
 const MIN_SCALE = 0.72;
 const MAX_SCALE = 1.45;
-const DRIFT_SPEED_PER_SECOND = 13.4;
-const DRIFT_ANGLE_PER_SECOND = 0.003;
+const DRIFT_SPEED_PER_SECOND = 9.5;
+const DRIFT_ANGLE_PER_SECOND = 0.0006;
+const DRIFT_TRAVEL_X = 320;
+const DRIFT_TRAVEL_Y = 180;
 type PreviewEffect = "gloss" | "holo" | "metal";
 type PreviewMode = "showcase" | "wallet" | "actual";
 const PREVIEW_MODES: { key: PreviewMode; label: string }[] = [
@@ -43,11 +46,10 @@ const PREVIEW_EFFECTS: { key: PreviewEffect; label: string }[] = [
 
 function newPosition() { return { x: 0, y: 0, scale: 1 }; }
 
-function WanderTile({ card, delay, viewportRef, onSelect }: {
+function WanderTile({ card, viewportRef, onSelect }: {
   card: WanderCard;
-  delay: number;
   viewportRef: RefObject<HTMLDivElement | null>;
-  onSelect: (card: WanderCard) => void;
+  onSelect: (card: WanderCard, tile: HTMLButtonElement) => void;
 }) {
   const tileRef = useRef<HTMLButtonElement>(null);
   const [nearViewport, setNearViewport] = useState(false);
@@ -69,9 +71,8 @@ function WanderTile({ card, delay, viewportRef, onSelect }: {
       ref={tileRef}
       type="button"
       className="card-wander-tile"
-      style={{ "--wander-delay": `${delay}ms` } as CSSProperties}
       aria-label={card.name}
-      onClick={() => onSelect(card)}
+      onClick={(event) => onSelect(card, event.currentTarget)}
     >
       {nearViewport && <img src={card.image} alt="" draggable={false} loading="eager" decoding="async" />}
     </button>
@@ -86,13 +87,18 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   const modalCloseRef = useRef<HTMLButtonElement>(null);
   const zoomSourceRef = useRef<HTMLButtonElement>(null);
   const positionRef = useRef(newPosition());
-  const driftDirectionRef = useRef({ x: -1, y: -1, angle: 0.36 });
+  const driftDirectionRef = useRef({ x: -1, y: -1, angle: 0.04 });
+  const driftAnchorRef = useRef({ x: 0, y: 0 });
   const dragRef = useRef<{ id: number; x: number; y: number; originX: number; originY: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
   const [selected, setSelected] = useState<WanderCard | null>(null);
   const [previewEffect, setPreviewEffect] = useState<PreviewEffect>("gloss");
   const [previewMode, setPreviewMode] = useState<PreviewMode>("showcase");
-  const [walletRaised, setWalletRaised] = useState(false);
+  const [walletPayment, setWalletPayment] = useState(false);
+  const sourceTileRef = useRef<HTMLButtonElement | null>(null);
+  const flightRef = useRef<HTMLImageElement | null>(null);
+  const previewClosingRef = useRef(false);
+  const shufflingRef = useRef(false);
   const actualRef = useRef<HTMLDivElement>(null);
   const actualDragRef = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
   const effectTiltRef = useRef<HTMLDivElement>(null);
@@ -109,6 +115,82 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   ), [deck]);
   const selectedCard = selected ? cards.find((card) => card.key === selected.key) ?? selected : null;
 
+  function restoreSourceTile() {
+    if (sourceTileRef.current) sourceTileRef.current.style.visibility = "";
+    sourceTileRef.current = null;
+    flightRef.current?.remove();
+    flightRef.current = null;
+  }
+
+  function flyCard(from: Pick<DOMRect, "left" | "top" | "width" | "height">, to: Pick<DOMRect, "left" | "top" | "width" | "height">, image: string, closing = false) {
+    const flight = document.createElement("img");
+    flight.src = image;
+    flight.alt = "";
+    flight.setAttribute("aria-hidden", "true");
+    Object.assign(flight.style, {
+      position: "fixed", left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px`,
+      zIndex: "10050", objectFit: "contain", pointerEvents: "none", borderRadius: closing ? "17px" : "10px",
+      boxShadow: "0 24px 60px rgba(0,0,0,.5)", willChange: "transform"
+    });
+    document.body.appendChild(flight);
+    flightRef.current = flight;
+    const transform = `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width}, ${to.height / from.height})`;
+    const animation = flight.animate([
+      { transform: closing ? "none" : "rotate(-6deg)", borderRadius: closing ? "17px" : "10px" },
+      { transform: closing ? `${transform} rotate(-6deg)` : `${transform} rotate(0deg)`, borderRadius: closing ? "10px" : "17px" }
+    ], { duration: closing ? 500 : 620, easing: "cubic-bezier(.22,1,.36,1)", fill: "forwards" });
+    return animation.finished.catch(() => undefined).finally(() => {
+      flight.remove();
+      if (flightRef.current === flight) flightRef.current = null;
+    });
+  }
+
+  function selectTile(card: WanderCard, tile: HTMLButtonElement) {
+    sourceTileRef.current = tile;
+    setPreviewMode("showcase");
+    setWalletPayment(false);
+    setSelected(card);
+  }
+
+  async function shuffleWall() {
+    if (shufflingRef.current || selected) return;
+    shufflingRef.current = true;
+    const wall = wallRef.current;
+    if (wall && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const fade = wall.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: "linear", fill: "forwards" });
+      await fade.finished.catch(() => undefined);
+    }
+    onShuffle();
+    shufflingRef.current = false;
+  }
+
+  function changePreviewMode(mode: PreviewMode) {
+    if (mode === previewMode) return;
+    setWalletPayment(false);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !document.startViewTransition) {
+      setPreviewMode(mode);
+      return;
+    }
+    document.startViewTransition(() => flushSync(() => setPreviewMode(mode)));
+  }
+
+  async function closePreview() {
+    if (previewClosingRef.current || !selectedCard) return;
+    previewClosingRef.current = true;
+    flightRef.current?.remove();
+    const from = getZoomSourceRect();
+    const to = sourceTileRef.current?.getBoundingClientRect();
+    const backdrop = modalRef.current?.parentElement;
+    if (from && to && backdrop && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (modalRef.current) modalRef.current.style.visibility = "hidden";
+      const fade = backdrop.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 480, easing: "ease-out", fill: "forwards" });
+      await Promise.allSettled([flyCard(from, to, selectedCard.image, true), fade.finished]);
+    }
+    restoreSourceTile();
+    setSelected(null);
+    previewClosingRef.current = false;
+  }
+
   const drawPosition = () => {
     const viewport = viewportRef.current;
     const wall = wallRef.current;
@@ -118,7 +200,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     const maxY = Math.max(0, (wall.offsetHeight * position.scale - viewport.clientHeight) / 2 + 90);
     position.x = Math.max(-maxX, Math.min(maxX, position.x));
     position.y = Math.max(-maxY, Math.min(maxY, position.y));
-    wall.style.transform = `translate(-50%, -50%) translate3d(${position.x}px, ${position.y}px, 0) rotateX(15deg) rotateZ(-6deg) scale(${position.scale})`;
+    wall.style.transform = `translate(-50%, -50%) rotateX(15deg) rotateZ(-6deg) scale(${position.scale}) translate3d(${position.x}px, ${position.y}px, 0)`;
   };
 
   useEffect(() => {
@@ -138,7 +220,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
       if (event.key === "Escape") {
         event.preventDefault();
         if (zoomOpen) void closeZoom();
-        else if (selected) setSelected(null);
+        else if (selected) void closePreview();
         else onClose();
         return;
       }
@@ -179,7 +261,9 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
 
   useEffect(() => {
     positionRef.current = newPosition();
-    driftDirectionRef.current = { x: -1, y: -1, angle: 0.36 };
+    driftDirectionRef.current = { x: -1, y: -1, angle: 0.04 };
+    driftAnchorRef.current = { x: 0, y: 0 };
+    restoreSourceTile();
     setSelected(null);
     setZoomOpen(false);
     drawPosition();
@@ -199,11 +283,16 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
         const direction = driftDirectionRef.current;
         const maxX = Math.max(0, (wall.offsetWidth * position.scale - viewport.clientWidth) / 2 + 90);
         const maxY = Math.max(0, (wall.offsetHeight * position.scale - viewport.clientHeight) / 2 + 90);
-        direction.angle += DRIFT_ANGLE_PER_SECOND * elapsed;
+        direction.angle = Math.min(0.22, direction.angle + DRIFT_ANGLE_PER_SECOND * elapsed);
         position.x += direction.x * Math.cos(direction.angle) * DRIFT_SPEED_PER_SECOND * elapsed;
         position.y += direction.y * Math.sin(direction.angle) * DRIFT_SPEED_PER_SECOND * elapsed;
-        if (Math.abs(position.x) >= maxX) { position.x = Math.sign(position.x) * maxX; direction.x *= -1; }
-        if (Math.abs(position.y) >= maxY) { position.y = Math.sign(position.y) * maxY; direction.y *= -1; }
+        const anchor = driftAnchorRef.current;
+        const minX = Math.max(-maxX, anchor.x - DRIFT_TRAVEL_X);
+        const maxDriftX = Math.min(maxX, anchor.x + DRIFT_TRAVEL_X);
+        const minY = Math.max(-maxY, anchor.y - DRIFT_TRAVEL_Y);
+        const maxDriftY = Math.min(maxY, anchor.y + DRIFT_TRAVEL_Y);
+        if (position.x <= minX || position.x >= maxDriftX) { position.x = Math.max(minX, Math.min(maxDriftX, position.x)); direction.x *= -1; }
+        if (position.y <= minY || position.y >= maxDriftY) { position.y = Math.max(minY, Math.min(maxDriftY, position.y)); direction.y *= -1; }
         drawPosition();
       }
       frame = window.requestAnimationFrame(animate);
@@ -214,12 +303,26 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
 
   useEffect(() => {
     if (!selected) return;
-    setPreviewMode("showcase");
-    setWalletRaised(false);
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     modalCloseRef.current?.focus();
     return () => previous?.focus();
   }, [selected]);
+
+  useLayoutEffect(() => {
+    if (!selectedCard || !sourceTileRef.current || !zoomSourceRef.current || !modalRef.current) return;
+    const from = sourceTileRef.current.getBoundingClientRect();
+    const to = zoomSourceRef.current.getBoundingClientRect();
+    sourceTileRef.current.style.visibility = "hidden";
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    modalRef.current.style.visibility = "hidden";
+    let alive = true;
+    void flyCard(from, to, selectedCard.image).then(() => {
+      if (alive && !previewClosingRef.current && modalRef.current) modalRef.current.style.visibility = "";
+    });
+    return () => { alive = false; };
+  }, [selected?.key]);
+
+  useEffect(() => () => restoreSourceTile(), []);
 
   useLayoutEffect(() => {
     if (previewMode !== "actual" || !selectedCard) return;
@@ -300,6 +403,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     if (dragRef.current?.id !== event.pointerId) return;
     suppressClickRef.current = dragRef.current.moved;
     dragRef.current = null;
+    driftAnchorRef.current = { x: positionRef.current.x, y: positionRef.current.y };
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     window.setTimeout(() => { suppressClickRef.current = false; }, 0);
   };
@@ -313,6 +417,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
       positionRef.current.y -= event.deltaY;
     }
     drawPosition();
+    driftAnchorRef.current = { x: positionRef.current.x, y: positionRef.current.y };
   };
   const onEffectPointerMove = (event: PointerEvent<HTMLButtonElement>) => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -351,14 +456,13 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
       >
         <div ref={wallRef} key={seed} className="card-wander-wall">
           {columns.map((column, columnIndex) => (
-            <div key={columnIndex} className="card-wander-column" style={{ "--wander-column-shift": `${((columnIndex * 73) % 145) - 72}px` } as CSSProperties}>
-              {column.map((card, rowIndex) => (
+            <div key={columnIndex} className="card-wander-column" style={{ "--wander-column-stagger": columnIndex % 2 } as CSSProperties}>
+              {column.map((card) => (
                 <WanderTile
                   key={card.key}
                   card={card}
-                  delay={Math.min(450, (rowIndex % 8) * 45 + columnIndex * 25)}
                   viewportRef={viewportRef}
-                  onSelect={setSelected}
+                  onSelect={selectTile}
                 />
               ))}
             </div>
@@ -371,12 +475,12 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
           <span aria-hidden="true">←</span> 返回
         </button>
       </div>
-      <button type="button" className="card-wander-shuffle" onClick={onShuffle} aria-label="洗牌，浏览另一组卡面">
+      <button type="button" className="card-wander-shuffle" onClick={() => void shuffleWall()} aria-label="洗牌，浏览另一组卡面">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h3c4 0 5 10 10 10h3m-3-3 3 3-3 3M4 17h3c1.5 0 2.5-.8 3.3-2M14 9c.8-1.2 1.7-2 3-2h3m-3-3 3 3-3 3" /></svg>
         洗牌
       </button>
       {selectedCard && (
-        <div className="card-wander-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null); }}>
+        <div className="card-wander-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) void closePreview(); }}>
           <div ref={modalRef} className="card-wander-modal" role="dialog" aria-modal="true" aria-labelledby="card-wander-modal-title">
             <div className="card-wander-preview-stage" data-mode={previewMode} data-effect={previewEffect}>
             {previewMode === "showcase" && <button ref={zoomSourceRef} type="button" className="card-wander-effect" data-effect={previewEffect} aria-label={`放大查看 ${selectedCard.name} 原图`} onPointerDown={(event) => { effectPressRef.current = { x: event.clientX, y: event.clientY, moved: false }; }} onPointerMove={(event) => {
@@ -394,15 +498,18 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
                 <span className="card-wander-effect-spec" aria-hidden="true" />
               </div>
             </button>}
-            {previewMode === "wallet" && <div className="card-wander-wallet" data-raised={walletRaised}>
-              <div className="card-wander-wallet-island" aria-hidden="true" />
+            {previewMode === "wallet" && <div className="card-wander-wallet" data-payment={walletPayment}>
+              <div className="card-wander-wallet-island" aria-hidden="true"><span className="card-wander-wallet-face">◉</span></div>
               <div className="card-wander-wallet-status" aria-hidden="true"><span>9:41</span><span>●●● ▰</span></div>
               <div className="card-wander-wallet-header" aria-hidden="true"><strong>钱包</strong><span>＋　···</span></div>
-              <div className="card-wander-wallet-stack" aria-hidden="true"><span /><span /></div>
-              <button ref={zoomSourceRef} type="button" className="card-wander-wallet-card" aria-label={`放大查看 ${selectedCard.name} 原图`} onClick={() => setZoomOpen(true)} onPointerDown={() => setWalletRaised(true)} onPointerUp={() => setWalletRaised(false)} onPointerCancel={() => setWalletRaised(false)} onPointerLeave={() => setWalletRaised(false)}>
+              <div className="card-wander-wallet-payment-header" aria-hidden="true"><span>×</span><span>···</span></div>
+              <div className="card-wander-wallet-stack" aria-hidden="true"><span /><span /><span /></div>
+              <button ref={zoomSourceRef} type="button" className="card-wander-wallet-card" aria-label={`模拟刷卡：${selectedCard.name}`} aria-pressed={walletPayment} onClick={() => setWalletPayment((open) => !open)}>
                 <img src={selectedCard.image} alt={selectedCard.name} draggable={false} />
                 <span className="card-wander-effect-sheen" aria-hidden="true" />
               </button>
+              <div className="card-wander-wallet-hint" aria-hidden="true">轻点卡面，试试刷卡</div>
+              <div className="card-wander-wallet-reader" aria-hidden="true"><span className="card-wander-wallet-reader-ring">▯</span><span>靠近读卡器</span></div>
               <div className="card-wander-wallet-bottom" aria-hidden="true"><span>◉</span><span>⌂</span></div>
             </div>}
             {previewMode === "actual" && <div ref={actualRef} className="card-wander-actual" role="region" aria-label="原尺寸卡面，可拖动或滚动查看" onPointerDown={(event) => {
@@ -431,21 +538,23 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
                 <span className="card-wander-effect-sheen" aria-hidden="true" />
               </button>
             </div>}
+            {previewMode === "actual" && <span className="card-wander-actual-hint" aria-hidden="true">拖动或滚动查看全图</span>}
             </div>
             <div className="card-wander-preview-controls">
-            <div className="card-wander-modes" role="radiogroup" aria-label="卡面展示方式" onKeyDown={(event) => {
+            <div className="card-wander-modes" role="radiogroup" aria-label="卡面展示方式" style={{ "--segment-index": PREVIEW_MODES.findIndex((item) => item.key === previewMode) } as CSSProperties} onKeyDown={(event) => {
               if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
               event.preventDefault();
               const current = PREVIEW_MODES.findIndex((item) => item.key === previewMode);
               const next = (current + (event.key === "ArrowRight" ? 1 : PREVIEW_MODES.length - 1)) % PREVIEW_MODES.length;
-              setPreviewMode(PREVIEW_MODES[next].key);
+              changePreviewMode(PREVIEW_MODES[next].key);
               event.currentTarget.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
             }}>
+              <span className="card-wander-seg-thumb" aria-hidden="true" />
               {PREVIEW_MODES.map(({ key, label }) => (
-                <button key={key} type="button" role="radio" aria-checked={previewMode === key} tabIndex={previewMode === key ? 0 : -1} onClick={() => setPreviewMode(key)}>{label}</button>
+                <button key={key} type="button" role="radio" aria-checked={previewMode === key} tabIndex={previewMode === key ? 0 : -1} onClick={() => changePreviewMode(key)}>{label}</button>
               ))}
             </div>
-            <div className="card-wander-effects" role="radiogroup" aria-label="卡面光效" onKeyDown={(event) => {
+            {previewMode === "showcase" && <div className="card-wander-effects" role="radiogroup" aria-label="卡面光效" style={{ "--segment-index": PREVIEW_EFFECTS.findIndex((item) => item.key === previewEffect) } as CSSProperties} onKeyDown={(event) => {
               if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
               event.preventDefault();
               const current = PREVIEW_EFFECTS.findIndex((item) => item.key === previewEffect);
@@ -453,10 +562,11 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
               setPreviewEffect(PREVIEW_EFFECTS[next].key);
               event.currentTarget.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
             }}>
+              <span className="card-wander-seg-thumb" aria-hidden="true" />
               {PREVIEW_EFFECTS.map(({ key, label }) => (
                 <button key={key} type="button" role="radio" aria-checked={previewEffect === key} tabIndex={previewEffect === key ? 0 : -1} onClick={() => setPreviewEffect(key)}>{label}</button>
               ))}
-            </div>
+            </div>}
             </div>
             <div className="card-wander-modal-content">
               <div className="card-wander-modal-heading">
@@ -464,7 +574,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
                   <h3 id="card-wander-modal-title" className="truncate text-[15px] font-semibold">{selectedCard.name}</h3>
                   <p className="mt-1 truncate text-xs text-white/50">{selectedCard.bank} · {selectedCard.region}{selectedCard.type ? ` · ${selectedCard.type}` : ""}</p>
                 </div>
-                <button ref={modalCloseRef} type="button" className="card-wander-modal-close" onClick={() => setSelected(null)} aria-label="关闭卡面预览">×</button>
+                <button ref={modalCloseRef} type="button" className="card-wander-modal-close" onClick={() => void closePreview()} aria-label="关闭卡面预览">×</button>
               </div>
               <div className="card-wander-modal-actions">
                 <button type="button" className="card-wander-hold" onClick={() => onToggleHeld(selectedCard.key, !selectedCard.held)} aria-label={selectedCard.held ? "移出我的卡" : "加入我的卡"} title={selectedCard.held ? "移出我的卡" : "加入我的卡"}>
