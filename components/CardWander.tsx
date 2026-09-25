@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type RefObject, type WheelEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type WheelEvent } from "react";
 import { flushSync } from "react-dom";
 import { selectWanderCards } from "@/lib/cardWander";
 
@@ -48,26 +48,18 @@ const PREVIEW_EFFECTS: { key: PreviewEffect; label: string }[] = [
 
 function newPosition() { return { x: 0, y: 0, scale: 1 }; }
 
-function WanderTile({ card, viewportRef, onSelect }: {
+function WanderTile({ card, observeTile, onSelect }: {
   card: WanderCard;
-  viewportRef: RefObject<HTMLDivElement | null>;
+  observeTile: (tile: HTMLButtonElement, onNear: () => void) => () => void;
   onSelect: (card: WanderCard, tile: HTMLButtonElement) => void;
 }) {
   const tileRef = useRef<HTMLButtonElement>(null);
   const [nearViewport, setNearViewport] = useState(false);
   useEffect(() => {
     const tile = tileRef.current;
-    const viewport = viewportRef.current;
-    if (!tile || !viewport) return;
-    if (!('IntersectionObserver' in window)) { setNearViewport(true); return; }
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries[0]?.isIntersecting) return;
-      setNearViewport(true);
-      observer.disconnect();
-    }, { root: viewport, rootMargin: '600px' });
-    observer.observe(tile);
-    return () => observer.disconnect();
-  }, [viewportRef]);
+    if (!tile) return;
+    return observeTile(tile, () => setNearViewport(true));
+  }, [observeTile]);
   return (
     <button
       ref={tileRef}
@@ -85,6 +77,10 @@ function WanderTile({ card, viewportRef, onSelect }: {
 export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDetails, onToggleHeld }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const wallRef = useRef<HTMLDivElement>(null);
+  const tileObserverRef = useRef<IntersectionObserver | null>(null);
+  const tileNearCallbacksRef = useRef(new Map<Element, () => void>());
+  const hoverFrameRef = useRef<number | null>(null);
+  const hoverPointRef = useRef<{ x: number; y: number; target: HTMLButtonElement | null } | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const modalCloseRef = useRef<HTMLButtonElement>(null);
@@ -114,6 +110,8 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   const effectPressRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
   const [zoomEffect, setZoomEffect] = useState<PreviewEffect>("gloss");
+  const zoomEffectBagRef = useRef<PreviewEffect[]>([]);
+  const previousZoomEffectRef = useRef<PreviewEffect | null>(null);
   const zoomRef = useRef<HTMLDivElement>(null);
   const zoomImageRef = useRef<HTMLDivElement>(null);
   const zoomCloseRef = useRef<HTMLButtonElement>(null);
@@ -124,6 +122,28 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     deck.slice(column * ROWS, (column + 1) * ROWS)
   ), [deck]);
   const selectedCard = selected ? cards.find((card) => card.key === selected.key) ?? selected : null;
+
+  const observeTile = useCallback((tile: HTMLButtonElement, onNear: () => void) => {
+    const viewport = viewportRef.current;
+    if (!viewport || !("IntersectionObserver" in window)) { onNear(); return () => {}; }
+    if (!tileObserverRef.current) {
+      tileObserverRef.current = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const callback = tileNearCallbacksRef.current.get(entry.target);
+          tileNearCallbacksRef.current.delete(entry.target);
+          tileObserverRef.current?.unobserve(entry.target);
+          callback?.();
+        }
+      }, { root: viewport, rootMargin: "360px" });
+    }
+    tileNearCallbacksRef.current.set(tile, onNear);
+    tileObserverRef.current.observe(tile);
+    return () => {
+      tileObserverRef.current?.unobserve(tile);
+      tileNearCallbacksRef.current.delete(tile);
+    };
+  }, []);
 
   function restoreSourceTile() {
     if (sourceTileRef.current) {
@@ -183,6 +203,9 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   }
 
   function selectTile(card: WanderCard, tile: HTMLButtonElement) {
+    if (hoverFrameRef.current !== null) window.cancelAnimationFrame(hoverFrameRef.current);
+    hoverFrameRef.current = null;
+    hoverPointRef.current = null;
     const transform = getComputedStyle(tile).transform;
     tile.style.transition = "none";
     tile.style.transform = transform;
@@ -214,6 +237,25 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     if (hoveredTileRef.current) delete hoveredTileRef.current.dataset.hovered;
     hoveredTileRef.current = tile;
     if (tile) tile.dataset.hovered = "true";
+  }
+
+  function queueHoveredTile(x: number, y: number, target: HTMLButtonElement | null) {
+    hoverPointRef.current = { x, y, target };
+    if (hoverFrameRef.current !== null) return;
+    hoverFrameRef.current = window.requestAnimationFrame(() => {
+      hoverFrameRef.current = null;
+      const point = hoverPointRef.current;
+      hoverPointRef.current = null;
+      if (!point || sourceTileRef.current || dragRef.current?.moved) return;
+      setHoveredTile(point.target || findTileAtPoint(point.x, point.y));
+    });
+  }
+
+  function clearHoveredTile() {
+    if (hoverFrameRef.current !== null) window.cancelAnimationFrame(hoverFrameRef.current);
+    hoverFrameRef.current = null;
+    hoverPointRef.current = null;
+    setHoveredTile(null);
   }
 
   async function shuffleWall() {
@@ -392,6 +434,9 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
 
   useEffect(() => () => {
     restoreSourceTile();
+    tileObserverRef.current?.disconnect();
+    tileNearCallbacksRef.current.clear();
+    if (hoverFrameRef.current !== null) window.cancelAnimationFrame(hoverFrameRef.current);
     if (effectFrameRef.current !== null) window.cancelAnimationFrame(effectFrameRef.current);
   }, []);
 
@@ -437,7 +482,18 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   }
 
   function openZoom() {
-    setZoomEffect(PREVIEW_EFFECTS[Math.floor(Math.random() * PREVIEW_EFFECTS.length)].key);
+    if (!zoomEffectBagRef.current.length) {
+      const bag = PREVIEW_EFFECTS.map((effect) => effect.key);
+      for (let index = bag.length - 1; index > 0; index--) {
+        const randomIndex = Math.floor(Math.random() * (index + 1));
+        [bag[index], bag[randomIndex]] = [bag[randomIndex], bag[index]];
+      }
+      if (bag[bag.length - 1] === previousZoomEffectRef.current) [bag[0], bag[bag.length - 1]] = [bag[bag.length - 1], bag[0]];
+      zoomEffectBagRef.current = bag;
+    }
+    const effect = zoomEffectBagRef.current.pop()!;
+    previousZoomEffectRef.current = effect;
+    setZoomEffect(effect);
     setZoomOpen(true);
   }
 
@@ -474,7 +530,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     if (!drag || drag.id !== event.pointerId) {
       if (!selected && event.pointerType === "mouse") {
         const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>(".card-wander-tile") : null;
-        setHoveredTile(target || findTileAtPoint(event.clientX, event.clientY));
+        queueHoveredTile(event.clientX, event.clientY, target);
       }
       return;
     }
@@ -482,7 +538,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     const dy = event.clientY - drag.y;
     if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 6) {
       drag.moved = true;
-      setHoveredTile(null);
+      clearHoveredTile();
       event.currentTarget.dataset.dragging = "true";
       event.currentTarget.setPointerCapture(event.pointerId);
     }
@@ -553,7 +609,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onPointerLeave={() => setHoveredTile(null)}
+        onPointerLeave={clearHoveredTile}
         onWheel={onWheel}
         onClickCapture={(event) => {
           if (!suppressClickRef.current) return;
@@ -576,7 +632,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
                   <WanderTile
                     key={card.key}
                     card={card}
-                    viewportRef={viewportRef}
+                    observeTile={observeTile}
                     onSelect={selectTile}
                   />
                 ))}
