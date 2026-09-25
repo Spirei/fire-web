@@ -123,13 +123,14 @@ function prettyLabel(name: string) {
     .slice(0, 24);
 }
 
-export default function ModelImporter({ existing }: { existing: ImportedModelRow[] }) {
+export default function ModelImporter({ existing, mode = "manage" }: { existing: ImportedModelRow[]; mode?: "manage" | "pipeline" }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const coverTargetRef = useRef<string | null>(null);
   /** 卡片顺序：拖动后本地先变，再写服务端（首页车型条照这个顺序排） */
   const [order, setOrder] = useState(() => existing.map((row) => row.id));
+  const [pipelineTarget, setPipelineTarget] = useState(() => existing.find((row) => !row.builtin)?.id ?? existing[0]?.id ?? "");
   const [dragId, setDragId] = useState<string | null>(null);
   const orderSavingRef = useRef(false);
   const [orderSaving, setOrderSaving] = useState(false);
@@ -575,6 +576,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
       setReport(null);
       setSavedSnapshot(JSON.stringify({ meta: savedMeta, params: model.params }));
       setNotice(`已保存“${model.label}”，首页车型条已同步`);
+      if (mode === "pipeline") setPipelineTarget(model.id);
       // 草稿转正会改文件名：立即持久化，刷新不能再请求已不存在的草稿路径。
       try { window.localStorage.setItem(WORKBENCH_STORAGE_KEY, JSON.stringify({
         editingId: model.id, previewFile: model.file, meta: savedMeta, params: model.params,
@@ -698,14 +700,14 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
   );
 
   return (
-    <div className={`mp-root${workbenchHydrated ? "" : " mp-hydrating"}`} aria-busy={!workbenchHydrated} inert={Boolean(previewFile && workbenchOpen)}>
+    <div className={`mp-root${mode === "pipeline" ? " mp-pipeline" : ""}${workbenchHydrated ? "" : " mp-hydrating"}`} aria-busy={!workbenchHydrated} inert={Boolean(previewFile && workbenchOpen)}>
       {!workbenchHydrated && (
         <div className="mp-restore-screen" role="status" aria-live="polite">
           <span />
           <b>正在恢复模型工作台</b>
         </div>
       )}
-      <header className="mp-head">
+      {mode === "manage" && <header className="mp-head">
         <div>
           <p className="mp-kicker">车型导入</p>
           <h1>导入一台车</h1>
@@ -717,15 +719,15 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
           <Link className="mp-back fire-cap" href="/showcase/pipeline">查看全链路</Link>
           <Link className="mp-back fire-cap" href="/">返回首页</Link>
         </div>
-      </header>
+      </header>}
 
-      {previewFile && !workbenchOpen && <section className="mp-step mp-resume"><div><b>{meta.label || "当前车型"}</b><p>已保存车型的调参草稿已保留，可继续编辑。</p></div><button type="button" className="fire-cap mp-primary fire-cap-primary" onClick={() => { setStructure(null); setPreviewStatus("loading"); setWorkbenchOpen(true); }}>继续调校</button></section>}
+      {mode === "manage" && previewFile && !workbenchOpen && <section className="mp-step mp-resume"><div><b>{meta.label || "当前车型"}</b><p>已保存车型的调参草稿已保留，可继续编辑。</p></div><button type="button" className="fire-cap mp-primary fire-cap-primary" onClick={() => { setStructure(null); setPreviewStatus("loading"); setWorkbenchOpen(true); }}>继续调校</button></section>}
       {notice && <div className="mp-notice" role="status">{notice}</div>}
       {error && <div className="mp-error">{error}</div>}
 
-      <section className="mp-step" id="upload">
+      <section className={`mp-step${mode === "pipeline" ? " mpl-pipeline-step" : ""}`} id="upload">
         <h2>
-          <span>1</span> 选文件
+          <span>{mode === "pipeline" ? "03" : "1"}</span> {mode === "pipeline" ? "上传原件" : "选文件"}
         </h2>
         <div
           className={`mp-drop${dragging ? " on" : ""}`}
@@ -770,18 +772,19 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
           ) : (
             <>
               <b>把 .glb 拖进来，或点这里选择文件</b>
-              <small>单文件 ≤ 250MB；这里选择原始 GLB，高清压缩副本在车型卡片单独上传</small>
+              <small>{mode === "pipeline" ? "原始 GLB · 最大 250 MiB" : "单文件 ≤ 250MB；这里选择原始 GLB，高清压缩副本在车型卡片单独上传"}</small>
             </>
           )}
         </div>
         {uploading && <button type="button" className="fire-cap mp-ghost mp-cancel" onClick={() => xhrRef.current?.abort()}>取消上传</button>}
       </section>
 
-      {report && (
-        <section className="mp-step">
+      {(report || mode === "pipeline") && (
+        <section className={`mp-step${mode === "pipeline" ? " mpl-pipeline-step" : ""}`} id="inspect">
           <h2>
-            <span>2</span> 体检报告
+            <span>{mode === "pipeline" ? "04" : "2"}</span> 体检报告
           </h2>
+          {report ? (
           <div className="mp-report">
             <div className="mp-report-head">
               <b>{report.file}</b>
@@ -847,8 +850,17 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
               </table>
             </details>
           </div>
+          ) : <p className="mpl-step-empty">上传原件后，网格、材质与贴图报告会显示在这里。</p>}
         </section>
       )}
+
+      {mode === "pipeline" && <section className="mp-step mpl-pipeline-step" id="tune">
+        <h2><span>05</span> 调校并保存</h2>
+        <p className="mpl-step-empty">确认朝向、轮胎与贴图；预览加载成功后保存。</p>
+        <button type="button" className="fire-cap fire-cap-primary" disabled={!previewFile || !workbenchHydrated} onClick={() => { setPreviewStatus("loading"); setWorkbenchOpen(true); }}>
+          {previewFile ? "打开模型工作台" : "先上传原件"}
+        </button>
+      </section>}
 
       {previewFile && workbenchOpen && workbenchHydrated && createPortal(
         <section ref={workbenchRef} tabIndex={-1} className="mp-root mp-workbench" role="dialog" aria-modal="true" aria-label="模型调校工作台">
@@ -1063,11 +1075,18 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         </section>, document.body
       )}
 
-      <section className="mp-step" id="model-list">
+      <section className={`mp-step${mode === "pipeline" ? " mpl-pipeline-step" : ""}`} id="model-list">
         <h2>
-          <span>·</span> 车型清单
+          <span>{mode === "pipeline" ? "06" : "·"}</span> {mode === "pipeline" ? "上传附件" : "车型清单"}
         </h2>
-        <p className="mt-3 text-xs leading-5 text-muted dark:text-white/55">原始车型单独保存；本地工具生成的首页预览与移动端原画副本，可在对应卡片分别上传。网站只校验和保存文件，不在线压缩。</p>
+        {mode === "pipeline" ? <>
+          <p className="mpl-step-empty">选择已保存车型，上传 1K 预览与可选的高清副本。</p>
+          <label className="mpl-model-picker">车型
+            <select value={existing.some((row) => row.id === pipelineTarget) ? pipelineTarget : (orderedRows[0]?.id ?? "")} onChange={(event) => setPipelineTarget(event.target.value)}>
+              {orderedRows.map((row) => <option key={row.id} value={row.id}>{row.label}</option>)}
+            </select>
+          </label>
+        </> : <p className="mt-3 text-xs leading-5 text-muted dark:text-white/55">原始车型单独保存；本地工具生成的首页预览与移动端原画副本，可在对应卡片分别上传。网站只校验和保存文件，不在线压缩。</p>}
         <input ref={previewInputRef} type="file" accept=".glb" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadLocalPreview(file); }} />
         <input ref={gpuInputRef} type="file" accept=".glb" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadGpuDerivative(file); }} />
         {/* 封面文件选择：卡片上的「传封面」统一走这个隐藏输入 */}
@@ -1085,10 +1104,10 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
           }}
         />
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {orderedRows.map((row) => (
+          {(mode === "pipeline" ? orderedRows.filter((row) => row.id === (existing.some((item) => item.id === pipelineTarget) ? pipelineTarget : orderedRows[0]?.id)) : orderedRows).map((row) => (
             <article
               key={row.id}
-              draggable={!orderSaving}
+              draggable={mode === "manage" && !orderSaving}
               onDragStart={() => setDragId(row.id)}
               onDragEnd={() => setDragId(null)}
               onDragOver={(event) => event.preventDefault()}

@@ -2,8 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { cleanupOrphanFiles } from "@/lib/fileCleanup";
 import { getAuthUser, isAdmin } from "@/lib/auth";
-import { modelFileExists, modelPreviewExists, modelUrlExists, orderRanker, readRegistry, readStoredModels, resolveOrder } from "@/lib/showcaseModels";
-import { SHOWCASE_MODELS } from "@/components/showcase/presets/models";
+import { getShowcaseImportRows } from "@/lib/showcaseImportRows";
 import ModelImporter from "@/components/showcase/ModelImporter";
 import "@/components/showcase/model-importer.css";
 import "@/components/showcase/capsule.css";
@@ -37,56 +36,9 @@ export default async function ShowcaseImportPage() {
     );
   }
   cleanupOrphanFiles({ scope: "showcase-unsaved" });
-  const { order, builtinMeta, hiddenIds } = readRegistry();
-  // 清单里连内置那辆一起列出来：首页有几辆，这里就显示几行，不会对不上
-  const builtin = SHOWCASE_MODELS.map((item) => {
-    // 内置车的封面同样可以换：文件存在才用，缺失就回退成车型代号占位
-    const cover = builtinMeta[item.id]?.cover ?? "";
-    return {
-      id: item.id,
-      label: item.label,
-      note: item.note,
-      file: item.config.assets.model.split("?")[0].split("/").pop() ?? item.config.assets.model,
-      cover: cover && modelUrlExists(cover) ? cover : "",
-      // 内置车的预设里 wheelPattern / materialRules 可能是正则；这一行只读展示，统一转成字符串
-      params: {
-        ...item.config.model,
-        wheelPattern: typeof item.config.model?.wheelPattern === "string" ? item.config.model.wheelPattern : undefined,
-        materialRules: (item.config.model?.materialRules ?? []).map((rule) => ({
-          match: typeof rule.match === "string" ? rule.match : String(rule.match),
-          metalness: rule.metalness,
-          roughness: rule.roughness
-        }))
-      },
-      updatedAt: "",
-      present: modelUrlExists(item.config.assets.model),
-      previewReady: Boolean(item.config.assets.previewModel && modelUrlExists(item.config.assets.previewModel)),
-      hidden: hiddenIds.includes(item.id),
-      builtin: true
-    };
-  });
-  const stored = readStoredModels();
-  const existing = [
-    ...builtin,
-    ...stored.map((model) => ({
-      id: model.id,
-      label: model.label,
-      note: model.note,
-      file: model.file,
-      cover: model.cover ?? "",
-      params: model.params,
-      updatedAt: model.updatedAt,
-      present: modelFileExists(model.file),
-      previewReady: modelPreviewExists(model.file),
-      hidden: hiddenIds.includes(model.id),
-      builtin: false
-    }))
-  ];
-  // 卡片顺序就是服务端保存的顺序（与首页右下角车型条同源），刷新不会跳回默认排列
-  const rank = orderRanker(resolveOrder(order, stored.map((model) => model.id)));
   return (
     <main className="showcase-import">
-      <ModelImporter existing={[...existing].sort((a, b) => rank(a.id) - rank(b.id))} />
+      <ModelImporter existing={getShowcaseImportRows()} />
     </main>
   );
 }
