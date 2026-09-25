@@ -38,9 +38,9 @@
 .mbl-shelf-scroll.is-dragging { cursor: grabbing; user-select: none; }
 .mbl-shelf-scroll.is-dragging .mbl-spine { cursor: grabbing; }
 .mbl-shelf-scroll::-webkit-scrollbar { display: none; }
-.mbl-shelf { position: relative; display: flex; justify-content: center; align-items: flex-end; min-width: max-content; padding: 0 35px 9px; border-bottom: 7px solid #262724; box-shadow: inset 0 -1px 0 #4b4c45, 0 13px 0 #141512, 0 19px 25px #0009; }
+.mbl-shelf { --spine-cap: clamp(235px, calc(100dvh - 490px), 530px); position: relative; display: flex; justify-content: center; align-items: flex-end; min-width: max-content; padding: 0 35px 9px; border-bottom: 7px solid #262724; box-shadow: inset 0 -1px 0 #4b4c45, 0 13px 0 #141512, 0 19px 25px #0009; }
 .mbl-shelf::after { position: absolute; bottom: -16px; left: 0; right: 0; height: 10px; content: ""; background: linear-gradient(#0e0f0d, transparent); pointer-events: none; }
-.mbl-spine { flex: none; position: relative; display: block; width: var(--spine-width); height: min(var(--spine-height), max(220px, calc(100dvh - 490px))); padding: 0; border: 1px solid var(--spine-edge); border-right-color: #1118; border-radius: 2px 3px 0 0; background: var(--spine-bg); color: var(--spine-ink); box-shadow: inset 3px 0 5px #fff5, inset -4px 0 5px #0004, 3px 0 3px #0009; transform-origin: bottom; transition: transform .35s cubic-bezier(.2,.85,.2,1), box-shadow .3s; }
+.mbl-spine { flex: none; position: relative; display: block; width: var(--spine-width); height: max(190px, calc(var(--spine-cap) * var(--spine-scale))); padding: 0; border: 1px solid var(--spine-edge); border-right-color: #1118; border-radius: 2px 3px 0 0; background: var(--spine-bg); color: var(--spine-ink); box-shadow: inset 3px 0 5px #fff5, inset -4px 0 5px #0004, 3px 0 3px #0009; transform-origin: bottom; transition: transform .35s cubic-bezier(.2,.85,.2,1), box-shadow .3s; }
 .mbl-spine:not(.mbl-spine-new)::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .8; }
 .mbl-spine[data-pattern="gulf"]::before { background: linear-gradient(151deg, transparent 31%, #e9782a 32% 45%, transparent 46%) center / 100% 100%; }
 .mbl-spine[data-pattern="racing"]::before { background: repeating-linear-gradient(0deg, transparent 0 7px, #dfcfa84d 7px 8px) 10px 43px / calc(100% - 20px) 48px no-repeat; }
@@ -55,11 +55,11 @@
 .mbl-spine.is-drop-after { box-shadow: 6px 0 0 #eee6d7, inset 3px 0 5px #fff5, inset -4px 0 5px #0004; }
 .mbl-spine-rule { position: absolute; top: 20px; left: 25%; right: 25%; height: 3px; border-top: 1px solid currentColor; border-bottom: 1px solid currentColor; opacity: .65; }
 .mbl-spine-title { position: absolute; top: 53px; left: 50%; transform: translateX(-50%); writing-mode: vertical-rl; text-orientation: mixed; white-space: nowrap; font-family: Georgia, "Songti SC", serif; font-size: clamp(15px, 1.4vw, 23px); letter-spacing: .065em; line-height: 1.15; font-weight: 600; }
-.mbl-spine-title.is-long { font-size: 14px; letter-spacing: 0; }
+.mbl-spine-title.is-long { max-height: calc(100% - 90px); overflow: hidden; text-overflow: ellipsis; font-size: 14px; letter-spacing: 0; }
 .mbl-spine-number { position: absolute; bottom: 16px; left: 0; right: 0; font-size: 10px; letter-spacing: .12em; opacity: .72; }
 .mbl-spine-grip { position: absolute; top: 7px; right: 6px; font-size: 13px; line-height: 1; opacity: 0; transition: opacity .2s; }
 .mbl-spine:hover .mbl-spine-grip, .mbl-spine:focus-visible .mbl-spine-grip { opacity: .8; }
-.mbl-spine-new { --spine-width: 68px; --spine-height: 435px; --spine-bg: #252824; --spine-edge: #596054; --spine-ink: #e9e5da; border: 1px dashed #778072; color: #e6e4d7; margin-left: 12px; }
+.mbl-spine-new { --spine-width: 68px; --spine-scale: .82; --spine-bg: #252824; --spine-edge: #596054; --spine-ink: #e9e5da; border: 1px dashed #778072; color: #e6e4d7; margin-left: 12px; }
 .mbl-spine-new > span { display: block; font-size: 27px; font-weight: 200; line-height: 1; }
 .mbl-spine-new small { display: block; margin: 14px auto 0; writing-mode: vertical-rl; letter-spacing: .17em; font-size: 9px; }
 .mbl-shelf-preview { position: relative; width: 100%; height: clamp(96px, calc(100dvh - 800px), 148px); flex: none; }
@@ -232,8 +232,7 @@
   .mbl-library-title { margin-bottom: 12px; }
   .mbl-library-title h1 { font-size: 50px; }
   .mbl-shelf-scroll { padding-top: 85px; }
-  .mbl-shelf { min-height: min(520px, 59dvh); padding-left: 15px; padding-right: 15px; }
-  .mbl-spine { height: min(var(--spine-height), max(220px, calc(100dvh - 400px))); }
+  .mbl-shelf { --spine-cap: clamp(260px, calc(100dvh - 400px), 530px); min-height: min(520px, 59dvh); padding-left: 15px; padding-right: 15px; }
   .mbl-shelf-preview { display: none; }
   .mbl-shelf-caption { margin: 17px 8px 0; }.mbl-shelf-caption span:last-child { display: none; }
   .mbl-reader { min-height: calc(100dvh - 114px); padding: 16px 12px 22px; justify-content: flex-start; }
