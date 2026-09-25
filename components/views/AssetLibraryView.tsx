@@ -219,14 +219,11 @@ function Avatar({
   const [timedOut, setTimedOut] = useState(false);
   const isRemote = !!src && /^https?:/i.test(src);
   const failKey = src ? `fire:logo-fail:${src}` : "";
-  const [cachedFail] = useState(() => {
-    if (!isRemote || !failKey) return false;
-    try {
-      return sessionStorage.getItem(failKey) === "1";
-    } catch {
-      return false;
-    }
-  });
+  const [cachedFail, setCachedFail] = useState(false);
+  useLayoutEffect(() => {
+    try { setCachedFail(isRemote && !!failKey && sessionStorage.getItem(failKey) === "1"); }
+    catch { setCachedFail(false); }
+  }, [isRemote, failKey]);
   const showImg = !!src && !err && !timedOut && !cachedFail;
 
   // 外部 logo（foolcdn / parqet / cmc）：1.5s 未加载即降级为首字母并记忆，避免慢 CDN 阻塞列表

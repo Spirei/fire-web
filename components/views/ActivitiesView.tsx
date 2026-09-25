@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import Pagination from "@/components/Pagination";
 import RefreshButton from "@/components/RefreshButton";
@@ -165,10 +165,18 @@ function writeQuery(scope: Scope, page: number, query: string) {
 }
 
 export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin = false, onRefresh }: Props) {
-  const initial = readQuery();
-  const [scope, setScope] = useState<Scope>(initial.scope);
-  const [query, setQuery] = useState(initial.query);
-  const [page, setPage] = useState(initial.page);
+  const [scope, setScope] = useState<Scope>("user");
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [urlReady, setUrlReady] = useState(false);
+  const initialFiltersRef = useRef(true);
+  useLayoutEffect(() => {
+    const initial = readQuery();
+    setScope(initial.scope);
+    setQuery(initial.query);
+    setPage(initial.page);
+    setUrlReady(true);
+  }, []);
   const [refreshing, setRefreshing] = useState(false);
   const refreshingRef = useRef(false);
   const [lastRefreshed, setLastRefreshed] = useState("");
@@ -207,9 +215,13 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
   }, [dailySummary, fx, rates]);
   const convertedTotal = Object.values(convertedMarkets).reduce((sum, value) => sum + value, 0);
 
-  useEffect(() => { setPage(1); }, [scope, query]);
-  useEffect(() => { if (page !== safePage) setPage(safePage); }, [page, safePage]);
-  useEffect(() => { writeQuery(scope, safePage, query); }, [query, safePage, scope]);
+  useEffect(() => {
+    if (!urlReady) return;
+    if (initialFiltersRef.current) { initialFiltersRef.current = false; return; }
+    setPage(1);
+  }, [scope, query, urlReady]);
+  useEffect(() => { if (urlReady && page !== safePage) setPage(safePage); }, [page, safePage, urlReady]);
+  useEffect(() => { if (urlReady) writeQuery(scope, safePage, query); }, [query, safePage, scope, urlReady]);
 
   useEffect(() => {
     if (!onRefresh) return;

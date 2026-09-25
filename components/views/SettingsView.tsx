@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { isSixDigitTotp, normalizeTotpDigits } from "@/lib/totpInput";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -1521,14 +1521,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     } | null;
     ok?: boolean;
     at?: number;
-  }>(() => {
-    // 保留上一次查询结果：刷新页面不自动查询，但直接显示上次成功的额度
+  }>({ loading: false, data: null });
+  useLayoutEffect(() => {
+    // 缓存只在挂载后恢复，避免浏览器首帧与服务端不同；不自动查询接口。
     try {
       const raw = localStorage.getItem("fire:futu-quota");
       if (raw) {
         const saved = JSON.parse(raw) as { data?: unknown; at?: number };
         if (saved?.data && typeof saved.at === "number") {
-          return {
+          setFutuQuota({
             loading: false,
             data: saved.data as {
               subscription?: { totalUsed: number; remain: number; ownUsed: number; totalQuota: number; ownTotalQuota: number };
@@ -1536,14 +1537,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             },
             ok: true,
             at: saved.at
-          };
+          });
         }
       }
     } catch {
       /* 缓存损坏时忽略 */
     }
-    return { loading: false, data: null };
-  });
+  }, []);
 
   async function loadFutuQuota() {
     setFutuQuota((s) => ({ ...s, loading: true }));

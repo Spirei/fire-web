@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
 import type { StockRecord } from "@/lib/types";
 import { ensureStockIcons, useAssetIcons } from "@/lib/useAssetIcons";
@@ -264,16 +264,17 @@ export default function EarningsCalendarView({ records = [], canManage = false }
   const [logoBases, setLogoBases] = useState<{ us: string; cn: string } | null>(null);
   const [timeKey, setTimeKey] = usePersistedState<TimeKey>("fire:earnings-time", "all");
   const [capKey, setCapKey] = usePersistedState<CapKey | CapKeyCN>("fire:earnings-cap", "all");
-  const [marketKey, setMarketKey] = useState<MarketKey>(() => {
-    if (typeof window === "undefined") return "US";
-    const m = new URLSearchParams(window.location.search).get("market")?.toUpperCase();
-    return (["US", "HK", "CN", "JP", "KR", "ALL"] as string[]).includes(m ?? "") ? (m as MarketKey) : "US";
-  });
-  const [stockKey, setStockKey] = useState<StockKey>(() => {
-    if (typeof window === "undefined") return "all";
-    const s = new URLSearchParams(window.location.search).get("type");
-    return s === "watchlist" || s === "holdings" || s === "star" ? (s as StockKey) : "all";
-  });
+  const [marketKey, setMarketKey] = useState<MarketKey>("US");
+  const [stockKey, setStockKey] = useState<StockKey>("all");
+  const [urlReady, setUrlReady] = useState(false);
+  useLayoutEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const m = sp.get("market")?.toUpperCase();
+    setMarketKey((["US", "HK", "CN", "JP", "KR", "ALL"] as string[]).includes(m ?? "") ? (m as MarketKey) : "US");
+    const s = sp.get("type");
+    setStockKey(s === "watch" || s === "hold" || s === "special" ? s : "all");
+    setUrlReady(true);
+  }, []);
   const [savingOrder, setSavingOrder] = useState(false);
   const [marketOrder, setMarketOrder] = useState<MarketKey[]>([]);
   const [moreMarketsOpen, setMoreMarketsOpen] = useState(false);
@@ -295,27 +296,29 @@ export default function EarningsCalendarView({ records = [], canManage = false }
       const m = sp.get("market")?.toUpperCase();
       if (m && (["US", "HK", "CN", "JP", "KR", "ALL"] as string[]).includes(m)) setMarketKey(m as MarketKey);
       const s = sp.get("type");
-      if (s === "watchlist" || s === "holdings" || s === "star") setStockKey(s as StockKey);
+      setStockKey(s === "watch" || s === "hold" || s === "special" ? s : "all");
     }
     window.addEventListener("popstate", syncFromUrl);
     return () => window.removeEventListener("popstate", syncFromUrl);
   }, []);
 
   useEffect(() => {
+    if (!urlReady) return;
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("market") !== marketKey) {
       sp.set("market", marketKey);
       window.history.replaceState(null, "", `?${sp.toString()}`);
     }
-  }, [marketKey]);
+  }, [marketKey, urlReady]);
 
   useEffect(() => {
+    if (!urlReady) return;
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("type") !== stockKey) {
       sp.set("type", stockKey);
       window.history.replaceState(null, "", `?${sp.toString()}`);
     }
-  }, [stockKey]);
+  }, [stockKey, urlReady]);
 
   const cursorKey = `${cursor.y}-${pad2(cursor.m + 1)}`;
   const dataKey = `${marketKey}:${cursorKey}`;

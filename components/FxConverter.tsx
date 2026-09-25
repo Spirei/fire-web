@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconCheck, IconPencil, IconPlus, IconRefresh, IconX } from "@tabler/icons-react";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
@@ -63,8 +63,15 @@ function DragHandle({ label }: { label: string }) {
 export default function FxConverter() {
   const { currency: displayCurrency } = useDisplayCurrency();
   const start = isFxCurrency(displayCurrency) ? displayCurrency : "USD";
-  const [base, setBase] = useState<FxCurrency>(() => readUrlState(start).from);
-  const [text, setText] = useState(() => readUrlState(start).amount);
+  const [base, setBase] = useState<FxCurrency>(start);
+  const [text, setText] = useState("100");
+  const [urlReady, setUrlReady] = useState(false);
+  useLayoutEffect(() => {
+    const initial = readUrlState(start);
+    setBase(initial.from);
+    setText(initial.amount);
+    setUrlReady(true);
+  }, []);
   const [savedOrder, setSavedOrder] = usePersistedState<FxCurrency[]>(FX_ORDER_KEY, [...FX_CURRENCIES]);
   const [hidden, setHidden] = usePersistedState<FxCurrency[]>(FX_HIDDEN_KEY, []);
   const [rates, setRates] = useState<Record<string, number>>({ USD: 1 });
@@ -87,6 +94,7 @@ export default function FxConverter() {
   const [over, setOver] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!urlReady) return;
     const params = new URLSearchParams(window.location.search);
     params.set("section", "convert");
     params.set("from", base);
@@ -94,7 +102,7 @@ export default function FxConverter() {
     if (parsed == null) params.delete("amount");
     else params.set("amount", sanitizeFxInput(text));
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
-  }, [base, text]);
+  }, [base, text, urlReady]);
 
   useEffect(() => {
     if (codes.length && !codes.includes(base)) {

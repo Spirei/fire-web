@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
 import { useRates, usdCap, fmtUsd } from "@/lib/useRates";
 import Pagination from "@/components/Pagination";
@@ -114,22 +114,29 @@ function writeFinReportCache(data: FinancialAttachment[]) {
 
 export function FinancialAttachments({ standalone }: { standalone?: boolean }) {
   const { stockIcons, marketIcons, assets } = useAssetIcons(["stock", "market"], { fullCatalog: true });
-  // 有本地缓存时直接秒出首帧，loading 保持 false，避免闪「正在读取财报文件」；无缓存才显示加载态
-  const [cachedFiles] = useState(() => (typeof window === "undefined" ? null : readFinReportCache()));
-  const [files, setFiles] = useState<FinancialAttachment[]>(cachedFiles ?? []);
-  const [loading, setLoading] = useState(!cachedFiles);
+  // SSR 首帧统一为加载态；挂载前恢复本地缓存，避免水合不一致及可见闪烁。
+  const [cachedFiles, setCachedFiles] = useState<FinancialAttachment[] | null>(null);
+  const [files, setFiles] = useState<FinancialAttachment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [urlReady, setUrlReady] = useState(false);
   const [error, setError] = useState("");
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
   // 类网盘文件夹导航：全部 → 市场 → 交易所 → 股票 → 年 → 报告类型；路径持久化到 ?view= 防止刷新重置。
   // 主流存储网站做法：URL 用稳定代码（公司 code / 报告类型英文码），显示时才映射为名称，避免中文长名撑爆 query。
-  const [view, setView] = useState<{ market?: string; exchange?: string; companyCode?: string; year?: number; category?: string }>(() => {
-    if (typeof window === "undefined") return {};
+  const [view, setView] = useState<{ market?: string; exchange?: string; companyCode?: string; year?: number; category?: string }>({});
+  useLayoutEffect(() => {
+    const cached = readFinReportCache();
+    setCachedFiles(cached);
+    if (cached) { setFiles(cached); setLoading(false); }
     const v = new URLSearchParams(window.location.search).get("view");
-    if (!v) return {};
-    const [market, exchange, companyCode, year, category] = v.split("/");
-    return { market: market || undefined, exchange: exchange ? decodeURIComponent(exchange) : undefined, companyCode: companyCode ? decodeURIComponent(companyCode) : undefined, year: year ? Number(year) : undefined, category: category ? reportCategoryName(decodeURIComponent(category)) : undefined };
-  });
+    if (v) {
+      const [market, exchange, companyCode, year, category] = v.split("/");
+      setView({ market: market || undefined, exchange: exchange ? decodeURIComponent(exchange) : undefined, companyCode: companyCode ? decodeURIComponent(companyCode) : undefined, year: year ? Number(year) : undefined, category: category ? reportCategoryName(decodeURIComponent(category)) : undefined });
+    }
+    setUrlReady(true);
+  }, []);
   useEffect(() => {
+    if (!urlReady) return;
     const url = new URL(window.location.href);
     const parts: string[] = [];
     if (view.market) parts.push(view.market);
@@ -144,7 +151,7 @@ export function FinancialAttachments({ standalone }: { standalone?: boolean }) {
     if (parts.length) searchParts.push(`view=${parts.map((p) => encodeURIComponent(p)).join("/")}`);
     url.search = searchParts.join("&");
     window.history.replaceState({}, "", url.toString());
-  }, [view]);
+  }, [view, urlReady]);
   const load = useCallback(() => {
     if (!cachedFiles) setLoading(true); // 有缓存则不闪加载态，后台刷新
     setError("");
@@ -159,7 +166,7 @@ export function FinancialAttachments({ standalone }: { standalone?: boolean }) {
       .catch((reason) => setError(reason instanceof Error ? reason.message : "财报文件加载失败"))
       .finally(() => setLoading(false));
   }, [cachedFiles]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (urlReady) load(); }, [load, urlReady]);
 
   // 层层下钻的待展示集合
   const byMarket = view.market ? files.filter((f) => f.market === view.market) : null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
 import { showToast } from "@/lib/toast";
 import AppSelect from "@/components/AppSelect";
@@ -158,17 +158,20 @@ function AttachmentModalShell({ children, onClose, labelledBy, alert = false, wi
 
 export default function AttachmentsView() {
   // 分类状态 URL 持久化：刷新保持当前分类（?category=docs|reports|library）
-  const [category, setCategory] = useState<"docs" | "reports" | "library">(() => {
-    if (typeof window === "undefined") return "docs";
+  const [category, setCategory] = useState<"docs" | "reports" | "library">("docs");
+  const [urlReady, setUrlReady] = useState(false);
+  useLayoutEffect(() => {
     const seg = new URLSearchParams(window.location.search).get("category");
-    return seg === "reports" || seg === "library" ? seg : "docs";
-  });
+    setCategory(seg === "reports" || seg === "library" ? seg : "docs");
+    setUrlReady(true);
+  }, []);
   useEffect(() => {
+    if (!urlReady) return;
     const url = new URL(window.location.href);
     if (category === "docs") url.searchParams.delete("category");
     else url.searchParams.set("category", category);
     window.history.replaceState({}, "", url.toString());
-  }, [category]);
+  }, [category, urlReady]);
   const [path, setPath] = useState("");
   const [dirs, setDirs] = useState<Entry[]>([]);
   const [files, setFiles] = useState<Entry[]>([]);

@@ -53,14 +53,11 @@ function CelebLogo({
   const isRemote = cdnEnabled && !overrideSrc && !src;
   // 外部兜底图标：失败 / 超时后记入 sessionStorage，本次会话刷新不再重复请求慢 CDN（如 foolcdn）
   const failKey = `fire:logo-fail:${key}`;
-  const [cachedFail] = useState(() => {
-    if (!isRemote) return false;
-    try {
-      return sessionStorage.getItem(failKey) === "1";
-    } catch {
-      return false;
-    }
-  });
+  const [cachedFail, setCachedFail] = useState(false);
+  useLayoutEffect(() => {
+    try { setCachedFail(isRemote && sessionStorage.getItem(failKey) === "1"); }
+    catch { setCachedFail(false); }
+  }, [isRemote, failKey]);
   const showImg = !!url && !err && !timedOut && !cachedFail;
 
   useEffect(() => {
