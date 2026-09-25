@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ModelImporter, { type ImportedModelRow, type ImportReport } from "./ModelImporter";
@@ -67,6 +68,35 @@ function shortDate(value: string) {
 
 function fileSize(bytes: number) { return `${(bytes / 1048576).toFixed(1)} MB`; }
 
+/** 翻页只复制可见 DOM；交互组件仍只有底层那一份，不会重复提交或加载。 */
+function clonePageVisual(source: Element | null): HTMLElement | null {
+  if (!(source instanceof HTMLElement)) return null;
+  const clone = source.cloneNode(true) as HTMLElement;
+  for (const element of [clone, ...clone.querySelectorAll<HTMLElement>("[id]")]) element.removeAttribute("id");
+  const scrollSource = [source, ...source.querySelectorAll<HTMLElement>("*")];
+  const scrollCopy = [clone, ...clone.querySelectorAll<HTMLElement>("*")];
+  scrollSource.forEach((element, index) => {
+    const copy = scrollCopy[index];
+    if (!copy) return;
+    copy.scrollTop = element.scrollTop;
+    copy.scrollLeft = element.scrollLeft;
+  });
+  const originalFields = source.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select");
+  const copiedFields = clone.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select");
+  originalFields.forEach((field, index) => {
+    const copy = copiedFields[index];
+    if (!copy) return;
+    copy.value = field.value;
+    if (field instanceof HTMLInputElement && copy instanceof HTMLInputElement) copy.checked = field.checked;
+  });
+  const originalCanvases = source.querySelectorAll("canvas");
+  const copiedCanvases = clone.querySelectorAll("canvas");
+  originalCanvases.forEach((canvas, index) => {
+    try { copiedCanvases[index]?.getContext("2d")?.drawImage(canvas, 0, 0); } catch { /* WebGL canvas may not permit capture. */ }
+  });
+  return clone;
+}
+
 function ReadonlyInspection({ model }: { model: ImportedModelRow }) {
   const [report, setReport] = useState<ImportReport | null>(null);
   const [busy, setBusy] = useState(false);
@@ -102,6 +132,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
   const [bookId, setBookId] = useState(initialBookId);
   const [page, setPage] = useState(initialPage);
   const [turn, setTurn] = useState<Turn>(null);
+  const [turnFromPage, setTurnFromPage] = useState<number | null>(null);
   const [shelfDragging, setShelfDragging] = useState(false);
   const [orderedIds, setOrderedIds] = useState(() => existing.map((item) => item.id));
   const [dragId, setDragId] = useState<string | null>(null);
@@ -115,6 +146,10 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
   const [method, setMethod] = usePersistedState<"local" | "online">("fire:showcase:processing-method", "local");
   const [qa, setQa] = usePersistedState<Record<string, boolean[]>>("fire:showcase:qa-checks", {});
   const timers = useRef<number[]>([]);
+  const turnRef = useRef(false);
+  const bookRef = useRef<HTMLDivElement | null>(null);
+  const flipOverlayRef = useRef<HTMLDivElement | null>(null);
+  const widthAnimationRef = useRef<Animation | null>(null);
   const touchX = useRef<number | null>(null);
   const shelfDrag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
   const shelfDragUntil = useRef(0);
@@ -132,7 +167,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
   const hoveredBook = existing.find((item) => item.id === hoverId);
 
   useEffect(() => { if (!orderSavingRef.current) setOrderedIds(existing.map((item) => item.id)); }, [existing]);
-  useEffect(() => () => { timers.current.forEach(window.clearTimeout); }, []);
+  useEffect(() => () => { timers.current.forEach(window.clearTimeout); widthAnimationRef.current?.cancel(); }, []);
 
   const saveOrder = useCallback(async (ids: string[]) => {
     if (orderSavingRef.current || ids.join("|") === orderedIds.join("|")) return;
@@ -187,14 +222,22 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
     else { url.searchParams.delete("book"); url.searchParams.delete("page"); }
     window.history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
-  const goTo = useCallback((id: string, nextPage: number) => {
+  const clearFlipVisual = useCallback(() => {
     timers.current.forEach(window.clearTimeout);
     timers.current = [];
+    widthAnimationRef.current?.cancel();
+    widthAnimationRef.current = null;
+    flipOverlayRef.current?.replaceChildren();
+    turnRef.current = false;
     setTurn(null);
+    setTurnFromPage(null);
+  }, []);
+  const goTo = useCallback((id: string, nextPage: number) => {
+    clearFlipVisual();
     setBookId(id);
     setPage(nextPage);
     syncUrl(id, nextPage);
-  }, [syncUrl]);
+  }, [clearFlipVisual, syncUrl]);
   const confirmDiscard = useCallback(() => window.confirm("原件尚未保存，离开画册后需要重新上传。确定离开吗？"), []);
   const leaveTo = useCallback((id: string, nextPage: number) => {
     const discarding = bookId === "new" && unsavedDraft && (id !== "new" || nextPage === 0);
@@ -203,7 +246,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
     goTo(id, nextPage);
   }, [bookId, confirmDiscard, goTo, unsavedDraft]);
   const flip = useCallback((direction: "next" | "previous") => {
-    if (turn || !selected) return;
+    if (turnRef.current || !selected) return;
     const next = Math.min(CHAPTERS.length - 1, Math.max(0, page + (direction === "next" ? 1 : -1)));
     if (next === page) return;
     if (isNew && unsavedDraft && next === 0) {
@@ -211,10 +254,48 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
       setUnsavedDraft(false);
     }
     if (window.matchMedia("(prefers-reduced-motion: reduce), (max-width: 620px)").matches) { goTo(bookId, next); return; }
-    setTurn(direction);
-    timers.current.push(window.setTimeout(() => { setPage(next); syncUrl(bookId, next); }, 265));
-    timers.current.push(window.setTimeout(() => setTurn(null), 560));
-  }, [bookId, confirmDiscard, goTo, isNew, page, selected, syncUrl, turn, unsavedDraft]);
+    const bookElement = bookRef.current;
+    const overlay = flipOverlayRef.current;
+    if (!bookElement || !overlay) { goTo(bookId, next); return; }
+    const opening = page === 0;
+    const closing = next === 0;
+    const mode = opening ? "opening" : closing ? "closing" : "spread";
+    const oldWidth = bookElement.getBoundingClientRect().width;
+    const front = clonePageVisual(bookElement.querySelector(opening ? ".mbl-cover" : direction === "next" ? ".mbl-page-right" : ".mbl-page-left"));
+    const stationary = opening ? null : clonePageVisual(bookElement.querySelector(direction === "next" ? ".mbl-page-left" : ".mbl-page-right"));
+    if (!front) { goTo(bookId, next); return; }
+    turnRef.current = true;
+    flushSync(() => { setTurn(direction); setTurnFromPage(page); setPage(next); });
+    syncUrl(bookId, next);
+    const back = clonePageVisual(bookElement.querySelector(closing ? ".mbl-cover" : direction === "next" ? ".mbl-page-left" : ".mbl-page-right"));
+    if (!back) { goTo(bookId, next); return; }
+    const scene = document.createElement("div");
+    scene.className = `mbl-flip-scene is-${mode} is-${direction}`;
+    if (stationary) {
+      const still = document.createElement("div");
+      still.className = "mbl-flip-stationary";
+      still.append(stationary);
+      scene.append(still);
+    }
+    const sheet = document.createElement("div");
+    sheet.className = "mbl-flip-sheet";
+    const frontFace = document.createElement("div");
+    frontFace.className = "mbl-flip-face mbl-flip-front";
+    frontFace.append(front);
+    const backFace = document.createElement("div");
+    backFace.className = "mbl-flip-face mbl-flip-back";
+    backFace.append(back);
+    sheet.append(frontFace, backFace);
+    scene.append(sheet);
+    overlay.replaceChildren(scene);
+    const newWidth = bookElement.getBoundingClientRect().width;
+    if (opening || closing) {
+      widthAnimationRef.current = bookElement.animate([{ width: `${oldWidth}px` }, { width: `${newWidth}px` }], {
+        duration: 700, easing: "cubic-bezier(.25,.7,.2,1)"
+      });
+    }
+    timers.current.push(window.setTimeout(clearFlipVisual, 730));
+  }, [bookId, clearFlipVisual, confirmDiscard, goTo, isNew, page, selected, syncUrl, unsavedDraft]);
   useEffect(() => {
     const pop = () => {
       const query = new URLSearchParams(window.location.search);
@@ -226,11 +307,11 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
       }
       setBookId(id === "new" || existing.some((item) => item.id === id) ? id : "");
       setPage(nextPage);
-      setTurn(null);
+      clearFlipVisual();
     };
     window.addEventListener("popstate", pop);
     return () => window.removeEventListener("popstate", pop);
-  }, [bookId, confirmDiscard, existing, page, syncUrl, unsavedDraft]);
+  }, [bookId, clearFlipVisual, confirmDiscard, existing, page, syncUrl, unsavedDraft]);
   useEffect(() => {
     if (bookId !== "new" || !unsavedDraft) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
@@ -343,8 +424,8 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
       <div className="mbl-shelf-preview" aria-live="polite">{hoveredBook && !dragId && <div className="mbl-preview-stack" style={{ left: `${hoverX}px`, "--preview-color": bookTheme(hoveredBook).cover, "--preview-ink": bookTheme(hoveredBook).ink } as React.CSSProperties}><div className="mbl-preview-cover">{hoveredBook.cover ? <img src={hoveredBook.cover} alt={`${hoveredBook.label} 封面预览`} /> : <strong>{hoveredBook.label}</strong>}</div><small>{hoveredBook.label} <span>· {hoveredBook.note || "车型档案"}</span></small></div>}</div>
       <div className="mbl-shelf-caption" aria-live="polite"><span>{String(orderedBooks.length).padStart(2, "0")} VOLUMES / ONE SHELF</span><span>{orderSaving ? "正在保存顺序…" : "拖动排序 · 点击阅读"}</span></div>
     </section> : <section className="mbl-reader" aria-label={`${label} 车型画册`} onTouchStart={(event) => { touchX.current = event.touches[0]?.clientX ?? null; }} onTouchEnd={(event) => { if (touchX.current === null) return; const delta = (event.changedTouches[0]?.clientX ?? touchX.current) - touchX.current; touchX.current = null; if (Math.abs(delta) > 90) flip(delta < 0 ? "next" : "previous"); }}>
-      <div className="mbl-reader-top"><button type="button" onClick={() => leaveTo("", 0)}>← 返回书架</button><span>FIRE / {label.toUpperCase()}</span><span>{String(page + 1).padStart(2, "0")} / {String(CHAPTERS.length).padStart(2, "0")}</span></div>
-      <div className={`mbl-book${page === 0 ? " is-cover" : ""}${turn ? ` is-turning-${turn}` : ""}${bookDragging ? " is-dragging" : ""}`} onPointerDown={(event) => {
+      <div className="mbl-reader-top"><button type="button" onClick={() => leaveTo("", 0)}>← 返回书架</button><span>FIRE / {label.toUpperCase()}</span><span>{String((turnFromPage ?? page) + 1).padStart(2, "0")} / {String(CHAPTERS.length).padStart(2, "0")}</span></div>
+      <div ref={bookRef} className={`mbl-book${page === 0 ? " is-cover" : ""}${turn ? ` is-turning-${turn}` : ""}${bookDragging ? " is-dragging" : ""}`} onPointerDown={(event) => {
         if (event.pointerType !== "mouse" || event.button !== 0 || turn || (event.target instanceof Element && event.target.closest("button, a, input, textarea, select, [contenteditable], .mbl-page-content"))) return;
         mouseTurnStart.current = { x: event.clientX, y: event.clientY };
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -398,11 +479,11 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
           </div>
           <div className="mbl-fold" aria-hidden="true" />
         </div>}
-        {turn && <div className="mbl-turn-sheet" aria-hidden="true"><span /><span /></div>}
+        <div className="mbl-flip-overlay" ref={flipOverlayRef} aria-hidden="true" />
         {page < CHAPTERS.length - 1 && <button type="button" className="mbl-corner-next" onClick={() => flip("next")} disabled={Boolean(turn)} aria-label="翻到下一页" title="翻到下一页"><span aria-hidden="true">↗</span></button>}
       </div>
-      <nav className="mbl-reader-controls" aria-label="书页导航"><button type="button" onClick={() => flip("previous")} disabled={page === 0 || Boolean(turn)} aria-label="上一页">←</button><span>{CHAPTERS[page].era} <i>·</i> {CHAPTERS[page].label}</span><button type="button" onClick={() => flip("next")} disabled={page === CHAPTERS.length - 1 || Boolean(turn)} aria-label="下一页">→</button></nav>
-      <div className="mbl-chapter-dots" aria-label="快速跳转章节">{CHAPTERS.map((chapter, index) => <button key={chapter.en} type="button" onClick={() => leaveTo(bookId, index)} className={index === page ? "active" : ""} aria-current={index === page ? "page" : undefined} aria-label={`跳到${chapter.label}`} title={chapter.label} />)}</div>
+      <nav className="mbl-reader-controls" aria-label="书页导航"><button type="button" onClick={() => flip("previous")} disabled={page === 0 || Boolean(turn)} aria-label="上一页">←</button><span className="mbl-reader-position"><strong>{String(turnFromPage ?? page).padStart(2, "0")} / {String(CHAPTERS.length - 1).padStart(2, "0")}</strong><small>拖动、滑动或使用方向键</small></span><button type="button" onClick={() => flip("next")} disabled={page === CHAPTERS.length - 1 || Boolean(turn)} aria-label="下一页">→</button></nav>
+      <div className="mbl-chapter-dots" aria-label="快速跳转章节">{CHAPTERS.map((chapter, index) => <button key={chapter.en} type="button" onClick={() => leaveTo(bookId, index)} className={index === (turnFromPage ?? page) ? "active" : ""} aria-current={index === (turnFromPage ?? page) ? "page" : undefined} aria-label={`跳到${chapter.label}`} title={chapter.label} />)}</div>
     </section>}
     <footer className="mbl-footer"><span>FIRE ARCHIVE © 2026</span><span>MODELS, KEPT IN MOTION.</span></footer>
   </main>;
