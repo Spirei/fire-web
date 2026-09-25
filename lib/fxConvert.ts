@@ -23,7 +23,12 @@ export const FX_CURRENCIES = [
   "BRL"
 ] as const;
 
-export const FX_EXTRA_CURRENCIES = ["MOP", "NZD", "SEK", "NOK", "DKK", "THB", "MYR", "IDR", "PHP", "AED", "SAR"] as const;
+/** 加号只提供主要国家／地区法币；具体可添加项仍取决于当前接口有无报价。 */
+export const FX_EXTRA_CURRENCIES = [
+  "MOP", "AED", "SAR", "ILS", "THB", "MYR", "IDR", "PHP", "VND", "TRY", "PKR", "BDT", "KZT",
+  "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "RON", "RUB", "UAH",
+  "MXN", "ARS", "CLP", "COP", "PEN", "NZD", "ZAR", "EGP", "NGN", "MAD", "KES"
+] as const;
 
 export type FxCurrency = string;
 
@@ -52,7 +57,29 @@ export const FX_CURRENCY_META: Record<string, { label: string; symbol: string; i
   IDR: { label: "印尼盾", symbol: "Rp", iso: "ID" },
   PHP: { label: "菲律宾比索", symbol: "₱", iso: "PH" },
   AED: { label: "阿联酋迪拉姆", symbol: "د.إ", iso: "AE" },
-  SAR: { label: "沙特里亚尔", symbol: "﷼", iso: "SA" }
+  SAR: { label: "沙特里亚尔", symbol: "﷼", iso: "SA" },
+  ILS: { label: "以色列新谢克尔", symbol: "₪", iso: "IL" },
+  VND: { label: "越南盾", symbol: "₫", iso: "VN" },
+  TRY: { label: "土耳其里拉", symbol: "₺", iso: "TR" },
+  PKR: { label: "巴基斯坦卢比", symbol: "₨", iso: "PK" },
+  BDT: { label: "孟加拉塔卡", symbol: "৳", iso: "BD" },
+  KZT: { label: "哈萨克斯坦坚戈", symbol: "₸", iso: "KZ" },
+  PLN: { label: "波兰兹罗提", symbol: "zł", iso: "PL" },
+  CZK: { label: "捷克克朗", symbol: "Kč", iso: "CZ" },
+  HUF: { label: "匈牙利福林", symbol: "Ft", iso: "HU" },
+  RON: { label: "罗马尼亚列伊", symbol: "lei", iso: "RO" },
+  RUB: { label: "俄罗斯卢布", symbol: "₽", iso: "RU" },
+  UAH: { label: "乌克兰格里夫纳", symbol: "₴", iso: "UA" },
+  MXN: { label: "墨西哥比索", symbol: "MX$", iso: "MX" },
+  ARS: { label: "阿根廷比索", symbol: "AR$", iso: "AR" },
+  CLP: { label: "智利比索", symbol: "CL$", iso: "CL" },
+  COP: { label: "哥伦比亚比索", symbol: "COL$", iso: "CO" },
+  PEN: { label: "秘鲁索尔", symbol: "S/", iso: "PE" },
+  ZAR: { label: "南非兰特", symbol: "R", iso: "ZA" },
+  EGP: { label: "埃及镑", symbol: "E£", iso: "EG" },
+  NGN: { label: "尼日利亚奈拉", symbol: "₦", iso: "NG" },
+  MAD: { label: "摩洛哥迪拉姆", symbol: "د.م.", iso: "MA" },
+  KES: { label: "肯尼亚先令", symbol: "KSh", iso: "KE" }
 };
 
 export function fxCurrencyMeta(code: string): { label: string; symbol: string; iso: string } {

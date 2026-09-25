@@ -555,11 +555,14 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(sanitizeFxInput('12.3.4a'), '12.34');
     assert.equal(amountToDraft(720, 'CNY'), '720');
     assert.equal(amountToDraft(155.4, 'JPY'), '155');
-    const { FX_CURRENCIES, fxContinent, formatRatesDate, normalizeFxOrder, moveFxOrder } = require(path.join(root, 'lib/fxConvert.ts'));
+    const { FX_CURRENCIES, FX_EXTRA_CURRENCIES, FX_CURRENCY_META, fxContinent, formatRatesDate, normalizeFxOrder, moveFxOrder } = require(path.join(root, 'lib/fxConvert.ts'));
     assert.equal(FX_CURRENCIES.length, 14);
     assert.equal(FX_CURRENCIES.length % 2, 0);
     assert(!FX_CURRENCIES.includes('MOP'));
     assert(FX_CURRENCIES.includes('CHF'));
+    assert(FX_EXTRA_CURRENCIES.includes('MOP'));
+    assert(FX_EXTRA_CURRENCIES.every((code) => Boolean(FX_CURRENCY_META[code]?.iso)));
+    assert(!FX_EXTRA_CURRENCIES.some((code) => ['BTC', 'XAU', 'XAG', 'XDR', 'BMD'].includes(code)));
     assert.deepEqual(normalizeFxOrder(['CNY', 'USD', 'MOP', 'NOPE', 'CNY']), ['CNY', 'USD', 'MOP', ...FX_CURRENCIES.filter((code) => code !== 'CNY' && code !== 'USD')]);
     assert.equal(fxContinent('MOP'), '亚洲');
     assert.equal(fxContinent('SEK'), '欧洲');
