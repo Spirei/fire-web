@@ -33,6 +33,8 @@ export default async function SlugLayout({
   unstable_noStore();
   const { slug } = await params;
   const path = "/" + (slug || []).join("/");
+  // 同一次服务端渲染的时间快照传给客户端，避免月末/交易时段边界的首帧分歧。
+  const initialNow = Date.now();
   const settings = getSiteSettings();
   // 从原始 Cookie 头里取（API 路由里 cookies() 正常，但布局里读不到 —— 用 headers 统一走一条路）
   const rawCookie = (await headers()).get("cookie") || "";
@@ -133,6 +135,7 @@ export default async function SlugLayout({
         <CurrencyProvider initialCurrency={currencyCookie ?? null}>
         <RecordsApp
           initialTab={tab.key}
+          initialNow={initialNow}
           initialVersion={CURRENT_VERSION.version}
           initialSymbol={initialSymbol}
           initialCelebAvatars={celebAvatars}

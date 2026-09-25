@@ -29,6 +29,7 @@ const WATCH_GROUP_CACHE_KEY = "fire:watch-groups";
 interface Props {
   /** 个股详情直达代码（如 US.GOOGL），来自 /watchlist/US.GOOGL 路径 */
   initialSymbol?: string;
+  initialNow: number;
   records: StockRecord[];
   initialWatchGroups?: WatchGroup[];
   quotes: Record<string, Quote>;
@@ -73,7 +74,7 @@ function filterIdFromToken(groups: WatchGroup[], raw: string): string {
   return "";
 }
 
-export default function QuotesView({ initialSymbol, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, groups, onDetailChange, onToggleWatch }: Props) {
+export default function QuotesView({ initialSymbol, initialNow, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, groups, onDetailChange, onToggleWatch }: Props) {
   const searchParams = useSearchParams();
   const filterToken = searchParams.get("filter") ?? "";
   const { brokerIcons, stockIcons, assetIcons } = useAssetIcons(["broker", "stock", "crypto", "metal"]);
@@ -684,6 +685,7 @@ export default function QuotesView({ initialSymbol, records, initialWatchGroups 
       <div style={{ animation: "fade-in .25s ease" }}>
         <StockDetailView
           market={detail.market}
+          initialNow={initialNow}
           code={detail.code}
           name={detail.name}
           quote={q}

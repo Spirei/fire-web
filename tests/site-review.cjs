@@ -614,6 +614,24 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.match(view, /if \(pageSize \|\| !urlReady\) return;/, '读取 URL 前不得回写默认区块覆盖分享链接');
     assert.match(css, /\.fx-converter-card\s*\{[^}]*grid-template-columns:\s*1fr 1fr/, '汇率换算必须一排两个');
   });
+  await test('calendar and stock detail share the server first-frame clock', () => {
+    const layout = fs.readFileSync(path.join(root, 'app/[...slug]/layout.tsx'), 'utf8');
+    const app = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
+    const calendar = fs.readFileSync(path.join(root, 'components/views/EarningsCalendarView.tsx'), 'utf8');
+    const detail = fs.readFileSync(path.join(root, 'components/StockDetailView.tsx'), 'utf8');
+    const watchlist = fs.readFileSync(path.join(root, 'components/views/WatchlistView.tsx'), 'utf8');
+    const quotes = fs.readFileSync(path.join(root, 'components/views/QuotesView.tsx'), 'utf8');
+    assert.match(layout, /const initialNow = Date\.now\(\);[\s\S]*?<RecordsApp[\s\S]*?initialNow=\{initialNow\}/);
+    assert.match(app, /<EarningsCalendarView[^>]*initialNow=\{initialNow\}/);
+    assert.match(app, /<WatchlistView[^>]*initialNow=\{initialNow\}/);
+    assert.match(watchlist, /<QuotesView[^>]*initialNow=\{initialNow\}/);
+    assert.match(quotes, /<StockDetailView[^>]*initialNow=\{initialNow\}/);
+    assert.match(calendar, /new Date\(initialNow\)/);
+    assert.match(calendar, /new Date\(calendarNow\)/);
+    assert.match(detail, /useState\(initialNow\)/);
+    assert.match(detail, /new Date\(marketClock\)/);
+    assert(!detail.includes('useState(() => Date.now())'));
+  });
   await test('production build never rotates the local demo password', () => {
     const db = fs.readFileSync(path.join(root, 'lib/db.ts'), 'utf8');
     assert.match(db, /NODE_ENV === "production" && process\.env\.NEXT_PHASE !== "phase-production-build"/, '生产服务的弱密码保护不能在 next build 阶段修改本地账号');

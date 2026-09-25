@@ -11,6 +11,7 @@ import type { WatchGroup } from "@/lib/watchGroups";
 interface Props {
   /** 个股详情直达代码（如 US.GOOGL），来自 /watchlist/US.GOOGL 路径 */
   initialSymbol?: string;
+  initialNow: number;
   records: StockRecord[];
   initialWatchGroups?: WatchGroup[];
   quotes: Record<string, Quote>;
@@ -122,7 +123,7 @@ function FearGreedGauge({ score }: { score: number }) {
   );
 }
 
-export default function WatchlistView({ initialSymbol, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onToggleWatch, groups }: Props) {
+export default function WatchlistView({ initialSymbol, initialNow, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onToggleWatch, groups }: Props) {
   const [indexGroups, setIndexGroups] = useState<MarketIndices[]>([]);
   const [indicesLoading, setIndicesLoading] = useState(true);
   const [indicesError, setIndicesError] = useState("");
@@ -341,6 +342,7 @@ export default function WatchlistView({ initialSymbol, records, initialWatchGrou
       <QuotesView
         initialWatchGroups={initialWatchGroups}
         initialSymbol={initialSymbol}
+        initialNow={initialNow}
         records={records}
         quotes={quotes}
         quoteAt={quoteAt}

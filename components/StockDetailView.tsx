@@ -23,6 +23,7 @@ import { dividendClientCacheKey, readDividendClientCache, writeDividendClientCac
 
 interface Props {
   market: string;
+  initialNow?: number;
   code: string;
   name: string;
   quote?: Quote | null;
@@ -193,7 +194,7 @@ function dividendStatus(item: DividendRecord) {
   return { label: raw || "已披露", tone: "info" as const };
 }
 
-export default function StockDetailView({ market, code, name, quote: propQuote, onBack, followed = false, onToggleFollow, initialTab = "overview", onTabChange }: Props) {
+export default function StockDetailView({ market, initialNow = 0, code, name, quote: propQuote, onBack, followed = false, onToggleFollow, initialTab = "overview", onTabChange }: Props) {
   const { assets, stockIcons } = useAssetIcons(["stock"]);
   const stockIconUrl = pickStockIcon(stockIcons, market, code);
   useEffect(() => {
@@ -213,7 +214,8 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
   const [tab, setTab] = useState<Tab>(initialTab);
   const [tabReady, setTabReady] = useState(false);
   const [extendedPrices, setExtendedPrices] = useState<{ pre: ExtendedPoint | null; after: ExtendedPoint | null; regular: ExtendedPoint | null }>({ pre: null, after: null, regular: null });
-  const [marketClock, setMarketClock] = useState(() => Date.now());
+  const [marketClock, setMarketClock] = useState(initialNow);
+  useLayoutEffect(() => { setMarketClock(Date.now()); }, []);
   const quotePollingRef = useRef(false);
   const [selectedRelatedETF, setSelectedRelatedETF] = useState<RelatedETF | null>(null);
   const [etfQuotes, setEtfQuotes] = useState<Record<string, Quote | null>>({});
@@ -535,7 +537,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
       ? usMarketPhase(marketClock)
       : (() => {
           // 港股/A股/日韩等按各自时区判时段：休市/午休不再误显示为「盘中」
-          const s = marketSessionState(market.toUpperCase(), new Date()).session;
+          const s = marketSessionState(market.toUpperCase(), new Date(marketClock)).session;
           return s === "pre" ? "PRE" : s === "regular" ? "REGULAR" : s === "post" ? "AFTER" : s === "overnight" ? "OVERNIGHT" : "WEEKEND";
         })();
   // 扩展块在常规盘外只要有最近一次扩展成交就展示：PREMARKET→盘前，AFTER→盘后；
@@ -640,7 +642,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
     .filter((item) => item.amount != null)
     .sort((a, b) => String(b.exDate || b.pubDate || "").localeCompare(String(a.exDate || a.pubDate || "")))[0];
   const upcomingDividend = [...dividends]
-    .filter((item) => item.payDate && new Date(`${item.payDate}T23:59:59`).getTime() >= Date.now())
+    .filter((item) => item.payDate && new Date(`${item.payDate}T23:59:59`).getTime() >= marketClock)
     .sort((a, b) => String(a.payDate).localeCompare(String(b.payDate)))[0];
 
   // 点击相关 ETF 后进入同一套个股详情页，返回箭头回到当前股票的 ETF 聚合页。
@@ -648,6 +650,7 @@ export default function StockDetailView({ market, code, name, quote: propQuote, 
     return (
       <StockDetailView
         market="US"
+        initialNow={marketClock}
         code={selectedRelatedETF.code}
         name={selectedRelatedETF.name}
         quote={etfQuotes[selectedRelatedETF.code]}

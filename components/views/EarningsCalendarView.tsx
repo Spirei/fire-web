@@ -258,7 +258,7 @@ function Fireo({
   );
 }
 
-export default function EarningsCalendarView({ records = [], canManage = false }: { records?: StockRecord[]; canManage?: boolean }) {
+export default function EarningsCalendarView({ records = [], canManage = false, initialNow }: { records?: StockRecord[]; canManage?: boolean; initialNow: number }) {
   const [months, setMonths] = useState<Record<string, EarnRow[] | null>>({});
   const [failed, setFailed] = useState(false);
   const [logoBases, setLogoBases] = useState<{ us: string; cn: string } | null>(null);
@@ -279,9 +279,15 @@ export default function EarningsCalendarView({ records = [], canManage = false }
   const [marketOrder, setMarketOrder] = useState<MarketKey[]>([]);
   const [moreMarketsOpen, setMoreMarketsOpen] = useState(false);
   const [cursor, setCursor] = useState(() => {
-    const n = new Date();
+    const n = new Date(initialNow);
     return { y: n.getFullYear(), m: n.getMonth() };
   });
+  const [calendarNow, setCalendarNow] = useState(initialNow);
+  useLayoutEffect(() => {
+    const now = new Date();
+    setCursor({ y: now.getFullYear(), m: now.getMonth() });
+    setCalendarNow(now.getTime());
+  }, []);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const dragMarketIndex = useRef<number | null>(null);
   // 已发起过请求的月份键：避免缓存回填导致的重复请求
@@ -503,11 +509,11 @@ export default function EarningsCalendarView({ records = [], canManage = false }
   }
 
   const bounds = useMemo(() => {
-    const now = new Date();
+    const now = new Date(calendarNow);
     const min = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const max = new Date(now.getFullYear(), now.getMonth() + 5, 0); // 未来 4 个月（含本月）
     return { minY: min.getFullYear(), minM: min.getMonth(), maxY: max.getFullYear(), maxM: max.getMonth() };
-  }, []);
+  }, [calendarNow]);
 
   // 股票类型 → 记录代码集合（自选=无持仓，持仓=数量>0，特别关注=分组名为“特别关注”）
   const stockSets = useMemo(() => {
@@ -570,7 +576,7 @@ export default function EarningsCalendarView({ records = [], canManage = false }
     const daysInMonth = new Date(y, m + 1, 0).getDate();
     const cells: ({ type: "blank" } | { type: "day"; key: string; day: number; rows: EarnRow[]; isToday: boolean })[] = [];
     for (let i = 0; i < offset; i++) cells.push({ type: "blank" });
-    const now = new Date();
+    const now = new Date(calendarNow);
     const today = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
     for (let d = 1; d <= daysInMonth; d++) {
       const key = dateKey(y, m, d);
@@ -578,7 +584,7 @@ export default function EarningsCalendarView({ records = [], canManage = false }
     }
     while (cells.length % 7 !== 0) cells.push({ type: "blank" });
     return cells;
-  }, [cursor, byDate]);
+  }, [cursor, byDate, calendarNow]);
 
   const canPrev = !monthBounds || cursor.y > monthBounds.minY || (cursor.y === monthBounds.minY && cursor.m > monthBounds.minM);
   const canNext = !monthBounds || cursor.y < monthBounds.maxY || (cursor.y === monthBounds.maxY && cursor.m < monthBounds.maxM);

@@ -91,6 +91,7 @@ function withFireTab(tabs: TabConfig[]): TabConfig[] {
 
 export default function RecordsApp({
   initialTab,
+  initialNow,
   initialVersion,
   initialSymbol,
   initialCelebAvatars,
@@ -111,6 +112,7 @@ export default function RecordsApp({
   initialTradingFilter = null
 }: {
   initialTab: string;
+  initialNow: number;
   initialVersion: string;
   initialSymbol?: string;
   initialCelebAvatars?: Record<string, string>;
@@ -900,6 +902,7 @@ export default function RecordsApp({
           {activeTab === "watchlist" && (
             <WatchlistView
               initialSymbol={initialSymbol}
+              initialNow={initialNow}
               records={records}
               initialWatchGroups={initialWatchGroups}
               quotes={quotes}
@@ -961,7 +964,7 @@ export default function RecordsApp({
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
           {activeTab === "global" && <GlobalPreviewView />}
           {activeTab === "trading" && <TradingSquareView avatars={initialCelebAvatars} records={records} initialPosts={initialTradingPosts} initialFilter={initialTradingFilter} />}
-          {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} />}
+          {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} initialNow={initialNow} />}
           {activeTab === "assistant" && <AssistantView page="assistant" symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} />}
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
