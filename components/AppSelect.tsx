@@ -42,7 +42,7 @@ export default function AppSelect({ value, options, onChange, className = "", me
   }, [open]);
 
   return <>
-    <button ref={buttonRef} type="button" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} aria-controls={menuId} onClick={() => { if (!open) place(); setOpen((shown) => !shown); }} className={`inline-flex items-center justify-between gap-2 text-left outline-none disabled:cursor-not-allowed disabled:opacity-50 ${className}`}>
+    <button ref={buttonRef} type="button" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined} onClick={() => { if (!open) place(); setOpen((shown) => !shown); }} className={`inline-flex items-center justify-between gap-2 text-left outline-none disabled:cursor-not-allowed disabled:opacity-50 ${className}`}>
       <span className="min-w-0 truncate">{selected?.label ?? String(value)}</span><IconChevronDown className={`h-4 w-4 flex-none text-muted transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
     </button>
     {open && createPortal(<>

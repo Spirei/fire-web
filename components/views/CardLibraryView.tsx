@@ -1,6 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
 import { appConfirm } from "@/lib/appDialog";
@@ -31,6 +32,9 @@ import type { CardLibraryPayload } from "@/lib/cardLibrary";
 import type { CardDetails } from "@/lib/cardWallet";
 import type { CustomCard } from "@/lib/cardCustom";
 import { CARD_VARIANT_FACES, CARD_VARIANT_MERGE_KEYS, CARD_VARIANT_MERGED, type CardFace } from "@/lib/cardVariants";
+import type { WanderCard } from "@/components/CardWander";
+
+const CardWander = dynamic(() => import("@/components/CardWander"), { ssr: false });
 
 interface CardItem {
   name: string;
@@ -528,6 +532,19 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   /** 用户自建的卡（素材库里没有的）：并进卡面库一起显示 */
   const [customCards, setCustomCards] = useState<CustomCard[]>(() => initial?.customCards ?? []);
   const [walletOpen, setWalletOpen] = useState(false);
+  const [wanderSeed, setWanderSeed] = useState<string | null>(null);
+  const wanderOpenedRef = useRef(false);
+  useLayoutEffect(() => {
+    const syncFromUrl = () => {
+      const seed = new URLSearchParams(window.location.search).get("wander");
+      const nextSeed = seed && /^[a-z0-9]{6,12}$/.test(seed) ? seed : null;
+      if (!nextSeed) wanderOpenedRef.current = false;
+      setWanderSeed(nextSeed);
+    };
+    syncFromUrl();
+    window.addEventListener("popstate", syncFromUrl);
+    return () => window.removeEventListener("popstate", syncFromUrl);
+  }, []);
 
   const { currency: displayCurrency } = useDisplayCurrency();
   const [rates, setRates] = useState<Record<string, number>>(() => ({ ...FALLBACK_RATES }));
@@ -1238,6 +1255,50 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     setActive(entry);
   }
 
+  const wanderCards = useMemo(() => flat.map(({ card, bank, region: regionLabel }): WanderCard => {
+    const file = card.faces?.[0]?.file ?? card.file;
+    return {
+      key: card.file,
+      name: cardTitle(card.name, script),
+      bank: bankTitle(bank, script),
+      region: regionTitle(regionLabel, script),
+      type: card.type,
+      image: covers[file] || (file.startsWith("/") ? file : manifestCoverUrl(file)),
+      held: !!holdings[card.file]
+    };
+  }), [flat, covers, holdings, script]);
+
+  function setWanderUrl(seed: string | null, mode: "push" | "replace") {
+    const url = new URL(window.location.href);
+    if (seed) url.searchParams.set("wander", seed);
+    else url.searchParams.delete("wander");
+    window.history[mode === "push" ? "pushState" : "replaceState"](null, "", url.pathname + url.search);
+  }
+
+  function enterWander() {
+    if (!flat.length) return;
+    const seed = Math.random().toString(36).slice(2, 10);
+    wanderOpenedRef.current = true;
+    setWanderUrl(seed, "push");
+    setWanderSeed(seed);
+  }
+
+  function leaveWander() {
+    setWanderSeed(null);
+    if (wanderOpenedRef.current) {
+      wanderOpenedRef.current = false;
+      window.history.back();
+    } else {
+      setWanderUrl(null, "replace");
+    }
+  }
+
+  function shuffleWander() {
+    const seed = Math.random().toString(36).slice(2, 10);
+    setWanderUrl(seed, "replace");
+    setWanderSeed(seed);
+  }
+
   async function saveAmount() {
     if (!active) return;
     const value = Number(draft.amount);
@@ -1532,6 +1593,16 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             </button>
           </div>
           <div className="flex flex-none items-center gap-2">
+            <button
+              type="button"
+              onClick={enterWander}
+              disabled={flat.length === 0}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 text-xs font-semibold text-ink-2 transition-all duration-200 hover:-translate-y-px hover:border-edge-strong hover:bg-brand-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10"
+              title="漫游卡面墙：拖动浏览、点按查看、洗牌换一组"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true"><path d="M4 7h3c4 0 5 10 10 10h3m-3-3 3 3-3 3M4 17h3c1.5 0 2.5-.8 3.3-2M14 9c.8-1.2 1.7-2 3-2h3m-3-3 3 3-3 3" /></svg>
+              漫游
+            </button>
             {/* 新增卡片：素材库里没有的卡自己传卡面加进来，点开是弹窗 */}
             <button
               type="button"
@@ -2680,6 +2751,24 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           onAmountChange={applyWalletAmount}
           onDetailsSaved={applyWalletDetails}
           onCoverChanged={(cardKey, url) => setCovers((prev) => ({ ...prev, [cardKey]: url }))}
+        />,
+        document.body
+      )}
+      {wanderSeed && typeof document !== "undefined" && createPortal(
+        <CardWander
+          cards={wanderCards}
+          seed={wanderSeed}
+          onClose={leaveWander}
+          onShuffle={shuffleWander}
+          onOpenDetails={(key) => {
+            const entry = flat.find(({ card }) => card.file === key);
+            if (!entry) return;
+            setWanderSeed(null);
+            wanderOpenedRef.current = false;
+            setWanderUrl(null, "replace");
+            openCard(entry);
+          }}
+          onToggleHeld={(key, held) => { void setHeld(key, held); }}
         />,
         document.body
       )}

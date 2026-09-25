@@ -1,0 +1,488 @@
+"use client";
+
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type RefObject, type WheelEvent } from "react";
+import { selectWanderCards } from "@/lib/cardWander";
+
+export interface WanderCard {
+  key: string;
+  name: string;
+  bank: string;
+  region: string;
+  type: string;
+  image: string;
+  held: boolean;
+}
+
+interface Props {
+  cards: WanderCard[];
+  seed: string;
+  onClose: () => void;
+  onShuffle: () => void;
+  onOpenDetails: (key: string) => void;
+  onToggleHeld: (key: string, held: boolean) => void;
+}
+
+const COLUMNS = 12;
+const ROWS = 18;
+const MIN_SCALE = 0.72;
+const MAX_SCALE = 1.45;
+const DRIFT_SPEED_PER_SECOND = 13.4;
+const DRIFT_ANGLE_PER_SECOND = 0.003;
+type PreviewEffect = "gloss" | "holo" | "metal";
+type PreviewMode = "showcase" | "wallet" | "actual";
+const PREVIEW_MODES: { key: PreviewMode; label: string }[] = [
+  { key: "showcase", label: "展示" },
+  { key: "wallet", label: "钱包" },
+  { key: "actual", label: "原尺寸" }
+];
+const PREVIEW_EFFECTS: { key: PreviewEffect; label: string }[] = [
+  { key: "gloss", label: "光泽" },
+  { key: "holo", label: "幻彩" },
+  { key: "metal", label: "金属" }
+];
+
+function newPosition() { return { x: 0, y: 0, scale: 1 }; }
+
+function WanderTile({ card, delay, viewportRef, onSelect }: {
+  card: WanderCard;
+  delay: number;
+  viewportRef: RefObject<HTMLDivElement | null>;
+  onSelect: (card: WanderCard) => void;
+}) {
+  const tileRef = useRef<HTMLButtonElement>(null);
+  const [nearViewport, setNearViewport] = useState(false);
+  useEffect(() => {
+    const tile = tileRef.current;
+    const viewport = viewportRef.current;
+    if (!tile || !viewport) return;
+    if (!('IntersectionObserver' in window)) { setNearViewport(true); return; }
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries[0]?.isIntersecting) return;
+      setNearViewport(true);
+      observer.disconnect();
+    }, { root: viewport, rootMargin: '600px' });
+    observer.observe(tile);
+    return () => observer.disconnect();
+  }, [viewportRef]);
+  return (
+    <button
+      ref={tileRef}
+      type="button"
+      className="card-wander-tile"
+      style={{ "--wander-delay": `${delay}ms` } as CSSProperties}
+      aria-label={card.name}
+      onClick={() => onSelect(card)}
+    >
+      {nearViewport && <img src={card.image} alt="" draggable={false} loading="eager" decoding="async" />}
+    </button>
+  );
+}
+
+export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDetails, onToggleHeld }: Props) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const wallRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const modalCloseRef = useRef<HTMLButtonElement>(null);
+  const zoomSourceRef = useRef<HTMLButtonElement>(null);
+  const positionRef = useRef(newPosition());
+  const driftDirectionRef = useRef({ x: -1, y: -1, angle: 0.36 });
+  const dragRef = useRef<{ id: number; x: number; y: number; originX: number; originY: number; moved: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
+  const [selected, setSelected] = useState<WanderCard | null>(null);
+  const [previewEffect, setPreviewEffect] = useState<PreviewEffect>("gloss");
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("showcase");
+  const [walletRaised, setWalletRaised] = useState(false);
+  const actualRef = useRef<HTMLDivElement>(null);
+  const actualDragRef = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
+  const effectTiltRef = useRef<HTMLDivElement>(null);
+  const effectPressRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const [zoomOpen, setZoomOpen] = useState(false);
+  const zoomRef = useRef<HTMLDivElement>(null);
+  const zoomImageRef = useRef<HTMLImageElement>(null);
+  const zoomCloseRef = useRef<HTMLButtonElement>(null);
+  const zoomClosingRef = useRef(false);
+
+  const deck = useMemo(() => selectWanderCards(cards, seed, COLUMNS * ROWS), [cards, seed]);
+  const columns = useMemo(() => Array.from({ length: COLUMNS }, (_, column) =>
+    deck.slice(column * ROWS, (column + 1) * ROWS)
+  ), [deck]);
+  const selectedCard = selected ? cards.find((card) => card.key === selected.key) ?? selected : null;
+
+  const drawPosition = () => {
+    const viewport = viewportRef.current;
+    const wall = wallRef.current;
+    if (!viewport || !wall) return;
+    const position = positionRef.current;
+    const maxX = Math.max(0, (wall.offsetWidth * position.scale - viewport.clientWidth) / 2 + 90);
+    const maxY = Math.max(0, (wall.offsetHeight * position.scale - viewport.clientHeight) / 2 + 90);
+    position.x = Math.max(-maxX, Math.min(maxX, position.x));
+    position.y = Math.max(-maxY, Math.min(maxY, position.y));
+    wall.style.transform = `translate(-50%, -50%) translate3d(${position.x}px, ${position.y}px, 0) rotateX(15deg) rotateZ(-6deg) scale(${position.scale})`;
+  };
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const previousRootOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    closeRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.documentElement.style.overflow = previousRootOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (zoomOpen) void closeZoom();
+        else if (selected) setSelected(null);
+        else onClose();
+        return;
+      }
+      if (zoomOpen && event.key === "Tab") {
+        event.preventDefault();
+        zoomCloseRef.current?.focus();
+        return;
+      }
+      if (selected && event.key === "Tab") {
+        const focusables = [...(modalRef.current?.querySelectorAll<HTMLElement>('button, a[href]') ?? [])];
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (!modalRef.current?.contains(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); }
+        else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        return;
+      }
+      if (selected || event.altKey || event.metaKey || event.ctrlKey) return;
+      const step = event.shiftKey ? 180 : 85;
+      if (event.key === "ArrowLeft") positionRef.current.x += step;
+      else if (event.key === "ArrowRight") positionRef.current.x -= step;
+      else if (event.key === "ArrowUp") positionRef.current.y += step;
+      else if (event.key === "ArrowDown") positionRef.current.y -= step;
+      else if (event.key === "+" || event.key === "=") positionRef.current.scale = Math.min(MAX_SCALE, positionRef.current.scale + 0.1);
+      else if (event.key === "-" || event.key === "_") positionRef.current.scale = Math.max(MIN_SCALE, positionRef.current.scale - 0.1);
+      else return;
+      event.preventDefault();
+      drawPosition();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", drawPosition);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", drawPosition);
+    };
+  }, [onClose, selected, zoomOpen]);
+
+  useEffect(() => {
+    positionRef.current = newPosition();
+    driftDirectionRef.current = { x: -1, y: -1, angle: 0.36 };
+    setSelected(null);
+    setZoomOpen(false);
+    drawPosition();
+  }, [seed]);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let frame = 0;
+    let previousTime = 0;
+    const animate = (time: number) => {
+      const elapsed = previousTime ? Math.min((time - previousTime) / 1000, 0.05) : 0;
+      previousTime = time;
+      const viewport = viewportRef.current;
+      const wall = wallRef.current;
+      if (!selected && !dragRef.current && !document.hidden && viewport && wall && elapsed) {
+        const position = positionRef.current;
+        const direction = driftDirectionRef.current;
+        const maxX = Math.max(0, (wall.offsetWidth * position.scale - viewport.clientWidth) / 2 + 90);
+        const maxY = Math.max(0, (wall.offsetHeight * position.scale - viewport.clientHeight) / 2 + 90);
+        direction.angle += DRIFT_ANGLE_PER_SECOND * elapsed;
+        position.x += direction.x * Math.cos(direction.angle) * DRIFT_SPEED_PER_SECOND * elapsed;
+        position.y += direction.y * Math.sin(direction.angle) * DRIFT_SPEED_PER_SECOND * elapsed;
+        if (Math.abs(position.x) >= maxX) { position.x = Math.sign(position.x) * maxX; direction.x *= -1; }
+        if (Math.abs(position.y) >= maxY) { position.y = Math.sign(position.y) * maxY; direction.y *= -1; }
+        drawPosition();
+      }
+      frame = window.requestAnimationFrame(animate);
+    };
+    frame = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frame);
+  }, [selected]);
+
+  useEffect(() => {
+    if (!selected) return;
+    setPreviewMode("showcase");
+    setWalletRaised(false);
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    modalCloseRef.current?.focus();
+    return () => previous?.focus();
+  }, [selected]);
+
+  useLayoutEffect(() => {
+    if (previewMode !== "actual" || !selectedCard) return;
+    const region = actualRef.current;
+    if (!region) return;
+    region.scrollLeft = Math.max(0, (region.scrollWidth - region.clientWidth) / 2);
+    region.scrollTop = Math.max(0, (region.scrollHeight - region.clientHeight) / 2);
+  }, [previewMode, selectedCard?.key]);
+
+  useLayoutEffect(() => {
+    if (!zoomOpen) return;
+    const source = getZoomSourceRect();
+    const target = zoomImageRef.current?.getBoundingClientRect();
+    if (source && target && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const x = source.left + source.width / 2 - target.left - target.width / 2;
+      const y = source.top + source.height / 2 - target.top - target.height / 2;
+      zoomImageRef.current?.animate([
+        { transform: `translate(${x}px, ${y}px) scale(${source.width / target.width})`, borderRadius: "17px" },
+        { transform: "none", borderRadius: "22px" }
+      ], { duration: 460, easing: "cubic-bezier(.2,.8,.2,1)", fill: "both" });
+    }
+    zoomCloseRef.current?.focus();
+    return () => zoomSourceRef.current?.focus();
+  }, [zoomOpen]);
+
+  function getZoomSourceRect() {
+    const source = zoomSourceRef.current?.getBoundingClientRect();
+    if (!source || previewMode !== "actual" || !actualRef.current) return source;
+    const viewport = actualRef.current.getBoundingClientRect();
+    const left = Math.max(source.left, viewport.left);
+    const top = Math.max(source.top, viewport.top);
+    return { left, top, width: Math.max(1, Math.min(source.right, viewport.right) - left), height: Math.max(1, Math.min(source.bottom, viewport.bottom) - top) };
+  }
+
+  async function closeZoom() {
+    if (zoomClosingRef.current) return;
+    const source = getZoomSourceRect();
+    const target = zoomImageRef.current?.getBoundingClientRect();
+    const backdrop = zoomRef.current;
+    const image = zoomImageRef.current;
+    if (!source || !target || !backdrop || !image || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setZoomOpen(false);
+      return;
+    }
+    zoomClosingRef.current = true;
+    image.getAnimations().forEach((animation) => animation.cancel());
+    const x = source.left + source.width / 2 - target.left - target.width / 2;
+    const y = source.top + source.height / 2 - target.top - target.height / 2;
+    const shrink = image.animate([
+      { transform: "none", borderRadius: "22px" },
+      { transform: `translate(${x}px, ${y}px) scale(${source.width / target.width})`, borderRadius: "17px" }
+    ], { duration: 360, easing: "cubic-bezier(.3,0,.8,.2)", fill: "forwards" });
+    const fade = backdrop.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 360, easing: "ease-in", fill: "forwards" });
+    await Promise.allSettled([shrink.finished, fade.finished]);
+    zoomClosingRef.current = false;
+    setZoomOpen(false);
+  }
+
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (selected || event.button !== 0) return;
+    dragRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, originX: positionRef.current.x, originY: positionRef.current.y, moved: false };
+  };
+  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.id !== event.pointerId) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 6) {
+      drag.moved = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    if (!drag.moved) return;
+    positionRef.current.x = drag.originX + dx;
+    positionRef.current.y = drag.originY + dy;
+    drawPosition();
+  };
+  const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.id !== event.pointerId) return;
+    suppressClickRef.current = dragRef.current.moved;
+    dragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+  };
+  const onWheel = (event: WheelEvent<HTMLDivElement>) => {
+    if (selected) return;
+    event.preventDefault();
+    if (event.ctrlKey || event.metaKey) {
+      positionRef.current.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, positionRef.current.scale - event.deltaY * 0.002));
+    } else {
+      positionRef.current.x -= event.deltaX;
+      positionRef.current.y -= event.deltaY;
+    }
+    drawPosition();
+  };
+  const onEffectPointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+    event.currentTarget.style.setProperty("--effect-x", `${(x * 100).toFixed(1)}%`);
+    event.currentTarget.style.setProperty("--effect-y", `${(y * 100).toFixed(1)}%`);
+    if (effectTiltRef.current) effectTiltRef.current.style.transform = `rotateX(${((0.5 - y) * 12).toFixed(2)}deg) rotateY(${((x - 0.5) * 13).toFixed(2)}deg) scale(1.025)`;
+    event.currentTarget.dataset.pointerActive = "true";
+  };
+  const onEffectPointerLeave = (event: PointerEvent<HTMLButtonElement>) => {
+    event.currentTarget.style.setProperty("--effect-x", "50%");
+    event.currentTarget.style.setProperty("--effect-y", "50%");
+    delete event.currentTarget.dataset.pointerActive;
+    if (effectTiltRef.current) effectTiltRef.current.style.transform = "";
+  };
+
+  return (
+    <div className="card-wander" role="dialog" aria-modal="true" aria-label="卡面漫游">
+      <div
+        ref={viewportRef}
+        className="card-wander-viewport"
+        aria-label="卡面墙：拖动或使用方向键浏览，按加减号缩放，点按卡面查看"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onWheel={onWheel}
+        onClickCapture={(event) => {
+          if (!suppressClickRef.current) return;
+          event.preventDefault();
+          event.stopPropagation();
+          suppressClickRef.current = false;
+        }}
+      >
+        <div ref={wallRef} key={seed} className="card-wander-wall">
+          {columns.map((column, columnIndex) => (
+            <div key={columnIndex} className="card-wander-column" style={{ "--wander-column-shift": `${((columnIndex * 73) % 145) - 72}px` } as CSSProperties}>
+              {column.map((card, rowIndex) => (
+                <WanderTile
+                  key={card.key}
+                  card={card}
+                  delay={Math.min(450, (rowIndex % 8) * 45 + columnIndex * 25)}
+                  viewportRef={viewportRef}
+                  onSelect={setSelected}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="card-wander-vignette" aria-hidden="true" />
+      <div className="card-wander-topbar">
+        <button ref={closeRef} type="button" className="card-wander-pill" onClick={onClose} aria-label="返回卡面库">
+          <span aria-hidden="true">←</span> 返回
+        </button>
+      </div>
+      <button type="button" className="card-wander-shuffle" onClick={onShuffle} aria-label="洗牌，浏览另一组卡面">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h3c4 0 5 10 10 10h3m-3-3 3 3-3 3M4 17h3c1.5 0 2.5-.8 3.3-2M14 9c.8-1.2 1.7-2 3-2h3m-3-3 3 3-3 3" /></svg>
+        洗牌
+      </button>
+      {selectedCard && (
+        <div className="card-wander-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null); }}>
+          <div ref={modalRef} className="card-wander-modal" role="dialog" aria-modal="true" aria-labelledby="card-wander-modal-title">
+            <div className="card-wander-preview-stage" data-mode={previewMode} data-effect={previewEffect}>
+            {previewMode === "showcase" && <button ref={zoomSourceRef} type="button" className="card-wander-effect" data-effect={previewEffect} aria-label={`放大查看 ${selectedCard.name} 原图`} onPointerDown={(event) => { effectPressRef.current = { x: event.clientX, y: event.clientY, moved: false }; }} onPointerMove={(event) => {
+              onEffectPointerMove(event);
+              const press = effectPressRef.current;
+              if (press && Math.abs(event.clientX - press.x) + Math.abs(event.clientY - press.y) > 8) press.moved = true;
+            }} onPointerUp={() => { window.setTimeout(() => { effectPressRef.current = null; }, 0); }} onPointerLeave={onEffectPointerLeave} onClick={() => {
+              if (effectPressRef.current?.moved) return;
+              setZoomOpen(true);
+            }}>
+              <div ref={effectTiltRef} className="card-wander-effect-tilt">
+                <img className="card-wander-modal-image" src={selectedCard.image} alt={selectedCard.name} draggable={false} />
+                <span className="card-wander-effect-sheen" aria-hidden="true" />
+                <span className="card-wander-effect-glare" aria-hidden="true" />
+                <span className="card-wander-effect-spec" aria-hidden="true" />
+              </div>
+            </button>}
+            {previewMode === "wallet" && <div className="card-wander-wallet" data-raised={walletRaised}>
+              <div className="card-wander-wallet-island" aria-hidden="true" />
+              <div className="card-wander-wallet-status" aria-hidden="true"><span>9:41</span><span>●●● ▰</span></div>
+              <div className="card-wander-wallet-header" aria-hidden="true"><strong>钱包</strong><span>＋　···</span></div>
+              <div className="card-wander-wallet-stack" aria-hidden="true"><span /><span /></div>
+              <button ref={zoomSourceRef} type="button" className="card-wander-wallet-card" aria-label={`放大查看 ${selectedCard.name} 原图`} onClick={() => setZoomOpen(true)} onPointerDown={() => setWalletRaised(true)} onPointerUp={() => setWalletRaised(false)} onPointerCancel={() => setWalletRaised(false)} onPointerLeave={() => setWalletRaised(false)}>
+                <img src={selectedCard.image} alt={selectedCard.name} draggable={false} />
+                <span className="card-wander-effect-sheen" aria-hidden="true" />
+              </button>
+              <div className="card-wander-wallet-bottom" aria-hidden="true"><span>◉</span><span>⌂</span></div>
+            </div>}
+            {previewMode === "actual" && <div ref={actualRef} className="card-wander-actual" role="region" aria-label="原尺寸卡面，可拖动或滚动查看" onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              actualDragRef.current = { x: event.clientX, y: event.clientY, left: event.currentTarget.scrollLeft, top: event.currentTarget.scrollTop, moved: false };
+            }} onPointerMove={(event) => {
+              const drag = actualDragRef.current;
+              if (!drag) return;
+              const dx = event.clientX - drag.x;
+              const dy = event.clientY - drag.y;
+              if (Math.abs(dx) + Math.abs(dy) > 6) { drag.moved = true; event.currentTarget.setPointerCapture(event.pointerId); }
+              if (!drag.moved) return;
+              event.currentTarget.scrollLeft = drag.left - dx;
+              event.currentTarget.scrollTop = drag.top - dy;
+            }} onPointerUp={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+              window.setTimeout(() => { actualDragRef.current = null; }, 0);
+            }} onPointerCancel={() => { actualDragRef.current = null; }}>
+              <button ref={zoomSourceRef} type="button" className="card-wander-actual-card" aria-label={`放大查看 ${selectedCard.name} 原图`} onClick={() => { if (!actualDragRef.current?.moved) setZoomOpen(true); }}>
+                <img src={selectedCard.image} alt={selectedCard.name} draggable={false} onLoad={() => {
+                  const region = actualRef.current;
+                  if (!region) return;
+                  region.scrollLeft = Math.max(0, (region.scrollWidth - region.clientWidth) / 2);
+                  region.scrollTop = Math.max(0, (region.scrollHeight - region.clientHeight) / 2);
+                }} />
+                <span className="card-wander-effect-sheen" aria-hidden="true" />
+              </button>
+            </div>}
+            </div>
+            <div className="card-wander-preview-controls">
+            <div className="card-wander-modes" role="radiogroup" aria-label="卡面展示方式" onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+              event.preventDefault();
+              const current = PREVIEW_MODES.findIndex((item) => item.key === previewMode);
+              const next = (current + (event.key === "ArrowRight" ? 1 : PREVIEW_MODES.length - 1)) % PREVIEW_MODES.length;
+              setPreviewMode(PREVIEW_MODES[next].key);
+              event.currentTarget.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
+            }}>
+              {PREVIEW_MODES.map(({ key, label }) => (
+                <button key={key} type="button" role="radio" aria-checked={previewMode === key} tabIndex={previewMode === key ? 0 : -1} onClick={() => setPreviewMode(key)}>{label}</button>
+              ))}
+            </div>
+            <div className="card-wander-effects" role="radiogroup" aria-label="卡面光效" onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+              event.preventDefault();
+              const current = PREVIEW_EFFECTS.findIndex((item) => item.key === previewEffect);
+              const next = (current + (event.key === "ArrowRight" ? 1 : PREVIEW_EFFECTS.length - 1)) % PREVIEW_EFFECTS.length;
+              setPreviewEffect(PREVIEW_EFFECTS[next].key);
+              event.currentTarget.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
+            }}>
+              {PREVIEW_EFFECTS.map(({ key, label }) => (
+                <button key={key} type="button" role="radio" aria-checked={previewEffect === key} tabIndex={previewEffect === key ? 0 : -1} onClick={() => setPreviewEffect(key)}>{label}</button>
+              ))}
+            </div>
+            </div>
+            <div className="card-wander-modal-content">
+              <div className="card-wander-modal-heading">
+                <div className="min-w-0">
+                  <h3 id="card-wander-modal-title" className="truncate text-[15px] font-semibold">{selectedCard.name}</h3>
+                  <p className="mt-1 truncate text-xs text-white/50">{selectedCard.bank} · {selectedCard.region}{selectedCard.type ? ` · ${selectedCard.type}` : ""}</p>
+                </div>
+                <button ref={modalCloseRef} type="button" className="card-wander-modal-close" onClick={() => setSelected(null)} aria-label="关闭卡面预览">×</button>
+              </div>
+              <div className="card-wander-modal-actions">
+                <button type="button" className="card-wander-hold" onClick={() => onToggleHeld(selectedCard.key, !selectedCard.held)} aria-label={selectedCard.held ? "移出我的卡" : "加入我的卡"} title={selectedCard.held ? "移出我的卡" : "加入我的卡"}>
+                  <span aria-hidden="true">{selectedCard.held ? "♥" : "♡"}</span>{selectedCard.held ? " 已存" : ""}
+                </button>
+                <a className="card-wander-download" href={selectedCard.image} download aria-label={`下载 ${selectedCard.name} 卡面`}>↓ 下载</a>
+                <button type="button" onClick={() => onOpenDetails(selectedCard.key)}>查看详情</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {zoomOpen && selectedCard && (
+        <div ref={zoomRef} className="card-wander-zoom-backdrop" role="dialog" aria-modal="true" aria-label={`放大查看 ${selectedCard.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) void closeZoom(); }}>
+          <img ref={zoomImageRef} className="card-wander-zoom-image" src={selectedCard.image} alt={selectedCard.name} draggable={false} />
+          <button ref={zoomCloseRef} type="button" className="card-wander-zoom-close" onClick={() => void closeZoom()}><span aria-hidden="true">×</span> 关闭</button>
+        </div>
+      )}
+    </div>
+  );
+}

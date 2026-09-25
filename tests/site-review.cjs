@@ -16,6 +16,29 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('card wander shuffles deterministically and preserves the reference wall angle', () => {
+    const { selectWanderCards } = require(path.join(root, 'lib/cardWander.ts'));
+    const cards = Array.from({ length: 140 }, (_, index) => ({ key: `card-${index}` }));
+    const first = selectWanderCards(cards, '70fry32r', 98);
+    assert.equal(first.length, 98);
+    assert.equal(new Set(first.map((card) => card.key)).size, 98);
+    assert.deepEqual(selectWanderCards([...cards].reverse(), '70fry32r', 98), first);
+    assert.notDeepEqual(selectWanderCards(cards, 'another1', 98), first);
+    const wander = fs.readFileSync(path.join(root, 'components/CardWander.tsx'), 'utf8');
+    const library = fs.readFileSync(path.join(root, 'components/views/CardLibraryView.tsx'), 'utf8');
+    assert(wander.includes('rotateX(15deg) rotateZ(-6deg)'), 'the card wall keeps the reference page tilt');
+    assert(wander.includes('requestAnimationFrame(animate)') && wander.includes('DRIFT_SPEED_PER_SECOND'), 'card wall must wander automatically');
+    assert(wander.includes('洗牌') && wander.includes('查看详情'));
+    assert(wander.includes('光泽') && wander.includes('幻彩') && wander.includes('金属'));
+    assert(wander.includes('"展示"') && wander.includes('"钱包"') && wander.includes('"原尺寸"'), 'all three card presentation modes stay available');
+    const wanderStyles = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    assert(wander.includes('card-wander-actual') && wanderStyles.includes('.card-wander-actual-card img { display: block; width: auto; height: auto; max-width: none;'), 'actual-size presentation uses the image intrinsic dimensions');
+    assert(wander.includes('getZoomSourceRect') && wander.includes('zoomImageRef.current?.animate'), 'the full-size view animates from the selected presentation');
+    assert(wander.includes('selectedCard.image') && wander.includes('card.image'), 'preview and wall both use the original card asset URL');
+    assert(!wander.includes('className="card-wander-brand"'), 'no extra title belongs on the card wall');
+    assert(!wander.includes('拖动浏览 · 点按查看'), 'the removed top-right hint must not return');
+    assert(library.includes('setWanderUrl(seed, "replace")'), 'shuffle retains a shareable URL');
+  });
   const { parseStockFile } = require(path.join(root, 'lib/importFile.ts'));
   const { importIdentity } = require(path.join(root, 'lib/importIdentity.ts'));
   await test('ticker/prefix, CSV quotes, TSV blanks, JSON, oversized imports', () => {
