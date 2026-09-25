@@ -3998,6 +3998,8 @@ html.dark .watch-import-target {
 .fx-converter-add-menu button { display:flex; align-items:center; gap:8px; width:100%; min-height:34px; padding:5px 8px; border-radius:7px; text-align:left; font-size:12px; color:#253044; }
 .fx-converter-add-menu button:hover { background:#f3f5f8; }
 .fx-converter-add-menu button small { margin-left:auto; color:#8992a0; }
+.fx-converter-code-mark { display:grid; flex:none; place-items:center; width:18px; height:18px; border-radius:50%; background:#e7ebf1; color:#465263; font-size:9px; font-weight:700; }
+.fx-converter-code-mark-large { width:28px; height:28px; font-size:12px; }
 .fx-converter-add-empty { display:block; padding:10px; color:#8992a0; font-size:12px; }
 .fx-converter-remove { position:absolute; right:9px; bottom:8px; display:grid; place-items:center; width:20px; height:20px; border-radius:50%; color:#8992a0; }
 .fx-converter-remove:hover { background:#e9edf2; color:#253044; }
@@ -4005,6 +4007,7 @@ html.dark .watch-import-target {
 .dark .fx-converter-add:hover,.dark .fx-converter-refresh:hover,.dark .fx-converter-add-menu button:hover { background:#252c36; color:#f0f3f7; }
 .dark .fx-converter-add-menu { border-color:#39414e; background:#171b22; box-shadow:0 12px 32px rgb(0 0 0 / 35%); }
 .dark .fx-converter-add-menu button { color:#e9edf3; }
+.dark .fx-converter-code-mark { background:#303844; color:#d5deea; }
 .dark .fx-converter-remove:hover { background:#303844; color:#f0f3f7; }
 .fx-converter-row {
   display: grid;

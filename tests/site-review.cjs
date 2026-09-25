@@ -560,7 +560,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(FX_CURRENCIES.length % 2, 0);
     assert(!FX_CURRENCIES.includes('MOP'));
     assert(FX_CURRENCIES.includes('CHF'));
-    assert.deepEqual(normalizeFxOrder(['CNY', 'USD', 'MOP', 'NOPE', 'CNY']), ['CNY', 'USD', ...FX_CURRENCIES.filter((code) => code !== 'CNY' && code !== 'USD')]);
+    assert.deepEqual(normalizeFxOrder(['CNY', 'USD', 'MOP', 'NOPE', 'CNY']), ['CNY', 'USD', 'MOP', ...FX_CURRENCIES.filter((code) => code !== 'CNY' && code !== 'USD')]);
     assert.equal(formatRatesDate(Date.UTC(2026, 8, 19, 4, 0, 0)).includes('2026年'), true);
     assert.deepEqual(moveFxOrder(['USD', 'EUR', 'HKD'], 0, 2), ['EUR', 'HKD', 'USD']);
     assert.deepEqual(moveFxOrder(['USD', 'EUR', 'HKD'], 2, 0), ['HKD', 'USD', 'EUR']);

@@ -23,11 +23,11 @@ export const FX_CURRENCIES = [
   "BRL"
 ] as const;
 
-export const FX_EXTRA_CURRENCIES = ["NZD", "SEK", "NOK", "DKK", "THB", "MYR", "IDR", "PHP", "AED", "SAR"] as const;
+export const FX_EXTRA_CURRENCIES = ["MOP", "NZD", "SEK", "NOK", "DKK", "THB", "MYR", "IDR", "PHP", "AED", "SAR"] as const;
 
-export type FxCurrency = (typeof FX_CURRENCIES)[number] | (typeof FX_EXTRA_CURRENCIES)[number];
+export type FxCurrency = string;
 
-export const FX_CURRENCY_META: Record<FxCurrency, { label: string; symbol: string; iso: string }> = {
+export const FX_CURRENCY_META: Record<string, { label: string; symbol: string; iso: string }> = {
   USD: FUND_CURRENCY_META.USD,
   EUR: FUND_CURRENCY_META.EUR,
   HKD: FUND_CURRENCY_META.HKD,
@@ -42,6 +42,7 @@ export const FX_CURRENCY_META: Record<FxCurrency, { label: string; symbol: strin
   CHF: { label: "瑞士法郎", symbol: "Fr.", iso: "CH" },
   INR: FUND_CURRENCY_META.INR,
   BRL: FUND_CURRENCY_META.BRL,
+  MOP: FUND_CURRENCY_META.MOP,
   NZD: { label: "新西兰元", symbol: "NZ$", iso: "NZ" },
   SEK: { label: "瑞典克朗", symbol: "kr", iso: "SE" },
   NOK: { label: "挪威克朗", symbol: "kr", iso: "NO" },
@@ -54,10 +55,20 @@ export const FX_CURRENCY_META: Record<FxCurrency, { label: string; symbol: strin
   SAR: { label: "沙特里亚尔", symbol: "﷼", iso: "SA" }
 };
 
-const FX_CURRENCY_SET = new Set<string>([...FX_CURRENCIES, ...FX_EXTRA_CURRENCIES]);
+export function fxCurrencyMeta(code: string): { label: string; symbol: string; iso: string } {
+  if (FX_CURRENCY_META[code]) return FX_CURRENCY_META[code];
+  let label = code;
+  let symbol = code;
+  try {
+    label = new Intl.DisplayNames(["zh-CN"], { type: "currency" }).of(code) || code;
+    symbol = new Intl.NumberFormat("zh-CN", { style: "currency", currency: code, currencyDisplay: "narrowSymbol" })
+      .formatToParts(1).find(part => part.type === "currency")?.value || code;
+  } catch { /* 未识别币种仍展示代码 */ }
+  return { label, symbol, iso: "" };
+}
 
 export function isFxCurrency(value: unknown): value is FxCurrency {
-  return typeof value === "string" && FX_CURRENCY_SET.has(value);
+  return typeof value === "string" && /^[A-Z]{3}$/.test(value);
 }
 
 export function normalizeFxOrder(saved: unknown): FxCurrency[] {

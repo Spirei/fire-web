@@ -9,7 +9,7 @@ import { showToast } from "@/lib/toast";
 import {
   FX_CURRENCIES,
   FX_EXTRA_CURRENCIES,
-  FX_CURRENCY_META,
+  fxCurrencyMeta,
   type FxCurrency,
   amountToDraft,
   convertAmount,
@@ -64,11 +64,14 @@ export default function FxConverter() {
   const [rates, setRates] = useState<Record<string, number>>({ USD: 1 });
   const [quoted, setQuoted] = useState<Set<string>>(() => new Set(["USD"]));
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [estimatedMop, setEstimatedMop] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [rateError, setRateError] = useState("");
   const codes = normalizeFxOrder(savedOrder);
+  const addable = [...new Set([...FX_EXTRA_CURRENCIES, ...quoted])].filter(code => code !== "USD" && !codes.includes(code) && (code === "MOP" || (rates[code] ?? 0) > 0)).sort((a, b) => a.localeCompare(b));
   const inputRefs = useRef<Partial<Record<FxCurrency, HTMLInputElement | null>>>({});
+  const addMenuRef = useRef<HTMLDivElement | null>(null);
   const dragFrom = useRef<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
@@ -99,6 +102,12 @@ export default function FxConverter() {
           const value = Number(data.rates[code]);
           if (value > 0) nextRates[code] = code === "USD" ? 1 : value;
         });
+        const mopFromHkd = !nextRates.MOP && nextQuoted.has("HKD") && nextRates.HKD > 0;
+        if (mopFromHkd) {
+          nextRates.MOP = nextRates.HKD * 1.03;
+          nextQuoted.add("MOP");
+        }
+        setEstimatedMop(Boolean(mopFromHkd));
         setQuoted(nextQuoted);
         setRates(nextRates);
         setUpdatedAt(typeof data.updatedAt === "number" && data.updatedAt > 0 ? data.updatedAt : null);
@@ -119,6 +128,22 @@ export default function FxConverter() {
     window.addEventListener("fire:rates-updated", onRates);
     return () => window.removeEventListener("fire:rates-updated", onRates);
   }, [loadRates]);
+
+  useEffect(() => {
+    if (!adding) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!addMenuRef.current?.contains(event.target as Node)) setAdding(false);
+    };
+    const closeEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAdding(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeEscape);
+    };
+  }, [adding]);
 
   const amount = parseFxAmount(text);
 
@@ -152,12 +177,12 @@ export default function FxConverter() {
       <header>
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-bold text-ink">汇率换算</h2>
-          <div className="relative flex items-center gap-2">
+          <div ref={addMenuRef} className="relative flex items-center gap-2">
             <button type="button" className="fx-converter-add" onClick={() => setAdding(value => !value)} aria-label="新增货币" title="新增货币" aria-expanded={adding}><IconPlus size={15} stroke={1.8} /></button>
             <button type="button" className="fx-converter-refresh" onClick={() => void loadRates(true)} disabled={refreshing} aria-label="刷新汇率" title="刷新汇率"><IconRefresh size={15} stroke={1.8} className={refreshing ? "animate-spin" : ""} /></button>
             {adding && <div className="fx-converter-add-menu" role="menu" aria-label="可新增货币">
-              {FX_EXTRA_CURRENCIES.filter(code => !codes.includes(code)).map(code => <button key={code} type="button" role="menuitem" onClick={() => { setSavedOrder([...codes, code]); setAdding(false); }}><CurrencyFlag market={FX_CURRENCY_META[code].iso} size={18} /><span>{FX_CURRENCY_META[code].label}</span><small>{code}</small></button>)}
-              {FX_EXTRA_CURRENCIES.every(code => codes.includes(code)) && <span className="fx-converter-add-empty">所有可选货币已添加</span>}
+              {addable.map(code => { const meta = fxCurrencyMeta(code); return <button key={code} type="button" role="menuitem" onClick={() => { setSavedOrder([...codes, code]); setAdding(false); }}>{meta.iso ? <CurrencyFlag market={meta.iso} size={18} /> : <span className="fx-converter-code-mark">{code.slice(0, 1)}</span>}<span>{meta.label}</span><small>{code}</small></button>; })}
+              {!addable.length && <span className="fx-converter-add-empty">暂无更多可添加货币；刷新汇率后可查看接口支持的币种</span>}
             </div>}
           </div>
         </div>
@@ -169,7 +194,7 @@ export default function FxConverter() {
 
       <div className="fx-converter-card">
         {codes.map((code, index) => {
-          const meta = FX_CURRENCY_META[code];
+          const meta = fxCurrencyMeta(code);
           const live = hasQuote(code);
           const active = code === base && live;
           const converted = !live || !hasQuote(base) ? null : active ? amount : amount == null ? null : convertAmount(amount, base, code, rates);
@@ -211,7 +236,7 @@ export default function FxConverter() {
             >
               <DragHandle label={meta.label} />
               <span className="fx-converter-flag">
-                <CurrencyFlag market={meta.iso} size={28} />
+                {meta.iso ? <CurrencyFlag market={meta.iso} size={28} /> : <span className="fx-converter-code-mark fx-converter-code-mark-large">{code.slice(0, 1)}</span>}
               </span>
               <label className="fx-converter-body">
                 <span className="fx-converter-meta">
@@ -250,7 +275,7 @@ export default function FxConverter() {
                       ? "暂无汇率"
                       : `1 ${base} = ${formatPairRate(rate)} ${code}`}
               </span>
-              {FX_EXTRA_CURRENCIES.includes(code as typeof FX_EXTRA_CURRENCIES[number]) && <button type="button" className="fx-converter-remove" aria-label={`移除${meta.label}`} title={`移除${meta.label}`} onClick={() => setSavedOrder(codes.filter(item => item !== code))}><IconX size={13} stroke={1.8} /></button>}
+              {!FX_CURRENCIES.includes(code as typeof FX_CURRENCIES[number]) && <button type="button" className="fx-converter-remove" aria-label={`移除${meta.label}`} title={`移除${meta.label}`} onClick={() => setSavedOrder(codes.filter(item => item !== code))}><IconX size={13} stroke={1.8} /></button>}
             </div>
           );
         })}
@@ -258,6 +283,7 @@ export default function FxConverter() {
 
       <p className="text-xs text-muted">
         以 1 美元（USD）为基准换算。汇率接口 更新于：{formatRatesDate(updatedAt)}
+        {estimatedMop && codes.includes("MOP") && <span> · 澳门元按 1 港元≈1.03 澳门元估算</span>}
       </p>
     </section>
   );
