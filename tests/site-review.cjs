@@ -35,6 +35,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(wander.includes('card-wander-actual') && wanderStyles.includes('.card-wander-actual-card img { display: block; width: auto; height: auto; max-width: none;'), 'actual-size presentation uses the image intrinsic dimensions');
     assert(wander.includes('getZoomSourceRect') && wander.includes('zoomImageRef.current?.animate'), 'the full-size view animates from the selected presentation');
     assert(wander.includes('flyCard(from, to, selectedCard.image') && wander.includes('sourceTileRef.current'), 'the card flies between the wall and preview in both directions');
+    assert(wander.includes('dataset.revealed = "true"') && wander.includes('dataset.landed = "true"') && wander.includes('dataset.closing = "true"'), 'preview entry and exit have separate choreography states');
+    assert(wander.includes('new DOMMatrixReadOnly(getComputedStyle(tile).transform)') && wander.includes('(sourceY - wallOriginY) * Math.sin(15 * Math.PI / 180)') && wander.includes('rotateX(15deg) rotateZ(-6deg) scale(${scale})') && wanderStyles.includes('.card-wander-modal[data-landed]:not([data-closing]) .card-wander-preview-stage'), 'flight derives its 3D origin and hover lift from each wall position until the full-resolution preview lands');
+    assert(wanderStyles.includes('.card-wander-modal[data-closing] .card-wander-preview-stage') && wanderStyles.includes('.card-wander-modal-actions { transition-delay: .12s; }'), 'closing hides content before the card flies back and entry actions appear last');
     assert(wander.includes('document.startViewTransition') && wanderStyles.includes('::view-transition-group(card-wander-card)'), 'presentation mode changes morph the card');
     assert(wander.includes('setWalletPayment((open) => !open)') && wander.includes('aria-pressed={walletPayment}'), 'wallet tap toggles the payment demonstration');
     assert(wanderStyles.includes('.card-wander-wallet[data-payment="true"] .card-wander-wallet-card') && wanderStyles.includes('card-wander-reader-pulse'), 'wallet card, stack, and reader animate during payment');
@@ -45,6 +48,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const tileHoverStyle = wanderStyles.match(/\.card-wander-tile:hover,\s*\.card-wander-tile:focus-visible \{([^}]+)\}/)?.[1] ?? '';
     assert(tileStyle.includes('border: 0;') && !tileHoverStyle.includes('border-color'), 'hover lift must not draw a white border around cards');
     assert(wanderStyles.includes('card-wander-unfold 1.2s') && wander.includes('dataset.dragging = "true"') && wanderStyles.includes('.card-wander-viewport[data-dragging] .card-wander-tile:hover'), 'wall unfolds on entry and drag suppresses hover lift');
+    assert(wander.includes('findTileAtPoint(event.clientX, event.clientY)') && wander.includes('data-wander-key={card.key}') && wanderStyles.includes('.card-wander-tile[data-hovered]'), 'cards behind the 3D wall hit plane remain clickable and hoverable with a pointer');
     assert(wander.includes('selectedCard.image') && wander.includes('card.image'), 'preview and wall both use the original card asset URL');
     assert(!wander.includes('className="card-wander-brand"'), 'no extra title belongs on the card wall');
     assert(!wander.includes('拖动浏览 · 点按查看'), 'the removed top-right hint must not return');

@@ -71,6 +71,7 @@ function WanderTile({ card, viewportRef, onSelect }: {
       ref={tileRef}
       type="button"
       className="card-wander-tile"
+      data-wander-key={card.key}
       aria-label={card.name}
       onClick={(event) => onSelect(card, event.currentTarget)}
     >
@@ -96,6 +97,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   const [previewMode, setPreviewMode] = useState<PreviewMode>("showcase");
   const [walletPayment, setWalletPayment] = useState(false);
   const sourceTileRef = useRef<HTMLButtonElement | null>(null);
+  const hoveredTileRef = useRef<HTMLButtonElement | null>(null);
   const flightRef = useRef<HTMLImageElement | null>(null);
   const previewClosingRef = useRef(false);
   const shufflingRef = useRef(false);
@@ -116,40 +118,92 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   const selectedCard = selected ? cards.find((card) => card.key === selected.key) ?? selected : null;
 
   function restoreSourceTile() {
-    if (sourceTileRef.current) sourceTileRef.current.style.visibility = "";
+    if (sourceTileRef.current) {
+      sourceTileRef.current.style.visibility = "";
+      sourceTileRef.current.style.transform = "";
+      sourceTileRef.current.style.transition = "";
+    }
     sourceTileRef.current = null;
-    flightRef.current?.remove();
+    flightRef.current?.parentElement?.remove();
     flightRef.current = null;
   }
 
-  function flyCard(from: Pick<DOMRect, "left" | "top" | "width" | "height">, to: Pick<DOMRect, "left" | "top" | "width" | "height">, image: string, closing = false) {
+  function flyCard(source: Pick<DOMRect, "left" | "top" | "width" | "height">, target: Pick<DOMRect, "left" | "top" | "width" | "height">, image: string, closing = false) {
+    const tile = sourceTileRef.current;
+    const viewport = viewportRef.current?.getBoundingClientRect();
+    const sourceX = source.left + source.width / 2;
+    const sourceY = source.top + source.height / 2;
+    const targetX = target.left + target.width / 2;
+    const targetY = target.top + target.height / 2;
+    const perspectiveX = window.innerWidth / 2;
+    const perspectiveY = window.innerHeight / 2;
+    const wallOriginY = viewport ? viewport.top + viewport.height / 2 : perspectiveY;
+    const lift = tile ? new DOMMatrixReadOnly(getComputedStyle(tile).transform) : null;
+    const depth = (sourceY - wallOriginY) * Math.sin(15 * Math.PI / 180) + (lift?.m43 || 0);
+    const projection = 1500 / (1500 - depth);
+    const offsetX = (sourceX - perspectiveX) / projection - (targetX - perspectiveX);
+    const offsetY = (sourceY - perspectiveY) / projection - (targetY - perspectiveY);
+    const scale = ((tile?.offsetWidth || source.width) * (lift?.m11 || 1)) / target.width;
+    const wallTransform = `translate3d(${offsetX}px, ${offsetY}px, ${depth}px) rotateX(15deg) rotateZ(-6deg) scale(${scale})`;
+    const shell = document.createElement("div");
+    Object.assign(shell.style, {
+      position: "fixed", inset: "0", zIndex: "10050", pointerEvents: "none",
+      perspective: "1500px", perspectiveOrigin: "50% 50%", transformStyle: "preserve-3d"
+    });
     const flight = document.createElement("img");
     flight.src = image;
     flight.alt = "";
     flight.setAttribute("aria-hidden", "true");
     Object.assign(flight.style, {
-      position: "fixed", left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px`,
-      zIndex: "10050", objectFit: "contain", pointerEvents: "none", borderRadius: closing ? "17px" : "10px",
-      boxShadow: "0 24px 60px rgba(0,0,0,.5)", willChange: "transform"
+      position: "absolute", left: `${target.left}px`, top: `${target.top}px`, width: `${target.width}px`, height: `${target.height}px`,
+      objectFit: "contain", pointerEvents: "none", transformOrigin: "center",
+      borderRadius: closing ? "17px" : "10px", boxShadow: "0 24px 60px rgba(0,0,0,.5)", willChange: "transform"
     });
-    document.body.appendChild(flight);
+    shell.appendChild(flight);
+    document.body.appendChild(shell);
     flightRef.current = flight;
-    const transform = `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width}, ${to.height / from.height})`;
     const animation = flight.animate([
-      { transform: closing ? "none" : "rotate(-6deg)", borderRadius: closing ? "17px" : "10px" },
-      { transform: closing ? `${transform} rotate(-6deg)` : `${transform} rotate(0deg)`, borderRadius: closing ? "10px" : "17px" }
+      { transform: closing ? "none" : wallTransform, borderRadius: closing ? "17px" : "10px" },
+      { transform: closing ? wallTransform : "none", borderRadius: closing ? "10px" : "17px" }
     ], { duration: closing ? 500 : 620, easing: "cubic-bezier(.22,1,.36,1)", fill: "forwards" });
     return animation.finished.catch(() => undefined).finally(() => {
-      flight.remove();
+      shell.remove();
       if (flightRef.current === flight) flightRef.current = null;
     });
   }
 
   function selectTile(card: WanderCard, tile: HTMLButtonElement) {
+    const transform = getComputedStyle(tile).transform;
+    tile.style.transition = "none";
+    tile.style.transform = transform;
+    setHoveredTile(null);
     sourceTileRef.current = tile;
     setPreviewMode("showcase");
     setWalletPayment(false);
     setSelected(card);
+  }
+
+  function findTileAtPoint(x: number, y: number) {
+    const tiles = viewportRef.current?.querySelectorAll<HTMLButtonElement>(".card-wander-tile");
+    if (!tiles) return null;
+    let nearest: HTMLButtonElement | null = null;
+    let distance = Infinity;
+    for (const tile of tiles) {
+      const rect = tile.getBoundingClientRect();
+      const insetX = Math.min(12, rect.width * .04);
+      const insetY = Math.min(8, rect.height * .04);
+      if (x < rect.left + insetX || x > rect.right - insetX || y < rect.top + insetY || y > rect.bottom - insetY) continue;
+      const score = ((x - rect.left - rect.width / 2) / rect.width) ** 2 + ((y - rect.top - rect.height / 2) / rect.height) ** 2;
+      if (score < distance) { nearest = tile; distance = score; }
+    }
+    return nearest;
+  }
+
+  function setHoveredTile(tile: HTMLButtonElement | null) {
+    if (hoveredTileRef.current === tile) return;
+    if (hoveredTileRef.current) delete hoveredTileRef.current.dataset.hovered;
+    hoveredTileRef.current = tile;
+    if (tile) tile.dataset.hovered = "true";
   }
 
   async function shuffleWall() {
@@ -177,14 +231,14 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   async function closePreview() {
     if (previewClosingRef.current || !selectedCard) return;
     previewClosingRef.current = true;
-    flightRef.current?.remove();
-    const from = getZoomSourceRect();
-    const to = sourceTileRef.current?.getBoundingClientRect();
+    flightRef.current?.parentElement?.remove();
+    const target = getZoomSourceRect();
+    const source = sourceTileRef.current?.getBoundingClientRect();
     const backdrop = modalRef.current?.parentElement;
-    if (from && to && backdrop && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      if (modalRef.current) modalRef.current.style.visibility = "hidden";
-      const fade = backdrop.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 480, easing: "ease-out", fill: "forwards" });
-      await Promise.allSettled([flyCard(from, to, selectedCard.image, true), fade.finished]);
+    if (source && target && backdrop && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (modalRef.current) modalRef.current.dataset.closing = "true";
+      const fade = backdrop.animate([{ opacity: 1 }, { opacity: 1, offset: .18 }, { opacity: 0 }], { duration: 560, easing: "cubic-bezier(.33,1,.68,1)", fill: "forwards" });
+      await Promise.allSettled([flyCard(source, target, selectedCard.image, true), fade.finished]);
     }
     restoreSourceTile();
     setSelected(null);
@@ -313,13 +367,23 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     const from = sourceTileRef.current.getBoundingClientRect();
     const to = zoomSourceRef.current.getBoundingClientRect();
     sourceTileRef.current.style.visibility = "hidden";
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    modalRef.current.style.visibility = "hidden";
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      modalRef.current.dataset.revealed = "true";
+      modalRef.current.dataset.landed = "true";
+      return;
+    }
     let alive = true;
+    const revealTimer = window.setTimeout(() => {
+      if (alive && !previewClosingRef.current && modalRef.current) modalRef.current.dataset.revealed = "true";
+    }, 250);
+    const landTimer = window.setTimeout(() => {
+      if (alive && !previewClosingRef.current && modalRef.current) modalRef.current.dataset.landed = "true";
+    }, 540);
     void flyCard(from, to, selectedCard.image).then(() => {
-      if (alive && !previewClosingRef.current && modalRef.current) modalRef.current.style.visibility = "";
+      if (!alive || previewClosingRef.current || !modalRef.current) return;
+      modalRef.current.dataset.landed = "true";
     });
-    return () => { alive = false; };
+    return () => { alive = false; window.clearTimeout(revealTimer); window.clearTimeout(landTimer); };
   }, [selected?.key]);
 
   useEffect(() => () => restoreSourceTile(), []);
@@ -387,11 +451,18 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   };
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
-    if (!drag || drag.id !== event.pointerId) return;
+    if (!drag || drag.id !== event.pointerId) {
+      if (!selected && event.pointerType === "mouse") {
+        const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>(".card-wander-tile") : null;
+        setHoveredTile(target || findTileAtPoint(event.clientX, event.clientY));
+      }
+      return;
+    }
     const dx = event.clientX - drag.x;
     const dy = event.clientY - drag.y;
     if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 6) {
       drag.moved = true;
+      setHoveredTile(null);
       event.currentTarget.dataset.dragging = "true";
       event.currentTarget.setPointerCapture(event.pointerId);
     }
@@ -448,12 +519,19 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onPointerLeave={() => setHoveredTile(null)}
         onWheel={onWheel}
         onClickCapture={(event) => {
           if (!suppressClickRef.current) return;
           event.preventDefault();
           event.stopPropagation();
           suppressClickRef.current = false;
+        }}
+        onClick={(event) => {
+          if (selected || event.target instanceof Element && event.target.closest(".card-wander-tile")) return;
+          const tile = findTileAtPoint(event.clientX, event.clientY);
+          const card = tile && deck.find((item) => item.key === tile.dataset.wanderKey);
+          if (tile && card) selectTile(card, tile);
         }}
       >
         <div className="card-wander-world">
