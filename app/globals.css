@@ -5892,8 +5892,26 @@ button.PhotoView-Slider__toolbarIcon {
 .card-wander-preview-stage[data-effect="holo"] .card-wander-effect-sheen { background: repeating-linear-gradient(120deg, #df4949 0%, #e3a53b 3.5%, #90c841 7%, #33cca6 10.5%, #4d99e6 14%, #9f68df 17.5%, #e052a5 21%, #df4949 24.5%); opacity: .28; mix-blend-mode: hard-light; animation: card-wander-effect-rainbow 8s linear infinite alternate; }
 .card-wander-preview-stage[data-effect="metal"] .card-wander-effect-sheen { background: linear-gradient(98deg, #454b54 0%, #7b848e 22%, #c3bfb6 38%, #75808a 50%, #535a65 64%, #afa9a1 80%, #4e555f 100%); opacity: .46; mix-blend-mode: overlay; animation: card-wander-effect-sweep 7s ease-in-out infinite alternate; }
 .card-wander-effect[data-effect="metal"] .card-wander-effect-spec { background: radial-gradient(ellipse at center, rgba(255,255,255,.52), rgba(255,255,255,.16) 30%, transparent 60%); }
+.card-wander-preview-stage[data-effect="pearl"] .card-wander-effect-sheen,
+.card-wander-zoom-card[data-effect="pearl"] .card-wander-effect-sheen {
+  background: radial-gradient(ellipse 37% 48% at 30% 34%, rgba(255,222,225,.58), transparent 75%), radial-gradient(ellipse 42% 48% at 67% 61%, rgba(171,218,237,.62), transparent 75%), radial-gradient(ellipse 28% 39% at 55% 23%, rgba(215,195,241,.48), transparent 74%);
+  opacity: .44;
+  animation: card-wander-effect-pearl 9s ease-in-out infinite alternate;
+}
+.card-wander-preview-stage[data-effect="stardust"] .card-wander-effect-sheen,
+.card-wander-zoom-card[data-effect="stardust"] .card-wander-effect-sheen {
+  background: radial-gradient(circle at 27% 28%, rgba(255,250,223,.9) 0 1px, rgba(255,250,223,.22) 3px, transparent 11px), radial-gradient(circle at 39% 67%, rgba(255,245,204,.82) 0 1px, rgba(255,245,204,.16) 3px, transparent 9px), radial-gradient(circle at 52% 39%, rgba(255,255,239,.86) 0 1px, rgba(255,255,239,.2) 3px, transparent 12px), radial-gradient(circle at 64% 72%, rgba(255,239,198,.88) 0 1px, rgba(255,239,198,.18) 3px, transparent 10px), radial-gradient(circle at 73% 44%, rgba(255,250,225,.86) 0 1px, rgba(255,250,225,.2) 3px, transparent 11px), radial-gradient(ellipse 45% 38% at 50% 50%, rgba(241,213,166,.1), transparent 80%);
+  opacity: .64;
+  animation: card-wander-effect-stardust 7.5s ease-in-out infinite alternate;
+}
+.card-wander-preview-stage[data-effect="pearl"] .card-wander-effect-glare,
+.card-wander-preview-stage[data-effect="pearl"] .card-wander-effect-spec { opacity: .42; }
+.card-wander-preview-stage[data-effect="stardust"] .card-wander-effect-glare,
+.card-wander-preview-stage[data-effect="stardust"] .card-wander-effect-spec { opacity: .24; }
 @keyframes card-wander-effect-sweep { from { transform: translate3d(-14%,0,0); } to { transform: translate3d(14%,0,0); } }
 @keyframes card-wander-effect-rainbow { from { transform: translate3d(-8%,-5%,0); } to { transform: translate3d(8%,5%,0); } }
+@keyframes card-wander-effect-pearl { from { transform: translate3d(-7%,-5%,0) rotate(-3deg); } to { transform: translate3d(7%,5%,0) rotate(3deg); } }
+@keyframes card-wander-effect-stardust { from { transform: translate3d(-5%,2%,0); opacity: .48; } 50% { opacity: .78; } to { transform: translate3d(5%,-2%,0); opacity: .58; } }
 .card-wander-wallet { position: relative; flex: none; width: 260px; height: 452px; margin-top: 16px; overflow: hidden; border: 5px solid #34393f; border-radius: 39px; background: #060709; box-shadow: 0 12px 40px #000b, inset 0 0 0 2px #050607; color: #f6f7f9; transition: translate .74s cubic-bezier(.22,1,.36,1); }
 .card-wander-wallet[data-payment="true"] { translate: 0 -65px; }
 .card-wander-wallet-island { position: absolute; z-index: 2; top: 7px; left: 50%; width: 70px; height: 18px; transform: translateX(-50%); border-radius: 999px; background: #050607; }
@@ -5934,6 +5952,8 @@ button.PhotoView-Slider__toolbarIcon {
 .card-wander-preview-controls { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 10px 16px 0; }
 .card-wander-modes, .card-wander-effects { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); width: max-content; padding: 3px; border: 1px solid rgba(255,255,255,.1); border-radius: 999px; background: #14191e; }
 .card-wander-seg-thumb { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 3); border-radius: 999px; background: #2a3036; transform: translateX(calc(var(--segment-index) * 100%)); transition: transform .38s cubic-bezier(.22,1,.36,1); pointer-events: none; }
+.card-wander-effects { grid-template-columns: repeat(5, 1fr); }
+.card-wander-effects .card-wander-seg-thumb { width: calc((100% - 6px) / 5); }
 .card-wander-modes button, .card-wander-effects button { position: relative; z-index: 1; min-height: 25px; padding: 0 11px; border-radius: 999px; color: #a7adb5; font-size: 11px; font-weight: 600; transition: color .25s ease; }
 .card-wander-modes button[aria-checked="true"], .card-wander-effects button[aria-checked="true"] { color: #f3f5f6; }
 .card-wander-modal-content { padding: 10px 24px 24px; }
@@ -5976,6 +5996,8 @@ button.PhotoView-Slider__toolbarIcon {
 .card-wander-zoom-card[data-effect="holo"] .card-wander-effect-sheen { background: repeating-linear-gradient(120deg, #df4949 0%, #e3a53b 3.5%, #90c841 7%, #33cca6 10.5%, #4d99e6 14%, #9f68df 17.5%, #e052a5 21%, #df4949 24.5%); opacity: .3; mix-blend-mode: hard-light; animation: card-wander-effect-rainbow 6s linear infinite alternate; }
 .card-wander-zoom-card[data-effect="metal"] .card-wander-effect-sheen { background: linear-gradient(98deg, #454b54 0%, #7b848e 22%, #c3bfb6 38%, #75808a 50%, #535a65 64%, #afa9a1 80%, #4e555f 100%); opacity: .48; mix-blend-mode: overlay; animation: card-wander-effect-sweep 5s ease-in-out infinite alternate; }
 .card-wander-zoom-card[data-effect="metal"]::after { content: ""; position: absolute; inset: -35% -40%; background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.03) 42%, rgba(255,255,255,.27) 50%, rgba(255,255,255,.03) 58%, transparent 65%); mix-blend-mode: screen; pointer-events: none; animation: card-wander-effect-sweep 4.1s ease-in-out infinite alternate; }
+.card-wander-zoom-card[data-effect="pearl"] .card-wander-effect-sheen { opacity: .56; }
+.card-wander-zoom-card[data-effect="stardust"] .card-wander-effect-sheen { filter: brightness(1.25); }
 .card-wander-zoom-close {
   position: relative;
   z-index: 1;
