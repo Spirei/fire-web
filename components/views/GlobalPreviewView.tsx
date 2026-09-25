@@ -464,13 +464,19 @@ function SectionIcon({ section }: { section: GlobalSection }) {
 }
 
 export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
-  const [section, setSection] = useState<GlobalSection>(() => {
-    if (typeof window === "undefined" || pageSize) return "assets";
-    return parseGlobalSection(new URLSearchParams(window.location.search).get("section"));
-  });
+  // 布局内的页签拿不到服务端 searchParams：首帧统一用 assets，水合后再读取 URL。
+  // 不能在 useState 初始化时只在浏览器读 URL，否则 /global?section=convert 会水合不一致。
+  const [section, setSection] = useState<GlobalSection>("assets");
+  const [urlReady, setUrlReady] = useState(false);
+
+  useLayoutEffect(() => {
+    if (pageSize) return;
+    setSection(parseGlobalSection(new URLSearchParams(window.location.search).get("section")));
+    setUrlReady(true);
+  }, [pageSize]);
 
   useEffect(() => {
-    if (pageSize) return;
+    if (pageSize || !urlReady) return;
     const params = new URLSearchParams(window.location.search);
     params.set("section", section);
     if (section !== "convert") {
@@ -478,7 +484,7 @@ export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
       params.delete("amount");
     }
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
-  }, [pageSize, section]);
+  }, [pageSize, section, urlReady]);
 
   if (pageSize) return <AssetMarketCapRanking pageSize={pageSize} />;
 

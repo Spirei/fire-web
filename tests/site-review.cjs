@@ -609,7 +609,14 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(!view.includes('GlobalEconomyHeatmap'));
     assert(!view.includes('["heatmap", "经济热图"'));
     assert.match(view, /section === "assets" \? <AssetMarketCapRanking \/> : <FxConverter \/>/);
+    assert.match(view, /useState<GlobalSection>\("assets"\)/, '服务端与客户端首帧必须使用相同区块');
+    assert.match(view, /useLayoutEffect\(\(\) => \{[\s\S]*?setSection\(parseGlobalSection\(new URLSearchParams\(window\.location\.search\)/, 'URL 区块只能在水合后读取');
+    assert.match(view, /if \(pageSize \|\| !urlReady\) return;/, '读取 URL 前不得回写默认区块覆盖分享链接');
     assert.match(css, /\.fx-converter-card\s*\{[^}]*grid-template-columns:\s*1fr 1fr/, '汇率换算必须一排两个');
+  });
+  await test('production build never rotates the local demo password', () => {
+    const db = fs.readFileSync(path.join(root, 'lib/db.ts'), 'utf8');
+    assert.match(db, /NODE_ENV === "production" && process\.env\.NEXT_PHASE !== "phase-production-build"/, '生产服务的弱密码保护不能在 next build 阶段修改本地账号');
   });
   await test('admin avatar badge does not depend on excluded deployment icons', () => {
     const badge = fs.readFileSync(path.join(root, 'components/AdminBadge.tsx'), 'utf8');

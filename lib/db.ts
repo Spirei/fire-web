@@ -984,7 +984,9 @@ function reassignUids(database: Database.Database) {
 }
 
 function seed(database: Database.Database) {
-  if (process.env.NODE_ENV === "production") {
+  // next build 也会以 NODE_ENV=production 读取本地数据库；构建不能重置开发账号密码。
+  // 真正的生产服务启动时仍禁用已知的 demo 默认密码并撤销其旧会话。
+  if (process.env.NODE_ENV === "production" && process.env.NEXT_PHASE !== "phase-production-build") {
     const demo = database.prepare("SELECT password_hash FROM users WHERE id='demo-user'").get() as { password_hash: string } | undefined;
     if (demo && verifyPassword("demo1234", demo.password_hash)) {
       database.prepare("UPDATE users SET password_hash=? WHERE id='demo-user'").run(hashPassword(randomBytes(32).toString("hex")));
