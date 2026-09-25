@@ -47,6 +47,8 @@ export interface ImportedModelRow {
   label: string;
   note: string;
   file: string;
+  /** 原始 GLB 的实际磁盘大小，供画册按体积计算书脊宽度 */
+  sourceBytes?: number;
   cover?: string;
   params: ShowcaseModelParams;
   updatedAt: string;

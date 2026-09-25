@@ -18,11 +18,26 @@ const CHAPTERS = [
   { label: "维护", en: "AFTER RELEASE", era: "发布后" }
 ] as const;
 
-const BOOK_SIZES = [
-  { height: 380, width: 68 }, { height: 475, width: 57 }, { height: 338, width: 54 },
-  { height: 393, width: 68 }, { height: 455, width: 59 }, { height: 530, width: 65 },
-  { height: 474, width: 56 }, { height: 405, width: 61 }
-];
+const BOOK_HEIGHTS = [380, 475, 338, 393, 455, 530, 474, 405];
+
+function bookHeight(model: ImportedModelRow) {
+  const identity = `${model.id} ${model.label}`.toLowerCase();
+  if (identity.includes("gulf")) return 380;
+  if (identity.includes("mcl35")) return 475;
+  if (identity.includes("mp4/6") || identity.includes("mp46")) return 338;
+  if (identity.includes("mp4/5") || identity.includes("mp45")) return 393;
+  if (identity.includes("mcl39")) return 455;
+  if (identity.includes("amr26")) return 530;
+  if (identity.includes("amr23")) return 474;
+  const hash = [...model.id].reduce((value, character) => value * 31 + character.charCodeAt(0), 0) >>> 0;
+  return BOOK_HEIGHTS[hash % BOOK_HEIGHTS.length];
+}
+
+function bookWidth(bytes?: number) {
+  if (!bytes || bytes <= 0) return 56;
+  const megabytes = bytes / 1048576;
+  return Math.round(Math.max(46, Math.min(84, 48 + 12 * Math.log2(megabytes / 20))));
+}
 
 function bookTheme(model?: ImportedModelRow) {
   if (!model) return { cover: "#e8e4d6", ink: "#202328", edge: "#b5ae93", pattern: "lines" };
@@ -283,7 +298,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
           if (Date.now() < shelfDragUntil.current) { event.preventDefault(); event.stopPropagation(); }
         }}
       ><div className="mbl-shelf" aria-label="车型书架">
-        {orderedBooks.map((model, index) => { const color = bookTheme(model); const size = BOOK_SIZES[index % BOOK_SIZES.length]; return <button key={model.id} type="button" draggable={!orderSaving} data-pattern={color.pattern} className={`mbl-spine${dragId === model.id ? " is-dragged" : ""}${dropTarget?.id === model.id ? ` is-drop-${dropTarget.after ? "after" : "before"}` : ""}`} onClick={() => { if (Date.now() >= shelfDragUntil.current) goTo(model.id, 0); }} onKeyDown={(event) => {
+        {orderedBooks.map((model, index) => { const color = bookTheme(model); return <button key={model.id} type="button" draggable={!orderSaving} data-pattern={color.pattern} className={`mbl-spine${dragId === model.id ? " is-dragged" : ""}${dropTarget?.id === model.id ? ` is-drop-${dropTarget.after ? "after" : "before"}` : ""}`} onClick={() => { if (Date.now() >= shelfDragUntil.current) goTo(model.id, 0); }} onKeyDown={(event) => {
           if (!event.altKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
           event.preventDefault();
           const nextIndex = index + (event.key === "ArrowRight" ? 1 : -1);
@@ -320,7 +335,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
           if (source) moveBook(source, model.id, event.clientX > event.currentTarget.getBoundingClientRect().left + event.currentTarget.getBoundingClientRect().width / 2);
           shelfDragUntil.current = Date.now() + 250;
           setDragId(null); setDropTarget(null);
-        }} onDragEnd={() => { shelfDragUntil.current = Date.now() + 250; setDragId(null); setDropTarget(null); }} style={{ "--spine-bg": color.cover, "--spine-ink": color.ink, "--spine-edge": color.edge, "--spine-height": `${size.height}px`, "--spine-width": `${size.width}px` } as React.CSSProperties} aria-label={`打开 ${model.label} 车型画册，拖动可排序`}>
+        }} onDragEnd={() => { shelfDragUntil.current = Date.now() + 250; setDragId(null); setDropTarget(null); }} style={{ "--spine-bg": color.cover, "--spine-ink": color.ink, "--spine-edge": color.edge, "--spine-height": `${bookHeight(model)}px`, "--spine-width": `${bookWidth(model.sourceBytes)}px` } as React.CSSProperties} aria-label={`打开 ${model.label} 车型画册，拖动可排序`} title={model.sourceBytes ? `原件 ${fileSize(model.sourceBytes)}` : "原件大小未知"}>
           <span className="mbl-spine-rule" aria-hidden="true" /><span className={`mbl-spine-title${model.label.length > 16 ? " is-long" : ""}`}>{model.label}</span><span className="mbl-spine-number">{String(index + 1).padStart(2, "0")}</span><span className="mbl-spine-grip" aria-hidden="true">⠿</span>
         </button>; })}
         <button type="button" className="mbl-spine mbl-spine-new" onClick={() => goTo("new", 0)} onDragOver={(event) => { if (dragId) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); if (dragId) moveBook(dragId, orderedIds.at(-1) ?? dragId, true); setDragId(null); setDropTarget(null); }} aria-label="新建车型画册"><span>＋</span><small>NEW<br />VOLUME</small></button>

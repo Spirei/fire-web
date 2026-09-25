@@ -49,16 +49,13 @@
 .mbl-spine[data-pattern="papaya"]::before { background: linear-gradient(155deg, transparent 31%, #1c3c50a8 32% 47%, transparent 48%) center / 100% 100%; }
 .mbl-spine[data-pattern="arcs"]::before { background: radial-gradient(circle at -30px 33%, transparent 69px, #f5d8a799 70px 71px, transparent 72px), radial-gradient(circle at -30px 33%, transparent 85px, #f5d8a799 86px 87px, transparent 88px); }
 .mbl-spine[data-pattern="lines"]::before { background: repeating-linear-gradient(160deg, transparent 0 14px, #e8d6b74d 15px 16px) center / 100% 100%; }
-.mbl-spine:nth-child(3n) { transform: rotate(-.8deg); }
-.mbl-spine:nth-child(5n) { transform: rotate(1deg); }
-.mbl-spine:hover, .mbl-spine:focus-visible { transform: translateY(-23px) rotate(0); z-index: 2; box-shadow: inset 3px 0 5px #fff5, inset -4px 0 5px #0004, 7px 18px 18px #0009; }
+.mbl-spine:hover, .mbl-spine:focus-visible { transform: translateY(-23px); z-index: 2; box-shadow: inset 3px 0 5px #fff5, inset -4px 0 5px #0004, 7px 18px 18px #0009; }
 .mbl-spine.is-dragged { opacity: .4; }
 .mbl-spine.is-drop-before { box-shadow: -6px 0 0 #eee6d7, inset 3px 0 5px #fff5, inset -4px 0 5px #0004; }
 .mbl-spine.is-drop-after { box-shadow: 6px 0 0 #eee6d7, inset 3px 0 5px #fff5, inset -4px 0 5px #0004; }
 .mbl-spine-rule { position: absolute; top: 20px; left: 25%; right: 25%; height: 3px; border-top: 1px solid currentColor; border-bottom: 1px solid currentColor; opacity: .65; }
 .mbl-spine-title { position: absolute; top: 53px; left: 50%; transform: translateX(-50%); writing-mode: vertical-rl; text-orientation: mixed; white-space: nowrap; font-family: Georgia, "Songti SC", serif; font-size: clamp(15px, 1.4vw, 23px); letter-spacing: .065em; line-height: 1.15; font-weight: 600; }
 .mbl-spine-title.is-long { font-size: 14px; letter-spacing: 0; }
-.mbl-spine:nth-child(2n) .mbl-spine-title { transform: translateX(-50%) rotate(180deg); }
 .mbl-spine-number { position: absolute; bottom: 16px; left: 0; right: 0; font-size: 10px; letter-spacing: .12em; opacity: .72; }
 .mbl-spine-grip { position: absolute; top: 7px; right: 6px; font-size: 13px; line-height: 1; opacity: 0; transition: opacity .2s; }
 .mbl-spine:hover .mbl-spine-grip, .mbl-spine:focus-visible .mbl-spine-grip { opacity: .8; }
