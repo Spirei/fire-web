@@ -129,19 +129,19 @@
 .mbl-flip-scene.is-next .mbl-flip-stationary { left: 0; }
 .mbl-flip-scene.is-previous .mbl-flip-stationary { right: 0; }
 .mbl-flip-stationary > .mbl-page, .mbl-flip-face > .mbl-page, .mbl-flip-face > .mbl-cover { width: 100%; height: 100%; min-height: 0; }
-.mbl-flip-sheet { position: absolute; top: 0; bottom: 0; width: 50%; transform-style: preserve-3d; }
-.mbl-flip-scene.is-next .mbl-flip-sheet { left: 50%; transform-origin: left center; animation: mbl-page-next .7s cubic-bezier(.22,.7,.14,1) both; }
-.mbl-flip-scene.is-previous .mbl-flip-sheet { left: 0; transform-origin: right center; animation: mbl-page-previous .7s cubic-bezier(.22,.7,.14,1) both; }
+.mbl-flip-sheet { position: absolute; top: 0; bottom: 0; width: 50%; transform-style: preserve-3d; will-change: transform; }
+.mbl-flip-scene.is-next .mbl-flip-sheet { left: 50%; transform-origin: left center; animation: mbl-page-next .82s cubic-bezier(.42,0,.16,1) both; }
+.mbl-flip-scene.is-previous .mbl-flip-sheet { left: 0; transform-origin: right center; animation: mbl-page-previous .82s cubic-bezier(.42,0,.16,1) both; }
 .mbl-flip-scene.is-opening .mbl-flip-sheet { left: 0; width: 100%; transform-origin: left center; animation-name: mbl-cover-open; }
-.mbl-flip-face { position: absolute; inset: 0; overflow: hidden; backface-visibility: hidden; -webkit-backface-visibility: hidden; background: var(--mbl-paper); box-shadow: 0 9px 22px #17150f47; }
+.mbl-flip-face { position: absolute; inset: 0; overflow: hidden; backface-visibility: hidden; -webkit-backface-visibility: hidden; background: var(--mbl-paper); box-shadow: 0 8px 16px #17150f38; }
 .mbl-flip-back { transform: rotateY(180deg); }
-.mbl-flip-front::after { content: ""; position: absolute; right: 0; bottom: 0; width: 82px; height: 82px; opacity: 0; background: linear-gradient(135deg, #0000 47%, #9b927e44 49%, #fbf8ed 53%, #cec6b4 100%); clip-path: polygon(100% 0, 100% 100%, 0 100%); animation: mbl-curl .7s ease-in-out both; }
+.mbl-flip-front::after { content: ""; position: absolute; right: 0; bottom: 0; width: 82px; height: 82px; opacity: 0; background: linear-gradient(135deg, #0000 47%, #9b927e44 49%, #fbf8ed 53%, #cec6b4 100%); clip-path: polygon(100% 0, 100% 100%, 0 100%); animation: mbl-curl .82s ease-in-out both; }
 .mbl-flip-scene.is-previous .mbl-flip-front::after { right: auto; left: 0; background: linear-gradient(225deg, #0000 47%, #9b927e44 49%, #fbf8ed 53%, #cec6b4 100%); clip-path: polygon(0 0, 100% 100%, 0 100%); }
-.mbl-flip-back::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #403b2b38, transparent 26%, transparent 82%, #fff8); animation: mbl-back-shadow .7s both; }
+.mbl-flip-back::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #403b2b38, transparent 26%, transparent 82%, #fff8); animation: mbl-back-shadow .82s both; }
 .mbl-book.is-turning-next .mbl-corner-next { visibility: hidden; }
-@keyframes mbl-page-next { 0% { transform: rotateY(0); } 18% { transform: rotateY(-12deg); } 54% { transform: rotateY(-106deg); } 100% { transform: rotateY(-180deg); } }
-@keyframes mbl-page-previous { 0% { transform: rotateY(0); } 18% { transform: rotateY(12deg); } 54% { transform: rotateY(106deg); } 100% { transform: rotateY(180deg); } }
-@keyframes mbl-cover-open { 0% { left: 0; width: 100%; transform: rotateY(0); } 35% { left: 24%; width: 76%; transform: rotateY(-62deg); } 100% { left: 50%; width: 50%; transform: rotateY(-180deg); } }
+@keyframes mbl-page-next { from { transform: rotateY(0); } to { transform: rotateY(-180deg); } }
+@keyframes mbl-page-previous { from { transform: rotateY(0); } to { transform: rotateY(180deg); } }
+@keyframes mbl-cover-open { from { left: 0; width: 100%; transform: rotateY(0); } to { left: 50%; width: 50%; transform: rotateY(-180deg); } }
 @keyframes mbl-curl { 0%, 10%, 90%, 100% { opacity: 0; transform: scale(.3); transform-origin: bottom right; } 25%, 65% { opacity: .8; transform: scale(1); } }
 @keyframes mbl-back-shadow { 0%, 100% { opacity: 0; } 45% { opacity: 1; } }
 .mbl-corner-next { position: absolute; z-index: 6; right: 0; bottom: 0; width: 58px; height: 58px; padding: 0; border: 0; background: transparent; color: #494c45; opacity: .64; transition: opacity .2s; }
@@ -151,8 +151,8 @@
 .mbl-corner-next:hover span { transform: rotate(45deg) translateY(-3px); }
 .mbl-book.is-cover .mbl-corner-next { color: var(--book-ink); }
 .mbl-book.is-cover .mbl-corner-next::before { background: linear-gradient(135deg, transparent 49%, color-mix(in srgb, var(--book-color), #fff 32%) 50%); }
-.mbl-reader-controls { width: min(680px, 100%); display: flex; align-items: center; justify-content: space-between; gap: 28px; margin: 25px 0 12px; }
-.mbl-reader-controls button { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #585b52; background: transparent; color: #f0ede1; font-size: 19px; transition: background .2s, color .2s, transform .2s; }
+.mbl-reader-controls { width: min(310px, 100%); display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 25px 0 12px; }
+.mbl-reader-controls button { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1px dashed #6e7268; background: transparent; color: #f0ede1; font-size: 19px; transition: background .2s, color .2s, transform .2s; }
 .mbl-reader-controls button:not(:disabled):hover { background: #eee9db; color: #242722; transform: scale(1.08); }
 .mbl-reader-controls button:disabled { opacity: .28; }
 .mbl-reader-position { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 190px; text-align: center; }
@@ -272,7 +272,7 @@
   .mbl-page-content { max-height: none; overflow: visible; padding: 22px 0 35px; }
   .mbl-fold { display: none; }
   .mbl-flip-overlay { display: none; }
-  .mbl-reader-controls { margin-top: 24px; }
+  .mbl-reader-controls { width: min(300px, 100%); margin-top: 24px; }
   .mbl-reader-position { min-width: 0; }
   .mbl-footer { min-height: 48px; }.mbl-footer span:last-child { display: none; }
 }

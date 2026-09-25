@@ -71,30 +71,31 @@ function fileSize(bytes: number) { return `${(bytes / 1048576).toFixed(1)} MB`; 
 /** 翻页只复制可见 DOM；交互组件仍只有底层那一份，不会重复提交或加载。 */
 function clonePageVisual(source: Element | null): HTMLElement | null {
   if (!(source instanceof HTMLElement)) return null;
-  const clone = source.cloneNode(true) as HTMLElement;
-  for (const element of [clone, ...clone.querySelectorAll<HTMLElement>("[id]")]) element.removeAttribute("id");
-  const scrollSource = [source, ...source.querySelectorAll<HTMLElement>("*")];
-  const scrollCopy = [clone, ...clone.querySelectorAll<HTMLElement>("*")];
-  scrollSource.forEach((element, index) => {
-    const copy = scrollCopy[index];
-    if (!copy) return;
-    copy.scrollTop = element.scrollTop;
-    copy.scrollLeft = element.scrollLeft;
-  });
-  const originalFields = source.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select");
-  const copiedFields = clone.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select");
-  originalFields.forEach((field, index) => {
-    const copy = copiedFields[index];
-    if (!copy) return;
-    copy.value = field.value;
-    if (field instanceof HTMLInputElement && copy instanceof HTMLInputElement) copy.checked = field.checked;
-  });
-  const originalCanvases = source.querySelectorAll("canvas");
-  const copiedCanvases = clone.querySelectorAll("canvas");
-  originalCanvases.forEach((canvas, index) => {
-    try { copiedCanvases[index]?.getContext("2d")?.drawImage(canvas, 0, 0); } catch { /* WebGL canvas may not permit capture. */ }
-  });
-  return clone;
+  const copyVisible = (node: Node): Node | null => {
+    // 工作台中未激活的步骤可能带有整套 3D 控件，不能每翻一页都复制。
+    if (node instanceof HTMLElement && node.hidden) return null;
+    const copy = node.cloneNode(false);
+    if (copy instanceof Element) copy.removeAttribute("id");
+    for (const child of node.childNodes) {
+      const clonedChild = copyVisible(child);
+      if (clonedChild) copy.appendChild(clonedChild);
+    }
+    if (node instanceof HTMLElement && copy instanceof HTMLElement) {
+      if (node.scrollTop) copy.scrollTop = node.scrollTop;
+      if (node.scrollLeft) copy.scrollLeft = node.scrollLeft;
+      if (node instanceof HTMLInputElement && copy instanceof HTMLInputElement) {
+        copy.value = node.value;
+        copy.checked = node.checked;
+      } else if (node instanceof HTMLTextAreaElement && copy instanceof HTMLTextAreaElement) copy.value = node.value;
+      else if (node instanceof HTMLSelectElement && copy instanceof HTMLSelectElement) copy.value = node.value;
+      // 大幅 WebGL 画布的 GPU 回读会卡住主线程；动画纸面保留容器即可。
+      if (node instanceof HTMLCanvasElement && copy instanceof HTMLCanvasElement && node.width * node.height <= 262144) {
+        try { copy.getContext("2d")?.drawImage(node, 0, 0); } catch { /* 无法读取的画布保持纸面底色。 */ }
+      }
+    }
+    return copy;
+  };
+  return copyVisible(source) as HTMLElement;
 }
 
 function ReadonlyInspection({ model }: { model: ImportedModelRow }) {
@@ -291,10 +292,16 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
     const newWidth = bookElement.getBoundingClientRect().width;
     if (opening || closing) {
       widthAnimationRef.current = bookElement.animate([{ width: `${oldWidth}px` }, { width: `${newWidth}px` }], {
-        duration: 700, easing: "cubic-bezier(.25,.7,.2,1)"
+        duration: 820, easing: "cubic-bezier(.42,0,.16,1)"
       });
     }
-    timers.current.push(window.setTimeout(clearFlipVisual, 730));
+    const finishTurn = (event: AnimationEvent) => {
+      if (event.target !== sheet) return;
+      sheet.removeEventListener("animationend", finishTurn);
+      clearFlipVisual();
+    };
+    sheet.addEventListener("animationend", finishTurn);
+    timers.current.push(window.setTimeout(clearFlipVisual, 1200));
   }, [bookId, clearFlipVisual, confirmDiscard, goTo, isNew, page, selected, syncUrl, unsavedDraft]);
   useEffect(() => {
     const pop = () => {
@@ -479,7 +486,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
           </div>
           <div className="mbl-fold" aria-hidden="true" />
         </div>}
-        <div className="mbl-flip-overlay" ref={flipOverlayRef} aria-hidden="true" />
+        <div className="mbl-flip-overlay" ref={flipOverlayRef} aria-hidden="true" inert />
         {page < CHAPTERS.length - 1 && <button type="button" className="mbl-corner-next" onClick={() => flip("next")} disabled={Boolean(turn)} aria-label="翻到下一页" title="翻到下一页"><span aria-hidden="true">↗</span></button>}
       </div>
       <nav className="mbl-reader-controls" aria-label="书页导航"><button type="button" onClick={() => flip("previous")} disabled={page === 0 || Boolean(turn)} aria-label="上一页">←</button><span className="mbl-reader-position"><strong>{String(turnFromPage ?? page).padStart(2, "0")} / {String(CHAPTERS.length - 1).padStart(2, "0")}</strong><small>拖动、滑动或使用方向键</small></span><button type="button" onClick={() => flip("next")} disabled={page === CHAPTERS.length - 1 || Boolean(turn)} aria-label="下一页">→</button></nav>
