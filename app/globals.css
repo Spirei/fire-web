@@ -5695,6 +5695,16 @@ button.PhotoView-Slider__toolbarIcon {
   perspective: 1500px;
 }
 .card-wander-viewport:active { cursor: grabbing; }
+.card-wander-world {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  animation: card-wander-unfold 1.2s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes card-wander-unfold {
+  from { transform: rotateX(16deg) rotateZ(-3deg) scale(.9); }
+  to { transform: none; }
+}
 .card-wander-wall {
   --wander-card-width: clamp(178px, 17.25vw, 240px);
   --wander-row-gap: clamp(16px, 1.7vw, 24px);
@@ -5719,6 +5729,7 @@ button.PhotoView-Slider__toolbarIcon {
   flex-direction: column;
   gap: var(--wander-row-gap);
   transform: translateY(calc(var(--wander-row-step) * .5 * var(--wander-column-stagger)));
+  transform-style: preserve-3d;
 }
 .card-wander-column:has(.card-wander-tile:hover),
 .card-wander-column:has(.card-wander-tile:focus-visible) { z-index: 2; }
@@ -5728,21 +5739,25 @@ button.PhotoView-Slider__toolbarIcon {
   aspect-ratio: 1.586;
   overflow: hidden;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, .10);
+  border: 0;
   border-radius: 10px;
   background: #20252c;
   box-shadow: 0 7px 20px rgba(0, 0, 0, .42);
   transform: none;
-  transition: transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s cubic-bezier(.22,1,.36,1), border-color .3s ease;
+  transform-style: preserve-3d;
+  transition: transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s cubic-bezier(.22,1,.36,1);
   cursor: pointer;
 }
 .card-wander-tile:hover,
 .card-wander-tile:focus-visible {
   z-index: 2;
-  border-color: rgba(255,255,255,.7);
   box-shadow: 0 17px 45px rgba(0,0,0,.7);
-  transform: translateY(-5px) scale(1.055);
+  transform: translateZ(32px) scale(1.04);
   outline: none;
+}
+.card-wander-viewport[data-dragging] .card-wander-tile:hover {
+  transform: none;
+  box-shadow: 0 7px 20px rgba(0,0,0,.42);
 }
 .card-wander-tile img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .card-wander-vignette {
@@ -5965,7 +5980,7 @@ button.PhotoView-Slider__toolbarIcon {
   .card-wander-modal-actions > * { padding: 0 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .card-wander-wall, .card-wander-tile, .card-wander-modal, .card-wander-modal-backdrop, .card-wander-zoom-backdrop { animation: none; }
+  .card-wander-world, .card-wander-wall, .card-wander-tile, .card-wander-modal, .card-wander-modal-backdrop, .card-wander-zoom-backdrop { animation: none; }
   .card-wander-tile, .card-wander-pill, .card-wander-shuffle { transition: none; }
   .card-wander-effect-tilt, .card-wander-effect-sheen { animation: none !important; transition: none; }
   .card-wander-wallet, .card-wander-wallet-card, .card-wander-wallet-stack, .card-wander-seg-thumb { animation: none !important; transition: none !important; }

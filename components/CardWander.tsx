@@ -392,6 +392,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     const dy = event.clientY - drag.y;
     if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 6) {
       drag.moved = true;
+      event.currentTarget.dataset.dragging = "true";
       event.currentTarget.setPointerCapture(event.pointerId);
     }
     if (!drag.moved) return;
@@ -403,6 +404,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     if (dragRef.current?.id !== event.pointerId) return;
     suppressClickRef.current = dragRef.current.moved;
     dragRef.current = null;
+    delete event.currentTarget.dataset.dragging;
     driftAnchorRef.current = { x: positionRef.current.x, y: positionRef.current.y };
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     window.setTimeout(() => { suppressClickRef.current = false; }, 0);
@@ -454,19 +456,21 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
           suppressClickRef.current = false;
         }}
       >
-        <div ref={wallRef} key={seed} className="card-wander-wall">
-          {columns.map((column, columnIndex) => (
-            <div key={columnIndex} className="card-wander-column" style={{ "--wander-column-stagger": columnIndex % 2 } as CSSProperties}>
-              {column.map((card) => (
-                <WanderTile
-                  key={card.key}
-                  card={card}
-                  viewportRef={viewportRef}
-                  onSelect={selectTile}
-                />
-              ))}
-            </div>
-          ))}
+        <div className="card-wander-world">
+          <div ref={wallRef} key={seed} className="card-wander-wall">
+            {columns.map((column, columnIndex) => (
+              <div key={columnIndex} className="card-wander-column" style={{ "--wander-column-stagger": columnIndex % 2 } as CSSProperties}>
+                {column.map((card) => (
+                  <WanderTile
+                    key={card.key}
+                    card={card}
+                    viewportRef={viewportRef}
+                    onSelect={selectTile}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
       <div className="card-wander-vignette" aria-hidden="true" />

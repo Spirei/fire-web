@@ -41,6 +41,10 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(wander.includes('const COLUMNS = 12') && wanderStyles.includes('grid-template-columns: repeat(12, var(--wander-card-width))'), 'all card wall columns fit on one grid row');
     assert(wander.includes('columnIndex % 2') && wanderStyles.includes('var(--wander-row-step) * .5 * var(--wander-column-stagger)'), 'alternating columns offset by exactly half a card row');
     assert(wander.includes('async function shuffleWall()') && wanderStyles.includes('card-wander-wall-in'), 'shuffle crossfades the wall instead of randomly staggering cards');
+    const tileStyle = wanderStyles.match(/\.card-wander-tile \{([^}]+)\}/)?.[1] ?? '';
+    const tileHoverStyle = wanderStyles.match(/\.card-wander-tile:hover,\s*\.card-wander-tile:focus-visible \{([^}]+)\}/)?.[1] ?? '';
+    assert(tileStyle.includes('border: 0;') && !tileHoverStyle.includes('border-color'), 'hover lift must not draw a white border around cards');
+    assert(wanderStyles.includes('card-wander-unfold 1.2s') && wander.includes('dataset.dragging = "true"') && wanderStyles.includes('.card-wander-viewport[data-dragging] .card-wander-tile:hover'), 'wall unfolds on entry and drag suppresses hover lift');
     assert(wander.includes('selectedCard.image') && wander.includes('card.image'), 'preview and wall both use the original card asset URL');
     assert(!wander.includes('className="card-wander-brand"'), 'no extra title belongs on the card wall');
     assert(!wander.includes('拖动浏览 · 点按查看'), 'the removed top-right hint must not return');
