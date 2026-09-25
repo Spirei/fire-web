@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { IconPlus, IconRefresh, IconX } from "@tabler/icons-react";
+import { IconCheck, IconPencil, IconPlus, IconRefresh, IconX } from "@tabler/icons-react";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
@@ -19,14 +19,17 @@ import {
   formatPairRate,
   formatRatesDate,
   isFxCurrency,
+  mergeVisibleFxOrder,
   moveFxOrder,
   normalizeFxOrder,
   pairRate,
   parseFxAmount,
-  sanitizeFxInput
+  sanitizeFxInput,
+  visibleFxOrder
 } from "@/lib/fxConvert";
 
 const FX_ORDER_KEY = "fire:fx-order";
+const FX_HIDDEN_KEY = "fire:fx-hidden";
 
 function readUrlState(fallback: FxCurrency): { from: FxCurrency; amount: string } {
   if (typeof window === "undefined") return { from: fallback, amount: "100" };
@@ -63,15 +66,19 @@ export default function FxConverter() {
   const [base, setBase] = useState<FxCurrency>(() => readUrlState(start).from);
   const [text, setText] = useState(() => readUrlState(start).amount);
   const [savedOrder, setSavedOrder] = usePersistedState<FxCurrency[]>(FX_ORDER_KEY, [...FX_CURRENCIES]);
+  const [hidden, setHidden] = usePersistedState<FxCurrency[]>(FX_HIDDEN_KEY, []);
   const [rates, setRates] = useState<Record<string, number>>({ USD: 1 });
   const [quoted, setQuoted] = useState<Set<string>>(() => new Set(["USD"]));
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [estimatedMop, setEstimatedMop] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [managing, setManaging] = useState(false);
   const [rateError, setRateError] = useState("");
-  const codes = normalizeFxOrder(savedOrder);
-  const addable = FX_EXTRA_CURRENCIES.filter(code => !codes.includes(code) && (code === "MOP" || (quoted.has(code) && (rates[code] ?? 0) > 0))).sort((a, b) => a.localeCompare(b));
+  const allCodes = normalizeFxOrder(savedOrder);
+  const codes = visibleFxOrder(savedOrder, hidden);
+  const visibleKey = codes.join("|");
+  const addable = [...FX_CURRENCIES, ...FX_EXTRA_CURRENCIES].filter(code => !codes.includes(code) && (code === "MOP" || FX_CURRENCIES.includes(code as typeof FX_CURRENCIES[number]) || (quoted.has(code) && (rates[code] ?? 0) > 0))).sort((a, b) => a.localeCompare(b));
   const addableByContinent = FX_CONTINENTS.map(continent => ({ continent, items: addable.filter(code => fxContinent(code) === continent) })).filter(group => group.items.length > 0);
   const inputRefs = useRef<Partial<Record<FxCurrency, HTMLInputElement | null>>>({});
   const addMenuRef = useRef<HTMLDivElement | null>(null);
@@ -88,6 +95,13 @@ export default function FxConverter() {
     else params.set("amount", sanitizeFxInput(text));
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }, [base, text]);
+
+  useEffect(() => {
+    if (codes.length && !codes.includes(base)) {
+      setBase(codes[0]);
+      setText("100");
+    }
+  }, [base, visibleKey]);
 
   const loadRates = useCallback(async (force = false) => {
       if (force) setRefreshing(true);
@@ -171,20 +185,46 @@ export default function FxConverter() {
     if (from == null || from === to) return;
     const next = moveFxOrder(codes, from, to);
     if (next === codes) return;
-    setSavedOrder(next);
+    setSavedOrder(mergeVisibleFxOrder(allCodes, next));
     showToast("顺序已保存");
   }
 
+  function addCurrency(code: FxCurrency) {
+    if (!allCodes.includes(code)) setSavedOrder([...allCodes, code]);
+    setHidden(current => current.filter(item => item !== code));
+    if (!codes.length) {
+      setBase(code);
+      setText("100");
+    }
+    setAdding(false);
+  }
+
+  function removeCurrency(code: FxCurrency) {
+    if (code === base) {
+      const next = codes.find(item => item !== code && hasQuote(item));
+      if (next) activate(next);
+      else {
+        const fallback = codes.find(item => item !== code);
+        if (fallback) {
+          setBase(fallback);
+          setText("100");
+        }
+      }
+    }
+    setHidden(current => current.includes(code) ? current : [...current, code]);
+  }
+
   return (
-    <section className="fx-converter flex flex-col gap-4">
+    <section className={`fx-converter flex flex-col gap-4${managing ? " is-managing" : ""}`}>
       <header>
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-bold text-ink">汇率换算</h2>
           <div ref={addMenuRef} className="relative flex items-center gap-2">
             <button type="button" className="fx-converter-add" onClick={() => setAdding(value => !value)} aria-label="新增货币" title="新增货币" aria-expanded={adding}><IconPlus size={15} stroke={1.8} /></button>
-            <button type="button" className="fx-converter-refresh" onClick={() => void loadRates(true)} disabled={refreshing} aria-label="刷新汇率" title="刷新汇率"><IconRefresh size={15} stroke={1.8} className={refreshing ? "animate-spin" : ""} /></button>
+            <button type="button" className="fx-converter-refresh" onClick={() => { setAdding(false); void loadRates(true); }} disabled={refreshing} aria-label="刷新汇率" title="刷新汇率"><IconRefresh size={15} stroke={1.8} className={refreshing ? "animate-spin" : ""} /></button>
+            <button type="button" className="fx-converter-manage" onClick={() => { setAdding(false); setManaging(value => !value); }} aria-pressed={managing} aria-label={managing ? "完成管理货币" : "管理货币"} title={managing ? "完成管理" : "管理货币"}>{managing ? <IconCheck size={15} stroke={1.8} /> : <IconPencil size={15} stroke={1.8} />}</button>
             {adding && <div className="fx-converter-add-menu" role="menu" aria-label="可新增货币">
-              {addableByContinent.map(group => <div key={group.continent} role="group" aria-label={group.continent} className="fx-converter-add-group"><div className="fx-converter-add-heading">{group.continent}</div>{group.items.map(code => { const meta = fxCurrencyMeta(code); return <button key={code} type="button" role="menuitem" onClick={() => { setSavedOrder([...codes, code]); setAdding(false); }}>{meta.iso ? <CurrencyFlag market={meta.iso} size={18} /> : <span className="fx-converter-code-mark">{code.slice(0, 1)}</span>}<span>{meta.label}</span><small>{code}</small></button>; })}</div>)}
+              {addableByContinent.map(group => <div key={group.continent} role="group" aria-label={group.continent} className="fx-converter-add-group"><div className="fx-converter-add-heading">{group.continent}</div>{group.items.map(code => { const meta = fxCurrencyMeta(code); return <button key={code} type="button" role="menuitem" onClick={() => addCurrency(code)}>{meta.iso ? <CurrencyFlag market={meta.iso} size={18} /> : <span className="fx-converter-code-mark">{code.slice(0, 1)}</span>}<span>{meta.label}</span><small>{code}</small></button>; })}</div>)}
               {!addable.length && <span className="fx-converter-add-empty">暂无更多可添加的主要货币；可手动刷新汇率后再查看</span>}
             </div>}
           </div>
@@ -196,6 +236,7 @@ export default function FxConverter() {
       </header>
 
       <div className="fx-converter-card">
+        {!codes.length && <div className="fx-converter-empty">已移除所有货币，点击上方「＋」重新添加。</div>}
         {codes.map((code, index) => {
           const meta = fxCurrencyMeta(code);
           const live = hasQuote(code);
@@ -278,7 +319,7 @@ export default function FxConverter() {
                       ? "暂无汇率"
                       : `1 ${base} = ${formatPairRate(rate)} ${code}`}
               </span>
-              {!FX_CURRENCIES.includes(code as typeof FX_CURRENCIES[number]) && <button type="button" className="fx-converter-remove" aria-label={`移除${meta.label}`} title={`移除${meta.label}`} onClick={() => setSavedOrder(codes.filter(item => item !== code))}><IconX size={13} stroke={1.8} /></button>}
+              <button type="button" className="fx-converter-remove" aria-label={`移除${meta.label}`} title={`移除${meta.label}`} onClick={() => removeCurrency(code)}><IconX size={13} stroke={1.8} /></button>
             </div>
           );
         })}

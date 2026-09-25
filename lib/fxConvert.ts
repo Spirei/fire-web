@@ -135,6 +135,12 @@ export function normalizeFxOrder(saved: unknown): FxCurrency[] {
   return next;
 }
 
+/** 默认币种仍在完整排序表中，显隐由单独的个人偏好决定。 */
+export function visibleFxOrder(saved: unknown, hidden: readonly string[]): FxCurrency[] {
+  const hiddenSet = new Set(hidden);
+  return normalizeFxOrder(saved).filter(code => !hiddenSet.has(code));
+}
+
 export function moveFxOrder(order: FxCurrency[], from: number, to: number): FxCurrency[] {
   if (!Number.isInteger(from) || !Number.isInteger(to)) return order;
   if (from === to || from < 0 || to < 0 || from >= order.length || to >= order.length) return order;
@@ -143,6 +149,13 @@ export function moveFxOrder(order: FxCurrency[], from: number, to: number): FxCu
   if (!item) return order;
   next.splice(to, 0, item);
   return next;
+}
+
+/** 只重排可见卡片，隐藏卡片在完整顺序表中的位置保持不变。 */
+export function mergeVisibleFxOrder(order: FxCurrency[], visible: FxCurrency[]): FxCurrency[] {
+  const visibleSet = new Set(visible);
+  const nextVisible = visible[Symbol.iterator]();
+  return order.map(code => visibleSet.has(code) ? nextVisible.next().value ?? code : code);
 }
 
 export function usdRate(code: string, rates: Record<string, number>): number {

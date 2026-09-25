@@ -555,7 +555,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(sanitizeFxInput('12.3.4a'), '12.34');
     assert.equal(amountToDraft(720, 'CNY'), '720');
     assert.equal(amountToDraft(155.4, 'JPY'), '155');
-    const { FX_CURRENCIES, FX_EXTRA_CURRENCIES, FX_CURRENCY_META, fxContinent, formatRatesDate, normalizeFxOrder, moveFxOrder } = require(path.join(root, 'lib/fxConvert.ts'));
+    const { FX_CURRENCIES, FX_EXTRA_CURRENCIES, FX_CURRENCY_META, fxContinent, formatRatesDate, normalizeFxOrder, visibleFxOrder, mergeVisibleFxOrder, moveFxOrder } = require(path.join(root, 'lib/fxConvert.ts'));
     assert.equal(FX_CURRENCIES.length, 14);
     assert.equal(FX_CURRENCIES.length % 2, 0);
     assert(!FX_CURRENCIES.includes('MOP'));
@@ -571,6 +571,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(formatRatesDate(Date.UTC(2026, 8, 19, 4, 0, 0)).includes('2026年'), true);
     assert.deepEqual(moveFxOrder(['USD', 'EUR', 'HKD'], 0, 2), ['EUR', 'HKD', 'USD']);
     assert.deepEqual(moveFxOrder(['USD', 'EUR', 'HKD'], 2, 0), ['HKD', 'USD', 'EUR']);
+    assert.deepEqual(mergeVisibleFxOrder(['USD', 'EUR', 'HKD'], ['HKD', 'USD']), ['HKD', 'EUR', 'USD']);
+    assert(!visibleFxOrder(['USD', 'EUR', 'HKD'], ['USD', 'EUR']).includes('USD'));
+    assert.deepEqual(visibleFxOrder(['USD', 'EUR', 'HKD'], ['USD', 'EUR']), ['HKD', ...FX_CURRENCIES.filter(code => !['USD', 'EUR', 'HKD'].includes(code))]);
     const untouched = ['USD', 'EUR'];
     assert.equal(moveFxOrder(untouched, 0, 0), untouched);
     assert.deepEqual(moveFxOrder(['USD', 'EUR'], 9, 0), ['USD', 'EUR']);
