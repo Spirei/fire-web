@@ -713,16 +713,17 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
             选择 GLB，检查模型并调整朝向与轮子。只有保存成功才保留附件；取消、离开或保存失败都会释放临时文件。
           </p>
         </div>
-        <Link className="mp-back fire-cap" href="/">
-          返回首页
-        </Link>
+        <div className="mp-head-actions">
+          <Link className="mp-back fire-cap" href="/showcase/pipeline">查看全链路</Link>
+          <Link className="mp-back fire-cap" href="/">返回首页</Link>
+        </div>
       </header>
 
       {previewFile && !workbenchOpen && <section className="mp-step mp-resume"><div><b>{meta.label || "当前车型"}</b><p>已保存车型的调参草稿已保留，可继续编辑。</p></div><button type="button" className="fire-cap mp-primary fire-cap-primary" onClick={() => { setStructure(null); setPreviewStatus("loading"); setWorkbenchOpen(true); }}>继续调校</button></section>}
       {notice && <div className="mp-notice" role="status">{notice}</div>}
       {error && <div className="mp-error">{error}</div>}
 
-      <section className="mp-step">
+      <section className="mp-step" id="upload">
         <h2>
           <span>1</span> 选文件
         </h2>
@@ -1062,7 +1063,7 @@ export default function ModelImporter({ existing }: { existing: ImportedModelRow
         </section>, document.body
       )}
 
-      <section className="mp-step">
+      <section className="mp-step" id="model-list">
         <h2>
           <span>·</span> 车型清单
         </h2>

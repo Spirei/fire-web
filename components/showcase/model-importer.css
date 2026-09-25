@@ -27,6 +27,9 @@
   gap: 18px;
 }
 
+.mp-head-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.mp-step[id] { scroll-margin-top: 18px; }
+
 .mp-kicker {
   margin: 0 0 6px;
   font-size: 11px;
@@ -796,7 +799,8 @@ html.mp-workbench-open { overflow: hidden; }
 .mp-root .mp-visibility-toggle { color: var(--mp-muted); border-radius: 50%; background: transparent; }
 .mp-root .mp-visibility-toggle:hover, .mp-root .mp-visibility-toggle[aria-pressed="true"] { color: var(--mp-ink); background: var(--mp-panel); }
 @media(max-width:560px) {
-  .mp-root .mp-head { gap: 12px; padding-bottom: 16px; }
+  .mp-root .mp-head { flex-direction: column; gap: 12px; padding-bottom: 16px; }
+  .mp-root .mp-head-actions { justify-content: flex-start; }
   .mp-root .mp-step { padding-block: 16px; }
   .mp-root .mp-model-card .fire-cap { min-height: 36px; }
   .mp-root .mp-workbench-head { padding-bottom: 10px; }

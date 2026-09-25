@@ -5609,6 +5609,18 @@ button.PhotoView-Slider__toolbarIcon {
 
 /* 导入页和工作台沿用首页展示台的深色中性调色。 */
 .dark .showcase-import { background: #050506; }
+
+/* 车型上传全链路页：暗色令牌与独立页面样式同步。 */
+.dark .mpl-page {
+  --mpl-bg: #111821;
+  --mpl-surface: #1a2430;
+  --mpl-surface-soft: #202c39;
+  --mpl-ink: #e9eef5;
+  --mpl-muted: #9cabbc;
+  --mpl-line: #344354;
+  --mpl-strong-line: #4a5d70;
+  --mpl-accent: #a7c4dd;
+}
 .dark .mp-root { --mp-bg: #050506; --mp-panel: rgba(255,255,255,.025); --mp-ink: #f4f4f5; --mp-muted: #9a9a9e; --mp-line: rgba(255,255,255,.14); --mp-active: rgba(255,255,255,.42); color: var(--mp-ink); }
 .dark .mp-workbench.mp-root { background: var(--mp-bg); color: var(--mp-ink); }
 .dark .mp-root .mp-danger { color: #dc8d84; }

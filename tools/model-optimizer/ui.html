@@ -6,7 +6,7 @@
 <header><div class="brand">FIRE / LOCAL TOOLS</div><h1>模型处理，留在本机。</h1><p>Mac 和 Windows 共用同一流程：选择原始 GLB，导出后手动上传网站。</p></header>
 <section class="panel"><div class="drop" id="drop"><button id="choose" type="button">选择 GLB 文件</button><input id="files" type="file" accept=".glb" multiple><p>也可以把文件拖到这里，支持多选</p><div class="fine">每个文件最多 512 MiB · 最多排队 8 个 · 文件不会上传到网站</div></div><div id="upload-status" role="status"></div><p id="notice" class="error" role="alert"></p></section>
 <div class="topline"><h2>处理列表</h2><span class="fine" id="count">暂无任务</span></div><section class="panel" id="jobs"><p>选择文件后开始检测，多个模型逐个处理。</p></section>
-<div class="instructions"><strong>导出后怎么用？</strong><br>先将“高清优化版”导入网站并保存车型，再在对应车型卡片点击“上传首页预览”，选择“首页预览”。<br>原文件不修改。高清优化版保留贴图尺寸与几何；UASTC 是高质量有损，不是逐像素无损，文件大小不一定减少。首页预览单独使用 1K 贴图。<br>处理期间请保持启动终端打开。文件也保存在工具的 output 目录，重启后仍可从该目录取用。Windows 首次使用编码器可能需要完成官方安装向导。</div>
+<div class="instructions"><strong>导出后怎么用？</strong><br>先将同一份<strong>原始 GLB</strong> 导入网站，体检、调校并保存；然后在对应车型卡片上传“首页预览”。只有生成了 UASTC 压缩版时，才把“高清优化版”上传到“移动端原画”。网站完整步骤见 /showcase/pipeline。<br>原文件不修改。高清优化版保留贴图尺寸与几何；UASTC 是高质量有损，不是逐像素无损，文件大小不一定减少。首页预览单独使用 1K 贴图。<br>处理期间请保持启动终端打开。文件也保存在工具的 output 目录，重启后仍可从该目录取用。Windows 首次使用编码器可能需要完成官方安装向导。</div>
 </main><script>
 const token='__TOKEN__', choose=document.querySelector('#choose'), input=document.querySelector('#files'), drop=document.querySelector('#drop'), notice=document.querySelector('#notice'), status=document.querySelector('#upload-status');
 let uploading=false, polling=false;
