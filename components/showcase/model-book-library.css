@@ -81,7 +81,8 @@
 .mbl-book.is-turning-next, .mbl-book.is-turning-previous { overflow: hidden; }
 .mbl-book.is-dragging { cursor: grabbing; user-select: none; }
 .mbl-cover-art, .mbl-page-left, .mbl-page-foot { cursor: grab; }
-.mbl-book.is-cover { width: min(454px, 100%); min-height: min(680px, calc(100dvh - 235px)); background: var(--book-color); box-shadow: 5px 5px 0 #48443a, 9px 10px 0 #cfc6b4, 0 24px 70px #000b; }
+.mbl-book.is-cover { min-height: min(680px, calc(100dvh - 235px)); background: transparent; box-shadow: none; }
+.mbl-book.is-cover > .mbl-cover { width: min(454px, 100%); margin-inline: auto; box-shadow: 5px 5px 0 #48443a, 9px 10px 0 #cfc6b4, 0 24px 70px #000b; }
 .mbl-cover { position: relative; isolation: isolate; overflow: hidden; min-height: inherit; display: flex; flex-direction: column; border: 1px solid var(--cover-edge); border-left: 13px solid var(--cover-edge); color: var(--book-ink); background: var(--book-color); box-shadow: inset 3px 0 8px #fff7, inset -3px 0 8px #0003; }
 .mbl-cover::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .58; }
 .mbl-cover[data-pattern="gulf"]::before { background: linear-gradient(156deg, transparent 0 57%, #e97b2c 57% 67%, transparent 67%); }
@@ -125,23 +126,36 @@
 .mbl-fold { position: absolute; left: calc(50% - 10px); top: 0; bottom: 0; width: 20px; pointer-events: none; background: linear-gradient(90deg, #0000, #6d665022 30%, #554b3544 49%, #fff7 53%, #0000); }
 .mbl-flip-overlay { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 .mbl-flip-scene { position: absolute; inset: 0; perspective: 1600px; transform-style: preserve-3d; }
+.mbl-flip-scene.is-opening::before { content: ""; position: absolute; inset: 0; background: var(--mbl-stage); animation: mbl-cover-reveal .82s linear both; }
 .mbl-flip-stationary { position: absolute; top: 0; bottom: 0; width: 50%; overflow: hidden; }
 .mbl-flip-scene.is-next .mbl-flip-stationary { left: 0; }
 .mbl-flip-scene.is-previous .mbl-flip-stationary { right: 0; }
+.mbl-flip-scene.is-closing .mbl-flip-stationary { animation: mbl-close-still .82s both; }
 .mbl-flip-stationary > .mbl-page, .mbl-flip-face > .mbl-page, .mbl-flip-face > .mbl-cover { width: 100%; height: 100%; min-height: 0; }
+.mbl-flip-pivot { position: absolute; inset: 0; transform-style: preserve-3d; }
+.mbl-flip-scene.is-spread.is-next .mbl-flip-pivot { animation: mbl-tilt-next .82s ease-in-out both; }
+.mbl-flip-scene.is-spread.is-previous .mbl-flip-pivot { animation: mbl-tilt-previous .82s ease-in-out both; }
+.mbl-flip-scene.is-closing .mbl-flip-pivot { animation: mbl-close-sheet .82s linear both; }
 .mbl-flip-sheet { position: absolute; top: 0; bottom: 0; width: 50%; transform-style: preserve-3d; will-change: transform; }
 .mbl-flip-scene.is-next .mbl-flip-sheet { left: 50%; transform-origin: left center; animation: mbl-page-next .82s cubic-bezier(.42,0,.16,1) both; }
 .mbl-flip-scene.is-previous .mbl-flip-sheet { left: 0; transform-origin: right center; animation: mbl-page-previous .82s cubic-bezier(.42,0,.16,1) both; }
-.mbl-flip-scene.is-opening .mbl-flip-sheet { left: 0; width: 100%; transform-origin: left center; animation-name: mbl-cover-open; }
+.mbl-flip-scene.is-opening .mbl-flip-sheet { left: calc(50% - min(227px, 50%)); width: min(454px, 100%); transform-origin: left center; animation-name: mbl-cover-open; }
 .mbl-flip-face { position: absolute; inset: 0; overflow: hidden; backface-visibility: hidden; -webkit-backface-visibility: hidden; background: var(--mbl-paper); box-shadow: 0 8px 16px #17150f38; }
 .mbl-flip-back { transform: rotateY(180deg); }
-.mbl-flip-front::after { content: ""; position: absolute; right: 0; bottom: 0; width: 82px; height: 82px; opacity: 0; background: linear-gradient(135deg, #0000 47%, #9b927e44 49%, #fbf8ed 53%, #cec6b4 100%); clip-path: polygon(100% 0, 100% 100%, 0 100%); animation: mbl-curl .82s ease-in-out both; }
+.mbl-flip-scene.is-closing .mbl-flip-back { background: transparent; box-shadow: none; }
+.mbl-flip-scene.is-closing .mbl-flip-back::after { display: none; }
+.mbl-flip-front::after { content: ""; position: absolute; right: 0; bottom: 0; width: 120px; height: 120px; opacity: 0; background: linear-gradient(135deg, #0000 47%, #9b927e44 49%, #fbf8ed 53%, #cec6b4 100%); clip-path: polygon(100% 0, 100% 100%, 0 100%); animation: mbl-curl .82s ease-in-out both; }
 .mbl-flip-scene.is-previous .mbl-flip-front::after { right: auto; left: 0; background: linear-gradient(225deg, #0000 47%, #9b927e44 49%, #fbf8ed 53%, #cec6b4 100%); clip-path: polygon(0 0, 100% 100%, 0 100%); }
 .mbl-flip-back::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #403b2b38, transparent 26%, transparent 82%, #fff8); animation: mbl-back-shadow .82s both; }
 .mbl-book.is-turning-next .mbl-corner-next { visibility: hidden; }
 @keyframes mbl-page-next { from { transform: rotateY(0); } to { transform: rotateY(-180deg); } }
 @keyframes mbl-page-previous { from { transform: rotateY(0); } to { transform: rotateY(180deg); } }
-@keyframes mbl-cover-open { from { left: 0; width: 100%; transform: rotateY(0); } to { left: 50%; width: 50%; transform: rotateY(-180deg); } }
+@keyframes mbl-cover-open { from { left: calc(50% - min(227px, 50%)); width: min(454px, 100%); transform: rotateY(0); } to { left: 50%; width: 50%; transform: rotateY(-180deg); } }
+@keyframes mbl-cover-reveal { 0%, 4% { opacity: 1; } 22%, 100% { opacity: 0; } }
+@keyframes mbl-close-sheet { 0%, 45% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes mbl-close-still { 0% { opacity: 1; } 38%, 100% { opacity: 0; } }
+@keyframes mbl-tilt-next { 0%, 100% { transform: rotateZ(0); } 48% { transform: rotateZ(-2deg); } }
+@keyframes mbl-tilt-previous { 0%, 100% { transform: rotateZ(0); } 48% { transform: rotateZ(2deg); } }
 @keyframes mbl-curl { 0%, 10%, 90%, 100% { opacity: 0; transform: scale(.3); transform-origin: bottom right; } 25%, 65% { opacity: .8; transform: scale(1); } }
 @keyframes mbl-back-shadow { 0%, 100% { opacity: 0; } 45% { opacity: 1; } }
 .mbl-corner-next { position: absolute; z-index: 6; right: 0; bottom: 0; width: 58px; height: 58px; padding: 0; border: 0; background: transparent; color: #494c45; opacity: .64; transition: opacity .2s; }
@@ -149,7 +163,7 @@
 .mbl-corner-next span { position: absolute; right: 9px; bottom: 7px; font-size: 17px; transform: rotate(45deg); transition: transform .2s; }
 .mbl-corner-next:hover, .mbl-corner-next:focus-visible { opacity: 1; }
 .mbl-corner-next:hover span { transform: rotate(45deg) translateY(-3px); }
-.mbl-book.is-cover .mbl-corner-next { color: var(--book-ink); }
+.mbl-book.is-cover .mbl-corner-next { right: max(0px, calc((100% - 454px) / 2)); color: var(--book-ink); }
 .mbl-book.is-cover .mbl-corner-next::before { background: linear-gradient(135deg, transparent 49%, color-mix(in srgb, var(--book-color), #fff 32%) 50%); }
 .mbl-reader-controls { width: min(310px, 100%); display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 25px 0 12px; }
 .mbl-reader-controls button { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1px dashed #6e7268; background: transparent; color: #f0ede1; font-size: 19px; transition: background .2s, color .2s, transform .2s; }

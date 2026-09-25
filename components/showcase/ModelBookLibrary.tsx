@@ -150,7 +150,6 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
   const turnRef = useRef(false);
   const bookRef = useRef<HTMLDivElement | null>(null);
   const flipOverlayRef = useRef<HTMLDivElement | null>(null);
-  const widthAnimationRef = useRef<Animation | null>(null);
   const touchX = useRef<number | null>(null);
   const shelfDrag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
   const shelfDragUntil = useRef(0);
@@ -168,7 +167,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
   const hoveredBook = existing.find((item) => item.id === hoverId);
 
   useEffect(() => { if (!orderSavingRef.current) setOrderedIds(existing.map((item) => item.id)); }, [existing]);
-  useEffect(() => () => { timers.current.forEach(window.clearTimeout); widthAnimationRef.current?.cancel(); }, []);
+  useEffect(() => () => { timers.current.forEach(window.clearTimeout); }, []);
 
   const saveOrder = useCallback(async (ids: string[]) => {
     if (orderSavingRef.current || ids.join("|") === orderedIds.join("|")) return;
@@ -226,8 +225,6 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
   const clearFlipVisual = useCallback(() => {
     timers.current.forEach(window.clearTimeout);
     timers.current = [];
-    widthAnimationRef.current?.cancel();
-    widthAnimationRef.current = null;
     flipOverlayRef.current?.replaceChildren();
     turnRef.current = false;
     setTurn(null);
@@ -261,15 +258,15 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
     const opening = page === 0;
     const closing = next === 0;
     const mode = opening ? "opening" : closing ? "closing" : "spread";
-    const oldWidth = bookElement.getBoundingClientRect().width;
     const front = clonePageVisual(bookElement.querySelector(opening ? ".mbl-cover" : direction === "next" ? ".mbl-page-right" : ".mbl-page-left"));
     const stationary = opening ? null : clonePageVisual(bookElement.querySelector(direction === "next" ? ".mbl-page-left" : ".mbl-page-right"));
     if (!front) { goTo(bookId, next); return; }
     turnRef.current = true;
     flushSync(() => { setTurn(direction); setTurnFromPage(page); setPage(next); });
     syncUrl(bookId, next);
-    const back = clonePageVisual(bookElement.querySelector(closing ? ".mbl-cover" : direction === "next" ? ".mbl-page-left" : ".mbl-page-right"));
-    if (!back) { goTo(bookId, next); return; }
+    // 合上封面时底层已经是真正的整张封面，不能再把它复制到半张纸的背面。
+    const back = closing ? null : clonePageVisual(bookElement.querySelector(direction === "next" ? ".mbl-page-left" : ".mbl-page-right"));
+    if (!closing && !back) { goTo(bookId, next); return; }
     const scene = document.createElement("div");
     scene.className = `mbl-flip-scene is-${mode} is-${direction}`;
     if (stationary) {
@@ -285,16 +282,13 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
     frontFace.append(front);
     const backFace = document.createElement("div");
     backFace.className = "mbl-flip-face mbl-flip-back";
-    backFace.append(back);
+    if (back) backFace.append(back);
     sheet.append(frontFace, backFace);
-    scene.append(sheet);
+    const pivot = document.createElement("div");
+    pivot.className = "mbl-flip-pivot";
+    pivot.append(sheet);
+    scene.append(pivot);
     overlay.replaceChildren(scene);
-    const newWidth = bookElement.getBoundingClientRect().width;
-    if (opening || closing) {
-      widthAnimationRef.current = bookElement.animate([{ width: `${oldWidth}px` }, { width: `${newWidth}px` }], {
-        duration: 820, easing: "cubic-bezier(.42,0,.16,1)"
-      });
-    }
     const finishTurn = (event: AnimationEvent) => {
       if (event.target !== sheet) return;
       sheet.removeEventListener("animationend", finishTurn);
@@ -434,6 +428,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
       <div className="mbl-reader-top"><button type="button" onClick={() => leaveTo("", 0)}>← 返回书架</button><span>FIRE / {label.toUpperCase()}</span><span>{String((turnFromPage ?? page) + 1).padStart(2, "0")} / {String(CHAPTERS.length).padStart(2, "0")}</span></div>
       <div ref={bookRef} className={`mbl-book${page === 0 ? " is-cover" : ""}${turn ? ` is-turning-${turn}` : ""}${bookDragging ? " is-dragging" : ""}`} onPointerDown={(event) => {
         if (event.pointerType !== "mouse" || event.button !== 0 || turn || (event.target instanceof Element && event.target.closest("button, a, input, textarea, select, [contenteditable], .mbl-page-content"))) return;
+        if (page === 0 && event.target instanceof Element && !event.target.closest(".mbl-cover")) return;
         mouseTurnStart.current = { x: event.clientX, y: event.clientY };
         event.currentTarget.setPointerCapture(event.pointerId);
       }} onPointerMove={(event) => {
