@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useServerPrefs, writePrefCookie } from "@/lib/prefsContext";
 
 const ICON_PATHS: Record<string, React.ReactNode> = {
   palette: (<><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a3 3 0 0 0 3-3 9 9 0 0 0-9-8Z" /><circle cx="7" cy="10" r=".7" /><circle cx="11" cy="7" r=".7" /><circle cx="16" cy="8" r=".7" /></>),
@@ -209,41 +210,39 @@ export function SettingsSection({
   /** 为 true 时强制展开（用于「点了编辑却看不到内容」的场景） */
   reveal?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const hydrated = useRef(false);
+  const key = `fire:collapse:${storageKey || title}`;
+  const serverPrefs = useServerPrefs();
+  const [open, setOpen] = useState(() => typeof serverPrefs[key] === "boolean" ? serverPrefs[key] as boolean : defaultOpen);
 
   useEffect(() => {
     if (!collapsible) return;
-    const key = `fire:collapse:${storageKey || title}`;
     try {
       const saved = localStorage.getItem(key);
-      if (saved !== null) setOpen(saved === "1");
-      hydrated.current = true;
-    } catch {
-      hydrated.current = true;
-    }
-  }, [collapsible, storageKey, title]);
+      if (saved !== null) setOpen(saved === "1" || saved === "true");
+    } catch { /* 存储不可用时保留首帧状态 */ }
+  }, [collapsible, key]);
+
+  function toggleOpen() {
+    const next = !open;
+    setOpen(next);
+    try { localStorage.setItem(key, next ? "1" : "0"); } catch { /* 存储不可用时仍可切换 */ }
+    writePrefCookie(key, next);
+  }
 
   // 进入编辑态时把分区自动展开：否则用户点了「编辑」却因为折叠看不到任何内容
   useEffect(() => {
-    if (reveal) setOpen(true);
-  }, [reveal]);
-
-  useEffect(() => {
-    if (!collapsible || !hydrated.current) return;
-    const key = `fire:collapse:${storageKey || title}`;
-    try {
-      localStorage.setItem(key, open ? "1" : "0");
-    } catch {
-      /* 忽略 */
+    if (reveal) {
+      setOpen(true);
+      try { localStorage.setItem(key, "1"); } catch { /* 忽略 */ }
+      writePrefCookie(key, true);
     }
-  }, [open, collapsible, storageKey, title]);
+  }, [reveal, key]);
 
   return (
     <section id={id} className={`settings-section-card${collapsible ? " is-accordion" : ""} ${className || ""}`}>
       <div
         className={`settings-section-top flex items-start justify-between gap-4 ${collapsible ? "cursor-pointer select-none" : ""}`}
-        onClick={collapsible ? () => setOpen((o) => !o) : undefined}
+        onClick={collapsible ? toggleOpen : undefined}
       >
         <div className="flex min-w-0 items-start gap-3.5">
           <span className="settings-section-icon flex h-8 w-8 flex-none items-center justify-center rounded-md">
@@ -263,7 +262,7 @@ export function SettingsSection({
           {collapsible && (
             <button
               type="button"
-              onClick={() => setOpen((o) => !o)}
+              onClick={toggleOpen}
               aria-label={open ? "折叠" : "展开"}
               title={open ? "折叠" : "展开"}
               className="settings-section-chevron inline-flex h-8 w-8 items-center justify-center"

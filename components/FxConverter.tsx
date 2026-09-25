@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { IconPlus, IconRefresh, IconX } from "@tabler/icons-react";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { showToast } from "@/lib/toast";
 import {
   FX_CURRENCIES,
+  FX_EXTRA_CURRENCIES,
   FX_CURRENCY_META,
   type FxCurrency,
   amountToDraft,
@@ -62,6 +64,9 @@ export default function FxConverter() {
   const [rates, setRates] = useState<Record<string, number>>({ USD: 1 });
   const [quoted, setQuoted] = useState<Set<string>>(() => new Set(["USD"]));
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [rateError, setRateError] = useState("");
   const codes = normalizeFxOrder(savedOrder);
   const inputRefs = useRef<Partial<Record<FxCurrency, HTMLInputElement | null>>>({});
   const dragFrom = useRef<number | null>(null);
@@ -78,13 +83,13 @@ export default function FxConverter() {
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }, [base, text]);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load(force = false) {
+  const loadRates = useCallback(async (force = false) => {
+      if (force) setRefreshing(true);
+      setRateError("");
       try {
         const response = await fetch(force ? "/api/rates?refresh=1" : "/api/rates");
         const data = await response.json().catch(() => null);
-        if (cancelled || !data?.rates) return;
+        if (!response.ok || !data?.rates) throw new Error(data?.error || "获取汇率失败");
         const quotedList = Array.isArray(data.quoted)
           ? data.quoted.filter((code: unknown): code is string => typeof code === "string" && /^[A-Z]{3}$/.test(code))
           : [];
@@ -96,22 +101,24 @@ export default function FxConverter() {
         });
         setQuoted(nextQuoted);
         setRates(nextRates);
-        if (typeof data.updatedAt === "number" && data.updatedAt > 0) setUpdatedAt(data.updatedAt);
-        if (!quotedList.length && !force) {
-          await load(true);
-        }
+        setUpdatedAt(typeof data.updatedAt === "number" && data.updatedAt > 0 ? data.updatedAt : null);
+        if (force) showToast("汇率已刷新");
       } catch {
-        /* 保留当前表 */
+        if (force) {
+          setRateError("刷新失败，请稍后重试");
+          showToast("汇率刷新失败");
+        }
+      } finally {
+        if (force) setRefreshing(false);
       }
-    }
-    void load();
-    const onRates = () => { void load(true); };
-    window.addEventListener("fire:rates-updated", onRates);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("fire:rates-updated", onRates);
-    };
   }, []);
+
+  useEffect(() => {
+    void loadRates();
+    const onRates = () => { void loadRates(); };
+    window.addEventListener("fire:rates-updated", onRates);
+    return () => window.removeEventListener("fire:rates-updated", onRates);
+  }, [loadRates]);
 
   const amount = parseFxAmount(text);
 
@@ -143,10 +150,21 @@ export default function FxConverter() {
   return (
     <section className="fx-converter flex flex-col gap-4">
       <header>
-        <h2 className="text-lg font-bold text-ink">汇率换算</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-bold text-ink">汇率换算</h2>
+          <div className="relative flex items-center gap-2">
+            <button type="button" className="fx-converter-add" onClick={() => setAdding(value => !value)} aria-label="新增货币" title="新增货币" aria-expanded={adding}><IconPlus size={15} stroke={1.8} /></button>
+            <button type="button" className="fx-converter-refresh" onClick={() => void loadRates(true)} disabled={refreshing} aria-label="刷新汇率" title="刷新汇率"><IconRefresh size={15} stroke={1.8} className={refreshing ? "animate-spin" : ""} /></button>
+            {adding && <div className="fx-converter-add-menu" role="menu" aria-label="可新增货币">
+              {FX_EXTRA_CURRENCIES.filter(code => !codes.includes(code)).map(code => <button key={code} type="button" role="menuitem" onClick={() => { setSavedOrder([...codes, code]); setAdding(false); }}><CurrencyFlag market={FX_CURRENCY_META[code].iso} size={18} /><span>{FX_CURRENCY_META[code].label}</span><small>{code}</small></button>)}
+              {FX_EXTRA_CURRENCIES.every(code => codes.includes(code)) && <span className="fx-converter-add-empty">所有可选货币已添加</span>}
+            </div>}
+          </div>
+        </div>
         <p className="mt-0.5 text-xs text-muted">
           输入任一币种金额，其余货币按当前汇率跟随换算 · 拖动手柄可调整顺序
         </p>
+        {rateError && <p role="alert" className="mt-1 text-xs text-red-500">{rateError}</p>}
       </header>
 
       <div className="fx-converter-card">
@@ -232,6 +250,7 @@ export default function FxConverter() {
                       ? "暂无汇率"
                       : `1 ${base} = ${formatPairRate(rate)} ${code}`}
               </span>
+              {FX_EXTRA_CURRENCIES.includes(code as typeof FX_EXTRA_CURRENCIES[number]) && <button type="button" className="fx-converter-remove" aria-label={`移除${meta.label}`} title={`移除${meta.label}`} onClick={() => setSavedOrder(codes.filter(item => item !== code))}><IconX size={13} stroke={1.8} /></button>}
             </div>
           );
         })}

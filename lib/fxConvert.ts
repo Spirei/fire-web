@@ -23,7 +23,9 @@ export const FX_CURRENCIES = [
   "BRL"
 ] as const;
 
-export type FxCurrency = (typeof FX_CURRENCIES)[number];
+export const FX_EXTRA_CURRENCIES = ["NZD", "SEK", "NOK", "DKK", "THB", "MYR", "IDR", "PHP", "AED", "SAR"] as const;
+
+export type FxCurrency = (typeof FX_CURRENCIES)[number] | (typeof FX_EXTRA_CURRENCIES)[number];
 
 export const FX_CURRENCY_META: Record<FxCurrency, { label: string; symbol: string; iso: string }> = {
   USD: FUND_CURRENCY_META.USD,
@@ -39,10 +41,20 @@ export const FX_CURRENCY_META: Record<FxCurrency, { label: string; symbol: strin
   TWD: FUND_CURRENCY_META.TWD,
   CHF: { label: "瑞士法郎", symbol: "Fr.", iso: "CH" },
   INR: FUND_CURRENCY_META.INR,
-  BRL: FUND_CURRENCY_META.BRL
+  BRL: FUND_CURRENCY_META.BRL,
+  NZD: { label: "新西兰元", symbol: "NZ$", iso: "NZ" },
+  SEK: { label: "瑞典克朗", symbol: "kr", iso: "SE" },
+  NOK: { label: "挪威克朗", symbol: "kr", iso: "NO" },
+  DKK: { label: "丹麦克朗", symbol: "kr", iso: "DK" },
+  THB: { label: "泰铢", symbol: "฿", iso: "TH" },
+  MYR: { label: "马来西亚林吉特", symbol: "RM", iso: "MY" },
+  IDR: { label: "印尼盾", symbol: "Rp", iso: "ID" },
+  PHP: { label: "菲律宾比索", symbol: "₱", iso: "PH" },
+  AED: { label: "阿联酋迪拉姆", symbol: "د.إ", iso: "AE" },
+  SAR: { label: "沙特里亚尔", symbol: "﷼", iso: "SA" }
 };
 
-const FX_CURRENCY_SET = new Set<string>(FX_CURRENCIES);
+const FX_CURRENCY_SET = new Set<string>([...FX_CURRENCIES, ...FX_EXTRA_CURRENCIES]);
 
 export function isFxCurrency(value: unknown): value is FxCurrency {
   return typeof value === "string" && FX_CURRENCY_SET.has(value);

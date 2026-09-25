@@ -3,13 +3,13 @@
  * 1. 只请求设置里的汇率接口（currencyApiUrl），不再拼接 symbols、也不再用腾讯补缺。
  * 2. 接口没返回的币种不写入实时表；换算页显示「暂无汇率」。
  * 3. 持仓等金额换算仍用 FALLBACK_RATES 垫底，避免刷新瞬间按 1:1 错算。
- * 4. 刷新时刻由 currencyRefreshPattern 正则匹配每天的 HH:MM，默认 09:00|23:00。
+ * 4. 普通读取只用已保存汇率；外部接口仅由显式刷新调用，避免触及有限额度。
  */
 
 import { getDb } from "./db";
 import { getSiteSettings } from "./settings";
 import { FALLBACK_RATES } from "./types";
-import { extractRateMap, nextRefreshAt, parseRefreshTimes, toUsdBase } from "./currencyRefresh";
+import { extractRateMap, toUsdBase } from "./currencyRefresh";
 
 const RATES_KEY = "rates_cache";
 const REFRESH_URL = "https://api.frankfurter.dev/v1/latest?base=USD";
@@ -21,10 +21,6 @@ interface PersistedCache {
 }
 
 let memory: PersistedCache | null = null;
-
-function refreshSlots() {
-  return parseRefreshTimes(getSiteSettings().currencyRefreshPattern);
-}
 
 function loadPersisted(): PersistedCache | null {
   try {
@@ -74,6 +70,7 @@ export async function refreshRates(): Promise<Record<string, number>> {
   const settings = getSiteSettings();
   const url = (settings.currencyApiUrl || REFRESH_URL).trim();
   const res = await fetch(url, {
+    cache: "no-store",
     headers: {
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36"
     },
@@ -100,17 +97,7 @@ export function ratesUpdatedAt(): number | null {
   return typeof at === "number" && at > 0 ? at : null;
 }
 
-/** 读取汇率：优先内存 → SQLite → 兜底值；过期时后台刷新，不阻塞响应 */
+/** 读取汇率：优先内存 → SQLite → 兜底值；不自动请求外部接口。 */
 export async function getRates(): Promise<Record<string, number>> {
-  const now = Date.now();
-  const slots = refreshSlots();
-  if (memory && now < nextRefreshAt(memory.at, slots)) return withFallback(memory.rates);
-  const persisted = loadPersisted();
-  if (persisted) {
-    memory = persisted;
-    if (now >= nextRefreshAt(persisted.at, slots)) refreshRates().catch(() => {});
-    return withFallback(persisted.rates);
-  }
-  refreshRates().catch(() => {});
-  return withFallback(null);
+  return withFallback(liveCache()?.rates ?? null);
 }
