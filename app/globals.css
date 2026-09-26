@@ -5912,17 +5912,24 @@ button.PhotoView-Slider__toolbarIcon {
 .card-wander-meteor-finish { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none; }
 .card-wander-meteor-finish::after { content: ""; position: absolute; inset: -30%; background: linear-gradient(112deg, transparent 48.5%, rgba(219,237,248,.2) 50%, transparent 51.5%); animation: card-wander-meteor-seal .65s ease-out both; }
 @keyframes card-wander-meteor-seal { from { transform: translate3d(-45%,0,0); opacity: 0; } 22% { opacity: 1; } to { transform: translate3d(45%,0,0); opacity: 0; } }
-.card-wander-preview-stage[data-effect="stardust"] .card-wander-effect-sheen,
-.card-wander-zoom-card[data-effect="stardust"] .card-wander-effect-sheen {
-  background: radial-gradient(circle at 27% 28%, rgba(255,250,223,.9) 0 1px, rgba(255,250,223,.22) 3px, transparent 11px), radial-gradient(circle at 39% 67%, rgba(255,245,204,.82) 0 1px, rgba(255,245,204,.16) 3px, transparent 9px), radial-gradient(circle at 52% 39%, rgba(255,255,239,.86) 0 1px, rgba(255,255,239,.2) 3px, transparent 12px), radial-gradient(circle at 64% 72%, rgba(255,239,198,.88) 0 1px, rgba(255,239,198,.18) 3px, transparent 10px), radial-gradient(circle at 73% 44%, rgba(255,250,225,.86) 0 1px, rgba(255,250,225,.2) 3px, transparent 11px), radial-gradient(ellipse 45% 38% at 50% 50%, rgba(241,213,166,.1), transparent 80%);
-  opacity: .64;
-  animation: card-wander-effect-stardust 7.5s ease-in-out infinite alternate;
+.card-wander-preview-stage[data-effect="fireflies"] .card-wander-effect-sheen,
+.card-wander-zoom-card[data-effect="fireflies"] .card-wander-effect-sheen {
+  inset: 0; overflow: hidden; background: none; opacity: 1; animation: none; will-change: auto;
 }
-.card-wander-preview-stage[data-effect="stardust"] .card-wander-effect-glare,
-.card-wander-preview-stage[data-effect="stardust"] .card-wander-effect-spec { opacity: .24; }
+.card-wander-preview-stage[data-effect="fireflies"] .card-wander-effect-glare,
+.card-wander-preview-stage[data-effect="fireflies"] .card-wander-effect-spec { display: none; }
+.card-wander-firefly { position: absolute; width: 24px; height: 24px; margin: -12px; pointer-events: none; animation: card-wander-effect-fireflies var(--fly-duration) var(--fly-delay) ease-in-out infinite; }
+.card-wander-firefly::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle, rgba(219,246,135,.28), rgba(185,226,94,.12) 28%, transparent 68%); animation: card-wander-firefly-glow var(--fly-glow) var(--fly-delay) ease-in-out infinite; }
+.card-wander-firefly::after { content: ""; position: absolute; left: 50%; top: 50%; width: var(--fly-size); height: var(--fly-size); margin: -1px; border-radius: 50%; background: #f5ffc1; box-shadow: 0 0 4px 1px #c5e77590; animation: card-wander-firefly-glow var(--fly-glow) var(--fly-delay) ease-in-out infinite; }
 @keyframes card-wander-effect-sweep { from { transform: translate3d(-14%,0,0); } to { transform: translate3d(14%,0,0); } }
 @keyframes card-wander-effect-rainbow { from { transform: translate3d(-8%,-5%,0); } to { transform: translate3d(8%,5%,0); } }
-@keyframes card-wander-effect-stardust { from { transform: translate3d(-5%,2%,0); opacity: .48; } 50% { opacity: .78; } to { transform: translate3d(5%,-2%,0); opacity: .58; } }
+@keyframes card-wander-effect-fireflies {
+  0%, 100% { transform: translate3d(0,0,0); }
+  28% { transform: translate3d(var(--fly-x),calc(var(--fly-y) * .4),0); }
+  56% { transform: translate3d(calc(var(--fly-x) * .45),var(--fly-y),0); }
+  79% { transform: translate3d(calc(var(--fly-x) * -.35),calc(var(--fly-y) * .65),0); }
+}
+@keyframes card-wander-firefly-glow { 0%, 100% { opacity: .12; } 24% { opacity: .38; } 48% { opacity: .95; } 66% { opacity: .7; } 85% { opacity: .18; } }
 .card-wander-wallet { position: relative; flex: none; width: 260px; height: 452px; margin-top: 16px; overflow: hidden; border: 5px solid #34393f; border-radius: 39px; background: #060709; box-shadow: 0 12px 40px #000b, inset 0 0 0 2px #050607; color: #f6f7f9; transition: translate .74s cubic-bezier(.22,1,.36,1); }
 .card-wander-wallet[data-payment="true"] { translate: 0 -65px; }
 .card-wander-wallet-island { position: absolute; z-index: 2; top: 7px; left: 50%; width: 70px; height: 18px; transform: translateX(-50%); border-radius: 999px; background: #050607; }
@@ -6007,7 +6014,6 @@ button.PhotoView-Slider__toolbarIcon {
 .card-wander-zoom-card[data-effect="holo"] .card-wander-effect-sheen { background: repeating-linear-gradient(120deg, #df4949 0%, #e3a53b 3.5%, #90c841 7%, #33cca6 10.5%, #4d99e6 14%, #9f68df 17.5%, #e052a5 21%, #df4949 24.5%); opacity: .3; mix-blend-mode: hard-light; animation: card-wander-effect-rainbow 6s linear infinite alternate; }
 .card-wander-zoom-card[data-effect="metal"] .card-wander-effect-sheen { background: linear-gradient(98deg, #454b54 0%, #7b848e 22%, #c3bfb6 38%, #75808a 50%, #535a65 64%, #afa9a1 80%, #4e555f 100%); opacity: .48; mix-blend-mode: overlay; animation: card-wander-effect-sweep 5s ease-in-out infinite alternate; }
 .card-wander-zoom-card[data-effect="metal"]::after { content: ""; position: absolute; inset: -35% -40%; background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.03) 42%, rgba(255,255,255,.27) 50%, rgba(255,255,255,.03) 58%, transparent 65%); mix-blend-mode: screen; pointer-events: none; animation: card-wander-effect-sweep 4.1s ease-in-out infinite alternate; }
-.card-wander-zoom-card[data-effect="stardust"] .card-wander-effect-sheen { filter: brightness(1.25); }
 .card-wander-zoom-close {
   position: relative;
   z-index: 1;
@@ -6043,6 +6049,8 @@ button.PhotoView-Slider__toolbarIcon {
   .card-wander-fragment::before, .card-wander-meteor-finish { display: none; }
   .card-wander-world, .card-wander-wall, .card-wander-tile, .card-wander-modal, .card-wander-modal-backdrop, .card-wander-zoom-backdrop::before { animation: none; }
   .card-wander-tile, .card-wander-pill, .card-wander-shuffle { transition: none; }
+  .card-wander-firefly, .card-wander-firefly::before, .card-wander-firefly::after { animation: none; }
+  .card-wander-firefly { opacity: .45; }
   .card-wander-effect-tilt, .card-wander-effect-sheen, .card-wander-effect-glare, .card-wander-effect-spec, .card-wander-zoom-card::after { animation: none !important; transition: none; }
   .card-wander-wallet, .card-wander-wallet-card, .card-wander-wallet-stack, .card-wander-seg-thumb { animation: none !important; transition: none !important; }
   .card-wander-wallet-reader-ring, .card-wander-wallet-face { animation: none !important; }

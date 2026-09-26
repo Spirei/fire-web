@@ -31,7 +31,7 @@ const DRIFT_SPEED_PER_SECOND = 9.5;
 const DRIFT_ANGLE_PER_SECOND = 0.0006;
 const DRIFT_TRAVEL_X = 320;
 const DRIFT_TRAVEL_Y = 180;
-type PreviewEffect = "gloss" | "holo" | "metal" | "meteor" | "stardust";
+type PreviewEffect = "gloss" | "holo" | "metal" | "meteor" | "fireflies";
 type PreviewMode = "showcase" | "wallet" | "actual";
 const PREVIEW_MODES: { key: PreviewMode; label: string }[] = [
   { key: "showcase", label: "展示" },
@@ -43,7 +43,7 @@ const PREVIEW_EFFECTS: { key: PreviewEffect; label: string }[] = [
   { key: "holo", label: "幻彩" },
   { key: "metal", label: "金属" },
   { key: "meteor", label: "流星" },
-  { key: "stardust", label: "星砂" }
+  { key: "fireflies", label: "萤火虫" }
 ];
 
 function newPosition() { return { x: 0, y: 0, scale: 1 }; }
@@ -72,6 +72,22 @@ function WanderTile({ card, observeTile, onSelect }: {
       {nearViewport && <img src={card.image} alt="" draggable={false} loading="eager" decoding="async" />}
     </button>
   );
+}
+
+/** 固定初始位置避免首帧差异；每只虫的飞行和发光周期独立。 */
+function EffectSheen({ effect }: { effect: PreviewEffect }) {
+  return <span className="card-wander-effect-sheen" aria-hidden="true">
+    {effect === "fireflies" && [
+      [14, 28, 8.4, -2.1, 22, -18], [29, 71, 10.2, -5.3, -18, -27],
+      [44, 38, 9.1, -1.2, 25, 16], [61, 76, 11.3, -7.2, 19, -23],
+      [78, 25, 9.8, -4.6, -24, 19], [85, 61, 12.1, -8.1, -21, -16],
+      [54, 17, 10.7, -3.8, -16, 23], [18, 52, 11.8, -6.4, 18, 21]
+    ].map(([x, y, duration, delay, dx, dy], index) => <span key={index} className="card-wander-firefly" style={{
+      left: `${x}%`, top: `${y}%`, "--fly-duration": `${duration}s`, "--fly-delay": `${delay}s`,
+      "--fly-x": `${dx}px`, "--fly-y": `${dy}px`, "--fly-glow": `${3.2 + index * .37}s`,
+      "--fly-size": `${index % 3 === 0 ? 3 : 2}px`
+    } as CSSProperties} />)}
+  </span>;
 }
 
 const FRAGMENT_COLS = 10;
@@ -770,7 +786,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
             }}>
               <div ref={effectTiltRef} className="card-wander-effect-tilt">
                 {previewEffect === "meteor" ? <FragmentCard image={selectedCard.image} name={selectedCard.name} className="card-wander-modal-image" /> : <img className="card-wander-modal-image" src={selectedCard.image} alt={selectedCard.name} draggable={false} />}
-                <span className="card-wander-effect-sheen" aria-hidden="true" />
+                <EffectSheen effect={previewEffect} />
                 <span ref={effectGlareRef} className="card-wander-effect-glare" aria-hidden="true" />
                 <span ref={effectSpecRef} className="card-wander-effect-spec" aria-hidden="true" />
               </div>
@@ -783,7 +799,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
               <div className="card-wander-wallet-stack" aria-hidden="true"><span /><span /><span /></div>
               <button ref={zoomSourceRef} type="button" className="card-wander-wallet-card" aria-label={`模拟刷卡：${selectedCard.name}`} aria-pressed={walletPayment} onClick={() => setWalletPayment((open) => !open)}>
                 <img src={selectedCard.image} alt={selectedCard.name} draggable={false} />
-                <span className="card-wander-effect-sheen" aria-hidden="true" />
+                <EffectSheen effect={previewEffect} />
               </button>
               <div className="card-wander-wallet-hint" aria-hidden="true">轻点卡面，试试刷卡</div>
               <div className="card-wander-wallet-reader" aria-hidden="true"><span className="card-wander-wallet-reader-ring">▯</span><span>靠近读卡器</span></div>
@@ -812,7 +828,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
                   region.scrollLeft = Math.max(0, (region.scrollWidth - region.clientWidth) / 2);
                   region.scrollTop = Math.max(0, (region.scrollHeight - region.clientHeight) / 2);
                 }} />
-                <span className="card-wander-effect-sheen" aria-hidden="true" />
+                <EffectSheen effect={previewEffect} />
               </button>
             </div>}
             {previewMode === "actual" && <span className="card-wander-actual-hint" aria-hidden="true">拖动或滚动查看全图</span>}
@@ -868,7 +884,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
         <div ref={zoomRef} className="card-wander-zoom-backdrop" role="dialog" aria-modal="true" aria-label={`放大查看 ${selectedCard.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) void closeZoom(); }}>
           <div ref={zoomImageRef} className="card-wander-zoom-card" data-effect={zoomEffect}>
             {zoomEffect === "meteor" ? <FragmentCard image={selectedCard.image} name={selectedCard.name} className="card-wander-zoom-image" /> : <img className="card-wander-zoom-image" src={selectedCard.image} alt={selectedCard.name} draggable={false} />}
-            <span className="card-wander-effect-sheen" aria-hidden="true" />
+            <EffectSheen effect={zoomEffect} />
           </div>
           <button ref={zoomCloseRef} type="button" className="card-wander-zoom-close" onClick={() => void closeZoom()}><span aria-hidden="true">×</span> 关闭</button>
         </div>
