@@ -4488,7 +4488,7 @@ export const V0_1_41_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_42_ENTRY: VersionEntry = {
   ...V0_1_41_ENTRY,
   version: "v0.1.42",
   date: "2026-09-26",
@@ -4552,11 +4552,23 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
 };
 
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_42_ENTRY,
+  version: "v0.1.43",
+  date: "2026-09-27",
+  summary: "API 文档采用参考视频的雾灰玻璃目录与刻度交互。",
+  software: V0_1_42_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.43" } : item),
+  changes: [
+    { kind: "feature", title: "API 文档玻璃目录", desc: "按参考视频逐帧区域取色，采用雾灰窗口、浅青背景与暖桃色透光，目录增加细刻度、彩色圆点及跟随当前行的圆形标记，子目录原位展开。保留代码复制与管理员编辑，取消编辑直接还原已确认内容，修复当前分组无法收起；适配深色、移动视口与减少动态效果设置。" }
+  ]
+};
+
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_42_ENTRY,
   V0_1_41_ENTRY,
   V0_1_40_ENTRY,
   V0_1_39_ENTRY,
