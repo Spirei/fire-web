@@ -6,6 +6,7 @@ import CurrencyFlag from "@/components/CurrencyFlag";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { showToast } from "@/lib/toast";
+import { sharedRead } from "@/lib/sharedRead";
 import {
   FX_CURRENCIES,
   FX_EXTRA_CURRENCIES,
@@ -111,12 +112,18 @@ export default function FxConverter() {
     }
   }, [base, visibleKey]);
 
+  const rateRequestRef = useRef(0);
+  const refreshPendingRef = useRef(false);
   const loadRates = useCallback(async (force = false) => {
+      if (refreshPendingRef.current) return;
+      const requestId = ++rateRequestRef.current;
+      if (force) refreshPendingRef.current = true;
       if (force) setRefreshing(true);
       setRateError("");
       try {
-        const response = await fetch(force ? "/api/rates?refresh=1" : "/api/rates");
+        const response = await sharedRead(force ? "/api/rates?refresh=1" : "/api/rates");
         const data = await response.json().catch(() => null);
+        if (requestId !== rateRequestRef.current) return;
         if (!response.ok || !data?.rates) throw new Error(data?.error || "获取汇率失败");
         const quotedList = Array.isArray(data.quoted)
           ? data.quoted.filter((code: unknown): code is string => typeof code === "string" && /^[A-Z]{3}$/.test(code))
@@ -138,12 +145,14 @@ export default function FxConverter() {
         setUpdatedAt(typeof data.updatedAt === "number" && data.updatedAt > 0 ? data.updatedAt : null);
         if (force) showToast("汇率已刷新");
       } catch {
+        if (requestId !== rateRequestRef.current) return;
+        setRateError(force ? "刷新失败，请稍后重试" : "汇率加载失败，请点击刷新重试");
         if (force) {
-          setRateError("刷新失败，请稍后重试");
           showToast("汇率刷新失败");
         }
       } finally {
-        if (force) setRefreshing(false);
+        if (force) refreshPendingRef.current = false;
+        if (force && requestId === rateRequestRef.current) setRefreshing(false);
       }
   }, []);
 
@@ -151,7 +160,10 @@ export default function FxConverter() {
     void loadRates();
     const onRates = () => { void loadRates(); };
     window.addEventListener("fire:rates-updated", onRates);
-    return () => window.removeEventListener("fire:rates-updated", onRates);
+    return () => {
+      ++rateRequestRef.current;
+      window.removeEventListener("fire:rates-updated", onRates);
+    };
   }, [loadRates]);
 
   useEffect(() => {

@@ -21,6 +21,7 @@ interface PersistedCache {
 }
 
 let memory: PersistedCache | null = null;
+const pendingRefreshes = new Map<string, Promise<Record<string, number>>>();
 
 function loadPersisted(): PersistedCache | null {
   try {
@@ -69,6 +70,16 @@ function withFallback(live: Record<string, number> | null): Record<string, numbe
 export async function refreshRates(): Promise<Record<string, number>> {
   const settings = getSiteSettings();
   const url = (settings.currencyApiUrl || REFRESH_URL).trim();
+  const pending = pendingRefreshes.get(url);
+  if (pending) return pending;
+  const task = fetchRates(url).finally(() => {
+    if (pendingRefreshes.get(url) === task) pendingRefreshes.delete(url);
+  });
+  pendingRefreshes.set(url, task);
+  return task;
+}
+
+async function fetchRates(url: string): Promise<Record<string, number>> {
   const res = await fetch(url, {
     cache: "no-store",
     headers: {
@@ -76,6 +87,7 @@ export async function refreshRates(): Promise<Record<string, number>> {
     },
     signal: AbortSignal.timeout(15000)
   });
+  if (!res.ok) throw new Error(`汇率接口请求失败 (${res.status})`);
   const data = await res.json().catch(() => null);
   const extracted = extractRateMap(data);
   if (!extracted) throw new Error("汇率接口返回格式异常");

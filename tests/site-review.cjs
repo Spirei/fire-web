@@ -686,6 +686,31 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(moveFxOrder(untouched, 0, 0), untouched);
     assert.deepEqual(moveFxOrder(['USD', 'EUR'], 9, 0), ['USD', 'EUR']);
   });
+  await test('rate refresh shares concurrent upstream calls, preserves cache on HTTP errors and retries', async () => {
+    const rates = require(path.join(root, 'lib/rates.ts'));
+    const original = global.fetch;
+    let calls = 0;
+    let finish;
+    global.fetch = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
+    try {
+      const a = rates.refreshRates();
+      const b = rates.refreshRates();
+      assert.equal(calls, 1);
+      finish(Response.json({ rates: { USD: 1, CNY: 7.1 } }));
+      const [first, second] = await Promise.all([a, b]);
+      assert.equal(first.CNY, 7.1);
+      assert.deepEqual(first, second);
+      const at = rates.ratesUpdatedAt();
+      global.fetch = async () => { calls++; return Response.json({ rates: { USD: 1, CNY: 99 } }, { status: 429 }); };
+      await assert.rejects(rates.refreshRates(), /429/);
+      assert.equal((await rates.getRates()).CNY, 7.1);
+      assert.equal(rates.ratesUpdatedAt(), at);
+      assert.equal(calls, 2, 'ordinary reads never fetch upstream');
+      global.fetch = async () => { calls++; return Response.json({ rates: { USD: 1, CNY: 7.2 } }); };
+      assert.equal((await rates.refreshRates()).CNY, 7.2);
+      assert.equal(calls, 3, 'failure does not poison subsequent refresh');
+    } finally { global.fetch = original; }
+  });
   await test('currency refresh pattern extracts HH:MM and normalizes USD base', () => {
     const { parseRefreshTimes, nextRefreshAt, extractRateMap, toUsdBase, compileCurrencyRefreshRegex } = require(path.join(root, 'lib/currencyRefresh.ts'));
     assert.deepEqual(parseRefreshTimes('09:00|23:00').map((item) => item.label), ['09:00', '23:00']);
