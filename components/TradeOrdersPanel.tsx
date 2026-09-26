@@ -1727,7 +1727,7 @@ export default function TradeOrdersPanel({
                   type="button"
                   disabled={importing || importPreview.imported === 0}
                   onClick={() => confirmImport(previewFileRef.current!)}
-                  className="btn btn-sm disabled:opacity-60"
+                  className="btn btn-line btn-sm disabled:opacity-60"
                 >
                   {importing ? "导入中…" : `确认导入 ${importPreview.imported} 笔`}
                 </button>

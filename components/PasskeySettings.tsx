@@ -42,14 +42,14 @@ export default function PasskeySettings({ admin }: { admin: boolean }) {
       const { options, requestId } = await passkeyRequest({ action: "register-options", password, code });
       const response = await startRegistration({ optionsJSON: options });
       await passkeyRequest({ action: "register-verify", requestId, response, name: name.trim() || "通行密钥" });
-      setName(""); await load(); setMessage("通行密钥已添加，下次可直接验证登录");
+      setName(""); await load(); setMessage("通行密钥已添加");
     });
   }
   async function save() {
-    if (config?.origin && config.origin !== draft.origin.replace(/\/$/, "") && !await appConfirm("更改域名后，原域名的通行密钥无法在新域名使用，需要重新添加。继续保存？", { title: "更改通行密钥域名" })) return;
+    if (config?.origin && config.origin !== draft.origin.replace(/\/$/, "") && !await appConfirm("更换域名后，需重新添加通行密钥。继续保存？", { title: "更换域名" })) return;
     await run(async () => {
       await passkeyRequest({ ...draft, currentPassword: password, code }, "PUT", "/api/auth/passkeys/config");
-      await load(); setMessage("通行密钥配置已保存");
+      await load(); setMessage("已保存");
     });
   }
   async function rename(key: Key) {
@@ -58,7 +58,7 @@ export default function PasskeySettings({ admin }: { admin: boolean }) {
     await run(async () => { await passkeyRequest({ id: key.id, name: value }, "PATCH"); await load(); setMessage("名称已更新"); });
   }
   async function remove(key: Key) {
-    if (!await appConfirm(`删除「${key.name}」后，将退出通过它登录的会话；升级前无法识别来源的旧会话也会退出。若包含当前会话，需要重新登录。密码登录仍可使用。`, { title: "删除通行密钥", danger: true })) return;
+    if (!await appConfirm(`删除「${key.name}」将退出相关登录及来源不明的旧登录，可能需要重新登录。仍可使用密码登录。`, { title: "删除通行密钥", danger: true })) return;
     await run(async () => {
       const result = await passkeyRequest({ id: key.id, password, code }, "DELETE");
       if (result.signedOut) { window.location.replace("/login"); return; }
@@ -68,9 +68,9 @@ export default function PasskeySettings({ admin }: { admin: boolean }) {
   const verifiedInput = !!password && (!totp || !!code);
   return <div id="passkeys" className="flex flex-col gap-6">
     <SettingsHeader name="passkeys" title="通行密钥" />
-    <p className="text-sm text-muted">用 Face ID、Touch ID、设备 PIN 或密码管理器验证登录。支持 iCloud 钥匙串、Bitwarden、1Password 等，无需输入登录密码。</p>
+    <p className="text-sm text-muted">使用设备解锁或密码管理器登录，支持 iCloud、Bitwarden、1Password。</p>
     {message && <p role="status" className="rounded-xl border border-edge bg-bg-gray p-3 text-sm text-ink">{message}</p>}
-    {!config && <button className="btn btn-ghost self-start" type="button" onClick={() => void load().catch(error => setMessage(passkeyError(error)))}>重新加载</button>}
+    {!config && <button className="btn btn-line btn-sm self-start disabled:opacity-50" type="button" onClick={() => void load().catch(error => setMessage(passkeyError(error)))}>重试</button>}
     {admin && config && <section className="rounded-2xl border border-edge p-4 sm:p-5">
       <h3 className="font-semibold">站点配置</h3>
       <div className="mt-4 flex items-center justify-between gap-4"><span className="text-sm">启用通行密钥登录</span>
@@ -79,14 +79,14 @@ export default function PasskeySettings({ admin }: { admin: boolean }) {
           <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full shadow transition-transform duration-300" style={{ backgroundColor: "#fff", transform: draft.enabled ? "translateX(16px)" : "translateX(0)", transitionTimingFunction: "cubic-bezier(.32,.72,0,1)" }} />
         </button>
       </div>
-      <label className="mt-4 flex flex-col gap-2 text-sm">站点 HTTPS 地址<input className="field w-full" type="url" value={draft.origin} onChange={e => setDraft({ ...draft, origin: e.target.value })} placeholder="https://fire.example.com" disabled={busy} /></label>
-      <label className="mt-4 flex flex-col gap-2 text-sm">验证时显示的站点名称<input className="field w-full" value={draft.name} maxLength={64} onChange={e => setDraft({ ...draft, name: e.target.value })} disabled={busy} /></label>
-      <p className="mt-3 text-xs text-muted">每个部署独立配置域名。更换域名后需重新添加通行密钥；已有密钥不会被自动删除。</p>
-      <button type="button" className="btn btn-ghost mt-4" disabled={busy || !verifiedInput} onClick={save}>保存站点配置</button>
+      <label className="mt-4 flex flex-col gap-2 text-sm">HTTPS 地址<input className="field w-full" type="url" value={draft.origin} onChange={e => setDraft({ ...draft, origin: e.target.value })} placeholder="https://fire.example.com" disabled={busy} /></label>
+      <label className="mt-4 flex flex-col gap-2 text-sm">站点名称<input className="field w-full" value={draft.name} maxLength={64} onChange={e => setDraft({ ...draft, name: e.target.value })} disabled={busy} /></label>
+      <p className="mt-3 text-xs text-muted">更换域名后需重新添加密钥。</p>
+      <button type="button" className="btn btn-line btn-sm mt-4 disabled:opacity-50" disabled={busy || !verifiedInput} onClick={save}>保存</button>
     </section>}
     <section className="rounded-2xl border border-edge p-4 sm:p-5">
       <h3 className="font-semibold">安全验证</h3>
-      <p className="mt-1 text-xs text-muted">添加、删除密钥或修改站点配置时，需要确认是你本人。</p>
+      <p className="mt-1 text-xs text-muted">添加、删除或保存前，请先验证。</p>
       <label className="mt-4 flex flex-col gap-2 text-sm">当前密码<input className="field w-full" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} disabled={busy} /></label>
       {totp && <label className="mt-4 flex flex-col gap-2 text-sm">二次验证码或备用码<input className="field w-full" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} disabled={busy} /></label>}
     </section>
@@ -94,14 +94,14 @@ export default function PasskeySettings({ admin }: { admin: boolean }) {
       <h3 className="font-semibold">我的通行密钥</h3>
       {keys.length === 0 && <p className="mt-3 text-sm text-muted">尚未添加通行密钥</p>}
       <ul className="divide-y divide-edge">{keys.map(key => <li key={key.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
-        <div className="min-w-0"><p className="break-all font-medium">{key.name}</p><p className="mt-1 break-all text-xs text-muted">{key.rpID} · {key.backedUp ? "支持同步且已备份" : "设备或密码管理器保管"}</p><p className="mt-1 text-xs text-muted">{key.lastUsedAt ? `最近使用：${new Date(key.lastUsedAt).toLocaleString()}` : `添加于：${new Date(key.createdAt).toLocaleString()}`}</p></div>
-        <div className="flex gap-2"><button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => rename(key)}>重命名</button><button className="btn btn-ghost btn-sm !text-up" disabled={busy || !verifiedInput} onClick={() => remove(key)}>删除</button></div>
+        <div className="min-w-0"><p className="break-all font-medium">{key.name}</p><p className="mt-1 break-all text-xs text-muted">{key.rpID} · {key.backedUp ? "已同步备份" : "设备或密码管理器保管"}</p><p className="mt-1 text-xs text-muted">{key.lastUsedAt ? `最近使用：${new Date(key.lastUsedAt).toLocaleString()}` : `添加于：${new Date(key.createdAt).toLocaleString()}`}</p></div>
+        <div className="flex gap-2"><button className="btn btn-line btn-sm disabled:opacity-50" disabled={busy} onClick={() => rename(key)}>重命名</button><button className="btn btn-line btn-sm !text-up disabled:opacity-50" disabled={busy || !verifiedInput} onClick={() => remove(key)}>删除</button></div>
       </li>)}</ul>
-      {!config?.enabled ? <p className="mt-4 text-sm text-muted">管理员启用后即可添加和使用通行密钥。</p> : !supported || origin !== config.origin ? <p className="mt-4 text-sm text-muted">请使用支持通行密钥的浏览器，通过 <a className="underline" href={config.origin}>{config.origin}</a> 添加。</p> : <>
-        <label className="mt-4 flex flex-col gap-2 text-sm">密钥名称<input className="field w-full" value={name} maxLength={64} onChange={e => setName(e.target.value)} placeholder="例如：iCloud、Bitwarden、随身安全密钥" disabled={busy} /></label>
-        <button type="button" className="btn btn-ghost mt-4" disabled={busy || !verifiedInput || keys.length >= 20} onClick={add}>{busy ? "处理中…" : "添加通行密钥"}</button>
+      {!config?.enabled ? <p className="mt-4 text-sm text-muted">管理员启用后即可添加。</p> : !supported || origin !== config.origin ? <p className="mt-4 text-sm text-muted">请在支持通行密钥的浏览器中，访问 <a className="break-all underline" href={config.origin}>{config.origin}</a> 添加。</p> : <>
+        <label className="mt-4 flex flex-col gap-2 text-sm">密钥名称<input className="field w-full" value={name} maxLength={64} onChange={e => setName(e.target.value)} placeholder="如 iCloud、Bitwarden" disabled={busy} /></label>
+        <button type="button" className="btn btn-line btn-sm mt-4 disabled:opacity-50" disabled={busy || !verifiedInput || keys.length >= 20} onClick={add}>{busy ? "处理中…" : "添加密钥"}</button>
       </>}
-      <p className="mt-3 text-xs text-muted">通行密钥登录会要求设备解锁验证，无需再输入 TOTP。密码登录及其二次验证仍可使用。</p>
+      <p className="mt-3 text-xs text-muted">设备验证后即可登录，无需二次验证码；密码登录仍可用。</p>
     </section>
   </div>;
 }
