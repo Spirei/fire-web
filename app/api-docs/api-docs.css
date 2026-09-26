@@ -5,9 +5,10 @@
   --reference-muted: #909296;
   --reference-hover: #c8cacd;
   --reference-blue: #5875b5;
+  --reference-inset: clamp(16px, 4vw, 56px);
   background: radial-gradient(ellipse at 10% 95%, #d9b69e 0, transparent 46%),
     radial-gradient(ellipse at 85% 65%, #cce4e4 0, transparent 52%), #d4e8e6;
-  padding: clamp(16px, 4vw, 56px);
+  padding: var(--reference-inset);
   color: var(--reference-ink);
 }
 .api-reference-window {
@@ -17,7 +18,7 @@
   max-width: 1440px;
   display: flex;
   flex-direction: column;
-  height: calc(100svh - 112px);
+  height: calc(100svh - var(--reference-inset) - var(--reference-inset));
   min-height: 460px;
   overflow: clip;
   border: 1px solid #ffffff80;
@@ -54,6 +55,8 @@
 .api-reference-layout { flex: 1; min-height: 0; gap: 28px; padding: 24px 28px 28px 12px; grid-template-columns: 292px minmax(0, 1fr); }
 .api-reference-layout aside { min-width: 0; min-height: 0; }
 .api-reference-layout[data-has-toc="false"] { grid-template-columns: minmax(0,1fr); }
+.api-reference-grip { display: flex; justify-content: center; gap: 4px; padding: 0 0 16px; opacity: .28; }
+.api-reference-grip i { width: 3px; height: 3px; border-radius: 50%; background: #9da1a4; }
 .api-reference-shell .api-docs-toc {
   position: sticky;
   top: 18px;
@@ -67,39 +70,50 @@
 }
 .api-docs-toc > div:first-of-type { padding: 0 10px 14px; opacity: .65; }
 .api-reference-ruler {
-  position: absolute; left: 12px; top: 8px; bottom: 8px; width: 18px; pointer-events: none;
-  background: repeating-linear-gradient(to bottom, #777b7e22 0 1px, transparent 1px 10px);
+  position: absolute; left: 12px; top: 8px; width: 18px; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, #777b7e22 0 1px, transparent 1px 11.5px);
   mask-image: linear-gradient(transparent, #000 24px, #000 calc(100% - 30px), transparent);
 }
-.api-reference-ruler::after { content: ""; position: absolute; inset: 0 9px 0 0; background: repeating-linear-gradient(to bottom, #777b7e32 0 1px, transparent 1px 40px); }
+.api-reference-ruler::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 1px; background: #777b7e14; }
+.api-reference-ruler::after { content: ""; position: absolute; inset: 0 9px 0 0; background: repeating-linear-gradient(to bottom, #777b7e32 0 1px, transparent 1px 34.5px); background-position: inherit; }
 .api-reference-marker {
-  position: absolute; top: -7px; left: 9px; width: 14px; height: 14px; z-index: 2;
+  position: absolute; top: -10px; left: 2px; width: 20px; height: 20px; z-index: 2;
   border-radius: 50%; background: radial-gradient(circle, #30363c 38%, #62676b 42% 47%, #343a40 52% 64%, #83898d 68% 72%, #2e353c 76%);
   box-shadow: 0 1px 3px #00000030; pointer-events: none;
-  transition: transform 160ms cubic-bezier(.22,.68,.3,1);
+  transition: transform 360ms cubic-bezier(.16,1,.3,1);
 }
-.api-reference-marker i { position: absolute; inset: 5px; border-radius: 50%; background: #dc7475; }
+.api-reference-marker::after { content: ""; position: absolute; left: 27px; top: 9px; width: 16px; height: 1px; background: var(--reference-accent, #929699); transition: background-color 180ms ease-out; }
+.api-reference-marker i { position: absolute; inset: 7px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ed8082, #ce545c); }
 .api-reference-shell .api-docs-toc-item {
-  position: relative; min-height: 34px; padding: 7px 10px; gap: 9px;
+  position: relative; min-height: 34.5px; padding: 7px 10px; gap: 9px;
   color: var(--reference-ink); font-size: 12px; font-weight: 600; border-radius: 7px;
   background: transparent; transition: background-color 140ms, color 140ms;
 }
 .api-reference-shell .api-docs-toc-item:hover,
-.api-reference-shell .api-docs-toc-item:focus-visible,
-.api-reference-shell .api-docs-toc-item[data-current] { background: var(--reference-hover); color: #30343a; }
-.api-reference-pip { flex: 0 0 5px; height: 5px; border-radius: 50%; background: #b67300; }
-.api-reference-pip.pip-1 { background: #459749; }
-.api-reference-pip.pip-2 { background: #118ba8; }
-.api-reference-pip.pip-3 { background: #59a2ec; }
-.api-reference-pip.pip-4 { background: #9d1f93; }
-.api-reference-pip.pip-5 { background: #e0493c; }
-.api-reference-pip.pip-6 { background: #b06000; }
-.api-reference-children { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 220ms cubic-bezier(.2,.7,.3,1), opacity 160ms; }
+.api-reference-shell .api-docs-toc-item:focus-visible { background: var(--reference-hover); color: #30343a; }
+.api-reference-shell .api-docs-toc-item[data-current] { color: #30343a; }
+.api-reference-row-label { padding: 2px 4px; margin: -2px -4px; border-radius: 5px; transition: background-color 110ms ease-out, color 110ms ease-out; }
+.api-docs-toc-item[data-current] .api-reference-row-label,
+.api-reference-children button[aria-current] .api-reference-row-label { background: #c8cacd80; }
+.api-reference-shell .pip-0 { --reference-accent: #b67300; }
+.api-reference-shell .pip-1 { --reference-accent: #459749; }
+.api-reference-shell .pip-2 { --reference-accent: #118ba8; }
+.api-reference-shell .pip-3 { --reference-accent: #59a2ec; }
+.api-reference-shell .pip-4 { --reference-accent: #9d1f93; }
+.api-reference-shell .pip-5 { --reference-accent: #e0493c; }
+.api-reference-shell .pip-6 { --reference-accent: #b06000; }
+.api-reference-pip { flex: 0 0 5px; height: 5px; border-radius: 50%; background: var(--reference-accent); }
+.api-reference-children { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 120ms cubic-bezier(.2,.75,.25,1), opacity 90ms ease-out; }
 .api-reference-children.is-open { grid-template-rows: 1fr; opacity: 1; }
 .api-reference-children > div { overflow: hidden; min-height: 0; }
-.api-reference-children button { min-height: 30px; border: 0; color: var(--reference-muted); background: transparent; font-size: 11px; }
+.api-reference-tree { gap: 0; }
+.api-reference-children button { min-height: 34.5px; margin-top: 0; margin-left: 32px; width: calc(100% - 32px); padding-left: 16px; border: 0; color: var(--reference-muted); background: transparent; font-size: 11.5px; }
+.api-reference-children .api-reference-row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .api-reference-children button:hover, .api-reference-children button:focus-visible,
-.api-reference-children button[aria-current] { background: #d6d6db99; color: var(--reference-ink); }
+.api-reference-children button[aria-current] { color: var(--reference-ink); }
+.api-reference-children button:hover .api-reference-row-label,
+.api-reference-children button:focus-visible .api-reference-row-label { background: var(--reference-hover); }
+.api-docs-toc-item svg { transition-duration: 120ms; transition-timing-function: cubic-bezier(.2,.75,.25,1); }
 .api-reference-shell .api-docs-paper {
   min-height: 0;
   overflow: auto;
@@ -138,8 +152,24 @@
 .dark .api-reference-shell .api-docs-toc-item:hover,
 .dark .api-reference-shell .api-docs-toc-item:focus-visible,
 .dark .api-reference-shell .api-docs-toc-item[data-current] { color: #e0e5e7; }
-.dark .api-reference-children button:hover,
-.dark .api-reference-children button[aria-current] { background: #394247; }
+.dark .api-docs-toc-item[data-current] .api-reference-row-label,
+.dark .api-reference-children button[aria-current] .api-reference-row-label { background: #39424780; }
+@media (min-width: 1024px) {
+  .api-reference-window[data-mode="read"] {
+    display: grid;
+    grid-template-columns: 320px minmax(0,1fr);
+    grid-template-rows: 56px auto minmax(0,1fr);
+  }
+  .api-reference-window[data-mode="read"] .api-reference-toolbar { grid-column: 1 / -1; grid-row: 1; }
+  .api-reference-window[data-mode="read"] .api-reference-heading { grid-column: 2; grid-row: 2; padding: 26px 28px 22px 12px; border: 0; }
+  .api-reference-window[data-mode="read"] .api-reference-layout { display: contents; }
+  .api-reference-window[data-mode="read"] .api-reference-layout > aside { grid-column: 1; grid-row: 2 / 4; margin: 18px 16px 28px 12px; }
+  .api-reference-window[data-mode="read"] .api-reference-layout > article { grid-column: 2; grid-row: 3; margin: 0 28px 28px 12px; }
+  .api-reference-window[data-mode="read"] .api-reference-loading { grid-column: 2; grid-row: 3; margin: 0 28px 28px 12px; }
+  .api-reference-window[data-mode="read"]:has(.api-reference-layout[data-has-toc="false"]) { grid-template-columns: minmax(0,1fr); }
+  .api-reference-window[data-mode="read"]:has(.api-reference-layout[data-has-toc="false"]) .api-reference-heading,
+  .api-reference-window[data-mode="read"]:has(.api-reference-layout[data-has-toc="false"]) .api-reference-layout > article { grid-column: 1; margin-left: 28px; }
+}
 @media (max-width: 1023px) {
   .api-docs-shell.api-reference-shell { padding: 16px; }
   .api-reference-window { height: calc(100svh - 32px); min-height: 460px; }
@@ -159,5 +189,5 @@
   .api-reference-shell .api-docs-paper h2 { padding: 12px; font-size: 17px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .api-reference-marker, .api-reference-children, .api-reference-shell .api-docs-toc-item { transition: none; }
+  .api-reference-marker, .api-reference-marker::after, .api-reference-children, .api-reference-row-label, .api-docs-toc-item svg, .api-reference-shell .api-docs-toc-item { transition: none; }
 }

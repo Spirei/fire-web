@@ -5,6 +5,7 @@ import Link from "next/link";
 import { renderMarkdown } from "@/lib/markdown";
 import { showToast } from "@/lib/toast";
 import { copyText } from "@/lib/clipboard";
+import { apiTocReadingMargin, resolveApiTocSelection } from "@/lib/apiDocsNavigation";
 import ThemeToggle from "@/components/ThemeToggle";
 import Toaster from "@/components/Toaster";
 import "./api-docs.css";
@@ -78,9 +79,17 @@ export default function ApiDocsPage() {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
   const savedContent = useRef("");
+  const navigating = useRef(false);
+  const navigationIdle = useRef<number | null>(null);
   const [markerY, setMarkerY] = useState(40);
-  const [hoverSlug, setHoverSlug] = useState<string | null>(null);
+  const [rulerHeight, setRulerHeight] = useState(300);
+  const [rulerOffset, setRulerOffset] = useState(77);
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const toc = useMemo(() => extractToc(content), [content]);
+  const { slug: currentSlug, accentIndex: markerIndex } = useMemo(
+    () => resolveApiTocSelection(toc, selectedSlug, activeSlug, openGroups),
+    [selectedSlug, activeSlug, toc, openGroups]
+  );
   const previewHtml = useMemo(() => renderMarkdown(content), [content]);
   // 路由表首列方法（GET/POST/PUT/DELETE）渲染为彩色徽标，便于扫读
   const methodHtml = useMemo(
@@ -163,33 +172,46 @@ export default function ApiDocsPage() {
 
   // 阅读模式：滚动监听，目录高亮当前章节
   useEffect(() => {
-    if (mode !== "read") return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-        if (visible?.target?.id) setActiveSlug(visible.target.id);
-      },
-      { root: contentRef.current, rootMargin: "0px 0px -72% 0px", threshold: 0 }
-    );
-    toc.forEach((t) => {
-      const el = document.getElementById(t.slug);
-      if (el) obs.observe(el);
-      t.children.forEach((c) => {
-        const cel = document.getElementById(c.slug);
-        if (cel) obs.observe(cel);
+    const root = contentRef.current;
+    if (mode !== "read" || !root) return;
+    if (root.scrollTop === 0) {
+      setActiveSlug(toc[0]?.slug ?? null);
+      setSelectedSlug(null);
+    }
+    let obs: IntersectionObserver | null = null;
+    const watch = () => {
+      obs?.disconnect();
+      const nextObserver = new IntersectionObserver(
+        (entries) => {
+          const visible = entries
+            .filter((entry) => entry.isIntersecting)
+            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+          if (visible?.target?.id) setActiveSlug(visible.target.id);
+        },
+        { root, rootMargin: apiTocReadingMargin(root.clientHeight), threshold: 0 }
+      );
+      obs = nextObserver;
+      toc.forEach((group) => {
+        const heading = document.getElementById(group.slug);
+        if (heading) nextObserver.observe(heading);
+        group.children.forEach((child) => {
+          const childHeading = document.getElementById(child.slug);
+          if (childHeading) nextObserver.observe(childHeading);
+        });
       });
-    });
-    return () => obs.disconnect();
-  }, [mode, toc]);
+    };
+    watch();
+    const resize = new ResizeObserver(watch);
+    resize.observe(root);
+    return () => { obs?.disconnect(); resize.disconnect(); };
+  }, [mode, toc, loading]);
 
   // 滚动到新章节时展开其分组；手动收起不触发重复展开。
   useEffect(() => {
     if (!activeSlug || mode !== "read") return;
     const group = toc.find((g) => g.slug === activeSlug || g.children.some((c) => c.slug === activeSlug));
     if (group) {
-      setOpenGroups((prev) => new Set(prev).add(group.slug));
+      setOpenGroups((prev) => prev.has(group.slug) ? prev : new Set(prev).add(group.slug));
     }
   }, [activeSlug, toc, mode]);
 
@@ -197,29 +219,69 @@ export default function ApiDocsPage() {
     const nav = navRef.current;
     if (!nav) return;
     const update = () => {
-      let slug = hoverSlug || activeSlug || toc[0]?.slug;
-      const parent = toc.find(group => group.children.some(child => child.slug === slug));
-      if (parent && !openGroups.has(parent.slug)) slug = parent.slug;
-      const row = Array.from(nav.querySelectorAll<HTMLElement>("[data-toc-row]"))
-        .find((item) => item.dataset.tocRow === slug);
-      if (row) setMarkerY(row.getBoundingClientRect().top - nav.getBoundingClientRect().top + nav.scrollTop + row.offsetHeight / 2);
+      const tree = nav.querySelector<HTMLElement>(".api-reference-tree");
+      if (tree) setRulerHeight(Math.max(nav.clientHeight - 16, tree.offsetTop + tree.offsetHeight + 24));
+      const rows = Array.from(nav.querySelectorAll<HTMLElement>("[data-toc-row]"));
+      const center = (row: HTMLElement) => row.getBoundingClientRect().top - nav.getBoundingClientRect().top + nav.scrollTop + row.getBoundingClientRect().height / 2;
+      if (rows[0]) setRulerOffset(center(rows[0]) - 8);
+      const row = rows.find((item) => item.dataset.tocRow === currentSlug);
+      if (row) setMarkerY(center(row));
     };
     update();
     const observer = new ResizeObserver(update);
     const tree = nav.querySelector(".api-reference-tree");
     if (tree) observer.observe(tree);
     return () => observer.disconnect();
-  }, [activeSlug, hoverSlug, openGroups, mode, loading, toc]);
+  }, [currentSlug, openGroups, mode, loading]);
+
+  useEffect(() => () => {
+    if (navigationIdle.current !== null) window.clearTimeout(navigationIdle.current);
+  }, []);
+
+  function resumeReading() {
+    navigating.current = false;
+    if (navigationIdle.current !== null) window.clearTimeout(navigationIdle.current);
+    navigationIdle.current = null;
+    setSelectedSlug(null);
+  }
+
+  function trackReadingScroll() {
+    const root = contentRef.current;
+    if (root) {
+      const edge = root.getBoundingClientRect().top + root.clientHeight * .28;
+      const headings = toc.flatMap((group) => [group.slug, ...group.children.map((child) => child.slug)]);
+      let reading = headings[0];
+      for (const slug of headings) {
+        const heading = document.getElementById(slug);
+        if (heading && heading.getBoundingClientRect().top <= edge) reading = slug;
+      }
+      if (reading) setActiveSlug(reading);
+    }
+    if (!navigating.current) {
+      setSelectedSlug(null);
+      return;
+    }
+    if (navigationIdle.current !== null) window.clearTimeout(navigationIdle.current);
+    // Native smooth-scroll events are not user navigation; resume tracking once settled.
+    navigationIdle.current = window.setTimeout(() => {
+      navigating.current = false;
+      navigationIdle.current = null;
+    }, 160);
+  }
 
   function jump(slug: string) {
+    setSelectedSlug(slug);
     const el = document.getElementById(slug);
     if (el) {
+      navigating.current = true;
+      trackReadingScroll();
       el.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
       setActiveSlug(slug);
     }
   }
 
   function toggleGroup(slug: string) {
+    setSelectedSlug(slug);
     setOpenGroups((prev) => {
       const next = new Set(prev);
       if (next.has(slug)) next.delete(slug);
@@ -255,7 +317,7 @@ export default function ApiDocsPage() {
   return (
     <main className="api-docs-shell api-reference-shell min-h-screen">
       <Toaster />
-      <div className="api-reference-window mx-auto max-w-7xl px-4 sm:px-6">
+      <div data-mode={mode} className="api-reference-window mx-auto max-w-7xl px-4 sm:px-6">
         {/* 顶部栏：返回 / 数据源 / 编辑·保存 */}
         <div className="api-reference-toolbar mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -355,7 +417,7 @@ export default function ApiDocsPage() {
         </section>
 
         {loading ? (
-          <div className="rounded-lg border border-[#e9e9e7] bg-white p-8 dark:border-[#2b2b2b] dark:bg-[#191919]">
+          <div className="api-reference-loading rounded-lg border border-[#e9e9e7] bg-white p-8 dark:border-[#2b2b2b] dark:bg-[#191919]">
             <div className="h-4 w-40 animate-pulse rounded bg-bg-gray dark:bg-white/10" />
             <div className="mt-4 h-3 w-full animate-pulse rounded bg-bg-gray dark:bg-white/10" />
             <div className="mt-2 h-3 w-3/4 animate-pulse rounded bg-bg-gray dark:bg-white/10" />
@@ -365,7 +427,7 @@ export default function ApiDocsPage() {
             {toc.length > 1 && (
               <div className="api-docs-mobile-toc mb-4 flex gap-2 overflow-x-auto pb-1 lg:hidden">
                 {toc.map((g) => (
-                  <button key={g.slug} type="button" onClick={() => jump(g.slug)} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${activeSlug === g.slug ? "border-edge-strong bg-white text-ink shadow-sm dark:bg-[#252c3a] dark:text-white" : "border-edge bg-white/70 text-muted hover:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]"}`}>
+                  <button key={g.slug} type="button" onClick={() => jump(g.slug)} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${currentSlug === g.slug ? "border-edge-strong bg-white text-ink shadow-sm dark:bg-[#252c3a] dark:text-white" : "border-edge bg-white/70 text-muted hover:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]"}`}>
                     {g.text}
                   </button>
                 ))}
@@ -375,9 +437,10 @@ export default function ApiDocsPage() {
             {/* 左侧目录大纲 */}
             {toc.length > 1 && (
               <aside className="hidden lg:block">
-                <nav ref={navRef} aria-label="API 文档目录" onPointerLeave={() => setHoverSlug(null)} className="api-docs-toc overflow-y-auto">
-                  <span className="api-reference-ruler" aria-hidden="true" />
-                  <span className="api-reference-marker" aria-hidden="true" style={{ transform: `translateY(${markerY}px)` }}><i /></span>
+                <nav ref={navRef} aria-label="API 文档目录" className="api-docs-toc overflow-y-auto">
+                  <span className="api-reference-grip" aria-hidden="true"><i /><i /><i /><i /><i /><i /></span>
+                  <span className="api-reference-ruler" aria-hidden="true" style={{ height: rulerHeight, backgroundPosition: `0 ${rulerOffset}px` }} />
+                  <span className={`api-reference-marker pip-${markerIndex}`} aria-hidden="true" style={{ transform: `translateY(${markerY}px)` }}><i /></span>
                   <div className="mb-2 flex items-center justify-between px-2">
                     <p className="flex items-center gap-1.5 text-[11px] font-bold tracking-widest text-faint">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
@@ -396,16 +459,12 @@ export default function ApiDocsPage() {
                   <div className="api-reference-tree flex flex-col gap-0.5">
                     {toc.map((g, index) => {
                       const open = openGroups.has(g.slug);
-                      const active =
-                        activeSlug === g.slug || g.children.some((c) => c.slug === activeSlug);
+                      const active = currentSlug === g.slug;
                       return (
                         <div key={g.slug}>
                           <button
                             data-toc-row={g.slug}
-                            onPointerEnter={() => setHoverSlug(g.slug)}
-                            onFocus={() => setHoverSlug(g.slug)}
-                            onBlur={() => setHoverSlug(null)}
-                            aria-current={activeSlug === g.slug ? "location" : undefined}
+                            aria-current={active ? "location" : undefined}
                             data-current={active || undefined}
                             type="button"
                             aria-expanded={g.children.length > 0 ? open : undefined}
@@ -413,7 +472,7 @@ export default function ApiDocsPage() {
                             className="api-docs-toc-item flex w-full items-center text-left leading-snug"
                           >
                             <span className={`api-reference-pip pip-${index % 7}`} aria-hidden="true" />
-                            <span className="min-w-0 break-words whitespace-normal">{g.text}</span>
+                            <span className="api-reference-row-label min-w-0 break-words whitespace-normal">{g.text}</span>
                             {g.children.length > 0 && (
                               <svg
                                 viewBox="0 0 24 24"
@@ -422,7 +481,7 @@ export default function ApiDocsPage() {
                                 strokeWidth="2.2"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
-                                className={`ml-auto h-3 w-3 flex-none transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+                                className={`ml-auto h-3 w-3 flex-none transition-transform duration-200 ${open ? "" : "-rotate-90"}`}
                                 aria-hidden="true"
                               >
                                 <path d="m6 9 6 6 6-6" />
@@ -433,18 +492,15 @@ export default function ApiDocsPage() {
                             {g.children.map((c) => (
                               <button
                                 data-toc-row={c.slug}
-                                onPointerEnter={() => setHoverSlug(c.slug)}
-                                onFocus={() => setHoverSlug(c.slug)}
-                                onBlur={() => setHoverSlug(null)}
-                                aria-current={activeSlug === c.slug ? "location" : undefined}
+                                aria-current={currentSlug === c.slug ? "location" : undefined}
                                 key={c.slug}
                                 type="button"
                                 tabIndex={open ? 0 : -1}
+                                title={c.text}
                                 onClick={() => jump(c.slug)}
                                 className="ml-4 mt-0.5 flex w-[calc(100%-1rem)] items-center gap-1 rounded-lg px-2 py-1 text-left leading-snug transition-colors"
-                                style={{ paddingLeft: 10 }}
                               >
-                                <span className="min-w-0 break-words whitespace-normal">{c.text}</span>
+                                <span className="api-reference-row-label min-w-0 break-words whitespace-normal">{c.text}</span>
                               </button>
                             ))}</div></div>
                         </div>
@@ -457,6 +513,14 @@ export default function ApiDocsPage() {
             {/* 文档内容 */}
             <article
               ref={contentRef}
+              tabIndex={0}
+              aria-label="API 规范正文"
+              onScroll={trackReadingScroll}
+              onWheel={resumeReading}
+              onTouchMove={resumeReading}
+              onKeyDown={(event) => {
+                if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) resumeReading();
+              }}
               className="markdown-body api-docs-paper min-w-0"
               dangerouslySetInnerHTML={{ __html: methodHtml }}
             />

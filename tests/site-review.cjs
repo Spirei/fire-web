@@ -16,6 +16,23 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('API directory keeps committed selection, resolves collapsed children and survives edited headings', () => {
+    const { apiTocReadingMargin, resolveApiTocSelection } = require(path.join(root, 'lib/apiDocsNavigation.ts'));
+    assert.equal(apiTocReadingMargin(466), '0px 0px -335px 0px');
+    assert.equal(apiTocReadingMargin(505), '0px 0px -363px 0px');
+    assert.equal(apiTocReadingMargin(NaN), '0px 0px -0px 0px');
+    assert.equal(apiTocReadingMargin(-1), '0px 0px -0px 0px');
+    const groups = [{ slug: 'start', children: [] }, { slug: 'routes', children: [{ slug: 'auth' }] }];
+    assert.deepEqual(resolveApiTocSelection(groups, null, null, new Set()), { slug: 'start', accentIndex: 0 });
+    assert.deepEqual(resolveApiTocSelection(groups, 'routes', 'start', new Set()), { slug: 'routes', accentIndex: 1 });
+    assert.deepEqual(resolveApiTocSelection(groups, 'auth', 'start', new Set()), { slug: 'routes', accentIndex: 1 });
+    assert.deepEqual(resolveApiTocSelection(groups, 'auth', 'start', new Set(['routes'])), { slug: 'auth', accentIndex: 1 });
+    assert.deepEqual(resolveApiTocSelection(groups, 'removed-heading', 'routes', new Set()), { slug: 'routes', accentIndex: 1 });
+    assert.deepEqual(resolveApiTocSelection([], 'removed-heading', 'start', new Set()), { slug: undefined, accentIndex: 0 });
+    const page = fs.readFileSync(path.join(root, 'app/api-docs/page.tsx'), 'utf8');
+    assert(!page.includes('onPointerEnter={() => setSelectedSlug'), 'hover must not change committed selection');
+    assert(page.includes('tabIndex={open ? 0 : -1}'), 'closed children must leave keyboard traversal');
+  });
   await test('PWA artwork uses content versions, bounded PNG sizes and safe local fallback', async () => {
     const sharp = require('sharp');
     const { pwaArtwork, pwaIconUrl } = require(path.join(root, 'lib/pwaIcon.ts'));
