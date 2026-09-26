@@ -1997,11 +1997,11 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 <span className="block w-full bg-bg-gray/60 p-2.5 dark:bg-white/[0.04]">
                   <span className="relative block overflow-hidden rounded-[10px] bg-bg-gray shadow-sm ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10">
                       <img
-                        src={cardCover(card.faces?.[0]?.file ?? card.file)}
+                        src={wanderSeed ? undefined : cardCover(card.faces?.[0]?.file ?? card.file)}
                         alt={card.name}
-                      loading={index < PAGE_SIZE_FIRST ? "eager" : "lazy"}
-                      fetchPriority={index < 8 ? "high" : "auto"}
-                      decoding={index < PAGE_SIZE_FIRST ? "sync" : "async"}
+                      loading={index < 4 ? "eager" : "lazy"}
+                      fetchPriority={index < 2 ? "high" : "auto"}
+                      decoding="async"
                       className="aspect-[1.586] w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
                     />
                     <span className="touch-always pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />

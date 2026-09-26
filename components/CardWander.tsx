@@ -50,7 +50,7 @@ function newPosition() { return { x: 0, y: 0, scale: 1 }; }
 
 function WanderTile({ card, observeTile, onSelect }: {
   card: WanderCard;
-  observeTile: (tile: HTMLButtonElement, onNear: () => void) => () => void;
+  observeTile: (tile: HTMLButtonElement, onNear: (near: boolean) => void) => () => void;
   onSelect: (card: WanderCard, tile: HTMLButtonElement) => void;
 }) {
   const tileRef = useRef<HTMLButtonElement>(null);
@@ -58,7 +58,7 @@ function WanderTile({ card, observeTile, onSelect }: {
   useEffect(() => {
     const tile = tileRef.current;
     if (!tile) return;
-    return observeTile(tile, () => setNearViewport(true));
+    return observeTile(tile, setNearViewport);
   }, [observeTile]);
   return (
     <button
@@ -174,10 +174,12 @@ function FragmentCard({ image, name, className }: { image: string; name: string;
 }
 
 export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDetails, onToggleHeld }: Props) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const wallRef = useRef<HTMLDivElement>(null);
   const tileObserverRef = useRef<IntersectionObserver | null>(null);
-  const tileNearCallbacksRef = useRef(new Map<Element, () => void>());
+  const tileNearCallbacksRef = useRef(new Map<Element, (near: boolean) => void>());
+  const geometryRef = useRef({ width: 0, height: 0, viewportWidth: 0, viewportHeight: 0 });
   const hoverFrameRef = useRef<number | null>(null);
   const hoverPointRef = useRef<{ x: number; y: number; target: HTMLButtonElement | null } | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -220,19 +222,16 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   ), [deck]);
   const selectedCard = selected ? cards.find((card) => card.key === selected.key) ?? selected : null;
 
-  const observeTile = useCallback((tile: HTMLButtonElement, onNear: () => void) => {
+  const observeTile = useCallback((tile: HTMLButtonElement, onNear: (near: boolean) => void) => {
     const viewport = viewportRef.current;
-    if (!viewport || !("IntersectionObserver" in window)) { onNear(); return () => {}; }
+    if (!viewport || !("IntersectionObserver" in window)) { onNear(true); return () => {}; }
     if (!tileObserverRef.current) {
       tileObserverRef.current = new IntersectionObserver((entries) => {
         for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
           const callback = tileNearCallbacksRef.current.get(entry.target);
-          tileNearCallbacksRef.current.delete(entry.target);
-          tileObserverRef.current?.unobserve(entry.target);
-          callback?.();
+          callback?.(entry.isIntersecting);
         }
-      }, { root: viewport, rootMargin: "360px" });
+      }, { root: viewport, rootMargin: window.matchMedia("(pointer: coarse), (max-width: 640px)").matches ? "180px" : "360px" });
     }
     tileNearCallbacksRef.current.set(tile, onNear);
     tileObserverRef.current.observe(tile);
@@ -406,12 +405,32 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     const wall = wallRef.current;
     if (!viewport || !wall) return;
     const position = positionRef.current;
-    const maxX = Math.max(0, (wall.offsetWidth * position.scale - viewport.clientWidth) / 2 + 90);
-    const maxY = Math.max(0, (wall.offsetHeight * position.scale - viewport.clientHeight) / 2 + 90);
+    const geometry = geometryRef.current;
+    const maxX = Math.max(0, (geometry.width * position.scale - geometry.viewportWidth) / 2 + 90);
+    const maxY = Math.max(0, (geometry.height * position.scale - geometry.viewportHeight) / 2 + 90);
     position.x = Math.max(-maxX, Math.min(maxX, position.x));
     position.y = Math.max(-maxY, Math.min(maxY, position.y));
     wall.style.transform = `translate(-50%, -50%) rotateX(15deg) rotateZ(-6deg) scale(${position.scale}) translate3d(${position.x}px, ${position.y}px, 0)`;
   };
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current, wall = wallRef.current;
+    if (!viewport || !wall) return;
+    const measure = () => {
+      geometryRef.current = { width: wall.offsetWidth, height: wall.offsetHeight, viewportWidth: viewport.clientWidth, viewportHeight: viewport.clientHeight };
+      drawPosition();
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport); observer.observe(wall);
+    return () => observer.disconnect();
+  }, [seed, deck.length]);
+
+  useEffect(() => {
+    const sync = () => { if (rootRef.current) rootRef.current.dataset.suspended = String(document.hidden); };
+    sync(); document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -485,7 +504,12 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     if (selected || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     let frame = 0;
     let previousTime = 0;
+    const frameInterval = window.matchMedia("(pointer: coarse), (max-width: 640px)").matches ? 1000 / 30 : 1000 / 60;
     const animate = (time: number) => {
+      if (previousTime && time - previousTime < frameInterval - 1) {
+        frame = window.requestAnimationFrame(animate);
+        return;
+      }
       const elapsed = previousTime ? Math.min((time - previousTime) / 1000, 0.05) : 0;
       previousTime = time;
       const viewport = viewportRef.current;
@@ -493,8 +517,9 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
       if (!selected && !dragRef.current && !document.hidden && viewport && wall && elapsed) {
         const position = positionRef.current;
         const direction = driftDirectionRef.current;
-        const maxX = Math.max(0, (wall.offsetWidth * position.scale - viewport.clientWidth) / 2 + 90);
-        const maxY = Math.max(0, (wall.offsetHeight * position.scale - viewport.clientHeight) / 2 + 90);
+        const geometry = geometryRef.current;
+        const maxX = Math.max(0, (geometry.width * position.scale - geometry.viewportWidth) / 2 + 90);
+        const maxY = Math.max(0, (geometry.height * position.scale - geometry.viewportHeight) / 2 + 90);
         direction.angle = Math.min(0.22, direction.angle + DRIFT_ANGLE_PER_SECOND * elapsed);
         position.x += direction.x * Math.cos(direction.angle) * DRIFT_SPEED_PER_SECOND * elapsed;
         position.y += direction.y * Math.sin(direction.angle) * DRIFT_SPEED_PER_SECOND * elapsed;
@@ -705,7 +730,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   };
 
   return (
-    <div className="card-wander" role="dialog" aria-modal="true" aria-label="卡面漫游">
+    <div ref={rootRef} className="card-wander" data-zoom-open={zoomOpen} role="dialog" aria-modal="true" aria-label="卡面漫游">
       <div
         ref={viewportRef}
         className="card-wander-viewport"

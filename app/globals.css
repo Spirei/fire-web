@@ -5762,6 +5762,18 @@ button.PhotoView-Slider__toolbarIcon {
   box-shadow: 0 7px 20px rgba(0,0,0,.42);
 }
 .card-wander-tile img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+/* Hidden tabs and the preview covered by fullscreen must not keep painting effects. */
+.card-wander[data-suspended="true"] *,
+.card-wander[data-suspended="true"] *::before,
+.card-wander[data-suspended="true"] *::after,
+.card-wander[data-zoom-open="true"] .card-wander-modal-backdrop *,
+.card-wander[data-zoom-open="true"] .card-wander-modal-backdrop *::before,
+.card-wander[data-zoom-open="true"] .card-wander-modal-backdrop *::after { animation-play-state: paused !important; }
+@media (pointer: coarse), (max-width: 640px) {
+  .card-wander-tile { box-shadow: none; transform-style: flat; }
+  .card-wander-tile:hover, .card-wander-tile:focus-visible { transform: none; box-shadow: none; }
+  .card-wander .card-wander-pill, .card-wander .card-wander-shuffle { backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
 .card-wander-vignette {
   position: absolute;
   inset: 0;
