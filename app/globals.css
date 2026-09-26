@@ -5896,7 +5896,11 @@ button.PhotoView-Slider__toolbarIcon {
 .card-wander-preview-stage[data-effect="meteor"] .card-wander-effect-glare,
 .card-wander-preview-stage[data-effect="meteor"] .card-wander-effect-spec,
 .card-wander-zoom-card[data-effect="meteor"] .card-wander-effect-sheen { display: none; }
-.card-wander-fragments { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+.card-wander-preview-stage[data-effect="meteor"][data-mode="showcase"] { z-index: 2; }
+.card-wander-effect[data-effect="meteor"] .card-wander-effect-tilt { overflow: visible; transform: none !important; background: transparent; }
+.card-wander-effect[data-effect="meteor"] .card-wander-modal-image { border-radius: inherit; }
+.card-wander-fragments { position: absolute; inset: 0 0 auto; height: 100%; overflow: hidden; border-radius: inherit; pointer-events: none; }
+.card-wander-fragment-grid { position: absolute; inset: 0 0 auto; height: 100%; pointer-events: none; }
 .card-wander-fragment { position: absolute; width: 12.5%; height: 20%; overflow: hidden; animation: card-wander-fragment-fall 5s var(--fragment-delay) both; will-change: transform; }
 .card-wander-fragment img { position: absolute; display: block; width: 800%; height: 500%; max-width: none; object-fit: contain; }
 @keyframes card-wander-fragment-fall {

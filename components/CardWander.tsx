@@ -77,7 +77,24 @@ function WanderTile({ card, observeTile, onSelect }: {
 /** 同一张原图裁成 8×5 格，只在当前预览生成；结束后回到单张原图。 */
 function FragmentCard({ image, name, className }: { image: string; name: string; className: string }) {
   const [running, setRunning] = useState(false);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const [geometry, setGeometry] = useState({ height: 0, footer: 0 });
   const completed = useRef(0);
+  useLayoutEffect(() => {
+    const img = imageRef.current;
+    if (!img) return;
+    const modal = img.closest(".card-wander-modal");
+    const measure = () => {
+      const rect = img.getBoundingClientRect();
+      const actions = modal?.querySelector(".card-wander-modal-actions")?.getBoundingClientRect();
+      setGeometry({ height: img.clientHeight, footer: actions ? Math.max(0, actions.bottom - rect.bottom + 12) : 0 });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(img);
+    if (modal) observer.observe(modal);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     let alive = true;
@@ -89,19 +106,21 @@ function FragmentCard({ image, name, className }: { image: string; name: string;
     return () => { alive = false; };
   }, [image]);
   return <>
-    <img className={className} src={image} alt={name} draggable={false} style={{ opacity: running ? 0 : 1 }} />
-    {running && <span className="card-wander-fragments" aria-hidden="true">
+    <img ref={imageRef} className={className} src={image} alt={name} draggable={false} style={{ opacity: running ? 0 : 1 }} />
+    {running && <span className="card-wander-fragments" aria-hidden="true" style={{ height: geometry.height + geometry.footer || undefined }}>
+      <span className="card-wander-fragment-grid" style={{ height: geometry.height || undefined }}>
       {Array.from({ length: 40 }, (_, index) => {
         const col = index % 8;
         const row = Math.floor(index / 8);
         return <span className="card-wander-fragment" key={index} style={{
           left: `${col * 12.5}%`, top: `${row * 20}%`,
           "--fragment-delay": `${((col * 3 + row * 2) % 8) * .04 + (4 - row) * .12}s`,
-          "--fragment-fall": "600%"
+          "--fragment-fall": geometry.footer ? `${geometry.height + geometry.footer - row * geometry.height / 5}px` : "600%"
         } as CSSProperties} onAnimationEnd={() => {
           if (++completed.current === 40) setRunning(false);
         }}><img src={image} alt="" draggable={false} style={{ left: `${-col * 100}%`, top: `${-row * 100}%` }} /></span>;
       })}
+      </span>
     </span>}
   </>;
 }
