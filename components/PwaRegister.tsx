@@ -6,7 +6,7 @@ import { useEffect } from "react";
 export default function PwaRegister() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").catch(() => {
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {
       /* 非安全上下文（如局域网 IP http）或浏览器不支持时静默失败 */
     });
   }, []);

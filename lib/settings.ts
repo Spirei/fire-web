@@ -43,6 +43,7 @@ const DEFAULTS: SiteSettings = {
   domain: "localhost:3000",
   title: "Fire - 股票记录与持仓管理",
   ico: "",
+  pwaIcon: "",
   homepageBg: "",
   loginSideImage: "",
   tabs: [
@@ -115,8 +116,8 @@ const DEFAULTS: SiteSettings = {
   ticker: DEFAULT_TICKER
 };
 
-const SIMPLE_KEYS: ("domain" | "title" | "ico" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "currencyRefreshPattern" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "xueqiuCookie")[] = [
-  "domain", "title", "ico", "homepageBg", "loginSideImage", "siteLogo", "logoText", "logoFont", "quoteSource", "futuHost", "futuPort", "footerDesc",
+const SIMPLE_KEYS: ("domain" | "title" | "ico" | "pwaIcon" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "currencyRefreshPattern" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "xueqiuCookie")[] = [
+  "domain", "title", "ico", "pwaIcon", "homepageBg", "loginSideImage", "siteLogo", "logoText", "logoFont", "quoteSource", "futuHost", "futuPort", "footerDesc",
   "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl", "currencyRefreshPattern", "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl", "translationProvider", "deepseekApiUrl", "deepseekModel", "deepseekApiKey", "llmProvider", "llmApiUrl", "llmModel", "llmApiKey",
   "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword", "xueqiuCookie"
 ];
@@ -263,7 +264,7 @@ export function getSiteSettings(): SiteSettings {
   });
   // 用户可能在外部删除 uploads 文件，或从旧备份恢复了已过期路径。
   // 本地站点素材不存在时按空值下发，让首页/登录页正常显示内置兜底，而不是空白或破图。
-  (["ico", "homepageBg", "siteLogo", "loginSideImage"] as const).forEach((key) => {
+  (["ico", "pwaIcon", "homepageBg", "siteLogo", "loginSideImage"] as const).forEach((key) => {
     const value = result[key];
     if (!value.startsWith("/uploads/")) return;
     let rel = value.slice("/uploads/".length);

@@ -230,6 +230,7 @@ export interface SiteSettings {
   domain: string;
   title: string;
   ico: string;
+  pwaIcon: string;
   homepageBg: string;
   /** 登录弹窗左侧配图（管理员上传） */
   loginSideImage: string;

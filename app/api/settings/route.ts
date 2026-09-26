@@ -64,10 +64,12 @@ export async function PUT(request: Request) {
   }
 
   const before = getSiteSettings();
+  if (body.pwaIcon !== undefined && (typeof body.pwaIcon !== "string" || (body.pwaIcon && !/^\/uploads\/ico\/[^/\\]+$/.test(body.pwaIcon)))) return NextResponse.json({ error: "PWA 图标请使用上传的图片" }, { status: 400 });
   const settings = updateSiteSettings({
     domain: body.domain !== undefined ? String(body.domain) : undefined,
     title: body.title !== undefined ? String(body.title) : undefined,
     ico: body.ico !== undefined ? String(body.ico) : undefined,
+    pwaIcon: body.pwaIcon !== undefined ? body.pwaIcon : undefined,
     homepageBg: body.homepageBg !== undefined ? String(body.homepageBg) : undefined,
     loginSideImage: body.loginSideImage !== undefined ? String(body.loginSideImage) : undefined,
     siteLogo: body.siteLogo !== undefined ? String(body.siteLogo) : undefined,
@@ -141,7 +143,7 @@ export async function PUT(request: Request) {
     });
   }
   // 网站形象 / 站点 Logo 替换后删除旧本地文件，保留唯一（不堆积 ico / background / logo）
-  ["ico", "homepageBg", "siteLogo"].forEach((k) => {
+  ["ico", "pwaIcon", "homepageBg", "siteLogo"].forEach((k) => {
     const oldVal = before[k as keyof typeof before];
     const newVal = settings[k as keyof typeof settings];
     if (typeof oldVal === "string" && typeof newVal === "string" && oldVal !== newVal) {

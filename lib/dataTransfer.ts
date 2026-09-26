@@ -19,7 +19,7 @@ const ENV_SETTING_KEYS = new Set(["dbType", "pgHost", "pgPort", "pgDatabase", "p
 const SITE_SETTING_KEYS = new Set([
   "allowRegister", "assetMarketOrder", "chartApiUrl", "cnEarningsApiUrl", "cnLogoApiUrl", "currencyApiUrl", "currencyRefreshPattern", "domain", "earningsApiUrl",
   "footerDesc", "futuHost", "futuPort", "groups", "heroBadge", "heroCtaPrimary", "heroCtaSecondary", "heroSubtitle", "heroTitle",
-  "holdingColumns", "homeNav", "homepageBg", "ico", "indicesOrder", "loginSideImage", "logoFont", "logoText", "marketLabels", "markets",
+  "holdingColumns", "homeNav", "homepageBg", "ico", "pwaIcon", "indicesOrder", "loginSideImage", "logoFont", "logoText", "marketLabels", "markets",
   "quoteApiUrl", "quoteSource", "searchApiUrl", "siteLogo", "stockIconCdn", "tabs", "ticker", "title", "usLogoApiUrl"
 ]);
 const MAX_ROWS = { records: 5000, tradeOrders: 20000, activities: 50000, watchGroups: 500, fundTransactions: 20000, userSettings: 1, celebs: 500 } as const;

@@ -104,6 +104,14 @@ const nextConfig = {
       },
       {
         // 浏览器刷新一开始即可复用静态站点图标，不退回通用地球占位。
+        source: "/manifest.webmanifest",
+        headers: [{ key: "Cache-Control", value: "no-store" }]
+      },
+      {
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache" }]
+      },
+      {
         source: "/site-icon.svg",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }]
       },

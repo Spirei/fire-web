@@ -144,7 +144,7 @@ export function cleanupOrphanFiles(options: { scope?: "showcase-unsaved" } = {})
   (db.prepare("SELECT avatar FROM celebs WHERE avatar <> ''").all() as { avatar: string }[]).forEach((r) => addRef(r.avatar));
   (db.prepare("SELECT image FROM card_details WHERE image <> ''").all() as { image: string }[]).forEach((r) => addRef(r.image));
   (
-    db.prepare("SELECT value FROM site_settings WHERE key IN ('ico','homepageBg','siteLogo')").all() as { value: string }[]
+    db.prepare("SELECT value FROM site_settings WHERE key IN ('ico','pwaIcon','homepageBg','siteLogo')").all() as { value: string }[]
   ).forEach((r) => addRef(r.value));
   try {
     const row = db.prepare("SELECT value FROM site_settings WHERE key = 'modelServices'").get() as { value?: string } | undefined;

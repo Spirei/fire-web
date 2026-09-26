@@ -2,7 +2,7 @@ import type { SiteSettings } from "./types";
 
 // Explicit allowlist: new server settings must be reviewed before reaching a browser.
 const CLIENT_KEYS = [
-  "domain", "title", "ico", "homepageBg", "loginSideImage", "tabs", "groups", "homeNav",
+  "domain", "title", "ico", "pwaIcon", "homepageBg", "loginSideImage", "tabs", "groups", "homeNav",
   "markets", "marketLabels", "marketBadges", "marketBadgesVisible", "assetMarketOrder",
   "assetAnalysisOrder", "indicesOrder", "holdingColumns", "allowRegister", "stockIconCdn",
   "siteLogo", "logoText", "logoFont", "quoteSource", "footerDesc", "quoteApiUrl", "searchApiUrl",

@@ -2,7 +2,7 @@
  * 策略：页面导航与静态/上传资源网络优先（在线永远拿最新，兼容 dev 热更新），离线回退缓存；
  * /api 动态数据不拦截、跨域（行情/汇率等）不拦截。
  */
-const CACHE = "fire-pwa-v3";
+const CACHE = "fire-pwa-v4";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -10,7 +10,7 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim())
+    caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith("fire-pwa-") && key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim())
   );
 });
 
@@ -19,11 +19,14 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (url.pathname === "/manifest.webmanifest") {
+    event.respondWith(fetch(request, { cache: "no-store" }));
+    return;
+  }
   const cacheable =
     request.mode === "navigate" ||
     url.pathname.startsWith("/_next/static/") ||
-    url.pathname.startsWith("/uploads/") ||
-    url.pathname === "/manifest.webmanifest";
+    url.pathname.startsWith("/uploads/");
   if (!cacheable) return;
 
   event.respondWith(

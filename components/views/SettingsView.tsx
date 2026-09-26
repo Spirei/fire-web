@@ -515,6 +515,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   domain: "",
   title: "",
   ico: "",
+  pwaIcon: "",
   homepageBg: "",
   loginSideImage: "",
   tabs: DEFAULT_TABS,
@@ -791,6 +792,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [dbSaving, setDbSaving] = useState(false);
   const [dbTesting, setDbTesting] = useState(false);
   const icoRef = useRef<HTMLInputElement>(null);
+  const pwaIconRef = useRef<HTMLInputElement>(null);
+  const [pwaUploading, setPwaUploading] = useState(false);
   const bgRef = useRef<HTMLInputElement>(null);
   const logoRef = useRef<HTMLInputElement>(null);
   const loginImgRef = useRef<HTMLInputElement>(null);
@@ -889,7 +892,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     };
   }, [sub, dbStatusRetry]);
 
-  async function uploadSiteFile(kind: "ico" | "background", file: File): Promise<string> {
+  async function uploadSiteFile(kind: "ico" | "background", file: File, target?: "pwaIcon"): Promise<string> {
+    if (target) setPwaUploading(true);
     try {
       const fd = new FormData();
       fd.append("kind", kind);
@@ -897,12 +901,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "上传失败");
-      setSite((s) => ({ ...s, [kind]: data.url }));
+      setSite((s) => ({ ...s, [target || kind]: data.url }));
       return data.url as string;
     } catch (err) {
       showToast(err instanceof Error ? err.message : "上传失败", "err");
       return "";
-    }
+    } finally { if (target) setPwaUploading(false); }
   }
 
   async function uploadLogo(file: File): Promise<string> {
@@ -1416,6 +1420,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const savingEditRef = useRef(false);
   async function saveActiveEdit() {
     if (savingEditRef.current || !activeEditState) return;
+    if (activeAnchor === "appearance" && pwaUploading) { showToast("PWA 图标正在上传，请稍候", "err"); return; }
     if (activeAnchor === "translation" && uploadingModelIconId) {
       showToast("图标正在上传并保存，请稍候", "err");
       return;
@@ -1432,7 +1437,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         const ok = await saveBlock("siteInfo", { title: site.title, domain: site.domain, allowRegister: site.allowRegister, footerDesc: site.footerDesc }, "站点信息已保存");
         // 站点信息是常驻可编辑 + 自动保存，不再有「保存后转只读」这一步
       } else if (activeAnchor === "appearance") {
-        const ok = await saveBlock("brand", { ico: site.ico, siteLogo: site.siteLogo, logoText: site.logoText, logoFont: site.logoFont, homepageBg: site.homepageBg, loginSideImage: site.loginSideImage }, "网站形象已保存");
+        const ok = await saveBlock("brand", { ico: site.ico, pwaIcon: site.pwaIcon, siteLogo: site.siteLogo, logoText: site.logoText, logoFont: site.logoFont, homepageBg: site.homepageBg, loginSideImage: site.loginSideImage }, "网站形象已保存");
         if (ok) setEditingAppearance(false);
       } else if (activeAnchor === "ticker") {
         const ok = await saveBlock("ticker", { ticker: site.ticker }, "首页指数已保存");
@@ -2313,6 +2318,16 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           onClear={() => setSiteField("ico", "")}
                           kind="icon"
                         />
+                        <div className="sw-media-field">
+                          <div className="sw-media-label"><b>PWA 图标</b><span>{site.pwaIcon ? "使用上传图标" : "自动跟随网站图标"}</span></div>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <img src={site.pwaIcon || site.ico || "/site-icon.svg"} alt="PWA 图标预览" className="h-11 w-11 rounded-xl border border-edge object-contain" />
+                            <input ref={pwaIconRef} type="file" accept="image/png,image/jpeg,image/webp,.svg,.ico" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) void uploadSiteFile("ico", file, "pwaIcon"); e.target.value = ""; }} />
+                            <button type="button" className="btn btn-line btn-sm" disabled={!editingAppearance || pwaUploading} onClick={() => pwaIconRef.current?.click()}>{pwaUploading ? "上传中…" : "上传"}</button>
+                            <button type="button" className="btn btn-line btn-sm" disabled={!editingAppearance || pwaUploading || !site.pwaIcon} onClick={() => setSiteField("pwaIcon", "")}>重置</button>
+                          </div>
+                          <p className="mt-2 text-xs text-muted">保存后生效。部分系统需确认图标更新或重新添加到主屏幕。</p>
+                        </div>
                         <SwMediaField
                           label="首页 Logo"
                           editable={editingAppearance}

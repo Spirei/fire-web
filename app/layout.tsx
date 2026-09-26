@@ -18,6 +18,7 @@ import { PrefsProvider } from "@/lib/prefsContext";
 import { PREFS_COOKIE, parsePrefsCookie } from "@/lib/prefsCookie";
 import SiteFavicon from "@/components/SiteFavicon";
 import { initialSiteFavicon } from "@/lib/siteFavicon";
+import { pwaArtwork, pwaIconUrl } from "@/lib/pwaIcon";
 import PaletteProvider from "@/components/PaletteProvider";
 import { PALETTE_KEY, paletteVariables, resolvePalette } from "@/lib/palettes";
 import "@/styles/palettes.css";
@@ -44,6 +45,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const prefs = parsePrefsCookie(cookieStore.get(PREFS_COOKIE)?.value);
   const settings = getSiteSettings();
   const palette = resolvePalette(prefs[PALETTE_KEY]);
+  const pwaIcon = await pwaArtwork(settings.pwaIcon || settings.ico);
   return (
     /* 禁止整页翻译：翻译器会在水合前改写服务端 HTML（连 title 属性都会改，比如把「繁體」改成「繁体」），
        客户端水合时读到的还是原文，于是报 "Hydration failed because the server rendered text didn't match the client"。
@@ -70,7 +72,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="投资记实" />
-        <link rel="apple-touch-icon" href="/uploads/ico/pwa-192.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href={pwaIconUrl(pwaIcon.version, 180)} />
         {/* 旧品牌本地缓存迁移 + 主题防闪兜底 */}
         <script
           dangerouslySetInnerHTML={{

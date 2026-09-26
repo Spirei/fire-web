@@ -16,6 +16,23 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('PWA artwork uses content versions, bounded PNG sizes and safe local fallback', async () => {
+    const sharp = require('sharp');
+    const { pwaArtwork, pwaIconUrl } = require(path.join(root, 'lib/pwaIcon.ts'));
+    fs.mkdirSync('public/uploads/ico', { recursive: true });
+    fs.copyFileSync(path.join(root, 'public/site-icon.svg'), 'public/site-icon.svg');
+    const fallback = await pwaArtwork('');
+    assert.equal((await sharp(fallback.data).metadata()).width, 512);
+    assert.equal((await pwaArtwork('/uploads/ico/%2e%2e%2fsecret')).version, fallback.version);
+    assert.equal((await pwaArtwork('https://not-fetched.example/icon.png')).version, fallback.version);
+    fs.writeFileSync('public/uploads/ico/custom.png', await sharp({ create: { width: 32, height: 32, channels: 3, background: '#f00' } }).png().toBuffer());
+    const custom = await pwaArtwork('/uploads/ico/custom.png');
+    assert.notEqual(custom.version, fallback.version);
+    assert.equal((await pwaArtwork('/uploads/ico/custom.png')).version, custom.version);
+    assert(pwaIconUrl(custom.version, 192).includes(custom.version));
+    fs.writeFileSync('public/uploads/ico/custom.png', await sharp({ create: { width: 32, height: 32, channels: 3, background: '#00f' } }).png().toBuffer());
+    assert.notEqual((await pwaArtwork('/uploads/ico/custom.png')).version, custom.version);
+  });
   await test('full kline requests coalesce and period cache preserves the requested count', async () => {
     const { fetchDailyKline, fetchPeriodKline } = require(path.join(root, 'lib/kline.ts'));
     const original = global.fetch;
@@ -471,6 +488,28 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   const request = (role, body, method='GET') => new Request('http://localhost:3000/api/settings', { method, headers: { ...(role ? { cookie: `fire_session=${tokens[role]}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
   const settings = require(path.join(root, 'lib/settings.ts'));
   const settingsRoute = require(path.join(root, 'app/api/settings/route.ts'));
+  await test('PWA icon override persists, reset restores automatic and public images reject stale addresses', async () => {
+    const manifest = require(path.join(root, 'app/manifest.ts')).default;
+    const iconRoute = require(path.join(root, 'app/api/pwa-icon/route.ts'));
+    const original = settings.getSiteSettings();
+    try {
+      assert.equal((await settingsRoute.PUT(request('user', { pwaIcon: '/uploads/ico/custom.png' }, 'PUT'))).status, 403);
+      assert.equal((await settingsRoute.PUT(request('admin', { pwaIcon: 'https://remote.example/icon.png' }, 'PUT'))).status, 400);
+      assert.equal((await settingsRoute.PUT(request('admin', { pwaIcon: '/uploads/ico/custom.png' }, 'PUT'))).status, 200);
+      assert.equal(settings.getSiteSettings().pwaIcon, '/uploads/ico/custom.png');
+      const custom = await manifest();
+      const response = await iconRoute.GET(new Request('http://localhost' + custom.icons[0].src));
+      assert.equal(response.status, 200);
+      assert.equal((await require('sharp')(Buffer.from(await response.arrayBuffer())).metadata()).width, 192);
+      assert.equal((await iconRoute.GET(new Request('http://localhost/api/pwa-icon?size=10000'))).status, 400);
+      assert.equal((await settingsRoute.PUT(request('admin', { pwaIcon: '' }, 'PUT'))).status, 200);
+      assert.equal(settings.getSiteSettings().pwaIcon, '');
+      const automatic = await manifest();
+      assert.notEqual(automatic.icons[0].src, custom.icons[0].src);
+      assert.equal(automatic.id, '/');
+      assert.equal((await iconRoute.GET(new Request('http://localhost' + custom.icons[0].src))).status, 404);
+    } finally { settings.updateSiteSettings({ ico: original.ico, pwaIcon: original.pwaIcon }); }
+  });
   await test('settings secrets filtered for admin/user and anonymous rejected; saving preserves secrets', async () => {
     settings.updateSiteSettings({ llmApiKey: 'TEST_ONLY_LLM', deepseekApiKey: 'TEST_ONLY_OLD', xueqiuCookie: 'TEST_ONLY_COOKIE', pgPassword: 'TEST_ONLY_DB' });
     for (const role of ['admin','user']) {
