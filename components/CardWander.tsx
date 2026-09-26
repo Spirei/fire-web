@@ -209,8 +209,6 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   const effectPressRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
   const [zoomEffect, setZoomEffect] = useState<PreviewEffect>("gloss");
-  const zoomEffectBagRef = useRef<PreviewEffect[]>([]);
-  const previousZoomEffectRef = useRef<PreviewEffect | null>(null);
   const zoomRef = useRef<HTMLDivElement>(null);
   const zoomImageRef = useRef<HTMLDivElement>(null);
   const zoomCloseRef = useRef<HTMLButtonElement>(null);
@@ -599,18 +597,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   }
 
   function openZoom() {
-    if (!zoomEffectBagRef.current.length) {
-      const bag = PREVIEW_EFFECTS.map((effect) => effect.key);
-      for (let index = bag.length - 1; index > 0; index--) {
-        const randomIndex = Math.floor(Math.random() * (index + 1));
-        [bag[index], bag[randomIndex]] = [bag[randomIndex], bag[index]];
-      }
-      if (bag[bag.length - 1] === previousZoomEffectRef.current) [bag[0], bag[bag.length - 1]] = [bag[bag.length - 1], bag[0]];
-      zoomEffectBagRef.current = bag;
-    }
-    const effect = zoomEffectBagRef.current.pop()!;
-    previousZoomEffectRef.current = effect;
-    setZoomEffect(effect);
+    setZoomEffect(previewEffect);
     setZoomOpen(true);
   }
 
