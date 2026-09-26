@@ -4495,6 +4495,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "后台页面随可视高度自适应，页脚下方不再留空白。",
   software: V0_1_41_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.42" } : item),
   changes: [
+    { kind: "fix", title: "后台打开与切换减负", desc: "设置等非资产页不再启动持仓行情轮询；导航指向或聚焦时按需预取目标页代码，省流量与慢速网络跳过。首屏现金改为 SQL 聚合，避免加载排序整本流水，并省去未使用的资金明细计算。" },
     { kind: "fix", title: "FIRE 未填年数不再误报已达成", desc: "空白或无效年数显示占位；表格不再满足达成条件时，清除之前自动推导的还需年数。" },
     { kind: "security", title: "会话与用户资料校验统一", desc: "退出登录、修改密码与两步验证统一使用当前认证令牌；拒绝跨站 Cookie 退出请求，管理员编辑资料阻止大小写不同的重复邮箱。" },
     { kind: "fix", title: "全站数据与缓存回归修复", desc: "手动刷新汇率同步各视图，拦截旧响应并校验缓存数值，FIRE 显示真实更新时间；偏好 Cookie 按编码后大小限制，文件 Range 无效时返回 416。完整 K 线合并并发、限制缓存规模、隔离指数并保持周期条数，附件分页拒绝无效偏移。" },

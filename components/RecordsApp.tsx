@@ -29,6 +29,7 @@ import SafeAssetImage from "@/components/SafeAssetImage";
 import type { WatchGroup } from "@/lib/watchGroups";
 import FourDoorNavigator from "@/components/FourDoorNavigator";
 import { usePersistedState } from "@/lib/usePersistedState";
+import { preloadView } from "@/lib/viewPreload";
 
 // 默认保留服务端渲染：刷新当前页仍随 HTML 直接呈现内容；仅客户端代码按页签拆包。
 // 不设 loading 挡板，切换页签时也不显示整屏「加载中…」。
@@ -401,7 +402,7 @@ export default function RecordsApp({
 
   useEffect(() => {
     // 自选股页面由自身的刷新间隔控件管理定时器，避免这里的 30 秒兜底计时器覆盖用户选择。
-    if (records.length === 0) return;
+    if (records.length === 0 || !["holdings", "assets", "fire", "pnl", "watchlist"].includes(activeTab)) return;
     if (activeTab === "watchlist") { void refreshQuotes({ missingOnly: true }); return; }
     refreshQuotes();
     // 交易时段 30 秒刷新；休市时回调只做本地会话判断，不发送行情请求。
@@ -856,6 +857,8 @@ export default function RecordsApp({
                 <button
                   type="button"
                   onClick={() => selectTab(t.key)}
+                  onPointerEnter={(event) => { if (event.pointerType === "mouse" && t.key !== activeTab) preloadView(t.key); }}
+                  onFocus={() => { if (t.key !== activeTab) preloadView(t.key); }}
                   draggable
                   onDragStart={() => { tabDragKeyRef.current = t.key; }}
                   onDragOver={(e) => e.preventDefault()}
@@ -887,6 +890,8 @@ export default function RecordsApp({
               key={t.key}
               data-nav-tab={t.key}
               type="button"
+              onPointerDown={() => { if (t.key !== activeTab) preloadView(t.key); }}
+              onFocus={() => { if (t.key !== activeTab) preloadView(t.key); }}
               onClick={() => selectTab(t.key)}
               className={`flex min-w-[76px] flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-xs transition-all duration-200 ${
                 activeTab === t.key ? "bg-white font-semibold text-ink shadow-[0_1px_4px_rgba(10,14,25,.08)] dark:bg-[#252c3a] dark:text-white" : "text-muted"

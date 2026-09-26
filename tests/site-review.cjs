@@ -213,6 +213,48 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   const user = createUser('review_user', 'Review-test-123');
   const other = createUser('review_other', 'Review-test-123');
   const tokens = { user: createSession(user.id), other: createSession(other.id), admin: createSession('demo-user') };
+  await test('database balance aggregation preserves debt, currencies and account isolation', () => {
+    const { fundBalances } = require(path.join(root, 'lib/funds.ts'));
+    const { totalFundBalances, fundState } = require(path.join(root, 'lib/fundState.ts'));
+    const benchmarkUser = createUser('review_perf', 'Review-test-123');
+    const insert = db.prepare("INSERT INTO fund_transactions(id,user_id,currency,type,amount,direction,note,occurred_at,created_at) VALUES(?,?,?,'adjustment',?,?,'',?,?)");
+    db.transaction(() => {
+      for (let i = 0; i < 20000; i++) insert.run(`perf-${i}`, benchmarkUser.id, ['USD','CNY','HKD'][i%3], (1+i%101)/4, i%5 ? -1 : 1, String(i%100), String(i));
+    })();
+    const old = () => {
+      const result = {};
+      for (const row of db.prepare('SELECT currency,amount,direction FROM fund_transactions WHERE user_id=? ORDER BY currency,occurred_at,created_at,id').all(benchmarkUser.id)) result[row.currency] = (result[row.currency] || 0) + row.amount * row.direction;
+      return result;
+    };
+    const expected = old(), actual = fundBalances(benchmarkUser.id);
+    for (const code of Object.keys(expected)) assert.equal(actual[code], expected[code]);
+    assert(actual.USD < 0, 'debt must not be clamped to zero');
+    assert.equal(fundBalances(other.id).USD, 0);
+    assert.deepEqual(totalFundBalances(benchmarkUser.id), fundState(benchmarkUser.id).balances);
+    const measure = (fn) => {
+      const samples = [];
+      for (let i=0;i<9;i++) { const started=performance.now(); fn(); samples.push(performance.now()-started); }
+      return samples.sort((a,b)=>a-b)[4].toFixed(2);
+    };
+    console.log(`BENCH 20000 ledger rows median: JS=${measure(old)}ms SQL=${measure(()=>fundBalances(benchmarkUser.id))}ms`);
+  });
+  await test('navigation code preload is deduplicated, data-saving aware and retryable', async () => {
+    const vm = require('node:vm');
+    const output = ts.transpileModule(fs.readFileSync(path.join(root, 'lib/viewPreload.ts'),'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+    const exports = {}, navigator = { connection: { saveData: false, effectiveType: '4g' } };
+    let calls=0, fail=false;
+    vm.runInNewContext(output, { exports, navigator, require: () => { calls++; if(fail) throw Error('offline'); return {}; } });
+    const flush = () => new Promise(resolve => setImmediate(resolve));
+    exports.preloadView('settings'); exports.preloadView('settings'); await flush(); assert.equal(calls,1);
+    navigator.connection.saveData=true; exports.preloadView('cards'); await flush(); assert.equal(calls,1);
+    navigator.connection.saveData=false; navigator.connection.effectiveType='2g'; exports.preloadView('cards'); await flush(); assert.equal(calls,1);
+    navigator.connection.effectiveType='4g'; fail=true; exports.preloadView('cards'); await flush(); assert.equal(calls,2);
+    fail=false; exports.preloadView('cards'); await flush(); assert.equal(calls,3);
+    exports.preloadView('__proto__'); await flush(); assert.equal(calls,3);
+    const app=fs.readFileSync(path.join(root,'components/RecordsApp.tsx'),'utf8');
+    assert(app.includes('!["holdings", "assets", "fire", "pnl", "watchlist"].includes(activeTab)'));
+    assert(app.includes('onPointerEnter=') && app.includes('onFocus='));
+  });
   await test('session mutations respect Bearer priority and reject cross-site cookie logout', async () => {
     const auth = require(path.join(root, 'lib/auth.ts'));
     for (const filename of ['app/api/auth/logout/route.ts', 'app/api/v1/auth/logout/route.ts']) {

@@ -216,11 +216,11 @@ export function fundBalances(userId: string): Record<FundCurrency, number> {
   // 现金必须保留完整的有符号净额。融资买入会形成负现金（融资负债）；如果逐笔
   // 截断到 0，早期融资会被抹掉，后续卖出回款却完整累加，从而系统性高估净资产。
   // 缺少期初入金的旧账本应通过期初资金/余额调整补齐，不能在汇总阶段篡改流水。
-  const rows = getDb().prepare("SELECT currency,amount,direction FROM fund_transactions WHERE user_id=? ORDER BY currency,occurred_at,created_at,id").all(userId) as { currency: FundCurrency; amount: number; direction: 1 | -1 }[];
+  // 在数据库内聚合，只传回币种级结果；无需为首屏排序、分配整本流水对象。
+  const rows = getDb().prepare("SELECT currency,SUM(amount*direction) AS balance FROM fund_transactions WHERE user_id=? GROUP BY currency").all(userId) as { currency: FundCurrency; balance: number }[];
   rows.forEach((row) => {
-    const delta = (Number(row.amount) || 0) * Number(row.direction);
     // 兜底 || 0：历史数据里若有清单外的币种，也不能让它把整个余额算成 NaN
-    result[row.currency] = (result[row.currency] || 0) + delta;
+    result[row.currency] = Number(row.balance) || 0;
   });
   return result;
 }

@@ -33,6 +33,15 @@ export interface FundState {
   cardCash: BalanceMap;
 }
 
+/** 后台首屏只需要总现金，不额外计算资金明细；口径与 fundState 相同。 */
+export function totalFundBalances(userId: string): BalanceMap {
+  const balances: BalanceMap = fundBalances(userId);
+  for (const [currency, amount] of Object.entries(cardCashByCurrency(userId))) {
+    if (Number.isFinite(amount)) balances[currency] = (balances[currency] || 0) + amount;
+  }
+  return balances;
+}
+
 export function fundState(userId: string): FundState {
   const balances = fundBalances(userId) as BalanceMap;
   const summaries = fundSummaries(userId) as SummaryMap;
