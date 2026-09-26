@@ -356,6 +356,8 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
       else return;
       event.preventDefault();
       drawPosition();
+      // 手动浏览后从当前位置继续漫游，不能被旧漂移范围拉回去。
+      driftAnchorRef.current = { x: positionRef.current.x, y: positionRef.current.y };
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("resize", drawPosition);
@@ -376,7 +378,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   }, [seed]);
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (selected || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     let frame = 0;
     let previousTime = 0;
     const animate = (time: number) => {
@@ -403,8 +405,17 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
       }
       frame = window.requestAnimationFrame(animate);
     };
-    frame = window.requestAnimationFrame(animate);
-    return () => window.cancelAnimationFrame(frame);
+    const syncVisibility = () => {
+      window.cancelAnimationFrame(frame);
+      previousTime = 0;
+      if (!document.hidden) frame = window.requestAnimationFrame(animate);
+    };
+    syncVisibility();
+    document.addEventListener("visibilitychange", syncVisibility);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", syncVisibility);
+    };
   }, [selected]);
 
   useEffect(() => {
@@ -609,7 +620,12 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onPointerLeave={clearHoveredTile}
+        onLostPointerCapture={onPointerUp}
+        onPointerLeave={(event) => {
+          clearHoveredTile();
+          // 尚未达到拖动阈值时没有 capture，离开视口也必须结束按压。
+          if (!event.currentTarget.hasPointerCapture(event.pointerId)) onPointerUp(event);
+        }}
         onWheel={onWheel}
         onClickCapture={(event) => {
           if (!suppressClickRef.current) return;
