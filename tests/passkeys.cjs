@@ -76,7 +76,62 @@ async function login(device, handle, changes = {}, binding) {
     assert.equal((await configRoute.PUT(request({ enabled: false }, cookie(session), 'PUT'))).status, 403);
     db.prepare("UPDATE users SET role='admin' WHERE id=?").run(other.id);
     assert.equal((await configRoute.PUT(request({ enabled: false, currentPassword: 'wrong' }, cookie(otherSession), 'PUT'))).status, 403);
-    assert.equal((await configRoute.PUT(request({ enabled: false, currentPassword: password }, cookie(otherSession), 'PUT', 'https://evil.example'))).status, 403);
+    assert.equal((await configRoute.PUT(request({ enabled: false, currentPassword: password }, cookie(otherSession), 'PUT', 'https://evil.example'))).status, 401);
+  });
+  await test('configuration revisions reject stale writes and unchanged saves preserve pending logins', async () => {
+    const before = await (await configRoute.GET()).json();
+    const saved = await configRoute.PUT(request({ enabled: true, origin, name: 'Fire updated', expectedRevision: before.revision, currentPassword: password }, cookie(otherSession), 'PUT'));
+    assert.equal(saved.status, 200);
+    const current = await saved.json(); assert.notEqual(current.revision, before.revision);
+    const stale = await configRoute.PUT(request({ enabled: true, origin, name: 'Stale edit', expectedRevision: before.revision, currentPassword: password }, cookie(otherSession), 'PUT'));
+    assert.equal(stale.status, 409); assert.equal(store.passkeyConfig().name, 'Fire updated');
+    assert.throws(() => store.savePasskeyConfig(store.normalizePasskeyConfig({ enabled: true, origin, name: 'Stale atomic edit' }), before.revision), store.PasskeyConfigConflictError);
+    const pending = await options('login-options');
+    const unchanged = await configRoute.PUT(request({ enabled: true, origin: origin + '/', name: ' Fire updated ', expectedRevision: current.revision, currentPassword: password }, cookie(otherSession), 'PUT'));
+    assert.equal(unchanged.status, 200); assert.equal((await unchanged.json()).revision, current.revision);
+    assert(db.prepare('SELECT id FROM passkey_challenges WHERE id=?').get(pending.requestId), 'unchanged settings must not interrupt a login');
+  });
+  await test('invalid configuration cannot consume an administrator backup code', async () => {
+    const totp = require(path.join(root, 'lib/totpAuth.ts'));
+    const setup = await totp.beginTotpSetup(other.id, other.username);
+    const enabled = totp.enableTotp(other.id, require(path.join(root, 'lib/totp.ts')).totpCodeAt(setup.secret));
+    assert(enabled.ok);
+    try {
+      const before = db.prepare('SELECT totp_backup_codes FROM users WHERE id=?').get(other.id).totp_backup_codes;
+      const invalid = await configRoute.PUT(request({ enabled: true, origin: origin + '/path', name: 'Fire', currentPassword: password, code: enabled.backupCodes[0] }, cookie(otherSession), 'PUT'));
+      assert.equal(invalid.status, 400);
+      assert.equal(db.prepare('SELECT totp_backup_codes FROM users WHERE id=?').get(other.id).totp_backup_codes, before);
+      const valid = await configRoute.PUT(request({ enabled: true, origin, name: 'Fire', expectedRevision: store.passkeyConfig().revision, currentPassword: password, code: enabled.backupCodes[0] }, cookie(otherSession), 'PUT'));
+      assert.equal(valid.status, 200);
+      assert.notEqual(db.prepare('SELECT totp_backup_codes FROM users WHERE id=?').get(other.id).totp_backup_codes, before);
+    } finally { totp.clearTotp(other.id); }
+  });
+  await test('browser configuration validation matches the server and rejects malformed public responses', () => {
+    const shared = require(path.join(root, 'lib/passkeyConfig.ts'));
+    for (const bad of ['http://example.com', 'https://127.1', 'https://[::1]', 'https://example.com.', origin + '/path', origin + '?x=1', 'not-a-url']) {
+      assert.throws(() => shared.parsePasskeyConfig({ enabled: true, origin: bad, name: 'Fire' }));
+      assert.throws(() => store.normalizePasskeyConfig({ enabled: true, origin: bad, name: 'Fire' }));
+    }
+    assert.equal(shared.parsePasskeyConfig({ enabled: true, origin: ' https://FIRE.example.test:443/ ', name: ' Fire ' }).origin, origin);
+    assert(shared.isPublicPasskeyConfig({ enabled: false, origin: '', name: 'Fire', revision: '' }));
+    for (const bad of [null, {}, { enabled: true, origin: 'invalid', name: 'Fire', revision: '' }, { enabled: false, origin: '', name: 'Fire' }]) assert(!shared.isPublicPasskeyConfig(bad));
+  });
+  await test('client requests end on timeout, reject proxy HTML and never silently accept uncertain mutations', async () => {
+    const client = require(path.join(root, 'lib/passkeyClient.ts'));
+    const previousFetch = global.fetch;
+    try {
+      global.fetch = async () => new Response('<html>proxy unavailable</html>', { status: 502 });
+      await assert.rejects(client.passkeyRequest({}, 'PUT'), error => error instanceof client.PasskeyRequestError && error.status === 502 && error.needsRefresh);
+      global.fetch = async () => new Response('null', { status: 200 });
+      await assert.rejects(client.passkeyRequest({}, 'PUT'), error => error.needsRefresh);
+      global.fetch = async () => new Response(JSON.stringify({ error: '操作过于频繁' }), { status: 429 });
+      await assert.rejects(client.passkeyRequest({ action: 'login-options' }), error => error.status === 429 && !error.needsRefresh && error.message === '操作过于频繁');
+      let attempts = 0;
+      global.fetch = async (_url, { signal }) => { attempts++; return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })); };
+      await assert.rejects(client.passkeyRead('/api/auth/passkeys/config', undefined, 10), error => error instanceof client.PasskeyRequestError && !error.needsRefresh && error.message.includes('超时'));
+      await assert.rejects(client.passkeyRequest({}, 'DELETE', '/api/auth/passkeys', undefined, 10), error => error.needsRefresh);
+      assert.equal(attempts, 2, 'each operation makes one attempt, with no automatic replay');
+    } finally { global.fetch = previousFetch; }
   });
   await test('enrollment requires session, password, correct origin and no authenticator restriction', async () => {
     assert.equal((await route.POST(request({ action: 'register-options', password }))).status, 401);

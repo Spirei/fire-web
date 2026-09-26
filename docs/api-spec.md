@@ -70,7 +70,7 @@ Web 通行密钥使用 `/api/auth/passkeys`：POST 的 `action` 为 `register-op
 
 DELETE 密钥会原子撤销该密钥关联会话及该账号来源不明的升级前旧会话，返回 `{ ok: true, signedOut: boolean }`；`signedOut=true` 时客户端应返回登录页。登录 options 另写入签名浏览器标识 Cookie，按浏览器和可信代理 IP 分别限流，不共享全站额度；每个浏览器只保留最新登录挑战，verify 仍需挑战绑定 Cookie 且一次性消费。
 
-`/api/auth/passkeys/config` 的 GET 公开返回 `{ enabled, origin, name }`；PUT 限管理员，接收这些配置字段及 `currentPassword`、已开启的 `code`。域名配置和凭据不通过普通站点设置或数据导入修改。部署与恢复说明见 [通行密钥](passkeys.md)。
+`/api/auth/passkeys/config` 的 GET 公开返回 `{ enabled, origin, name, revision }`；PUT 限管理员，接收配置字段及 `currentPassword`、已开启的 `code`，网页同时提交 `expectedRevision` 防止旧窗口覆盖（版本冲突返回 409；兼容旧客户端省略此字段）。成功返回确认后的配置及版本。地址先校验，再验证身份；内容不变不撤销正在进行的挑战。域名配置和凭据不通过普通站点设置或数据导入修改。部署与恢复说明见 [通行密钥](passkeys.md)。
 
 ## 5. 公共约定
 

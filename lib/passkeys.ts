@@ -1,9 +1,9 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { isIP } from "node:net";
 import { getDb } from "./db";
 import { getCookie, getSessionToken } from "./auth";
 import { hmacWithDataKey } from "./secretStorage";
 import { clientIp, rateLimit } from "./rateLimit";
+import { parsePasskeyConfig } from "./passkeyConfig";
 
 export const PASSKEY_COOKIE = "fire_passkey_challenge";
 export const PASSKEY_CLIENT_COOKIE = "fire_passkey_client";
@@ -37,27 +37,22 @@ export function passkeyConfig(): PasskeyConfig {
   return row ? JSON.parse(row.value) : { enabled: false, origin: "", rpID: "", name: "Fire", revision: "" };
 }
 export function normalizePasskeyConfig(value: { enabled?: unknown; origin?: unknown; name?: unknown }): PasskeyConfig {
-  if (typeof value.enabled !== "boolean") throw new Error("请选择是否启用通行密钥");
-  const name = String(value.name ?? "Fire").trim();
-  const raw = String(value.origin ?? "").trim();
-  if (!name || name.length > 64) throw new Error("站点名称需为 1–64 个字符");
-  let origin = "", rpID = "";
-  if (raw) {
-    const url = new URL(raw);
-    if ((url.protocol !== "https:" && !(url.protocol === "http:" && url.hostname === "localhost")) || url.username || url.password || url.search || url.hash || url.pathname !== "/" || isIP(url.hostname) || url.hostname.includes(":")) {
-      throw new Error("请填写完整 HTTPS 站点地址，不包含路径、参数或 IP 地址（本地测试可用 http://localhost:3000）");
-    }
-    origin = url.origin; rpID = url.hostname;
-  }
-  if (value.enabled && !origin) throw new Error("启用前请填写 HTTPS 站点地址");
-  return { enabled: value.enabled, origin, rpID, name, revision: randomBytes(16).toString("hex") };
+  const fields = parsePasskeyConfig(value);
+  return { ...fields, rpID: fields.origin ? new URL(fields.origin).hostname : "", revision: randomBytes(16).toString("hex") };
 }
-export function savePasskeyConfig(config: PasskeyConfig) {
+export class PasskeyConfigConflictError extends Error {
+  constructor() { super("登录设置已在其他窗口更新，请刷新后确认再保存"); }
+}
+export function savePasskeyConfig(config: PasskeyConfig, expectedRevision?: string): PasskeyConfig {
   const db = getDb();
-  db.transaction(() => {
+  return db.transaction(() => {
+    const current = passkeyConfig();
+    if (expectedRevision !== undefined && current.revision !== expectedRevision) throw new PasskeyConfigConflictError();
+    if (current.enabled === config.enabled && current.origin === config.origin && current.name === config.name) return current;
     db.prepare("INSERT INTO passkey_config(id,value) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value").run(JSON.stringify(config));
     db.prepare("DELETE FROM passkey_challenges").run();
-  })();
+    return config;
+  }).immediate();
 }
 export function assertPasskeyOrigin(request: Request, config: PasskeyConfig) {
   if (!config.enabled) throw new Error("站点尚未启用通行密钥");
