@@ -93,7 +93,7 @@ export default function ApiDocsPage() {
   const previewHtml = useMemo(() => renderMarkdown(content), [content]);
   // 路由表首列方法（GET/POST/PUT/DELETE）渲染为彩色徽标，便于扫读
   const methodHtml = useMemo(
-    () => previewHtml.replace(/^<h1\b[^>]*>.*?<\/h1>\s*/, "").replace(/<td>(GET|POST|PUT|DELETE|PATCH)<\/td>/g, (_m, p: string) => `<td><span class="api-method ${p.toLowerCase()}">${p}</span></td>`),
+    () => previewHtml.replace(/^<h1\b[^>]*>.*?<\/h1>\s*/, "").replace(/<td([^>]*)>(GET|POST|PUT|DELETE|PATCH)<\/td>/g, (_m, attributes: string, method: string) => `<td${attributes}><span class="api-method ${method.toLowerCase()}">${method}</span></td>`),
     [previewHtml]
   );
 

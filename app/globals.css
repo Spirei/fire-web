@@ -589,6 +589,7 @@
   .dark .api-reference-shell .api-docs-paper h2.markdown-subsection { color: #ced6da; }
   .dark .api-reference-shell .markdown-details { background: #263138; border-color: #3a454d; }
   .dark .api-reference-shell .markdown-details summary { color: #ced6da; border-color: #3a454d; }
+  .dark .api-reference-shell .markdown-routes tbody tr { border-color: #3a454d; }
   .api-docs-paper table tbody tr {
     transition: background-color 160ms ease;
   }

@@ -150,6 +150,8 @@
 .api-reference-shell .api-docs-paper pre code { background: transparent; font-size: inherit; }
 .api-reference-shell .api-docs-paper .markdown-table-wrap { margin: 16px 0 24px; border: 1px solid #dae1e6; border-radius: 10px; }
 .api-reference-shell .api-docs-paper table { margin: 0; width: 100%; }
+.api-reference-shell .markdown-routes td:nth-child(2) code { overflow-wrap: anywhere; word-break: normal; }
+.api-reference-shell .markdown-routes td:last-child { min-width: 90px; }
 .api-reference-shell .markdown-details { margin: 10px 0; padding: 0 18px; border: 1px solid #dae1e6; border-radius: 10px; background: #f5f7f8; }
 .api-reference-shell .markdown-details summary { padding: 15px 0; cursor: pointer; font-size: 14px; font-weight: 600; color: #34414b; }
 .api-reference-shell .markdown-details summary::marker { color: #7a8792; }
@@ -210,6 +212,16 @@
   .api-reference-layout { padding: 16px 10px; }
   .api-reference-shell .api-docs-paper { padding: 18px 14px; }
   .api-reference-shell .api-docs-paper h2 { padding: 22px 0 0; font-size: 19px; }
+}
+@media (max-width: 767px) {
+  .api-reference-shell .api-docs-paper .markdown-routes { border: 0; border-radius: 0; overflow: visible; }
+  .api-reference-shell .markdown-routes table,
+  .api-reference-shell .markdown-routes tbody { display: block; }
+  .api-reference-shell .markdown-routes thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .api-reference-shell .markdown-routes tbody tr { display: grid; grid-template-columns: 1fr; margin-bottom: 12px; padding: 14px; border: 1px solid #dae1e6; border-radius: 10px; }
+  .api-reference-shell .api-docs-paper .markdown-routes td { display: block; width: auto; min-width: 0; padding: 4px 0; border: 0; }
+  .api-reference-shell .markdown-routes td:nth-child(2) code { font-size: 12px; background: transparent; padding: 0; }
+  .api-reference-shell .markdown-routes td:nth-child(n+3)::before { content: attr(data-label) "："; opacity: .7; }
 }
 @media (prefers-reduced-motion: reduce) {
   .api-reference-marker, .api-reference-marker::after, .api-reference-children, .api-reference-row-label, .api-docs-toc-item svg, .api-reference-shell .api-docs-toc-item { transition: none; }

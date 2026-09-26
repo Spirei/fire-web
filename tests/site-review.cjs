@@ -16,6 +16,15 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('API route tables preserve escaped pipes and label mobile cells safely', () => {
+    const { renderMarkdown } = require(path.join(root, 'lib/markdown.ts'));
+    const html = renderMarkdown('| 方法 | 路径 | 说明 | 鉴权 |\n| --- | --- | --- | --- |\n| GET | `/api/v1/earnings` | `US\\|CN` | 无 |');
+    assert.equal((html.match(/<td\b/g) || []).length, 4);
+    assert(html.includes('<code>US|CN</code>'));
+    assert(html.includes('data-label="鉴权"'));
+    assert(html.includes('markdown-routes'));
+    assert(!renderMarkdown('| 字段 | 类型 |\n| --- | --- |\n| id | string |').includes('markdown-routes'));
+  });
   await test('API disclosure renders escaped summaries and keeps code fences literal', () => {
     const { renderMarkdown } = require(path.join(root, 'lib/markdown.ts'));
     const html = renderMarkdown('<details>\n<summary>登录 <img src=x onerror=alert(1)></summary>\n\n- Token\n</details>');

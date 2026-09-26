@@ -60,6 +60,7 @@ export function renderMarkdown(md: string): string {
   };
 
   const codeBlock = (code: string) => `<pre><button type="button" class="markdown-copy-button" data-copy-code="true" aria-label="复制代码" title="复制代码"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button><code>${code}</code></pre>`;
+  const tableCells = (line: string) => line.trim().split(/(?<!\\)\|/).slice(1, -1).map(cell => cell.trim().replace(/\\\|/g, "|"));
 
   while (i < lines.length) {
     const line = lines[i];
@@ -109,22 +110,23 @@ export function renderMarkdown(md: string): string {
     // 表格
     if (trimmed.startsWith("|") && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
       closeList();
-      const header = trimmed.split("|").slice(1, -1).map((c) => c.trim());
+      const header = tableCells(trimmed);
       i += 2;
       const body: string[][] = [];
       while (i < lines.length && lines[i].trim().startsWith("|")) {
-        body.push(lines[i].trim().split("|").slice(1, -1).map((c) => c.trim()));
+        body.push(tableCells(lines[i]));
         i += 1;
       }
-      let table = `<div class="markdown-table-wrap"><table><thead><tr>`;
+      const routes = header[0] === "方法" && header[1] === "路径";
+      let table = `<div class="markdown-table-wrap${routes ? ' markdown-routes' : ''}"><table><thead><tr>`;
       header.forEach((h) => {
-        table += `<th>${inline(h)}</th>`;
+        table += `<th scope="col">${inline(h)}</th>`;
       });
       table += "</tr></thead><tbody>";
       body.forEach((row) => {
         table += "<tr>";
-        row.forEach((cell) => {
-          table += `<td>${inline(cell)}</td>`;
+        row.forEach((cell, index) => {
+          table += `<td${routes ? ` data-label="${escapeHtml(header[index] ?? '')}"` : ''}>${inline(cell)}</td>`;
         });
         table += "</tr>";
       });
