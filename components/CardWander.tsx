@@ -31,7 +31,7 @@ const DRIFT_SPEED_PER_SECOND = 9.5;
 const DRIFT_ANGLE_PER_SECOND = 0.0006;
 const DRIFT_TRAVEL_X = 320;
 const DRIFT_TRAVEL_Y = 180;
-type PreviewEffect = "gloss" | "holo" | "metal" | "pearl" | "stardust";
+type PreviewEffect = "gloss" | "holo" | "metal" | "pulse" | "stardust";
 type PreviewMode = "showcase" | "wallet" | "actual";
 const PREVIEW_MODES: { key: PreviewMode; label: string }[] = [
   { key: "showcase", label: "展示" },
@@ -42,7 +42,7 @@ const PREVIEW_EFFECTS: { key: PreviewEffect; label: string }[] = [
   { key: "gloss", label: "光泽" },
   { key: "holo", label: "幻彩" },
   { key: "metal", label: "金属" },
-  { key: "pearl", label: "珠光" },
+  { key: "pulse", label: "脉冲" },
   { key: "stardust", label: "星砂" }
 ];
 
