@@ -9,20 +9,28 @@ import { FALLBACK_RATES } from "./types";
 
 const RATES_CACHE_KEY = "fire:rates";
 
+export function normalizeCachedRates(value: unknown): Record<string, number> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const valid = Object.entries(value).filter(([code, rate]) => /^[A-Z]{3}$/.test(code) && typeof rate === "number" && Number.isFinite(rate) && rate > 0);
+  if (!valid.length) return null;
+  return { ...FALLBACK_RATES, ...Object.fromEntries(valid), USD: 1 };
+}
+
 /** 读取上次成功保存的汇率（合并到兜底汇率之上）；读不到返回 null */
 export function readCachedRates(): Record<string, number> | null {
   try {
     const parsed = JSON.parse(localStorage.getItem(RATES_CACHE_KEY) || "null");
-    if (!parsed || typeof parsed !== "object") return null;
-    return { ...FALLBACK_RATES, ...(parsed as Record<string, number>) };
+    return normalizeCachedRates(parsed);
   } catch {
     return null;
   }
 }
 
 export function writeCachedRates(rates: Record<string, number>) {
+  const normalized = normalizeCachedRates(rates);
+  if (!normalized) return;
   try {
-    localStorage.setItem(RATES_CACHE_KEY, JSON.stringify(rates));
+    localStorage.setItem(RATES_CACHE_KEY, JSON.stringify(normalized));
   } catch {
     /* 存储不可用时忽略 */
   }

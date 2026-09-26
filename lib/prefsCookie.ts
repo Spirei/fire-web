@@ -24,11 +24,8 @@ export function parsePrefsCookie(raw: string | null | undefined): PrefMap {
 }
 
 function byteLength(value: string): number {
-  try {
-    return new TextEncoder().encode(value).length;
-  } catch {
-    return value.length * 2;
-  }
+  // 浏览器限制的是实际写入的编码后长度，中文每字常占 9 字节。
+  return encodeURIComponent(value).length;
 }
 
 /** 序列化偏好表，并保证结果一定塞得进一条 cookie：超了就按「从小到大」保留，丢掉太长的几条 */
@@ -37,13 +34,10 @@ export function serializePrefs(map: PrefMap): string {
   const full = JSON.stringify(Object.fromEntries(entries));
   if (byteLength(full) <= MAX_BYTES) return full;
   const sorted = [...entries].sort((a, b) => JSON.stringify(a[1]).length - JSON.stringify(b[1]).length);
-  const kept: PrefMap = {};
-  let size = 2;
+  const kept: PrefMap = Object.create(null);
   for (const [key, value] of sorted) {
-    const piece = byteLength(JSON.stringify(key)) + byteLength(JSON.stringify(value)) + 2;
-    if (size + piece > MAX_BYTES) continue;
+    if (byteLength(JSON.stringify({ ...kept, [key]: value })) > MAX_BYTES) continue;
     kept[key] = value;
-    size += piece;
   }
   return JSON.stringify(kept);
 }

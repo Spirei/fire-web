@@ -15,8 +15,8 @@ export async function GET(request: Request) {
   const market = String(searchParams.get("market") ?? "").trim().toUpperCase();
   const code = String(searchParams.get("code") ?? "").trim().toUpperCase();
   if (!market || !code) return NextResponse.json({ error: "缺少 market / code" }, { status: 400 });
-  if (!/^[A-Z0-9._-]+$/.test(code)) return NextResponse.json({ error: "股票代码不合法" }, { status: 400 });
-  const limit = Math.min(3300, Math.max(60, Number(searchParams.get("limit")) || 320));
+  if (!/^[A-Z0-9._-]{1,32}$/.test(code)) return NextResponse.json({ error: "股票代码不合法" }, { status: 400 });
+  const limit = Math.floor(Math.min(3300, Math.max(60, Number(searchParams.get("limit")) || 320)));
   if (market === "ASSET") {
     const ids: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", BNB: "binancecoin", XRP: "xrp", DOGE: "dogecoin", ADA: "cardano", LTC: "litecoin", DOT: "polkadot", TRX: "tron", SHIB: "shiba-inu", AVAX: "avalanche-2", LINK: "chainlink" };
     const id = ids[code];
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
   const adjust = adjustRaw === "hfq" ? "hfq" : adjustRaw === "none" ? "none" : "qfq";
   try {
     const items = period
-      ? await fetchPeriodKline(market, code, period, limit, adjust)
+      ? await fetchPeriodKline(market, code, period, limit, adjust, index)
       : await fetchDailyKline(market, code, limit, index, adjust);
     return NextResponse.json({ market, code, period, adjust, items });
   } catch {

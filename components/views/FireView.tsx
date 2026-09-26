@@ -418,16 +418,21 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   }, [annualExpense, withdrawalRate, annualReturn, inflation, savingsRate]);
 
   const [rates, setRates] = useState<Record<string, number>>({ ...FALLBACK_RATES });
-  const [ratesAt, setRatesAt] = useState<number>(Date.now());
+  const [ratesAt, setRatesAt] = useState<number | null>(null);
   useEffect(() => {
-    let alive = true;
-    sharedRead("/api/rates")
+    let generation = 0;
+    const load = () => {
+      const current = ++generation;
+      return sharedRead("/api/rates")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (alive && data?.rates) { setRates({ ...FALLBACK_RATES, ...data.rates, USD: data.rates.USD ?? 1 }); setRatesAt(Date.now()); }
+        if (current === generation && data?.rates) { setRates({ ...FALLBACK_RATES, ...data.rates, USD: 1 }); setRatesAt(typeof data.updatedAt === "number" && data.updatedAt > 0 ? data.updatedAt : null); }
       })
       .catch(() => {});
-    return () => { alive = false; };
+    };
+    void load();
+    window.addEventListener("fire:rates-updated", load);
+    return () => { ++generation; window.removeEventListener("fire:rates-updated", load); };
   }, []);
 
   // 各币种持仓统一换算成 USD（避免 USD/HKD/CNY 直接相加的错误）
@@ -546,7 +551,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
     return tableRows[idx].year - currentYear;
   }, [tableRows, currentYear]);
   useEffect(() => {
-    if (!yearsDirty.current && tableYearsToFire != null) setYearsInput(String(tableYearsToFire));
+    if (!yearsDirty.current) setYearsInput(tableYearsToFire == null ? "" : String(tableYearsToFire));
   }, [tableYearsToFire]);
   // 今年的行始终按真实账户数据重算（仅会话内可临时改），不因持久化而冻结
   const currentRowTouched = useRef(false);
@@ -1078,7 +1083,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
             {editing ? (
               <input type="number" value={yearsInput} onChange={(e) => { yearsDirty.current = true; setYearsInput(e.target.value); }} className={inputCls} />
             ) : (
-              <div className="text-[20px] font-semibold leading-tight tabular-nums text-ink-2 dark:text-white">{Number(yearsInput) <= 0 ? "已达成" : `${Number(yearsInput)} 年`}</div>
+              <div className="text-[20px] font-semibold leading-tight tabular-nums text-ink-2 dark:text-white">{!yearsInput.trim() || !Number.isFinite(Number(yearsInput)) ? "—" : Number(yearsInput) <= 0 ? "已达成" : `${Number(yearsInput)} 年`}</div>
             )}
           </div>
         </div>
@@ -1240,7 +1245,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
       {/* 汇率信息（右下角）：1 USD = X 显示币种 · 更新于日期 */}
       <div className="mt-3 flex justify-end">
         <span className="text-[12px] tabular-nums text-muted">
-          1 USD = {Number(curRate.toFixed(4))} {displayCurrency} · 更新于 {new Date(ratesAt).getFullYear()}.{new Date(ratesAt).getMonth() + 1}.{new Date(ratesAt).getDate()}
+          1 USD = {Number(curRate.toFixed(4))} {displayCurrency} · {ratesAt ? `更新于 ${new Date(ratesAt).getFullYear()}.${new Date(ratesAt).getMonth() + 1}.${new Date(ratesAt).getDate()}` : "参考汇率"}
         </span>
       </div>
       <FireAssetHeatmap history={assetHistory} />

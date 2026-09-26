@@ -57,7 +57,9 @@ export function queryLibraryAssets(input: {
   const market = type === "stock" && input.market && input.market !== "ALL" ? input.market : "";
   const q = String(input.q ?? "").trim().slice(0, 80);
   const pageSize = Math.min(100, Math.max(1, Math.floor(Number(input.pageSize) || 10)));
-  const page = Math.max(1, Math.floor(Number(input.page) || 1));
+  const requestedPage = Number(input.page);
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0
+    ? Math.min(requestedPage, Math.floor(Number.MAX_SAFE_INTEGER / pageSize)) : 1;
   const where = ["type = ?"];
   const params: Array<string | number> = [type];
   if (market) {

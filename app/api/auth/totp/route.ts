@@ -1,6 +1,6 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
-import { deleteOtherSessions, findUserById, getAuthUser, getCookie, LEGACY_SESSION_COOKIE, SESSION_COOKIE } from "@/lib/auth";
+import { deleteOtherSessions, findUserById, getAuthUser, getSessionToken } from "@/lib/auth";
 import { beginTotpSetup, disableTotp, enableTotp, userTotpEnabled } from "@/lib/totpAuth";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
@@ -39,7 +39,7 @@ export async function PUT(request: Request) {
   const body = await readJsonBody(request, 4 * 1024).catch(() => null);
   const result = enableTotp(user.id, String(body?.code ?? ""));
   if (!result.ok) return NextResponse.json({ error: result.error || "验证失败" }, { status: 400 });
-  deleteOtherSessions(user.id, getCookie(request, SESSION_COOKIE) || getCookie(request, LEGACY_SESSION_COOKIE));
+  deleteOtherSessions(user.id, getSessionToken(request));
   logSecurityEvent(request, user.id, "auth.totp.enabled", "二次验证已开启，其它会话已退出");
   return NextResponse.json({ ok: true, backupCodes: result.backupCodes }, NO_STORE);
 }

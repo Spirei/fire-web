@@ -23,6 +23,25 @@ export interface KlineItem {
 }
 
 const cache = new Map<string, { items: KlineItem[]; at: number }>();
+const pending = new Map<string, Promise<KlineItem[]>>();
+
+async function cachedKline(key: string, load: () => Promise<KlineItem[]>): Promise<KlineItem[]> {
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_TTL) return hit.items;
+  const active = pending.get(key);
+  if (active) return active;
+  const request = load().then((items) => {
+    cache.delete(key);
+    for (const [oldKey, entry] of cache) {
+      if (Date.now() - entry.at >= CACHE_TTL) cache.delete(oldKey);
+    }
+    while (cache.size >= 128) cache.delete(cache.keys().next().value!);
+    cache.set(key, { items, at: Date.now() });
+    return items;
+  }).finally(() => pending.delete(key));
+  pending.set(key, request);
+  return request;
+}
 const CACHE_TTL = 10 * 60 * 1000;
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36";
@@ -243,10 +262,8 @@ export async function fetchDailyKline(
   adjust: "qfq" | "none" | "hfq" = "qfq"
 ): Promise<KlineItem[]> {
   // 不同周期需要不同条数；limit 必须进入缓存键，否则先缓存 320 条会污染后续 3200 条请求。
-  const key = `${market}:${code}:${limit}:${adjust}`;
-  const cached = cache.get(key);
-  if (cached && Date.now() - cached.at < CACHE_TTL) return cached.items;
-
+  const key = `${market}:${code}:${limit}:${adjust}:${index}`;
+  return cachedKline(key, async () => {
   const symbol = tencentSymbol(market, code, index);
   let items: KlineItem[] = [];
   if (market === "US") {
@@ -289,8 +306,8 @@ export async function fetchDailyKline(
     }
   }
   if (items.length === 0) throw new Error("暂无 K 线数据");
-  cache.set(key, { items, at: Date.now() });
   return items;
+  });
 }
 
 function aggregatePeriods(rows: KlineItem[], period: "WEEK" | "MONTH" | "QUARTER" | "YEAR"): KlineItem[] {
@@ -330,21 +347,20 @@ export async function fetchPeriodKline(
   code: string,
   period: "WEEK" | "MONTH" | "QUARTER" | "YEAR",
   limit = 320,
-  adjust: "qfq" | "none" | "hfq" = "qfq"
+  adjust: "qfq" | "none" | "hfq" = "qfq",
+  index = false
 ): Promise<KlineItem[]> {
-  const key = `${market}:${code}:${period}:${limit}:${adjust}`;
-  const cached = cache.get(key);
-  if (cached && Date.now() - cached.at < CACHE_TTL) return cached.items;
-
+  const key = `${market}:${code}:${period}:${limit}:${adjust}:${index}`;
+  return cachedKline(key, async () => {
   let items: KlineItem[] = [];
   // 周/月/季/年K一律用日K（qfq/hfq/none）聚合：富途周期K对拆股股未正确前复权（GOOGL 2022-07
   // 拆股 20:1 后仍是 2179→116），Yahoo 日K已前复权连续，聚合出连续月/年K。
   if (items.length === 0) {
     // 年K显示「上市以来」：拉取足够多日K（>7000 触发 Yahoo range=max 全量）。
-    const daily = await fetchDailyKline(market, code, period === "YEAR" ? 12000 : 3300, false, adjust);
+    const daily = await fetchDailyKline(market, code, period === "YEAR" ? 12000 : 3300, index, adjust);
     items = aggregatePeriods(daily, period);
   }
   if (items.length === 0) throw new Error("暂无 K 线数据");
-  cache.set(key, { items, at: Date.now() });
   return items.slice(-limit);
+  });
 }

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { deleteSession, getAuthUser, getCookie, LEGACY_SESSION_COOKIE, SESSION_COOKIE } from "@/lib/auth";
+import { deleteSession, getAuthUser, getSessionToken, isTrustedMutationRequest, LEGACY_SESSION_COOKIE, SESSION_COOKIE } from "@/lib/auth";
 import { logSecurityEvent } from "@/lib/securityAudit";
 
 export async function POST(request: Request) {
-  const token = getCookie(request, SESSION_COOKIE) || getCookie(request, LEGACY_SESSION_COOKIE);
+  if (!request.headers.get("authorization")?.startsWith("Bearer ") && !isTrustedMutationRequest(request)) return NextResponse.json({ error: "请求来源不受信任" }, { status: 403 });
+  const token = getSessionToken(request);
   const user = getAuthUser(request);
   if (user) logSecurityEvent(request, user.id, "auth.logout", "网页登录退出");
   deleteSession(token);

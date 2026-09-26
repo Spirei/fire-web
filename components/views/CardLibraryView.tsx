@@ -10,10 +10,9 @@ import AppSelect from "@/components/AppSelect";
 import { cardTagsOf } from "@/lib/cardTags";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import CardWalletStack, { type WalletCard, type WalletCardDetails } from "@/components/CardWalletStack";
-import { FALLBACK_RATES } from "@/lib/types";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
-import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
+import { useRates } from "@/lib/useRates";
 import { REGION_CURRENCY, currencySymbol } from "@/lib/cardCurrencies";
 import { searchKey } from "@/lib/hanConvert";
 import { bankTitle, cardTitle, regionTitle, typeTitle, type CardScript } from "@/lib/cardNamesEn";
@@ -548,29 +547,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   }, []);
 
   const { currency: displayCurrency } = useDisplayCurrency();
-  const [rates, setRates] = useState<Record<string, number>>(() => ({ ...FALLBACK_RATES }));
-
-  // 汇率：首帧用兜底值（与服务端一致），挂载前（useLayoutEffect）再合并本地缓存，随后拉一次最新
-  useLayoutEffect(() => {
-    const cached = readCachedRates();
-    if (cached) setRates((prev) => ({ ...prev, ...cached }));
-  }, []);
-  useEffect(() => {
-    let cancelled = false;
-    sharedRead("/api/rates")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled || !data?.rates) return;
-        setRates((prev) => ({ ...prev, ...data.rates, USD: 1 }));
-        writeCachedRates(data.rates);
-      })
-      .catch(() => {
-        /* 汇率失败保留兜底值 */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const rates = useRates();
 
   /** 同一份 payload 既用于服务端注入，也用于挂载后的静默刷新 */
   const applyPayload = (data: {

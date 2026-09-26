@@ -16,7 +16,7 @@ import {
   type TradeOrder,
   type OrderSide
 } from "@/lib/types";
-import { readCachedRates, writeCachedRates } from "@/lib/ratesCache";
+import { normalizeCachedRates, readCachedRates, writeCachedRates } from "@/lib/ratesCache";
 import StockSearch from "@/components/StockSearch";
 import MarketIcon from "@/components/MarketIcon";
 import GroupSelect from "@/components/GroupSelect";
@@ -271,15 +271,18 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const pnlDragIndex = useRef<number | null>(null);
 
   // 加载实时汇率（总资产跨市场换算用）；抽成函数供手动刷新复用
+  const ratesGeneration = useRef(0);
   const loadRates = useCallback(async () => {
+    const generation = ++ratesGeneration.current;
     try {
       const res = await sharedRead("/api/rates");
       const data = res.ok ? await res.json() : null;
-      if (data?.rates) {
+      const next = normalizeCachedRates(data?.rates);
+      if (next && generation === ratesGeneration.current) {
         // 以当前（上一次成功）汇率为底，覆盖上游返回的币种，缺失币种保留上次值
-        setRates((prev) => ({ ...prev, ...data.rates, USD: 1 }));
+        setRates((prev) => ({ ...prev, ...next, USD: 1 }));
         setRatesReady(true);
-        writeCachedRates(data.rates);
+        writeCachedRates(next);
       }
     } catch {
       /* 汇率失败保留上次值 */
@@ -288,6 +291,8 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
 
   useEffect(() => {
     void loadRates();
+    window.addEventListener("fire:rates-updated", loadRates);
+    return () => { ++ratesGeneration.current; window.removeEventListener("fire:rates-updated", loadRates); };
   }, [loadRates]);
 
   const loadFundBalances = useCallback(async () => {

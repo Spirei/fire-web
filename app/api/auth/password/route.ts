@@ -1,6 +1,6 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
-import { deleteOtherSessions, findUserById, getAuthUser, getCookie, LEGACY_SESSION_COOKIE, SESSION_COOKIE, updatePassword } from "@/lib/auth";
+import { deleteOtherSessions, findUserById, getAuthUser, getSessionToken, updatePassword } from "@/lib/auth";
 import { consumeTotpFactor, userTotpEnabled } from "@/lib/totpAuth";
 import { validatePassword, verifyPassword } from "@/lib/password";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
   updatePassword(user.id, newPassword);
   // 修改密码后踢掉其它登录会话，防止被盗会话继续使用
-  deleteOtherSessions(user.id, getCookie(request, SESSION_COOKIE) || getCookie(request, LEGACY_SESSION_COOKIE));
+  deleteOtherSessions(user.id, getSessionToken(request));
   logSecurityEvent(request, user.id, "password_change", "other sessions revoked");
   return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }

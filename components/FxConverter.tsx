@@ -143,7 +143,10 @@ export default function FxConverter() {
         setQuoted(nextQuoted);
         setRates(nextRates);
         setUpdatedAt(typeof data.updatedAt === "number" && data.updatedAt > 0 ? data.updatedAt : null);
-        if (force) showToast("汇率已刷新");
+        if (force) {
+          showToast("汇率已刷新");
+          window.dispatchEvent(new Event("fire:rates-updated"));
+        }
       } catch {
         if (requestId !== rateRequestRef.current) return;
         setRateError(force ? "刷新失败，请稍后重试" : "汇率加载失败，请点击刷新重试");

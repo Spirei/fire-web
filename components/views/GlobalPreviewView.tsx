@@ -288,7 +288,7 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
     <div className="flex flex-col gap-4">
       <div className="min-w-0">
         <div className="flex items-center gap-2.5">
-          <h2 className="min-w-0 text-lg font-bold">全球资产市值排行</h2><span className="sr-only">dbg</span>
+          <h2 className="min-w-0 text-lg font-bold">全球资产市值排行</h2>
           <CurrencySelect align="left" />
         </div>
         <p className="mt-0.5 text-xs text-muted">

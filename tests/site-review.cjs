@@ -16,12 +16,75 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('full kline requests coalesce and period cache preserves the requested count', async () => {
+    const { fetchDailyKline, fetchPeriodKline } = require(path.join(root, 'lib/kline.ts'));
+    const original = global.fetch;
+    let calls = 0;
+    global.fetch = async () => {
+      calls++;
+      return Response.json({ data: { hk09999: { qfqday: ['01', '02', '03', '04'].map(month => [`2026-${month}-15`, '10', '11', '12', '9', '100']) } } });
+    };
+    try {
+      const [a, b] = await Promise.all([fetchDailyKline('HK', '09999', 4), fetchDailyKline('HK', '09999', 4)]);
+      assert.deepEqual(a, b);
+      assert.equal(calls, 1);
+      await fetchDailyKline('HK', '09999', 4, true);
+      assert.equal(calls, 2, 'index flag must be part of cache identity');
+      const first = await fetchPeriodKline('HK', '09999', 'MONTH', 2);
+      const cached = await fetchPeriodKline('HK', '09999', 'MONTH', 2);
+      assert.equal(first.length, 2);
+      assert.deepEqual(cached, first);
+      assert.equal(calls, 3);
+      assert.equal((await fetchPeriodKline('HK', '09999', 'MONTH', 2, 'qfq', true)).length, 2);
+      assert.equal(calls, 4, 'period requests must preserve index identity');
+    } finally { global.fetch = original; }
+  });
+  await test('preference cookies fit after URI encoding and retain small Chinese preferences', () => {
+    const { prefsCookieString, parsePrefsCookie } = require(path.join(root, 'lib/prefsCookie.ts'));
+    const cookie = prefsCookieString({ 'fire:small': '简体', 'fire:large': '汉字'.repeat(800), 'fire:columns': Array.from({ length: 80 }, (_, i) => `列${i}`) });
+    assert(Buffer.byteLength(cookie) < 4096);
+    const value = decodeURIComponent(cookie.split(';')[0].split('=').slice(1).join('='));
+    const restored = parsePrefsCookie(value);
+    assert.equal(restored['fire:small'], '简体');
+    assert.equal(restored['fire:large'], undefined);
+  });
+  await test('attachment pagination rejects non-finite and unsafe offsets', () => {
+    const { queryLibraryAssets } = require(path.join(root, 'lib/attachments.ts'));
+    for (const page of [Infinity, -Infinity, NaN, 1.5, Number.MAX_VALUE]) {
+      assert.equal(queryLibraryAssets({ page }).page, 1);
+    }
+    assert.equal(queryLibraryAssets({ page: 2 }).page, 2);
+  });
+  await test('FIRE blank years never imply that retirement has been reached', () => {
+    const source = fs.readFileSync(path.join(root, 'components/views/FireView.tsx'), 'utf8');
+    const expression = source.match(/\{(!yearsInput\.trim\(\).*?)\}<\/div>/)[1];
+    const label = new Function('yearsInput', `return (${expression})`);
+    assert.equal(label(''), '—');
+    assert.equal(label('NaN'), '—');
+    assert.equal(label('0'), '已达成');
+    assert.equal(label('8'), '8 年');
+    assert(source.includes('tableYearsToFire == null ? "" : String(tableYearsToFire)'));
+  });
+  await test('rate caches reject malformed values and always preserve the USD base', () => {
+    const { normalizeCachedRates } = require(path.join(root, 'lib/ratesCache.ts'));
+    assert.equal(normalizeCachedRates([]), null);
+    assert.equal(normalizeCachedRates({ BAD: -1 }), null);
+    const rates = normalizeCachedRates({ USD: 50, CNY: 7.2, HKD: Infinity, EUR: '1.2', longCode: 5 });
+    assert.equal(rates.USD, 1);
+    assert.equal(rates.CNY, 7.2);
+    assert(Number.isFinite(rates.HKD));
+    assert.equal(typeof rates.EUR, 'number');
+    assert.equal(rates.longCode, undefined);
+  });
   await test('concurrent reads share transport but keep independent bodies and allow fresh retry', async () => {
     const { sharedRead } = require(path.join(root, 'lib/sharedRead.ts'));
     const original = global.fetch;
     let calls = 0;
     let finish;
-    global.fetch = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
+    global.fetch = (url) => {
+      if (url !== '/api/rates') return Promise.reject(new Error('Network disabled in isolated regression'));
+      calls++; return new Promise(resolve => { finish = resolve; });
+    };
     try {
       const a = sharedRead('/api/rates');
       const b = sharedRead('/api/rates');
@@ -33,7 +96,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       assert.equal(calls, 2);
       finish(new Response('unavailable', { status: 503 }));
       assert.equal((await next).status, 503);
-      global.fetch = async () => { calls++; throw new Error('offline'); };
+      global.fetch = async (url) => { if (url === '/api/rates') calls++; throw new Error('offline'); };
       await assert.rejects(sharedRead('/api/rates'), /offline/);
       await assert.rejects(sharedRead('/api/rates'), /offline/);
       assert.equal(calls, 4);
@@ -150,6 +213,38 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   const user = createUser('review_user', 'Review-test-123');
   const other = createUser('review_other', 'Review-test-123');
   const tokens = { user: createSession(user.id), other: createSession(other.id), admin: createSession('demo-user') };
+  await test('session mutations respect Bearer priority and reject cross-site cookie logout', async () => {
+    const auth = require(path.join(root, 'lib/auth.ts'));
+    for (const filename of ['app/api/auth/logout/route.ts', 'app/api/v1/auth/logout/route.ts']) {
+      const route = require(path.join(root, filename));
+      const cookie = createSession(user.id);
+      const bearer = createSession(other.id);
+      const crossSite = new Request('http://localhost/logout', { method: 'POST', headers: { cookie: `fire_session=${cookie}`, origin: 'https://foreign.example', 'sec-fetch-site': 'cross-site' } });
+      assert.equal((await route.POST(crossSite)).status, 403);
+      assert(auth.getUserByToken(cookie));
+      const explicit = new Request('http://localhost/logout', { method: 'POST', headers: { cookie: `fire_session=${cookie}`, authorization: `Bearer ${bearer}` } });
+      assert.equal(auth.getSessionToken(explicit), bearer);
+      assert.equal((await route.POST(explicit)).status, 200);
+      assert.equal(auth.getUserByToken(bearer), null);
+      assert(auth.getUserByToken(cookie), 'logout must not revoke another identity from a stale cookie');
+      auth.deleteSession(cookie);
+    }
+    const changing = createUser('review_password', 'Review-test-123');
+    const bearer = createSession(changing.id);
+    const oldSession = createSession(changing.id);
+    const password = require(path.join(root, 'app/api/auth/password/route.ts'));
+    const result = await password.POST(new Request('http://localhost/api/auth/password', { method: 'POST', headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json' }, body: JSON.stringify({ oldPassword: 'Review-test-123', newPassword: 'Review-new-456' }) }));
+    assert.equal(result.status, 200);
+    assert(auth.getUserByToken(bearer));
+    assert.equal(auth.getUserByToken(oldSession), null);
+  });
+  await test('admin profile edits reject case-insensitive duplicate email', () => {
+    const auth = require(path.join(root, 'lib/auth.ts'));
+    const owner = createUser('review_email_owner', 'Review-test-123', false, 'unique@example.test');
+    assert.equal(auth.updateUserById(other.id, { email: ' UNIQUE@example.test ' }), null);
+    assert.equal(auth.findUserById(other.id).email, '');
+    assert(auth.updateUserById(owner.id, { email: 'UNIQUE@example.test' }));
+  });
   await test('card balance replay restores opening balance, respects adjustments and rolls back failed writes', () => {
     const { upsertCardAmount, listCardAmounts } = require(path.join(root, 'lib/cardAmounts.ts'));
     const { addCardBalanceEntry, deleteCardBalanceEntry, listCardBalanceHistoryForCard } = require(path.join(root, 'lib/cardWallet.ts'));
@@ -979,6 +1074,15 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const served = await route.GET(new Request(`http://localhost${url}`), { params: Promise.resolve({ path: rel.split('/') }) });
     assert.equal(served.status, 200);
     assert.equal(served.headers.get('content-type'), 'image/png');
+    assert.deepEqual(Buffer.from(await served.arrayBuffer()), png);
+    const suffix = await route.GET(new Request(`http://localhost${url}`, { headers: { range: 'bytes=-4' } }), { params: Promise.resolve({ path: rel.split('/') }) });
+    assert.equal(suffix.status, 206);
+    assert.deepEqual(Buffer.from(await suffix.arrayBuffer()), png.subarray(-4));
+    for (const range of ['bytes=999999-', 'bytes=-0', 'bytes=-', 'bytes=0-1,4-5']) {
+      const invalidRange = await route.GET(new Request(`http://localhost${url}`, { headers: { range } }), { params: Promise.resolve({ path: rel.split('/') }) });
+      assert.equal(invalidRange.status, 416, range);
+      assert.equal(invalidRange.headers.get('content-range'), `bytes */${png.length}`);
+    }
     assert.equal((await settingsRoute.PUT(request('admin', { modelServices: beforeServices }, 'PUT'))).status, 200);
     const missing = await route.GET(new Request('http://localhost/uploads/asset/icon/not-there.png'), { params: Promise.resolve({ path: ['asset', 'icon', 'not-there.png'] }) });
     assert.equal(missing.status, 404);

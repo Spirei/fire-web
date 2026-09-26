@@ -82,7 +82,7 @@ assert.equal(validateWorkbench({ id: 'car', label: 'Car', note: '' }, { length: 
   const context = {
     previewFile: 'car.glb', selectedFileRef: { current: attachment }, report: { file: 'car.glb' }, editingId: null, saveBlocked: false,
     savingRef: { current: false }, meta: { id: 'car', label: 'Car', note: '' }, params: { length: 5.6 },
-    wheelPick: ['tire'], tuneRegion: 'overall', wireTuneOpen: false, WORKBENCH_STORAGE_KEY: 'test',
+    wheelPick: ['tire'], tuneRegion: 'overall', wireTuneOpen: false, WORKBENCH_STORAGE_KEY: 'test', mode: 'import', onSaved: undefined,
     setSaving() {}, setError(message) { context.error = message; },
     setEditingId(value) { context.editingId = value; }, setPreviewFile(value) { context.previewFile = value; },
     setMeta(value) { context.meta = value; }, setParams(value) { context.params = value; }, setPreviewParams() {},

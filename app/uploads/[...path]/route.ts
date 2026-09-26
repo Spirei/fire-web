@@ -84,7 +84,7 @@ export async function GET(
         const suffix = !match[1] && match[2] ? Number(match[2]) : 0;
         const start = suffix > 0 ? Math.max(0, stat.size - suffix) : match[1] ? Number(match[1]) : 0;
         const end = suffix > 0 ? stat.size - 1 : match[2] ? Math.min(Number(match[2]), stat.size - 1) : stat.size - 1;
-        if (Number.isFinite(start) && start <= end && start < stat.size) {
+        if ((match[1] || suffix > 0) && Number.isSafeInteger(start) && Number.isSafeInteger(end) && start <= end && start < stat.size) {
           const stream = Readable.toWeb(fs.createReadStream(source, { start, end })) as ReadableStream<Uint8Array>;
           return new NextResponse(stream, {
             status: 206,
@@ -92,6 +92,7 @@ export async function GET(
           });
         }
       }
+      return new NextResponse(null, { status: 416, headers: { ...headers, "Content-Range": `bytes */${stat.size}` } });
     }
     const stream = Readable.toWeb(fs.createReadStream(source)) as ReadableStream<Uint8Array>;
     return new NextResponse(stream, { headers: { ...headers, "Content-Length": String(stat.size) } });

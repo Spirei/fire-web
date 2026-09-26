@@ -37,7 +37,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const updated = updateUserById(id, patch);
-  if (!updated) return NextResponse.json({ error: "用户不存在或用户名已被使用" }, { status: 409 });
+  if (!updated) return NextResponse.json({ error: "用户不存在、用户名或邮箱已被使用，或系统需保留至少一个管理员" }, { status: 409 });
   return NextResponse.json({ user: updated });
 }
 

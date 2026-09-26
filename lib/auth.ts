@@ -179,15 +179,19 @@ export function getCookie(request: Request, name: string): string | null {
   return null;
 }
 
-export function getAuthUser(request: Request): User | null {
+export function getSessionToken(request: Request): string | null {
   // 兼容两种认证方式：Web 端 httpOnly Cookie 会话；移动端（Swift / Android）Authorization: Bearer <token>
   const cookieToken = getCookie(request, SESSION_COOKIE) || getCookie(request, LEGACY_SESSION_COOKIE);
   const authHeader = request.headers.get("authorization") ?? "";
   const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
   // Bearer 是显式认证，优先于浏览器可能残留的过期 Cookie。
-  if (bearer) return getUserByToken(bearer);
+  if (bearer) return bearer;
   if (cookieToken && !isTrustedMutationRequest(request)) return null;
-  return getUserByToken(cookieToken || null);
+  return cookieToken || null;
+}
+
+export function getAuthUser(request: Request): User | null {
+  return getUserByToken(getSessionToken(request));
 }
 
 /**
@@ -305,6 +309,11 @@ export function updateUserById(
   const username = patch.username !== undefined ? patch.username.trim() : row.username;
   const email = patch.email !== undefined ? patch.email.trim() : (row.email ?? "");
   const role = patch.role === "admin" || patch.role === "user" ? patch.role : row.role;
+
+  if (email) {
+    const conflict = findUserByEmail(email);
+    if (conflict && conflict.id !== userId) return null;
+  }
 
   if (row.role === "admin" && role === "user") {
     const admins = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get() as { n: number };
