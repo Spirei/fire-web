@@ -112,7 +112,7 @@ function FragmentCard({ image, name, className }: { image: string; name: string;
     preload.src = image;
     void preload.decode().then(() => {
       if (alive) {
-        // 每次播放独立洗牌；只在客户端解码完成后生成，首帧保持一致。
+        // 下落错落随机；归位只随机正序或倒序，逐格填满而非散点拼回。
         const shuffle = () => {
           const ranks = Array.from({ length: FRAGMENT_COUNT }, (_, i) => i);
           for (let i = ranks.length - 1; i > 0; i--) {
@@ -121,7 +121,8 @@ function FragmentCard({ image, name, className }: { image: string; name: string;
           }
           return ranks;
         };
-        setSequence({ fall: shuffle(), return: shuffle() });
+        const reverseReturn = Math.random() < .5;
+        setSequence({ fall: shuffle(), return: Array.from({ length: FRAGMENT_COUNT }, (_, i) => reverseReturn ? FRAGMENT_COUNT - 1 - i : i) });
         completed.current = 0; setSettled(false); setRunning(true);
       }
     }).catch(() => {});
