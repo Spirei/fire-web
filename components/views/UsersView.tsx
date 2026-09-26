@@ -118,19 +118,35 @@ export default function UsersView() {
     return () => window.clearInterval(timer);
   }, []);
 
+  async function requestAdminStepUp(): Promise<{ currentPassword: string; code: string } | null> {
+    const currentPassword = await appPrompt("请输入你的管理员密码以继续", { title: "安全验证", placeholder: "当前密码" });
+    if (!currentPassword) return null;
+    const currentAdmin = users.find((item) => item.id === me);
+    const code = currentAdmin?.totpEnabled
+      ? await appPrompt("请输入管理员二次验证码或备用码", { title: "二次验证", placeholder: "6 位数字或备用码" })
+      : "";
+    if (currentAdmin?.totpEnabled && !code) return null;
+    return { currentPassword, code: code || "" };
+  }
+
   async function saveEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editUser) return;
     setBusy(true);
     setMsg(null);
     const fd = new FormData(e.target as HTMLFormElement);
+    const nextRole = String(fd.get("role") ?? "user");
+    const previousRole = users.find((item) => item.id === editUser.id)?.role;
+    const stepUp = previousRole !== nextRole ? await requestAdminStepUp() : null;
+    if (previousRole !== nextRole && !stepUp) { setBusy(false); return; }
     const res = await fetch(`/api/users/${editUser.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         username: String(fd.get("username") ?? ""),
         email: String(fd.get("email") ?? ""),
-        role: String(fd.get("role") ?? "user")
+        role: nextRole,
+        ...stepUp
       })
     });
     const data = await res.json().catch(() => null);
@@ -152,10 +168,12 @@ export default function UsersView() {
     setMsg(null);
     const fd = new FormData(e.target as HTMLFormElement);
     const pw = String(fd.get("newPassword") ?? "");
+    const stepUp = await requestAdminStepUp();
+    if (!stepUp) { setBusy(false); return; }
     const res = await fetch(`/api/users/${resetUser.id}/reset-password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ newPassword: pw })
+      body: JSON.stringify({ newPassword: pw, ...stepUp })
     });
     const data = await res.json().catch(() => null);
     setBusy(false);
@@ -170,13 +188,13 @@ export default function UsersView() {
 
   async function disableUserTotp(u: AdminUser) {
     if (!await appConfirm(`关闭「${u.username}」的二次验证？该用户下次登录将不再需要验证码。`, { title: "关闭二次验证", danger: true })) return;
-    const password = await appPrompt("请输入你的管理员密码以继续", { title: "安全验证", placeholder: "当前密码" });
-    if (!password) return;
+    const stepUp = await requestAdminStepUp();
+    if (!stepUp) return;
     setMsg(null);
     const res = await fetch(`/api/users/${u.id}/disable-totp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password })
+      body: JSON.stringify(stepUp)
     });
     const data = await res.json().catch(() => null);
     if (!res.ok) {
@@ -190,8 +208,14 @@ export default function UsersView() {
 
   async function removeUser(u: AdminUser) {
     if (!await appConfirm(`确定删除用户「${u.username}」吗？该用户的记录、会话、操作日志会一并删除！`, { title: "删除用户", danger: true })) return;
+    const stepUp = await requestAdminStepUp();
+    if (!stepUp) return;
     setMsg(null);
-    const res = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
+    const res = await fetch(`/api/users/${u.id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(stepUp)
+    });
     const data = await res.json().catch(() => null);
     if (!res.ok) {
       setMsg({ type: "err", text: data?.error || "删除失败" });
@@ -329,7 +353,7 @@ export default function UsersView() {
             )}
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
               新密码（至少 8 位，含字母和数字）
-              <input name="newPassword" type="password" required minLength={6} className="field" />
+              <input name="newPassword" type="password" required minLength={8} autoComplete="new-password" className="field" />
             </label>
             <div className="mt-1 flex justify-end gap-2.5 border-t border-edge pt-4">
               <button type="button" onClick={() => setResetUser(null)} className="btn btn-ghost btn-sm">取消</button>

@@ -1269,7 +1269,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   async function doDeleteAccount() {
     try {
-      const res = await fetch("/api/v1/auth/delete-account", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: deletePassword }) });
+      const res = await fetch("/api/v1/auth/delete-account", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: deletePassword, code: deleteTotpCode }) });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "注销失败");
       showToast("账号已注销");
@@ -1506,6 +1506,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const dataTipRef = useRef<HTMLSpanElement | null>(null);
   const [dataTip, setDataTip] = useState<{ top: number; left: number } | null>(null);
   const [deletePassword, setDeletePassword] = useState("");
+  const [deleteTotpCode, setDeleteTotpCode] = useState("");
   const [groupSaving, setGroupSaving] = useState(false);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [srcMsg, setSrcMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -1765,10 +1766,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }, []);
 
   async function startTotpSetup() {
+    const password = await appPrompt("开启二次验证前，请输入当前密码", { title: "安全验证", placeholder: "当前密码" });
+    if (!password) return;
     setTotpMsg(null);
     setTotpBusy(true);
     try {
-      const res = await fetch("/api/auth/totp", { method: "POST", credentials: "same-origin" });
+      const res = await fetch("/api/auth/totp", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ password }) });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "无法开始绑定");
       setTotpSetup({
@@ -2041,7 +2044,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   return (
     <div className="settings-page flex h-full min-h-0 flex-1">
       {showDeleteConfirm && createPortal(
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); } }}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteTotpCode(""); } }}>
           <div className="w-full max-w-[380px] rounded-2xl border border-edge bg-white p-6 shadow-pop dark:border-[#2a3140] dark:bg-[#1b2029]">
             <h3 className="text-base font-bold text-ink">确认注销账号</h3>
             <p className="mt-2 text-sm text-muted">此操作<strong className="text-up">不可恢复</strong>，将永久删除账号「{user.nickname || user.username}」及全部持仓、订单、分组、偏好等数据。</p>
@@ -2059,14 +2062,27 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               type="password"
               value={deletePassword}
               onChange={(e) => setDeletePassword(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && deleteConfirmText.trim() === user.username && deletePassword) doDeleteAccount(); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && deleteConfirmText.trim() === user.username && deletePassword && (!totpEnabled || deleteTotpCode)) doDeleteAccount(); }}
               autoComplete="current-password"
               placeholder="请输入当前密码"
               className="mt-1.5 h-10 w-full rounded-lg border border-edge-strong bg-white px-3 text-sm text-ink outline-none placeholder:opacity-40 focus:border-edge-strong dark:bg-[#151a26] dark:border-[#2a3140]"
             />
+            {totpEnabled && (
+              <>
+                <label className="mt-3 block text-xs font-semibold text-muted">二次验证码或备用码</label>
+                <input
+                  value={deleteTotpCode}
+                  onChange={(e) => setDeleteTotpCode(e.target.value)}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="6 位验证码或备用码"
+                  className="mt-1.5 h-10 w-full rounded-lg border border-edge-strong bg-white px-3 text-sm text-ink outline-none placeholder:opacity-40 focus:border-edge-strong dark:bg-[#151a26] dark:border-[#2a3140]"
+                />
+              </>
+            )}
             <div className="mt-5 flex justify-end gap-2.5">
-              <button type="button" onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); }} className="btn btn-ghost btn-sm">取消</button>
-              <button type="button" disabled={deleteConfirmText.trim() !== user.username || !deletePassword} onClick={doDeleteAccount} className="btn btn-ghost btn-sm !text-up disabled:opacity-40">确认注销</button>
+              <button type="button" onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteTotpCode(""); }} className="btn btn-ghost btn-sm">取消</button>
+              <button type="button" disabled={deleteConfirmText.trim() !== user.username || !deletePassword || (totpEnabled && !deleteTotpCode)} onClick={doDeleteAccount} className="btn btn-ghost btn-sm !text-up disabled:opacity-40">确认注销</button>
             </div>
           </div>
         </div>,

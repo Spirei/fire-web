@@ -84,7 +84,7 @@ Web 端继续使用 httpOnly Cookie 会话，两种方式等价，`GET /api/v1/a
 | GET | `/api/v1/auth/setup-status` | 空实例是否需要首次管理员设置（`{ needsSetup }`） | 无 |
 | GET | `/api/v1/auth/me` | 当前用户 | 登录 |
 | POST | `/api/v1/auth/logout` | 登出 | 登录 |
-| POST | `/api/v1/auth/delete-account` | 注销当前账号（body 必须提供 `password`；级联删除其全部数据；保护最后一个管理员） | 登录 + 当前密码 |
+| POST | `/api/v1/auth/delete-account` | 注销当前账号（body 必须提供 `password`；已开启二次验证时还需 `code`；级联删除其全部数据；保护最后一个管理员） | 登录 + 当前密码 + 可选 TOTP |
 
 ### 6.2 资产 / 持仓
 | 方法 | 路径 | 说明 | 鉴权 |

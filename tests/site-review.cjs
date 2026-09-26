@@ -325,6 +325,70 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(auth.findUserById(other.id).email, '');
     assert(auth.updateUserById(owner.id, { email: 'UNIQUE@example.test' }));
   });
+  await test('TOTP enrollment requires the current password before revealing a secret', async () => {
+    const route = require(path.join(root, 'app/api/auth/totp/route.ts'));
+    const enrolled = createUser('review_totp_setup', 'Setup-test-123');
+    const token = createSession(enrolled.id);
+    const call = password => route.POST(new Request('http://localhost/api/auth/totp', {
+      method: 'POST', headers: { cookie: `fire_session=${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ password })
+    }));
+    assert.equal((await call('wrong-password')).status, 403);
+    assert.equal(db.prepare('SELECT 1 FROM totp_setup WHERE user_id=?').get(enrolled.id), undefined);
+    const accepted = await call('Setup-test-123');
+    assert.equal(accepted.status, 200);
+    const setup = await accepted.json();
+    assert(setup.secret && setup.otpauthUrl.startsWith('otpauth://'));
+  });
+  await test('high-risk admin mutations require step-up authentication', async () => {
+    const auth = require(path.join(root, 'lib/auth.ts'));
+    const admin = createUser('review_stepup_admin', 'Admin-test-123');
+    db.prepare("UPDATE users SET role='admin' WHERE id=?").run(admin.id);
+    const adminToken = createSession(admin.id);
+    const target = createUser('review_stepup_target', 'Target-test-123');
+    const targetToken = createSession(target.id);
+    const reset = require(path.join(root, 'app/api/users/[id]/reset-password/route.ts'));
+    const resetCall = body => reset.POST(new Request('http://localhost/api/users/reset', {
+      method: 'POST', headers: { cookie: `fire_session=${adminToken}`, 'content-type': 'application/json' }, body: JSON.stringify(body)
+    }), { params: Promise.resolve({ id: target.id }) });
+    assert.equal((await resetCall({ newPassword: 'Target-new-456', currentPassword: 'wrong' })).status, 403);
+    assert(auth.authenticateUser(target.username, 'Target-test-123'));
+    assert.equal((await resetCall({ newPassword: 'Target-new-456', currentPassword: 'Admin-test-123' })).status, 200);
+    assert(auth.authenticateUser(target.username, 'Target-new-456'));
+    assert.equal(auth.getUserByToken(targetToken), null, 'password reset revokes all target sessions');
+
+    const usersRoute = require(path.join(root, 'app/api/users/[id]/route.ts'));
+    const roleCall = body => usersRoute.PUT(new Request('http://localhost/api/users/role', {
+      method: 'PUT', headers: { cookie: `fire_session=${adminToken}`, 'content-type': 'application/json' }, body: JSON.stringify(body)
+    }), { params: Promise.resolve({ id: target.id }) });
+    assert.equal((await roleCall({ role: 'admin' })).status, 403);
+    assert.equal((await roleCall({ role: 'admin', currentPassword: 'Admin-test-123' })).status, 200);
+    const doomed = createUser('review_stepup_delete', 'Delete-test-123');
+    const deleteCall = body => usersRoute.DELETE(new Request('http://localhost/api/users/delete', {
+      method: 'DELETE', headers: { cookie: `fire_session=${adminToken}`, 'content-type': 'application/json' }, body: JSON.stringify(body)
+    }), { params: Promise.resolve({ id: doomed.id }) });
+    assert.equal((await deleteCall({ currentPassword: 'wrong' })).status, 403);
+    assert.equal((await deleteCall({ currentPassword: 'Admin-test-123' })).status, 200);
+    assert.equal(auth.findUserById(doomed.id), undefined);
+  });
+  await test('account deletion requires a second factor when TOTP is enabled', async () => {
+    const auth = require(path.join(root, 'lib/auth.ts'));
+    const totpAuth = require(path.join(root, 'lib/totpAuth.ts'));
+    const { totpCodeAt } = require(path.join(root, 'lib/totp.ts'));
+    const deleting = createUser('review_delete_2fa', 'Delete2fa-123');
+    const token = createSession(deleting.id);
+    const setup = await totpAuth.beginTotpSetup(deleting.id, deleting.username);
+    const enabled = totpAuth.enableTotp(deleting.id, totpCodeAt(setup.secret));
+    assert(enabled.ok && enabled.backupCodes.length > 0);
+    const route = require(path.join(root, 'app/api/v1/auth/delete-account/route.ts'));
+    const call = body => route.POST(new Request('http://localhost/api/v1/auth/delete-account', {
+      method: 'POST', headers: { cookie: `fire_session=${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body)
+    }));
+    assert.equal((await call({ password: 'Delete2fa-123' })).status, 403);
+    assert(auth.findUserById(deleting.id));
+    assert.equal((await call({ password: 'Delete2fa-123', code: enabled.backupCodes[0] })).status, 200);
+    assert.equal(auth.findUserById(deleting.id), undefined);
+  });
   await test('card balance replay restores opening balance, respects adjustments and rolls back failed writes', () => {
     const { upsertCardAmount, listCardAmounts } = require(path.join(root, 'lib/cardAmounts.ts'));
     const { addCardBalanceEntry, deleteCardBalanceEntry, listCardBalanceHistoryForCard } = require(path.join(root, 'lib/cardWallet.ts'));

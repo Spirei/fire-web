@@ -6,6 +6,7 @@
  */
 
 import { getDb } from "./db";
+import { createHash } from "crypto";
 
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
@@ -14,6 +15,8 @@ function useSqlite(): boolean {
 }
 
 export function clientIp(request: Request): string {
+  // 转发头可由客户端伪造；只有明确位于可信反向代理后时才使用。
+  if (!/^(1|true|yes)$/i.test(process.env.FIRE_TRUST_PROXY_HEADERS || "")) return "direct";
   const fwd = request.headers.get("x-forwarded-for");
   const xri = request.headers.get("x-real-ip");
   const candidate = fwd ? fwd.split(",")[0].trim() : "";
@@ -21,6 +24,11 @@ export function clientIp(request: Request): string {
   // 仅接受格式合法的 IP（IPv4 / IPv6），非法值一律归入 unknown，防止垃圾值注入绕过
   if (/^[\d.a-fA-F:]+$/.test(ip)) return ip;
   return "unknown";
+}
+
+/** 登录标识只以摘要进入限流表，避免在运维数据中保存邮箱或用户名。 */
+export function loginIdentityKey(login: string): string {
+  return createHash("sha256").update(login.trim().toLowerCase()).digest("hex");
 }
 
 export function rateLimit(key: string, limit: number, windowMs: number): boolean {

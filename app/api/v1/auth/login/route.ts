@@ -1,7 +1,7 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { authenticateUser, createSession, sessionCookieMaxAge } from "@/lib/auth";
 import { createLoginTicket, userTotpEnabled } from "@/lib/totpAuth";
-import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
+import { clientIp, loginIdentityKey, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { fail, ok } from "@/lib/api";
 
 /** v1 登录：返回 token（移动端 Authorization: Bearer 使用）与用户信息 */
@@ -15,6 +15,9 @@ export async function POST(request: Request) {
   const password = String(body.password ?? "");
   if (username.length > 254 || password.length > 128) {
     return fail(40103, "用户名或密码错误", 401);
+  }
+  if (!rateLimit(`login-account:${loginIdentityKey(username)}`, 20, 15 * 60 * 1000)) {
+    return fail(42901, "尝试过于频繁，请 15 分钟后再试", 429);
   }
   const userRow = authenticateUser(username, password);
   if (!userRow) {

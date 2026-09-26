@@ -216,7 +216,7 @@ TID=$(echo "$USERS" | python3 -c 'import json,sys; d=json.load(sys.stdin); print
 check "用户列表标记测试账号" 1 "$(echo "$USERS" | python3 -c 'import json,sys; d=json.load(sys.stdin); u=[u for u in d["users"] if u["username"]=="'"$TESTER"'"][0]; print(1 if u.get("isTest") and not u.get("uid") else 0)')"
 EDIT_BODY="{\"email\":\"$TESTER@test.local\",\"role\":\"user\"}"
 check "编辑用户邮箱" "$TESTER@test.local" "$(curl -s -b "$JAR_DEMO" -X PUT "$BASE/api/users/$TID" -H 'Content-Type: application/json' --data-raw "$EDIT_BODY" | python3 -c 'import json,sys; print(json.load(sys.stdin)["user"]["email"])')"
-check "重置用户密码" 200 "$(code -b "$JAR_DEMO" -X POST "$BASE/api/users/$TID/reset-password" -H 'Content-Type: application/json' --data-raw '{"newPassword":"reset123"}')"
+check "重置用户密码" 200 "$(code -b "$JAR_DEMO" -X POST "$BASE/api/users/$TID/reset-password" -H 'Content-Type: application/json' --data-raw '{"newPassword":"reset123","currentPassword":"demo1234"}')"
 RESET_LOGIN_BODY="{\"username\":\"$TESTER\",\"password\":\"reset123\"}"
 check "重置后新密码可登录" 200 "$(code -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' --data-raw "$RESET_LOGIN_BODY")"
 check "不能删除自己" 400 "$(code -b "$JAR_DEMO" -X DELETE "$BASE/api/users/demo-user")"

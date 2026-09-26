@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
-import { createSession, createUser, findUserByUsername, LEGACY_SESSION_COOKIE, needsSetup, sessionCookieMaxAge, sessionCookieSecure, SESSION_COOKIE } from "@/lib/auth";
+import { applySessionCookie, createSession, createUser, findUserByUsername, needsSetup } from "@/lib/auth";
 import { validatePassword } from "@/lib/password";
 import { getSiteSettings } from "@/lib/settings";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
@@ -52,17 +52,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "用户名已存在" }, { status: 409 });
   }
 
-  const user = createUser(username, password, isTest);
+  let user;
+  try {
+    user = createUser(username, password, isTest);
+  } catch (error) {
+    // 并发注册可能都通过预检查，最终以数据库唯一约束为准，不暴露底层异常。
+    if (findUserByUsername(username)) {
+      return NextResponse.json({ error: "用户名已存在" }, { status: 409 });
+    }
+    throw error;
+  }
   logSecurityEvent(request, user.id, "auth.register.success", isTest ? "创建测试账号" : "注册账号");
   const token = createSession(user.id);
-  const res = NextResponse.json({ user }, { status: 201 });
-  res.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: sessionCookieMaxAge(),
-    secure: sessionCookieSecure(request)
-  });
-  res.cookies.set(LEGACY_SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+  const res = NextResponse.json({ user }, { status: 201, headers: { "Cache-Control": "no-store" } });
+  applySessionCookie(res, token, request);
   return res;
 }

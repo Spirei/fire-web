@@ -8,6 +8,7 @@ import { findUserById } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
+import { consumeTotpFactor, userTotpEnabled } from "@/lib/totpAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,10 @@ export async function POST(request: Request) {
   if (!rowWithPassword || !verifyPassword(String(body?.password ?? ""), rowWithPassword.password_hash)) {
     logSecurityEvent(request, user.id, "account_delete_rejected", "password verification failed");
     return NextResponse.json({ error: "当前密码错误" }, { status: 403 });
+  }
+  if (userTotpEnabled(user.id) && !consumeTotpFactor(user.id, String(body?.code ?? ""))) {
+    logSecurityEvent(request, user.id, "account_delete_rejected", "totp verification failed");
+    return NextResponse.json({ error: "二次验证失败" }, { status: 403 });
   }
   const db = getDb();
   const adminCount = (db.prepare("SELECT COUNT(*) n FROM users WHERE role = 'admin'").get() as { n: number }).n;

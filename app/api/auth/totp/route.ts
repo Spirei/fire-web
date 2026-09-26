@@ -21,6 +21,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "尝试过于频繁，请稍后再试" }, { status: 429 });
   }
   if (userTotpEnabled(user.id)) return NextResponse.json({ error: "已经开启二次验证" }, { status: 409 });
+  const body = await readJsonBody(request, 4 * 1024).catch(() => null);
+  const row = findUserById(user.id);
+  if (!row || !verifyPassword(String(body?.password ?? ""), row.password_hash)) {
+    logSecurityEvent(request, user.id, "auth.totp.setup_rejected", "password verification failed");
+    return NextResponse.json({ error: "当前密码错误" }, { status: 403 });
+  }
   const setup = await beginTotpSetup(user.id, user.username, "Fire");
   logSecurityEvent(request, user.id, "auth.totp.setup", "开始绑定二次验证");
   return NextResponse.json({

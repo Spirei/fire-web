@@ -1,20 +1,23 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
-import { findUserById, getAuthUser, isAdmin } from "@/lib/auth";
+import { getAuthUser, isAdmin } from "@/lib/auth";
 import { clearTotp, userTotpEnabled } from "@/lib/totpAuth";
 import { logSecurityEvent } from "@/lib/securityAudit";
-import { verifyPassword } from "@/lib/password";
+import { verifyAdminStepUp } from "@/lib/adminStepUp";
+import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const me = getAuthUser(request);
   if (!me) return NextResponse.json({ error: "未登录" }, { status: 401 });
   if (!isAdmin(me)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
+  if (!rateLimit(`admin-disable-totp:${clientIp(request)}:${me.id}`, 10, 15 * 60 * 1000) || !rateLimitGlobal("admin-disable-totp", 50, 15 * 60 * 1000)) {
+    return NextResponse.json({ error: "尝试过于频繁，请稍后再试" }, { status: 429 });
+  }
   const body = await readJsonBody(request, 4 * 1024).catch(() => null);
-  const password = String(body?.password ?? "");
-  const admin = findUserById(me.id);
-  if (!admin || !verifyPassword(password, admin.password_hash)) {
-    logSecurityEvent(request, me.id, "auth.totp.admin_disable_rejected", "管理员密码不正确");
-    return NextResponse.json({ error: "管理员密码不正确" }, { status: 403 });
+  const stepUp = verifyAdminStepUp(me.id, body);
+  if (!stepUp.ok) {
+    logSecurityEvent(request, me.id, "auth.totp.admin_disable_rejected", stepUp.error);
+    return NextResponse.json({ error: stepUp.error }, { status: 403 });
   }
   const { id } = await params;
   if (!userTotpEnabled(id)) return NextResponse.json({ error: "该用户未开启二次验证" }, { status: 400 });

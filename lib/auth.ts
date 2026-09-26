@@ -83,21 +83,17 @@ export function createUser(username: string, password: string, isTest = false, e
   // 首个非测试注册用户自动成为管理员，后续注册均为普通用户。
   // 测试账号不占位（is_test=1 不参与判断）；若 seed 已用 INITIAL_ADMIN_* 建过管理员，
   // 这里会因已有非测试用户而判定为普通用户。
-  const isFirst = needsSetup();
-  const role = isFirst ? "admin" : "user";
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const last = db.prepare("SELECT uid FROM users ORDER BY CAST(uid AS INTEGER) DESC LIMIT 1").get() as { uid: string } | undefined;
-    const next = last && /^\d+$/.test(last.uid) ? String(parseInt(last.uid, 10) + 1) : "1";
-    try {
-      db.prepare(
-        "INSERT INTO users (id, username, password_hash, created_at, email, avatar, role, nickname, uid) VALUES (?, ?, ?, ?, ?, '', ?, '', ?)"
-      ).run(id, username, hash, now, normalizedEmail, role, next);
-      uid = next;
-      break;
-    } catch {
-      if (attempt === 4) throw new Error("UID 分配冲突，请重试");
-    }
-  }
+  let role: "admin" | "user" = "user";
+  // IMMEDIATE 事务让“首个用户”和 UID 分配在多进程下也只有一个赢家。
+  db.transaction(() => {
+    role = needsSetup() ? "admin" : "user";
+    const last = db.prepare("SELECT MAX(CAST(uid AS INTEGER)) AS uid FROM users WHERE uid GLOB '[0-9]*'").get() as { uid: number | null };
+    const next = String((Number(last.uid) || 0) + 1);
+    db.prepare(
+      "INSERT INTO users (id, username, password_hash, created_at, email, avatar, role, nickname, uid) VALUES (?, ?, ?, ?, ?, '', ?, '', ?)"
+    ).run(id, username, hash, now, normalizedEmail, role, next);
+    uid = next;
+  }).immediate();
   return { id, username, nickname: "", uid, email: "", avatar: "", role };
 }
 
@@ -116,9 +112,15 @@ export function updatePassword(userId: string, newPassword: string): boolean {
 export function createSession(userId: string): string {
   const token = randomBytes(32).toString("hex");
   const expiresAt = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
-  getDb().prepare(
-    "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)"
-  ).run(sessionDbToken(token), userId, expiresAt);
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)")
+      .run(sessionDbToken(token), userId, expiresAt);
+    // 限制单账号最多 20 个并发会话，避免凭据泄露后无限堆积长期有效的登录态。
+    db.prepare(`DELETE FROM sessions WHERE user_id = ? AND token NOT IN (
+      SELECT token FROM sessions WHERE user_id = ? ORDER BY expires_at DESC LIMIT 20
+    )`).run(userId, userId);
+  })();
   return token;
 }
 
