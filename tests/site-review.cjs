@@ -146,7 +146,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       assert.equal(readMiniKline('US', 'BAD'), null);
     } finally { global.localStorage = originalStorage; Date.now = originalNow; }
   });
-  await test('card wander shuffles deterministically and preserves the reference wall angle', () => {
+  await test('card wander shuffles deterministically and preserves the reference wall angle', async () => {
     const { selectWanderCards } = require(path.join(root, 'lib/cardWander.ts'));
     const cards = Array.from({ length: 140 }, (_, index) => ({ key: `card-${index}` }));
     const first = selectWanderCards(cards, '70fry32r', 98);
@@ -173,7 +173,41 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(library.includes('eager={index < 4}') && library.includes('src={wanderSeed ? undefined : cardCover') && !library.includes('decoding={index < PAGE_SIZE_FIRST ? "sync"'), 'library limits eager decoding and releases covered images');
     const thumbnail = fs.readFileSync(path.join(root, 'components/CardThumbnail.tsx'), 'utf8');
     assert(thumbnail.includes('from "next/image"') && thumbnail.includes('sizes={sizes}') && thumbnail.includes('quality={90}') && thumbnail.includes('onError={() => setFailedSource(src)}'), 'display-sized cached previews retain an original-image fallback');
-    assert(wander.includes('<CardThumbnail src={card.image}') && wander.includes('src={selectedCard.image}') && wander.includes('href={selectedCard.image} download'), 'preview optimization never replaces full-size or download originals');
+    assert(wander.includes('<CardWanderImage key={card.image} src={card.image}') && wander.includes('src={selectedCard.image}') && wander.includes('href={selectedCard.image} download'), 'progressive wander, full-size and downloads retain original sources');
+    const progressive = fs.readFileSync(path.join(root, 'components/CardWanderImage.tsx'), 'utf8');
+    assert(progressive.includes('await image.decode()') && progressive.includes('!originalReady && <CardThumbnail') && progressive.includes('src={originalReady ? src : undefined}') && progressive.includes('if (!visible || !previewReady || originalReady) return'), 'visible originals replace previews only after decoding');
+    const { createCardImageQueue } = require(path.join(root, 'lib/cardImageQueue.ts'));
+    const queue = createCardImageQueue(2); let activeLoads = 0, peakLoads = 0;
+    const release = [];
+    const task = () => new Promise(resolve => { activeLoads++; peakLoads = Math.max(peakLoads, activeLoads); release.push(() => { activeLoads--; resolve(); }); });
+    queue.enqueue(task); queue.enqueue(task);
+    const cancelThird = queue.enqueue(task); cancelThird();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(activeLoads, 2); queue.pause(true);
+    queue.enqueue(task); release.shift()(); release.shift()();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(activeLoads, 0, 'paused queue does not start pending originals');
+    queue.pause(false); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(activeLoads, 1); assert.equal(peakLoads, 2);
+    release.shift()(); await new Promise(resolve => setImmediate(resolve));
+    const { wanderWarmupImages, warmWanderOriginals } = require(path.join(root, 'lib/cardWander.ts'));
+    const warmCards = cards.map(card => ({ ...card, image: `/uploads/cards/${card.key}.png` }));
+    const warmed = wanderWarmupImages(warmCards, 'testseed', 12);
+    assert.equal(warmed.length, 12);
+    assert.deepEqual(wanderWarmupImages([...warmCards].reverse(), 'testseed', 12), warmed);
+    const oldFetch = global.fetch; const requests = [];
+    try {
+      global.fetch = async (url, options) => { requests.push({url, options}); return new Response(new Uint8Array(8), { headers: { 'content-length': '8' } }); };
+      await warmWanderOriginals(warmed, new AbortController().signal, 16);
+      assert.equal(requests.length, 2, 'warmup stops at its byte budget');
+      assert(requests.every(r => r.options.cache === 'force-cache' && r.options.priority === 'low'));
+      const cancelled = new AbortController(); cancelled.abort();
+      await warmWanderOriginals(warmed, cancelled.signal);
+      assert.equal(requests.length, 2, 'cancelled warmup issues no requests');
+      await warmWanderOriginals(['https://outside.example/image.png', '/uploads/reports/private.png'], new AbortController().signal);
+      assert.equal(requests.length, 2, 'no external or private report prefetch');
+    } finally { global.fetch = oldFetch; }
+    assert(library.includes('const seed = preparedWanderSeed ||') && library.includes('controller?.abort()') && library.includes('connection?.saveData'), 'prefetch shares the next seed and respects cancellation and data saver');
     assert(wander.includes('queueHoveredTile(event.clientX, event.clientY, target)') && wander.includes('hoverFrameRef.current = window.requestAnimationFrame'), 'rapid pointer events coalesce into one hover hit test per frame');
     assert(wanderStyles.includes('.card-wander-effects { grid-template-columns: repeat(5, 1fr); }') && wanderStyles.includes('@keyframes card-wander-fragment-fall') && wanderStyles.includes('@keyframes card-wander-effect-fireflies'), 'the five-way selector and two restrained effects remain available');
     assert(wanderStyles.includes('.card-wander-zoom-card[data-effect="metal"]::after') && wanderStyles.includes('.card-wander-zoom-backdrop::before'), 'metal has a visible specular sweep while the zoom background fades separately from the opaque card');

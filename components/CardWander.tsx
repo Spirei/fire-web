@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type WheelEvent } from "react";
 import { flushSync } from "react-dom";
 import { selectWanderCards } from "@/lib/cardWander";
-import CardThumbnail from "@/components/CardThumbnail";
+import CardWanderImage from "@/components/CardWanderImage";
+import { wanderOriginalQueue } from "@/lib/cardImageQueue";
 
 export interface WanderCard {
   key: string;
@@ -70,7 +71,7 @@ function WanderTile({ card, observeTile, onSelect }: {
       aria-label={card.name}
       onClick={(event) => onSelect(card, event.currentTarget)}
     >
-      {nearViewport && <CardThumbnail src={card.image} alt="" sizes="350px" eager />}
+      {nearViewport && <CardWanderImage key={card.image} src={card.image} />}
     </button>
   );
 }
@@ -428,10 +429,13 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   }, [seed, deck.length]);
 
   useEffect(() => {
-    const sync = () => { if (rootRef.current) rootRef.current.dataset.suspended = String(document.hidden); };
+    const sync = () => {
+      if (rootRef.current) rootRef.current.dataset.suspended = String(document.hidden);
+      wanderOriginalQueue.pause(document.hidden || !!selected);
+    };
     sync(); document.addEventListener("visibilitychange", sync);
-    return () => document.removeEventListener("visibilitychange", sync);
-  }, []);
+    return () => { document.removeEventListener("visibilitychange", sync); wanderOriginalQueue.pause(true); };
+  }, [selected]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;

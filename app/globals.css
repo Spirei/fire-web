@@ -5762,6 +5762,7 @@ button.PhotoView-Slider__toolbarIcon {
   box-shadow: 0 7px 20px rgba(0,0,0,.42);
 }
 .card-wander-tile img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.card-wander-progressive { position: relative; display: block; width: 100%; height: 100%; pointer-events: none; }
 /* Hidden tabs and the preview covered by fullscreen must not keep painting effects. */
 .card-wander[data-suspended="true"] *,
 .card-wander[data-suspended="true"] *::before,

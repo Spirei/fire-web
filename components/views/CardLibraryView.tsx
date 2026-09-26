@@ -4,6 +4,7 @@ import { sharedRead } from "@/lib/sharedRead";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import CardThumbnail from "@/components/CardThumbnail";
+import { wanderWarmupImages, warmWanderOriginals } from "@/lib/cardWander";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
 import { appConfirm } from "@/lib/appDialog";
@@ -534,6 +535,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   const [customCards, setCustomCards] = useState<CustomCard[]>(() => initial?.customCards ?? []);
   const [walletOpen, setWalletOpen] = useState(false);
   const [wanderSeed, setWanderSeed] = useState<string | null>(null);
+  const [preparedWanderSeed, setPreparedWanderSeed] = useState<string | null>(null);
+  useEffect(() => { setPreparedWanderSeed(Math.random().toString(36).slice(2, 10)); }, []);
   const wanderOpenedRef = useRef(false);
   useLayoutEffect(() => {
     const syncFromUrl = () => {
@@ -1247,6 +1250,29 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
     };
   }), [flat, covers, holdings, script]);
 
+  const warmupUrls = useMemo(() => preparedWanderSeed ? wanderWarmupImages(wanderCards, preparedWanderSeed, 24) : [], [wanderCards, preparedWanderSeed]);
+  const warmupKey = JSON.stringify(warmupUrls);
+  useEffect(() => {
+    if (wanderSeed || !preparedWanderSeed) return;
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    if (connection?.saveData || /(^|-)2g$/.test(connection?.effectiveType || "")) return;
+    let controller: AbortController | null = null;
+    let timer = 0;
+    const sync = () => {
+      clearTimeout(timer); controller?.abort();
+      if (document.hidden) return;
+      controller = new AbortController();
+      const signal = controller.signal;
+      // Let the visible library finish first; stop immediately when entering wander/leaving the page.
+      timer = window.setTimeout(() => {
+        const mobile = window.matchMedia("(pointer: coarse), (max-width: 640px)").matches;
+        void warmWanderOriginals((JSON.parse(warmupKey) as string[]).slice(0, mobile ? 12 : 24), signal, (mobile ? 16 : 32) * 1024 * 1024);
+      }, 1800);
+    };
+    sync(); document.addEventListener("visibilitychange", sync);
+    return () => { clearTimeout(timer); controller?.abort(); document.removeEventListener("visibilitychange", sync); };
+  }, [warmupKey, preparedWanderSeed, wanderSeed]);
+
   function setWanderUrl(seed: string | null, mode: "push" | "replace") {
     const url = new URL(window.location.href);
     if (seed) url.searchParams.set("wander", seed);
@@ -1256,7 +1282,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
 
   function enterWander() {
     if (!flat.length) return;
-    const seed = Math.random().toString(36).slice(2, 10);
+    const seed = preparedWanderSeed || Math.random().toString(36).slice(2, 10);
+    setPreparedWanderSeed(Math.random().toString(36).slice(2, 10));
     wanderOpenedRef.current = true;
     setWanderUrl(seed, "push");
     setWanderSeed(seed);
