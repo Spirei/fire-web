@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 
 // 简单内存缓存：月收盘序列（10 分钟）
 const cache = new Map<string, { closes: number[]; at: number }>();
+const pending = new Map<string, Promise<number[]>>();
 
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36";
@@ -28,14 +29,28 @@ export async function GET(request: Request) {
   const code = (searchParams.get("code") || "").toUpperCase();
   if (!code) return NextResponse.json({ error: "缺少代码" }, { status: 400 });
   // 代码白名单：仅允许字母 / 数字 / 点 / 下划线 / 连字符，防止 URL 参数注入
-  if (!/^[A-Z0-9._-]+$/.test(code)) return NextResponse.json({ error: "股票代码不合法" }, { status: 400 });
+  if (!/^[A-Z0-9._-]{1,32}$/.test(code)) return NextResponse.json({ error: "股票代码不合法" }, { status: 400 });
+  if (market !== "CN" && market !== "US") return NextResponse.json({ closes: [] });
 
   const key = `${market}:${code}`;
   const cached = cache.get(key);
-  if (cached && Date.now() - cached.at < 10 * 60 * 1000) {
+  if (cached && Date.now() - cached.at < (cached.closes.length ? 10 * 60 * 1000 : 30 * 1000)) {
     return NextResponse.json({ closes: cached.closes });
   }
 
+  let task = pending.get(key);
+  if (!task) {
+    task = loadCloses(market, code).then(closes => {
+      if (cache.size >= 600) cache.delete(cache.keys().next().value!);
+      cache.set(key, { closes, at: Date.now() });
+      return closes;
+    }).finally(() => { pending.delete(key); });
+    pending.set(key, task);
+  }
+  return NextResponse.json({ closes: await task });
+}
+
+async function loadCloses(market: string, code: string): Promise<number[]> {
   let closes: number[] = [];
   try {
     if (market === "CN") {
@@ -44,6 +59,7 @@ export async function GET(request: Request) {
         `https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20_=/CN_MarketDataService.getKLineData?symbol=${encodeURIComponent(symbol)}&scale=240&ma=no&datalen=250`,
         { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(12000) }
       );
+      if (!res.ok) throw new Error("K 线接口请求失败");
       const text = await res.text();
       const m = text.match(/\((\[.*\])\)/s);
       if (m) {
@@ -55,6 +71,7 @@ export async function GET(request: Request) {
         `https://stock.finance.sina.com.cn/usstock/api/jsonp_v2.php/var%20_=/US_MinKService.getDailyK?symbol=${encodeURIComponent(code)}&___qn=3`,
         { headers: { "User-Agent": UA, Referer: "https://finance.sina.com.cn/" }, signal: AbortSignal.timeout(12000) }
       );
+      if (!res.ok) throw new Error("K 线接口请求失败");
       const text = await res.text();
       const m = text.match(/\((\[.*\])\)/s);
       if (m) {
@@ -66,6 +83,5 @@ export async function GET(request: Request) {
   } catch {
     /* 数据源失败时返回空 */
   }
-  cache.set(key, { closes, at: Date.now() });
-  return NextResponse.json({ closes });
+  return closes;
 }

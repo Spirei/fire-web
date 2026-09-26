@@ -9,6 +9,8 @@ import CurrencySelect from "@/components/CurrencySelect";
 import { useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
 import { IconArrowsExchange, IconChartHistogram } from "@tabler/icons-react";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
+import { sharedRead } from "@/lib/sharedRead";
+import { readMiniKline, writeMiniKline, validCloses } from "@/lib/miniKlineCache";
 
 interface TopAsset {
   market: string;
@@ -80,10 +82,8 @@ function fmtPrice(price: number, rate: number, symbol: string, currency: Currenc
 }
 
 // ---------- 月 K mini 图（后端代理新浪日 K 聚合月收盘，懒加载 + 缓存） ----------
-const klineCache = new Map<string, number[]>();
 const TOP_CACHE_KEY = "fire:topstocks:cache";
 const RANK_CACHE_KEY = "fire:topstocks:rank";
-const klineCacheKey = (code: string) => `fire:kline:${code}`;
 
 function readTopCache(): TopAsset[] {
   try {
@@ -123,31 +123,12 @@ function saveDailyRank(date: string, rank: Record<string, number>) {
   }
 }
 
-/** 迷你 K 线的本地缓存：内存 + localStorage。只在浏览器挂载后读取（见 MiniKline） */
-function readCachedKline(code: string): number[] | null {
-  const memory = klineCache.get(code);
-  if (memory) return memory;
-  try {
-    const raw = localStorage.getItem(klineCacheKey(code));
-    if (raw) {
-      const parsed = JSON.parse(raw) as number[];
-      if (Array.isArray(parsed) && parsed.length > 1) {
-        klineCache.set(code, parsed);
-        return parsed;
-      }
-    }
-  } catch {
-    /* 忽略 */
-  }
-  return null;
-}
-
 const MiniKline = memo(function MiniKline({ item }: { item: TopAsset }) {
   // 首帧不画（服务端也没有本地缓存）：挂载后、绘制前再恢复缓存，避免水合不一致
   const [points, setPoints] = useState<number[] | null>(null);
   useLayoutEffect(() => {
-    setPoints(readCachedKline(item.code));
-  }, [item.code]);
+    setPoints(readMiniKline(item.market, item.code));
+  }, [item.market, item.code]);
   const holderRef = useRef<HTMLSpanElement>(null);
   const [inView, setInView] = useState(false);
 
@@ -173,18 +154,13 @@ const MiniKline = memo(function MiniKline({ item }: { item: TopAsset }) {
     if (item.type === "crypto" || item.type === "metal") return;
     if (item.market !== "US" && item.market !== "CN") return;
     let cancelled = false;
-    fetch(`/api/kline?market=${encodeURIComponent(item.market)}&code=${encodeURIComponent(item.code)}`)
-      .then((r) => r.json())
+    sharedRead(`/api/kline?market=${encodeURIComponent(item.market)}&code=${encodeURIComponent(item.code)}`)
+      .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (cancelled) return;
         const closes: number[] = Array.isArray(data?.closes) ? data.closes : [];
-        if (closes.length > 1) {
-          klineCache.set(item.code, closes);
-          try {
-            localStorage.setItem(klineCacheKey(item.code), JSON.stringify(closes));
-          } catch {
-            /* 忽略 */
-          }
+        if (validCloses(closes)) {
+          writeMiniKline(item.market, item.code, closes);
           setPoints(closes);
         }
       })
@@ -192,7 +168,7 @@ const MiniKline = memo(function MiniKline({ item }: { item: TopAsset }) {
     return () => {
       cancelled = true;
     };
-  }, [item, points, inView]);
+  }, [item.market, item.code, item.type, points, inView]);
 
   if (!points || points.length < 2) return <span ref={holderRef} className="inline-block h-[22px] w-[60px]" />;
   const min = Math.min(...points);
@@ -204,7 +180,7 @@ const MiniKline = memo(function MiniKline({ item }: { item: TopAsset }) {
   const coords = points.map((p, i) => `${(i * step).toFixed(1)},${(H - 2 - ((p - min) / span) * (H - 4)).toFixed(1)}`).join(" ");
   const up = points[points.length - 1] >= points[0];
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="inline-block h-[22px] w-[60px] flex-none" aria-label="近30日走势">
+    <svg viewBox={`0 0 ${W} ${H}`} className="inline-block h-[22px] w-[60px] flex-none" aria-label="最近12个月月收盘走势">
       <polyline points={coords} fill="none" stroke={up ? "#e23d3d" : "#0fa07b"} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );

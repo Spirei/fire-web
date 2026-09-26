@@ -39,6 +39,50 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       assert.equal(calls, 4);
     } finally { global.fetch = original; }
   });
+  await test('kline route coalesces upstream requests and caches successful closes', async () => {
+    const { GET } = require(path.join(root, 'app/api/kline/route.ts'));
+    const original = global.fetch;
+    let calls = 0;
+    let finish;
+    global.fetch = (url) => {
+      if (!String(url).includes('US_MinKService.getDailyK')) return Promise.reject(new Error('Network disabled in isolated regression'));
+      calls++; return new Promise(resolve => { finish = resolve; });
+    };
+    const request = () => new Request('http://localhost/api/kline?market=US&code=REGRESSION');
+    try {
+      const a = GET(request());
+      const b = GET(request());
+      assert.equal(calls, 1);
+      finish(new Response('callback([{"d":"2026-01-30","c":"10"},{"d":"2026-02-27","c":"12"}])'));
+      assert.deepEqual(await (await a).json(), { closes: [10, 12] });
+      assert.deepEqual(await (await b).json(), { closes: [10, 12] });
+      assert.deepEqual(await (await GET(request())).json(), { closes: [10, 12] });
+      assert.equal(calls, 1);
+      assert.equal((await GET(new Request('http://localhost/api/kline?market=US&code=' + 'A'.repeat(33)))).status, 400);
+      assert.equal(calls, 1);
+    } finally { global.fetch = original; }
+  });
+  await test('mini kline cache isolates markets, expires and rejects invalid data', () => {
+    const { readMiniKline, writeMiniKline, miniKlineKey } = require(path.join(root, 'lib/miniKlineCache.ts'));
+    const originalStorage = global.localStorage;
+    const originalNow = Date.now;
+    const values = new Map();
+    let now = 1000000;
+    global.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+    Date.now = () => now;
+    try {
+      writeMiniKline('US', 'ABC', [10, 11]);
+      writeMiniKline('CN', 'ABC', [20, 21]);
+      assert.deepEqual(readMiniKline('us', 'abc'), [10, 11]);
+      assert.deepEqual(readMiniKline('CN', 'ABC'), [20, 21]);
+      now += 600000;
+      assert.equal(readMiniKline('US', 'ABC'), null);
+      values.set(miniKlineKey('US', 'BAD'), JSON.stringify({ at: now, closes: [1, '2'] }));
+      assert.equal(readMiniKline('US', 'BAD'), null);
+      writeMiniKline('US', 'BAD', [1, Infinity]);
+      assert.equal(readMiniKline('US', 'BAD'), null);
+    } finally { global.localStorage = originalStorage; Date.now = originalNow; }
+  });
   await test('card wander shuffles deterministically and preserves the reference wall angle', () => {
     const { selectWanderCards } = require(path.join(root, 'lib/cardWander.ts'));
     const cards = Array.from({ length: 140 }, (_, index) => ({ key: `card-${index}` }));
