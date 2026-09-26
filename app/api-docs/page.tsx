@@ -93,17 +93,9 @@ export default function ApiDocsPage() {
   const previewHtml = useMemo(() => renderMarkdown(content), [content]);
   // 路由表首列方法（GET/POST/PUT/DELETE）渲染为彩色徽标，便于扫读
   const methodHtml = useMemo(
-    () => previewHtml.replace(/<td>(GET|POST|PUT|DELETE|PATCH)<\/td>/g, (_m, p: string) => `<td><span class="api-method ${p.toLowerCase()}">${p}</span></td>`),
+    () => previewHtml.replace(/^<h1\b[^>]*>.*?<\/h1>\s*/, "").replace(/<td>(GET|POST|PUT|DELETE|PATCH)<\/td>/g, (_m, p: string) => `<td><span class="api-method ${p.toLowerCase()}">${p}</span></td>`),
     [previewHtml]
   );
-  const docStats = useMemo(() => {
-    const lines = content ? content.split("\n").length : 0;
-    const endpoints = new Set<string>();
-    for (const match of content.matchAll(/(?:GET|POST|PUT|DELETE)\s+(`?\/api[^`\s]+`?)/g)) {
-      endpoints.add(match[1]);
-    }
-    return { lines, endpoints: endpoints.size };
-  }, [content]);
 
   useEffect(() => {
     fetch("/api/api-docs")
@@ -195,10 +187,12 @@ export default function ApiDocsPage() {
     };
     watch();
     root.addEventListener("scroll", watch, { passive: true });
+    root.addEventListener("toggle", watch, true);
     const resize = new ResizeObserver(watch);
     resize.observe(root);
     return () => {
       root.removeEventListener("scroll", watch);
+      root.removeEventListener("toggle", watch, true);
       resize.disconnect();
       if (frame) window.cancelAnimationFrame(frame);
     };
@@ -324,7 +318,7 @@ export default function ApiDocsPage() {
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
                 <path d="M14 2v6h6" />
               </svg>
-              docs/api-spec.md
+              API 文档
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -339,7 +333,7 @@ export default function ApiDocsPage() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                     <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
                   </svg>
-                  编辑文档
+                  编辑
                 </button>
               )
             ) : (
@@ -380,27 +374,9 @@ export default function ApiDocsPage() {
           </div>
         </div>
 
-        <section className="api-reference-heading mb-6 border-b pb-6">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="min-w-0">
-              <div className="mb-2 flex items-center gap-1.5 text-xs text-[#a8a6a1] dark:text-[#6f6f6f]">
-                <span>Developer center</span>
-                <span>/</span>
-                <span className="text-[#787774] dark:text-[#a0a0a0]">API reference</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div>
-                  <h1 className="text-2xl font-bold tracking-[-0.02em] text-[#37352f] dark:text-[#e0e0e0]">API 开发接口</h1>
-                  <p className="mt-1 max-w-xl text-[13px] leading-5 text-[#787774] dark:text-[#a0a0a0]">面向 Web、iOS 与自动化客户端的统一接口参考。请求、响应、鉴权与错误码集中维护，修改后即时同步。</p>
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2 sm:min-w-[300px]">
-              <div className="api-docs-stat"><span className="api-docs-stat-value">{toc.length}</span><span className="api-docs-stat-label">章节</span></div>
-              <div className="api-docs-stat"><span className="api-docs-stat-value">{docStats.endpoints || "—"}</span><span className="api-docs-stat-label">接口</span></div>
-              <div className="api-docs-stat"><span className="api-docs-stat-value">{docStats.lines || "—"}</span><span className="api-docs-stat-label">行规范</span></div>
-            </div>
-          </div>
+        <section className="api-reference-heading">
+          <h1>接口参考</h1>
+          <p>请求、认证与响应格式</p>
         </section>
 
         {loading ? (

@@ -1,6 +1,6 @@
 # Fire · API 规范（v1）
 
-> 面向移动端（Swift / Android）与全站前端的统一接口规范。旧版 `/api/**` 接口保持兼容、逐步迁移到 `/api/v1/**`。
+Web、iOS 与 Android 共用 `/api/v1`。旧版 `/api/**` 继续兼容。
 
 ## 1. 基础信息
 
@@ -11,9 +11,9 @@
 | 数据格式 | `application/json`（上传接口 `multipart/form-data`） |
 | 健康检查 | `GET /api/health` → `{ code: 0, data: { status: "ok", version } }` |
 
-## 2. 统一响应信封
+## 2. 响应格式
 
-所有 v1 接口返回统一结构：
+`code` 为 `0` 表示成功，业务数据在 `data` 中。
 
 **成功**
 ```json
@@ -56,21 +56,64 @@
 
 ## 4. 认证
 
-移动端推荐 Bearer Token：
+按接入方式查看。移动端使用 Bearer Token，Web 使用 Cookie。
+
+<details>
+<summary>移动端登录 · 获取 Token</summary>
 
 1. `POST /api/v1/auth/login`，请求体 `{ "username": "你的用户名", "password": "你的密码" }`
 2. 未开启二次验证时，响应 `data` 携带 `token` 与 `expiresIn`（秒）
-3. 已开启二次验证时，密码正确不签发 token，返回 `{ "requires2fa": true, "ticket": "…" }`（ticket 5 分钟有效、同一账号只保留最新一张）；接着 `POST /api/v1/auth/login/totp`，请求体 `{ "ticket", "code" }`（`code` 为 6 位 TOTP 或一次性备用码），成功后再拿到 `token`。ticket 校验失败 8 次作废。
+3. 开启二次验证时，先返回 `{ "requires2fa": true, "ticket": "…" }`。再向 `POST /api/v1/auth/login/totp` 提交 `{ "ticket", "code" }`，验证成功后获取 `token`。
 4. 后续请求头携带 `Authorization: Bearer <token>`
 5. 退出：`POST /api/v1/auth/logout`（携带同一 token）
 
-Web 端继续使用 httpOnly Cookie 会话，两种方式等价，`GET /api/v1/auth/me` 均可识别。开启二次验证后，网页登录同样先返回 ticket，再由 `POST /api/auth/login/totp` 写入会话 Cookie。
+`code` 接受 6 位 TOTP 或一次性备用码。ticket 有效期 5 分钟，每个账号仅保留最新一张，验证失败 8 次后作废。
 
-Web 通行密钥使用 `/api/auth/passkeys`：POST 的 `action` 为 `register-options` / `register-verify` / `login-options` / `login-verify`；options 返回 `{ options, requestId }` 并写入一次性浏览器绑定 Cookie，verify 提交 `{ action, requestId, response }`（注册可另传 `name`）。注册 options 需登录、`password` 及已开启的 `code`；登录强制 WebAuthn 用户验证，成功后仅签发 HttpOnly Cookie，不返回 Bearer。GET 返回当前用户密钥列表；PATCH 接收 `{ id, name }` 改名；DELETE 接收 `{ id, password, code }` 删除。
+</details>
 
-DELETE 密钥会原子撤销该密钥关联会话及该账号来源不明的升级前旧会话，返回 `{ ok: true, signedOut: boolean }`；`signedOut=true` 时客户端应返回登录页。登录 options 另写入签名浏览器标识 Cookie，按浏览器和可信代理 IP 分别限流，不共享全站额度；每个浏览器只保留最新登录挑战，verify 仍需挑战绑定 Cookie 且一次性消费。
+<details>
+<summary>Web 登录 · Cookie 会话</summary>
 
-`/api/auth/passkeys/config` 的 GET 公开返回 `{ enabled, origin, name, revision }`；PUT 限管理员，接收配置字段及 `currentPassword`、已开启的 `code`，网页同时提交 `expectedRevision` 防止旧窗口覆盖（版本冲突返回 409；兼容旧客户端省略此字段）。成功返回确认后的配置及版本。地址先校验，再验证身份；内容不变不撤销正在进行的挑战。域名配置和凭据不通过普通站点设置或数据导入修改。部署与恢复说明见 [通行密钥](passkeys.md)。
+使用 HttpOnly Cookie 会话，`GET /api/v1/auth/me` 同时识别 Cookie 与 Bearer Token。开启二次验证时，先获取 ticket，再由 `POST /api/auth/login/totp` 验证并写入 Cookie。
+
+</details>
+
+<details>
+<summary>通行密钥 · 注册与登录</summary>
+
+入口：`/api/auth/passkeys`。
+
+| 操作 | 请求 |
+| --- | --- |
+| 注册 | POST，`action` 为 `register-options` → `register-verify` |
+| 登录 | POST，`action` 为 `login-options` → `login-verify` |
+| 查看 | GET，返回当前用户的密钥列表 |
+| 改名 | PATCH，提交 `{ id, name }` |
+| 删除 | DELETE，提交 `{ id, password, code }` |
+
+- options 返回 `{ options, requestId }`，并写入一次性浏览器绑定 Cookie。
+- verify 提交 `{ action, requestId, response }`；注册可另传 `name`。
+- 注册 options 需要登录、`password`，以及已开启二次验证时的 `code`。
+- 登录要求 WebAuthn 用户验证。成功后写入 HttpOnly Cookie，不返回 Bearer Token。
+
+删除密钥会同时撤销关联会话及该账号来源不明的升级前旧会话。返回 `{ ok: true, signedOut: boolean }`；`signedOut=true` 时返回登录页。
+
+登录 options 写入签名浏览器标识 Cookie，按浏览器及可信代理 IP 分别限流。每个浏览器只保留最新挑战；verify 需要挑战绑定 Cookie，挑战仅可使用一次。
+
+</details>
+
+<details>
+<summary>密钥配置 · 管理员设置</summary>
+
+入口：`/api/auth/passkeys/config`。
+
+- **读取**：GET 公开返回 `{ enabled, origin, name, revision }`。
+- **保存**：PUT 限管理员，提交配置、`currentPassword`，以及已开启二次验证时的 `code`。
+- **版本检查**：网页提交 `expectedRevision`，冲突返回 HTTP 409；兼容旧客户端省略该字段。保存成功返回确认后的配置和版本。
+- **校验顺序**：先检查地址，再验证身份。配置未变时保留现有挑战。
+- **修改范围**：域名和凭据不能通过普通站点设置或数据导入修改。部署与恢复见 [通行密钥](passkeys.md)。
+
+</details>
 
 ## 5. 公共约定
 
@@ -80,7 +123,7 @@ DELETE 密钥会原子撤销该密钥关联会话及该账号来源不明的升�
 - **限流**：登录 50 次/15 分钟/IP；行情类 120 次/分钟/IP；搜索 60 次/分钟/IP；被限流返回 `42901`。
 - **缓存**：行情 / 指数类接口建议客户端 30s 内不重复请求；K 线服务端缓存 10 分钟。
 
-## 6. 路由清单（v1）
+## 6. 接口清单
 
 ### 6.1 认证
 | 方法 | 路径 | 说明 | 鉴权 |
@@ -149,7 +192,7 @@ DELETE 密钥会原子撤销该密钥关联会话及该账号来源不明的升�
 | DELETE | `/api/v1/assets/{id}` | 删除素材 | 管理员 |
 | POST | `/api/v1/upload` | 文件上传（`kind=avatar/asset/ico/background/logo`） | 登录 / 管理员 |
 
-### 6.6 券商 Brokers
+### 6.6 券商
 | 方法 | 路径 | 说明 | 鉴权 |
 | --- | --- | --- | --- |
 | GET | `/api/v1/brokers` | 券商列表（含图标，顺序即展示顺序） | 登录 |
@@ -161,7 +204,7 @@ DELETE 密钥会原子撤销该密钥关联会话及该账号来源不明的升�
 | --- | --- | --- | --- |
 | GET | `/api/v1/settings/public` | 公开站点设置（标题 / 图标 / Logo / 注册开关） | 无 |
 
-## 6.8 券商 Brokers（数据模型）
+## 6.8 券商字段
 
 券商 = 分组管理中的券商分组，持仓记录通过 `records.group_name`（券商名称）关联。
 
@@ -197,7 +240,7 @@ DELETE 密钥会原子撤销该密钥关联会话及该账号来源不明的升�
 - 删除：`DELETE /api/v1/brokers?id={id}` 会同步清空该券商名下持仓记录的券商。
 - 图标：素材库「券商图标」tab 上传（`/api/v1/upload` kind=asset + folder=broker，或 Web 端上传），`GET /api/v1/brokers` 自动合并。
 
-## 6.9 个股详情 Stock Detail（Web / iOS 共用契约）
+## 6.9 个股详情
 
 个股详情页（moomoo 风格：头部行情 + 4 列指标 + 多币种市值 + K 线）的数据统一走该接口，
 Web 前端与 iOS App 消费同一份数据，移动端**无需自行做币种换算 / K 线聚合**。
@@ -266,7 +309,7 @@ Web 前端与 iOS App 消费同一份数据，移动端**无需自行做币种�
 行情、汇率、K 线三路并行拉取互不阻塞：任一路失败只缺对应字段（`quote: null` / `marketCap: null` / `kline: []`），HTTP 仍返回 `code: 0`。
 周 / 月 K 由客户端对 `kline` 聚合（周：ISO 周首日开 / 末日收 / 高低取极值；月：自然月同理）。
 
-## 6.10 公司简况 Company Profile
+## 6.10 公司简况
 
 Web“公司”页与 iOS App 共用同一份公司资料契约。
 
@@ -304,7 +347,7 @@ Web“公司”页与 iOS App 共用同一份公司资料契约。
 
 资料按公司缓存 24 小时。`website`、`address`、`phone` 可能为空字符串；无法覆盖的成立年份返回 `—`。
 
-## 6.11 多市场分时走势 Intraday Charts
+## 6.11 分时走势
 
 供 Web 行情板、持仓列表和 iOS 迷你走势图共用。一次最多请求 100 只股票，服务端会按市场选择数据源，并在主数据源缺失时自动回退；单只股票无数据不会导致整批请求失败。
 
@@ -369,7 +412,7 @@ Web“公司”页与 iOS App 共用同一份公司资料契约。
 
 美股 K 线会先规范化交易所后缀（例如 `SPCH.AM → SPCH`）。日 K 首选新浪，空数据时自动回退 Yahoo 日线；5 日分钟线同样在新浪缺失时回退 Yahoo 5 分钟线。客户端只消费统一的 `items` / `points`，无需识别上游，适用于新上市 ETF 与美交所证券。
 
-## 6.12 K 线时段 Kline Sessions
+## 6.12 K 线时段
 
 返回美股最近交易日 1 分钟分时数据，时间均为**美东时间**。Web 和 iOS 可按 `session` 字段直接筛选，无需自行推断时段。
 
@@ -409,7 +452,7 @@ Web“公司”页与 iOS App 共用同一份公司资料契约。
 
 行情缓存 30 秒。夜盘暂不返回伪数据；iOS 应根据 `coverage.overnight` 将夜盘入口置灰。
 
-## 6.13 自选股分组 Watch Groups（方案 A：独立分组实体）
+## 6.13 自选股分组
 
 自选股分组为服务端独立实体（`watch_groups` 表），记录通过 `watch_group_id` 归属，券商仍走 `records.group_name`（持仓显示），两者彻底解耦；Web 与 iOS 共享同一份分组数据。
 
@@ -493,7 +536,7 @@ Web“公司”页与 iOS App 共用同一份公司资料契约。
 - 旧版 `?filter=G:名称` / `M:US` URL 自动迁移到分组 id；分组不存在时回退「全部」。
 - 旧 localStorage 分组配置（`fire:watch-groups:v1`）首次加载时一次性同步到服务端并清除。
 
-## 6.14 持仓交易与订单 Orders
+## 6.14 交易与订单
 
 订单是可审计的成交凭证；持仓记录是订单执行后的最新快照。普通交易只追加订单，录入错误通过专用更正接口修改并重算账本。Web 的持仓一级页只展示组合，点击股票进入二级详情后再执行交易、查看该股票订单。iOS 可直接复用以下接口。
 
@@ -574,7 +617,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 6.15 财务报表 Financial Reports
+## 6.15 财务报表
 
 财报文件按「市场 + 交易所 + 代码 + 财年 + 财期」归类存储，供财务面板 / F10 使用。
 
@@ -605,7 +648,7 @@ Authorization: Bearer <token>
 
 成功返回 `{ deleted: true }`；不存在返回 `40401`。仅管理员。
 
-## 6.16 指数月 K Index Monthly Kline
+## 6.16 指数月 K
 
 ```http
 GET /api/v1/index-kline?key=spx
@@ -613,7 +656,7 @@ GET /api/v1/index-kline?key=spx
 
 `key` 支持 `spx`（标普 500）等指数标识（见 INDEX_MAP）。返回 `{ closes: number[], months: ["YYYY-MM", ...] }`，按月收盘价对齐。数据源东财优先，失败依次回退腾讯 / 雅虎，结果缓存 10 分钟；未知指数返回 `40001`，限流返回 `42901`。
 
-## 6.17 订单导出 Orders Export
+## 6.17 订单导出
 
 ```http
 GET /api/v1/orders/export?scope=all&market=ALL&status=all&type=all&start=&end=&recordId=&limit=5000&detail=1
@@ -622,7 +665,7 @@ Authorization: Bearer <token>
 
 返回 `.xlsx` 二进制（手写零依赖写入器）。筛选参数与订单列表一致：`scope`（today / history / all）、`market`、`status`、`type`、`start` / `end`（委托时间区间）、`recordId`、`limit`（默认 5000，上限 10000）；`detail=1` 时追加「订单明细」工作表（含成交后持仓数量、成本等 23 列）。仅登录用户。
 
-## 6.18 网站设置/数据 导出导入 Site Backup
+## 6.18 数据备份
 
 ```http
 GET  /api/v1/data/export
@@ -633,7 +676,7 @@ Authorization: Bearer <token>
 - **导出**：返回 `fire-site-backup` 版本化 JSON（`format` / `version` / `appVersion` / `exportedAt` / `manifest` / `data`）。`data` 含当前用户的：`userSettings`、`records`、`tradeOrders`、`activities`、`watchGroups`、`profile(nickname)`；**管理员额外含** `siteSettings`(全部站点设置，排除数据库连接串等环境键) 与 `celebs`(名人持仓)。普通用户仅自己的数据。所有登录用户可用。
 - **导入**：body 为导出文件，最大 10MB，并限制各数据集条数和调用频率。`POST /api/v1/data/import?preview=1` 做**结构、字段白名单、版本、引用归属校验 + 试算条数**（不写入）；正式导入前必须成功生成数据库快照，否则停止。导入在单事务内恢复当前用户数据：与当前用户已有 ID 匹配时更新；新数据或与其他用户冲突的 ID 会生成新 ID，并同步重映射订单/分组引用，绝不会改变其他用户的数据归属。管理员可额外导入固定白名单内的 `site_settings` 与 `celebs`；普通用户携带的站点级数据会被忽略。
 
-## 6.19 资金系统 Funds
+## 6.19 资金
 
 ```http
 GET    /api/v1/funds?limit=100
@@ -644,7 +687,7 @@ Authorization: Bearer <token>
 
 支持 USD / HKD / CNY 多币种现金账本。GET 返回各币种 `balances` 与当前用户的资金记录；POST 字段为 `currency`、`type(opening|deposit|withdrawal|adjustment)`、`amount`、`direction(1|-1)`、`note`、`occurredAt`；DELETE 只能删除当前用户自己的记录。资金记录随网站数据导出/导入迁移。
 
-## 6.20 车型展示管理 Showcase Models
+## 6.20 车型展示
 
 车型导入设置页的上传、参数保存、排序、封面、删除和预览生成全部通过以下 API 完成。除公开清单外，写操作都要求管理员 Cookie 会话、可信同源请求并受频率限制。模型文件通过 `/uploads/**` 静态地址与浏览器 Cache Storage / IndexedDB 加载；镜头、圆盘、线框颜色和部位选择属于逐帧交互，不经过 API。
 

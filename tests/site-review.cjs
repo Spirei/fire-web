@@ -16,6 +16,15 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('API disclosure renders escaped summaries and keeps code fences literal', () => {
+    const { renderMarkdown } = require(path.join(root, 'lib/markdown.ts'));
+    const html = renderMarkdown('<details>\n<summary>登录 <img src=x onerror=alert(1)></summary>\n\n- Token\n</details>');
+    assert(html.includes('<details class="markdown-details">'));
+    assert(html.includes('&lt;img'));
+    assert(!html.includes('<img'));
+    assert(html.includes('</ul>\n</details>'));
+    assert(!renderMarkdown('```html\n<details>\n```').includes('<details'));
+  });
   await test('API directory keeps committed selection, resolves collapsed children and survives edited headings', () => {
     const { resolveApiReadingHeading, resolveApiTocSelection } = require(path.join(root, 'lib/apiDocsNavigation.ts'));
     const headings = [{ slug: 'start', top: -500 }, { slug: 'middle', top: -100 }, { slug: 'last', top: 600 }];

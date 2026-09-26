@@ -47,9 +47,9 @@
   font-weight: 500;
 }
 .api-reference-toolbar button:hover, .api-reference-toolbar a:hover { background: #ffffff40 !important; transform: none; }
-.api-reference-heading { flex-shrink: 0; margin: 0 !important; padding: 26px 30px; border-color: #7d818117; }
-.api-reference-heading h1 { font-size: 22px; color: var(--reference-ink); }
-.api-reference-heading p { color: var(--reference-muted); }
+.api-reference-heading { display: flex; align-items: baseline; gap: 16px; flex-shrink: 0; margin: 0 !important; padding: 20px 28px; }
+.api-reference-heading h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -.025em; color: var(--reference-ink); }
+.api-reference-heading p { margin: 0; font-size: 13px; color: var(--reference-ink); opacity: .7; }
 .api-reference-heading .api-docs-stat { background: #ffffff30; border-color: #ffffff40; box-shadow: none; min-width: 76px; }
 .api-reference-heading .api-docs-stat-value { color: var(--reference-ink); }
 .api-reference-layout { flex: 1; min-height: 0; gap: 28px; padding: 24px 28px 28px 12px; grid-template-columns: 292px minmax(0, 1fr); }
@@ -120,22 +120,45 @@
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: #83909455 transparent;
-  background: #f6f7f2c9;
+  background: #fcfdfbeF;
   border: 1px solid #ffffff75;
   border-radius: 12px;
-  color: #54595d;
+  color: #3e464d;
+  font-size: 14px;
+  line-height: 1.8;
   box-shadow: 0 2px 5px #59636908;
   padding: clamp(20px, 1.75vw, 28px);
 }
 .api-reference-shell .api-docs-paper h2 {
-  border: 0; border-left: 2px solid var(--reference-blue);
-  border-radius: 6px; padding: 14px 18px; margin-top: 36px;
-  color: #4f5969; background: #5875b50b; scroll-margin-top: 22px;
+  border: 0; border-top: 1px solid #7c899526;
+  border-radius: 0; padding: 28px 0 0; margin: 36px 0 16px;
+  font-size: 21px; font-weight: 650; letter-spacing: -.02em;
+  color: #29333d; background: transparent; scroll-margin-top: 22px;
 }
-.api-reference-shell .api-docs-paper h3 { color: #606771; scroll-margin-top: 22px; }
-.api-reference-shell .api-docs-paper pre { background: #e9edee; border-color: #77838c20; color: #46515d; box-shadow: none; }
+.api-reference-shell .api-docs-paper h2::before { display: none; }
+.api-reference-shell .api-docs-paper h2.markdown-subsection,
+.api-reference-shell .api-docs-paper h3 { font-size: 17px; font-weight: 650; color: #34414b; background: transparent; border: 0; padding: 0; margin: 28px 0 12px; scroll-margin-top: 22px; }
+.api-reference-shell .api-docs-paper > h2:first-child { margin-top: 0; padding-top: 0; border: 0; }
+.api-reference-shell .api-docs-paper p { margin: 10px 0; line-height: 1.8; }
+.api-reference-shell .api-docs-paper li { margin: 6px 0; line-height: 1.8; }
+.api-reference-shell .api-docs-paper th { text-align: left; font-weight: 600; }
+.api-reference-shell .api-docs-paper td, .api-reference-shell .api-docs-paper th { padding: 11px 14px; vertical-align: top; font-size: 13px; line-height: 1.65; }
+.api-reference-shell .api-docs-paper table:has(.api-method) td:first-child { width: 80px; white-space: nowrap; }
+.api-reference-shell .api-docs-paper table:has(.api-method) td:nth-child(2) { min-width: 220px; }
+.api-reference-shell .api-docs-paper pre { font-size: 13px; line-height: 1.7; margin: 12px 0 22px; }
+.api-reference-shell .api-docs-paper pre { background: #f0f3f5; border: 1px solid #dae1e6; color: #344354; border-radius: 10px; box-shadow: none; }
+.api-reference-shell .api-docs-paper pre code { background: transparent; font-size: inherit; }
+.api-reference-shell .api-docs-paper .markdown-table-wrap { margin: 16px 0 24px; border: 1px solid #dae1e6; border-radius: 10px; }
+.api-reference-shell .api-docs-paper table { margin: 0; width: 100%; }
+.api-reference-shell .markdown-details { margin: 10px 0; padding: 0 18px; border: 1px solid #dae1e6; border-radius: 10px; background: #f5f7f8; }
+.api-reference-shell .markdown-details summary { padding: 15px 0; cursor: pointer; font-size: 14px; font-weight: 600; color: #34414b; }
+.api-reference-shell .markdown-details summary::marker { color: #7a8792; }
+.api-reference-shell .markdown-details[open] { padding-bottom: 12px; }
+.api-reference-shell .markdown-details[open] summary { border-bottom: 1px solid #dae1e6; margin-bottom: 14px; }
+.api-reference-shell .markdown-details > p, .api-reference-shell .markdown-details > ul, .api-reference-shell .markdown-details > ol { max-width: 90ch; }
+.api-reference-shell .api-docs-paper tbody tr:last-child td { border-bottom: 0; }
 .api-reference-shell .api-docs-paper blockquote { background: #5875b50b; border-left-color: var(--reference-blue); }
-.api-reference-shell .api-docs-paper th { background: #5875b510; }
+.api-reference-shell .api-docs-paper th { background: #f0f3f5; color: #4b5965; }
 .api-reference-shell .api-docs-paper td, .api-reference-shell .api-docs-paper th { border-color: #7c899522; }
 .api-reference-shell .api-docs-editor-pane { margin: 24px; min-height: 0; }
 .api-reference-editor-layout { flex: 1; min-height: 0; overflow: auto; }
@@ -161,7 +184,7 @@
     grid-template-rows: 56px auto minmax(0,1fr);
   }
   .api-reference-window[data-mode="read"] .api-reference-toolbar { grid-column: 1 / -1; grid-row: 1; }
-  .api-reference-window[data-mode="read"] .api-reference-heading { grid-column: 2; grid-row: 2; padding: 24px 20px 20px 8px; border: 0; }
+  .api-reference-window[data-mode="read"] .api-reference-heading { grid-column: 2; grid-row: 2; padding: 18px 20px 18px 8px; border: 0; }
   .api-reference-window[data-mode="read"] .api-reference-layout { display: contents; }
   .api-reference-window[data-mode="read"] .api-reference-layout > aside { grid-column: 1; grid-row: 2 / 4; margin: 18px 8px 20px 8px; }
   .api-reference-window[data-mode="read"] .api-reference-layout > article { grid-column: 2; grid-row: 3; margin: 0 20px 20px 8px; }
@@ -186,7 +209,7 @@
   .api-reference-heading p { display: none; }
   .api-reference-layout { padding: 16px 10px; }
   .api-reference-shell .api-docs-paper { padding: 18px 14px; }
-  .api-reference-shell .api-docs-paper h2 { padding: 12px; font-size: 17px; }
+  .api-reference-shell .api-docs-paper h2 { padding: 22px 0 0; font-size: 19px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .api-reference-marker, .api-reference-marker::after, .api-reference-children, .api-reference-row-label, .api-docs-toc-item svg, .api-reference-shell .api-docs-toc-item { transition: none; }

@@ -42,6 +42,7 @@ export function renderMarkdown(md: string): string {
   let inCode = false;
   const codeBuf: string[] = [];
   let listType: "ul" | "ol" | null = null;
+  let inDetails = false;
 
   const closeList = () => {
     if (listType) {
@@ -78,6 +79,29 @@ export function renderMarkdown(md: string): string {
     }
     if (inCode) {
       codeBuf.push(escapeHtml(line));
+      i += 1;
+      continue;
+    }
+
+    // Explicit disclosure syntax only; arbitrary HTML remains escaped.
+    if (trimmed === "<details>" && !inDetails) {
+      closeList();
+      html.push('<details class="markdown-details">');
+      inDetails = true;
+      i += 1;
+      continue;
+    }
+    const summary = /^<summary>(.+)<\/summary>$/.exec(trimmed);
+    if (summary && inDetails) {
+      closeList();
+      html.push(`<summary>${inline(summary[1])}</summary>`);
+      i += 1;
+      continue;
+    }
+    if (trimmed === "</details>" && inDetails) {
+      closeList();
+      html.push('</details>');
+      inDetails = false;
       i += 1;
       continue;
     }
@@ -156,5 +180,6 @@ export function renderMarkdown(md: string): string {
     html.push(codeBlock(codeBuf.join("\n")));
   }
   closeList();
+  if (inDetails) html.push('</details>');
   return html.join("\n");
 }
