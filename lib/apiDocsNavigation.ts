@@ -1,9 +1,16 @@
 type TocGroup = { slug: string; children: readonly { slug: string }[] };
 
-/** IO percentage margins use root width, not height; use pixels for a vertical reading band. */
-export function apiTocReadingMargin(height: number): string {
-  const bottom = Number.isFinite(height) && height > 0 ? Math.floor(height * .72) : 0;
-  return `0px 0px -${bottom}px 0px`;
+/** One ordered geometry snapshot handles skipped headings and the final short section. */
+export function resolveApiReadingHeading(
+  headings: readonly { slug: string; top: number }[], edge: number, atEnd: boolean
+): string | undefined {
+  if (atEnd) return headings.at(-1)?.slug;
+  let slug = headings[0]?.slug;
+  for (const heading of headings) {
+    if (heading.top <= edge) slug = heading.slug;
+    else break;
+  }
+  return slug;
 }
 
 /** Only committed selection or reading position moves the marker, never hover. */

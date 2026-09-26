@@ -17,11 +17,12 @@ let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
   await test('API directory keeps committed selection, resolves collapsed children and survives edited headings', () => {
-    const { apiTocReadingMargin, resolveApiTocSelection } = require(path.join(root, 'lib/apiDocsNavigation.ts'));
-    assert.equal(apiTocReadingMargin(466), '0px 0px -335px 0px');
-    assert.equal(apiTocReadingMargin(505), '0px 0px -363px 0px');
-    assert.equal(apiTocReadingMargin(NaN), '0px 0px -0px 0px');
-    assert.equal(apiTocReadingMargin(-1), '0px 0px -0px 0px');
+    const { resolveApiReadingHeading, resolveApiTocSelection } = require(path.join(root, 'lib/apiDocsNavigation.ts'));
+    const headings = [{ slug: 'start', top: -500 }, { slug: 'middle', top: -100 }, { slug: 'last', top: 600 }];
+    assert.equal(resolveApiReadingHeading(headings, 130, false), 'middle');
+    assert.equal(resolveApiReadingHeading(headings, 130, true), 'last');
+    assert.equal(resolveApiReadingHeading(headings, -600, false), 'start');
+    assert.equal(resolveApiReadingHeading([], 130, true), undefined);
     const groups = [{ slug: 'start', children: [] }, { slug: 'routes', children: [{ slug: 'auth' }] }];
     assert.deepEqual(resolveApiTocSelection(groups, null, null, new Set()), { slug: 'start', accentIndex: 0 });
     assert.deepEqual(resolveApiTocSelection(groups, 'routes', 'start', new Set()), { slug: 'routes', accentIndex: 1 });

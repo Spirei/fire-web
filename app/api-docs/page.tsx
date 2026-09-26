@@ -5,7 +5,7 @@ import Link from "next/link";
 import { renderMarkdown } from "@/lib/markdown";
 import { showToast } from "@/lib/toast";
 import { copyText } from "@/lib/clipboard";
-import { apiTocReadingMargin, resolveApiTocSelection } from "@/lib/apiDocsNavigation";
+import { resolveApiReadingHeading, resolveApiTocSelection } from "@/lib/apiDocsNavigation";
 import ThemeToggle from "@/components/ThemeToggle";
 import Toaster from "@/components/Toaster";
 import "./api-docs.css";
@@ -178,32 +178,30 @@ export default function ApiDocsPage() {
       setActiveSlug(toc[0]?.slug ?? null);
       setSelectedSlug(null);
     }
-    let obs: IntersectionObserver | null = null;
+    let frame = 0;
+    const headingSlugs = toc.flatMap(group => [group.slug, ...group.children.map(child => child.slug)]);
     const watch = () => {
-      obs?.disconnect();
-      const nextObserver = new IntersectionObserver(
-        (entries) => {
-          const visible = entries
-            .filter((entry) => entry.isIntersecting)
-            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-          if (visible?.target?.id) setActiveSlug(visible.target.id);
-        },
-        { root, rootMargin: apiTocReadingMargin(root.clientHeight), threshold: 0 }
-      );
-      obs = nextObserver;
-      toc.forEach((group) => {
-        const heading = document.getElementById(group.slug);
-        if (heading) nextObserver.observe(heading);
-        group.children.forEach((child) => {
-          const childHeading = document.getElementById(child.slug);
-          if (childHeading) nextObserver.observe(childHeading);
-        });
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        const edge = root.getBoundingClientRect().top + root.clientHeight * .28;
+        const atEnd = root.scrollTop > 0 && root.scrollTop + root.clientHeight >= root.scrollHeight - 2;
+        // Markdown can replace its DOM on a render; never retain detached heading nodes.
+        const headings = headingSlugs.map(slug => document.getElementById(slug))
+          .filter((heading): heading is HTMLElement => !!heading && root.contains(heading));
+        const slug = resolveApiReadingHeading(headings.map(heading => ({ slug: heading.id, top: heading.getBoundingClientRect().top })), edge, atEnd);
+        if (slug) setActiveSlug(slug);
       });
     };
     watch();
+    root.addEventListener("scroll", watch, { passive: true });
     const resize = new ResizeObserver(watch);
     resize.observe(root);
-    return () => { obs?.disconnect(); resize.disconnect(); };
+    return () => {
+      root.removeEventListener("scroll", watch);
+      resize.disconnect();
+      if (frame) window.cancelAnimationFrame(frame);
+    };
   }, [mode, toc, loading]);
 
   // 滚动到新章节时展开其分组；手动收起不触发重复展开。
@@ -246,17 +244,6 @@ export default function ApiDocsPage() {
   }
 
   function trackReadingScroll() {
-    const root = contentRef.current;
-    if (root) {
-      const edge = root.getBoundingClientRect().top + root.clientHeight * .28;
-      const headings = toc.flatMap((group) => [group.slug, ...group.children.map((child) => child.slug)]);
-      let reading = headings[0];
-      for (const slug of headings) {
-        const heading = document.getElementById(slug);
-        if (heading && heading.getBoundingClientRect().top <= edge) reading = slug;
-      }
-      if (reading) setActiveSlug(reading);
-    }
     if (!navigating.current) {
       setSelectedSlug(null);
       return;
