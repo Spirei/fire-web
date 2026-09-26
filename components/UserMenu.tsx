@@ -46,9 +46,16 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
   }
 
   useEffect(() => {
-    function loadUser() {
-      fetch("/api/auth/me", { cache: "no-store", credentials: "same-origin" })
+    let lastCheck = 0;
+    let pending = false;
+    const controller = new AbortController();
+    function loadUser(force = false) {
+      if (document.hidden || pending || (!force && Date.now() - lastCheck < 60000)) return;
+      pending = true;
+      lastCheck = Date.now();
+      fetch("/api/auth/me", { method: "POST", cache: "no-store", credentials: "same-origin", signal: controller.signal })
         .then(async (res) => {
+          if (controller.signal.aborted) return;
           if (res.ok) {
             const data = await res.json().catch(() => null);
             setUser(data?.user ?? null);
@@ -65,11 +72,23 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
           }
           if (!initialUser) setUser(null);
         })
-        .catch(() => setReady(true));
+        .catch(() => { if (!controller.signal.aborted) setReady(true); })
+        .finally(() => { pending = false; });
     }
-    loadUser();
-    window.addEventListener("fire:user-updated", loadUser);
-    return () => window.removeEventListener("fire:user-updated", loadUser);
+    const checkVisible = () => loadUser();
+    const reloadUser = () => loadUser(true);
+    loadUser(true);
+    const timer = window.setInterval(checkVisible, 15 * 60 * 1000);
+    window.addEventListener("fire:user-updated", reloadUser);
+    window.addEventListener("focus", checkVisible);
+    document.addEventListener("visibilitychange", checkVisible);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+      window.removeEventListener("fire:user-updated", reloadUser);
+      window.removeEventListener("focus", checkVisible);
+      document.removeEventListener("visibilitychange", checkVisible);
+    };
   }, []);
 
   useEffect(() => {

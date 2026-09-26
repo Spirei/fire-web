@@ -149,7 +149,7 @@ export function getUserByToken(token: string | null): User | null {
     }
   }
   if (!row) return null;
-  if (row.expires_at < Date.now()) {
+  if (row.expires_at <= Date.now()) {
     db.prepare("DELETE FROM sessions WHERE token IN (?, ?)").run(digest, token);
     return null;
   }
@@ -227,6 +227,15 @@ export function deleteOtherSessions(userId: string, keepToken: string | null) {
 
 export function sessionCookieMaxAge() {
   return SESSION_DAYS * 24 * 60 * 60;
+}
+
+/** 浏览器使用期间最多每天续期一次；原子条件保证已过期/撤销的会话不能复活。 */
+export function renewSessionIfNeeded(token: string): boolean {
+  const now = Date.now();
+  const expiresAt = now + sessionCookieMaxAge() * 1000;
+  return getDb().prepare(`UPDATE sessions SET expires_at = ?
+    WHERE token = ? AND expires_at > ? AND expires_at <= ?`)
+    .run(expiresAt, sessionDbToken(token), now, expiresAt - 24 * 60 * 60 * 1000).changes > 0;
 }
 
 export function applySessionCookie(res: { cookies: { set: (name: string, value: string, options: { httpOnly: boolean; sameSite: "lax"; path: string; maxAge: number; secure: boolean }) => void } }, token: string, request: Request) {

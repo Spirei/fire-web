@@ -4495,6 +4495,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "后台页面随可视高度自适应，页脚下方不再留空白。",
   software: V0_1_41_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.42" } : item),
   changes: [
+    { kind: "fix", title: "活跃网页登录自动续期", desc: "网页登录从固定七天到期改为使用期间每日最多续期一次，Cookie 与服务端同步延长七天；可见页面每十五分钟及回到前台时检查。过期与撤销会话不能复活，跨站请求不能续期，移动端 Bearer 有效期不变。" },
     { kind: "fix", title: "后台打开与切换减负", desc: "设置等非资产页不再启动持仓行情轮询；导航指向或聚焦时按需预取目标页代码，省流量与慢速网络跳过。首屏现金改为 SQL 聚合，避免加载排序整本流水，并省去未使用的资金明细计算。" },
     { kind: "fix", title: "FIRE 未填年数不再误报已达成", desc: "空白或无效年数显示占位；表格不再满足达成条件时，清除之前自动推导的还需年数。" },
     { kind: "security", title: "会话与用户资料校验统一", desc: "退出登录、修改密码与两步验证统一使用当前认证令牌；拒绝跨站 Cookie 退出请求，管理员编辑资料阻止大小写不同的重复邮箱。" },

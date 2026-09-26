@@ -213,6 +213,44 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   const user = createUser('review_user', 'Review-test-123');
   const other = createUser('review_other', 'Review-test-123');
   const tokens = { user: createSession(user.id), other: createSession(other.id), admin: createSession('demo-user') };
+  await test('browser sessions renew both expiries without reviving revoked or expired sessions', async () => {
+    const auth = require(path.join(root, 'lib/auth.ts'));
+    const route = require(path.join(root, 'app/api/auth/me/route.ts'));
+    const digest = token => require('node:crypto').createHash('sha256').update(token).digest('hex');
+    const realNow = Date.now;
+    let now = realNow();
+    Date.now = () => now;
+    const request = (token, headers = {}) => new Request('http://localhost/api/auth/me', { method:'POST', headers:{ cookie:`fire_session=${token}`, origin:'http://localhost', ...headers } });
+    const expires = token => db.prepare('SELECT expires_at FROM sessions WHERE token=?').get(digest(token))?.expires_at;
+    try {
+      const token = auth.createSession(user.id);
+      const originalExpiry = expires(token);
+      assert.equal(auth.sessionCookieMaxAge(), 7*86400);
+      assert.equal((await route.POST(request(token))).headers.get('set-cookie'), null, 'fresh session needs no write');
+      now += 2*86400000;
+      const forbidden = await route.POST(request(token, {origin:'https://other.example','sec-fetch-site':'cross-site'}));
+      assert.equal(forbidden.status,403); assert.equal(expires(token),originalExpiry);
+      const read = await route.GET(new Request('http://localhost/api/auth/me',{headers:{cookie:`fire_session=${token}`}}));
+      assert.equal(read.status,200); assert.equal(expires(token),originalExpiry,'GET remains read-only');
+      const renewed = await route.POST(request(token));
+      assert.equal(renewed.status,200); assert.equal(expires(token), now+7*86400000);
+      const cookie = renewed.headers.get('set-cookie');
+      assert(cookie.includes('Max-Age=604800')); assert(cookie.includes('HttpOnly')); assert(cookie.includes('SameSite=lax'));
+      assert.equal((await route.POST(request(token))).headers.get('set-cookie'),null,'repeated check is throttled');
+      now = originalExpiry+1;
+      assert(auth.getUserByToken(token),'renewed session survives original expiry');
+      const bearer = auth.createSession(user.id); now += 2*86400000;
+      const bearerExpiry = expires(bearer);
+      const mobile = await route.POST(request(token,{authorization:`Bearer ${bearer}`}));
+      assert.equal(mobile.status,200); assert.equal(mobile.headers.get('set-cookie'),null); assert.equal(expires(bearer),bearerExpiry);
+      now = expires(token);
+      assert.equal((await route.POST(request(token))).status,401,'exact expiry boundary is expired');
+      assert.equal(auth.renewSessionIfNeeded(token),false);
+      auth.deleteSession(bearer);
+      assert.equal((await route.POST(request(bearer))).status,401);
+      assert.equal(auth.renewSessionIfNeeded(bearer),false);
+    } finally { Date.now = realNow; }
+  });
   await test('database balance aggregation preserves debt, currencies and account isolation', () => {
     const { fundBalances } = require(path.join(root, 'lib/funds.ts'));
     const { totalFundBalances, fundState } = require(path.join(root, 'lib/fundState.ts'));
