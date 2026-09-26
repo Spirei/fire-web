@@ -4496,6 +4496,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   software: V0_1_41_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.42" } : item),
   frontend: [...V0_1_41_ENTRY.frontend, { name: "SimpleWebAuthn", version: "14", desc: "WebAuthn 通行密钥 · 浏览器与服务端签名校验" }],
   changes: [
+    { kind: "security", title: "登录限流并发加固", desc: "配额检查与扣减合并为单条 SQLite 原子语句，避免多个服务进程同时占用最后一个名额。代理 IP 使用标准格式校验并统一 IPv6 写法，拒绝非法地址。新增四线程共享数据库回归，检查限额、窗口恢复及内存后备模式。" },
     { kind: "security", title: "通行密钥撤销与限流隔离", desc: "删除通行密钥时原子撤销该密钥创建的会话，阻止续期；升级前无法识别来源的旧会话保守退出，当前会话被撤销时返回登录页。取消匿名请求共享的全站硬限额，挑战签发按签名浏览器标识及可信代理 IP 限流，注册按账号限流，已签发挑战的验证不受签发额度影响。补充密钥删除、旧会话、跨浏览器与跨 IP 隔离回归测试。" },
     { kind: "feature", title: "通行密钥登录与独立域名配置", desc: "新增无需用户名或密码的通行密钥登录，使用设备解锁或密码管理器验证；按标准 WebAuthn 支持 iCloud 钥匙串、Bitwarden、1Password 与兼容安全密钥，不限定本机验证器。设置中的通行密钥页支持每个开源部署独立配置 HTTPS 域名与站点名称、多密钥添加、重命名和删除。绑定与删除要求密码及已开启的 TOTP；验证请求五分钟有效、绑定浏览器与注册会话、一次性消费，并严格校验 Origin、RP ID、签名与用户验证。管理员恢复账号时同步撤销通行密钥和旧会话。" },
     { kind: "security", title: "登录全链条安全加固", desc: "首次管理员与 UID 分配改为 IMMEDIATE 事务，关闭并发初始化竞态；登录增加账号摘要维度限流，默认不信任客户端可伪造的代理 IP 头。绑定二次验证前必须重验密码；管理员重置密码、变更角色、删除用户，以及用户注销账号均要求密码二次确认，已启用 TOTP 时还需动态码或备用码。会话令牌继续仅存摘要，并限制每个账号最多 20 个并发会话；注册响应统一 no-store 与安全 Cookie 策略。" },

@@ -12,7 +12,7 @@
     "check:commit-title": "node scripts/check-commit-title.mjs",
     "smoke": "bash scripts/smoke-test.sh",
     "smoke:ci": "bash scripts/smoke-ci.sh",
-    "test:review": "node tests/site-review.cjs && node tests/passkeys.cjs",
+    "test:review": "node tests/site-review.cjs && node tests/passkeys.cjs && node tests/rate-limit.cjs",
     "test:passkeys": "node tests/passkeys.cjs",
     "clean:caches": "node scripts/clean-next-cache.mjs",
     "clean:dsstore": "find .. -name .DS_Store -not -path '*/node_modules/*' -delete && echo '已清理 .DS_Store'"
