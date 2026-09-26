@@ -13,8 +13,10 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const recordsOnly = params.get("recordsOnly") === "1";
   if (!recordsOnly) ensureOrderCashTransactions(user.id);
-  const limit = Math.min(100, Math.max(1, Number(params.get("limit")) || 40));
-  const offset = Math.max(0, Number(params.get("offset")) || 0);
+  const rawLimit = Number(params.get("limit"));
+  const rawOffset = Number(params.get("offset"));
+  const limit = Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, Math.trunc(rawLimit || 40))) : 40;
+  const offset = Number.isFinite(rawOffset) ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.trunc(rawOffset))) : 0;
   const requestedCurrency = String(params.get("currency") || "").toUpperCase();
   const currency = currencies.has(requestedCurrency) ? requestedCurrency as FundCurrency : undefined;
   const query = String(params.get("q") || "").trim().slice(0, 60);

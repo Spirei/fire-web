@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fire 功能冒烟测试：页面、认证、记录 CRUD、数据隔离、实时行情
+# 默认只读巡检。历史写入检查仅用于 SMOKE_DISPOSABLE_INSTANCE=1 的可丢弃实例。
 set -u
 
 BASE="${BASE:-http://localhost:3000}"
@@ -18,7 +18,7 @@ check() {
   fi
 }
 
-code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+code() { curl -s --max-time 45 -o /dev/null -w '%{http_code}' "$@"; }
 
 echo "== 页面加载 =="
 check "GET /"          200 "$(code "$BASE/")"
@@ -47,7 +47,7 @@ fi
 ME=$(curl -s -b "$JAR_DEMO" "$BASE/api/auth/me")
 check "me 返回 demo" demo "$(echo "$ME" | python3 -c 'import json,sys; print(json.load(sys.stdin)["user"]["username"])')"
 SEED_COUNT=$(curl -s -b "$JAR_DEMO" "$BASE/api/records" | python3 -c 'import json,sys; data=json.load(sys.stdin); print(len(data) if isinstance(data,list) else -1)')
-if [ "$SEED_COUNT" != 6 ]; then
+if [ "${SMOKE_DISPOSABLE_INSTANCE:-0}" = 1 ] && [ "$SEED_COUNT" != 6 ]; then
   echo "冒烟测试需要 demo 的 6 条种子记录（当前 $SEED_COUNT）；停止后续写入。"
   rm -f "$JAR_DEMO" "$JAR_NEW"
   exit 1
@@ -76,6 +76,19 @@ check "美股五日分时接口" 200 "$(code --max-time 40 "$BASE/api/kline/five
 check "个股详情接口" 200 "$(code --max-time 40 "$BASE/api/v1/stock-detail?market=US&code=AAPL")"
 check "汇率接口（登录后）" 200 "$(code -b "$JAR_DEMO" "$BASE/api/rates")"
 check "汇率以美元为基准" 1 "$(curl -s -b "$JAR_DEMO" "$BASE/api/rates" | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d.get("rates") or {}; print(1 if r.get("USD")==1 else 0)')"
+
+if [ "${SMOKE_DISPOSABLE_INSTANCE:-0}" != 1 ]; then
+  for API in /api/records /api/activities /api/settings /api/cards/holdings /api/cards/amounts /api/cards/wallet; do
+    check "${API} 未登录拒绝" 401 "$(code "$BASE$API")"
+    check "${API} 登录读取" 200 "$(code -b "$JAR_DEMO" "$BASE$API")"
+  done
+  check "资金分页小数参数" 200 "$(code -b "$JAR_DEMO" "$BASE/api/v1/funds?recordsOnly=1&limit=1.5&offset=0.5")"
+  check "退出测试会话" 200 "$(code -b "$JAR_DEMO" -X POST "$BASE/api/auth/logout")"
+  rm -f "$JAR_DEMO" "$JAR_NEW"
+  echo "只读巡检结果: PASS=${PASS} FAIL=${FAIL}；写入回归使用 npm run test:review 的临时数据库。"
+  [ "$FAIL" -eq 0 ]
+  exit $?
+fi
 
 # 备份真实设置，测试结束后恢复，避免覆盖用户配置
 BACKUP_FILE=$(mktemp)

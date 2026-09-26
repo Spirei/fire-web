@@ -83,6 +83,43 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   const user = createUser('review_user', 'Review-test-123');
   const other = createUser('review_other', 'Review-test-123');
   const tokens = { user: createSession(user.id), other: createSession(other.id), admin: createSession('demo-user') };
+  await test('card balance replay restores opening balance, respects adjustments and rolls back failed writes', () => {
+    const { upsertCardAmount, listCardAmounts } = require(path.join(root, 'lib/cardAmounts.ts'));
+    const { addCardBalanceEntry, deleteCardBalanceEntry, listCardBalanceHistoryForCard } = require(path.join(root, 'lib/cardWallet.ts'));
+    const key = 'review-balance';
+    const amount = () => listCardAmounts(user.id).find(row => row.cardKey === key).amount;
+    upsertCardAmount(user.id, { cardKey: key, amount: 100, currency: 'USD' });
+    const first = addCardBalanceEntry(user.id, { cardKey: key, kind: 'deposit', amount: 20, fundAccount: 'broker', occurredAt: '2026-01-02' });
+    assert.equal(deleteCardBalanceEntry(other.id, first.entry.id), null);
+    assert.equal(deleteCardBalanceEntry(user.id, first.entry.id).balance, 100);
+    assert.equal(amount(), 100);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM fund_transactions WHERE user_id = ? AND id = ?').get(user.id, `card-link-${first.entry.id}`).n, 0);
+    const later = addCardBalanceEntry(user.id, { cardKey: key, kind: 'deposit', amount: 20, occurredAt: '2026-01-03' });
+    addCardBalanceEntry(user.id, { cardKey: key, kind: 'deposit', amount: 10, occurredAt: '2026-01-01' });
+    assert.equal(amount(), 130);
+    assert.equal(listCardBalanceHistoryForCard(user.id, key).find(row => row.id === later.entry.id).balance, 130);
+    addCardBalanceEntry(user.id, { cardKey: key, kind: 'adjust', amount: 0, currentBalance: 200, occurredAt: '2026-01-04' });
+    deleteCardBalanceEntry(user.id, later.entry.id);
+    assert.equal(amount(), 200, 'an absolute balance adjustment must remain 200 after deleting an earlier deposit');
+    const before = listCardBalanceHistoryForCard(user.id, key);
+    db.exec("CREATE TEMP TRIGGER review_fail_card_amount BEFORE UPDATE ON card_amounts BEGIN SELECT RAISE(ABORT, 'review write failure'); END");
+    try {
+      assert.throws(() => addCardBalanceEntry(user.id, { cardKey: key, kind: 'deposit', amount: 5 }), /review write failure/);
+      assert.deepEqual(listCardBalanceHistoryForCard(user.id, key), before);
+      assert.throws(() => deleteCardBalanceEntry(user.id, before[0].id), /review write failure/);
+      assert.deepEqual(listCardBalanceHistoryForCard(user.id, key), before);
+    } finally { db.exec('DROP TRIGGER review_fail_card_amount'); }
+  });
+  await test('fund pagination tolerates fractional and non-finite query parameters', async () => {
+    const route = require(path.join(root, 'app/api/v1/funds/route.ts'));
+    for (const query of ['limit=1.5&offset=0.5', 'limit=Infinity&offset=Infinity', 'limit=-2&offset=-1', 'limit=abc&offset=NaN']) {
+      const response = await route.GET(new Request(`http://localhost/api/v1/funds?recordsOnly=1&${query}`, { headers: { cookie: `fire_session=${tokens.user}` } }));
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert(Number.isInteger(body.data.pagination.limit));
+      assert(Number.isInteger(body.data.pagination.offset));
+    }
+  });
   const request = (role, body, method='GET') => new Request('http://localhost:3000/api/settings', { method, headers: { ...(role ? { cookie: `fire_session=${tokens[role]}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
   const settings = require(path.join(root, 'lib/settings.ts'));
   const settingsRoute = require(path.join(root, 'app/api/settings/route.ts'));

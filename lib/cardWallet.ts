@@ -200,6 +200,27 @@ function cardCurrency(userId: string, cardKey: string, amountCurrency: string): 
   return (row?.currency || "").toUpperCase();
 }
 
+function openingBalance(userId: string, cardKey: string, fallback: number): number {
+  const first = getDb().prepare("SELECT balance, delta FROM card_balance_history WHERE user_id = ? AND card_key = ? ORDER BY occurred_at, created_at, rowid LIMIT 1")
+    .get(userId, cardKey) as { balance: number; delta: number } | undefined;
+  return first ? first.balance - first.delta : fallback;
+}
+
+/** 补记与删除都按发生时间回放；余额调整是绝对值，不能当成固定增减额。调用方持有写事务。 */
+function replayCardBalance(userId: string, cardKey: string, opening: number): number {
+  const db = getDb();
+  const rows = db.prepare("SELECT id, kind, delta, balance FROM card_balance_history WHERE user_id = ? AND card_key = ? ORDER BY occurred_at, created_at, rowid")
+    .all(userId, cardKey) as { id: string; kind: string; delta: number; balance: number }[];
+  const update = db.prepare("UPDATE card_balance_history SET delta = ?, balance = ? WHERE id = ? AND user_id = ?");
+  let balance = opening;
+  for (const row of rows) {
+    const next = row.kind === "adjust" ? row.balance : balance + row.delta;
+    update.run(next - balance, next, row.id, userId);
+    balance = next;
+  }
+  return balance;
+}
+
 /**
  * 记一笔余额变动：写入流水，并把卡面库里的当前余额同步更新。
  *
@@ -225,34 +246,35 @@ export function addCardBalanceEntry(
   }
 ): { entry: CardBalanceEntry; balance: number } {
   const db = getDb();
-  const now = new Date().toISOString();
-  const occurredAt = input.occurredAt && !Number.isNaN(Date.parse(input.occurredAt)) ? new Date(input.occurredAt).toISOString() : now;
-  const existing = currentAmount(userId, input.cardKey);
-  const currency = cardCurrency(userId, input.cardKey, existing.currency);
-  const base = existing.amount;
-  const delta = input.kind === "withdraw" ? -Math.abs(input.amount) : Math.abs(input.amount);
-  const balance =
-    input.kind === "adjust"
-      ? Number.isFinite(input.currentBalance)
-        ? Number(input.currentBalance)
-        : Math.abs(input.amount)
-      : base + delta;
-  const linked = input.fundAccount === "broker" && input.kind !== "adjust";
-  if (linked && !isFundCurrency(currency)) {
-    throw new Error(currency ? `资金系统不支持 ${currency}（没有汇率），没法记券商流水` : "这张卡还没有币种，先把卡背信息的币种填上");
-  }
-  const entry: CardBalanceEntry = {
-    id: randomUUID(),
-    cardKey: input.cardKey,
-    kind: input.kind,
-    delta: balance - base,
-    balance,
-    note: String(input.note || "").trim().slice(0, 100),
-    occurredAt,
-    brokerLinked: linked
-  };
-  const fundTxId = linked ? `${CARD_LINK_PREFIX}${entry.id}` : "";
-  const tx = db.transaction(() => {
+  return db.transaction(() => {
+    const now = new Date().toISOString();
+    const occurredAt = input.occurredAt && !Number.isNaN(Date.parse(input.occurredAt)) ? new Date(input.occurredAt).toISOString() : now;
+    const existing = currentAmount(userId, input.cardKey);
+    const opening = openingBalance(userId, input.cardKey, existing.amount);
+    const currency = cardCurrency(userId, input.cardKey, existing.currency);
+    const base = existing.amount;
+    const delta = input.kind === "withdraw" ? -Math.abs(input.amount) : Math.abs(input.amount);
+    const balance =
+      input.kind === "adjust"
+        ? Number.isFinite(input.currentBalance)
+          ? Number(input.currentBalance)
+          : Math.abs(input.amount)
+        : base + delta;
+    const linked = input.fundAccount === "broker" && input.kind !== "adjust";
+    if (linked && !isFundCurrency(currency)) {
+      throw new Error(currency ? `资金系统不支持 ${currency}（没有汇率），没法记券商流水` : "这张卡还没有币种，先把卡背信息的币种填上");
+    }
+    const entry: CardBalanceEntry = {
+      id: randomUUID(),
+      cardKey: input.cardKey,
+      kind: input.kind,
+      delta: balance - base,
+      balance,
+      note: String(input.note || "").trim().slice(0, 100),
+      occurredAt,
+      brokerLinked: linked
+    };
+    const fundTxId = linked ? `${CARD_LINK_PREFIX}${entry.id}` : "";
     db.prepare(
       "INSERT INTO card_balance_history (id, user_id, card_key, kind, delta, balance, note, occurred_at, created_at, fund_tx_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(entry.id, userId, entry.cardKey, entry.kind, entry.delta, entry.balance, entry.note, entry.occurredAt, now, fundTxId);
@@ -270,44 +292,33 @@ export function addCardBalanceEntry(
         occurredAt
       });
     }
-  });
-  tx();
-  // 当前余额同步到卡面库（概览条与卡片上的金额胶囊都读它）
-  upsertCardAmount(userId, { cardKey: input.cardKey, amount: entry.balance, currency: existing.currency || currency, note: existing.note });
-  setCardHeld(userId, input.cardKey, true);
-  return { entry, balance: entry.balance };
+    const currentBalance = replayCardBalance(userId, input.cardKey, opening);
+    const saved = db.prepare("SELECT delta, balance FROM card_balance_history WHERE id = ? AND user_id = ?")
+      .get(entry.id, userId) as { delta: number; balance: number };
+    Object.assign(entry, saved);
+    // 当前余额同步到卡面库（概览条与卡片上的金额胶囊都读它）
+    upsertCardAmount(userId, { cardKey: input.cardKey, amount: currentBalance, currency: existing.currency || currency, note: existing.note });
+    setCardHeld(userId, input.cardKey, true);
+    return { entry, balance: currentBalance };
+  })();
 }
 
 /** 删除一笔流水：按「最早一笔之前的余额」重放整条流水，并同步当前余额（联动流水一起删） */
 export function deleteCardBalanceEntry(userId: string, entryId: string): { cardKey: string; balance: number } | null {
   const db = getDb();
-  const target = db
-    .prepare("SELECT card_key, fund_tx_id FROM card_balance_history WHERE id = ? AND user_id = ?")
-    .get(entryId, userId) as { card_key: string; fund_tx_id?: string } | undefined;
-  if (!target) return null;
-  const cardKey = target.card_key;
-  const ordered = db
-    .prepare(
-      "SELECT id, delta, balance FROM card_balance_history WHERE user_id = ? AND card_key = ? ORDER BY occurred_at ASC, created_at ASC"
-    )
-    .all(userId, cardKey) as { id: string; delta: number; balance: number }[];
-  // 删之前先把「首笔发生之前的余额」固定下来，之后无论删哪一笔都能重放
-  const opening = ordered.length > 0 ? Number(ordered[0].balance) - Number(ordered[0].delta) : 0;
-  const remaining = ordered.filter((row) => row.id !== entryId);
-  const update = db.prepare("UPDATE card_balance_history SET balance = ? WHERE id = ? AND user_id = ?");
-  let running = opening;
-  db.transaction(() => {
+  return db.transaction(() => {
+    const target = db
+      .prepare("SELECT card_key, fund_tx_id FROM card_balance_history WHERE id = ? AND user_id = ?")
+      .get(entryId, userId) as { card_key: string; fund_tx_id?: string } | undefined;
+    if (!target) return null;
+    const cardKey = target.card_key;
+    const existing = currentAmount(userId, cardKey);
+    const opening = openingBalance(userId, cardKey, existing.amount);
     db.prepare("DELETE FROM card_balance_history WHERE id = ? AND user_id = ?").run(entryId, userId);
     // 联动的那笔券商流水跟着一起删，否则券商现金与卡余额会各少一笔、账对不上
     if (target.fund_tx_id) db.prepare("DELETE FROM fund_transactions WHERE id = ? AND user_id = ?").run(target.fund_tx_id, userId);
-    remaining.forEach((row) => {
-      running += Number(row.delta) || 0;
-      update.run(running, row.id, userId);
-    });
-  })();
-  const existing = currentAmount(userId, cardKey);
-  if (remaining.length > 0) {
+    const running = replayCardBalance(userId, cardKey, opening);
     upsertCardAmount(userId, { cardKey, amount: running, currency: existing.currency, note: existing.note });
-  }
-  return { cardKey, balance: remaining.length > 0 ? running : existing.amount };
+    return { cardKey, balance: running };
+  })();
 }

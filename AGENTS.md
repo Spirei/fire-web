@@ -3,7 +3,7 @@
 ## 项目
 
 - 技术栈：Next.js 15（App Router）+ React 19 + TypeScript + Tailwind CSS，SQLite（better-sqlite3）。
-- 常用命令：开发 `npm run dev`（固定监听 `0.0.0.0:3000`，禁止临时切换端口）；构建 `npm run build`；冒烟测试 `./scripts/smoke-test.sh`（期望全部 PASS，测试会备份并还原设置，不污染用户数据）。
+- 常用命令：开发 `npm run dev`（固定监听 `0.0.0.0:3000`，禁止临时切换端口）；构建 `npm run build`；冒烟测试 `./scripts/smoke-test.sh` 默认只读巡检。写入回归使用 `npm run test:review` 的临时数据库；历史冒烟写入分支仅限 `SMOKE_DISPOSABLE_INSTANCE=1` 的可丢弃实例，会覆盖分组、数据库配置和 demo 头像，禁止在真实实例启用。
 
 ## 收尾 Review 规范（重要）
 
