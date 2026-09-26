@@ -5901,7 +5901,7 @@ button.PhotoView-Slider__toolbarIcon {
 .card-wander-effect[data-effect="meteor"] .card-wander-modal-image { border-radius: inherit; }
 .card-wander-fragments { position: absolute; inset: 0 0 auto; height: 100%; overflow: hidden; border-radius: inherit; pointer-events: none; }
 .card-wander-fragment-grid { position: absolute; inset: 0 0 auto; height: 100%; pointer-events: none; }
-.card-wander-fragment { position: absolute; width: 10%; height: calc(100% / 6); background-repeat: no-repeat; animation: card-wander-fragment-fall 1.25s var(--fragment-delay) forwards, card-wander-fragment-return .65s var(--fragment-return-delay) forwards; will-change: transform; backface-visibility: hidden; }
+.card-wander-fragment { position: absolute; width: 10%; height: calc(100% / 6); background-repeat: no-repeat; animation: card-wander-fragment-fall 1.25s var(--fragment-delay) forwards, card-wander-fragment-return .07s var(--fragment-return-delay) forwards; will-change: transform; backface-visibility: hidden; }
 .card-wander-fragment[data-trail]::before { content: ""; position: absolute; bottom: 100%; left: 50%; width: 1px; height: 80%; background: linear-gradient(to bottom, transparent, rgba(210,231,244,.14) 55%, rgba(235,247,255,.64)); transform-origin: bottom; animation: card-wander-meteor-tail 1.25s var(--fragment-delay) both; pointer-events: none; }
 @keyframes card-wander-fragment-fall {
   0% { transform: translate3d(0,0,0); animation-timing-function: cubic-bezier(.32,.12,.62,.58); }

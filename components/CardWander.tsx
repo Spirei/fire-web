@@ -142,7 +142,7 @@ function FragmentCard({ image, name, className }: { image: string; name: string;
           backgroundSize: `${geometry.artWidth}px ${geometry.artHeight}px`,
           backgroundPosition: `${(geometry.width - geometry.artWidth) / 2 - col * geometry.width / FRAGMENT_COLS}px ${(geometry.height - geometry.artHeight) / 2 - row * geometry.height / FRAGMENT_ROWS}px`,
           "--fragment-delay": `${sequence.fall[index] * .009}s`,
-          "--fragment-return-delay": `${1.9 + sequence.return[index] * .032}s`,
+          "--fragment-return-delay": `${1.9 + sequence.return[index] * .07}s`,
           "--fragment-drift": `${(col - 4.5) * 1.4}px`,
           "--fragment-fall": `${geometry.height + geometry.footer + 18 - row * geometry.height / FRAGMENT_ROWS}px`
         } as CSSProperties} onAnimationEnd={(event) => {
