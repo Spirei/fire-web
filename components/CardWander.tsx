@@ -78,7 +78,7 @@ function WanderTile({ card, observeTile, onSelect }: {
 function FragmentCard({ image, name, className }: { image: string; name: string; className: string }) {
   const [running, setRunning] = useState(false);
   const imageRef = useRef<HTMLImageElement>(null);
-  const [geometry, setGeometry] = useState({ height: 0, footer: 0 });
+  const [geometry, setGeometry] = useState({ width: 0, height: 0, footer: 0, artWidth: 0, artHeight: 0 });
   const completed = useRef(0);
   useLayoutEffect(() => {
     const img = imageRef.current;
@@ -87,13 +87,18 @@ function FragmentCard({ image, name, className }: { image: string; name: string;
     const measure = () => {
       const rect = img.getBoundingClientRect();
       const actions = modal?.querySelector(".card-wander-modal-actions")?.getBoundingClientRect();
-      setGeometry({ height: img.clientHeight, footer: actions ? Math.max(0, actions.bottom - rect.bottom + 12) : 0 });
+      const width = img.clientWidth;
+      const height = img.clientHeight;
+      const fit = Math.min(width / (img.naturalWidth || width), height / (img.naturalHeight || height));
+      const next = { width, height, footer: actions ? Math.max(0, actions.bottom - rect.bottom + 12) : 0, artWidth: (img.naturalWidth || width) * fit, artHeight: (img.naturalHeight || height) * fit };
+      setGeometry(previous => Object.keys(next).every(key => previous[key as keyof typeof next] === next[key as keyof typeof next]) ? previous : next);
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(img);
+    img.addEventListener("load", measure);
     if (modal) observer.observe(modal);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); img.removeEventListener("load", measure); };
   }, []);
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -114,11 +119,14 @@ function FragmentCard({ image, name, className }: { image: string; name: string;
         const row = Math.floor(index / 8);
         return <span className="card-wander-fragment" key={index} style={{
           left: `${col * 12.5}%`, top: `${row * 20}%`,
+          backgroundImage: `url(${JSON.stringify(image)})`,
+          backgroundSize: `${geometry.artWidth}px ${geometry.artHeight}px`,
+          backgroundPosition: `${(geometry.width - geometry.artWidth) / 2 - col * geometry.width / 8}px ${(geometry.height - geometry.artHeight) / 2 - row * geometry.height / 5}px`,
           "--fragment-delay": `${((col * 3 + row * 2) % 8) * .04 + (4 - row) * .12}s`,
           "--fragment-fall": geometry.footer ? `${geometry.height + geometry.footer - row * geometry.height / 5}px` : "600%"
         } as CSSProperties} onAnimationEnd={() => {
           if (++completed.current === 40) setRunning(false);
-        }}><img src={image} alt="" draggable={false} style={{ left: `${-col * 100}%`, top: `${-row * 100}%` }} /></span>;
+        }} />;
       })}
       </span>
     </span>}
@@ -638,6 +646,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     driftAnchorRef.current = { x: positionRef.current.x, y: positionRef.current.y };
   };
   const onEffectPointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+    if (previewEffect === "meteor") return;
     if (!modalRef.current?.hasAttribute("data-landed") || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const rect = effectRectRef.current ?? event.currentTarget.getBoundingClientRect();
     effectRectRef.current = rect;
