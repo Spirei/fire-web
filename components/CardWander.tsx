@@ -84,8 +84,10 @@ function EffectSheen({ effect }: { effect: PreviewEffect }) {
       [54, 17, 10.7, -3.8, -16, 23], [18, 52, 11.8, -6.4, 18, 21]
     ].map(([x, y, duration, delay, dx, dy], index) => <span key={index} className="card-wander-firefly" style={{
       left: `${x}%`, top: `${y}%`, "--fly-duration": `${duration}s`, "--fly-delay": `${delay}s`,
-      "--fly-x": `${dx}px`, "--fly-y": `${dy}px`, "--fly-glow": `${3.2 + index * .37}s`,
-      "--fly-size": `${index % 3 === 0 ? 3 : 2}px`
+      "--fly-x": `${dx}px`, "--fly-y": `${dy}px`, "--fly-glow": `${4.7 + index * .43}s`,
+      "--fly-vertical": `${duration * .73}s`, "--fly-glow-delay": `${delay * 1.61}s`,
+      "--fly-depth": index % 3 === 0 ? .95 : index % 3 === 1 ? .65 : .4,
+      "--fly-size": `${index % 3 === 0 ? 2.8 : 1.7}px`
     } as CSSProperties} />)}
   </span>;
 }

@@ -5918,18 +5918,17 @@ button.PhotoView-Slider__toolbarIcon {
 }
 .card-wander-preview-stage[data-effect="fireflies"] .card-wander-effect-glare,
 .card-wander-preview-stage[data-effect="fireflies"] .card-wander-effect-spec { display: none; }
-.card-wander-firefly { position: absolute; width: 24px; height: 24px; margin: -12px; pointer-events: none; animation: card-wander-effect-fireflies var(--fly-duration) var(--fly-delay) ease-in-out infinite; }
-.card-wander-firefly::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle, rgba(219,246,135,.28), rgba(185,226,94,.12) 28%, transparent 68%); animation: card-wander-firefly-glow var(--fly-glow) var(--fly-delay) ease-in-out infinite; }
-.card-wander-firefly::after { content: ""; position: absolute; left: 50%; top: 50%; width: var(--fly-size); height: var(--fly-size); margin: -1px; border-radius: 50%; background: #f5ffc1; box-shadow: 0 0 4px 1px #c5e77590; animation: card-wander-firefly-glow var(--fly-glow) var(--fly-delay) ease-in-out infinite; }
+.card-wander-firefly { position: absolute; width: 24px; height: 24px; margin: -12px; pointer-events: none; opacity: var(--fly-depth); animation: card-wander-effect-fireflies var(--fly-duration) var(--fly-delay) cubic-bezier(.37,0,.63,1) infinite alternate, card-wander-firefly-rise var(--fly-vertical) var(--fly-delay) cubic-bezier(.37,0,.63,1) infinite alternate; }
+.card-wander-firefly::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle, rgba(219,246,135,.32), rgba(185,226,94,.12) 28%, transparent 68%); animation: card-wander-firefly-glow var(--fly-glow) var(--fly-glow-delay) ease-in-out infinite; }
+.card-wander-firefly::after { content: ""; position: absolute; left: 50%; top: 50%; width: var(--fly-size); height: var(--fly-size); translate: -50% -50%; border-radius: 50%; background: #f5ffc1; box-shadow: 0 0 4px 1px #c5e77590; animation: card-wander-firefly-glow var(--fly-glow) var(--fly-glow-delay) ease-in-out infinite; }
 @keyframes card-wander-effect-sweep { from { transform: translate3d(-14%,0,0); } to { transform: translate3d(14%,0,0); } }
 @keyframes card-wander-effect-rainbow { from { transform: translate3d(-8%,-5%,0); } to { transform: translate3d(8%,5%,0); } }
 @keyframes card-wander-effect-fireflies {
-  0%, 100% { transform: translate3d(0,0,0); }
-  28% { transform: translate3d(var(--fly-x),calc(var(--fly-y) * .4),0); }
-  56% { transform: translate3d(calc(var(--fly-x) * .45),var(--fly-y),0); }
-  79% { transform: translate3d(calc(var(--fly-x) * -.35),calc(var(--fly-y) * .65),0); }
+  from { translate: calc(var(--fly-x) * -.65) 0; }
+  to { translate: var(--fly-x) 0; }
 }
-@keyframes card-wander-firefly-glow { 0%, 100% { opacity: .12; } 24% { opacity: .38; } 48% { opacity: .95; } 66% { opacity: .7; } 85% { opacity: .18; } }
+@keyframes card-wander-firefly-rise { from { transform: translate3d(0,calc(var(--fly-y) * -.55),0); } to { transform: translate3d(0,var(--fly-y),0); } }
+@keyframes card-wander-firefly-glow { 0%, 16%, 100% { opacity: .04; } 36% { opacity: 1; } 51% { opacity: .32; } 62% { opacity: .66; } 81% { opacity: .04; } }
 .card-wander-wallet { position: relative; flex: none; width: 260px; height: 452px; margin-top: 16px; overflow: hidden; border: 5px solid #34393f; border-radius: 39px; background: #060709; box-shadow: 0 12px 40px #000b, inset 0 0 0 2px #050607; color: #f6f7f9; transition: translate .74s cubic-bezier(.22,1,.36,1); }
 .card-wander-wallet[data-payment="true"] { translate: 0 -65px; }
 .card-wander-wallet-island { position: absolute; z-index: 2; top: 7px; left: 50%; width: 70px; height: 18px; transform: translateX(-50%); border-radius: 999px; background: #050607; }
