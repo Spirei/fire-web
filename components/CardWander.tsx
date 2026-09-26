@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type WheelEvent } from "react";
 import { flushSync } from "react-dom";
 import { selectWanderCards } from "@/lib/cardWander";
+import CardThumbnail from "@/components/CardThumbnail";
 
 export interface WanderCard {
   key: string;
@@ -69,7 +70,7 @@ function WanderTile({ card, observeTile, onSelect }: {
       aria-label={card.name}
       onClick={(event) => onSelect(card, event.currentTarget)}
     >
-      {nearViewport && <img src={card.image} alt="" draggable={false} loading="eager" decoding="async" />}
+      {nearViewport && <CardThumbnail src={card.image} alt="" sizes="350px" eager />}
     </button>
   );
 }

@@ -3,6 +3,7 @@
 import { sharedRead } from "@/lib/sharedRead";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
+import CardThumbnail from "@/components/CardThumbnail";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
 import { appConfirm } from "@/lib/appDialog";
@@ -1996,12 +1997,12 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                 {/* 卡片底托：留白 + 圆角裁切，让每张卡看起来都像一张实体卡（素材自带圆角的也保持一致） */}
                 <span className="block w-full bg-bg-gray/60 p-2.5 dark:bg-white/[0.04]">
                   <span className="relative block overflow-hidden rounded-[10px] bg-bg-gray shadow-sm ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10">
-                      <img
+                      <CardThumbnail
                         src={wanderSeed ? undefined : cardCover(card.faces?.[0]?.file ?? card.file)}
                         alt={card.name}
-                      loading={index < 4 ? "eager" : "lazy"}
-                      fetchPriority={index < 2 ? "high" : "auto"}
-                      decoding="async"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 260px"
+                      eager={index < 4}
+                      highPriority={index < 2}
                       className="aspect-[1.586] w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
                     />
                     <span className="touch-always pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/0 to-black/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
