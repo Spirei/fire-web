@@ -20,7 +20,8 @@ export default function AppModal({
   headerActions,
   size = "sm",
   className = "",
-  draggable = false
+  draggable = false,
+  closeDisabled = false
 }: {
   title?: string;
   desc?: string;
@@ -30,11 +31,14 @@ export default function AppModal({
   size?: ModalSize;
   className?: string;
   draggable?: boolean;
+  closeDisabled?: boolean;
 }) {
   const [closing, setClosing] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeDisabledRef = useRef(closeDisabled);
+  closeDisabledRef.current = closeDisabled;
   const dragRef = useRef<{ pointerId: number; x: number; y: number; startX: number; startY: number; rect: DOMRect } | null>(null);
 
   useEffect(() => {
@@ -44,8 +48,8 @@ export default function AppModal({
     window.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    // 自动聚焦面板，方便键盘操作
-    panelRef.current?.focus({ preventScroll: true });
+    // Forms can place focus directly in their first required field.
+    (panelRef.current?.querySelector<HTMLElement>("[data-autofocus]") || panelRef.current)?.focus({ preventScroll: true });
     return () => {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
@@ -55,9 +59,12 @@ export default function AppModal({
   }, []);
 
   function requestClose() {
-    if (closing) return;
+    if (closing || closeDisabledRef.current) return;
     setClosing(true);
-    closeTimer.current = setTimeout(() => onClose(), 140);
+    closeTimer.current = setTimeout(() => {
+      if (closeDisabledRef.current) { setClosing(false); return; }
+      onClose();
+    }, 140);
   }
 
   function startDrag(event: React.PointerEvent<HTMLDivElement>) {
@@ -112,6 +119,7 @@ export default function AppModal({
           {headerActions && <div className="ml-auto min-w-0 flex-1 sm:max-w-[240px]">{headerActions}</div>}
           <button
             type="button"
+            disabled={closeDisabled}
             onClick={requestClose}
             className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-full text-muted transition-colors duration-200 hover:bg-black/5 hover:text-ink dark:hover:bg-white/10"
             aria-label="关闭"
