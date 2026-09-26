@@ -16,6 +16,29 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('concurrent reads share transport but keep independent bodies and allow fresh retry', async () => {
+    const { sharedRead } = require(path.join(root, 'lib/sharedRead.ts'));
+    const original = global.fetch;
+    let calls = 0;
+    let finish;
+    global.fetch = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
+    try {
+      const a = sharedRead('/api/rates');
+      const b = sharedRead('/api/rates');
+      assert.equal(calls, 1);
+      finish(Response.json({ rates: { USD: 1 } }));
+      const results = await Promise.all([a, b]);
+      assert.deepEqual(await results[0].json(), await results[1].json());
+      const next = sharedRead('/api/rates');
+      assert.equal(calls, 2);
+      finish(new Response('unavailable', { status: 503 }));
+      assert.equal((await next).status, 503);
+      global.fetch = async () => { calls++; throw new Error('offline'); };
+      await assert.rejects(sharedRead('/api/rates'), /offline/);
+      await assert.rejects(sharedRead('/api/rates'), /offline/);
+      assert.equal(calls, 4);
+    } finally { global.fetch = original; }
+  });
   await test('card wander shuffles deterministically and preserves the reference wall angle', () => {
     const { selectWanderCards } = require(path.join(root, 'lib/cardWander.ts'));
     const cards = Array.from({ length: 140 }, (_, index) => ({ key: `card-${index}` }));

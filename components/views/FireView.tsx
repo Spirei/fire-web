@@ -1,5 +1,6 @@
 "use client";
 
+import { sharedRead } from "@/lib/sharedRead";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FALLBACK_RATES, type StockRecord, type Quote } from "@/lib/types";
 import { usdCap } from "@/lib/currency";
@@ -420,7 +421,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   const [ratesAt, setRatesAt] = useState<number>(Date.now());
   useEffect(() => {
     let alive = true;
-    fetch("/api/rates")
+    sharedRead("/api/rates")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (alive && data?.rates) { setRates({ ...FALLBACK_RATES, ...data.rates, USD: data.rates.USD ?? 1 }); setRatesAt(Date.now()); }

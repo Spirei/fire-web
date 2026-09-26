@@ -1,5 +1,6 @@
 "use client";
 
+import { sharedRead } from "@/lib/sharedRead";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FALLBACK_RATES, type Quote, type StockRecord, type TradeOrder } from "@/lib/types";
 import { MARKET_CURRENCY } from "@/lib/currency";
@@ -260,7 +261,7 @@ export default function AssetPnlAnalysis({
                 if (!response.ok) throw new Error(response.status === 401 ? "登录已失效，请重新登录" : "持仓数据加载失败");
                 return response.json();
               }),
-          fetch("/api/rates").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          sharedRead("/api/rates").then((r) => (r.ok ? r.json() : null)).catch(() => null),
           fetchPortfolioBundle({ days: 330 })
         ]);
         if (cancelled) return;

@@ -1,5 +1,6 @@
 "use client";
 
+import { sharedRead } from "@/lib/sharedRead";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { FALLBACK_RATES, type Quote, type StockRecord } from "@/lib/types";
 import AssetAnalysisDashboard from "@/components/AssetAnalysisDashboard";
@@ -27,7 +28,7 @@ export default function AssetAnalysisView({ records, quotes, livePrice, user, re
 
   const loadRates = useCallback(async () => {
     try {
-      const res = await fetch("/api/rates");
+      const res = await sharedRead("/api/rates");
       const data = res.ok ? await res.json() : null;
       if (data?.rates) {
         setRates((prev) => ({ ...prev, ...data.rates, USD: 1 }));

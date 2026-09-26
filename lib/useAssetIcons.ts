@@ -423,7 +423,7 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
     requestedTypes.forEach((type) => subscribedTypes.add(type));
     setAssets(assetsFor(requestedTypes));
 
-    void refreshTypes(requestedTypes, Boolean(options.fullCatalog)).then(() => {
+    void refreshTypes(requestedTypes).then(() => {
       if (!cancelled) setAssets(assetsFor(requestedTypes));
     });
     const onUpdate = () => setAssets(assetsFor(requestedTypes));

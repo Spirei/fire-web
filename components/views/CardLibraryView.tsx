@@ -1,5 +1,6 @@
 "use client";
 
+import { sharedRead } from "@/lib/sharedRead";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -556,7 +557,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   }, []);
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/rates")
+    sharedRead("/api/rates")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (cancelled || !data?.rates) return;

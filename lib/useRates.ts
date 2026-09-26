@@ -1,5 +1,6 @@
 "use client";
 
+import { sharedRead } from "@/lib/sharedRead";
 import { useEffect, useState } from "react";
 export { MARKET_CURRENCY, MULTI_CURRENCIES, usdCap, fmtUsd } from "@/lib/currency";
 import { FALLBACK_RATES } from "@/lib/types";
@@ -22,7 +23,7 @@ export function useRates(): Record<string, number> {
       });
       return;
     }
-    inflight = fetch("/api/rates")
+    inflight = sharedRead("/api/rates")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.rates) {

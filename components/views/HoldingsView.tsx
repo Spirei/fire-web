@@ -1,5 +1,6 @@
 "use client";
 
+import { sharedRead } from "@/lib/sharedRead";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fmtMoney, fmtMoneyCompact, fmtPct, fmtPrice, fmtQty } from "@/lib/format";
 import {
@@ -272,7 +273,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   // 加载实时汇率（总资产跨市场换算用）；抽成函数供手动刷新复用
   const loadRates = useCallback(async () => {
     try {
-      const res = await fetch("/api/rates");
+      const res = await sharedRead("/api/rates");
       const data = res.ok ? await res.json() : null;
       if (data?.rates) {
         // 以当前（上一次成功）汇率为底，覆盖上游返回的币种，缺失币种保留上次值
@@ -291,7 +292,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
 
   const loadFundBalances = useCallback(async () => {
     try {
-      const res = await fetch("/api/v1/funds?limit=1", { cache: "no-store" });
+      const res = await sharedRead("/api/v1/funds?limit=1");
       const json = res.ok ? await res.json() : null;
       if (json?.data?.balances) setFundBalances((current) => ({ ...current, ...json.data.balances }));
     } catch {
