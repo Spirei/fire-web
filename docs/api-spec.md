@@ -68,6 +68,8 @@ Web 端继续使用 httpOnly Cookie 会话，两种方式等价，`GET /api/v1/a
 
 Web 通行密钥使用 `/api/auth/passkeys`：POST 的 `action` 为 `register-options` / `register-verify` / `login-options` / `login-verify`；options 返回 `{ options, requestId }` 并写入一次性浏览器绑定 Cookie，verify 提交 `{ action, requestId, response }`（注册可另传 `name`）。注册 options 需登录、`password` 及已开启的 `code`；登录强制 WebAuthn 用户验证，成功后仅签发 HttpOnly Cookie，不返回 Bearer。GET 返回当前用户密钥列表；PATCH 接收 `{ id, name }` 改名；DELETE 接收 `{ id, password, code }` 删除。
 
+DELETE 密钥会原子撤销该密钥关联会话及该账号来源不明的升级前旧会话，返回 `{ ok: true, signedOut: boolean }`；`signedOut=true` 时客户端应返回登录页。登录 options 另写入签名浏览器标识 Cookie，按浏览器和可信代理 IP 分别限流，不共享全站额度；每个浏览器只保留最新登录挑战，verify 仍需挑战绑定 Cookie 且一次性消费。
+
 `/api/auth/passkeys/config` 的 GET 公开返回 `{ enabled, origin, name }`；PUT 限管理员，接收这些配置字段及 `currentPassword`、已开启的 `code`。域名配置和凭据不通过普通站点设置或数据导入修改。部署与恢复说明见 [通行密钥](passkeys.md)。
 
 ## 5. 公共约定

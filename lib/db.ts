@@ -176,6 +176,7 @@ function migrate(database: Database.Database) {
       expires_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_passkey_challenges_expiry ON passkey_challenges(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_passkey_challenges_binding ON passkey_challenges(purpose,binding);
 
     CREATE TABLE IF NOT EXISTS security_audit (
       id TEXT PRIMARY KEY,
@@ -462,6 +463,11 @@ function migrate(database: Database.Database) {
       if (prevFk) database.pragma("foreign_keys = ON");
     }
   }
+
+  const sessionCols = (database.prepare("PRAGMA table_info(sessions)").all() as { name: string }[]).map(c => c.name);
+  if (!sessionCols.includes("auth_method")) database.exec("ALTER TABLE sessions ADD COLUMN auth_method TEXT NOT NULL DEFAULT 'legacy'");
+  if (!sessionCols.includes("passkey_id")) database.exec("ALTER TABLE sessions ADD COLUMN passkey_id TEXT");
+  database.exec("CREATE INDEX IF NOT EXISTS idx_sessions_passkey ON sessions(passkey_id)");
 
   const userSettingCols = (database.prepare("PRAGMA table_info(user_settings)").all() as { name: string }[]).map((c) => c.name);
   if (!userSettingCols.includes("simple")) database.exec("ALTER TABLE user_settings ADD COLUMN simple TEXT NOT NULL DEFAULT '{}'");

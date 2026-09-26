@@ -1,9 +1,34 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import { getDb } from "./db";
 import { getCookie, getSessionToken } from "./auth";
+import { hmacWithDataKey } from "./secretStorage";
+import { clientIp, rateLimit } from "./rateLimit";
 
 export const PASSKEY_COOKIE = "fire_passkey_challenge";
+export const PASSKEY_CLIENT_COOKIE = "fire_passkey_client";
+
+/** Signed browser identity isolates clients without a reliable IP; trusted proxy IP is an additional budget.
+ * Anonymous clients can clear cookies, so volumetric abuse still needs edge/proxy rate limiting.
+ */
+export function passkeyLoginClient(request: Request) {
+  const raw = getCookie(request, PASSKEY_CLIENT_COOKIE) || "";
+  const parts = raw.split(".");
+  const payload = parts.slice(0, 2).join(".");
+  if (parts.length === 3 && /^[a-f0-9]{48}$/.test(parts[0]) && /^\d{13}$/.test(parts[1]) && /^[a-f0-9]{64}$/.test(parts[2])) {
+    const expires = Number(parts[1]);
+    if (expires > Date.now() && expires <= Date.now() + 900000 && timingSafeEqual(Buffer.from(parts[2], "hex"), Buffer.from(hmacWithDataKey(`passkey-client:${payload}`), "hex"))) return { id: parts[0], cookie: raw };
+  }
+  const id = randomBytes(24).toString("hex");
+  const next = `${id}.${Date.now() + 900000}`;
+  return { id, cookie: `${next}.${hmacWithDataKey(`passkey-client:${next}`)}` };
+}
+export function allowPasskeyLoginOptions(request: Request, clientId: string) {
+  const ip = clientIp(request);
+  // Never put every deployment user into the same "direct" or "unknown" bucket.
+  if (ip !== "direct" && ip !== "unknown" && !rateLimit(`passkey-options-ip:${ip}`, 100, 60000)) return false;
+  return rateLimit(`passkey-options-browser:${clientId}`, 30, 900000);
+}
 export type PasskeyConfig = { enabled: boolean; origin: string; rpID: string; name: string; revision: string };
 export type PasskeyRow = { id: string; user_id: string; user_handle: string; rp_id: string; public_key: Buffer; counter: number; transports: string; name: string; backed_up: number; created_at: number; last_used_at: number | null };
 export type PasskeyChallenge = { id: string; binding: string; purpose: string; user_id: string | null; challenge: string; config_revision: string; password_hash: string; expires_at: number };
@@ -44,12 +69,13 @@ export function listPasskeys(userId: string): PasskeyRow[] {
 export function passkeyBinding(request: Request, purpose: string, nonce: string) {
   return createHash("sha256").update(`${purpose}:${nonce}:${purpose === "register" ? getSessionToken(request) || "" : ""}`).digest("hex");
 }
-export function issuePasskeyChallenge(request: Request, purpose: "register" | "login", challenge: string, config: PasskeyConfig, userId: string | null = null, passwordHash = "") {
-  const nonce = randomBytes(32).toString("base64url");
+export function issuePasskeyChallenge(request: Request, purpose: "register" | "login", challenge: string, config: PasskeyConfig, userId: string | null = null, passwordHash = "", browserId?: string) {
+  const nonce = browserId || randomBytes(32).toString("base64url");
   const id = randomBytes(24).toString("hex");
   const db = getDb();
   db.transaction(() => {
     db.prepare("DELETE FROM passkey_challenges WHERE expires_at<=?").run(Date.now());
+    if (browserId) db.prepare("DELETE FROM passkey_challenges WHERE purpose=? AND binding=?").run(purpose, passkeyBinding(request, purpose, nonce));
     db.prepare("INSERT INTO passkey_challenges(id,binding,purpose,user_id,challenge,config_revision,password_hash,expires_at) VALUES(?,?,?,?,?,?,?,?)")
       .run(id, passkeyBinding(request, purpose, nonce), purpose, userId, challenge, config.revision, passwordHash, Date.now() + 300000);
   })();

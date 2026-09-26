@@ -58,8 +58,12 @@ export default function PasskeySettings({ admin }: { admin: boolean }) {
     await run(async () => { await passkeyRequest({ id: key.id, name: value }, "PATCH"); await load(); setMessage("名称已更新"); });
   }
   async function remove(key: Key) {
-    if (!await appConfirm(`删除「${key.name}」后将无法用它登录。密码登录仍可使用。`, { title: "删除通行密钥", danger: true })) return;
-    await run(async () => { await passkeyRequest({ id: key.id, password, code }, "DELETE"); await load(); setMessage("通行密钥已删除"); });
+    if (!await appConfirm(`删除「${key.name}」后，将退出通过它登录的会话；升级前无法识别来源的旧会话也会退出。若包含当前会话，需要重新登录。密码登录仍可使用。`, { title: "删除通行密钥", danger: true })) return;
+    await run(async () => {
+      const result = await passkeyRequest({ id: key.id, password, code }, "DELETE");
+      if (result.signedOut) { window.location.replace("/login"); return; }
+      await load(); setMessage("通行密钥已删除，相关会话已退出");
+    });
   }
   const verifiedInput = !!password && (!totp || !!code);
   return <div id="passkeys" className="flex flex-col gap-6">

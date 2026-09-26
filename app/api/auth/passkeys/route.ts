@@ -6,9 +6,9 @@ import { applySessionCookie, createSession, findUserById, getAuthUser, getUserBy
 import { verifyPassword } from "@/lib/password";
 import { consumeTotpFactor, userTotpEnabled } from "@/lib/totpAuth";
 import { getDb } from "@/lib/db";
-import { assertPasskeyOrigin, consumePasskeyChallenge, issuePasskeyChallenge, listPasskeys, passkeyConfig, PASSKEY_COOKIE, type PasskeyRow } from "@/lib/passkeys";
+import { allowPasskeyLoginOptions, passkeyLoginClient, PASSKEY_CLIENT_COOKIE, assertPasskeyOrigin, consumePasskeyChallenge, issuePasskeyChallenge, listPasskeys, passkeyConfig, PASSKEY_COOKIE, type PasskeyRow } from "@/lib/passkeys";
 import { readJsonBody } from "@/lib/requestBody";
-import { rateLimit, clientIp, rateLimitGlobal } from "@/lib/rateLimit";
+import { rateLimit } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "no-store, private" } });
@@ -28,7 +28,6 @@ export async function GET(request: Request) {
   return json({ keys: listPasskeys(user.id).map(row => ({ id: row.id, name: row.name, rpID: row.rp_id, createdAt: row.created_at, lastUsedAt: row.last_used_at, backedUp: !!row.backed_up })), totpEnabled: userTotpEnabled(user.id) });
 }
 export async function POST(request: Request) {
-  if (!rateLimit(`passkey:${clientIp(request)}`, 100, 900000) || !rateLimitGlobal("passkey", 500, 900000)) return json({ error: "尝试过于频繁，请稍后再试" }, 429);
   const body = await readJsonBody(request, 32768).catch(() => null);
   if (!body) return json({ error: "无效的请求" }, 400);
   const config = passkeyConfig();
@@ -77,9 +76,12 @@ export async function POST(request: Request) {
       return json({ ok: true });
     }
     if (action === "login-options") {
+      const client = passkeyLoginClient(request);
+      if (!allowPasskeyLoginOptions(request, client.id)) return json({ error: "尝试过于频繁，请稍后再试" }, 429);
       const options = await generateAuthenticationOptions({ rpID: config.rpID, userVerification: "required" });
-      const issued = issuePasskeyChallenge(request, "login", options.challenge, config);
+      const issued = issuePasskeyChallenge(request, "login", options.challenge, config, null, "", client.id);
       const response = json({ options, requestId: issued.id });
+      response.cookies.set(PASSKEY_CLIENT_COOKIE, client.cookie, { httpOnly: true, sameSite: "strict", secure: config.origin.startsWith("https:"), path: "/api/auth/passkeys", maxAge: 900 });
       response.cookies.set(PASSKEY_COOKIE, issued.nonce, { httpOnly: true, sameSite: "strict", secure: config.origin.startsWith("https:"), path: "/api/auth/passkeys", maxAge: 300 });
       return response;
     }
@@ -98,7 +100,7 @@ export async function POST(request: Request) {
         const updated = getDb().prepare("UPDATE passkeys SET counter=?,last_used_at=?,backed_up=? WHERE id=? AND counter=?")
           .run(result.authenticationInfo.newCounter, Date.now(), Number(result.authenticationInfo.credentialBackedUp), key.id, key.counter);
         if (!updated.changes) throw new Error("通行密钥已撤销或已使用，请重试");
-        return createSession(key.user_id);
+        return createSession(key.user_id, key.id);
       })();
       logSecurityEvent(request, key.user_id, "auth.passkey.login", "通行密钥登录成功");
       const response = json({ ok: true });
@@ -109,7 +111,8 @@ export async function POST(request: Request) {
     }
     return json({ error: "不支持的操作" }, 400);
   } catch (error) {
-    logSecurityEvent(request, "", "auth.passkey.rejected", String(body.action || "invalid").slice(0, 32));
+    // Bound anonymous rejection logging without consuming any user's authentication budget.
+    if (rateLimit("passkey-rejection-log", 60, 60000)) logSecurityEvent(request, "", "auth.passkey.rejected", String(body.action || "invalid").slice(0, 32));
     // 不向浏览器暴露 CBOR、签名校验或数据库内部错误。
     const message = error instanceof Error && /[\u4e00-\u9fff]/.test(error.message) ? error.message : "通行密钥验证失败，请重新尝试";
     return json({ error: message }, 400);
@@ -128,10 +131,15 @@ async function manage(request: Request, remove: boolean) {
     const id = String(body.id || "");
     const name = String(body.name || "").trim();
     if (!remove && (!name || name.length > 64)) throw new Error("名称需为 1–64 个字符");
-    const result = remove ? getDb().prepare("DELETE FROM passkeys WHERE id=? AND user_id=?").run(id, me.id)
+    const result = remove ? getDb().transaction(() => {
+      const deleted = getDb().prepare("DELETE FROM passkeys WHERE id=? AND user_id=?").run(id, me.id);
+      // Pre-upgrade sessions have no credential provenance: revoke conservatively on removal.
+      if (deleted.changes) getDb().prepare("DELETE FROM sessions WHERE user_id=? AND (passkey_id=? OR auth_method='legacy')").run(me.id, id);
+      return deleted;
+    })()
       : getDb().prepare("UPDATE passkeys SET name=? WHERE id=? AND user_id=?").run(name, id, me.id);
     if (!result.changes) return json({ error: "通行密钥不存在" }, 404);
     logSecurityEvent(request, me.id, remove ? "auth.passkey.removed" : "auth.passkey.renamed", "通行密钥管理");
-    return json({ ok: true });
+    return json({ ok: true, signedOut: remove && !getAuthUser(request) });
   } catch (error) { return json({ error: error instanceof Error ? error.message : "验证失败" }, 403); }
 }

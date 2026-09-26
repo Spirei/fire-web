@@ -58,7 +58,7 @@ function assertion(device, options, handle, changes = {}) {
 async function options(action, sessionToken, extra = {}) {
   const response = await route.POST(request({ action, password, ...extra }, sessionToken ? cookie(sessionToken) : ''));
   const body = await response.json(); assert.equal(response.status, 200, JSON.stringify(body));
-  return { ...body, cookie: [sessionToken ? cookie(sessionToken) : '', response.headers.get('set-cookie').split(';')[0]].filter(Boolean).join('; ') };
+  return { ...body, cookie: [sessionToken ? cookie(sessionToken) : '', ...response.headers.getSetCookie().map(value => value.split(';')[0])].filter(Boolean).join('; ') };
 }
 async function login(device, handle, changes = {}, binding) {
   const pending = await options('login-options');
@@ -167,6 +167,91 @@ async function login(device, handle, changes = {}, binding) {
     const unverified = authenticator();
     assert.equal((await route.POST(request({ action: 'register-verify', requestId: pending.requestId, response: attestation(unverified, pending.options, 0x41) }, pending.cookie))).status, 400);
     assert.equal(store.listPasskeys(other.id).length, 0);
+  });
+  await test('deletion revokes associated and legacy sessions but preserves unrelated sessions', async () => {
+    db.prepare('DELETE FROM rate_limit').run();
+    const owner = auth.createUser('revocation_owner', password);
+    const ownerSession = auth.createSession(owner.id);
+    const first = authenticator(), second = authenticator();
+    let userHandle;
+    for (const key of [first, second]) {
+      const pending = await options('register-options', ownerSession);
+      userHandle = pending.options.user.id;
+      assert.equal((await route.POST(request({ action: 'register-verify', requestId: pending.requestId, response: attestation(key, pending.options) }, pending.cookie))).status, 200);
+    }
+    const tokenOf = result => result.response.headers.getSetCookie().find(value => value.startsWith('fire_session=')).split(';')[0].slice('fire_session='.length);
+    const firstSession = tokenOf(await login(first, userHandle));
+    const secondSession = tokenOf(await login(second, userHandle));
+    const legacyToken = crypto.randomBytes(32).toString('hex');
+    db.prepare('INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)').run(hash(legacyToken).toString('hex'), owner.id, Date.now()+86400000);
+    assert.equal(auth.getUserByToken(legacyToken).id, owner.id);
+    const pendingLogin = await options('login-options');
+    const pendingRegister = await options('register-options', firstSession);
+    const replacement = authenticator();
+    const removed = await route.DELETE(request({ id: b64(first.id), password }, cookie(ownerSession), 'DELETE'));
+    assert.equal(removed.status, 200);
+    assert.equal((await removed.json()).signedOut, false);
+    assert.equal(auth.getUserByToken(firstSession), null);
+    assert.equal(auth.getUserByToken(legacyToken), null);
+    assert.equal(auth.renewSessionIfNeeded(firstSession), false);
+    assert.equal(auth.getUserByToken(ownerSession).id, owner.id);
+    assert.equal(auth.getUserByToken(secondSession).id, owner.id);
+    assert.equal(auth.getUserByToken(otherSession).id, other.id);
+    assert.equal((await route.POST(request({ action: 'login-verify', requestId: pendingLogin.requestId, response: assertion(first, pendingLogin.options, userHandle) }, pendingLogin.cookie))).status, 400);
+    assert.equal((await route.POST(request({ action: 'register-verify', requestId: pendingRegister.requestId, response: attestation(replacement, pendingRegister.options) }, pendingRegister.cookie))).status, 401);
+    const selfRemoved = await route.DELETE(request({ id: b64(second.id), password }, cookie(secondSession), 'DELETE'));
+    assert.equal(selfRemoved.status, 200);
+    assert.equal((await selfRemoved.json()).signedOut, true);
+    assert.equal(auth.getUserByToken(secondSession), null);
+  });
+  await test('invalid anonymous requests do not exhaust valid options or enrollment', async () => {
+    db.prepare('DELETE FROM rate_limit').run();
+    delete process.env.FIRE_TRUST_PROXY_HEADERS;
+    for (let i=0; i<510; i++) {
+      assert.equal((await route.POST(request({ action: 'invalid' }, '', 'POST', i%2 ? origin : 'https://evil.example'))).status, 400);
+    }
+    assert.equal((await route.POST(request({ action: 'login-options' }))).status, 200);
+    assert.equal((await route.POST(request({ action: 'register-options', password }, cookie(otherSession)))).status, 200);
+  });
+  await test('direct browser budgets are isolated and keep one pending challenge per browser', async () => {
+    db.prepare('DELETE FROM rate_limit').run();
+    const initial = await options('login-options');
+    let latest;
+    for (let i=1; i<30; i++) {
+      const response = await route.POST(request({ action: 'login-options' }, initial.cookie));
+      assert.equal(response.status, 200);
+      latest = await response.json();
+    }
+    assert.equal((await route.POST(request({ action: 'login-options' }, initial.cookie))).status, 429);
+    assert.equal((await route.POST(request({ action: 'login-options' }))).status, 200, 'another browser is not locked');
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM passkey_challenges WHERE id=?').get(initial.requestId).n, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM passkey_challenges WHERE id=?').get(latest.requestId).n, 1);
+    const good = store.passkeyLoginClient(request({}, initial.cookie));
+    assert(initial.cookie.includes(good.cookie));
+    const forged = store.passkeyLoginClient(request({}, `${store.PASSKEY_CLIENT_COOKIE}=${good.cookie.slice(0,-1)}${good.cookie.endsWith('0')?'1':'0'}`));
+    assert.notEqual(forged.id, good.id, 'tampering cannot choose another browser bucket');
+  });
+  await test('proxy IP budgets are isolated and options exhaustion cannot block valid verification', async () => {
+    db.prepare('DELETE FROM rate_limit').run();
+    process.env.FIRE_TRUST_PROXY_HEADERS='true';
+    const pending = await options('register-options', otherSession);
+    const key = authenticator();
+    assert.equal((await route.POST(request({ action:'register-verify', requestId:pending.requestId, response:attestation(key,pending.options) }, pending.cookie))).status,200);
+    const loginPending = await options('login-options');
+    for (let i=0; i<100; i++) {
+      const req = request({action:'login-options'}); req.headers.set('x-forwarded-for','192.0.2.1');
+      assert.equal((await route.POST(req)).status,200);
+    }
+    const denied = request({action:'login-options'}); denied.headers.set('x-forwarded-for','192.0.2.1');
+    assert.equal((await route.POST(denied)).status,429);
+    const unaffected = request({action:'login-options'}); unaffected.headers.set('x-forwarded-for','198.51.100.1');
+    assert.equal((await route.POST(unaffected)).status,200);
+    const verify = request({action:'login-verify', requestId:loginPending.requestId, response:assertion(key,loginPending.options,pending.options.user.id)},loginPending.cookie);
+    verify.headers.set('x-forwarded-for','192.0.2.1');
+    const replay = verify.clone();
+    assert.equal((await route.POST(verify)).status,200);
+    assert.equal((await route.POST(replay)).status,400);
+    delete process.env.FIRE_TRUST_PROXY_HEADERS;
   });
   console.log(`${suites} passkey security suites passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => {

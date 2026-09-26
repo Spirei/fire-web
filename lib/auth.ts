@@ -109,13 +109,13 @@ export function updatePassword(userId: string, newPassword: string): boolean {
   return result.changes > 0;
 }
 
-export function createSession(userId: string): string {
+export function createSession(userId: string, passkeyId?: string): string {
   const token = randomBytes(32).toString("hex");
   const expiresAt = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
   const db = getDb();
   db.transaction(() => {
-    db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)")
-      .run(sessionDbToken(token), userId, expiresAt);
+    db.prepare("INSERT INTO sessions (token, user_id, expires_at, auth_method, passkey_id) VALUES (?, ?, ?, ?, ?)")
+      .run(sessionDbToken(token), userId, expiresAt, passkeyId ? "passkey" : "password", passkeyId ?? null);
     // 限制单账号最多 20 个并发会话，避免凭据泄露后无限堆积长期有效的登录态。
     db.prepare(`DELETE FROM sessions WHERE user_id = ? AND token NOT IN (
       SELECT token FROM sessions WHERE user_id = ? ORDER BY expires_at DESC LIMIT 20
