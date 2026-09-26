@@ -1,4 +1,13 @@
 /* Desktop owns the full-density layout. Component defaults remain the source of truth. */
 @media (min-width: 1024px) {
   .app-shell-main, .records-app { min-width: 0; }
+  /* One viewport budget: header/footer take their actual height, workspaces share the remainder. */
+  .app-shell-root { height:100dvh; min-height:0; display:grid; grid-template-rows:auto minmax(0,1fr) auto; }
+  .app-shell-main { min-height:0; display:flex; padding-bottom:16px; overflow:hidden; }
+  .app-shell-main > .records-app { flex:1; width:100%; height:100%; min-height:0; }
+  .app-shell-main .fire-sidebar { height:100%; }
+  .app-shell-main .sv-win-root { height:100%; min-height:0; }
+  .app-shell-main .records-content > .tab-panel:has(.sv-win-root) { height:100%; min-height:0; }
+  .app-shell-main .sv-win-root .sw-window { height:100%; min-height:0; }
+  .app-shell-main .records-app:has(.assistant-page) .assistant-workspace { height:100%; }
 }

@@ -268,10 +268,53 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   });
   const { getDb } = require(path.join(root, 'lib/db.ts'));
   const db = getDb();
+  await test('ticker retains last valid prices across empty weekends and isolates full security IDs', async () => {
+    const { preserveTicker, readLastTicker } = require(path.join(root, 'lib/ticker.ts'));
+    const good = { key: 'index', label: 'Index', market: 'US', price: 123, change: 2, changePct: 1.65, points: [120, 123] };
+    preserveTicker('100.TEST', good);
+    const unavailable = { ...good, price: null, change: null, changePct: null, points: [] };
+    assert.deepEqual(preserveTicker('100.TEST', unavailable), good);
+    assert.equal(preserveTicker('1.TEST', unavailable).price, null);
+    const renamed = preserveTicker('100.TEST', { ...unavailable, key: 'new', label: 'Renamed' });
+    assert.equal(renamed.key, 'new'); assert.equal(renamed.price, 123);
+    assert.equal(readLastTicker('100.TEST').price, 123);
+    assert.equal(preserveTicker('100.TEST', { ...good, price: NaN }).price, 123);
+    assert.equal(preserveTicker('100.TEST', { ...good, price: 125, points: [] }).price, 125);
+    assert.deepEqual(readLastTicker('100.TEST').points, [120, 123]);
+    const settings = require(path.join(root, 'lib/settings.ts'));
+    const before = settings.getSiteSettings().ticker;
+    try {
+      settings.updateSiteSettings({ ticker: { items: [{ key: 'index', label: 'Index', market: 'US', secid: '100.TEST' }], interval: 5 } });
+      // A fresh module has no memory cache: the database still paints before unavailable upstreams.
+      delete require.cache[require.resolve(path.join(root, 'lib/ticker.ts'))];
+      const fresh = require(path.join(root, 'lib/ticker.ts'));
+      const result = await fresh.fetchTicker();
+      assert.equal(result.items[0].price, 125);
+      assert.deepEqual(result.items[0].points, [120, 123]);
+    } finally { settings.updateSiteSettings({ ticker: before }); }
+  });
   const { createUser, createSession } = require(path.join(root, 'lib/auth.ts'));
   const user = createUser('review_user', 'Review-test-123');
   const other = createUser('review_other', 'Review-test-123');
   const tokens = { user: createSession(user.id), other: createSession(other.id), admin: createSession('demo-user') };
+  await test('ticker upstream parsing keeps market IDs distinct and missing changes unknown', async () => {
+    const settings = require(path.join(root, 'lib/settings.ts'));
+    const before = settings.getSiteSettings().ticker;
+    const fetch = global.fetch;
+    try {
+      settings.updateSiteSettings({ ticker: { items: [
+        { key: 'one', label: 'One', market: 'US', secid: '100.REVIEW' },
+        { key: 'two', label: 'Two', market: 'CN', secid: '1.REVIEW' }
+      ], interval: 5 } });
+      global.fetch = async url => Response.json(String(url).includes('ulist') ? { data: { diff: [
+        { f13: 100, f12: 'REVIEW', f2: 300, f3: null, f4: null },
+        { f13: 1, f12: 'REVIEW', f2: 400, f3: 1, f4: 4 }
+      ] } } : { data: { trends: [] } });
+      const result = await require(path.join(root, 'lib/ticker.ts')).fetchTicker();
+      assert.equal(result.items[0].price, 300); assert.equal(result.items[1].price, 400);
+      assert.equal(result.items[0].change, null); assert.equal(result.items[0].changePct, null);
+    } finally { global.fetch = fetch; settings.updateSiteSettings({ ticker: before }); }
+  });
   await test('browser sessions renew both expiries without reviving revoked or expired sessions', async () => {
     const auth = require(path.join(root, 'lib/auth.ts'));
     const route = require(path.join(root, 'app/api/auth/me/route.ts'));

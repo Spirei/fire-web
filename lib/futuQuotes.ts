@@ -136,7 +136,7 @@ function runBridge(input: Record<string, unknown>, host = "127.0.0.1", port = 11
 }
 
 /** 主入口：OpenD 可用时拉取富途快照；失败抛错由调用方回退腾讯。 */
-export async function fetchFutuQuotes(items: QuoteItem[]): Promise<Map<string, Quote>> {
+export async function fetchFutuQuotes(items: Array<Omit<QuoteItem, "market"> & { market: string }>): Promise<Map<string, Quote>> {
   if (items.length === 0 || !(await isFutuAvailable())) return new Map();
   const { futuHost, futuPort } = getSiteSettings();
   const withSession = items.map((item) => ({

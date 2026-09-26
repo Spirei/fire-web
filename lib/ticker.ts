@@ -2,7 +2,42 @@
 
 import { getSiteSettings } from "./settings";
 import type { TickerConfig } from "./types";
-import { fetchFutuMinuteCloses } from "./futuQuotes";
+import { fetchFutuMinuteCloses, fetchFutuQuotes } from "./futuQuotes";
+import { fetchBatch } from "./quotes";
+import { getDb } from "./db";
+
+const FALLBACK_SYMBOLS: Record<string, string> = {
+  "100.DJIA": "usDJI", "100.NDX": "usNDX", "100.IXIC": "usIXIC", "100.SPX": "usINX",
+  "100.HSI": "hkHSI", "1.000001": "sh000001", "0.399001": "sz399001"
+};
+function tickerDb() {
+  const db = getDb();
+  db.exec("CREATE TABLE IF NOT EXISTS ticker_last_valid (secid TEXT PRIMARY KEY, value TEXT NOT NULL)");
+  return db;
+}
+export function readLastTicker(secid: string): TickerItem | null {
+  try {
+    const row = tickerDb().prepare("SELECT value FROM ticker_last_valid WHERE secid=?").get(secid) as { value: string } | undefined;
+    const item = row ? JSON.parse(row.value) : null;
+    return item && Number.isFinite(item.price) && item.price > 0 && Array.isArray(item.points) ? item : null;
+  } catch { return null; }
+}
+export function preserveTicker(secid: string, item: TickerItem): TickerItem {
+  const previous = readLastTicker(secid);
+  const hasQuote = item.price !== null && Number.isFinite(item.price) && item.price > 0;
+  const merged = {
+    ...item,
+    price: hasQuote ? item.price : previous?.price ?? null,
+    change: hasQuote ? item.change : previous?.change ?? null,
+    changePct: hasQuote ? item.changePct : previous?.changePct ?? null,
+    points: item.points.length ? item.points : previous?.points ?? []
+  };
+  if (hasQuote || previous) {
+    try { tickerDb().prepare("INSERT INTO ticker_last_valid(secid,value) VALUES(?,?) ON CONFLICT(secid) DO UPDATE SET value=excluded.value").run(secid, JSON.stringify(merged)); }
+    catch { /* A cache write failure must not hide a usable quote. */ }
+  }
+  return merged;
+}
 
 export interface TickerItem {
   key: string;
@@ -61,26 +96,27 @@ const EM_HEADERS = {
   Accept: "application/json, text/plain, */*"
 };
 
-async function fetchQuotes(symbols: { secid: string }[]): Promise<Map<string, { price: number; change: number; changePct: number }>> {
+async function fetchQuotes(symbols: { secid: string }[]): Promise<Map<string, { price: number; change: number | null; changePct: number | null }>> {
+  if (!symbols.length) return new Map();
   const secids = symbols.map((s) => s.secid).join(",");
   for (const host of EM_QUOTE_HOSTS) {
     try {
-      const url = `${host}/api/qt/ulist.np/get?secids=${secids}&fields=f2,f3,f4,f12&fltt=2`;
+      const url = `${host}/api/qt/ulist.np/get?secids=${secids}&fields=f2,f3,f4,f12,f13&fltt=2`;
       const res = await fetch(url, { headers: EM_HEADERS, signal: AbortSignal.timeout(3000) });
       if (!res.ok) continue;
       const json = await res.json().catch(() => null);
       const diff = json?.data?.diff;
       if (!Array.isArray(diff) || diff.length === 0) continue;
-      const map = new Map<string, { price: number; change: number; changePct: number }>();
+      const map = new Map<string, { price: number; change: number | null; changePct: number | null }>();
       for (const it of diff) {
         const price = Number(it?.f2);
         if (!Number.isFinite(price) || price <= 0) continue;
-        const change = Number(it?.f4);
-        const changePct = Number(it?.f3);
-        map.set(String(it?.f12), {
+        const change = it?.f4 == null ? NaN : Number(it.f4);
+        const changePct = it?.f3 == null ? NaN : Number(it.f3);
+        map.set(`${it?.f13}.${it?.f12}`, {
           price,
-          change: Number.isFinite(change) ? change : 0,
-          changePct: Number.isFinite(changePct) ? changePct : 0
+          change: Number.isFinite(change) ? change : null,
+          changePct: Number.isFinite(changePct) ? changePct : null
         });
       }
       if (map.size > 0) return map;
@@ -249,6 +285,7 @@ const crossChecks = new Map<string, TickerCrossCheck>();
 let crossChecking = false;
 let cache: { at: number; data: TickerItem[]; config: string; pollSec: number } | null = null;
 let inflight: Promise<{ items: TickerItem[]; interval: number; pollSec: number; crossCheck: TickerCrossCheck[] }> | null = null;
+let inflightConfig = "";
 
 export async function fetchTicker(): Promise<{ items: TickerItem[]; interval: number; pollSec: number; crossCheck: TickerCrossCheck[] }> {
   const config: TickerConfig = getSiteSettings().ticker;
@@ -258,13 +295,27 @@ export async function fetchTicker(): Promise<{ items: TickerItem[]; interval: nu
   const interval = config.interval;
   const configKey = JSON.stringify(config);
   if (cache && Date.now() - cache.at < TTL && cache.config === configKey) return { items: cache.data, interval, pollSec: cache.pollSec, crossCheck: getTickerCrossCheck() };
-  if (inflight) return inflight;
+  if (!cache || cache.config !== configKey) {
+    const saved = symbols.map(s => ({ ...(readLastTicker(s.secid) || { price: null, change: null, changePct: null, points: [] }), key: s.key, label: s.label, market: s.market }));
+    cache = { at: 0, data: saved, config: configKey, pollSec: 60 };
+  }
+  const savedResponse = cache.data.some(item => item.price !== null) ? { items: cache.data, interval, pollSec: cache.pollSec, crossCheck: getTickerCrossCheck() } : null;
+  if (inflight && inflightConfig === configKey) return savedResponse || inflight;
+  inflightConfig = configKey;
   inflight = (async () => {
     const quotes = await fetchQuotes(symbols);
+    const missing = symbols.filter(s => !quotes.has(s.secid));
+    const fallbackCodes = missing.map(s => FALLBACK_SYMBOLS[s.secid]).filter(Boolean);
+    const [fallback, futu] = await Promise.all([
+      fetchBatch([...new Set(fallbackCodes)]).catch(() => new Map()),
+      fetchFutuQuotes(missing.flatMap(s => {
+        const mapping = FUTU_INDEX_CODES[s.secid];
+        return mapping ? [{ id: s.secid, market: mapping.market, code: mapping.code }] : [];
+      })).catch(() => new Map())
+    ]);
     const built = await Promise.all(
       symbols.map(async (s) => {
-        const code = s.secid.split(".")[1];
-        const q = quotes.get(code);
+        const q = quotes.get(s.secid) || futu.get(s.secid) || fallback.get(FALLBACK_SYMBOLS[s.secid]);
         const trend = await fetchTrend(s.secid).catch(() => ({ points: [] as number[], lastBarAt: 0, date: "" }));
         const item: TickerItem = {
           key: s.key,
@@ -279,7 +330,7 @@ export async function fetchTicker(): Promise<{ items: TickerItem[]; interval: nu
       })
     );
     // 行情推进判断和富途对账继续使用 built 内的完整分钟序列；仅压缩返回前端绘图的数据。
-    const items = built.map((row) => ({ ...row.item, points: sampleTickerPoints(row.item.points) }));
+    const items = built.map((row, index) => preserveTicker(symbols[index].secid, { ...row.item, points: sampleTickerPoints(row.item.points) }));
     // 有任何市场在出新数据 → 60 秒；收市按「停了多久」逐档退避（5 / 15 / 30 分钟）；
     // 页面重新可见时客户端另外会立刻刷新一次
     const rows = built.map((row) => ({ key: row.item.key, lastBarAt: row.lastBarAt, points: row.item.points.length }));
@@ -303,12 +354,18 @@ export async function fetchTicker(): Promise<{ items: TickerItem[]; interval: nu
     });
     lastSeen = nextSeen;
     scheduleCrossCheck(pendingCrossCheck);
-    cache = { at: Date.now(), data: items, config: configKey, pollSec };
+    if (inflightConfig === configKey) cache = { at: Date.now(), data: items, config: configKey, pollSec };
     return { items, interval, pollSec, crossCheck: getTickerCrossCheck() };
   })();
+  const task = inflight;
+  if (savedResponse) {
+    // Saved closing prices paint immediately; slow or offline upstreams refresh in the background.
+    void task.finally(() => { if (inflight === task) inflight = null; }).catch(() => {});
+    return savedResponse;
+  }
   try {
-    return await inflight;
+    return await task;
   } finally {
-    inflight = null;
+    if (inflight === task) inflight = null;
   }
 }

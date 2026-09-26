@@ -113,9 +113,9 @@ function TickerChip({ item }: { item: TickerItem }) {
       </span>
       <span className="whitespace-nowrap text-[13px] font-semibold text-ink">{item.label}</span>
       <span className="whitespace-nowrap text-[15px] font-bold tabular-nums text-ink">{fmtPrice(item.price)}</span>
-      <svg viewBox="0 0 24 24" fill="currentColor" className={`h-[10px] w-[10px] flex-none ${color}`} aria-hidden>
+      {item.change !== null && <svg viewBox="0 0 24 24" fill="currentColor" className={`h-[10px] w-[10px] flex-none ${color}`} aria-hidden>
         {up ? <path d="M12 5 20 19H4Z" /> : <path d="M12 19 4 5h16Z" />}
-      </svg>
+      </svg>}
       <Sparkline points={item.points} up={up} baseline={baseline} />
       <span className={`whitespace-nowrap text-[12.5px] font-semibold tabular-nums ${color}`}>
         {fmtSigned(item.change)} {fmtSigned(item.changePct, "%")}
@@ -158,7 +158,7 @@ export default function IndexTicker() {
         const res = await fetch("/api/ticker", { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json().catch(() => null);
-        if (!cancelled && data?.items) {
+        if (!cancelled && Array.isArray(data?.items) && data.items.length > 0) {
           setItems(data.items);
           if (typeof data.interval === "number" && data.interval >= 3) setIntervalSec(data.interval);
           if (typeof data.pollSec === "number" && data.pollSec >= 30) setPollSec(data.pollSec);
