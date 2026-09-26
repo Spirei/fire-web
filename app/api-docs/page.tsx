@@ -304,7 +304,7 @@ export default function ApiDocsPage() {
   return (
     <main className="api-docs-shell api-reference-shell min-h-screen">
       <Toaster />
-      <div data-mode={mode} className="api-reference-window mx-auto max-w-7xl px-4 sm:px-6">
+      <div data-mode={mode} className="api-reference-window mx-auto w-full">
         {/* 顶部栏：返回 / 数据源 / 编辑·保存 */}
         <div className="api-reference-toolbar mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
