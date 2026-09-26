@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import PasskeyLoginButton from "@/components/PasskeyLoginButton";
 import { isCompleteBackupCode, isSixDigitTotp, normalizeBackupInput, normalizeTotpDigits } from "@/lib/totpInput";
 
 type Mode = "login" | "register";
@@ -172,6 +173,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
         </div>
       )}
 
+      {mode === "login" && !totpTicket && <PasskeyLoginButton disabled={loading} onBusy={setLoading} onError={setError} onSuccess={() => { onClose?.(); router.push("/records"); router.refresh(); }} />}
       <form onSubmit={submit} className="mt-7 flex flex-col gap-4">
         {totpTicket ? (
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">

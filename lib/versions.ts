@@ -4494,7 +4494,9 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   date: "2026-09-26",
   summary: "后台页面随可视高度自适应，页脚下方不再留空白。",
   software: V0_1_41_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.42" } : item),
+  frontend: [...V0_1_41_ENTRY.frontend, { name: "SimpleWebAuthn", version: "14", desc: "WebAuthn 通行密钥 · 浏览器与服务端签名校验" }],
   changes: [
+    { kind: "feature", title: "通行密钥登录与独立域名配置", desc: "新增无需用户名或密码的通行密钥登录，使用设备解锁或密码管理器验证；按标准 WebAuthn 支持 iCloud 钥匙串、Bitwarden、1Password 与兼容安全密钥，不限定本机验证器。设置中的通行密钥页支持每个开源部署独立配置 HTTPS 域名与站点名称、多密钥添加、重命名和删除。绑定与删除要求密码及已开启的 TOTP；验证请求五分钟有效、绑定浏览器与注册会话、一次性消费，并严格校验 Origin、RP ID、签名与用户验证。管理员恢复账号时同步撤销通行密钥和旧会话。" },
     { kind: "security", title: "登录全链条安全加固", desc: "首次管理员与 UID 分配改为 IMMEDIATE 事务，关闭并发初始化竞态；登录增加账号摘要维度限流，默认不信任客户端可伪造的代理 IP 头。绑定二次验证前必须重验密码；管理员重置密码、变更角色、删除用户，以及用户注销账号均要求密码二次确认，已启用 TOTP 时还需动态码或备用码。会话令牌继续仅存摘要，并限制每个账号最多 20 个并发会话；注册响应统一 no-store 与安全 Cookie 策略。" },
     { kind: "fix", title: "活跃网页登录自动续期", desc: "网页登录从固定七天到期改为使用期间每日最多续期一次，Cookie 与服务端同步延长七天；可见页面每十五分钟及回到前台时检查。过期与撤销会话不能复活，跨站请求不能续期，移动端 Bearer 有效期不变。" },
     { kind: "fix", title: "后台打开与切换减负", desc: "设置等非资产页不再启动持仓行情轮询；导航指向或聚焦时按需预取目标页代码，省流量与慢速网络跳过。首屏现金改为 SQL 聚合，避免加载排序整本流水，并省去未使用的资金明细计算。" },

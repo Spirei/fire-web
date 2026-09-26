@@ -147,6 +147,36 @@ function migrate(database: Database.Database) {
       expires_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS passkey_config (
+      id INTEGER PRIMARY KEY CHECK(id = 1),
+      value TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS passkeys (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_handle TEXT NOT NULL,
+      rp_id TEXT NOT NULL,
+      public_key BLOB NOT NULL,
+      counter INTEGER NOT NULL,
+      transports TEXT NOT NULL DEFAULT '[]',
+      name TEXT NOT NULL,
+      backed_up INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      last_used_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_passkeys_user ON passkeys(user_id);
+    CREATE TABLE IF NOT EXISTS passkey_challenges (
+      id TEXT PRIMARY KEY,
+      binding TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      challenge TEXT NOT NULL,
+      config_revision TEXT NOT NULL,
+      password_hash TEXT NOT NULL DEFAULT '',
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_passkey_challenges_expiry ON passkey_challenges(expires_at);
+
     CREATE TABLE IF NOT EXISTS security_audit (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL DEFAULT '',

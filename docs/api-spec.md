@@ -66,6 +66,10 @@
 
 Web 端继续使用 httpOnly Cookie 会话，两种方式等价，`GET /api/v1/auth/me` 均可识别。开启二次验证后，网页登录同样先返回 ticket，再由 `POST /api/auth/login/totp` 写入会话 Cookie。
 
+Web 通行密钥使用 `/api/auth/passkeys`：POST 的 `action` 为 `register-options` / `register-verify` / `login-options` / `login-verify`；options 返回 `{ options, requestId }` 并写入一次性浏览器绑定 Cookie，verify 提交 `{ action, requestId, response }`（注册可另传 `name`）。注册 options 需登录、`password` 及已开启的 `code`；登录强制 WebAuthn 用户验证，成功后仅签发 HttpOnly Cookie，不返回 Bearer。GET 返回当前用户密钥列表；PATCH 接收 `{ id, name }` 改名；DELETE 接收 `{ id, password, code }` 删除。
+
+`/api/auth/passkeys/config` 的 GET 公开返回 `{ enabled, origin, name }`；PUT 限管理员，接收这些配置字段及 `currentPassword`、已开启的 `code`。域名配置和凭据不通过普通站点设置或数据导入修改。部署与恢复说明见 [通行密钥](passkeys.md)。
+
 ## 5. 公共约定
 
 - **分页**：`?page=1&pageSize=20`（page 从 1 开始，pageSize 默认 20、上限 100），响应 `meta` 带回 total。

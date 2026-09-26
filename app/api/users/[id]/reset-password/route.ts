@@ -6,6 +6,7 @@ import { validatePassword } from "@/lib/password";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
 import { verifyAdminStepUp } from "@/lib/adminStepUp";
+import { getDb } from "@/lib/db";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const me = getAuthUser(request);
@@ -25,10 +26,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     logSecurityEvent(request, me.id, "admin.password_reset_rejected", stepUp.error);
     return NextResponse.json({ error: stepUp.error }, { status: 403 });
   }
-  const ok = resetUserPassword(id, newPassword);
+  const ok = getDb().transaction(() => {
+    if (!resetUserPassword(id, newPassword)) return false;
+    clearTotp(id);
+    deleteOtherSessions(id, null);
+    getDb().prepare("DELETE FROM passkeys WHERE user_id=?").run(id);
+    getDb().prepare("DELETE FROM passkey_challenges WHERE user_id=?").run(id);
+    return true;
+  })();
   if (!ok) return NextResponse.json({ error: "用户不存在" }, { status: 404 });
-  clearTotp(id);
-  deleteOtherSessions(id, null);
   logSecurityEvent(request, me.id, "admin.password_reset", `user=${id}`);
-  return NextResponse.json({ ok: true, totpDisabled: true });
+  return NextResponse.json({ ok: true, totpDisabled: true, passkeysRevoked: true });
 }

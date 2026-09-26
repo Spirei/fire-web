@@ -1,4 +1,5 @@
 "use client";
+import PasskeySettings from "@/components/PasskeySettings";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { isSixDigitTotp, normalizeTotpDigits } from "@/lib/totpInput";
@@ -51,7 +52,7 @@ interface Props {
   initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "groups" | "markets" | "marketLabels" | "modelServices">;
 }
 
-const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "database", "cron", "about"] as const;
+const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "passkeys", "database", "cron", "about"] as const;
 type SubKey = (typeof SETTINGS_SUB_KEYS)[number];
 function isSettingsSub(value: string | undefined | null): value is SubKey {
   return Boolean(value && (SETTINGS_SUB_KEYS as readonly string[]).includes(value));
@@ -76,6 +77,7 @@ const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; group
   { sub: "stocks", anchor: "sources", label: "股票来源接口", groupLabel: "股票", keywords: "股票来源 接口 行情 财报 图标 url 数据源" },
   { sub: "profile", anchor: "profile", label: "个人信息", groupLabel: "账号", keywords: "头像 昵称 密码 邮箱 导出 清空 数据" },
   { sub: "totp", anchor: "totp", label: "2FA", groupLabel: "账号", keywords: "2FA 二次验证 TOTP 验证器 备用码 谷歌验证 Google Authenticator 安全" },
+  { sub: "passkeys", anchor: "passkeys", label: "通行密钥", groupLabel: "账号", keywords: "Passkey WebAuthn iCloud Bitwarden 1Password Face ID Touch ID 无密码 登录 安全 通行密匙" },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
   { sub: "api", anchor: "api", label: "API 接口", groupLabel: "系统", keywords: "api 接口 开发 文档 鉴权" },
@@ -105,6 +107,7 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   "currency-display": "stocks",
   profile: "profile",
   totp: "totp",
+  passkeys: "passkeys",
   database: "database",
   cron: "cron",
   api: "api",
@@ -272,6 +275,7 @@ const SUB_NAV: { key: SubKey; label: string }[] = [
   { key: "stocks", label: "股票设置" },
   { key: "profile", label: "个人信息" },
   { key: "totp", label: "2FA" },
+  { key: "passkeys", label: "通行密钥" },
   { key: "database", label: "数据库增强" },
   { key: "cron", label: "定时任务" },
   { key: "api", label: "API 开发接口" },
@@ -298,7 +302,8 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
     label: "账号",
     items: [
       { key: "profile", label: "个人信息", desc: "头像、资料、密码、数据管理" },
-      { key: "totp", label: "2FA", desc: "验证器与备用码" }
+      { key: "totp", label: "2FA", desc: "验证器与备用码" },
+      { key: "passkeys", label: "通行密钥", desc: "设备验证与密码管理器" }
     ]
   },
   {
@@ -1405,7 +1410,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }, [activeAnchor]);
   // 把「当前分区是否在编辑」广播给标题栏（铅笔 ↔ 完成图标切换）
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent("fire:settings-edit-state", { detail: { editing: activeEditState, auto: ["info", "palette"].includes(activeAnchor) } }));
+    window.dispatchEvent(new CustomEvent("fire:settings-edit-state", { detail: { editing: activeEditState, auto: ["info", "palette", "passkeys"].includes(activeAnchor) } }));
   }, [activeEditState, activeAnchor]);
   const saveActiveEditRef = useRef<() => Promise<void>>(async () => {});
   const savingEditRef = useRef(false);
@@ -2217,7 +2222,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         {/* 内容头部 */}
         <div className="sw-page-head flex flex-none items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate">{activePageMeta?.label || activeSubMeta?.label} · {activeAnchor === "palette" ? "选择即时生效" : activeAnchor === "info" ? "修改自动保存" : activeEditState ? "正在编辑" : "只读浏览"}</p>
+            <p className="truncate">{activePageMeta?.label || activeSubMeta?.label} · {activeAnchor === "passkeys" ? "账号安全" : activeAnchor === "palette" ? "选择即时生效" : activeAnchor === "info" ? "修改自动保存" : activeEditState ? "正在编辑" : "只读浏览"}</p>
           </div>
         </div>
 
@@ -3522,6 +3527,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </div>
             )}
 
+            {sub === "passkeys" && <PasskeySettings admin={user.role === "admin"} />}
             {sub === "totp" && (
               <div id="totp" className="flex flex-col gap-6">
                 <SettingsHeader name="totp" title="二次验证" />
@@ -3904,7 +3910,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>数据与服务</b><span>本地优先，可切换企业数据库</span></div>
-                    <span className="settings-detail-value">Node.js · SQLite · PostgreSQL · ExcelJS · saxes（SVG 校验）</span>
+                    <span className="settings-detail-value">Node.js · SQLite · PostgreSQL · ExcelJS · saxes（SVG 校验）· SimpleWebAuthn（通行密钥）</span>
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>部署运行</b><span>容器镜像与受限更新</span></div>

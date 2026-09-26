@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useServerPrefs, writePrefCookie } from "@/lib/prefsContext";
 
 const ICON_PATHS: Record<string, React.ReactNode> = {
+  passkeys: (<><circle cx="8" cy="8" r="4" /><path d="M2 21v-3a6 6 0 0 1 10-4.5M18 15v7m0-3h3" /><circle cx="18" cy="12" r="3" /></>),
   palette: (<><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a3 3 0 0 0 3-3 9 9 0 0 0-9-8Z" /><circle cx="7" cy="10" r=".7" /><circle cx="11" cy="7" r=".7" /><circle cx="16" cy="8" r=".7" /></>),
   site: (
     <>

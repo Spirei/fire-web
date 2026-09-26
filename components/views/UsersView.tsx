@@ -182,8 +182,8 @@ export default function UsersView() {
       return;
     }
     setResetUser(null);
-    setMsg({ type: "ok", text: `已重置 ${resetUser.username} 的密码${data?.totpDisabled ? "，并关闭二次验证" : ""}` });
-    showToast(data?.totpDisabled ? "密码已重置，二次验证已关闭" : "密码已重置");
+    setMsg({ type: "ok", text: `已重置 ${resetUser.username} 的密码，二次验证、通行密钥与原有会话已撤销` });
+    showToast(data?.passkeysRevoked ? "密码已重置，二次验证和通行密钥已撤销" : "密码已重置");
   }
 
   async function disableUserTotp(u: AdminUser) {
@@ -348,9 +348,7 @@ export default function UsersView() {
       {resetUser && (
         <AppModal title="重置密码" desc={`为「${resetUser.username}」设置新密码`} onClose={() => setResetUser(null)}>
           <form onSubmit={doResetPassword} className="flex flex-col gap-4">
-            {resetUser.totpEnabled && (
-              <p className="rounded-[10px] bg-bg-gray px-3.5 py-2.5 text-[13px] text-muted">重置密码会同时关闭该用户的二次验证。</p>
-            )}
+            <p className="rounded-[10px] bg-bg-gray px-3.5 py-2.5 text-[13px] text-muted">重置密码会同时撤销该用户的二次验证、通行密钥和所有登录会话。</p>
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
               新密码（至少 8 位，含字母和数字）
               <input name="newPassword" type="password" required minLength={8} autoComplete="new-password" className="field" />
