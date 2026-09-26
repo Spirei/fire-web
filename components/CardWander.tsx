@@ -74,9 +74,14 @@ function WanderTile({ card, observeTile, onSelect }: {
   );
 }
 
-/** 同一张原图裁成 8×5 格，只在当前预览生成；结束后回到单张原图。 */
+const FRAGMENT_COLS = 10;
+const FRAGMENT_ROWS = 6;
+const FRAGMENT_COUNT = FRAGMENT_COLS * FRAGMENT_ROWS;
+/** 单色短尾迹与原图碎格；动画结束立即释放碎片图层。 */
 function FragmentCard({ image, name, className }: { image: string; name: string; className: string }) {
   const [running, setRunning] = useState(false);
+  const [settled, setSettled] = useState(false);
+  const [sequence, setSequence] = useState({ fall: Array.from({ length: FRAGMENT_COUNT }, (_, i) => i), return: Array.from({ length: FRAGMENT_COUNT }, (_, i) => i) });
   const imageRef = useRef<HTMLImageElement>(null);
   const [geometry, setGeometry] = useState({ width: 0, height: 0, footer: 0, artWidth: 0, artHeight: 0 });
   const completed = useRef(0);
@@ -106,26 +111,42 @@ function FragmentCard({ image, name, className }: { image: string; name: string;
     const preload = new Image();
     preload.src = image;
     void preload.decode().then(() => {
-      if (alive) { completed.current = 0; setRunning(true); }
+      if (alive) {
+        // 每次播放独立洗牌；只在客户端解码完成后生成，首帧保持一致。
+        const shuffle = () => {
+          const ranks = Array.from({ length: FRAGMENT_COUNT }, (_, i) => i);
+          for (let i = ranks.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [ranks[i], ranks[j]] = [ranks[j], ranks[i]];
+          }
+          return ranks;
+        };
+        setSequence({ fall: shuffle(), return: shuffle() });
+        completed.current = 0; setSettled(false); setRunning(true);
+      }
     }).catch(() => {});
     return () => { alive = false; };
   }, [image]);
   return <>
     <img ref={imageRef} className={className} src={image} alt={name} draggable={false} style={{ opacity: running ? 0 : 1 }} />
+    {settled && <span className="card-wander-meteor-finish" aria-hidden="true" onAnimationEnd={() => setSettled(false)} />}
     {running && <span className="card-wander-fragments" aria-hidden="true" style={{ height: geometry.height + geometry.footer || undefined }}>
       <span className="card-wander-fragment-grid" style={{ height: geometry.height || undefined }}>
-      {Array.from({ length: 40 }, (_, index) => {
-        const col = index % 8;
-        const row = Math.floor(index / 8);
-        return <span className="card-wander-fragment" key={index} style={{
-          left: `${col * 12.5}%`, top: `${row * 20}%`,
+      {Array.from({ length: FRAGMENT_COUNT }, (_, index) => {
+        const col = index % FRAGMENT_COLS;
+        const row = Math.floor(index / FRAGMENT_COLS);
+        return <span className="card-wander-fragment" data-trail={index % 3 === 0 ? "true" : undefined} key={index} style={{
+          left: `${col * 100 / FRAGMENT_COLS}%`, top: `${row * 100 / FRAGMENT_ROWS}%`,
           backgroundImage: `url(${JSON.stringify(image)})`,
           backgroundSize: `${geometry.artWidth}px ${geometry.artHeight}px`,
-          backgroundPosition: `${(geometry.width - geometry.artWidth) / 2 - col * geometry.width / 8}px ${(geometry.height - geometry.artHeight) / 2 - row * geometry.height / 5}px`,
-          "--fragment-delay": `${((col * 3 + row * 2) % 8) * .04 + (4 - row) * .12}s`,
-          "--fragment-fall": geometry.footer ? `${geometry.height + geometry.footer - row * geometry.height / 5}px` : "600%"
-        } as CSSProperties} onAnimationEnd={() => {
-          if (++completed.current === 40) setRunning(false);
+          backgroundPosition: `${(geometry.width - geometry.artWidth) / 2 - col * geometry.width / FRAGMENT_COLS}px ${(geometry.height - geometry.artHeight) / 2 - row * geometry.height / FRAGMENT_ROWS}px`,
+          "--fragment-delay": `${sequence.fall[index] * .009}s`,
+          "--fragment-return-delay": `${1.9 + sequence.return[index] * .032}s`,
+          "--fragment-drift": `${(col - 4.5) * 1.4}px`,
+          "--fragment-fall": `${geometry.height + geometry.footer + 18 - row * geometry.height / FRAGMENT_ROWS}px`
+        } as CSSProperties} onAnimationEnd={(event) => {
+          if (event.animationName !== "card-wander-fragment-return") return;
+          if (++completed.current === FRAGMENT_COUNT) { setRunning(false); setSettled(true); }
         }} />;
       })}
       </span>
