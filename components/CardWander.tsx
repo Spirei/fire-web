@@ -171,7 +171,11 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     const projection = 1500 / (1500 - depth);
     const offsetX = (sourceX - perspectiveX) / projection - (targetX - perspectiveX);
     const offsetY = (sourceY - perspectiveY) / projection - (targetY - perspectiveY);
-    const scale = ((tile?.offsetWidth || source.width) * (lift?.m11 || 1)) / target.width;
+    const wallScale = positionRef.current.scale;
+    const scale = ((tile?.offsetWidth || source.width) * (lift?.m11 || 1) * wallScale) / target.width;
+    // radius 在 transform 之前计算；反向补偿缩放，落位仍与原卡的 10px 圆角一致。
+    const sourceRadius = tile ? parseFloat(getComputedStyle(tile).borderTopLeftRadius) || 10 : 10;
+    const wallRadius = `${sourceRadius * (lift?.m11 || 1) * wallScale / scale}px`;
     const wallTransform = `translate3d(${offsetX}px, ${offsetY}px, ${depth}px) rotateX(15deg) rotateZ(-6deg) scale(${scale})`;
     const shell = document.createElement("div");
     Object.assign(shell.style, {
@@ -185,20 +189,23 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     Object.assign(flight.style, {
       position: "absolute", left: `${target.left}px`, top: `${target.top}px`, width: `${target.width}px`, height: `${target.height}px`,
       objectFit: "contain", pointerEvents: "none", transformOrigin: "center",
-      borderRadius: closing ? "17px" : "10px", boxShadow: "0 24px 60px rgba(0,0,0,.5)", willChange: "transform"
+      borderRadius: closing ? "17px" : wallRadius, boxShadow: "0 24px 60px rgba(0,0,0,.5)", willChange: "transform"
     });
     shell.appendChild(flight);
     document.body.appendChild(shell);
     flightRef.current = flight;
     const animation = flight.animate([
-      { transform: closing ? "none" : wallTransform, borderRadius: closing ? "17px" : "10px" },
-      { transform: closing ? wallTransform : "none", borderRadius: closing ? "10px" : "17px" }
+      { transform: closing ? "none" : wallTransform, borderRadius: closing ? "17px" : wallRadius },
+      { transform: closing ? wallTransform : "none", borderRadius: closing ? wallRadius : "17px" }
     ], { duration: closing ? 500 : 620, easing: "cubic-bezier(.22,1,.36,1)", fill: "forwards" });
     return animation.finished.then(() => {
       if (!closing && !previewClosingRef.current && modalRef.current) modalRef.current.dataset.landed = "true";
     }).catch(() => undefined).finally(() => {
-      shell.remove();
-      if (flightRef.current === flight) flightRef.current = null;
+      // 关闭时保留终帧，等遮罩结束后由 restoreSourceTile 同步换回原卡。
+      if (!closing) {
+        shell.remove();
+        if (flightRef.current === flight) flightRef.current = null;
+      }
     });
   }
 
@@ -289,7 +296,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     const backdrop = modalRef.current?.parentElement;
     if (source && target && backdrop && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       if (modalRef.current) modalRef.current.dataset.closing = "true";
-      const fade = backdrop.animate([{ opacity: 1 }, { opacity: 1, offset: .18 }, { opacity: 0 }], { duration: 560, easing: "cubic-bezier(.33,1,.68,1)", fill: "forwards" });
+      const fade = backdrop.animate([{ opacity: 1 }, { opacity: 1, offset: .18 }, { opacity: 0 }], { duration: 500, easing: "cubic-bezier(.33,1,.68,1)", fill: "forwards" });
       await Promise.allSettled([flyCard(source, target, selectedCard.image, true), fade.finished]);
     }
     restoreSourceTile();
