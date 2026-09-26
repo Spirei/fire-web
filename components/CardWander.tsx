@@ -31,7 +31,7 @@ const DRIFT_SPEED_PER_SECOND = 9.5;
 const DRIFT_ANGLE_PER_SECOND = 0.0006;
 const DRIFT_TRAVEL_X = 320;
 const DRIFT_TRAVEL_Y = 180;
-type PreviewEffect = "gloss" | "holo" | "metal" | "pulse" | "stardust";
+type PreviewEffect = "gloss" | "holo" | "metal" | "meteor" | "stardust";
 type PreviewMode = "showcase" | "wallet" | "actual";
 const PREVIEW_MODES: { key: PreviewMode; label: string }[] = [
   { key: "showcase", label: "展示" },
@@ -42,7 +42,7 @@ const PREVIEW_EFFECTS: { key: PreviewEffect; label: string }[] = [
   { key: "gloss", label: "光泽" },
   { key: "holo", label: "幻彩" },
   { key: "metal", label: "金属" },
-  { key: "pulse", label: "脉冲" },
+  { key: "meteor", label: "流星" },
   { key: "stardust", label: "星砂" }
 ];
 
@@ -72,6 +72,38 @@ function WanderTile({ card, observeTile, onSelect }: {
       {nearViewport && <img src={card.image} alt="" draggable={false} loading="eager" decoding="async" />}
     </button>
   );
+}
+
+/** 同一张原图裁成 8×5 格，只在当前预览生成；结束后回到单张原图。 */
+function FragmentCard({ image, name, className }: { image: string; name: string; className: string }) {
+  const [running, setRunning] = useState(false);
+  const completed = useRef(0);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let alive = true;
+    const preload = new Image();
+    preload.src = image;
+    void preload.decode().then(() => {
+      if (alive) { completed.current = 0; setRunning(true); }
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [image]);
+  return <>
+    <img className={className} src={image} alt={name} draggable={false} style={{ opacity: running ? 0 : 1 }} />
+    {running && <span className="card-wander-fragments" aria-hidden="true">
+      {Array.from({ length: 40 }, (_, index) => {
+        const col = index % 8;
+        const row = Math.floor(index / 8);
+        return <span className="card-wander-fragment" key={index} style={{
+          left: `${col * 12.5}%`, top: `${row * 20}%`,
+          "--fragment-delay": `${((col * 3 + row * 2) % 8) * .04 + (4 - row) * .12}s`,
+          "--fragment-fall": "600%"
+        } as CSSProperties} onAnimationEnd={() => {
+          if (++completed.current === 40) setRunning(false);
+        }}><img src={image} alt="" draggable={false} style={{ left: `${-col * 100}%`, top: `${-row * 100}%` }} /></span>;
+      })}
+    </span>}
+  </>;
 }
 
 export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDetails, onToggleHeld }: Props) {
@@ -687,7 +719,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
               openZoom();
             }}>
               <div ref={effectTiltRef} className="card-wander-effect-tilt">
-                <img className="card-wander-modal-image" src={selectedCard.image} alt={selectedCard.name} draggable={false} />
+                {previewEffect === "meteor" ? <FragmentCard image={selectedCard.image} name={selectedCard.name} className="card-wander-modal-image" /> : <img className="card-wander-modal-image" src={selectedCard.image} alt={selectedCard.name} draggable={false} />}
                 <span className="card-wander-effect-sheen" aria-hidden="true" />
                 <span ref={effectGlareRef} className="card-wander-effect-glare" aria-hidden="true" />
                 <span ref={effectSpecRef} className="card-wander-effect-spec" aria-hidden="true" />
@@ -785,7 +817,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
       {zoomOpen && selectedCard && (
         <div ref={zoomRef} className="card-wander-zoom-backdrop" role="dialog" aria-modal="true" aria-label={`放大查看 ${selectedCard.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) void closeZoom(); }}>
           <div ref={zoomImageRef} className="card-wander-zoom-card" data-effect={zoomEffect}>
-            <img className="card-wander-zoom-image" src={selectedCard.image} alt={selectedCard.name} draggable={false} />
+            {zoomEffect === "meteor" ? <FragmentCard image={selectedCard.image} name={selectedCard.name} className="card-wander-zoom-image" /> : <img className="card-wander-zoom-image" src={selectedCard.image} alt={selectedCard.name} draggable={false} />}
             <span className="card-wander-effect-sheen" aria-hidden="true" />
           </div>
           <button ref={zoomCloseRef} type="button" className="card-wander-zoom-close" onClick={() => void closeZoom()}><span aria-hidden="true">×</span> 关闭</button>
