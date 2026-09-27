@@ -2271,8 +2271,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         {/* 内容头部 */}
         <div className="sw-page-head flex flex-none items-center justify-between gap-3">
           <div className="min-w-0">
+            {homeIsBackground && <span className="sc-mobile-brand">Fire</span>}
             {!homeIsBackground && <button type="button" className={`sc-back ${categoryPage || sub === "passkeys" ? "sc-category-back" : ""}`} onClick={() => openCategory(categoryPage ? "home" : detailOrigin || currentCategory?.key || "home")}><span aria-hidden="true">←</span> {categoryPage ? "设置首页" : currentCategory?.label || "设置首页"}</button>}
-            <h2>{homeIsBackground ? "首页" : categoryPage || sub === "passkeys" ? currentCategory?.label : activePageMeta?.label || activeSubMeta?.label}</h2>
+            <h2>{homeIsBackground ? <><span className="hidden md:inline">首页</span><span className="md:hidden">设置中心</span></> : categoryPage || sub === "passkeys" ? currentCategory?.label : activePageMeta?.label || activeSubMeta?.label}</h2>
             {(homeIsBackground || categoryPage || sub === "passkeys") && <p>{homeIsBackground ? "管理个人信息与账户安全。" : currentCategory?.desc}</p>}
           </div>
           <div className="sc-head-actions">

@@ -830,6 +830,12 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const security = fs.readFileSync(path.join(root, 'components/SecurityCheck.tsx'), 'utf8');
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
     assert(settings.includes('aria-label="手机设置分类"'));
+    const recordsApp = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
+    assert(recordsApp.includes('activeTab === "settings" ? "hidden md:flex" : "flex"'));
+    assert(recordsApp.includes('className="settings-mobile-toolbar"'));
+    assert(recordsApp.includes('aria-label="关闭设置"'));
+    assert(css.includes('.app-shell-root:has(.records-app.is-settings) .app-shell-header,'));
+    assert(css.includes('.records-app.is-settings .sw-window { background:#fff !important; }'));
     assert(settings.includes('categories.map(category => <button'));
     assert(settings.includes('onClick={() => openCategory(category.key)}'));
     assert(css.includes('.sv-center .sc-mobile-navigation { display:block;'));

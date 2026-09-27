@@ -808,7 +808,6 @@ export default function RecordsApp({
     <div className="relative h-full min-h-0">
       {!settingsSubReady && (
         <div className="settings-first-frame" aria-hidden="true">
-          <div className="settings-first-frame-tabs"><i /><i /><i /><i /></div>
           <div className="settings-first-frame-title"><i /><span /></div>
           <div className="settings-first-frame-card"><i /><i /><i /><i /></div>
         </div>
@@ -839,7 +838,7 @@ export default function RecordsApp({
   // 实测把「繁體」改成了「繁体」），React 一比对就报 Hydration failed。站内的繁简 / 英文切换不受影响。
   return (
     <>
-    <div translate="no" className="records-app notranslate flex items-start">
+    <div translate="no" className={`records-app notranslate flex items-start${activeTab === "settings" ? " is-settings" : ""}`}>
       {/* 桌面侧边导航 */}
       <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block ${activeTab === "settings" ? "is-settings" : ""}`}>
         <nav ref={desktopNavRef} onScroll={updateSidebarScroll} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
@@ -884,7 +883,8 @@ export default function RecordsApp({
       {/* 内容区 */}
       <div className="records-content min-w-0 flex-1">
         {/* 移动端顶部标签 */}
-        <div ref={mobileNavRef} className="mobile-tab-nav mb-6 flex overflow-x-auto rounded-2xl bg-bg-gray p-1 lg:hidden">
+        {activeTab === "settings" && <div className="settings-mobile-toolbar"><button type="button" aria-label="关闭设置" onClick={() => selectTab("holdings")}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>}
+        <div ref={mobileNavRef} className={`mobile-tab-nav mb-6 overflow-x-auto rounded-2xl bg-bg-gray p-1 lg:hidden ${activeTab === "settings" ? "hidden md:flex" : "flex"}`}>
           {sidebarTabs.map((t) => (
             <button
               key={t.key}

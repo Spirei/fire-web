@@ -6228,7 +6228,29 @@ button.PhotoView-Slider__toolbarIcon {
 .sv-center .settings-section-card[hidden] + .settings-section-card { margin-top:0; }
 .sv-center .settings-password-grid input { min-height:42px; }
 .sc-mobile-navigation { display:none; }
+.settings-mobile-toolbar { display:none; }
+.sc-mobile-brand { display:none; }
 @media(max-width:767px) {
+  .app-shell-root:has(.records-app.is-settings),
+  .app-shell-main:has(.records-app.is-settings),
+  .records-app.is-settings,
+  .records-app.is-settings .sv-center,
+  .records-app.is-settings .sw-window { background:#fff !important; }
+  .records-app.is-settings :is(.settings-mobile-toolbar,.settings-page,.sw-content,.sw-content-scroll,.sw-page-head,.sc-landing,.tab-panel) { background:#fff !important; }
+  .dark .app-shell-root:has(.records-app.is-settings),
+  .dark .app-shell-main:has(.records-app.is-settings),
+  .dark .records-app.is-settings,
+  .dark .records-app.is-settings .sv-center,
+  .dark .records-app.is-settings .sw-window { background:#15181b !important; }
+  .dark .records-app.is-settings :is(.settings-mobile-toolbar,.settings-page,.sw-content,.sw-content-scroll,.sw-page-head,.sc-landing,.tab-panel) { background:#15181b !important; }
+  body:has(.records-app.is-settings) .assistant-launcher[aria-pressed="false"] { display:none; }
+  .app-shell-root:has(.records-app.is-settings) .app-shell-header,
+  .app-shell-root:has(.records-app.is-settings) .app-shell-footer { display:none; }
+  .app-shell-main:has(.records-app.is-settings) { padding:0 !important; }
+  .records-app.is-settings { padding:0; margin:0; width:100%; }
+  .sc-mobile-brand { display:block; margin-bottom:10px; font-size:14px; font-weight:600; }
+  .settings-mobile-toolbar { display:flex; justify-content:flex-end; padding:0 14px; color:rgb(var(--site-ink)); }
+  .settings-mobile-toolbar button { display:grid; place-items:center; width:44px; height:44px; }
   .sv-center .sc-mobile-navigation { display:block; margin-top:24px; flex:none; }
   .sv-center .sc-mobile-navigation .sc-setting-row { min-height:56px; padding:14px 16px; }
   .sv-center .sc-mobile-navigation .sc-setting-row > svg { flex:none; }
@@ -6236,11 +6258,11 @@ button.PhotoView-Slider__toolbarIcon {
   .sv-center .sc-home-landing .security-check-entry { margin-bottom:0; }
   .sv-win-root.sv-center { width:100%; max-width:none; }
   .sv-center .sw-sidebar { display:none !important; }
-  .sv-center .sw-page-head { padding:16px 14px 18px; }
+  .sv-center .sw-page-head { padding:16px 20px 18px; }
   .sv-center .sw-page-head h2 { font-size:24px; }
   .sv-center .sw-page-head p { font-size:13px; }
-  .sv-center .sw-content-scroll { padding:0 14px calc(28px + env(safe-area-inset-bottom)); }
-  .sv-center .sc-search-button { display:grid; place-items:center; min-width:40px; min-height:40px; border:1px solid var(--sv-border); border-radius:50%; }
+  .sv-center .sw-content-scroll { padding:0 20px calc(28px + env(safe-area-inset-bottom)); }
+  .sv-center .sc-search-button { display:none; }
   .sv-center .sc-back { min-height:36px; margin-bottom:8px; }
   .sv-center .sc-setting-row,.sv-center .sc-account-card { padding:16px; gap:12px; min-height:60px; }
   .sv-center .sc-setting-row strong { font-size:14px; }
