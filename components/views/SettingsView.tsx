@@ -1,6 +1,7 @@
 "use client";
 import PasskeySettings from "@/components/PasskeySettings";
 import SecurityCheck from "@/components/SecurityCheck";
+import SettingsManagedGroup, { SettingsManagedPane } from "@/components/SettingsManagedGroup";
 import AppModal from "@/components/AppModal";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
 
@@ -427,20 +428,25 @@ function BackupTaskCard() {
     : "从未备份";
   const totalSize = backups.reduce((s, b) => s + b.size, 0);
   const fmtSize = (n: number) =>
-    n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${(n / 1024).toFixed(0)} KB` : `${n} B`;
+    n >= 1073741824 ? `${(n / 1073741824).toFixed(1)} GB` : n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${(n / 1024).toFixed(0)} KB` : `${n} B`;
   if (!cfg) return <div className="settings-load-state" role="status">{loadError || "正在读取备份设置…"}{loadError && <button type="button" className="btn btn-line" onClick={() => void refresh()}>重试</button>}</div>;
   return <div className="settings-backup-panel">
+    <SettingsManagedGroup scope="backups">
+    <SettingsManagedPane name="plan" title="备份计划" summary={`${cfg.enabled ? "已开启" : "未开启"} · ${({1:"每小时",24:"每天",168:"每周",720:"每月"} as Record<number,string>)[cfg.intervalHours] || `每 ${cfg.intervalHours} 小时`} · 保留 ${cfg.keep} 份`}>
     <fieldset className="settings-clean-group" disabled={saving || busy} aria-label="备份计划">
       <div className="sw-row"><div className="sw-row-label"><b>自动备份</b><span>保存数据库与素材文件</span></div><SettingsSwitch checked={enabled === true} onChange={() => setEnabled(v => !v)} label="自动备份" /></div>
       <div className="sw-row"><div className="sw-row-label"><b>备份频率</b></div><AppSelect value={intervalHours} onChange={value => setIntervalHours(Number(value))} options={[{ value: "1", label: "每小时" }, { value: "24", label: "每天" }, { value: "168", label: "每周" }, { value: "720", label: "每月" }]} className="settings-clean-select" ariaLabel="备份频率" /></div>
       <div className="sw-row"><div className="sw-row-label"><b>保留份数</b><span>自动清理较早的备份</span></div><AppSelect value={keep} onChange={value => setKeep(Number(value))} options={[3, 7, 14, 30].map(value => ({ value:String(value), label:`${value} 份` }))} className="settings-clean-select" ariaLabel="备份保留份数" /></div>
     </fieldset>
     <button type="button" className="btn settings-full-action" onClick={save} disabled={saving || busy || (cfg.enabled === enabled && cfg.intervalHours === intervalHours && cfg.keep === keep)}>{saving ? "保存中…" : "保存设置"}</button>
-    <h3 className="settings-clean-heading">备份记录</h3>
+    </SettingsManagedPane>
+    <SettingsManagedPane name="records" title="备份记录" summary={`${backups.length} 份 · ${fmtSize(totalSize)}`}>
     <div className="settings-clean-group">
       <div className="sw-row"><div className="sw-row-label"><b>最近备份</b><span>{last}</span></div><button type="button" className="btn btn-line" onClick={backupNow} disabled={busy || saving}>{busy ? "备份中…" : "立即备份"}</button></div>
       <div className="sw-row"><div className="sw-row-label"><b>已保存</b><span>data/backups</span></div><span className="settings-detail-value">{backups.length} 份 · {fmtSize(totalSize)}</span></div>
     </div>
+    </SettingsManagedPane>
+    </SettingsManagedGroup>
     {loadError && <p className="settings-inline-error" role="alert">{loadError}</p>}
   </div>;
 }
@@ -960,7 +966,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     setSite((s) => ({ ...s, [key]: value }));
   }
 
-  /* ---------- 全局自动保存：修改即保存，成功/失败均通过胶囊 Toast 提示 ---------- */
+  /* Site information and the standalone visibility switch auto-save; editors require Save. */
   const savedRef = useRef<Record<string, unknown> | null>(null);
   // 上次保存成功的完整设置（取消用）；tabsRef 同步 tabs，避免闭包拿到旧值
   const lastSavedRef = useRef<{ site: SiteSettings; tabs: TabConfig[] } | null>(null);
@@ -973,28 +979,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       domain: s.domain,
       allowRegister: s.allowRegister,
       footerDesc: s.footerDesc,
-      ico: s.ico,
-      siteLogo: s.siteLogo,
-      logoText: s.logoText,
-      logoFont: s.logoFont,
-      homepageBg: s.homepageBg,
-      loginSideImage: s.loginSideImage,
-      quoteApiUrl: s.quoteApiUrl,
-      searchApiUrl: s.searchApiUrl,
-      chartApiUrl: s.chartApiUrl,
-      currencyApiUrl: s.currencyApiUrl,
-      currencyRefreshPattern: s.currencyRefreshPattern,
-      earningsApiUrl: s.earningsApiUrl,
-      cnEarningsApiUrl: s.cnEarningsApiUrl,
-      hkEarningsApiUrl: s.hkEarningsApiUrl,
-      usLogoApiUrl: s.usLogoApiUrl,
-      cnLogoApiUrl: s.cnLogoApiUrl,
-      futuHost: s.futuHost,
-      futuPort: s.futuPort,
-      quoteSource: s.quoteSource,
-      ticker: JSON.stringify(s.ticker),
-      homeNav: JSON.stringify(s.homeNav),
-      marketBadgesVisible: s.marketBadgesVisible !== false
+      marketBadgesVisible: s.marketBadgesVisible !== false,
     };
   }
 
@@ -1017,6 +1002,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     const cur = autoSaveSnapshot(site) as unknown as Record<string, unknown>;
     const patch: Record<string, unknown> = {};
     Object.keys(cur).forEach((key) => {
+      if (key === "marketBadgesVisible" && editingMarketBadges) return;
       if (cur[key] !== saved[key]) patch[key] = cur[key];
     });
     if (Object.keys(patch).length === 0) return;
@@ -1474,8 +1460,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const importBackupRef = useRef<HTMLInputElement | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
-  const dataTipRef = useRef<HTMLSpanElement | null>(null);
-  const [dataTip, setDataTip] = useState<{ top: number; left: number } | null>(null);
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteTotpCode, setDeleteTotpCode] = useState("");
   const [groupSaving, setGroupSaving] = useState(false);
@@ -1952,6 +1936,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   function syncSettingsUrl(nextSub: SubKey, anchor: string) {
     const url = new URL(window.location.href);
     url.searchParams.delete("category");
+    url.searchParams.delete("panel");
     url.searchParams.set("sub", nextSub);
     const origin = categoryPage || detailOrigin;
     if (origin) url.searchParams.set("from", origin);
@@ -1969,6 +1954,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     setCmdOpen(false);
     const url = new URL(window.location.href);
     url.searchParams.delete("sub");
+    url.searchParams.delete("panel");
     url.searchParams.delete("anchor");
     url.searchParams.delete("from");
     if (key === "home") url.searchParams.delete("category");
@@ -3089,6 +3075,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     const [item] = next.splice(from, 1);
                     next.splice(to, 0, item);
                     updateServices(next);
+                    if (editingModel) return;
                     void saveBlock("model-order", { modelServices: next }, "模型优先级已保存").then(ok => { if (!ok) updateServices(services); });
                   };
                   const addService = () => updateServices([...services, {
@@ -3110,11 +3097,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       action={editingModel ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" disabled={!!uploadingModelIconId || !!blockSaving.model} onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">{uploadingModelIconId ? "图标保存中…" : "保存"}</button></div> : <button type="button" onClick={() => { if (!site.modelServices.length) updateServices(services); setEditingModel(true); }} className="btn btn-ghost btn-sm">编辑</button>}
                     >
                       <div className="model-service-stack">
+                        <SettingsManagedGroup scope="models" editing={editingModel} onReorder={blockSaving["model-order"] ? undefined : reorderServices}>
                         {services.map((service, serviceIndex) => {
                           const meta = MODEL_PROVIDERS.find(item => item.id === service.provider) || MODEL_PROVIDERS[3];
                           const configured = Boolean(service.apiKey || service.apiKeyConfigured) && Boolean(service.apiUrl) && service.models.some(Boolean);
                           const connected = configured && service.models.filter(Boolean).every(model => modelTestStates[`${service.id}:${model}`]?.state === "ok");
                           return (
+                            <SettingsManagedPane key={service.id} name={service.id} title={service.name || "未命名服务"} summary={`${configured ? "已配置" : "待完善"} · ${service.models.filter(Boolean).join(" → ") || "尚未添加模型"} · 优先级 ${serviceIndex + 1}`}>
                             <article
                               key={service.id}
                               className={`model-service-panel ${!editingModel && services.length > 1 && !blockSaving["model-order"] ? "is-draggable" : ""}`}
@@ -3137,6 +3126,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 </div>
                                 {!editingModel ? <span className="model-service-use">{service.provider === "jev" ? "决策专用" : blockSaving["model-order"] ? "保存排序…" : `优先级 ${serviceIndex + 1}`}</span> : (
                                   <div className="model-order-actions">
+                                    <button type="button" onClick={() => reorderServices(serviceIndex, serviceIndex - 1)} disabled={serviceIndex === 0 || !!blockSaving["model-order"]} aria-label="服务上移">↑</button>
+                                    <button type="button" onClick={() => reorderServices(serviceIndex, serviceIndex + 1)} disabled={serviceIndex === services.length - 1 || !!blockSaving["model-order"]} aria-label="服务下移">↓</button>
                                     <button type="button" className="is-danger" onClick={() => updateServices(services.filter(item => item.id !== service.id))} disabled={services.length === 1} aria-label="删除服务"><DeleteIcon className="h-4 w-4" /></button>
                                   </div>
                                 )}
@@ -3206,8 +3197,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 </div>
                               )}
                             </article>
+                            </SettingsManagedPane>
                           );
                         })}
+                        </SettingsManagedGroup>
                         {editingModel && <button type="button" className="model-add-service" onClick={addService}><b>＋</b><span>添加模型服务<small>接入聊天或决策模型</small></span></button>}
                         <div className="model-privacy-note"><SubNavIcon name="key" className="h-4 w-4" /><span>API 密钥只保存在服务端。聊天模型按顺序回退；Jev 仅用于结构化决策配置与连接测试。</span></div>
                       </div>
@@ -3228,7 +3221,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   ) : undefined}
                   action={editingFutu ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                 >
-                  <div className="flex flex-col">
+                  <SettingsManagedGroup scope="trade" editing={editingFutu}>
+                    <SettingsManagedPane name="connection" title="OpenD 连接" summary={`${site.futuHost || "127.0.0.1"}:${site.futuPort || "11111"} · ${futuOnline === null ? "检测中…" : futuOnline ? "已连接" : futuSkipped ? "本地跳过" : "未连接"}`}>
                       <div className="sw-row">
                         <div className="sw-row-label"><b>OpenD 主机</b><span>填写运行 OpenD 的设备地址</span></div>
                         <input className={`sw-row-input ${editingFutu ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} value={site.futuHost} readOnly={!editingFutu} onChange={(e) => setSiteField("futuHost", e.target.value)} placeholder="127.0.0.1" />
@@ -3252,6 +3246,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         )}
                       </div>
                     </div>
+                    </SettingsManagedPane>
+                    <SettingsManagedPane name="quota" title="接口额度" summary={futuQuota.data?.subscription && futuQuota.data.historyKl ? `订阅 ${futuQuota.data.subscription.ownUsed}/${futuQuota.data.subscription.ownTotalQuota} · 历史K线 ${futuQuota.data.historyKl.used}/${futuQuota.data.historyKl.totalQuota}` : "按需查询，不自动消耗接口额度"}>
                     <div className="sw-row">
                       <div className="sw-row-label"><b>接口额度</b><span>已用 / 总额</span></div>
                       <div className="ctrl flex flex-nowrap items-center gap-2">
@@ -3274,11 +3270,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         </button>
                       </div>
                     </div>
+                    </SettingsManagedPane>
+                    <SettingsManagedPane name="source" title="行情来源" summary={site.quoteSource === "futu" ? "仅富途" : site.quoteSource === "tencent" ? "腾讯 + Yahoo" : "自动（富途优先）"}>
                     <div className="sw-row">
                       <div className="sw-row-label"><b>行情来源</b><span>自动模式失败时使用备用源</span></div>
                       {editingFutu ? <AppSelect value={site.quoteSource} onChange={value => setSite(s => ({ ...s, quoteSource:value as SiteSettings["quoteSource"] }))} options={[{value:"auto",label:"自动（富途优先）"},{value:"futu",label:"仅富途"},{value:"tencent",label:"腾讯 + Yahoo"}]} className="settings-clean-select" ariaLabel="行情来源" /> : <span className="settings-detail-value">{site.quoteSource === "futu" ? "仅富途" : site.quoteSource === "tencent" ? "腾讯 + Yahoo" : "自动（富途优先）"}</span>}
                     </div>
-                  </div>
+                    </SettingsManagedPane>
+                  </SettingsManagedGroup>
                 </SettingsSection>
                 <SettingsSection id="currency-display" icon="stocks" title="货币金额显示" desc="控制持仓、资产分析等页面的大额金额展示方式">
                   <div className="sw-row">
@@ -3459,41 +3458,33 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 </SettingsSection>
                 <SettingsSection id="data" icon="data" title="导入与导出" desc="备份或迁移你的数据">
                   <div className="settings-profile-actions">
+                  <SettingsManagedGroup scope="data">
+                  <SettingsManagedPane name="export" title="导出网站数据" summary="备份持仓、订单、分组与个人设置">
+                  <p className="settings-managed-note">包含持仓、订单、自选分组、个人偏好与昵称；不含图片、图标和数据库连接信息。管理员导出另含站点设置与名人持仓。</p>
                   <div className="sw-row">
-                    <div className="sw-row-label">
-                      <span
-                        ref={dataTipRef}
-                        className="sw-help-tip"
-                        style={{ marginLeft: 0 }}
-                        onMouseEnter={() => {
-                          const win = dataTipRef.current?.closest(".sv-win-root") as HTMLElement | null;
-                          const r = dataTipRef.current?.getBoundingClientRect();
-                          if (!r) return;
-                          const wr = win?.getBoundingClientRect();
-                          setDataTip({ top: (wr ? r.bottom - wr.top : r.bottom) + 8, left: wr ? r.left - wr.left : r.left });
-                        }}
-                        onMouseLeave={() => setDataTip(null)}
-                      >
-                        <b className="!text-[12.5px] underline decoration-dotted decoration-[var(--sv-text-3)] underline-offset-4">网站数据</b>
-                      </span>
-                    </div>
+                    <div className="sw-row-label"><b>网站数据</b><span>下载为 JSON 文件</span></div>
                     <div className="ctrl">
                       <button type="button" disabled={backupBusy === "export"} onClick={exportSiteBackup} className="btn btn-ghost btn-sm disabled:opacity-60">{backupBusy === "export" ? "导出中…" : "导出"}</button>
+                    </div>
+                  </div>
+                  </SettingsManagedPane>
+                  <SettingsManagedPane name="import" title="导入网站数据" summary="从 Fire 备份文件恢复数据">
+                  <p className="settings-managed-note">选择 Fire 导出的 JSON 文件，确认内容后导入。请先导出现有数据留作备份。</p>
+                  <div className="sw-row">
+                    <div className="sw-row-label"><b>备份文件</b><span>JSON 格式</span></div>
+                    <div className="ctrl">
                       <button type="button" disabled={backupBusy === "import"} onClick={() => importBackupRef.current?.click()} className="btn btn-ghost btn-sm disabled:opacity-60">{backupBusy === "import" ? "导入中…" : "导入"}</button>
                       <input ref={importBackupRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importSiteBackup(f); }} />
                     </div>
                   </div>
-                  {dataTip && (
-                    <div className="sw-tip-fixed" style={{ top: dataTip.top, left: dataTip.left }}>
-                      <span className="block"><b className="text-up">导出 / 导入：</b>你的持仓、订单、自选分组、个人偏好与昵称</span>
-                      <span className="block mt-1"><b className="text-up">数据：</b>纯数据，不含图标 / 图片与数据库连接串等环境专属配置</span>
-                      <span className="block mt-0.5 opacity-70"><b className="text-up">权限：</b>管理员额外包含站点设置与名人持仓</span>
-                    </div>
-                  )}
+                  </SettingsManagedPane>
+                  <SettingsManagedPane name="holdings" title="持仓数据" summary={`导出持仓与自选记录 · ${recordsCount} 条`}>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>持仓数据</b><span>导出持仓与自选记录，共 {recordsCount} 条</span></div>
                     <button type="button" onClick={onExport} className="btn btn-ghost btn-sm">导出</button>
                   </div>
+                  </SettingsManagedPane>
+                  </SettingsManagedGroup>
                   </div>
                 </SettingsSection>
                 <SettingsSection id="danger" icon="danger" title="清空投资数据" desc="删除持仓、自选与相关投资记录；操作不可恢复">
@@ -3600,6 +3591,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   ) : undefined}
                   action={editingDb ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                 >
+                  <SettingsManagedGroup scope="database" editing={editingDb}>
+                  <SettingsManagedPane name="type" title="存储方式" summary={site.dbType === "sqlite" ? "SQLite · 本地文件" : "PostgreSQL · 远程数据库"}>
                   <div className="subhead">数据库类型</div>
                   <div className="settings-db-types">
                     {([
@@ -3627,6 +3620,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     ))}
                   </div>
 
+                  </SettingsManagedPane>
+                  <SettingsManagedPane name="connection" title={site.dbType === "sqlite" ? "数据库状态" : "连接配置"} summary={site.dbType === "sqlite" ? dbStatus ? `${(dbStatus.sizeBytes / 1024).toFixed(1)} KB · ${dbStatus.tables.length} 张表` : dbStatusError || "读取中…" : `${site.pgHost || "未设置主机"}:${site.pgPort || "5432"}`}>
                 {/* SQLite 信息 */}
                 {site.dbType === "sqlite" && (
                   <>
@@ -3705,6 +3700,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                   </>
                 )}
+                  </SettingsManagedPane>
+                  </SettingsManagedGroup>
                 </SettingsSection>
               </div>
             )}

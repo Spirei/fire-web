@@ -1906,6 +1906,18 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('<SettingsSection id="backups"') && !/key: "board"[\s\S]{0,900}<BackupTaskCard/.test(settings), '缓存任务与数据库自动备份必须分开');
     assert(css.includes('[data-detail^="source"] .sw-row-label { width:100%; flex:none; }'), '手机端数据源标签不得继承桌面横向宽度成为大段空白');
   });
+  await test('managed settings retain forms and URL detail without nested controls', () => {
+    const managed = fs.readFileSync(path.join(root, 'components/SettingsManagedGroup.tsx'), 'utf8');
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    assert(managed.includes('useSearchParams()') && managed.includes('window.history.pushState(null'), '详情应持久化在 URL');
+    assert(managed.includes('hidden={active !== pane}'), '返回概览不得卸载草稿表单');
+    assert(managed.includes('aria-label="返回概览"') && managed.includes('target?.focus()'), '返回应恢复键盘焦点');
+    assert(managed.includes('onReorder?.') && managed.includes('onDragEnd'), '模型优先级拖动须保留');
+    for (const scope of ['models', 'trade', 'backups', 'database', 'data']) assert(settings.includes(`scope="${scope}"`));
+    assert(settings.includes('url.searchParams.delete("panel")'), '切换设置应清理旧详情');
+    const automatic = settings.slice(settings.indexOf('function autoSaveSnapshot'), settings.indexOf('function captureSaved'));
+    for (const field of ['futuPort', 'quoteSource', 'ticker', 'homeNav', 'quoteApiUrl', 'logoText']) assert(!automatic.includes(field), `${field} 有保存按钮，不得自动提交草稿`);
+  });
   await test('settings overlays keep confirmations and feedback above detail dialogs', () => {
     const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
     const modal = fs.readFileSync(path.join(root, 'components/AppModal.tsx'), 'utf8');

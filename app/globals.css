@@ -6722,3 +6722,29 @@ button.PhotoView-Slider__toolbarIcon {
   .sc-detail-dialog .sw-row-input,.sc-detail-dialog .sw-media-input,.sc-detail-dialog input,.sc-detail-dialog textarea,.sc-detail-dialog select { width:100%; max-width:100%; font-size:16px; }
 }
 @media(prefers-reduced-motion:reduce) { .sc-detail-scrim,.sc-detail-dialog { animation:none !important; } }
+/* Meta Pay: summary first, one focused detail at a time. */
+.sc-detail-dialog .sv-win-root .settings-section-card .settings-section-body:has(.settings-managed) { border: 0; padding: 0; background: transparent; overflow: visible; }
+.sc-detail-dialog .sv-win-root .settings-section-card .settings-profile-actions:has(.settings-managed) { border: 0; padding: 0; background: transparent; }
+.settings-managed-list { border: 1px solid var(--sc-dialog-border, #dcdfe4); border-radius: 16px; overflow: hidden; }
+.settings-managed-entry { width: 100%; min-height: 64px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; text-align: left; background: var(--sc-dialog-bg, #fff); color: inherit; transition: background-color 160ms ease; }
+.settings-managed-entry + .settings-managed-entry { border-top: 1px solid var(--sc-dialog-border, #dcdfe4); }
+.settings-managed-entry:hover { background: var(--sc-dialog-hover, #f2f3f5); }
+.settings-managed-copy { min-width: 0; flex: 1; }
+.settings-managed-drag { flex: none; color: var(--sc-dialog-muted); cursor: grab; }
+.settings-managed-entry b { display: block; font-size: 15px; font-weight: 600; line-height: 21px; }
+.settings-managed-entry small { display: block; margin-top: 3px; font-size: 13px; line-height: 19px; color: var(--sc-dialog-muted, #656b73); overflow-wrap: anywhere; }
+.settings-managed-entry > span:last-child { flex: none; font-size: 24px; font-weight: 300; color: var(--sc-dialog-muted, #656b73); }
+.settings-managed-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.settings-managed-heading h3 { font-size: 17px; font-weight: 600; }
+.settings-managed-back { width: 34px; height: 34px; flex: none; border-radius: 50%; font-size: 29px; line-height: 1; background: transparent; }
+.settings-managed-back:hover { background: var(--sc-dialog-hover, #f2f3f5); }
+.settings-managed-content:not([hidden]) { animation: settings-managed-enter 160ms ease-out; }
+.settings-managed-content[hidden] { display: none !important; }
+.settings-managed[data-scope="trade"] .settings-managed-content:not([hidden]) { border: 1px solid var(--sc-dialog-border); border-radius: 16px; overflow: hidden; }
+.settings-managed[data-scope="data"] .settings-managed-content .sw-row { border: 1px solid var(--sc-dialog-border) !important; border-radius: 16px; }
+.settings-managed-content .settings-full-action { margin-top: 16px; }
+.settings-managed-note { font-size: 13px; line-height: 20px; color: var(--sc-dialog-muted, #656b73); margin-bottom: 16px; }
+.dark .settings-managed-entry { background: var(--sc-dialog-bg, #20252d); }
+.dark .settings-managed-entry:hover, .dark .settings-managed-back:hover { background: var(--sc-dialog-hover, #2b3038); }
+@keyframes settings-managed-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .settings-managed-content:not([hidden]) { animation: none; } }
