@@ -6319,6 +6319,15 @@ button.PhotoView-Slider__toolbarIcon {
 .sc-detail-dialog .settings-task-row:hover { background:transparent; }
 .sv-center .sc-row-group,.sv-center .sc-account-card { border-radius:16px; }
 .security-check-entry { margin-bottom:32px; }
+.sv-center .sc-home-landing { max-width:680px; }
+.sv-center .sc-home-landing .sc-account-card { min-height:54px; padding:14px 16px; gap:12px; margin-bottom:10px; }
+.sv-center .sc-home-landing .sc-account-card > img,.sv-center .sc-home-landing .sc-account-card > .sc-avatar-placeholder { width:24px; height:24px; }
+.sv-center .security-check-entry .sc-setting-row { min-height:60px; padding:10px 16px; gap:12px; }
+.sv-center .security-check-entry .sc-setting-row > svg { width:24px; height:24px; }
+.sv-center .security-check-entry .sc-setting-row strong { font-size:15px; line-height:20px; font-weight:500; }
+.sv-center .security-check-entry .sc-setting-row small { margin-top:2px; font-size:14px; line-height:20px; font-weight:400; }
+.sv-center .sc-home-landing .sc-account-card strong { font-size:15px; line-height:24px; font-weight:500; }
+.sv-center .sc-home-landing .sc-chevron { font-size:22px; }
 .security-check-blue { color:#0866ff !important; }
 .security-check-ok { color:#008a25; }
 .security-check-modal.modal-glass { max-width:600px; padding:20px; background:var(--sv-surface, #fff); border:0; border-radius:32px; }

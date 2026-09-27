@@ -2277,11 +2277,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         </div>
 
         <div ref={contentScrollRef} className="sw-content-scroll min-h-0 flex-1 overflow-y-auto">
-          {categoryPage ? <div className="sc-landing">
+          {categoryPage ? <div className={`sc-landing ${categoryPage === "home" ? "sc-home-landing" : ""}`}>
             {categoryPage === "home" ? <>
               <button type="button" className="sc-account-card" onClick={() => jumpTo({ sub: "profile", anchor: "profile", label: "个人信息" })}>
                 {me.avatar ? <img src={me.avatar} alt=""/> : <span className="sc-avatar-placeholder">{(me.nickname || me.username).slice(0, 1)}</span>}
-                <span><strong>{me.nickname || me.username}</strong><small>个人信息与登录方式</small></span><span className="sc-chevron" aria-hidden="true">›</span>
+                <span><strong>{me.email || me.nickname || me.username}</strong></span><span className="sc-chevron" aria-hidden="true">›</span>
               </button>
               <SecurityCheck onNavigate={anchor => jumpTo({ sub: anchor, anchor, label: anchor === "profile" ? "个人信息" : anchor === "totp" ? "双重验证" : "通行密钥" })} />
             </> : categoryList}
