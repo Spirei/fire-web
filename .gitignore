@@ -55,7 +55,9 @@ public/uploads/cards/
 /public/fonts/
 /public/images/
 /public/share/
-/public/icons/
+/public/icons/*
+!/public/icons/palette.svg
+!/public/icons/security-check.svg
 /public/maps-world.json
 
 /app/favicon.ico

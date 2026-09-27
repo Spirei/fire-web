@@ -34,6 +34,8 @@ const deploymentFiles = new Set([
 const publicMediaAllowlist = new Set([
   // 配色设置入口的内置矢量图标，属于产品源码，不是用户上传或部署私有素材。
   "public/icons/palette.svg",
+  // 用户授权随源码发布的内置安全检查插图；不放行其他部署素材。
+  "public/icons/security-check.svg",
   "public/uploads/feature/four-door/window.png",
   "public/uploads/feature/four-door/dial.png",
   "public/uploads/feature/four-door/pointer.png",

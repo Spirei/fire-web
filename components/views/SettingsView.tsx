@@ -1,5 +1,6 @@
 "use client";
 import PasskeySettings from "@/components/PasskeySettings";
+import SecurityCheck from "@/components/SecurityCheck";
 import AppModal from "@/components/AppModal";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
 
@@ -2077,13 +2078,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     contentScrollRef.current?.scrollTo({ top: 0 });
   }
 
-  const categoryList = (currentCategory?.key === "account" ? [
+  const categoryList = <>{currentCategory?.key === "account" && <SecurityCheck onNavigate={anchor => { const item = currentCategory.items.find(item => item.anchor === anchor); if (item) jumpTo(item); }} />}{(currentCategory?.key === "account" ? [
     { title: "个人资料", desc: "管理头像、昵称与登录邮箱。", items: currentCategory.items.filter((item) => item.anchor === "profile") },
     { title: "账户登录", desc: "管理密码、验证器和免密登录方式。", items: currentCategory.items.filter((item) => item.anchor !== "profile") }
   ] : [{ title: "", desc: "", items: currentCategory?.items || [] }]).map((group, index) => <section className="sc-category-section" key={index}>
     {group.title && <><h3>{group.title}</h3><p>{group.desc}</p></>}
     <div className="sc-row-group">{group.items.map((item) => <button type="button" className="sc-setting-row" key={item.anchor} onClick={() => jumpTo(item)}><span><strong>{item.label}</strong></span><span className="sc-chevron" aria-hidden="true">›</span></button>)}</div>
-  </section>);
+  </section>)}</>;
 
   return (
     <div className="settings-page flex h-full min-h-0 flex-1">
@@ -2267,7 +2268,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           <div className="min-w-0">
             {categoryPage !== "home" && <button type="button" className={`sc-back ${categoryPage || sub === "passkeys" ? "sc-category-back" : ""}`} onClick={() => openCategory(categoryPage ? "home" : currentCategory?.key || "home")}><span aria-hidden="true">←</span> {categoryPage ? "设置首页" : currentCategory?.label || "设置首页"}</button>}
             <h2>{categoryPage === "home" ? "首页" : categoryPage || sub === "passkeys" ? currentCategory?.label : activePageMeta?.label || activeSubMeta?.label}</h2>
-            {(categoryPage || sub === "passkeys") && <p>{categoryPage === "home" ? "账号、外观与服务，在这里统一管理。" : currentCategory?.desc}</p>}
+            {(categoryPage || sub === "passkeys") && <p>{categoryPage === "home" ? "管理个人信息与账户安全。" : currentCategory?.desc}</p>}
           </div>
           <div className="sc-head-actions">
             <button type="button" className="sc-search-button" onClick={openCmdPalette} aria-label="搜索设置"><SubNavIcon name="list"/></button>
@@ -2282,7 +2283,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 {me.avatar ? <img src={me.avatar} alt=""/> : <span className="sc-avatar-placeholder">{(me.nickname || me.username).slice(0, 1)}</span>}
                 <span><strong>{me.nickname || me.username}</strong><small>个人信息与登录方式</small></span><span className="sc-chevron" aria-hidden="true">›</span>
               </button>
-              <h3>所有设置</h3><div className="sc-row-group">{categories.map((category) => <button type="button" className="sc-setting-row" key={category.key} onClick={() => openCategory(category.key)}><SubNavIcon name={category.icon} className="h-5 w-5"/><span><strong>{category.label}</strong><small>{category.desc}</small></span><span className="sc-chevron" aria-hidden="true">›</span></button>)}</div>
+              <SecurityCheck onNavigate={anchor => jumpTo({ sub: anchor, anchor, label: anchor === "profile" ? "个人信息" : anchor === "totp" ? "双重验证" : "通行密钥" })} />
             </> : categoryList}
           </div> : sub === "passkeys" ? <>
             <div className="sc-landing">{categoryList}</div>
