@@ -6,19 +6,22 @@ import { SubNavIcon } from "@/components/SettingsHeader";
 import { passkeyError, passkeyRequest, passkeyRead, PasskeyRequestError } from "@/lib/passkeyClient";
 import { parsePasskeyConfig, isPublicPasskeyConfig, type PublicPasskeyConfig } from "@/lib/passkeyConfig";
 import { appPrompt } from "@/lib/appDialog";
+import { createPasskeySettingsData, type PasskeySettingsData } from "@/lib/passkeySettingsData";
 
 type Config = PublicPasskeyConfig;
 type Key = { id: string; name: string; rpID: string; createdAt: number; lastUsedAt: number | null; backedUp: boolean };
 type PendingAction = { kind: "save"; config: Config } | { kind: "add" } | { kind: "delete"; key: Key };
 const normalizeDraft = (value: Config): Config => ({ ...value, origin: value.origin.trim().replace(/\/$/, ""), name: value.name.trim() });
-export default function PasskeySettings({ admin, onClose, mode = "keys" }: { admin: boolean; onClose?: () => void; mode?: "keys" | "config" }) {
+export default function PasskeySettings({ admin, onClose, mode = "keys", dataSource }: { admin: boolean; onClose?: () => void; mode?: "keys" | "config"; dataSource?: PasskeySettingsData }) {
+  const [source] = useState(() => dataSource ?? createPasskeySettingsData());
+  const [initial] = useState(() => source.peek());
   const [showHelp, setShowHelp] = useState(false);
   const [intro, setIntro] = useState(false);
   const [flowDirection, setFlowDirection] = useState<"forward" | "back">("forward");
-  const [config, setConfig] = useState<Config | null>(null);
-  const [draft, setDraft] = useState<Config>({ enabled: false, origin: "", name: "Fire", revision: "" });
-  const [keys, setKeys] = useState<Key[]>([]);
-  const [totp, setTotp] = useState(false);
+  const [config, setConfig] = useState<Config | null>(initial?.config ?? null);
+  const [draft, setDraft] = useState<Config>(initial?.config ?? { enabled: false, origin: "", name: "Fire", revision: "" });
+  const [keys, setKeys] = useState<Key[]>(initial?.keys ?? []);
+  const [totp, setTotp] = useState(initial?.totpEnabled ?? false);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -26,7 +29,7 @@ export default function PasskeySettings({ admin, onClose, mode = "keys" }: { adm
   const [message, setMessage] = useState("");
   const [verificationError, setVerificationError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initial);
   const [refreshRequired, setRefreshRequired] = useState(false);
   const [supported, setSupported] = useState(false);
   const [origin, setOrigin] = useState("");
@@ -44,9 +47,9 @@ export default function PasskeySettings({ admin, onClose, mode = "keys" }: { adm
     const controller = new AbortController(); activeRequest.current = controller;
     setLoading(true); setMessage("");
     try {
-      const [next] = await Promise.all([passkeyRead("/api/auth/passkeys/config", controller.signal), loadKeys(controller.signal)]);
-      if (!isPublicPasskeyConfig(next)) throw new Error("登录设置响应异常，请刷新页面");
+      const { config: next, keys: nextKeys, totpEnabled } = await source.read(keepDraft);
       if (controller.signal.aborted) return;
+      setKeys(nextKeys); setTotp(totpEnabled);
       setConfig(next); if (!keepDraft) setDraft(next);
       setRefreshRequired(false);
       if (keepDraft) setMessage("已刷新，请检查设置和密钥后再操作");
@@ -54,6 +57,7 @@ export default function PasskeySettings({ admin, onClose, mode = "keys" }: { adm
       if (!controller.signal.aborted) {
         if (error instanceof PasskeyRequestError && error.status === 401) { window.location.assign("/login"); return; }
         setMessage(passkeyError(error));
+        if (initial) setRefreshRequired(true);
       }
     }
     finally { if (!controller.signal.aborted) setLoading(false); }
@@ -64,6 +68,7 @@ export default function PasskeySettings({ admin, onClose, mode = "keys" }: { adm
     void load();
     return () => {
       activeRequest.current?.abort();
+      if (!dataSource) source.invalidate();
       if (ceremonyActive.current) WebAuthnAbortService.cancelCeremony();
     };
   }, []);
@@ -74,7 +79,7 @@ export default function PasskeySettings({ admin, onClose, mode = "keys" }: { adm
   const currentRPID = config?.origin ? new URL(config.origin).hostname : "";
   const domainChanged = pending?.kind === "save" && !!currentRPID && (!pending.config.origin || currentRPID !== new URL(pending.config.origin).hostname);
   function begin(action: PendingAction) {
-    if (lock.current || pending || refreshRequired) return;
+    if (loading || lock.current || pending || refreshRequired) return;
     setFlowDirection("forward");
     setPassword(""); setCode(""); setName(""); setVerificationError(""); setMessage(""); setPending(action);
   }
@@ -93,6 +98,7 @@ export default function PasskeySettings({ admin, onClose, mode = "keys" }: { adm
     event.preventDefault();
     if (!pending || lock.current || !password || (totp && !code.trim())) return;
     const action = pending;
+    source.invalidate();
     const controller = new AbortController(); activeRequest.current = controller;
     lock.current = true; setBusy(true); setVerificationError("");
     try {
@@ -131,10 +137,11 @@ export default function PasskeySettings({ admin, onClose, mode = "keys" }: { adm
     } finally { if (!controller.signal.aborted) { setPassword(""); setCode(""); setBusy(false); } lock.current = false; }
   }
   async function rename(key: Key) {
-    if (lock.current || pending || refreshRequired) return;
+    if (loading || lock.current || pending || refreshRequired) return;
     const value = await appPrompt("填写便于识别的名称", { title: "重命名", placeholder: key.name });
     const nextName = value?.trim().slice(0, 64);
     if (!nextName || nextName === key.name || lock.current) return;
+    source.invalidate();
     lock.current = true; setBusy(true); setMessage("");
     const controller = new AbortController(); activeRequest.current = controller;
     try {
@@ -155,7 +162,7 @@ export default function PasskeySettings({ admin, onClose, mode = "keys" }: { adm
     {showHelp && <div className="pk-help"><p>通过面容、指纹或设备密码登录，无需输入网站密码。</p><p>可保存在 iCloud 钥匙串、Bitwarden、1Password 等密码管理器中。Fire 不会获取你的面容或指纹。</p></div>}
     {message && <p role="status" className="rounded-xl border border-edge bg-bg-gray p-3 text-sm text-ink">{message}</p>}
     {refreshRequired && <button type="button" className="btn btn-line btn-sm self-start disabled:opacity-50" disabled={loading || busy} onClick={() => void load(true)}>刷新确认</button>}
-    {loading ? <p role="status" className="text-sm text-muted">加载中…</p> : !config ? <button className="btn btn-line btn-sm self-start" type="button" onClick={() => void load()}>重试</button> : <>
+    {!config && loading ? <div className="pk-loading-placeholder" role="status" aria-label="正在读取通行密钥"><i /><i /></div> : !config ? <button className="btn btn-line btn-sm self-start" type="button" onClick={() => void load()}>重试</button> : <>
     {admin && mode === "config" && <section className="rounded-2xl border border-edge p-4 sm:p-5">
       <form onSubmit={save}>
       <div className="flex items-center justify-between gap-4"><h3 className="font-semibold">登录设置</h3>
@@ -175,7 +182,7 @@ export default function PasskeySettings({ admin, onClose, mode = "keys" }: { adm
       </form>
     </section>}
     {mode === "keys" && <section>
-      <button type="button" className="pk-create-row disabled:opacity-50" disabled={busy || !!pending || refreshRequired} onClick={() => { setFlowDirection("forward"); setIntro(true); }}>创建通行密钥</button>
+      <button type="button" className="pk-create-row disabled:opacity-50" disabled={loading || busy || !!pending || refreshRequired} onClick={() => { setFlowDirection("forward"); setIntro(true); }}>创建通行密钥</button>
       <ul className="divide-y divide-edge">{keys.map(key => <li key={key.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
         <div className="min-w-0"><p className="break-all font-medium">{key.name}</p><p className="mt-1 break-all text-xs text-muted">{key.rpID} · {currentRPID && key.rpID !== currentRPID ? "旧域名密钥" : key.backedUp ? "已同步备份" : "设备或密码管理器保管"}</p><p className="mt-1 text-xs text-muted">{key.lastUsedAt ? `最近使用：${new Date(key.lastUsedAt).toLocaleString()}` : `添加于：${new Date(key.createdAt).toLocaleString()}`}</p></div>
         <div className="flex gap-2"><button type="button" className="btn btn-line btn-sm disabled:opacity-50" disabled={busy || !!pending || refreshRequired} onClick={() => void rename(key)}>重命名</button><button type="button" className="btn btn-line btn-sm !text-up disabled:opacity-50" disabled={busy || !!pending || refreshRequired} onClick={() => begin({ kind: "delete", key })}>删除</button></div>

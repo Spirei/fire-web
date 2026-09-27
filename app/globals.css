@@ -6137,6 +6137,10 @@ button.PhotoView-Slider__toolbarIcon {
 .pk-field { display:flex; flex-direction:column; gap:6px; color:var(--pk-muted); font-size:12px; font-weight:600; }
 .pk-field input { width:100%; min-height:56px; padding:0 16px; border:1px solid var(--pk-border-strong); border-radius:16px; background:var(--pk-bg); color:var(--pk-text); font-size:15px; font-weight:400; outline:none; box-shadow:none; transition:border-color .15s,box-shadow .15s; }
 .pk-field input:focus { border-color:var(--pk-primary); box-shadow:0 0 0 1px var(--pk-primary); }
+.pk-loading-placeholder { min-height:88px; display:flex; flex-direction:column; gap:16px; padding-top:8px; }
+.pk-loading-placeholder i { display:block; height:28px; width:100%; border-radius:12px; background:var(--pk-soft,#f0f2f5); }
+.pk-loading-placeholder i:last-child { width:62%; height:16px; }
+.dark .pk-loading-placeholder i { background:#3a3b3c; }
 .pk-verify-modal .dialog-actions { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px; }
 .pk-verify-modal .dialog-btn { width:100%; min-height:46px; border-radius:999px; }
 .pk-flow-view { transform-origin:50% 20%; will-change:transform,opacity; }

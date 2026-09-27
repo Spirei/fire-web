@@ -619,6 +619,35 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(JSON.parse(db.prepare('SELECT totp_backup_codes FROM users WHERE id=?').get(standalone.id).totp_backup_codes).length,1);
     assert.equal(reset.issuePasswordRecoveryTotp(other.id),null,'unconfigured account cannot use TOTP recovery');
   });
+  await test('passkey settings prefetch coalesces reads and isolates page snapshots', async () => {
+    const { createPasskeySettingsData } = require(path.join(root, 'lib/passkeySettingsData.ts'));
+    const oldFetch = global.fetch;
+    let calls = 0;
+    try {
+      global.fetch = async url => {
+        calls++;
+        return new Response(JSON.stringify(String(url).endsWith('/config')
+          ? { enabled: false, origin: '', name: 'Fire', revision: 'r1' }
+          : { keys: [], totpEnabled: false }));
+      };
+      const resource = createPasskeySettingsData();
+      const first = resource.read();
+      assert.equal(first, resource.read(), 'preload and open share in-flight requests');
+      await first;
+      assert.equal(calls, 2);
+      assert.equal(resource.peek().config.revision, 'r1');
+      await resource.read(); assert.equal(calls, 2, 'fresh snapshot avoids duplicate reads');
+      assert.equal(createPasskeySettingsData().peek(), null, 'another page/account cannot inherit keys');
+      resource.invalidate(); assert.equal(resource.peek(), null);
+      await resource.read(); assert.equal(calls, 4);
+      global.fetch = async () => new Response('{}');
+      await assert.rejects(resource.read(true), /响应异常/);
+      assert.equal(resource.peek(), null, 'failed refresh cannot preserve a usable stale snapshot');
+      global.fetch = oldFetch;
+      await assert.rejects(resource.read(), /网络连接失败/);
+      resource.invalidate();
+    } finally { global.fetch = oldFetch; }
+  });
   await test('password strength detects common patterns and personal inputs without changing server policy', async () => {
     const {estimatePasswordStrength}=require(path.join(root,'lib/passwordStrength.ts'));
     const {validatePassword}=require(path.join(root,'lib/password.ts'));

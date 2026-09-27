@@ -1,5 +1,6 @@
 "use client";
 import PasskeySettings from "@/components/PasskeySettings";
+import { createPasskeySettingsData } from "@/lib/passkeySettingsData";
 import SecurityCheck from "@/components/SecurityCheck";
 import SettingsManagedGroup, { SettingsManagedPane } from "@/components/SettingsManagedGroup";
 import AppModal from "@/components/AppModal";
@@ -676,6 +677,8 @@ const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
 // 临界阻尼（无过冲、无回弹）+ 弹簧自身正是“起步缓、中间快、收尾柔”的缘故，
 // 比直接给速度/摩擦更流畅，不会有速度突跳或生硬停下的卡顿感。
 export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub, initialSettings }: Props) {
+  const passkeyData = useMemo(() => createPasskeySettingsData(), [user.username, user.uid]);
+  useEffect(() => () => passkeyData.invalidate(), [passkeyData]);
   const isAdminUser = user?.role === "admin";
   const { unit: currencyDisplayUnit, setUnit: setCurrencyDisplayUnit } = useCurrencyDisplayUnit();
   const { assets: libraryAssets, assetIcons } = useAssetIcons(["broker", "icon"]);
@@ -742,6 +745,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   });
   const activeSubMeta = visibleGroups.flatMap((g) => g.items).find((item) => item.key === sub);
   const [categoryPage, setCategoryPage] = useState<string | null>(initialSub ? null : "home");
+  useEffect(() => {
+    if (categoryPage === "home" || categoryPage === "account") passkeyData.preload();
+  }, [categoryPage, passkeyData]);
   const [detailOrigin, setDetailOrigin] = useState<string | null>(null);
   const homeIsBackground = categoryPage === "home" || (!categoryPage && detailOrigin === "home");
   const allowedItems = SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || (!ADMIN_SUB_KEYS.has(item.sub) && !item.adminOnly));
@@ -2270,7 +2276,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         <div ref={contentScrollRef} className="sw-content-scroll min-h-0 flex-1 overflow-y-auto">
           {categoryPage ? categoryPage === "home" ? homeLanding : <div className="sc-landing">{categoryList}</div> : sub === "passkeys" ? <>
             {detailBackground}
-            <PasskeySettings admin={user.role === "admin"} mode={activeAnchor === "passkey-config" ? "config" : "keys"} onClose={() => openCategory(detailOrigin || "account")} />
+            <PasskeySettings admin={user.role === "admin"} dataSource={passkeyData} mode={activeAnchor === "passkey-config" ? "config" : "keys"} onClose={() => openCategory(detailOrigin || "account")} />
           </> : <>
           {detailBackground}
           <SettingsDetailShell
