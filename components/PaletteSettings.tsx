@@ -4,11 +4,13 @@ import { useSitePalette } from "./PaletteProvider";
 import { APPEARANCE_ACCENTS } from "@/lib/appearance";
 import { useThemePreference } from "./ThemePreferenceProvider";
 import { IconSun, IconMoon, IconDeviceDesktop, IconCheck } from "@tabler/icons-react";
+import TypographySettings, { TypographyPreview } from "./TypographySettings";
 export default function PaletteSettings() {
   const { palette, choose, accent, chooseAccent } = useSitePalette();
   const { mode, choose: chooseMode } = useThemePreference();
   return <section id="palette" className="site-palette-settings">
     <header><div><h2>外观</h2></div></header>
+    <TypographyPreview />
     <div className="appearance-card">
       <div className="appearance-row"><span className="appearance-label">模式</span>
         <div className="appearance-mode" role="group" aria-label="外观模式">
@@ -24,6 +26,7 @@ export default function PaletteSettings() {
         </div>
       </div>
     </div>
+    <TypographySettings />
     <details className="appearance-more"><summary>更多配色</summary>
     <div className="site-palette-grid">
       {SITE_PALETTES.map(p => <button type="button" key={p.id} aria-pressed={palette === p.id} onClick={() => choose(p.id)} className="site-palette-option">

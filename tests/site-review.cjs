@@ -16,12 +16,36 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('typography has safe local choices, shared weights and cookie-backed SSR preview', () => {
+    const type = require(path.join(root, 'lib/typography.ts'));
+    assert.equal(type.resolveFont('invalid').id, 'system');
+    assert.equal(type.resolveFontWeight(900), 400);
+    assert.equal(type.resolveFontWeight('700'), 400);
+    for (const font of type.SITE_FONTS) for (const weight of type.FONT_WEIGHTS) {
+      const vars = type.typographyVariables(font.id, weight.value);
+      assert.equal(vars['--site-entry-weight'], String(weight.value));
+      assert(vars['--site-font-family'].includes('"Microsoft YaHei"'));
+      assert(!vars['--site-font-family'].includes('url('));
+    }
+    const layout = fs.readFileSync(path.join(root, 'app/layout.tsx'), 'utf8');
+    assert(layout.includes('typographyVariables(prefs[FONT_KEY], prefs[FONT_WEIGHT_KEY])'));
+    const provider = fs.readFileSync(path.join(root, 'components/TypographyProvider.tsx'), 'utf8');
+    assert(provider.includes('usePersistedState<SiteFont>(FONT_KEY, "system")'));
+    assert(provider.includes('usePersistedState<SiteFontWeight>(FONT_WEIGHT_KEY, 400)'));
+    const settings = fs.readFileSync(path.join(root, 'components/TypographySettings.tsx'), 'utf8');
+    assert(settings.indexOf('字体实时预览') < settings.indexOf('<AppSelect value={font}'));
+    assert(!settings.includes('<select'));
+    assert(settings.includes('menuClassName="typography-select-menu"'));
+    assert(settings.includes('aria-pressed={weight === item.value}'));
+    assert(settings.includes('name="typography"'));
+    assert(fs.readFileSync(path.join(root,'components/SettingsHeader.tsx'),'utf8').includes('typography: (<><path'));
+  });
   await test('navigation selection changes background and ink together without weight or icon tweening', () => {
     const css = fs.readFileSync(path.join(root, 'styles/capsules.css'), 'utf8');
     const app = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
     const {accentVariables} = require(path.join(root, 'lib/appearance.ts'));
-    assert(css.includes('font-weight:400!important; transition:none!important; transform:none!important;'));
-    assert(css.includes('.sv-center :is(.sc-setting-row,.sc-account-card) strong { font-family:inherit; font-synthesis:none; font-weight:400!important; }'));
+    assert(css.includes('font-weight:var(--site-entry-weight,400)!important; transition:none!important; transform:none!important;'));
+    assert(css.includes('.sv-center :is(.sc-setting-row,.sc-account-card) strong { font-family:inherit; font-synthesis:none; font-weight:var(--site-entry-weight,400)!important; }'));
     assert(css.includes('svg { color:inherit!important; opacity:.72; filter:none; transition:none!important; }'));
     assert(css.includes(',.fire-sidebar-item-active,[aria-current="page"]) svg { opacity:1; }'));
     assert(app.includes('aria-current={activeTab === t.key ? "page" : undefined}'));

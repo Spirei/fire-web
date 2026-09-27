@@ -29,6 +29,9 @@ import ThemePreferenceProvider from "@/components/ThemePreferenceProvider";
 import { ACCENT_KEY, accentVariables } from "@/lib/appearance";
 import { THEME_MODE_KEY, resolveThemeMode } from "@/lib/theme";
 import "@/styles/capsules.css";
+import TypographyProvider from "@/components/TypographyProvider";
+import { FONT_KEY, FONT_WEIGHT_KEY, typographyVariables } from "@/lib/typography";
+import "@/styles/typography.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = getSiteSettings();
@@ -67,7 +70,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       data-palette={palette.id}
       data-theme-mode={themeMode}
       data-material={palette.glass ? "glass" : "solid"}
-      style={{ ...paletteVariables(palette.id), ...accentVariables(prefs[ACCENT_KEY]) }}
+      style={{ ...paletteVariables(palette.id), ...accentVariables(prefs[ACCENT_KEY]), ...typographyVariables(prefs[FONT_KEY], prefs[FONT_WEIGHT_KEY]) }}
     >
       <head>
         {/* Google 翻译（含 Chrome 内置翻译）看到这一条就不再动这个页面 */}
@@ -94,6 +97,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <PrefsProvider initialPrefs={prefs}>
           <ThemePreferenceProvider initialTheme={dark ? "dark" : "light"}>
           <PaletteProvider>
+            <TypographyProvider>
             <SiteFavicon />
             <PwaRegister />
             {/* 全站拖拽上传：文件拖进页面就近落到最近的上传入口 */}
@@ -103,6 +107,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <LoginModal />
             <AppDialogHost />
             {children}
+            </TypographyProvider>
           </PaletteProvider>
           </ThemePreferenceProvider>
         </PrefsProvider>

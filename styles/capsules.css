@@ -37,9 +37,9 @@ body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.w
 body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger):active { transform:none; }
 /* Keep the roaming segmented thumb visible and retain its existing slide animation. */
 /* Selection is atomic: white text must never precede its colored background. Keep glyphs on the same raster grid. */
-body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger) { font-family:inherit; font-synthesis:none; font-weight:400!important; transition:none!important; transform:none!important; }
+body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger) { font-family:inherit; font-synthesis:none; font-weight:var(--site-entry-weight,400)!important; transition:none!important; transform:none!important; }
 /* Entry labels share the same regular face as navigation, including mobile categories and security entries. */
-body:has([data-capsule-scope="non-home"]) .sv-center :is(.sc-setting-row,.sc-account-card) strong { font-family:inherit; font-synthesis:none; font-weight:400!important; }
+body:has([data-capsule-scope="non-home"]) .sv-center :is(.sc-setting-row,.sc-account-card) strong { font-family:inherit; font-synthesis:none; font-weight:var(--site-entry-weight,400)!important; }
 body:has([data-capsule-scope="non-home"]) button:is(.fire-sidebar-item,.sc-nav-link),
 body:has([data-capsule-scope="non-home"]) button:is(.fire-sidebar-item,.sc-nav-link):is(.is-active,.fire-sidebar-item-active,[aria-current="page"]) { border-color:transparent!important; }
 body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link) svg { color:inherit!important; opacity:.72; filter:none; transition:none!important; }
