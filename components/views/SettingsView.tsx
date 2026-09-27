@@ -3744,7 +3744,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                       <div className="mail-settings-two-col">
                         <label><span>用户名</span><input type="text" value={site.smtpUser} onChange={(event) => setSite({ ...site, smtpUser: event.target.value })} autoComplete="username" placeholder="name@example.com" /></label>
-                        <label><span>应用密码</span><input type="password" value={site.smtpPassword} onChange={(event) => setSite({ ...site, smtpPassword: event.target.value })} autoComplete="new-password" placeholder={site.smtpPasswordConfigured ? "已保存 · 留空不修改" : "输入应用专用密码"} /></label>
+                        <label><span>授权码</span><input type="password" value={site.smtpPassword} onChange={(event) => setSite({ ...site, smtpPassword: event.target.value })} autoComplete="new-password" placeholder={site.smtpPasswordConfigured ? "已保存 · 留空不修改" : "输入邮箱授权码"} /></label>
                       </div>
                       <button type="button" role="switch" aria-checked={site.smtpSecure} onClick={() => setSite({ ...site, smtpSecure: !site.smtpSecure })} className="mail-settings-switch-row">
                         <span><b>直接使用 SSL/TLS</b><small>465 端口通常开启；587 端口通常关闭</small></span>
