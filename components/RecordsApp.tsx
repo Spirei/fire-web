@@ -106,6 +106,7 @@ export default function RecordsApp({
   initialWatchGroups = [],
   initialUserLogs,
   initialAssistantHistory = null,
+  initialPasskeys = null,
   initialFundBalances,
   initialSettings,
   initialStockIcons,
@@ -127,6 +128,7 @@ export default function RecordsApp({
   initialWatchGroups?: WatchGroup[];
   initialUserLogs: SystemLog[];
   initialAssistantHistory?: import("@/lib/assistantHistory").AssistantHistoryState | null;
+  initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
   initialFundBalances: Record<string, number>;
   initialSettings: Pick<SiteSettings, "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices">;
   initialStockIcons: Record<string, string>;
@@ -858,6 +860,7 @@ export default function RecordsApp({
           onClearAll={clearAllRecords}
           onTabsChange={setNavTabs}
           initialSub={settingsSub ?? undefined}
+          initialPasskeys={initialPasskeys}
           initialSettings={initialSettings}
         />
       </div>

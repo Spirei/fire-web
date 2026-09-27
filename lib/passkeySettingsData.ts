@@ -5,9 +5,9 @@ export type SettingsPasskey = { id: string; name: string; rpID: string; createdA
 export type PasskeySettingsSnapshot = { config: PublicPasskeyConfig; keys: SettingsPasskey[]; totpEnabled: boolean };
 
 /** Memory only, scoped to one mounted settings page; never share across accounts. */
-export function createPasskeySettingsData() {
-  let snapshot: PasskeySettingsSnapshot | null = null;
-  let expires = 0;
+export function createPasskeySettingsData(initial: PasskeySettingsSnapshot | null = null) {
+  let snapshot: PasskeySettingsSnapshot | null = initial;
+  let expires = initial ? Date.now() + 10_000 : 0;
   let flight: Promise<PasskeySettingsSnapshot> | null = null;
   let controller: AbortController | null = null;
   function invalidate() {
@@ -32,6 +32,8 @@ export function createPasskeySettingsData() {
     flight = pending;
     return pending;
   }
-  return { read, invalidate, peek: () => snapshot && Date.now() < expires ? snapshot : null, preload: () => { void read().catch(() => {}); } };
+  // Expiry triggers revalidation, not an empty first frame. Writes and account
+  // changes still invalidate the snapshot; actions wait for read() to complete.
+  return { read, invalidate, peek: () => snapshot, preload: () => { void read().catch(() => {}); } };
 }
 export type PasskeySettingsData = ReturnType<typeof createPasskeySettingsData>;

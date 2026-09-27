@@ -6211,6 +6211,8 @@ button.PhotoView-Slider__toolbarIcon {
 .sv-center .sc-setting-row > svg { flex:none; }
 .sv-center .sc-setting-row > span:not(.sc-chevron),.sv-center .sc-account-card > span:not(.sc-chevron) { flex:1; min-width:0; }
 .sv-center .sc-setting-row strong,.sv-center .sc-account-card strong { display:block; font-size:15px; font-weight:550; overflow-wrap:anywhere; }
+.sv-center .sc-passkey-recommendation { display:inline-flex; align-items:center; margin-top:5px; padding:3px 9px; min-height:23px; border-radius:999px; background:#dcecff; color:#1c1e21; font-size:12px; line-height:17px; font-weight:600; white-space:nowrap; }
+.dark .sv-center .sc-passkey-recommendation { background:#243e60; color:#e6efff; }
 .sv-center .sc-setting-row small,.sv-center .sc-account-card small { display:block; margin-top:4px; font-size:12px; line-height:1.55; color:var(--sv-text-3); }
 .sv-center .sc-chevron { flex:none; font-size:25px; line-height:1; font-weight:300; color:var(--sv-text-3); }
 .sv-center .sc-category-section .sc-setting-row { min-height:54px; padding-block:14px; }

@@ -57,6 +57,7 @@ interface Props {
   onClearAll: (password: string) => Promise<boolean>;
   onTabsChange: (tabs: TabConfig[]) => void;
   initialSub?: string;
+  initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
   /** 服务端首帧设置快照，避免刷新时先渲染默认开关再回落到真实值 */
   initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "groups" | "markets" | "marketLabels" | "modelServices">;
 }
@@ -153,7 +154,7 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "profile", anchor: "delete-account", label: "注销账号", groupLabel: "数据", keywords: "注销 永久删除 账号 数据" },
   { sub: "totp", anchor: "totp", label: "双重验证", groupLabel: "账号", keywords: "2FA 二次验证 TOTP 验证器 备用码 谷歌验证 Google Authenticator 安全" },
   { sub: "passkeys", anchor: "passkeys", label: "通行密钥", groupLabel: "账号", keywords: "Passkey WebAuthn iCloud Bitwarden 1Password Face ID Touch ID 无密码 登录 安全 通行密匙" },
-  { sub: "passkeys", anchor: "passkey-config", label: "通行密钥登录", groupLabel: "账号", keywords: "Passkey WebAuthn HTTPS 域名 站点名称 登录配置", adminOnly: true },
+  { sub: "passkeys", anchor: "passkey-config", label: "通行密钥域名", groupLabel: "账号", keywords: "Passkey WebAuthn HTTPS 域名 站点名称 登录配置", adminOnly: true },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
   { sub: "cron", anchor: "mail", label: "邮件服务", groupLabel: "系统", keywords: "SMTP 邮件 密码 找回 重置 邮箱" },
@@ -684,8 +685,8 @@ const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
 // 连续点击则目标不断前移，弹簧持续追赶，产生连续顺滑的转动。
 // 临界阻尼（无过冲、无回弹）+ 弹簧自身正是“起步缓、中间快、收尾柔”的缘故，
 // 比直接给速度/摩擦更流畅，不会有速度突跳或生硬停下的卡顿感。
-export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub, initialSettings }: Props) {
-  const passkeyData = useMemo(() => createPasskeySettingsData(), [user.username, user.uid]);
+export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub, initialSettings, initialPasskeys }: Props) {
+  const passkeyData = useMemo(() => createPasskeySettingsData(initialPasskeys), [user.username, user.uid, initialPasskeys]);
   useEffect(() => () => passkeyData.invalidate(), [passkeyData]);
   const isAdminUser = user?.role === "admin";
   const { unit: currencyDisplayUnit, setUnit: setCurrencyDisplayUnit } = useCurrencyDisplayUnit();
@@ -2091,7 +2092,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     { title: "账户登录", desc: "密码、验证器与通行密钥", items: currentCategory.items.filter((item) => item.anchor !== "profile") }
   ] : [{ title: "", desc: "", items: currentCategory?.items || [] }]).map((group, index) => <section className="sc-category-section" key={index}>
     {group.title && <><h3>{group.title}</h3><p>{group.desc}</p></>}
-    <div className="sc-row-group">{group.items.map((item) => <button type="button" className="sc-setting-row" key={item.anchor} onClick={() => jumpTo(item)}><span><strong>{item.label}</strong></span><span className="sc-chevron" aria-hidden="true">›</span></button>)}</div>
+    <div className="sc-row-group">{group.items.map((item) => <button type="button" className="sc-setting-row" key={item.anchor} onClick={() => jumpTo(item)}><span><strong>{item.label}</strong>{item.anchor === "passkeys" && <span className="sc-passkey-recommendation">推荐</span>}</span><span className="sc-chevron" aria-hidden="true">›</span></button>)}</div>
   </section>)}</>;
 
   const homeLanding = <div className="sc-landing sc-home-landing">

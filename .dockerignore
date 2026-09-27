@@ -61,6 +61,8 @@ public/uploads/**
 !public/uploads/feature/four-door/dial.png
 !public/uploads/feature/four-door/pointer.png
 !public/uploads/feature/four-door/cursor-hand.png
+# 通行密钥系统插图随镜像提供；uploads 卷为空时也能读取 resource-default。
+!public/uploads/feature/passkey/通行密钥PASSKEY.png
 public/*preview*.html
 
 public/fonts

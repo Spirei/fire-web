@@ -93,6 +93,8 @@ requireText("上传资源路由", uploadRoute, ["resource-default", "defaultAbs"
 requireText("素材播种", assetsModule, ["resource-default", "ensureBrokerAssets", "ensureCategoryAssets"]);
 
 requireText("部署者自行提供素材", dockerignore, ["public/uploads/**", "!public/uploads/.gitkeep"]);
+requireText("通行密钥系统插图打包", dockerignore, ["!public/uploads/feature/passkey/通行密钥PASSKEY.png"]);
+requireText("通行密钥系统副本优先", read("app/api/system-assets/passkey/route.ts"), ['["resource-default", "public/uploads"]', '"no-store"']);
 requireText("非 root 运行", dockerfile, ["USER node", "chmod -R 750"]);
 
 for (const [label, file] of [

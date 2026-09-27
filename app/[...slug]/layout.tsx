@@ -22,6 +22,7 @@ import { listWatchGroups } from "@/lib/watchGroupsStore";
 import { getAssistantHistoryState } from "@/lib/assistantHistory";
 import { readTradingSquareSnapshot } from "@/lib/tradingSquareSnapshot";
 import { CURRENT_VERSION } from "@/lib/versions";
+import { passkeySettingsSnapshot } from "@/lib/passkeySettingsSnapshot";
 
 export const dynamic = "force-dynamic";
 
@@ -111,6 +112,7 @@ export default async function SlugLayout({
 
   return (
     <div className="app-shell-root flex min-h-[100dvh] flex-col bg-page">
+      {tab.key === "settings" && <link rel="preload" as="image" href="/api/system-assets/passkey" />}
       {/* 名人持仓与交易广场都会用到名人头像：HTML 阶段并行预加载，刷新时人物不闪现文字占位 */}
       {(tab.key === "celebs" || tab.key === "trading") &&
         Object.values(celebAvatars)
@@ -144,6 +146,7 @@ export default async function SlugLayout({
           initialWatchGroups={initialWatchGroups}
           initialUserLogs={initialUserLogs}
           initialAssistantHistory={initialAssistantHistory}
+          initialPasskeys={tab.key === "settings" ? passkeySettingsSnapshot(user.id) : null}
           initialFundBalances={initialFundBalances}
           initialStockIcons={initialStockIcons}
           initialMarketIcons={initialMarketIcons}
