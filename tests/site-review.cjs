@@ -1933,6 +1933,19 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('document.querySelector("[data-priority-modal=\'true\']")'), '设置详情不得响应上层弹窗的 Esc');
     assert(modal.includes('document.querySelector("[data-system-modal=\'true\']")'), '普通业务弹窗不得响应系统确认层的 Esc');
   });
+  await test('toast copy is concise without hiding diagnostic details', () => {
+    const { conciseToast } = require(path.join(root, 'lib/toast.ts'));
+    assert.equal(conciseToast('交易与行情源设置已保存'), '已保存');
+    assert.equal(conciseToast('设置已自动保存'), '已保存');
+    assert.equal(conciseToast('API 密钥复制成功'), '已复制');
+    assert.equal(conciseToast('已取消未保存的修改'), '已取消');
+    assert.equal(conciseToast('网站设置保存失败'), '保存失败');
+    assert.equal(conciseToast('保存失败：网络连接超时，请重试'), '保存失败：网络连接超时，请重试');
+    assert.equal(conciseToast('已保存，但部分模型未通过测试'), '已保存，但部分模型未通过测试');
+    const toaster = fs.readFileSync(path.join(root, 'components/Toaster.tsx'), 'utf8');
+    assert(toaster.includes('timers.forEach(clearTimeout)') && toaster.includes('leaving: true'));
+    assert(toaster.includes('.slice(-3)') && toaster.includes('role={t.type === "err" ? "alert" : "status"}'));
+  });
   await test('clickable controls have actions and password recovery is reachable', () => {
     const files = [];
     const collect = dir => fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {

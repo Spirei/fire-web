@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { conciseToast, type ToastType } from "@/lib/toast";
 
 interface ToastItem {
   id: number;
   text: string;
-  type: "ok" | "err";
+  type: ToastType;
+  leaving: boolean;
 }
 
 export default function Toaster() {
@@ -13,15 +15,25 @@ export default function Toaster() {
 
   useEffect(() => {
     let next = 0;
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    function later(callback: () => void, delay: number) {
+      const timer = setTimeout(() => { timers.delete(timer); callback(); }, delay);
+      timers.add(timer);
+    }
     function onToast(e: Event) {
-      const d = (e as CustomEvent).detail as { text?: string; type?: "ok" | "err" };
+      const d = (e as CustomEvent).detail as { text?: string; type?: ToastType };
       if (!d?.text) return;
       const id = ++next;
-      setItems((prev) => [...prev, { id, text: d.text!, type: d.type === "err" ? "err" : "ok" }]);
-      setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), 2400);
+      const text = conciseToast(d.text);
+      const type: ToastType = d.type === "err" ? "err" : d.type === "cancel" || text === "已取消" ? "cancel" : "ok";
+      setItems((prev) => [...prev.filter(item => item.text !== text || item.type !== type), { id, text, type, leaving: false }].slice(-3));
+      later(() => {
+        setItems(prev => prev.map(item => item.id === id ? { ...item, leaving: true } : item));
+        later(() => setItems(prev => prev.filter(item => item.id !== id)), 180);
+      }, type === "err" ? Math.min(8000, Math.max(4000, text.length * 100)) : 2200);
     }
     window.addEventListener("fire:toast", onToast);
-    return () => window.removeEventListener("fire:toast", onToast);
+    return () => { window.removeEventListener("fire:toast", onToast); timers.forEach(clearTimeout); };
   }, []);
 
   return (
@@ -30,18 +42,14 @@ export default function Toaster() {
       {items.map((t) => (
         <div
           key={t.id}
-          className={`toast-in flex items-center rounded-full px-5 py-2.5 text-sm font-medium shadow-pop ${
-            t.type === "err" ? "bg-up text-white" : "bg-black text-white"
-          }`}
+          className={`fire-toast is-${t.type}${t.leaving ? " is-leaving" : ""}`}
+          role={t.type === "err" ? "alert" : "status"}
         >
-          {t.type === "ok" ? (
-            <span className="mr-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-white text-ink-2 border border-edge-strong shadow-sm">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5"><path d="m5 13 4 4L19 7" /></svg>
-            </span>
-          ) : (
-            <span className="mr-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/25 text-xs font-bold">!</span>
-          )}
-          {t.text}
+          <svg className="fire-toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            {t.type === "ok" ? <path className="fire-toast-mark" d="m7.5 12 3 3 6-6" /> : t.type === "err" ? <><path d="M12 7.5v5" /><path d="M12 16h.01" /></> : <path d="M8 12h8" />}
+          </svg>
+          <span>{t.text}</span>
         </div>
       ))}
     </div>
