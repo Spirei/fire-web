@@ -1,3 +1,8 @@
+export function pnlDayDetailMode(detail: { date: string; rows: readonly { pnl: number }[] } | null | undefined, selection: { date: string; mode: "profit" | "loss" } | null): "profit" | "loss" {
+  if (detail && selection && selection.date === detail.date) return selection.mode;
+  return detail?.rows.some(row => row.pnl > 0) ? "profit" : "loss";
+}
+
 /* 收益日历（资产盈亏分析 / 资产分析共用）的数据口径：
  * 日资产序列、月格子、年汇总、某天的每股盈亏，两个页面都走这里，避免同一天两个页面数字不一致。 */
 

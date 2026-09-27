@@ -1571,8 +1571,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
           </p>
         </div>
         {/* 模式切换（分段控件）是主角，新增卡片 / 卡包缩成两枚图标按钮跟在后面：一排放下，少两个大按钮 */}
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-edge bg-white p-1 sm:w-auto sm:flex-none dark:border-white/10 dark:bg-[#1c222d]">
+        <div className="card-library-actions flex w-full items-center gap-2 sm:w-auto">
+          <div className="card-library-mode flex min-w-0 flex-1 items-center gap-1 rounded-full border border-edge bg-white p-1 sm:w-auto sm:flex-none dark:border-white/10 dark:bg-[#1c222d]">
             <button
               type="button"
               onClick={() => setMode("mine")}
@@ -1595,7 +1595,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   : "text-ink-2 hover:bg-brand-hover dark:text-white/80 dark:hover:bg-white/10"
               }`}
             >
-              全部卡面 {flat.length}
+              <span className="sm:hidden">全部</span><span className="hidden sm:inline">全部卡面</span> {flat.length}
             </button>
           </div>
           <div className="flex flex-none items-center gap-2">
@@ -1607,7 +1607,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
               title="漫游卡面墙：拖动浏览、点按查看、洗牌换一组"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true"><path d="M4 7h3c4 0 5 10 10 10h3m-3-3 3 3-3 3M4 17h3c1.5 0 2.5-.8 3.3-2M14 9c.8-1.2 1.7-2 3-2h3m-3-3 3 3-3 3" /></svg>
-              漫游
+              <span className="hidden sm:inline">漫游</span><span className="sr-only sm:hidden">漫游</span>
             </button>
             {/* 新增卡片：素材库里没有的卡自己传卡面加进来，点开是弹窗 */}
             <button
@@ -2078,7 +2078,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   </span>
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">
-                  <b className="truncate text-[13px] font-semibold text-ink">{cardTitle(card.name, script)}</b>
+                  <b className="block truncate text-[13px] font-semibold text-ink" title={cardTitle(card.name, script)}>{cardTitle(card.name, script)}</b>
                   <small className="truncate text-[11px] text-muted">
                     {bankTitle(bank, script)}
                     {card.brand ? ` · ${card.brand}` : ""}

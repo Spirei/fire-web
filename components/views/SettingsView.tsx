@@ -2781,7 +2781,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       ["tradingSquareTrumpRefreshMinutes", "特朗普", "Truth Social 公开动态"],
                       ["tradingSquareDuanRefreshMinutes", "段永平", "雪球公开动态"]
                     ] as const).map(([key, name, desc]) => (
-                      <div key={key} className="sw-row">
+                      <div key={key} className="sw-row settings-inline-row">
                         <div className="sw-row-label"><b>{name}</b><span>{desc}</span></div>
                         <div className="ctrl">
                           {editingTradingSquare ? (
@@ -3286,15 +3286,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 >
                   <SettingsManagedGroup scope="trade" inline editing={editingFutu}>
                     <SettingsManagedPane name="connection" title="OpenD 连接" summary={`${site.futuHost || "127.0.0.1"}:${site.futuPort || "11111"} · ${futuOnline === null ? "检测中…" : futuOnline ? "已连接" : futuSkipped ? "本地跳过" : "未连接"}`}>
-                      <div className="sw-row">
+                      <div className={`sw-row ${editingFutu ? "" : "settings-inline-row"}`}>
                         <div className="sw-row-label"><b>OpenD 主机</b><span>填写运行 OpenD 的设备地址</span></div>
                         <input className={`sw-row-input ${editingFutu ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} value={site.futuHost} readOnly={!editingFutu} onChange={(e) => setSiteField("futuHost", e.target.value)} placeholder="127.0.0.1" />
                       </div>
-                      <div className="sw-row">
+                      <div className="sw-row settings-inline-row settings-port-row">
                         <div className="sw-row-label"><b>端口</b></div>
                         <input className={`sw-row-input ${editingFutu ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} value={site.futuPort} readOnly={!editingFutu} onChange={(e) => setSiteField("futuPort", e.target.value)} placeholder="11111" inputMode="numeric" />
                       </div>
-                    <div className="sw-row">
+                    <div className="sw-row settings-inline-row">
                       <div className="sw-row-label"><b>连接状态</b>{futuSkipped && <span title="本地开发服务默认不连接 OpenD；如需启用，设置 STOCKLOG_FUTU=on 后重启。">本地默认跳过，测试仍会连接</span>}</div>
                       <div className="ctrl">
                         <span className={`inline-flex items-center gap-1.5 text-[11.5px] ${futuOnline === null ? "text-faint" : futuOnline ? "text-[#0fa07b]" : "text-[#e5a13b]"}`}>
@@ -3335,7 +3335,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                     </SettingsManagedPane>
                     <SettingsManagedPane name="source" title="行情来源" heading={false} summary={site.quoteSource === "futu" ? "仅富途" : site.quoteSource === "tencent" ? "腾讯 + Yahoo" : "自动（富途优先）"}>
-                    <div className="sw-row">
+                    <div className="sw-row settings-inline-row">
                       <div className="sw-row-label"><b>行情来源</b><span>自动模式失败时使用备用源</span></div>
                       {editingFutu ? <AppSelect value={site.quoteSource} onChange={value => setSite(s => ({ ...s, quoteSource:value as SiteSettings["quoteSource"] }))} options={[{value:"auto",label:"自动（富途优先）"},{value:"futu",label:"仅富途"},{value:"tencent",label:"腾讯 + Yahoo"}]} className="settings-clean-select" ariaLabel="行情来源" /> : <span className="settings-detail-value">{site.quoteSource === "futu" ? "仅富途" : site.quoteSource === "tencent" ? "腾讯 + Yahoo" : "自动（富途优先）"}</span>}
                     </div>
@@ -3469,11 +3469,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       {avatarMsg && <p className={avatarMsg.type === "ok" ? "is-ok" : "is-error"}>{avatarMsg.text}</p>}
                     </div>
                     <div className="settings-profile-fields">
-                      <div className="sw-row">
+                      <div className="sw-row settings-inline-row">
                         <div className="sw-row-label"><b>用户名<span className="ml-0.5" style={{ display: "inline" }}>*</span></b><span>唯一标识，不可修改</span></div>
                         <div className="ctrl" style={{ flex: 1 }}><code className="settings-code-value">{me.username}</code></div>
                       </div>
-                      <div className="sw-row">
+                      <div className={`sw-row ${editingProfile ? "" : "settings-inline-row"}`}>
                         <div className="sw-row-label"><b>昵称</b><span>最多 20 个字符</span></div>
                         <div className="ctrl" style={{ flex: 1 }}>
                           {editingProfile ? (

@@ -245,8 +245,8 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
 
   return (
     <div className="w-full max-w-[800px] overflow-hidden rounded-[18px] border border-edge bg-white shadow-card dark:bg-[#151b26]">
-      <div className="flex items-end justify-between gap-3 border-b border-edge px-5 pt-4">
-        <div className="flex gap-6">
+      <div className="activities-toolbar flex items-end justify-between gap-3 border-b border-edge px-5 pt-4">
+        <div className="activities-scope-tabs flex gap-6">
           {(["user", "system"] as const).map((key) => (
             <button
               key={key}
@@ -258,7 +258,7 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
             </button>
           ))}
         </div>
-        <div className="mb-3 flex min-w-0 items-center gap-2">
+        <div className="activities-search mb-3 flex min-w-0 items-center gap-2">
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}

@@ -16,6 +16,15 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('calendar detail mode handles absent data, losses and date-specific choices', () => {
+    const { pnlDayDetailMode } = require(path.join(root, 'lib/pnlCalendar.ts'));
+    assert.equal(pnlDayDetailMode(null, null), 'loss');
+    assert.equal(pnlDayDetailMode(undefined, null), 'loss');
+    assert.equal(pnlDayDetailMode({date:'2026-09-01', rows:[{pnl:-2}]}, null), 'loss');
+    assert.equal(pnlDayDetailMode({date:'2026-09-01', rows:[{pnl:2}]}, null), 'profit');
+    assert.equal(pnlDayDetailMode({date:'2026-09-01', rows:[{pnl:2}]}, {date:'2026-09-01',mode:'loss'}), 'loss');
+    assert.equal(pnlDayDetailMode({date:'2026-09-02', rows:[{pnl:2}]}, {date:'2026-09-01',mode:'loss'}), 'profit');
+  });
   await test('mobile sheets avoid desktop row heights, native touch drag and nested fixed dialogs', () => {
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
     const calendar = fs.readFileSync(path.join(root, 'components/PnlCalendar.tsx'), 'utf8');
@@ -32,9 +41,13 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(profile.includes('连接失败，请重试'));
     assert(profile.includes('disabled={profileSaving} maxLength={20}'));
     assert(profile.includes('setProfileSaving(true)'));
-    assert(calendar.includes('dayDetail?.rows.some(row => row.pnl > 0)'));
+    assert(calendar.includes('pnlDayDetailMode(dayDetail, daySelection)'));
     assert(calendar.includes('pnl-day-dialog-list mt-3 min-h-0'));
     assert(css.includes('touch-action:pan-y pinch-zoom'));
+    assert(css.includes('.activities-scope-tabs button { flex:none; white-space:nowrap; }'));
+    assert(css.includes('.card-library-mode button { min-width:0; padding-inline:8px; white-space:nowrap; }'));
+    assert(css.includes('.settings-clean-group .settings-detail-value { width:auto; max-width:60%;'));
+    assert(profile.includes('settings-inline-row settings-port-row'));
   });
   await test('mobile navigation order persists separately, preserves defaults and filters permissions', () => {
     const { mobileWorkspaceGroups, normalizeMobileNavigationOrder } = require(path.join(root, 'lib/workspaceNavigation.ts'));

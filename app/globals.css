@@ -6156,6 +6156,7 @@ button.PhotoView-Slider__toolbarIcon {
 @keyframes pk-art-in { from { opacity:0; transform:translateX(-50%) scale(.96); } to { opacity:1; transform:translateX(-50%) scale(1); } }
 .dark .pk-reference-modal.modal-glass { --pk-bg:#1c2024; --pk-border:#353b41; --pk-border-strong:#505861; --pk-text:#f1f3f5; --pk-muted:#a4aab3; --pk-soft:#282d32; --pk-soft-hover:#30363d; --pk-primary:#2d88ff; --pk-primary-hover:#1877f2; --pk-link:#75b6ff; background:var(--pk-bg); border-color:var(--pk-border); color:var(--pk-text); }
 @media(max-width:600px) {
+  .funds-panel > div:first-child h3 { flex:none; white-space:nowrap; }
   .pk-reference-modal.modal-glass { width:100%; min-height:min(420px,calc(100dvh - 32px)); max-height:calc(100dvh - 32px); border-radius:24px; padding:58px 18px 24px; }
   .pk-reference-modal input { font-size:16px; min-height:44px; }
   .pk-reference-modal .dialog-actions { flex-wrap:wrap; }
@@ -7032,4 +7033,33 @@ html { scrollbar-gutter:stable; }
   .pnl-calendar-date-row > div { min-width:0; }
   .asset-ranking-heading { gap:6px; }
   .workspace-navigation-label { font-size:14px; }
+}
+
+/* Short mobile controls share a baseline; prose and editable long fields keep their space. */
+@media(max-width:600px) {
+  .activities-toolbar { display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; padding-inline:16px; }
+  .activities-scope-tabs { gap:12px; }
+  .activities-scope-tabs button { flex:none; white-space:nowrap; }
+  .activities-search input { width:100%; min-width:0; }
+  .activities-search > button { flex:none; }
+  .card-library-mode { min-width:140px; }
+  .card-library-mode button { min-width:0; padding-inline:8px; white-space:nowrap; }
+  .card-library-actions > div:last-child > button { width:40px; padding-inline:0; justify-content:center; }
+  .sc-detail-dialog .settings-clean-group .settings-detail-value { width:auto; max-width:60%; flex:0 1 auto; text-align:right; white-space:nowrap; }
+  .sc-detail-dialog .sv-win-root .settings-inline-row,
+  .sc-detail-dialog .sv-win-root .sw-row:has(> button[role="switch"]) { flex-direction:row; flex-wrap:nowrap; align-items:center; gap:12px; }
+  .sc-detail-dialog .sv-win-root .settings-inline-row .sw-row-label,
+  .sc-detail-dialog .sv-win-root .sw-row:has(> button[role="switch"]) .sw-row-label { width:auto; flex:1 1 auto; min-width:0; }
+  .sc-detail-dialog .settings-inline-row .sw-row-label b,
+  .sc-detail-dialog .settings-clean-group .sw-row-label b { white-space:nowrap; }
+  .sc-detail-dialog .sv-win-root .settings-inline-row > .ctrl { width:auto; flex:0 1 auto!important; max-width:62%; justify-content:flex-end; flex-wrap:nowrap; }
+  .sc-detail-dialog .settings-inline-row > .settings-detail-value { width:auto; max-width:60%; text-align:right; }
+  .sc-detail-dialog .settings-inline-row > input { width:60%; min-width:0; text-align:right; }
+  .sc-detail-dialog .settings-port-row > input { width:100px; }
+  .sc-detail-dialog .settings-inline-row .settings-profile-value,
+  .sc-detail-dialog .settings-inline-row .settings-code-value { max-width:100%; }
+  .sc-detail-dialog .settings-inline-row .ctrl > span { white-space:nowrap; }
+  .sc-detail-dialog .sv-win-root .settings-task-row:has(> button) { grid-template-columns:minmax(0,1fr) auto auto; gap:8px; align-items:center; }
+  .sc-detail-dialog .settings-task-row:has(> button) > button { grid-column:3; grid-row:1; margin:0; white-space:nowrap; }
+  .sc-detail-dialog .settings-task-schedule { white-space:nowrap; }
 }

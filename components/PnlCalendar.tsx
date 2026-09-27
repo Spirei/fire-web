@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import MarketIcon from "@/components/MarketIcon";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import type { CalendarDayCell, CalendarDayRow, CalendarYearCell } from "@/lib/pnlCalendar";
+import { pnlDayDetailMode } from "@/lib/pnlCalendar";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import AppModal from "@/components/AppModal";
 
@@ -130,7 +131,7 @@ export default function PnlCalendar({
 }: PnlCalendarProps) {
   const [marketMenuOpen, setMarketMenuOpen] = useState(false);
   const [daySelection, setDaySelection] = useState<{ date: string; mode: "profit" | "loss" } | null>(null);
-  const dayDetailMode = daySelection?.date === dayDetail?.date ? daySelection!.mode : dayDetail?.rows.some(row => row.pnl > 0) ? "profit" : "loss";
+  const dayDetailMode = pnlDayDetailMode(dayDetail, daySelection);
   const setDayDetailMode = (mode: "profit" | "loss") => { if (dayDetail) setDaySelection({ date: dayDetail.date, mode }); };
 
   const shiftMonth = (delta: number) => {
