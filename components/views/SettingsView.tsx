@@ -2628,7 +2628,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </SettingsSection>
                 </div>
 
-                <SettingsSection id="mobile-nav" icon="mobile-nav" title="手机导航" desc="拖动或上下移动，保存后全站生效。桌面菜单不变。">
+                <SettingsSection id="mobile-nav" icon="mobile-nav" title="手机导航" desc="前四项显示在底部，其余收进更多。保存后生效。">
                   {activeAnchor === "mobile-nav" && <MobileNavigationSettings tabs={tabs} order={site.mobileNavigationOrder ?? []} onSave={order => saveBlock("mobile-nav", { mobileNavigationOrder: order }, "已保存")} />}
                   {blockMsg["mobile-nav"]?.type === "err" && <p role="alert" className="settings-form-message is-error">{blockMsg["mobile-nav"]?.text}</p>}
                 </SettingsSection>

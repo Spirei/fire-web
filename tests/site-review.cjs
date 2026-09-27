@@ -238,7 +238,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(profile.includes('settings-inline-row settings-port-row'));
   });
   await test('mobile navigation order persists separately, preserves defaults and filters permissions', () => {
-    const { mobileWorkspaceGroups, normalizeMobileNavigationOrder } = require(path.join(root, 'lib/workspaceNavigation.ts'));
+    const { mobileWorkspaceGroups, normalizeMobileNavigationOrder, moveMobileNavigation } = require(path.join(root, 'lib/workspaceNavigation.ts'));
     const { mobilePanelDirection } = require(path.join(root, 'lib/mobileNavigation.ts'));
     const { getSiteSettings, updateSiteSettings } = require(path.join(root, 'lib/settings.ts'));
     const before = getSiteSettings();
@@ -254,6 +254,28 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const allowed = tabs.filter(tab => !['users', 'attachments', 'library'].includes(tab.key));
     assert(!mobileWorkspaceGroups(allowed, ['users', ...order]).more.some(tab => tab.key === 'users'));
     assert(mobileWorkspaceGroups([...allowed, {key:'new-page'}], order).more.some(tab => tab.key === 'new-page'));
+    const full = [...mobileWorkspaceGroups(tabs).primary, ...mobileWorkspaceGroups(tabs).more].map(tab => tab.key);
+    const promoted = moveMobileNavigation(full, full.indexOf('fire'), 3);
+    const promotion = updateSiteSettings({ mobileNavigationOrder: promoted });
+    assert.deepEqual(mobileWorkspaceGroups(tabs, promotion.mobileNavigationOrder).primary.map(tab => tab.key), ['assets','watchlist','holdings','fire']);
+    assert.equal(mobileWorkspaceGroups(tabs, promoted).more[0].key, 'settings');
+    const demoted = moveMobileNavigation(promoted, 3, 4);
+    assert.deepEqual(mobileWorkspaceGroups(tabs, demoted).primary.map(tab => tab.key), ['assets','watchlist','holdings','settings']);
+    assert.equal(new Set(promoted).size, full.length);
+    assert.deepEqual(moveMobileNavigation(full, -1, 0), full);
+    assert.deepEqual(moveMobileNavigation(full, 0, full.length), full);
+    assert.deepEqual(moveMobileNavigation(full, NaN, 1), full);
+    const filtered = mobileWorkspaceGroups(allowed, ['users','attachments','library','fire', ...full]);
+    assert.equal(filtered.primary.length, 4);
+    assert(![...filtered.primary,...filtered.more].some(tab => ['users','attachments','library'].includes(tab.key)));
+    const editor = fs.readFileSync(path.join(root,'components/MobileNavigationSettings.tsx'),'utf8');
+    assert(editor.includes('NAV_ICONS[item.key]'));
+    assert(editor.includes('IconDots size={20}'));
+    assert(!editor.includes('source?.group === group'));
+    assert(editor.includes('"放入底部" : "移到更多"'));
+    const navigation = fs.readFileSync(path.join(root, 'components/WorkspaceNavigation.tsx'), 'utf8');
+    assert(navigation.includes('const navigationKey = activeKey === "pnl" ? "assets" : activeKey;'));
+    assert(navigation.includes('!primaryKeys.includes(navigationKey)'));
     assert.equal(mobilePanelDirection('assets', 'holdings', order.slice(0,4)), 'back');
     assert.deepEqual(updateSiteSettings({ mobileNavigationOrder: [] }).mobileNavigationOrder, []);
     assert.deepEqual(mobileWorkspaceGroups(tabs).primary.map(tab => tab.key), ['assets', 'watchlist', 'holdings', 'settings']);
