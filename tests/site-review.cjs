@@ -575,6 +575,12 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   await test('PWA icon override persists, reset restores automatic and public images reject stale addresses', async () => {
     const manifest = require(path.join(root, 'app/manifest.ts')).default;
     const iconRoute = require(path.join(root, 'app/api/pwa-icon/route.ts'));
+    const settingsView = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    assert(settingsView.includes('className="brand-live-preview"'), '网站形象应先展示实时品牌预览');
+    assert(settingsView.includes('emptyLabel="自动跟随网站图标"'));
+    assert(settingsView.includes('clearLabel="恢复自动"'));
+    assert(settingsView.includes('{ ico: "", pwaIcon: "", siteLogo: ""'), '恢复默认必须同时清除 PWA 独立图标');
+    assert(!settingsView.includes('<SwMediaField'), '网站形象不得退回旧式媒体输入行');
     const original = settings.getSiteSettings();
     try {
       assert.equal((await settingsRoute.PUT(request('user', { pwaIcon: '/uploads/ico/custom.png' }, 'PUT'))).status, 403);

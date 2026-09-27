@@ -180,74 +180,57 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   about: "about"
 };
 
-/** 统一媒体/链接字段：标签在上，控制条在下一行（预览 + 上传 + 链接输入 + 清除/打开直链） */
-function SwMediaField({
+/** 网站形象素材：只读时保持 Meta 式摘要行，进入编辑后再显示上传、移除与链接输入。 */
+function BrandAssetRow({
   label,
   desc,
   value,
+  fallbackValue = "",
+  emptyLabel = "未设置",
+  customLabel = "已自定义",
   onChange,
-  placeholder,
   inputRef,
   accept,
   onUpload,
   onClear,
   kind,
-  editable = true
+  editable = true,
+  busy = false,
+  clearLabel = "移除"
 }: {
   label: string;
-  desc?: string;
+  desc: string;
   value: string;
+  fallbackValue?: string;
+  emptyLabel?: string;
+  customLabel?: string;
   onChange: (v: string) => void;
-  placeholder: string;
   inputRef: React.RefObject<HTMLInputElement | null>;
   accept: string;
   onUpload: (f: File) => void;
   onClear: () => void;
-  kind: "icon" | "logo" | "bg";
+  kind: "icon" | "logo" | "wide";
   editable?: boolean;
+  busy?: boolean;
+  clearLabel?: string;
 }) {
+  const previewValue = value || fallbackValue;
   const isUrl = /^(https?:\/\/|\/)/.test(value.trim());
   return (
-    <div className="sw-media-field">
-      <div className="sw-media-label">
-        <b>{label}</b>
-        {desc && <span>{desc}</span>}
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        {/* 预览图 + 相机浮层（悬停显示在图片内）：点击上传 */}
-        <button type="button" onClick={() => inputRef.current?.click()} disabled={!editable} className="sw-media-shot group disabled:cursor-default" title="点击上传">
-          {kind === "icon" && (
-            <span className="h-11 w-11 overflow-hidden rounded-xl border bg-white dark:bg-[#151a26]">
-              {value ? <img src={value} alt="" className="h-full w-full object-contain" /> : <span className="block h-full w-full bg-bg-gray" />}
-            </span>
-          )}
-          {kind === "logo" && (
-            <span className="h-11 w-11 overflow-hidden rounded-xl border bg-white p-1 dark:bg-[#151a26]">
-              {value ? <img src={value} alt="" className="h-full w-full object-contain" /> : <span className="flex h-full w-full items-center justify-center text-[10px] text-faint">Logo</span>}
-            </span>
-          )}
-          {kind === "bg" && (
-            <span className="h-11 w-20 overflow-hidden rounded-xl border" style={value ? { backgroundImage: `url(${value})`, backgroundSize: "cover", backgroundPosition: "center" } : {}}>
-              {!value && <span className="flex h-full w-full items-center justify-center text-[10px] text-faint">背景</span>}
-            </span>
-          )}
-          <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-black/35 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z" /><circle cx="12" cy="13" r="3.2" /></svg>
-          </span>
-        </button>
-        <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ""; }} />
-        <input value={value} readOnly={!editable} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`sw-media-input ${editable ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} />
-        {value && (
-          <>
-            <button type="button" onClick={onClear} disabled={!editable} className="btn btn-line btn-sm disabled:opacity-50" title="清除">清除</button>
-            {isUrl && (
-              <a href={value} target="_blank" rel="noreferrer" className="settings-source-link" title="打开直链" aria-label={`在新窗口打开${label}`}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 5h5v5" /><path d="m19 5-9 9" /><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg>
-              </a>
-            )}
-          </>
-        )}
-      </div>
+    <div className="brand-asset-row" data-kind={kind}>
+      <button type="button" className="brand-asset-preview" onClick={() => editable && inputRef.current?.click()} disabled={!editable || busy} aria-label={`${value ? "更换" : "上传"}${label}`}>
+        {previewValue ? <img src={previewValue} alt="" /> : <svg viewBox="0 0 48 36" fill="none" aria-hidden="true"><path d="M5 5h38v26H5z"/><path d="m8 27 10-10 7 7 5-5 10 8"/><circle cx="33" cy="12" r="3"/></svg>}
+      </button>
+      <div className="brand-asset-copy"><b>{label}</b><small>{desc}</small><em className={value ? "is-custom" : ""}>{value ? customLabel : emptyLabel}</em></div>
+      {editable && <div className="brand-asset-actions">
+        <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}>{busy ? "上传中…" : value ? "更换" : "上传"}</button>
+        {value && <button type="button" onClick={onClear} disabled={busy}>{clearLabel}</button>}
+      </div>}
+      {editable && <div className="brand-asset-link">
+        <input value={value} onChange={(event) => onChange(event.target.value)} placeholder="粘贴图片链接" inputMode="url" aria-label={`${label}链接`} />
+        {isUrl && <a href={value} target="_blank" rel="noreferrer" aria-label={`在新窗口打开${label}`} title="打开原图"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M14 5h5v5"/><path d="m19 5-9 9"/><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>}
+      </div>}
+      <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ""; }} />
     </div>
   );
 }
@@ -1056,7 +1039,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   async function resetBrand() {
     if (!await appConfirm("将清空网站图标、Logo 图片、网站背景图与登录页左侧图，Logo 文字恢复为 Fire。", { title: "恢复默认网站形象", danger: true })) return;
-    saveBlock("brand", { ico: "", siteLogo: "", logoText: "Fire", logoFont: "diatype", homepageBg: "", loginSideImage: "" }, "网站形象已重置");
+    const ok = await saveBlock("brand", { ico: "", pwaIcon: "", siteLogo: "", logoText: "Fire", logoFont: "diatype", homepageBg: "", loginSideImage: "" }, "网站形象已重置");
+    if (ok) setEditingAppearance(false);
   }
 
   function setTickerInterval(v: number) {
@@ -2260,93 +2244,104 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <SettingsSection
                       icon="image"
                       title="网站形象"
-                      desc="Logo、字体与背景图，替换后删除旧文件保持唯一"
+                      desc="预览并管理网站在浏览器、主屏幕与登录页中的品牌形象。"
                       id="appearance"
-                      action={
-                        <div className="flex items-center gap-2">
-                          {editingAppearance && EDIT_CANCEL_BUTTON}
-                          {editingAppearance && (
-                            <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button>
-                          )}
-                          <button
-                            type="button"
-                            disabled={blockSaving.brand || !editingAppearance}
-                            onClick={resetBrand}
-                            className="btn btn-line btn-sm disabled:opacity-60"
-                          >
-                            重置
-                          </button>
-                        </div>
-                      }
-                      titleAction={!editingAppearance ? (
-                        <button type="button" onClick={() => setEditingAppearance(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑网站形象" aria-label="编辑网站形象">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                        </button>
-                      ) : undefined}
                     >
-                      <div className="flex flex-col">
-                        <SwMediaField
+                      <div className="brand-settings">
+                        <div className="brand-live-preview" style={site.homepageBg ? { backgroundImage: `linear-gradient(135deg, rgba(16,24,32,.72), rgba(16,24,32,.32)), url(${site.homepageBg})` } : undefined}>
+                          <div className="brand-preview-browser"><i/><i/><i/><span><img src={site.ico || "/site-icon.svg"} alt="" />{site.title || "Fire"}</span></div>
+                          <div className="brand-preview-body">
+                            <div className="brand-preview-logo">{(site.siteLogo || site.ico) ? <img src={site.siteLogo || site.ico} alt="" /> : <span>F</span>}<b>{site.logoText || site.title || "Fire"}</b></div>
+                            <div className="brand-preview-lines"><i/><i/><i/></div>
+                            <div className="brand-preview-app"><img src={site.pwaIcon || site.ico || "/site-icon.svg"} alt="" /><span><b>{site.title || "Fire"}</b><small>主屏幕图标</small></span></div>
+                          </div>
+                        </div>
+
+                        <section className="brand-settings-group" aria-labelledby="brand-icons-title">
+                          <div className="brand-settings-heading"><h3 id="brand-icons-title">应用图标</h3><p>用于浏览器标签、收藏夹和安装到主屏幕后的入口。</p></div>
+                          <div className="brand-asset-list">
+                        <BrandAssetRow
                           label="网站图标"
                           editable={editingAppearance}
-                          desc="Favicon · 支持上传或直接粘贴图片链接，自动预览"
+                          desc="浏览器标签与收藏夹中显示"
                           value={site.ico}
+                          fallbackValue="/site-icon.svg"
+                          emptyLabel="使用默认图标"
                           onChange={(v) => setSiteField("ico", v)}
-                          placeholder="或粘贴图片链接"
                           inputRef={icoRef}
                           accept="image/jpeg,image/png,image/gif,image/webp,.ico,.svg"
                           onUpload={(f) => uploadSiteFile("ico", f).then((url) => { if (url) setSiteField("ico", url); })}
                           onClear={() => setSiteField("ico", "")}
                           kind="icon"
                         />
-                        <div className="sw-media-field">
-                          <div className="sw-media-label"><b>PWA 图标</b><span>{site.pwaIcon ? "使用上传图标" : "自动跟随网站图标"}</span></div>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <img src={site.pwaIcon || site.ico || "/site-icon.svg"} alt="PWA 图标预览" className="h-11 w-11 rounded-xl border border-edge object-contain" />
-                            <input ref={pwaIconRef} type="file" accept="image/png,image/jpeg,image/webp,.svg,.ico" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) void uploadSiteFile("ico", file, "pwaIcon"); e.target.value = ""; }} />
-                            <button type="button" className="btn btn-line btn-sm" disabled={!editingAppearance || pwaUploading} onClick={() => pwaIconRef.current?.click()}>{pwaUploading ? "上传中…" : "上传"}</button>
-                            <button type="button" className="btn btn-line btn-sm" disabled={!editingAppearance || pwaUploading || !site.pwaIcon} onClick={() => setSiteField("pwaIcon", "")}>重置</button>
+                        <BrandAssetRow
+                          label="PWA 图标"
+                          editable={editingAppearance}
+                          desc="安装到手机或桌面后的应用图标"
+                          value={site.pwaIcon}
+                          fallbackValue={site.ico || "/site-icon.svg"}
+                          emptyLabel="自动跟随网站图标"
+                          customLabel="使用独立图标"
+                          onChange={(v) => setSiteField("pwaIcon", v)}
+                          inputRef={pwaIconRef}
+                          accept="image/png,image/jpeg,image/webp,.svg,.ico"
+                          onUpload={(f) => { void uploadSiteFile("ico", f, "pwaIcon"); }}
+                          onClear={() => setSiteField("pwaIcon", "")}
+                          kind="icon"
+                          busy={pwaUploading}
+                          clearLabel="恢复自动"
+                        />
                           </div>
-                          <p className="mt-2 text-xs text-muted">保存后生效。部分系统需确认图标更新或重新添加到主屏幕。</p>
-                        </div>
-                        <SwMediaField
+                          <p className="brand-settings-note">PWA 图标保存后会自动更新清单；已安装应用是否立即换图由操作系统决定。</p>
+                        </section>
+
+                        <section className="brand-settings-group" aria-labelledby="brand-images-title">
+                          <div className="brand-settings-heading"><h3 id="brand-images-title">页面图片</h3><p>控制首页品牌区、页面背景和登录入口的视觉内容。</p></div>
+                          <div className="brand-asset-list">
+                        <BrandAssetRow
                           label="首页 Logo"
                           editable={editingAppearance}
-                          desc="左上角品牌 Logo · 支持上传或直接粘贴图片链接，自动预览"
+                          desc="显示在页面左上角的品牌标识"
                           value={site.siteLogo}
+                          fallbackValue={site.ico || "/site-icon.svg"}
+                          emptyLabel="跟随网站图标"
                           onChange={(v) => setSiteField("siteLogo", v)}
-                          placeholder="或粘贴图片链接"
                           inputRef={logoRef}
                           accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,.svg"
                           onUpload={(f) => uploadLogo(f).then((url) => { if (url) setSiteField("siteLogo", url); })}
                           onClear={() => setSiteField("siteLogo", "")}
                           kind="logo"
                         />
-                        <SwMediaField
+                        <BrandAssetRow
                           label="网站背景"
                           editable={editingAppearance}
-                          desc="首页背景图 · 支持上传或直接粘贴图片链接，自动预览"
+                          desc="作为站点主页面的低对比度背景"
                           value={site.homepageBg}
+                          emptyLabel="使用纯色背景"
                           onChange={(v) => setSiteField("homepageBg", v)}
-                          placeholder="或粘贴图片链接"
                           inputRef={bgRef}
                           accept="image/jpeg,image/png,image/gif,image/webp"
                           onUpload={(f) => uploadSiteFile("background", f).then((url) => { if (url) setSiteField("homepageBg", url); })}
                           onClear={() => setSiteField("homepageBg", "")}
-                          kind="bg"
+                          kind="wide"
                         />
-                        <SwMediaField
-                          label="登录页左侧图"
+                        <BrandAssetRow
+                          label="登录页图片"
                           editable={editingAppearance}
-                          desc="登录弹窗左侧配图 · 上传后登录页优先展示，未上传时使用品牌默认图"
+                          desc="显示在登录面板左侧的品牌插图"
                           value={site.loginSideImage}
+                          emptyLabel="使用默认插图"
                           onChange={(v) => setSiteField("loginSideImage", v)}
-                          placeholder="或粘贴图片链接"
                           inputRef={loginImgRef}
                           accept="image/jpeg,image/png,image/gif,image/webp"
                           onUpload={(f) => uploadLoginImage(f).then((url) => { if (url) setSiteField("loginSideImage", url); })}
                           onClear={() => setSiteField("loginSideImage", "")}
-                          kind="bg"
+                          kind="wide"
                         />
+                          </div>
+                        </section>
+
+                        {editingAppearance && <button type="button" className="brand-reset-all" disabled={blockSaving.brand || pwaUploading} onClick={() => { void resetBrand(); }}>恢复默认网站形象</button>}
                       </div>
                     </SettingsSection>
 
