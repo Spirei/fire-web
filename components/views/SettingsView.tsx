@@ -1,5 +1,6 @@
 "use client";
 import PasskeySettings from "@/components/PasskeySettings";
+import AppModal from "@/components/AppModal";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -139,6 +140,7 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "passkeys", anchor: "passkey-config", label: "通行密钥登录", groupLabel: "账号", keywords: "Passkey WebAuthn HTTPS 域名 站点名称 登录配置", adminOnly: true },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
+  { sub: "cron", anchor: "mail", label: "邮件服务", groupLabel: "系统", keywords: "SMTP 邮件 密码 找回 重置 邮箱" },
   { sub: "cron", anchor: "backups", label: "自动备份", groupLabel: "系统", keywords: "数据库 定时 备份 保留 立即备份" },
   { sub: "api", anchor: "api", label: "API 接口", groupLabel: "系统", keywords: "api 接口 开发 文档 鉴权" },
   { sub: "about", anchor: "about", label: "关于", groupLabel: "系统", keywords: "关于 版本 技术栈 数据源 更新" }
@@ -153,7 +155,7 @@ const SETTINGS_CATEGORIES = [
   { key: "website", label: "外观与网站", icon: "site", desc: "设置网站形象、配色与首页内容。", anchors: ["palette", "info", "appearance", "ticker", "nav", "app-nav"] },
   { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "sources", "source-reports", "source-icons", "source-content"] },
   { key: "services", label: "功能与模型", icon: "model", desc: "配置模型服务与内容更新。", anchors: ["translation", "trading-square"] },
-  { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "backups", "danger", "delete-account"] },
+  { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "mail", "backups", "danger", "delete-account"] },
   { key: "developer", label: "开发与关于", icon: "api", desc: "查看接口文档、版本与技术信息。", anchors: ["api", "about"] }
 ];
 const SETTINGS_ANCHORS = SETTINGS_SEARCH_INDEX.map((item) => item.anchor);
@@ -191,6 +193,7 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   "passkey-config": "passkey-config",
   database: "database",
   cron: "cron",
+  mail: "api",
   backups: "backups",
   api: "api",
   about: "about"
@@ -539,6 +542,13 @@ const DEFAULT_SETTINGS: SiteSettings = {
   pgDatabase: "",
   pgUser: "",
   pgPassword: "",
+  smtpHost: "",
+  smtpPort: "587",
+  smtpSecure: false,
+  smtpUser: "",
+  smtpPassword: "",
+  smtpFromName: "Fire",
+  smtpFromEmail: "",
   holdingColumns: DEFAULT_HOLDING_COLUMNS,
   ticker: DEFAULT_TICKER
 };
@@ -1727,6 +1737,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [showPasswordHelp, setShowPasswordHelp] = useState(false);
   const [pwdMsg, setPwdMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [pwdBusy, setPwdBusy] = useState(false);
+  const [mailTesting, setMailTesting] = useState(false);
+  const [passwordRecoveryOpen, setPasswordRecoveryOpen] = useState(false);
+  const [passwordRecoveryBusy, setPasswordRecoveryBusy] = useState(false);
+  const [passwordRecoveryError, setPasswordRecoveryError] = useState("");
   const [profilePassword, setProfilePassword] = useState("");
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [totpStatusLoaded, setTotpStatusLoaded] = useState(false);
@@ -1880,6 +1894,41 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setPwdMsg({ type: "err", text: err instanceof Error ? err.message : "修改失败" });
     } finally {
       setPwdBusy(false);
+    }
+  }
+
+  function openPasswordRecovery() {
+    setPasswordRecoveryError("");
+    if (!me.email.trim()) {
+      setPasswordRecoveryOpen(false);
+      setNickMsg({ type: "err", text: "请先绑定邮箱，保存后再使用密码找回。" });
+      jumpTo({ sub: "profile", anchor: "profile", label: "个人信息" });
+      setEditingProfile(true);
+      setTimeout(() => emailInputRef.current?.focus(), 80);
+      showToast("请先绑定邮箱");
+      return;
+    }
+    setPasswordRecoveryOpen(true);
+  }
+
+  async function requestPasswordReset() {
+    setPasswordRecoveryBusy(true);
+    setPasswordRecoveryError("");
+    try {
+      const res = await fetch("/api/auth/password-reset/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ login: me.email })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "申请失败");
+      setPasswordRecoveryOpen(false);
+      setPwdMsg({ type: "ok", text: `重置邮件已发送至 ${me.email}，链接 15 分钟内有效。` });
+      showToast("重置邮件已发送");
+    } catch (error) {
+      setPasswordRecoveryError(error instanceof Error ? error.message : "申请失败");
+    } finally {
+      setPasswordRecoveryBusy(false);
     }
   }
 
@@ -3418,7 +3467,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     {totpEnabled && (
                       <label><span>二次验证码</span><input autoComplete="one-time-code" spellCheck={false} value={totpPasswordCode} onChange={(e) => setTotpPasswordCode(e.target.value)} required placeholder="验证器 6 位数字或备用码" /></label>
                     )}
-                    <button type="button" className="settings-password-forgot" onClick={() => showToast("Fire 暂不通过邮件重置密码，请联系管理员处理")}>忘记密码了？</button>
+                    <button type="button" className="settings-password-forgot" onClick={openPasswordRecovery}>忘记密码了？</button>
                     <button type="submit" disabled={pwdBusy} className="settings-meta-primary">{pwdBusy ? "提交中…" : "更改密码"}</button>
                     <label className="settings-signout-option"><input type="checkbox" checked={signOutOtherDevices} onChange={(event) => setSignOutOtherDevices(event.target.checked)} /><span>在其他设备上退出登录。如果有人使用了你的账户，请选择此项。</span></label>
                   </form>
@@ -3492,17 +3541,17 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <button type="button" className="totp-meta-learn" onClick={(event) => { const scroll = event.currentTarget.closest(".sc-detail-dialog-scroll"); setTotpLearnMore((value) => !value); requestAnimationFrame(() => scroll?.scrollTo({ top: 0 })); }}>详细了解</button>
                       {totpLearnMore && <p className="totp-meta-help">验证码由你的验证器应用在本机生成，不经过短信，也不会上传验证器密钥。请同时保存备用码，以便设备丢失时恢复登录。</p>}
                       <h3>选择你希望接收验证码的方式</h3>
-                      <div className="totp-meta-methods" role="radiogroup" aria-label="双重验证方式">
-                        <button type="button" className="totp-meta-method is-selected" role="radio" aria-checked="true">
+                      <div className="totp-meta-methods" aria-label="双重验证方式">
+                        <div className="totp-meta-method is-selected">
                           <span className="totp-meta-method-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path d="M15 14h2v2h-2zM19 14h1v3h-3v3h-3v-2M19 19h1v1h-1z"/></svg></span>
                           <span className="totp-meta-method-copy"><b>身份验证应用</b><small>通过 Google Authenticator、1Password、Bitwarden 等应用获取一次性验证码。</small><em>推荐</em></span>
                           <span className="totp-meta-radio" aria-hidden="true" />
-                        </button>
-                        <button type="button" className="totp-meta-method" role="radio" aria-checked="false" disabled>
+                        </div>
+                        <div className="totp-meta-method is-unavailable" aria-disabled="true">
                           <span className="totp-meta-method-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 5.5h16v11H9l-4 3v-3H4z"/><path d="M8 9h8M8 12.5h5"/></svg></span>
                           <span className="totp-meta-method-copy"><b>短信</b><small>Fire 暂未提供短信验证码。</small></span>
                           <span className="totp-meta-radio" aria-hidden="true" />
-                        </button>
+                        </div>
                       </div>
                       <button type="button" disabled={totpBusy} onClick={startTotpSetup} className="totp-meta-primary">{totpBusy ? "请稍候…" : "继续"}</button>
                     </>
@@ -3685,6 +3734,21 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {/* ===== 定时任务 ===== */}
             {sub === "cron" && isAdminUser && (
               <div className="flex flex-col gap-6">
+                <SettingsSection id="mail" icon="api" title="邮件服务" desc="用于发送一次性密码重置链接；未配置时不会伪装发送成功">
+                  <div className="settings-password-grid settings-password-meta">
+                    <label><span>SMTP 主机</span><input value={site.smtpHost} onChange={(event) => setSite({ ...site, smtpHost: event.target.value })} placeholder="smtp.example.com" /></label>
+                    <label><span>端口</span><input inputMode="numeric" value={site.smtpPort} onChange={(event) => setSite({ ...site, smtpPort: event.target.value })} placeholder="587" /></label>
+                    <label><span>SMTP 用户名</span><input value={site.smtpUser} onChange={(event) => setSite({ ...site, smtpUser: event.target.value })} autoComplete="username" placeholder="通常为完整邮箱" /></label>
+                    <label><span>SMTP 密码</span><input type="password" value={site.smtpPassword} onChange={(event) => setSite({ ...site, smtpPassword: event.target.value })} autoComplete="new-password" placeholder={site.smtpPasswordConfigured ? "已安全保存，留空不修改" : "应用专用密码"} /></label>
+                    <label><span>发件名称</span><input value={site.smtpFromName} onChange={(event) => setSite({ ...site, smtpFromName: event.target.value })} placeholder="Fire" /></label>
+                    <label><span>发件邮箱</span><input type="email" value={site.smtpFromEmail} onChange={(event) => setSite({ ...site, smtpFromEmail: event.target.value })} placeholder="no-reply@example.com" /></label>
+                    <label className="settings-signout-option"><input type="checkbox" checked={site.smtpSecure} onChange={(event) => setSite({ ...site, smtpSecure: event.target.checked })} /><span>使用 SMTP SSL/TLS（通常为 465 端口；587 通常不勾选并自动升级 TLS）</span></label>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" disabled={blockSaving.mail} onClick={() => void saveBlock("mail", { smtpHost: site.smtpHost, smtpPort: site.smtpPort, smtpSecure: site.smtpSecure, smtpUser: site.smtpUser, smtpPassword: site.smtpPassword, smtpFromName: site.smtpFromName, smtpFromEmail: site.smtpFromEmail }, "邮件服务已保存")} className="settings-meta-primary">{blockSaving.mail ? "保存中…" : "保存邮件设置"}</button>
+                      <button type="button" disabled={mailTesting || blockSaving.mail} onClick={async () => { setMailTesting(true); try { const saved = await saveBlock("mail", { smtpHost: site.smtpHost, smtpPort: site.smtpPort, smtpSecure: site.smtpSecure, smtpUser: site.smtpUser, smtpPassword: site.smtpPassword, smtpFromName: site.smtpFromName, smtpFromEmail: site.smtpFromEmail }, "邮件服务已保存"); if (!saved) return; const response = await fetch("/api/settings/mail-test", { method: "POST" }); const data = await response.json().catch(() => null); if (!response.ok) throw new Error(data?.error || "发送失败"); showToast(`测试邮件已发送至 ${data.email}`); } catch (error) { showToast(error instanceof Error ? error.message : "发送失败", "err"); } finally { setMailTesting(false); } }} className="btn btn-line h-[42px]">{mailTesting ? "发送中…" : "保存并测试"}</button>
+                    </div>
+                  </div>
+                </SettingsSection>
                 <SettingsSection id="cron" icon="cron" title="定时任务" desc="行情与数据缓存自动更新；汇率仅手动刷新">
                 <div className="settings-task-list">
                   {[
@@ -3831,6 +3895,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         </div>
       </div>
       {versionOpen && <VersionModal onClose={() => setVersionOpen(false)} />}
+      {passwordRecoveryOpen && <AppModal title="找回密码" desc="通过已绑定邮箱设置新密码" onClose={() => { if (!passwordRecoveryBusy) setPasswordRecoveryOpen(false); }} closeDisabled={passwordRecoveryBusy}>
+        <div className="flex flex-col gap-4">
+          <div className="rounded-[12px] bg-bg-gray px-4 py-3 text-[13px] leading-5 text-muted">重置链接将发送至 <b className="text-ink">{me.email}</b>，15 分钟内有效且只能使用一次。</div>
+          <button type="button" disabled={passwordRecoveryBusy} onClick={() => void requestPasswordReset()} className="btn btn-line h-[46px] w-full disabled:opacity-60">{passwordRecoveryBusy ? "发送中…" : "发送重置邮件"}</button>
+          {passwordRecoveryError && <p role="alert" className="rounded-[10px] bg-up-bg px-3.5 py-2.5 text-[13px] text-up">{passwordRecoveryError}</p>}
+        </div>
+      </AppModal>}
     </div>
   );
 }

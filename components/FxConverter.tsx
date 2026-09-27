@@ -46,18 +46,17 @@ function readUrlState(fallback: FxCurrency): { from: FxCurrency; amount: string 
 
 function DragHandle({ label }: { label: string }) {
   return (
-    <button
-      type="button"
+    <span
       className="drag-handle fx-converter-handle"
-      aria-label={`拖动 ${label} 排序`}
-      title="拖动排序"
+      title={`拖动 ${label} 排序`}
+      aria-hidden="true"
     >
       <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
         <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
         <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
         <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
       </svg>
-    </button>
+    </span>
   );
 }
 

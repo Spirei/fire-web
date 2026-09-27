@@ -6372,8 +6372,7 @@ button.PhotoView-Slider__toolbarIcon {
 .totp-meta-method { display:grid; width:100%; min-height:62px; grid-template-columns:28px minmax(0,1fr) 24px; align-items:center; gap:12px; padding:11px 16px; color:var(--sc-dialog-text); text-align:left; transition:background-color .15s; }
 .totp-meta-method + .totp-meta-method { border-top:1px solid var(--sc-dialog-border); }
 .totp-meta-method:first-child { min-height:106px; }
-.totp-meta-method:not(:disabled):hover { background:var(--sc-dialog-soft); }
-.totp-meta-method:disabled { cursor:not-allowed; opacity:.54; }
+.totp-meta-method.is-unavailable { cursor:not-allowed; opacity:.54; }
 .totp-meta-method-icon { display:grid; place-items:center; width:28px; height:28px; color:var(--sc-dialog-text); }
 .totp-meta-method-icon svg { width:24px; height:24px; }
 .totp-meta-method-copy { display:flex; min-width:0; flex-direction:column; align-items:flex-start; }

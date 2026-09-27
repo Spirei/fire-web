@@ -519,8 +519,7 @@ function CelebRing({ celeb, size = 138 }: { celeb: Celeb; size?: number }) {
           非透明头像维持单层圆形裁剪（圆环在人物之下）。 */}
       {avatarTransparent && (
         <div
-          role="button"
-          aria-label={celeb.name}
+          aria-hidden="true"
           className="pointer-events-none absolute left-1/2 top-1/2"
           style={{
             width: size * 0.74,
@@ -541,7 +540,7 @@ function CelebRing({ celeb, size = 138 }: { celeb: Celeb; size?: number }) {
           {celeb.avatar && !avatarBroken && (
             <img
               src={celeb.avatar}
-              alt={celeb.name}
+              alt=""
               className="absolute inset-0 h-full w-full object-cover"
               draggable={false}
               onError={() => setAvatarBroken(true)}
@@ -554,8 +553,7 @@ function CelebRing({ celeb, size = 138 }: { celeb: Celeb; size?: number }) {
       {/* 透明头像上层：只显示头部上半部分，额头探出压住上方扇形（F2 效果） */}
       {avatarTransparent && (
         <div
-          role="button"
-          aria-label={celeb.name}
+          aria-hidden="true"
           className="pointer-events-none absolute left-1/2 top-1/2"
           style={{
             width: size * 0.74,
@@ -577,7 +575,7 @@ function CelebRing({ celeb, size = 138 }: { celeb: Celeb; size?: number }) {
           {celeb.avatar && !avatarBroken && (
             <img
               src={celeb.avatar}
-              alt={celeb.name}
+              alt=""
               className="absolute inset-0 h-full w-full object-cover"
               draggable={false}
               onError={() => setAvatarBroken(true)}
@@ -588,8 +586,7 @@ function CelebRing({ celeb, size = 138 }: { celeb: Celeb; size?: number }) {
       {/* 非透明头像：圆形裁剪居中，圆环在人物之下 */}
       {!avatarTransparent && (
         <div
-          role="button"
-          aria-label={celeb.name}
+          aria-hidden="true"
           className="pointer-events-none absolute left-1/2 top-1/2 flex items-center justify-center overflow-hidden rounded-full font-bold text-white"
           style={{
             width: size * 0.66,
@@ -609,7 +606,7 @@ function CelebRing({ celeb, size = 138 }: { celeb: Celeb; size?: number }) {
           {celeb.avatar && !avatarBroken && (
             <img
               src={celeb.avatar}
-              alt={celeb.name}
+              alt=""
               className="absolute inset-0 h-full w-full object-cover"
               draggable={false}
               onError={() => setAvatarBroken(true)}

@@ -461,6 +461,37 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(auth.getUserByToken(bearer));
     assert(auth.getUserByToken(preservedSession), 'unchecked session option must preserve other devices');
   });
+  await test('email password reset tokens are private, single-use, and revoke old sessions', async () => {
+    const auth = require(path.join(root, 'lib/auth.ts'));
+    const resetTokens = require(path.join(root, 'lib/passwordReset.ts'));
+    const requestRoute = require(path.join(root, 'app/api/auth/password-reset/request/route.ts'));
+    const confirmRoute = require(path.join(root, 'app/api/auth/password-reset/confirm/route.ts'));
+    const account = createUser('review_recovery', 'Recovery-old-123', false, 'recovery@example.test');
+    const request = login => requestRoute.POST(new Request('http://localhost/api/auth/password-reset/request', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ login })
+    }));
+    const known = await request('recovery@example.test');
+    const unknown = await request('missing@example.test');
+    assert.equal(known.status, 200);
+    assert.equal(unknown.status, 200);
+    assert.equal((await known.json()).message, (await unknown.json()).message, 'public result must not reveal whether an account exists');
+    const crossSite = await requestRoute.POST(new Request('http://localhost/api/auth/password-reset/request', {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://foreign.example', 'sec-fetch-site': 'cross-site' }, body: JSON.stringify({ login: account.username })
+    }));
+    assert.equal(crossSite.status, 403);
+    const oldSession = createSession(account.id);
+    const issued = resetTokens.issuePasswordResetToken(account.id);
+    const recovered = await confirmRoute.POST(new Request('http://localhost/api/auth/password-reset/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: issued.token, newPassword: 'Recovery-new-456' })
+    }));
+    assert.equal(recovered.status, 200);
+    assert(auth.authenticateUser(account.username, 'Recovery-new-456'));
+    assert.equal(auth.getUserByToken(oldSession), null, 'email recovery revokes existing sessions');
+    const reused = await confirmRoute.POST(new Request('http://localhost/api/auth/password-reset/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: issued.token, newPassword: 'Recovery-final-789' })
+    }));
+    assert.equal(reused.status, 400, 'reset token must be single-use');
+  });
   await test('admin profile edits reject case-insensitive duplicate email', () => {
     const auth = require(path.join(root, 'lib/auth.ts'));
     const owner = createUser('review_email_owner', 'Review-test-123', false, 'unique@example.test');
@@ -601,7 +632,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     } finally { settings.updateSiteSettings({ ico: original.ico, pwaIcon: original.pwaIcon }); }
   });
   await test('settings secrets filtered for admin/user and anonymous rejected; saving preserves secrets', async () => {
-    settings.updateSiteSettings({ llmApiKey: 'TEST_ONLY_LLM', deepseekApiKey: 'TEST_ONLY_OLD', xueqiuCookie: 'TEST_ONLY_COOKIE', pgPassword: 'TEST_ONLY_DB' });
+    settings.updateSiteSettings({ llmApiKey: 'TEST_ONLY_LLM', deepseekApiKey: 'TEST_ONLY_OLD', xueqiuCookie: 'TEST_ONLY_COOKIE', pgPassword: 'TEST_ONLY_DB', smtpPassword: 'TEST_ONLY_SMTP' });
     for (const role of ['admin','user']) {
       const res = await settingsRoute.GET(request(role)); assert.equal(res.status, 200);
       const body = await res.json(); assert(!JSON.stringify(body).includes('TEST_ONLY'));
@@ -612,6 +643,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     }
     assert.equal(settings.getSiteSettings().pgPassword, 'TEST_ONLY_DB');
     assert.equal(settings.getSiteSettings().llmApiKey, 'TEST_ONLY_LLM');
+    assert.equal(settings.getSiteSettings().smtpPassword, 'TEST_ONLY_SMTP');
     assert.equal((await settingsRoute.GET(request())).status, 401);
     assert.equal((await settingsRoute.PUT(request('user', {assetMarketOrder:['HK','US']},'PUT'))).status,403);
   });
@@ -1800,7 +1832,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
 
     const loginForm = fs.readFileSync(path.join(root, 'components/LoginForm.tsx'), 'utf8');
     assert(loginForm.includes('/api/auth/login/totp'));
-    assert(loginForm.includes('{!totpTicket && ('));
+    assert(loginForm.includes('{!totpTicket && !recovering && ('));
     assert(loginForm.includes('使用备用码'));
     assert(loginForm.includes('normalizeTotpDigits'));
     const loginRoute = fs.readFileSync(path.join(root, 'app/api/auth/login/route.ts'), 'utf8');
@@ -1832,11 +1864,12 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(!settings.includes('<SettingsHeader name="totp" title="二次验证" />'), '详情弹层不得重复渲染旧标题');
     assert(settings.includes('{sub === "totp" && ('));
     assert(settings.includes('sub: "totp"'));
-    assert(settings.includes('role="radiogroup" aria-label="双重验证方式"'));
+    assert(settings.includes('className="totp-meta-methods" aria-label="双重验证方式"'));
     assert(settings.includes('<b>身份验证应用</b>'));
     assert(settings.includes('<em>推荐</em>'));
     assert(settings.includes('Fire 暂未提供短信验证码'));
-    assert(settings.includes('role="radio" aria-checked="false" disabled'));
+    assert(settings.includes('className="totp-meta-method is-unavailable" aria-disabled="true"'));
+    assert(!settings.includes('role="radio"'), 'unselectable verification methods must not masquerade as clickable radios');
     assert(settings.includes('showBack={activeAnchor === "totp"}'));
     assert(!settings.includes('desc: "头像、资料、密码、二次验证、数据管理"'));
     assert(settings.includes('url.searchParams.delete("anchor")'), '只有一个区块时不写重复的 anchor');
@@ -1861,6 +1894,44 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(!fs.readFileSync(path.join(root, 'components/PasskeySettings.tsx'), 'utf8').includes('showConfig'), '通行密钥页不得保留二次展开配置');
     assert(settings.includes('<SettingsSection id="backups"') && !/key: "board"[\s\S]{0,900}<BackupTaskCard/.test(settings), '缓存任务与数据库自动备份必须分开');
     assert(css.includes('[data-detail^="source"] .sw-row-label { width:100%; flex:none; }'), '手机端数据源标签不得继承桌面横向宽度成为大段空白');
+  });
+  await test('clickable controls have actions and password recovery is reachable', () => {
+    const files = [];
+    const collect = dir => fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) collect(full);
+      else if (entry.name.endsWith('.tsx')) files.push(full);
+    });
+    collect(path.join(root, 'app'));
+    collect(path.join(root, 'components'));
+    const dead = [];
+    for (const file of files) {
+      const source = fs.readFileSync(file, 'utf8');
+      const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      const visit = node => {
+        if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+          const opening = ts.isJsxElement(node) ? node.openingElement : node;
+          const tag = opening.tagName.getText(ast);
+          const attrs = new Map(opening.attributes.properties.filter(ts.isJsxAttribute).map(attr => [attr.name.getText(ast), attr.initializer?.getText(ast) || '']));
+          const alternativeAction = ['onPointerDown', 'onMouseDown', 'onDoubleClick', 'onDragStart', 'onContextMenu'].some(name => attrs.has(name));
+          const openingText = opening.getText(ast);
+          const delegatedShowcase = file.endsWith('ShowcaseStage.tsx') && /ref=\{(?:zoomModeRef|zoomOutRef|zoomInRef)\}/.test(openingText);
+          if (tag === 'button' && !attrs.has('onClick') && !alternativeAction && attrs.get('type') !== '"submit"' && !attrs.has('data-copy-code') && !delegatedShowcase) dead.push(`${path.relative(root, file)}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`);
+          if (tag === 'a' && ['"#"', '""'].includes(attrs.get('href'))) dead.push(`${path.relative(root, file)}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`);
+          if (attrs.get('role') === '"button"' && !attrs.has('onClick') && !alternativeAction && attrs.get('tabIndex') !== '{-1}') dead.push(`${path.relative(root, file)}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`);
+          assert(!/onClick=\{\s*\(.*?\)\s*=>\s*(?:\{\s*\}|undefined|null)\s*\}/s.test(openingText), `empty click handler in ${path.relative(root, file)}`);
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(ast);
+    }
+    assert.deepEqual(dead, [], `dead click targets: ${dead.join(', ')}`);
+    const engine = fs.readFileSync(path.join(root, 'components/showcase/engine.ts'), 'utf8');
+    for (const control of ['zoomIn', 'zoomOut', 'zoomMode']) assert(engine.includes(`hud.${control}?.addEventListener("click"`), `delegated showcase control lacks click binding: ${control}`);
+    const login = fs.readFileSync(path.join(root, 'components/LoginForm.tsx'), 'utf8');
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    assert(login.includes('忘记密码？') && login.includes('/api/auth/password-reset/request'));
+    assert(settings.includes('请先绑定邮箱') && settings.includes('发送重置邮件'));
   });
   db.close();console.log(`${passed} regression suites passed (isolated database)`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{ fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode || 0); });

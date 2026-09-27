@@ -294,6 +294,14 @@ export interface SiteSettings {
   pgDatabase: string;
   pgUser: string;
   pgPassword: string;
+  smtpHost: string;
+  smtpPort: string;
+  smtpSecure: boolean;
+  smtpUser: string;
+  smtpPassword: string;
+  smtpPasswordConfigured?: boolean;
+  smtpFromName: string;
+  smtpFromEmail: string;
   ticker: TickerConfig;
 }
 

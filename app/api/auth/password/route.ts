@@ -24,6 +24,7 @@ export async function POST(request: Request) {
   const newPassword = String(body.newPassword ?? "");
   const signOutOthers = body.signOutOthers !== false;
   const row = findUserById(user.id);
+  const sessionToken = getSessionToken(request);
   if (!row || !verifyPassword(oldPassword, row.password_hash)) {
     logSecurityEvent(request, user.id, "password_change_rejected", "old password mismatch");
     return NextResponse.json({ error: "原密码错误" }, { status: 400 });
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
   }
 
   updatePassword(user.id, newPassword);
-  if (signOutOthers) deleteOtherSessions(user.id, getSessionToken(request));
-  logSecurityEvent(request, user.id, "password_change", signOutOthers ? "other sessions revoked" : "other sessions preserved");
+  if (signOutOthers) deleteOtherSessions(user.id, sessionToken);
+  logSecurityEvent(request, user.id, "password_change", `password verified; ${signOutOthers ? "other sessions revoked" : "other sessions preserved"}`);
   return NextResponse.json({ ok: true, signedOutOthers: signOutOthers }, { headers: { "Cache-Control": "no-store" } });
 }

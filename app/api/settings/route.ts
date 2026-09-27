@@ -52,6 +52,12 @@ export async function PUT(request: Request) {
   if (body.llmModel !== undefined && String(body.llmModel).trim().length > 160) {
     return NextResponse.json({ error: "模型 ID 不能超过 160 个字符" }, { status: 400 });
   }
+  if (body.smtpPort !== undefined && (!/^\d{1,5}$/.test(String(body.smtpPort).trim()) || Number(body.smtpPort) > 65535)) {
+    return NextResponse.json({ error: "SMTP 端口必须是 1-65535 的数字" }, { status: 400 });
+  }
+  if (body.smtpFromEmail !== undefined && String(body.smtpFromEmail).trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(body.smtpFromEmail).trim())) {
+    return NextResponse.json({ error: "发件邮箱格式不正确" }, { status: 400 });
+  }
   const llmProvider = body.llmProvider === "openai-compatible" ? "custom" : body.llmProvider;
   if (llmProvider !== undefined && !["deepseek", "openai", "custom"].includes(llmProvider)) {
     return NextResponse.json({ error: "不支持的模型提供方" }, { status: 400 });
@@ -129,7 +135,14 @@ export async function PUT(request: Request) {
     pgPort: body.pgPort !== undefined ? String(body.pgPort) : undefined,
     pgDatabase: body.pgDatabase !== undefined ? String(body.pgDatabase) : undefined,
     pgUser: body.pgUser !== undefined ? String(body.pgUser) : undefined,
-    pgPassword: body.pgPassword !== undefined ? String(body.pgPassword) : undefined
+    pgPassword: body.pgPassword !== undefined ? String(body.pgPassword) : undefined,
+    smtpHost: body.smtpHost !== undefined ? String(body.smtpHost) : undefined,
+    smtpPort: body.smtpPort !== undefined ? String(body.smtpPort) : undefined,
+    smtpSecure: typeof body.smtpSecure === "boolean" ? body.smtpSecure : undefined,
+    smtpUser: body.smtpUser !== undefined ? String(body.smtpUser) : undefined,
+    smtpPassword: body.smtpPassword !== undefined ? String(body.smtpPassword) : undefined,
+    smtpFromName: body.smtpFromName !== undefined ? String(body.smtpFromName) : undefined,
+    smtpFromEmail: body.smtpFromEmail !== undefined ? String(body.smtpFromEmail) : undefined
   });
   if (Array.isArray(body.groups)) {
     syncRecordGroups(before.groups, settings.groups);

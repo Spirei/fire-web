@@ -19,6 +19,10 @@ export function clientSettings(settings: SiteSettings, admin: boolean) {
     pgHost: admin ? settings.pgHost : "", pgPort: admin ? settings.pgPort : "",
     pgDatabase: admin ? settings.pgDatabase : "", pgUser: admin ? settings.pgUser : "",
     pgPassword: "", llmApiKey: "", deepseekApiKey: "", xueqiuCookie: "",
+    smtpHost: admin ? settings.smtpHost : "", smtpPort: admin ? settings.smtpPort : "",
+    smtpSecure: admin && settings.smtpSecure, smtpUser: admin ? settings.smtpUser : "",
+    smtpPassword: "", smtpFromName: admin ? settings.smtpFromName : "", smtpFromEmail: admin ? settings.smtpFromEmail : "",
+    smtpPasswordConfigured: admin && Boolean(settings.smtpPassword),
     pgPasswordConfigured: admin && Boolean(settings.pgPassword),
     llmApiKeyConfigured: admin && Boolean(settings.llmApiKey || settings.deepseekApiKey),
     modelServices: admin ? settings.modelServices.map(service => ({

@@ -726,9 +726,8 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
                   cell.type === "blank" ? (
                     <div key={`blank-${i}`} className="min-h-[52px] rounded-lg sm:min-h-[88px] sm:rounded-[14px]" />
                   ) : (
-                    <button
+                    <div
                       key={cell.key}
-                      type="button"
                       aria-current={cell.isToday ? "date" : undefined}
                       className={`flex min-h-[52px] cursor-default flex-col items-center rounded-lg border bg-bg-gray/30 p-1.5 sm:min-h-[88px] sm:items-stretch sm:rounded-[14px] sm:p-2.5 dark:bg-white/[0.04] ${
                         cell.isToday
@@ -739,7 +738,7 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
                       <span className="flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold tabular-nums text-faint">
                         {cell.day}
                       </span>
-                    </button>
+                    </div>
                   )
                 )}
               </div>

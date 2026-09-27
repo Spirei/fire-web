@@ -113,13 +113,20 @@ const DEFAULTS: SiteSettings = {
   pgDatabase: "",
   pgUser: "",
   pgPassword: "",
+  smtpHost: "",
+  smtpPort: "587",
+  smtpSecure: false,
+  smtpUser: "",
+  smtpPassword: "",
+  smtpFromName: "Fire",
+  smtpFromEmail: "",
   ticker: DEFAULT_TICKER
 };
 
-const SIMPLE_KEYS: ("domain" | "title" | "ico" | "pwaIcon" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "currencyRefreshPattern" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "xueqiuCookie")[] = [
+const SIMPLE_KEYS: ("domain" | "title" | "ico" | "pwaIcon" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "currencyRefreshPattern" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "smtpHost" | "smtpPort" | "smtpUser" | "smtpPassword" | "smtpFromName" | "smtpFromEmail" | "xueqiuCookie")[] = [
   "domain", "title", "ico", "pwaIcon", "homepageBg", "loginSideImage", "siteLogo", "logoText", "logoFont", "quoteSource", "futuHost", "futuPort", "footerDesc",
   "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl", "currencyRefreshPattern", "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl", "translationProvider", "deepseekApiUrl", "deepseekModel", "deepseekApiKey", "llmProvider", "llmApiUrl", "llmModel", "llmApiKey",
-  "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword", "xueqiuCookie"
+  "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpFromName", "smtpFromEmail", "xueqiuCookie"
 ];
 
 export const NAV_KEYS = ["holdings", "assets", "fire", "watchlist", "global", "trading", "earnings", "assistant", "celebs", "users", "attachments", "library", "cards", "activities", "settings"] as const;
@@ -259,7 +266,7 @@ export function getSiteSettings(): SiteSettings {
   SIMPLE_KEYS.forEach((k) => {
     if (typeof map[k] === "string" && map[k] !== "") (result as unknown as Record<string, string>)[k] = map[k];
   });
-  (["xueqiuCookie", "pgPassword", "llmApiKey", "deepseekApiKey"] as const).forEach((key) => {
+  (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey"] as const).forEach((key) => {
     result[key] = decryptSecret(result[key]);
   });
   // 用户可能在外部删除 uploads 文件，或从旧备份恢复了已过期路径。
@@ -430,6 +437,7 @@ export function getSiteSettings(): SiteSettings {
   result.allowRegister = map.allowRegister !== "0";
   result.stockIconCdn = map.stockIconCdn === "1";
   result.marketBadgesVisible = map.marketBadgesVisible !== "0";
+  result.smtpSecure = map.smtpSecure === "1";
   result.tradingSquareTrumpRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareTrumpRefreshMinutes) || 5)));
   result.tradingSquareDuanRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareDuanRefreshMinutes) || 5)));
   settingsCache = result;
@@ -448,9 +456,10 @@ export function updateSiteSettings(patch: Partial<SiteSettings>): SiteSettings {
     const trimmed = v.trim();
     // 雪球 Cookie：GET 会把真实值藏成空串、输入框未改时显示 ********。
     // 这两种都不能写回，否则会把已保存的登录会话清掉。
-    if (["xueqiuCookie", "pgPassword", "llmApiKey", "deepseekApiKey"].includes(k) && (!trimmed || trimmed === "********")) return;
-    upsert.run(k, ["xueqiuCookie", "pgPassword", "llmApiKey", "deepseekApiKey"].includes(k) ? encryptSecret(trimmed) : trimmed);
+    if (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey"].includes(k) && (!trimmed || trimmed === "********")) return;
+    upsert.run(k, ["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey"].includes(k) ? encryptSecret(trimmed) : trimmed);
   });
+  if (typeof patch.smtpSecure === "boolean") upsert.run("smtpSecure", patch.smtpSecure ? "1" : "0");
   if (Array.isArray(patch.modelServices)) {
     upsert.run("modelServices", JSON.stringify(normalizeModelServices(patch.modelServices).map(service => ({ ...service, apiKey: encryptSecret(service.apiKey) }))));
   }

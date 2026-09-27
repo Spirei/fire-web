@@ -6,6 +6,8 @@ Next.js 15 + React 19 + TypeScript + Tailwind + SQLite（better-sqlite3）全栈
 
 空数据库在生产环境不会再创建公开的默认管理员。未配置 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` 时，首次访问登录或后台会进入 `/setup` 创建首位管理员；也可参考 `.env.example` 用环境变量预置管理员。已有数据库不受此初始化逻辑影响。
 
+邮箱自助找回密码需要 SMTP。管理员可在“设置 → 数据与系统 → 邮件服务”中配置并发送测试邮件，也可通过 `.env.example` 中的 `SMTP_*` 环境变量提供默认值；网页保存的配置优先。
+
 ## 常用命令
 
 ```bash
