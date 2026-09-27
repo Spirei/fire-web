@@ -15,6 +15,7 @@ export default function PasskeySettings({ admin, onClose }: { admin: boolean; on
   const [showConfig, setShowConfig] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [intro, setIntro] = useState(false);
+  const [flowDirection, setFlowDirection] = useState<"forward" | "back">("forward");
   const [config, setConfig] = useState<Config | null>(null);
   const [draft, setDraft] = useState<Config>({ enabled: false, origin: "", name: "Fire", revision: "" });
   const [keys, setKeys] = useState<Key[]>([]);
@@ -75,10 +76,12 @@ export default function PasskeySettings({ admin, onClose }: { admin: boolean; on
   const domainChanged = pending?.kind === "save" && !!currentRPID && (!pending.config.origin || currentRPID !== new URL(pending.config.origin).hostname);
   function begin(action: PendingAction) {
     if (lock.current || pending || refreshRequired) return;
+    setFlowDirection("forward");
     setPassword(""); setCode(""); setName(""); setVerificationError(""); setMessage(""); setPending(action);
   }
   function closeVerification() {
     if (lock.current) return;
+    setFlowDirection("back");
     setPending(null); setPassword(""); setCode(""); setName(""); setVerificationError("");
   }
   function save(event: FormEvent<HTMLFormElement>) {
@@ -118,7 +121,7 @@ export default function PasskeySettings({ admin, onClose }: { admin: boolean; on
         setKeys(current => current.filter(key => key.id !== action.key.id));
         setMessage("密钥已删除，相关登录已退出");
       }
-      setPending(null); setName(""); setIntro(false);
+      setFlowDirection("back"); setPending(null); setName(""); setIntro(false);
     } catch (error) {
       if (!controller.signal.aborted) {
         const text = passkeyError(error);
@@ -173,7 +176,7 @@ export default function PasskeySettings({ admin, onClose }: { admin: boolean; on
       </form>
     </section>}
     <section>
-      <button type="button" className="pk-create-row disabled:opacity-50" disabled={busy || !!pending || refreshRequired} onClick={() => setIntro(true)}>创建通行密钥</button>
+      <button type="button" className="pk-create-row disabled:opacity-50" disabled={busy || !!pending || refreshRequired} onClick={() => { setFlowDirection("forward"); setIntro(true); }}>创建通行密钥</button>
       <ul className="divide-y divide-edge">{keys.map(key => <li key={key.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
         <div className="min-w-0"><p className="break-all font-medium">{key.name}</p><p className="mt-1 break-all text-xs text-muted">{key.rpID} · {currentRPID && key.rpID !== currentRPID ? "旧域名密钥" : key.backedUp ? "已同步备份" : "设备或密码管理器保管"}</p><p className="mt-1 text-xs text-muted">{key.lastUsedAt ? `最近使用：${new Date(key.lastUsedAt).toLocaleString()}` : `添加于：${new Date(key.createdAt).toLocaleString()}`}</p></div>
         <div className="flex gap-2"><button type="button" className="btn btn-line btn-sm disabled:opacity-50" disabled={busy || !!pending || refreshRequired} onClick={() => void rename(key)}>重命名</button><button type="button" className="btn btn-line btn-sm !text-up disabled:opacity-50" disabled={busy || !!pending || refreshRequired} onClick={() => begin({ kind: "delete", key })}>删除</button></div>
@@ -183,23 +186,34 @@ export default function PasskeySettings({ admin, onClose }: { admin: boolean; on
     {admin && <button type="button" className="pk-admin-row" aria-expanded={showConfig} onClick={() => setShowConfig(!showConfig)}><SubNavIcon name="site" className="h-4 w-4"/><span>网站登录配置</span><span aria-hidden="true">{showConfig ? "−" : "+"}</span></button>}
     </>}
   </div>;
-  return <>
-    {!pending && intro ? <AppModal title="下次免密登录" onClose={() => { setIntro(false); onClose?.(); }} className="pk-reference-modal pk-intro-modal" size="lg">
-      <button type="button" className="pk-back" aria-label="返回" onClick={() => setIntro(false)}>‹</button>
-      <img className="pk-security-art" src="/uploads/feature/passkey/%E9%80%9A%E8%A1%8C%E5%AF%86%E9%92%A5PASSKEY.png" alt="通行密钥保护登录安全" />
-      <div className="pk-benefits"><p><SubNavIcon name="passkeys"/><span>使用面容、指纹或设备密码登录，就像解锁设备一样。</span></p><p><SubNavIcon name="account"/><span>你的生物识别信息始终留在设备上，不会分享给 Fire。</span></p></div>
-      {!canAdd && <p className="pk-availability">{!config?.enabled ? (admin ? "请先启用网站登录配置。" : "请等待管理员启用通行密钥。") : origin !== config.origin ? <>请访问 <a href={config.origin}>{config.origin}</a> 创建。</> : !supported ? "请在 HTTPS 下使用支持通行密钥的浏览器。" : "已达 20 个密钥，请先移除不再使用的密钥。"}</p>}
-      <div className="pk-intro-actions"><button type="button" onClick={() => { setIntro(false); onClose?.(); }}>以后再说</button><button type="button" disabled={!canAdd || busy || refreshRequired} onClick={() => begin({ kind: "add" })}>创建通行密钥</button></div>
-    </AppModal> : !pending && (onClose ? <AppModal title="通行密钥" onClose={onClose} className="pk-reference-modal" size="lg">{content}</AppModal> : content)}
-    {pending && <AppModal className="pk-reference-modal pk-verify-modal" size="lg" title={actionLabel} desc={pending.kind === "delete" ? `删除「${pending.key.name}」后，相关设备需要重新登录。` : domainChanged ? "更换域名后需重新添加通行密钥。请验证当前账号。" : "为了保护账号安全，请先验证当前账号。"} onClose={closeVerification} closeDisabled={busy}>
-      <form onSubmit={confirmAction} className="pk-verify-form">
+  const renderIntroContent = (requestClose: () => void) => <div className={`pk-flow-view is-${flowDirection}`} key="intro">
+    <button type="button" className="pk-back" aria-label="返回" onClick={() => { setFlowDirection("back"); setIntro(false); }}>‹</button>
+    <img className="pk-security-art" src="/uploads/feature/passkey/%E9%80%9A%E8%A1%8C%E5%AF%86%E9%92%A5PASSKEY.png" alt="通行密钥保护登录安全" />
+    <div className="pk-benefits"><p><SubNavIcon name="passkeys"/><span>使用面容、指纹或设备密码登录，就像解锁设备一样。</span></p><p><SubNavIcon name="account"/><span>你的生物识别信息始终留在设备上，不会分享给 Fire。</span></p></div>
+    {!canAdd && <p className="pk-availability">{!config?.enabled ? (admin ? "请先启用网站登录配置。" : "请等待管理员启用通行密钥。") : origin !== config.origin ? <>请访问 <a href={config.origin}>{config.origin}</a> 创建。</> : !supported ? "请在 HTTPS 下使用支持通行密钥的浏览器。" : "已达 20 个密钥，请先移除不再使用的密钥。"}</p>}
+    <div className="pk-intro-actions"><button type="button" onClick={requestClose}>以后再说</button><button type="button" disabled={!canAdd || busy || refreshRequired} onClick={() => begin({ kind: "add" })}>创建通行密钥</button></div>
+  </div>;
+  const verificationContent = pending && <div className={`pk-flow-view is-${flowDirection}`} key="verify">
+    <form onSubmit={confirmAction} className="pk-verify-form">
         <div className="pk-account-row"><span className="pk-account-mark"><SubNavIcon name="account" /></span><span><b>Fire 账号</b><small>安全验证</small></span></div>
         {pending.kind === "add" && <label className="pk-field"><span>通行密钥名称（选填）</span><input value={name} maxLength={64} onChange={e => setName(e.target.value)} placeholder="例如：iCloud 或 Bitwarden" disabled={busy} /></label>}
         <label className="pk-field"><span>当前密码</span><input type="password" required autoComplete="current-password" data-autofocus autoFocus value={password} onChange={e => setPassword(e.target.value)} placeholder="输入当前密码" disabled={busy} /></label>
         {totp && <label className="pk-field"><span>二次验证码或备用码</span><input required autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} placeholder="6 位验证码或备用码" disabled={busy} /></label>}
         {verificationError && <p role="alert" className="text-sm text-up">{verificationError}</p>}
         <div className="dialog-actions"><button type="button" className="dialog-btn dialog-btn-ghost" disabled={busy} onClick={closeVerification}>取消</button><button type="submit" className={`dialog-btn ${pending.kind === "delete" ? "dialog-btn-danger" : "dialog-btn-neutral"}`} disabled={busy || !password || (totp && !code.trim())}>{busy ? "处理中…" : actionLabel}</button></div>
-      </form>
-    </AppModal>}
-  </>;
+    </form>
+  </div>;
+  if (!onClose) return <>{content}{pending && <AppModal className="pk-reference-modal pk-verify-modal" size="lg" title={actionLabel} desc={pending.kind === "delete" ? `删除「${pending.key.name}」后，相关设备需要重新登录。` : domainChanged ? "更换域名后需重新添加通行密钥。请验证当前账号。" : "为了保护账号安全，请先验证当前账号。"} onClose={closeVerification} closeDisabled={busy}>{verificationContent}</AppModal>}</>;
+  const modalTitle = pending ? actionLabel : intro ? "下次免密登录" : "通行密钥";
+  const modalDesc = pending ? (pending.kind === "delete" ? `删除「${pending.key.name}」后，相关设备需要重新登录。` : domainChanged ? "更换域名后需重新添加通行密钥。请验证当前账号。" : "为了保护账号安全，请先验证当前账号。") : undefined;
+  return <AppModal
+    title={modalTitle}
+    desc={modalDesc}
+    onClose={onClose}
+    closeDisabled={busy}
+    className={`pk-reference-modal${intro ? " pk-intro-modal" : ""}${pending ? " pk-verify-modal" : ""}`}
+    size="lg"
+  >
+    {(requestClose) => pending ? verificationContent : intro ? renderIntroContent(requestClose) : <div className={`pk-flow-view is-${flowDirection}`} key="list">{content}</div>}
+  </AppModal>;
 }

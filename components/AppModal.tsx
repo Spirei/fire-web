@@ -26,7 +26,7 @@ export default function AppModal({
   title?: string;
   desc?: string;
   onClose: () => void;
-  children: React.ReactNode;
+  children: React.ReactNode | ((requestClose: () => void) => React.ReactNode);
   headerActions?: React.ReactNode;
   size?: ModalSize;
   className?: string;
@@ -130,7 +130,7 @@ export default function AppModal({
             </svg>
           </button>
         </div>
-        {children}
+        {typeof children === "function" ? children(requestClose) : children}
       </div>
     </div>,
     document.body

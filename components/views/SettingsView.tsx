@@ -2,7 +2,7 @@
 import PasskeySettings from "@/components/PasskeySettings";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isSixDigitTotp, normalizeTotpDigits } from "@/lib/totpInput";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -54,26 +54,42 @@ interface Props {
 
 function SettingsDetailShell({ title, category, editable = false, editing = false, onEdit, onSave, onCancel, onClose, children }: { title: string; category: string; editable?: boolean; editing?: boolean; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; onClose: () => void; children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const requestClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setClosing(true);
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    closeTimer.current = setTimeout(() => onCloseRef.current(), reducedMotion ? 0 : 180);
+  }, []);
   useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
   useEffect(() => {
     if (!mounted) return;
     const previous = document.body.style.overflow;
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") requestClose(); };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKeyDown);
-    return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", onKeyDown); };
-  }, [mounted, onClose]);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKeyDown);
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, [mounted, requestClose]);
   if (!mounted) return null;
   return createPortal(
-    <div className="sc-detail-layer fixed inset-0 z-[10900] flex items-start justify-center px-4 pb-4 pt-[72px] sm:px-8 sm:pb-8 sm:pt-[88px]" role="dialog" aria-modal="true" aria-label={title}>
-      <button type="button" aria-label="关闭设置详情" className="sc-detail-scrim absolute inset-0" onClick={onClose} />
+    <div className={`sc-detail-layer fixed inset-0 z-[10900] flex items-start justify-center px-4 pb-4 pt-[72px] sm:px-8 sm:pb-8 sm:pt-[88px]${closing ? " is-closing" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+      <button type="button" aria-label="关闭设置详情" className="sc-detail-scrim absolute inset-0" onClick={requestClose} disabled={closing} />
       <section className="sc-detail-dialog relative flex w-full max-w-[594px] flex-col overflow-hidden">
         <div className="sc-detail-theme-bridge sv-win-root sv-orca sv-center flex min-h-0 flex-1 flex-col">
         <header className="sc-detail-dialog-head flex-none">
           <div className="min-w-0"><span>{category}</span><h2>{title}</h2></div>
           <div className="sc-detail-dialog-actions">
             {editable && (editing ? <><button type="button" className="sc-detail-text-action" onClick={onCancel}>取消</button><button type="button" className="sc-detail-primary-action" onClick={onSave}>保存</button></> : <button type="button" className="sc-detail-text-action" onClick={onEdit}>编辑</button>)}
-            <button type="button" className="sc-detail-close" aria-label="关闭" onClick={onClose}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button>
+            <button type="button" className="sc-detail-close" aria-label="关闭" onClick={requestClose} disabled={closing}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button>
           </div>
         </header>
         <div className="sc-detail-dialog-scroll min-h-0 flex-1 overflow-y-auto">{children}</div>
@@ -2994,6 +3010,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       );
                     })}
                   </div>
+                  {editingMarketBadges && (
+                    <button
+                      type="button"
+                      onClick={() => setSite((s) => ({ ...s, marketBadges: { ...DEFAULT_MARKET_BADGES }, marketBadgesVisible: true }))}
+                      className="btn btn-ghost btn-sm mt-3 self-start"
+                    >
+                      恢复默认
+                    </button>
+                  )}
                   {MARKET_BADGE_ITEMS.length > 5 && (
                     <button
                       type="button"

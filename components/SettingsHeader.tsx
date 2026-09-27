@@ -268,7 +268,7 @@ export function SettingsSection({
           </div>
         </div>
         <div className="flex flex-none items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-          {action}
+          {action && <span className="settings-section-primary-actions inline-flex items-center gap-1.5">{action}</span>}
           {collapsible && (
             <button
               type="button"
