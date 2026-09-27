@@ -28,6 +28,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(css.includes(':not([role="switch"],[role="checkbox"],.password-visibility-toggle'));
     assert(css.includes('--cap-danger') && css.includes(':disabled') && css.includes('@media(prefers-reduced-motion:reduce)'));
     assert(css.includes('.card-wander-zoom-backdrop') && css.includes('.card-wander-seg-thumb'));
+    assert(css.includes('--cap-primary:#0866ff') && css.includes('--cap-primary-hover:#075ce5'));
+    assert(css.includes('border-color:var(--cap-primary)!important; color:#fff!important'));
+    assert(css.includes('.pk-intro-actions > button:last-child') && css.includes('.dialog-btn-neutral'));
     const calendar = fs.readFileSync(path.join(root,'components/PnlCalendar.tsx'),'utf8');
     assert(calendar.includes('aria-pressed={view === "month"}') && calendar.includes('aria-pressed={mode === "收益"}'));
     const trade = fs.readFileSync(path.join(root,'components/QuickTradeDialog.tsx'),'utf8');

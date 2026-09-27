@@ -115,6 +115,8 @@ Review 自查清单（按项目实际走一遍）：
 
 ## 中性色按钮标准（浅灰边框 + 白色块状，2026-08-08 起）
 
+- **2026-09-28 用户最新要求优先**：除网站首页 `/` 外，主操作与当前选中胶囊使用设置中心参考的 Meta 蓝 `#0866ff` + 白字，悬停 `#075ce5`；主侧栏与设置分类导航选中态一致。统一规则在 `styles/capsules.css`，由 `CapsuleScope` 覆盖详情及 body 弹窗。次操作保持浅边框，危险操作保留红色；开关、复选框、密码眼睛与日历数据格不套用胶囊规则。此条覆盖下方旧中性色标准及非首页车型导入页的旧例外，首页展示台保持不变。
+
 - 全站主按钮 / 色块统一为「白底 + 浅灰边框 + 深色文字」：`border border-edge-strong bg-white text-ink-2`（深色模式 `dark:bg-[#1c1c1e] dark:text-white`）。
 - hover 统一为**明显浅灰背景**（`hover:bg-brand-hover`，浅色 ≈ #e9ebee；深色模式 globals.css 已补 `.dark .hover\:bg-brand-hover:hover` 为 #262c37），文字保持深色、边框颜色不变。
 - 动画：按钮带 `transition-all duration-200`，hover 轻微上浮 `hover:-translate-y-px` + 阴影，点击 `active:scale-[.97]`。
