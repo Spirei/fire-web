@@ -791,6 +791,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [me, setMe] = useState({ username: user.username, nickname: user.nickname ?? "", uid: user.uid ?? "", email: user.email ?? "", emailVerified: user.emailVerified === true, avatar: user.avatar ?? "" });
   const [emailVerifyBusy,setEmailVerifyBusy]=useState(false);
   const [emailVerifyMessage,setEmailVerifyMessage]=useState("");
+  const [emailVerifyState,setEmailVerifyState]=useState<"ok" | "error">("ok");
   useEffect(()=>{
     let active=true;
     const refresh=async()=>{
@@ -801,9 +802,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   },[]);
   async function sendEmailConfirmation() {
     if(emailVerifyBusy) return;
-    setEmailVerifyBusy(true);setEmailVerifyMessage("");
+    setEmailVerifyBusy(true);setEmailVerifyMessage("");setEmailVerifyState("ok");
     try {const response=await fetch("/api/auth/email-verification/request",{method:"POST"});const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.error||"发送失败");setEmailVerifyMessage(data?.verified?"邮箱已验证":"确认链接已发送，请在邮箱中点击验证。");if(data?.verified)setMe(previous=>({...previous,emailVerified:true}));showToast(data?.verified?"邮箱已验证":"确认邮件已发送");}
-    catch(error){const text=error instanceof Error?error.message:"发送失败";setEmailVerifyMessage(text);showToast(text,"err");}
+    catch(error){const text=error instanceof Error?error.message:"发送失败";setEmailVerifyState("error");setEmailVerifyMessage(text);showToast(text,"err");}
     finally{setEmailVerifyBusy(false);}
   }
   const [nickname, setNickname] = useState(user.nickname ?? "");
@@ -3258,7 +3259,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                               ) : (
                                 <div className="model-service-readonly">
                                   <div><span>API 地址</span><b title={service.apiUrl}>{service.apiUrl || "未设置"}</b></div>
-                                  {service.models.filter(Boolean).map(model => <div key={model} className="model-readonly-test-row"><span title={model}>{model}</span><button type="button" className="btn btn-line btn-sm" onClick={() => void testModelService(service, model)} disabled={modelTestStates[`${service.id}:${model}`]?.state === "loading"}>{modelTestStates[`${service.id}:${model}`]?.state === "loading" ? "测试中…" : modelTestStates[`${service.id}:${model}`]?.state === "ok" ? "重新测试" : "测试连接"}</button>{modelTestStates[`${service.id}:${model}`]?.text && <small className={modelTestStates[`${service.id}:${model}`]?.state === "error" ? "text-up" : "text-muted"}>{modelTestStates[`${service.id}:${model}`].text}</small>}</div>)}
+                                  {service.models.filter(Boolean).map(model => <div key={model} className="model-readonly-test-row"><span className="model-readonly-test-copy"><b title={model}>{model}</b>{modelTestStates[`${service.id}:${model}`]?.text && <small className={modelTestStates[`${service.id}:${model}`]?.state === "error" ? "text-up" : "text-muted"}>{modelTestStates[`${service.id}:${model}`].text}</small>}</span><button type="button" className="btn btn-line btn-sm" onClick={() => void testModelService(service, model)} disabled={modelTestStates[`${service.id}:${model}`]?.state === "loading"}>{modelTestStates[`${service.id}:${model}`]?.state === "loading" ? "测试中…" : modelTestStates[`${service.id}:${model}`]?.state === "ok" ? "重新测试" : "测试连接"}</button></div>)}
                                   <div><span>密钥</span><b>{service.apiKeyConfigured || service.apiKey ? "已安全保存" : "未配置"}</b></div>
                                 </div>
                               )}
@@ -3497,7 +3498,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         </div>
                       </div>
                       {!editingProfile && me.email && !me.emailVerified && <div className="sw-row"><div className="sw-row-label"><b>验证邮箱</b><span>点击确认邮件中的链接</span></div><button type="button" disabled={emailVerifyBusy} onClick={()=>void sendEmailConfirmation()} className="btn btn-line btn-sm">{emailVerifyBusy?"发送中…":"发送确认邮件"}</button></div>}
-                      {emailVerifyMessage && <p role="status" className="settings-form-message">{emailVerifyMessage}</p>}
+                      {emailVerifyMessage && <p role={emailVerifyState === "error" ? "alert" : "status"} className={`settings-form-message is-${emailVerifyState}`}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/>{emailVerifyState === "error" ? <path d="M12 7v6m0 3h.01"/> : <path d="m8 12 3 3 5-6"/>}</svg><span>{emailVerifyMessage}</span></p>}
                       {editingProfile && email.trim().toLowerCase() !== (me.email ?? "").trim().toLowerCase() && (
                         <div className="sw-row">
                           <div className="sw-row-label"><b>安全验证</b><span>修改登录邮箱需要当前密码</span></div>
@@ -3643,7 +3644,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   )}
                   {totpStatusLoaded && totpEnabled && !totpBackupCodes?.length && (
                     <div className="totp-meta-enabled">
-                      <p className="totp-meta-copy">你的账户已使用身份验证应用进行保护。登录时，需要输入验证器中的 6 位验证码。</p>
                       <div className="totp-meta-methods"><div className="totp-meta-method is-selected"><span className="totp-meta-method-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path d="M15 14h2v2h-2zM19 14h1v3h-3v3h-3v-2M19 19h1v1h-1z"/></svg></span><span className="totp-meta-method-copy"><b>{totpDeviceName || "身份验证应用"}</b><small>已开启，可使用验证码或备用码登录。</small></span><span className="totp-meta-status">已开启</span></div></div>
                       <h3>关闭双重验证</h3>
                       <form onSubmit={disableTotp} className="totp-meta-disable">

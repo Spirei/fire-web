@@ -2260,15 +2260,16 @@ html.dark .watch-import-target {
 .model-service-status.is-disconnected i { background: #ef4444; }
 .model-service-use { flex: none; color: var(--sv-text-3, #8b93a0); font-size: 11px; }
 .model-service-readonly {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(120px, .7fr) minmax(110px, .55fr);
-  gap: 1px;
+  display: flex;
+  flex-direction: column;
   border-top: 1px solid var(--sv-border, #e5e7eb);
   background: var(--sv-border, #e5e7eb);
 }
-.model-service-readonly > div { min-width: 0; padding: 13px 18px; background: var(--sv-card, white); }
-.model-service-readonly span { display: block; margin-bottom: 4px; color: var(--sv-text-3, #8b93a0); font-size: 10px; }
-.model-service-readonly b { display: block; overflow: hidden; color: var(--sv-text-2, #475569); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.model-service-readonly > div { display:flex; align-items:center; justify-content:space-between; gap:16px; min-width:0; padding:16px 18px; background:var(--sv-card, white); }
+.model-service-readonly > div + div { border-top:1px solid var(--sv-border, #e5e7eb); }
+.model-service-readonly span { display:block; min-width:0; color:var(--sv-text-3, #8b93a0); font-size:14px; line-height:20px; }
+.model-service-readonly > div > span:not(.model-readonly-test-copy) { flex:none; }
+.model-service-readonly b { display:block; min-width:0; overflow:hidden; color:var(--sv-text-2, #475569); font-size:14px; font-weight:500; text-overflow:ellipsis; white-space:nowrap; }
 .model-service-editor { display: flex; flex-direction: column; gap: 16px; border-top: 1px solid var(--sv-border, #e5e7eb); padding: 18px; background: color-mix(in srgb, var(--sv-card, white) 92%, var(--sv-bg, #f8fafc)); }
 .model-service-label { margin-bottom: 8px; color: var(--sv-text-2, #475569); font-size: 11px; font-weight: 700; }
 .model-provider-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -2295,7 +2296,8 @@ html.dark .watch-import-target {
 .model-icon-controls > button:hover { color: var(--sv-text, #111827); }
 .model-key-state { position: absolute; top: 50%; right: 12px; display: inline-flex; align-items: center; gap: 5px; transform: translateY(-50%); color: var(--sv-text-3, #8b93a0); font-size: 10px; font-weight: 700; }
 .model-key-state.is-ready { color: #168447; }
-.model-privacy-note { display: flex; align-items: center; gap: 8px; border-radius: 10px; background: color-mix(in srgb, var(--sv-accent, #16a085) 6%, transparent); padding: 9px 11px; color: var(--sv-text-2, #64748b); font-size: 10.5px; }
+.model-privacy-note { display:flex; align-items:flex-start; gap:10px; border-radius:12px; background:color-mix(in srgb,var(--sv-accent, #16a085) 6%,transparent); padding:12px 14px; color:var(--sv-text-2, #64748b); font-size:13px; line-height:20px; }
+.model-privacy-note > svg { flex:none; margin-top:2px; }
 .model-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .model-list-heading > span { color: var(--sv-text, #111827); font-size: 12px; font-weight: 700; }
 .model-list-heading small { display: inline; margin-left: 8px; color: var(--sv-text-3, #8b93a0); font-size: 10px; font-weight: 400; }
@@ -6774,8 +6776,9 @@ button.PhotoView-Slider__toolbarIcon {
 .totp-meta-backup-actions { display:flex; gap:8px; margin-top:14px; }
 .totp-meta-backup .totp-meta-primary { margin-top:24px; }
 .totp-meta-enabled { display:flex; flex-direction:column; }
-.totp-meta-enabled .totp-meta-method:first-child { min-height:74px; }
-.totp-meta-status { justify-self:end; color:var(--sc-dialog-success); font-size:13px; font-weight:650; }
+.totp-meta-enabled .totp-meta-method:first-child { min-height:74px; grid-template-columns:28px minmax(0,1fr) auto; }
+.totp-meta-status { display:inline-flex; align-items:center; gap:6px; justify-self:end; padding:5px 9px; border-radius:999px; background:color-mix(in srgb,var(--sc-dialog-success) 9%,transparent); color:var(--sc-dialog-success); font-size:13px; font-weight:600; line-height:18px; white-space:nowrap; }
+.totp-meta-status::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
 .totp-meta-disable { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .totp-meta-disable > button { grid-column:1/-1; margin-top:4px; color:var(--sc-dialog-danger); }
 .sc-detail-dialog[data-detail="appearance"] { max-height:min(92dvh,860px); }
@@ -6955,10 +6958,14 @@ button.PhotoView-Slider__toolbarIcon {
 .settings-managed-inline-section { min-width:0; }
 .settings-managed-inline-section > .settings-clean-heading { margin:0 0 10px; font-size:15px; font-weight:600; }
 .settings-managed.is-inline .settings-managed-content { animation:none; }
-.sc-detail-dialog .model-service-readonly .model-readonly-test-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
-.sc-detail-dialog .model-readonly-test-row > span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.sc-detail-dialog .model-service-readonly .model-readonly-test-row { display:flex; align-items:center; flex-wrap:nowrap; gap:16px; }
+.sc-detail-dialog .model-readonly-test-row > .model-readonly-test-copy { flex:1; min-width:0; }
 .sc-detail-dialog .model-readonly-test-row > button { flex:none; }
-.sc-detail-dialog .model-readonly-test-row > small { flex-basis:100%; overflow-wrap:anywhere; line-height:20px; }
+.sc-detail-dialog .model-readonly-test-copy > small { display:block; margin-top:4px; font-size:13px; overflow-wrap:anywhere; line-height:20px; }
+.sc-detail-dialog .settings-form-message { display:flex; align-items:flex-start; gap:10px; margin:12px 16px 16px; padding:12px 14px; border-radius:12px; background:var(--sc-dialog-soft); color:var(--sc-dialog-text); font-size:14px; font-weight:400; line-height:21px; overflow-wrap:anywhere; }
+.sc-detail-dialog .settings-form-message.is-error { color:var(--sc-dialog-danger); background:color-mix(in srgb,var(--sc-dialog-danger) 7%,var(--sc-dialog-bg)); }
+.sc-detail-dialog .settings-form-message.is-ok { color:var(--sc-dialog-success); background:color-mix(in srgb,var(--sc-dialog-success) 7%,var(--sc-dialog-bg)); }
+.settings-form-message > svg { flex:none; width:20px; height:20px; margin-top:1px; }
 .settings-managed[data-scope="trade"] .settings-managed-content:not([hidden]) { border: 1px solid var(--sc-dialog-border); border-radius: 16px; overflow: hidden; }
 .settings-managed[data-scope="data"] .settings-managed-content .sw-row { border: 1px solid var(--sc-dialog-border) !important; border-radius: 16px; }
 .settings-managed-content .settings-full-action { margin-top: 16px; }
@@ -7038,9 +7045,9 @@ html { scrollbar-gutter:stable; }
 }
 
 /* Password visibility keeps the input geometry unchanged and does not submit its form. */
-.password-input,.sc-detail-dialog .settings-password-meta label > .password-input { position:relative; display:grid; grid-template-columns:minmax(0,1fr) 44px; width:100%; min-width:0; margin:0; }
-.password-input > input { grid-area:1 / 1 / 2 / 3; width:100%!important; min-width:0; padding-right:48px!important; }
-.password-input > .password-visibility-toggle { grid-area:1 / 2 / 2 / 3; z-index:1; display:flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; padding:0; margin:0; border:0; border-radius:12px; background:transparent; color:inherit; opacity:.65; box-shadow:none; cursor:pointer; transition:opacity 150ms ease; }
+.password-input,.sc-detail-dialog .settings-password-meta label > .password-input { position:relative; display:block; width:100%; min-width:0; margin:0; }
+.password-input > input { display:block; width:100%!important; min-width:0; padding-right:48px!important; }
+.password-input > .password-visibility-toggle { position:absolute; right:2px; top:50%; transform:translateY(-50%); z-index:1; display:flex; align-items:center; justify-content:center; width:44px; height:44px; min-width:44px; min-height:44px; padding:0; margin:0; border:0; border-radius:12px; background:transparent; color:inherit; opacity:.65; box-shadow:none; cursor:pointer; transition:opacity 150ms ease; }
 .password-input > .password-visibility-toggle:hover { opacity:1; }
 .sv-win-root .sw-row > .password-input { flex:1; min-width:0; }
 .sc-detail-dialog .settings-password-meta .password-input-control { min-height:60px; padding-left:16px; border-radius:16px; font-size:15px; font-weight:500; line-height:19px; }

@@ -16,6 +16,18 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('settings detail rows and password reveal controls cannot collapse into narrow columns', () => {
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    const palettes = fs.readFileSync(path.join(root, 'styles/palettes.css'), 'utf8');
+    assert(css.includes('.password-input > .password-visibility-toggle { position:absolute; right:2px; top:50%'));
+    assert(css.includes('min-height:74px; grid-template-columns:28px minmax(0,1fr) auto;'));
+    assert(settings.includes('className="model-readonly-test-copy"'));
+    assert(!css.includes('minmax(120px, .7fr)'));
+    assert(!settings.includes('你的账户已使用身份验证应用进行保护。登录时，需要输入验证器中的 6 位验证码。'));
+    assert(settings.includes('className={`settings-form-message is-${emailVerifyState}`}'));
+    assert(palettes.includes('summary::-webkit-details-marker { display:none; }'));
+  });
   await test('appearance selection uses theme-colored dashed ring and a dedicated website icon', () => {
     const css = fs.readFileSync(path.join(root, 'styles/palettes.css'), 'utf8');
     assert(css.includes('border:2px dashed rgb(var(--site-accent))'));
