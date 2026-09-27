@@ -4,6 +4,11 @@ Web、iOS 与 Android 共用 `/api/v1`。旧版 `/api/**` 继续兼容。
 
 ## 1. 基础信息
 
+连接地址、请求格式与服务状态。
+
+<details>
+<summary>连接与格式 · 接入前必读</summary>
+
 | 项 | 值 |
 | --- | --- |
 | Base URL | `http://localhost:3000`（生产为 HTTPS 域名） |
@@ -11,16 +16,24 @@ Web、iOS 与 Android 共用 `/api/v1`。旧版 `/api/**` 继续兼容。
 | 数据格式 | `application/json`（上传接口 `multipart/form-data`） |
 | 健康检查 | `GET /api/health` → `{ code: 0, data: { status: "ok", version } }` |
 
+</details>
+
 ## 2. 响应格式
 
 `code` 为 `0` 表示成功，业务数据在 `data` 中。
 
-**成功**
+<details>
+<summary>成功 · 读取 data</summary>
+
 ```json
 { "code": 0, "message": "ok", "data": { } }
 ```
 
-**分页列表**
+</details>
+
+<details>
+<summary>分页 · 读取列表与总数</summary>
+
 ```json
 {
   "code": 0,
@@ -30,17 +43,27 @@ Web、iOS 与 Android 共用 `/api/v1`。旧版 `/api/**` 继续兼容。
 }
 ```
 
-**失败**
+</details>
+
+<details>
+<summary>失败 · 读取错误码与提示</summary>
+
 ```json
 { "code": 40101, "message": "未登录" }
 ```
 失败同时携带 HTTP 状态码（400 / 401 / 403 / 404 / 429 / 500 / 502）。
 
+</details>
+
 ## 3. 错误码
+
+按响应 `code` 判断结果。`0` 表示成功。
+
+<details>
+<summary>请求与认证 · 参数、会话及权限</summary>
 
 | 分段 | 含义 |
 | --- | --- |
-| `0` | 成功 |
 | `40001` | 参数无效 |
 | `40002` | 请求体无效 |
 | `40101` | 未登录 |
@@ -51,8 +74,18 @@ Web、iOS 与 Android 共用 `/api/v1`。旧版 `/api/**` 继续兼容。
 | `40401` | 资源不存在 |
 | `40901` | 冲突 / 重复 |
 | `42901` | 请求过于频繁（限流） |
+
+</details>
+
+<details>
+<summary>服务异常 · 服务器与数据源</summary>
+
+| 错误码 | 含义 |
+| --- | --- |
 | `50001` | 服务器内部错误 |
 | `50002` | 上游数据源失败 |
+
+</details>
 
 ## 4. 认证
 
@@ -176,13 +209,60 @@ Authorization: Bearer <token>
 
 ## 5. 公共约定
 
-- **分页**：`?page=1&pageSize=20`（page 从 1 开始，pageSize 默认 20、上限 100），响应 `meta` 带回 total。
-- **金额**：统一为数字（元 / 美元等原生币种），不携带货币符号；汇率换算由客户端按 `GET /api/v1/rates` 处理。
-- **日期**：统一 `YYYY-MM-DD`；时间戳 `YYYY-MM-DDTHH:mm:ss.sssZ`（ISO 8601）。
-- **限流**：登录 50 次/15 分钟/IP；行情类 120 次/分钟/IP；搜索 60 次/分钟/IP；被限流返回 `42901`。
-- **缓存**：行情 / 指数类接口建议客户端 30s 内不重复请求；K 线服务端缓存 10 分钟。
+分页、数据格式与请求频率适用于以下接口。
+
+<details>
+<summary>分页 · 页码与数量</summary>
+
+```http
+?page=1&pageSize=20
+```
+
+- `page`：从 1 开始。
+- `pageSize`：默认 20，上限 100。
+- `meta.total`：返回记录总数。
+
+</details>
+
+<details>
+<summary>数据格式 · 金额与日期</summary>
+
+### 金额
+
+金额使用原生币种的数字，不带货币符号。客户端通过以下接口获取汇率后换算：
+
+```http
+GET /api/v1/rates
+```
+
+### 日期
+
+- 日期：`YYYY-MM-DD`。
+- 时间戳：`YYYY-MM-DDTHH:mm:ss.sssZ`（ISO 8601）。
+
+</details>
+
+<details>
+<summary>请求频率 · 限流与缓存</summary>
+
+### 每个 IP 的请求上限
+
+- 登录：50 次 / 15 分钟。
+- 行情：120 次 / 分钟。
+- 搜索：60 次 / 分钟。
+
+> 超过限制返回 `42901`。
+
+### 缓存建议
+
+- 行情与指数：客户端 30 秒内避免重复请求。
+- K 线：服务端缓存 10 分钟。
+
+</details>
 
 ## 6. 接口清单
+
+按业务查看接口。每条接口列出方法、路径、用途与所需权限。
 
 ### 6.1 认证
 | 方法 | 路径 | 说明 | 鉴权 |
@@ -861,19 +941,76 @@ Content-Type: application/json
 
 ## 7. 快速上手（移动端）
 
-**Swift（URLSession + Codable）**：请求统一解析 `{ code, message, data }`，`code == 0` 视为成功；认证头 `Authorization: Bearer <token>`。
+选择客户端接入方式，再查看所需业务示例。
 
-**Android（Retrofit + Gson）**：定义 `ApiResponse<T>` 泛型，`code == 0` 判成功；BaseUrl 指向 `/api/v1/`。
+<details>
+<summary>iOS · URLSession + Codable</summary>
 
-旧版 `/api/**` 接口响应为裸数据（`{ error }` 或直接资源），v1 为唯一规范入口，新功能只进 v1。
+### ① 解析响应
 
-### 资产总览币种与估值口径
+用 Codable 解析 `code`、`message`、`data`；`code == 0` 表示成功。
 
-`GET /api/v1/overview?currency=USD` 默认美元；支持汇率表内币种。
-`totalCost`、`totalMarket`、`totalPnl` 和 `byMarket` 内金额均使用响应 `currency`，不得再次按市场本币换算。
-优先实时行情，缺失时用记录价格；`valuation` 返回每条记录的 `id`、`source`（quote/record）和 `at`。
-无法换算的记录列入 `unconverted`，此时 `complete=false`，客户端应提示汇总不完整。
+### ② 携带认证
 
-### 车型首页显隐
+获取 Token 后，使用 URLSession 发起请求并附加：
 
-`PATCH /api/showcase/models/{id}`（管理员）接收 `{ "hidden": true }`，设为 `false` 恢复首页显示。内置和导入车型均支持；设置写入车型登记表，隐藏不删除文件或参数。首页及公开车型清单排除隐藏车型，不加载或预载其模型；全部隐藏时显示空状态。
+```http
+Authorization: Bearer <token>
+```
+
+</details>
+
+<details>
+<summary>Android · Retrofit + Gson</summary>
+
+### ① 设置地址
+
+BaseUrl 指向服务域名下的 `/api/v1/`，保留末尾斜线。
+
+### ② 解析响应
+
+定义 `ApiResponse<T>` 泛型承载响应，`code == 0` 表示成功。
+
+</details>
+
+<details>
+<summary>资产总览 · 币种与估值</summary>
+
+```http
+GET /api/v1/overview?currency=USD
+```
+
+### 币种
+
+- 默认美元，支持汇率表内币种。
+- `totalCost`、`totalMarket`、`totalPnl` 和 `byMarket` 的金额均使用响应 `currency`，不要再次按市场本币换算。
+
+### 估值
+
+- 优先实时行情，缺失时使用记录价格。
+- `valuation` 返回每条记录的 `id`、`source`（quote / record）和 `at`。
+- 无法换算的记录列入 `unconverted`。当 `complete=false` 时，提示汇总不完整。
+
+</details>
+
+<details>
+<summary>车型展示 · 首页显隐</summary>
+
+仅管理员可调用，支持内置和导入车型。
+
+```http
+PATCH /api/showcase/models/{id}
+```
+
+```json
+{ "hidden": true }
+```
+
+- `true`：隐藏；`false`：恢复首页显示。
+- 设置写入车型登记表，不删除模型文件或参数。
+- 隐藏车型不出现在首页和公开清单中，也不加载或预载模型。
+- 全部隐藏时，首页显示空状态。
+
+</details>
+
+> 新功能统一使用 `/api/v1/**`。旧版 `/api/**` 返回裸数据（`{ error }` 或直接资源），不要混用响应格式。
