@@ -66,6 +66,15 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(css.includes('isolation:isolate; min-height:196px; overflow:hidden; border-radius:var(--brand-preview-radius); clip-path:inset(0 round var(--brand-preview-radius));'));
     assert(css.includes('.brand-live-preview { --brand-preview-radius:18px; min-height:174px; }'));
   });
+  await test('tablet details reduce whitespace but preserve touch targets and the 48 percent height cap', () => {
+    const tablet = fs.readFileSync(path.join(root,'styles/tablet.css'),'utf8');
+    const detail = tablet.slice(tablet.lastIndexOf('@media (min-width: 768px) and (max-width: 1279px)'));
+    assert(detail.includes('max-width:560px; max-height:48dvh;'));
+    assert(detail.includes('.sc-detail-dialog-actions > button { min-height:44px; }'));
+    assert(detail.includes('min-height:116px; padding:16px; gap:16px;'));
+    assert(detail.includes('.appearance-row { min-height:64px; padding-block:10px; gap:14px; }'));
+    assert(!detail.includes('transform:scale'), 'compact spacing must not shrink text and controls together');
+  });
   await test('custom fonts validate files, isolate lists, deduplicate and protect CSS URLs', async () => {
     const type = require(path.join(root, 'lib/typography.ts'));
     const fonts = require(path.join(root, 'lib/customFonts.ts'));

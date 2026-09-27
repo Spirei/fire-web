@@ -50,4 +50,25 @@
 /* Tablet dialogs keep generous surrounding space in both orientations. */
 @media (min-width: 768px) and (max-width: 1279px) {
   .sc-detail-dialog { max-width:560px; max-height:48dvh; }
+  .sc-detail-dialog-head { min-height:64px; padding:10px 16px; }
+  .sc-detail-dialog-head h2 { font-size:22px; }
+  .sc-detail-dialog-actions > button { min-height:44px; }
+  .sc-detail-dialog-actions .sc-detail-close { width:44px; min-width:44px; }
+  .sc-detail-dialog-scroll { padding:0 16px 20px; }
+  .sc-detail-dialog .settings-section-top { padding-bottom:12px; }
+  .sc-detail-dialog .model-service-summary { min-height:72px; padding:12px 16px; gap:12px; }
+  .sc-detail-dialog .model-service-readonly > div { padding:12px 16px; gap:12px; }
+  .sc-detail-dialog :is(.sw-row-input,.sw-media-input,input[type="text"],input[type="password"],input[type="url"],input[type="email"],input[type="number"]) { min-height:48px; }
+
+  /* Compact the specimen and whitespace, never scale the entire dialog or its controls. */
+  .sc-detail-dialog .typography-preview-chrome { padding:9px 16px; }
+  .sc-detail-dialog .typography-preview-content { min-height:116px; padding:16px; gap:16px; }
+  .sc-detail-dialog .typography-specimen { width:72px; height:72px; border-radius:20px; font-size:38px; }
+  .sc-detail-dialog .typography-preview-title { font-size:19px; }
+  .sc-detail-dialog .typography-preview-copy { gap:6px; }
+  .sc-detail-dialog .typography-preview + .appearance-card { margin-top:12px; }
+  .sc-detail-dialog .appearance-card { padding-inline:16px; border-radius:20px; }
+  .sc-detail-dialog .appearance-row { min-height:64px; padding-block:10px; gap:14px; }
+  .sc-detail-dialog .typography-settings,
+  .sc-detail-dialog .appearance-more { margin-top:12px; }
 }
