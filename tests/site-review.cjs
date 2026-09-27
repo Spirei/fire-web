@@ -1885,6 +1885,10 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('className="settings-nav-visibility"'), '导航显隐应使用文字加开关');
     assert(settings.includes('<SettingsSwitch') && settings.includes('label={`${item.enabled ? "隐藏" : "显示"}${item.label}`}'));
     assert(css.includes('.sc-detail-dialog .settings-meta-list'));
+    assert(css.includes('.sc-detail-dialog .sv-win-root .settings-section-body:has(.sw-row) { padding:0;'), '详情分组必须覆盖嵌套设置行，而非只匹配直接子行');
+    assert(css.includes('.sc-detail-dialog .sv-win-root .settings-section-body .sw-row { padding:13px 16px; border:0; }'), '设置行必须先清除旧上下边框');
+    assert(css.includes('.sc-detail-dialog .sv-win-root .settings-section-body .sw-row + .sw-row { border-top:1px solid var(--sc-dialog-border); }'), '相邻行只能绘制一次分隔线');
+    assert(settings.includes('<Fragment key={id}>') && settings.includes('<div key={f.key} className="sw-row">'), '接口设置的透明容器不得隔断相邻行选择器');
     assert(css.includes('.sc-detail-dialog[data-detail^="source"] .sw-row .ctrl'), '所有数据源详情的长链接必须限制在弹层内');
     for (const anchor of ['app-nav', 'source-reports', 'source-icons', 'source-content', 'delete-account', 'passkey-config', 'backups']) {
       assert(settings.includes(`anchor: "${anchor}"`), `独立职责应有自己的设置入口：${anchor}`);

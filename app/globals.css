@@ -6308,10 +6308,12 @@ button.PhotoView-Slider__toolbarIcon {
 .settings-item-state.is-on { background:color-mix(in srgb,var(--sc-dialog-link) 10%,var(--sc-dialog-bg)); color:var(--sc-dialog-link); }
 .sc-detail-dialog .sw-row { min-height:64px; padding:13px 2px; gap:18px; border-bottom:1px solid var(--sc-dialog-border); }
 /* 分组行仅绘制一次分隔线，线条接到外框；内容仍保留独立内边距。 */
-.sc-detail-dialog .settings-section-body:has(> .sw-row) { padding:0; border-radius:16px; overflow:hidden; }
-.sc-detail-dialog .settings-section-body > .sw-row { padding:13px 16px; border-top:0; border-bottom:0; }
-.sc-detail-dialog .settings-section-body > .sw-row + .sw-row { border-top:1px solid var(--sc-dialog-border); }
-.sc-detail-dialog .settings-section-body > .sw-row:last-child { border-bottom:0; }
+/* Detail sections contain both direct rows and rows wrapped in flex columns.
+   Scope above the legacy window rules so only the group draws its outer edge. */
+.sc-detail-dialog .sv-win-root .settings-section-body:has(.sw-row) { padding:0; border-radius:16px; overflow:hidden; }
+.sc-detail-dialog .sv-win-root .settings-section-body .sw-row { padding:13px 16px; border:0; }
+.sc-detail-dialog .sv-win-root .settings-section-body .sw-row + .sw-row { border-top:1px solid var(--sc-dialog-border); }
+.sc-detail-dialog .sv-win-root .settings-section-body .sw-row:last-child { border-bottom:0; }
 .sc-detail-dialog .settings-navigation-row { width:100%; text-align:left; background:transparent; border-radius:0; color:var(--sc-dialog-text); }
 .sc-detail-dialog .settings-navigation-row .sw-row-label { flex:1; }
 .sc-detail-dialog .settings-navigation-row:hover { background:color-mix(in srgb,var(--sc-dialog-text) 2%,var(--sc-dialog-bg)); }
@@ -6577,6 +6579,7 @@ button.PhotoView-Slider__toolbarIcon {
 .sc-detail-dialog .settings-danger-zone { border-radius:16px; background:var(--sc-dialog-bg); }
 .sc-detail-dialog .settings-profile-grid { display:flex; flex-direction:column; gap:0; padding:0; }
 .sc-detail-dialog .settings-avatar-side { display:flex; flex-direction:row; align-items:center; justify-content:flex-start; gap:12px; padding:12px 2px 16px; border:0; border-bottom:1px solid var(--sc-dialog-border); border-radius:0; background:transparent; }
+.sc-detail-dialog .sv-win-root .settings-avatar-side { padding:16px; }
 .sc-detail-dialog .settings-avatar-wrap,.sc-detail-dialog .settings-avatar-wrap > img,.sc-detail-dialog .settings-avatar-wrap > span { width:52px; height:52px; }
 .sc-detail-dialog .settings-avatar-wrap > img,.sc-detail-dialog .settings-avatar-wrap > span { border-width:2px; }
 .sc-detail-dialog .settings-profile-identity { display:flex; min-width:0; flex:1; align-items:baseline; justify-content:flex-start; gap:7px; text-align:left; }
@@ -6652,8 +6655,8 @@ button.PhotoView-Slider__toolbarIcon {
   .sc-detail-dialog .settings-section-body,
   .sc-detail-dialog .settings-section-card > .settings-section-top + * { padding:6px 14px; }
   .sc-detail-dialog .sw-row { align-items:flex-start; flex-direction:column; gap:10px; padding:14px 0; }
-  .sc-detail-dialog .settings-section-body:has(> .sw-row) { padding:0; }
-  .sc-detail-dialog .settings-section-body > .sw-row { padding:14px 16px; }
+  .sc-detail-dialog .sv-win-root .settings-section-body:has(.sw-row) { padding:0; }
+  .sc-detail-dialog .sv-win-root .settings-section-body .sw-row { padding:14px 16px; }
   .sc-detail-dialog[data-detail="api"] .api-docs-entry-row { flex-direction:row; align-items:center; }
   .sc-detail-dialog[data-detail="api"] .api-docs-entry-row .sw-row-label { width:auto; }
   .sc-detail-dialog .settings-navigation-row { flex-direction:row; align-items:center; }

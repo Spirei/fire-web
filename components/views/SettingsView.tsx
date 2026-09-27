@@ -4,7 +4,7 @@ import SecurityCheck from "@/components/SecurityCheck";
 import AppModal from "@/components/AppModal";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isSixDigitTotp, normalizeTotpDigits } from "@/lib/totpInput";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -3360,12 +3360,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       const fields = SOURCE_FIELDS.filter((f) => (keys as readonly string[]).includes(f.key));
                       if (!fields.length) return null;
                       return (
-                        <div key={id} className="contents">
+                        <Fragment key={id}>
                           {fields.map((f) => {
                             const value = (site as unknown as Record<string, string>)[f.key] || f.placeholder;
                             return (
-                              <div key={f.key} className="contents">
-                              <div className="sw-row">
+                              <div key={f.key} className="sw-row">
                                 <div className="sw-row-label"><b>{f.name}</b><span>{f.desc}</span></div>
                                 <div className="ctrl">
                                   {editingSources ? (
@@ -3416,10 +3415,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                   )}
                                 </div>
                               </div>
-                              </div>
                             );
                           })}
-                        </div>
+                        </Fragment>
                       );
                     })}
                   </div>
