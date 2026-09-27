@@ -431,7 +431,7 @@ function BackupTaskCard() {
     n >= 1073741824 ? `${(n / 1073741824).toFixed(1)} GB` : n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${(n / 1024).toFixed(0)} KB` : `${n} B`;
   if (!cfg) return <div className="settings-load-state" role="status">{loadError || "正在读取备份设置…"}{loadError && <button type="button" className="btn btn-line" onClick={() => void refresh()}>重试</button>}</div>;
   return <div className="settings-backup-panel">
-    <SettingsManagedGroup scope="backups">
+    <SettingsManagedGroup scope="backups" inline>
     <SettingsManagedPane name="plan" title="备份计划" summary={`${cfg.enabled ? "已开启" : "未开启"} · ${({1:"每小时",24:"每天",168:"每周",720:"每月"} as Record<number,string>)[cfg.intervalHours] || `每 ${cfg.intervalHours} 小时`} · 保留 ${cfg.keep} 份`}>
     <fieldset className="settings-clean-group" disabled={saving || busy} aria-label="备份计划">
       <div className="sw-row"><div className="sw-row-label"><b>自动备份</b><span>保存数据库与素材文件</span></div><SettingsSwitch checked={enabled === true} onChange={() => setEnabled(v => !v)} label="自动备份" /></div>
@@ -3078,15 +3078,21 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     if (editingModel) return;
                     void saveBlock("model-order", { modelServices: next }, "模型优先级已保存").then(ok => { if (!ok) updateServices(services); });
                   };
-                  const addService = () => updateServices([...services, {
-                    id: `model-service-${Date.now().toString(36)}`,
+                  const addService = () => {
+                    const id = `model-service-${Date.now().toString(36)}`;
+                    updateServices([...services, {
+                    id,
                     name: "新模型服务",
                     provider: "custom",
                     icon: "",
                     apiUrl: "",
                     apiKey: "",
                     models: [""]
-                  }]);
+                    }]);
+                    const url = new URL(window.location.href);
+                    url.searchParams.set("panel", `models:${id}`);
+                    window.history.pushState(null, "", url);
+                  };
                   return (
                     <SettingsSection
                       id="translation"
@@ -3097,7 +3103,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       action={editingModel ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" disabled={!!uploadingModelIconId || !!blockSaving.model} onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">{uploadingModelIconId ? "图标保存中…" : "保存"}</button></div> : <button type="button" onClick={() => { if (!site.modelServices.length) updateServices(services); setEditingModel(true); }} className="btn btn-ghost btn-sm">编辑</button>}
                     >
                       <div className="model-service-stack">
-                        <SettingsManagedGroup scope="models" editing={editingModel} onReorder={blockSaving["model-order"] ? undefined : reorderServices}>
+                        <SettingsManagedGroup scope="models" inline={services.length === 1} headings={false} editing={editingModel} onReorder={blockSaving["model-order"] ? undefined : reorderServices}>
                         {services.map((service, serviceIndex) => {
                           const meta = MODEL_PROVIDERS.find(item => item.id === service.provider) || MODEL_PROVIDERS[3];
                           const configured = Boolean(service.apiKey || service.apiKeyConfigured) && Boolean(service.apiUrl) && service.models.some(Boolean);
@@ -3192,7 +3198,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                               ) : (
                                 <div className="model-service-readonly">
                                   <div><span>API 地址</span><b title={service.apiUrl}>{service.apiUrl || "未设置"}</b></div>
-                                  <div><span>模型数量</span><b>{service.models.filter(Boolean).length} 个</b></div>
+                                  {service.models.filter(Boolean).map(model => <div key={model} className="model-readonly-test-row"><span title={model}>{model}</span><button type="button" className="btn btn-line btn-sm" onClick={() => void testModelService(service, model)} disabled={modelTestStates[`${service.id}:${model}`]?.state === "loading"}>{modelTestStates[`${service.id}:${model}`]?.state === "loading" ? "测试中…" : modelTestStates[`${service.id}:${model}`]?.state === "ok" ? "重新测试" : "测试连接"}</button>{modelTestStates[`${service.id}:${model}`]?.text && <small className={modelTestStates[`${service.id}:${model}`]?.state === "error" ? "text-up" : "text-muted"}>{modelTestStates[`${service.id}:${model}`].text}</small>}</div>)}
                                   <div><span>密钥</span><b>{service.apiKeyConfigured || service.apiKey ? "已安全保存" : "未配置"}</b></div>
                                 </div>
                               )}
@@ -3221,7 +3227,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   ) : undefined}
                   action={editingFutu ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                 >
-                  <SettingsManagedGroup scope="trade" editing={editingFutu}>
+                  <SettingsManagedGroup scope="trade" inline editing={editingFutu}>
                     <SettingsManagedPane name="connection" title="OpenD 连接" summary={`${site.futuHost || "127.0.0.1"}:${site.futuPort || "11111"} · ${futuOnline === null ? "检测中…" : futuOnline ? "已连接" : futuSkipped ? "本地跳过" : "未连接"}`}>
                       <div className="sw-row">
                         <div className="sw-row-label"><b>OpenD 主机</b><span>填写运行 OpenD 的设备地址</span></div>
@@ -3247,7 +3253,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                     </div>
                     </SettingsManagedPane>
-                    <SettingsManagedPane name="quota" title="接口额度" summary={futuQuota.data?.subscription && futuQuota.data.historyKl ? `订阅 ${futuQuota.data.subscription.ownUsed}/${futuQuota.data.subscription.ownTotalQuota} · 历史K线 ${futuQuota.data.historyKl.used}/${futuQuota.data.historyKl.totalQuota}` : "按需查询，不自动消耗接口额度"}>
+                    <SettingsManagedPane name="quota" title="接口额度" heading={false} summary={futuQuota.data?.subscription && futuQuota.data.historyKl ? `订阅 ${futuQuota.data.subscription.ownUsed}/${futuQuota.data.subscription.ownTotalQuota} · 历史K线 ${futuQuota.data.historyKl.used}/${futuQuota.data.historyKl.totalQuota}` : "按需查询，不自动消耗接口额度"}>
                     <div className="sw-row">
                       <div className="sw-row-label"><b>接口额度</b><span>已用 / 总额</span></div>
                       <div className="ctrl flex flex-nowrap items-center gap-2">
@@ -3271,7 +3277,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                     </div>
                     </SettingsManagedPane>
-                    <SettingsManagedPane name="source" title="行情来源" summary={site.quoteSource === "futu" ? "仅富途" : site.quoteSource === "tencent" ? "腾讯 + Yahoo" : "自动（富途优先）"}>
+                    <SettingsManagedPane name="source" title="行情来源" heading={false} summary={site.quoteSource === "futu" ? "仅富途" : site.quoteSource === "tencent" ? "腾讯 + Yahoo" : "自动（富途优先）"}>
                     <div className="sw-row">
                       <div className="sw-row-label"><b>行情来源</b><span>自动模式失败时使用备用源</span></div>
                       {editingFutu ? <AppSelect value={site.quoteSource} onChange={value => setSite(s => ({ ...s, quoteSource:value as SiteSettings["quoteSource"] }))} options={[{value:"auto",label:"自动（富途优先）"},{value:"futu",label:"仅富途"},{value:"tencent",label:"腾讯 + Yahoo"}]} className="settings-clean-select" ariaLabel="行情来源" /> : <span className="settings-detail-value">{site.quoteSource === "futu" ? "仅富途" : site.quoteSource === "tencent" ? "腾讯 + Yahoo" : "自动（富途优先）"}</span>}
@@ -3458,7 +3464,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 </SettingsSection>
                 <SettingsSection id="data" icon="data" title="导入与导出" desc="备份或迁移你的数据">
                   <div className="settings-profile-actions">
-                  <SettingsManagedGroup scope="data">
+                  <SettingsManagedGroup scope="data" inline headings={false}>
                   <SettingsManagedPane name="export" title="导出网站数据" summary="备份持仓、订单、分组与个人设置">
                   <p className="settings-managed-note">包含持仓、订单、自选分组、个人偏好与昵称；不含图片、图标和数据库连接信息。管理员导出另含站点设置与名人持仓。</p>
                   <div className="sw-row">
@@ -3591,7 +3597,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   ) : undefined}
                   action={editingDb ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                 >
-                  <SettingsManagedGroup scope="database" editing={editingDb}>
+                  <SettingsManagedGroup scope="database" inline headings={false} editing={editingDb}>
                   <SettingsManagedPane name="type" title="存储方式" summary={site.dbType === "sqlite" ? "SQLite · 本地文件" : "PostgreSQL · 远程数据库"}>
                   <div className="subhead">数据库类型</div>
                   <div className="settings-db-types">
@@ -3688,14 +3694,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </p>
                     )}
                     <div className="mt-4 flex flex-wrap gap-3">
-                      <button type="button" disabled={dbTesting || !editingDb} onClick={testDb} className="btn btn-ghost btn-sm disabled:opacity-60">
+                      <button type="button" disabled={dbTesting} onClick={testDb} className="btn btn-ghost btn-sm disabled:opacity-60">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4 12 14.01l-3-3" />
                         </svg>
                         {dbTesting ? "测试中…" : "测试连接"}
-                      </button>
-                      <button type="button" disabled={dbSaving || !editingDb} onClick={saveDb} className="btn btn-line btn-sm disabled:opacity-60">
-                        {dbSaving ? "保存中…" : "保存数据库配置"}
                       </button>
                     </div>
                   </>

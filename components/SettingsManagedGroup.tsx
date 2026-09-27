@@ -3,11 +3,11 @@
 import { Children, isValidElement, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 
-type PaneProps = { name: string; title: string; summary?: ReactNode; children: ReactNode };
+type PaneProps = { name: string; title: string; summary?: ReactNode; heading?: boolean; children: ReactNode };
 export function SettingsManagedPane({ children }: PaneProps) { return <>{children}</>; }
 
 /** Keep forms mounted so navigating back never discards an unsaved draft. */
-export default function SettingsManagedGroup({ scope, children, editing = false, onReorder }: { scope: string; children: ReactNode; editing?: boolean; onReorder?: (from: number, to: number) => void }) {
+export default function SettingsManagedGroup({ scope, children, editing = false, onReorder, inline = false, headings = true }: { scope: string; children: ReactNode; editing?: boolean; onReorder?: (from: number, to: number) => void; inline?: boolean; headings?: boolean }) {
   const params = useSearchParams();
   const panes = Children.toArray(children).filter(isValidElement<PaneProps>);
   const requested = params.get("panel");
@@ -29,6 +29,12 @@ export default function SettingsManagedGroup({ scope, children, editing = false,
       target?.focus();
     });
   }
+  if (inline) return <div ref={root} className="settings-managed is-inline" data-scope={scope} data-editing={editing || undefined}>
+    {panes.map(pane => <section key={pane.props.name} className="settings-managed-inline-section">
+      {headings && pane.props.heading !== false && <h3 className="settings-clean-heading">{pane.props.title}</h3>}
+      <div className="settings-managed-content">{pane}</div>
+    </section>)}
+  </div>;
   return <div ref={root} className="settings-managed" data-scope={scope} data-editing={editing || undefined}>
     <span className="sr-only" aria-live="polite">{announcement}</span>
     {active && <div className="settings-managed-heading"><button type="button" className="settings-managed-back" onClick={() => navigate()} aria-label="返回概览">‹</button><h3>{active.props.title}</h3></div>}

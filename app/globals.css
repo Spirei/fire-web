@@ -6740,6 +6740,14 @@ button.PhotoView-Slider__toolbarIcon {
 .settings-managed-back:hover { background: var(--sc-dialog-hover, #f2f3f5); }
 .settings-managed-content:not([hidden]) { animation: settings-managed-enter 160ms ease-out; }
 .settings-managed-content[hidden] { display: none !important; }
+.settings-managed.is-inline { display:flex; flex-direction:column; gap:24px; }
+.settings-managed-inline-section { min-width:0; }
+.settings-managed-inline-section > .settings-clean-heading { margin:0 0 10px; font-size:15px; font-weight:600; }
+.settings-managed.is-inline .settings-managed-content { animation:none; }
+.sc-detail-dialog .model-service-readonly .model-readonly-test-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.sc-detail-dialog .model-readonly-test-row > span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.sc-detail-dialog .model-readonly-test-row > button { flex:none; }
+.sc-detail-dialog .model-readonly-test-row > small { flex-basis:100%; overflow-wrap:anywhere; line-height:20px; }
 .settings-managed[data-scope="trade"] .settings-managed-content:not([hidden]) { border: 1px solid var(--sc-dialog-border); border-radius: 16px; overflow: hidden; }
 .settings-managed[data-scope="data"] .settings-managed-content .sw-row { border: 1px solid var(--sc-dialog-border) !important; border-radius: 16px; }
 .settings-managed-content .settings-full-action { margin-top: 16px; }

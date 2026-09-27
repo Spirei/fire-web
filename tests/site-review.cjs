@@ -1915,6 +1915,12 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(managed.includes('onReorder?.') && managed.includes('onDragEnd'), '模型优先级拖动须保留');
     for (const scope of ['models', 'trade', 'backups', 'database', 'data']) assert(settings.includes(`scope="${scope}"`));
     assert(settings.includes('url.searchParams.delete("panel")'), '切换设置应清理旧详情');
+    for (const scope of ['trade', 'backups', 'database', 'data']) assert(settings.includes(`scope="${scope}" inline`), `${scope} 不得增加往返层级`);
+    assert(settings.includes('inline={services.length === 1}'), '单个模型服务不需要额外列表层级');
+    assert(!settings.includes('保存数据库配置"}'), '数据库不应提供两个相同的保存入口');
+    assert(settings.includes('disabled={dbTesting} onClick={testDb}'), '只测试数据库连接不应强迫进入编辑');
+    assert(settings.includes('className="model-readonly-test-row"'), '已保存的模型连接应可直接测试');
+    assert(settings.includes('url.searchParams.set("panel", `models:${id}`)'), '添加模型服务后应直接进入新服务，不要求再次选择');
     const automatic = settings.slice(settings.indexOf('function autoSaveSnapshot'), settings.indexOf('function captureSaved'));
     for (const field of ['futuPort', 'quoteSource', 'ticker', 'homeNav', 'quoteApiUrl', 'logoText']) assert(!automatic.includes(field), `${field} 有保存按钮，不得自动提交草稿`);
   });
