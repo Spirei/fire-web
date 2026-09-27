@@ -391,7 +391,7 @@ export default function ApiDocsPage() {
             {toc.length > 1 && (
               <div className="api-docs-mobile-toc mb-4 flex gap-2 overflow-x-auto pb-1 lg:hidden">
                 {toc.map((g) => (
-                  <button key={g.slug} type="button" onClick={() => jump(g.slug)} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${currentSlug === g.slug ? "border-edge-strong bg-white text-ink shadow-sm dark:bg-[#252c3a] dark:text-white" : "border-edge bg-white/70 text-muted hover:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]"}`}>
+                  <button aria-pressed={currentSlug === g.slug} key={g.slug} type="button" onClick={() => jump(g.slug)} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${currentSlug === g.slug ? "border-edge-strong bg-white text-ink shadow-sm dark:bg-[#252c3a] dark:text-white" : "border-edge bg-white/70 text-muted hover:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]"}`}>
                     {g.text}
                   </button>
                 ))}

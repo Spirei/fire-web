@@ -639,7 +639,7 @@ export default function AssetPnlAnalysis({
       <div className="mt-3 mb-4 flex items-center gap-3">
         <div className="flex min-w-0 items-center gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {["本月", "近 1 月", "近 6 月", "本年", "近 1 年", "全部"].map((item) => (
-            <button key={item} onClick={() => setPeriod(item)} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${period === item ? "border-[#3297f6] bg-[#3297f6]/15 text-[#3297f6] shadow-sm" : "border-edge text-muted hover:bg-bg-gray"}`}>{item}</button>
+            <button aria-pressed={period === item} key={item} onClick={() => setPeriod(item)} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${period === item ? "border-[#3297f6] bg-[#3297f6]/15 text-[#3297f6] shadow-sm" : "border-edge text-muted hover:bg-bg-gray"}`}>{item}</button>
           ))}
         </div>
         {/* 市场筛选按钮：紧跟「全部」右侧（在滚动容器外，下拉不被裁剪） */}
@@ -874,8 +874,8 @@ export default function AssetPnlAnalysis({
               <article className="card p-5">
                 <div className="flex items-center justify-between"><h2 className="text-base font-bold">全部盈亏排行榜</h2><span className="text-xs text-muted">更新至 {updatedAt.slice(5).replace("/", ".")}</span></div>
                 <div className="mt-5 grid grid-cols-2 rounded-full bg-bg-gray p-1">
-                  <button onClick={() => setRankMode("profit")} className={`rounded-full py-2.5 font-semibold ${rankMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利 Top5</button>
-                  <button onClick={() => setRankMode("loss")} className={`rounded-full py-2.5 font-semibold ${rankMode === "loss" ? "bg-white shadow-sm" : "text-muted"}`}>亏损 Top5</button>
+                  <button aria-pressed={rankMode === "profit"} onClick={() => setRankMode("profit")} className={`rounded-full py-2.5 font-semibold ${rankMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利 Top5</button>
+                  <button aria-pressed={rankMode === "loss"} onClick={() => setRankMode("loss")} className={`rounded-full py-2.5 font-semibold ${rankMode === "loss" ? "bg-white shadow-sm" : "text-muted"}`}>亏损 Top5</button>
                 </div>
                 <div className="mt-5 space-y-2">
                   {ranking.length === 0 && <p className="py-8 text-center text-sm text-muted">暂无数据</p>}
@@ -895,8 +895,8 @@ export default function AssetPnlAnalysis({
               <article className="card p-5">
                 <div className="flex items-center justify-between"><h2 className="text-base font-bold">股票盈亏明细</h2><span className="text-xs text-muted">{rows.length} 只</span></div>
                 <div className="mt-5 grid grid-cols-2 rounded-full bg-bg-gray p-1">
-                  <button onClick={() => setDetailMode("profit")} className={`rounded-full py-2.5 font-semibold ${detailMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利</button>
-                  <button onClick={() => setDetailMode("loss")} className={`rounded-full py-2.5 font-semibold ${detailMode === "loss" ? "bg-white shadow-sm" : "text-muted"}`}>亏损</button>
+                  <button aria-pressed={detailMode === "profit"} onClick={() => setDetailMode("profit")} className={`rounded-full py-2.5 font-semibold ${detailMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利</button>
+                  <button aria-pressed={detailMode === "loss"} onClick={() => setDetailMode("loss")} className={`rounded-full py-2.5 font-semibold ${detailMode === "loss" ? "bg-white shadow-sm" : "text-muted"}`}>亏损</button>
                 </div>
                 <div className="mt-5 divide-y divide-edge">
                   {rows.length === 0 && <p className="py-8 text-center text-sm text-muted">暂无数据</p>}
@@ -951,7 +951,7 @@ export default function AssetPnlAnalysis({
               <div className="flex items-center justify-between"><h2 className="text-base font-bold">全部盈亏总结</h2><span className="text-xs text-muted">更新至 {updatedAt.slice(5).replace("/", ".")}</span></div>
               <div className="mt-5 flex gap-2">
                 {["全部", "美股", "港股", "A股"].map((item) => (
-                  <button
+                  <button aria-pressed={market === item}
                     key={item}
                     type="button"
                     onClick={() => setMarket(item)}

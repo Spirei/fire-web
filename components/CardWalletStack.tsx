@@ -121,7 +121,7 @@ function IconButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <button aria-pressed={active}
       type="button"
       onClick={onClick}
       title={label}

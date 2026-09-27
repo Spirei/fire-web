@@ -71,7 +71,7 @@ function FundDatePicker({ value, onChange, max }: { value: string; onChange: (va
           const disabled = date > max;
           const active = date === selected;
           const isToday = date === today;
-          return <button key={date} type="button" disabled={disabled} onClick={() => { onChange(date); setOpen(false); }} className={`relative mx-auto flex h-8 w-8 items-center justify-center rounded-full text-[11px] tabular-nums transition ${active ? "bg-[#3297f6] font-bold text-white shadow-sm" : disabled ? "cursor-not-allowed text-faint opacity-35" : "text-ink hover:bg-bg-gray"}`}>{day}{isToday && !active && <i className="absolute bottom-0.5 h-1 w-1 rounded-full bg-[#3297f6]" />}</button>;
+          return <button aria-pressed={active} key={date} type="button" disabled={disabled} onClick={() => { onChange(date); setOpen(false); }} className={`relative mx-auto flex h-8 w-8 items-center justify-center rounded-full text-[11px] tabular-nums transition ${active ? "bg-[#3297f6] font-bold text-white shadow-sm" : disabled ? "cursor-not-allowed text-faint opacity-35" : "text-ink hover:bg-bg-gray"}`}>{day}{isToday && !active && <i className="absolute bottom-0.5 h-1 w-1 rounded-full bg-[#3297f6]" />}</button>;
         })}</div>
         <div className="mt-3 flex items-center justify-between border-t border-edge px-1 pt-3"><span className="text-[9px] text-muted">未来日期不可选择</span><button type="button" onClick={() => { onChange(today); setMonth(new Date()); setOpen(false); }} className="text-[10px] font-semibold text-[#3297f6] hover:underline">回到今天</button></div>
       </div>

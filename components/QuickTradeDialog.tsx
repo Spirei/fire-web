@@ -492,7 +492,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
                       </div>
                       <div className="flex items-center justify-between border-t border-[#f0e2da] dark:border-white/10 px-3 py-2">
                         <span className="text-xs text-[#6b6b70] dark:text-white/60">展示碎股</span>
-                        <button type="button" onClick={() => setShowFractions((v) => !v)} className={className("relative h-5 w-9 rounded-full transition-colors", showFractions ? "bg-[#34c759]" : "bg-white/20")}>
+                        <button role="switch" aria-checked={showFractions} type="button" onClick={() => setShowFractions((v) => !v)} className={className("relative h-5 w-9 rounded-full transition-colors", showFractions ? "bg-[#34c759]" : "bg-white/20")}>
                           <span className={className("absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all", showFractions ? "left-[18px]" : "left-0.5")} />
                         </button>
                       </div>
@@ -622,7 +622,7 @@ function Calendar({ month, onMonth, value, onPick, onClose }: { month: { y: numb
             const isSel = sel === value;
             const isToday = sel === today;
             return (
-              <button key={i} type="button" disabled={!d} onClick={() => d && onPick(ds(d))} className={className("mx-0.5 my-0.5 grid h-7 place-items-center rounded-full text-[13px] tabular-nums transition-colors", !d ? "invisible" : isSel ? "bg-[#2f6fed] font-semibold text-white" : isToday ? "font-semibold text-[#2f6fed]" : "text-[#1d1d1f] hover:bg-black/5 dark:text-white/80 dark:hover:bg-white/10")}>
+              <button data-capsule="off" aria-pressed={isSel} key={i} type="button" disabled={!d} onClick={() => d && onPick(ds(d))} className={className("mx-0.5 my-0.5 grid h-7 place-items-center rounded-full text-[13px] tabular-nums transition-colors", !d ? "invisible" : isSel ? "bg-[#2f6fed] font-semibold text-white" : isToday ? "font-semibold text-[#2f6fed]" : "text-[#1d1d1f] hover:bg-black/5 dark:text-white/80 dark:hover:bg-white/10")}>
                 {d ?? ""}
               </button>
             );

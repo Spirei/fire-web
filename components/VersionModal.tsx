@@ -103,7 +103,7 @@ export default function VersionModal({
         {VERSIONS.length > 1 && (
           <div data-glass-group className="mb-5 flex flex-wrap gap-2">
             {VERSIONS.map((v) => (
-              <button
+              <button aria-pressed={active.version === v.version}
                 key={v.version}
                 type="button"
                 onClick={() => setActive(v)}

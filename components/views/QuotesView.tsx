@@ -761,7 +761,7 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
           const g = watchGroups.find((x) => x.id === chip.id);
           const customIcon = g && g.kind === "custom" ? g.icon || brokerIcons[g.name] || groupStockIcon[g.id] : undefined;
           return (
-            <button
+            <button aria-pressed={selected}
               key={chip.id}
               ref={(node) => { groupChipRefs.current[chip.id || "__all"] = node; }}
               type="button"

@@ -212,12 +212,12 @@ export default function PnlCalendar({
         </div>
         <div className="pnl-calendar-switches flex items-center gap-2">
           <div className="flex rounded-full bg-bg-gray p-1 text-sm">
-            <button onClick={() => onViewChange("year")} className={`rounded-full px-5 py-2 font-semibold transition ${view === "year" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>年</button>
-            <button onClick={() => onViewChange("month")} className={`rounded-full px-5 py-2 font-semibold transition ${view === "month" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>月</button>
+            <button aria-pressed={view === "year"} onClick={() => onViewChange("year")} className={`rounded-full px-5 py-2 font-semibold transition ${view === "year" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>年</button>
+            <button aria-pressed={view === "month"} onClick={() => onViewChange("month")} className={`rounded-full px-5 py-2 font-semibold transition ${view === "month" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>月</button>
           </div>
           <div className="flex rounded-full bg-bg-gray p-1 text-sm">
-            <button onClick={() => onModeChange("收益")} className={`rounded-full px-5 py-2 font-semibold transition ${mode === "收益" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>收益</button>
-            <button onClick={() => onModeChange("收益率")} className={`rounded-full px-5 py-2 font-semibold transition ${mode === "收益率" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>收益率</button>
+            <button aria-pressed={mode === "收益"} onClick={() => onModeChange("收益")} className={`rounded-full px-5 py-2 font-semibold transition ${mode === "收益" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>收益</button>
+            <button aria-pressed={mode === "收益率"} onClick={() => onModeChange("收益率")} className={`rounded-full px-5 py-2 font-semibold transition ${mode === "收益率" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>收益率</button>
           </div>
         </div>
       </div>

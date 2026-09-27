@@ -1044,7 +1044,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       {/* 市场按钮（可拖动排序，第一个为默认显示，加号编辑/新增市场） */}
       <div className="mb-5 flex flex-wrap items-center gap-2">
         {/* 总资产：全市场汇总，位于最左侧 */}
-        <button
+        <button aria-pressed={active === "TOTAL"}
           type="button"
           onClick={() => switchMarket("TOTAL")}
           title="总资产：全部市场汇总"
@@ -1068,7 +1068,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           const count = holdingsPool.filter((p) => p.market === m).length;
           const activeTab = active === m;
           return (
-            <button
+            <button aria-pressed={activeTab}
               key={m}
               type="button"
               draggable

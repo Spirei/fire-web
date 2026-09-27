@@ -172,7 +172,7 @@ export default function HoldingDividendDialog({
               {["全部", ...years].map((item) => {
                 const active = item === "全部" ? year === null : year === item;
                 return (
-                  <button
+                  <button aria-pressed={active}
                     key={item}
                     type="button"
                     onClick={() => setYear(item === "全部" ? null : item)}

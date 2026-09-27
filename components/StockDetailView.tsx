@@ -915,7 +915,7 @@ export default function StockDetailView({ market, initialNow = 0, code, name, qu
                     ["short", "做空"],
                     ["income", "收益策略"]
                   ].map(([key, label]) => (
-                    <button
+                    <button aria-pressed={etfFilter === key}
                       key={key}
                       type="button"
                       onClick={() => setEtfFilter(key as "all" | "long" | "short" | "income")}
@@ -1046,7 +1046,7 @@ export default function StockDetailView({ market, initialNow = 0, code, name, qu
                       {["全部", ...dividendYears].map((y) => {
                         const active = y === "全部" ? dividendYear === null : dividendYear === y;
                         return (
-                          <button
+                          <button aria-pressed={active}
                             key={y}
                             type="button"
                             onClick={() => setDividendYear(y === "全部" ? null : y)}

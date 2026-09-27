@@ -4626,6 +4626,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "安全检查插图系统内置，完善全站密码显示与隐藏。",
   software: V0_1_43_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.44" } : item),
   changes: [
+    { kind: "fix", title: "非首页胶囊统一", desc: "非首页操作胶囊与导航接入统一中性色、圆角、细边框及选中反馈，覆盖设置详情、通行密钥、双重验证、股票详情、卡面漫游、API 文档和管理弹窗；保留危险与禁用语义、深色卡面场景和分段滑块动画。首页不应用，减少动态偏好关闭过渡。" },
     { kind: "feature", title: "密码显示切换", desc: "所有可编辑密码输入增加显示与隐藏按钮，覆盖首次设置、找回密码、账号资料、安全确认和管理配置；默认隐藏，不读取已保存密钥，禁用或清空时恢复隐藏，切换不提交表单。" },
     { kind: "fix", title: "安全插图部署兜底", desc: "安全检查保持内置 SVG，旧图片地址由系统代码返回同款插图，不受空 icons 挂载或 Docker 素材排除影响；响应要求缓存重新验证，并增加部署审计与无素材回归。" }
   ]

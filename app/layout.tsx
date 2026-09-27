@@ -24,6 +24,8 @@ import { PALETTE_KEY, paletteVariables, resolvePalette } from "@/lib/palettes";
 import "@/styles/palettes.css";
 import "@/styles/liquid-glass.css";
 import AppDialogHost from "@/components/AppDialogHost";
+import CapsuleScope from "@/components/CapsuleScope";
+import "@/styles/capsules.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = getSiteSettings();
@@ -81,6 +83,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body className="font-sans">
+        <CapsuleScope />
         <PrefsProvider initialPrefs={prefs}>
           <PaletteProvider>
             <SiteFavicon />

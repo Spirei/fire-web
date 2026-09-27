@@ -1254,7 +1254,7 @@ export default function TradeOrdersPanel({
                   {([["all", "全部"], ["today", "当日"], ["7d", "近7天"], ["30d", "近30天"], ["1y", "近1年"], ["custom", "自定义"]] as const).map(([mode, label]) => {
                     const active = timeFilter.mode === mode;
                     return (
-                      <button
+                      <button aria-pressed={active}
                         key={mode}
                         type="button"
                         onClick={() => {

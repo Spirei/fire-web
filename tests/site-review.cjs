@@ -16,6 +16,25 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('non-home capsules include portalled details, retain semantic controls and exclude homepage', () => {
+    const scope = fs.readFileSync(path.join(root,'components/CapsuleScope.tsx'),'utf8');
+    const css = fs.readFileSync(path.join(root,'styles/capsules.css'),'utf8');
+    const layout = fs.readFileSync(path.join(root,'app/layout.tsx'),'utf8');
+    assert(scope.includes('pathname !== "/"'));
+    assert(!scope.includes('useEffect') && !scope.includes('window.'));
+    assert(layout.includes('<CapsuleScope />') && layout.includes('styles/capsules.css'));
+    assert(css.includes('body:has([data-capsule-scope="non-home"])'));
+    for(const name of ['.sc-detail-primary-action','.totp-meta-primary','.pk-intro-actions','.card-wander-modes','.stock-chart-range','.fire-sidebar-item','.sc-nav-link','.fire-cap']) assert(css.includes(name),name);
+    assert(css.includes(':not([role="switch"],[role="checkbox"],.password-visibility-toggle'));
+    assert(css.includes('--cap-danger') && css.includes(':disabled') && css.includes('@media(prefers-reduced-motion:reduce)'));
+    assert(css.includes('.card-wander-zoom-backdrop') && css.includes('.card-wander-seg-thumb'));
+    const calendar = fs.readFileSync(path.join(root,'components/PnlCalendar.tsx'),'utf8');
+    assert(calendar.includes('aria-pressed={view === "month"}') && calendar.includes('aria-pressed={mode === "收益"}'));
+    const trade = fs.readFileSync(path.join(root,'components/QuickTradeDialog.tsx'),'utf8');
+    assert(trade.includes('role="switch" aria-checked={showFractions}') && trade.includes('data-capsule="off" aria-pressed={isSel}'));
+    const cards = fs.readFileSync(path.join(root,'components/views/CardLibraryView.tsx'),'utf8');
+    assert(cards.includes('aria-pressed={!activeScope.overridden}'));
+  });
   await test('password inputs use accessible draft-only visibility toggles', () => {
     const React = require('react');
     const { renderToStaticMarkup } = require('react-dom/server');

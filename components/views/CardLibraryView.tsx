@@ -220,7 +220,7 @@ function fileExt(file: string): string {
 
 function Pill({ active, children, onClick }: { active: boolean; children: React.ReactNode; onClick: () => void }) {
   return (
-    <button
+    <button aria-pressed={active}
       type="button"
       onClick={onClick}
       className={`whitespace-nowrap rounded-full border px-4 py-2 text-[13px] font-semibold transition-all duration-200 ${
@@ -2541,7 +2541,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <span className="text-[11px] text-faint">改成</span>
-                    <button
+                    <button aria-pressed={!activeScope.overridden}
                       type="button"
                       disabled={saving}
                       onClick={() => void setScopeOverride(active.card.file, "")}
@@ -2554,7 +2554,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                       自动
                     </button>
                     {CURRENCY_SCOPE_ORDER.map((value) => (
-                      <button
+                      <button aria-pressed={activeScope.overridden && activeScope.scope === value}
                         key={value}
                         type="button"
                         disabled={saving}

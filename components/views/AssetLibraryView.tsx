@@ -1538,7 +1538,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
               </div>
               <div className="asset-library-market-tools relative flex flex-wrap items-center gap-1.5">
                 {(["ALL", ...orderedMarkets.slice(0, 5)] as string[]).map((m, i) => (
-                  <button
+                  <button aria-pressed={selected === m}
                     key={m}
                     type="button"
                     draggable={m !== "ALL"}

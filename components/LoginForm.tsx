@@ -164,7 +164,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
       {mode === "login" && !totpTicket && !recovering && (
         <div className="mt-6 grid grid-cols-2 rounded-full bg-bg-gray p-1">
           {([["username", "用户名登录"], ["email", "邮箱登录"]] as const).map(([key, label]) => (
-            <button
+            <button aria-pressed={loginType === key}
               key={key}
               type="button"
               onClick={() => { setLoginType(key); setError(""); }}
