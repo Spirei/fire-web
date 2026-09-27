@@ -4,7 +4,12 @@
 const loaders: Record<string, () => Promise<unknown>> = {
   holdings: () => import("@/components/views/HoldingsView"),
   watchlist: () => import("@/components/views/WatchlistView"),
-  assets: () => import("@/components/views/AssetAnalysisView"),
+  // Prime the nested trend chunk alongside the page on navigation intent, not after its first render.
+  // Importing code does not mount charts or start their data requests.
+  assets: () => Promise.all([
+    import("@/components/views/AssetAnalysisView"),
+    import("@/components/PnlTrendChart")
+  ]),
   fire: () => import("@/components/views/FireView"),
   activities: () => import("@/components/views/ActivitiesView"),
   earnings: () => import("@/components/views/EarningsCalendarView"),

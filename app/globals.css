@@ -742,6 +742,12 @@
   animation: tab-in 0.28s ease both;
 }
 
+/* Desktop navigation is immediate; keep mobile direction cues and unrelated detail fades. */
+@media(min-width:768px) {
+  body:has([data-capsule-scope="non-home"]) .records-content > .tab-panel,
+  body:has([data-capsule-scope="non-home"]) .sc-detail-dialog .tab-panel { animation:none; }
+}
+
 /* 智能助手保留完整工作区结构，同时留出与主站一致的呼吸边距。 */
 .app-shell-main:has(.assistant-page) { padding-top:16px; padding-bottom:16px; }
 .records-app:has(.assistant-page) { gap:16px; align-items:start; }

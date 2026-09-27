@@ -20,12 +20,22 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const css = fs.readFileSync(path.join(root, 'styles/capsules.css'), 'utf8');
     const app = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
     const {accentVariables} = require(path.join(root, 'lib/appearance.ts'));
-    assert(css.includes('font-weight:550!important; transition:none!important; transform:none!important;'));
-    assert(css.includes('svg { color:inherit!important; opacity:1; filter:none; transition:none!important; }'));
+    assert(css.includes('font-weight:500!important; transition:none!important; transform:none!important;'));
+    assert(css.includes('svg { color:inherit!important; opacity:.72; filter:none; transition:none!important; }'));
+    assert(css.includes(',.fire-sidebar-item-active,[aria-current="page"]) svg { opacity:1; }'));
     assert(app.includes('aria-current={activeTab === t.key ? "page" : undefined}'));
     assert(!app.includes('fire-sidebar-item-active font-semibold'));
     assert.equal(accentVariables('white')['--site-action-icon-filter'], 'brightness(0)');
     assert.equal(accentVariables('brown')['--site-action-icon-filter'], 'brightness(0) invert(1)');
+  });
+  await test('desktop workspace switches do not replay page fades and asset intent primes nested chart code', () => {
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    assert(css.includes('@media(min-width:768px) {\n  body:has([data-capsule-scope="non-home"]) .records-content > .tab-panel,'));
+    assert(css.includes('.sc-detail-dialog .tab-panel { animation:none; }'));
+    assert(css.includes('animation:mobile-panel-forward 200ms'));
+    const preload = fs.readFileSync(path.join(root, 'lib/viewPreload.ts'), 'utf8');
+    assert(preload.includes('assets: () => Promise.all(['));
+    assert(preload.includes('import("@/components/PnlTrendChart")'));
   });
   await test('settings detail overlays keep the category header stable and back navigation mobile-only', () => {
     const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
@@ -644,6 +654,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     navigator.connection.effectiveType='4g'; fail=true; exports.preloadView('cards'); await flush(); assert.equal(calls,2);
     fail=false; exports.preloadView('cards'); await flush(); assert.equal(calls,3);
     exports.preloadView('__proto__'); await flush(); assert.equal(calls,3);
+    exports.preloadView('assets'); exports.preloadView('assets'); await flush(); assert.equal(calls,5, 'page and nested chart load together, once each');
     const app=fs.readFileSync(path.join(root,'components/RecordsApp.tsx'),'utf8');
     assert(app.includes('!["holdings", "assets", "fire", "pnl", "watchlist"].includes(activeTab)'));
     assert(app.includes('onPointerEnter=') && app.includes('onFocus='));
