@@ -38,6 +38,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('menuClassName="typography-select-menu"'));
     assert(settings.includes('aria-pressed={weight === item.value}'));
     assert(settings.includes('name="typography"'));
+    assert(!settings.includes('Fire · 字体预览'));
+    assert(settings.includes('别人贪婪时恐惧，') && settings.includes('别人恐惧时贪婪。'));
+    assert(settings.includes('π 3.141592653589793…'));
     assert(fs.readFileSync(path.join(root,'components/SettingsHeader.tsx'),'utf8').includes('typography: (<><path'));
   });
   await test('navigation selection changes background and ink together without weight or icon tweening', () => {

@@ -6,8 +6,9 @@ import { SubNavIcon } from "./SettingsHeader";
 export function TypographyPreview() {
   const { font, weight } = useTypography();
   return <div className="typography-preview" aria-label="字体实时预览" style={{ fontFamily: resolveFont(font).family, fontWeight: weight }}>
-      <div className="typography-preview-chrome"><span className="typography-window-dots" aria-hidden="true"><i/><i/><i/></span><span>Fire · 字体预览</span></div>
-      <div className="typography-preview-content"><span className="typography-specimen" aria-hidden="true">Aa</span><div className="typography-preview-copy"><span className="typography-preview-title">让每一笔记录，清晰动人。</span><span>我的持仓 · 资产分析 · 自选股</span><span className="typography-preview-numbers">Fire 0123456789 · $12,345.67</span></div></div>
+      <div className="typography-preview-chrome"><span className="typography-window-dots" aria-hidden="true"><i/><i/><i/></span></div>
+      {/* Buffett's 1986 shareholder letter: https://www.berkshirehathaway.com/letters/1986.html */}
+      <div className="typography-preview-content"><span className="typography-specimen" aria-hidden="true">Aa</span><div className="typography-preview-copy"><span className="typography-preview-title">别人贪婪时恐惧，</span><span>别人恐惧时贪婪。</span><span className="typography-preview-numbers">π 3.141592653589793…</span></div></div>
     </div>;
 }
 export default function TypographySettings() {
