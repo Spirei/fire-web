@@ -1951,6 +1951,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const toaster = fs.readFileSync(path.join(root, 'components/Toaster.tsx'), 'utf8');
     assert(toaster.includes('timers.forEach(clearTimeout)') && toaster.includes('leaving: true'));
     assert(toaster.includes('.slice(-3)') && toaster.includes('role={t.type === "err" ? "alert" : "status"}'));
+    assert(toaster.includes('r="10" fill="currentColor"') && toaster.includes('pathLength="1"'), '反馈徽标应使用统一实心圆及归一化勾线');
+    const toastCss = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    assert(toastCss.includes('fire-toast-icon-enter 240ms') && toastCss.includes('.fire-toast-icon,.fire-toast-symbol,.fire-toast-mark { animation:none; }'), '图标短动效必须支持减少动画偏好');
   });
   await test('clickable controls have actions and password recovery is reachable', () => {
     const files = [];

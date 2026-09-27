@@ -45,9 +45,11 @@ export default function Toaster() {
           className={`fire-toast is-${t.type}${t.leaving ? " is-leaving" : ""}`}
           role={t.type === "err" ? "alert" : "status"}
         >
-          <svg className="fire-toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            {t.type === "ok" ? <path className="fire-toast-mark" d="m7.5 12 3 3 6-6" /> : t.type === "err" ? <><path d="M12 7.5v5" /><path d="M12 16h.01" /></> : <path d="M8 12h8" />}
+          <svg className="fire-toast-icon" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="10" fill="currentColor" />
+            <g className="fire-toast-symbol" stroke="#fff">
+              {t.type === "ok" ? <path className="fire-toast-mark" pathLength="1" d="m7.5 12 3 3 6-6" /> : t.type === "err" ? <><path d="M12 7v6" /><circle cx="12" cy="16.5" r="1" fill="#fff" stroke="none" /></> : <path d="M8 12h8" />}
+            </g>
           </svg>
           <span>{t.text}</span>
         </div>
