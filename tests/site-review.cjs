@@ -862,6 +862,30 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const shortcut = dashboard.slice(dashboard.indexOf('className="asset-pnl-shortcut text-left"'), dashboard.indexOf('className="asset-pnl-shortcut text-left"') + 800);
     assert(!shortcut.includes('group-hover:opacity-100'));
   });
+  await test('mobile asset holdings retain calculations and make trading explicit', async () => {
+    const list = fs.readFileSync(path.join(root, 'components/AssetHoldingList.tsx'), 'utf8');
+    const dashboard = fs.readFileSync(path.join(root, 'components/AssetAnalysisDashboard.tsx'), 'utf8');
+    const app = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
+    const view = fs.readFileSync(path.join(root, 'components/views/AssetAnalysisView.tsx'), 'utf8');
+    assert(dashboard.includes('records={pagedPositions}'));
+    assert(dashboard.includes('cell={holdingCell}'));
+    assert(list.includes('numericColumns.includes(key as HoldingColumnKey)'));
+    assert(list.includes('numericColumns.filter(key => !featured.includes(key))'));
+    assert(list.includes('setExpanded(open ? null : record.id)'));
+    assert(list.includes('setActionRecord(record)'));
+    assert(list.includes('setActionRecord(null); onAction(actionRecord, action)'));
+    assert(list.includes('aria-label="持仓排序指标"'));
+    assert(app.includes('onReady={restoreAssetPosition}'));
+    assert(view.includes('useLayoutEffect(() => onReady?.(), [onReady])'));
+    assert(app.includes('window.history.replaceState({}, "", assetReturnRef.current.url)'));
+  });
+  await test('mobile fund explanations are collapsed without hiding records', async () => {
+    const funds = fs.readFileSync(path.join(root, 'components/FundsPanel.tsx'), 'utf8');
+    assert(funds.includes('<details className="fund-calculation-notes md:hidden">'));
+    assert(!funds.includes('<details open'));
+    assert(funds.includes('className="fund-records-link"'));
+    assert(!funds.includes('温馨提示'));
+  });
   await test('high-risk admin mutations require step-up authentication', async () => {
     const auth = require(path.join(root, 'lib/auth.ts'));
     const admin = createUser('review_stepup_admin', 'Admin-test-123');

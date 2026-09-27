@@ -6250,6 +6250,18 @@ button.PhotoView-Slider__toolbarIcon {
 .asset-pnl-shortcut { width:100%; border-radius:0; transition:background-color .18s; }
 .asset-pnl-shortcut:not(:disabled):hover { background:rgb(var(--site-ink) / .04); }
 .asset-account-card > div:first-child button { min-width:40px; min-height:40px; box-shadow:none; border-radius:50%; }
+.asset-mobile-holdings { display:none; }
+.fund-panel-footer { border-top:1px solid rgb(var(--site-ink) / .12); }
+.fund-calculation-notes summary,.fund-records-link { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:44px; width:100%; font-size:12px; color:rgb(var(--site-ink) / .7); cursor:pointer; }
+.fund-calculation-notes summary { list-style:none; }
+.fund-calculation-notes summary::-webkit-details-marker { display:none; }
+.fund-calculation-notes[open] summary svg { transform:rotate(180deg); }
+.fund-calculation-notes + .fund-records-link { border-top:1px solid rgb(var(--site-ink) / .08); }
+.asset-mobile-actions.modal-glass { background:rgb(var(--site-surface)) !important; }
+.asset-mobile-action-list { overflow:hidden; border:1px solid rgb(var(--site-edge)); border-radius:16px; }
+.asset-mobile-action-list button { display:flex; align-items:center; justify-content:space-between; width:100%; min-height:52px; padding:12px 16px; color:rgb(var(--site-ink)); }
+.asset-mobile-action-list button + button { border-top:1px solid rgb(var(--site-edge)); }
+.asset-mobile-action-list button:active { background:rgb(var(--site-ink) / .06); }
 .asset-analysis-page input[placeholder="代码 / 名称"] { height:40px; width:clamp(120px,calc(100vw - 210px),180px); border-radius:12px; font-size:13px; }
 .workspace-navigation-list { border:1px solid rgb(var(--site-edge)); border-radius:16px; overflow:hidden; }
 .workspace-navigation-list button { display:flex; align-items:center; gap:14px; width:100%; min-height:54px; padding:14px 16px; text-align:left; color:rgb(var(--site-ink)); background:transparent; }
@@ -6277,6 +6289,35 @@ button.PhotoView-Slider__toolbarIcon {
   .asset-account-amount { font-size:32px; }
 }
 .settings-mobile-toolbar { display:none; }
+@media(max-width:767px) {
+  .asset-desktop-holdings { display:none !important; }
+  .asset-mobile-holdings { display:block; }
+  .asset-mobile-list-caption { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 20px 4px; font-size:11px; color:rgb(var(--site-ink) / .55); }
+  .asset-mobile-list-caption > span { flex:none; white-space:nowrap; }
+  .asset-mobile-sort { display:flex; align-items:center; justify-content:flex-end; gap:4px; flex:1; min-width:0; }
+  .asset-mobile-sort select { flex:1; min-width:0; max-width:150px; min-height:40px; padding:8px; border-radius:12px; background:rgb(var(--site-surface)); color:rgb(var(--site-ink)); font-size:12px; }
+  .asset-mobile-sort button { flex:none; width:40px; height:40px; border-radius:12px; color:rgb(var(--site-ink)); font-size:18px; }
+  .asset-mobile-holding + .asset-mobile-holding { border-top:1px solid rgb(var(--site-edge)); }
+  .asset-mobile-holding-trigger { display:grid; grid-template-columns:minmax(0,1fr) 18px; align-items:center; gap:14px 8px; width:100%; padding:18px 20px; text-align:left; }
+  .asset-mobile-holding-identity,.asset-mobile-holding-identity > span { min-width:0; }
+  .asset-mobile-holding-identity b { font-size:14px; font-weight:600; }
+  .asset-mobile-holding-identity small { font-size:11px; }
+  .asset-mobile-holding-summary { grid-column:1/-1; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .asset-mobile-holding-summary > span > span { display:block; margin-bottom:4px; font-size:11px; color:rgb(var(--site-ink) / .55); }
+  .asset-mobile-holding-summary strong { font-size:15px; font-weight:600; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+  .asset-mobile-holding-expanded { padding:0 20px 18px; animation:fade-in .18s ease; }
+  .asset-mobile-holding-expanded dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; padding:16px 0; border-top:1px solid rgb(var(--site-edge)); }
+  .asset-mobile-holding-expanded dt { font-size:11px; color:rgb(var(--site-ink) / .55); }
+  .asset-mobile-holding-expanded dd { margin-top:4px; font-size:14px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+  .asset-mobile-trade-button { display:block; width:100%; min-height:44px; margin-top:16px; border:1px solid rgb(var(--site-edge)); border-radius:14px; font-size:14px; font-weight:600; }
+  .asset-mobile-trade-button:active { background:rgb(var(--site-ink) / .06); }
+  .asset-account-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); border-top:1px solid rgb(var(--site-edge)); }
+  .asset-account-metrics > * { display:block; border-top:0; padding:14px 0; }
+  .asset-account-metrics > *:last-child { grid-column:1/-1; display:flex; border-top:1px solid rgb(var(--site-edge)); min-height:48px; }
+  .asset-account-metrics strong { margin-top:6px; text-align:left; }
+  .asset-account-metrics > *:last-child strong { margin-top:0; }
+}
+@media(prefers-reduced-motion:reduce) { .asset-mobile-holding-expanded { animation:none; } }
 .sc-mobile-brand { display:none; }
 @media(max-width:767px) {
   .app-shell-root:has(.records-app.is-settings),

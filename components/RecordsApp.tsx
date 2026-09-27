@@ -147,11 +147,24 @@ export default function RecordsApp({
   const loadedQuoteIdsRef = useRef(new Set<string>());
   const quoteCacheKeyRef = useRef("");
   const desktopNavRef = useRef<HTMLElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const assetReturnRef = useRef<{ url: string; top: number; innerTop: number } | null>(null);
+  const restoreAssetScrollRef = useRef(false);
   const [fourDoorPinned, setFourDoorPinned] = usePersistedState("fire:four-door-pinned", false);
   const [sidebarScroll, setSidebarScroll] = useState({ top: 0, height: 0, visible: false });
   const [userLogs, setUserLogs] = useState<SystemLog[]>(initialUserLogs);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
+  const restoreAssetPosition = useCallback(() => {
+    if (!restoreAssetScrollRef.current || !assetReturnRef.current) return;
+    const position = assetReturnRef.current;
+    const frame = requestAnimationFrame(() => {
+      restoreAssetScrollRef.current = false;
+      window.scrollTo({ top: position.top, behavior: "instant" });
+      contentRef.current?.scrollTo({ top: position.innerTop, behavior: "instant" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const skipInitialActivityFetchRef = useRef(initialTab === "activities");
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
   const [navReady, setNavReady] = useState(true);
@@ -871,7 +884,7 @@ export default function RecordsApp({
       </aside>
 
       {/* 内容区 */}
-      <div className="records-content min-w-0 flex-1">
+      <div ref={contentRef} className="records-content min-w-0 flex-1">
         {activeTab !== "settings" && <WorkspaceNavigation items={sidebarTabs} activeKey={activeTab} onPrepare={key => preloadView(key as TabKey)} onSelect={key => {
           if (key !== activeTab) selectTab(key as TabKey);
           window.scrollTo({ top: 0, behavior: "instant" });
@@ -925,7 +938,13 @@ export default function RecordsApp({
                 avatar: user?.avatar ?? ""
               }}
               refreshQuotes={refreshQuotes}
-              onOpenPnlAnalysis={() => selectTab("pnl")}
+              onReady={restoreAssetPosition}
+              onOpenPnlAnalysis={() => {
+                assetReturnRef.current = { url: `${window.location.pathname}${window.location.search}${window.location.hash}`, top: window.scrollY, innerTop: contentRef.current?.scrollTop || 0 };
+                selectTab("pnl");
+                window.scrollTo({ top: 0, behavior: "instant" });
+                contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
+              }}
             />
           )}
           {activeTab === "fire" && (
@@ -937,7 +956,11 @@ export default function RecordsApp({
           )}
           {activeTab === "pnl" && (
             <AssetPnlAnalysisView
-              onBack={() => selectTab("assets")}
+              onBack={() => {
+                restoreAssetScrollRef.current = Boolean(assetReturnRef.current);
+                selectTab("assets");
+                if (assetReturnRef.current) window.history.replaceState({}, "", assetReturnRef.current.url);
+              }}
               initialRecords={records}
               initialQuotes={quotes}
             />

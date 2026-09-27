@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useLayoutEffect, useMemo } from "react";
 import { type Quote, type StockRecord } from "@/lib/types";
 import AssetAnalysisDashboard from "@/components/AssetAnalysisDashboard";
 import { useAssetIcons } from "@/lib/useAssetIcons";
@@ -13,10 +13,12 @@ interface Props {
   user?: { username?: string; nickname?: string; avatar?: string };
   refreshQuotes?: (options?: { force?: boolean }) => Promise<void>;
   onOpenPnlAnalysis?: () => void;
+  onReady?: () => void | (() => void);
 }
 
 /** 独立页签：资产分析（从我的持仓剥离），行情/汇率/记录刷新与持仓页共用链路 */
-export default function AssetAnalysisView({ records, quotes, livePrice, user, refreshQuotes, onOpenPnlAnalysis }: Props) {
+export default function AssetAnalysisView({ records, quotes, livePrice, user, refreshQuotes, onOpenPnlAnalysis, onReady }: Props) {
+  useLayoutEffect(() => onReady?.(), [onReady]);
   const { stockIcons } = useAssetIcons(["stock"]);
   const rates = useRates();
 
