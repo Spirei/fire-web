@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PasskeyLoginButton from "@/components/PasskeyLoginButton";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
+import PasswordStrength from "@/components/PasswordStrength";
 import { isCompleteBackupCode, isSixDigitTotp, normalizeBackupInput, normalizeTotpDigits } from "@/lib/totpInput";
 
 type Mode = "login" | "register";
@@ -224,6 +225,8 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={mode === "register" ? "至少 8 位，含字母和数字" : "请输入密码"}
+              maxLength={128}
+              autoComplete={mode === "register" ? "new-password" : "current-password"}
               required
               className={`${inputCls} pr-11`}
             />
@@ -241,6 +244,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
               )}
             </button>
           </div>
+          {mode === "register" && <PasswordStrength password={password} userInputs={[username]} />}
         </label>
 
         {mode === "register" && (
@@ -252,6 +256,8 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 placeholder="再次输入密码"
+                maxLength={128}
+                autoComplete="new-password"
                 required
                 className={`${inputCls} pr-11`}
               />

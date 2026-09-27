@@ -4,6 +4,7 @@ import SecurityCheck from "@/components/SecurityCheck";
 import SettingsManagedGroup, { SettingsManagedPane } from "@/components/SettingsManagedGroup";
 import AppModal from "@/components/AppModal";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
+import PasswordStrength from "@/components/PasswordStrength";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -1728,7 +1729,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [signOutOtherDevices, setSignOutOtherDevices] = useState(false);
-  const [showPasswordHelp, setShowPasswordHelp] = useState(false);
   const [pwdMsg, setPwdMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [pwdBusy, setPwdBusy] = useState(false);
   const [mailTesting, setMailTesting] = useState(false);
@@ -3468,13 +3468,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                   </div>
                 </SettingsSection>
-                <SettingsSection id="password" icon="password" title="更改密码" desc={<>你将使用这个密码登录 Fire。请使用至少 8 位的字母和数字组合。 <button type="button" className="settings-password-help-link" aria-expanded={showPasswordHelp} onClick={() => setShowPasswordHelp((value) => !value)}>了解如何创建高强度密码</button></>}>
+                <SettingsSection id="password" icon="password" title="更改密码">
                   <form onSubmit={changePassword} className="settings-password-grid settings-password-meta">
-                    {showPasswordHelp && <div className="settings-password-help"><b>高强度密码</b><span>建议使用 12 位以上、不与其他网站重复的密码，并交给 iCloud 钥匙串、1Password 或 Bitwarden 保管。</span></div>}
                     <div className="settings-account-identity"><span className="settings-account-avatar">{me.avatar ? <img src={me.avatar} alt="" /> : (me.nickname || me.username).slice(0, 1)}</span><span><b>{me.nickname || me.username}</b><small>{me.email || `@${me.username}`}</small></span><span aria-hidden="true">›</span></div>
                     <label><span>当前密码</span><input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required autoFocus data-autofocus autoComplete="current-password" placeholder="当前密码" /></label>
-                    <label><span>新密码</span><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required placeholder="新密码" /></label>
-                    <label><span>确认新密码</span><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required placeholder="再次输入新密码" /></label>
+                    <div><label><span>新密码</span><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required maxLength={128} autoComplete="new-password" placeholder="新密码" /></label><PasswordStrength password={newPassword} userInputs={[me.username, me.nickname, me.email ?? ""]} /></div>
+                    <label><span>确认新密码</span><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required maxLength={128} autoComplete="new-password" placeholder="再次输入新密码" /></label>
                     {totpEnabled && (
                       <label><span>二次验证码</span><input autoComplete="one-time-code" spellCheck={false} value={totpPasswordCode} onChange={(e) => setTotpPasswordCode(e.target.value)} required placeholder="验证器 6 位数字或备用码" /></label>
                     )}
@@ -3875,7 +3874,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </button>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>前端技术栈</b><span>交互与响应式界面</span></div>
-                    <span className="settings-detail-value">Next.js 15 · React 19 · TypeScript · Tailwind CSS · WebGL 原图动效 · KTX2/UASTC 纹理压缩</span>
+                    <span className="settings-detail-value">Next.js 15 · React 19 · TypeScript · Tailwind CSS · WebGL 原图动效 · KTX2/UASTC 纹理压缩 · zxcvbn-ts（本地密码强度）</span>
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>数据与服务</b><span>本地优先，可切换企业数据库</span></div>

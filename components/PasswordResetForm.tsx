@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import PasswordStrength from "@/components/PasswordStrength";
 import { useMemo, useRef, useState } from "react";
 
 export default function PasswordResetForm({ token, onBusy, onRestart }: { token: string; onBusy?: (busy: boolean) => void; onRestart?: () => void }) {
@@ -47,7 +48,7 @@ export default function PasswordResetForm({ token, onBusy, onRestart }: { token:
   return <form onSubmit={submit} className="space-y-4">
     <div><h1 className="text-2xl font-extrabold text-ink">设置新密码</h1><p className="mt-1.5 text-sm text-muted">至少 8 位，并同时包含字母和数字。</p></div>
     {!token && <p role="alert" className="rounded-[10px] bg-up-bg px-3.5 py-3 text-sm text-up">请先验证身份。</p>}
-    <label className="block text-sm font-semibold text-ink-2">新密码<input type="password" value={password} disabled={busy} maxLength={128} onChange={event => setPassword(event.target.value)} autoComplete="new-password" required className="field mt-1.5 w-full" /></label>
+    <div><label className="block text-sm font-semibold text-ink-2">新密码<input type="password" value={password} disabled={busy} maxLength={128} onChange={event => setPassword(event.target.value)} autoComplete="new-password" required className="field mt-1.5 w-full" /></label><PasswordStrength password={password} /></div>
     <label className="block text-sm font-semibold text-ink-2">确认新密码<input type="password" value={confirm} disabled={busy} maxLength={128} onChange={event => setConfirm(event.target.value)} autoComplete="new-password" required className="field mt-1.5 w-full" /></label>
     {error && <p role="alert" className="rounded-[10px] bg-up-bg px-3.5 py-3 text-sm text-up">{error}</p>}
     <button type="submit" disabled={busy || !valid} className="h-11 w-full rounded-[10px] bg-[#0866ff] text-sm font-bold text-white transition-colors hover:bg-[#075ce5] disabled:cursor-not-allowed disabled:bg-bg-gray disabled:text-faint">{busy ? "正在更新…" : "更新密码"}</button>

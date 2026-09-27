@@ -619,6 +619,28 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(JSON.parse(db.prepare('SELECT totp_backup_codes FROM users WHERE id=?').get(standalone.id).totp_backup_codes).length,1);
     assert.equal(reset.issuePasswordRecoveryTotp(other.id),null,'unconfigured account cannot use TOTP recovery');
   });
+  await test('password strength detects common patterns and personal inputs without changing server policy', async () => {
+    const {estimatePasswordStrength}=require(path.join(root,'lib/passwordStrength.ts'));
+    const {validatePassword}=require(path.join(root,'lib/password.ts'));
+    for(const weak of ['Password123!','qwerty123','abcabcabc123','aaaaaaaaaaaaaaaaa1','1234567890a'])assert((await estimatePasswordStrength(weak))<=1,weak);
+    const strong='F8$vQ2!zR9@kL6#nT4';
+    assert.equal(await estimatePasswordStrength(strong),4);
+    assert((await estimatePasswordStrength(strong,[strong]))<=1,'personal inputs lower guess resistance');
+    assert.equal(await estimatePasswordStrength(strong),4,'prior personal context must not leak into later checks');
+    assert.equal(await estimatePasswordStrength('a'.repeat(256)+'1'),await estimatePasswordStrength('a'.repeat(128)),'estimation input bounded');
+    const controller=new AbortController();controller.abort();
+    await assert.rejects(estimatePasswordStrength(strong,[],controller.signal),{name:'AbortError'});
+    assert.equal(validatePassword('Password123!'),null,'rating is advisory, not a new server policy');
+    const settings=fs.readFileSync(path.join(root,'components/views/SettingsView.tsx'),'utf8');
+    assert(!settings.includes('你将使用这个密码') && !settings.includes('showPasswordHelp'));
+    for(const file of ['components/LoginForm.tsx','components/PasswordResetForm.tsx','components/views/SettingsView.tsx'])assert(fs.readFileSync(path.join(root,file),'utf8').includes('<PasswordStrength'));
+    const component=fs.readFileSync(path.join(root,'components/PasswordStrength.tsx'),'utf8');
+    assert(component.includes('if (!password) return null') && component.includes('controller.abort()'));
+    assert(component.includes('new Worker(new URL(') && component.includes('workerRef.current?.terminate()'));
+    const css=fs.readFileSync(path.join(root,'app/globals.css'),'utf8');
+    assert(css.includes('input:not([type="checkbox"]):is(:focus,:focus-visible) { border-color:var(--sc-dialog-border-strong); outline:none; box-shadow:none; }'));
+    assert(!component.includes('localStorage') && !component.includes('fetch('));
+  });
   await test('SMTP sliding budgets cap recipient, purpose and site volume without plaintext addresses', () => {
     const { reserveMailAttempt, MailBudgetError } = require(path.join(root,'lib/mailBudget.ts'));
     const clock=Date.now;let now=clock();Date.now=()=>now;
