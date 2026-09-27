@@ -1,7 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
-import { useServerPrefs, writePrefCookie } from "@/lib/prefsContext";
+import { createContext, useContext } from "react";
 
 export const SettingsSectionSelection = createContext<{ active: string; anchors: readonly string[] } | null>(null);
 
@@ -197,12 +196,7 @@ export function SettingsSection({
   action,
   titleAction,
   className,
-  id,
-  collapsible = false,
-  defaultOpen = true,
-  storageKey,
-  summary,
-  reveal = false
+  id
 }: {
   icon: string;
   title: string;
@@ -212,48 +206,11 @@ export function SettingsSection({
   titleAction?: React.ReactNode;
   className?: string;
   id?: string;
-  collapsible?: boolean;
-  defaultOpen?: boolean;
-  storageKey?: string;
-  summary?: string;
-  /** 为 true 时强制展开（用于「点了编辑却看不到内容」的场景） */
-  reveal?: boolean;
 }) {
-  const key = `fire:collapse:${storageKey || title}`;
   const selection = useContext(SettingsSectionSelection);
-  const serverPrefs = useServerPrefs();
-  const [open, setOpen] = useState(() => typeof serverPrefs[key] === "boolean" ? serverPrefs[key] as boolean : defaultOpen);
-
-  useEffect(() => {
-    if (!collapsible) return;
-    try {
-      const saved = localStorage.getItem(key);
-      if (saved !== null) setOpen(saved === "1" || saved === "true");
-    } catch { /* 存储不可用时保留首帧状态 */ }
-  }, [collapsible, key]);
-
-  function toggleOpen() {
-    const next = !open;
-    setOpen(next);
-    try { localStorage.setItem(key, next ? "1" : "0"); } catch { /* 存储不可用时仍可切换 */ }
-    writePrefCookie(key, next);
-  }
-
-  // 进入编辑态时把分区自动展开：否则用户点了「编辑」却因为折叠看不到任何内容
-  useEffect(() => {
-    if (reveal) {
-      setOpen(true);
-      try { localStorage.setItem(key, "1"); } catch { /* 忽略 */ }
-      writePrefCookie(key, true);
-    }
-  }, [reveal, key]);
-
   return (
-    <section id={id} hidden={Boolean(id && selection?.anchors.includes(id) && selection.active !== id)} className={`settings-section-card${collapsible ? " is-accordion" : ""} ${className || ""}`}>
-      <div
-        className={`settings-section-top flex items-start justify-between gap-4 ${collapsible ? "cursor-pointer select-none" : ""}`}
-        onClick={collapsible ? toggleOpen : undefined}
-      >
+    <section id={id} hidden={Boolean(id && selection?.anchors.includes(id) && selection.active !== id)} className={`settings-section-card ${className || ""}`}>
+      <div className="settings-section-top flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3.5">
           <span className="settings-section-icon flex h-8 w-8 flex-none items-center justify-center rounded-md">
             <SubNavIcon name={icon} className="h-4 w-4" />
@@ -264,41 +221,13 @@ export function SettingsSection({
               {titleAction && <span className="settings-section-title-action inline-flex" onClick={(e) => e.stopPropagation()}>{titleAction}</span>}
             </div>
             {desc && <p className="max-w-3xl leading-6">{desc}</p>}
-            {summary && !open && <p className="settings-section-summary">{summary}</p>}
           </div>
         </div>
         <div className="flex flex-none items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
           {action && <span className="settings-section-primary-actions inline-flex items-center gap-1.5">{action}</span>}
-          {collapsible && (
-            <button
-              type="button"
-              onClick={toggleOpen}
-              aria-label={open ? "折叠" : "展开"}
-              title={open ? "折叠" : "展开"}
-              className="settings-section-chevron inline-flex h-8 w-8 items-center justify-center"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className={`h-[18px] w-[18px] transition-transform duration-200 ${open ? "rotate-90" : ""}`}
-              >
-                <path d="m9 6 6 6-6 6" />
-              </svg>
-            </button>
-          )}
         </div>
       </div>
-      {collapsible ? (
-        <div className={`settings-section-body grid transition-[grid-template-rows,opacity] duration-200 ease-out ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
-          <div className="min-h-0 overflow-hidden">{children}</div>
-        </div>
-      ) : (
-        <div className="settings-section-body">{children}</div>
-      )}
+      <div className="settings-section-body">{children}</div>
     </section>
   );
 }

@@ -12,7 +12,7 @@ import { appConfirm, appPrompt } from "@/lib/appDialog";
 import AppSelect from "@/components/AppSelect";
 import { copyText } from "@/lib/clipboard";
 import PaletteSettings from "@/components/PaletteSettings";
-import SettingsHeader, { SettingsSection, SettingsSectionSelection, SubNavIcon } from "@/components/SettingsHeader";
+import { SettingsSection, SettingsSectionSelection, SubNavIcon } from "@/components/SettingsHeader";
 import { LOGO_FONT_LABELS, logoFontClass } from "@/lib/logoFont";
 import MarketIcon from "@/components/MarketIcon";
 import DeleteIcon from "@/components/DeleteIcon";
@@ -271,12 +271,13 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
   }
 ];
 
-function SettingsSwitch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+function SettingsSwitch({ checked, onChange, label = "切换设置" }: { checked: boolean; onChange: () => void; label?: string }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={label}
       onClick={onChange}
       className={`relative h-6 w-11 flex-none rounded-full transition-colors duration-200 ${checked ? "bg-[#34c759]" : "bg-[#e9e9ea] dark:bg-[#3a3a3c]"}`}
     >
@@ -1279,20 +1280,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }
 
   function addGroup() {
-    setShowAllStockGroups(true);
     setEditingStockGroups(true);
     setStockGroups((prev) => [...prev, { id: `g${Date.now()}-${prev.length}`, name: "新券商", alias: "" }]);
   }
 
   const [groupMsg, setGroupMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [showAllStockGroups, setShowAllStockGroups] = useState(false);
   const [editingStockGroups, setEditingStockGroups] = useState(false);
   const [editingTicker, setEditingTicker] = useState(false);
   const [editingHomeNav, setEditingHomeNav] = useState(false);
   const [editingTabs, setEditingTabs] = useState(false);
-  const [showAllTicker, setShowAllTicker] = useState(false);
-  const [showAllHomeNav, setShowAllHomeNav] = useState(false);
-  const [showAllTabs, setShowAllTabs] = useState(false);
   const [editingSources, setEditingSources] = useState(false);
   const [editingModel, setEditingModel] = useState(false);
   const [uploadingModelIconId, setUploadingModelIconId] = useState<string | null>(null);
@@ -1319,7 +1315,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [editingSiteInfo] = useState(true);
   const [editingFutu, setEditingFutu] = useState(false);
   const [editingMarketBadges, setEditingMarketBadges] = useState(false);
-  const [showAllMarketBadges, setShowAllMarketBadges] = useState(false);
   const [editingAppearance, setEditingAppearance] = useState(false);
   const [editingDb, setEditingDb] = useState(false);
   const activeEditState = activeAnchor === "trading-square" ? editingTradingSquare
@@ -2351,10 +2346,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       desc="首页顶部指数行情条的指数与轮换间隔"
                       className="xl:col-span-2"
                       id="ticker"
-                      collapsible
-                      defaultOpen
-                      storageKey="homepage-ticker-v2"
-                      reveal={editingTicker}
                       titleAction={!editingTicker ? (
                         <button type="button" onClick={() => setEditingTicker(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑首页指数" aria-label="编辑首页指数">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
@@ -2386,8 +2377,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <span />
                       </div>
 
-                      <div className="settings-compact-list flex flex-col gap-2">
-                        {site.ticker.items.slice(0, showAllTicker ? site.ticker.items.length : 5).map((item, i) => (
+                      <div className="settings-compact-list settings-meta-list flex flex-col gap-2">
+                        {site.ticker.items.map((item, i) => (
                           <div
                             key={item.key}
                             draggable={editingTicker}
@@ -2442,12 +2433,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           </div>
                         ))}
                       </div>
-                      {site.ticker.items.length > 5 && (
-                        <button type="button" onClick={() => setShowAllTicker((value) => !value)} className="mt-3 inline-flex self-start items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink" aria-expanded={showAllTicker}>
-                          {showAllTicker ? "收起" : `更多（${site.ticker.items.length - 5}）`}
-                          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 transition-transform ${showAllTicker ? "rotate-180" : ""}`}><path d="m5 7.5 5 5 5-5" /></svg>
-                        </button>
-                      )}
                       <datalist id="ticker-market-options">
                         {["US", "HK", "CN", "JP", "KR", "SG", "TW", "TH", "IN", "AU", "DE", "GB", "FR"].map((m) => (
                           <option key={m} value={m} />
@@ -2467,10 +2452,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       desc="首页入口菜单，可拖动排序、启停"
                       className="xl:col-span-2"
                       id="nav"
-                      collapsible
-                      defaultOpen
-                      storageKey="home-nav-v2"
-                      reveal={editingHomeNav}
                       titleAction={!editingHomeNav ? (
                         <button type="button" onClick={() => setEditingHomeNav(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑首页导航" aria-label="编辑首页导航">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
@@ -2478,8 +2459,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       ) : undefined}
                       action={editingHomeNav ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                     >
-                      <div className="settings-compact-list flex flex-col gap-2">
-                        {(site.homeNav || []).slice(0, showAllHomeNav ? (site.homeNav || []).length : 5).map((item) => (
+                      <div className="settings-compact-list settings-meta-list flex flex-col gap-2">
+                        {(site.homeNav || []).map((item) => (
                           <div
                             key={item.key}
                             draggable={editingHomeNav}
@@ -2501,37 +2482,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
                                 <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
                               </svg>
-                              {/* 显示 / 隐藏用眼睛图标切换（右对齐同一列），不再用「勾选框 + 显示」文字 */}
-                              <button
-                                type="button"
-                                aria-pressed={item.enabled}
-                                title={item.enabled ? "已显示，点击隐藏" : "已隐藏，点击显示"}
-                                aria-label={item.enabled ? "隐藏这一项" : "显示这一项"}
-                                onClick={() => setNav(item.key, { enabled: !item.enabled })}
-                                className={`flex h-7 w-7 flex-none items-center justify-center rounded-md transition-colors hover:bg-brand-hover dark:hover:bg-white/10 ${item.enabled ? "text-ink-2" : "text-faint"}`}
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                                  {item.enabled ? (
-                                    <><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" /><circle cx="12" cy="12" r="3" /></>
-                                  ) : (
-                                    <><path d="M3 3l18 18" /><path d="M10.6 10.6A3 3 0 0 0 13.4 13.4" /><path d="M9.9 5.1A10 10 0 0 1 12 5c5 0 9.3 3.1 11 7.5a11.7 11.7 0 0 1-4.2 4.8M6.1 6.1A11.7 11.7 0 0 0 1 12.5 10.8 10.8 0 0 0 12 19c1.1 0 2.2-.2 3.2-.5" /></>
-                                  )}
-                                </svg>
-                              </button>
+                              <label className="settings-nav-visibility"><span>{item.enabled ? "显示" : "隐藏"}</span><SettingsSwitch checked={item.enabled} onChange={() => setNav(item.key, { enabled: !item.enabled })} label={`${item.enabled ? "隐藏" : "显示"}${item.label}`} /></label>
                             </div>
                             <>
                               <input value={item.label} onChange={(e) => setNav(item.key, { label: e.target.value })} placeholder="名称" className="h-[34px] w-full rounded-[8px] border border-transparent bg-transparent px-2 text-sm font-semibold text-ink outline-none transition-all duration-200 hover:border-edge-strong hover:bg-white focus:border-edge-strong focus:bg-white focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)]" />
                               <input value={item.href} onChange={(e) => setNav(item.key, { href: e.target.value })} placeholder="链接，如 #preview / /records" className="h-[32px] w-full rounded-[8px] border border-edge bg-bg-gray/60 px-2.5 font-mono text-[11px] text-muted outline-none transition-all duration-200 hover:border-edge-strong hover:bg-white focus:border-edge-strong focus:bg-white focus:text-ink" />
-                            </></> : <><strong className="min-w-0 flex-1 truncate text-sm text-ink">{item.label}</strong><span className="w-[180px] truncate font-mono text-[11px] text-muted max-sm:order-3 max-sm:w-full">{item.href}</span><span className="flex-none text-[11px] font-medium text-muted">{item.enabled ? "已显示" : "已隐藏"}</span></>}
+                            </></> : <><strong className="min-w-0 flex-1 truncate text-sm text-ink">{item.label}</strong><span className="w-[180px] truncate font-mono text-[11px] text-muted max-sm:order-3 max-sm:w-full">{item.href}</span><span className={`settings-item-state ${item.enabled ? "is-on" : ""}`}>{item.enabled ? "已显示" : "已隐藏"}</span></>}
                           </div>
                         ))}
                       </div>
-                      {(site.homeNav || []).length > 5 && (
-                        <button type="button" onClick={() => setShowAllHomeNav((value) => !value)} className="mt-3 inline-flex self-start items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink" aria-expanded={showAllHomeNav}>
-                          {showAllHomeNav ? "收起" : `更多（${(site.homeNav || []).length - 5}）`}
-                          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 transition-transform ${showAllHomeNav ? "rotate-180" : ""}`}><path d="m5 7.5 5 5 5-5" /></svg>
-                        </button>
-                      )}
                     </SettingsSection>
                 </div>
 
@@ -2540,10 +2499,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   icon="list"
                   title="应用导航菜单"
                   desc="侧栏与移动端入口，可调整默认页、图标、名称和顺序"
-                  collapsible
-                  defaultOpen
-                  storageKey="nav-tabs-v2"
-                  reveal={editingTabs}
+                  className="settings-secondary-section"
                   titleAction={!editingTabs ? (
                     <button type="button" onClick={() => setEditingTabs(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑应用导航" aria-label="编辑应用导航">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
@@ -2563,8 +2519,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </button> : undefined
                   }
                 >
-                  <div className="settings-compact-list flex flex-col gap-2">
-                    {tabs.slice(0, showAllTabs ? tabs.length : 5).map((t, i) => (
+                  <div className="settings-compact-list settings-meta-list flex flex-col gap-2">
+                    {tabs.map((t, i) => (
                       <div
                         key={t.key}
                         draggable={editingTabs}
@@ -2663,12 +2619,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                     ))}
                   </div>
-                  {tabs.length > 5 && (
-                    <button type="button" onClick={() => setShowAllTabs((value) => !value)} className="mt-3 inline-flex self-start items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink" aria-expanded={showAllTabs}>
-                      {showAllTabs ? "收起" : `更多（${tabs.length - 5}）`}
-                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 transition-transform ${showAllTabs ? "rotate-180" : ""}`}><path d="m5 7.5 5 5 5-5" /></svg>
-                    </button>
-                  )}
                 </SettingsSection>}
 
               </div>
@@ -2785,8 +2735,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     ) : undefined
                   }
                 >
-                  <div className="settings-compact-list flex flex-col gap-2">
-                    {stockGroups.slice(0, showAllStockGroups ? stockGroups.length : 3).map((g, i) => (
+                  <div className="settings-compact-list settings-meta-list flex flex-col gap-2">
+                    {stockGroups.map((g, i) => (
                       <div
                         key={g.id}
                         draggable={editingStockGroups}
@@ -2857,19 +2807,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </p>
                     )}
                   </div>
-                  {stockGroups.length > 3 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllStockGroups((value) => !value)}
-                      className="mt-3 inline-flex self-start items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink"
-                      aria-expanded={showAllStockGroups}
-                    >
-                      {showAllStockGroups ? "收起" : `更多（${stockGroups.length - 3}）`}
-                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 transition-transform duration-200 ${showAllStockGroups ? "rotate-180" : ""}`}>
-                        <path d="m5 7.5 5 5 5-5" />
-                      </svg>
-                    </button>
-                  )}
                   {editingStockGroups && (
                     <button type="button" onClick={addGroup} className="btn btn-ghost btn-sm mt-4 self-start">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-4 w-4"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
@@ -2953,8 +2890,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       }}
                     />
                   </div>
-                  <div className="flex flex-col gap-2">
-                    {(showAllMarketBadges ? MARKET_BADGE_ITEMS : MARKET_BADGE_ITEMS.slice(0, 5)).map((item) => {
+                  <div className="settings-meta-list flex flex-col gap-2">
+                    {MARKET_BADGE_ITEMS.map((item) => {
                       const badge = normalizeMarketBadges(site.marketBadges)[item.key];
                       return (
                         <div key={item.key} className="flex flex-wrap items-center gap-2.5 rounded-[14px] border border-edge bg-white p-3 dark:bg-[#151a26]">
@@ -3029,19 +2966,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       className="btn btn-ghost btn-sm mt-3 self-start"
                     >
                       恢复默认
-                    </button>
-                  )}
-                  {MARKET_BADGE_ITEMS.length > 5 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllMarketBadges((value) => !value)}
-                      className="mt-3 inline-flex self-start items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-brand-hover hover:text-ink"
-                      aria-expanded={showAllMarketBadges}
-                    >
-                      {showAllMarketBadges ? "收起" : `更多市场（${MARKET_BADGE_ITEMS.length - 5}）`}
-                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 transition-transform duration-200 ${showAllMarketBadges ? "rotate-180" : ""}`}>
-                        <path d="m5 7.5 5 5 5-5" />
-                      </svg>
                     </button>
                   )}
                   {blockMsg.marketBadges && (
@@ -3311,10 +3235,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   title="股票来源接口"
                   desc="行情、财报、汇率与图标外部数据源，可在不升级情况下调整"
                   id="sources"
-                  collapsible
-                  defaultOpen={false}
-                  storageKey="stock-sources"
-                  reveal={editingSources}
                   titleAction={!editingSources ? (
                     <button type="button" onClick={() => setEditingSources(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑股票来源接口" aria-label="编辑股票来源接口">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
@@ -3534,7 +3454,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
             {sub === "totp" && (
               <div id="totp" className="flex flex-col gap-6">
-                <SettingsHeader name="totp" title="二次验证" />
                 <section className="totp-meta-flow">
                   {!totpStatusLoaded && <div className="totp-meta-loading" aria-label="正在读取双重验证状态"><i /><i /><i /></div>}
                   {totpStatusLoaded && !totpEnabled && !totpSetup && !totpBackupCodes?.length && (
@@ -3606,8 +3525,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {/* ===== 数据库增强 ===== */}
             {sub === "database" && isAdminUser && (
               <div id="database" className="flex flex-col gap-6">
-                <SettingsHeader name="database" title="数据库增强" />
-
                 {/* 类型选择 */}
                 <SettingsSection
                   icon="database"
@@ -3738,7 +3655,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {/* ===== 定时任务 ===== */}
             {sub === "cron" && isAdminUser && (
               <div id="cron" className="flex flex-col gap-6">
-                <SettingsHeader name="cron" title="定时任务" />
                 <SettingsSection icon="cron" title="定时任务" desc="行情与数据缓存自动更新；汇率仅手动刷新">
                 <div className="settings-task-list">
                   {[
@@ -3820,7 +3736,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {/* ===== API 开发接口 ===== */}
             {sub === "api" && (
               <div id="api" className="flex flex-col gap-6">
-                <SettingsHeader name="api" title="API 接口" />
                 <SettingsSection
                   icon="api"
                   title="API 开发接口"
@@ -3850,7 +3765,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {/* ===== 关于 ===== */}
             {sub === "about" && (
               <div id="about" className="flex flex-col gap-6">
-                <SettingsHeader name="info" title="关于" />
                 <SettingsSection icon="info" title="关于" desc="版本、技术栈与外部数据源">
                   <div className="sw-row">
                     <div className="sw-row-label"><b>当前版本</b><span>Fire Web 稳定版本</span></div>

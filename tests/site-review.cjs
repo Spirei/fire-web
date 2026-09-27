@@ -1829,7 +1829,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(!settings.includes('添加其他验证器'));
     // 登录安全采用可读名称，搜索关键词仍兼容 2FA。
     assert(settings.includes('label: "双重验证", groupLabel: "账号"'));
-    assert(settings.includes('<SettingsHeader name="totp" title="二次验证" />'));
+    assert(!settings.includes('<SettingsHeader name="totp" title="二次验证" />'), '详情弹层不得重复渲染旧标题');
     assert(settings.includes('{sub === "totp" && ('));
     assert(settings.includes('sub: "totp"'));
     assert(settings.includes('role="radiogroup" aria-label="双重验证方式"'));
@@ -1840,6 +1840,19 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('showBack={activeAnchor === "totp"}'));
     assert(!settings.includes('desc: "头像、资料、密码、二次验证、数据管理"'));
     assert(settings.includes('url.searchParams.delete("anchor")'), '只有一个区块时不写重复的 anchor');
+  });
+  await test('settings details use one flat Meta-style navigation system', async () => {
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    const header = fs.readFileSync(path.join(root, 'components/SettingsHeader.tsx'), 'utf8');
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    for (const legacy of ['collapsible', 'defaultOpen', 'storageKey', 'settings-section-chevron', 'showAllStockGroups', 'showAllTicker', 'showAllHomeNav', 'showAllTabs', 'showAllMarketBadges']) {
+      assert(!settings.includes(legacy) && !header.includes(legacy), `设置详情不得残留旧式展开状态：${legacy}`);
+    }
+    assert(!settings.includes('>更多<') && !settings.includes('>收起<'), '独立详情不得再次截断列表');
+    assert(settings.includes('className="settings-nav-visibility"'), '导航显隐应使用文字加开关');
+    assert(settings.includes('<SettingsSwitch') && settings.includes('label={`${item.enabled ? "隐藏" : "显示"}${item.label}`}'));
+    assert(css.includes('.sc-detail-dialog .settings-meta-list'));
+    assert(css.includes('.sc-detail-dialog[data-detail="sources"] .sw-row .ctrl'), '长数据源链接必须限制在弹层内');
   });
   db.close();console.log(`${passed} regression suites passed (isolated database)`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{ fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode || 0); });
