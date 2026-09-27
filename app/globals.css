@@ -6289,9 +6289,11 @@ button.PhotoView-Slider__toolbarIcon {
 .sc-detail-dialog .settings-meta-list { width:100%; gap:0 !important; }
 .sc-detail-dialog .settings-meta-list > div { margin:0; border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important; }
 .sc-detail-dialog .settings-meta-list > div + div { border-top:1px solid var(--sc-dialog-border) !important; }
-.sc-detail-dialog[data-detail="sources"] .sw-row-label { flex:0 0 172px; }
-.sc-detail-dialog[data-detail="sources"] .sw-row .ctrl { width:auto; min-width:0; max-width:calc(100% - 190px); flex:1 1 300px; overflow:hidden; }
-.sc-detail-dialog[data-detail="sources"] .sw-row .ctrl > .truncate { min-width:0; }
+.sc-detail-dialog[data-detail^="source"] .sw-row-label { flex:0 0 172px; }
+.sc-detail-dialog[data-detail^="source"] .sw-row .ctrl { width:auto; min-width:0; max-width:calc(100% - 190px); flex:1 1 300px; overflow:hidden; }
+.sc-detail-dialog[data-detail^="source"] .sw-row .ctrl > .truncate { min-width:0; }
+.sc-detail-dialog[data-detail^="source"] .source-field-list,
+.sc-detail-dialog[data-detail^="source"] .source-field-list .sw-row { height:auto !important; min-height:0; flex:none; }
 .settings-nav-visibility { display:flex; align-items:center; gap:8px; color:var(--sc-dialog-muted); font-size:12px; font-weight:600; }
 .settings-item-state { display:inline-flex; min-height:22px; flex:none; align-items:center; padding:0 8px; border-radius:999px; background:var(--sc-dialog-soft); color:var(--sc-dialog-muted); font-size:11px; font-weight:600; line-height:22px; }
 .settings-item-state.is-on { background:color-mix(in srgb,var(--sc-dialog-link) 10%,var(--sc-dialog-bg)); color:var(--sc-dialog-link); }
@@ -6554,7 +6556,9 @@ button.PhotoView-Slider__toolbarIcon {
   .sc-detail-dialog .sw-row { align-items:flex-start; flex-direction:column; gap:10px; padding:14px 0; }
   .sc-detail-dialog .sw-row-label { width:100%; flex:none; }
   .sc-detail-dialog .sw-row .ctrl { width:100%; }
-  .sc-detail-dialog[data-detail="sources"] .sw-row .ctrl { width:100%; max-width:none; flex-basis:auto; }
+  .sc-detail-dialog[data-detail^="source"] .sw-row-label { width:100%; flex:none; }
+  .sc-detail-dialog[data-detail^="source"] .sw-row .ctrl { width:100%; max-width:none; flex:none; overflow:visible; }
+  .sc-detail-dialog[data-detail^="source"] .source-field-list .sw-row { min-height:84px; }
   .sc-detail-dialog .sw-row-input,.sc-detail-dialog .sw-media-input,.sc-detail-dialog input,.sc-detail-dialog textarea,.sc-detail-dialog select { width:100%; max-width:100%; font-size:16px; }
 }
 @media(prefers-reduced-motion:reduce) { .sc-detail-scrim,.sc-detail-dialog { animation:none !important; } }

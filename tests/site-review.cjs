@@ -1852,7 +1852,15 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('className="settings-nav-visibility"'), '导航显隐应使用文字加开关');
     assert(settings.includes('<SettingsSwitch') && settings.includes('label={`${item.enabled ? "隐藏" : "显示"}${item.label}`}'));
     assert(css.includes('.sc-detail-dialog .settings-meta-list'));
-    assert(css.includes('.sc-detail-dialog[data-detail="sources"] .sw-row .ctrl'), '长数据源链接必须限制在弹层内');
+    assert(css.includes('.sc-detail-dialog[data-detail^="source"] .sw-row .ctrl'), '所有数据源详情的长链接必须限制在弹层内');
+    for (const anchor of ['app-nav', 'source-reports', 'source-icons', 'source-content', 'delete-account', 'passkey-config', 'backups']) {
+      assert(settings.includes(`anchor: "${anchor}"`), `独立职责应有自己的设置入口：${anchor}`);
+      assert(header.includes(`"${anchor}"`) || header.includes(`${anchor}:`), `拆分后的设置入口应使用专属图标：${anchor}`);
+    }
+    assert(settings.includes('mode={activeAnchor === "passkey-config" ? "config" : "keys"}'), '个人通行密钥与站点登录配置必须分离');
+    assert(!fs.readFileSync(path.join(root, 'components/PasskeySettings.tsx'), 'utf8').includes('showConfig'), '通行密钥页不得保留二次展开配置');
+    assert(settings.includes('<SettingsSection id="backups"') && !/key: "board"[\s\S]{0,900}<BackupTaskCard/.test(settings), '缓存任务与数据库自动备份必须分开');
+    assert(css.includes('[data-detail^="source"] .sw-row-label { width:100%; flex:none; }'), '手机端数据源标签不得继承桌面横向宽度成为大段空白');
   });
   db.close();console.log(`${passed} regression suites passed (isolated database)`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{ fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode || 0); });

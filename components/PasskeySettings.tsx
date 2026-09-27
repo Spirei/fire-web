@@ -11,8 +11,7 @@ type Config = PublicPasskeyConfig;
 type Key = { id: string; name: string; rpID: string; createdAt: number; lastUsedAt: number | null; backedUp: boolean };
 type PendingAction = { kind: "save"; config: Config } | { kind: "add" } | { kind: "delete"; key: Key };
 const normalizeDraft = (value: Config): Config => ({ ...value, origin: value.origin.trim().replace(/\/$/, ""), name: value.name.trim() });
-export default function PasskeySettings({ admin, onClose }: { admin: boolean; onClose?: () => void }) {
-  const [showConfig, setShowConfig] = useState(false);
+export default function PasskeySettings({ admin, onClose, mode = "keys" }: { admin: boolean; onClose?: () => void; mode?: "keys" | "config" }) {
   const [showHelp, setShowHelp] = useState(false);
   const [intro, setIntro] = useState(false);
   const [flowDirection, setFlowDirection] = useState<"forward" | "back">("forward");
@@ -152,12 +151,12 @@ export default function PasskeySettings({ admin, onClose }: { admin: boolean; on
     finally { if (!controller.signal.aborted) setBusy(false); lock.current = false; }
   }
   const content = <div id="passkeys" className="pk-center flex flex-col gap-4">
-    <p className="pk-intro">使用安全又方便的通行密钥来替代密码。<button type="button" className="pk-text-link" onClick={() => setShowHelp(!showHelp)} aria-expanded={showHelp}>详细了解</button></p>
+    <p className="pk-intro">{mode === "config" ? "设置此部署用于通行密钥登录的 HTTPS 地址和站点名称。" : "使用安全又方便的通行密钥来替代密码。"}{mode === "keys" && <button type="button" className="pk-text-link" onClick={() => setShowHelp(!showHelp)} aria-expanded={showHelp}>详细了解</button>}</p>
     {showHelp && <div className="pk-help"><p>通过面容、指纹或设备密码登录，无需输入网站密码。</p><p>可保存在 iCloud 钥匙串、Bitwarden、1Password 等密码管理器中。Fire 不会获取你的面容或指纹。</p></div>}
     {message && <p role="status" className="rounded-xl border border-edge bg-bg-gray p-3 text-sm text-ink">{message}</p>}
     {refreshRequired && <button type="button" className="btn btn-line btn-sm self-start disabled:opacity-50" disabled={loading || busy} onClick={() => void load(true)}>刷新确认</button>}
     {loading ? <p role="status" className="text-sm text-muted">加载中…</p> : !config ? <button className="btn btn-line btn-sm self-start" type="button" onClick={() => void load()}>重试</button> : <>
-    {admin && showConfig && <section className="rounded-2xl border border-edge p-4 sm:p-5">
+    {admin && mode === "config" && <section className="rounded-2xl border border-edge p-4 sm:p-5">
       <form onSubmit={save}>
       <div className="flex items-center justify-between gap-4"><h3 className="font-semibold">登录设置</h3>
         <button type="button" role="switch" aria-label="启用通行密钥登录" aria-checked={draft.enabled} disabled={busy || !!pending} onClick={() => setDraft({ ...draft, enabled: !draft.enabled })}
@@ -175,15 +174,14 @@ export default function PasskeySettings({ admin, onClose }: { admin: boolean; on
       </div>
       </form>
     </section>}
-    <section>
+    {mode === "keys" && <section>
       <button type="button" className="pk-create-row disabled:opacity-50" disabled={busy || !!pending || refreshRequired} onClick={() => { setFlowDirection("forward"); setIntro(true); }}>创建通行密钥</button>
       <ul className="divide-y divide-edge">{keys.map(key => <li key={key.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
         <div className="min-w-0"><p className="break-all font-medium">{key.name}</p><p className="mt-1 break-all text-xs text-muted">{key.rpID} · {currentRPID && key.rpID !== currentRPID ? "旧域名密钥" : key.backedUp ? "已同步备份" : "设备或密码管理器保管"}</p><p className="mt-1 text-xs text-muted">{key.lastUsedAt ? `最近使用：${new Date(key.lastUsedAt).toLocaleString()}` : `添加于：${new Date(key.createdAt).toLocaleString()}`}</p></div>
         <div className="flex gap-2"><button type="button" className="btn btn-line btn-sm disabled:opacity-50" disabled={busy || !!pending || refreshRequired} onClick={() => void rename(key)}>重命名</button><button type="button" className="btn btn-line btn-sm !text-up disabled:opacity-50" disabled={busy || !!pending || refreshRequired} onClick={() => begin({ kind: "delete", key })}>删除</button></div>
       </li>)}</ul>
       {!config.enabled ? <p className="mt-4 text-xs text-muted">{admin ? "启用并保存登录设置后，即可添加。" : "管理员启用后即可添加。"}</p> : origin !== config.origin ? <p className="mt-4 text-xs text-muted">请访问 <a className="break-all underline" href={config.origin}>{config.origin}</a> 添加。</p> : !supported ? <p className="mt-4 text-xs text-muted">请使用支持通行密钥的浏览器。</p> : keys.length >= 20 ? <p className="mt-4 text-xs text-muted">已达 20 个，请先删除不用的密钥。</p> : null}
-    </section>
-    {admin && <button type="button" className="pk-admin-row" aria-expanded={showConfig} onClick={() => setShowConfig(!showConfig)}><SubNavIcon name="site" className="h-4 w-4"/><span>网站登录配置</span><span aria-hidden="true">{showConfig ? "−" : "+"}</span></button>}
+    </section>}
     </>}
   </div>;
   const renderIntroContent = (requestClose: () => void) => <div className={`pk-flow-view is-${flowDirection}`} key="intro">
@@ -204,7 +202,7 @@ export default function PasskeySettings({ admin, onClose }: { admin: boolean; on
     </form>
   </div>;
   if (!onClose) return <>{content}{pending && <AppModal className="pk-reference-modal pk-verify-modal" size="lg" title={actionLabel} desc={pending.kind === "delete" ? `删除「${pending.key.name}」后，相关设备需要重新登录。` : domainChanged ? "更换域名后需重新添加通行密钥。请验证当前账号。" : "为了保护账号安全，请先验证当前账号。"} onClose={closeVerification} closeDisabled={busy}>{verificationContent}</AppModal>}</>;
-  const modalTitle = pending ? actionLabel : intro ? "下次免密登录" : "通行密钥";
+  const modalTitle = pending ? actionLabel : intro ? "下次免密登录" : mode === "config" ? "通行密钥登录" : "通行密钥";
   const modalDesc = pending ? (pending.kind === "delete" ? `删除「${pending.key.name}」后，相关设备需要重新登录。` : domainChanged ? "更换域名后需重新添加通行密钥。请验证当前账号。" : "为了保护账号安全，请先验证当前账号。") : undefined;
   return <AppModal
     title={modalTitle}

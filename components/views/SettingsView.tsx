@@ -111,27 +111,35 @@ function isSettingsSub(value: string | undefined | null): value is SubKey {
 const ADMIN_SUB_KEYS = new Set<SubKey>(["site", "features", "stocks", "database", "cron"]);
 
 /** ⌘K 命令搜索索引：关键词 → 子分类 + 锚点 */
-const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; groupLabel: string; keywords: string }[] = [
+type SettingsSearchItem = { sub: SubKey; anchor: string; label: string; groupLabel: string; keywords: string; adminOnly?: boolean };
+const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "palette", anchor: "palette", label: "全站配色", groupLabel: "配色", keywords: "配色 主题 Meta Liquid Glass 玻璃 海盐 松林 琥珀 暮光" },
   { sub: "site", anchor: "info", label: "站点信息", groupLabel: "网站", keywords: "网站 标题 域名 注册 页脚 简介" },
   { sub: "site", anchor: "appearance", label: "网站形象", groupLabel: "网站", keywords: "图标 logo 字体 背景 形象 favicon 图片" },
   { sub: "site", anchor: "ticker", label: "首页指数", groupLabel: "网站", keywords: "指数 轮换 首页 ticker 行情条" },
   { sub: "site", anchor: "nav", label: "首页导航", groupLabel: "网站", keywords: "导航 菜单 首页 入口" },
+  { sub: "site", anchor: "app-nav", label: "应用导航", groupLabel: "网站", keywords: "后台 侧栏 移动端 默认页 图标 顺序" },
   { sub: "features", anchor: "trading-square", label: "交易广场", groupLabel: "功能", keywords: "交易广场 特朗普 段永平 更新 刷新 频率 缓存" },
   { sub: "stocks", anchor: "groups", label: "券商分组", groupLabel: "股票", keywords: "券商 分组 别名 持仓" },
   { sub: "stocks", anchor: "market-badges", label: "市场色块", groupLabel: "股票", keywords: "市场 色块 徽标 颜色 显示 US HK A股 上证 深证 加密" },
   { sub: "stocks", anchor: "translation", label: "模型服务", groupLabel: "智能服务", keywords: "模型服务 AI 大模型 账户助手 翻译 DeepSeek OpenAI API" },
   { sub: "stocks", anchor: "trade", label: "交易 · 富途", groupLabel: "股票", keywords: "富途 futu opend 交易 行情源 主机 端口 腾讯 yahoo 备用" },
   { sub: "stocks", anchor: "currency-display", label: "货币金额显示", groupLabel: "股票", keywords: "货币 单位 金额 万 百万 千万 亿 缩写" },
-  { sub: "stocks", anchor: "sources", label: "股票来源接口", groupLabel: "股票", keywords: "股票来源 接口 行情 财报 图标 url 数据源" },
+  { sub: "stocks", anchor: "sources", label: "行情与汇率接口", groupLabel: "股票", keywords: "股票来源 接口 行情 搜索 分时 汇率 url 数据源" },
+  { sub: "stocks", anchor: "source-reports", label: "财报接口", groupLabel: "股票", keywords: "美股 A股 港股 财报 日历 接口 数据源" },
+  { sub: "stocks", anchor: "source-icons", label: "公司图标接口", groupLabel: "股票", keywords: "美股 A股 公司 图标 logo 接口 数据源" },
+  { sub: "stocks", anchor: "source-content", label: "公开内容接口", groupLabel: "股票", keywords: "交易广场 特朗普 动态 翻译 接口 数据源" },
   { sub: "profile", anchor: "profile", label: "个人信息", groupLabel: "账号", keywords: "头像 昵称 邮箱" },
   { sub: "profile", anchor: "password", label: "更改密码", groupLabel: "账号", keywords: "密码 登录 安全" },
   { sub: "profile", anchor: "data", label: "导入与导出", groupLabel: "数据", keywords: "备份 持仓 导出 导入 数据" },
-  { sub: "profile", anchor: "danger", label: "账号与数据管理", groupLabel: "数据", keywords: "清空 注销 删除 账号 数据" },
+  { sub: "profile", anchor: "danger", label: "清空投资数据", groupLabel: "数据", keywords: "清空 删除 持仓 自选 订单 投资 数据" },
+  { sub: "profile", anchor: "delete-account", label: "注销账号", groupLabel: "数据", keywords: "注销 永久删除 账号 数据" },
   { sub: "totp", anchor: "totp", label: "双重验证", groupLabel: "账号", keywords: "2FA 二次验证 TOTP 验证器 备用码 谷歌验证 Google Authenticator 安全" },
   { sub: "passkeys", anchor: "passkeys", label: "通行密钥", groupLabel: "账号", keywords: "Passkey WebAuthn iCloud Bitwarden 1Password Face ID Touch ID 无密码 登录 安全 通行密匙" },
+  { sub: "passkeys", anchor: "passkey-config", label: "通行密钥登录", groupLabel: "账号", keywords: "Passkey WebAuthn HTTPS 域名 站点名称 登录配置", adminOnly: true },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
+  { sub: "cron", anchor: "backups", label: "自动备份", groupLabel: "系统", keywords: "数据库 定时 备份 保留 立即备份" },
   { sub: "api", anchor: "api", label: "API 接口", groupLabel: "系统", keywords: "api 接口 开发 文档 鉴权" },
   { sub: "about", anchor: "about", label: "关于", groupLabel: "系统", keywords: "关于 版本 技术栈 数据源 更新" }
 ];
@@ -141,15 +149,16 @@ function defaultAnchorFor(sub: SubKey): string {
 }
 
 const SETTINGS_CATEGORIES = [
-  { key: "account", label: "账号与安全", icon: "account", desc: "管理个人资料、密码和登录方式。", anchors: ["profile", "password", "totp", "passkeys"] },
-  { key: "website", label: "外观与网站", icon: "site", desc: "设置网站形象、配色与首页内容。", anchors: ["palette", "info", "appearance", "ticker", "nav"] },
-  { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "sources"] },
+  { key: "account", label: "账号与安全", icon: "account", desc: "管理个人资料、密码和登录方式。", anchors: ["profile", "password", "totp", "passkeys", "passkey-config"] },
+  { key: "website", label: "外观与网站", icon: "site", desc: "设置网站形象、配色与首页内容。", anchors: ["palette", "info", "appearance", "ticker", "nav", "app-nav"] },
+  { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "sources", "source-reports", "source-icons", "source-content"] },
   { key: "services", label: "功能与模型", icon: "model", desc: "配置模型服务与内容更新。", anchors: ["translation", "trading-square"] },
-  { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "danger"] },
+  { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "backups", "danger", "delete-account"] },
   { key: "developer", label: "开发与关于", icon: "api", desc: "查看接口文档、版本与技术信息。", anchors: ["api", "about"] }
 ];
 const SETTINGS_ANCHORS = SETTINGS_SEARCH_INDEX.map((item) => item.anchor);
-const EDITABLE_DETAIL_ANCHORS = new Set(["appearance", "ticker", "nav", "groups", "market-badges", "sources", "translation", "trade", "profile", "database", "trading-square"]);
+const SOURCE_DETAIL_ANCHORS = new Set(["sources", "source-reports", "source-icons", "source-content"]);
+const EDITABLE_DETAIL_ANCHORS = new Set(["appearance", "ticker", "nav", "app-nav", "groups", "market-badges", ...SOURCE_DETAIL_ANCHORS, "translation", "trade", "profile", "database", "trading-square"]);
 
 function persistSettingsAnchor(sub: SubKey, anchor: string): boolean {
   const anchors = SETTINGS_SEARCH_INDEX.filter((item) => item.sub === sub);
@@ -161,21 +170,28 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   appearance: "image",
   ticker: "stocks",
   nav: "home",
+  "app-nav": "app-nav",
   "trading-square": "features",
   groups: "tag",
   "market-badges": "badges",
   translation: "model",
   sources: "plug",
+  "source-reports": "source-reports",
+  "source-icons": "source-icons",
+  "source-content": "source-content",
   trade: "trade",
   "currency-display": "currency",
   password: "password",
   data: "data",
   danger: "danger",
+  "delete-account": "delete-account",
   profile: "profile",
   totp: "totp",
   passkeys: "passkeys",
+  "passkey-config": "passkey-config",
   database: "database",
   cron: "cron",
+  backups: "backups",
   api: "api",
   about: "about"
 };
@@ -593,6 +609,13 @@ const SOURCE_FIELDS: {
   { key: "deepseekApiKey", name: "DeepSeek API Key", desc: "仅服务端使用，不下发浏览器", placeholder: "sk-…", icon: "translate" }
 ];
 
+const SOURCE_SECTIONS = [
+  { id: "sources", icon: "plug", title: "行情与汇率接口", desc: "实时行情、搜索、分时走势与汇率换算", keys: ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"] },
+  { id: "source-reports", icon: "source-reports", title: "财报接口", desc: "美股、A 股与港股财报日历数据源", keys: ["earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl"] },
+  { id: "source-icons", icon: "source-icons", title: "公司图标接口", desc: "美股与 A 股公司图标数据源", keys: ["usLogoApiUrl", "cnLogoApiUrl"] },
+  { id: "source-content", icon: "source-content", title: "公开内容接口", desc: "交易广场公开动态与翻译数据源", keys: ["trumpArchiveApiUrl", "translationApiUrl"] }
+] as const;
+
 const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
   chart: (
     <>
@@ -711,7 +734,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     .filter((g) => g.items.length > 0);
   // 细粒度侧栏导航：与 ⌘K 搜索索引一致（站点信息/网站形象/首页指数…，各占一项）
   const navGroups = SETTINGS_SEARCH_INDEX
-    .filter((it) => isAdminUser || !ADMIN_SUB_KEYS.has(it.sub))
+    .filter((it) => isAdminUser || (!ADMIN_SUB_KEYS.has(it.sub) && !it.adminOnly))
     .reduce<{ label: string; items: { sub: SubKey; anchor: string; label: string; groupLabel: string }[] }[]>((acc, it) => {
       const g = acc.find((x) => x.label === it.groupLabel);
       if (g) g.items.push({ sub: it.sub, anchor: it.anchor, label: it.label, groupLabel: it.groupLabel });
@@ -729,7 +752,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   });
   const activeSubMeta = visibleGroups.flatMap((g) => g.items).find((item) => item.key === sub);
   const [categoryPage, setCategoryPage] = useState<string | null>(initialSub ? null : "home");
-  const allowedItems = SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || !ADMIN_SUB_KEYS.has(item.sub));
+  const allowedItems = SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || (!ADMIN_SUB_KEYS.has(item.sub) && !item.adminOnly));
   const categories = SETTINGS_CATEGORIES.map((category) => ({ ...category, items: category.anchors.flatMap((anchor) => allowedItems.filter((item) => item.anchor === anchor)) })).filter((category) => category.items.length > 0);
   const currentCategory = categories.find((category) => category.key === categoryPage || (!categoryPage && category.anchors.includes(activeAnchor)));
   const [site, setSite] = useState<SiteSettings>(() => initialSettings ? {
@@ -777,7 +800,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   useLayoutEffect(() => {
     function restoreLocation() {
-      const location = resolveSettingsLocation(new URLSearchParams(window.location.search), SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || !ADMIN_SUB_KEYS.has(item.sub)), SETTINGS_CATEGORIES);
+      const location = resolveSettingsLocation(new URLSearchParams(window.location.search), SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || (!ADMIN_SUB_KEYS.has(item.sub) && !item.adminOnly)), SETTINGS_CATEGORIES);
       setCategoryPage(location.category);
       if (location.item && isSettingsSub(location.item.sub)) {
         setSub(location.item.sub);
@@ -1321,10 +1344,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     : activeAnchor === "info" ? editingSiteInfo
     : activeAnchor === "appearance" ? editingAppearance
       : activeAnchor === "ticker" ? editingTicker
-        : activeAnchor === "nav" ? (editingHomeNav || editingTabs)
+        : activeAnchor === "nav" ? editingHomeNav
+          : activeAnchor === "app-nav" ? editingTabs
           : activeAnchor === "groups" ? editingStockGroups
             : activeAnchor === "market-badges" ? editingMarketBadges
-            : activeAnchor === "sources" ? editingSources
+            : SOURCE_DETAIL_ANCHORS.has(activeAnchor) ? editingSources
               : activeAnchor === "translation" ? editingModel
               : activeAnchor === "trade" ? editingFutu
                 : activeAnchor === "profile" ? editingProfile
@@ -1337,10 +1361,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     // info 分区常驻可编辑（自动保存），无需进入编辑态
     else if (activeAnchor === "appearance") setEditingAppearance(true);
     else if (activeAnchor === "ticker") setEditingTicker(true);
-    else if (activeAnchor === "nav") { setEditingHomeNav(true); setEditingTabs(true); }
+    else if (activeAnchor === "nav") setEditingHomeNav(true);
+    else if (activeAnchor === "app-nav") setEditingTabs(true);
     else if (activeAnchor === "groups") setEditingStockGroups(true);
     else if (activeAnchor === "market-badges") setEditingMarketBadges(true);
-    else if (activeAnchor === "sources") setEditingSources(true);
+    else if (SOURCE_DETAIL_ANCHORS.has(activeAnchor)) setEditingSources(true);
     else if (activeAnchor === "translation") setEditingModel(true);
     else if (activeAnchor === "trade") setEditingFutu(true);
     else if (activeAnchor === "profile") setEditingProfile(true);
@@ -1382,8 +1407,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         const ok = await saveBlock("ticker", { ticker: site.ticker }, "首页指数已保存");
         if (ok) setEditingTicker(false);
       } else if (activeAnchor === "nav") {
-        const ok = await saveBlock("navigation", { homeNav: site.homeNav, tabs }, "导航设置已保存");
-        if (ok) { setEditingHomeNav(false); setEditingTabs(false); }
+        const ok = await saveBlock("navigation", { homeNav: site.homeNav }, "首页导航已保存");
+        if (ok) setEditingHomeNav(false);
+      } else if (activeAnchor === "app-nav") {
+        const ok = await saveBlock("tabs", { tabs }, "应用导航已保存");
+        if (ok) setEditingTabs(false);
       } else if (activeAnchor === "groups") {
         await saveStockGroups();
       } else if (activeAnchor === "market-badges") {
@@ -1393,7 +1421,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           applyMarketBadges(nextBadges, site.marketBadgesVisible !== false);
           setEditingMarketBadges(false);
         }
-      } else if (activeAnchor === "sources") {
+      } else if (SOURCE_DETAIL_ANCHORS.has(activeAnchor)) {
         const ok = await saveStockSources();
         if (ok) setEditingSources(false);
       } else if (activeAnchor === "translation") {
@@ -1420,8 +1448,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     if (activeAnchor === "trading-square") setEditingTradingSquare(false);
     else if (activeAnchor === "appearance") setEditingAppearance(false);
     else if (activeAnchor === "ticker") setEditingTicker(false);
-    else if (activeAnchor === "nav") { setEditingHomeNav(false); setEditingTabs(false); }
-    else if (activeAnchor === "sources") setEditingSources(false);
+    else if (activeAnchor === "nav") setEditingHomeNav(false);
+    else if (activeAnchor === "app-nav") setEditingTabs(false);
+    else if (SOURCE_DETAIL_ANCHORS.has(activeAnchor)) setEditingSources(false);
     else if (activeAnchor === "translation") setEditingModel(false);
     else if (activeAnchor === "trade") setEditingFutu(false);
     else if (activeAnchor === "market-badges") setEditingMarketBadges(false);
@@ -2157,7 +2186,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           </div>
           <div className="sc-head-actions">
             <button type="button" className="sc-search-button" onClick={openCmdPalette} aria-label="搜索设置"><SubNavIcon name="list"/></button>
-            {!categoryPage && !activeEditState && ["appearance", "ticker", "nav", "groups", "market-badges", "sources", "translation", "trade", "profile", "database", "trading-square"].includes(activeAnchor) && <button type="button" onClick={beginActiveEdit} className="btn btn-line btn-sm">编辑</button>}
+            {!categoryPage && !activeEditState && EDITABLE_DETAIL_ANCHORS.has(activeAnchor) && <button type="button" onClick={beginActiveEdit} className="btn btn-line btn-sm">编辑</button>}
           </div>
         </div>
 
@@ -2172,7 +2201,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             </> : categoryList}
           </div> : sub === "passkeys" ? <>
             <div className="sc-landing">{categoryList}</div>
-            <PasskeySettings admin={user.role === "admin"} onClose={() => openCategory("account")} />
+            <PasskeySettings admin={user.role === "admin"} mode={activeAnchor === "passkey-config" ? "config" : "keys"} onClose={() => openCategory("account")} />
           </> : <>
           <div className="sc-landing">{categoryList}</div>
           <SettingsDetailShell
@@ -2494,12 +2523,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </SettingsSection>
                 </div>
 
-                {/* 应用导航与首页导航归入同一侧栏入口，避免切换后残留在其他设置项下。 */}
-                {activeAnchor === "nav" && <SettingsSection
-                  icon="list"
+                <SettingsSection
+                  id="app-nav"
+                  icon="app-nav"
                   title="应用导航菜单"
                   desc="侧栏与移动端入口，可调整默认页、图标、名称和顺序"
-                  className="settings-secondary-section"
                   titleAction={!editingTabs ? (
                     <button type="button" onClick={() => setEditingTabs(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑应用导航" aria-label="编辑应用导航">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
@@ -2619,7 +2647,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                     ))}
                   </div>
-                </SettingsSection>}
+                </SettingsSection>
 
               </div>
             )}
@@ -3229,12 +3257,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                 </SettingsSection>
 
-                {/* 股票来源接口放在股票类别末尾 */}
                 <SettingsSection
-                  icon="plug"
-                  title="股票来源接口"
-                  desc="行情、财报、汇率与图标外部数据源，可在不升级情况下调整"
-                  id="sources"
+                  icon={SOURCE_SECTIONS.find((section) => section.id === activeAnchor)?.icon || "plug"}
+                  title={SOURCE_SECTIONS.find((section) => section.id === activeAnchor)?.title || "行情与汇率接口"}
+                  desc={SOURCE_SECTIONS.find((section) => section.id === activeAnchor)?.desc || "实时行情、搜索、分时走势与汇率换算"}
+                  id={SOURCE_DETAIL_ANCHORS.has(activeAnchor) ? activeAnchor : "sources"}
                   titleAction={!editingSources ? (
                     <button type="button" onClick={() => setEditingSources(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑股票来源接口" aria-label="编辑股票来源接口">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
@@ -3242,17 +3269,16 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   ) : undefined}
                   action={editingSources ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                 >
-                  <div className="flex flex-col">
-                    {([["行情", ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"]], ["财报", ["earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl"]], ["图标", ["usLogoApiUrl", "cnLogoApiUrl"]], ["交易广场数据源", ["trumpArchiveApiUrl", "translationApiUrl"]]] as const).map(([label, keys]) => {
+                  <div className="source-field-list flex flex-col">
+                    {SOURCE_SECTIONS.filter((section) => section.id === activeAnchor).map(({ id, keys }) => {
                       const fields = SOURCE_FIELDS.filter((f) => (keys as readonly string[]).includes(f.key));
                       if (!fields.length) return null;
                       return (
-                        <div key={label}>
-                          <p className={`subhead ${label.startsWith("翻译服务") ? "mt-6 border-t border-edge pt-5 text-brand-deep" : ""}`}>{label}</p>
+                        <div key={id} className="contents">
                           {fields.map((f) => {
                             const value = (site as unknown as Record<string, string>)[f.key] || f.placeholder;
                             return (
-                              <div key={f.key}>
+                              <div key={f.key} className="contents">
                               <div className="sw-row">
                                 <div className="sw-row-label"><b>{f.name}</b><span>{f.desc}</span></div>
                                 <div className="ctrl">
@@ -3437,16 +3463,20 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                   </div>
                 </SettingsSection>
-                <SettingsSection id="danger" icon="danger" title="账号与数据管理" desc="以下操作不可恢复，请先导出备份">
+                <SettingsSection id="danger" icon="danger" title="清空投资数据" desc="删除持仓、自选与相关投资记录；操作不可恢复">
                   <div className="settings-danger-zone">
                   <div className="sw-row">
                     <div className="sw-row-label"><b>清空数据</b><span>不可恢复，请谨慎操作</span></div>
                     <button type="button" onClick={clearAll} disabled={clearing || recordsCount === 0} className="btn btn-ghost btn-sm !text-up disabled:opacity-50">{clearing ? "清空中…" : "清空"}</button>
                   </div>
-                  <div className="sw-row">
-                    <div className="sw-row-label"><b>注销账号</b><span>永久删除本账号及全部数据，不可恢复</span></div>
-                    <button type="button" onClick={() => setShowDeleteConfirm(true)} className="btn btn-ghost btn-sm !text-up">注销账号</button>
                   </div>
+                </SettingsSection>
+                <SettingsSection id="delete-account" icon="delete-account" title="注销账号" desc="永久删除本账号、登录方式及全部个人数据">
+                  <div className="settings-danger-zone">
+                    <div className="sw-row">
+                      <div className="sw-row-label"><b>永久注销</b><span>账号删除后不可恢复，请先导出备份</span></div>
+                      <button type="button" onClick={() => setShowDeleteConfirm(true)} className="btn btn-ghost btn-sm !text-up">注销账号</button>
+                    </div>
                   </div>
                 </SettingsSection>
               </div>
@@ -3654,8 +3684,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
             {/* ===== 定时任务 ===== */}
             {sub === "cron" && isAdminUser && (
-              <div id="cron" className="flex flex-col gap-6">
-                <SettingsSection icon="cron" title="定时任务" desc="行情与数据缓存自动更新；汇率仅手动刷新">
+              <div className="flex flex-col gap-6">
+                <SettingsSection id="cron" icon="cron" title="定时任务" desc="行情与数据缓存自动更新；汇率仅手动刷新">
                 <div className="settings-task-list">
                   {[
                     {
@@ -3727,8 +3757,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       {task.action && <CronRefreshButton />}
                     </div>
                   ))}
-                  <BackupTaskCard />
                 </div>
+                </SettingsSection>
+                <SettingsSection id="backups" icon="backups" title="自动备份" desc="定期保存数据库与素材文件，并按保留份数清理旧备份">
+                  <div className="settings-task-list"><BackupTaskCard /></div>
                 </SettingsSection>
               </div>
             )}

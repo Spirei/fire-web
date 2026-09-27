@@ -12,6 +12,7 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
   badges: (<><rect x="3" y="3" width="7" height="18" rx="2"/><rect x="14" y="3" width="7" height="8" rx="2"/><rect x="14" y="15" width="7" height="6" rx="2"/></>),
   currency: (<><circle cx="12" cy="12" r="9"/><path d="M15 8h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4H9m3-10v12"/></>),
   passkeys: (<><circle cx="8" cy="8" r="4" /><path d="M2 21v-3a6 6 0 0 1 10-4.5M18 15v7m0-3h3" /><circle cx="18" cy="12" r="3" /></>),
+  "passkey-config": (<><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 9h6M7 13h3"/><circle cx="17" cy="13" r="2"/><path d="M17 15v3"/></>),
   palette: (<><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a3 3 0 0 0 3-3 9 9 0 0 0-9-8Z" /><circle cx="7" cy="10" r=".7" /><circle cx="11" cy="7" r=".7" /><circle cx="16" cy="8" r=".7" /></>),
   site: (
     <>
@@ -102,6 +103,7 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
       <circle cx="3.5" cy="18" r="1" fill="currentColor" stroke="none" />
     </>
   ),
+  "app-nav": (<><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></>),
   tag: (
     <>
       <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z" />
@@ -115,6 +117,11 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
       <path d="M12 19v3" />
     </>
   ),
+  "source-reports": (<><path d="M6 3h9l4 4v14H6Z"/><path d="M15 3v5h5M9 12h7M9 16h5"/></>),
+  "source-icons": (<><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m5 18 5-5 3 3 3-4 3 4"/></>),
+  "source-content": (<><path d="M4 5h16v11H9l-5 4Z"/><path d="M8 9h8M8 12h5"/></>),
+  backups: (<><path d="M4 7a8 8 0 1 1-1 8"/><path d="M4 3v4H8M12 8v5l3 2"/></>),
+  "delete-account": (<><circle cx="9" cy="8" r="4"/><path d="M3 21v-2a6 6 0 0 1 10-5.5M17 14l5 5m0-5-5 5"/></>),
   key: (
     <>
       <circle cx="8" cy="15" r="4" />
