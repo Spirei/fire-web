@@ -5,6 +5,7 @@ import MarketIcon from "@/components/MarketIcon";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import type { CalendarDayCell, CalendarDayRow, CalendarYearCell } from "@/lib/pnlCalendar";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
+import AppModal from "@/components/AppModal";
 
 const CAL_MARKETS = ["全部", "美股", "港股", "A股"] as const;
 const CAL_MARKET_ICON: Record<string, string> = { 美股: "US", 港股: "HK", A股: "CN" };
@@ -137,9 +138,9 @@ export default function PnlCalendar({
   };
 
   return (
-    <section className={className}>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+    <section className={`pnl-calendar ${className}`}>
+      <div className="pnl-calendar-toolbar flex flex-wrap items-center justify-between gap-4">
+        <div className="pnl-calendar-date-row flex items-center gap-3">
           <h2 className="text-base font-bold">{title}</h2>
           <div className="flex items-center gap-1">
             <button onClick={() => shiftMonth(-1)} className="grid h-7 w-7 place-items-center rounded-full border border-edge text-muted hover:bg-bg-gray" aria-label="上个月">
@@ -206,7 +207,7 @@ export default function PnlCalendar({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="pnl-calendar-switches flex items-center gap-2">
           <div className="flex rounded-full bg-bg-gray p-1 text-sm">
             <button onClick={() => onViewChange("year")} className={`rounded-full px-5 py-2 font-semibold transition ${view === "year" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>年</button>
             <button onClick={() => onViewChange("month")} className={`rounded-full px-5 py-2 font-semibold transition ${view === "month" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>月</button>
@@ -276,17 +277,8 @@ export default function PnlCalendar({
         const shownRows = dayDetailMode === "profit" ? profitRows : lossRows;
         const shownTotal = shownRows.reduce((sum, r) => sum + r.pnl, 0);
         return (
-          <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/50 p-6">
-            <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-card border border-edge bg-white shadow-2xl dark:border-white/10 dark:bg-[#16181d]">
-              <div className="flex items-center justify-between border-b border-edge px-5 py-4">
-                <div>
-                  <h3 className="text-base font-bold">当日盈亏 · {dayDetail.date.replace(/-/g, "/")}</h3>
-                  <p className="mt-0.5 text-xs text-muted">{profitRows.length} / {lossRows.length}</p>
-                </div>
-                <button type="button" onClick={onDayDetailClose} aria-label="关闭" className="grid h-8 w-8 place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="m6 6 12 12M18 6 6 18" /></svg>
-                </button>
-              </div>
+          <AppModal title={`当日盈亏 · ${dayDetail.date.replace(/-/g, "/")}`} desc={`${profitRows.length} / ${lossRows.length}`} size="md" onClose={onDayDetailClose} className="pnl-day-dialog">
+            <div className="pnl-day-dialog-content flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-card border border-edge bg-white shadow-2xl dark:border-white/10 dark:bg-[#16181d]">
               <div className="px-5 pt-4">
                 <div className="grid grid-cols-2 rounded-full bg-bg-gray p-1">
                   <button onClick={() => setDayDetailMode("profit")} className={`rounded-full py-2.5 font-semibold ${dayDetailMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利</button>
@@ -327,7 +319,7 @@ export default function PnlCalendar({
                 <strong className={`text-sm font-bold tabular-nums ${shownTotal >= 0 ? "text-up" : "text-down"}`}>{formatAmount(shownTotal)}</strong>
               </div>
             </div>
-          </div>
+          </AppModal>
         );
       })()}
     </section>

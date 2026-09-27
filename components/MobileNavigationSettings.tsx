@@ -13,6 +13,7 @@ export default function MobileNavigationSettings({ tabs, order, onSave }: {
   const [saving, setSaving] = useState(false);
   const drag = useRef<{ key: string; group: string } | null>(null);
   const savingRef = useRef(false);
+  const [mouseDrag, setMouseDrag] = useState(false);
   useEffect(() => { setDraft(order); }, [order]);
   const groups = mobileWorkspaceGroups(tabs, draft);
   const saved = mobileWorkspaceGroups(tabs, order);
@@ -46,7 +47,7 @@ export default function MobileNavigationSettings({ tabs, order, onSave }: {
         drag.current = null;
         if (source?.group === group) move(group, groups[group].findIndex(row => row.key === source.key), index);
       }}>
-        <span role="img" aria-label={`拖动${MOBILE_NAV_LABELS[item.key] ?? item.label}排序`} title="拖动排序" draggable={!saving} className="mobile-nav-drag" onDragStart={event => { drag.current = { key: item.key, group }; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.key); }} onDragEnd={() => { drag.current = null; }}>
+        <span role="img" aria-label={`拖动${MOBILE_NAV_LABELS[item.key] ?? item.label}排序`} title="拖动排序" onPointerEnter={event => setMouseDrag(event.pointerType === "mouse")} onPointerDown={event => setMouseDrag(event.pointerType === "mouse")} draggable={!saving && mouseDrag} className="mobile-nav-drag" onDragStart={event => { drag.current = { key: item.key, group }; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.key); }} onDragEnd={() => { drag.current = null; }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">{[6,12,18].flatMap(y => [9,15].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.5"/>))}</svg>
         </span>
         <span className="min-w-0 flex-1 text-sm font-medium text-ink">{MOBILE_NAV_LABELS[item.key] ?? item.label}</span>

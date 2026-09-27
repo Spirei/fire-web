@@ -16,6 +16,21 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('mobile sheets avoid desktop row heights, native touch drag and nested fixed dialogs', () => {
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    const calendar = fs.readFileSync(path.join(root, 'components/PnlCalendar.tsx'), 'utf8');
+    const nav = fs.readFileSync(path.join(root, 'components/MobileNavigationSettings.tsx'), 'utf8');
+    const profile = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    assert(css.includes('.settings-profile-fields .sw-row-label { flex:0 0 auto; }'));
+    assert(css.includes('.settings-profile-fields .sw-row .ctrl { flex:0 0 auto!important;'));
+    assert(css.includes('.app-shell-root:has(.records-app) .app-shell-footer { display:none; }'));
+    assert(css.includes('.records-content .pnl-calendar h2 { flex:none; font-size:16px;'));
+    assert(calendar.includes('<AppModal title={`当日盈亏'));
+    assert(!calendar.includes('fixed inset-0 z-[10002]'));
+    assert(nav.includes('draggable={!saving && mouseDrag}'));
+    assert(profile.includes('if (profileSavingRef.current) return;'));
+    assert(profile.includes('连接失败，请重试'));
+  });
   await test('mobile navigation order persists separately, preserves defaults and filters permissions', () => {
     const { mobileWorkspaceGroups, normalizeMobileNavigationOrder } = require(path.join(root, 'lib/workspaceNavigation.ts'));
     const { mobilePanelDirection } = require(path.join(root, 'lib/mobileNavigation.ts'));

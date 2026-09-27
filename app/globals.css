@@ -6253,7 +6253,8 @@ button.PhotoView-Slider__toolbarIcon {
 .workspace-navigation-modal.modal-glass { background:rgb(var(--site-surface)) !important; border:0; border-radius:24px; box-shadow:0 16px 48px rgba(0,0,0,.16); }
 .asset-analysis-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
 .asset-analysis-shortcuts { display:flex; gap:4px; }
-.asset-analysis-shortcuts a { padding:10px 12px; border-radius:12px; font-size:13px; color:rgb(var(--site-ink) / .72); }
+.asset-analysis-shortcuts a { display:flex; align-items:center; justify-content:center; gap:7px; padding:10px 12px; border-radius:12px; font-size:13px; color:rgb(var(--site-ink) / .72); }
+.asset-analysis-shortcuts svg { width:18px; height:18px; flex:none; }
 .asset-analysis-shortcuts a:hover { background:rgb(var(--site-ink) / .06); color:rgb(var(--site-ink)); }
 .asset-analysis-page :is(#asset-trend,#asset-holdings,#asset-calendar) { scroll-margin-top:88px; }
 .asset-account-highlight { margin-top:4px; }
@@ -6876,8 +6877,8 @@ button.PhotoView-Slider__toolbarIcon {
 @media(max-width:600px) {
   .sc-detail-layer { align-items:flex-start; padding:68px 0 0; }
   .sc-detail-dialog { width:100%; max-height:calc(100dvh - 68px); min-height:calc(100dvh - 68px); border-radius:24px 24px 0 0; }
-  .sc-detail-dialog-head { min-height:114px; padding:76px 16px 8px; }
-  .sc-detail-dialog-head h2 { font-size:22px; }
+  .sc-detail-dialog-head { min-height:90px; padding:54px 16px 12px; }
+  .sc-detail-dialog-head h2 { font-size:20px; }
   .sc-detail-dialog-actions { top:14px; right:12px; }
   .sc-detail-dialog-scroll { padding:0 16px calc(24px + env(safe-area-inset-bottom)); }
   .sc-detail-dialog .settings-section-top { padding-bottom:14px; }
@@ -6993,3 +6994,42 @@ button.PhotoView-Slider__toolbarIcon {
 .mobile-nav-sort-list > li > button:not(:disabled):active { background:rgb(var(--site-soft)); }
 @media (prefers-reduced-motion:reduce) { .mobile-nav-sort-list > li > button { transition:none; } }
 @media (prefers-reduced-motion:reduce) { .fire-toast,.fire-toast.is-leaving,.fire-toast-icon,.fire-toast-symbol,.fire-toast-mark { animation:none; } .fire-toast-mark { stroke-dashoffset:0; } }
+
+/* Mobile sheets own their scrolling; desktop row widths must not become column heights. */
+html { scrollbar-gutter:stable; }
+.sc-detail-dialog-scroll,.workspace-navigation-modal.modal-glass { overscroll-behavior-y:contain; touch-action:pan-y; -webkit-overflow-scrolling:touch; }
+.sc-detail-dialog[data-detail="mobile-nav"] .settings-section-body { border:0!important; padding:0!important; background:transparent!important; }
+.pnl-day-dialog-content { border:0; box-shadow:none; max-height:calc(75dvh - 80px); background:transparent; }
+@media(max-width:1023px) {
+  .app-shell-root:has(.records-app) .app-shell-footer { display:none; }
+}
+@media(max-width:600px) {
+  .sc-detail-dialog .settings-profile-fields .sw-row-label { flex:0 0 auto; }
+  .sc-detail-dialog .settings-profile-fields .sw-row .ctrl { flex:0 0 auto!important; min-height:0; }
+  .sc-detail-dialog .settings-profile-value,.sc-detail-dialog .settings-code-value { max-width:100%; font-size:14px; }
+  .sc-detail-dialog .settings-profile-fields .sw-row { gap:8px; }
+  .sc-detail-dialog .settings-profile-fields input { text-align:left; }
+  .sc-detail-dialog .settings-profile-identity { flex-wrap:wrap; }
+  .sc-detail-dialog .settings-profile-identity em { white-space:nowrap; }
+  .sc-detail-dialog .settings-avatar-side { flex-wrap:wrap; }
+  .sc-detail-dialog .sw-row-label b { font-size:14px; }
+  .sc-detail-dialog .sw-row-label > span { font-size:12px; }
+  .sc-detail-dialog[data-detail="mobile-nav"] .settings-section-top p { font-size:13px; line-height:1.5; }
+  .mobile-nav-preview { min-height:44px; }
+  .mobile-nav-sort-list > li { min-height:54px; padding:4px 8px; }
+  .mobile-nav-drag { touch-action:pan-y; }
+  .records-app:not(.is-settings) .records-content h2 { font-size:18px; }
+  .records-app:not(.is-settings) .records-content .asset-analysis-heading h2,.records-app:not(.is-settings) .records-content .stock-add-card h2 { font-size:20px; line-height:1.3; }
+  .records-app .stock-add-card { padding:18px; margin-bottom:16px; }
+  .records-app .stock-add-card > p { font-size:13px; line-height:1.5; }
+  .asset-analysis-shortcuts a { padding-inline:6px; font-size:12px; min-height:44px; gap:5px; white-space:nowrap; }
+  .asset-analysis-shortcuts svg { width:17px; height:17px; }
+  .pnl-calendar-toolbar { gap:12px; }
+  .pnl-calendar-switches { max-width:100%; gap:8px; }
+  .pnl-calendar-switches button { flex:none; min-height:36px; padding:8px 12px; font-size:12px; white-space:nowrap; }
+  .pnl-calendar-date-row { width:100%; justify-content:space-between; gap:8px; }
+  .records-app:not(.is-settings) .records-content .pnl-calendar h2 { flex:none; font-size:16px; line-height:1.3; white-space:nowrap; }
+  .pnl-calendar-date-row > div { min-width:0; }
+  .asset-ranking-heading { gap:6px; }
+  .workspace-navigation-label { font-size:14px; }
+}

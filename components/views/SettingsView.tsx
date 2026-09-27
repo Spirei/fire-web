@@ -1162,7 +1162,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     }
   }
 
+  const profileSavingRef = useRef(false);
   async function saveProfile() {
+    if (profileSavingRef.current) return;
+    profileSavingRef.current = true;
     setNickMsg(null);
     try {
       const res = await fetch("/api/auth/profile", {
@@ -1172,7 +1175,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "保存失败");
-      const changedEmail=data.user.email.toLowerCase()!==me.email.toLowerCase();
+      if (!data?.user) throw new Error("保存失败，请重试");
+      const changedEmail=(data.user.email ?? "").toLowerCase()!==(me.email ?? "").toLowerCase();
       setMe((m) => ({ ...m, nickname: data.user.nickname, email: data.user.email, emailVerified: data.user.emailVerified===true }));
       setNickname(data.user.nickname);
       setEmail(data.user.email);
@@ -1183,9 +1187,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setEditingProfile(false);
       if(changedEmail && data.user.email && !data.user.emailVerified) void sendEmailConfirmation();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "个人资料保存失败";
+      const message = err instanceof TypeError ? "连接失败，请重试" : err instanceof Error ? err.message : "保存失败，请重试";
       setNickMsg({ type: "err", text: message });
       showToast(message, "err");
+    } finally {
+      profileSavingRef.current = false;
     }
   }
 

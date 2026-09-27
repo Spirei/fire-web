@@ -705,7 +705,7 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
   return (
     <div>
       {/* 搜索添加 */}
-      <div className="card mb-6 p-6">
+      <div className="stock-add-card card mb-6 p-6">
         <h2 className="mb-1.5 text-lg font-bold">股票添加</h2>
         <p className="mb-4 text-sm text-muted">搜索名称或代码，加入自选。</p>
         <div className="mx-auto max-w-[560px]">

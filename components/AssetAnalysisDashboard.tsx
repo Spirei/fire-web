@@ -1116,7 +1116,9 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     <div className="asset-analysis-heading">
       <h2 className="text-lg font-extrabold">资产分析</h2>
       <nav className="asset-analysis-shortcuts" aria-label="资产分析区块">
-        <a href="#asset-trend">趋势</a><a href="#asset-holdings">持仓</a><a href="#asset-calendar">盈亏日历</a>
+        <a href="#asset-trend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 17 10 11l4 3 6-8M15 6h5v5"/></svg>趋势</a>
+        <a href="#asset-holdings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M8 6V4h8v2M3 12h18M10 12v3h4v-3"/></svg>持仓</a>
+        <a href="#asset-calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 10h18m-13 6 3 2 5-4"/></svg>盈亏日历</a>
       </nav>
     </div>
 
@@ -1198,7 +1200,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
         <div {...moduleDragProps("left", "pnlRank")} className={moduleWrapperClass("left", "pnlRank")} style={{ order: moduleOrderIndex("left", "pnlRank") }}>
           <section className="card overflow-hidden">
             <div className="border-b border-edge px-4 py-4">
-              <div className="flex items-center justify-between gap-3"><h3 className="text-base font-bold">持仓盈亏排行</h3><span className="text-[11px] text-muted">更新至 {formatRangeDate(activeRange.end)}</span></div>
+              <div className="asset-ranking-heading flex flex-wrap items-center justify-between gap-3"><h3 className="whitespace-nowrap text-base font-bold">持仓盈亏排行</h3><span className="text-[11px] text-muted">更新至 {formatRangeDate(activeRange.end)}</span></div>
               <div className="mt-2"><MarketPills value={pnlMarket} onChange={(key) => { setPnlMarket(key); setPnlExpanded(false); }} /></div>
             </div>
             <div className="grid grid-cols-[48px_minmax(0,1fr)_110px] bg-bg-gray px-4 py-2.5 text-[11px] font-semibold text-muted"><span>序号</span><span>名称 / 代码</span><span className="text-right">盈亏 / 明细</span></div>
