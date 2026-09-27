@@ -19,6 +19,23 @@ export function getMailConfig() {
   };
 }
 
+export type MailConfigInput = Partial<ReturnType<typeof getMailConfig>>;
+
+function resolveMailConfig(input?: MailConfigInput) {
+  const saved = getMailConfig();
+  if (!input) return saved;
+  const port = Number(input.port ?? saved.port);
+  return {
+    host: String(input.host ?? saved.host).trim(),
+    port: Number.isInteger(port) && port > 0 && port <= 65535 ? port : saved.port,
+    secure: typeof input.secure === "boolean" ? input.secure : saved.secure,
+    user: String(input.user ?? saved.user).trim(),
+    password: input.password ? String(input.password) : saved.password,
+    fromName: String(input.fromName ?? saved.fromName).trim(),
+    fromEmail: String(input.fromEmail ?? saved.fromEmail).trim()
+  };
+}
+
 export function mailConfigured() {
   const config = getMailConfig();
   return Boolean(config.host && config.fromEmail);
@@ -48,8 +65,8 @@ export async function sendPasswordResetEmail(input: { to: string; name: string; 
   });
 }
 
-export async function sendTestEmail(to: string) {
-  const config = getMailConfig();
+export async function sendTestEmail(to: string, input?: MailConfigInput) {
+  const config = resolveMailConfig(input);
   if (!config.host || !config.fromEmail) throw new Error("邮件服务未配置完整");
   const transport = nodemailer.createTransport({
     host: config.host,

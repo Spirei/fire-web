@@ -3735,17 +3735,32 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {sub === "cron" && isAdminUser && (
               <div className="flex flex-col gap-6">
                 <SettingsSection id="mail" icon="api" title="邮件服务" desc="用于发送一次性密码重置链接；未配置时不会伪装发送成功">
-                  <div className="settings-password-grid settings-password-meta">
-                    <label><span>SMTP 主机</span><input value={site.smtpHost} onChange={(event) => setSite({ ...site, smtpHost: event.target.value })} placeholder="smtp.example.com" /></label>
-                    <label><span>端口</span><input inputMode="numeric" value={site.smtpPort} onChange={(event) => setSite({ ...site, smtpPort: event.target.value })} placeholder="587" /></label>
-                    <label><span>SMTP 用户名</span><input value={site.smtpUser} onChange={(event) => setSite({ ...site, smtpUser: event.target.value })} autoComplete="username" placeholder="通常为完整邮箱" /></label>
-                    <label><span>SMTP 密码</span><input type="password" value={site.smtpPassword} onChange={(event) => setSite({ ...site, smtpPassword: event.target.value })} autoComplete="new-password" placeholder={site.smtpPasswordConfigured ? "已安全保存，留空不修改" : "应用专用密码"} /></label>
-                    <label><span>发件名称</span><input value={site.smtpFromName} onChange={(event) => setSite({ ...site, smtpFromName: event.target.value })} placeholder="Fire" /></label>
-                    <label><span>发件邮箱</span><input type="email" value={site.smtpFromEmail} onChange={(event) => setSite({ ...site, smtpFromEmail: event.target.value })} placeholder="no-reply@example.com" /></label>
-                    <label className="settings-signout-option"><input type="checkbox" checked={site.smtpSecure} onChange={(event) => setSite({ ...site, smtpSecure: event.target.checked })} /><span>使用 SMTP SSL/TLS（通常为 465 端口；587 通常不勾选并自动升级 TLS）</span></label>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" disabled={blockSaving.mail} onClick={() => void saveBlock("mail", { smtpHost: site.smtpHost, smtpPort: site.smtpPort, smtpSecure: site.smtpSecure, smtpUser: site.smtpUser, smtpPassword: site.smtpPassword, smtpFromName: site.smtpFromName, smtpFromEmail: site.smtpFromEmail }, "邮件服务已保存")} className="settings-meta-primary">{blockSaving.mail ? "保存中…" : "保存邮件设置"}</button>
-                      <button type="button" disabled={mailTesting || blockSaving.mail} onClick={async () => { setMailTesting(true); try { const saved = await saveBlock("mail", { smtpHost: site.smtpHost, smtpPort: site.smtpPort, smtpSecure: site.smtpSecure, smtpUser: site.smtpUser, smtpPassword: site.smtpPassword, smtpFromName: site.smtpFromName, smtpFromEmail: site.smtpFromEmail }, "邮件服务已保存"); if (!saved) return; const response = await fetch("/api/settings/mail-test", { method: "POST" }); const data = await response.json().catch(() => null); if (!response.ok) throw new Error(data?.error || "发送失败"); showToast(`测试邮件已发送至 ${data.email}`); } catch (error) { showToast(error instanceof Error ? error.message : "发送失败", "err"); } finally { setMailTesting(false); } }} className="btn btn-line h-[42px]">{mailTesting ? "发送中…" : "保存并测试"}</button>
+                  <div className="mail-settings">
+                    <div className="mail-settings-group">
+                      <div className="mail-settings-group-title"><b>服务器</b><span>由你的邮件服务商提供</span></div>
+                      <div className="mail-settings-server-grid">
+                        <label><span>SMTP 主机</span><input type="text" value={site.smtpHost} onChange={(event) => setSite({ ...site, smtpHost: event.target.value })} placeholder="smtp.example.com" autoComplete="off" /></label>
+                        <label><span>端口</span><input type="text" inputMode="numeric" value={site.smtpPort} onChange={(event) => setSite({ ...site, smtpPort: event.target.value.replace(/\D/g, "").slice(0, 5) })} placeholder="587" /></label>
+                      </div>
+                      <div className="mail-settings-two-col">
+                        <label><span>用户名</span><input type="text" value={site.smtpUser} onChange={(event) => setSite({ ...site, smtpUser: event.target.value })} autoComplete="username" placeholder="name@example.com" /></label>
+                        <label><span>应用密码</span><input type="password" value={site.smtpPassword} onChange={(event) => setSite({ ...site, smtpPassword: event.target.value })} autoComplete="new-password" placeholder={site.smtpPasswordConfigured ? "已保存 · 留空不修改" : "输入应用专用密码"} /></label>
+                      </div>
+                      <button type="button" role="switch" aria-checked={site.smtpSecure} onClick={() => setSite({ ...site, smtpSecure: !site.smtpSecure })} className="mail-settings-switch-row">
+                        <span><b>直接使用 SSL/TLS</b><small>465 端口通常开启；587 端口通常关闭</small></span>
+                        <i className={site.smtpSecure ? "is-on" : ""} aria-hidden="true"><em /></i>
+                      </button>
+                    </div>
+                    <div className="mail-settings-group">
+                      <div className="mail-settings-group-title"><b>发件人</b><span>显示在密码重置邮件中</span></div>
+                      <div className="mail-settings-sender-grid">
+                        <label><span>名称</span><input type="text" value={site.smtpFromName} onChange={(event) => setSite({ ...site, smtpFromName: event.target.value })} placeholder="Fire" /></label>
+                        <label><span>邮箱</span><input type="email" value={site.smtpFromEmail} onChange={(event) => setSite({ ...site, smtpFromEmail: event.target.value })} placeholder="no-reply@example.com" /></label>
+                      </div>
+                    </div>
+                    <div className="mail-settings-actions">
+                      <button type="button" disabled={mailTesting || blockSaving.mail} onClick={async () => { setMailTesting(true); try { const response = await fetch("/api/settings/mail-test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ smtpHost: site.smtpHost, smtpPort: site.smtpPort, smtpSecure: site.smtpSecure, smtpUser: site.smtpUser, smtpPassword: site.smtpPassword, smtpFromName: site.smtpFromName, smtpFromEmail: site.smtpFromEmail }) }); const data = await response.json().catch(() => null); if (!response.ok) throw new Error(data?.error || "测试失败"); showToast(`测试邮件已发送至 ${data.email}，确认无误后请保存`); } catch (error) { showToast(error instanceof Error ? error.message : "测试失败", "err"); } finally { setMailTesting(false); } }} className="mail-settings-test">{mailTesting ? "测试中…" : "测试连接"}</button>
+                      <button type="button" disabled={blockSaving.mail || mailTesting} onClick={() => void saveBlock("mail", { smtpHost: site.smtpHost, smtpPort: site.smtpPort, smtpSecure: site.smtpSecure, smtpUser: site.smtpUser, smtpPassword: site.smtpPassword, smtpFromName: site.smtpFromName, smtpFromEmail: site.smtpFromEmail }, "邮件服务已保存")} className="mail-settings-save">{blockSaving.mail ? "保存中…" : "保存"}</button>
                     </div>
                   </div>
                 </SettingsSection>
