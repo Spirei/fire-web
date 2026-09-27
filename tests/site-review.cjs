@@ -16,6 +16,40 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('password inputs use accessible draft-only visibility toggles', () => {
+    const React = require('react');
+    const { renderToStaticMarkup } = require('react-dom/server');
+    const PasswordInput = require(path.join(root,'components/PasswordInput.tsx')).default;
+    const html = renderToStaticMarkup(React.createElement(PasswordInput,{id:'test-password',value:'example-draft',onChange:()=>{},autoComplete:'new-password'}));
+    assert(html.includes('type="password"'));
+    assert(html.includes('type="button"') && html.includes('aria-pressed="false"'));
+    assert(html.includes('aria-controls="test-password"') && html.includes('autoComplete="new-password"'));
+    const disabled = renderToStaticMarkup(React.createElement(PasswordInput,{disabled:true}));
+    const readOnly = renderToStaticMarkup(React.createElement(PasswordInput,{readOnly:true}));
+    assert(!disabled.includes('<button') && !readOnly.includes('<button'));
+    const component = fs.readFileSync(path.join(root, 'components/PasswordInput.tsx'), 'utf8');
+    assert(component.includes('type={shown ? "text" : "password"}'));
+    assert(component.includes('type="button"'));
+    assert(component.includes('aria-pressed={shown}'));
+    assert(component.includes('aria-controls={inputId}'));
+    assert(component.includes('const canReveal = !disabled && !readOnly'));
+    assert(component.includes('event.preventDefault()'));
+    assert(!component.includes('fetch(') && !component.includes('localStorage'));
+    for (const file of ['components/FirstRunSetup.tsx','components/PasswordResetForm.tsx','components/PasskeySettings.tsx','components/views/SettingsView.tsx','components/views/UsersView.tsx','components/AssistantHarnessSettings.tsx','app/deploy-status/page.tsx']) {
+      const source = fs.readFileSync(path.join(root,file), 'utf8');
+      const ast = ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+      function visit(node) {
+        if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(ast) === 'PasswordInput') {
+          assert(node.attributes.properties.some(a=>ts.isJsxAttribute(a) && a.name.getText(ast)==='type' && a.initializer && ts.isStringLiteral(a.initializer) && a.initializer.text==='password'), file + ' must not mask non-password fields');
+        }
+        if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(ast) === 'input') {
+          assert(!node.attributes.properties.some(a => ts.isJsxAttribute(a) && a.name.getText(ast)==='type' && a.initializer && ts.isStringLiteral(a.initializer) && a.initializer.text === 'password'), file + ' must use PasswordInput');
+        }
+        ts.forEachChild(node,visit);
+      }
+      visit(ast);
+    }
+  });
   await test('system security illustration works without deployment media and preserves its legacy URL', async () => {
     const { GET } = require(path.join(root, 'app/api/system-assets/security-check/route.ts'));
     const response = GET();

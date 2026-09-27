@@ -1,5 +1,7 @@
 "use client";
 
+import PasswordInput from "@/components/PasswordInput";
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -179,20 +181,20 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
                 }}
               >
                 <div className="fr-fields">
-                  {requireSetupToken && <label htmlFor="fr-setup-token">安装令牌<input id="fr-setup-token" type="password" value={setupToken} onChange={e => setSetupToken(e.target.value)} autoComplete="off" placeholder="部署时配置的 FIRE_SETUP_TOKEN" /></label>}
+                  {requireSetupToken && <label htmlFor="fr-setup-token">安装令牌<PasswordInput id="fr-setup-token" type="password" value={setupToken} onChange={e => setSetupToken(e.target.value)} autoComplete="off" placeholder="部署时配置的 FIRE_SETUP_TOKEN" /></label>}
                   <label htmlFor="fr-username">
                     登录名
                     <input id="fr-username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="例如：admin" autoComplete="username" autoFocus />
                   </label>
                   <label htmlFor="fr-password">
                     密码
-                    <input id="fr-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="至少 8 位，含字母和数字" autoComplete="new-password" />
+                    <PasswordInput id="fr-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="至少 8 位，含字母和数字" autoComplete="new-password" />
                   </label>
                 </div>
                 <div className="fr-fields single" style={{ marginTop: 16 }}>
                   <label htmlFor="fr-confirm">
                     确认密码
-                    <input id="fr-confirm" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="再次输入密码" autoComplete="new-password" />
+                    <PasswordInput id="fr-confirm" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="再次输入密码" autoComplete="new-password" />
                   </label>
                 </div>
                 <div className="fr-hint">

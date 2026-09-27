@@ -1,4 +1,6 @@
 "use client";
+
+import PasswordInput from "@/components/PasswordInput";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import AppModal from "@/components/AppModal";
 import { startRegistration, WebAuthnAbortService } from "@simplewebauthn/browser";
@@ -202,7 +204,7 @@ export default function PasskeySettings({ admin, onClose, mode = "keys", dataSou
     <form onSubmit={confirmAction} className="pk-verify-form">
         <div className="pk-account-row"><span className="pk-account-mark"><SubNavIcon name="account" /></span><span><b>Fire 账号</b><small>安全验证</small></span></div>
         {pending.kind === "add" && <label className="pk-field"><span>通行密钥名称（选填）</span><input value={name} maxLength={64} onChange={e => setName(e.target.value)} placeholder="例如：iCloud 或 Bitwarden" disabled={busy} /></label>}
-        <label className="pk-field"><span>当前密码</span><input type="password" required autoComplete="current-password" data-autofocus autoFocus value={password} onChange={e => setPassword(e.target.value)} placeholder="输入当前密码" disabled={busy} /></label>
+        <label className="pk-field"><span>当前密码</span><PasswordInput type="password" required autoComplete="current-password" data-autofocus autoFocus value={password} onChange={e => setPassword(e.target.value)} placeholder="输入当前密码" disabled={busy} /></label>
         {totp && <label className="pk-field"><span>二次验证码或备用码</span><input required autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} placeholder="6 位验证码或备用码" disabled={busy} /></label>}
         {verificationError && <p role="alert" className="text-sm text-up">{verificationError}</p>}
         <div className="dialog-actions"><button type="button" className="dialog-btn dialog-btn-ghost" disabled={busy} onClick={closeVerification}>取消</button><button type="submit" className={`dialog-btn ${pending.kind === "delete" ? "dialog-btn-danger" : "dialog-btn-neutral"}`} disabled={busy || !password || (totp && !code.trim())}>{busy ? "处理中…" : actionLabel}</button></div>

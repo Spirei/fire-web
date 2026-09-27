@@ -1,4 +1,6 @@
 "use client";
+
+import PasswordInput from "@/components/PasswordInput";
 import PasskeySettings from "@/components/PasskeySettings";
 import { createPasskeySettingsData } from "@/lib/passkeySettingsData";
 import SecurityCheck from "@/components/SecurityCheck";
@@ -2121,7 +2123,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               className="sc-meta-field mt-1.5 w-full border border-edge-strong bg-white px-3 text-sm text-ink outline-none placeholder:opacity-40 focus:border-edge-strong dark:bg-[#151a26] dark:border-[#2a3140]"
             />
             <label className="mt-3 block text-xs font-semibold text-muted">当前密码</label>
-            <input
+            <PasswordInput
               type="password"
               value={deletePassword}
               onChange={(e) => setDeletePassword(e.target.value)}
@@ -2797,7 +2799,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <div className="sw-row">
                       <div className="sw-row-label"><b>雪球 Cookie</b><span>登录雪球后复制整段 Cookie；服务端带登录会话请求，绕过雪球 WAF 反爬（仅服务端使用）</span></div>
                       <div className="ctrl">
-                        <input className="sw-row-input" type="password" autoComplete="off" readOnly={!editingTradingSquare}
+                        <PasswordInput className="sw-row-input" type="password" autoComplete="off" readOnly={!editingTradingSquare}
                           placeholder="xq_a_token=…; u=…; …"
                           value={!site.xueqiuCookie && site.xueqiuCookieConfigured ? "********" : (site.xueqiuCookie || "")}
                           onFocus={(e) => { if (e.currentTarget.value === "********") e.currentTarget.value = ""; }}
@@ -3234,7 +3236,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                     </div>
                                   </div>
                                   <label className="model-field"><span>API 地址<small>{service.provider === "jev" ? "TypeSafe System One 决策接口" : "OpenAI 兼容的 Chat Completions 地址"}</small></span><input className="sw-row-input" value={service.apiUrl} onChange={event => updateService(service.id, { apiUrl: event.target.value })} placeholder={service.provider === "jev" ? "https://api.typesafe.ai/v1/systemone" : "https://api.example.com/v1/chat/completions"} autoComplete="off" /></label>
-                                  <label className="model-field"><span>API 密钥<small>留空不会覆盖已保存密钥</small></span><div className="relative min-w-0 flex-1"><input className="sw-row-input !w-full pr-24" type="password" autoComplete="new-password" value={service.apiKey} onChange={event => updateService(service.id, { apiKey: event.target.value })} placeholder={service.apiKeyConfigured ? "已配置，输入新值可替换" : "输入 API Key"} /><span className={`model-key-state ${service.apiKey || service.apiKeyConfigured ? "is-ready" : ""}`}><i />{service.apiKey || service.apiKeyConfigured ? "已保护" : "未配置"}</span></div></label>
+                                  <label className="model-field"><span>API 密钥<small>留空不会覆盖已保存密钥</small></span><div className="relative min-w-0 flex-1"><PasswordInput className="sw-row-input !w-full pr-24" type="password" autoComplete="new-password" value={service.apiKey} onChange={event => updateService(service.id, { apiKey: event.target.value })} placeholder={service.apiKeyConfigured ? "已配置，输入新值可替换" : "输入 API Key"} /><span className={`model-key-state ${service.apiKey || service.apiKeyConfigured ? "is-ready" : ""}`}><i />{service.apiKey || service.apiKeyConfigured ? "已保护" : "未配置"}</span></div></label>
                                   <div>
                                     <div className="model-list-heading"><span>{service.provider === "jev" ? "决策模型" : "模型与回退顺序"}<small>{service.provider === "jev" ? "测试连接使用结构化判断请求；不参与聊天与翻译回退" : "从上到下依次尝试"}</small></span><button type="button" onClick={() => updateService(service.id, { models: [...service.models, ""] })}><b>＋</b> 添加模型</button></div>
                                     <div className="model-list">
@@ -3498,7 +3500,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       {editingProfile && email.trim().toLowerCase() !== (me.email ?? "").trim().toLowerCase() && (
                         <div className="sw-row">
                           <div className="sw-row-label"><b>安全验证</b><span>修改登录邮箱需要当前密码</span></div>
-                          <div className="ctrl" style={{ flex: 1 }}><input type="password" disabled={profileSaving} value={profilePassword} onChange={(e) => setProfilePassword(e.target.value)} autoComplete="current-password" placeholder="当前密码" className="sw-row-input" /></div>
+                          <div className="ctrl" style={{ flex: 1 }}><PasswordInput type="password" disabled={profileSaving} value={profilePassword} onChange={(e) => setProfilePassword(e.target.value)} autoComplete="current-password" placeholder="当前密码" className="sw-row-input" /></div>
                         </div>
                       )}
                       {nickMsg && <p className={`settings-form-message ${nickMsg.type === "ok" ? "is-ok" : "is-error"}`}>{nickMsg.text}</p>}
@@ -3508,9 +3510,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 <SettingsSection id="password" icon="password" title="更改密码">
                   <form onSubmit={changePassword} className="settings-password-grid settings-password-meta">
                     <div className="settings-account-identity"><span className="settings-account-avatar">{me.avatar ? <img src={me.avatar} alt="" /> : (me.nickname || me.username).slice(0, 1)}</span><span><b>{me.nickname || me.username}</b><small>{me.email || `@${me.username}`}</small></span><span aria-hidden="true">›</span></div>
-                    <label><span>当前密码</span><input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required autoFocus data-autofocus autoComplete="current-password" placeholder="当前密码" /></label>
-                    <div><label><span>新密码</span><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required maxLength={128} autoComplete="new-password" placeholder="新密码" /></label><PasswordStrength password={newPassword} userInputs={[me.username, me.nickname, me.email ?? ""]} /></div>
-                    <label><span>确认新密码</span><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required maxLength={128} autoComplete="new-password" placeholder="再次输入新密码" /></label>
+                    <label><span>当前密码</span><PasswordInput type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required autoFocus data-autofocus autoComplete="current-password" placeholder="当前密码" /></label>
+                    <div><label><span>新密码</span><PasswordInput type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required maxLength={128} autoComplete="new-password" placeholder="新密码" /></label><PasswordStrength password={newPassword} userInputs={[me.username, me.nickname, me.email ?? ""]} /></div>
+                    <label><span>确认新密码</span><PasswordInput type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required maxLength={128} autoComplete="new-password" placeholder="再次输入新密码" /></label>
                     {totpEnabled && (
                       <label><span>二次验证码</span><input autoComplete="one-time-code" spellCheck={false} value={totpPasswordCode} onChange={(e) => setTotpPasswordCode(e.target.value)} required placeholder="验证器 6 位数字或备用码" /></label>
                     )}
@@ -3644,7 +3646,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <div className="totp-meta-methods"><div className="totp-meta-method is-selected"><span className="totp-meta-method-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path d="M15 14h2v2h-2zM19 14h1v3h-3v3h-3v-2M19 19h1v1h-1z"/></svg></span><span className="totp-meta-method-copy"><b>{totpDeviceName || "身份验证应用"}</b><small>已开启，可使用验证码或备用码登录。</small></span><span className="totp-meta-status">已开启</span></div></div>
                       <h3>关闭双重验证</h3>
                       <form onSubmit={disableTotp} className="totp-meta-disable">
-                        <label><span>当前密码</span><input type="password" autoComplete="current-password" value={totpDisablePassword} onChange={(e) => setTotpDisablePassword(e.target.value)} required /></label>
+                        <label><span>当前密码</span><PasswordInput type="password" autoComplete="current-password" value={totpDisablePassword} onChange={(e) => setTotpDisablePassword(e.target.value)} required /></label>
                         <label><span>验证码或备用码</span><input autoComplete="one-time-code" value={totpDisableCode} onChange={(e) => setTotpDisableCode(e.target.value)} required /></label>
                         <button type="submit" disabled={totpBusy}>{totpBusy ? "提交中…" : "关闭双重验证"}</button>
                       </form>
@@ -3758,7 +3760,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </label>
                       <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2 md:col-span-2">
                         密码
-                        <input type="password" value={site.pgPassword} readOnly={!editingDb} onChange={(e) => setSite({ ...site, pgPassword: e.target.value })} placeholder="数据库密码" className={`h-[42px] rounded-[10px] border border-edge-strong px-3 outline-none transition-shadow focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] ${editingDb ? "" : "!border-transparent !bg-transparent !shadow-none"}`} />
+                        <PasswordInput type="password" value={site.pgPassword} readOnly={!editingDb} onChange={(e) => setSite({ ...site, pgPassword: e.target.value })} placeholder="数据库密码" className={`h-[42px] rounded-[10px] border border-edge-strong px-3 outline-none transition-shadow focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] ${editingDb ? "" : "!border-transparent !bg-transparent !shadow-none"}`} />
                       </label>
                     </div>
                     {dbMsg && (
@@ -3796,7 +3798,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                       <div className="mail-settings-two-col">
                         <label><span>用户名</span><input type="text" value={site.smtpUser} onChange={(event) => setSite({ ...site, smtpUser: event.target.value })} autoComplete="username" placeholder="name@example.com" /></label>
-                        <label><span>授权码</span><input type="password" value={site.smtpPassword} onChange={(event) => setSite({ ...site, smtpPassword: event.target.value })} autoComplete="new-password" placeholder={site.smtpPasswordConfigured ? "已保存 · 留空不修改" : "输入邮箱授权码"} /></label>
+                        <label><span>授权码</span><PasswordInput type="password" value={site.smtpPassword} onChange={(event) => setSite({ ...site, smtpPassword: event.target.value })} autoComplete="new-password" placeholder={site.smtpPasswordConfigured ? "已保存 · 留空不修改" : "输入邮箱授权码"} /></label>
                       </div>
                       <button type="button" role="switch" aria-checked={site.smtpSecure} onClick={() => setSite({ ...site, smtpSecure: !site.smtpSecure })} className="mail-settings-switch-row">
                         <span><b>直接使用 SSL/TLS</b><small>465 端口通常开启；587 端口通常关闭</small></span>

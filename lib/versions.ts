@@ -4623,9 +4623,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_43_ENTRY,
   version: "v0.1.44",
   date: "2026-09-28",
-  summary: "安全检查插图由系统内置提供，不依赖部署素材。",
+  summary: "安全检查插图系统内置，完善全站密码显示与隐藏。",
   software: V0_1_43_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.44" } : item),
   changes: [
+    { kind: "feature", title: "密码显示切换", desc: "所有可编辑密码输入增加显示与隐藏按钮，覆盖首次设置、找回密码、账号资料、安全确认和管理配置；默认隐藏，不读取已保存密钥，禁用或清空时恢复隐藏，切换不提交表单。" },
     { kind: "fix", title: "安全插图部署兜底", desc: "安全检查保持内置 SVG，旧图片地址由系统代码返回同款插图，不受空 icons 挂载或 Docker 素材排除影响；响应要求缓存重新验证，并增加部署审计与无素材回归。" }
   ]
 };

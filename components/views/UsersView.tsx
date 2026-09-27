@@ -1,5 +1,7 @@
 "use client";
 
+import PasswordInput from "@/components/PasswordInput";
+
 import { useEffect, useLayoutEffect, useState } from "react";
 import type { User } from "@/lib/types";
 import { fmtDateTime } from "@/lib/format";
@@ -351,7 +353,7 @@ export default function UsersView() {
             <p className="rounded-[10px] bg-bg-gray px-3.5 py-2.5 text-[13px] text-muted">重置密码会同时撤销该用户的二次验证、通行密钥和所有登录会话。</p>
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
               新密码（至少 8 位，含字母和数字）
-              <input name="newPassword" type="password" required minLength={8} autoComplete="new-password" className="field" />
+              <PasswordInput name="newPassword" type="password" required minLength={8} autoComplete="new-password" className="field" />
             </label>
             <div className="mt-1 flex justify-end gap-2.5 border-t border-edge pt-4">
               <button type="button" onClick={() => setResetUser(null)} className="btn btn-ghost btn-sm">取消</button>

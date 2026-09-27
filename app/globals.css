@@ -6760,7 +6760,7 @@ button.PhotoView-Slider__toolbarIcon {
 .totp-meta-code-form { display:flex; flex-direction:column; gap:14px; }
 .totp-meta-code-form label,.totp-meta-disable label { display:flex; flex-direction:column; gap:6px; color:var(--sc-dialog-muted); font-size:12px; font-weight:600; }
 .totp-meta-code-form input,.totp-meta-disable input { width:100%; min-height:56px; padding:0 16px; border:1px solid var(--sc-dialog-border-strong); border-radius:16px; background:var(--sc-dialog-bg); color:var(--sc-dialog-text); font-size:16px; outline:none; box-shadow:none; }
-.totp-meta-code-form input:not([type="password"]) { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:19px; letter-spacing:.34em; text-align:center; }
+.totp-meta-code-form input:not([type="password"]):not(.password-input-control) { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:19px; letter-spacing:.34em; text-align:center; }
 .totp-meta-code-form input:focus,.totp-meta-disable input:focus { border-color:var(--sc-dialog-primary); }
 .totp-meta-code-form .totp-meta-primary { margin-top:12px; }
 .totp-meta-disable > button { min-height:44px; border-radius:999px; background:var(--sc-dialog-soft); color:var(--sc-dialog-text); font-size:14px; font-weight:650; }
@@ -7035,6 +7035,15 @@ html { scrollbar-gutter:stable; }
   .workspace-navigation-label { font-size:14px; }
 }
 
+/* Password visibility keeps the input geometry unchanged and does not submit its form. */
+.password-input,.sc-detail-dialog .settings-password-meta label > .password-input { position:relative; display:grid; grid-template-columns:minmax(0,1fr) 44px; width:100%; min-width:0; margin:0; }
+.password-input > input { grid-area:1 / 1 / 2 / 3; width:100%!important; min-width:0; padding-right:48px!important; }
+.password-input > .password-visibility-toggle { grid-area:1 / 2 / 2 / 3; z-index:1; display:flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; padding:0; margin:0; border:0; border-radius:12px; background:transparent; color:inherit; opacity:.65; box-shadow:none; cursor:pointer; transition:opacity 150ms ease; }
+.password-input > .password-visibility-toggle:hover { opacity:1; }
+.sv-win-root .sw-row > .password-input { flex:1; min-width:0; }
+.sc-detail-dialog .settings-password-meta .password-input-control { min-height:60px; padding-left:16px; border-radius:16px; font-size:15px; font-weight:500; line-height:19px; }
+.model-field .model-key-state { right:48px; }
+.model-field .password-input > input { padding-right:132px!important; }
 /* Short mobile controls share a baseline; prose and editable long fields keep their space. */
 @media(max-width:600px) {
   .activities-toolbar { display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; padding-inline:16px; }
