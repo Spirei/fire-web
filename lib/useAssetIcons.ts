@@ -187,8 +187,9 @@ export function primeNavIconCache(icons: Record<string, string>) {
 }
 
 /** 首帧结束后把固定货币的小图标送入浏览器图片缓存，打开下拉时无需再等网络。 */
-export function usePrefetchFlagIcons(icons: Record<string, string>) {
+export function usePrefetchFlagIcons(icons: Record<string, string>, enabled = true) {
   useEffect(() => {
+    if (!enabled) return;
     const urls = [...new Set(Object.values(icons).filter((url) => Boolean(url) && !url.startsWith("data:")))];
     if (!urls.length) return;
     const prefetch = () => urls.forEach((url) => {
@@ -206,7 +207,7 @@ export function usePrefetchFlagIcons(icons: Record<string, string>) {
     }
     const id = setTimeout(prefetch, 200);
     return () => clearTimeout(id);
-  }, [icons]);
+  }, [icons, enabled]);
 }
 
 const flagInflight = new Map<string, Promise<void>>();

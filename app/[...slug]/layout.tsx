@@ -9,7 +9,7 @@ import { listRecords, listSecurityLogs } from "@/lib/store";
 import RecordsApp from "@/components/RecordsApp";
 import UserMenu from "@/components/UserMenu";
 import SiteLogo from "@/components/SiteLogo";
-import IndexTicker from "@/components/IndexTicker";
+import WorkspaceTicker from "@/components/WorkspaceTicker";
 import Toaster from "@/components/Toaster";
 import { getAssetsPage, getInlineFlagIconMap, getMarketIconMap, getNavIconMap, getStockIconMap, inlineLocalAssetUrl, stockIconKeysForRecords } from "@/lib/assets";
 import { CURRENCY_FLAG_CODES, displayCurrencyFlagCode } from "@/lib/flagAssets";
@@ -84,7 +84,7 @@ export default async function SlugLayout({
   const initialWatchGroups = tab.key === "watchlist" ? listWatchGroups(user.id) : [];
   // 日志只在日志页首屏使用；其他页进入日志时再按需读取。
   const initialUserLogs = tab.key === "activities" ? listSecurityLogs(200, user.id) : [];
-  const initialAssistantHistory = getAssistantHistoryState(user.id);
+  const initialAssistantHistory = tab.key === "assistant" ? getAssistantHistoryState(user.id) : null;
   // 资金余额与持仓记录一起进入首屏，避免切到“我的持仓”时先按 0 现金计算、随后再跳到完整净资产。
   const initialFundBalances = totalFundBalances(user.id);
   // 当前账户涉及的股票图标随 HTML 首屏下发，不再等待客户端请求 3,000+ 条素材。
@@ -124,7 +124,7 @@ export default async function SlugLayout({
           <Link href="/" className="inline-flex flex-none items-center gap-2.5 hover:opacity-90">
             <SiteLogo initialLogo={settings.siteLogo} initialText={settings.logoText} initialFont={settings.logoFont} />
           </Link>
-          <div className="app-shell-ticker min-w-0 overflow-hidden"><IndexTicker /></div>
+          <WorkspaceTicker />
           <div className="ml-auto flex flex-none items-center gap-2.5">
             <UserMenu initialUser={user} initialAvatar={initialAvatar} />
           </div>

@@ -30,7 +30,7 @@ import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import WorkspaceNavigation from "@/components/WorkspaceNavigation";
 import type { WatchGroup } from "@/lib/watchGroups";
-import FourDoorNavigator from "@/components/FourDoorNavigator";
+import { useDesktopViewport } from "@/lib/useDesktopViewport";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { preloadView } from "@/lib/viewPreload";
 
@@ -52,7 +52,8 @@ const AttachmentsView = dynamic(() => import("@/components/views/AttachmentsView
 const GlobalPreviewView = dynamic(() => import("@/components/views/GlobalPreviewView"));
 const AssetPnlAnalysisView = dynamic(() => import("@/components/AssetPnlAnalysis"));
 const AssistantView = dynamic(() => import("@/components/views/AssistantView"));
-const ContextAssistant = dynamic(() => import("@/components/ContextAssistant"));
+const DeferredAssistant = dynamic(() => import("@/components/DeferredAssistant"));
+const FourDoorNavigator = dynamic(() => import("@/components/FourDoorNavigator"), { ssr: false, loading: () => <div className="four-door-zone" aria-hidden="true" /> });
 
 type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "assistant" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
 
@@ -103,7 +104,7 @@ export default function RecordsApp({
   initialRecords,
   initialWatchGroups = [],
   initialUserLogs,
-  initialAssistantHistory = { activeId: "", conversations: [] },
+  initialAssistantHistory = null,
   initialFundBalances,
   initialSettings,
   initialStockIcons,
@@ -124,7 +125,7 @@ export default function RecordsApp({
   initialRecords: StockRecord[];
   initialWatchGroups?: WatchGroup[];
   initialUserLogs: SystemLog[];
-  initialAssistantHistory?: import("@/lib/assistantHistory").AssistantHistoryState;
+  initialAssistantHistory?: import("@/lib/assistantHistory").AssistantHistoryState | null;
   initialFundBalances: Record<string, number>;
   initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices">;
   initialStockIcons: Record<string, string>;
@@ -137,6 +138,7 @@ export default function RecordsApp({
   initialTradingFilter?: string | null;
 }) {
   const router = useRouter();
+  const desktopViewport = useDesktopViewport();
   const [user] = useState<User>(initialUser);
   const [records, setRecords] = useState<StockRecord[]>(initialRecords);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
@@ -196,9 +198,10 @@ export default function RecordsApp({
   useMemo(() => primeMarketIconCache(initialMarketIcons), [initialMarketIcons]);
   useMemo(() => primeNavIconCache(initialNavIcons), [initialNavIcons]);
   useMemo(() => primeFlagIconCache(initialFlagIcons), [initialFlagIcons]);
-  usePrefetchFlagIcons(initialFlagIcons);
+  usePrefetchFlagIcons(initialFlagIcons, desktopViewport);
   useEffect(() => setNavIconsHydrated(true), []);
   useEffect(() => {
+    if (!desktopViewport || activeTab === "assistant") return;
     const win = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
     const start = () => {
       setFloatingAssistantReady(true);
@@ -209,13 +212,14 @@ export default function RecordsApp({
     }
     const id = window.setTimeout(start, 1200);
     return () => window.clearTimeout(id);
-  }, []);
+  }, [desktopViewport, activeTab]);
   useLayoutEffect(() => {
     applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
   }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible]);
 
   // 兼容升级前已经加入但仍为首字母占位的股票；每个标的本次会话只尝试一次，双 worker 后台补齐。
   useEffect(() => {
+    if (!["holdings", "watchlist", "assets", "pnl", "fire", "earnings"].includes(activeTab)) return;
     const missing = records.filter((record) => {
       const market = record.market.toUpperCase();
       const key = `${market}:${record.code.toUpperCase()}`;
@@ -223,11 +227,12 @@ export default function RecordsApp({
       return !pickStockIcon(stockIcons, market, record.code) && !pickStockIcon(initialStockIcons, market, record.code);
     });
     if (!missing.length) return;
-    missing.forEach((record) => attemptedIconBackfillRef.current.add(`${record.market.toUpperCase()}:${record.code.toUpperCase()}`));
     let cursor = 0;
+    let cancelled = false;
     const worker = async () => {
-      while (cursor < missing.length) {
+      while (!cancelled && cursor < missing.length) {
         const record = missing[cursor++];
+        attemptedIconBackfillRef.current.add(`${record.market.toUpperCase()}:${record.code.toUpperCase()}`);
         try {
           const response = await fetch("/api/assets/add-by-search", {
             method: "POST",
@@ -242,7 +247,8 @@ export default function RecordsApp({
       }
     };
     void Promise.all([worker(), worker()]);
-  }, [initialStockIcons, records, stockIcons]);
+    return () => { cancelled = true; };
+  }, [activeTab, initialStockIcons, records, stockIcons]);
 
   useLayoutEffect(() => {
     if (initialTab === "settings") {
@@ -287,6 +293,7 @@ export default function RecordsApp({
   );
 
   const reloadActivities = useCallback(() => {
+    if (activeTabRef.current !== "activities") return;
     fetch("/api/activities")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -556,7 +563,7 @@ export default function RecordsApp({
   useEffect(() => {
     function onVisibility() {
       // 自选页有独立的刷新间隔控件；切回标签页时不能绕过用户选择额外刷新。
-      if (!document.hidden) void refreshQuotes(activeTab === "watchlist" ? { initialOnly: true } : undefined);
+      if (!document.hidden && ["holdings", "watchlist", "assets", "pnl", "fire"].includes(activeTab)) void refreshQuotes(activeTab === "watchlist" ? { initialOnly: true } : undefined);
     }
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
@@ -567,7 +574,7 @@ export default function RecordsApp({
       fetch("/api/records")
         .then((res) => (res.ok ? res.json() : null))
         .then((d) => d && setRecords(d));
-      reloadActivities();
+      if (activeTabRef.current === "activities") reloadActivities();
     }
     window.addEventListener("fire:records-updated", reloadRecords);
     return () => window.removeEventListener("fire:records-updated", reloadRecords);
@@ -783,6 +790,7 @@ export default function RecordsApp({
             icon: (
               <SafeAssetImage
                 src={custom}
+                loading="lazy"
                 fallback={NAV_ICONS[t.key]}
                 className="h-[17px] w-[17px] flex-none object-contain dark:brightness-0 dark:invert"
               />
@@ -810,7 +818,7 @@ export default function RecordsApp({
 
   useEffect(() => {
     const nav = desktopNavRef.current;
-    if (!nav) return;
+    if (!desktopViewport || !nav) return;
     const observer = new ResizeObserver(updateSidebarScroll);
     observer.observe(nav);
     window.addEventListener("resize", updateSidebarScroll);
@@ -820,7 +828,7 @@ export default function RecordsApp({
       window.removeEventListener("resize", updateSidebarScroll);
       window.cancelAnimationFrame(frame);
     };
-  }, [sidebarTabs, updateSidebarScroll]);
+  }, [desktopViewport, sidebarTabs, updateSidebarScroll]);
 
 
   const settingsPanel = (
@@ -862,7 +870,7 @@ export default function RecordsApp({
       <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block ${activeTab === "settings" ? "is-settings" : ""}`}>
         <nav ref={desktopNavRef} onScroll={updateSidebarScroll} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
           <div className={`four-door-anchor ${fourDoorPinned ? "is-pinned" : ""}`}>
-            <FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} pinned={fourDoorPinned} onTogglePinned={() => setFourDoorPinned(value => !value)} />
+            {desktopViewport ? <FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} pinned={fourDoorPinned} onTogglePinned={() => setFourDoorPinned(value => !value)} /> : <div className="four-door-zone" aria-hidden="true" />}
           </div>
           <div className="fire-sidebar-section-label">资产</div>
           {sidebarTabs.map((t, index) => {
@@ -994,7 +1002,7 @@ export default function RecordsApp({
         </div>
       </div>
     </div>
-    {activeTab !== "assistant" && floatingAssistantReady && <ContextAssistant page={activeTab} symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}
+    {desktopViewport && activeTab !== "assistant" && floatingAssistantReady && <DeferredAssistant page={activeTab} symbol={initialSymbol} userId={user.id} initialHistory={null} onNavigate={navigateFromAssistant} />}
     </>
   );
 }

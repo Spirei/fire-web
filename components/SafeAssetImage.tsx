@@ -23,7 +23,8 @@ export default function SafeAssetImage({
   className = "",
   style,
   title,
-  alt = ""
+  alt = "",
+  loading
 }: {
   src?: string | null;
   fallback: ReactNode;
@@ -31,6 +32,7 @@ export default function SafeAssetImage({
   style?: CSSProperties;
   title?: string;
   alt?: string;
+  loading?: "lazy" | "eager";
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -45,6 +47,7 @@ export default function SafeAssetImage({
       <img
         src={src}
         alt={alt}
+        loading={loading}
         className={`absolute inset-0 ${className}`}
         style={style}
         onError={() => setFailed(true)}

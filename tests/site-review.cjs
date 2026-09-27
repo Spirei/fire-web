@@ -16,6 +16,32 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('mobile shell defers desktop-only enhancements and unrelated assistant history', () => {
+    const shell = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
+    const layout = fs.readFileSync(path.join(root, 'app/[...slug]/layout.tsx'), 'utf8');
+    const viewport = fs.readFileSync(path.join(root, 'lib/useDesktopViewport.ts'), 'utf8');
+    const assistant = fs.readFileSync(path.join(root, 'components/DeferredAssistant.tsx'), 'utf8');
+    const navigation = fs.readFileSync(path.join(root, 'components/WorkspaceNavigation.tsx'), 'utf8');
+    const ticker = fs.readFileSync(path.join(root, 'components/WorkspaceTicker.tsx'), 'utf8');
+    assert(shell.includes('desktopViewport ? <FourDoorNavigator'));
+    assert(shell.includes('desktopViewport && activeTab !== "assistant" && floatingAssistantReady'));
+    assert(shell.includes('if (!desktopViewport || !nav) return;'));
+    assert(shell.includes('usePrefetchFlagIcons(initialFlagIcons, desktopViewport)'));
+    assert(shell.includes('loading="lazy"'));
+    assert(shell.includes('while (!cancelled && cursor < missing.length)'));
+    assert(shell.includes('["holdings", "watchlist", "assets", "pnl", "fire", "earnings"].includes(activeTab)'));
+    assert(layout.includes('tab.key === "assistant" ? getAssistantHistoryState(user.id) : null'));
+    assert(viewport.includes('serverSnapshot = () => false'));
+    assert(viewport.includes('useSyncExternalStore(subscribe, snapshot, serverSnapshot)'));
+    assert(assistant.indexOf('if (!history) return') < assistant.indexOf('return <ContextAssistant'));
+    assert(assistant.includes('if (!response.ok) throw'));
+    assert(assistant.includes('if (!cancelled) setLoaded'));
+    assert(!navigation.includes('onFocus='), 'dialog autofocus must not preload unrelated pages');
+    assert(ticker.includes('visible ? <IndexTicker />'));
+    assert(ticker.includes('observer.disconnect()'));
+    assert(shell.includes('!document.hidden && ["holdings", "watchlist", "assets", "pnl", "fire"].includes(activeTab)'));
+    assert(shell.includes('if (activeTabRef.current === "activities") reloadActivities()'));
+  });
   await test('API route tables preserve escaped pipes and label mobile cells safely', () => {
     const { renderMarkdown } = require(path.join(root, 'lib/markdown.ts'));
     const html = renderMarkdown('| 方法 | 路径 | 说明 | 鉴权 |\n| --- | --- | --- | --- |\n| GET | `/api/v1/earnings` | `US\\|CN` | 无 |');
