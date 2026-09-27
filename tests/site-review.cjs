@@ -43,6 +43,11 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('π 3.1415926</span>'));
     assert(fs.readFileSync(path.join(root,'components/SettingsHeader.tsx'),'utf8').includes('typography: (<><path'));
   });
+  await test('website preview clips glass layers to its responsive rounded outline', () => {
+    const css = fs.readFileSync(path.join(root,'app/globals.css'),'utf8');
+    assert(css.includes('isolation:isolate; min-height:196px; overflow:hidden; border-radius:var(--brand-preview-radius); clip-path:inset(0 round var(--brand-preview-radius));'));
+    assert(css.includes('.brand-live-preview { --brand-preview-radius:18px; min-height:174px; }'));
+  });
   await test('custom fonts validate files, isolate lists, deduplicate and protect CSS URLs', async () => {
     const type = require(path.join(root, 'lib/typography.ts'));
     const fonts = require(path.join(root, 'lib/customFonts.ts'));
