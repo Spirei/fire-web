@@ -1889,6 +1889,10 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(css.includes('.sc-detail-dialog .sv-win-root .settings-section-body .sw-row { padding:13px 16px; border:0; }'), '设置行必须先清除旧上下边框');
     assert(css.includes('.sc-detail-dialog .sv-win-root .settings-section-body .sw-row + .sw-row { border-top:1px solid var(--sc-dialog-border); }'), '相邻行只能绘制一次分隔线');
     assert(settings.includes('<Fragment key={id}>') && settings.includes('<div key={f.key} className="sw-row">'), '接口设置的透明容器不得隔断相邻行选择器');
+    assert(settings.includes('settings-backup-panel') && settings.includes('settings-clean-group'), '备份计划与记录必须分组而非塞进同一任务行');
+    assert(settings.includes('cfg.enabled === enabled && cfg.intervalHours === intervalHours && cfg.keep === keep'), '未改动备份配置时不得重复保存');
+    assert(settings.includes('settings-futu-quota') && css.includes('flex-direction:row; flex-wrap:wrap; gap:4px 12px;'), '接口额度优先同排，仅空间不足时换行');
+    assert(settings.includes('editingFutu ? <AppSelect value={site.quoteSource}'), '只读富途详情不得允许直接修改来源');
     assert(css.includes('.sc-detail-dialog[data-detail^="source"] .sw-row .ctrl'), '所有数据源详情的长链接必须限制在弹层内');
     for (const anchor of ['app-nav', 'source-reports', 'source-icons', 'source-content', 'delete-account', 'passkey-config', 'backups']) {
       assert(settings.includes(`anchor: "${anchor}"`), `独立职责应有自己的设置入口：${anchor}`);

@@ -364,11 +364,14 @@ function BackupTaskCard() {
   const [keep, setKeep] = useState(7);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   async function refresh() {
+    setLoadError("");
     try {
-      const res = await fetch("/api/backup");
+      const res = await fetch("/api/backup", { cache:"no-store", signal:AbortSignal.timeout(15000) });
       const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.config) throw new Error(data?.error || "无法读取备份设置");
       if (data?.config) {
         setCfg(data.config);
         setEnabled(data.config.enabled);
@@ -376,8 +379,8 @@ function BackupTaskCard() {
         setKeep(data.config.keep);
       }
       if (Array.isArray(data?.backups)) setBackups(data.backups);
-    } catch {
-      /* 忽略 */
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "无法读取备份设置");
     }
   }
 
@@ -425,58 +428,21 @@ function BackupTaskCard() {
   const totalSize = backups.reduce((s, b) => s + b.size, 0);
   const fmtSize = (n: number) =>
     n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${(n / 1024).toFixed(0)} KB` : `${n} B`;
-  const intervalLabel = intervalHours === 1 ? "每小时" : intervalHours === 24 ? "每天" : intervalHours === 168 ? "每周" : intervalHours === 720 ? "每月" : `${intervalHours} 小时`;
-
-  return (
-    <div className={`settings-task-row settings-backup-row ${cfg ? "" : "invisible"}`}>
-      <div className="flex flex-wrap items-center gap-3.5">
-        <span className="flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-edge text-muted">
-          <SubNavIcon name="database" className="h-[18px] w-[18px]" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-bold text-ink">数据库定时备份</span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                enabled ? "bg-brand-light text-brand-deep dark:bg-white/10 dark:text-white" : "bg-bg-gray text-muted"
-              }`}
-            >
-              {enabled ? "已启用" : "已停用"}
-            </span>
-          </div>
-          <p className="mt-0.5 text-xs text-muted">
-            SQLite 在线快照（WAL 安全）+ 素材库，自动保存到 data/backups 并保留最近 {keep} 份
-          </p>
-          <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] text-ink-2">
-            <label className="flex cursor-pointer items-center gap-1.5">
-              <span className="text-faint">开关</span>
-              <SettingsSwitch checked={enabled === true} onChange={() => setEnabled((v) => v === null ? v : !v)} />
-            </label>
-            <label className="flex items-center gap-1.5">
-              <span className="text-faint">间隔</span>
-              <AppSelect value={intervalHours} onChange={(value) => setIntervalHours(Number(value))} options={[{ value: "1", label: "每小时" }, { value: "24", label: "每天" }, { value: "168", label: "每周" }, { value: "720", label: "每月" }]} className="rounded-lg border border-edge bg-white px-2 py-1 text-[12px] font-medium text-ink dark:bg-white/5" ariaLabel="备份间隔" />
-            </label>
-            <label className="flex items-center gap-1.5">
-              <span className="text-faint">保留</span>
-              <AppSelect value={keep} onChange={(value) => setKeep(Number(value))} options={[3, 7, 14, 30].map((value) => ({ value: String(value), label: `${value} 份` }))} className="rounded-lg border border-edge bg-white px-2 py-1 text-[12px] font-medium text-ink dark:bg-white/5" ariaLabel="备份保留份数" />
-            </label>
-            <span className="text-faint">
-              上次 {last} · 共 {backups.length} 份 · {fmtSize(totalSize)}
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-none flex-col items-end gap-2">
-          <button type="button" onClick={backupNow} disabled={busy} className="btn btn-line btn-sm disabled:opacity-60">
-            {busy ? "备份中…" : "立即备份"}
-          </button>
-          <span className="text-[11px] text-faint">当前计划：{intervalLabel}</span>
-          <button type="button" onClick={save} disabled={saving} className="btn btn-soft btn-sm disabled:opacity-60">
-            {saving ? "保存中…" : "保存设置"}
-          </button>
-        </div>
-      </div>
+  if (!cfg) return <div className="settings-load-state" role="status">{loadError || "正在读取备份设置…"}{loadError && <button type="button" className="btn btn-line" onClick={() => void refresh()}>重试</button>}</div>;
+  return <div className="settings-backup-panel">
+    <fieldset className="settings-clean-group" disabled={saving || busy} aria-label="备份计划">
+      <div className="sw-row"><div className="sw-row-label"><b>自动备份</b><span>保存数据库与素材文件</span></div><SettingsSwitch checked={enabled === true} onChange={() => setEnabled(v => !v)} label="自动备份" /></div>
+      <div className="sw-row"><div className="sw-row-label"><b>备份频率</b></div><AppSelect value={intervalHours} onChange={value => setIntervalHours(Number(value))} options={[{ value: "1", label: "每小时" }, { value: "24", label: "每天" }, { value: "168", label: "每周" }, { value: "720", label: "每月" }]} className="settings-clean-select" ariaLabel="备份频率" /></div>
+      <div className="sw-row"><div className="sw-row-label"><b>保留份数</b><span>自动清理较早的备份</span></div><AppSelect value={keep} onChange={value => setKeep(Number(value))} options={[3, 7, 14, 30].map(value => ({ value:String(value), label:`${value} 份` }))} className="settings-clean-select" ariaLabel="备份保留份数" /></div>
+    </fieldset>
+    <button type="button" className="btn settings-full-action" onClick={save} disabled={saving || busy || (cfg.enabled === enabled && cfg.intervalHours === intervalHours && cfg.keep === keep)}>{saving ? "保存中…" : "保存设置"}</button>
+    <h3 className="settings-clean-heading">备份记录</h3>
+    <div className="settings-clean-group">
+      <div className="sw-row"><div className="sw-row-label"><b>最近备份</b><span>{last}</span></div><button type="button" className="btn btn-line" onClick={backupNow} disabled={busy || saving}>{busy ? "备份中…" : "立即备份"}</button></div>
+      <div className="sw-row"><div className="sw-row-label"><b>已保存</b><span>data/backups</span></div><span className="settings-detail-value">{backups.length} 份 · {fmtSize(totalSize)}</span></div>
     </div>
-  );
+    {loadError && <p className="settings-inline-error" role="alert">{loadError}</p>}
+  </div>;
 }
 
 const TAB_HINTS: Record<string, string> = {
@@ -2756,7 +2722,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   id="trading-square"
                   icon="features"
                   title="交易广场"
-                  desc="公开动态使用本地缓存，访问页面时在后台按频率检查更新"
+                  desc="公开动态按设定频率更新本地缓存。"
                   action={editingTradingSquare ? (
                     <button type="button" disabled={blockSaving.tradingSquare} onClick={async () => {
                       const ok = await saveBlock("tradingSquare", {
@@ -2816,7 +2782,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 <SettingsSection
                   icon="tag"
                   title="券商分组"
-                  desc="持仓记录所属券商；拖动排序，点名称可编辑别名"
+                  desc="管理持仓券商、别名与顺序。"
                   id="groups"
                   titleAction={!editingStockGroups ? (
                     <button
@@ -2948,7 +2914,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 <SettingsSection
                   icon="tag"
                   title="市场色块"
-                  desc="全站持仓、搜索、分享页等处的市场徽标颜色与文字"
+                  desc="统一全站市场徽标的颜色与文字。"
                   id="market-badges"
                   titleAction={!editingMarketBadges ? (
                     <button
@@ -3139,7 +3105,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       id="translation"
                       icon="model"
                       title="模型服务"
-                      desc="配置聊天模型与 Jev 决策模型；聊天模型按顺序回退"
+                      desc="管理聊天与决策模型。聊天模型按顺序回退。"
                       className="settings-model-section"
                       action={editingModel ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" disabled={!!uploadingModelIconId || !!blockSaving.model} onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">{uploadingModelIconId ? "图标保存中…" : "保存"}</button></div> : <button type="button" onClick={() => { if (!site.modelServices.length) updateServices(services); setEditingModel(true); }} className="btn btn-ghost btn-sm">编辑</button>}
                     >
@@ -3253,7 +3219,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 <SettingsSection
                   icon="trade"
                   title="交易 · 富途 / 行情源"
-                  desc="富途 OpenAPI 连接与行情源切换（自动模式失败时回退备用源）"
+                  desc="管理 OpenD 连接与行情来源。"
                   id="trade"
                   titleAction={!editingFutu ? (
                     <button type="button" onClick={() => setEditingFutu(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑富途连接" aria-label="编辑富途连接">
@@ -3263,26 +3229,21 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   action={editingFutu ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                 >
                   <div className="flex flex-col">
-                    <div className="flex flex-col">
                       <div className="sw-row">
-                        <div className="sw-row-label"><b>OpenD 主机</b><span>生产环境填写 OpenD 所在机器；本地 next dev 默认不连，避免抢线上唯一连接</span></div>
+                        <div className="sw-row-label"><b>OpenD 主机</b><span>填写运行 OpenD 的设备地址</span></div>
                         <input className={`sw-row-input ${editingFutu ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} value={site.futuHost} readOnly={!editingFutu} onChange={(e) => setSiteField("futuHost", e.target.value)} placeholder="127.0.0.1" />
                       </div>
                       <div className="sw-row">
                         <div className="sw-row-label"><b>端口</b></div>
                         <input className={`sw-row-input ${editingFutu ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} value={site.futuPort} readOnly={!editingFutu} onChange={(e) => setSiteField("futuPort", e.target.value)} placeholder="11111" inputMode="numeric" />
                       </div>
-                    </div>
                     <div className="sw-row">
-                      <div className="sw-row-label"><b>连接状态</b></div>
+                      <div className="sw-row-label"><b>连接状态</b>{futuSkipped && <span title="本地开发服务默认不连接 OpenD；如需启用，设置 STOCKLOG_FUTU=on 后重启。">本地默认跳过，测试仍会连接</span>}</div>
                       <div className="ctrl">
                         <span className={`inline-flex items-center gap-1.5 text-[11.5px] ${futuOnline === null ? "text-faint" : futuOnline ? "text-[#0fa07b]" : "text-[#e5a13b]"}`}>
                           <i className={`h-1.5 w-1.5 rounded-full ${futuOnline === null ? "bg-[#d1d5db]" : futuOnline ? "bg-[#0fa07b]" : "bg-[#e5a13b]"}`} />
-                          {futuOnline === null ? "检测中…" : futuOnline ? "已连接" : futuSkipped ? "本地已跳过 OpenD" : "未连接"}
+                          {futuOnline === null ? "检测中…" : futuOnline ? "已连接" : futuSkipped ? "本地跳过" : "未连接"}
                         </span>
-                        {futuSkipped ? (
-                          <span className="max-w-[220px] text-[11px] leading-4 text-muted">行情走腾讯 / Yahoo。本机要连时设 STOCKLOG_FUTU=on 后重启。「测试连接」仍会打 OpenD。</span>
-                        ) : null}
                         <button type="button" disabled={futuTest?.busy} onClick={testFutu} className="btn btn-line btn-sm disabled:opacity-60">
                           {futuTest?.busy ? "测试中…" : "测试连接"}
                         </button>
@@ -3292,26 +3253,21 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                     </div>
                     <div className="sw-row">
-                      <div className="sw-row-label"><b>OpenAPI 额度</b><span>实时订阅 / 历史K线 · 已用 / 总额</span></div>
+                      <div className="sw-row-label"><b>接口额度</b><span>已用 / 总额</span></div>
                       <div className="ctrl flex flex-nowrap items-center gap-2">
                         {futuQuota.data?.subscription && futuQuota.data.historyKl ? (
-                          <span className="inline-flex min-w-0 flex-1 items-center gap-x-3 overflow-hidden text-[11.5px] text-muted">
+                          <span className="settings-futu-quota" title={futuQuota.at ? `查询于 ${new Date(futuQuota.at).toLocaleString("zh-CN", { hour12:false })}` : undefined}>
                             <span>
-                              实时订阅 <b className="text-ink">{futuQuota.data.subscription.ownUsed}</b> / {futuQuota.data.subscription.ownTotalQuota}
+                              订阅 <b className="text-ink">{futuQuota.data.subscription.ownUsed}</b> / {futuQuota.data.subscription.ownTotalQuota}
                             </span>
                             <span>
                               历史K线 <b className="text-ink">{futuQuota.data.historyKl.used}</b> / {futuQuota.data.historyKl.totalQuota}
                             </span>
-                            {futuQuota.at && (
-                              <span className="text-faint">
-                                · 查询于 {new Date(futuQuota.at).toLocaleTimeString("zh-CN", { hour12: false })}
-                              </span>
-                            )}
                           </span>
                         ) : futuQuota.loading ? (
                           <span className="text-[11.5px] text-faint">查询中…</span>
                         ) : (
-                          <span className="text-[11.5px] text-faint">未查询</span>
+                          <span className="text-[11.5px] text-faint">{futuQuota.ok === false ? "查询失败，请重试" : "未查询"}</span>
                         )}
                         <button type="button" disabled={futuQuota.loading} onClick={() => void loadFutuQuota()} className="btn btn-line btn-sm disabled:opacity-60">
                           {futuQuota.loading ? "查询中…" : "查询额度"}
@@ -3319,26 +3275,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                     </div>
                     <div className="sw-row">
-                      <div className="sw-row-label"><b>行情源</b></div>
-                      <div className="pills flex flex-nowrap gap-1.5">
-                        {([
-                          ["auto", "自动（富途优先）"],
-                          ["futu", "仅富途"],
-                          ["tencent", "腾讯 + Yahoo"]
-                        ] as const).map(([value, label]) => (
-                          <button
-                            key={value}
-                            type="button"
-                            onClick={() => setSite((s) => ({ ...s, quoteSource: value }))}
-                            className={`sw-pill ${site.quoteSource === value ? "is-active" : ""}`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="sw-row">
-                      <div className="sw-row-label"><span>自动模式：富途在线走富途，失败回退腾讯 + Yahoo</span></div>
+                      <div className="sw-row-label"><b>行情来源</b><span>自动模式失败时使用备用源</span></div>
+                      {editingFutu ? <AppSelect value={site.quoteSource} onChange={value => setSite(s => ({ ...s, quoteSource:value as SiteSettings["quoteSource"] }))} options={[{value:"auto",label:"自动（富途优先）"},{value:"futu",label:"仅富途"},{value:"tencent",label:"腾讯 + Yahoo"}]} className="settings-clean-select" ariaLabel="行情来源" /> : <span className="settings-detail-value">{site.quoteSource === "futu" ? "仅富途" : site.quoteSource === "tencent" ? "腾讯 + Yahoo" : "自动（富途优先）"}</span>}
                     </div>
                   </div>
                 </SettingsSection>
@@ -3654,7 +3592,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 <SettingsSection
                   icon="database"
                   title="数据库"
-                  desc="SQLite 单文件或 PostgreSQL 远程存储"
+                  desc="选择本地或远程存储。"
                   titleAction={!editingDb ? (
                     <button type="button" onClick={() => setEditingDb(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑数据库" aria-label="编辑数据库">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
@@ -3663,27 +3601,24 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   action={editingDb ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                 >
                   <div className="subhead">数据库类型</div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="settings-db-types">
                     {([
-                      { type: "sqlite" as const, title: "SQLite", desc: "内置文件数据库，零配置，适合个人使用" },
-                      { type: "postgres" as const, title: "PostgreSQL", desc: "开源关系型数据库，适合多用户/部署环境" }
+                      { type: "sqlite" as const, title: "SQLite", desc: "本地文件，无需配置" },
+                      { type: "postgres" as const, title: "PostgreSQL", desc: "远程数据库，适合多人使用" }
                     ]).map((opt) => (
                       <button
                         key={opt.type}
                         type="button"
                         disabled={!editingDb}
                         onClick={() => setSite({ ...site, dbType: opt.type })}
-                        className={`rounded-[12px] border p-4 text-left transition-all duration-200 ${
-                          site.dbType === opt.type
-                            ? "border-ink/60 bg-white shadow-sm dark:border-[#5b6678] dark:bg-[#262c3a]"
-                            : "border-edge hover:border-edge-strong"
-                        }`}
+                        aria-pressed={site.dbType === opt.type}
+                        className={`settings-db-type ${site.dbType === opt.type ? "is-selected" : ""}`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-bold text-ink">{opt.title}</span>
-                          <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border-2 ${site.dbType === opt.type ? "border-ink/70 bg-ink dark:border-white/80 dark:bg-white" : "border-edge-strong"}`}>
+                          <span className={`settings-choice-radio ${site.dbType === opt.type ? "is-selected" : ""}`}>
                             {site.dbType === opt.type && (
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 text-white dark:text-[#1a1f2b]"><path d="m5 13 4 4L19 7" /></svg>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m5 13 4 4L19 7" /></svg>
                             )}
                           </span>
                         </div>
@@ -3697,7 +3632,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   <>
                     <div className="subhead">SQLite 状态</div>
                     {dbStatus ? (
-                      <div className="grid gap-3 text-sm sm:grid-cols-2">
+                      <div className="settings-db-status-list">
                         <div className="settings-db-stat">
                           <span className="block text-xs text-muted">数据库文件</span>
                           <span className="block break-all font-mono text-xs text-ink-2">{dbStatus.file}</span>
@@ -3708,10 +3643,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             {(dbStatus.sizeBytes / 1024).toFixed(1)} KB
                           </span>
                         </div>
-                        <div className="settings-db-stat sm:col-span-2">
-                          <span className="block text-xs text-muted">数据表（{dbStatus.tables.length} 张）</span>
-                          <span className="text-sm text-ink-2">{dbStatus.tables.join("、")}</span>
-                        </div>
+                        <details className="settings-db-tables"><summary>数据表<span>{dbStatus.tables.length} 张</span></summary><p>{dbStatus.tables.join("、")}</p></details>
                       </div>
                     ) : dbStatusError ? (
                       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-300">
@@ -3780,7 +3712,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {/* ===== 定时任务 ===== */}
             {sub === "cron" && isAdminUser && (
               <div className="flex flex-col gap-6">
-                <SettingsSection id="mail" icon="api" title="邮件服务" desc="用于发送一次性密码重置链接；未配置时不会伪装发送成功">
+                <SettingsSection id="mail" icon="api" title="邮件服务" desc="发送密码重置邮件。请先测试，再保存。">
                   <div className="mail-settings">
                     <div className="mail-settings-group">
                       <div className="mail-settings-group-title"><b>服务器</b><span>由你的邮件服务商提供</span></div>
@@ -3810,14 +3742,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                   </div>
                 </SettingsSection>
-                <SettingsSection id="cron" icon="cron" title="定时任务" desc="行情与数据缓存自动更新；汇率仅手动刷新">
+                <SettingsSection id="cron" icon="cron" title="定时任务" desc="查看刷新与缓存规则。汇率仅手动刷新。">
                 <div className="settings-task-list">
                   {[
                     {
                       key: "rates",
                       icon: "money",
-                      name: "汇率手动刷新",
-                      desc: "仅点击刷新时从汇率接口拉取 USD 兑各币种汇率",
+                      name: "汇率",
+                      desc: "仅手动请求，不消耗定时额度",
                       schedule: "不自动请求",
                       state: "手动",
                       action: true
@@ -3825,66 +3757,56 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     {
                       key: "earnings",
                       icon: "cal",
-                      name: "财报日历缓存",
-                      desc: "缓存美股 / A股 / 港股财报数据，减少外部接口请求",
-                      schedule: "请求后缓存 30 分钟",
+                      name: "财报日历",
+                      desc: "美股、A股与港股财报",
+                      schedule: "缓存 30 分钟",
                       state: "已启用"
                     },
                     {
                       key: "topstocks",
                       icon: "chart",
-                      name: "全球市值榜缓存",
-                      desc: "缓存全球资产市值排行（日股 / 韩股 / 全球 6 小时，其余 30 分钟）",
+                      name: "全球市值榜",
+                      desc: "日股、韩股与全球榜缓存 6 小时",
                       schedule: "30 分钟 / 6 小时",
                       state: "已启用"
                     },
                     {
                       key: "kline",
                       icon: "wave",
-                      name: "K线数据缓存",
-                      desc: "缓存月 K 走势数据，避免重复抓取",
+                      name: "月 K 走势",
+                      desc: "复用月 K 走势数据",
                       schedule: "10 分钟",
                       state: "已启用"
                     },
                     {
                       key: "quotes",
                       icon: "search",
-                      name: "行情自动轮询",
-                      desc: "后端页面每 60 秒自动刷新一次实时行情",
+                      name: "实时行情",
+                      desc: "后端页面实时行情",
                       schedule: "每 60 秒",
                       state: "已启用"
                     },
                     {
                       key: "board",
                       icon: "plug",
-                      name: "行情板刷新间隔",
-                      desc: "我的行情板按配置的间隔刷新（可自定义）",
-                      schedule: "1 秒 - 1 日 可调",
+                      name: "行情板",
+                      desc: "在行情板中设置刷新间隔",
+                      schedule: "1 秒至 1 日",
                       state: "可配置"
                     }
                   ].map((task) => (
                     <div key={task.key} className="settings-task-row">
-                      <span className="flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-edge text-muted">
-                        <SubNavIcon name={task.icon} className="h-[18px] w-[18px]" />
-                      </span>
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-bold text-ink">{task.name}</span>
-                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-brand-deep ring-1 ring-brand/20 dark:bg-white/10">
-                            {task.state}
-                          </span>
-                        </div>
+                        <strong className="settings-task-name">{task.name}</strong>
                         <p className="mt-0.5 text-xs text-muted">{task.desc}</p>
                       </div>
-                      <span className="flex-none rounded-full border border-edge bg-white px-2.5 py-1 text-[11px] font-medium text-ink-2 dark:bg-white/5">
-                        {task.schedule}
-                      </span>
+                      <span className="settings-task-schedule">{task.schedule}</span>
                       {task.action && <CronRefreshButton />}
                     </div>
                   ))}
                 </div>
                 </SettingsSection>
-                <SettingsSection id="backups" icon="backups" title="自动备份" desc="定期保存数据库与素材文件，并按保留份数清理旧备份">
+                <SettingsSection id="backups" icon="backups" title="自动备份" desc="定期保存数据库与素材，自动清理旧备份。">
                   <div className="settings-task-list"><BackupTaskCard /></div>
                 </SettingsSection>
               </div>

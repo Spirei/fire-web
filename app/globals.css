@@ -6319,6 +6319,59 @@ button.PhotoView-Slider__toolbarIcon {
 .sc-detail-dialog .settings-navigation-row:hover { background:color-mix(in srgb,var(--sc-dialog-text) 2%,var(--sc-dialog-bg)); }
 .sc-detail-dialog .settings-navigation-arrow { width:20px; height:20px; flex:none; color:var(--sc-dialog-muted); }
 .sc-detail-dialog .settings-task-row:hover { background:transparent; }
+.sc-detail-dialog[data-detail="cron"] .sv-win-root .settings-section-card .settings-section-body { padding:0; overflow:hidden; border-radius:16px; }
+.sc-detail-dialog .sv-win-root .settings-task-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 20px; padding:16px; min-height:76px; border:0; }
+.sc-detail-dialog .sv-win-root .settings-task-row + .settings-task-row { border-top:1px solid var(--sc-dialog-border); }
+.settings-task-name { display:block; font-size:15px; font-weight:550; line-height:21px; }
+.sc-detail-dialog .sv-win-root .settings-task-row > .settings-task-schedule { margin:0; max-width:180px; text-align:right; color:var(--sc-dialog-muted); font-size:13px; line-height:20px; }
+.sc-detail-dialog .settings-task-row > button { grid-column:2; justify-self:end; }
+.sc-detail-dialog[data-detail="backups"] .sv-win-root .settings-section-card .settings-section-body { padding:0; border:0; background:transparent; overflow:visible; }
+.settings-backup-panel { display:flex; flex-direction:column; }
+.settings-clean-group { min-width:0; overflow:hidden; border:1px solid var(--sc-dialog-border); border-radius:16px; background:var(--sc-dialog-bg); }
+.sc-detail-dialog .sv-win-root .settings-clean-group .sw-row { min-height:64px; padding:14px 16px; }
+.settings-clean-heading { margin:28px 0 12px; font-size:17px; font-weight:600; color:var(--sc-dialog-text); }
+.sc-detail-dialog .btn.settings-full-action { margin-top:16px; min-height:44px; width:100%; background:var(--sc-dialog-primary); border-color:transparent; color:#fff; }
+.sc-detail-dialog .btn.settings-full-action:hover:not(:disabled) { background:var(--sc-dialog-primary-hover); color:#fff; }
+.sc-detail-dialog .btn.settings-full-action:disabled { background:var(--sc-dialog-soft); color:var(--sc-dialog-muted); }
+.sc-detail-dialog .settings-clean-select { min-height:40px; min-width:110px; padding:8px 12px; border:0; border-radius:8px; background:transparent; font-size:14px; color:var(--sc-dialog-text); }
+.sc-detail-dialog .settings-clean-select:hover { background:var(--sc-dialog-soft); }
+.settings-load-state { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:20px 0; color:var(--sc-dialog-muted); font-size:14px; }
+.settings-inline-error { margin-top:16px; color:var(--sc-dialog-danger); font-size:13px; }
+.sc-detail-dialog[data-detail="trade"] .ctrl { flex-wrap:wrap; gap:10px; justify-content:flex-end; max-width:310px; }
+.sc-detail-dialog[data-detail="trade"] .ctrl > span { font-size:13px; }
+.settings-futu-quota { display:flex; flex-direction:row; flex-wrap:wrap; gap:4px 12px; color:var(--sc-dialog-muted); line-height:19px; }
+.settings-futu-quota > span { white-space:nowrap; }
+.sc-detail-dialog .settings-db-types,.sc-detail-dialog .settings-db-status-list { border:1px solid var(--sc-dialog-border); border-radius:16px; overflow:hidden; }
+.sc-detail-dialog .settings-db-type { width:100%; display:block; padding:16px; text-align:left; background:transparent; }
+.sc-detail-dialog .settings-db-type + .settings-db-type { border-top:1px solid var(--sc-dialog-border); }
+.sc-detail-dialog .settings-db-type:not(:disabled):hover { background:var(--sc-dialog-soft); }
+.sc-detail-dialog .settings-db-type:disabled { opacity:1; cursor:default; }
+.sc-detail-dialog .settings-db-type p { font-size:13px; line-height:19px; }
+.settings-choice-radio { display:inline-flex; width:20px; height:20px; flex:none; align-items:center; justify-content:center; border:2px solid var(--sc-dialog-border-strong); border-radius:50%; }
+.settings-choice-radio.is-selected { background:var(--sc-dialog-primary); border-color:var(--sc-dialog-primary); color:#fff; }
+.sc-detail-dialog .settings-db-type strong,.sc-detail-dialog .settings-db-type .font-bold { font-weight:550; }
+.sc-detail-dialog .settings-db-status-list .settings-db-stat { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:16px; border:0; border-radius:0; background:transparent; box-shadow:none; }
+.sc-detail-dialog .settings-db-status-list .settings-db-stat + .settings-db-stat,.settings-db-tables { border-top:1px solid var(--sc-dialog-border); }
+.sc-detail-dialog .settings-db-stat > span:last-child { min-width:0; text-align:right; overflow-wrap:anywhere; }
+.settings-db-tables summary { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:16px; cursor:pointer; font-size:14px; }
+.settings-db-tables summary span { color:var(--sc-dialog-muted); }
+.settings-db-tables summary::after { content:"›"; font-size:20px; line-height:1; }
+.settings-db-tables[open] summary::after { transform:rotate(90deg); }
+.settings-db-tables p { padding:0 16px 16px; color:var(--sc-dialog-muted); font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
+.sc-detail-dialog[data-detail="database"] .settings-section-body { border:0; padding:0; }
+.sc-detail-dialog[data-detail="database"] .subhead { margin:24px 0 12px; font-size:16px; font-weight:600; }
+.sc-detail-dialog[data-detail="database"] .subhead:first-child { margin-top:0; }
+.sc-detail-dialog[data-detail="database"] input[readonly] { border-color:transparent !important; background:transparent !important; box-shadow:none !important; }
+.sc-detail-dialog input[readonly].pointer-events-none { border-color:transparent !important; background:transparent !important; box-shadow:none !important; padding-inline:0; text-align:right; }
+@media(max-width:640px) {
+  .sc-detail-dialog .sv-win-root .settings-task-row { grid-template-columns:minmax(0,1fr) auto; gap:6px 12px; }
+  .sc-detail-dialog .sv-win-root .settings-task-row > .settings-task-schedule { max-width:130px; }
+  .sc-detail-dialog .settings-task-row > button { grid-column:2; justify-self:end; margin-top:4px; }
+  .sc-detail-dialog[data-detail="trade"] .ctrl { max-width:none; justify-content:flex-start; }
+  .sc-detail-dialog .sv-win-root .settings-clean-group .sw-row { flex-direction:row; align-items:center; gap:16px; }
+  .sc-detail-dialog .settings-clean-group .sw-row-label { width:auto; flex:1; }
+  .sc-detail-dialog input[readonly].pointer-events-none { text-align:left; }
+}
 .sv-center .sc-row-group,.sv-center .sc-account-card { border-radius:16px; }
 .security-check-entry { margin-bottom:32px; }
 .sv-center .sc-home-landing { max-width:680px; }
