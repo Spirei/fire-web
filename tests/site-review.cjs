@@ -16,6 +16,16 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('appearance selection uses theme-colored dashed ring and a dedicated website icon', () => {
+    const css = fs.readFileSync(path.join(root, 'styles/palettes.css'), 'utf8');
+    assert(css.includes('border:2px dashed rgb(var(--site-accent))'));
+    assert(css.includes('.appearance-swatch[aria-pressed="true"]::after'));
+    assert(css.includes('pointer-events:none'));
+    const icons = fs.readFileSync(path.join(root, 'components/SettingsHeader.tsx'), 'utf8');
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    assert(icons.includes('website: (<><rect'));
+    assert(settings.includes('label: "外观与网站", icon: "website"'));
+  });
   await test('appearance modes, persisted accent tokens and compact controls share the SSR contract', () => {
     const appearance = require(path.join(root, 'lib/appearance.ts'));
     const theme = require(path.join(root, 'lib/theme.ts'));
