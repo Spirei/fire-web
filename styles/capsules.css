@@ -34,8 +34,13 @@ body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.w
 }
 body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger):is(.is-active,.is-selected,.selected,.fire-sidebar-item-active,[aria-pressed="true"],[aria-checked="true"],[aria-current="page"],[class~="bg-ink"],[class~="bg-black"],[class~="bg-brand"]) { background:var(--cap-selected)!important; border-color:var(--cap-primary)!important; color:var(--site-action-text,#fff)!important; font-weight:650; }
 @media(hover:hover) { body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger):hover { background:var(--cap-hover)!important; } }
-body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger):active { transform:scale(.99); }
+body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger):active { transform:none; }
 /* Keep the roaming segmented thumb visible and retain its existing slide animation. */
+/* Selection is atomic: white text must never precede its colored background. Keep glyphs on the same raster grid. */
+body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger) { font-weight:550!important; transition:none!important; transform:none!important; }
+body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link) svg { color:inherit!important; opacity:1; filter:none; transition:none!important; }
+body:has([data-capsule-scope="non-home"]) .fire-sidebar-item img { transition:none!important; }
+body:has([data-capsule-scope="non-home"]) .fire-sidebar-item-active img { filter:var(--site-action-icon-filter,brightness(0) invert(1)); }
 body:has([data-capsule-scope="non-home"]) :is(.card-wander-modes,.card-wander-effects) > button,
 body:has([data-capsule-scope="non-home"]) :is(.card-wander-modes,.card-wander-effects) > button:is([aria-checked="true"],:hover) { background:transparent!important; border-color:transparent!important; }
 body:has([data-capsule-scope="non-home"]) .card-wander-seg-thumb { background:var(--cap-selected); }

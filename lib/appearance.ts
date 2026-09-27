@@ -16,5 +16,5 @@ export function accentVariables(value: unknown): Record<string, string> {
   const accent = resolveAccent(value);
   const channels = (hex: string) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(" ");
   const rgb = channels(accent.color);
-  return { "--site-action": accent.color, "--site-action-text": accent.ink, "--site-action-hover": `color-mix(in srgb, ${accent.color} 90%, #000)`, "--site-accent-light": accent.id === "white" ? channels("#65676b") : rgb, "--site-accent-dark": accent.id === "white" ? channels("#e4e6eb") : rgb };
+  return { "--site-action": accent.color, "--site-action-text": accent.ink, "--site-action-icon-filter": accent.id === "white" ? "brightness(0)" : "brightness(0) invert(1)", "--site-action-hover": `color-mix(in srgb, ${accent.color} 90%, #000)`, "--site-accent-light": accent.id === "white" ? channels("#65676b") : rgb, "--site-accent-dark": accent.id === "white" ? channels("#e4e6eb") : rgb };
 }

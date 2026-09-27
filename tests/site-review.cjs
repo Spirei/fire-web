@@ -16,6 +16,17 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('navigation selection changes background and ink together without weight or icon tweening', () => {
+    const css = fs.readFileSync(path.join(root, 'styles/capsules.css'), 'utf8');
+    const app = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
+    const {accentVariables} = require(path.join(root, 'lib/appearance.ts'));
+    assert(css.includes('font-weight:550!important; transition:none!important; transform:none!important;'));
+    assert(css.includes('svg { color:inherit!important; opacity:1; filter:none; transition:none!important; }'));
+    assert(app.includes('aria-current={activeTab === t.key ? "page" : undefined}'));
+    assert(!app.includes('fire-sidebar-item-active font-semibold'));
+    assert.equal(accentVariables('white')['--site-action-icon-filter'], 'brightness(0)');
+    assert.equal(accentVariables('brown')['--site-action-icon-filter'], 'brightness(0) invert(1)');
+  });
   await test('settings detail overlays keep the category header stable and back navigation mobile-only', () => {
     const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');

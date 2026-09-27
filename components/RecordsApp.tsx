@@ -898,9 +898,10 @@ export default function RecordsApp({
                   onDrop={() => onTabDrop(t.key)}
                   onDragEnd={() => { tabDragKeyRef.current = null; }}
                   title={`${t.label}（可拖动排序）`}
-                  className={`fire-sidebar-item flex h-[42px] w-full cursor-grab items-center gap-3 rounded-[10px] px-3 text-[15px] transition-all duration-200 active:cursor-grabbing ${
+                  aria-current={activeTab === t.key ? "page" : undefined}
+                  className={`fire-sidebar-item flex h-[42px] w-full cursor-grab items-center gap-3 rounded-[10px] px-3 text-[15px] font-medium active:cursor-grabbing ${
                     activeTab === t.key
-                      ? "fire-sidebar-item-active font-semibold text-ink dark:text-white"
+                      ? "fire-sidebar-item-active text-ink dark:text-white"
                       : "text-muted hover:bg-black/[.05] hover:text-ink dark:hover:bg-[#2a2a2a]"
                   }`}
                 >
