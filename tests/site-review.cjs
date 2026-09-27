@@ -88,7 +88,10 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const header = settings.slice(settings.indexOf('{/* 内容头部 */}'), settings.indexOf('<div ref={contentScrollRef}'));
     assert(header.includes('className="sc-back sc-category-back"'));
     assert(css.includes('@media(min-width:768px) { .sv-center .sc-category-back { display:none; } }'));
-    assert(header.includes('currentCategory?.label || "设置中心"'));
+    assert(header.includes('currentCategory?.label || "账户设置"'));
+    assert(settings.includes('<div className="sc-brand"><h1>账户设置</h1></div>'));
+    assert(!settings.includes('管理账号与网站偏好') && !settings.includes('设置中心'));
+    assert(css.includes('.sv-center .sw-search-wrap { margin:0 4px; padding:0; border-bottom:0; }'));
     assert(!header.includes('activePageMeta') && !header.includes('beginActiveEdit'));
     assert(header.includes('<p>{homeIsBackground ? "管理个人信息与账户安全。" : currentCategory?.desc}</p>'));
   });

@@ -2158,7 +2158,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       )}
       {/* 侧栏：搜索 + 分组导航，对齐 Orca 设置语言 */}
       <aside className="sw-sidebar relative hidden w-[248px] flex-none flex-col border-r md:flex">
-        <div className="sc-brand"><span>Fire</span><h1>设置中心</h1><p>管理账号与网站偏好</p></div>
+        <div className="sc-brand"><h1>账户设置</h1></div>
         <div className="sw-search-wrap">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="sw-search-icon" aria-hidden="true">
             <circle cx="11" cy="11" r="7" />
@@ -2291,7 +2291,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           <div className="min-w-0">
             {homeIsBackground && <span className="sc-mobile-brand">Fire</span>}
             {!homeIsBackground && <button type="button" className="sc-back sc-category-back" onClick={() => openCategory(categoryPage ? "home" : detailOrigin || currentCategory?.key || "home")}><span aria-hidden="true">←</span> {categoryPage ? "设置首页" : currentCategory?.label || "设置首页"}</button>}
-            <h2>{homeIsBackground ? <><span className="hidden md:inline">首页</span><span className="md:hidden">设置中心</span></> : currentCategory?.label || "设置中心"}</h2>
+            <h2>{homeIsBackground ? <><span className="hidden md:inline">首页</span><span className="md:hidden">账户设置</span></> : currentCategory?.label || "账户设置"}</h2>
             <p>{homeIsBackground ? "管理个人信息与账户安全。" : currentCategory?.desc}</p>
           </div>
           <div className="sc-head-actions">
@@ -2309,7 +2309,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             title={activeAnchor === "totp"
               ? (totpBackupCodes?.length ? "保存备用码" : totpSetup ? (totpSetupStage === "verify" ? "输入验证码" : totpSetupStage === "name" ? "绑定设备" : "设置说明") : totpEnabled ? "双重验证" : totpLandingStage === "intro" ? "为你的账户加固防护" : "帮助保护你的账户")
               : (activePageMeta?.label || activeSubMeta?.label || "设置")}
-            category={currentCategory?.label || "设置中心"}
+            category={currentCategory?.label || "账户设置"}
             detailKey={activeAnchor}
             showBack={activeAnchor === "totp" && (totpEnabled || !!totpSetup || totpLandingStage === "method")}
             closeDisabled={(activeAnchor === "totp" && totpBusy) || (activeAnchor === "profile" && profileSaving) || (activeAnchor === "mobile-nav" && !!blockSaving["mobile-nav"])}

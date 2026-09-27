@@ -6192,11 +6192,9 @@ button.PhotoView-Slider__toolbarIcon {
 .sv-center .sw-window > div { width:100%; }
 .sv-center .sw-sidebar { width:264px; background:transparent; padding:22px 20px 0 0; border-color:var(--sv-border); }
 .sv-center .sc-brand { padding:0 14px 14px; }
-.sv-center .sc-brand > span { font-size:14px; font-weight:700; letter-spacing:.08em; }
-.sv-center .sc-brand h1 { margin:12px 0 5px; font-size:25px; font-weight:700; letter-spacing:-.04em; color:var(--sv-text); }
-.sv-center .sc-brand p { font-size:13px; color:var(--sv-text-3); }
+.sv-center .sc-brand h1 { margin:0; font-size:25px; font-weight:700; letter-spacing:-.04em; color:var(--sv-text); }
 .sv-center .sw-sidebar-nav { padding:12px 0; }
-.sv-center .sw-search-wrap { margin:0 4px; padding:0; }
+.sv-center .sw-search-wrap { margin:0 4px; padding:0; border-bottom:0; }
 .sv-center .sw-search-icon { left:12px; }
 .sv-center .sw-search-kbd { right:8px; }
 .sv-center .sc-nav { display:flex; flex-direction:column; gap:4px; }
