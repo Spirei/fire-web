@@ -21,7 +21,8 @@ export default function AppModal({
   size = "sm",
   className = "",
   draggable = false,
-  closeDisabled = false
+  closeDisabled = false,
+  priority = false
 }: {
   title?: string;
   desc?: string;
@@ -32,6 +33,7 @@ export default function AppModal({
   className?: string;
   draggable?: boolean;
   closeDisabled?: boolean;
+  priority?: boolean;
 }) {
   const [closing, setClosing] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -43,7 +45,9 @@ export default function AppModal({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") requestClose();
+      if (e.key !== "Escape") return;
+      if (!priority && document.querySelector("[data-system-modal='true']")) return;
+      requestClose();
     };
     window.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
@@ -96,7 +100,7 @@ export default function AppModal({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[11000] flex items-center justify-center p-4 sm:p-8" role="dialog" aria-modal="true" aria-label={title || "弹窗"}>
+    <div data-priority-modal="true" data-system-modal={priority ? "true" : undefined} className={`fixed inset-0 ${priority ? "z-[12500]" : "z-[11000]"} flex items-center justify-center p-4 sm:p-8`} role="dialog" aria-modal="true" aria-label={title || "弹窗"}>
       {/* 毛玻璃遮罩（iOS 风格），保持页面可读 */}
       <div
         className={`modal-scrim absolute inset-0 ${closing ? "modal-overlay-closing" : "modal-overlay"}`}

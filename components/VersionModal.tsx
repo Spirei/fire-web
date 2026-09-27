@@ -63,7 +63,8 @@ export default function VersionModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-8"
+      data-priority-modal="true"
+      className="fixed inset-0 z-[11000] flex items-center justify-center p-4 sm:p-8"
       role="dialog"
       aria-modal="true"
       aria-label="版本记录"

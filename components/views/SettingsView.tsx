@@ -71,7 +71,12 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, edi
   useEffect(() => {
     if (!mounted) return;
     const previous = document.body.style.overflow;
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") requestClose(); };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      // 详情上方还有确认、找回密码或版本弹窗时，只允许最上层弹窗处理 Esc。
+      if (document.querySelector("[data-priority-modal='true']")) return;
+      requestClose();
+    };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKeyDown);
     return () => {
@@ -1061,7 +1066,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             ? patch.marketBadgesVisible ? "市场色块已显示" : "市场色块已隐藏"
             : keys.length === 1 && keys[0] === "allowRegister"
               ? patch.allowRegister ? "已允许新用户注册" : "已关闭新用户注册"
-              : "保存成功";
+              : "设置已自动保存";
         showToast(savedMessage);
       } catch (err) {
         showToast(err instanceof Error ? err.message : "保存失败，请稍后重试", "err");
@@ -1161,7 +1166,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setAvatarMsg({ type: "ok", text: "头像已更新，右上角已同步" });
       showToast("头像已更新");
     } catch (err) {
-      setAvatarMsg({ type: "err", text: err instanceof Error ? err.message : "上传失败" });
+      const message = err instanceof Error ? err.message : "头像上传失败";
+      setAvatarMsg({ type: "err", text: message });
+      showToast(message, "err");
     } finally {
       setAvatarUploading(false);
     }
@@ -1186,7 +1193,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       showToast("个人资料已更新");
       setEditingProfile(false);
     } catch (err) {
-      setNickMsg({ type: "err", text: err instanceof Error ? err.message : "保存失败" });
+      const message = err instanceof Error ? err.message : "个人资料保存失败";
+      setNickMsg({ type: "err", text: message });
+      showToast(message, "err");
     }
   }
 
@@ -1634,7 +1643,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       showToast("股票来源接口已保存");
       return true;
     } catch (err) {
-      setSrcMsg({ type: "err", text: err instanceof Error ? err.message : "保存失败" });
+      const message = err instanceof Error ? err.message : "行情与汇率接口保存失败";
+      setSrcMsg({ type: "err", text: message });
+      showToast(message, "err");
       return false;
     } finally {
       setSrcSaving(false);
@@ -1665,7 +1676,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       showToast("券商已保存");
       setEditingStockGroups(false);
     } catch (err) {
-      setGroupMsg({ type: "err", text: err instanceof Error ? err.message : "保存失败" });
+      const message = err instanceof Error ? err.message : "券商设置保存失败";
+      setGroupMsg({ type: "err", text: message });
+      showToast(message, "err");
     } finally {
       setGroupSaving(false);
     }
@@ -1695,7 +1708,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       showToast("数据库配置已保存");
       return true;
     } catch (err) {
-      setDbMsg({ type: "err", text: err instanceof Error ? err.message : "保存失败" });
+      const message = err instanceof Error ? err.message : "数据库配置保存失败";
+      setDbMsg({ type: "err", text: message });
+      showToast(message, "err");
       return false;
     } finally {
       setDbSaving(false);
@@ -1718,12 +1733,16 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         })
       });
       const data = await res.json().catch(() => null);
+      const message = res.ok ? `数据库连接成功：${data?.version ?? "已建立连接"}` : (data?.error ?? "数据库连接失败，请检查地址、端口和账号");
       setDbMsg({
         type: res.ok ? "ok" : "err",
-        text: res.ok ? `连接成功：${data?.version ?? ""}` : (data?.error ?? "连接失败")
+        text: message
       });
+      showToast(message, res.ok ? "ok" : "err");
     } catch {
-      setDbMsg({ type: "err", text: "连接失败" });
+      const message = "数据库连接失败，请检查网络与服务器配置";
+      setDbMsg({ type: "err", text: message });
+      showToast(message, "err");
     } finally {
       setDbTesting(false);
     }
@@ -1785,7 +1804,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       totpSetupAutoTried.current = "";
       setTotpBackupCodes(null);
     } catch (err) {
-      setTotpMsg({ type: "err", text: err instanceof Error ? err.message : "无法开始绑定" });
+      const message = err instanceof Error ? err.message : "无法开始双重验证设置";
+      setTotpMsg({ type: "err", text: message });
+      showToast(message, "err");
     } finally {
       setTotpBusy(false);
     }
@@ -1813,7 +1834,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setTotpMsg({ type: "ok", text: "二次验证已开启。密钥不再显示，请保存备用码。其它设备需要重新登录。" });
       showToast("二次验证已开启，请保存备用码");
     } catch (err) {
-      setTotpMsg({ type: "err", text: err instanceof Error ? err.message : "验证失败" });
+      const message = err instanceof Error ? err.message : "验证码校验失败";
+      setTotpMsg({ type: "err", text: message });
+      showToast(message, "err");
     } finally {
       setTotpBusy(false);
     }
@@ -1843,6 +1866,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     showToast("备用码已下载");
   }
 
+  async function copySecurityText(text: string, label: string) {
+    const copied = await copyText(text);
+    showToast(copied ? `${label}已复制` : `${label}复制失败，请手动选择复制`, copied ? "ok" : "err");
+  }
+
   async function disableTotp(e: React.FormEvent) {
     e.preventDefault();
     setTotpMsg(null);
@@ -1865,7 +1893,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setTotpMsg({ type: "ok", text: "二次验证已关闭" });
       showToast("二次验证已关闭");
     } catch (err) {
-      setTotpMsg({ type: "err", text: err instanceof Error ? err.message : "关闭失败" });
+      const message = err instanceof Error ? err.message : "双重验证关闭失败";
+      setTotpMsg({ type: "err", text: message });
+      showToast(message, "err");
     } finally {
       setTotpBusy(false);
     }
@@ -1875,7 +1905,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     e.preventDefault();
     setPwdMsg(null);
     if (newPassword !== confirmPassword) {
-      setPwdMsg({ type: "err", text: "两次输入的新密码不一致" });
+      const message = "两次输入的新密码不一致，请重新确认";
+      setPwdMsg({ type: "err", text: message });
+      showToast(message, "err");
       return;
     }
     setPwdBusy(true);
@@ -1891,7 +1923,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       showToast("密码修改成功");
       setOldPassword(""); setNewPassword(""); setConfirmPassword(""); setTotpPasswordCode(""); setSignOutOtherDevices(false);
     } catch (err) {
-      setPwdMsg({ type: "err", text: err instanceof Error ? err.message : "修改失败" });
+      const message = err instanceof Error ? err.message : "密码修改失败";
+      setPwdMsg({ type: "err", text: message });
+      showToast(message, "err");
     } finally {
       setPwdBusy(false);
     }
@@ -1926,7 +1960,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setPwdMsg({ type: "ok", text: `重置邮件已发送至 ${me.email}，链接 15 分钟内有效。` });
       showToast("重置邮件已发送");
     } catch (error) {
-      setPasswordRecoveryError(error instanceof Error ? error.message : "申请失败");
+      const message = error instanceof Error ? error.message : "重置邮件发送失败";
+      setPasswordRecoveryError(message);
+      showToast(message, "err");
     } finally {
       setPasswordRecoveryBusy(false);
     }
@@ -2052,7 +2088,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   return (
     <div className="settings-page flex h-full min-h-0 flex-1">
       {showDeleteConfirm && createPortal(
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteTotpCode(""); } }}>
+        <div data-priority-modal="true" className="fixed inset-0 z-[11000] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="确认注销账号" onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteTotpCode(""); } }}>
           <div className="sc-meta-dialog w-full max-w-[594px] rounded-2xl border border-edge bg-white p-6 shadow-pop dark:border-[#2a3140] dark:bg-[#1b2029]">
             <h3 className="text-base font-bold text-ink">确认注销账号</h3>
             <p className="mt-2 text-sm text-muted">此操作<strong className="text-up">不可恢复</strong>，将永久删除账号「{user.nickname || user.username}」及全部持仓、订单、分组、偏好等数据。</p>
@@ -3563,7 +3599,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <div className="totp-meta-step"><h3>2. 扫描二维码或复制密钥</h3><p>请在身份验证应用中扫描二维码，或者复制密钥并粘贴到应用中。</p></div>
                         <div className="totp-meta-setup-grid">
                           <div className="totp-meta-qr">{totpSetup.qrPng && <img alt="二次验证二维码" src={totpSetup.qrPng} />}</div>
-                          <div className="totp-meta-secret"><code>{totpSetup.secret.replace(/(.{4})/g, "$1 ").trim()}</code><div><button type="button" onClick={() => { void copyText(totpSetup.secret); showToast("密钥已复制"); }}>复制密钥</button>{totpSetup.otpauthUrl && <button type="button" onClick={() => { void copyText(totpSetup.otpauthUrl); showToast("链接已复制"); }}>复制链接</button>}</div></div>
+                          <div className="totp-meta-secret"><code>{totpSetup.secret.replace(/(.{4})/g, "$1 ").trim()}</code><div><button type="button" onClick={() => void copySecurityText(totpSetup.secret, "密钥")}>复制密钥</button>{totpSetup.otpauthUrl && <button type="button" onClick={() => void copySecurityText(totpSetup.otpauthUrl, "链接")}>复制链接</button>}</div></div>
                         </div>
                         <div className="totp-meta-step"><h3>3. 复制并输入 6 位数验证码</h3><p>扫描二维码或输入密钥后，身份验证应用将生成一组 6 位数验证码。</p></div>
                         <button type="button" className="totp-meta-primary totp-meta-next" onClick={() => setTotpSetupStage("verify")}>输入验证码</button>
@@ -3580,7 +3616,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <div className="totp-meta-backup">
                       <p className="totp-meta-copy">备用码只显示这一次。验证器不可用时，每个备用码可代替验证码使用一次。</p>
                       <ul>{totpBackupCodes.map((code) => <li key={code}>{code}</li>)}</ul>
-                      <div className="totp-meta-backup-actions"><button type="button" onClick={() => { void copyText(totpBackupCodes.join("\n")); showToast("备用码已复制"); }}>复制</button><button type="button" onClick={downloadBackupCodes}>下载</button></div>
+                      <div className="totp-meta-backup-actions"><button type="button" onClick={() => void copySecurityText(totpBackupCodes.join("\n"), "备用码")}>复制</button><button type="button" onClick={downloadBackupCodes}>下载</button></div>
                       <button type="button" className="totp-meta-primary" onClick={() => setTotpBackupCodes(null)}>我已保存</button>
                     </div>
                   )}

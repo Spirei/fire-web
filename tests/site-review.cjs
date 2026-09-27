@@ -1895,6 +1895,21 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('<SettingsSection id="backups"') && !/key: "board"[\s\S]{0,900}<BackupTaskCard/.test(settings), '缓存任务与数据库自动备份必须分开');
     assert(css.includes('[data-detail^="source"] .sw-row-label { width:100%; flex:none; }'), '手机端数据源标签不得继承桌面横向宽度成为大段空白');
   });
+  await test('settings overlays keep confirmations and feedback above detail dialogs', () => {
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    const modal = fs.readFileSync(path.join(root, 'components/AppModal.tsx'), 'utf8');
+    const dialogHost = fs.readFileSync(path.join(root, 'components/AppDialogHost.tsx'), 'utf8');
+    const toaster = fs.readFileSync(path.join(root, 'components/Toaster.tsx'), 'utf8');
+    const versions = fs.readFileSync(path.join(root, 'components/VersionModal.tsx'), 'utf8');
+    assert(settings.includes('z-[10900]'), '设置详情必须保留明确基础层级');
+    assert(settings.includes('data-priority-modal="true" className="fixed inset-0 z-[11000]'), '注销确认必须高于设置详情');
+    assert(versions.includes('data-priority-modal="true"') && versions.includes('z-[11000]'), '版本记录必须高于设置详情');
+    assert(modal.includes('priority ? "z-[12500]" : "z-[11000]"'), '系统确认必须高于普通业务弹窗');
+    assert(dialogHost.includes('size="sm" priority'), '全局确认与输入弹窗必须使用系统层级');
+    assert(toaster.includes('z-[13000]') && toaster.includes('aria-live="polite"'), '操作反馈必须位于所有弹窗上方并可被辅助技术播报');
+    assert(settings.includes('document.querySelector("[data-priority-modal=\'true\']")'), '设置详情不得响应上层弹窗的 Esc');
+    assert(modal.includes('document.querySelector("[data-system-modal=\'true\']")'), '普通业务弹窗不得响应系统确认层的 Esc');
+  });
   await test('clickable controls have actions and password recovery is reachable', () => {
     const files = [];
     const collect = dir => fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {

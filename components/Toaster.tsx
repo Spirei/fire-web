@@ -26,7 +26,7 @@ export default function Toaster() {
 
   return (
     /* z-index 必须高于设置详情（10900）及全站其他弹层，保证成功和错误反馈始终可见。 */
-    <div className="pointer-events-none fixed left-0 right-0 top-[84px] z-[12000] flex flex-col items-center gap-2 px-4">
+    <div className="pointer-events-none fixed left-0 right-0 top-[84px] z-[13000] flex flex-col items-center gap-2 px-4" role="region" aria-label="操作提示" aria-live="polite">
       {items.map((t) => (
         <div
           key={t.id}

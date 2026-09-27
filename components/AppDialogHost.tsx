@@ -20,7 +20,7 @@ export default function AppDialogHost() {
 
   if (!current) return null;
   const finish = (value: boolean | string | null) => { current.resolve(value); setCurrent(null); };
-  return <AppModal title={current.title} desc={current.message} onClose={() => finish(current.kind === "confirm" ? false : null)} size="sm">
+  return <AppModal title={current.title} desc={current.message} onClose={() => finish(current.kind === "confirm" ? false : null)} size="sm" priority>
     {current.kind === "prompt" && <input autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && draft.trim()) finish(draft.trim()); }} placeholder={current.placeholder} className="field w-full" />}
     <div className="dialog-actions">
       {/* 底部按钮统一走 globals.css 的胶囊配方：ghost 取消 / neutral 确认 / danger 删除。
