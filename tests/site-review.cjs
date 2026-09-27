@@ -30,6 +30,11 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(nav.includes('draggable={!saving && mouseDrag}'));
     assert(profile.includes('if (profileSavingRef.current) return;'));
     assert(profile.includes('连接失败，请重试'));
+    assert(profile.includes('disabled={profileSaving} maxLength={20}'));
+    assert(profile.includes('setProfileSaving(true)'));
+    assert(calendar.includes('dayDetail?.rows.some(row => row.pnl > 0)'));
+    assert(calendar.includes('pnl-day-dialog-list mt-3 min-h-0'));
+    assert(css.includes('touch-action:pan-y pinch-zoom'));
   });
   await test('mobile navigation order persists separately, preserves defaults and filters permissions', () => {
     const { mobileWorkspaceGroups, normalizeMobileNavigationOrder } = require(path.join(root, 'lib/workspaceNavigation.ts'));

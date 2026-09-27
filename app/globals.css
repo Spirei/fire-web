@@ -6997,7 +6997,7 @@ button.PhotoView-Slider__toolbarIcon {
 
 /* Mobile sheets own their scrolling; desktop row widths must not become column heights. */
 html { scrollbar-gutter:stable; }
-.sc-detail-dialog-scroll,.workspace-navigation-modal.modal-glass { overscroll-behavior-y:contain; touch-action:pan-y; -webkit-overflow-scrolling:touch; }
+.sc-detail-dialog-scroll,.workspace-navigation-modal.modal-glass,.pnl-day-dialog-list { overscroll-behavior-y:contain; touch-action:pan-y pinch-zoom; -webkit-overflow-scrolling:touch; }
 .sc-detail-dialog[data-detail="mobile-nav"] .settings-section-body { border:0!important; padding:0!important; background:transparent!important; }
 .pnl-day-dialog-content { border:0; box-shadow:none; max-height:calc(75dvh - 80px); background:transparent; }
 @media(max-width:1023px) {

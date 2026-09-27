@@ -103,7 +103,7 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
           {showBack && <button type="button" className="sc-detail-back" aria-label="返回" onClick={onBack || requestClose} disabled={closing || closeDisabled}><span aria-hidden="true">‹</span></button>}
           <div className="min-w-0"><span>{category}</span><h2>{title}</h2></div>
           <div className="sc-detail-dialog-actions">
-            {editable && (editing ? <><button type="button" className="sc-detail-text-action" onClick={onCancel}>取消</button><button type="button" className="sc-detail-primary-action" onClick={onSave}>保存</button></> : <button type="button" className="sc-detail-text-action" onClick={onEdit}>编辑</button>)}
+            {editable && (editing ? <><button type="button" disabled={closeDisabled} className="sc-detail-text-action" onClick={onCancel}>取消</button><button type="button" disabled={closeDisabled} className="sc-detail-primary-action" onClick={onSave}>{closeDisabled ? "保存中…" : "保存"}</button></> : <button type="button" className="sc-detail-text-action" onClick={onEdit}>编辑</button>)}
             <button type="button" className="sc-detail-close" aria-label="关闭" onClick={requestClose} disabled={closing || closeDisabled}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button>
           </div>
         </header>
@@ -1163,9 +1163,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }
 
   const profileSavingRef = useRef(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   async function saveProfile() {
     if (profileSavingRef.current) return;
     profileSavingRef.current = true;
+    setProfileSaving(true);
     setNickMsg(null);
     try {
       const res = await fetch("/api/auth/profile", {
@@ -1192,6 +1194,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       showToast(message, "err");
     } finally {
       profileSavingRef.current = false;
+      setProfileSaving(false);
     }
   }
 
@@ -2305,7 +2308,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             category={currentCategory?.label || "设置中心"}
             detailKey={activeAnchor}
             showBack={activeAnchor === "totp" && (totpEnabled || !!totpSetup || totpLandingStage === "method")}
-            closeDisabled={activeAnchor === "totp" && totpBusy}
+            closeDisabled={(activeAnchor === "totp" && totpBusy) || (activeAnchor === "profile" && profileSaving) || (activeAnchor === "mobile-nav" && !!blockSaving["mobile-nav"])}
             onBack={activeAnchor === "totp" ? () => {
               if (totpBusy) return;
               if (totpSetup && totpSetupStage === "verify") { setTotpSetupStage("name"); setTotpSetupCode(""); setTotpMsg(null); return; }
@@ -3474,7 +3477,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <div className="sw-row-label"><b>昵称</b><span>最多 20 个字符</span></div>
                         <div className="ctrl" style={{ flex: 1 }}>
                           {editingProfile ? (
-                            <input ref={nickInputRef} value={nickname} onChange={(e) => setNickname(e.target.value)} className="sw-row-input" />
+                            <input ref={nickInputRef} disabled={profileSaving} maxLength={20} value={nickname} onChange={(e) => setNickname(e.target.value)} className="sw-row-input" />
                           ) : (
                             <span className="settings-profile-value" title={nickname}>{nickname || "未设置昵称"}</span>
                           )}
@@ -3484,7 +3487,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <div className="sw-row-label"><b>登录邮箱<span className="ml-0.5" style={{ display: "inline" }}>*</span></b><span>{me.emailVerified?"已验证，可用于找回密码":"验证后可用于找回密码"}</span></div>
                         <div className="ctrl" style={{ flex: 1 }}>
                           {editingProfile ? (
-                            <input ref={emailInputRef} type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="sw-row-input" />
+                            <input ref={emailInputRef} disabled={profileSaving} type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="sw-row-input" />
                           ) : (
                             <span className="settings-profile-value" title={email}>{email || "未设置邮箱"}</span>
                           )}
@@ -3495,7 +3498,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       {editingProfile && email.trim().toLowerCase() !== (me.email ?? "").trim().toLowerCase() && (
                         <div className="sw-row">
                           <div className="sw-row-label"><b>安全验证</b><span>修改登录邮箱需要当前密码</span></div>
-                          <div className="ctrl" style={{ flex: 1 }}><input type="password" value={profilePassword} onChange={(e) => setProfilePassword(e.target.value)} autoComplete="current-password" placeholder="当前密码" className="sw-row-input" /></div>
+                          <div className="ctrl" style={{ flex: 1 }}><input type="password" disabled={profileSaving} value={profilePassword} onChange={(e) => setProfilePassword(e.target.value)} autoComplete="current-password" placeholder="当前密码" className="sw-row-input" /></div>
                         </div>
                       )}
                       {nickMsg && <p className={`settings-form-message ${nickMsg.type === "ok" ? "is-ok" : "is-error"}`}>{nickMsg.text}</p>}
