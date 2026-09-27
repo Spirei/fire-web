@@ -178,6 +178,8 @@ export function cleanupOrphanFiles(options: { scope?: "showcase-unsaved" } = {})
         // 卡面清单原图目录整棵跳过：卡面库直接从 manifest.json 读这些文件，
         // 数据库里没有任何引用，扫下去会整目录被当孤立文件清掉
         if (ent.name === "cards" && path.basename(dir) === "uploads") continue;
+        // 用户字体由 /api/fonts 管理，个人字体偏好不在数据库引用表里。
+        if (ent.name === "fonts" && path.basename(dir) === "uploads") continue;
         // 车型由 showroom.json 管理，不能按通用素材库的数据库引用判定为孤立文件。
         if (ent.name === "mclaren" && path.basename(dir) === "uploads") continue;
         walk(full);

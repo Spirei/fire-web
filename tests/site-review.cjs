@@ -40,8 +40,33 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('name="typography"'));
     assert(!settings.includes('Fire · 字体预览'));
     assert(settings.includes('别人贪婪时恐惧，') && settings.includes('别人恐惧时贪婪。'));
-    assert(settings.includes('π 3.141592653589793…'));
+    assert(settings.includes('π 3.1415926</span>'));
     assert(fs.readFileSync(path.join(root,'components/SettingsHeader.tsx'),'utf8').includes('typography: (<><path'));
+  });
+  await test('custom fonts validate files, isolate lists, deduplicate and protect CSS URLs', async () => {
+    const type = require(path.join(root, 'lib/typography.ts'));
+    const fonts = require(path.join(root, 'lib/customFonts.ts'));
+    const route = require(path.join(root, 'app/api/fonts/route.ts'));
+    assert.equal((await route.GET(new Request('http://localhost/api/fonts'))).status, 401);
+    assert.equal((await route.POST(new Request('http://localhost/api/fonts', {method:'POST'}))).status, 401);
+    const bytes = fs.readFileSync(path.join(root,'public/fonts/sf-pro-display-regular.woff'));
+    const font = fonts.saveCustomFont(1, '苹果测试.woff', bytes);
+    assert.equal(font.name, '苹果测试');
+    assert.equal(fonts.saveCustomFont(1, '重复.woff', bytes).id, font.id);
+    assert.equal(fonts.listCustomFonts(1).length, 1);
+    assert.equal(fonts.listCustomFonts(2).length, 0);
+    assert.notEqual(fonts.saveCustomFont(2, '测试.woff', bytes).id, font.id);
+    assert.throws(() => fonts.saveCustomFont(1, '坏文件.woff', Buffer.alloc(80)));
+    assert.throws(() => fonts.saveCustomFont(1, '错误后缀.ttf', bytes));
+    assert.throws(() => fonts.saveCustomFont(1, '过大.woff', Buffer.alloc(fonts.FONT_MAX_BYTES+1)));
+    assert.throws(() => fonts.saveCustomFont(NaN, '测试.woff', bytes));
+    assert(type.customFontCss(font.id).includes('/uploads/fonts/'));
+    assert.equal(type.resolveFont(font.id).id, font.id);
+    assert.equal(type.customFontCss('custom-1-"</style><script>'), '');
+    assert.equal(type.resolveFont('custom-../../x').id, 'system');
+    const layout = fs.readFileSync(path.join(root,'app/layout.tsx'),'utf8');
+    assert(layout.includes('customFontCss(prefs[FONT_KEY])'));
+    assert(fs.readFileSync(path.join(root,'lib/fileCleanup.ts'),'utf8').includes('ent.name === "fonts"'));
   });
   await test('navigation selection changes background and ink together without weight or icon tweening', () => {
     const css = fs.readFileSync(path.join(root, 'styles/capsules.css'), 'utf8');
@@ -630,6 +655,30 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   const user = createUser('review_user', 'Review-test-123');
   const other = createUser('review_other', 'Review-test-123');
   const tokens = { user: createSession(user.id), other: createSession(other.id), admin: createSession('demo-user') };
+  await test('font upload route enforces account ownership, origin, decoding header and quota', async () => {
+    const route = require(path.join(root,'app/api/fonts/route.ts'));
+    const fonts = require(path.join(root,'lib/customFonts.ts'));
+    const bytes = fs.readFileSync(path.join(root,'public/fonts/AWSDiatypeRoundedSemi-Mono-Regular.woff2'));
+    const send = (token, file, origin='http://localhost') => {
+      const body = new FormData(); body.append('file',file);
+      return route.POST(new Request('http://localhost/api/fonts',{method:'POST',headers:{cookie:`fire_session=${token}`,origin},body}));
+    };
+    assert([401,403].includes((await send(tokens.user,new File([bytes],'测试.woff2'),'https://foreign.example')).status));
+    assert.equal((await send(tokens.user,new File(['broken'],'坏字体.ttf'))).status,400);
+    const result = await send(tokens.user,new File([bytes],'圆润测试.woff2'));
+    assert.equal(result.status,200);
+    const {font} = await result.json();
+    assert.equal(font.name,'圆润测试');
+    const read = token => route.GET(new Request('http://localhost/api/fonts',{headers:{cookie:`fire_session=${token}`}}));
+    const own = await (await read(tokens.user)).json();
+    assert(own.fonts.some(item=>item.id===font.id));
+    const foreign = await (await read(tokens.other)).json();
+    assert(!foreign.fonts.some(item=>item.id===font.id));
+    assert.equal((await (await send(tokens.user,new File([bytes],'重复.woff2'))).json()).font.id,font.id);
+    for(let i=0;i<20;i++) { const sample=Buffer.from(bytes); sample[sample.length-1]=i; fonts.saveCustomFont(9999,`额度${i}.woff2`,sample); }
+    const extra=Buffer.from(bytes); extra[extra.length-1]=21;
+    assert.throws(()=>fonts.saveCustomFont(9999,'超额.woff2',extra),/20/);
+  });
   await test('ticker upstream parsing keeps market IDs distinct and missing changes unknown', async () => {
     const settings = require(path.join(root, 'lib/settings.ts'));
     const before = settings.getSiteSettings().ticker;

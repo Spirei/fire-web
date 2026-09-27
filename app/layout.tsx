@@ -30,7 +30,7 @@ import { ACCENT_KEY, accentVariables } from "@/lib/appearance";
 import { THEME_MODE_KEY, resolveThemeMode } from "@/lib/theme";
 import "@/styles/capsules.css";
 import TypographyProvider from "@/components/TypographyProvider";
-import { FONT_KEY, FONT_WEIGHT_KEY, typographyVariables } from "@/lib/typography";
+import { FONT_KEY, FONT_WEIGHT_KEY, typographyVariables, customFontCss } from "@/lib/typography";
 import "@/styles/typography.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -73,6 +73,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       style={{ ...paletteVariables(palette.id), ...accentVariables(prefs[ACCENT_KEY]), ...typographyVariables(prefs[FONT_KEY], prefs[FONT_WEIGHT_KEY]) }}
     >
       <head>
+        <style>{customFontCss(prefs[FONT_KEY])}</style>
         {/* Google 翻译（含 Chrome 内置翻译）看到这一条就不再动这个页面 */}
         <meta name="google" content="notranslate" />
         <script dangerouslySetInnerHTML={{ __html: `try{if(document.documentElement.dataset.themeMode==='system'){document.documentElement.classList.toggle('dark',matchMedia('(prefers-color-scheme: dark)').matches);}}catch(e){}` }} />

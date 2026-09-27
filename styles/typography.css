@@ -10,7 +10,9 @@ body:has([data-capsule-scope="non-home"]) :is(button,.appearance-label) { font-w
 .typography-window-dots i { width:7px; height:7px; border-radius:50%; background:rgb(var(--site-muted) / .4); }
 .typography-preview-content { display:flex; align-items:center; gap:28px; min-height:172px; padding:28px; }
 .typography-specimen { display:grid; place-items:center; flex:none; width:96px; height:96px; border-radius:24px; background:rgb(var(--site-surface) / .7); border:1px solid rgb(var(--site-edge)); color:var(--site-action); font-size:46px; line-height:1; letter-spacing:-2px; }
-.typography-preview-copy { display:flex; flex-direction:column; gap:10px; min-width:0; font-size:14px; line-height:1.55; }
+.typography-preview-copy { display:flex; flex:1; flex-direction:column; gap:10px; min-width:0; font-size:14px; line-height:1.55; }
+.typography-quote-end { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px 20px; }
+.typography-signature { margin-left:auto; font-size:12px; font-style:italic; color:rgb(var(--site-muted)); white-space:nowrap; }
 .typography-preview-title { font-size:21px; line-height:1.4; }
 .typography-preview-numbers { color:rgb(var(--site-muted)); font-size:13px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .typography-card { margin-top:0; }
@@ -20,6 +22,11 @@ body:has([data-capsule-scope="non-home"]) :is(button,.appearance-label) { font-w
 .typography-select-menu { background:rgb(var(--site-surface))!important; border-color:rgb(var(--site-edge)); color:rgb(var(--site-ink)); }
 .typography-select-menu [role="option"] { color:rgb(var(--site-ink)); min-height:40px; }
 .typography-select-menu [role="option"][aria-selected="true"] { background:var(--site-action)!important; color:var(--site-action-text)!important; }
+.typography-select { overflow:hidden; }
+.typography-upload { min-height:40px; padding:8px 16px; border:1px solid rgb(var(--site-edge)); border-radius:999px; background:rgb(var(--site-surface)); color:rgb(var(--site-ink)); font-size:14px; white-space:nowrap; }
+.typography-upload:disabled { opacity:.6; cursor:wait; }
+.typography-upload-error { margin:0; padding:0 24px 18px; font-size:14px; line-height:1.5; color:#dc2626; }
+.dark .typography-upload-error { color:#fca5a5; }
 .typography-weights { display:flex; gap:3px; padding:4px; border-radius:999px; background:rgb(var(--site-soft)); }
 .typography-weights button { min-width:60px; min-height:40px; padding:8px 12px; border-radius:999px; font-size:14px; line-height:20px; color:rgb(var(--site-muted)); white-space:nowrap; }
 .typography-weights button[aria-pressed="true"] { background:var(--site-action); color:var(--site-action-text); }
