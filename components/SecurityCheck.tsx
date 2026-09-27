@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AppModal from "./AppModal";
 
 type Target = "profile" | "totp" | "passkeys";
@@ -20,10 +20,12 @@ export default function SecurityCheck({ onNavigate }: { onNavigate: (target: Tar
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const loaded = useRef(false);
   useEffect(() => {
+    // Closing an inspected panel should not clear its result or repeat both requests.
+    if (!open && loaded.current) return;
     const controller = new AbortController();
     setError(false);
-    setStatus(null);
     const timeout = window.setTimeout(() => { setError(true); controller.abort(); }, 15000);
     async function load() {
       try {
@@ -31,7 +33,10 @@ export default function SecurityCheck({ onNavigate }: { onNavigate: (target: Tar
         if (responses.some(response => !response.ok)) throw new Error("status");
         const [account, security] = await Promise.all(responses.map(response => response.json()));
         if (!account.user || !Array.isArray(security.keys) || typeof security.totpEnabled !== "boolean") throw new Error("status");
-        if (!controller.signal.aborted) setStatus({ email: account.user.emailVerified === true, totp: security.totpEnabled, passkeys: security.keys.length > 0 });
+        if (!controller.signal.aborted) {
+          loaded.current = true;
+          setStatus({ email: account.user.emailVerified === true, totp: security.totpEnabled, passkeys: security.keys.length > 0 });
+        }
       } catch { if (!controller.signal.aborted) setError(true); }
       finally { window.clearTimeout(timeout); }
     }
@@ -48,10 +53,10 @@ export default function SecurityCheck({ onNavigate }: { onNavigate: (target: Tar
     <div className="sc-row-group security-check-entry"><button type="button" className="sc-setting-row" onClick={() => setOpen(true)}><svg className="security-check-blue" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6zM12 7v6m0 3v.5" /></svg><span><strong>Fire 安全检查</strong><small className="security-check-blue">{summary}</small></span><span className="sc-chevron" aria-hidden="true">›</span></button></div>
     {open && <AppModal title="Fire 安全检查" size="lg" className="security-check-modal" onClose={() => setOpen(false)}>
       <svg className="security-check-illustration" width="100" height="100" viewBox="0 0 100 100" fill="none" aria-hidden="true"><defs><linearGradient id="fire-security-shield" x1="20" y1="10" x2="77" y2="82" gradientUnits="userSpaceOnUse"><stop stopColor="#9b9cff"/><stop offset=".38" stopColor="#0866ff"/><stop offset="1" stopColor="#00d5f4"/></linearGradient><linearGradient id="fire-security-fold" x1="32" y1="49" x2="60" y2="90" gradientUnits="userSpaceOnUse"><stop stopColor="#1340da"/><stop offset="1" stopColor="#002a98"/></linearGradient></defs><path d="M49 8c-14 0-27 5-35 10v27c0 23 13 37 35 47 22-10 35-24 35-47V18C76 13 63 8 49 8Z" fill="url(#fire-security-shield)"/><path d="M14 36c7 23 21 38 45 46l-10 10C27 82 14 68 14 45Z" fill="url(#fire-security-fold)"/><circle cx="76" cy="64" r="22" fill="white"/><circle cx="76" cy="64" r="17" stroke="#0866ff" strokeWidth="3.5"/><path d="M76 54v12" stroke="#0866ff" strokeWidth="4" strokeLinecap="round"/><circle cx="76" cy="73" r="2.2" fill="#0866ff"/></svg>
-      <h2 className="security-check-heading" aria-live="polite">{status ? pending.length ? `你有 ${pending.length} 项推荐操作` : "推荐操作已完成" : summary}</h2>
+      <h2 className="security-check-heading" aria-live="polite">{error ? summary : status ? pending.length ? `你有 ${pending.length} 项推荐操作` : "推荐操作已完成" : summary}</h2>
       {error && <div className="security-check-error"><p>无法读取安全设置，请重试。</p><button type="button" onClick={() => setAttempt(value => value + 1)}>重新检查</button></div>}
-      {pending.length > 0 && <div className="security-check-group">{pending.map(check => row(check, false))}</div>}
-      {completed.length > 0 && <div className="security-check-group">{completed.map(check => row(check, true))}</div>}
+      {!error && pending.length > 0 && <div className="security-check-group">{pending.map(check => row(check, false))}</div>}
+      {!error && completed.length > 0 && <div className="security-check-group">{completed.map(check => row(check, true))}</div>}
     </AppModal>}
   </>;
 }

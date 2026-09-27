@@ -835,6 +835,9 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(css.includes('.sv-center .sc-mobile-navigation { display:block;'));
     assert(security.includes('<svg className="security-check-illustration"'));
     assert(!security.includes('src="/icons/security-check.svg"'));
+    assert(security.includes('if (!open && loaded.current) return;'));
+    assert(!security.includes('setStatus(null)'));
+    assert(security.includes('!error && completed.length > 0'));
   });
   await test('high-risk admin mutations require step-up authentication', async () => {
     const auth = require(path.join(root, 'lib/auth.ts'));
