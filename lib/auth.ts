@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { getDb } from "./db";
 import { hashPassword, verifyPassword } from "./password";
 import type { User } from "./types";
+import { emailVerified } from "./emailVerification";
 
 export const SESSION_COOKIE = "fire_session";
 export const LEGACY_SESSION_COOKIE = "sto" + "cklog_session";
@@ -60,6 +61,7 @@ function toUser(
     nickname: row.nickname ?? "",
     uid: row.uid ?? "",
     email: row.email ?? "",
+    emailVerified: emailVerified(row.id, row.email ?? ""),
     avatar: row.avatar ?? "",
     role: row.role === "admin" ? "admin" : "user",
     isTest: row.is_test === 1
@@ -276,7 +278,10 @@ export function updateProfile(
     const conflict = db.prepare("SELECT id FROM users WHERE username = ? AND id != ?").get(username, userId);
     if (conflict) return null;
   }
-  db.prepare("UPDATE users SET username = ?, email = ?, nickname = ? WHERE id = ?").run(username, email, nickname, userId);
+  db.transaction(() => {
+    db.prepare("UPDATE users SET username = ?, email = ?, nickname = ? WHERE id = ?").run(username, email, nickname, userId);
+    if (email.toLowerCase() !== (row.email || "").toLowerCase()) invalidateEmailRecovery(userId);
+  }).immediate();
   const updated = findUserById(userId)!;
   return toUser(updated);
 }
@@ -335,7 +340,10 @@ export function updateUserById(
     const conflict = db.prepare("SELECT id FROM users WHERE username = ? AND id != ?").get(username, userId);
     if (conflict) return null;
   }
-  db.prepare("UPDATE users SET username = ?, email = ?, role = ? WHERE id = ?").run(username, email, role, userId);
+  db.transaction(() => {
+    db.prepare("UPDATE users SET username = ?, email = ?, role = ? WHERE id = ?").run(username, email, role, userId);
+    if (email.toLowerCase() !== (row.email || "").toLowerCase()) invalidateEmailRecovery(userId);
+  }).immediate();
   return toUser(findUserById(userId)!);
 }
 
@@ -352,4 +360,11 @@ export function deleteUserById(userId: string): boolean {
 
 export function resetUserPassword(userId: string, newPassword: string): boolean {
   return updatePassword(userId, newPassword);
+}
+
+function invalidateEmailRecovery(userId: string) {
+  const db = getDb();
+  for (const table of ["verified_emails", "email_verification_tokens", "password_reset_tokens", "password_reset_codes", "password_reset_totp"]) {
+    db.prepare(`DELETE FROM ${table} WHERE user_id=?`).run(userId);
+  }
 }

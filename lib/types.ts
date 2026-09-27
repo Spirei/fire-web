@@ -139,6 +139,7 @@ export interface User {
   nickname: string;
   uid: string;
   email: string;
+  emailVerified?: boolean;
   avatar: string;
   role: "user" | "admin";
   isTest?: boolean;

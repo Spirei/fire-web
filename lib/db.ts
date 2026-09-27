@@ -46,6 +46,38 @@ function migrate(database: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id);
     CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires ON password_reset_tokens(expires_at);
+    CREATE TABLE IF NOT EXISTS password_reset_codes (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      challenge_hash TEXT UNIQUE NOT NULL,
+      code_hash TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      email TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS verified_emails (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      verified_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS password_reset_totp (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      challenge_hash TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      factor_hash TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT UNIQUE NOT NULL,
+      email TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
 
     CREATE TABLE IF NOT EXISTS user_settings (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -474,6 +506,12 @@ function migrate(database: Database.Database) {
   }
 
   const sessionCols = (database.prepare("PRAGMA table_info(sessions)").all() as { name: string }[]).map(c => c.name);
+  const resetCols = database.prepare("PRAGMA table_info(password_reset_tokens)").all() as { name: string }[];
+  if (!resetCols.some(col => col.name === "password_hash")) database.exec("ALTER TABLE password_reset_tokens ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''");
+  if (!resetCols.some(col => col.name === "email")) database.exec("ALTER TABLE password_reset_tokens ADD COLUMN email TEXT NOT NULL DEFAULT ''");
+  if (!resetCols.some(col => col.name === "attempts")) database.exec("ALTER TABLE password_reset_tokens ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0");
+  if (!resetCols.some(col => col.name === "method")) database.exec("ALTER TABLE password_reset_tokens ADD COLUMN method TEXT NOT NULL DEFAULT 'email'");
+  if (!resetCols.some(col => col.name === "factor_hash")) database.exec("ALTER TABLE password_reset_tokens ADD COLUMN factor_hash TEXT NOT NULL DEFAULT ''");
   if (!sessionCols.includes("auth_method")) database.exec("ALTER TABLE sessions ADD COLUMN auth_method TEXT NOT NULL DEFAULT 'legacy'");
   if (!sessionCols.includes("passkey_id")) database.exec("ALTER TABLE sessions ADD COLUMN passkey_id TEXT");
   database.exec("CREATE INDEX IF NOT EXISTS idx_sessions_passkey ON sessions(passkey_id)");

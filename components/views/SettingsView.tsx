@@ -3,6 +3,7 @@ import PasskeySettings from "@/components/PasskeySettings";
 import SecurityCheck from "@/components/SecurityCheck";
 import SettingsManagedGroup, { SettingsManagedPane } from "@/components/SettingsManagedGroup";
 import AppModal from "@/components/AppModal";
+import EmailRecoveryForm from "@/components/EmailRecoveryForm";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -45,7 +46,7 @@ const DEFAULT_TICKER: TickerConfig = {
 };
 
 interface Props {
-  user: { username: string; nickname?: string; uid?: string; email?: string; avatar?: string; role?: string };
+  user: { username: string; nickname?: string; uid?: string; email?: string; emailVerified?: boolean; avatar?: string; role?: string };
   recordsCount: number;
   onExport: () => void;
   onClearAll: (password: string) => Promise<boolean>;
@@ -771,7 +772,24 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const avatarRef = useRef<HTMLInputElement>(null);
   const nickInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
-  const [me, setMe] = useState({ username: user.username, nickname: user.nickname ?? "", uid: user.uid ?? "", email: user.email ?? "", avatar: user.avatar ?? "" });
+  const [me, setMe] = useState({ username: user.username, nickname: user.nickname ?? "", uid: user.uid ?? "", email: user.email ?? "", emailVerified: user.emailVerified === true, avatar: user.avatar ?? "" });
+  const [emailVerifyBusy,setEmailVerifyBusy]=useState(false);
+  const [emailVerifyMessage,setEmailVerifyMessage]=useState("");
+  useEffect(()=>{
+    let active=true;
+    const refresh=async()=>{
+      try { const response=await fetch("/api/auth/me",{cache:"no-store"});const data=await response.json();if(active&&response.ok&&data.user)setMe(previous=>({...previous,emailVerified:data.user.emailVerified===true&&data.user.email===previous.email})); } catch {}
+    };
+    void refresh();window.addEventListener("focus",refresh);window.addEventListener("fire:user-updated",refresh);
+    return()=>{active=false;window.removeEventListener("focus",refresh);window.removeEventListener("fire:user-updated",refresh);};
+  },[]);
+  async function sendEmailConfirmation() {
+    if(emailVerifyBusy) return;
+    setEmailVerifyBusy(true);setEmailVerifyMessage("");
+    try {const response=await fetch("/api/auth/email-verification/request",{method:"POST"});const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.error||"发送失败");setEmailVerifyMessage(data?.verified?"邮箱已验证":"确认链接已发送，请在邮箱中点击验证。");if(data?.verified)setMe(previous=>({...previous,emailVerified:true}));showToast(data?.verified?"邮箱已验证":"确认邮件已发送");}
+    catch(error){const text=error instanceof Error?error.message:"发送失败";setEmailVerifyMessage(text);showToast(text,"err");}
+    finally{setEmailVerifyBusy(false);}
+  }
   const [nickname, setNickname] = useState(user.nickname ?? "");
   const [email, setEmail] = useState(user.email ?? "");
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -1116,7 +1134,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       if (!res.ok) throw new Error(data?.error || "上传失败");
       const meRes = await fetch("/api/auth/me");
       const meData = await meRes.json();
-      setMe({ username: meData.user.username, nickname: meData.user.nickname ?? "", uid: meData.user.uid ?? "", email: meData.user.email ?? "", avatar: meData.user.avatar });
+      setMe({ username: meData.user.username, nickname: meData.user.nickname ?? "", uid: meData.user.uid ?? "", email: meData.user.email ?? "", emailVerified: meData.user.emailVerified === true, avatar: meData.user.avatar });
       setNickname(meData.user.nickname ?? "");
       setEmail(meData.user.email ?? "");
       window.dispatchEvent(new Event("fire:user-updated"));
@@ -1141,7 +1159,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "保存失败");
-      setMe((m) => ({ ...m, nickname: data.user.nickname, email: data.user.email }));
+      const changedEmail=data.user.email.toLowerCase()!==me.email.toLowerCase();
+      setMe((m) => ({ ...m, nickname: data.user.nickname, email: data.user.email, emailVerified: data.user.emailVerified===true }));
       setNickname(data.user.nickname);
       setEmail(data.user.email);
       setProfilePassword("");
@@ -1149,6 +1168,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setNickMsg({ type: "ok", text: "个人资料已更新" });
       showToast("个人资料已更新");
       setEditingProfile(false);
+      if(changedEmail && data.user.email && !data.user.emailVerified) void sendEmailConfirmation();
     } catch (err) {
       const message = err instanceof Error ? err.message : "个人资料保存失败";
       setNickMsg({ type: "err", text: message });
@@ -1738,7 +1758,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }
   const [passwordRecoveryOpen, setPasswordRecoveryOpen] = useState(false);
   const [passwordRecoveryBusy, setPasswordRecoveryBusy] = useState(false);
-  const [passwordRecoveryError, setPasswordRecoveryError] = useState("");
   const [profilePassword, setProfilePassword] = useState("");
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [totpStatusLoaded, setTotpStatusLoaded] = useState(false);
@@ -1911,41 +1930,18 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }
 
   function openPasswordRecovery() {
-    setPasswordRecoveryError("");
-    if (!me.email.trim()) {
+    if (!totpEnabled && (!me.email.trim() || !me.emailVerified)) {
       setPasswordRecoveryOpen(false);
-      setNickMsg({ type: "err", text: "请先绑定邮箱，保存后再使用密码找回。" });
+      setNickMsg({ type: "err", text: me.email ? "请先点击确认邮件中的链接，验证邮箱。" : "请先绑定邮箱，保存后验证邮箱。" });
       jumpTo({ sub: "profile", anchor: "profile", label: "个人信息" });
-      setEditingProfile(true);
+      setEditingProfile(!me.email);
       setTimeout(() => emailInputRef.current?.focus(), 80);
-      showToast("请先绑定邮箱");
+      showToast(me.email ? "请先验证邮箱" : "请先绑定邮箱");
       return;
     }
     setPasswordRecoveryOpen(true);
   }
 
-  async function requestPasswordReset() {
-    setPasswordRecoveryBusy(true);
-    setPasswordRecoveryError("");
-    try {
-      const res = await fetch("/api/auth/password-reset/request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login: me.email })
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "申请失败");
-      setPasswordRecoveryOpen(false);
-      setPwdMsg({ type: "ok", text: `重置邮件已发送至 ${me.email}，链接 15 分钟内有效。` });
-      showToast("重置邮件已发送");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "重置邮件发送失败";
-      setPasswordRecoveryError(message);
-      showToast(message, "err");
-    } finally {
-      setPasswordRecoveryBusy(false);
-    }
-  }
 
   const [clearing, setClearing] = useState(false);
   async function clearAll() {
@@ -3451,7 +3447,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         </div>
                       </div>
                       <div className="sw-row">
-                        <div className="sw-row-label"><b>登录邮箱<span className="ml-0.5" style={{ display: "inline" }}>*</span></b><span>用于账号识别与通知</span></div>
+                        <div className="sw-row-label"><b>登录邮箱<span className="ml-0.5" style={{ display: "inline" }}>*</span></b><span>{me.emailVerified?"已验证，可用于找回密码":"验证后可用于找回密码"}</span></div>
                         <div className="ctrl" style={{ flex: 1 }}>
                           {editingProfile ? (
                             <input ref={emailInputRef} type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="sw-row-input" />
@@ -3460,6 +3456,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           )}
                         </div>
                       </div>
+                      {!editingProfile && me.email && !me.emailVerified && <div className="sw-row"><div className="sw-row-label"><b>验证邮箱</b><span>点击确认邮件中的链接</span></div><button type="button" disabled={emailVerifyBusy} onClick={()=>void sendEmailConfirmation()} className="btn btn-line btn-sm">{emailVerifyBusy?"发送中…":"发送确认邮件"}</button></div>}
+                      {emailVerifyMessage && <p role="status" className="settings-form-message">{emailVerifyMessage}</p>}
                       {editingProfile && email.trim().toLowerCase() !== (me.email ?? "").trim().toLowerCase() && (
                         <div className="sw-row">
                           <div className="sw-row-label"><b>安全验证</b><span>修改登录邮箱需要当前密码</span></div>
@@ -3902,11 +3900,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       </div>
       {versionOpen && <VersionModal onClose={() => setVersionOpen(false)} />}
       {passwordRecoveryOpen && <AppModal title="找回密码" desc="通过已绑定邮箱设置新密码" onClose={() => { if (!passwordRecoveryBusy) setPasswordRecoveryOpen(false); }} closeDisabled={passwordRecoveryBusy}>
-        <div className="flex flex-col gap-4">
-          <div className="rounded-[12px] bg-bg-gray px-4 py-3 text-[13px] leading-5 text-muted">重置链接将发送至 <b className="text-ink">{me.email}</b>，15 分钟内有效且只能使用一次。</div>
-          <button type="button" disabled={passwordRecoveryBusy} onClick={() => void requestPasswordReset()} className="btn btn-line h-[46px] w-full disabled:opacity-60">{passwordRecoveryBusy ? "发送中…" : "发送重置邮件"}</button>
-          {passwordRecoveryError && <p role="alert" className="rounded-[10px] bg-up-bg px-3.5 py-2.5 text-[13px] text-up">{passwordRecoveryError}</p>}
-        </div>
+        <EmailRecoveryForm initialLogin={me.username} fixedLogin hideTitle emailAvailable={me.emailVerified} totpAvailable={totpEnabled} onBusy={setPasswordRecoveryBusy} />
       </AppModal>}
     </div>
   );

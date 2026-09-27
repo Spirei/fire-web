@@ -7,7 +7,7 @@ type Target = "profile" | "totp" | "passkeys";
 type Status = { email: boolean; totp: boolean; passkeys: boolean };
 const checks: { key: keyof Status; target: Target; title: string; action: string; desc: string; done: string }[] = [
   { key: "passkeys", target: "passkeys", title: "通行密钥", action: "创建通行密钥", desc: "通过指纹或面容安全登录，无需输入密码。", done: "已添加通行密钥" },
-  { key: "email", target: "profile", title: "联系信息", action: "绑定邮箱", desc: "添加邮箱，方便找回密码。", done: "已绑定邮箱" },
+  { key: "email", target: "profile", title: "联系信息", action: "验证邮箱", desc: "绑定并验证邮箱，方便找回密码。", done: "邮箱已验证" },
   { key: "totp", target: "totp", title: "双重验证", action: "开启双重验证", desc: "为密码登录增加一层保护。", done: "已开启双重验证" }
 ];
 
@@ -31,7 +31,7 @@ export default function SecurityCheck({ onNavigate }: { onNavigate: (target: Tar
         if (responses.some(response => !response.ok)) throw new Error("status");
         const [account, security] = await Promise.all(responses.map(response => response.json()));
         if (!account.user || !Array.isArray(security.keys) || typeof security.totpEnabled !== "boolean") throw new Error("status");
-        if (!controller.signal.aborted) setStatus({ email: Boolean(account.user.email?.trim()), totp: security.totpEnabled, passkeys: security.keys.length > 0 });
+        if (!controller.signal.aborted) setStatus({ email: account.user.emailVerified === true, totp: security.totpEnabled, passkeys: security.keys.length > 0 });
       } catch { if (!controller.signal.aborted) setError(true); }
       finally { window.clearTimeout(timeout); }
     }

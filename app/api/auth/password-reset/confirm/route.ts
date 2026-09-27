@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     updatePassword(id, newPassword);
     deleteOtherSessions(id, null);
   });
-  if (!userId) return NextResponse.json({ error: "链接无效或已过期，请重新申请" }, { status: 400 });
-  logSecurityEvent(request, userId, "password_reset", "email token verified; all sessions revoked");
+  if (!userId) return NextResponse.json({ error: "验证已过期，请重新验证身份" }, { status: 400 });
+  logSecurityEvent(request, userId, "password_reset", "recovery identity verified; all sessions revoked");
   return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }

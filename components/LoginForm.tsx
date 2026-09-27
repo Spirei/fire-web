@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PasskeyLoginButton from "@/components/PasskeyLoginButton";
+import EmailRecoveryForm from "@/components/EmailRecoveryForm";
 import { isCompleteBackupCode, isSixDigitTotp, normalizeBackupInput, normalizeTotpDigits } from "@/lib/totpInput";
 
 type Mode = "login" | "register";
@@ -25,7 +26,6 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [recovering, setRecovering] = useState(false);
-  const [recoverySent, setRecoverySent] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store", credentials: "same-origin" })
@@ -46,12 +46,10 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
   }, [router]);
 
   const formValid = useMemo(
-    () => recovering
-      ? username.trim().length > 0 && !recoverySent
-      : totpTicket
+    () => totpTicket
       ? (useBackupCode ? isCompleteBackupCode(totpCode) : isSixDigitTotp(totpCode))
       : username.trim().length > 0 && password.length > 0 && (mode === "login" || confirm.length > 0),
-    [username, password, mode, confirm, totpTicket, totpCode, useBackupCode, recovering, recoverySent]
+    [username, password, mode, confirm, totpTicket, totpCode, useBackupCode]
   );
 
   async function completeTotp(code: string) {
@@ -99,24 +97,6 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (recovering) {
-      setLoading(true);
-      try {
-        const res = await fetch("/api/auth/password-reset/request", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ login: username.trim() })
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(data?.error || "发送失败");
-        setRecoverySent(true);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "发送失败");
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
     if (mode === "register" && password !== confirm) {
       setError("两次输入的密码不一致");
       return;
@@ -155,16 +135,18 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
   const inputCls =
     "w-full h-[46px] rounded-[10px] border border-edge-strong bg-white px-3.5 text-[14px] text-ink outline-none transition-shadow placeholder:text-faint focus:border-[#1FBE9E] focus:shadow-[0_0_0_3px_rgba(31,190,158,.18)] dark:bg-[#161b26] dark:text-white";
 
+  if (recovering) return <div className="w-full px-6 py-7 sm:px-9"><EmailRecoveryForm initialLogin={username} onBack={() => { setRecovering(false); setError(""); }} /></div>;
+
   return (
     <div className="flex w-full flex-col px-6 py-7 sm:px-9">
       {/* 标题行：登录 + 关闭 */}
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-[26px] font-extrabold tracking-[-0.3px] text-ink">
-            {recovering ? "找回密码" : totpTicket ? "二次验证" : mode === "login" ? "登录" : "注册账号"}
+            {totpTicket ? "二次验证" : mode === "login" ? "登录" : "注册账号"}
           </h1>
           <p className="mt-1 text-[13px] text-muted">
-            {recovering ? "输入用户名或邮箱，我们会发送一次性重置链接" : totpTicket ? (useBackupCode ? "请输入一次性备用码" : "请输入验证器中的 6 位数字") : mode === "login" ? "欢迎回来，继续你的投资记录" : "创建账号，数据独立保存在服务端"}
+            {totpTicket ? (useBackupCode ? "请输入一次性备用码" : "请输入验证器中的 6 位数字") : mode === "login" ? "欢迎回来，继续你的投资记录" : "创建账号，数据独立保存在服务端"}
           </p>
         </div>
         <button
@@ -197,19 +179,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
 
       {mode === "login" && !totpTicket && !recovering && <PasskeyLoginButton disabled={loading} onBusy={setLoading} onError={setError} onSuccess={() => { onClose?.(); router.push("/records"); router.refresh(); }} />}
       <form onSubmit={submit} className="mt-7 flex flex-col gap-4">
-        {recovering ? (
-          <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-            用户名或邮箱
-            <input
-              autoFocus
-              value={username}
-              onChange={(event) => { setUsername(event.target.value); setRecoverySent(false); }}
-              placeholder="请输入用户名或邮箱"
-              required
-              className={inputCls}
-            />
-          </label>
-        ) : totpTicket ? (
+        {totpTicket ? (
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
             {useBackupCode ? "备用码" : "验证码"}
             <input
@@ -312,12 +282,9 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
           disabled={loading || !formValid}
           className="mt-1 h-[46px] rounded-[10px] bg-[#1FBE9E] text-[15px] font-bold text-white transition-all duration-200 hover:bg-[#17A887] active:scale-[.98] disabled:cursor-not-allowed disabled:bg-bg-gray disabled:text-faint dark:disabled:bg-[#263040] dark:disabled:text-[#aab4c2]"
         >
-          {loading ? "请稍候…" : recovering ? (recoverySent ? "邮件已发送" : "发送重置邮件") : totpTicket ? "验证并登录" : mode === "login" ? "登录" : "注册并登录"}
+          {loading ? "请稍候…" : totpTicket ? "验证并登录" : mode === "login" ? "登录" : "注册并登录"}
         </button>
 
-        {recoverySent && <p role="status" className="rounded-[10px] bg-brand-light px-3.5 py-2.5 text-[13px] leading-5 text-brand-deep">如果账号存在且已绑定邮箱，重置邮件会在几分钟内送达。请检查收件箱与垃圾邮件。</p>}
-
-        {recovering && !recoverySent && <p className="text-[12px] leading-5 text-muted">没有绑定邮箱？请在仍登录的设备中进入“设置 → 个人信息”先绑定邮箱。</p>}
 
         {totpTicket && (
           <p className="mt-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-[13px] text-muted">
@@ -333,12 +300,9 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
         )}
 
         {mode === "login" && !totpTicket && !recovering && (
-          <button type="button" onClick={() => { setRecovering(true); setRecoverySent(false); setError(""); }} className="text-center text-[13px] font-semibold text-ink underline-offset-4 hover:underline">忘记密码？</button>
+          <button type="button" onClick={() => { setRecovering(true); setPassword(""); setConfirm(""); setError(""); }} className="text-center text-[13px] font-semibold text-ink underline-offset-4 hover:underline">忘记密码？</button>
         )}
 
-        {recovering && (
-          <button type="button" onClick={() => { setRecovering(false); setRecoverySent(false); setError(""); }} className="text-center text-[13px] font-semibold text-ink underline-offset-4 hover:underline">返回登录</button>
-        )}
 
         {allowRegister && !totpTicket && !recovering && (
           <p className="mt-1 text-center text-[13px] text-muted">
