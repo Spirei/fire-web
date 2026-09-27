@@ -43,11 +43,11 @@
   .sv-center .sw-side-foot { padding-block:10px; }
   .sv-center .sc-category-section { margin-bottom:20px; }
   .sc-detail-layer { padding:16px; }
-  .sc-detail-dialog { max-height:min(78dvh,calc(100dvh - 32px)); }
+  .sc-detail-dialog { max-height:min(48dvh,calc(100dvh - 32px)); }
   .sc-detail-dialog-head { min-height:64px; padding-block:16px 12px; }
 }
 
 /* Tablet dialogs keep generous surrounding space in both orientations. */
 @media (min-width: 768px) and (max-width: 1279px) {
-  .sc-detail-dialog { max-width:560px; max-height:min(78dvh,720px); }
+  .sc-detail-dialog { max-width:560px; max-height:48dvh; }
 }
