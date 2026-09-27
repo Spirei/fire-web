@@ -619,13 +619,88 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(JSON.parse(db.prepare('SELECT totp_backup_codes FROM users WHERE id=?').get(standalone.id).totp_backup_codes).length,1);
     assert.equal(reset.issuePasswordRecoveryTotp(other.id),null,'unconfigured account cannot use TOTP recovery');
   });
+  await test('SMTP sliding budgets cap recipient, purpose and site volume without plaintext addresses', () => {
+    const { reserveMailAttempt, MailBudgetError } = require(path.join(root,'lib/mailBudget.ts'));
+    const clock=Date.now;let now=clock();Date.now=()=>now;
+    const clear=()=>db.prepare('DELETE FROM mail_send_attempts').run();
+    try {
+      clear();
+      reserveMailAttempt('Victim@example.test','reset');
+      assert.throws(()=>reserveMailAttempt(' victim@EXAMPLE.test ','verification'),MailBudgetError);
+      now+=60_000;reserveMailAttempt('victim@example.test','reset');
+      now+=60_000;reserveMailAttempt('victim@example.test','reset');
+      now+=60_000;assert.throws(()=>reserveMailAttempt('victim@example.test','reset'),MailBudgetError);
+      const rows=db.prepare('SELECT * FROM mail_send_attempts').all();
+      assert.equal(rows.length,3);assert(rows.every(row=>/^[a-f0-9]{64}$/.test(row.recipient_hash)));
+      now+=60*60_000;reserveMailAttempt('victim@example.test','reset');
+      clear();
+      for(let i=0;i<10;i++){reserveMailAttempt('daily@example.test','reset');now+=61*60_000;}
+      assert.throws(()=>reserveMailAttempt('daily@example.test','reset'),MailBudgetError);
+      now+=24*60*60_000;reserveMailAttempt('daily@example.test','reset');
+      clear();
+      for(let i=0;i<5;i++){reserveMailAttempt('verify@example.test','verification');now+=60_000;}
+      assert.throws(()=>reserveMailAttempt('verify@example.test','verification'),MailBudgetError);
+      clear();
+      for(let i=0;i<100;i++)reserveMailAttempt(`global${i}@example.test`,'reset');
+      assert.throws(()=>reserveMailAttempt('new@example.test','verification'),MailBudgetError);
+      clear();
+      for(let batch=0;batch<5;batch++){for(let i=0;i<100;i++)reserveMailAttempt(`daily${batch}-${i}@example.test`,'reset');now+=61*60_000;}
+      assert.throws(()=>reserveMailAttempt('overday@example.test','test'),MailBudgetError);
+      clear();
+      for(const invalid of ['a@example.test,b@example.test','Name <a@example.test>','a@example.test\r\nBcc: b@example.test','a(comment)@example.test','Group:a@example.test','"a"@example.test'])assert.throws(()=>reserveMailAttempt(invalid,'reset'),/格式/);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM mail_send_attempts').get().count,0);
+    } finally { Date.now=clock;clear(); }
+  });
+  await test('SMTP failure consumes quota and all mail entry points stop before transport on cooldown', async () => {
+    const nodemailer=require('nodemailer'),mailer=nodemailer.default||nodemailer;
+    const original=mailer.createTransport, env={host:process.env.SMTP_HOST,from:process.env.SMTP_FROM_EMAIL};let transports=0;
+    process.env.SMTP_HOST='smtp.example.test';process.env.SMTP_FROM_EMAIL='fire@example.test';
+    mailer.createTransport=()=>{transports++;return {sendMail:async()=>{throw new Error('mock SMTP secret failure');}};};
+    try {
+      const mail=require(path.join(root,'lib/mail.ts'));
+      await assert.rejects(mail.sendPasswordResetEmail({to:'failed@example.test',name:'Test',code:'123456',minutes:5}));
+      await assert.rejects(mail.sendPasswordResetEmail({to:'failed@example.test',name:'Test',code:'123456',minutes:5}),/频繁/);
+      await assert.rejects(mail.sendEmailVerification('FAILED@example.test','https://fire.example.test/verify-email'),/频繁/);
+      await assert.rejects(mail.sendTestEmail('failed@example.test'),/频繁/);
+      assert.equal(transports,1,'budget must block before SMTP creation');
+    } finally {
+      mailer.createTransport=original;db.prepare('DELETE FROM mail_send_attempts').run();
+      if(env.host===undefined)delete process.env.SMTP_HOST;else process.env.SMTP_HOST=env.host;
+      if(env.from===undefined)delete process.env.SMTP_FROM_EMAIL;else process.env.SMTP_FROM_EMAIL=env.from;
+    }
+  });
+  await test('SMTP quota denial preserves existing recovery and email confirmation credentials', () => {
+    const reset=require(path.join(root,'lib/passwordReset.ts'));
+    const verification=require(path.join(root,'lib/emailVerification.ts'));
+    const {reserveMailAttempt,consumeMailPermit}=require(path.join(root,'lib/mailBudget.ts'));
+    const account=createUser('review_mail_budget_rollback','Recovery-old-123',false,'rollback@example.test');
+    db.prepare('INSERT INTO verified_emails (user_id,email,verified_at) VALUES (?,?,?)').run(account.id,'rollback@example.test',Date.now());
+    const code=reset.issuePasswordResetCode(account.id);
+    db.prepare('UPDATE password_reset_codes SET created_at=created_at-61000 WHERE user_id=?').run(account.id);
+    const permit=reserveMailAttempt('rollback@example.test','reset');
+    assert.throws(()=>reset.issuePasswordResetCode(account.id,email=>reserveMailAttempt(email,'reset')));
+    assert(reset.verifyPasswordResetCode(code.challenge,code.code),'blocked sends must preserve old code');
+    consumeMailPermit('rollback@example.test','reset',permit);
+    assert.throws(()=>consumeMailPermit('rollback@example.test','reset',permit),'send permit can be consumed only once');
+    assert.throws(()=>consumeMailPermit('rollback@example.test','reset',{recipient:'rollback@example.test',purpose:'reset'}),'forged permit denied');
+    const link=verification.issueEmailVerification(account.id);
+    db.prepare('UPDATE email_verification_tokens SET created_at=created_at-61000 WHERE user_id=?').run(account.id);
+    assert.throws(()=>verification.issueEmailVerification(account.id,email=>reserveMailAttempt(email,'verification')));
+    assert(verification.confirmEmailVerification(link.token),'blocked sends must preserve old confirmation link');
+    db.prepare('DELETE FROM mail_send_attempts').run();
+  });
   await test('email code template and request flow never send reset links or save plaintext codes', async () => {
     const nodemailer = require('nodemailer');
     const mailer = nodemailer.default || nodemailer;
     const original = mailer.createTransport;
     const env = {host:process.env.SMTP_HOST,from:process.env.SMTP_FROM_EMAIL};
     const sent = [];
-    mailer.createTransport = () => ({sendMail: async message => { sent.push(message); }});
+    mailer.createTransport = options => {
+      assert.equal(options.requireTLS,!options.secure);
+      assert.equal(options.tls.rejectUnauthorized,true);assert.equal(options.tls.minVersion,'TLSv1.2');
+      assert.equal(options.disableFileAccess,true);assert.equal(options.disableUrlAccess,true);
+      return {sendMail: async message => { sent.push(message); }};
+    };
     process.env.SMTP_HOST = 'smtp.example.test'; process.env.SMTP_FROM_EMAIL = 'fire@example.test';
     try {
       const mail = require(path.join(root, 'lib/mail.ts'));

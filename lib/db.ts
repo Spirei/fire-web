@@ -167,6 +167,14 @@ function migrate(database: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_assistant_actions_created ON assistant_actions(created_at);
 
+    CREATE TABLE IF NOT EXISTS mail_send_attempts (
+      id INTEGER PRIMARY KEY,
+      recipient_hash TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS mail_send_attempts_time ON mail_send_attempts(created_at);
+    CREATE INDEX IF NOT EXISTS mail_send_attempts_recipient ON mail_send_attempts(recipient_hash,created_at);
     CREATE TABLE IF NOT EXISTS rate_limit (
       key TEXT PRIMARY KEY,
       count INTEGER NOT NULL DEFAULT 0,

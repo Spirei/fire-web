@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { getSiteSettings } from "./settings";
+import { consumeMailPermit, type MailPermit } from "./mailBudget";
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] || char);
@@ -41,18 +42,27 @@ export function mailConfigured() {
   return Boolean(config.host && config.fromEmail);
 }
 
-export async function sendPasswordResetEmail(input: { to: string; name: string; code: string; minutes: number }) {
-  const config = getMailConfig();
-  if (!config.host || !config.fromEmail) throw new Error("邮件服务未配置");
-  const transport = nodemailer.createTransport({
+function createMailTransport(config: ReturnType<typeof getMailConfig>) {
+  return nodemailer.createTransport({
     host: config.host,
     port: config.port,
     secure: config.secure,
+    requireTLS: !config.secure,
+    tls: { minVersion: "TLSv1.2", rejectUnauthorized: true },
     auth: config.user ? { user: config.user, pass: config.password } : undefined,
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,
-    socketTimeout: 15_000
+    socketTimeout: 15_000,
+    disableFileAccess: true,
+    disableUrlAccess: true
   });
+}
+
+export async function sendPasswordResetEmail(input: { to: string; name: string; code: string; minutes: number }, permit?: MailPermit) {
+  const config = getMailConfig();
+  if (!config.host || !config.fromEmail) throw new Error("邮件服务未配置");
+  consumeMailPermit(input.to, "reset", permit);
+  const transport = createMailTransport(config);
   const siteName = config.fromName || "Fire";
   const safeName = escapeHtml(input.name || "你好");
   const safeCode = escapeHtml(input.code);
@@ -68,15 +78,8 @@ export async function sendPasswordResetEmail(input: { to: string; name: string; 
 export async function sendTestEmail(to: string, input?: MailConfigInput) {
   const config = resolveMailConfig(input);
   if (!config.host || !config.fromEmail) throw new Error("邮件服务未配置完整");
-  const transport = nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    auth: config.user ? { user: config.user, pass: config.password } : undefined,
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 15_000
-  });
+  consumeMailPermit(to, "test");
+  const transport = createMailTransport(config);
   await transport.sendMail({
     from: { name: config.fromName || "Fire", address: config.fromEmail },
     to,
@@ -86,9 +89,10 @@ export async function sendTestEmail(to: string, input?: MailConfigInput) {
   });
 }
 
-export async function sendEmailVerification(to: string, url: string) {
+export async function sendEmailVerification(to: string, url: string, permit?: MailPermit) {
   const config=getMailConfig();
   if(!config.host || !config.fromEmail) throw new Error("邮件服务未配置");
-  const transport=nodemailer.createTransport({host:config.host,port:config.port,secure:config.secure,auth:config.user?{user:config.user,pass:config.password}:undefined,connectionTimeout:10_000,greetingTimeout:10_000,socketTimeout:15_000});
+  consumeMailPermit(to, "verification", permit);
+  const transport=createMailTransport(config);
   await transport.sendMail({from:{name:config.fromName||"Fire",address:config.fromEmail},to,subject:`确认你的 ${config.fromName||"Fire"} 邮箱`,text:`请打开以下链接确认邮箱：\n\n${url}\n\n30 分钟内有效。如果不是你发起的，请忽略此邮件。`,html:`<div style="max-width:480px;margin:24px auto;padding:28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c1e21;border:1px solid #dedfe3;border-radius:16px"><h2>确认邮箱</h2><p>点击下方按钮，确认此邮箱属于你。</p><p><a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;border-radius:24px;background:#0866ff;color:#fff;text-decoration:none;font-weight:600">确认邮箱</a></p><p style="color:#65676b;font-size:13px">30 分钟内有效。如果不是你发起的，请忽略此邮件。</p></div>`});
 }

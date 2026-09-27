@@ -17,7 +17,7 @@ export function verificationOrigin(request: Request) {
   }
   return process.env.NODE_ENV !== "production" ? new URL(request.url).origin : "";
 }
-export function issueEmailVerification(userId: string) {
+export function issueEmailVerification(userId: string, beforeIssue?: (email: string) => void) {
   const db=getDb();
   return db.transaction(()=>{
     const user=db.prepare("SELECT email,password_hash FROM users WHERE id=?").get(userId) as {email:string;password_hash:string}|undefined;
@@ -25,6 +25,7 @@ export function issueEmailVerification(userId: string) {
     const now=Date.now();
     const previous=db.prepare("SELECT created_at FROM email_verification_tokens WHERE user_id=?").get(userId) as {created_at:number}|undefined;
     if(previous && now-previous.created_at<60_000) return null;
+    beforeIssue?.(user.email);
     const token=randomBytes(32).toString("base64url");
     db.prepare("DELETE FROM email_verification_tokens WHERE expires_at<=? AND created_at<=?").run(now,now-60_000);
     db.prepare("INSERT OR REPLACE INTO email_verification_tokens (user_id,token_hash,email,password_hash,expires_at,created_at) VALUES (?,?,?,?,?,?)").run(userId,digest(token),user.email,user.password_hash,now+30*60_000,now);

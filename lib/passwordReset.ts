@@ -62,7 +62,7 @@ export function retainedResetChallenge(userId: string, supplied: unknown) {
 }
 
 /** 每账号持久冷却；只保存 challenge 和 code 的组合摘要，不保存验证码明文。 */
-export function issuePasswordResetCode(userId: string) {
+export function issuePasswordResetCode(userId: string, beforeIssue?: (email: string) => void) {
   const db = getDb();
   return db.transaction(() => {
     const now = Date.now();
@@ -70,6 +70,7 @@ export function issuePasswordResetCode(userId: string) {
     if (previous && now - previous.created_at < PASSWORD_RESET_COOLDOWN_SECONDS * 1000) return null;
     const user = db.prepare("SELECT password_hash, email FROM users WHERE id = ?").get(userId) as { password_hash: string; email: string } | undefined;
     if (!user?.email || !emailVerified(userId,user.email)) return null;
+    beforeIssue?.(user.email); // Quota denial rolls back without replacing an existing valid code/grant.
     const challenge = newResetChallenge();
     const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
     db.prepare("DELETE FROM password_reset_tokens WHERE user_id = ? OR expires_at <= ?").run(userId, now);

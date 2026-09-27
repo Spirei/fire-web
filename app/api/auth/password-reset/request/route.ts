@@ -5,6 +5,7 @@ import { issuePasswordResetCode, issuePasswordRecoveryTotp, retainedTotpChalleng
 import { emailVerified } from "@/lib/emailVerification";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { readJsonBody } from "@/lib/requestBody";
+import { MailBudgetError, reserveMailAttempt, type MailPermit } from "@/lib/mailBudget";
 
 const GENERIC_MESSAGE = "如果账号已绑定邮箱，验证码会发送至该邮箱。请检查收件箱与垃圾邮件。";
 export async function POST(request: Request) {
@@ -27,22 +28,32 @@ export async function POST(request: Request) {
   // 未知账号返回相同格式的随机 challenge，不暴露账号或邮箱是否存在。
   let challenge = newResetChallenge();
   if (user?.email && emailVerified(user.id,user.email) && mailConfigured()) {
-    const issued = issuePasswordResetCode(user.id);
+    let permit: MailPermit | undefined;
+    let issued: ReturnType<typeof issuePasswordResetCode> = null;
+    try { issued = issuePasswordResetCode(user.id, email => { permit = reserveMailAttempt(email, "reset"); }); }
+    catch (error) {
+      if (selfRequest) return NextResponse.json({error:error instanceof MailBudgetError ? error.message : "邮件服务暂不可用，请稍后重试"},{status:error instanceof MailBudgetError ? 429 : 503});
+      // Public responses stay neutral even when a recipient or global SMTP budget is exhausted.
+    }
     if (issued) {
       challenge = issued.challenge;
       const deliver = async () => {
         try {
-          await sendPasswordResetEmail({ to: issued.email, name: user.nickname || user.username, code: issued.code, minutes: PASSWORD_RESET_MINUTES });
-          return true;
-        } catch {
+          await sendPasswordResetEmail({ to: issued.email, name: user.nickname || user.username, code: issued.code, minutes: PASSWORD_RESET_MINUTES }, permit);
+          return "sent";
+        } catch (error) {
           revokePasswordResetCode(issued.challenge);
+          if (error instanceof MailBudgetError) return "limited";
           console.error("password reset email delivery failed");
-          return false;
+          return "failed";
         }
       };
       // 公开请求不等待 SMTP，避免发送耗时透露账号是否存在；Next 保证响应后任务运行。
-      if (!selfRequest) after(deliver);
-      else if (!await deliver()) return NextResponse.json({ error: "发送失败，请检查邮件服务后重试" }, { status: 502 });
+      if (!selfRequest) after(async () => { await deliver(); });
+      else {
+        const result = await deliver();
+        if (result !== "sent") return NextResponse.json({ error: result === "limited" ? "发送过于频繁，请稍后再试" : "发送失败，请检查邮件服务后重试" }, { status: result === "limited" ? 429 : 502 });
+      }
     } else {
       challenge = retainedResetChallenge(user.id, body?.challenge) || challenge;
     }

@@ -8,8 +8,8 @@ const Database = require('better-sqlite3');
 const ts = require('typescript');
 
 // Production limiter with real SQLite, isolated from app data and seeding.
-function loadLimiter(db) {
-  const filename = path.resolve(__dirname, '../lib/rateLimit.ts');
+function loadLimiter(db, source = 'rateLimit') {
+  const filename = path.resolve(__dirname, `../lib/${source}.ts`);
   const m = new Module(filename, module);
   m.filename = filename; m.paths = Module._nodeModulePaths(path.dirname(filename));
   const original = m.require.bind(m);
@@ -26,7 +26,10 @@ if (!isMainThread) {
   const gate = new Int32Array(workerData.gate);
   parentPort.postMessage('ready'); Atomics.wait(gate, 0, 0);
   let admitted = 0;
-  for (let i=0; i<40; i++) if (rateLimit('concurrent', 25, 60000)) admitted++;
+  if (workerData.mail) {
+    const { reserveMailAttempt } = loadLimiter(db, 'mailBudget');
+    for (let i=0; i<40; i++) { try { reserveMailAttempt('concurrent@example.test','reset'); admitted++; } catch {} }
+  } else for (let i=0; i<40; i++) if (rateLimit('concurrent', 25, 60000)) admitted++;
   db.close(); parentPort.postMessage(admitted);
 } else {
   (async () => {
@@ -37,6 +40,7 @@ if (!isMainThread) {
     try {
       db.pragma('journal_mode = WAL');
       db.exec('CREATE TABLE rate_limit(key TEXT PRIMARY KEY, count INTEGER NOT NULL, reset_at INTEGER NOT NULL)');
+      db.exec('CREATE TABLE mail_send_attempts(id INTEGER PRIMARY KEY, recipient_hash TEXT NOT NULL, purpose TEXT NOT NULL, created_at INTEGER NOT NULL)');
       const { rateLimit, clientIp } = loadLimiter(db);
       process.env.RATE_LIMIT_STORE = 'sqlite';
       assert.equal(rateLimit('boundary', 2, 60000), true);
@@ -80,7 +84,24 @@ if (!isMainThread) {
       assert.equal(counts.reduce((a,b) => a+b, 0), 25);
       assert.equal(db.prepare('SELECT count FROM rate_limit WHERE key=?').get('concurrent').count, 25);
       console.log('PASS four concurrent workers admit exactly 25 of 160 attempts');
-      console.log('5 rate-limit suites passed');
+      const mailGate = new SharedArrayBuffer(4), mailReady = [], mailResults = [];
+      for (let i=0; i<4; i++) {
+        const worker = new Worker(__filename, {workerData:{file,gate:mailGate,mail:true}});
+        workers.push(worker);
+        mailReady.push(new Promise((resolve,reject)=>{worker.once('message',resolve);worker.once('error',reject);}));
+        mailResults.push(new Promise((resolve,reject)=>{worker.on('message',value=>{if(typeof value==='number')resolve(value);});worker.once('error',reject);}));
+      }
+      await Promise.all(mailReady); Atomics.store(new Int32Array(mailGate),0,1);Atomics.notify(new Int32Array(mailGate),0);
+      assert.equal((await Promise.all(mailResults)).reduce((a,b)=>a+b,0),1);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM mail_send_attempts').get().count,1);
+      console.log('PASS four concurrent workers admit exactly one SMTP attempt of 160 for a mailbox');
+      const {reserveMailAttempt}=loadLimiter(db,'mailBudget');
+      process.env.RATE_LIMIT_STORE='memory';
+      assert.throws(()=>reserveMailAttempt('CONCURRENT@EXAMPLE.TEST','verification'));
+      const broken=loadLimiter({transaction(){throw new Error('disk unavailable');}},'mailBudget');
+      assert.throws(()=>broken.reserveMailAttempt('safe@example.test','reset'),/暂不可用/);
+      console.log('PASS SMTP remains persistent in memory-limit mode and fails closed on storage failure');
+      console.log('7 rate-limit suites passed');
     } finally {
       await Promise.all(workers.map(worker => worker.terminate()));
       db.close(); fs.rmSync(temp, { recursive: true, force: true });
