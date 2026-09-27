@@ -11,3 +11,28 @@
   .app-shell-main .sv-win-root .sw-window { height:100%; min-height:0; }
   .app-shell-main .records-app:has(.assistant-page) .assistant-workspace { height:100%; }
 }
+
+/* Small desktops/tablet landscape need space for content, not two full sidebars. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .app-shell-main .records-app { gap:16px; padding-inline:16px; }
+  .app-shell-main .fire-sidebar { width:72px; }
+  .fire-sidebar-panel { padding:12px 8px; }
+  .fire-sidebar-panel > * { flex-shrink:0; }
+  .fire-sidebar-panel .four-door-anchor,
+  .fire-sidebar-panel .fire-sidebar-section-label { display:none; }
+  .fire-sidebar-item { justify-content:center; gap:0; padding-inline:0; min-height:44px; }
+  /* Keep the label in the accessibility tree; the title also provides a mouse tooltip. */
+  .fire-sidebar-item > .fire-sidebar-label { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+}
+
+/* Preserve the viewport budget at short heights instead of shrinking the whole UI. */
+@media (min-width: 1024px) and (max-width: 1279px), (min-width: 1024px) and (max-height: 800px) {
+  .app-shell-main { padding-block:16px; }
+  .app-shell-footer { display:none; }
+}
+
+@media (min-width: 1280px) and (max-height: 800px) {
+  /* Decorative navigation must not consume the small workspace's entire scroll area. */
+  .fire-sidebar-panel .four-door-anchor { display:none; }
+  .fire-sidebar-panel { padding-top:12px; }
+}

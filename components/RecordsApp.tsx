@@ -902,6 +902,7 @@ export default function RecordsApp({
                   onDrop={() => onTabDrop(t.key)}
                   onDragEnd={() => { tabDragKeyRef.current = null; }}
                   title={`${t.label}（可拖动排序）`}
+                  aria-label={t.label}
                   aria-current={activeTab === t.key ? "page" : undefined}
                   className={`fire-sidebar-item flex h-[42px] w-full cursor-grab items-center gap-3 rounded-[10px] px-3 text-[15px] font-medium active:cursor-grabbing ${
                     activeTab === t.key
@@ -910,7 +911,7 @@ export default function RecordsApp({
                   }`}
                 >
                   {t.icon}
-                  <span className="truncate">{t.label}</span>
+                  <span className="fire-sidebar-label truncate">{t.label}</span>
                 </button>
               </div>
             );

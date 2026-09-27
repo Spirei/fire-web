@@ -43,6 +43,25 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('π 3.1415926</span>'));
     assert(fs.readFileSync(path.join(root,'components/SettingsHeader.tsx'),'utf8').includes('typography: (<><path'));
   });
+  await test('compact workspace adapts sidebars and height without changing phone layout', () => {
+    const desktop = fs.readFileSync(path.join(root,'styles/desktop.css'),'utf8');
+    const tablet = fs.readFileSync(path.join(root,'styles/tablet.css'),'utf8');
+    const shell = fs.readFileSync(path.join(root,'components/RecordsApp.tsx'),'utf8');
+    assert(desktop.includes('@media (min-width: 1024px) and (max-width: 1279px)'));
+    assert(desktop.includes('.app-shell-main .fire-sidebar { width:72px; }'));
+    assert(desktop.includes('.fire-sidebar-item > .fire-sidebar-label'));
+    assert(!desktop.includes('.fire-sidebar-item > span {'), 'custom image wrapper must not be hidden with the text');
+    assert(shell.includes('aria-label={t.label}') && shell.includes('className="fire-sidebar-label truncate"'));
+    assert(desktop.includes('(min-width: 1024px) and (max-height: 800px)'));
+    assert(desktop.includes('.app-shell-footer { display:none; }'));
+    assert(tablet.includes('.app-shell-root:has(.records-app.is-settings) { height:100dvh;'));
+    assert(tablet.includes('@media (min-width: 768px) and (max-height: 700px)'));
+    assert(tablet.includes('.sc-detail-dialog { max-height:min(88dvh,calc(100dvh - 32px)); }'));
+    assert(tablet.includes('(max-width: 1279px) and (orientation: landscape)'));
+    assert(tablet.includes('.sc-detail-dialog { max-width:680px; max-height:min(88dvh,860px); }'));
+    assert(tablet.includes('.sc-detail-dialog-head { min-height:64px;'));
+    assert(!tablet.includes('@media (max-width: 767px)'), 'phone layout remains owned by mobile.css');
+  });
   await test('website preview clips glass layers to its responsive rounded outline', () => {
     const css = fs.readFileSync(path.join(root,'app/globals.css'),'utf8');
     assert(css.includes('isolation:isolate; min-height:196px; overflow:hidden; border-radius:var(--brand-preview-radius); clip-path:inset(0 round var(--brand-preview-radius));'));
