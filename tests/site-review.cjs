@@ -20,7 +20,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const css = fs.readFileSync(path.join(root, 'styles/capsules.css'), 'utf8');
     const app = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
     const {accentVariables} = require(path.join(root, 'lib/appearance.ts'));
-    assert(css.includes('font-weight:500!important; transition:none!important; transform:none!important;'));
+    assert(css.includes('font-weight:400!important; transition:none!important; transform:none!important;'));
+    assert(css.includes('.sv-center :is(.sc-setting-row,.sc-account-card) strong { font-family:inherit; font-synthesis:none; font-weight:400!important; }'));
     assert(css.includes('svg { color:inherit!important; opacity:.72; filter:none; transition:none!important; }'));
     assert(css.includes(',.fire-sidebar-item-active,[aria-current="page"]) svg { opacity:1; }'));
     assert(app.includes('aria-current={activeTab === t.key ? "page" : undefined}'));
