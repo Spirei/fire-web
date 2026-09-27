@@ -831,7 +831,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
     assert(settings.includes('aria-label="手机设置分类"'));
     const recordsApp = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
-    assert(recordsApp.includes('activeTab === "settings" ? "hidden md:flex" : "flex"'));
+    assert(!recordsApp.includes('className="mobile-tab-nav'));
+    assert(recordsApp.includes('<WorkspaceNavigation items={sidebarTabs}'));
     assert(recordsApp.includes('className="settings-mobile-toolbar"'));
     assert(recordsApp.includes('aria-label="关闭设置"'));
     assert(css.includes('.app-shell-root:has(.records-app.is-settings) .app-shell-header,'));
@@ -844,6 +845,22 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(security.includes('if (!open && loaded.current) return;'));
     assert(!security.includes('setStatus(null)'));
     assert(security.includes('!error && completed.length > 0'));
+  });
+  await test('mobile dock preserves allowed navigation and asset shortcuts target real modules', async () => {
+    const nav = fs.readFileSync(path.join(root, 'components/WorkspaceNavigation.tsx'), 'utf8');
+    const dashboard = fs.readFileSync(path.join(root, 'components/AssetAnalysisDashboard.tsx'), 'utf8');
+    assert(nav.includes('primaryKeys.flatMap(key => items.filter(item => item.key === key))'));
+    assert(nav.includes('items.filter(item => !primaryKeys.includes(item.key))'));
+    assert(nav.includes('activeKey === "pnl"'));
+    assert(nav.includes('setOpen(false); onSelect(item.key)'));
+    for (const id of ['asset-trend', 'asset-holdings', 'asset-calendar']) {
+      assert(dashboard.includes(`href="#${id}"`));
+      assert(dashboard.includes(`id="${id}"`));
+    }
+    assert(dashboard.includes('disabled={!onOpenPnlAnalysis}'));
+    assert(dashboard.includes('className="asset-pnl-shortcut text-left"'));
+    const shortcut = dashboard.slice(dashboard.indexOf('className="asset-pnl-shortcut text-left"'), dashboard.indexOf('className="asset-pnl-shortcut text-left"') + 800);
+    assert(!shortcut.includes('group-hover:opacity-100'));
   });
   await test('high-risk admin mutations require step-up authentication', async () => {
     const auth = require(path.join(root, 'lib/auth.ts'));

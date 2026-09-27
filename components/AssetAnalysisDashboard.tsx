@@ -1110,35 +1110,37 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   };
 
   return <div className="asset-analysis-page space-y-4">
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="asset-analysis-heading">
       <h2 className="text-lg font-extrabold">资产分析</h2>
+      <nav className="asset-analysis-shortcuts" aria-label="资产分析区块">
+        <a href="#asset-trend">趋势</a><a href="#asset-holdings">持仓</a><a href="#asset-calendar">盈亏日历</a>
+      </nav>
     </div>
 
     <div ref={splitRef} className="asset-analysis-split" style={splitReady ? splitPaneStyle(leftPanePct) : undefined}>
       <aside className="flex min-w-0 flex-col gap-4">
         <div {...moduleDragProps("left", "account")} className={moduleWrapperClass("left", "account")} style={{ order: moduleOrderIndex("left", "account") }}>
-          <section className="card p-5">
+          <section className="asset-account-card card p-5">
             <div className="mb-5 flex items-center justify-between"><div className="flex min-w-0 items-center gap-2"><h3 className="text-base font-bold">账户资产</h3><QuoteSourceBadge records={positions} quotes={quotes} /></div><div className="flex items-center gap-1.5"><button type="button" disabled={shareOpening} onClick={async () => { if (shareOpening) return; setShareOpening(true); try { preloadDailyPnlTemplates(summary.day >= 0); await waitForDailyPnlTemplates(); setDailyShareOpen(true); } finally { setShareOpening(false); } }} title={shareOpening ? "正在准备分享图…" : "分享当日盈亏"} aria-label="分享当日盈亏" className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-[7px] border border-edge bg-white text-muted shadow-sm transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover hover:text-ink active:scale-[.97] disabled:opacity-50 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><circle cx="18" cy="5" r="2.2" /><circle cx="6" cy="12" r="2.2" /><circle cx="18" cy="19" r="2.2" /><path d="m8 11 8-5M8 13l8 5" /></svg></button><RefreshButton onClick={() => void handleRefresh("assets")} title="刷新账户资产" /></div></div>
             <div className="flex items-center gap-2"><CurrencyPicker context="asset" prefix="总资产" /></div>
-            <div className="mt-1 grid grid-cols-3 items-end gap-3"><div className="col-span-2 flex min-w-0 items-center gap-2"><strong className="block truncate text-2xl font-extrabold tabular-nums">{maskCashMoney(totalAsset, true)}</strong><button type="button" onClick={() => setAssetsVisible((visible) => !visible)} className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg-gray hover:text-ink" title={assetsVisible ? "隐藏资产金额" : "显示资产金额"} aria-label={assetsVisible ? "隐藏资产金额" : "显示资产金额"}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />{assetsVisible ? <circle cx="12" cy="12" r="2.6" /> : <path d="m4 4 16 16" />}</svg></button></div><div><span className="block text-xs text-muted">当日盈亏</span><strong className={`mt-1 block text-sm tabular-nums ${summary.day >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.day, true)}</strong></div></div>
-            <div className="mt-5 grid grid-cols-3 gap-3">
+            <div className="asset-account-highlight"><div className="asset-account-total"><strong className="asset-account-amount tabular-nums">{maskCashMoney(totalAsset, true)}</strong><button type="button" onClick={() => setAssetsVisible((visible) => !visible)} className="asset-privacy-button text-muted" title={assetsVisible ? "隐藏资产金额" : "显示资产金额"} aria-label={assetsVisible ? "隐藏资产金额" : "显示资产金额"}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />{assetsVisible ? <circle cx="12" cy="12" r="2.6" /> : <path d="m4 4 16 16" />}</svg></button></div><div><span className="block text-xs text-muted">当日盈亏</span><strong className={`mt-1 block text-sm tabular-nums ${summary.day >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.day, true)}</strong></div></div>
+            <div className="asset-account-metrics">
               <div><span className="text-xs text-muted">持仓总市值</span><strong className="mt-1 block text-sm tabular-nums">{maskMoney(summary.asset)}</strong></div>
-              <div
-                role="button"
-                tabIndex={0}
+              <button
+                type="button"
+                disabled={!onOpenPnlAnalysis}
                 onClick={onOpenPnlAnalysis}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenPnlAnalysis?.(); } }}
                 title="查看资产盈亏分析"
-                className="group -mx-1 cursor-pointer rounded-[10px] px-1 transition-colors hover:bg-brand-hover/70 dark:hover:bg-white/5"
+                className="asset-pnl-shortcut text-left"
               >
                 <span className="text-xs text-muted">
                   持仓总盈亏
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-1 inline-block h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100">
+                  {onOpenPnlAnalysis && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-1 inline-block h-3 w-3">
                     <path d="m9 18 6-6-6-6" />
-                  </svg>
+                  </svg>}
                 </span>
                 <strong className={`mt-1 block text-sm tabular-nums ${summary.pnl >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.pnl, true)}</strong>
-              </div>
+              </button>
               <div><span className="text-xs text-muted">现金</span><strong className="mt-1 block text-sm tabular-nums">{maskCashMoney(cashTotal)}</strong></div>
             </div>
             <div className="mt-6"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold">资产分布</span><span className="text-[11px] text-muted">按市场</span></div><div className="flex h-2 overflow-hidden rounded-full bg-bg-gray">{marketEntries.map(([key, value], index) => <span key={key} style={{ width: `${summary.asset ? value.asset / summary.asset * 100 : 0}%`, background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />)}</div><div className="mt-3 grid grid-cols-2 gap-2">{marketEntries.map(([key, value], index) => <div key={key} className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-muted"><i className="h-2 w-2 rounded-full" style={{ background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />{marketMeta(key).label}</span><b>{summary.asset ? (value.asset / summary.asset * 100).toFixed(1) : "0.0"}%</b></div>)}</div></div>
@@ -1146,7 +1148,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
           {renderModuleHandle("left", "account")}
         </div>
 
-        <div {...moduleDragProps("left", "trend")} className={moduleWrapperClass("left", "trend")} style={{ order: moduleOrderIndex("left", "trend") }}>
+        <div id="asset-trend" {...moduleDragProps("left", "trend")} className={moduleWrapperClass("left", "trend")} style={{ order: moduleOrderIndex("left", "trend") }}>
           <section className="card relative overflow-visible">
             <div className="flex items-end gap-6 border-b border-edge px-4 pt-3">{([['return', '收益率趋势图'], ['asset', '总资产趋势图']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setChartTab(key)} className={`relative px-0.5 pb-3 transition-colors ${chartTab === key ? "text-[15px] font-bold text-ink" : "text-sm font-medium text-muted hover:text-ink"}`}>{label}{chartTab === key && <i className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-[#3297f6]" />}</button>)}</div>
             <div className="relative flex items-center gap-2 px-4 py-3"><div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{PERIODS.map(([key, label]) => <button key={key} type="button" onClick={() => { setPeriod(key); setDatePickerOpen(false); setPnlExpanded(false); }} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold ${period === key ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray"}`}>{label}</button>)}</div><button type="button" onClick={() => setDatePickerOpen((open) => !open)} className={`inline-flex h-8 w-10 flex-none items-center justify-center rounded-full border transition-colors ${period === "custom" || datePickerOpen ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray hover:text-ink"}`} title="选择日期区间" aria-label="选择日期区间"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M4 5h16M7 3v4m10-4v4M5 9h14v11H5z" /><path d="m9 14 2 2 4-5" /></svg></button>{datePickerOpen && <DateRangePicker range={customRange} onClose={() => setDatePickerOpen(false)} onApply={(range) => { setCustomRange(range); setPeriod("custom"); setDatePickerOpen(false); setPnlExpanded(false); }} />}</div>
@@ -1229,7 +1231,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
           {renderModuleHandle("right", "overview")}
         </div>
 
-        <div {...moduleDragProps("right", "holdings")} className={moduleWrapperClass("right", "holdings")} style={{ order: moduleOrderIndex("right", "holdings") }}>
+        <div id="asset-holdings" {...moduleDragProps("right", "holdings")} className={moduleWrapperClass("right", "holdings")} style={{ order: moduleOrderIndex("right", "holdings") }}>
           <section className="card overflow-hidden">
             <div className="border-b border-edge px-5 py-4">
               <h3 className="mb-3 text-base font-bold">持仓分布</h3>
@@ -1260,7 +1262,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
           />
           {renderModuleHandle("right", "orders")}
         </div>
-        <div {...moduleDragProps("right", "calendar")} className={moduleWrapperClass("right", "calendar")} style={{ order: moduleOrderIndex("right", "calendar") }}>
+        <div id="asset-calendar" {...moduleDragProps("right", "calendar")} className={moduleWrapperClass("right", "calendar")} style={{ order: moduleOrderIndex("right", "calendar") }}>
           <PnlCalendar
             className="card p-5"
             days={calendarDays}

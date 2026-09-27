@@ -26,6 +26,7 @@ import { primeFlagIconCache, primeMarketIconCache, primeNavIconCache, primeStock
 import { pickStockIcon } from "@/lib/stockIconKey";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
+import WorkspaceNavigation from "@/components/WorkspaceNavigation";
 import type { WatchGroup } from "@/lib/watchGroups";
 import FourDoorNavigator from "@/components/FourDoorNavigator";
 import { usePersistedState } from "@/lib/usePersistedState";
@@ -145,7 +146,6 @@ export default function RecordsApp({
   const initialQuoteLoadRef = useRef(false);
   const loadedQuoteIdsRef = useRef(new Set<string>());
   const quoteCacheKeyRef = useRef("");
-  const mobileNavRef = useRef<HTMLDivElement>(null);
   const desktopNavRef = useRef<HTMLElement>(null);
   const [fourDoorPinned, setFourDoorPinned] = usePersistedState("fire:four-door-pinned", false);
   const [sidebarScroll, setSidebarScroll] = useState({ top: 0, height: 0, visible: false });
@@ -793,16 +793,6 @@ export default function RecordsApp({
     };
   }, [sidebarTabs, updateSidebarScroll]);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia("(max-width: 1023px)").matches) return;
-    const frame = window.requestAnimationFrame(() => {
-      const nav = mobileNavRef.current;
-      const activeButton = nav?.querySelector<HTMLElement>(`[data-nav-tab="${activeTab}"]`);
-      if (!nav || !activeButton) return;
-      nav.scrollLeft = Math.max(0, activeButton.offsetLeft - (nav.clientWidth - activeButton.offsetWidth) / 2);
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [activeTab, sidebarTabs.length]);
 
   const settingsPanel = (
     <div className="relative h-full min-h-0">
@@ -882,26 +872,12 @@ export default function RecordsApp({
 
       {/* 内容区 */}
       <div className="records-content min-w-0 flex-1">
-        {/* 移动端顶部标签 */}
+        {activeTab !== "settings" && <WorkspaceNavigation items={sidebarTabs} activeKey={activeTab} onPrepare={key => preloadView(key as TabKey)} onSelect={key => {
+          if (key !== activeTab) selectTab(key as TabKey);
+          window.scrollTo({ top: 0, behavior: "instant" });
+        }} />}
+        {/* 设置采用独立的分层页面 */}
         {activeTab === "settings" && <div className="settings-mobile-toolbar"><button type="button" aria-label="关闭设置" onClick={() => selectTab("holdings")}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>}
-        <div ref={mobileNavRef} className={`mobile-tab-nav mb-6 overflow-x-auto rounded-2xl bg-bg-gray p-1 lg:hidden ${activeTab === "settings" ? "hidden md:flex" : "flex"}`}>
-          {sidebarTabs.map((t) => (
-            <button
-              key={t.key}
-              data-nav-tab={t.key}
-              type="button"
-              onPointerDown={() => { if (t.key !== activeTab) preloadView(t.key); }}
-              onFocus={() => { if (t.key !== activeTab) preloadView(t.key); }}
-              onClick={() => selectTab(t.key)}
-              className={`flex min-w-[76px] flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-xs transition-all duration-200 ${
-                activeTab === t.key ? "bg-white font-semibold text-ink shadow-[0_1px_4px_rgba(10,14,25,.08)] dark:bg-[#252c3a] dark:text-white" : "text-muted"
-              }`}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
-        </div>
 
         <div key={activeTab} className="tab-panel min-w-0">
           {activeTab === "watchlist" && (
