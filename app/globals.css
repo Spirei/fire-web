@@ -5076,10 +5076,11 @@ html.dark .watch-import-target {
 .sc-detail-dialog[data-detail="api"] .api-auth-methods { display:flex; align-items:center; justify-content:flex-end; gap:9px; font-size:12px; white-space:nowrap; }
 .sc-detail-dialog[data-detail="api"] .api-auth-methods b { color:var(--sc-dialog-text); font-weight:600; }
 .sc-detail-dialog[data-detail="api"] .api-auth-methods i { width:3px; height:3px; border-radius:50%; background:var(--sc-dialog-border-strong); }
-.sc-detail-dialog[data-detail="api"] .api-docs-entry-row { min-height:68px; border-bottom:0; border-radius:12px; color:inherit; text-decoration:none; transition:background-color .15s; }
-.sc-detail-dialog[data-detail="api"] .api-docs-entry-row:hover { background:var(--sc-dialog-soft); }
-.sc-detail-dialog[data-detail="api"] .api-docs-entry-icon { display:grid; width:34px; height:34px; flex:none; place-items:center; border-radius:50%; color:var(--sc-dialog-link); transition:background-color .15s,transform .15s; }
-.sc-detail-dialog[data-detail="api"] .api-docs-entry-row:hover .api-docs-entry-icon { background:color-mix(in srgb,var(--sc-dialog-primary) 10%,transparent); transform:translate(1px,-1px); }
+.sc-detail-dialog[data-detail="api"] .api-docs-entry-row { min-height:64px; border-radius:0; color:inherit; text-decoration:none; background:transparent; }
+.sc-detail-dialog[data-detail="api"] .api-docs-entry-row .sw-row-label { flex:1 1 auto; }
+.sc-detail-dialog[data-detail="api"] .api-docs-entry-row:hover { background:color-mix(in srgb,var(--sc-dialog-text) 2%,var(--sc-dialog-bg)); }
+.sc-detail-dialog[data-detail="api"] .api-docs-entry-icon { display:grid; width:24px; height:24px; flex:none; place-items:center; color:var(--sc-dialog-muted); }
+.sc-detail-dialog[data-detail="api"] .api-docs-entry-row:hover .api-docs-entry-icon { color:var(--sc-dialog-text); }
 .sc-detail-dialog[data-detail="api"] .api-docs-entry-icon svg { width:17px; height:17px; }
 .sv-win-root .settings-profile-grid {
   display:grid;
@@ -6311,6 +6312,13 @@ button.PhotoView-Slider__toolbarIcon {
 .sc-detail-dialog .settings-section-body > .sw-row { padding:13px 16px; border-top:0; border-bottom:0; }
 .sc-detail-dialog .settings-section-body > .sw-row + .sw-row { border-top:1px solid var(--sc-dialog-border); }
 .sc-detail-dialog .settings-section-body > .sw-row:last-child { border-bottom:0; }
+.sc-detail-dialog .settings-navigation-row { width:100%; text-align:left; background:transparent; border-radius:0; color:var(--sc-dialog-text); }
+.sc-detail-dialog .settings-navigation-row .sw-row-label { flex:1; }
+.sc-detail-dialog .settings-navigation-row:hover { background:color-mix(in srgb,var(--sc-dialog-text) 2%,var(--sc-dialog-bg)); }
+.sc-detail-dialog .settings-navigation-arrow { width:20px; height:20px; flex:none; color:var(--sc-dialog-muted); }
+.sc-detail-dialog .settings-task-row:hover { background:transparent; }
+.sv-center .sc-row-group,.sv-center .sc-account-card { border-radius:16px; }
+.sc-detail-dialog .brand-asset-list,.sc-detail-dialog .mail-settings-group { border-radius:16px; }
 .sc-detail-dialog .sw-row-label b { color:var(--sc-dialog-text); font-size:14px; font-weight:550; }
 .sc-detail-dialog .sw-row-label span { margin-top:4px; color:var(--sc-dialog-muted); font-size:12px; line-height:1.45; }
 .sc-detail-dialog .sw-row-input,
@@ -6605,6 +6613,10 @@ button.PhotoView-Slider__toolbarIcon {
   .sc-detail-dialog .sw-row { align-items:flex-start; flex-direction:column; gap:10px; padding:14px 0; }
   .sc-detail-dialog .settings-section-body:has(> .sw-row) { padding:0; }
   .sc-detail-dialog .settings-section-body > .sw-row { padding:14px 16px; }
+  .sc-detail-dialog[data-detail="api"] .api-docs-entry-row { flex-direction:row; align-items:center; }
+  .sc-detail-dialog[data-detail="api"] .api-docs-entry-row .sw-row-label { width:auto; }
+  .sc-detail-dialog .settings-navigation-row { flex-direction:row; align-items:center; }
+  .sc-detail-dialog .settings-navigation-row .sw-row-label { width:auto; }
   .sc-detail-dialog .sw-row-label { width:100%; flex:none; }
   .sc-detail-dialog .sw-row .ctrl { width:100%; }
   .sc-detail-dialog[data-detail^="source"] .sw-row-label { width:100%; flex:none; }

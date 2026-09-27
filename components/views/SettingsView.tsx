@@ -3901,7 +3901,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <span className="settings-status-badge is-on"><i />已启用</span>
                   </div>
                   <a href="/api-docs" target="_blank" rel="noreferrer" className="sw-row api-docs-entry-row" aria-label="在新窗口打开 API 文档">
-                    <span className="sw-row-label"><b>API 文档</b><span>认证、参数、示例与完整接口清单</span></span>
+                    <span className="sw-row-label"><b>API 文档</b><span>认证、参数与请求示例</span></span>
                     <span className="api-docs-entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 5h5v5" /><path d="m19 5-8 8" /><path d="M19 14v5H5V5h5" /></svg></span>
                   </a>
                 </SettingsSection>
@@ -3912,13 +3912,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {sub === "about" && (
               <div id="about" className="flex flex-col gap-6">
                 <SettingsSection icon="info" title="关于" desc="版本、技术栈与外部数据源">
-                  <div className="sw-row">
-                    <div className="sw-row-label"><b>当前版本</b><span>Fire Web 稳定版本</span></div>
-                    <button type="button" onClick={() => setVersionOpen(true)} className="settings-link-value">
-                      Fire {CURRENT_VERSION.version}<span>{CURRENT_VERSION.changes.length} 项更新</span>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
-                    </button>
-                  </div>
+                  <button type="button" onClick={() => setVersionOpen(true)} className="sw-row settings-navigation-row" aria-label="查看版本记录">
+                    <span className="sw-row-label"><b>当前版本</b><span>Fire {CURRENT_VERSION.version} · {CURRENT_VERSION.changes.length} 项更新</span></span>
+                    <svg className="settings-navigation-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+                  </button>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>前端技术栈</b><span>交互与响应式界面</span></div>
                     <span className="settings-detail-value">Next.js 15 · React 19 · TypeScript · Tailwind CSS · WebGL 原图动效 · KTX2/UASTC 纹理压缩</span>
