@@ -5,7 +5,7 @@ m._compile(ts.transpileModule(fs.readFileSync('lib/palettes.ts','utf8'),{compile
 const {SITE_PALETTES,resolvePalette,paletteVariables} = m.exports;
 const lum = hex => [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((s,v,i)=>s+v*[.2126,.7152,.0722][i],0);
 const contrast=(a,b)=>(Math.max(lum(a),lum(b))+.05)/(Math.min(lum(a),lum(b))+.05);
-assert.equal(new Set(SITE_PALETTES.map(p=>p.id)).size,6);
+assert.equal(new Set(SITE_PALETTES.map(p=>p.id)).size,7);
 for(const p of SITE_PALETTES){
  assert.equal(Object.keys(paletteVariables(p.id)).length,14);
  for(const mode of ['light','dark']){
@@ -15,4 +15,5 @@ for(const p of SITE_PALETTES){
 }
 for(const value of [null,{},'unknown','__proto__']) assert.equal(resolvePalette(value).id,'neutral');
 assert.equal(resolvePalette('liquid').glass,true);
-console.log('PASS six complete light/dark palettes, 4.5:1 text/accent contrast, invalid preference fallback');
+assert.equal(resolvePalette('meta').name,'Meta');
+console.log('PASS seven complete light/dark palettes, 4.5:1 text/accent contrast, invalid preference fallback');

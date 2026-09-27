@@ -111,7 +111,7 @@ const ADMIN_SUB_KEYS = new Set<SubKey>(["site", "features", "stocks", "database"
 
 /** ⌘K 命令搜索索引：关键词 → 子分类 + 锚点 */
 const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; groupLabel: string; keywords: string }[] = [
-  { sub: "palette", anchor: "palette", label: "全站配色", groupLabel: "配色", keywords: "配色 主题 Liquid Glass 玻璃 海盐 松林 琥珀 暮光" },
+  { sub: "palette", anchor: "palette", label: "全站配色", groupLabel: "配色", keywords: "配色 主题 Meta Liquid Glass 玻璃 海盐 松林 琥珀 暮光" },
   { sub: "site", anchor: "info", label: "站点信息", groupLabel: "网站", keywords: "网站 标题 域名 注册 页脚 简介" },
   { sub: "site", anchor: "appearance", label: "网站形象", groupLabel: "网站", keywords: "图标 logo 字体 背景 形象 favicon 图片" },
   { sub: "site", anchor: "ticker", label: "首页指数", groupLabel: "网站", keywords: "指数 轮换 首页 ticker 行情条" },

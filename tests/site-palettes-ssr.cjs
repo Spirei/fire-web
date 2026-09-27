@@ -13,5 +13,5 @@ m._compile(ts.transpileModule(fs.readFileSync('lib/palettes.ts','utf8'),{compile
   assert(tag.includes('--site-accent-light:'));
   assert.equal(/class="[^"]*\bdark\b/.test(tag),theme==='dark');
  }
- console.log('PASS twelve palette/theme SSR combinations emit matching palette, material and tokens before hydration');
+ console.log('PASS fourteen palette/theme SSR combinations emit matching palette, material and tokens before hydration');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -17,6 +17,6 @@ export default function PaletteSettings() {
         <span className="site-palette-note">{p.note}</span>
       </button>)}
     </div>
-    <p className="site-palette-foot">每套配色均支持深浅模式。Liquid Glass 只为胶囊保留通透材质，不再为头像、普通按钮和面板添加点击透镜。选择即时生效并在当前浏览器保存；行情涨跌色保持原有含义。</p>
+    <p className="site-palette-foot">每套配色均支持深浅模式。Meta 会同步主按钮、导航、表单与弹层；Liquid Glass 只为胶囊保留通透材质。选择即时生效并在当前浏览器保存，刷新不闪回默认色；行情涨跌色保持原有含义。</p>
   </section>;
 }

@@ -44,6 +44,127 @@ html:root[data-palette] .sv-win-root.sv-orca:not(.sv-center) {
 html:root[data-palette="liquid"] .sv-win-root.sv-orca:not(.sv-center) {
   --sv-shell: rgb(var(--site-bg)); --sv-shell-hover: rgb(var(--site-surface));
 }
+/* Meta: use the palette as a complete product language, not a blue accent pasted on top.
+   All selectors stay inside the palette scope so the other six themes keep their identity. */
+html:root[data-palette="meta"] {
+  --material-radius: 16px;
+  --meta-primary: #0866ff;
+  --meta-selection: color-mix(in srgb, rgb(var(--site-accent)) 12%, rgb(var(--site-surface)));
+  --meta-selection-hover: color-mix(in srgb, rgb(var(--site-accent)) 17%, rgb(var(--site-surface)));
+  --meta-control-hover: color-mix(in srgb, rgb(var(--site-ink)) 7%, rgb(var(--site-surface)));
+}
+html:root.dark[data-palette="meta"] {
+  --meta-primary: #2374e1;
+  --meta-selection: color-mix(in srgb, rgb(var(--site-accent)) 20%, rgb(var(--site-surface)));
+  --meta-selection-hover: color-mix(in srgb, rgb(var(--site-accent)) 26%, rgb(var(--site-surface)));
+  --meta-control-hover: color-mix(in srgb, rgb(var(--site-ink)) 9%, rgb(var(--site-surface)));
+}
+html:root[data-palette="meta"] :is(.card, .fire-sidebar, .sc-row-group, .sc-account-card) {
+  border-color: rgb(var(--site-edge));
+  border-radius: 16px;
+  box-shadow: none;
+}
+html:root[data-palette="meta"] :is(.btn-dark, .btn-brand, .dialog-btn-neutral) {
+  border-color: var(--meta-primary);
+  background: var(--meta-primary);
+  color: #fff;
+  box-shadow: none;
+}
+html:root[data-palette="meta"] :is(.btn-dark, .btn-brand, .dialog-btn-neutral):hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--meta-primary) 88%, #000);
+  background: color-mix(in srgb, var(--meta-primary) 88%, #000);
+  color: #fff;
+  box-shadow: none;
+  transform: none;
+}
+html:root.dark[data-palette="meta"] :is(.btn-dark, .btn-brand, .dialog-btn-neutral):hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--meta-primary) 86%, #fff);
+  background: color-mix(in srgb, var(--meta-primary) 86%, #fff);
+}
+html:root[data-palette="meta"] :is(.btn-soft, .btn-line, .btn-ghost, .pg-btn) {
+  border-color: rgb(var(--site-edge));
+  background: rgb(var(--site-surface));
+  color: rgb(var(--site-ink));
+  box-shadow: none;
+}
+html:root[data-palette="meta"] :is(.btn-soft, .btn-line, .btn-ghost, .pg-btn):hover:not(:disabled) {
+  border-color: rgb(var(--site-edge));
+  background: var(--meta-control-hover);
+  color: rgb(var(--site-ink));
+  transform: none;
+}
+html:root[data-palette="meta"] :is(.seg-active, .fire-sidebar-item-active) {
+  border-color: rgb(var(--site-accent) / .22);
+  background: var(--meta-selection);
+  color: rgb(var(--site-accent));
+  box-shadow: none;
+}
+html:root[data-palette="meta"] :is(.seg-active, .fire-sidebar-item-active):hover {
+  background: var(--meta-selection-hover);
+  color: rgb(var(--site-accent));
+}
+html:root[data-palette="meta"] :is(.field, input[type="text"], input[type="password"], input[type="email"], input[type="url"], input[type="number"], textarea, select) {
+  border-color: rgb(var(--site-edge));
+  background-color: rgb(var(--site-surface));
+  color: rgb(var(--site-ink));
+}
+html:root[data-palette="meta"] :is(.field, input[type="text"], input[type="password"], input[type="email"], input[type="url"], input[type="number"], textarea, select):focus {
+  border-color: rgb(var(--site-accent));
+  outline: none;
+  box-shadow: none;
+}
+html:root[data-palette="meta"] :is(.global-section-button.is-active, .global-section-button.is-active .global-section-icon) { color: rgb(var(--site-accent)); }
+html:root[data-palette="meta"] .global-section-button.is-active::after { background: rgb(var(--site-accent)); }
+html:root[data-palette="meta"] .attachments-space { --attachment-accent:rgb(var(--site-accent)); --attachment-accent-soft:var(--meta-selection); }
+html:root[data-palette="meta"] .sc-detail-layer {
+  --sc-dialog-bg:rgb(var(--site-surface)); --sc-dialog-border:rgb(var(--site-edge));
+  --sc-dialog-border-strong:color-mix(in srgb,rgb(var(--site-edge)) 72%,rgb(var(--site-ink)));
+  --sc-dialog-text:rgb(var(--site-ink)); --sc-dialog-muted:rgb(var(--site-muted));
+  --sc-dialog-soft:rgb(var(--site-soft)); --sc-dialog-soft-hover:var(--meta-control-hover);
+  --sc-dialog-primary:var(--meta-primary); --sc-dialog-primary-hover:color-mix(in srgb,var(--meta-primary) 88%,#000);
+  --sc-dialog-link:rgb(var(--site-accent));
+}
+html:root.dark[data-palette="meta"] .sc-detail-layer { --sc-dialog-primary-hover:color-mix(in srgb,var(--meta-primary) 86%,#fff); }
+html:root[data-palette="meta"] .pk-reference-modal.modal-glass {
+  --pk-bg:rgb(var(--site-surface)); --pk-border:rgb(var(--site-edge));
+  --pk-border-strong:color-mix(in srgb,rgb(var(--site-edge)) 72%,rgb(var(--site-ink)));
+  --pk-text:rgb(var(--site-ink)); --pk-muted:rgb(var(--site-muted));
+  --pk-soft:rgb(var(--site-soft)); --pk-soft-hover:var(--meta-control-hover);
+  --pk-primary:var(--meta-primary); --pk-link:rgb(var(--site-accent));
+}
+html:root[data-palette="meta"] .sv-win-root.sv-orca {
+  --sv-shell:rgb(var(--site-surface)); --sv-shell-hover:rgb(var(--site-soft));
+  --sv-bg:rgb(var(--site-bg)); --sv-border:rgb(var(--site-edge));
+  --sv-border-strong:color-mix(in srgb,rgb(var(--site-edge)) 72%,rgb(var(--site-ink)));
+  --sv-text:rgb(var(--site-ink)); --sv-text-2:rgb(var(--site-ink)); --sv-text-3:rgb(var(--site-muted));
+  --sv-accent:rgb(var(--site-accent)); --sv-card:rgb(var(--site-surface)); --sv-card-border:rgb(var(--site-edge));
+  --sv-input:rgb(var(--site-surface)); --sv-surface-2:rgb(var(--site-soft)); --sv-hover-bg:var(--meta-control-hover);
+  --sv-ring:transparent; --sv-card-shadow:none;
+  background:rgb(var(--site-bg));
+}
+html:root[data-palette="meta"] .sv-center .sc-nav-link.is-active {
+  background:var(--meta-primary);
+  color:#fff;
+}
+html:root[data-palette="meta"] .sv-win-root .sw-nav-item.is-active {
+  border-color:rgb(var(--site-accent) / .18);
+  background:var(--meta-selection);
+  color:rgb(var(--site-accent));
+  box-shadow:none;
+}
+html:root[data-palette="meta"] .sv-win-root .sw-window .sw-pill.is-active {
+  border-color:rgb(var(--site-accent) / .18);
+  background:var(--meta-selection);
+  color:rgb(var(--site-accent));
+}
+html:root[data-palette="meta"] .sv-win-root .sw-window :is(.sw-row-input,.sw-media-input,input[type="password"],input[type="text"]):focus {
+  border-color:rgb(var(--site-accent));
+  box-shadow:none;
+}
+html:root[data-palette="meta"] .sc-detail-dialog .sc-detail-theme-bridge.sv-win-root.sv-orca.sv-center {
+  --sv-bg:var(--sc-dialog-bg); --sv-shell:var(--sc-dialog-bg); --sv-card:var(--sc-dialog-bg);
+  background:var(--sc-dialog-bg);
+}
 /* 3D 舞台有独立主题：不能被站点 html 的深浅状态反向覆盖。 */
 html:root[data-palette] .showcase:not(.light) {
   --site-bg: var(--site-bg-dark); --site-surface: var(--site-surface-dark); --site-ink: var(--site-ink-dark);

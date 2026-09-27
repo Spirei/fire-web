@@ -50,7 +50,7 @@ p=mount();p.onPointerDown(ev(154));p.onLostPointerCapture();advance(600);p.onPoi
 p=mount();p.onPointerDown(ev(354));advance(60);p.onPointerUp(ev(354));assert.deepEqual(selected,[2],'short click commits immediately');advance(90);assert(refs[2].current.lift.value>.3,'short click briefly raises lens');advance(1000);assert.equal(refs[2].current.lift.value,0,'click lens returns to rest');
 p=mount();refs[2].current.reduced=true;p.onPointerDown(ev(154));advance(321);p.onPointerMove(ev(354));assert.equal(refs[2].current.x.value,2);assert.equal(refs[2].current.lift.value,0);p.onPointerUp(ev(354));assert.deepEqual(selected,[2]);
 palette='neutral';p=mount();p.onPointerDown(ev(354));p.onPointerUp(ev(354));assert.equal(selected.length,0);
-for(const solid of ['neutral','ocean','forest','amber','dusk']){
+for(const solid of ['neutral','meta','ocean','forest','amber','dusk']){
  palette=solid;p=mount();p.children[0].props.children[2].props.onClick({detail:1});
  assert.deepEqual(selected,[2]);assert.equal(refs[2].current.lift.value,0);assert.equal(timers.size,0,`${solid} has no glass animation`);
 }

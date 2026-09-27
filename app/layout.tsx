@@ -67,7 +67,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script dangerouslySetInnerHTML={{ __html: `if(location.pathname==='/simple-app')document.documentElement.classList.add('simple-app-active');` }} />
         {/* PWA：可安装（Chrome「在应用中打开」/ Safari 添加到主屏幕） */}
         <link rel="manifest" href="/manifest.webmanifest" />
-        <meta name="theme-color" content={dark ? "#0a0e19" : "#ffffff"} />
+        <meta name="theme-color" content={dark ? palette.dark[0] : palette.light[0]} />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
