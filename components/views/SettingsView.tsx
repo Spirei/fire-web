@@ -52,7 +52,7 @@ interface Props {
   initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "groups" | "markets" | "marketLabels" | "modelServices">;
 }
 
-function SettingsDetailShell({ title, category, detailKey, editable = false, editing = false, onEdit, onSave, onCancel, onClose, children }: { title: string; category: string; detailKey?: string; editable?: boolean; editing?: boolean; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; onClose: () => void; children: React.ReactNode }) {
+function SettingsDetailShell({ title, category, detailKey, showBack = false, editable = false, editing = false, onBack, onEdit, onSave, onCancel, onClose, children }: { title: string; category: string; detailKey?: string; showBack?: boolean; editable?: boolean; editing?: boolean; onBack?: () => void; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; onClose: () => void; children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
@@ -86,6 +86,7 @@ function SettingsDetailShell({ title, category, detailKey, editable = false, edi
       <section className="sc-detail-dialog relative flex w-full max-w-[600px] flex-col overflow-hidden" data-detail={detailKey}>
         <div className="sc-detail-theme-bridge sv-win-root sv-orca sv-center flex min-h-0 flex-1 flex-col">
         <header className="sc-detail-dialog-head flex-none">
+          {showBack && <button type="button" className="sc-detail-back" aria-label="返回" onClick={onBack || requestClose} disabled={closing}><span aria-hidden="true">‹</span></button>}
           <div className="min-w-0"><span>{category}</span><h2>{title}</h2></div>
           <div className="sc-detail-dialog-actions">
             {editable && (editing ? <><button type="button" className="sc-detail-text-action" onClick={onCancel}>取消</button><button type="button" className="sc-detail-primary-action" onClick={onSave}>保存</button></> : <button type="button" className="sc-detail-text-action" onClick={onEdit}>编辑</button>)}
@@ -1720,8 +1721,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [pwdBusy, setPwdBusy] = useState(false);
   const [profilePassword, setProfilePassword] = useState("");
   const [totpEnabled, setTotpEnabled] = useState(false);
+  const [totpStatusLoaded, setTotpStatusLoaded] = useState(false);
   const [totpBusy, setTotpBusy] = useState(false);
   const [totpSetup, setTotpSetup] = useState<{ secret: string; qrPng: string; otpauthUrl: string } | null>(null);
+  const [totpSetupStage, setTotpSetupStage] = useState<"instructions" | "verify">("instructions");
   const [totpSetupCode, setTotpSetupCode] = useState("");
   const totpSetupAutoTried = useRef("");
   const [totpBackupCodes, setTotpBackupCodes] = useState<string[] | null>(null);
@@ -1729,6 +1732,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [totpDisableCode, setTotpDisableCode] = useState("");
   const [totpPasswordCode, setTotpPasswordCode] = useState("");
   const [totpMsg, setTotpMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [totpLearnMore, setTotpLearnMore] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/totp", { cache: "no-store", credentials: "same-origin" })
@@ -1736,7 +1740,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       .then((data) => {
         if (typeof data?.enabled === "boolean") setTotpEnabled(data.enabled);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setTotpStatusLoaded(true));
   }, []);
 
   async function startTotpSetup() {
@@ -1754,6 +1759,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         otpauthUrl: String(data.otpauthUrl || "")
       });
       setTotpSetupCode("");
+      setTotpSetupStage("instructions");
       totpSetupAutoTried.current = "";
       setTotpBackupCodes(null);
     } catch (err) {
@@ -1779,6 +1785,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       if (!res.ok) throw new Error(data?.error || "验证失败");
       setTotpEnabled(true);
       setTotpSetup(null);
+      setTotpSetupStage("instructions");
       setTotpSetupCode("");
       setTotpBackupCodes(Array.isArray(data?.backupCodes) ? data.backupCodes : []);
       setTotpMsg({ type: "ok", text: "二次验证已开启。密钥不再显示，请保存备用码。其它设备需要重新登录。" });
@@ -1832,6 +1839,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setTotpDisableCode("");
       setTotpBackupCodes(null);
       setTotpSetup(null);
+      setTotpSetupStage("instructions");
       setTotpMsg({ type: "ok", text: "二次验证已关闭" });
       showToast("二次验证已关闭");
     } catch (err) {
@@ -2189,9 +2197,17 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           </> : <>
           <div className="sc-landing">{categoryList}</div>
           <SettingsDetailShell
-            title={activePageMeta?.label || activeSubMeta?.label || "设置"}
+            title={activeAnchor === "totp"
+              ? (totpBackupCodes?.length ? "保存备用码" : totpSetup ? (totpSetupStage === "verify" ? "输入验证码" : "设置说明") : totpEnabled ? "双重验证" : "帮助保护你的账户")
+              : (activePageMeta?.label || activeSubMeta?.label || "设置")}
             category={currentCategory?.label || "设置中心"}
             detailKey={activeAnchor}
+            showBack={activeAnchor === "totp"}
+            onBack={activeAnchor === "totp" ? () => {
+              if (totpSetup && totpSetupStage === "verify") { setTotpSetupStage("instructions"); setTotpSetupCode(""); setTotpMsg(null); return; }
+              if (totpSetup) { setTotpSetup(null); setTotpSetupCode(""); setTotpMsg(null); return; }
+              openCategory(currentCategory?.key || "home");
+            } : undefined}
             editable={EDITABLE_DETAIL_ANCHORS.has(activeAnchor)}
             editing={activeEditState}
             onEdit={beginActiveEdit}
@@ -3524,120 +3540,71 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {sub === "totp" && (
               <div id="totp" className="flex flex-col gap-6">
                 <SettingsHeader name="totp" title="二次验证" />
-                <SettingsSection
-                  icon="totp"
-                  title="二次验证"
-                  desc="登录时除密码外，再输入验证器中的 6 位数字"
-                >
-                  <div className="sw-row">
-                    <div className="sw-row-label">
-                      <b>验证器</b>
-                      <span>{totpEnabled ? "已开启，登录需要 6 位验证码或备用码" : "使用 Google Authenticator、1Password 等 TOTP 应用"}</span>
-                    </div>
-                    <div className="ctrl">
-                      <span className={`inline-flex rounded-full border px-2.5 py-[3px] text-[11px] font-medium ${totpEnabled ? "border-edge-strong/30 bg-brand-light text-brand-deep" : "border-edge bg-bg-gray text-ink-2 dark:bg-white/[.04]"}`}>
-                        {totpEnabled ? "已开启" : "未开启"}
-                      </span>
-                    </div>
-                  </div>
-                  {!totpEnabled && !totpSetup && (
-                    <div className="mt-3">
-                      <button type="button" disabled={totpBusy} onClick={startTotpSetup} className="btn btn-line btn-sm disabled:opacity-60">
-                        {totpBusy ? "生成中…" : "开始绑定"}
-                      </button>
-                    </div>
+                <section className="totp-meta-flow">
+                  {!totpStatusLoaded && <div className="totp-meta-loading" aria-label="正在读取双重验证状态"><i /><i /><i /></div>}
+                  {totpStatusLoaded && !totpEnabled && !totpSetup && !totpBackupCodes?.length && (
+                    <>
+                      <p className="totp-meta-copy">设置双重验证后，当有人从陌生设备登录时，除密码外还需要一次性验证码，确认是你本人。</p>
+                      <button type="button" className="totp-meta-learn" onClick={(event) => { const scroll = event.currentTarget.closest(".sc-detail-dialog-scroll"); setTotpLearnMore((value) => !value); requestAnimationFrame(() => scroll?.scrollTo({ top: 0 })); }}>详细了解</button>
+                      {totpLearnMore && <p className="totp-meta-help">验证码由你的验证器应用在本机生成，不经过短信，也不会上传验证器密钥。请同时保存备用码，以便设备丢失时恢复登录。</p>}
+                      <h3>选择你希望接收验证码的方式</h3>
+                      <div className="totp-meta-methods" role="radiogroup" aria-label="双重验证方式">
+                        <button type="button" className="totp-meta-method is-selected" role="radio" aria-checked="true">
+                          <span className="totp-meta-method-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path d="M15 14h2v2h-2zM19 14h1v3h-3v3h-3v-2M19 19h1v1h-1z"/></svg></span>
+                          <span className="totp-meta-method-copy"><b>身份验证应用</b><small>通过 Google Authenticator、1Password、Bitwarden 等应用获取一次性验证码。</small><em>推荐</em></span>
+                          <span className="totp-meta-radio" aria-hidden="true" />
+                        </button>
+                        <button type="button" className="totp-meta-method" role="radio" aria-checked="false" disabled>
+                          <span className="totp-meta-method-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 5.5h16v11H9l-4 3v-3H4z"/><path d="M8 9h8M8 12.5h5"/></svg></span>
+                          <span className="totp-meta-method-copy"><b>短信</b><small>Fire 暂未提供短信验证码。</small></span>
+                          <span className="totp-meta-radio" aria-hidden="true" />
+                        </button>
+                      </div>
+                      <button type="button" disabled={totpBusy} onClick={startTotpSetup} className="totp-meta-primary">{totpBusy ? "请稍候…" : "继续"}</button>
+                    </>
                   )}
                   {totpSetup && (
-                    <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
-                      <div className="flex flex-col items-start gap-2">
-                        <p className="text-[13px] font-semibold text-ink">扫描二维码</p>
-                        {totpSetup.qrPng && (
-                          <img
-                            alt="二次验证二维码"
-                            src={totpSetup.qrPng}
-                            className="h-auto w-full max-w-[240px] rounded-[10px] border border-edge bg-white p-2"
-                          />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-semibold text-ink">或手动输入密钥</p>
-                        <p className="mt-1 text-[13px] text-muted">Bitwarden、1Password 等请把密钥粘贴到「验证器密钥」。确认开启后密钥和二维码都不再显示，请现在加好要用的验证器。</p>
-                        <code className="mt-3 block break-all rounded-[10px] border border-edge bg-bg-gray px-3 py-2 text-[13px] tracking-[0.12em] text-ink">
-                          {totpSetup.secret.replace(/(.{4})/g, "$1 ").trim()}
-                        </code>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { void copyText(totpSetup.secret); showToast("密钥已复制"); }}>复制密钥</button>
-                          {totpSetup.otpauthUrl && (
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { void copyText(totpSetup.otpauthUrl); showToast("otpauth 链接已复制"); }}>复制 otpauth 链接</button>
-                          )}
+                    <div className="totp-meta-setup">
+                      {totpSetupStage === "instructions" ? <>
+                        <div className="totp-meta-step"><h3>1. 下载身份验证应用</h3><p>如果你还未安装身份验证应用，建议使用 Google Authenticator、1Password 或 Bitwarden。</p></div>
+                        <div className="totp-meta-step"><h3>2. 扫描二维码或复制密钥</h3><p>请在身份验证应用中扫描二维码，或者复制密钥并粘贴到应用中。</p></div>
+                        <div className="totp-meta-setup-grid">
+                          <div className="totp-meta-qr">{totpSetup.qrPng && <img alt="二次验证二维码" src={totpSetup.qrPng} />}</div>
+                          <div className="totp-meta-secret"><code>{totpSetup.secret.replace(/(.{4})/g, "$1 ").trim()}</code><div><button type="button" onClick={() => { void copyText(totpSetup.secret); showToast("密钥已复制"); }}>复制密钥</button>{totpSetup.otpauthUrl && <button type="button" onClick={() => { void copyText(totpSetup.otpauthUrl); showToast("链接已复制"); }}>复制链接</button>}</div></div>
                         </div>
-                        <form onSubmit={confirmTotpSetup} className="mt-4 flex flex-col gap-3">
-                          <label className="flex min-w-0 w-full flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                            验证码
-                            <input
-                              autoComplete="one-time-code"
-                              autoFocus
-                              spellCheck={false}
-                              inputMode="numeric"
-                              maxLength={6}
-                              value={totpSetupCode}
-                              onChange={(e) => setTotpSetupCode(normalizeTotpDigits(e.target.value))}
-                              placeholder="6 位数字"
-                              required
-                              className="sw-row-input w-full min-w-0 text-center font-mono text-[18px] tracking-[0.35em]"
-                            />
-                          </label>
-                          <div className="flex flex-wrap gap-2">
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setTotpSetup(null); setTotpSetupCode(""); setTotpMsg(null); }}>取消</button>
-                            <button type="submit" disabled={totpBusy || totpSetupCode.replace(/\s/g, "").length !== 6} className="btn btn-line btn-sm disabled:opacity-60">{totpBusy ? "验证中…" : "确认开启"}</button>
-                          </div>
+                        <div className="totp-meta-step"><h3>3. 复制并输入 6 位数验证码</h3><p>扫描二维码或输入密钥后，身份验证应用将生成一组 6 位数验证码。</p></div>
+                        <button type="button" className="totp-meta-primary totp-meta-next" onClick={() => setTotpSetupStage("verify")}>输入验证码</button>
+                      </> : <>
+                        <p className="totp-meta-copy">输入身份验证应用中显示的 6 位数验证码。</p>
+                        <form onSubmit={confirmTotpSetup} className="totp-meta-code-form">
+                          <label><span>验证码</span><input autoComplete="one-time-code" autoFocus spellCheck={false} inputMode="numeric" maxLength={6} value={totpSetupCode} onChange={(e) => setTotpSetupCode(normalizeTotpDigits(e.target.value))} placeholder="6 位数字" required /></label>
+                          <button type="submit" className="totp-meta-primary" disabled={totpBusy || !isSixDigitTotp(totpSetupCode)}>{totpBusy ? "验证中…" : "继续"}</button>
                         </form>
-                      </div>
+                      </>}
                     </div>
                   )}
                   {totpBackupCodes && totpBackupCodes.length > 0 && (
-                    <div className="mt-4 rounded-[10px] border border-edge bg-bg-gray/60 px-3.5 py-3">
-                      <p className="text-[13px] font-semibold text-ink">备用码只显示这一次，请立刻保存</p>
-                      <p className="mt-1 text-[12px] text-muted">每条只能用一次。验证器丢失时，可用备用码登录。</p>
-                      <ul className="mt-3 grid grid-cols-2 gap-2 font-mono text-[13px] tracking-[0.08em] text-ink">
-                        {totpBackupCodes.map((code) => (
-                          <li key={code} className="rounded-[8px] border border-edge bg-white px-3 py-1.5 dark:bg-[#161b26]">{code}</li>
-                        ))}
-                      </ul>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => { void copyText(totpBackupCodes.join("\n")); showToast("备用码已复制"); }}
-                        >
-                          复制全部备用码
-                        </button>
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={downloadBackupCodes}>
-                          下载备用码
-                        </button>
-                        <button type="button" className="btn btn-line btn-sm" onClick={() => setTotpBackupCodes(null)}>
-                          我已保存
-                        </button>
-                      </div>
+                    <div className="totp-meta-backup">
+                      <p className="totp-meta-copy">备用码只显示这一次。验证器不可用时，每个备用码可代替验证码使用一次。</p>
+                      <ul>{totpBackupCodes.map((code) => <li key={code}>{code}</li>)}</ul>
+                      <div className="totp-meta-backup-actions"><button type="button" onClick={() => { void copyText(totpBackupCodes.join("\n")); showToast("备用码已复制"); }}>复制</button><button type="button" onClick={downloadBackupCodes}>下载</button></div>
+                      <button type="button" className="totp-meta-primary" onClick={() => setTotpBackupCodes(null)}>我已保存</button>
                     </div>
                   )}
-                  {totpEnabled && !totpBackupCodes?.length && (
-                    <form onSubmit={disableTotp} className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                        当前密码
-                        <input type="password" autoComplete="current-password" value={totpDisablePassword} onChange={(e) => setTotpDisablePassword(e.target.value)} required className="sw-row-input" />
-                      </label>
-                      <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                        验证码或备用码
-                        <input autoComplete="one-time-code" value={totpDisableCode} onChange={(e) => setTotpDisableCode(e.target.value)} required className="sw-row-input" />
-                      </label>
-                      <div className="sm:col-span-2">
-                        <button type="submit" disabled={totpBusy} className="btn btn-ghost btn-sm disabled:opacity-60">{totpBusy ? "提交中…" : "关闭二次验证"}</button>
-                      </div>
-                    </form>
+                  {totpStatusLoaded && totpEnabled && !totpBackupCodes?.length && (
+                    <div className="totp-meta-enabled">
+                      <p className="totp-meta-copy">你的账户已使用身份验证应用进行保护。登录陌生设备时，需要输入验证器中的 6 位验证码。</p>
+                      <div className="totp-meta-methods"><div className="totp-meta-method is-selected"><span className="totp-meta-method-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path d="M15 14h2v2h-2zM19 14h1v3h-3v3h-3v-2M19 19h1v1h-1z"/></svg></span><span className="totp-meta-method-copy"><b>身份验证应用</b><small>已开启，可使用验证码或备用码登录。</small></span><span className="totp-meta-status">已开启</span></div></div>
+                      <h3>关闭双重验证</h3>
+                      <form onSubmit={disableTotp} className="totp-meta-disable">
+                        <label><span>当前密码</span><input type="password" autoComplete="current-password" value={totpDisablePassword} onChange={(e) => setTotpDisablePassword(e.target.value)} required /></label>
+                        <label><span>验证码或备用码</span><input autoComplete="one-time-code" value={totpDisableCode} onChange={(e) => setTotpDisableCode(e.target.value)} required /></label>
+                        <button type="submit" disabled={totpBusy}>{totpBusy ? "提交中…" : "关闭双重验证"}</button>
+                      </form>
+                    </div>
                   )}
                   {totpMsg && <p className={`settings-form-message ${totpMsg.type === "ok" ? "is-ok" : "is-error"}`}>{totpMsg.text}</p>}
-                </SettingsSection>
+                </section>
               </div>
             )}
 
