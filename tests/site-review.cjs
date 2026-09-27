@@ -57,7 +57,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(tablet.includes('.app-shell-root:has(.records-app.is-settings) { height:100dvh;'));
     assert(tablet.includes('@media (min-width: 768px) and (max-height: 700px)'));
     assert(tablet.includes('.sc-detail-dialog { max-height:min(48dvh,calc(100dvh - 32px)); }'));
-    assert(tablet.includes('.sc-detail-dialog { max-width:560px; max-height:48dvh; }'));
+    assert(tablet.includes('max-width:560px; height:auto; min-height:0; max-height:calc(100dvh - 96px);'));
     assert(tablet.includes('.sc-detail-dialog-head { min-height:64px;'));
     assert(!tablet.includes('@media (max-width: 767px)'), 'phone layout remains owned by mobile.css');
   });
@@ -66,10 +66,12 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(css.includes('isolation:isolate; min-height:196px; overflow:hidden; border-radius:var(--brand-preview-radius); clip-path:inset(0 round var(--brand-preview-radius));'));
     assert(css.includes('.brand-live-preview { --brand-preview-radius:18px; min-height:174px; }'));
   });
-  await test('tablet details reduce whitespace but preserve touch targets and the 48 percent height cap', () => {
+  await test('tablet details fit their content, cap long forms and preserve touch targets', () => {
     const tablet = fs.readFileSync(path.join(root,'styles/tablet.css'),'utf8');
     const detail = tablet.slice(tablet.lastIndexOf('@media (min-width: 768px) and (max-width: 1279px)'));
-    assert(detail.includes('max-width:560px; max-height:48dvh;'));
+    assert(detail.includes('max-width:560px; height:auto; min-height:0; max-height:calc(100dvh - 96px);'));
+    assert(!detail.includes('max-height:560px'), 'a fitting form must not be clipped by an arbitrary pixel cap');
+    assert(!detail.includes('48dvh'), 'the earlier percentage is not a fixed sizing requirement');
     assert(detail.includes('.sc-detail-dialog-actions > button { min-height:44px; }'));
     assert(detail.includes('min-height:116px; padding:16px; gap:16px;'));
     assert(detail.includes('.appearance-row { min-height:64px; padding-block:10px; gap:14px; }'));

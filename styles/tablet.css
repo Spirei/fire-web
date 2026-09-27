@@ -47,9 +47,9 @@
   .sc-detail-dialog-head { min-height:64px; padding-block:16px 12px; }
 }
 
-/* Tablet dialogs keep generous surrounding space in both orientations. */
+/* Let content choose the height; cap long dialogs without filling the tablet screen. */
 @media (min-width: 768px) and (max-width: 1279px) {
-  .sc-detail-dialog { max-width:560px; max-height:48dvh; }
+  .sc-detail-dialog { width:100%; max-width:560px; height:auto; min-height:0; max-height:calc(100dvh - 96px); }
   .sc-detail-dialog-head { min-height:64px; padding:10px 16px; }
   .sc-detail-dialog-head h2 { font-size:22px; }
   .sc-detail-dialog-actions > button { min-height:44px; }
