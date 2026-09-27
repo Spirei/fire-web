@@ -4552,7 +4552,7 @@ const V0_1_42_ENTRY: VersionEntry = {
 };
 
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_43_ENTRY: VersionEntry = {
   ...V0_1_42_ENTRY,
   version: "v0.1.43",
   date: "2026-09-27",
@@ -4619,11 +4619,23 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_43_ENTRY,
+  version: "v0.1.44",
+  date: "2026-09-28",
+  summary: "安全检查插图由系统内置提供，不依赖部署素材。",
+  software: V0_1_43_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.44" } : item),
+  changes: [
+    { kind: "fix", title: "安全插图部署兜底", desc: "安全检查保持内置 SVG，旧图片地址由系统代码返回同款插图，不受空 icons 挂载或 Docker 素材排除影响；响应要求缓存重新验证，并增加部署审计与无素材回归。" }
+  ]
+};
+
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_43_ENTRY,
   V0_1_42_ENTRY,
   V0_1_41_ENTRY,
   V0_1_40_ENTRY,

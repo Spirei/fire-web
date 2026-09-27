@@ -161,6 +161,7 @@ Review 自查清单（按项目实际走一遍）：
 
 ## 资源本地化约定（重要）
 
+- 安全检查插图属于系统默认资源：主界面使用内置 SVG，旧 `/icons/security-check.svg` 地址由 `beforeFiles` 重写到代码内置响应。不得改回依赖上传、外部 URL 或宿主机 icons 挂载的图片；Git 白名单通过不能代替镜像和空素材目录验证。
 - **线上版 / 线下版资源一律走本地素材库**，禁止依赖远程 CDN 图标（flagcdn / 长桥 LB 等）。图标、市场 / 货币旗帜、名人头像、导航图、登录图、site logo、背景等展示资源以 `public/uploads/` 的本地文件为准：镜像打包默认资源（`asset` / `celebs` / `currency` / `ico` / `login` / `logo` / `background`，不含用户 `avatar` / `reports` / 分组图标），首次启动由 `entrypoint.sh` 复制到 `./uploads` 挂载；素材库按类别用 `ensureIconAssets` / `ensureMarketAssets` / `ensureCategoryAssets` 播种缺失的默认条目（icon / market / crypto / metal），不覆盖用户已上传素材。
 - 前端图标渲染：素材库自定义图标优先，加载失败 `SafeAssetImage` 回退内置矢量默认图标；市场图标 `MarketIcon` 无本地素材时回退本地矢量地球，**不再请求任何远程图标地址**。
 - 新增任何可上传 / 可展示的图标时，同步确认本地素材存在 + 素材库播种逻辑 + `SafeAssetImage` 兜底，避免出现「?」破图。

@@ -65,6 +65,14 @@ requireText("生产镜像", dockerfile, [
   'ENV PATH="/opt/futu-venv/bin:${PATH}"',
   'ENTRYPOINT ["sh", "/app/entrypoint.sh"]'
 ]);
+// System illustrations must not depend on optional deployer-owned media volumes.
+requireText("安全插图系统兜底", read("next.config.mjs"), [
+  'source: "/icons/security-check.svg"', 'destination: "/api/system-assets/security-check"'
+]);
+requireText("安全插图内置响应", read("app/api/system-assets/security-check/route.ts"), [
+  'import { SECURITY_CHECK_SVG }', '"image/svg+xml; charset=utf-8"', '"public, max-age=0, must-revalidate"'
+]);
+requireText("安全检查内置矢量", read("components/SecurityCheck.tsx"), ['<svg className="security-check-illustration"']);
 requireText("启动脚本", entrypoint, [
   // 校验的是「镜像内路径必须被启动脚本引用」这一不变式；路径已改为带默认值的变量，
   // 因此断言路径本身，不再断言具体某行 shell 写法。

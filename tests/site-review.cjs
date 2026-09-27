@@ -16,6 +16,19 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('system security illustration works without deployment media and preserves its legacy URL', async () => {
+    const { GET } = require(path.join(root, 'app/api/system-assets/security-check/route.ts'));
+    const response = GET();
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'image/svg+xml; charset=utf-8');
+    assert.equal(response.headers.get('cache-control'), 'public, max-age=0, must-revalidate');
+    const svg = await response.text();
+    assert.equal(svg.trim(), fs.readFileSync(path.join(root, 'public/icons/security-check.svg'), 'utf8').trim());
+    assert(svg.includes('<svg xmlns="http://www.w3.org/2000/svg"'));
+    assert(!svg.includes('<image') && !svg.includes('href='));
+    const config = fs.readFileSync(path.join(root, 'next.config.mjs'), 'utf8');
+    assert(config.includes('source: "/icons/security-check.svg", destination: "/api/system-assets/security-check"'));
+  });
   await test('calendar detail mode handles absent data, losses and date-specific choices', () => {
     const { pnlDayDetailMode } = require(path.join(root, 'lib/pnlCalendar.ts'));
     assert.equal(pnlDayDetailMode(null, null), 'loss');

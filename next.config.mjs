@@ -34,6 +34,8 @@ const nextConfig = {
   allowedDevOrigins,
   async rewrites() {
     return { beforeFiles: [
+      // 系统安全插图优先由代码提供，不受宿主机 icons 挂载覆盖。
+      { source: "/icons/security-check.svg", destination: "/api/system-assets/security-check" },
       { source: "/uploads/reports/:path*", destination: "/api/private-reports/:path*" },
       // 草稿以 .draft- 开头；必须先走动态读取，否则 public 静态服务拒绝隐藏文件并返回 400。
       { source: "/uploads/mclaren/models/:file", destination: "/api/showcase/model-files/:file" }
