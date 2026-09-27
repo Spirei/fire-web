@@ -61,20 +61,69 @@ Web、iOS 与 Android 共用 `/api/v1`。旧版 `/api/**` 继续兼容。
 <details>
 <summary>移动端登录 · 获取 Token</summary>
 
-1. `POST /api/v1/auth/login`，请求体 `{ "username": "你的用户名", "password": "你的密码" }`
-2. 未开启二次验证时，响应 `data` 携带 `token` 与 `expiresIn`（秒）
-3. 开启二次验证时，先返回 `{ "requires2fa": true, "ticket": "…" }`。再向 `POST /api/v1/auth/login/totp` 提交 `{ "ticket", "code" }`，验证成功后获取 `token`。
-4. 后续请求头携带 `Authorization: Bearer <token>`
-5. 退出：`POST /api/v1/auth/logout`（携带同一 token）
+### ① 提交账号密码
 
-`code` 接受 6 位 TOTP 或一次性备用码。ticket 有效期 5 分钟，每个账号仅保留最新一张，验证失败 8 次后作废。
+```http
+POST /api/v1/auth/login
+Content-Type: application/json
+```
+
+```json
+{
+  "username": "你的用户名",
+  "password": "你的密码"
+}
+```
+
+**登录成功**：`data` 返回 `token` 和 `expiresIn`（秒），进入第 ③ 步。
+
+**需要二次验证**：返回 `requires2fa: true` 和 `ticket`，进入第 ② 步。
+
+### ② 二次验证（仅开启时）
+
+```http
+POST /api/v1/auth/login/totp
+Content-Type: application/json
+```
+
+```json
+{
+  "ticket": "上一步返回的 ticket",
+  "code": "6 位验证码或一次性备用码"
+}
+```
+
+验证成功后获取 `token`。
+
+> ticket 有效期 5 分钟，每个账号仅保留最新一张；验证失败 8 次后作废。
+
+### ③ 携带 Token 请求
+
+在后续请求中加入请求头：
+
+```http
+Authorization: Bearer <token>
+```
+
+### ④ 退出登录
+
+携带同一 Token 调用：
+
+```http
+POST /api/v1/auth/logout
+Authorization: Bearer <token>
+```
 
 </details>
 
 <details>
 <summary>Web 登录 · Cookie 会话</summary>
 
-使用 HttpOnly Cookie 会话，`GET /api/v1/auth/me` 同时识别 Cookie 与 Bearer Token。开启二次验证时，先获取 ticket，再由 `POST /api/auth/login/totp` 验证并写入 Cookie。
+| 场景 | 处理方式 |
+| --- | --- |
+| 会话 | 使用 HttpOnly Cookie |
+| 二次验证 | 先获取 ticket，再调用 `POST /api/auth/login/totp` 验证并写入 Cookie |
+| 当前用户 | `GET /api/v1/auth/me`，同时识别 Cookie 与 Bearer Token |
 
 </details>
 
@@ -91,14 +140,24 @@ Web、iOS 与 Android 共用 `/api/v1`。旧版 `/api/**` 继续兼容。
 | 改名 | PATCH，提交 `{ id, name }` |
 | 删除 | DELETE，提交 `{ id, password, code }` |
 
-- options 返回 `{ options, requestId }`，并写入一次性浏览器绑定 Cookie。
-- verify 提交 `{ action, requestId, response }`；注册可另传 `name`。
-- 注册 options 需要登录、`password`，以及已开启二次验证时的 `code`。
-- 登录要求 WebAuthn 用户验证。成功后写入 HttpOnly Cookie，不返回 Bearer Token。
+### 请求与验证
 
-删除密钥会同时撤销关联会话及该账号来源不明的升级前旧会话。返回 `{ ok: true, signedOut: boolean }`；`signedOut=true` 时返回登录页。
+| 阶段 | 字段与要求 |
+| --- | --- |
+| options 响应 | `{ options, requestId }`，同时写入一次性浏览器绑定 Cookie |
+| verify 请求 | `{ action, requestId, response }`；注册可另传 `name` |
+| 注册身份 | 已登录、`password`，以及已开启二次验证时的 `code` |
+| 登录结果 | 必须通过 WebAuthn 用户验证；成功写入 HttpOnly Cookie，不返回 Bearer Token |
 
-登录 options 写入签名浏览器标识 Cookie，按浏览器及可信代理 IP 分别限流。每个浏览器只保留最新挑战；verify 需要挑战绑定 Cookie，挑战仅可使用一次。
+### 删除与会话
+
+- 删除密钥会撤销关联会话及该账号来源不明的升级前旧会话。
+- 返回 `{ ok: true, signedOut: boolean }`；`signedOut=true` 时返回登录页。
+
+### 挑战与限流
+
+- 登录 options 写入签名浏览器标识 Cookie，按浏览器及可信代理 IP 分别限流。
+- 每个浏览器只保留最新挑战；verify 需要挑战绑定 Cookie，挑战仅可使用一次。
 
 </details>
 
@@ -404,11 +463,16 @@ Web“公司”页与 iOS App 共用同一份公司资料契约。
 
 服务端行情缓存 30 秒。列表页建议只请求当前可见证券（Web 当前每页 6 只）；iOS 前台活跃时建议每 30 秒刷新一次，进入后台或非交易日停止轮询。
 
-多市场持仓的“当日盈亏”必须按**交易所当地交易日**计算，不能按设备所在时区的自然日统一切换：美股以 `America/New_York` 为准，港股与 A 股以 `Asia/Shanghai` 为准。单股口径为 `(最新价 - 昨收价) × 持仓数量`；混合市场汇总时先按各市场本币计算，再用当前可用汇率换算到展示币种。Web 首次进入拉取全部市场收盘快照，之后仅在对应市场盘前、盘中或盘后时段每 30 秒刷新；周末及休市时保留最后有效值，不持续请求。
+- **交易日**：按交易所当地日期计算。美股使用 `America/New_York`，港股与 A 股使用 `Asia/Shanghai`，不按设备时区切换。
+- **单股盈亏**：`(最新价 - 昨收价) × 持仓数量`。
+- **跨市场汇总**：先按本币计算，再用当前汇率换算到展示币种。
+- **刷新**：首次拉取全部市场收盘快照；之后仅在对应市场盘前、盘中或盘后每 30 秒刷新。周末和休市保留最后有效值，不持续请求。
 
 美股当日盈亏覆盖美东盘前、盘中与盘后，并以**美东时间 20:00**作为当天结算边界。到达 20:00 后停止该市场行情轮询、冻结最终当日盈亏并显示“已结算”；下一交易日美东 04:00 盘前恢复更新。不得使用中国时间 20:00 或设备本地午夜切换美股当日盈亏。
 
-美股盘前 / 盘后行情返回时，`price`、`change`、`changePct` 为当前扩展时段有效值，并附带 `session: PRE | AFTER` 与 `prevClose`。涨跌基准固定使用最近一次**常规盘收盘价**；不得直接采用扩展行情源的 `previousClose` / `chartPreviousClose` 元数据，因为新上市或杠杆 ETF 可能返回复权前或更早交易日数据。Web、持仓盈亏与 iOS 必须直接复用这组统一字段，避免详情页上涨而持仓仍显示下跌。
+- **返回字段**：`price`、`change`、`changePct` 为当前扩展时段有效值，同时返回 `session: PRE | AFTER` 与 `prevClose`。
+- **涨跌基准**：最近一次常规盘收盘价。不要直接使用上游 `previousClose` / `chartPreviousClose`，新上市或杠杆 ETF 的该字段可能来自复权前或更早交易日。
+- **客户端**：Web、持仓盈亏与 iOS 共用上述字段，保持涨跌口径一致。
 
 美股 K 线会先规范化交易所后缀（例如 `SPCH.AM → SPCH`）。日 K 首选新浪，空数据时自动回退 Yahoo 日线；5 日分钟线同样在新浪缺失时回退 Yahoo 5 分钟线。客户端只消费统一的 `items` / `points`，无需识别上游，适用于新上市 ETF 与美交所证券。
 
@@ -604,7 +668,19 @@ Authorization: Bearer <token>
 }
 ```
 
-成功返回 `{ order, position }`。买入成本按“原持仓成本额 + 本次成交额 + 费用”加权；卖出采用券商常见的摊薄 / 保本成本口径：`剩余成本 = (卖出前数量 × 卖出前成本 − 卖出数量 × 成交价) ÷ 剩余数量`，因此亏损卖出会提高剩余成本，盈利卖出会降低成本，累计回款超过投入时成本可为负数。成交后持仓成本统一保留 3 位小数，后续持仓盈亏也使用这个可见成本计算，避免隐藏小数位造成对账差额。卖出费用只计入 `realizedPnl = (成交价 - 卖出前成本) × 数量 - 费用`，避免在剩余成本与已实现盈亏中重复计算。订单同时返回 `positionQtyBefore` / `positionCostBefore` 及成交后快照，供 iOS 审计和可靠重放。卖出数量超过持仓时返回 `40001`，订单写入与持仓更新在同一数据库事务内完成。
+成功返回 `{ order, position }`。
+
+| 项目 | 计算规则 |
+| --- | --- |
+| 买入成本 | 按原持仓成本额、本次成交额与费用加权 |
+| 卖出后成本 | `(卖出前数量 × 卖出前成本 − 卖出数量 × 成交价) ÷ 剩余数量` |
+| 已实现盈亏 | `(成交价 - 卖出前成本) × 数量 - 费用` |
+| 精度 | 成交后成本保留 3 位小数，后续持仓盈亏使用该可见成本 |
+
+- 卖出采用摊薄 / 保本成本：亏损卖出提高剩余成本，盈利卖出降低成本，累计回款超过投入时可为负数。
+- 卖出费用仅计入已实现盈亏，不重复计入剩余成本。
+- 订单返回 `positionQtyBefore`、`positionCostBefore` 及成交后快照，供审计与重放。
+- 超卖返回 `40001`；订单写入与持仓更新在同一数据库事务内完成。
 
 ### 删除历史订单
 
@@ -663,7 +739,15 @@ GET /api/v1/orders/export?scope=all&market=ALL&status=all&type=all&start=&end=&r
 Authorization: Bearer <token>
 ```
 
-返回 `.xlsx` 二进制（手写零依赖写入器）。筛选参数与订单列表一致：`scope`（today / history / all）、`market`、`status`、`type`、`start` / `end`（委托时间区间）、`recordId`、`limit`（默认 5000，上限 10000）；`detail=1` 时追加「订单明细」工作表（含成交后持仓数量、成本等 23 列）。仅登录用户。
+返回 `.xlsx` 文件，仅登录用户可用。
+
+| 参数 | 说明 |
+| --- | --- |
+| `scope` | today / history / all |
+| `market`、`status`、`type`、`recordId` | 与订单列表筛选一致 |
+| `start`、`end` | 委托时间区间 |
+| `limit` | 默认 5000，上限 10000 |
+| `detail=1` | 追加订单明细表，含成交后持仓数量、成本等 23 列 |
 
 ## 6.18 数据备份
 
@@ -673,8 +757,27 @@ POST /api/v1/data/import
 Authorization: Bearer <token>
 ```
 
-- **导出**：返回 `fire-site-backup` 版本化 JSON（`format` / `version` / `appVersion` / `exportedAt` / `manifest` / `data`）。`data` 含当前用户的：`userSettings`、`records`、`tradeOrders`、`activities`、`watchGroups`、`profile(nickname)`；**管理员额外含** `siteSettings`(全部站点设置，排除数据库连接串等环境键) 与 `celebs`(名人持仓)。普通用户仅自己的数据。所有登录用户可用。
-- **导入**：body 为导出文件，最大 10MB，并限制各数据集条数和调用频率。`POST /api/v1/data/import?preview=1` 做**结构、字段白名单、版本、引用归属校验 + 试算条数**（不写入）；正式导入前必须成功生成数据库快照，否则停止。导入在单事务内恢复当前用户数据：与当前用户已有 ID 匹配时更新；新数据或与其他用户冲突的 ID 会生成新 ID，并同步重映射订单/分组引用，绝不会改变其他用户的数据归属。管理员可额外导入固定白名单内的 `site_settings` 与 `celebs`；普通用户携带的站点级数据会被忽略。
+### 导出范围
+
+所有登录用户可用。返回 `fire-site-backup` JSON，包含 `format`、`version`、`appVersion`、`exportedAt`、`manifest`、`data`。
+
+| 用户 | data 内容 |
+| --- | --- |
+| 普通用户 | 自己的 `userSettings`、`records`、`tradeOrders`、`activities`、`watchGroups`、`profile(nickname)` |
+| 管理员 | 另含 `siteSettings` 与 `celebs`；排除数据库连接串等环境键 |
+
+### 导入流程
+
+1. 提交导出文件，最大 10MB；各数据集条数和调用频率另有限制。
+2. 调用 `POST /api/v1/data/import?preview=1`，校验结构、字段白名单、版本和引用归属，并试算条数；此步不写入。
+3. 正式导入前生成数据库快照，失败则停止。
+4. 在单事务内恢复当前用户数据。
+
+### 数据合并规则
+
+- 当前用户已有 ID：更新对应数据。
+- 新数据或与其他用户冲突的 ID：生成新 ID，同步重映射订单与分组引用，不改变其他用户的数据归属。
+- 管理员可额外导入白名单内的 `site_settings` 与 `celebs`；普通用户携带的站点级数据会被忽略。
 
 ## 6.19 资金
 

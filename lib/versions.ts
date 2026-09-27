@@ -4559,6 +4559,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "API 文档采用参考视频的雾灰玻璃目录与刻度交互。",
   software: V0_1_42_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.43" } : item),
   changes: [
+    { kind: "fix", title: "认证步骤与长文说明", desc: "移动端认证拆为登录、二次验证、携带 Token 和退出四步，独立展示 HTTP / JSON 示例；整理 Web、通行密钥、行情与订单长段说明，保留原有参数与规则。" },
     { kind: "fix", title: "API 接口清单适配", desc: "手机端按方法、路径、说明与权限纵向展示接口卡片，长路径可换行；修复转义竖线造成表格错列，补充表头语义与回归测试。" },
     { kind: "fix", title: "API 文档内容排版", desc: "精简页头、统计卡和重复标题，统一右侧标题、表格及代码示例样式并增强对比；认证内容拆为四个默认收起的条目，按需展开短步骤与操作表，保留接口参数和安全约定。" },
     { kind: "fix", title: "API 文档阅读区加宽", desc: "目录收至 256px，窗口最大宽度增至 1600px，缩减外围留白与正文内边距，移除冲突的 1280px 宽度限制；保留玻璃样式、目录动画与手机布局。" },

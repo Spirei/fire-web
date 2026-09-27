@@ -158,6 +158,10 @@
 .api-reference-shell .markdown-details[open] { padding-bottom: 12px; }
 .api-reference-shell .markdown-details[open] summary { border-bottom: 1px solid #dae1e6; margin-bottom: 14px; }
 .api-reference-shell .markdown-details > p, .api-reference-shell .markdown-details > ul, .api-reference-shell .markdown-details > ol { max-width: 90ch; }
+.api-reference-shell .api-docs-paper .markdown-details h3 { margin: 28px 0 12px; padding-top: 20px; border-top: 1px solid #7c899526; font-size: 15px; }
+.api-reference-shell .api-docs-paper .markdown-details summary + h3 { border: 0; padding-top: 0; margin-top: 18px; }
+.api-reference-shell .api-docs-paper .markdown-details pre { padding: 16px 48px 16px 16px; }
+.api-reference-shell .api-docs-paper .markdown-details blockquote { margin: 16px 0; font-size: 13px; }
 .api-reference-shell .api-docs-paper tbody tr:last-child td { border-bottom: 0; }
 .api-reference-shell .api-docs-paper blockquote { background: #5875b50b; border-left-color: var(--reference-blue); }
 .api-reference-shell .api-docs-paper th { background: #f0f3f5; color: #4b5965; }
@@ -214,6 +218,8 @@
   .api-reference-shell .api-docs-paper h2 { padding: 22px 0 0; font-size: 19px; }
 }
 @media (max-width: 767px) {
+  .api-reference-shell .api-docs-paper .markdown-details pre { padding: 44px 12px 14px; }
+  .api-reference-shell .api-docs-paper .markdown-details pre code { white-space: pre-wrap; overflow-wrap: anywhere; }
   .api-reference-shell .api-docs-paper .markdown-routes { border: 0; border-radius: 0; overflow: visible; }
   .api-reference-shell .markdown-routes table,
   .api-reference-shell .markdown-routes tbody { display: block; }

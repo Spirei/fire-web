@@ -96,6 +96,7 @@ export default function ApiDocsPage() {
     () => previewHtml.replace(/^<h1\b[^>]*>.*?<\/h1>\s*/, "").replace(/<td([^>]*)>(GET|POST|PUT|DELETE|PATCH)<\/td>/g, (_m, attributes: string, method: string) => `<td${attributes}><span class="api-method ${method.toLowerCase()}">${method}</span></td>`),
     [previewHtml]
   );
+  const renderedDocument = useMemo(() => ({ __html: methodHtml }), [methodHtml]);
 
   useEffect(() => {
     fetch("/api/api-docs")
@@ -485,7 +486,7 @@ export default function ApiDocsPage() {
                 if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) resumeReading();
               }}
               className="markdown-body api-docs-paper min-w-0"
-              dangerouslySetInnerHTML={{ __html: methodHtml }}
+              dangerouslySetInnerHTML={renderedDocument}
             />
             </div>
           </>
@@ -524,7 +525,7 @@ export default function ApiDocsPage() {
                 <span className="text-[10px] text-faint">{content.length} 字符</span>
               </div>
               <div className="markdown-body api-docs-paper h-[70vh] overflow-y-auto bg-white p-5 dark:bg-[#0d1117] sm:p-7">
-                <article dangerouslySetInnerHTML={{ __html: methodHtml }} />
+                <article dangerouslySetInnerHTML={renderedDocument} />
               </div>
             </section>
           </div>
