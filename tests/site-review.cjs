@@ -891,6 +891,26 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(funds.includes('cardMoney(profit, true)'));
     assert(funds.includes('<details className="fund-mobile-breakdown">'));
   });
+  await test('mobile back follows horizontal intent without mistaking vertical scroll or tiny flicks', () => {
+    const { mobileGestureAxis, shouldFinishMobileBack, mobilePanelDirection } = require(path.join(root, 'lib/mobileNavigation.ts'));
+    assert.equal(mobileGestureAxis(8, 3), 'pending');
+    assert.equal(mobileGestureAxis(32, 50), 'scroll');
+    assert.equal(mobileGestureAxis(-60, 2), 'scroll');
+    assert.equal(mobileGestureAxis(40, 8), 'back');
+    assert.equal(shouldFinishMobileBack(20, 390, 2), false);
+    assert.equal(shouldFinishMobileBack(50, 390, .6), true);
+    assert.equal(shouldFinishMobileBack(70, 390, .1), false);
+    assert.equal(shouldFinishMobileBack(115, 390, 0), true);
+    assert.equal(mobilePanelDirection('assets', 'pnl'), 'forward');
+    assert.equal(mobilePanelDirection('pnl', 'assets'), 'back');
+    assert.equal(mobilePanelDirection('holdings', 'watchlist'), 'back');
+    assert.equal(mobilePanelDirection('assets', 'assets'), 'none');
+    const gesture = fs.readFileSync(path.join(root, 'components/MobileBackGesture.tsx'), 'utf8');
+    assert(gesture.includes('passive: true'));
+    assert(!gesture.includes('preventDefault'));
+    assert(gesture.includes('touchcancel'));
+    assert(gesture.includes('cancelAnimationFrame(frame)'));
+  });
   await test('high-risk admin mutations require step-up authentication', async () => {
     const auth = require(path.join(root, 'lib/auth.ts'));
     const admin = createUser('review_stepup_admin', 'Admin-test-123');

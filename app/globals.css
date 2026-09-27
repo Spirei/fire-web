@@ -6229,6 +6229,24 @@ button.PhotoView-Slider__toolbarIcon {
 .sv-center .settings-password-grid input { min-height:42px; }
 .sc-mobile-navigation { display:none; }
 .workspace-mobile-navigation { display:none; }
+@keyframes mobile-panel-forward { from { opacity:.65; transform:translate3d(24px,0,0); } to { opacity:1; transform:none; } }
+@keyframes mobile-panel-back { from { opacity:.65; transform:translate3d(-24px,0,0); } to { opacity:1; transform:none; } }
+@media(max-width:767px) {
+  .records-content { overflow-x:clip; }
+  .records-app:not(.is-settings) .tab-panel[data-direction="forward"] { animation:mobile-panel-forward 200ms cubic-bezier(.2,.8,.2,1) both; }
+  .records-app:not(.is-settings) .tab-panel[data-direction="back"] { animation:mobile-panel-back 200ms cubic-bezier(.2,.8,.2,1) both; }
+  .mobile-back-gesture[data-dragging="true"] { user-select:none; }
+}
+@media(max-width:1023px) and (hover:none) {
+  .records-app:not(.is-settings) .btn:hover,.records-app:not(.is-settings) button.hover\:-translate-x-1:hover { transform:none; }
+  .workspace-dock-main,.workspace-menu-trigger { box-shadow:0 2px 8px rgb(var(--site-ink) / .08) !important; }
+  .workspace-bottom-tabs button { -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+  .workspace-bottom-tabs button:active,.asset-mobile-holding-trigger:active { background:rgb(var(--site-ink) / .06); }
+}
+@media(prefers-reduced-motion:reduce) {
+  .records-app .tab-panel[data-direction] { animation:none !important; }
+  .asset-analysis-page :is(.btn,button,a) { scroll-behavior:auto; }
+}
 .records-app:not(.is-settings) .card { border:1px solid rgb(var(--site-edge)); border-radius:16px; box-shadow:none; background:rgb(var(--site-surface)); }
 .records-app:not(.is-settings) .records-content h2 { font-size:24px; line-height:1.3; letter-spacing:-.025em; }
 .records-app:not(.is-settings) .btn { min-height:40px; border-radius:16px; box-shadow:none; }

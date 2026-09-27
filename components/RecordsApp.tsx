@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import MobileBackGesture from "@/components/MobileBackGesture";
+import { mobilePanelDirection } from "@/lib/mobileNavigation";
 import { useRouter } from "next/navigation";
 import {
   MARKET_LIST,
@@ -155,6 +157,9 @@ export default function RecordsApp({
   const [userLogs, setUserLogs] = useState<SystemLog[]>(initialUserLogs);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
+  const [panelDirection, setPanelDirection] = useState("none");
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
   const restoreAssetPosition = useCallback(() => {
     if (!restoreAssetScrollRef.current || !assetReturnRef.current) return;
     const position = assetReturnRef.current;
@@ -426,6 +431,7 @@ export default function RecordsApp({
   // 统一的无感导航：只改状态 + 地址栏，不触发路由重载
   const navigateTo = useCallback(
     (key: TabKey, sub?: string | null) => {
+      setPanelDirection(mobilePanelDirection(activeTabRef.current, key));
       setActiveTab(key);
       const tab = navTabs.find((t) => t.key === key);
       const url = key === "pnl" ? "/asset-pnl-analysis" : tab?.url || `/${key}`;
@@ -447,12 +453,19 @@ export default function RecordsApp({
     [navigateTo, settingsSub]
   );
 
+  const returnFromAssetPnl = useCallback(() => {
+    restoreAssetScrollRef.current = Boolean(assetReturnRef.current);
+    selectTab("assets");
+    if (assetReturnRef.current) window.history.replaceState({}, "", assetReturnRef.current.url);
+  }, [selectTab]);
+
   const navigateFromAssistant = useCallback((path: string) => {
     const url = new URL(path, window.location.origin);
     const target = url.pathname === "/asset-pnl-analysis"
       ? "pnl"
       : navTabs.find((tab) => (tab.url || `/${tab.key}`) === url.pathname)?.key;
     if (!target) return;
+    setPanelDirection(mobilePanelDirection(activeTabRef.current, target));
     setActiveTab(target as TabKey);
     window.history.pushState({}, "", `${url.pathname}${url.search}`);
   }, [navTabs]);
@@ -522,11 +535,14 @@ export default function RecordsApp({
   useEffect(() => {
     function onPop() {
       if (window.location.pathname === "/asset-pnl-analysis") {
+        setPanelDirection(mobilePanelDirection(activeTabRef.current, "pnl"));
         setActiveTab("pnl");
         return;
       }
       const tab = navTabs.find((t) => (t.url || `/${t.key}`) === window.location.pathname);
       if (tab) {
+        setPanelDirection(mobilePanelDirection(activeTabRef.current, tab.key));
+        if (activeTabRef.current === "pnl" && tab.key === "assets") restoreAssetScrollRef.current = Boolean(assetReturnRef.current);
         setActiveTab(tab.key as TabKey);
         if (tab.key === "settings") {
           setSettingsSub(new URLSearchParams(window.location.search).get("sub"));
@@ -886,13 +902,14 @@ export default function RecordsApp({
       {/* 内容区 */}
       <div ref={contentRef} className="records-content min-w-0 flex-1">
         {activeTab !== "settings" && <WorkspaceNavigation items={sidebarTabs} activeKey={activeTab} onPrepare={key => preloadView(key as TabKey)} onSelect={key => {
-          if (key !== activeTab) selectTab(key as TabKey);
+          if (key === activeTab) return;
+          selectTab(key as TabKey);
           window.scrollTo({ top: 0, behavior: "instant" });
         }} />}
         {/* 设置采用独立的分层页面 */}
         {activeTab === "settings" && <div className="settings-mobile-toolbar"><button type="button" aria-label="关闭设置" onClick={() => selectTab("holdings")}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>}
 
-        <div key={activeTab} className="tab-panel min-w-0">
+        <div key={activeTab} data-direction={panelDirection} className="tab-panel min-w-0">
           {activeTab === "watchlist" && (
             <WatchlistView
               initialSymbol={initialSymbol}
@@ -955,15 +972,11 @@ export default function RecordsApp({
             />
           )}
           {activeTab === "pnl" && (
-            <AssetPnlAnalysisView
-              onBack={() => {
-                restoreAssetScrollRef.current = Boolean(assetReturnRef.current);
-                selectTab("assets");
-                if (assetReturnRef.current) window.history.replaceState({}, "", assetReturnRef.current.url);
-              }}
+            <MobileBackGesture onBack={returnFromAssetPnl}><AssetPnlAnalysisView
+              onBack={returnFromAssetPnl}
               initialRecords={records}
               initialQuotes={quotes}
-            />
+            /></MobileBackGesture>
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
           {activeTab === "global" && <GlobalPreviewView />}

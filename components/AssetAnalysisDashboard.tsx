@@ -13,6 +13,7 @@ import { emptyFundBalances, type FundCurrency } from "@/lib/fundCurrencies";
 import TradeOrdersPanel from "@/components/TradeOrdersPanel";
 import RefreshButton from "@/components/RefreshButton";
 import AssetHoldingList from "@/components/AssetHoldingList";
+import { preloadView } from "@/lib/viewPreload";
 import DailyPnlShareModal, { preloadDailyPnlTemplates, waitForDailyPnlTemplates, type DailyPnlShareItem } from "@/components/DailyPnlShareModal";
 import dynamic from "next/dynamic";
 // 图表按需加载：echarts 不小，等趋势卡片真正需要渲染时再拉这块 JS
@@ -1133,6 +1134,9 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
                 onClick={onOpenPnlAnalysis}
                 title="查看资产盈亏分析"
                 className="asset-pnl-shortcut text-left"
+                onPointerDown={() => preloadView("pnl")}
+                onPointerEnter={event => { if (event.pointerType === "mouse") preloadView("pnl"); }}
+                onFocus={() => preloadView("pnl")}
               >
                 <span className="text-xs text-muted">
                   持仓总盈亏
