@@ -6251,11 +6251,20 @@ button.PhotoView-Slider__toolbarIcon {
 .asset-pnl-shortcut:not(:disabled):hover { background:rgb(var(--site-ink) / .04); }
 .asset-account-card > div:first-child button { min-width:40px; min-height:40px; box-shadow:none; border-radius:50%; }
 .asset-mobile-holdings { display:none; }
+.fund-mobile-overview { display:none; }
 .fund-panel-footer { border-top:1px solid rgb(var(--site-ink) / .12); }
-.fund-calculation-notes summary,.fund-records-link { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:44px; width:100%; font-size:12px; color:rgb(var(--site-ink) / .7); cursor:pointer; }
-.fund-calculation-notes summary { list-style:none; }
-.fund-calculation-notes summary::-webkit-details-marker { display:none; }
-.fund-calculation-notes[open] summary svg { transform:rotate(180deg); }
+.fund-calculation-notes summary,.fund-records-link,.fund-mobile-breakdown summary { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:44px; width:100%; font-size:13px; color:rgb(var(--site-ink) / .7); cursor:pointer; }
+.fund-calculation-notes summary,.fund-mobile-breakdown summary { list-style:none; }
+.fund-calculation-notes summary::-webkit-details-marker,.fund-mobile-breakdown summary::-webkit-details-marker { display:none; }
+.fund-calculation-notes[open] summary svg,.fund-mobile-breakdown[open] summary svg { transform:rotate(180deg); }
+.fund-mobile-breakdown summary { border-top:1px solid rgb(var(--site-ink) / .12); }
+.fund-mobile-total > span,.fund-mobile-key-metrics dt,.fund-mobile-breakdown dt { font-size:12px; color:rgb(var(--site-ink) / .6); }
+.fund-mobile-total > strong { display:block; margin-top:6px; font-size:28px; line-height:1.2; font-weight:650; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.fund-mobile-key-metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; padding:20px 0; }
+.fund-mobile-key-metrics dd { margin-top:5px; font-size:18px; font-weight:600; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.fund-mobile-breakdown dl > div { display:flex; justify-content:space-between; align-items:center; gap:16px; min-height:40px; }
+.fund-mobile-breakdown dd { text-align:right; font-size:14px; font-weight:550; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+@media(max-width:767px) { .fund-mobile-overview { display:block; } .fund-desktop-flow { display:none; } .funds-panel .fund-panel-footer { margin-top:0; } }
 .fund-calculation-notes + .fund-records-link { border-top:1px solid rgb(var(--site-ink) / .08); }
 .asset-mobile-actions.modal-glass { background:rgb(var(--site-surface)) !important; }
 .asset-mobile-action-list { overflow:hidden; border:1px solid rgb(var(--site-edge)); border-radius:16px; }

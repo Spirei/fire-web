@@ -885,6 +885,11 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(!funds.includes('<details open'));
     assert(funds.includes('className="fund-records-link"'));
     assert(!funds.includes('温馨提示'));
+    assert(funds.includes('className="fund-flow-grid fund-desktop-flow"'));
+    assert(funds.includes('className="fund-mobile-overview"'));
+    assert(funds.includes('cardMoney(endingAsset)'));
+    assert(funds.includes('cardMoney(profit, true)'));
+    assert(funds.includes('<details className="fund-mobile-breakdown">'));
   });
   await test('high-risk admin mutations require step-up authentication', async () => {
     const auth = require(path.join(root, 'lib/auth.ts'));

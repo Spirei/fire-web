@@ -163,7 +163,15 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
   return <section className="funds-panel card overflow-visible">
     <div className="flex items-center justify-between gap-3 border-b border-edge px-4 py-4"><div className="min-w-0"><div className="flex items-center gap-2.5"><h3 className="text-base font-bold">资金系统</h3><CurrencySelect value={currency} options={fundCurrencyOptions()} align="left" onChange={(next) => { setCurrency(next); setRecordsPage(0); }} /></div><p className="mt-0.5 truncate text-[11px] text-muted">现金与持仓共同构成账户资产</p></div><button type="button" onClick={() => setOpen(true)} className="btn-line h-8 shrink-0 px-3 text-xs"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="mr-1 h-3.5 w-3.5"><path d="M10 4v12M4 10h12" /></svg>记一笔</button></div>
     <div className="p-5">
-      <div className="fund-flow-grid">
+      <div className="fund-mobile-overview">
+        <div className="fund-mobile-total"><span>期末总资产 · {currency}</span><strong title={exactMoney(endingAsset)}>{cardMoney(endingAsset)}</strong></div>
+        <dl className="fund-mobile-key-metrics">
+          <div><dt>盈亏额</dt><dd className={profit > 0 ? "text-up" : profit < 0 ? "text-down" : ""} title={exactMoney(profit, true)}>{cardMoney(profit, true)}</dd></div>
+          <div><dt>当期净投入</dt><dd title={exactMoney(currentInvestment, true)}>{cardMoney(currentInvestment, true)}</dd></div>
+        </dl>
+        <details className="fund-mobile-breakdown"><summary>资金明细<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></summary><dl>{([['期初总资产', openingAsset], ['现金净流入', cashNetFlow], ['交易现金流', stockNetFlow], ['其他净流入', otherNetFlow]] as const).map(([label, value]) => <div key={label}><dt>{label}</dt><dd title={exactMoney(value, true)}>{cardMoney(value, true)}</dd></div>)}</dl></details>
+      </div>
+      <div className="fund-flow-grid fund-desktop-flow">
         <div aria-hidden="true" className="fund-flow-bracket fund-flow-bracket--left" />
         <div aria-hidden="true" className="fund-flow-bracket fund-flow-bracket--right" />
         <div aria-hidden="true" className="fund-flow-center-line fund-flow-center-line--left" />
