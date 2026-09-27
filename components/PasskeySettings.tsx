@@ -186,27 +186,17 @@ export default function PasskeySettings({ admin, onClose }: { admin: boolean; on
   return <>
     {!pending && intro ? <AppModal title="下次免密登录" onClose={() => { setIntro(false); onClose?.(); }} className="pk-reference-modal pk-intro-modal" size="lg">
       <button type="button" className="pk-back" aria-label="返回" onClick={() => setIntro(false)}>‹</button>
-      <svg className="pk-security-art" viewBox="0 0 360 220" fill="none" aria-hidden="true">
-        <defs><linearGradient id="pk-shield" x1="100" y1="20" x2="260" y2="210" gradientUnits="userSpaceOnUse"><stop stopColor="#12c4ee"/><stop offset=".45" stopColor="#0668eb"/><stop offset=".8" stopColor="#2438d7"/><stop offset="1" stopColor="#db97ed"/></linearGradient><linearGradient id="pk-tile" x1="40" y1="0" x2="140" y2="150" gradientUnits="userSpaceOnUse"><stop stopColor="#beff89"/><stop offset=".5" stopColor="#83f0eb"/><stop offset="1" stopColor="#b7a2ff"/></linearGradient><linearGradient id="pk-tile-pink" x1="230" y1="100" x2="320" y2="220" gradientUnits="userSpaceOnUse"><stop stopColor="#85e4ff"/><stop offset=".55" stopColor="#d1aaff"/><stop offset="1" stopColor="#ffdcad"/></linearGradient></defs>
-        <path d="M180 32c36 0 61 12 76 20v65c0 50-57 82-76 91-19-9-76-41-76-91V52c15-8 40-20 76-20Z" fill="url(#pk-shield)"/>
-        <path d="m145 110 25 24 47-48" stroke="white" strokeWidth="15" strokeLinecap="round" strokeLinejoin="round"/>
-        <rect x="45" y="14" width="94" height="98" rx="19" fill="url(#pk-tile)" stroke="#76e9e4" strokeWidth="3" transform="rotate(5 92 63)"/>
-        <g stroke="#079ada" strokeWidth="5" strokeLinecap="round"><path d="m72 77 35-35m-35 35 33 5m-20-19 23 3"/><circle cx="73" cy="39" r="2"/><circle cx="73" cy="56" r="2"/><circle cx="108" cy="40" r="2"/><circle cx="109" cy="83" r="2"/></g>
-        <rect x="242" y="20" width="53" height="54" rx="12" fill="url(#pk-tile)" transform="rotate(-7 268 47)"/>
-        <g stroke="#168fe8" strokeWidth="3" strokeLinecap="round"><path d="M256 48c0-17 26-17 26 0m-21 5V44c0-9 16-9 16 0v10m-11-9v13m6-10v13"/></g>
-        <rect x="226" y="95" width="91" height="103" rx="20" fill="url(#pk-tile-pink)" transform="rotate(-5 270 146)"/>
-        <g stroke="#3778ed" strokeWidth="5" strokeLinecap="round"><path d="M247 124v-9h10m30 0h10v9m0 40v9h-10m-30 0h-10v-9"/></g><circle cx="272" cy="134" r="10" fill="#327be9"/><path d="M256 160c0-18 32-18 32 0v3h-32Z" fill="#7069ee"/>
-        <rect x="83" y="133" width="62" height="63" rx="16" fill="url(#pk-tile-pink)"/><circle cx="108" cy="153" r="7" fill="#159fd8"/><path d="M97 176c0-14 22-14 22 0" stroke="#159fd8" strokeWidth="7"/><circle cx="127" cy="163" r="4" stroke="#159fd8" strokeWidth="3"/><path d="M127 168v10" stroke="#159fd8" strokeWidth="3"/>
-      </svg>
+      <img className="pk-security-art" src="/uploads/feature/passkey/%E9%80%9A%E8%A1%8C%E5%AF%86%E9%92%A5PASSKEY.png" alt="通行密钥保护登录安全" />
       <div className="pk-benefits"><p><SubNavIcon name="passkeys"/><span>使用面容、指纹或设备密码登录，就像解锁设备一样。</span></p><p><SubNavIcon name="account"/><span>你的生物识别信息始终留在设备上，不会分享给 Fire。</span></p></div>
       {!canAdd && <p className="pk-availability">{!config?.enabled ? (admin ? "请先启用网站登录配置。" : "请等待管理员启用通行密钥。") : origin !== config.origin ? <>请访问 <a href={config.origin}>{config.origin}</a> 创建。</> : !supported ? "请在 HTTPS 下使用支持通行密钥的浏览器。" : "已达 20 个密钥，请先移除不再使用的密钥。"}</p>}
       <div className="pk-intro-actions"><button type="button" onClick={() => { setIntro(false); onClose?.(); }}>以后再说</button><button type="button" disabled={!canAdd || busy || refreshRequired} onClick={() => begin({ kind: "add" })}>创建通行密钥</button></div>
     </AppModal> : !pending && (onClose ? <AppModal title="通行密钥" onClose={onClose} className="pk-reference-modal" size="lg">{content}</AppModal> : content)}
-    {pending && <AppModal className="pk-reference-modal" size="lg" title={actionLabel} desc={pending.kind === "delete" ? `删除「${pending.key.name}」将退出相关登录及来源不明的旧登录，可能需要重新登录。仍可用密码登录。` : domainChanged ? "更换域名后需重新添加密钥。输入当前密码确认保存。" : "输入当前密码以继续。"} onClose={closeVerification} closeDisabled={busy}>
-      <form onSubmit={confirmAction} className="flex flex-col gap-4">
-        {pending.kind === "add" && <label className="flex flex-col gap-2 text-sm">密钥名称（选填）<input className="field w-full" value={name} maxLength={64} onChange={e => setName(e.target.value)} placeholder="如 iCloud、Bitwarden" disabled={busy} /></label>}
-        <label className="flex flex-col gap-2 text-sm">当前密码<input className="field w-full" type="password" required autoComplete="current-password" data-autofocus autoFocus value={password} onChange={e => setPassword(e.target.value)} disabled={busy} /></label>
-        {totp && <label className="flex flex-col gap-2 text-sm">二次验证码或备用码<input className="field w-full" required autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} disabled={busy} /></label>}
+    {pending && <AppModal className="pk-reference-modal pk-verify-modal" size="lg" title={actionLabel} desc={pending.kind === "delete" ? `删除「${pending.key.name}」后，相关设备需要重新登录。` : domainChanged ? "更换域名后需重新添加通行密钥。请验证当前账号。" : "为了保护账号安全，请先验证当前账号。"} onClose={closeVerification} closeDisabled={busy}>
+      <form onSubmit={confirmAction} className="pk-verify-form">
+        <div className="pk-account-row"><span className="pk-account-mark"><SubNavIcon name="account" /></span><span><b>Fire 账号</b><small>安全验证</small></span></div>
+        {pending.kind === "add" && <label className="pk-field"><span>通行密钥名称（选填）</span><input value={name} maxLength={64} onChange={e => setName(e.target.value)} placeholder="例如：iCloud 或 Bitwarden" disabled={busy} /></label>}
+        <label className="pk-field"><span>当前密码</span><input type="password" required autoComplete="current-password" data-autofocus autoFocus value={password} onChange={e => setPassword(e.target.value)} placeholder="输入当前密码" disabled={busy} /></label>
+        {totp && <label className="pk-field"><span>二次验证码或备用码</span><input required autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} placeholder="6 位验证码或备用码" disabled={busy} /></label>}
         {verificationError && <p role="alert" className="text-sm text-up">{verificationError}</p>}
         <div className="dialog-actions"><button type="button" className="dialog-btn dialog-btn-ghost" disabled={busy} onClick={closeVerification}>取消</button><button type="submit" className={`dialog-btn ${pending.kind === "delete" ? "dialog-btn-danger" : "dialog-btn-neutral"}`} disabled={busy || !password || (totp && !code.trim())}>{busy ? "处理中…" : actionLabel}</button></div>
       </form>

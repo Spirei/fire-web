@@ -52,6 +52,38 @@ interface Props {
   initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "groups" | "markets" | "marketLabels" | "modelServices">;
 }
 
+function SettingsDetailShell({ title, category, editable = false, editing = false, onEdit, onSave, onCancel, onClose, children }: { title: string; category: string; editable?: boolean; editing?: boolean; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; onClose: () => void; children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
+  useEffect(() => {
+    if (!mounted) return;
+    const previous = document.body.style.overflow;
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", onKeyDown); };
+  }, [mounted, onClose]);
+  if (!mounted) return null;
+  return createPortal(
+    <div className="sc-detail-layer fixed inset-0 z-[10900] flex items-start justify-center px-4 pb-4 pt-[72px] sm:px-8 sm:pb-8 sm:pt-[88px]" role="dialog" aria-modal="true" aria-label={title}>
+      <button type="button" aria-label="关闭设置详情" className="sc-detail-scrim absolute inset-0" onClick={onClose} />
+      <section className="sc-detail-dialog relative flex w-full max-w-[594px] flex-col overflow-hidden">
+        <div className="sc-detail-theme-bridge sv-win-root sv-orca sv-center flex min-h-0 flex-1 flex-col">
+        <header className="sc-detail-dialog-head flex-none">
+          <div className="min-w-0"><span>{category}</span><h2>{title}</h2></div>
+          <div className="sc-detail-dialog-actions">
+            {editable && (editing ? <><button type="button" className="sc-detail-text-action" onClick={onCancel}>取消</button><button type="button" className="sc-detail-primary-action" onClick={onSave}>保存</button></> : <button type="button" className="sc-detail-text-action" onClick={onEdit}>编辑</button>)}
+            <button type="button" className="sc-detail-close" aria-label="关闭" onClick={onClose}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button>
+          </div>
+        </header>
+        <div className="sc-detail-dialog-scroll min-h-0 flex-1 overflow-y-auto">{children}</div>
+        </div>
+      </section>
+    </div>,
+    document.body
+  );
+}
+
 const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "passkeys", "database", "cron", "about"] as const;
 type SubKey = (typeof SETTINGS_SUB_KEYS)[number];
 function isSettingsSub(value: string | undefined | null): value is SubKey {
@@ -100,6 +132,7 @@ const SETTINGS_CATEGORIES = [
   { key: "developer", label: "开发与关于", icon: "api", desc: "查看接口文档、版本与技术信息。", anchors: ["api", "about"] }
 ];
 const SETTINGS_ANCHORS = SETTINGS_SEARCH_INDEX.map((item) => item.anchor);
+const EDITABLE_DETAIL_ANCHORS = new Set(["appearance", "ticker", "nav", "groups", "market-badges", "sources", "translation", "trade", "profile", "database", "trading-square"]);
 
 function persistSettingsAnchor(sub: SubKey, anchor: string): boolean {
   const anchors = SETTINGS_SEARCH_INDEX.filter((item) => item.sub === sub);
@@ -1396,6 +1429,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     else if (activeAnchor === "translation") setEditingModel(false);
     else if (activeAnchor === "trade") setEditingFutu(false);
     else if (activeAnchor === "market-badges") setEditingMarketBadges(false);
+    else if (activeAnchor === "groups") setEditingStockGroups(false);
+    else if (activeAnchor === "profile") setEditingProfile(false);
+    else if (activeAnchor === "database") setEditingDb(false);
   }
   function cancelActiveEdit() {
     const snapshot = lastSavedRef.current;
@@ -1662,6 +1698,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [signOutOtherDevices, setSignOutOtherDevices] = useState(false);
+  const [showPasswordHelp, setShowPasswordHelp] = useState(false);
   const [pwdMsg, setPwdMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [pwdBusy, setPwdBusy] = useState(false);
   const [profilePassword, setProfilePassword] = useState("");
@@ -1799,13 +1837,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       const res = await fetch("/api/auth/password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ oldPassword, newPassword, code: totpPasswordCode })
+        body: JSON.stringify({ oldPassword, newPassword, code: totpPasswordCode, signOutOthers: signOutOtherDevices })
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "修改失败");
       setPwdMsg({ type: "ok", text: "密码修改成功，下次登录请使用新密码" });
       showToast("密码修改成功");
-      setOldPassword(""); setNewPassword(""); setConfirmPassword(""); setTotpPasswordCode("");
+      setOldPassword(""); setNewPassword(""); setConfirmPassword(""); setTotpPasswordCode(""); setSignOutOtherDevices(false);
     } catch (err) {
       setPwdMsg({ type: "err", text: err instanceof Error ? err.message : "修改失败" });
     } finally {
@@ -1934,7 +1972,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     <div className="settings-page flex h-full min-h-0 flex-1">
       {showDeleteConfirm && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteTotpCode(""); } }}>
-          <div className="w-full max-w-[380px] rounded-2xl border border-edge bg-white p-6 shadow-pop dark:border-[#2a3140] dark:bg-[#1b2029]">
+          <div className="sc-meta-dialog w-full max-w-[594px] rounded-2xl border border-edge bg-white p-6 shadow-pop dark:border-[#2a3140] dark:bg-[#1b2029]">
             <h3 className="text-base font-bold text-ink">确认注销账号</h3>
             <p className="mt-2 text-sm text-muted">此操作<strong className="text-up">不可恢复</strong>，将永久删除账号「{user.nickname || user.username}」及全部持仓、订单、分组、偏好等数据。</p>
             <label className="mt-4 block text-xs font-semibold text-muted">请输入登录名「<b className="text-ink">{user.username}</b>」以确认</label>
@@ -1944,7 +1982,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               onChange={(e) => setDeleteConfirmText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && deleteConfirmText.trim() === user.username) doDeleteAccount(); }}
               placeholder={`请输入 ${user.username}`}
-              className="mt-1.5 h-10 w-full rounded-lg border border-edge-strong bg-white px-3 text-sm text-ink outline-none placeholder:opacity-40 focus:border-edge-strong dark:bg-[#151a26] dark:border-[#2a3140]"
+              className="sc-meta-field mt-1.5 w-full border border-edge-strong bg-white px-3 text-sm text-ink outline-none placeholder:opacity-40 focus:border-edge-strong dark:bg-[#151a26] dark:border-[#2a3140]"
             />
             <label className="mt-3 block text-xs font-semibold text-muted">当前密码</label>
             <input
@@ -1954,7 +1992,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               onKeyDown={(e) => { if (e.key === "Enter" && deleteConfirmText.trim() === user.username && deletePassword && (!totpEnabled || deleteTotpCode)) doDeleteAccount(); }}
               autoComplete="current-password"
               placeholder="请输入当前密码"
-              className="mt-1.5 h-10 w-full rounded-lg border border-edge-strong bg-white px-3 text-sm text-ink outline-none placeholder:opacity-40 focus:border-edge-strong dark:bg-[#151a26] dark:border-[#2a3140]"
+              className="sc-meta-field mt-1.5 w-full border border-edge-strong bg-white px-3 text-sm text-ink outline-none placeholder:opacity-40 focus:border-edge-strong dark:bg-[#151a26] dark:border-[#2a3140]"
             />
             {totpEnabled && (
               <>
@@ -1965,7 +2003,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   placeholder="6 位验证码或备用码"
-                  className="mt-1.5 h-10 w-full rounded-lg border border-edge-strong bg-white px-3 text-sm text-ink outline-none placeholder:opacity-40 focus:border-edge-strong dark:bg-[#151a26] dark:border-[#2a3140]"
+                  className="sc-meta-field mt-1.5 w-full border border-edge-strong bg-white px-3 text-sm text-ink outline-none placeholder:opacity-40 focus:border-edge-strong dark:bg-[#151a26] dark:border-[#2a3140]"
                 />
               </>
             )}
@@ -2129,7 +2167,22 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </button>
               <h3>所有设置</h3><div className="sc-row-group">{categories.map((category) => <button type="button" className="sc-setting-row" key={category.key} onClick={() => openCategory(category.key)}><SubNavIcon name={category.icon} className="h-5 w-5"/><span><strong>{category.label}</strong><small>{category.desc}</small></span><span className="sc-chevron" aria-hidden="true">›</span></button>)}</div>
             </> : categoryList}
-          </div> : <SettingsSectionSelection.Provider value={{ active: activeAnchor, anchors: SETTINGS_ANCHORS }}>
+          </div> : sub === "passkeys" ? <>
+            <div className="sc-landing">{categoryList}</div>
+            <PasskeySettings admin={user.role === "admin"} onClose={() => openCategory("account")} />
+          </> : <>
+          <div className="sc-landing">{categoryList}</div>
+          <SettingsDetailShell
+            title={activePageMeta?.label || activeSubMeta?.label || "设置"}
+            category={currentCategory?.label || "设置中心"}
+            editable={EDITABLE_DETAIL_ANCHORS.has(activeAnchor)}
+            editing={activeEditState}
+            onEdit={beginActiveEdit}
+            onSave={() => { void saveActiveEdit(); }}
+            onCancel={cancelActiveEdit}
+            onClose={() => { if (EDITABLE_DETAIL_ANCHORS.has(activeAnchor) && activeEditState) cancelActiveEdit(); openCategory(currentCategory?.key || "home"); }}
+          >
+          <SettingsSectionSelection.Provider value={{ active: activeAnchor, anchors: SETTINGS_ANCHORS }}>
           <div key={sub} className="tab-panel sc-detail">
             {!isAdminUser && ADMIN_SUB_KEYS.has(sub) && (
               <div className="rounded-card border border-edge bg-white p-10 text-center shadow-card">
@@ -3372,15 +3425,18 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                   </div>
                 </SettingsSection>
-                <SettingsSection id="password" icon="password" title="更改密码" desc="使用不易猜测、且未在其他网站使用过的密码">
-                  <form onSubmit={changePassword} className="settings-password-grid">
-                    <label><span>当前密码</span><input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required /></label>
-                    <label><span>新密码</span><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required placeholder="至少 8 位，含字母和数字" /></label>
-                    <label><span>确认新密码</span><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required /></label>
+                <SettingsSection id="password" icon="password" title="更改密码" desc={<>你将使用这个密码登录 Fire。请使用至少 8 位的字母和数字组合。 <button type="button" className="settings-password-help-link" aria-expanded={showPasswordHelp} onClick={() => setShowPasswordHelp((value) => !value)}>了解如何创建高强度密码</button></>}>
+                  <form onSubmit={changePassword} className="settings-password-grid settings-password-meta">
+                    {showPasswordHelp && <div className="settings-password-help"><b>高强度密码</b><span>建议使用 12 位以上、不与其他网站重复的密码，并交给 iCloud 钥匙串、1Password 或 Bitwarden 保管。</span></div>}
+                    <div className="settings-account-identity"><span className="settings-account-avatar">{me.avatar ? <img src={me.avatar} alt="" /> : (me.nickname || me.username).slice(0, 1)}</span><span><b>{me.nickname || me.username}</b><small>{me.email || `@${me.username}`}</small></span><span aria-hidden="true">›</span></div>
+                    <label><span>当前密码</span><input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required autoFocus data-autofocus autoComplete="current-password" placeholder="当前密码" /></label>
+                    <label><span>新密码</span><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required placeholder="新密码" /></label>
+                    <label><span>确认新密码</span><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required placeholder="再次输入新密码" /></label>
                     {totpEnabled && (
                       <label><span>二次验证码</span><input autoComplete="one-time-code" spellCheck={false} value={totpPasswordCode} onChange={(e) => setTotpPasswordCode(e.target.value)} required placeholder="验证器 6 位数字或备用码" /></label>
                     )}
-                    <button type="submit" disabled={pwdBusy} className="btn btn-ghost btn-sm">{pwdBusy ? "提交中…" : "修改密码"}</button>
+                    <button type="submit" disabled={pwdBusy} className="settings-meta-primary">{pwdBusy ? "提交中…" : "更改密码"}</button>
+                    <label className="settings-signout-option"><input type="checkbox" checked={signOutOtherDevices} onChange={(event) => setSignOutOtherDevices(event.target.checked)} /><span>在其他设备上退出登录。如果有人使用了你的账户，请选择此项。</span></label>
                   </form>
                   {pwdMsg && <p className={`settings-form-message ${pwdMsg.type === "ok" ? "is-ok" : "is-error"}`}>{pwdMsg.text}</p>}
                 </SettingsSection>
@@ -3438,10 +3494,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </div>
             )}
 
-            {sub === "passkeys" && <>
-              <div className="sc-landing">{categoryList}</div>
-              <PasskeySettings admin={user.role === "admin"} onClose={() => openCategory("account")} />
-            </>}
             {sub === "totp" && (
               <div id="totp" className="flex flex-col gap-6">
                 <SettingsHeader name="totp" title="二次验证" />
@@ -3838,7 +3890,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </div>
             )}
           </div>
-          </SettingsSectionSelection.Provider>}
+          </SettingsSectionSelection.Provider>
+          </SettingsDetailShell>
+          </>}
         </div>
       </div>
       {versionOpen && <VersionModal onClose={() => setVersionOpen(false)} />}

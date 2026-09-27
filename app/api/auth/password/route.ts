@@ -22,6 +22,7 @@ export async function POST(request: Request) {
 
   const oldPassword = String(body.oldPassword ?? "");
   const newPassword = String(body.newPassword ?? "");
+  const signOutOthers = body.signOutOthers !== false;
   const row = findUserById(user.id);
   if (!row || !verifyPassword(oldPassword, row.password_hash)) {
     logSecurityEvent(request, user.id, "password_change_rejected", "old password mismatch");
@@ -37,8 +38,7 @@ export async function POST(request: Request) {
   }
 
   updatePassword(user.id, newPassword);
-  // 修改密码后踢掉其它登录会话，防止被盗会话继续使用
-  deleteOtherSessions(user.id, getSessionToken(request));
-  logSecurityEvent(request, user.id, "password_change", "other sessions revoked");
-  return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
+  if (signOutOthers) deleteOtherSessions(user.id, getSessionToken(request));
+  logSecurityEvent(request, user.id, "password_change", signOutOthers ? "other sessions revoked" : "other sessions preserved");
+  return NextResponse.json({ ok: true, signedOutOthers: signOutOthers }, { headers: { "Cache-Control": "no-store" } });
 }

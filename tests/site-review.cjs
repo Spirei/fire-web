@@ -455,6 +455,11 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(result.status, 200);
     assert(auth.getUserByToken(bearer));
     assert.equal(auth.getUserByToken(oldSession), null);
+    const preservedSession = createSession(changing.id);
+    const preserved = await password.POST(new Request('http://localhost/api/auth/password', { method: 'POST', headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json' }, body: JSON.stringify({ oldPassword: 'Review-new-456', newPassword: 'Review-final-789', signOutOthers: false }) }));
+    assert.equal(preserved.status, 200);
+    assert(auth.getUserByToken(bearer));
+    assert(auth.getUserByToken(preservedSession), 'unchecked session option must preserve other devices');
   });
   await test('admin profile edits reject case-insensitive duplicate email', () => {
     const auth = require(path.join(root, 'lib/auth.ts'));

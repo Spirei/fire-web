@@ -167,7 +167,7 @@ export default function SettingsHeader({
 }: {
   name: string;
   title: string;
-  desc?: string;
+  desc?: React.ReactNode;
   action?: React.ReactNode;
   hideIcon?: boolean;
 }) {
@@ -206,7 +206,7 @@ export function SettingsSection({
 }: {
   icon: string;
   title: string;
-  desc?: string;
+  desc?: React.ReactNode;
   children: React.ReactNode;
   action?: React.ReactNode;
   titleAction?: React.ReactNode;
