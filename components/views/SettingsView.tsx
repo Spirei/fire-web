@@ -2072,8 +2072,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }
 
   const categoryList = <>{currentCategory?.key === "account" && <SecurityCheck onNavigate={anchor => { const item = currentCategory.items.find(item => item.anchor === anchor); if (item) jumpTo(item); }} />}{(currentCategory?.key === "account" ? [
-    { title: "个人资料", desc: "管理头像、昵称与登录邮箱。", items: currentCategory.items.filter((item) => item.anchor === "profile") },
-    { title: "账户登录", desc: "管理密码、验证器和免密登录方式。", items: currentCategory.items.filter((item) => item.anchor !== "profile") }
+    { title: "个人资料", desc: "头像、昵称与邮箱", items: currentCategory.items.filter((item) => item.anchor === "profile") },
+    { title: "账户登录", desc: "密码、验证器与通行密钥", items: currentCategory.items.filter((item) => item.anchor !== "profile") }
   ] : [{ title: "", desc: "", items: currentCategory?.items || [] }]).map((group, index) => <section className="sc-category-section" key={index}>
     {group.title && <><h3>{group.title}</h3><p>{group.desc}</p></>}
     <div className="sc-row-group">{group.items.map((item) => <button type="button" className="sc-setting-row" key={item.anchor} onClick={() => jumpTo(item)}><span><strong>{item.label}</strong></span><span className="sc-chevron" aria-hidden="true">›</span></button>)}</div>
@@ -2327,7 +2327,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   <SettingsSection
                     icon="info"
                     title="站点信息"
-                    desc="站点在浏览器标签页与首页展示的基础信息"
+                    desc="网站名称、域名与简介"
                     id="info"
                   >
                     <div className="flex flex-col">
@@ -2356,7 +2356,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <SettingsSection
                       icon="image"
                       title="网站形象"
-                      desc="预览并管理网站在浏览器、主屏幕与登录页中的品牌形象。"
+                      desc="图标、背景与登录插图"
                       id="appearance"
                     >
                       <div className="brand-settings">
@@ -2375,7 +2375,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <BrandAssetRow
                           label="网站图标"
                           editable={editingAppearance}
-                          desc="浏览器标签与收藏夹中显示"
+                          desc="浏览器标签与收藏夹"
                           value={site.ico}
                           fallbackValue="/site-icon.svg"
                           emptyLabel="使用默认图标"
@@ -2389,7 +2389,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <BrandAssetRow
                           label="PWA 图标"
                           editable={editingAppearance}
-                          desc="安装到手机或桌面后的应用图标"
+                          desc="安装后的应用图标"
                           value={site.pwaIcon}
                           fallbackValue={site.ico || "/site-icon.svg"}
                           emptyLabel="自动跟随网站图标"
@@ -2404,7 +2404,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           clearLabel="恢复自动"
                         />
                           </div>
-                          <p className="brand-settings-note">PWA 图标保存后会自动更新清单；已安装应用是否立即换图由操作系统决定。</p>
+                          <p className="brand-settings-note">保存后更新清单；已安装图标由系统更新。</p>
                         </section>
 
                         <section className="brand-settings-group" aria-labelledby="brand-images-title">
@@ -2413,7 +2413,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <BrandAssetRow
                           label="首页 Logo"
                           editable={editingAppearance}
-                          desc="显示在页面左上角的品牌标识"
+                          desc="页面左上角标识"
                           value={site.siteLogo}
                           fallbackValue={site.ico || "/site-icon.svg"}
                           emptyLabel="跟随网站图标"
@@ -2427,7 +2427,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <BrandAssetRow
                           label="网站背景"
                           editable={editingAppearance}
-                          desc="作为站点主页面的低对比度背景"
+                          desc="主页面背景"
                           value={site.homepageBg}
                           emptyLabel="使用纯色背景"
                           onChange={(v) => setSiteField("homepageBg", v)}
@@ -2440,7 +2440,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <BrandAssetRow
                           label="登录页图片"
                           editable={editingAppearance}
-                          desc="显示在登录面板左侧的品牌插图"
+                          desc="登录页插图"
                           value={site.loginSideImage}
                           emptyLabel="使用默认插图"
                           onChange={(v) => setSiteField("loginSideImage", v)}
@@ -2460,7 +2460,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <SettingsSection
                       icon="stocks"
                       title="首页指数设置"
-                      desc="首页顶部指数行情条的指数与轮换间隔"
+                      desc="选择指数与轮换间隔"
                       className="xl:col-span-2"
                       id="ticker"
                       titleAction={!editingTicker ? (
@@ -2566,7 +2566,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <SettingsSection
                       icon="list"
                       title="首页导航"
-                      desc="首页入口菜单，可拖动排序、启停"
+                      desc="拖动排序，启用或隐藏入口"
                       className="xl:col-span-2"
                       id="nav"
                       titleAction={!editingHomeNav ? (
@@ -2615,7 +2615,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   id="app-nav"
                   icon="app-nav"
                   title="应用导航菜单"
-                  desc="侧栏与移动端入口，可调整默认页、图标、名称和顺序"
+                  desc="默认页、入口名称、图标与顺序"
                   titleAction={!editingTabs ? (
                     <button type="button" onClick={() => setEditingTabs(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑应用导航" aria-label="编辑应用导航">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
@@ -3324,7 +3324,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </SettingsManagedPane>
                   </SettingsManagedGroup>
                 </SettingsSection>
-                <SettingsSection id="currency-display" icon="stocks" title="货币金额显示" desc="控制持仓、资产分析等页面的大额金额展示方式">
+                <SettingsSection id="currency-display" icon="stocks" title="货币金额显示" desc="大额金额显示方式">
                   <div className="sw-row">
                     <div className="sw-row-label">
                       <b>金额单位</b>
@@ -3767,7 +3767,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {/* ===== 定时任务 ===== */}
             {sub === "cron" && isAdminUser && (
               <div className="flex flex-col gap-6">
-                <SettingsSection id="mail" icon="api" title="邮件服务" desc="用于密码找回。先发送测试邮件，确认收到后保存。">
+                <SettingsSection id="mail" icon="api" title="邮件服务" desc="用于找回密码。测试邮件收到后再保存。">
                   <div className="mail-settings">
                     <fieldset className="mail-settings-fields" disabled={mailTesting || blockSaving.mail}>
                     <div className="mail-settings-group">
@@ -3864,7 +3864,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   ))}
                 </div>
                 </SettingsSection>
-                <SettingsSection id="backups" icon="backups" title="自动备份" desc="定期保存数据库与素材，自动清理旧备份。">
+                <SettingsSection id="backups" icon="backups" title="自动备份" desc="定期备份数据与素材，清理旧备份。">
                   <div className="settings-task-list"><BackupTaskCard /></div>
                 </SettingsSection>
               </div>

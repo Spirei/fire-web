@@ -761,7 +761,7 @@ export default function AssetPnlAnalysis({
                       未实现 <span className={unrealizedPnlTotal >= 0 ? "text-up" : "text-down"}>{moneyDisp(unrealizedPnlTotal)}</span>
                     </p>
                   ) : (
-                    <p className="mt-2 text-[11px] text-muted">区间盈亏已扣除买卖资金净流入</p>
+                    <p className="mt-2 text-xs text-muted">已扣除买卖净流入</p>
                   )}
                 </div>
 

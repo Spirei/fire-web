@@ -1,4 +1,5 @@
 "use client";
+import MobileExplanation from "@/components/MobileExplanation";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -1524,7 +1525,7 @@ export default function TradeOrdersPanel({
             <div className="flex items-center justify-between gap-2 border-b border-edge px-5 py-4">
               <div>
                 <h3 className="text-base font-bold text-ink">导出订单</h3>
-                <p className="mt-0.5 text-xs text-muted">导出为 Excel（.xlsx）文件</p>
+                <p className="mt-0.5 text-xs text-muted">Excel · .xlsx</p>
               </div>
               <button
                 type="button"
@@ -1539,20 +1540,20 @@ export default function TradeOrdersPanel({
             </div>
             <div className="space-y-3 px-5 py-4">
               <div className="rounded-[12px] bg-bg-gray/70 px-4 py-3 text-xs dark:bg-white/5">
-                <p className="font-semibold text-ink">当前筛选条件</p>
+                <p className="font-semibold text-ink">当前筛选</p>
                 <p className="mt-1.5 text-muted">
-                  委托时间：<span className="text-ink">{timeFilter.mode === "all" ? (tab === "today" ? "当日" : "历史") : timeDisplay(timeFilter).replace("委托时间:", "")}</span>
+                  时间：<span className="text-ink">{timeFilter.mode === "all" ? (tab === "today" ? "当日" : "历史") : timeDisplay(timeFilter).replace("委托时间:", "")}</span>
                   <span className="mx-2 text-faint">·</span>
                   市场：<span className="text-ink">{marketFilter === "ALL" ? "全部" : marketMeta(marketFilter).label}</span>
                   <span className="mx-2 text-faint">·</span>
-                  标的类型：<span className="text-ink">{typeFilter === "all" ? "全部" : typeFilter === "stock" ? "股票" : "ETF"}</span>
+                  类型：<span className="text-ink">{typeFilter === "all" ? "全部" : typeFilter === "stock" ? "股票" : "ETF"}</span>
                   <span className="mx-2 text-faint">·</span>
-                  订单状态：<span className="text-ink">{statusFilter === "all" ? "全部" : STATUS_LABEL[statusFilter] ?? "其他"}</span>
+                  状态：<span className="text-ink">{statusFilter === "all" ? "全部" : STATUS_LABEL[statusFilter] ?? "其他"}</span>
                 </p>
               </div>
-              <p className="text-xs leading-relaxed text-muted">
+              <MobileExplanation className="text-xs leading-relaxed text-muted" summary={<>导出 {sortedOrders.length} 笔 · 21 列</>}><p>
                 将导出当前筛选条件下的 <strong className="text-ink">{sortedOrders.length}</strong> 笔订单，共 21 列：订单状态、市场、股票代码、股票名称、方向、委托类型、委托数量、委托价格、触发价格、币种、委托时间、成交均价、成交数量、成交金额、剩余挂单数量、撤/废单数量、有效期、时段、触发状态、订单号、驳回原因。
-              </p>
+              </p></MobileExplanation>
               <label className="flex cursor-pointer items-start gap-2.5 rounded-[12px] bg-bg-gray/70 px-4 py-3 dark:bg-white/5">
                 <span className={`mt-px flex h-[15px] w-[15px] flex-none items-center justify-center rounded-[3px] border transition-colors ${
                   exportDetail ? "border-transparent bg-ink text-white dark:bg-white dark:text-black" : "border-edge-strong bg-transparent text-transparent"
@@ -1563,15 +1564,15 @@ export default function TradeOrdersPanel({
                 </span>
                 <input type="checkbox" checked={exportDetail} onChange={(event) => setExportDetail(event.target.checked)} className="sr-only" />
                 <span>
-                  <span className="text-xs font-semibold text-ink">同时导出订单明细</span>
-                  <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">订单明细提供单个订单的全部数据（费用、已实现盈亏、成交后持仓、备注等），作为「订单明细」工作表一并导出。</span>
+                  <span className="text-xs font-semibold text-ink">包含订单明细</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">另附「订单明细」表：费用、已实现盈亏、成交后持仓和备注等。</span>
                 </span>
               </label>
             </div>
             <div className="border-t border-edge px-5 py-4">
               <div className="mb-2 flex items-baseline justify-between">
                 <h4 className="text-xs font-bold text-ink">最近导出</h4>
-                <span className="text-[11px] text-faint">仅显示最近 {recentExports.length > 0 ? "20" : "0"} 条记录</span>
+                {recentExports.length > 0 && <span className="text-[11px] text-faint">最近 20 条</span>}
               </div>
               {recentExports.length === 0 ? (
                 <div className="rounded-[12px] bg-bg-gray/60 py-8 text-center text-xs text-faint dark:bg-white/5">暂无导出记录</div>
@@ -1619,7 +1620,7 @@ export default function TradeOrdersPanel({
             <div className="flex items-center justify-between gap-2 border-b border-edge px-5 py-4">
               <div>
                 <h3 className="text-base font-bold text-ink">导入订单</h3>
-                <p className="mt-0.5 text-xs text-muted">上传券商导出的 .xlsx 历史订单</p>
+                <p className="mt-0.5 text-xs text-muted">券商历史订单 · .xlsx</p>
               </div>
               <button
                 type="button"

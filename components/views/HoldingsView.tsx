@@ -970,7 +970,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-5 py-4">
             <div>
               <h3 className="text-base font-bold text-ink">交易与订单</h3>
-              <p className="mt-1 text-xs text-muted">每笔成交生成唯一订单号并永久留痕，自动更新该股票的持仓数量与成本。</p>
+              <p className="mt-1 text-xs text-muted">成交留痕，持仓与成本同步更新。</p>
             </div>
           </div>
           <TradeOrdersPanel
@@ -1013,7 +1013,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
               <label className="col-span-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">订单备注<input value={tradeForm.note} onChange={(e) => setTradeForm({ ...tradeForm, note: e.target.value })} className="field" placeholder="如：分批建仓、止盈、调仓" /></label>
             </div>
             <div className="mt-4 rounded-[12px] border border-edge bg-bg-gray/60 px-4 py-3 text-xs text-muted">股息总额：<strong className="text-ink">{fmtMoney((Number(tradeForm.qty) || 0) * (Number(tradeForm.price) || 0), marketMeta(tradeRecord.market).currency)}</strong>{tradeSide === "dividend" ? " · 按持仓股数 × 每股股息记为现金收入，计入已实现收益，不改变持仓数量与成本" : tradeSide === "buy" ? " · 买入后按含费用的加权成本更新" : " · 卖出回款冲减投入并摊薄剩余成本，费用计入已实现盈亏"}</div>
-            {editingOrder && <p className="mt-3 text-xs leading-relaxed text-muted">更正后将按成交时间重新计算该股票全部订单；若中途出现超卖，系统会拒绝保存。</p>}
+            {editingOrder && <p className="mt-3 text-xs leading-relaxed text-muted">更正会按成交时间重算全部订单；超卖时无法保存。</p>}
             <div className="mt-5 flex justify-end gap-2.5"><button type="button" onClick={() => { setTradeRecord(null); setEditingOrder(null); }} className="btn btn-ghost btn-sm">取消</button><button type="button" disabled={tradeSaving} onClick={() => void submitTrade()} className="btn btn-line btn-sm disabled:opacity-60">{tradeSaving ? (editingOrder ? "保存中…" : "成交中…") : (editingOrder ? "保存更正" : "确认交易")}</button></div>
           </AppModal>
         )}
@@ -1296,7 +1296,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
 
       {/* 市场编辑弹窗 */}
       {editorOpen && (
-        <AppModal title="编辑市场" desc="名称可编辑；市场图标统一从素材库读取。勾选控制显示/隐藏，可新增任意市场。" onClose={() => setEditorOpen(false)} size="lg">
+        <AppModal title="编辑市场" desc="编辑名称与显隐，图标来自素材库。" onClose={() => setEditorOpen(false)} size="lg">
             <div className="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
               {editorRows.map((row) => {
                 const editing = editingKey === row.key;

@@ -13,6 +13,7 @@ import { emptyFundBalances, type FundCurrency } from "@/lib/fundCurrencies";
 import TradeOrdersPanel from "@/components/TradeOrdersPanel";
 import RefreshButton from "@/components/RefreshButton";
 import AssetHoldingList from "@/components/AssetHoldingList";
+import MobileExplanation from "@/components/MobileExplanation";
 import { preloadView } from "@/lib/viewPreload";
 import DailyPnlShareModal, { preloadDailyPnlTemplates, waitForDailyPnlTemplates, type DailyPnlShareItem } from "@/components/DailyPnlShareModal";
 import dynamic from "next/dynamic";
@@ -1160,9 +1161,9 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
             {period === "custom" && <div className="px-4 pb-2 text-xs font-semibold text-muted">{formatRangeDate(customRange.start)} – {formatRangeDate(customRange.end)}</div>}
             {chartTab === "return" && <div className="flex items-start justify-between gap-3 px-4"><div className="min-w-0 flex-1"><CurrencyPicker context="trend" prefix={pnlLabel} /><strong className={`mt-1 block max-w-[15rem] text-xl tabular-nums ${cumulative >= 0 ? "text-up" : "text-down"}`}><AccountOverviewValue value={cumulative} hidden={!assetsVisible} forceCompact={currencyDisplayUnit === "compact"} /></strong></div><div className="relative flex-none text-right"><button type="button" onClick={() => setWeightMenuOpen((open) => !open)} aria-expanded={weightMenuOpen} className="inline-flex items-center gap-1 rounded-lg px-1 py-1 text-xs font-semibold text-muted transition-colors hover:bg-bg-gray hover:text-ink">收益率·{weighting === "simple" ? "简单加权" : "时间加权"}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 transition-transform ${weightMenuOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg></button>{weightMenuOpen && <><div className="fixed inset-0 z-30" onClick={() => setWeightMenuOpen(false)} /><div className="absolute right-0 top-full z-40 mt-1 min-w-[160px] overflow-hidden rounded-xl border border-edge-strong bg-white p-1 shadow-xl dark:bg-[#1b2029]">{WEIGHT_OPTIONS.map(([key, label]) => <button key={key} type="button" onClick={() => { setWeighting(key); setWeightMenuOpen(false); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${weighting === key ? "bg-[#3297f6]/15 font-bold text-[#3297f6]" : "text-ink hover:bg-bg-gray"}`}><span>{label}</span>{weighting === key && <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>}</button>)}</div></>}<strong className={`mt-1 block text-base tabular-nums ${returnRate >= 0 ? "text-up" : "text-down"}`}>{assetsVisible ? fmtPct(returnRate) : "******"}</strong></div></div>}
             {chartTab === "return" && historyIncomplete && (
-              <p className="mx-4 mt-2 text-[10.5px] leading-4 text-muted">
+              <MobileExplanation className="mx-4 mt-2 text-xs leading-relaxed text-muted" summary={<>订单覆盖 {coveredHoldingCount}/{positions.length} 只持仓</>} mobileContent={<p>未覆盖的持仓从首个可靠日期计算，不回填年初。</p>}><p>
                 历史订单覆盖 {coveredHoldingCount}/{positions.length} 只持仓；未覆盖仓位从首个可确认日期起计，不再回填到年初。
-              </p>
+              </p></MobileExplanation>
             )}
             {chartTab === "return" && <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-lg bg-bg-gray px-3 py-2 text-xs">
               <div className="relative">

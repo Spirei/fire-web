@@ -6270,6 +6270,11 @@ button.PhotoView-Slider__toolbarIcon {
 .asset-account-card > div:first-child button { min-width:40px; min-height:40px; box-shadow:none; border-radius:50%; }
 .asset-mobile-holdings { display:none; }
 .fund-mobile-overview { display:none; }
+.mobile-explanation summary { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:40px; cursor:pointer; list-style:none; }
+.mobile-explanation summary::-webkit-details-marker { display:none; }
+.mobile-explanation summary > svg { flex:none; color:rgb(var(--site-ink) / .55); }
+.mobile-explanation[open] summary > svg { transform:rotate(180deg); }
+.mobile-explanation-body { padding:4px 0 12px; line-height:1.65; overflow-wrap:anywhere; }
 .fund-panel-footer { border-top:1px solid rgb(var(--site-ink) / .12); }
 .fund-calculation-notes summary,.fund-records-link,.fund-mobile-breakdown summary { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:44px; width:100%; font-size:13px; color:rgb(var(--site-ink) / .7); cursor:pointer; }
 .fund-calculation-notes summary,.fund-mobile-breakdown summary { list-style:none; }

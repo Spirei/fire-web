@@ -252,7 +252,7 @@ export default function FxConverter() {
           </div>
         </div>
         <p className="mt-0.5 text-xs text-muted">
-          输入任一币种金额，其余货币按当前汇率跟随换算 · 拖动手柄可调整顺序
+          输入金额即可换算，拖动手柄排序。
         </p>
         {rateError && <p role="alert" className="mt-1 text-xs text-red-500">{rateError}</p>}
       </header>

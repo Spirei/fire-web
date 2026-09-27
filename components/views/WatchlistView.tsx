@@ -221,7 +221,7 @@ export default function WatchlistView({ initialSymbol, initialNow, records, init
           {indicesError && indexGroups.length === 0 && (
             <div className="col-span-full flex min-h-[120px] flex-col items-center justify-center gap-2 rounded-[16px] border border-edge bg-white text-center">
               <p className="text-sm font-semibold text-ink-2">{indicesError}</p>
-              <p className="text-xs text-muted">页面其余功能仍可正常使用，稍后会自动重试</p>
+              <p className="text-xs text-muted">其他功能可用，稍后自动重试。</p>
             </div>
           )}
           {indexGroups.map((g, i) => {

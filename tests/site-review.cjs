@@ -911,6 +911,19 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(gesture.includes('touchcancel'));
     assert(gesture.includes('cancelAnimationFrame(frame)'));
   });
+  await test('mobile explanations stay readable without hiding coverage or export counts', () => {
+    const note = fs.readFileSync(path.join(root, 'components/MobileExplanation.tsx'), 'utf8');
+    const assets = fs.readFileSync(path.join(root, 'components/AssetAnalysisDashboard.tsx'), 'utf8');
+    const orders = fs.readFileSync(path.join(root, 'components/TradeOrdersPanel.tsx'), 'utf8');
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    assert(note.includes('<details className="mobile-explanation md:hidden">'));
+    assert(!note.includes('window') && !note.includes('useState'));
+    assert(assets.includes('summary={<>订单覆盖 {coveredHoldingCount}/{positions.length} 只持仓</>}'));
+    assert(assets.includes('不再回填到年初'));
+    assert(orders.includes('summary={<>导出 {sortedOrders.length} 笔 · 21 列</>}'));
+    assert(settings.includes('测试邮件收到后再保存'));
+    assert(settings.includes('操作不可恢复'));
+  });
   await test('high-risk admin mutations require step-up authentication', async () => {
     const auth = require(path.join(root, 'lib/auth.ts'));
     const admin = createUser('review_stepup_admin', 'Admin-test-123');
