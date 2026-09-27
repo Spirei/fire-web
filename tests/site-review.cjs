@@ -1117,6 +1117,19 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const freshSetup = await (await freshCall('POST', {})).json();
     assert.equal((await freshCall('PUT', { code: require(path.join(root, 'lib/totp.ts')).totpCodeAt(freshSetup.secret), name: '手机验证器' })).status, 200);
   });
+  await test('settings detail spacing does not reserve empty desktop toolbars or section headers', async () => {
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    const header = fs.readFileSync(path.join(root, 'components/SettingsHeader.tsx'), 'utf8');
+    assert(header.includes('data-has-description={Boolean(desc)}'));
+    assert(css.includes('.sc-detail-dialog-head { display:flex; min-height:72px; align-items:center;'));
+    assert(!css.includes('padding:76px 20px 8px'));
+    assert(css.includes('.sc-detail-dialog-actions { position:relative;'));
+    assert(css.includes('.sc-detail-dialog .site-palette-settings { padding:0; }'));
+    assert(css.includes('.sc-detail-dialog .site-palette-settings > header { display:none; }'));
+    assert(css.includes('.pk-reference-modal.modal-glass:not(.pk-intro-modal) { min-height:0; padding:24px; }'));
+    assert(css.includes('.settings-section-card:not(.settings-secondary-section) > .settings-section-top[data-has-description="false"] { display:none; }'));
+    assert(css.includes('.sc-detail-dialog-actions { position:absolute; top:14px; right:12px; }'));
+  });
   await test('mobile settings retain category navigation and ship the security illustration inline', async () => {
     const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
     const security = fs.readFileSync(path.join(root, 'components/SecurityCheck.tsx'), 'utf8');

@@ -6135,6 +6135,12 @@ button.PhotoView-Slider__toolbarIcon {
 .pk-verify-modal.pk-reference-modal { min-height:0; padding-top:38px; }
 .pk-verify-modal > div:first-child { padding-right:38px; }
 .pk-verify-modal > div:first-child p { max-width:500px; margin-top:7px; font-size:14px; line-height:1.55; }
+/* Lists and account verification do not need the illustration's reserved space. */
+@media(min-width:641px) {
+  .pk-reference-modal.modal-glass:not(.pk-intro-modal) { min-height:0; padding:24px; }
+  .pk-reference-modal:not(.pk-intro-modal) > div:first-child { align-items:flex-start; gap:16px; margin-bottom:16px; padding-right:0; }
+  .pk-reference-modal:not(.pk-intro-modal) > div:first-child > button { position:static; }
+}
 .pk-verify-form { display:flex; flex-direction:column; gap:14px; }
 .pk-account-row { display:flex; align-items:center; gap:12px; min-height:64px; padding:10px 14px; border:1px solid var(--pk-border); border-radius:16px; }
 .pk-account-row > span:nth-child(2) { display:flex; min-width:0; flex:1; flex-direction:column; }
@@ -6428,11 +6434,12 @@ button.PhotoView-Slider__toolbarIcon {
 .sc-detail-layer.is-closing .sc-detail-scrim { animation:sc-detail-scrim-out 180ms ease-in both; }
 .sc-detail-layer.is-closing .sc-detail-dialog { animation:sc-detail-panel-out 180ms cubic-bezier(.4,0,1,1) both; pointer-events:none; }
 .sc-detail-theme-bridge.sv-win-root.sv-orca.sv-center { --sv-bg:var(--sc-dialog-bg); --sv-shell:var(--sc-dialog-bg); --sv-card:var(--sc-dialog-bg); --sv-card-border:var(--sc-dialog-border); --sv-border:var(--sc-dialog-border); --sv-border-strong:var(--sc-dialog-border-strong); --sv-text:var(--sc-dialog-text); --sv-text-2:var(--sc-dialog-text); --sv-text-3:var(--sc-dialog-muted); --sv-input:var(--sc-dialog-bg); --sv-surface-2:var(--sc-dialog-soft); --sv-hover-bg:var(--sc-dialog-soft); --sv-accent:var(--sc-dialog-primary); width:100%; max-width:none; height:100%; background:var(--sc-dialog-bg); color:var(--sc-dialog-text); }
-.sc-detail-dialog-head { display:flex; min-height:114px; align-items:flex-start; justify-content:space-between; gap:20px; padding:76px 20px 8px; }
+.sc-detail-dialog-head { display:flex; min-height:72px; align-items:center; justify-content:space-between; gap:12px; padding:20px 20px 16px; }
+.sc-detail-dialog-head > .min-w-0 { flex:1; }
 .sc-detail-dialog-head span { display:none; }
 .sc-detail-dialog-head h2 { color:var(--sc-dialog-text); font-size:24px; font-weight:650; line-height:28px; letter-spacing:-.025em; }
-.sc-detail-dialog-actions { position:absolute; z-index:2; top:16px; right:16px; display:flex; align-items:center; justify-content:flex-end; gap:8px; flex:none; margin:0; }
-.sc-detail-back { position:absolute; z-index:2; top:16px; left:11px; display:grid; place-items:center; width:36px; height:36px; border-radius:50%; color:var(--sc-dialog-text); transition:background-color .15s,transform .15s; }
+.sc-detail-dialog-actions { position:relative; z-index:2; display:flex; align-items:center; justify-content:flex-end; gap:8px; flex:none; margin:0; }
+.sc-detail-back { position:relative; z-index:2; display:grid; flex:none; place-items:center; width:36px; height:36px; border-radius:50%; color:var(--sc-dialog-text); transition:background-color .15s,transform .15s; }
 .sc-detail-back > span { display:block !important; margin:0 !important; color:inherit !important; font-size:34px !important; font-weight:300 !important; line-height:28px !important; transform:translateY(-1px); }
 .sc-detail-back:hover { background:var(--sc-dialog-soft); }
 .sc-detail-back:active { transform:scale(.94); }
@@ -6451,6 +6458,9 @@ button.PhotoView-Slider__toolbarIcon {
 .sc-detail-dialog .sc-detail .settings-section-top { padding-top:0; }
 .sc-detail-dialog .settings-section-icon { display:none; }
 .sc-detail-dialog .settings-section-top h4 { display:none; }
+/* The dialog already owns the title/actions. A section without a description
+   has no remaining header content, so it must not reserve an empty row. */
+.sc-detail-dialog .settings-section-card:not(.settings-secondary-section) > .settings-section-top[data-has-description="false"] { display:none; }
 .sc-detail-dialog .settings-section-title-action,
 .sc-detail-dialog .settings-section-primary-actions { display:none; }
 .sc-detail-dialog .settings-section-top p { max-width:560px; margin-top:0 !important; color:var(--sc-dialog-muted); font-size:14px; line-height:1.55; }
@@ -6704,7 +6714,6 @@ button.PhotoView-Slider__toolbarIcon {
 .mail-settings-save { min-width:82px; background:var(--sc-dialog-primary); color:#fff; }
 .mail-settings-save:hover:not(:disabled) { background:var(--sc-dialog-primary-hover); }
 .sc-detail-dialog[data-detail="totp"] { max-height:min(92dvh,820px); }
-.sc-detail-dialog[data-detail="totp"] .sc-detail-dialog-head { min-height:106px; padding-top:68px; }
 .sc-detail-dialog[data-detail="totp"] .sc-detail-dialog-scroll { padding-bottom:20px; }
 .sc-detail-dialog[data-detail="totp"] .sc-detail > div { gap:0; }
 .sc-detail-dialog[data-detail="totp"] .settings-section-heading { display:none; }
@@ -6862,7 +6871,8 @@ button.PhotoView-Slider__toolbarIcon {
 .sc-detail-dialog .settings-avatar-side > .btn { margin-left:auto; }
 .sc-detail-dialog .settings-avatar-side > small { display:none; }
 .sc-detail-dialog .settings-profile-fields .sw-row:first-child { padding-top:13px; }
-.sc-detail-dialog .site-palette-settings > header h2 { display:none; }
+.sc-detail-dialog .site-palette-settings { padding:0; }
+.sc-detail-dialog .site-palette-settings > header { display:none; }
 .sc-detail-dialog .site-palette-settings > header p { color:var(--sc-dialog-muted); font-size:14px; line-height:1.55; }
 .sc-meta-dialog { border-radius:30px !important; }
 .sc-meta-dialog h3 { font-size:22px; }
@@ -6891,7 +6901,8 @@ button.PhotoView-Slider__toolbarIcon {
   .sc-detail-dialog { width:100%; max-height:calc(100dvh - 68px); min-height:calc(100dvh - 68px); border-radius:24px 24px 0 0; }
   .sc-detail-dialog-head { min-height:90px; padding:54px 16px 12px; }
   .sc-detail-dialog-head h2 { font-size:20px; }
-  .sc-detail-dialog-actions { top:14px; right:12px; }
+  .sc-detail-dialog-actions { position:absolute; top:14px; right:12px; }
+  .sc-detail-back { position:absolute; top:14px; left:11px; }
   .sc-detail-dialog-scroll { padding:0 16px calc(24px + env(safe-area-inset-bottom)); }
   .sc-detail-dialog .settings-section-top { padding-bottom:14px; }
   .sc-detail-dialog[data-detail="totp"] .sc-detail-dialog-head { min-height:106px; padding-top:68px; }

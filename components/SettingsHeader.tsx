@@ -220,7 +220,7 @@ export function SettingsSection({
   const selection = useContext(SettingsSectionSelection);
   return (
     <section id={id} hidden={Boolean(id && selection?.anchors.includes(id) && selection.active !== id)} className={`settings-section-card ${className || ""}`}>
-      <div className="settings-section-top flex items-start justify-between gap-4">
+      <div className="settings-section-top flex items-start justify-between gap-4" data-has-description={Boolean(desc)}>
         <div className="flex min-w-0 items-start gap-3.5">
           <span className="settings-section-icon flex h-8 w-8 flex-none items-center justify-center rounded-md">
             <SubNavIcon name={icon} className="h-4 w-4" />
