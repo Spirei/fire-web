@@ -56,9 +56,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(desktop.includes('.app-shell-footer { display:none; }'));
     assert(tablet.includes('.app-shell-root:has(.records-app.is-settings) { height:100dvh;'));
     assert(tablet.includes('@media (min-width: 768px) and (max-height: 700px)'));
-    assert(tablet.includes('.sc-detail-dialog { max-height:min(88dvh,calc(100dvh - 32px)); }'));
-    assert(tablet.includes('(max-width: 1279px) and (orientation: landscape)'));
-    assert(tablet.includes('.sc-detail-dialog { max-width:680px; max-height:min(88dvh,860px); }'));
+    assert(tablet.includes('.sc-detail-dialog { max-height:min(78dvh,calc(100dvh - 32px)); }'));
+    assert(tablet.includes('.sc-detail-dialog { max-width:560px; max-height:min(78dvh,720px); }'));
     assert(tablet.includes('.sc-detail-dialog-head { min-height:64px;'));
     assert(!tablet.includes('@media (max-width: 767px)'), 'phone layout remains owned by mobile.css');
   });
