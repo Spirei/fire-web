@@ -4556,9 +4556,11 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_42_ENTRY,
   version: "v0.1.43",
   date: "2026-09-27",
-  summary: "API 文档采用参考视频的雾灰玻璃目录与刻度交互。",
+  summary: "重建设置中心与通行密钥交互，统一 API 文档阅读体验。",
   software: V0_1_42_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.43" } : item),
   changes: [
+    { kind: "feature", title: "重建设置中心", desc: "参考 Meta 账户中心重排分类、列表与详情，拆分个人信息、密码、备份及危险操作；移除可拖动窗口和两层手机横向标签，统一白底细线与深色适配。通行密钥采用独立弹层与免密介绍，管理员配置按需展开，保留原有身份验证。" },
+    { kind: "fix", title: "设置导航状态一致", desc: "以 URL 统一分类、具体区块和浏览器前进后退，兼容原链接；取消重复跳转、延迟滚动及挂载后隐藏区块，搜索同步管理员权限，并补充导航回归测试。" },
     { kind: "fix", title: "API 全部章节统一排版", desc: "基础信息、响应格式、错误码、公共约定和快速上手统一为主题折叠卡片；接口清单沿用统一表格与手机卡片，请求和 JSON 独立呈现。" },
     { kind: "fix", title: "认证步骤与长文说明", desc: "移动端认证拆为登录、二次验证、携带 Token 和退出四步，独立展示 HTTP / JSON 示例；整理 Web、通行密钥、行情与订单长段说明，保留原有参数与规则。" },
     { kind: "fix", title: "API 接口清单适配", desc: "手机端按方法、路径、说明与权限纵向展示接口卡片，长路径可换行；修复转义竖线造成表格错列，补充表头语义与回归测试。" },

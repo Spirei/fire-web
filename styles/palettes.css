@@ -32,7 +32,7 @@ html:root[data-palette] :is(.border-edge, .border-edge-strong, .card) { border-c
 html:root[data-palette] :is(.btn-dark, .seg-active) { background: rgb(var(--site-accent)); color: rgb(var(--site-surface)); }
 html:root[data-palette] :is(.btn-brand, .btn-soft) { background: rgb(var(--site-surface)); color: rgb(var(--site-ink)); border-color: rgb(var(--site-edge)); }
 /* Retire window-only palette overrides: the settings window inherits the same site tokens. */
-html:root[data-palette] .sv-win-root.sv-orca {
+html:root[data-palette] .sv-win-root.sv-orca:not(.sv-center) {
   --sv-shell: rgb(var(--site-soft)); --sv-shell-hover: rgb(var(--site-edge));
   --sv-bg: rgb(var(--site-bg)); --sv-border: rgb(var(--site-edge)); --sv-border-strong: rgb(var(--site-edge));
   --sv-text: rgb(var(--site-ink)); --sv-text-2: rgb(var(--site-muted)); --sv-text-3: rgb(var(--site-muted)); --sv-text-4: rgb(var(--site-muted) / .8);
@@ -41,7 +41,7 @@ html:root[data-palette] .sv-win-root.sv-orca {
   --sv-ring: rgb(var(--site-accent) / .2); --sv-card-shadow: 0 2px 12px rgb(var(--site-ink) / .04);
 }
 /* Liquid Glass 的设置导航与正文共用底色，仅用较浅的卡片色区分悬停/选中。 */
-html:root[data-palette="liquid"] .sv-win-root.sv-orca {
+html:root[data-palette="liquid"] .sv-win-root.sv-orca:not(.sv-center) {
   --sv-shell: rgb(var(--site-bg)); --sv-shell-hover: rgb(var(--site-surface));
 }
 /* 3D 舞台有独立主题：不能被站点 html 的深浅状态反向覆盖。 */

@@ -1,7 +1,8 @@
 "use client";
 import PasskeySettings from "@/components/PasskeySettings";
+import { resolveSettingsLocation } from "@/lib/settingsNavigation";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isSixDigitTotp, normalizeTotpDigits } from "@/lib/totpInput";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -11,8 +12,7 @@ import { appConfirm, appPrompt } from "@/lib/appDialog";
 import AppSelect from "@/components/AppSelect";
 import { copyText } from "@/lib/clipboard";
 import PaletteSettings from "@/components/PaletteSettings";
-import { useSitePalette } from "@/components/PaletteProvider";
-import SettingsHeader, { SettingsSection, SubNavIcon } from "@/components/SettingsHeader";
+import SettingsHeader, { SettingsSection, SettingsSectionSelection, SubNavIcon } from "@/components/SettingsHeader";
 import { LOGO_FONT_LABELS, logoFontClass } from "@/lib/logoFont";
 import MarketIcon from "@/components/MarketIcon";
 import DeleteIcon from "@/components/DeleteIcon";
@@ -75,8 +75,11 @@ const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; group
   { sub: "stocks", anchor: "trade", label: "交易 · 富途", groupLabel: "股票", keywords: "富途 futu opend 交易 行情源 主机 端口 腾讯 yahoo 备用" },
   { sub: "stocks", anchor: "currency-display", label: "货币金额显示", groupLabel: "股票", keywords: "货币 单位 金额 万 百万 千万 亿 缩写" },
   { sub: "stocks", anchor: "sources", label: "股票来源接口", groupLabel: "股票", keywords: "股票来源 接口 行情 财报 图标 url 数据源" },
-  { sub: "profile", anchor: "profile", label: "个人信息", groupLabel: "账号", keywords: "头像 昵称 密码 邮箱 导出 清空 数据" },
-  { sub: "totp", anchor: "totp", label: "2FA", groupLabel: "账号", keywords: "2FA 二次验证 TOTP 验证器 备用码 谷歌验证 Google Authenticator 安全" },
+  { sub: "profile", anchor: "profile", label: "个人信息", groupLabel: "账号", keywords: "头像 昵称 邮箱" },
+  { sub: "profile", anchor: "password", label: "更改密码", groupLabel: "账号", keywords: "密码 登录 安全" },
+  { sub: "profile", anchor: "data", label: "导入与导出", groupLabel: "数据", keywords: "备份 持仓 导出 导入 数据" },
+  { sub: "profile", anchor: "danger", label: "账号与数据管理", groupLabel: "数据", keywords: "清空 注销 删除 账号 数据" },
+  { sub: "totp", anchor: "totp", label: "双重验证", groupLabel: "账号", keywords: "2FA 二次验证 TOTP 验证器 备用码 谷歌验证 Google Authenticator 安全" },
   { sub: "passkeys", anchor: "passkeys", label: "通行密钥", groupLabel: "账号", keywords: "Passkey WebAuthn iCloud Bitwarden 1Password Face ID Touch ID 无密码 登录 安全 通行密匙" },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
@@ -87,6 +90,16 @@ const SETTINGS_SEARCH_INDEX: { sub: SubKey; anchor: string; label: string; group
 function defaultAnchorFor(sub: SubKey): string {
   return SETTINGS_SEARCH_INDEX.find((item) => item.sub === sub)?.anchor || "info";
 }
+
+const SETTINGS_CATEGORIES = [
+  { key: "account", label: "账号与安全", icon: "account", desc: "管理个人资料、密码和登录方式。", anchors: ["profile", "password", "totp", "passkeys"] },
+  { key: "website", label: "外观与网站", icon: "site", desc: "设置网站形象、配色与首页内容。", anchors: ["palette", "info", "appearance", "ticker", "nav"] },
+  { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "sources"] },
+  { key: "services", label: "功能与模型", icon: "model", desc: "配置模型服务与内容更新。", anchors: ["translation", "trading-square"] },
+  { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "danger"] },
+  { key: "developer", label: "开发与关于", icon: "api", desc: "查看接口文档、版本与技术信息。", anchors: ["api", "about"] }
+];
+const SETTINGS_ANCHORS = SETTINGS_SEARCH_INDEX.map((item) => item.anchor);
 
 function persistSettingsAnchor(sub: SubKey, anchor: string): boolean {
   const anchors = SETTINGS_SEARCH_INDEX.filter((item) => item.sub === sub);
@@ -100,11 +113,14 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   nav: "home",
   "trading-square": "features",
   groups: "tag",
-  "market-badges": "tag",
+  "market-badges": "badges",
   translation: "model",
   sources: "plug",
   trade: "trade",
-  "currency-display": "stocks",
+  "currency-display": "currency",
+  password: "password",
+  data: "data",
+  danger: "danger",
   profile: "profile",
   totp: "totp",
   passkeys: "passkeys",
@@ -186,101 +202,6 @@ function SwMediaField({
   );
 }
 
-/* ReactBits 风格子导航胶囊：鼠标磁吸跟随 + 点击水波纹 */
-function SubPill({
-  active,
-  icon,
-  label,
-  onClick
-}: {
-  active: boolean;
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  const { palette } = useSitePalette();
-  const ref = useRef<HTMLButtonElement | null>(null);
-  const [hovered, setHovered] = useState(false);
-  const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
-
-  function handleMove(e: ReactMouseEvent<HTMLButtonElement>) {
-    if (palette === "liquid") return;
-    const el = ref.current;
-    if (!el) return;
-    if (!el.classList.contains("tracking")) el.classList.add("tracking");
-    const rect = el.getBoundingClientRect();
-    const dx = (e.clientX - (rect.left + rect.width / 2)) / rect.width;
-    const dy = (e.clientY - (rect.top + rect.height / 2)) / rect.height;
-    el.style.transform = `translate(${(dx * 4).toFixed(2)}px, ${(dy * 3).toFixed(2)}px)`;
-  }
-
-  function handleLeave() {
-    setHovered(false);
-    const el = ref.current;
-    if (el) {
-      el.classList.remove("tracking");
-      el.style.transform = "translate(0px, 0px)";
-    }
-  }
-
-  function handleClick(e: ReactMouseEvent<HTMLButtonElement>) {
-    const el = ref.current;
-    if (el && palette !== "liquid") {
-      const rect = el.getBoundingClientRect();
-      const id = Date.now() + Math.random();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      setRipples((rs) => [...rs, { id, x, y }]);
-      window.setTimeout(() => setRipples((rs) => rs.filter((r) => r.id !== id)), 650);
-    }
-    onClick();
-  }
-
-  return (
-    <button
-      ref={ref}
-      type="button"
-      data-active={active ? "true" : undefined}
-      onClick={handleClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseMove={handleMove}
-      onMouseLeave={handleLeave}
-      className={`pill-magnetic settings-primary-pill relative flex min-h-10 flex-none items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-semibold ${
-        active
-          ? "bg-white text-ink-2 border border-edge-strong shadow-sm shadow-sm active:bg-bg-gray"
-          : "text-muted hover:bg-brand-hover active:bg-bg-gray"
-      }`}
-    >
-      {icon}
-      {label}
-      {ripples.map((r) => (
-        <span
-          key={r.id}
-          className="pill-ripple"
-          style={{
-            left: r.x,
-            top: r.y,
-            background: hovered || active ? "rgba(255,255,255,.45)" : "rgba(107,114,128,.22)"
-          }}
-        />
-      ))}
-    </button>
-  );
-}
-
-const SUB_NAV: { key: SubKey; label: string }[] = [
-  { key: "palette", label: "配色" },
-  { key: "site", label: "网站设置" },
-  { key: "features", label: "功能" },
-  { key: "stocks", label: "股票设置" },
-  { key: "profile", label: "个人信息" },
-  { key: "totp", label: "2FA" },
-  { key: "passkeys", label: "通行密钥" },
-  { key: "database", label: "数据库增强" },
-  { key: "cron", label: "定时任务" },
-  { key: "api", label: "API 开发接口" },
-  { key: "about", label: "关于" }
-];
 
 const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: string }[] }[] = [
   { label: "配色", items: [{ key: "palette", label: "全站配色", desc: "全站颜色与材质" }] },
@@ -751,7 +672,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setBlockSaving((b) => ({ ...b, [busyKey]: false }));
     }
   }
-  const visibleSubNav = SUB_NAV.filter((s) => isAdminUser || !ADMIN_SUB_KEYS.has(s.key));
   const visibleGroups = SUB_GROUPS
     .map((g) => ({ ...g, items: g.items.filter((it) => isAdminUser || !ADMIN_SUB_KEYS.has(it.key)) }))
     .filter((g) => g.items.length > 0);
@@ -774,6 +694,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     return SETTINGS_SEARCH_INDEX.find((x) => x.sub === valid)?.anchor || "info";
   });
   const activeSubMeta = visibleGroups.flatMap((g) => g.items).find((item) => item.key === sub);
+  const [categoryPage, setCategoryPage] = useState<string | null>(initialSub ? null : "home");
+  const allowedItems = SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || !ADMIN_SUB_KEYS.has(item.sub));
+  const categories = SETTINGS_CATEGORIES.map((category) => ({ ...category, items: category.anchors.flatMap((anchor) => allowedItems.filter((item) => item.anchor === anchor)) })).filter((category) => category.items.length > 0);
+  const currentCategory = categories.find((category) => category.key === categoryPage || (!categoryPage && category.anchors.includes(activeAnchor)));
   const [site, setSite] = useState<SiteSettings>(() => initialSettings ? {
     ...DEFAULT_SETTINGS,
     ...initialSettings,
@@ -807,7 +731,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [avatarMsg, setAvatarMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [nickMsg, setNickMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   useEffect(() => {
-    const openPalette = () => { setSub("palette"); setActiveAnchor("palette"); syncSettingsUrl("palette", "palette"); };
+    const openPalette = () => { jumpTo({ sub: "palette", anchor: "palette", label: "全站配色" }); };
     window.addEventListener("fire:open-palette", openPalette);
     return () => window.removeEventListener("fire:open-palette", openPalette);
   }, []);
@@ -817,24 +741,18 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const navDragIndex = useRef<number | null>(null);
   const tickerDragIndex = useRef<number | null>(null);
 
-  useEffect(() => {
-    const requestedAnchor = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("anchor") : null;
-    if (initialSub === "profile" && requestedAnchor === "totp") {
-      setSub("totp");
-      setActiveAnchor("totp");
-      syncSettingsUrl("totp", "totp");
-      return;
+  useLayoutEffect(() => {
+    function restoreLocation() {
+      const location = resolveSettingsLocation(new URLSearchParams(window.location.search), SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || !ADMIN_SUB_KEYS.has(item.sub)), SETTINGS_CATEGORIES);
+      setCategoryPage(location.category);
+      if (location.item && isSettingsSub(location.item.sub)) {
+        setSub(location.item.sub);
+        setActiveAnchor(location.item.anchor);
+      }
     }
-    if (isSettingsSub(initialSub)) {
-      const next = initialSub;
-      const resolved = isAdminUser || !ADMIN_SUB_KEYS.has(next) ? next : "profile";
-      setSub(resolved);
-      const nextAnchor = requestedAnchor && SETTINGS_SEARCH_INDEX.some((item) => item.sub === resolved && item.anchor === requestedAnchor)
-        ? requestedAnchor
-        : defaultAnchorFor(resolved);
-      if (nextAnchor) setActiveAnchor(nextAnchor);
-      syncSettingsUrl(resolved, nextAnchor);
-    }
+    restoreLocation();
+    window.addEventListener("popstate", restoreLocation);
+    return () => window.removeEventListener("popstate", restoreLocation);
   }, [initialSub, isAdminUser]);
 
   useEffect(() => {
@@ -858,14 +776,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         setGroupsLoaded(true);
       });
   }, []);
-
-  // 对照 mockup：点导航只显示该区块、隐藏同组其他区块（仅隐藏带锚点且锚点在搜索索引里的区块，避免误伤「用户头像」等）
-  useEffect(() => {
-    const anchors = new Set(SETTINGS_SEARCH_INDEX.map((x) => x.anchor));
-    document.querySelectorAll<HTMLElement>(".settings-section-card[id]").forEach((el) => {
-      if (anchors.has(el.id)) el.hidden = el.id !== activeAnchor;
-    });
-  }, [sub, activeAnchor]);
 
   useEffect(() => {
     if (sub !== "database") return;
@@ -1913,40 +1823,36 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     setClearing(false);
   }
 
-  function changeSub(key: SubKey) {
-    const anchor = defaultAnchorFor(key);
-    setSub(key);
-    setActiveAnchor(anchor);
-    syncSettingsUrl(key, anchor);
-    window.dispatchEvent(new CustomEvent("fire:navigate", { detail: { tab: "settings", sub: key } }));
-  }
-
   function syncSettingsUrl(nextSub: SubKey, anchor: string) {
     const url = new URL(window.location.href);
+    url.searchParams.delete("category");
     url.searchParams.set("sub", nextSub);
     if (persistSettingsAnchor(nextSub, anchor)) url.searchParams.set("anchor", anchor);
     else url.searchParams.delete("anchor");
-    window.history.replaceState({}, "", url.toString());
+    // Next.js copies its own history fields; passing __NA ourselves skips router URL synchronization.
+    if (url.href !== window.location.href) window.history.pushState(null, "", url.toString());
+  }
+
+  function openCategory(key: string) {
+    setCategoryPage(key);
+    setCmdQuery("");
+    setCmdOpen(false);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("sub");
+    url.searchParams.delete("anchor");
+    if (key === "home") url.searchParams.delete("category");
+    else url.searchParams.set("category", key);
+    if (url.href !== window.location.href) window.history.pushState(null, "", url);
+    contentScrollRef.current?.scrollTo({ top: 0 });
   }
 
   /* ---------- ⌘K / 侧栏搜索 ---------- */
   const cmdRef = useRef<HTMLInputElement | null>(null);
   const sidebarSearchRef = useRef<HTMLInputElement | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
-  const mobileSubnavRef = useRef<HTMLDivElement | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [cmdQuery, setCmdQuery] = useState("");
   const [cmdIndex, setCmdIndex] = useState(0);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const nav = mobileSubnavRef.current;
-      const active = nav?.querySelector<HTMLElement>('[data-active="true"]');
-      if (!nav || !active) return;
-      nav.scrollLeft = Math.max(0, active.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2);
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [sub]);
 
   function openCmdPalette() {
     setCmdIndex(0);
@@ -1963,10 +1869,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     const q = cmdQuery.trim().toLowerCase();
     if (!q) return [];
     return SETTINGS_SEARCH_INDEX.filter((item) => {
+      if (!isAdminUser && ADMIN_SUB_KEYS.has(item.sub)) return false;
       const hay = `${item.label} ${item.groupLabel} ${item.keywords}`.toLowerCase();
       return [...q].every((ch) => hay.includes(ch)) || hay.includes(q);
     });
-  }, [cmdQuery]);
+  }, [cmdQuery, isAdminUser]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -2005,51 +1912,23 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }, [navGroups, cmdQuery]);
 
   function jumpTo(item: { sub: SubKey; anchor: string; label: string }) {
+    if (!isAdminUser && ADMIN_SUB_KEYS.has(item.sub)) return;
     setCmdOpen(false);
-    changeSub(item.sub);
+    setCmdQuery("");
+    setCategoryPage(null);
+    setSub(item.sub);
     setActiveAnchor(item.anchor);
     syncSettingsUrl(item.sub, item.anchor);
-    setTimeout(() => {
-      const container = contentScrollRef.current;
-      const el = document.getElementById(item.anchor);
-      if (container && el) {
-        const containerTop = container.getBoundingClientRect().top;
-        const elTop = el.getBoundingClientRect().top;
-        const scrollTo = container.scrollTop + (elTop - containerTop) - 14;
-        container.scrollTo({ top: Math.max(0, scrollTo), behavior: "smooth" });
-      }
-    }, 120);
+    contentScrollRef.current?.scrollTo({ top: 0 });
   }
 
-  const subPills = (extra: string) => (
-    <div ref={mobileSubnavRef} className={`settings-subnav settings-primary-subnav mb-5 flex flex-nowrap items-center gap-1.5 overflow-x-auto rounded-2xl border border-edge bg-white p-1.5 shadow-card [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${extra}`}>
-      {visibleSubNav.map((s) => (
-        <SubPill
-          key={s.key}
-          active={sub === s.key}
-          icon={<SubNavIcon name={s.key} className="h-[15px] w-[15px]" />}
-          label={s.label}
-          onClick={() => changeSub(s.key)}
-        />
-      ))}
-    </div>
-  );
-
-  const mobileAnchorItems = navGroups.flatMap((group) => group.items).filter((item) => item.sub === sub);
-  const mobileAnchorPills = mobileAnchorItems.length > 1 ? (
-    <div className="mb-4 flex gap-1.5 overflow-x-auto rounded-xl border border-edge bg-bg-gray/40 p-1.5 md:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {mobileAnchorItems.map((item) => (
-        <button
-          key={item.anchor}
-          type="button"
-          onClick={() => jumpTo(item)}
-          className={`flex-none rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors ${activeAnchor === item.anchor ? "bg-white text-ink shadow-sm" : "text-muted hover:bg-brand-hover hover:text-ink"}`}
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
-  ) : null;
+  const categoryList = (currentCategory?.key === "account" ? [
+    { title: "个人资料", desc: "管理头像、昵称与登录邮箱。", items: currentCategory.items.filter((item) => item.anchor === "profile") },
+    { title: "账户登录", desc: "管理密码、验证器和免密登录方式。", items: currentCategory.items.filter((item) => item.anchor !== "profile") }
+  ] : [{ title: "", desc: "", items: currentCategory?.items || [] }]).map((group, index) => <section className="sc-category-section" key={index}>
+    {group.title && <><h3>{group.title}</h3><p>{group.desc}</p></>}
+    <div className="sc-row-group">{group.items.map((item) => <button type="button" className="sc-setting-row" key={item.anchor} onClick={() => jumpTo(item)}><span><strong>{item.label}</strong></span><span className="sc-chevron" aria-hidden="true">›</span></button>)}</div>
+  </section>);
 
   return (
     <div className="settings-page flex h-full min-h-0 flex-1">
@@ -2100,6 +1979,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       )}
       {/* 侧栏：搜索 + 分组导航，对齐 Orca 设置语言 */}
       <aside className="sw-sidebar relative hidden w-[248px] flex-none flex-col border-r md:flex">
+        <div className="sc-brand"><span>Fire</span><h1>设置中心</h1><p>管理账号与网站偏好</p></div>
         <div className="sw-search-wrap">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="sw-search-icon" aria-hidden="true">
             <circle cx="11" cy="11" r="7" />
@@ -2122,7 +2002,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           {cmdQuery === "" ? <span className="sw-search-kbd">⌘K</span> : null}
         </div>
         <div className="sw-sidebar-nav">
-        {visibleNavGroups.map((g) => (
+        {!cmdQuery.trim() && <nav aria-label="设置分类" className="sc-nav">
+          {[{ key: "home", label: "首页", icon: "home" }, ...categories].map((category) => <button type="button" key={category.key} onClick={() => openCategory(category.key)} aria-current={(categoryPage === "home" ? category.key === "home" : currentCategory?.key === category.key) ? "page" : undefined} className={`sc-nav-link ${(categoryPage === "home" ? category.key === "home" : currentCategory?.key === category.key) ? "is-active" : ""}`}><SubNavIcon name={category.icon} className="h-5 w-5"/><span>{category.label}</span></button>)}
+        </nav>}
+        {cmdQuery.trim() && visibleNavGroups.map((g) => (
           <div key={g.label} className="sw-nav-group">
             <p className="sw-nav-group-title">{g.label}</p>
             {g.items.map((item) => (
@@ -2168,12 +2051,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         </div>
       </aside>
 
-      {cmdOpen && (
+      {cmdOpen && createPortal(
         <div
           role="dialog"
           aria-label="搜索设置"
-          className="sw-cmd-pop fixed right-4 top-[52px] z-[200] w-[min(240px,calc(100vw-32px))] overflow-hidden rounded-xl border shadow-pop md:right-5 md:w-[180px]"
-          style={{ borderColor: "var(--sv-card-border)", background: "var(--sv-card)", color: "var(--sv-text)" }}
+          className="sw-cmd-pop sc-command fixed right-4 top-[72px] z-[200] w-[min(340px,calc(100vw-32px))] overflow-hidden rounded-2xl border shadow-pop"
+          style={{ borderColor: "rgb(var(--site-edge))", background: "rgb(var(--site-surface))", color: "rgb(var(--site-ink))" }}
         >
           <div className="flex items-center gap-2 border-b px-3 py-2" style={{ borderColor: "var(--sv-border)" }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-[13px] w-[13px] flex-none opacity-60"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
@@ -2220,23 +2103,34 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </button>
             ))}
           </div>
-        </div>
+        </div>, document.body
       )}
 
       <div className="sw-content flex min-w-0 flex-1 flex-col">
         {/* 内容头部 */}
         <div className="sw-page-head flex flex-none items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate">{activePageMeta?.label || activeSubMeta?.label} · {activeAnchor === "passkeys" ? "账号安全" : activeAnchor === "palette" ? "选择即时生效" : activeAnchor === "info" ? "修改自动保存" : activeEditState ? "正在编辑" : "只读浏览"}</p>
+            {categoryPage !== "home" && <button type="button" className={`sc-back ${categoryPage || sub === "passkeys" ? "sc-category-back" : ""}`} onClick={() => openCategory(categoryPage ? "home" : currentCategory?.key || "home")}><span aria-hidden="true">←</span> {categoryPage ? "设置首页" : currentCategory?.label || "设置首页"}</button>}
+            <h2>{categoryPage === "home" ? "首页" : categoryPage || sub === "passkeys" ? currentCategory?.label : activePageMeta?.label || activeSubMeta?.label}</h2>
+            {(categoryPage || sub === "passkeys") && <p>{categoryPage === "home" ? "账号、外观与服务，在这里统一管理。" : currentCategory?.desc}</p>}
+          </div>
+          <div className="sc-head-actions">
+            <button type="button" className="sc-search-button" onClick={openCmdPalette} aria-label="搜索设置"><SubNavIcon name="list"/></button>
+            {!categoryPage && !activeEditState && ["appearance", "ticker", "nav", "groups", "market-badges", "sources", "translation", "trade", "profile", "database", "trading-square"].includes(activeAnchor) && <button type="button" onClick={beginActiveEdit} className="btn btn-line btn-sm">编辑</button>}
           </div>
         </div>
 
         <div ref={contentScrollRef} className="sw-content-scroll min-h-0 flex-1 overflow-y-auto">
-          {/* 移动端横向分类 */}
-          {subPills("md:hidden")}
-          {mobileAnchorPills}
-
-          <div key={sub} className="tab-panel">
+          {categoryPage ? <div className="sc-landing">
+            {categoryPage === "home" ? <>
+              <button type="button" className="sc-account-card" onClick={() => jumpTo({ sub: "profile", anchor: "profile", label: "个人信息" })}>
+                {me.avatar ? <img src={me.avatar} alt=""/> : <span className="sc-avatar-placeholder">{(me.nickname || me.username).slice(0, 1)}</span>}
+                <span><strong>{me.nickname || me.username}</strong><small>个人信息与登录方式</small></span><span className="sc-chevron" aria-hidden="true">›</span>
+              </button>
+              <h3>所有设置</h3><div className="sc-row-group">{categories.map((category) => <button type="button" className="sc-setting-row" key={category.key} onClick={() => openCategory(category.key)}><SubNavIcon name={category.icon} className="h-5 w-5"/><span><strong>{category.label}</strong><small>{category.desc}</small></span><span className="sc-chevron" aria-hidden="true">›</span></button>)}</div>
+            </> : categoryList}
+          </div> : <SettingsSectionSelection.Provider value={{ active: activeAnchor, anchors: SETTINGS_ANCHORS }}>
+          <div key={sub} className="tab-panel sc-detail">
             {!isAdminUser && ADMIN_SUB_KEYS.has(sub) && (
               <div className="rounded-card border border-edge bg-white p-10 text-center shadow-card">
                 <p className="text-sm font-semibold text-ink">没有访问权限</p>
@@ -3413,9 +3307,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
             {/* ===== 个人信息 ===== */}
             {sub === "profile" && (
-              <div id="profile" className="flex flex-col gap-6">
-                <SettingsHeader name="profile" title="个人信息" />
+              <div className="flex flex-col gap-6">
                 <SettingsSection
+                  id="profile"
                   icon="profile"
                   title="个人信息"
                   desc="头像、昵称与邮箱"
@@ -3477,7 +3371,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       {nickMsg && <p className={`settings-form-message ${nickMsg.type === "ok" ? "is-ok" : "is-error"}`}>{nickMsg.text}</p>}
                     </div>
                   </div>
-                  {editingProfile && <><div className="subhead">密码</div>
+                </SettingsSection>
+                <SettingsSection id="password" icon="password" title="更改密码" desc="使用不易猜测、且未在其他网站使用过的密码">
                   <form onSubmit={changePassword} className="settings-password-grid">
                     <label><span>当前密码</span><input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required /></label>
                     <label><span>新密码</span><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required placeholder="至少 8 位，含字母和数字" /></label>
@@ -3487,9 +3382,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     )}
                     <button type="submit" disabled={pwdBusy} className="btn btn-ghost btn-sm">{pwdBusy ? "提交中…" : "修改密码"}</button>
                   </form>
-                  {pwdMsg && <p className={`settings-form-message ${pwdMsg.type === "ok" ? "is-ok" : "is-error"}`}>{pwdMsg.text}</p>}</>}
+                  {pwdMsg && <p className={`settings-form-message ${pwdMsg.type === "ok" ? "is-ok" : "is-error"}`}>{pwdMsg.text}</p>}
                 </SettingsSection>
-                <SettingsSection icon="profile" title="数据与备份" desc="导出或清空本账号数据">
+                <SettingsSection id="data" icon="data" title="导入与导出" desc="备份或迁移你的数据">
                   <div className="settings-profile-actions">
                   <div className="sw-row">
                     <div className="sw-row-label">
@@ -3527,7 +3422,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <button type="button" onClick={onExport} className="btn btn-ghost btn-sm">导出</button>
                   </div>
                   </div>
-                  <div className="subhead settings-danger-title">危险操作</div>
+                </SettingsSection>
+                <SettingsSection id="danger" icon="danger" title="账号与数据管理" desc="以下操作不可恢复，请先导出备份">
                   <div className="settings-danger-zone">
                   <div className="sw-row">
                     <div className="sw-row-label"><b>清空数据</b><span>不可恢复，请谨慎操作</span></div>
@@ -3542,7 +3438,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </div>
             )}
 
-            {sub === "passkeys" && <PasskeySettings admin={user.role === "admin"} />}
+            {sub === "passkeys" && <>
+              <div className="sc-landing">{categoryList}</div>
+              <PasskeySettings admin={user.role === "admin"} onClose={() => openCategory("account")} />
+            </>}
             {sub === "totp" && (
               <div id="totp" className="flex flex-col gap-6">
                 <SettingsHeader name="totp" title="二次验证" />
@@ -3939,6 +3838,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </div>
             )}
           </div>
+          </SettingsSectionSelection.Provider>}
         </div>
       </div>
       {versionOpen && <VersionModal onClose={() => setVersionOpen(false)} />}

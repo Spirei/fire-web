@@ -1169,13 +1169,33 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.deepEqual(extractRateMap({ rates: { CNY: 7.2, HKD: '7.85' } }), { CNY: 7.2, HKD: 7.85 });
     assert.equal(Number(toUsdBase({ USD: 1.08, CNY: 7.56 }).CNY.toFixed(4)), 7);
   });
-  await test('settings window keeps online height and hover scrollbar', () => {
+  await test('settings center uses container height without draggable offsets', () => {
     const win = fs.readFileSync(path.join(root, 'components/SettingsWindow.tsx'), 'utf8');
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
-    assert.match(win, /h-\[min\(916px,calc\(100dvh-136px\)\)\]/, '设置窗口应与左侧导航等高');
+    assert.match(win, /sw-window flex h-full min-h-0/, '设置应适应父容器高度');
+    assert(!win.includes('localStorage') && !win.includes('translate('), '旧窗口位置不能将设置移出视口');
     assert.match(win, /overflow-hidden">\{children\}/, '中间层不能抢走右侧滚动');
     assert.match(css, /height:min\(916px,calc\(100dvh - 136px\)\)/, 'CSS 高度应与左侧导航一致');
     assert.match(css, /\.sv-win-root \.sw-content-scroll,\s*\.dark \.sv-win-root \.sw-content-scroll\s*\{\s*scrollbar-width:\s*auto;\s*scrollbar-color:\s*auto/, '右侧滚动条必须重置后才能划过显示');
+  });
+  await test('settings routes preserve anchors, legacy links and permission boundaries', () => {
+    const { resolveSettingsLocation } = require(path.join(root, 'lib/settingsNavigation.ts'));
+    const items = [{ sub:'profile', anchor:'profile' }, { sub:'profile', anchor:'password' }, { sub:'totp', anchor:'totp' }];
+    const categories = [{key:'account', anchors:['profile','password','totp']}, {key:'system', anchors:['database']}];
+    const resolve = query => resolveSettingsLocation(new URLSearchParams(query), items, categories);
+    assert.deepEqual(resolve(''), {category:'home', item:null});
+    assert.deepEqual(resolve('category=account'), {category:'account', item:null});
+    assert.equal(resolve('category=system').category, 'home');
+    assert.equal(resolve('sub=profile&anchor=password').item.anchor, 'password');
+    assert.equal(resolve('sub=profile&anchor=totp').item.sub, 'totp');
+    assert.equal(resolve('sub=database').item.anchor, 'profile');
+    assert.equal(resolve('sub=profile&anchor=unknown').item.anchor, 'profile');
+    assert.equal(resolve('sub=profile&category=account').category, null);
+    const view = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    assert(!view.includes('document.querySelectorAll<HTMLElement>(".settings-section-card[id]")'));
+    assert(!view.includes('window.dispatchEvent(new CustomEvent("fire:navigate"'));
+    assert.match(view, /window.history.pushState\(null/);
+    assert(!view.includes('pushState(window.history.state'), 'Next.js must synchronize its canonical URL');
   });
   await test('global economy removes archived heatmap but keeps converter', () => {
     const view = fs.readFileSync(path.join(root, 'components/views/GlobalPreviewView.tsx'), 'utf8');
@@ -1231,7 +1251,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(!material.includes('.lg-global-lens') && !material.includes('button.rounded-full'), '玻璃效果不能覆盖普通圆按钮或头像');
     assert.match(material, /data-material="glass"\] :is\(\.fire-cap,\.settings-primary-pill/, '胶囊仍保留玻璃材质');
     assert(!/data-material="glass"\] :is\(\.card,/.test(palette), '卡片不能附加玻璃材质');
-    assert.match(palette, /data-palette="liquid"\] \.sv-win-root\.sv-orca\s*\{\s*--sv-shell:\s*rgb\(var\(--site-bg\)\);\s*--sv-shell-hover:\s*rgb\(var\(--site-surface\)\)/, 'Liquid Glass 设置导航应与正文同底色');
+    assert.match(palette, /data-palette="liquid"\] \.sv-win-root\.sv-orca:not\(\.sv-center\)\s*\{\s*--sv-shell:\s*rgb\(var\(--site-bg\)\);\s*--sv-shell-hover:\s*rgb\(var\(--site-surface\)\)/, '设置中心独立使用中性底色，旧窗口仍继承配色');
     assert(!menu.includes('scale-[1.4]') && !menu.includes('open ? "ring-2 ring-white"'), '头像菜单打开后不应放大或加亮圈');
   });
   await test('sidebar scrollbar stays hidden until hover (dark mode)', () => {
@@ -1793,9 +1813,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('totpEnabled && !totpBackupCodes?.length'));
     assert(!settings.includes('/api/auth/totp/reveal'));
     assert(!settings.includes('添加其他验证器'));
-    // 入口名用通用叫法 2FA，但点进去的页面文案保持「二次验证」
-    assert(settings.includes('{ key: "totp", label: "2FA" }'));
-    assert(settings.includes('label: "2FA", groupLabel: "账号"'));
+    // 登录安全采用可读名称，搜索关键词仍兼容 2FA。
+    assert(settings.includes('label: "双重验证", groupLabel: "账号"'));
     assert(settings.includes('<SettingsHeader name="totp" title="二次验证" />'));
     assert(settings.includes('{sub === "totp" && ('));
     assert(settings.includes('sub: "totp"'));
