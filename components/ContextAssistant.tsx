@@ -6,11 +6,11 @@ import dynamic from "next/dynamic";
 import { IconArchive, IconArrowDown, IconArrowUp, IconBrain, IconChartPie, IconCheck, IconChevronDown, IconCopy, IconDatabaseSearch, IconDots, IconHistory, IconMessageCircle, IconPaperclip, IconPencil, IconPlus, IconRefresh, IconSearch, IconSettings, IconTrash, IconX } from "@tabler/icons-react";
 import type { AssistantHistoryState, StoredAssistantConversation, StoredAssistantMessage } from "@/lib/assistantHistory";
 import type { AssistantTrace } from "@/components/AssistantTraceView";
-import type { AssistantAppearance, AssistantDensity } from "@/components/AssistantHarnessSettings";
+import type { AssistantDensity } from "@/components/AssistantHarnessSettings";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { clientRandomId } from "@/lib/randomId";
 import AssistantRichText from "@/components/AssistantRichText";
-import { applySiteTheme, THEME_CHANGE_EVENT, type SiteTheme } from "@/lib/theme";
+import { useThemePreference } from "@/components/ThemePreferenceProvider";
 import { appConfirm } from "@/lib/appDialog";
 import { showToast } from "@/lib/toast";
 
@@ -166,8 +166,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [workspaceView, setWorkspaceView] = useState<"chat"|"trace">("chat");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<"general"|"conversation"|"models">("general");
-  const [appearance, setAppearance] = usePersistedState<AssistantAppearance>("fire:assistant:appearance", "system");
-  const applyingAppearanceTheme = useRef(false);
+  const { mode: appearance, choose: setAppearance } = useThemePreference();
   const [contentFontSize, setContentFontSize] = usePersistedState("fire:assistant:font-size", 14);
   const [density, setDensity] = usePersistedState<AssistantDensity>("fire:assistant:density", "compact");
   const [dataMenuOpen, setDataMenuOpen] = useState(false);
@@ -219,29 +218,6 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
     }
   }
 
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      const resolved: SiteTheme = appearance === "system" ? (media.matches ? "dark" : "light") : appearance;
-      applyingAppearanceTheme.current = true;
-      applySiteTheme(resolved);
-      applyingAppearanceTheme.current = false;
-    };
-    apply();
-    if (appearance !== "system") return;
-    media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
-  }, [appearance]);
-
-  useEffect(() => {
-    const sync = (event: Event) => {
-      if (applyingAppearanceTheme.current) return;
-      const theme = (event as CustomEvent<{ theme?: SiteTheme }>).detail?.theme;
-      if (theme) setAppearance(theme);
-    };
-    window.addEventListener(THEME_CHANGE_EVENT, sync);
-    return () => window.removeEventListener(THEME_CHANGE_EVENT, sync);
-  }, [setAppearance]);
   const requestGeneration = useRef(0);
   const requestController = useRef<AbortController | null>(null);
   const [actionBusy, setActionBusy] = useState(false);

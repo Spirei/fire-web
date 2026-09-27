@@ -25,6 +25,9 @@ import "@/styles/palettes.css";
 import "@/styles/liquid-glass.css";
 import AppDialogHost from "@/components/AppDialogHost";
 import CapsuleScope from "@/components/CapsuleScope";
+import ThemePreferenceProvider from "@/components/ThemePreferenceProvider";
+import { ACCENT_KEY, accentVariables } from "@/lib/appearance";
+import { THEME_MODE_KEY, resolveThemeMode } from "@/lib/theme";
 import "@/styles/capsules.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -41,10 +44,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // 服务端读取主题 Cookie：暗黑模式下 SSR 首帧即深色，避免刷新白屏
   const cookieStore = await cookies();
   // 与首页使用同一套默认值：没有主题 Cookie 的新访客首帧也是深色。
-  const dark = readThemeFromCookieHeader(cookieStore.toString()) === "dark";
+  const cookieTheme = readThemeFromCookieHeader(cookieStore.toString());
   // 用户偏好（「原文 / 简体 / 繁體 / 英文」、卡包排序、图表周期 …）镜像在 cookie 里：
   // 服务端首帧直接用它渲染，客户端首帧也是同一个值 —— 刷新不会再先闪默认值、再跳回用户的选择。
   const prefs = parsePrefsCookie(cookieStore.get(PREFS_COOKIE)?.value);
+  const themeMode = resolveThemeMode(prefs[THEME_MODE_KEY], cookieTheme);
+  const dark = (themeMode === "system" ? cookieTheme : themeMode) === "dark";
   const settings = getSiteSettings();
   const palette = resolvePalette(prefs[PALETTE_KEY]);
   const pwaIcon = await pwaArtwork(settings.pwaIcon || settings.ico);
@@ -60,12 +65,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       translate="no"
       className={dark ? "dark notranslate" : "notranslate"}
       data-palette={palette.id}
+      data-theme-mode={themeMode}
       data-material={palette.glass ? "glass" : "solid"}
-      style={paletteVariables(palette.id)}
+      style={{ ...paletteVariables(palette.id), ...accentVariables(prefs[ACCENT_KEY]) }}
     >
       <head>
         {/* Google 翻译（含 Chrome 内置翻译）看到这一条就不再动这个页面 */}
         <meta name="google" content="notranslate" />
+        <script dangerouslySetInnerHTML={{ __html: `try{if(document.documentElement.dataset.themeMode==='system'){document.documentElement.classList.toggle('dark',matchMedia('(prefers-color-scheme: dark)').matches);}}catch(e){}` }} />
         <script dangerouslySetInnerHTML={{ __html: `if(location.pathname==='/simple-app')document.documentElement.classList.add('simple-app-active');` }} />
         {/* PWA：可安装（Chrome「在应用中打开」/ Safari 添加到主屏幕） */}
         <link rel="manifest" href="/manifest.webmanifest" />
@@ -85,6 +92,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="font-sans">
         <CapsuleScope />
         <PrefsProvider initialPrefs={prefs}>
+          <ThemePreferenceProvider initialTheme={dark ? "dark" : "light"}>
           <PaletteProvider>
             <SiteFavicon />
             <PwaRegister />
@@ -96,6 +104,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <AppDialogHost />
             {children}
           </PaletteProvider>
+          </ThemePreferenceProvider>
         </PrefsProvider>
       </body>
     </html>

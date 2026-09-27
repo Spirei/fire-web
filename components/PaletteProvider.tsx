@@ -2,7 +2,8 @@
 import { createContext, useCallback, useContext, useLayoutEffect, type ReactNode } from "react";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { PALETTE_KEY, paletteVariables, resolvePalette, type PaletteId } from "@/lib/palettes";
-const PaletteContext = createContext<{ palette: PaletteId; choose: (id: PaletteId) => void }>({ palette: "neutral", choose: () => {} });
+import { ACCENT_KEY, accentVariables, resolveAccent, type AppearanceAccent } from "@/lib/appearance";
+const PaletteContext = createContext<{ palette: PaletteId; choose: (id: PaletteId) => void; accent: AppearanceAccent; chooseAccent: (id: AppearanceAccent) => void }>({ palette: "neutral", choose: () => {}, accent: "blue", chooseAccent: () => {} });
 export function applyPalette(id: unknown) {
   const palette = resolvePalette(id);
   const root = document.documentElement;
@@ -12,9 +13,14 @@ export function applyPalette(id: unknown) {
 }
 export default function PaletteProvider({ children }: { children: ReactNode }) {
   const [stored, setStored] = usePersistedState<PaletteId>(PALETTE_KEY, "neutral");
+  const [storedAccent, setAccent] = usePersistedState<AppearanceAccent>(ACCENT_KEY, "blue");
+  const accent = resolveAccent(storedAccent).id;
   const palette = resolvePalette(stored).id;
-  useLayoutEffect(() => applyPalette(palette), [palette]);
-  const choose = useCallback((id: PaletteId) => { applyPalette(id); setStored(id); }, [setStored]);
-  return <PaletteContext.Provider value={{ palette, choose }}>{children}</PaletteContext.Provider>;
+  useLayoutEffect(() => {
+    applyPalette(palette);
+    Object.entries(accentVariables(accent)).forEach(([key, value]) => document.documentElement.style.setProperty(key, value));
+  }, [palette, accent]);
+  const choose = useCallback((id: PaletteId) => { setStored(id); }, [setStored]);
+  return <PaletteContext.Provider value={{ palette, choose, accent, chooseAccent: setAccent }}>{children}</PaletteContext.Provider>;
 }
 export const useSitePalette = () => useContext(PaletteContext);

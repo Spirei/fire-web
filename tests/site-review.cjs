@@ -16,6 +16,30 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('appearance modes, persisted accent tokens and compact controls share the SSR contract', () => {
+    const appearance = require(path.join(root, 'lib/appearance.ts'));
+    const theme = require(path.join(root, 'lib/theme.ts'));
+    assert.equal(appearance.APPEARANCE_ACCENTS.length, 9);
+    assert.equal(appearance.resolveAccent('unknown').id, 'blue');
+    const white = appearance.accentVariables('white');
+    assert.equal(white['--site-action'], '#ffffff');
+    assert.equal(white['--site-action-text'], '#1c1e21');
+    assert.notEqual(white['--site-accent-light'], '255 255 255', '白色主题的链接仍可读');
+    assert.equal(theme.effectiveTheme('system', true), 'dark');
+    assert.equal(theme.effectiveTheme('system', false), 'light');
+    assert.equal(theme.effectiveTheme('light', true), 'light');
+    assert.equal(theme.resolveThemeMode('unknown', 'light'), 'light');
+    const provider = fs.readFileSync(path.join(root, 'components/ThemePreferenceProvider.tsx'), 'utf8');
+    assert(provider.includes('media.addEventListener("change", apply)') && provider.includes('media.removeEventListener("change", apply)'));
+    assert(provider.includes('usePersistedState<SiteThemeMode>'));
+    const layout = fs.readFileSync(path.join(root, 'app/layout.tsx'), 'utf8');
+    assert(layout.includes('accentVariables(prefs[ACCENT_KEY])') && layout.includes('data-theme-mode'));
+    assert(layout.includes("dataset.themeMode==='system'") && layout.includes("matchMedia('(prefers-color-scheme: dark)')"));
+    const panel = fs.readFileSync(path.join(root, 'components/PaletteSettings.tsx'), 'utf8');
+    assert(panel.includes('data-capsule="off"') && panel.includes('aria-label="主题颜色"') && panel.includes('<details'));
+    const assistant = fs.readFileSync(path.join(root, 'components/ContextAssistant.tsx'), 'utf8');
+    assert(assistant.includes('mode: appearance, choose: setAppearance') && !assistant.includes('applySiteTheme('), '助手不能用独立主题覆写全站');
+  });
   await test('non-home capsules include portalled details, retain semantic controls and exclude homepage', () => {
     const scope = fs.readFileSync(path.join(root,'components/CapsuleScope.tsx'),'utf8');
     const css = fs.readFileSync(path.join(root,'styles/capsules.css'),'utf8');
@@ -28,8 +52,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(css.includes(':not([role="switch"],[role="checkbox"],.password-visibility-toggle'));
     assert(css.includes('--cap-danger') && css.includes(':disabled') && css.includes('@media(prefers-reduced-motion:reduce)'));
     assert(css.includes('.card-wander-zoom-backdrop') && css.includes('.card-wander-seg-thumb'));
-    assert(css.includes('--cap-primary:#0866ff') && css.includes('--cap-primary-hover:#075ce5'));
-    assert(css.includes('border-color:var(--cap-primary)!important; color:#fff!important'));
+    assert(css.includes('--cap-primary:var(--site-action,#0866ff)') && css.includes('--cap-primary-hover:var(--site-action-hover,#075ce5)'));
+    assert(css.includes('border-color:var(--cap-primary)!important; color:var(--site-action-text,#fff)!important'));
     assert(css.includes('.pk-intro-actions > button:last-child') && css.includes('.dialog-btn-neutral'));
     const calendar = fs.readFileSync(path.join(root,'components/PnlCalendar.tsx'),'utf8');
     assert(calendar.includes('aria-pressed={view === "month"}') && calendar.includes('aria-pressed={mode === "收益"}'));

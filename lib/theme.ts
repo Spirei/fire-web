@@ -4,6 +4,14 @@ export const THEME_COOKIE = "fire_theme";
 export const THEME_KEY = "fire.theme";
 export const THEME_CHANGE_EVENT = "fire:theme-change";
 export type SiteTheme = "light" | "dark";
+export type SiteThemeMode = SiteTheme | "system";
+export const THEME_MODE_KEY = "fire:theme-mode";
+export function resolveThemeMode(value: unknown, fallback: SiteTheme = "dark"): SiteThemeMode {
+  return value === "light" || value === "dark" || value === "system" ? value : fallback;
+}
+export function effectiveTheme(mode: SiteThemeMode, systemDark: boolean): SiteTheme {
+  return mode === "system" ? (systemDark ? "dark" : "light") : mode;
+}
 const LEGACY_THEME_COOKIE = "sto" + "cklog_theme";
 
 export function setThemeCookie(dark: boolean) {

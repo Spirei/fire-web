@@ -1,11 +1,30 @@
 "use client";
 import { SITE_PALETTES } from "@/lib/palettes";
 import { useSitePalette } from "./PaletteProvider";
-import ThemeToggle from "./ThemeToggle";
+import { APPEARANCE_ACCENTS } from "@/lib/appearance";
+import { useThemePreference } from "./ThemePreferenceProvider";
+import { IconSun, IconMoon, IconDeviceDesktop, IconCheck } from "@tabler/icons-react";
 export default function PaletteSettings() {
-  const { palette, choose } = useSitePalette();
+  const { palette, choose, accent, chooseAccent } = useSitePalette();
+  const { mode, choose: chooseMode } = useThemePreference();
   return <section id="palette" className="site-palette-settings">
-    <header><div><h2>全站配色</h2><p>从颜色到材质，首页、车型导入和后台保持一致。</p></div><ThemeToggle /></header>
+    <header><div><h2>外观</h2></div></header>
+    <div className="appearance-card">
+      <div className="appearance-row"><span className="appearance-label">模式</span>
+        <div className="appearance-mode" role="group" aria-label="外观模式">
+          {([{ id: "light", name: "浅色", Icon: IconSun }, { id: "dark", name: "深色", Icon: IconMoon }, { id: "system", name: "跟随系统", Icon: IconDeviceDesktop }] as const).map(({ id, name, Icon }) =>
+            <button key={id} type="button" data-capsule="off" aria-label={name} title={name} aria-pressed={mode === id} onClick={() => chooseMode(id)}><Icon size={23} stroke={1.7}/></button>)}
+        </div>
+      </div>
+      <div className="appearance-row appearance-colors-row"><span className="appearance-label">主题颜色</span>
+        <div className="appearance-colors" role="group" aria-label="主题颜色">
+          {APPEARANCE_ACCENTS.map(a => <button type="button" key={a.id} data-capsule="off" className="appearance-swatch" aria-label={a.name} title={a.name} aria-pressed={accent === a.id} style={{ "--swatch": a.color } as React.CSSProperties} onClick={() => chooseAccent(a.id)}>
+            {accent === a.id && <span className="appearance-check"><IconCheck size={12} stroke={2.5}/></span>}
+          </button>)}
+        </div>
+      </div>
+    </div>
+    <details className="appearance-more"><summary>更多配色</summary>
     <div className="site-palette-grid">
       {SITE_PALETTES.map(p => <button type="button" key={p.id} aria-pressed={palette === p.id} onClick={() => choose(p.id)} className="site-palette-option">
         <span className="site-palette-preview" style={{ background: p.light[0], color: p.light[2] }}>
@@ -17,6 +36,6 @@ export default function PaletteSettings() {
         <span className="site-palette-note">{p.note}</span>
       </button>)}
     </div>
-    <p className="site-palette-foot">每套配色均支持深浅模式。Meta 会同步主按钮、导航、表单与弹层；Liquid Glass 只为胶囊保留通透材质。选择即时生效并在当前浏览器保存，刷新不闪回默认色；行情涨跌色保持原有含义。</p>
+    </details>
   </section>;
 }

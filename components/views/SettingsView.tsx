@@ -130,7 +130,7 @@ const ADMIN_SUB_KEYS = new Set<SubKey>(["site", "features", "stocks", "database"
 /** ⌘K 命令搜索索引：关键词 → 子分类 + 锚点 */
 type SettingsSearchItem = { sub: SubKey; anchor: string; label: string; groupLabel: string; keywords: string; adminOnly?: boolean };
 const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
-  { sub: "palette", anchor: "palette", label: "全站配色", groupLabel: "配色", keywords: "配色 主题 Meta Liquid Glass 玻璃 海盐 松林 琥珀 暮光" },
+  { sub: "palette", anchor: "palette", label: "外观", groupLabel: "配色", keywords: "配色 主题 颜色 模式 浅色 深色 跟随系统 Meta Liquid Glass 玻璃 海盐 松林 琥珀 暮光" },
   { sub: "site", anchor: "info", label: "站点信息", groupLabel: "网站", keywords: "网站 标题 域名 注册 页脚 简介" },
   { sub: "site", anchor: "appearance", label: "网站形象", groupLabel: "网站", keywords: "图标 logo 字体 背景 形象 favicon 图片" },
   { sub: "site", anchor: "ticker", label: "首页指数", groupLabel: "网站", keywords: "指数 轮换 首页 ticker 行情条" },
@@ -274,7 +274,7 @@ function BrandAssetRow({
 
 
 const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: string }[] }[] = [
-  { label: "配色", items: [{ key: "palette", label: "全站配色", desc: "全站颜色与材质" }] },
+  { label: "外观", items: [{ key: "palette", label: "外观", desc: "模式与主题颜色" }] },
   {
     label: "站点",
     items: [
@@ -812,7 +812,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [avatarMsg, setAvatarMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [nickMsg, setNickMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   useEffect(() => {
-    const openPalette = () => { jumpTo({ sub: "palette", anchor: "palette", label: "全站配色" }); };
+    const openPalette = () => { jumpTo({ sub: "palette", anchor: "palette", label: "外观" }); };
     window.addEventListener("fire:open-palette", openPalette);
     return () => window.removeEventListener("fire:open-palette", openPalette);
   }, []);
