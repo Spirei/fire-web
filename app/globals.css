@@ -6227,7 +6227,11 @@ button.PhotoView-Slider__toolbarIcon {
 .sv-center .sc-detail > .flex { gap:20px; }
 .sv-center .settings-section-card[hidden] + .settings-section-card { margin-top:0; }
 .sv-center .settings-password-grid input { min-height:42px; }
+.sc-mobile-navigation { display:none; }
 @media(max-width:767px) {
+  .sv-center .sc-mobile-navigation { display:block; margin-top:24px; flex:none; }
+  .sv-center .sc-mobile-navigation .sc-setting-row { min-height:56px; padding:14px 16px; }
+  .sv-center .sc-mobile-navigation .sc-setting-row > svg { flex:none; }
   .sv-win-root.sv-center { width:100%; max-width:none; }
   .sv-center .sw-sidebar { display:none !important; }
   .sv-center .sw-page-head { padding:16px 14px 18px; }

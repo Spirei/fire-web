@@ -825,6 +825,17 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const freshSetup = await (await freshCall('POST', {})).json();
     assert.equal((await freshCall('PUT', { code: require(path.join(root, 'lib/totp.ts')).totpCodeAt(freshSetup.secret), name: '手机验证器' })).status, 200);
   });
+  await test('mobile settings retain category navigation and ship the security illustration inline', async () => {
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    const security = fs.readFileSync(path.join(root, 'components/SecurityCheck.tsx'), 'utf8');
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    assert(settings.includes('aria-label="手机设置分类"'));
+    assert(settings.includes('categories.map(category => <button'));
+    assert(settings.includes('onClick={() => openCategory(category.key)}'));
+    assert(css.includes('.sv-center .sc-mobile-navigation { display:block;'));
+    assert(security.includes('<svg className="security-check-illustration"'));
+    assert(!security.includes('src="/icons/security-check.svg"'));
+  });
   await test('high-risk admin mutations require step-up authentication', async () => {
     const auth = require(path.join(root, 'lib/auth.ts'));
     const admin = createUser('review_stepup_admin', 'Admin-test-123');

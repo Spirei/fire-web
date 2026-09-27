@@ -2085,6 +2085,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       <span><strong>{me.email || me.nickname || me.username}</strong></span><span className="sc-chevron" aria-hidden="true">›</span>
     </button>
     <SecurityCheck onNavigate={anchor => jumpTo({ sub: anchor, anchor, label: anchor === "profile" ? "个人信息" : anchor === "totp" ? "双重验证" : "通行密钥" })} />
+    <nav className="sc-mobile-navigation sc-row-group" aria-label="手机设置分类">
+      {categories.map(category => <button type="button" className="sc-setting-row" key={category.key} onClick={() => openCategory(category.key)}><SubNavIcon name={category.icon} className="h-5 w-5"/><span><strong>{category.label}</strong></span><span className="sc-chevron" aria-hidden="true">›</span></button>)}
+    </nav>
   </div>;
   const detailBackground = detailOrigin === "home" ? homeLanding : <div className="sc-landing">{categoryList}</div>;
 
