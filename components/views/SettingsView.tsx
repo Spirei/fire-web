@@ -52,7 +52,7 @@ interface Props {
   initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "groups" | "markets" | "marketLabels" | "modelServices">;
 }
 
-function SettingsDetailShell({ title, category, editable = false, editing = false, onEdit, onSave, onCancel, onClose, children }: { title: string; category: string; editable?: boolean; editing?: boolean; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; onClose: () => void; children: React.ReactNode }) {
+function SettingsDetailShell({ title, category, detailKey, editable = false, editing = false, onEdit, onSave, onCancel, onClose, children }: { title: string; category: string; detailKey?: string; editable?: boolean; editing?: boolean; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; onClose: () => void; children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
@@ -81,9 +81,9 @@ function SettingsDetailShell({ title, category, editable = false, editing = fals
   }, [mounted, requestClose]);
   if (!mounted) return null;
   return createPortal(
-    <div className={`sc-detail-layer fixed inset-0 z-[10900] flex items-start justify-center px-4 pb-4 pt-[72px] sm:px-8 sm:pb-8 sm:pt-[88px]${closing ? " is-closing" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+    <div className={`sc-detail-layer fixed inset-0 z-[10900] flex items-center justify-center p-4 sm:p-8${closing ? " is-closing" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" aria-label="关闭设置详情" className="sc-detail-scrim absolute inset-0" onClick={requestClose} disabled={closing} />
-      <section className="sc-detail-dialog relative flex w-full max-w-[594px] flex-col overflow-hidden">
+      <section className="sc-detail-dialog relative flex w-full max-w-[600px] flex-col overflow-hidden" data-detail={detailKey}>
         <div className="sc-detail-theme-bridge sv-win-root sv-orca sv-center flex min-h-0 flex-1 flex-col">
         <header className="sc-detail-dialog-head flex-none">
           <div className="min-w-0"><span>{category}</span><h2>{title}</h2></div>
@@ -2191,6 +2191,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           <SettingsDetailShell
             title={activePageMeta?.label || activeSubMeta?.label || "设置"}
             category={currentCategory?.label || "设置中心"}
+            detailKey={activeAnchor}
             editable={EDITABLE_DETAIL_ANCHORS.has(activeAnchor)}
             editing={activeEditState}
             onEdit={beginActiveEdit}
@@ -3460,6 +3461,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     {totpEnabled && (
                       <label><span>二次验证码</span><input autoComplete="one-time-code" spellCheck={false} value={totpPasswordCode} onChange={(e) => setTotpPasswordCode(e.target.value)} required placeholder="验证器 6 位数字或备用码" /></label>
                     )}
+                    <button type="button" className="settings-password-forgot" onClick={() => showToast("Fire 暂不通过邮件重置密码，请联系管理员处理")}>忘记密码了？</button>
                     <button type="submit" disabled={pwdBusy} className="settings-meta-primary">{pwdBusy ? "提交中…" : "更改密码"}</button>
                     <label className="settings-signout-option"><input type="checkbox" checked={signOutOtherDevices} onChange={(event) => setSignOutOtherDevices(event.target.checked)} /><span>在其他设备上退出登录。如果有人使用了你的账户，请选择此项。</span></label>
                   </form>

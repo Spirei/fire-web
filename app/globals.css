@@ -6273,14 +6273,14 @@ button.PhotoView-Slider__toolbarIcon {
   --sc-dialog-success:#168447;
 }
 .sc-detail-scrim { border:0; background:rgba(12,16,20,.62); animation:sc-detail-scrim-in 190ms cubic-bezier(.08,.52,.52,1) both; }
-.sc-detail-dialog { max-height:min(86dvh,820px); border:1px solid var(--sc-dialog-border); border-radius:32px; background:var(--sc-dialog-bg); color:var(--sc-dialog-text); box-shadow:0 24px 70px rgba(0,0,0,.3); transform-origin:50% 45%; animation:sc-detail-panel-in 240ms cubic-bezier(.08,.52,.52,1) both; }
+.sc-detail-dialog { width:100%; max-width:600px; max-height:min(86dvh,820px); border:0; border-radius:32px; background:var(--sc-dialog-bg); color:var(--sc-dialog-text); box-shadow:0 24px 70px rgba(0,0,0,.3); transform-origin:50% 45%; animation:sc-detail-panel-in 240ms cubic-bezier(.08,.52,.52,1) both; }
 .sc-detail-layer.is-closing .sc-detail-scrim { animation:sc-detail-scrim-out 180ms ease-in both; }
 .sc-detail-layer.is-closing .sc-detail-dialog { animation:sc-detail-panel-out 180ms cubic-bezier(.4,0,1,1) both; pointer-events:none; }
 .sc-detail-theme-bridge.sv-win-root.sv-orca.sv-center { --sv-bg:var(--sc-dialog-bg); --sv-shell:var(--sc-dialog-bg); --sv-card:var(--sc-dialog-bg); --sv-card-border:var(--sc-dialog-border); --sv-border:var(--sc-dialog-border); --sv-border-strong:var(--sc-dialog-border-strong); --sv-text:var(--sc-dialog-text); --sv-text-2:var(--sc-dialog-text); --sv-text-3:var(--sc-dialog-muted); --sv-input:var(--sc-dialog-bg); --sv-surface-2:var(--sc-dialog-soft); --sv-hover-bg:var(--sc-dialog-soft); --sv-accent:var(--sc-dialog-primary); width:100%; max-width:none; height:100%; background:var(--sc-dialog-bg); color:var(--sc-dialog-text); }
-.sc-detail-dialog-head { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; padding:28px 20px 18px; }
-.sc-detail-dialog-head span { display:block; margin-bottom:6px; color:var(--sc-dialog-muted); font-size:12px; font-weight:600; }
-.sc-detail-dialog-head h2 { color:var(--sc-dialog-text); font-size:24px; font-weight:700; line-height:1.25; letter-spacing:-.025em; }
-.sc-detail-dialog-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex:none; margin-top:-12px; margin-right:-4px; }
+.sc-detail-dialog-head { display:flex; min-height:114px; align-items:flex-start; justify-content:space-between; gap:20px; padding:76px 20px 8px; }
+.sc-detail-dialog-head span { display:none; }
+.sc-detail-dialog-head h2 { color:var(--sc-dialog-text); font-size:24px; font-weight:650; line-height:28px; letter-spacing:-.025em; }
+.sc-detail-dialog-actions { position:absolute; z-index:2; top:16px; right:16px; display:flex; align-items:center; justify-content:flex-end; gap:8px; flex:none; margin:0; }
 .sc-detail-dialog-actions > button { min-height:36px; padding:0 13px; border-radius:999px; color:var(--sc-dialog-text); font-size:13px; font-weight:600; transition:background-color .15s,color .15s,transform .15s; }
 .sc-detail-dialog-actions > button:hover { background:var(--sc-dialog-soft); }
 .sc-detail-dialog-actions > button:active:not(:disabled) { transform:scale(.96); }
@@ -6292,12 +6292,13 @@ button.PhotoView-Slider__toolbarIcon {
 .sc-detail-dialog .sc-detail { width:100%; max-width:none; margin:0; }
 .sc-detail-dialog .sc-detail > div { gap:18px; }
 .sc-detail-dialog .settings-section-card { padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
-.sc-detail-dialog .settings-section-top { min-height:0; padding:0 0 18px; border:0; }
+.sc-detail-dialog .settings-section-top { min-height:0; padding:0 0 16px; border:0; }
+.sc-detail-dialog .sc-detail .settings-section-top { padding-top:0; }
 .sc-detail-dialog .settings-section-icon { display:none; }
 .sc-detail-dialog .settings-section-top h4 { display:none; }
 .sc-detail-dialog .settings-section-title-action,
 .sc-detail-dialog .settings-section-primary-actions { display:none; }
-.sc-detail-dialog .settings-section-top p { max-width:510px; color:var(--sc-dialog-muted); font-size:14px; line-height:1.55; }
+.sc-detail-dialog .settings-section-top p { max-width:560px; margin-top:0 !important; color:var(--sc-dialog-muted); font-size:14px; line-height:1.55; }
 .sc-detail-dialog .settings-section-body,
 .sc-detail-dialog .settings-section-card > .settings-section-top + * { margin-top:0; padding:8px 16px; overflow:visible; border:1px solid var(--sc-dialog-border); border-radius:17px; background:var(--sc-dialog-bg); box-shadow:none; }
 .sc-detail-dialog .settings-section-card.is-accordion { overflow:hidden; border:1px solid var(--sc-dialog-border); border-radius:17px; }
@@ -6335,19 +6336,25 @@ button.PhotoView-Slider__toolbarIcon {
 .sc-detail-dialog :is(.bg-bg-gray,.bg-soft) { background:var(--sc-dialog-soft) !important; }
 .sc-detail-dialog :is(a,.settings-source-link) { color:var(--sc-dialog-link); }
 .sc-detail-dialog :is(.text-up,.is-error) { color:var(--sc-dialog-danger) !important; }
-.sc-detail-dialog .settings-password-meta { display:flex; grid-template-columns:none; flex-direction:column; align-items:stretch; gap:14px; padding:0; background:transparent; }
+.sc-detail-dialog[data-detail="password"] .sc-detail-dialog-scroll { padding-bottom:39px; }
+.sc-detail-dialog[data-detail="password"] .settings-section-top { padding:0 0 13px !important; }
+.sc-detail-dialog[data-detail="password"] .settings-section-top p { max-width:560px; font-size:15px; line-height:19px; }
+.sc-detail-dialog .settings-password-meta { display:flex; grid-template-columns:none; flex-direction:column; align-items:stretch; gap:16px; padding:0; border:0; border-radius:0; background:transparent; }
 .sc-detail-dialog #password .settings-section-body { padding:0; border:0; }
 .sc-detail-dialog .settings-password-meta label { display:block; width:100%; }
 .sc-detail-dialog .settings-password-meta label > span { display:none; }
-.sc-detail-dialog .settings-password-meta input[type="password"] { width:100%; min-height:58px; padding:0 16px; border-radius:16px; font-size:15px; }
-.settings-account-identity { display:flex; align-items:center; gap:12px; min-height:64px; padding:10px 14px; border:1px solid var(--sc-dialog-border); border-radius:16px; }
+.sc-detail-dialog .settings-password-meta input[type="password"] { width:100%; min-height:60px; padding:0 16px; border-radius:16px; font-size:15px; font-weight:500; line-height:19px; }
+.sc-detail-dialog[data-detail="password"] .settings-password-meta input[type="password"]:focus { border-color:var(--sc-dialog-muted); box-shadow:none; }
+.settings-account-identity { display:flex; align-items:center; gap:12px; min-height:62px; padding:10px 12px; border:1px solid var(--sc-dialog-border); border-radius:16px; }
 .settings-account-identity > span:nth-child(2) { display:flex; min-width:0; flex:1; flex-direction:column; }
-.settings-account-identity b { overflow:hidden; color:var(--sc-dialog-text); font-size:14px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
-.settings-account-identity small { margin-top:2px; overflow:hidden; color:var(--sc-dialog-muted); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.settings-account-identity b { overflow:hidden; color:var(--sc-dialog-text); font-size:15px; font-weight:600; line-height:19px; text-overflow:ellipsis; white-space:nowrap; }
+.settings-account-identity small { margin-top:1px; overflow:hidden; color:var(--sc-dialog-muted); font-size:13px; line-height:17px; text-overflow:ellipsis; white-space:nowrap; }
 .settings-account-identity > span:last-child { color:var(--sc-dialog-muted); font-size:26px; }
-.settings-account-avatar { display:grid; place-items:center; width:36px; height:36px; flex:none; border-radius:50%; background:var(--sc-dialog-soft); font-size:14px; font-weight:700; }
+.settings-account-avatar { display:grid; place-items:center; width:24px; height:24px; flex:none; border-radius:50%; background:var(--sc-dialog-soft); font-size:11px; font-weight:700; }
 .settings-account-avatar img { width:100%; height:100%; border-radius:inherit; object-fit:cover; }
-.settings-meta-primary { width:100%; min-height:46px; margin-top:4px; border-radius:999px; background:var(--sc-dialog-primary); color:#fff; font-size:14px; font-weight:650; transition:background-color .15s,transform .15s; }
+.settings-password-forgot { display:flex; min-height:26px; align-items:flex-start; color:var(--sc-dialog-link); font-size:15px; font-weight:650; line-height:19px; text-align:left; }
+.settings-password-forgot:hover { text-decoration:underline; }
+.settings-meta-primary { width:100%; min-height:44px; border-radius:999px; background:var(--sc-dialog-primary); color:#fff; font-size:15px; font-weight:600; line-height:19px; transition:background-color .15s,transform .15s; }
 .settings-meta-primary:hover:not(:disabled) { background:var(--sc-dialog-primary-hover); }
 .settings-meta-primary:active:not(:disabled) { transform:scale(.99); }
 .settings-meta-primary:disabled { opacity:.5; }
@@ -6355,9 +6362,9 @@ button.PhotoView-Slider__toolbarIcon {
 .settings-password-help-link:hover { text-decoration:underline; }
 .settings-password-help { display:flex; flex-direction:column; gap:3px; padding:13px 15px; border-radius:14px; background:var(--sc-dialog-soft); color:var(--sc-dialog-muted); font-size:12px; line-height:1.5; }
 .settings-password-help b { color:var(--sc-dialog-text); font-size:13px; }
-.settings-signout-option { display:flex !important; width:100%; align-items:flex-start; gap:10px; color:var(--sc-dialog-text); font-size:13px; line-height:1.45; cursor:pointer; }
-.sc-detail-dialog .settings-password-meta .settings-signout-option > span { display:block; flex:1; margin:0; color:var(--sc-dialog-text); font-size:13px; font-weight:550; }
-.settings-signout-option input[type="checkbox"] { width:20px; height:20px; min-height:20px; flex:none; margin:0; padding:0; border:1px solid var(--sc-dialog-border-strong); border-radius:5px; accent-color:var(--sc-dialog-primary); }
+.settings-signout-option { display:flex !important; width:100%; min-height:24px; align-items:flex-start; gap:12px; color:var(--sc-dialog-text); font-size:15px; line-height:19px; cursor:pointer; }
+.sc-detail-dialog .settings-password-meta .settings-signout-option > span { display:block; flex:1; margin:0; color:var(--sc-dialog-text); font-size:15px; font-weight:500; line-height:19px; }
+.settings-signout-option input[type="checkbox"] { width:24px; height:24px; min-height:24px; flex:none; margin:0; padding:0; border:1px solid var(--sc-dialog-border-strong); border-radius:5px; accent-color:var(--sc-dialog-primary); }
 .sc-detail-dialog .settings-profile-actions,
 .sc-detail-dialog .settings-danger-zone { border-radius:16px; background:var(--sc-dialog-bg); }
 .sc-detail-dialog .settings-profile-grid { display:flex; flex-direction:column; gap:0; padding:0; }
@@ -6397,10 +6404,10 @@ button.PhotoView-Slider__toolbarIcon {
 @keyframes sc-detail-panel-out { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(8px) scale(.985); } }
 @media(max-width:600px) {
   .sc-detail-layer { align-items:flex-start; padding:68px 0 0; }
-  .sc-detail-dialog { width:100%; max-height:calc(100dvh - 68px); min-height:calc(100dvh - 68px); border-width:1px 0 0; border-radius:24px 24px 0 0; }
-  .sc-detail-dialog-head { padding:24px 16px 16px; }
+  .sc-detail-dialog { width:100%; max-height:calc(100dvh - 68px); min-height:calc(100dvh - 68px); border-radius:24px 24px 0 0; }
+  .sc-detail-dialog-head { min-height:114px; padding:76px 16px 8px; }
   .sc-detail-dialog-head h2 { font-size:22px; }
-  .sc-detail-dialog-actions { margin-right:0; }
+  .sc-detail-dialog-actions { top:14px; right:12px; }
   .sc-detail-dialog-scroll { padding:0 16px calc(24px + env(safe-area-inset-bottom)); }
   .sc-detail-dialog .settings-section-top { padding-bottom:14px; }
   .sc-detail-dialog .settings-section-body,
