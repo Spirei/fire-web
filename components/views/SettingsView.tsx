@@ -768,6 +768,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   });
   const activeSubMeta = visibleGroups.flatMap((g) => g.items).find((item) => item.key === sub);
   const [categoryPage, setCategoryPage] = useState<string | null>(initialSub ? null : "home");
+  const [detailOrigin, setDetailOrigin] = useState<string | null>(null);
+  const homeIsBackground = categoryPage === "home" || (!categoryPage && detailOrigin === "home");
   const allowedItems = SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || (!ADMIN_SUB_KEYS.has(item.sub) && !item.adminOnly));
   const categories = SETTINGS_CATEGORIES.map((category) => ({ ...category, items: category.anchors.flatMap((anchor) => allowedItems.filter((item) => item.anchor === anchor)) })).filter((category) => category.items.length > 0);
   const currentCategory = categories.find((category) => category.key === categoryPage || (!categoryPage && category.anchors.includes(activeAnchor)));
@@ -818,6 +820,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     function restoreLocation() {
       const location = resolveSettingsLocation(new URLSearchParams(window.location.search), SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || (!ADMIN_SUB_KEYS.has(item.sub) && !item.adminOnly)), SETTINGS_CATEGORIES);
       setCategoryPage(location.category);
+      const origin = new URLSearchParams(window.location.search).get("from");
+      setDetailOrigin(origin === "home" || SETTINGS_CATEGORIES.some(item => item.key === origin) ? origin : null);
       if (location.item && isSettingsSub(location.item.sub)) {
         setSub(location.item.sub);
         setActiveAnchor(location.item.anchor);
@@ -1983,6 +1987,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     const url = new URL(window.location.href);
     url.searchParams.delete("category");
     url.searchParams.set("sub", nextSub);
+    const origin = categoryPage || detailOrigin;
+    if (origin) url.searchParams.set("from", origin);
+    else url.searchParams.delete("from");
     if (persistSettingsAnchor(nextSub, anchor)) url.searchParams.set("anchor", anchor);
     else url.searchParams.delete("anchor");
     // Next.js copies its own history fields; passing __NA ourselves skips router URL synchronization.
@@ -1991,11 +1998,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   function openCategory(key: string) {
     setCategoryPage(key);
+    setDetailOrigin(null);
     setCmdQuery("");
     setCmdOpen(false);
     const url = new URL(window.location.href);
     url.searchParams.delete("sub");
     url.searchParams.delete("anchor");
+    url.searchParams.delete("from");
     if (key === "home") url.searchParams.delete("category");
     else url.searchParams.set("category", key);
     if (url.href !== window.location.href) window.history.pushState(null, "", url);
@@ -2071,6 +2080,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     if (!isAdminUser && ADMIN_SUB_KEYS.has(item.sub)) return;
     setCmdOpen(false);
     setCmdQuery("");
+    setDetailOrigin(categoryPage || detailOrigin);
     setCategoryPage(null);
     setSub(item.sub);
     setActiveAnchor(item.anchor);
@@ -2085,6 +2095,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     {group.title && <><h3>{group.title}</h3><p>{group.desc}</p></>}
     <div className="sc-row-group">{group.items.map((item) => <button type="button" className="sc-setting-row" key={item.anchor} onClick={() => jumpTo(item)}><span><strong>{item.label}</strong></span><span className="sc-chevron" aria-hidden="true">›</span></button>)}</div>
   </section>)}</>;
+
+  const homeLanding = <div className="sc-landing sc-home-landing">
+    <button type="button" className="sc-account-card" onClick={() => jumpTo({ sub: "profile", anchor: "profile", label: "个人信息" })}>
+      {me.avatar ? <img src={me.avatar} alt=""/> : <span className="sc-avatar-placeholder">{(me.nickname || me.username).slice(0, 1)}</span>}
+      <span><strong>{me.email || me.nickname || me.username}</strong></span><span className="sc-chevron" aria-hidden="true">›</span>
+    </button>
+    <SecurityCheck onNavigate={anchor => jumpTo({ sub: anchor, anchor, label: anchor === "profile" ? "个人信息" : anchor === "totp" ? "双重验证" : "通行密钥" })} />
+  </div>;
+  const detailBackground = detailOrigin === "home" ? homeLanding : <div className="sc-landing">{categoryList}</div>;
 
   return (
     <div className="settings-page flex h-full min-h-0 flex-1">
@@ -2159,7 +2178,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         </div>
         <div className="sw-sidebar-nav">
         {!cmdQuery.trim() && <nav aria-label="设置分类" className="sc-nav">
-          {[{ key: "home", label: "首页", icon: "home" }, ...categories].map((category) => <button type="button" key={category.key} onClick={() => openCategory(category.key)} aria-current={(categoryPage === "home" ? category.key === "home" : currentCategory?.key === category.key) ? "page" : undefined} className={`sc-nav-link ${(categoryPage === "home" ? category.key === "home" : currentCategory?.key === category.key) ? "is-active" : ""}`}><SubNavIcon name={category.icon} className="h-5 w-5"/><span>{category.label}</span></button>)}
+          {[{ key: "home", label: "首页", icon: "home" }, ...categories].map((category) => <button type="button" key={category.key} onClick={() => openCategory(category.key)} aria-current={(homeIsBackground ? category.key === "home" : currentCategory?.key === category.key) ? "page" : undefined} className={`sc-nav-link ${(homeIsBackground ? category.key === "home" : currentCategory?.key === category.key) ? "is-active" : ""}`}><SubNavIcon name={category.icon} className="h-5 w-5"/><span>{category.label}</span></button>)}
         </nav>}
         {cmdQuery.trim() && visibleNavGroups.map((g) => (
           <div key={g.label} className="sw-nav-group">
@@ -2266,30 +2285,22 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         {/* 内容头部 */}
         <div className="sw-page-head flex flex-none items-center justify-between gap-3">
           <div className="min-w-0">
-            {categoryPage !== "home" && <button type="button" className={`sc-back ${categoryPage || sub === "passkeys" ? "sc-category-back" : ""}`} onClick={() => openCategory(categoryPage ? "home" : currentCategory?.key || "home")}><span aria-hidden="true">←</span> {categoryPage ? "设置首页" : currentCategory?.label || "设置首页"}</button>}
-            <h2>{categoryPage === "home" ? "首页" : categoryPage || sub === "passkeys" ? currentCategory?.label : activePageMeta?.label || activeSubMeta?.label}</h2>
-            {(categoryPage || sub === "passkeys") && <p>{categoryPage === "home" ? "管理个人信息与账户安全。" : currentCategory?.desc}</p>}
+            {!homeIsBackground && <button type="button" className={`sc-back ${categoryPage || sub === "passkeys" ? "sc-category-back" : ""}`} onClick={() => openCategory(categoryPage ? "home" : detailOrigin || currentCategory?.key || "home")}><span aria-hidden="true">←</span> {categoryPage ? "设置首页" : currentCategory?.label || "设置首页"}</button>}
+            <h2>{homeIsBackground ? "首页" : categoryPage || sub === "passkeys" ? currentCategory?.label : activePageMeta?.label || activeSubMeta?.label}</h2>
+            {(homeIsBackground || categoryPage || sub === "passkeys") && <p>{homeIsBackground ? "管理个人信息与账户安全。" : currentCategory?.desc}</p>}
           </div>
           <div className="sc-head-actions">
             <button type="button" className="sc-search-button" onClick={openCmdPalette} aria-label="搜索设置"><SubNavIcon name="list"/></button>
-            {!categoryPage && !activeEditState && EDITABLE_DETAIL_ANCHORS.has(activeAnchor) && <button type="button" onClick={beginActiveEdit} className="btn btn-line btn-sm">编辑</button>}
+            {!homeIsBackground && !categoryPage && !activeEditState && EDITABLE_DETAIL_ANCHORS.has(activeAnchor) && <button type="button" onClick={beginActiveEdit} className="btn btn-line btn-sm">编辑</button>}
           </div>
         </div>
 
         <div ref={contentScrollRef} className="sw-content-scroll min-h-0 flex-1 overflow-y-auto">
-          {categoryPage ? <div className={`sc-landing ${categoryPage === "home" ? "sc-home-landing" : ""}`}>
-            {categoryPage === "home" ? <>
-              <button type="button" className="sc-account-card" onClick={() => jumpTo({ sub: "profile", anchor: "profile", label: "个人信息" })}>
-                {me.avatar ? <img src={me.avatar} alt=""/> : <span className="sc-avatar-placeholder">{(me.nickname || me.username).slice(0, 1)}</span>}
-                <span><strong>{me.email || me.nickname || me.username}</strong></span><span className="sc-chevron" aria-hidden="true">›</span>
-              </button>
-              <SecurityCheck onNavigate={anchor => jumpTo({ sub: anchor, anchor, label: anchor === "profile" ? "个人信息" : anchor === "totp" ? "双重验证" : "通行密钥" })} />
-            </> : categoryList}
-          </div> : sub === "passkeys" ? <>
-            <div className="sc-landing">{categoryList}</div>
-            <PasskeySettings admin={user.role === "admin"} mode={activeAnchor === "passkey-config" ? "config" : "keys"} onClose={() => openCategory("account")} />
+          {categoryPage ? categoryPage === "home" ? homeLanding : <div className="sc-landing">{categoryList}</div> : sub === "passkeys" ? <>
+            {detailBackground}
+            <PasskeySettings admin={user.role === "admin"} mode={activeAnchor === "passkey-config" ? "config" : "keys"} onClose={() => openCategory(detailOrigin || "account")} />
           </> : <>
-          <div className="sc-landing">{categoryList}</div>
+          {detailBackground}
           <SettingsDetailShell
             title={activeAnchor === "totp"
               ? (totpBackupCodes?.length ? "保存备用码" : totpSetup ? (totpSetupStage === "verify" ? "输入验证码" : "设置说明") : totpEnabled ? "双重验证" : "帮助保护你的账户")
@@ -2300,14 +2311,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             onBack={activeAnchor === "totp" ? () => {
               if (totpSetup && totpSetupStage === "verify") { setTotpSetupStage("instructions"); setTotpSetupCode(""); setTotpMsg(null); return; }
               if (totpSetup) { setTotpSetup(null); setTotpSetupCode(""); setTotpMsg(null); return; }
-              openCategory(currentCategory?.key || "home");
+              openCategory(detailOrigin || currentCategory?.key || "home");
             } : undefined}
             editable={EDITABLE_DETAIL_ANCHORS.has(activeAnchor)}
             editing={activeEditState}
             onEdit={beginActiveEdit}
             onSave={() => { void saveActiveEdit(); }}
             onCancel={cancelActiveEdit}
-            onClose={() => { if (EDITABLE_DETAIL_ANCHORS.has(activeAnchor) && activeEditState) cancelActiveEdit(); openCategory(currentCategory?.key || "home"); }}
+            onClose={() => { if (EDITABLE_DETAIL_ANCHORS.has(activeAnchor) && activeEditState) cancelActiveEdit(); openCategory(detailOrigin || currentCategory?.key || "home"); }}
           >
           <SettingsSectionSelection.Provider value={{ active: activeAnchor, anchors: SETTINGS_ANCHORS }}>
           <div key={sub} className="tab-panel sc-detail">
