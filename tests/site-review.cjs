@@ -1955,6 +1955,15 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const toastCss = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
     assert(toastCss.includes('fire-toast-icon-enter 240ms') && toastCss.includes('.fire-toast-icon,.fire-toast-symbol,.fire-toast-mark { animation:none; }'), '图标短动效必须支持减少动画偏好');
   });
+  await test('mail settings retain feedback without confusing test and save', () => {
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    assert(settings.includes('发送测试邮件') && settings.includes('settings-form-feedback'));
+    assert(settings.includes('className="mail-settings-fields" disabled={mailTesting || blockSaving.mail}'), '测试中锁定字段，避免结果与配置错配');
+    assert(settings.includes('setMailResult(null);\n  }, [site.smtpHost'), '修改配置必须清除旧结果');
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    assert(css.includes('.mail-settings-switch-row > i.is-on { background:#34c759; }'));
+    assert(css.includes('[data-detail="api"] .sv-win-root .sw-row { flex-direction:row;'));
+  });
   await test('clickable controls have actions and password recovery is reachable', () => {
     const files = [];
     const collect = dir => fs.readdirSync(dir, { withFileTypes: true }).forEach(entry => {

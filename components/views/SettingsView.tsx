@@ -1712,6 +1712,30 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [pwdMsg, setPwdMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [pwdBusy, setPwdBusy] = useState(false);
   const [mailTesting, setMailTesting] = useState(false);
+  const [mailResult, setMailResult] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  useEffect(() => {
+    setMailResult(null);
+  }, [site.smtpHost, site.smtpPort, site.smtpSecure, site.smtpUser, site.smtpPassword, site.smtpFromName, site.smtpFromEmail]);
+
+  async function testMailSettings() {
+    if (mailTesting || blockSaving.mail) return;
+    setMailTesting(true);
+    setMailResult(null);
+    try {
+      const response = await fetch("/api/settings/mail-test", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ smtpHost: site.smtpHost, smtpPort: site.smtpPort, smtpSecure: site.smtpSecure, smtpUser: site.smtpUser, smtpPassword: site.smtpPassword, smtpFromName: site.smtpFromName, smtpFromEmail: site.smtpFromEmail })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "测试失败，请检查邮件配置");
+      setMailResult({ type: "ok", text: `已发送至 ${data.email}。确认收到后保存。` });
+      showToast("测试邮件已发送");
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "测试失败，请重试";
+      setMailResult({ type: "err", text });
+      showToast(text, "err");
+    } finally { setMailTesting(false); }
+  }
   const [passwordRecoveryOpen, setPasswordRecoveryOpen] = useState(false);
   const [passwordRecoveryBusy, setPasswordRecoveryBusy] = useState(false);
   const [passwordRecoveryError, setPasswordRecoveryError] = useState("");
@@ -3712,8 +3736,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {/* ===== 定时任务 ===== */}
             {sub === "cron" && isAdminUser && (
               <div className="flex flex-col gap-6">
-                <SettingsSection id="mail" icon="api" title="邮件服务" desc="发送密码重置邮件。请先测试，再保存。">
+                <SettingsSection id="mail" icon="api" title="邮件服务" desc="用于密码找回。先发送测试邮件，确认收到后保存。">
                   <div className="mail-settings">
+                    <fieldset className="mail-settings-fields" disabled={mailTesting || blockSaving.mail}>
                     <div className="mail-settings-group">
                       <div className="mail-settings-group-title"><b>服务器</b><span>由你的邮件服务商提供</span></div>
                       <div className="mail-settings-server-grid">
@@ -3726,7 +3751,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                       <button type="button" role="switch" aria-checked={site.smtpSecure} onClick={() => setSite({ ...site, smtpSecure: !site.smtpSecure })} className="mail-settings-switch-row">
                         <span><b>直接使用 SSL/TLS</b><small>465 端口通常开启；587 端口通常关闭</small></span>
-                        <i className={site.smtpSecure ? "is-on" : ""} aria-hidden="true"><em /></i>
+                        <i className={site.smtpSecure ? "is-on" : ""} aria-hidden="true"><em style={{ backgroundColor: "#fff" }} /></i>
                       </button>
                     </div>
                     <div className="mail-settings-group">
@@ -3736,8 +3761,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <label><span>邮箱</span><input type="email" value={site.smtpFromEmail} onChange={(event) => setSite({ ...site, smtpFromEmail: event.target.value })} placeholder="no-reply@example.com" /></label>
                       </div>
                     </div>
+                    </fieldset>
+                    {mailResult && <p className={`settings-form-feedback is-${mailResult.type}`} role={mailResult.type === "err" ? "alert" : "status"}><svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" /><g stroke="#fff">{mailResult.type === "ok" ? <path d="m7.5 12 3 3 6-6" /> : <><path d="M12 7v6" /><circle cx="12" cy="16.5" r="1" fill="#fff" stroke="none" /></>}</g></svg><span>{mailResult.text}</span></p>}
                     <div className="mail-settings-actions">
-                      <button type="button" disabled={mailTesting || blockSaving.mail} onClick={async () => { setMailTesting(true); try { const response = await fetch("/api/settings/mail-test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ smtpHost: site.smtpHost, smtpPort: site.smtpPort, smtpSecure: site.smtpSecure, smtpUser: site.smtpUser, smtpPassword: site.smtpPassword, smtpFromName: site.smtpFromName, smtpFromEmail: site.smtpFromEmail }) }); const data = await response.json().catch(() => null); if (!response.ok) throw new Error(data?.error || "测试失败"); showToast(`测试邮件已发送至 ${data.email}，确认无误后请保存`); } catch (error) { showToast(error instanceof Error ? error.message : "测试失败", "err"); } finally { setMailTesting(false); } }} className="mail-settings-test">{mailTesting ? "测试中…" : "测试连接"}</button>
+                      <button type="button" disabled={mailTesting || blockSaving.mail} onClick={() => void testMailSettings()} className="mail-settings-test">{mailTesting ? "发送中…" : "发送测试邮件"}</button>
                       <button type="button" disabled={blockSaving.mail || mailTesting} onClick={() => void saveBlock("mail", { smtpHost: site.smtpHost, smtpPort: site.smtpPort, smtpSecure: site.smtpSecure, smtpUser: site.smtpUser, smtpPassword: site.smtpPassword, smtpFromName: site.smtpFromName, smtpFromEmail: site.smtpFromEmail }, "邮件服务已保存")} className="mail-settings-save">{blockSaving.mail ? "保存中…" : "保存"}</button>
                     </div>
                   </div>
