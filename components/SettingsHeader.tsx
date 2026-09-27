@@ -104,6 +104,7 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   "app-nav": (<><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></>),
+  "mobile-nav": (<><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M9 17h6M10 7l2-2 2 2M10 11l2 2 2-2"/></>),
   tag: (
     <>
       <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z" />

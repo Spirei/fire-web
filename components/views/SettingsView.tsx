@@ -26,6 +26,7 @@ import { CURRENT_VERSION } from "@/lib/versions";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
+import MobileNavigationSettings from "@/components/MobileNavigationSettings";
 import type { BackupConfig } from "@/lib/backup";
 import { DEFAULT_HOLDING_COLUMNS } from "@/lib/holdingColumns";
 import { useCurrencyDisplayUnit, type CurrencyDisplayUnit } from "@/lib/currencyPrefs";
@@ -132,6 +133,7 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "site", anchor: "ticker", label: "首页指数", groupLabel: "网站", keywords: "指数 轮换 首页 ticker 行情条" },
   { sub: "site", anchor: "nav", label: "首页导航", groupLabel: "网站", keywords: "导航 菜单 首页 入口" },
   { sub: "site", anchor: "app-nav", label: "应用导航", groupLabel: "网站", keywords: "后台 侧栏 移动端 默认页 图标 顺序" },
+  { sub: "site", anchor: "mobile-nav", label: "手机导航", groupLabel: "网站", keywords: "手机 底部 胶囊 更多 导航 顺序 排序" },
   { sub: "features", anchor: "trading-square", label: "交易广场", groupLabel: "功能", keywords: "交易广场 特朗普 段永平 更新 刷新 频率 缓存" },
   { sub: "stocks", anchor: "groups", label: "券商分组", groupLabel: "股票", keywords: "券商 分组 别名 持仓" },
   { sub: "stocks", anchor: "market-badges", label: "市场色块", groupLabel: "股票", keywords: "市场 色块 徽标 颜色 显示 US HK A股 上证 深证 加密" },
@@ -164,7 +166,7 @@ function defaultAnchorFor(sub: SubKey): string {
 
 const SETTINGS_CATEGORIES = [
   { key: "account", label: "账号与安全", icon: "account", desc: "管理个人资料、密码和登录方式。", anchors: ["profile", "password", "totp", "passkeys", "passkey-config"] },
-  { key: "website", label: "外观与网站", icon: "site", desc: "设置网站形象、配色与首页内容。", anchors: ["palette", "info", "appearance", "ticker", "nav", "app-nav"] },
+  { key: "website", label: "外观与网站", icon: "site", desc: "设置网站形象、配色与首页内容。", anchors: ["palette", "info", "appearance", "ticker", "nav", "app-nav", "mobile-nav"] },
   { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "sources", "source-reports", "source-icons", "source-content"] },
   { key: "services", label: "功能与模型", icon: "model", desc: "配置模型服务与内容更新。", anchors: ["translation", "trading-square"] },
   { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "mail", "backups", "danger", "delete-account"] },
@@ -185,6 +187,7 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   ticker: "stocks",
   nav: "home",
   "app-nav": "app-nav",
+  "mobile-nav": "mobile-nav",
   "trading-square": "features",
   groups: "tag",
   "market-badges": "badges",
@@ -476,6 +479,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   homepageBg: "",
   loginSideImage: "",
   tabs: DEFAULT_TABS,
+  mobileNavigationOrder: [],
   groups: [],
   homeNav: [],
   markets: [],
@@ -2610,6 +2614,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                     </SettingsSection>
                 </div>
+
+                <SettingsSection id="mobile-nav" icon="mobile-nav" title="手机导航" desc="拖动或上下移动，保存后全站生效。桌面菜单不变。">
+                  {activeAnchor === "mobile-nav" && <MobileNavigationSettings tabs={tabs} order={site.mobileNavigationOrder ?? []} onSave={order => saveBlock("mobile-nav", { mobileNavigationOrder: order }, "已保存")} />}
+                  {blockMsg["mobile-nav"]?.type === "err" && <p role="alert" className="settings-form-message is-error">{blockMsg["mobile-nav"]?.text}</p>}
+                </SettingsSection>
 
                 <SettingsSection
                   id="app-nav"

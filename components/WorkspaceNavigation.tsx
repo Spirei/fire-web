@@ -2,16 +2,16 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import AppModal from "./AppModal";
+import { mobileWorkspaceGroups, MOBILE_NAV_LABELS } from "@/lib/workspaceNavigation";
 
 type Item = { key: string; label: string; icon: ReactNode };
 
-export default function WorkspaceNavigation({ items, activeKey, onSelect, onPrepare }: { items: Item[]; activeKey: string; onSelect: (key: string) => void; onPrepare?: (key: string) => void }) {
+export default function WorkspaceNavigation({ items, order, activeKey, onSelect, onPrepare }: { items: Item[]; order?: string[]; activeKey: string; onSelect: (key: string) => void; onPrepare?: (key: string) => void }) {
   const [open, setOpen] = useState(false);
   useEffect(() => { setOpen(false); }, [activeKey]);
-  const primaryKeys = ["assets", "watchlist", "holdings", "settings"];
-  const labels: Record<string, string> = { assets: "总览", holdings: "持仓", watchlist: "自选", settings: "设置" };
-  const primaryItems = primaryKeys.flatMap(key => items.filter(item => item.key === key));
-  const secondaryItems = items.filter(item => !primaryKeys.includes(item.key));
+  const { primary: primaryItems, more: secondaryItems } = mobileWorkspaceGroups(items, order);
+  const primaryKeys = primaryItems.map(item => item.key);
+  const labels = MOBILE_NAV_LABELS;
   return <div className="workspace-mobile-navigation">
     <nav className="workspace-bottom-tabs" aria-label="主要工作区">
       <div className="workspace-dock-main">

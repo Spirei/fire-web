@@ -7,11 +7,10 @@ export function shouldFinishMobileBack(distance: number, width: number, velocity
   return distance >= Math.min(110, width * .28) || (distance >= 48 && velocity >= .55);
 }
 
-export function mobilePanelDirection(from: string, to: string): "forward" | "back" | "none" {
+export function mobilePanelDirection(from: string, to: string, tabs: readonly string[] = ["assets", "watchlist", "holdings", "settings"]): "forward" | "back" | "none" {
   if (from === to) return "none";
   if (from === "pnl" && to === "assets") return "back";
   if (from === "assets" && to === "pnl") return "forward";
-  const tabs = ["assets", "watchlist", "holdings", "settings"];
   const source = tabs.indexOf(from), target = tabs.indexOf(to);
   return source >= 0 && target >= 0 ? target > source ? "forward" : "back" : "none";
 }

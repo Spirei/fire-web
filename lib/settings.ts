@@ -4,6 +4,7 @@ import { DEFAULT_MARKET_BADGES, normalizeMarketBadges } from "./marketBadge";
 import { DEFAULT_HOLDING_COLUMNS, normalizeHoldingColumns } from "./holdingColumns";
 import { normalizeModelServices } from "./modelServices";
 import { decryptSecret, encryptSecret } from "./secretStorage";
+import { normalizeMobileNavigationOrder } from "./workspaceNavigation";
 import fs from "fs";
 import path from "path";
 
@@ -40,6 +41,7 @@ export const DEFAULT_TICKER: TickerConfig = {
 };
 
 const DEFAULTS: SiteSettings = {
+  mobileNavigationOrder: [],
   domain: "localhost:3000",
   title: "Fire - 股票记录与持仓管理",
   ico: "",
@@ -302,6 +304,9 @@ export function getSiteSettings(): SiteSettings {
       return t;
     });
   }
+  try {
+    result.mobileNavigationOrder = normalizeMobileNavigationOrder(JSON.parse(map.mobileNavigationOrder || "[]"), result.tabs.map(tab => tab.key));
+  } catch { result.mobileNavigationOrder = []; }
   if (typeof map.groups === "string") {
     try {
       const parsed = JSON.parse(map.groups);
@@ -465,6 +470,9 @@ export function updateSiteSettings(patch: Partial<SiteSettings>): SiteSettings {
   }
   if (patch.dbType === "sqlite" || patch.dbType === "postgres") {
     upsert.run("dbType", patch.dbType);
+  }
+  if (Array.isArray(patch.mobileNavigationOrder)) {
+    upsert.run("mobileNavigationOrder", JSON.stringify(normalizeMobileNavigationOrder(patch.mobileNavigationOrder, (patch.tabs ?? getSiteSettings().tabs).map(tab => tab.key))));
   }
   if (Array.isArray(patch.tabs)) {
     const seen = new Set<string>();

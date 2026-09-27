@@ -33,6 +33,7 @@ import type { WatchGroup } from "@/lib/watchGroups";
 import { useDesktopViewport } from "@/lib/useDesktopViewport";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { preloadView } from "@/lib/viewPreload";
+import { mobileWorkspaceGroups } from "@/lib/workspaceNavigation";
 
 // 默认保留服务端渲染：刷新当前页仍随 HTML 直接呈现内容；仅客户端代码按页签拆包。
 // 不设 loading 挡板，切换页签时也不显示整屏「加载中…」。
@@ -127,7 +128,7 @@ export default function RecordsApp({
   initialUserLogs: SystemLog[];
   initialAssistantHistory?: import("@/lib/assistantHistory").AssistantHistoryState | null;
   initialFundBalances: Record<string, number>;
-  initialSettings: Pick<SiteSettings, "tabs" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices">;
+  initialSettings: Pick<SiteSettings, "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices">;
   initialStockIcons: Record<string, string>;
   initialMarketIcons?: Record<string, string>;
   initialNavIcons?: Record<string, string>;
@@ -174,6 +175,8 @@ export default function RecordsApp({
   }, []);
   const skipInitialActivityFetchRef = useRef(initialTab === "activities");
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
+  const [mobileNavigationOrder, setMobileNavigationOrder] = useState(initialSettings.mobileNavigationOrder ?? []);
+  const mobilePrimaryOrder = useMemo(() => mobileWorkspaceGroups(navTabs, mobileNavigationOrder).primary.map(tab => tab.key), [navTabs, mobileNavigationOrder]);
   const [navReady, setNavReady] = useState(true);
   const [settingsSub, setSettingsSub] = useState<string | null>(null);
   const [settingsSubReady, setSettingsSubReady] = useState(initialTab !== "settings");
@@ -329,6 +332,7 @@ export default function RecordsApp({
           );
         }
         if (s.groups) setGroups(s.groups);
+        if (s.mobileNavigationOrder) setMobileNavigationOrder(s.mobileNavigationOrder);
         if (s.markets) setMarkets(s.markets);
         if (s.marketLabels) setMarketLabels(s.marketLabels);
       })
@@ -438,7 +442,7 @@ export default function RecordsApp({
   // 统一的无感导航：只改状态 + 地址栏，不触发路由重载
   const navigateTo = useCallback(
     (key: TabKey, sub?: string | null) => {
-      setPanelDirection(mobilePanelDirection(activeTabRef.current, key));
+      setPanelDirection(mobilePanelDirection(activeTabRef.current, key, mobilePrimaryOrder));
       setActiveTab(key);
       const tab = navTabs.find((t) => t.key === key);
       const url = key === "pnl" ? "/asset-pnl-analysis" : tab?.url || `/${key}`;
@@ -449,7 +453,7 @@ export default function RecordsApp({
         window.history.pushState({}, "", url);
       }
     },
-    [navTabs]
+    [navTabs, mobilePrimaryOrder]
   );
 
   const selectTab = useCallback(
@@ -472,10 +476,10 @@ export default function RecordsApp({
       ? "pnl"
       : navTabs.find((tab) => (tab.url || `/${tab.key}`) === url.pathname)?.key;
     if (!target) return;
-    setPanelDirection(mobilePanelDirection(activeTabRef.current, target));
+    setPanelDirection(mobilePanelDirection(activeTabRef.current, target, mobilePrimaryOrder));
     setActiveTab(target as TabKey);
     window.history.pushState({}, "", `${url.pathname}${url.search}`);
-  }, [navTabs]);
+  }, [navTabs, mobilePrimaryOrder]);
 
   /* ---------- 导航页签可拖动排序 + 自动保存 ---------- */
   const tabDragKeyRef = useRef<TabKey | null>(null);
@@ -542,13 +546,13 @@ export default function RecordsApp({
   useEffect(() => {
     function onPop() {
       if (window.location.pathname === "/asset-pnl-analysis") {
-        setPanelDirection(mobilePanelDirection(activeTabRef.current, "pnl"));
+        setPanelDirection(mobilePanelDirection(activeTabRef.current, "pnl", mobilePrimaryOrder));
         setActiveTab("pnl");
         return;
       }
       const tab = navTabs.find((t) => (t.url || `/${t.key}`) === window.location.pathname);
       if (tab) {
-        setPanelDirection(mobilePanelDirection(activeTabRef.current, tab.key));
+        setPanelDirection(mobilePanelDirection(activeTabRef.current, tab.key, mobilePrimaryOrder));
         if (activeTabRef.current === "pnl" && tab.key === "assets") restoreAssetScrollRef.current = Boolean(assetReturnRef.current);
         setActiveTab(tab.key as TabKey);
         if (tab.key === "settings") {
@@ -558,7 +562,7 @@ export default function RecordsApp({
     }
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [navTabs]);
+  }, [navTabs, mobilePrimaryOrder]);
 
   useEffect(() => {
     function onVisibility() {
@@ -909,7 +913,7 @@ export default function RecordsApp({
 
       {/* 内容区 */}
       <div ref={contentRef} className="records-content min-w-0 flex-1">
-        {activeTab !== "settings" && <WorkspaceNavigation items={sidebarTabs} activeKey={activeTab} onPrepare={key => preloadView(key as TabKey)} onSelect={key => {
+        {activeTab !== "settings" && <WorkspaceNavigation items={sidebarTabs} order={mobileNavigationOrder} activeKey={activeTab} onPrepare={key => preloadView(key as TabKey)} onSelect={key => {
           if (key === activeTab) return;
           selectTab(key as TabKey);
           window.scrollTo({ top: 0, behavior: "instant" });

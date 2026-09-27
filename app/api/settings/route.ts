@@ -118,6 +118,7 @@ export async function PUT(request: Request) {
     xueqiuCookie: body.xueqiuCookie !== undefined ? String(body.xueqiuCookie) : undefined,
     homeNav: Array.isArray(body.homeNav) ? body.homeNav : undefined,
     tabs: Array.isArray(body.tabs) ? body.tabs : undefined,
+    mobileNavigationOrder: Array.isArray(body.mobileNavigationOrder) ? body.mobileNavigationOrder : undefined,
     groups: Array.isArray(body.groups) ? body.groups : undefined,
     markets: Array.isArray(body.markets) ? body.markets : undefined,
     marketLabels: Array.isArray(body.marketLabels) ? body.marketLabels : undefined,

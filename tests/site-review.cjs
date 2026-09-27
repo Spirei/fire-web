@@ -16,6 +16,28 @@ global.fetch = async () => { throw new Error('Network disabled in isolated regre
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 (async () => {
+  await test('mobile navigation order persists separately, preserves defaults and filters permissions', () => {
+    const { mobileWorkspaceGroups, normalizeMobileNavigationOrder } = require(path.join(root, 'lib/workspaceNavigation.ts'));
+    const { mobilePanelDirection } = require(path.join(root, 'lib/mobileNavigation.ts'));
+    const { getSiteSettings, updateSiteSettings } = require(path.join(root, 'lib/settings.ts'));
+    const before = getSiteSettings();
+    const tabs = before.tabs;
+    assert.deepEqual(mobileWorkspaceGroups(tabs).primary.map(tab => tab.key), ['assets', 'watchlist', 'holdings', 'settings']);
+    assert.deepEqual(normalizeMobileNavigationOrder(['settings', 'settings', 'missing', null, 'assets'], tabs.map(tab => tab.key)), ['settings', 'assets']);
+    const order = ['settings', 'holdings', 'assets', 'watchlist', 'activities', 'fire'];
+    const changed = updateSiteSettings({ mobileNavigationOrder: order });
+    assert.deepEqual(changed.mobileNavigationOrder, order);
+    assert.deepEqual(changed.tabs, tabs, 'mobile sort must not change desktop/default paths');
+    assert.deepEqual(mobileWorkspaceGroups(tabs, changed.mobileNavigationOrder).primary.map(tab => tab.key), order.slice(0,4));
+    assert.deepEqual(mobileWorkspaceGroups(tabs, order).more.slice(0,2).map(tab => tab.key), ['activities', 'fire']);
+    const allowed = tabs.filter(tab => !['users', 'attachments', 'library'].includes(tab.key));
+    assert(!mobileWorkspaceGroups(allowed, ['users', ...order]).more.some(tab => tab.key === 'users'));
+    assert(mobileWorkspaceGroups([...allowed, {key:'new-page'}], order).more.some(tab => tab.key === 'new-page'));
+    assert.equal(mobilePanelDirection('assets', 'holdings', order.slice(0,4)), 'back');
+    assert.deepEqual(updateSiteSettings({ mobileNavigationOrder: [] }).mobileNavigationOrder, []);
+    assert.deepEqual(mobileWorkspaceGroups(tabs).primary.map(tab => tab.key), ['assets', 'watchlist', 'holdings', 'settings']);
+    updateSiteSettings({ mobileNavigationOrder: before.mobileNavigationOrder });
+  });
   await test('mobile shell defers desktop-only enhancements and unrelated assistant history', () => {
     const shell = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
     const layout = fs.readFileSync(path.join(root, 'app/[...slug]/layout.tsx'), 'utf8');
@@ -875,8 +897,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   await test('mobile dock preserves allowed navigation and asset shortcuts target real modules', async () => {
     const nav = fs.readFileSync(path.join(root, 'components/WorkspaceNavigation.tsx'), 'utf8');
     const dashboard = fs.readFileSync(path.join(root, 'components/AssetAnalysisDashboard.tsx'), 'utf8');
-    assert(nav.includes('primaryKeys.flatMap(key => items.filter(item => item.key === key))'));
-    assert(nav.includes('items.filter(item => !primaryKeys.includes(item.key))'));
+    assert(nav.includes('mobileWorkspaceGroups(items, order)'));
+    assert(nav.includes('more: secondaryItems'));
     assert(nav.includes('activeKey === "pnl"'));
     assert(nav.includes('setOpen(false); onSelect(item.key)'));
     for (const id of ['asset-trend', 'asset-holdings', 'asset-calendar']) {

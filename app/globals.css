@@ -6980,4 +6980,16 @@ button.PhotoView-Slider__toolbarIcon {
 @keyframes fire-toast-check { to { stroke-dashoffset:0; } }
 @keyframes fire-toast-icon-enter { from { opacity:0; transform:scale(.85); } to { opacity:1; transform:scale(1); } }
 @keyframes fire-toast-symbol-enter { from { opacity:0; } to { opacity:1; } }
+.mobile-nav-preview { display:flex; min-height:54px; align-items:center; gap:4px; padding:6px; border:1px solid rgb(var(--site-edge)); border-radius:28px; background:rgb(var(--site-surface)); }
+.mobile-nav-preview > span { flex:1; min-width:0; text-align:center; font-size:12px; font-weight:600; }
+.sc-detail-dialog .mobile-nav-editor,.sv-center .mobile-nav-editor { border:0!important; padding:0!important; background:transparent!important; }
+.mobile-nav-sort-list { margin:0; padding:0; list-style:none; overflow:hidden; border:1px solid rgb(var(--site-edge)); border-radius:16px; background:rgb(var(--site-surface)); }
+.mobile-nav-sort-list > li { display:flex; min-height:60px; align-items:center; gap:6px; padding:6px 10px; }
+.mobile-nav-sort-list > li + li { border-top:1px solid rgb(var(--site-edge)); }
+.mobile-nav-drag { display:grid; width:30px; height:44px; flex:none; place-items:center; color:rgb(var(--site-muted)); cursor:grab; }
+.mobile-nav-sort-list > li > button { display:grid; width:44px; height:44px; flex:none; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; color:rgb(var(--site-ink)); transition:background-color 160ms ease; }
+.mobile-nav-sort-list > li > button:disabled { opacity:.25; cursor:default; }
+@media (hover:hover) { .mobile-nav-sort-list > li > button:not(:disabled):hover { background:rgb(var(--site-soft)); } }
+.mobile-nav-sort-list > li > button:not(:disabled):active { background:rgb(var(--site-soft)); }
+@media (prefers-reduced-motion:reduce) { .mobile-nav-sort-list > li > button { transition:none; } }
 @media (prefers-reduced-motion:reduce) { .fire-toast,.fire-toast.is-leaving,.fire-toast-icon,.fire-toast-symbol,.fire-toast-mark { animation:none; } .fire-toast-mark { stroke-dashoffset:0; } }

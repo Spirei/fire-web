@@ -236,6 +236,7 @@ export interface SiteSettings {
   /** 登录弹窗左侧配图（管理员上传） */
   loginSideImage: string;
   tabs: TabConfig[];
+  mobileNavigationOrder: string[];
   groups: GroupConfig[];
   homeNav: HomeNavItem[];
   markets: Market[];

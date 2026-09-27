@@ -155,6 +155,7 @@ export default async function SlugLayout({
           initialTradingFilter={initialTradingFilter}
           initialSettings={{
             tabs: settings.tabs,
+            mobileNavigationOrder: settings.mobileNavigationOrder,
             groups: settings.groups,
             markets: settings.markets,
             marketLabels: settings.marketLabels,
