@@ -37,7 +37,9 @@ const publicMediaAllowlist = new Set([
   "public/uploads/feature/four-door/window.png",
   "public/uploads/feature/four-door/dial.png",
   "public/uploads/feature/four-door/pointer.png",
-  "public/uploads/feature/four-door/cursor-hand.png"
+  "public/uploads/feature/four-door/cursor-hand.png",
+  // 通行密钥引导的内置插图，已获准随公开仓库分发。
+  "public/uploads/feature/passkey/通行密钥PASSKEY.png"
 ]);
 
 const findings = [];
