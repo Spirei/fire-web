@@ -5073,6 +5073,10 @@ html.dark .watch-import-target {
 .sv-win-root .settings-link-value:hover { background:var(--sv-hover-bg); border-color:var(--sv-border-strong); transform:translateY(-1px); }
 .sv-win-root .settings-link-value span { color:var(--sv-text-3); font-size:10.5px; font-weight:500; }
 .sv-win-root .settings-link-value svg { width:13px; height:13px; color:var(--sv-text-3); }
+.sc-detail-dialog[data-detail="api"] .api-docs-entry-row { border-bottom:0; }
+.sc-detail-dialog[data-detail="api"] .api-docs-entry { min-height:38px; padding-inline:14px 11px; border-color:color-mix(in srgb,var(--sc-dialog-primary) 28%,var(--sc-dialog-border)); background:color-mix(in srgb,var(--sc-dialog-primary) 8%,var(--sc-dialog-bg)); color:var(--sc-dialog-primary); }
+.sc-detail-dialog[data-detail="api"] .api-docs-entry:hover { border-color:color-mix(in srgb,var(--sc-dialog-primary) 48%,var(--sc-dialog-border)); background:color-mix(in srgb,var(--sc-dialog-primary) 13%,var(--sc-dialog-bg)); }
+.sc-detail-dialog[data-detail="api"] .api-docs-entry svg { color:currentColor; }
 .sv-win-root .settings-profile-grid {
   display:grid;
   grid-template-columns:150px minmax(0,1fr);

@@ -3887,11 +3887,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   icon="api"
                   title="API 开发接口"
                   desc="接口鉴权、版本与访问策略"
-                  action={
-                    <a href="/api-docs" target="_blank" rel="noreferrer" className="btn btn-line btn-sm">
-                      打开完整文档
-                    </a>
-                  }
                 >
                   <div className="sw-row">
                     <div className="sw-row-label"><b>鉴权方式</b><span>登录态与程序化访问</span></div>
@@ -3904,6 +3899,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   <div className="sw-row">
                     <div className="sw-row-label"><b>访问保护</b><span>限制异常频率并保留错误语义</span></div>
                     <span className="settings-status-badge is-on"><i />已启用</span>
+                  </div>
+                  <div className="sw-row api-docs-entry-row">
+                    <div className="sw-row-label"><b>API 文档</b><span>查看认证、参数、示例与完整接口清单</span></div>
+                    <a href="/api-docs" className="settings-link-value api-docs-entry" aria-label="打开 API 文档">
+                      打开文档
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 5h5v5" /><path d="m19 5-8 8" /><path d="M19 14v5H5V5h5" /></svg>
+                    </a>
                   </div>
                 </SettingsSection>
               </div>

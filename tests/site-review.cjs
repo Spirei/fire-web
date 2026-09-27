@@ -1891,6 +1891,8 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
       assert(header.includes(`"${anchor}"`) || header.includes(`${anchor}:`), `拆分后的设置入口应使用专属图标：${anchor}`);
     }
     assert(settings.includes('mode={activeAnchor === "passkey-config" ? "config" : "keys"}'), '个人通行密钥与站点登录配置必须分离');
+    assert(settings.includes('href="/api-docs" className="settings-link-value api-docs-entry"'), 'API 设置详情必须在正文内提供可见的文档入口');
+    assert(!/title="API 开发接口"[\s\S]{0,180}action=/.test(settings), 'API 文档入口不得放在详情弹层会隐藏的标题操作区');
     assert(!fs.readFileSync(path.join(root, 'components/PasskeySettings.tsx'), 'utf8').includes('showConfig'), '通行密钥页不得保留二次展开配置');
     assert(settings.includes('<SettingsSection id="backups"') && !/key: "board"[\s\S]{0,900}<BackupTaskCard/.test(settings), '缓存任务与数据库自动备份必须分开');
     assert(css.includes('[data-detail^="source"] .sw-row-label { width:100%; flex:none; }'), '手机端数据源标签不得继承桌面横向宽度成为大段空白');
