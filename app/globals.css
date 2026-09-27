@@ -6245,7 +6245,7 @@ button.PhotoView-Slider__toolbarIcon {
 /* 设置详情：分类页保留在底层，所有设置用同一个专注弹层完成。 */
 .sc-detail-layer {
   --sc-dialog-bg:#fff;
-  --sc-dialog-border:#dfe3e8;
+  --sc-dialog-border:#dee1e6;
   --sc-dialog-border-strong:#c7ccd2;
   --sc-dialog-text:#1c2b33;
   --sc-dialog-muted:#667781;
@@ -6306,6 +6306,11 @@ button.PhotoView-Slider__toolbarIcon {
 .settings-item-state { display:inline-flex; min-height:22px; flex:none; align-items:center; padding:0 8px; border-radius:999px; background:var(--sc-dialog-soft); color:var(--sc-dialog-muted); font-size:11px; font-weight:600; line-height:22px; }
 .settings-item-state.is-on { background:color-mix(in srgb,var(--sc-dialog-link) 10%,var(--sc-dialog-bg)); color:var(--sc-dialog-link); }
 .sc-detail-dialog .sw-row { min-height:64px; padding:13px 2px; gap:18px; border-bottom:1px solid var(--sc-dialog-border); }
+/* 分组行仅绘制一次分隔线，线条接到外框；内容仍保留独立内边距。 */
+.sc-detail-dialog .settings-section-body:has(> .sw-row) { padding:0; border-radius:16px; overflow:hidden; }
+.sc-detail-dialog .settings-section-body > .sw-row { padding:13px 16px; border-top:0; border-bottom:0; }
+.sc-detail-dialog .settings-section-body > .sw-row + .sw-row { border-top:1px solid var(--sc-dialog-border); }
+.sc-detail-dialog .settings-section-body > .sw-row:last-child { border-bottom:0; }
 .sc-detail-dialog .sw-row-label b { color:var(--sc-dialog-text); font-size:14px; font-weight:550; }
 .sc-detail-dialog .sw-row-label span { margin-top:4px; color:var(--sc-dialog-muted); font-size:12px; line-height:1.45; }
 .sc-detail-dialog .sw-row-input,
@@ -6598,6 +6603,8 @@ button.PhotoView-Slider__toolbarIcon {
   .sc-detail-dialog .settings-section-body,
   .sc-detail-dialog .settings-section-card > .settings-section-top + * { padding:6px 14px; }
   .sc-detail-dialog .sw-row { align-items:flex-start; flex-direction:column; gap:10px; padding:14px 0; }
+  .sc-detail-dialog .settings-section-body:has(> .sw-row) { padding:0; }
+  .sc-detail-dialog .settings-section-body > .sw-row { padding:14px 16px; }
   .sc-detail-dialog .sw-row-label { width:100%; flex:none; }
   .sc-detail-dialog .sw-row .ctrl { width:100%; }
   .sc-detail-dialog[data-detail^="source"] .sw-row-label { width:100%; flex:none; }
