@@ -787,20 +787,43 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert.equal(auth.findUserById(other.id).email, '');
     assert(auth.updateUserById(owner.id, { email: 'UNIQUE@example.test' }));
   });
-  await test('TOTP enrollment requires the current password before revealing a secret', async () => {
+  await test('TOTP setup uses recent authentication and requires step-up only for older sessions', async () => {
     const route = require(path.join(root, 'app/api/auth/totp/route.ts'));
     const enrolled = createUser('review_totp_setup', 'Setup-test-123');
     const token = createSession(enrolled.id);
-    const call = password => route.POST(new Request('http://localhost/api/auth/totp', {
-      method: 'POST', headers: { cookie: `fire_session=${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ password })
+    const call = (method, body, headers = {}) => route[method](new Request('http://localhost/api/auth/totp', {
+      method, headers: { cookie: `fire_session=${token}`, 'content-type': 'application/json', ...headers },
+      body: JSON.stringify(body)
     }));
-    assert.equal((await call('wrong-password')).status, 403);
+    assert.equal((await call('POST', {}, { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' })).status, 401);
     assert.equal(db.prepare('SELECT 1 FROM totp_setup WHERE user_id=?').get(enrolled.id), undefined);
-    const accepted = await call('Setup-test-123');
+    const accepted = await call('POST', {});
     assert.equal(accepted.status, 200);
     const setup = await accepted.json();
     assert(setup.secret && setup.otpauthUrl.startsWith('otpauth://'));
+    const code = require(path.join(root, 'lib/totp.ts')).totpCodeAt(setup.secret);
+    const auth = require(path.join(root, 'lib/auth.ts'));
+    const request = new Request('http://localhost/api/auth/totp', { headers: { cookie: `fire_session=${token}` } });
+    assert.equal(auth.hasRecentAuthentication(request, enrolled.id), true);
+    assert.equal(auth.hasRecentAuthentication(request, 'another-user'), false);
+    db.prepare('UPDATE sessions SET authenticated_at=? WHERE user_id=?').run(Date.now() + 60000, enrolled.id);
+    assert.equal(auth.hasRecentAuthentication(request, enrolled.id), false);
+    db.prepare('UPDATE sessions SET authenticated_at=0 WHERE user_id=?').run(enrolled.id);
+    auth.getUserByToken(token);
+    assert.equal(auth.hasRecentAuthentication(request, enrolled.id), false, 'session renewal must not refresh authentication time');
+    assert.equal((await call('PUT', { code, name: '验证器' })).status, 403);
+    assert.equal((await call('PUT', { password: 'wrong', code, name: '验证器' })).status, 403);
+    assert.equal(require(path.join(root, 'lib/totpAuth.ts')).userTotpEnabled(enrolled.id), false);
+    assert.equal((await call('PUT', { password: 'Setup-test-123', code, name: 42 })).status, 400);
+    assert.equal((await call('PUT', { password: 'Setup-test-123', code, name: '验证器' })).status, 200);
+    assert.equal((await route.GET(new Request('http://localhost/api/auth/totp', { headers: { cookie: `fire_session=${token}` } }))).status, 200);
+    const fresh = createUser('review_totp_recent', 'Recent-test-123');
+    const freshToken = createSession(fresh.id);
+    const freshCall = (method, body) => route[method](new Request('http://localhost/api/auth/totp', {
+      method, headers: { cookie: `fire_session=${freshToken}`, 'content-type': 'application/json' }, body: JSON.stringify(body)
+    }));
+    const freshSetup = await (await freshCall('POST', {})).json();
+    assert.equal((await freshCall('PUT', { code: require(path.join(root, 'lib/totp.ts')).totpCodeAt(freshSetup.secret), name: '手机验证器' })).status, 200);
   });
   await test('high-risk admin mutations require step-up authentication', async () => {
     const auth = require(path.join(root, 'lib/auth.ts'));
@@ -2089,10 +2112,14 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(setup.otpauthUrl.includes(`secret=${setup.secret}`));
     assert(!setup.otpauthUrl.includes('chart.googleapis'));
     const enableCode = totp.totpCodeAt(setup.secret);
-    const enabled = totpAuth.enableTotp(totpUser.id, enableCode);
+    assert.equal(totpAuth.enableTotp(totpUser.id, enableCode, '').ok, false);
+    assert.equal(totpAuth.enableTotp(totpUser.id, enableCode, 'x'.repeat(65)).ok, false);
+    assert.equal(totpAuth.enableTotp(totpUser.id, enableCode, 'bad\nname').ok, false);
+    const enabled = totpAuth.enableTotp(totpUser.id, enableCode, 'iPhone 验证器');
     assert.equal(enabled.ok, true);
     assert.equal(enabled.backupCodes.length, 8);
     assert.equal(totpAuth.userTotpEnabled(totpUser.id), true);
+    assert.equal(getDb().prepare('SELECT totp_device_name FROM users WHERE id = ?').get(totpUser.id).totp_device_name, 'iPhone 验证器');
     assert.equal(totpAuth.enableTotp(totpUser.id, totp.totpCodeAt(setup.secret)).ok, false, '已开启不能再绑定');
     const stored = getDb().prepare('SELECT totp_secret FROM users WHERE id = ?').get(totpUser.id);
     assert(String(stored.totp_secret).startsWith('enc:v1:'), '密钥落盘需加密');
@@ -2111,6 +2138,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     for (let i = 0; i < 8; i++) assert.equal(totpAuth.completeLoginTicket(locked, '000000').ok, false);
     assert.match(totpAuth.completeLoginTicket(locked, enabled.backupCodes[1]).error, /次数过多|过期/);
     totpAuth.clearTotp(totpUser.id);
+    assert.equal(getDb().prepare('SELECT totp_device_name FROM users WHERE id = ?').get(totpUser.id).totp_device_name, '');
     assert.equal(totpAuth.userTotpEnabled(totpUser.id), false);
     const disableUser = createUser('totp_disable', 'Totp-test-1234');
     const setup2 = await totpAuth.beginTotpSetup(disableUser.id, disableUser.username, 'Fire');
@@ -2141,6 +2169,11 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('2. 扫描二维码或复制密钥'));
     assert(settings.includes('3. 复制并输入 6 位数验证码'));
     assert(settings.includes('totpSetupStage === "verify"'));
+    assert(settings.includes('totpLandingStage === "intro"'));
+    assert(settings.includes('totpSetupStage === "name"'));
+    assert(settings.includes('name: totpDeviceName.trim(), ...(password ? { password } : {})'));
+    assert(settings.includes('totpReauthNeeded ? await appPrompt'));
+    assert(!settings.includes('void confirmTotpSetup();'), 'typing a code must not submit enrollment automatically');
     assert(settings.includes('setTotpSetupStage("verify")'));
     assert(settings.includes('onSubmit={confirmTotpSetup} className="totp-meta-code-form"'));
     assert(settings.includes('onClick={downloadBackupCodes}>下载</button>'));
@@ -2158,7 +2191,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(settings.includes('Fire 暂未提供短信验证码'));
     assert(settings.includes('className="totp-meta-method is-unavailable" aria-disabled="true"'));
     assert(!settings.includes('role="radio"'), 'unselectable verification methods must not masquerade as clickable radios');
-    assert(settings.includes('showBack={activeAnchor === "totp"}'));
+    assert(settings.includes('showBack={activeAnchor === "totp" && (totpEnabled || !!totpSetup || totpLandingStage === "method")}'));
     assert(!settings.includes('desc: "头像、资料、密码、二次验证、数据管理"'));
     assert(settings.includes('url.searchParams.delete("anchor")'), '只有一个区块时不写重复的 anchor');
   });

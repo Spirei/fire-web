@@ -522,6 +522,7 @@ function migrate(database: Database.Database) {
   if (!resetCols.some(col => col.name === "factor_hash")) database.exec("ALTER TABLE password_reset_tokens ADD COLUMN factor_hash TEXT NOT NULL DEFAULT ''");
   if (!sessionCols.includes("auth_method")) database.exec("ALTER TABLE sessions ADD COLUMN auth_method TEXT NOT NULL DEFAULT 'legacy'");
   if (!sessionCols.includes("passkey_id")) database.exec("ALTER TABLE sessions ADD COLUMN passkey_id TEXT");
+  if (!sessionCols.includes("authenticated_at")) database.exec("ALTER TABLE sessions ADD COLUMN authenticated_at INTEGER NOT NULL DEFAULT 0");
   database.exec("CREATE INDEX IF NOT EXISTS idx_sessions_passkey ON sessions(passkey_id)");
 
   const userSettingCols = (database.prepare("PRAGMA table_info(user_settings)").all() as { name: string }[]).map((c) => c.name);
@@ -704,6 +705,7 @@ function migrate(database: Database.Database) {
   if (!userCols.includes("is_test")) database.exec("ALTER TABLE users ADD COLUMN is_test INTEGER DEFAULT 0");
   if (!userCols.includes("totp_secret")) database.exec("ALTER TABLE users ADD COLUMN totp_secret TEXT DEFAULT ''");
   if (!userCols.includes("totp_enabled")) database.exec("ALTER TABLE users ADD COLUMN totp_enabled INTEGER DEFAULT 0");
+  if (!userCols.includes("totp_device_name")) database.exec("ALTER TABLE users ADD COLUMN totp_device_name TEXT DEFAULT ''");
   if (!userCols.includes("totp_backup_codes")) database.exec("ALTER TABLE users ADD COLUMN totp_backup_codes TEXT DEFAULT '[]'");
   if (!userCols.includes("totp_last_step")) database.exec("ALTER TABLE users ADD COLUMN totp_last_step INTEGER DEFAULT -1");
   const legacyUid = (database

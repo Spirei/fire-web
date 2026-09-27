@@ -116,8 +116,8 @@ export function createSession(userId: string, passkeyId?: string): string {
   const expiresAt = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
   const db = getDb();
   db.transaction(() => {
-    db.prepare("INSERT INTO sessions (token, user_id, expires_at, auth_method, passkey_id) VALUES (?, ?, ?, ?, ?)")
-      .run(sessionDbToken(token), userId, expiresAt, passkeyId ? "passkey" : "password", passkeyId ?? null);
+    db.prepare("INSERT INTO sessions (token, user_id, expires_at, auth_method, passkey_id, authenticated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(sessionDbToken(token), userId, expiresAt, passkeyId ? "passkey" : "password", passkeyId ?? null, Date.now());
     // 限制单账号最多 20 个并发会话，避免凭据泄露后无限堆积长期有效的登录态。
     db.prepare(`DELETE FROM sessions WHERE user_id = ? AND token NOT IN (
       SELECT token FROM sessions WHERE user_id = ? ORDER BY expires_at DESC LIMIT 20
@@ -196,6 +196,16 @@ export function getSessionToken(request: Request): string | null {
 
 export function getAuthUser(request: Request): User | null {
   return getUserByToken(getSessionToken(request));
+}
+
+/** Renewal extends login lifetime, never the time of actual password/passkey authentication. */
+export function hasRecentAuthentication(request: Request, userId: string): boolean {
+  const token = getSessionToken(request);
+  if (!token) return false;
+  const row = getDb().prepare("SELECT authenticated_at, expires_at FROM sessions WHERE token = ? AND user_id = ?")
+    .get(sessionDbToken(token), userId) as { authenticated_at: number; expires_at: number } | undefined;
+  const now = Date.now();
+  return !!row && row.expires_at > now && row.authenticated_at > now - 15 * 60_000 && row.authenticated_at <= now;
 }
 
 /**

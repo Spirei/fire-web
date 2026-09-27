@@ -43,7 +43,9 @@ export async function beginTotpSetup(userId: string, account: string, issuer = "
   return { secret, otpauthUrl, qrSvg, qrPng };
 }
 
-export function enableTotp(userId: string, code: string): { ok: boolean; error?: string; backupCodes?: string[] } {
+export function enableTotp(userId: string, code: string, deviceName = "身份验证应用"): { ok: boolean; error?: string; backupCodes?: string[] } {
+  const name = deviceName.trim();
+  if (!name || name.length > 64 || /[\u0000-\u001f\u007f]/.test(name)) return { ok: false, error: "名称需为 1 至 64 个字符" };
   if (userTotpEnabled(userId)) return { ok: false, error: "已经开启二次验证" };
   const pending = getDb().prepare("SELECT secret, expires_at FROM totp_setup WHERE user_id = ?").get(userId) as { secret: string; expires_at: number } | undefined;
   if (!pending || pending.expires_at < Date.now()) {
@@ -58,8 +60,8 @@ export function enableTotp(userId: string, code: string): { ok: boolean; error?:
   const db = getDb();
   db.transaction(() => {
     db.prepare(
-      "UPDATE users SET totp_secret = ?, totp_enabled = 1, totp_backup_codes = ?, totp_last_step = ? WHERE id = ?"
-    ).run(encryptSecret(secret), JSON.stringify(hashes), verified.step, userId);
+      "UPDATE users SET totp_secret = ?, totp_enabled = 1, totp_backup_codes = ?, totp_last_step = ?, totp_device_name = ? WHERE id = ?"
+    ).run(encryptSecret(secret), JSON.stringify(hashes), verified.step, name, userId);
     db.prepare("DELETE FROM totp_setup WHERE user_id = ?").run(userId);
     db.prepare("DELETE FROM totp_tickets WHERE user_id = ?").run(userId);
   })();
@@ -95,7 +97,7 @@ export function clearTotp(userId: string) {
   const db = getDb();
   db.transaction(() => {
     db.prepare(
-      "UPDATE users SET totp_secret = '', totp_enabled = 0, totp_backup_codes = '[]', totp_last_step = -1 WHERE id = ?"
+      "UPDATE users SET totp_secret = '', totp_enabled = 0, totp_backup_codes = '[]', totp_last_step = -1, totp_device_name = '' WHERE id = ?"
     ).run(userId);
     db.prepare("DELETE FROM totp_setup WHERE user_id = ?").run(userId);
     db.prepare("DELETE FROM totp_tickets WHERE user_id = ?").run(userId);
