@@ -42,7 +42,8 @@ body:has([data-capsule-scope="non-home"]) button:is(.fire-sidebar-item,.sc-nav-l
 body:has([data-capsule-scope="non-home"]) button:is(.fire-sidebar-item,.sc-nav-link):is(.is-active,.fire-sidebar-item-active,[aria-current="page"]) { border-color:transparent!important; }
 body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link) svg { color:inherit!important; opacity:.72; filter:none; transition:none!important; }
 body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link):is(:hover,:focus-visible,.is-active,.fire-sidebar-item-active,[aria-current="page"]) svg { opacity:1; }
-body:has([data-capsule-scope="non-home"]) .fire-sidebar-item img { transition:none!important; }
+body:has([data-capsule-scope="non-home"]) .fire-sidebar-item img { opacity:.72; transition:none!important; }
+body:has([data-capsule-scope="non-home"]) .fire-sidebar-item:is(:hover,:focus-visible,.fire-sidebar-item-active,[aria-current="page"]) img { opacity:1; }
 body:has([data-capsule-scope="non-home"]) .fire-sidebar-item-active img { filter:var(--site-action-icon-filter,brightness(0) invert(1)); }
 body:has([data-capsule-scope="non-home"]) :is(.card-wander-modes,.card-wander-effects) > button,
 body:has([data-capsule-scope="non-home"]) :is(.card-wander-modes,.card-wander-effects) > button:is([aria-checked="true"],:hover) { background:transparent!important; border-color:transparent!important; }

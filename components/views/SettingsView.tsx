@@ -1996,6 +1996,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }
 
   function openCategory(key: string) {
+    if (categoryPage === key) return;
     setCategoryPage(key);
     setDetailOrigin(null);
     setCmdQuery("");

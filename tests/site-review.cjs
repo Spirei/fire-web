@@ -37,6 +37,23 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     assert(preload.includes('assets: () => Promise.all(['));
     assert(preload.includes('import("@/components/PnlTrendChart")'));
   });
+  await test('reselecting workspace and category preserves URL and position while explicit settings links remain navigable', () => {
+    const vm = require('node:vm');
+    const source = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
+    const select = source.slice(source.indexOf('const selectTab = useCallback('), source.indexOf('const returnFromAssetPnl'));
+    const output = ts.transpileModule(select + '\nexports.selectTab = selectTab;', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+    const exports = {}, calls = [], activeTabRef = { current: 'assets' };
+    vm.runInNewContext(output, { exports, activeTabRef, settingsSub:'profile', useCallback:fn=>fn, navigateTo:(key,sub)=>{ calls.push([key,sub]); activeTabRef.current=key; } });
+    exports.selectTab('assets'); assert.equal(calls.length,0);
+    exports.selectTab('settings'); exports.selectTab('settings'); assert.deepEqual(calls,[['settings','profile']]);
+    exports.selectTab('holdings'); assert.deepEqual(calls[1],['holdings',null]);
+    assert(source.includes('activeTabRef.current = key;\n      setActiveTab(key);'));
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    assert(settings.includes('function openCategory(key: string) {\n    if (categoryPage === key) return;'));
+    const workspace = fs.readFileSync(path.join(root, 'components/WorkspaceNavigation.tsx'), 'utf8');
+    assert.equal((workspace.match(/onKeyDown=/g) || []).length,2);
+    assert(!workspace.includes('onFocus='), 'automatic dialog focus is not navigation intent');
+  });
   await test('settings detail overlays keep the category header stable and back navigation mobile-only', () => {
     const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');

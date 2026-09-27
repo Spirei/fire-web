@@ -445,6 +445,7 @@ export default function RecordsApp({
   const navigateTo = useCallback(
     (key: TabKey, sub?: string | null) => {
       setPanelDirection(mobilePanelDirection(activeTabRef.current, key, mobilePrimaryOrder));
+      activeTabRef.current = key;
       setActiveTab(key);
       const tab = navTabs.find((t) => t.key === key);
       const url = key === "pnl" ? "/asset-pnl-analysis" : tab?.url || `/${key}`;
@@ -460,6 +461,8 @@ export default function RecordsApp({
 
   const selectTab = useCallback(
     (key: TabKey) => {
+      // Re-selecting the workspace is not a reset: retain its filters, detail URL and scroll position.
+      if (key === activeTabRef.current) return;
       if (key === "settings") navigateTo(key, settingsSub);
       else navigateTo(key, null);
     },
@@ -891,6 +894,7 @@ export default function RecordsApp({
                   type="button"
                   onClick={() => selectTab(t.key)}
                   onPointerEnter={(event) => { if (event.pointerType === "mouse" && t.key !== activeTab) preloadView(t.key); }}
+                  onPointerDown={() => { if (t.key !== activeTab) preloadView(t.key); }}
                   onFocus={() => { if (t.key !== activeTab) preloadView(t.key); }}
                   draggable
                   onDragStart={() => { tabDragKeyRef.current = t.key; }}
