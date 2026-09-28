@@ -15,6 +15,17 @@ process.env.STOCKLOG_FUTU = 'off';
 global.fetch = async () => { throw new Error('Network disabled in isolated regression'); };
 let passed = 0;
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
+// Exercise the upload validator with deterministic headers; deployment fonts are
+// intentionally git-ignored and must never be required by repository tests.
+function fontHeaderFixture(ext) {
+  const bytes = Buffer.alloc(64);
+  bytes.write(ext === 'woff2' ? 'wOF2' : 'wOFF', 0, 'ascii');
+  bytes.writeUInt32BE(0x00010000, 4);
+  bytes.writeUInt32BE(bytes.length, 8);
+  bytes.writeUInt16BE(1, 12);
+  bytes.writeUInt32BE(128, 16);
+  return bytes;
+}
 (async () => {
   await test('typography has safe local choices, shared weights and cookie-backed SSR preview', () => {
     const type = require(path.join(root, 'lib/typography.ts'));
@@ -83,7 +94,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
     const route = require(path.join(root, 'app/api/fonts/route.ts'));
     assert.equal((await route.GET(new Request('http://localhost/api/fonts'))).status, 401);
     assert.equal((await route.POST(new Request('http://localhost/api/fonts', {method:'POST'}))).status, 401);
-    const bytes = fs.readFileSync(path.join(root,'public/fonts/sf-pro-display-regular.woff'));
+    const bytes = fontHeaderFixture('woff');
     const font = fonts.saveCustomFont(1, '苹果测试.woff', bytes);
     assert.equal(font.name, '苹果测试');
     assert.equal(fonts.saveCustomFont(1, '重复.woff', bytes).id, font.id);
@@ -692,7 +703,7 @@ async function test(name, run) { await run(); passed++; console.log(`PASS ${name
   await test('font upload route enforces account ownership, origin, decoding header and quota', async () => {
     const route = require(path.join(root,'app/api/fonts/route.ts'));
     const fonts = require(path.join(root,'lib/customFonts.ts'));
-    const bytes = fs.readFileSync(path.join(root,'public/fonts/AWSDiatypeRoundedSemi-Mono-Regular.woff2'));
+    const bytes = fontHeaderFixture('woff2');
     const send = (token, file, origin='http://localhost') => {
       const body = new FormData(); body.append('file',file);
       return route.POST(new Request('http://localhost/api/fonts',{method:'POST',headers:{cookie:`fire_session=${token}`,origin},body}));
