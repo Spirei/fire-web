@@ -106,5 +106,14 @@ body:has([data-capsule-scope="non-home"]) :is(button,a):is(.fire-cap-danger,.dia
   body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs > .workspace-menu-trigger:not([aria-current="page"]) { background:rgb(var(--site-surface))!important; box-shadow:none!important; }
 }
 @media(max-width:767px) {
-  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"] { border-radius:13px!important; }
+  /* The selected color is a smaller inset tile; the button keeps its full hit area. */
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"],
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"]:hover {
+    position:relative; isolation:isolate; background:transparent!important; border-color:transparent!important;
+  }
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"]::before {
+    content:""; position:absolute; z-index:-1; inset:4px 6px; border-radius:13px;
+    background:var(--dock-selected); pointer-events:none;
+  }
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs .workspace-menu-trigger[aria-current="page"]::before { inset:6px!important; }
 }

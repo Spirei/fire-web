@@ -1404,10 +1404,12 @@ function fontHeaderFixture(ext) {
     assert(palette.includes('document.documentElement.dataset.accent = accent;'));
     assert(css.includes('backdrop-filter:blur(24px) saturate(1.5)'));
     assert(css.includes('.workspace-dock-main { display:flex; flex:1; min-width:0; gap:4px; padding:5px; border-radius:999px; }'));
-    assert(css.includes('.workspace-bottom-tabs { max-width:312px; }'));
-    assert(css.includes('.workspace-dock-main > button { min-height:44px; gap:2px; border-radius:13px; }'));
-    assert(css.includes('.workspace-bottom-tabs > button { width:54px; height:54px; min-height:54px; }'));
     assert(css.includes('.workspace-bottom-tabs > button { flex:none; width:64px; height:64px; border-radius:50%; }'));
+    assert(!css.includes('.workspace-bottom-tabs { max-width:312px; }'));
+    assert(capsules.includes('inset:4px 6px; border-radius:13px;'));
+    assert(capsules.includes('.workspace-menu-trigger[aria-current="page"]::before { inset:6px!important; }'));
+    assert(capsules.includes('position:relative; isolation:isolate; background:transparent!important;'));
+    assert(css.includes('.mobile-nav-preview > .mobile-nav-preview-item.is-selected::before'));
     assert(css.includes('.mobile-nav-preview { --dock-selected:var(--site-action,#0866ff); display:flex; min-height:54px; align-items:center; gap:4px; padding:6px; border:1px solid rgb(var(--site-edge) / .7); border-radius:999px;'));
     assert(css.includes('color:#fff; background:var(--dock-selected); font-weight:600;'));
     assert(css.includes('(prefers-reduced-transparency:reduce)'));
