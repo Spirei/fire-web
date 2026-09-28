@@ -289,6 +289,22 @@ function fontHeaderFixture(ext) {
     assert.equal(pnlDayDetailMode({date:'2026-09-01', rows:[{pnl:2}]}, {date:'2026-09-01',mode:'loss'}), 'loss');
     assert.equal(pnlDayDetailMode({date:'2026-09-02', rows:[{pnl:2}]}, {date:'2026-09-01',mode:'loss'}), 'profit');
   });
+  await test('profit calendar uses K/M/B units and keeps profit/loss tiles styled alike', () => {
+    const { fmtMoneyCalendarCell, fmtMoneyCalendarCompact } = require(path.join(root, 'lib/format.ts'));
+    assert.equal(fmtMoneyCalendarCell(1700, '$'), '$1.7K');
+    assert.equal(fmtMoneyCalendarCell(1200000, '$'), '$1.2M');
+    assert.equal(fmtMoneyCalendarCell(2300000000, '$'), '$2.3B');
+    assert.equal(fmtMoneyCalendarCell(999950, '$'), '$1M');
+    assert.equal(fmtMoneyCalendarCompact(10000000, '$', 1e6), '$10M');
+    assert.equal(fmtMoneyCalendarCompact(999999999, '$'), '$1B');
+    assert.equal(fmtMoneyCalendarCompact(970, '$'), '$970.00');
+    assert.equal(fmtMoneyCalendarCell(Infinity, '$'), '—');
+    const calendar = fs.readFileSync(path.join(root, 'components/PnlCalendar.tsx'), 'utf8');
+    assert(calendar.includes('data-capsule="off"'), 'financial day cells must not inherit danger-button styling');
+    assert(calendar.includes('size="sm" onClose={onDayDetailClose} className="pnl-day-dialog"'));
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    assert(css.includes('.pnl-day-dialog-content { max-height:min(330px,calc(100dvh - 150px)); }'));
+  });
   await test('mobile sheets avoid desktop row heights, native touch drag and nested fixed dialogs', () => {
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
     const calendar = fs.readFileSync(path.join(root, 'components/PnlCalendar.tsx'), 'utf8');
@@ -298,7 +314,7 @@ function fontHeaderFixture(ext) {
     assert(css.includes('.settings-profile-fields .sw-row .ctrl { flex:0 0 auto!important;'));
     assert(css.includes('.app-shell-root:has(.records-app) .app-shell-footer { display:none; }'));
     assert(css.includes('.records-content .pnl-calendar h2 { flex:none; font-size:16px;'));
-    assert(calendar.includes('<AppModal title={`当日盈亏'));
+    assert(calendar.includes('<AppModal title={dayDetail.date.replace'));
     assert(!calendar.includes('fixed inset-0 z-[10002]'));
     assert(nav.includes('draggable={!saving && mouseDrag}'));
     assert(profile.includes('if (profileSavingRef.current) return;'));

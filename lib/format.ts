@@ -38,15 +38,33 @@ export function fmtMoneyCompact(n: number, currency: string): string {
   return fmtMoney(n, currency);
 }
 
-/** 七列手机日历专用金额：千位开始缩写，小额省略小数，长货币符号也能装入单元格。 */
+function calendarUnit(value: number, narrow: boolean): string {
+  const units = [[1e3, "K"], [1e6, "M"], [1e9, "B"], [1e12, "T"]] as const;
+  let index = 0;
+  for (let i = 1; i < units.length && value >= units[i][0]; i++) index = i;
+  let scaled = value / units[index][0];
+  let digits = narrow ? 1 : scaled < 10 ? 2 : scaled < 100 ? 1 : 0;
+  if (index < units.length - 1 && Number(scaled.toFixed(digits)) >= 1000) {
+    index += 1;
+    scaled = value / units[index][0];
+    digits = narrow ? 1 : scaled < 10 ? 2 : scaled < 100 ? 1 : 0;
+  }
+  return `${scaled.toLocaleString("en-US", { maximumFractionDigits: digits })}${units[index][1]}`;
+}
+
+/** 收益日历专用美式金额缩写；其他财务视图仍沿用原有的中文单位。 */
+export function fmtMoneyCalendarCompact(n: number, currency: string, compactFrom = 1e3): string {
+  if (!Number.isFinite(n)) return "—";
+  const value = Math.abs(n);
+  if (value < compactFrom) return `${n < 0 ? "−" : ""}${fmtMoney(value, currency)}`;
+  return `${n < 0 ? "−" : ""}${currency}${calendarUnit(value, false)}`;
+}
+
+/** 七列手机日历专用金额：K/M/B/T 缩写并省略小额小数，避免窄格溢出。 */
 export function fmtMoneyCalendarCell(n: number, currency: string): string {
   if (!Number.isFinite(n)) return "—";
   const value = Math.abs(n);
-  const compact = (divisor: number, unit: string) =>
-    `${currency}${(value / divisor).toLocaleString("zh-CN", { minimumFractionDigits: 0, maximumFractionDigits: 1 })}${unit}`;
-  if (value >= 1e8) return compact(1e8, "亿");
-  if (value >= 1e4) return compact(1e4, "万");
-  if (value >= 1e3) return compact(1e3, "千");
+  if (value >= 1e3) return `${currency}${calendarUnit(value, true)}`;
   return `${currency}${Math.round(value).toLocaleString("zh-CN")}`;
 }
 

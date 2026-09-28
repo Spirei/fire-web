@@ -15,7 +15,7 @@ import { usePersistedState } from "@/lib/usePersistedState";
 import { showToast } from "@/lib/toast";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
-import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCompact, localDateKey } from "@/lib/format";
+import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCalendarCompact, fmtMoneyCompact, localDateKey } from "@/lib/format";
 import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses, peekPortfolioBundle } from "@/lib/portfolioSeries";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
@@ -432,7 +432,11 @@ export default function AssetPnlAnalysis({
     const converted = value * currencyFactor;
     const abs = Math.abs(converted);
     const sign = converted < 0 ? "−" : "+";
-    return `${sign}${fmtMoneyCompact(abs, curSymbol)}`;
+    return `${sign}${fmtMoneyCalendarCompact(abs, curSymbol)}`;
+  };
+  const calendarAmount = (value: number) => {
+    const converted = value * currencyFactor;
+    return `${converted < 0 ? "−" : "+"}${fmtMoneyCalendarCompact(Math.abs(converted), curSymbol, 1e4)}`;
   };
   const narrowDisp = (value: number) => {
     const converted = value * currencyFactor;
@@ -937,7 +941,7 @@ export default function AssetPnlAnalysis({
                 setCalMarket(next);
                 savePnlCalendarPref({ market: next });
               }}
-              formatAmount={moneyDisp}
+              formatAmount={calendarAmount}
               formatCompact={compactDisp}
               formatNarrow={narrowDisp}
               stockIcons={stockIcons}

@@ -234,8 +234,9 @@ export default function PnlCalendar({
             <button
               key={m}
               type="button"
+              data-capsule="off"
               onClick={() => onMonthChange({ y: month.y, m })}
-              className={`flex min-h-16 flex-col items-center justify-center rounded-xl border transition sm:min-h-20 ${active ? "border-up bg-up-bg" : "border-edge hover:border-edge-strong"} ${pnl > 0 ? "text-up" : pnl < 0 ? "text-down" : "text-muted"}`}
+              className={`flex min-h-16 flex-col items-center justify-center rounded-xl border transition sm:min-h-20 ${active ? pnl > 0 ? "border-up bg-up-bg" : pnl < 0 ? "border-down bg-down-bg" : "border-edge bg-bg-gray" : "border-edge hover:border-edge-strong"} ${pnl > 0 ? "text-up" : pnl < 0 ? "text-down" : "text-muted"}`}
             >
               <b className="text-sm text-ink">{m}月</b>
               {pnl !== 0 && (
@@ -255,6 +256,7 @@ export default function PnlCalendar({
                 <button
                   key={index}
                   type="button"
+                  data-capsule="off"
                   onClick={() => onDayClick(`${month.y}-${String(month.m).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`)}
                   title="点击查看当日每只股票盈亏"
                   className={`flex min-h-[52px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-lg px-0.5 transition hover:ring-1 hover:ring-edge-strong sm:min-h-20 sm:rounded-xl ${cell.pnl > 0 ? "bg-up-bg text-up" : cell.pnl < 0 ? "bg-down-bg text-down" : "text-muted hover:bg-bg-gray"}`}
@@ -280,8 +282,8 @@ export default function PnlCalendar({
         const shownRows = dayDetailMode === "profit" ? profitRows : lossRows;
         const shownTotal = shownRows.reduce((sum, r) => sum + r.pnl, 0);
         return (
-          <AppModal title={`当日盈亏 · ${dayDetail.date.replace(/-/g, "/")}`} desc={`盈利 ${profitRows.length} 项 · 亏损 ${lossRows.length} 项`} size="md" onClose={onDayDetailClose} className="pnl-day-dialog">
-            <div className="pnl-day-dialog-content flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-card border border-edge bg-white shadow-2xl dark:border-white/10 dark:bg-[#16181d]">
+          <AppModal title={dayDetail.date.replace(/-/g, "/")} desc={`盈利 ${profitRows.length} 项 · 亏损 ${lossRows.length} 项`} size="sm" onClose={onDayDetailClose} className="pnl-day-dialog">
+            <div className="pnl-day-dialog-content flex w-full flex-col overflow-hidden">
               <div className="px-5 pt-4">
                 <div className="grid grid-cols-2 rounded-full bg-bg-gray p-1">
                   <button aria-pressed={dayDetailMode === "profit"} onClick={() => setDayDetailMode("profit")} className={`rounded-full py-2.5 font-semibold ${dayDetailMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利</button>

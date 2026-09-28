@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CurrencyFlag from "@/components/CurrencyFlag";
-import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCompact, fmtNumMarket, fmtPct, fmtQty } from "@/lib/format";
+import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCalendarCompact, fmtMoneyCompact, fmtNumMarket, fmtPct, fmtQty } from "@/lib/format";
 import { marketMeta, type Quote, type StockRecord, type TradeOrder } from "@/lib/types";
 import { showToast } from "@/lib/toast";
 import { HoldingColumnManager, HoldingColumnsButton, useHoldingColumns } from "@/components/HoldingColumnManager";
@@ -624,12 +624,12 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const calendarYear = useMemo(() => buildYearSummary(calendarSeries, calMonth.y, calMonth.m), [calendarSeries, calMonth]);
   const calendarAmount = (usd: number) => {
     const value = usd * currencyFactor;
-    const body = Math.abs(value) >= 1e7 ? fmtMoneyCompact(Math.abs(value), symbol) : fmtMoney(Math.abs(value), symbol);
+    const body = fmtMoneyCalendarCompact(Math.abs(value), symbol, 1e4);
     return `${value >= 0 ? "+" : "−"}${body}`;
   };
   const calendarCompact = (usd: number) => {
     const value = usd * currencyFactor;
-    return `${value < 0 ? "−" : "+"}${fmtMoneyCompact(Math.abs(value), symbol)}`;
+    return `${value < 0 ? "−" : "+"}${fmtMoneyCalendarCompact(Math.abs(value), symbol)}`;
   };
   const calendarNarrow = (usd: number) => {
     const value = usd * currencyFactor;
