@@ -64,5 +64,30 @@ body:has([data-capsule-scope="non-home"]) :is(button,a):is(.btn,.mail-settings-s
   body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger):is(.is-active,.fire-sidebar-item-active,[aria-current="page"]):hover { background:var(--cap-primary-hover)!important; }
 }
 body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger):is(.is-active,.fire-sidebar-item-active,[aria-current="page"]) svg { color:inherit!important; }
+/* Uploaded navigation artwork follows the same ink as built-in SVGs in every entry. */
+.nav-custom-icon { filter:brightness(0); opacity:.72; }
+.dark .nav-custom-icon { filter:brightness(0) invert(1); }
+body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item-active,.workspace-dock-main > button[aria-current="page"],.workspace-navigation-list button[aria-current="page"]) .nav-custom-icon { filter:var(--site-action-icon-filter,brightness(0) invert(1)); opacity:1; }
+body:has([data-capsule-scope="non-home"]) .workspace-navigation-list button[aria-current="page"] { background:var(--cap-selected)!important; color:var(--site-action-text,#fff)!important; }
+@media(hover:hover) { body:has([data-capsule-scope="non-home"]) .workspace-navigation-list button[aria-current="page"]:hover { background:var(--cap-primary-hover)!important; } }
 body:has([data-capsule-scope="non-home"]) :is(.card-wander-modes,.card-wander-effects) > button[aria-checked="true"] { color:var(--site-action-text,#fff)!important; }
 body:has([data-capsule-scope="non-home"]) :is(button,a):is(.fire-cap-danger,.dialog-btn-danger,.is-danger,[class~="text-up"],[class~="text-red-600"],[class~="text-red-500"]):not([data-capsule="off"]):not([role="switch"]):not([role="checkbox"]) { background:var(--cap-surface)!important; color:var(--cap-danger)!important; border-color:color-mix(in srgb,var(--cap-danger) 40%,transparent)!important; }
+
+/* The mobile glass dock keeps its compact square selection and a matching light glyph,
+   including the white palette (whose generic action-icon filter would turn it black). */
+@media(max-width:1023px) {
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"] {
+    background:var(--dock-selected)!important; border-color:transparent!important; color:#fff!important;
+    border-radius:15px!important; font-weight:var(--site-entry-weight,400)!important;
+  }
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"] .nav-custom-icon {
+    filter:brightness(0) invert(1)!important; opacity:1;
+  }
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs .workspace-menu-trigger[aria-expanded="true"]:not([aria-current="page"]) {
+    background:color-mix(in srgb,var(--dock-selected) 15%,rgb(var(--site-surface)))!important;
+    color:var(--dock-selected)!important;
+  }
+}
+@media(max-width:1023px) and (hover:hover) {
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"]:hover { background:var(--dock-selected)!important; }
+}

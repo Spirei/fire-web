@@ -5,10 +5,12 @@ import type { TabConfig } from "@/lib/types";
 import { mobileWorkspaceGroups, moveMobileNavigation, MOBILE_NAV_LABELS } from "@/lib/workspaceNavigation";
 import { NAV_ICONS } from "@/lib/navIcons";
 import { IconDots, IconArrowUpRight, IconArrowDownRight } from "@tabler/icons-react";
+import SafeAssetImage from "./SafeAssetImage";
 
-export default function MobileNavigationSettings({ tabs, order, onSave }: {
+export default function MobileNavigationSettings({ tabs, order, icons, onSave }: {
   tabs: TabConfig[];
   order: string[];
+  icons: Record<string, string>;
   onSave: (order: string[]) => Promise<boolean>;
 }) {
   const [draft, setDraft] = useState(order);
@@ -37,7 +39,7 @@ export default function MobileNavigationSettings({ tabs, order, onSave }: {
   }
 
   return <div className="mobile-nav-editor">
-    <div className="mobile-nav-preview" aria-label="底部入口预览">{groups.primary.map(item => <span key={item.key}><span className="mobile-nav-preview-icon" aria-hidden="true">{NAV_ICONS[item.key]}</span><span>{MOBILE_NAV_LABELS[item.key] ?? item.label}</span></span>)}<span className="text-muted"><IconDots size={20} stroke={1.8} aria-hidden="true"/><span>更多</span></span></div>
+    <div className="mobile-nav-preview" aria-label="底部入口预览">{groups.primary.map((item, index) => <span key={item.key} className={index === 0 ? "mobile-nav-preview-item is-selected" : "mobile-nav-preview-item"}><span className="mobile-nav-preview-icon" aria-hidden="true"><SafeAssetImage src={icons[item.key.toUpperCase()]} fallback={NAV_ICONS[item.key] ?? null} className="nav-custom-icon h-5 w-5 object-contain" /></span><span>{MOBILE_NAV_LABELS[item.key] ?? item.label}</span></span>)}<span className="mobile-nav-preview-item text-muted"><IconDots size={20} stroke={1.8} aria-hidden="true"/><span>更多</span></span></div>
     {(["primary", "more"] as const).map(group => <div key={group} className="mt-5">
       <h5 className="mobile-nav-group-title">{group === "primary" ? "底部入口" : "更多功能"}</h5>
       <ol className="mobile-nav-sort-list">{groups[group].map((item, index) => { const position = group === "primary" ? index : groups.primary.length + index; return <li key={item.key} onDragOver={event => { if (drag.current && !saving) event.preventDefault(); }} onDrop={event => {
@@ -49,6 +51,7 @@ export default function MobileNavigationSettings({ tabs, order, onSave }: {
         <span role="img" aria-label={`拖动${MOBILE_NAV_LABELS[item.key] ?? item.label}排序`} title="拖动排序" onPointerEnter={event => setMouseDrag(event.pointerType === "mouse")} onPointerDown={event => setMouseDrag(event.pointerType === "mouse")} draggable={!saving && mouseDrag} className="mobile-nav-drag" onDragStart={event => { drag.current = { key: item.key }; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.key); }} onDragEnd={() => { drag.current = null; }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">{[6,12,18].flatMap(y => [9,15].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.5"/>))}</svg>
         </span>
+        <span className="mobile-nav-item-icon" aria-hidden="true"><SafeAssetImage src={icons[item.key.toUpperCase()]} fallback={NAV_ICONS[item.key] ?? null} className="nav-custom-icon h-5 w-5 object-contain" /></span>
         <span className="mobile-nav-item-label">{item.label}</span>
         <button type="button" className="mobile-nav-transfer" disabled={saving || currentKeys.length <= 4} aria-label={`${group === "more" ? "放入底部" : "移到更多"}${item.label}`} title={group === "more" ? "放入第4个入口，原入口移入更多" : "移到更多，下一项补入底部"} onClick={() => move(position, group === "more" ? 3 : 4)}>{group === "more" ? <IconArrowUpRight size={18}/> : <IconArrowDownRight size={18}/>}</button>
         <button type="button" disabled={saving || position === 0} aria-label={`上移${item.label}`} onClick={() => move(position, position - 1)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="m6 14 6-6 6 6"/></svg></button>

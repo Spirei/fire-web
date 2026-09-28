@@ -463,10 +463,11 @@ export default function RecordsApp({
     (key: TabKey) => {
       // Re-selecting the workspace is not a reset: retain its filters, detail URL and scroll position.
       if (key === activeTabRef.current) return;
-      if (key === "settings") navigateTo(key, settingsSub);
-      else navigateTo(key, null);
+      // The workspace tab opens the settings home. Only an explicit deep link
+      // should reopen a detail panel; a previous sub-page must not be sticky.
+      navigateTo(key, null);
     },
-    [navigateTo, settingsSub]
+    [navigateTo]
   );
 
   const returnFromAssetPnl = useCallback(() => {
@@ -801,7 +802,7 @@ export default function RecordsApp({
                 src={custom}
                 loading="lazy"
                 fallback={NAV_ICONS[t.key]}
-                className="h-[17px] w-[17px] flex-none object-contain dark:brightness-0 dark:invert"
+                className="nav-custom-icon h-[17px] w-[17px] flex-none object-contain"
               />
             )
           };

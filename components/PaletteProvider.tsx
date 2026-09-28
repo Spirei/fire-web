@@ -18,6 +18,7 @@ export default function PaletteProvider({ children }: { children: ReactNode }) {
   const palette = resolvePalette(stored).id;
   useLayoutEffect(() => {
     applyPalette(palette);
+    document.documentElement.dataset.accent = accent;
     Object.entries(accentVariables(accent)).forEach(([key, value]) => document.documentElement.style.setProperty(key, value));
   }, [palette, accent]);
   const choose = useCallback((id: PaletteId) => { setStored(id); }, [setStored]);

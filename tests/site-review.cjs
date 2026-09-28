@@ -135,15 +135,15 @@ function fontHeaderFixture(ext) {
     assert(preload.includes('assets: () => Promise.all(['));
     assert(preload.includes('import("@/components/PnlTrendChart")'));
   });
-  await test('reselecting workspace and category preserves URL and position while explicit settings links remain navigable', () => {
+  await test('reselecting workspace preserves position while settings tab clears stale detail links', () => {
     const vm = require('node:vm');
     const source = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
     const select = source.slice(source.indexOf('const selectTab = useCallback('), source.indexOf('const returnFromAssetPnl'));
     const output = ts.transpileModule(select + '\nexports.selectTab = selectTab;', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
     const exports = {}, calls = [], activeTabRef = { current: 'assets' };
-    vm.runInNewContext(output, { exports, activeTabRef, settingsSub:'profile', useCallback:fn=>fn, navigateTo:(key,sub)=>{ calls.push([key,sub]); activeTabRef.current=key; } });
+    vm.runInNewContext(output, { exports, activeTabRef, settingsSub:'palette', useCallback:fn=>fn, navigateTo:(key,sub)=>{ calls.push([key,sub]); activeTabRef.current=key; } });
     exports.selectTab('assets'); assert.equal(calls.length,0);
-    exports.selectTab('settings'); exports.selectTab('settings'); assert.deepEqual(calls,[['settings','profile']]);
+    exports.selectTab('settings'); exports.selectTab('settings'); assert.deepEqual(calls,[['settings',null]]);
     exports.selectTab('holdings'); assert.deepEqual(calls[1],['holdings',null]);
     assert(source.includes('activeTabRef.current = key;\n      setActiveTab(key);'));
     const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
@@ -1002,6 +1002,51 @@ function fontHeaderFixture(ext) {
       assert.equal(verification.verificationOrigin(request),'https://fire.example.com:18520');
     } finally { settings.updateSiteSettings({domain:original.domain,emailLinkOrigin:original.emailLinkOrigin}); }
   });
+  await test('public settings hide LAN domains and GitHub OAuth uses one public callback', async () => {
+    const settings=require(path.join(root,'lib/settings.ts'));
+    const publicUrls=require(path.join(root,'lib/publicSiteUrl.ts'));
+    const publicRoute=require(path.join(root,'app/api/settings/public/route.ts'));
+    const publicV1Route=require(path.join(root,'app/api/v1/settings/public/route.ts'));
+    const githubStart=require(path.join(root,'app/api/deploy-status/github/start/route.ts'));
+    const githubCallback=require(path.join(root,'app/api/deploy-status/github/callback/route.ts'));
+    const clientSettings=require(path.join(root,'lib/settingsClient.ts')).clientSettings;
+    const original=settings.getSiteSettings();
+    const oldId=process.env.GITHUB_CLIENT_ID, oldSecret=process.env.GITHUB_CLIENT_SECRET, oldCallback=process.env.GITHUB_OAUTH_CALLBACK_URL;
+    try {
+      settings.updateSiteSettings({domain:'http://192.168.1.8:3000',emailLinkOrigin:''});
+      assert.equal(publicUrls.publicSiteDomain('http://192.168.1.8:3000'),'');
+      assert.equal((await (await publicRoute.GET()).json()).settings.domain,'');
+      assert.equal((await (await publicV1Route.GET()).json()).data.domain,'');
+      assert.equal(clientSettings(settings.getSiteSettings(),false).domain,'');
+      assert.equal(clientSettings(settings.getSiteSettings(),true).domain,'http://192.168.1.8:3000');
+      assert.throws(()=>publicUrls.githubOAuthCallbackUrl(new Request('http://192.168.1.8:3000/api/deploy-status/github/start'),'','https://fire.example.com',''),/公网 HTTPS/);
+      assert.throws(()=>publicUrls.githubOAuthCallbackUrl(new Request('https://fire.example.com/api/deploy-status/github/start'),'','',''),/站点域名/);
+      assert.equal(publicUrls.githubOAuthCallbackUrl(new Request('https://fire.example.com/api/deploy-status/github/start'),'','http://192.168.1.8:3000','https://fire.example.com'),'https://fire.example.com/api/deploy-status/github/callback');
+      assert.throws(()=>publicUrls.githubOAuthCallbackUrl(new Request('https://fire.example.com/api/deploy-status/github/start'),'https://192.168.1.8/api/deploy-status/github/callback','https://fire.example.com',''),/GITHUB_OAUTH_CALLBACK_URL/);
+      assert.throws(()=>publicUrls.githubOAuthCallbackUrl(new Request('https://other.example.com/api/deploy-status/github/start'),'','https://fire.example.com',''),/不同/);
+      process.env.GITHUB_CLIENT_ID='review-client'; process.env.GITHUB_CLIENT_SECRET='review-secret'; delete process.env.GITHUB_OAUTH_CALLBACK_URL;
+      const authHeaders={cookie:`fire_session=${tokens.admin}`};
+      const blocked=await githubStart.GET(new Request('http://192.168.1.8:3000/api/deploy-status/github/start',{headers:authHeaders}));
+      assert.equal(blocked.status,400);
+      settings.updateSiteSettings({domain:'https://fire.example.com:18520'});
+      assert.equal((await (await publicRoute.GET()).json()).settings.domain,'https://fire.example.com:18520');
+      assert.equal((await (await publicV1Route.GET()).json()).data.domain,'https://fire.example.com:18520');
+      const allowed=await githubStart.GET(new Request('https://fire.example.com:18520/api/deploy-status/github/start',{headers:authHeaders}));
+      assert.equal(allowed.status,307);
+      assert.equal(new URL(allowed.headers.get('location')).searchParams.get('redirect_uri'),'https://fire.example.com:18520/api/deploy-status/github/callback');
+      const saved=JSON.parse(db.prepare("SELECT value FROM site_settings WHERE key='deployGithubOauthState'").get().value);
+      assert.equal(saved.callback,'https://fire.example.com:18520/api/deploy-status/github/callback');
+      settings.updateSiteSettings({domain:'https://changed.example.com'});
+      const changed=await githubCallback.GET(new Request(`https://fire.example.com:18520/api/deploy-status/github/callback?state=${saved.state}&code=unused`,{headers:{cookie:`fire_session=${tokens.admin}; fire_github_oauth_state=${saved.state}`}}));
+      assert.equal(changed.status,307);
+      assert.match(changed.headers.get('location'),/github_error=/);
+    } finally {
+      settings.updateSiteSettings({domain:original.domain,emailLinkOrigin:original.emailLinkOrigin});
+      if(oldId===undefined) delete process.env.GITHUB_CLIENT_ID; else process.env.GITHUB_CLIENT_ID=oldId;
+      if(oldSecret===undefined) delete process.env.GITHUB_CLIENT_SECRET; else process.env.GITHUB_CLIENT_SECRET=oldSecret;
+      if(oldCallback===undefined) delete process.env.GITHUB_OAUTH_CALLBACK_URL; else process.env.GITHUB_OAUTH_CALLBACK_URL=oldCallback;
+    }
+  });
   await test('verified email and TOTP are independent recovery methods with no login scope', async () => {
     const reset = require(path.join(root,'lib/passwordReset.ts'));
     const auth = require(path.join(root,'lib/auth.ts'));
@@ -1285,11 +1330,30 @@ function fontHeaderFixture(ext) {
   });
   await test('mobile dock preserves allowed navigation and asset shortcuts target real modules', async () => {
     const nav = fs.readFileSync(path.join(root, 'components/WorkspaceNavigation.tsx'), 'utf8');
+    const mobileSettings = fs.readFileSync(path.join(root, 'components/MobileNavigationSettings.tsx'), 'utf8');
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    const app = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
+    const capsules = fs.readFileSync(path.join(root, 'styles/capsules.css'), 'utf8');
     const dashboard = fs.readFileSync(path.join(root, 'components/AssetAnalysisDashboard.tsx'), 'utf8');
     assert(nav.includes('mobileWorkspaceGroups(items, order)'));
     assert(nav.includes('more: secondaryItems'));
     assert(nav.includes('activeKey === "pnl"'));
     assert(nav.includes('setOpen(false); onSelect(item.key)'));
+    assert(mobileSettings.includes('src={icons[item.key.toUpperCase()]}'));
+    assert(settings.includes('icons={assetIcons}'));
+    const appNav = settings.slice(settings.indexOf('id="app-nav"'), settings.indexOf('{/* ===== 功能：交易广场 ===== */}'));
+    assert(appNav.includes('className="nav-custom-icon h-full w-full object-contain"'));
+    assert(appNav.includes('className={editingTabs ? "flex min-w-0 items-center gap-2" : "flex min-w-0 flex-1 items-center gap-2"}'));
+    assert(appNav.includes('"flex w-[36%] min-w-0 flex-none items-center gap-2 sm:w-[180px]"'));
+    assert(appNav.includes('truncate font-mono text-[13px] text-muted'));
+    assert(!appNav.includes('max-sm:flex-wrap'));
+    assert(app.includes('className="nav-custom-icon h-[17px] w-[17px] flex-none object-contain"'));
+    assert(!app.includes('dark:brightness-0 dark:invert'));
+    assert(capsules.includes('.nav-custom-icon { filter:brightness(0); opacity:.72; }'));
+    assert(capsules.includes('.dark .nav-custom-icon { filter:brightness(0) invert(1); }'));
+    assert(capsules.includes('.workspace-navigation-list button[aria-current="page"]) .nav-custom-icon'));
+    assert(capsules.includes('filter:var(--site-action-icon-filter,brightness(0) invert(1)); opacity:1;'));
+    assert(capsules.includes('.workspace-navigation-list button[aria-current="page"] { background:var(--cap-selected)!important;'));
     for (const id of ['asset-trend', 'asset-holdings', 'asset-calendar']) {
       assert(dashboard.includes(`href="#${id}"`));
       assert(dashboard.includes(`id="${id}"`));
@@ -1298,6 +1362,36 @@ function fontHeaderFixture(ext) {
     assert(dashboard.includes('className="asset-pnl-shortcut text-left"'));
     const shortcut = dashboard.slice(dashboard.indexOf('className="asset-pnl-shortcut text-left"'), dashboard.indexOf('className="asset-pnl-shortcut text-left"') + 800);
     assert(!shortcut.includes('group-hover:opacity-100'));
+  });
+  await test('mobile settings show compact navigation and ticker summaries without forced wraps', () => {
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    const ticker = settings.slice(settings.indexOf('id="ticker"'), settings.indexOf('id="nav"'));
+    const homeNav = settings.slice(settings.indexOf('id="nav"'), settings.indexOf('id="mobile-nav"'));
+    assert(ticker.includes('grid-cols-[minmax(0,1fr)_auto]'));
+    assert(ticker.includes('"flex min-h-[50px] min-w-0 items-center gap-2'));
+    assert(ticker.includes('title={`${item.market} · ${item.secid}`}'));
+    assert(ticker.includes('grid-cols-[16px_20px_minmax(0,1fr)_28px]'));
+    assert(ticker.includes('grid-cols-[64px_minmax(0,1fr)] gap-2 sm:contents'));
+    assert(ticker.includes('sm:grid-cols-[auto_auto_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,1.4fr)_auto]'));
+    assert(homeNav.includes('min-h-[52px] min-w-0 items-center gap-3'));
+    assert(homeNav.includes('w-[36%] min-w-0 flex-none truncate font-mono text-[13px]'));
+    assert(!homeNav.includes('max-sm:order-3 max-sm:w-full'));
+  });
+  await test('mobile dock glass keeps square selection and light icons for every palette', () => {
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    const capsules = fs.readFileSync(path.join(root, 'styles/capsules.css'), 'utf8');
+    const preview = fs.readFileSync(path.join(root, 'components/MobileNavigationSettings.tsx'), 'utf8');
+    const layout = fs.readFileSync(path.join(root, 'app/layout.tsx'), 'utf8');
+    const palette = fs.readFileSync(path.join(root, 'components/PaletteProvider.tsx'), 'utf8');
+    assert(css.includes('html[data-accent="white"] .workspace-bottom-tabs { --dock-selected:#0866ff; }'));
+    assert(layout.includes('data-accent={resolveAccent(prefs[ACCENT_KEY]).id}'));
+    assert(palette.includes('document.documentElement.dataset.accent = accent;'));
+    assert(css.includes('backdrop-filter:blur(24px) saturate(1.5)'));
+    assert(css.includes('color:#fff; background:var(--dock-selected); font-weight:600;'));
+    assert(css.includes('(prefers-reduced-transparency:reduce)'));
+    assert(capsules.includes('filter:brightness(0) invert(1)!important; opacity:1;'));
+    assert(capsules.includes('background:var(--dock-selected)!important; border-color:transparent!important; color:#fff!important;'));
+    assert(preview.includes('mobile-nav-preview-item is-selected'));
   });
   await test('mobile asset holdings retain calculations and make trading explicit', async () => {
     const list = fs.readFileSync(path.join(root, 'components/AssetHoldingList.tsx'), 'utf8');

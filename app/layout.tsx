@@ -26,7 +26,7 @@ import "@/styles/liquid-glass.css";
 import AppDialogHost from "@/components/AppDialogHost";
 import CapsuleScope from "@/components/CapsuleScope";
 import ThemePreferenceProvider from "@/components/ThemePreferenceProvider";
-import { ACCENT_KEY, accentVariables } from "@/lib/appearance";
+import { ACCENT_KEY, accentVariables, resolveAccent } from "@/lib/appearance";
 import { THEME_MODE_KEY, resolveThemeMode } from "@/lib/theme";
 import "@/styles/capsules.css";
 import TypographyProvider from "@/components/TypographyProvider";
@@ -68,6 +68,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       translate="no"
       className={dark ? "dark notranslate" : "notranslate"}
       data-palette={palette.id}
+      data-accent={resolveAccent(prefs[ACCENT_KEY]).id}
       data-theme-mode={themeMode}
       data-material={palette.glass ? "glass" : "solid"}
       style={{ ...paletteVariables(palette.id), ...accentVariables(prefs[ACCENT_KEY]), ...typographyVariables(prefs[FONT_KEY], prefs[FONT_WEIGHT_KEY]) }}

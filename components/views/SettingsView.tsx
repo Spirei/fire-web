@@ -2488,7 +2488,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       ) : undefined}
                       action={editingTicker ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                     >
-                      <div className="settings-compact-list mb-3 flex flex-wrap items-center gap-3 rounded-[10px] bg-bg-gray/60 px-3 py-2.5">
+                      <div className="settings-compact-list mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-[10px] bg-bg-gray/60 px-3 py-2.5 sm:flex sm:flex-wrap sm:gap-3">
                         <span className="text-[13px] font-semibold text-ink-2">轮换间隔</span>
                         <input
                           type="number"
@@ -2497,10 +2497,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           value={site.ticker.interval}
                           readOnly={!editingTicker}
                           onChange={(e) => setTickerInterval(Number(e.target.value))}
-                          className={`h-[34px] w-20 rounded-[8px] px-2.5 text-sm tabular-nums outline-none transition-shadow ${editingTicker ? "border border-edge-strong bg-white focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] dark:bg-[#151a26]" : "pointer-events-none border border-transparent bg-transparent"}`}
+                          className={`col-start-1 row-start-2 h-[34px] w-20 rounded-[8px] px-2.5 text-sm tabular-nums outline-none transition-shadow sm:col-auto sm:row-auto ${editingTicker ? "border border-edge-strong bg-white focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] dark:bg-[#151a26]" : "pointer-events-none border border-transparent bg-transparent"}`}
                         />
-                        <span className="text-xs text-muted">秒（3 - 60）</span>
-                        <span className="ml-auto text-xs text-faint">共 {site.ticker.items.length} 个指数</span>
+                        <span className="col-start-2 row-start-2 text-xs text-muted sm:col-auto sm:row-auto">秒（3 - 60）</span>
+                        <span className="col-start-2 row-start-1 text-xs text-faint sm:col-auto sm:row-auto sm:ml-auto">共 {site.ticker.items.length} 个指数</span>
                       </div>
 
                       <div className="settings-compact-list hidden grid-cols-[auto_auto_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,1.4fr)_auto] items-center gap-2 px-2 pb-1 text-[11px] font-semibold text-faint sm:grid">
@@ -2526,45 +2526,46 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             onDragEnd={() => {
                               tickerDragIndex.current = null;
                             }}
-                            className="grid grid-cols-[auto_auto_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,1.4fr)_auto] items-center gap-2 rounded-[10px] border border-edge bg-bg-gray/30 p-2 transition-colors"
+                            className={editingTicker ? "grid grid-cols-[16px_20px_minmax(0,1fr)_28px] items-center gap-2 rounded-[10px] border border-edge bg-bg-gray/30 p-2 transition-colors sm:grid-cols-[auto_auto_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,1.4fr)_auto]" : "flex min-h-[50px] min-w-0 items-center gap-2 rounded-[10px] border border-edge bg-bg-gray/30 px-3 py-2"}
                             title={editingTicker ? "按住拖动排序" : undefined}
                           >
-                            <svg viewBox="0 0 24 24" fill="currentColor" className={`h-4 w-4 text-faint ${editingTicker ? "cursor-grab active:cursor-grabbing" : "opacity-0"}`}>
+                            {editingTicker && <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 cursor-grab text-faint active:cursor-grabbing">
                               <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
                               <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
                               <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
-                            </svg>
+                            </svg>}
                             <MarketIcon market={item.market} size={20} />
+                            {editingTicker ? <>
                             <input
                               value={item.label}
-                              readOnly={!editingTicker}
                               onChange={(e) => setTickerItem(i, { label: e.target.value })}
                               placeholder="指数名称"
-                              className={`h-[34px] min-w-0 rounded-[8px] px-2.5 text-sm font-semibold text-ink outline-none transition-shadow ${editingTicker ? "border border-edge-strong bg-white focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] dark:bg-[#151a26]" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`}
+                              className="h-[34px] min-w-0 rounded-[8px] border border-edge-strong bg-white px-2.5 text-sm font-semibold text-ink outline-none transition-shadow focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] dark:bg-[#151a26]"
                             />
-                            <input
-                              value={item.market}
-                              readOnly={!editingTicker}
-                              onChange={(e) => setTickerItem(i, { market: e.target.value.trim().toUpperCase() })}
-                              placeholder="如 US / HK"
-                              list="ticker-market-options"
-                              className={`h-[34px] min-w-0 rounded-[8px] px-2.5 text-sm text-ink outline-none transition-shadow ${editingTicker ? "border border-edge-strong bg-white focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] dark:bg-[#151a26]" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`}
-                            />
-                            <input
-                              value={item.secid}
-                              readOnly={!editingTicker}
-                              onChange={(e) => setTickerItem(i, { secid: e.target.value })}
-                              placeholder="如 100.DJIA"
-                              className={`h-[34px] min-w-0 rounded-[8px] px-2.5 font-mono text-xs text-ink outline-none transition-shadow ${editingTicker ? "border border-edge-strong bg-white focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] dark:bg-[#151a26]" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`}
-                            />
-                            {editingTicker ? <button
+                            <div className="col-span-4 row-start-2 grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-2 sm:contents">
+                              <input
+                                value={item.market}
+                                onChange={(e) => setTickerItem(i, { market: e.target.value.trim().toUpperCase() })}
+                                placeholder="如 US / HK"
+                                list="ticker-market-options"
+                                className="h-[34px] min-w-0 rounded-[8px] border border-edge-strong bg-white px-2 text-center text-sm text-ink outline-none transition-shadow focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] dark:bg-[#151a26] sm:text-left"
+                              />
+                              <input
+                                value={item.secid}
+                                onChange={(e) => setTickerItem(i, { secid: e.target.value })}
+                                placeholder="如 100.DJIA"
+                                className="h-[34px] min-w-0 rounded-[8px] border border-edge-strong bg-white px-2.5 font-mono text-xs text-ink outline-none transition-shadow focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] dark:bg-[#151a26]"
+                              />
+                            </div>
+                            <button
                               type="button"
                               onClick={() => removeTickerItem(i)}
                               title="删除指数"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-faint transition-colors hover:bg-brand-hover hover:text-ink dark:hover:bg-white/10 dark:hover:text-white"
+                              className="col-start-4 row-start-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-faint transition-colors hover:bg-brand-hover hover:text-ink dark:hover:bg-white/10 dark:hover:text-white sm:col-auto sm:row-auto"
                             >
                               <DeleteIcon size={14} />
-                            </button> : <span className="h-7 w-7" />}
+                            </button>
+                            </> : <><strong className="min-w-0 flex-1 truncate text-sm font-semibold text-ink" title={item.label}>{item.label}</strong><span className="w-[84px] min-w-0 flex-none truncate text-right font-mono text-[12px] text-muted" title={`${item.market} · ${item.secid}`}>{item.secid}</span></>}
                           </div>
                         ))}
                       </div>
@@ -2608,7 +2609,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             onDragEnd={() => {
                               navDragIndex.current = null;
                             }}
-                            className={`group rounded-[12px] border border-edge bg-white transition-[border-color,box-shadow] duration-200 hover:border-edge-strong/50 hover:shadow-[0_4px_14px_rgba(107,114,128,.10)] ${editingHomeNav ? "flex flex-col gap-2 p-3" : "flex min-h-[52px] items-center gap-3 px-3 py-2 max-sm:flex-wrap"}`}
+                            className={`group rounded-[12px] border border-edge bg-white transition-[border-color,box-shadow] duration-200 hover:border-edge-strong/50 hover:shadow-[0_4px_14px_rgba(107,114,128,.10)] ${editingHomeNav ? "flex flex-col gap-2 p-3" : "flex min-h-[52px] min-w-0 items-center gap-3 px-3 py-2"}`}
                             title={editingHomeNav ? "按住拖动排序" : undefined}
                           >
                             {editingHomeNav ? <><div className="flex items-center justify-between">
@@ -2622,7 +2623,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             <>
                               <input value={item.label} onChange={(e) => setNav(item.key, { label: e.target.value })} placeholder="名称" className="h-[34px] w-full rounded-[8px] border border-transparent bg-transparent px-2 text-sm font-semibold text-ink outline-none transition-all duration-200 hover:border-edge-strong hover:bg-white focus:border-edge-strong focus:bg-white focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)]" />
                               <input value={item.href} onChange={(e) => setNav(item.key, { href: e.target.value })} placeholder="链接，如 #preview / /records" className="h-[32px] w-full rounded-[8px] border border-edge bg-bg-gray/60 px-2.5 font-mono text-[11px] text-muted outline-none transition-all duration-200 hover:border-edge-strong hover:bg-white focus:border-edge-strong focus:bg-white focus:text-ink" />
-                            </></> : <><strong className="min-w-0 flex-1 truncate text-sm text-ink">{item.label}</strong><span className="w-[180px] truncate font-mono text-[11px] text-muted max-sm:order-3 max-sm:w-full">{item.href}</span><span className={`settings-item-state ${item.enabled ? "is-on" : ""}`}>{item.enabled ? "已显示" : "已隐藏"}</span></>}
+                            </></> : <><strong className="min-w-0 flex-1 truncate text-sm text-ink">{item.label}</strong><span className="w-[36%] min-w-0 flex-none truncate font-mono text-[13px] text-muted sm:w-[180px]" title={item.href}>{item.href}</span><span className={`settings-item-state ${item.enabled ? "is-on" : ""}`}>{item.enabled ? "已显示" : "已隐藏"}</span></>}
                           </div>
                         ))}
                       </div>
@@ -2630,7 +2631,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 </div>
 
                 <SettingsSection id="mobile-nav" icon="mobile-nav" title="手机导航" desc="前四项显示在底部，其余收进更多。保存后生效。">
-                  {activeAnchor === "mobile-nav" && <MobileNavigationSettings tabs={tabs} order={site.mobileNavigationOrder ?? []} onSave={order => saveBlock("mobile-nav", { mobileNavigationOrder: order }, "已保存")} />}
+                  {activeAnchor === "mobile-nav" && <MobileNavigationSettings tabs={tabs} order={site.mobileNavigationOrder ?? []} icons={assetIcons} onSave={order => saveBlock("mobile-nav", { mobileNavigationOrder: order }, "已保存")} />}
                   {blockMsg["mobile-nav"]?.type === "err" && <p role="alert" className="settings-form-message is-error">{blockMsg["mobile-nav"]?.text}</p>}
                 </SettingsSection>
 
@@ -2672,7 +2673,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         onDragEnd={() => {
                           tabDragIndex.current = null;
                         }}
-                        className={editingTabs ? "grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 rounded-[10px] border border-edge bg-bg-gray/30 p-2 transition-colors sm:grid-cols-[auto_auto_minmax(0,1fr)_140px_auto_auto] sm:gap-2.5" : "flex min-h-[50px] items-center gap-2 rounded-[10px] border border-edge bg-bg-gray/30 px-3 py-2 max-sm:flex-wrap"}
+                        className={editingTabs ? "grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 rounded-[10px] border border-edge bg-bg-gray/30 p-2 transition-colors sm:grid-cols-[auto_auto_minmax(0,1fr)_140px_auto_auto] sm:gap-2.5" : "flex min-h-[50px] min-w-0 items-center gap-2 rounded-[10px] border border-edge bg-bg-gray/30 px-3 py-2"}
                         title={editingTabs ? "拖动排序" : undefined}
                       >
                         <svg viewBox="0 0 24 24" fill="currentColor" className={`h-3.5 w-3.5 flex-none text-faint ${editingTabs ? "cursor-grab" : "hidden"}`}>
@@ -2692,7 +2693,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m5 13 4 4L19 7" /></svg>
                           )}
                         </button> : <span className="inline-flex h-5 w-5 flex-none items-center justify-center">{t.default && <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-ink"><path d="m4 10 3.5 3.5L16 5.5" /></svg>}</span>}
-                        <div className="flex min-w-0 items-center gap-2">
+                        <div className={editingTabs ? "flex min-w-0 items-center gap-2" : "flex min-w-0 flex-1 items-center gap-2"}>
                           <button
                             type="button"
                             disabled={!editingTabs || !!blockSaving[`nav-icon:${t.key}`]}
@@ -2702,8 +2703,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           >
                             <SafeAssetImage
                               src={assetIcons[t.key.toUpperCase()]}
-                              fallback={<span className="flex h-[22px] w-[22px] items-center justify-center text-muted">{NAV_ICONS[t.key] ?? null}</span>}
-                              className="h-full w-full object-contain"
+                              fallback={<span className="flex h-[18px] w-[18px] items-center justify-center text-ink opacity-[.72]">{NAV_ICONS[t.key] ?? null}</span>}
+                              className="nav-custom-icon h-full w-full object-contain"
                             />
                             {editingTabs && <span className="absolute inset-0 flex items-center justify-center rounded-[9px] bg-black/45 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                               {blockSaving[`nav-icon:${t.key}`] ? (
@@ -2739,15 +2740,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             className={`h-[34px] min-w-0 flex-1 rounded-[8px] px-3 text-sm outline-none transition-shadow ${editingTabs ? "border border-edge-strong bg-white focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)]" : "pointer-events-none !border-transparent !bg-transparent !shadow-none font-semibold"}`}
                           />
                         </div>
-                        <div className={editingTabs ? "col-span-4 flex items-center gap-2 sm:col-span-3 sm:min-w-0" : "flex w-[180px] flex-none items-center gap-2 max-sm:w-full max-sm:pl-7"}>
-                          <input
+                        <div className={editingTabs ? "col-span-4 flex items-center gap-2 sm:col-span-3 sm:min-w-0" : "flex w-[36%] min-w-0 flex-none items-center gap-2 sm:w-[180px]"}>
+                          {editingTabs ? <input
                             value={t.url || `/${t.key}`}
-                            readOnly={!editingTabs}
                             onChange={(e) => setTabs((prev) => prev.map((x, idx) => (idx === i ? { ...x, url: e.target.value.trim() } : x)))}
                             placeholder={`/${t.key}`}
                             title="独立 URL，如 /holdings"
-                            className={`h-[34px] min-w-0 flex-1 rounded-[8px] px-2.5 font-mono text-xs outline-none transition-shadow ${editingTabs ? "border border-edge-strong bg-bg-gray/40 focus:bg-white focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)]" : "pointer-events-none !border-transparent !bg-transparent !shadow-none text-muted"}`}
-                          />
+                            className="h-[34px] min-w-0 flex-1 rounded-[8px] border border-edge-strong bg-bg-gray/40 px-2.5 font-mono text-xs outline-none transition-shadow focus:bg-white focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)]"
+                          /> : <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-muted" title={t.url || `/${t.key}`}>{t.url || `/${t.key}`}</span>}
                           {editingTabs && <button type="button" disabled={i === 0} onClick={() => moveTab(i, -1)} className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-[8px] border border-edge text-muted transition-colors hover:bg-brand-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-35" title="上移">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="m18 15-6-6-6 6" /></svg>
                           </button>}
