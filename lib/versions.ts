@@ -4621,7 +4621,7 @@ const V0_1_43_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_44_ENTRY: VersionEntry = {
   ...V0_1_43_ENTRY,
   version: "v0.1.44",
   date: "2026-09-28",
@@ -4661,11 +4661,23 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_44_ENTRY,
+  version: "v0.1.45",
+  date: "2026-09-29",
+  summary: "手机 Dock 选中块按苹果参考图调整比例、圆角与灰色。",
+  software: V0_1_44_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.45" } : item),
+  changes: [
+    { kind: "fix", title: "手机 Dock 苹果灰选中块", desc: "按参考视频与并排截图取样，选中块收至约 68 × 50 像素并改为满圆角胶囊；浅色使用 #CDCDCF 附近的苹果灰渐变，深色使用相应中性灰，图标与文字保持对比。主导航与独立圆形的「更多」不再跟随主题颜色；外观的全局主题颜色新增可选的苹果灰，手机导航预览同步。" }
+  ]
+};
+
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_44_ENTRY,
   V0_1_43_ENTRY,
   V0_1_42_ENTRY,
   V0_1_41_ENTRY,

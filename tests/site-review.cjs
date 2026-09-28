@@ -190,7 +190,9 @@ function fontHeaderFixture(ext) {
   await test('appearance modes, persisted accent tokens and compact controls share the SSR contract', () => {
     const appearance = require(path.join(root, 'lib/appearance.ts'));
     const theme = require(path.join(root, 'lib/theme.ts'));
-    assert.equal(appearance.APPEARANCE_ACCENTS.length, 9);
+    assert.equal(appearance.APPEARANCE_ACCENTS.length, 10);
+    assert.equal(appearance.resolveAccent('apple-gray').color, '#cdcdcf');
+    assert.equal(appearance.accentVariables('apple-gray')['--site-action-text'], '#1c1e21');
     assert.equal(appearance.resolveAccent('unknown').id, 'blue');
     const white = appearance.accentVariables('white');
     assert.equal(white['--site-action'], '#ffffff');
@@ -208,6 +210,7 @@ function fontHeaderFixture(ext) {
     assert(layout.includes("dataset.themeMode==='system'") && layout.includes("matchMedia('(prefers-color-scheme: dark)')"));
     const panel = fs.readFileSync(path.join(root, 'components/PaletteSettings.tsx'), 'utf8');
     assert(panel.includes('data-capsule="off"') && panel.includes('aria-label="主题颜色"') && panel.includes('<details'));
+    assert(!panel.includes('Dock 选中块颜色'), '苹果灰属于全站主题色，不单设 Dock 配色');
     const assistant = fs.readFileSync(path.join(root, 'components/ContextAssistant.tsx'), 'utf8');
     assert(assistant.includes('mode: appearance, choose: setAppearance') && !assistant.includes('applySiteTheme('), '助手不能用独立主题覆写全站');
   });
@@ -1393,28 +1396,30 @@ function fontHeaderFixture(ext) {
     assert(homeNav.includes('w-[36%] min-w-0 flex-none truncate font-mono text-[13px]'));
     assert(!homeNav.includes('max-sm:order-3 max-sm:w-full'));
   });
-  await test('mobile dock glass keeps square selection and light icons for every palette', () => {
+  await test('mobile dock keeps Apple-gray pill selection independent of site palette', () => {
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
     const capsules = fs.readFileSync(path.join(root, 'styles/capsules.css'), 'utf8');
     const preview = fs.readFileSync(path.join(root, 'components/MobileNavigationSettings.tsx'), 'utf8');
     const layout = fs.readFileSync(path.join(root, 'app/layout.tsx'), 'utf8');
     const palette = fs.readFileSync(path.join(root, 'components/PaletteProvider.tsx'), 'utf8');
-    assert(css.includes('html[data-accent="white"] .workspace-bottom-tabs { --dock-selected:#0866ff; }'));
+    assert(css.includes('--dock-selected-fill:linear-gradient(180deg,#ceced0,#c6c6c8)'));
+    assert(css.includes('.dark .workspace-bottom-tabs { --dock-selected-fill:linear-gradient(180deg,#4a4a4c,#3f3f41)'));
     assert(layout.includes('data-accent={resolveAccent(prefs[ACCENT_KEY]).id}'));
     assert(palette.includes('document.documentElement.dataset.accent = accent;'));
     assert(css.includes('backdrop-filter:blur(24px) saturate(1.5)'));
-    assert(css.includes('.workspace-dock-main { display:flex; flex:1; min-width:0; gap:4px; padding:5px; border-radius:999px; }'));
+    assert(css.includes('.workspace-dock-main { display:flex; flex:1; min-width:0; gap:4px; padding:5px; border-radius:999px; overflow:hidden; }'));
     assert(css.includes('.workspace-bottom-tabs > button { flex:none; width:64px; height:64px; border-radius:50%; }'));
     assert(!css.includes('.workspace-bottom-tabs { max-width:312px; }'));
-    assert(capsules.includes('inset:4px 6px; border-radius:13px;'));
-    assert(capsules.includes('.workspace-menu-trigger[aria-current="page"]::before { inset:6px!important; }'));
+    assert(capsules.includes('width:min(68px,calc(100% + 18px)); height:50px;'));
+    assert(capsules.includes('transform:translate(-50%,-50%); border-radius:999px;'));
+    assert(!capsules.includes('.workspace-menu-trigger[aria-current="page"]::before'));
     assert(capsules.includes('position:relative; isolation:isolate; background:transparent!important;'));
     assert(css.includes('.mobile-nav-preview > .mobile-nav-preview-item.is-selected::before'));
-    assert(css.includes('.mobile-nav-preview { --dock-selected:var(--site-action,#0866ff); display:flex; min-height:54px; align-items:center; gap:4px; padding:6px; border:1px solid rgb(var(--site-edge) / .7); border-radius:999px;'));
-    assert(css.includes('color:#fff; background:var(--dock-selected); font-weight:600;'));
+    assert(css.includes('.mobile-nav-preview { --dock-selected-fill:linear-gradient(180deg,#ceced0,#c6c6c8)'));
+    assert(css.includes('color:var(--dock-selected-text); background:var(--dock-selected-fill); font-weight:600;'));
     assert(css.includes('(prefers-reduced-transparency:reduce)'));
-    assert(capsules.includes('filter:brightness(0) invert(1)!important; opacity:1;'));
-    assert(capsules.includes('background:var(--dock-selected)!important; border-color:transparent!important; color:#fff!important;'));
+    assert(capsules.includes('filter:var(--dock-selected-icon-filter)!important; opacity:1;'));
+    assert(capsules.includes('background:var(--dock-selected-fill)!important; border-color:transparent!important; color:var(--dock-selected-text)!important;'));
     assert(capsules.includes('.workspace-bottom-tabs > .workspace-menu-trigger:not([aria-current="page"]) {'));
     assert(capsules.includes('border:1px solid rgb(var(--site-edge) / .7)!important; border-radius:50%!important;'));
     assert(preview.includes('mobile-nav-preview-item is-selected'));

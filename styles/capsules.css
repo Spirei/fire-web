@@ -73,8 +73,7 @@ body:has([data-capsule-scope="non-home"]) .workspace-navigation-list button[aria
 body:has([data-capsule-scope="non-home"]) :is(.card-wander-modes,.card-wander-effects) > button[aria-checked="true"] { color:var(--site-action-text,#fff)!important; }
 body:has([data-capsule-scope="non-home"]) :is(button,a):is(.fire-cap-danger,.dialog-btn-danger,.is-danger,[class~="text-up"],[class~="text-red-600"],[class~="text-red-500"]):not([data-capsule="off"]):not([role="switch"]):not([role="checkbox"]) { background:var(--cap-surface)!important; color:var(--cap-danger)!important; border-color:color-mix(in srgb,var(--cap-danger) 40%,transparent)!important; }
 
-/* The mobile glass dock keeps its compact square selection inside a pill-shaped shell,
-   including the white palette (whose generic action-icon filter would turn it black). */
+/* The Dock keeps Apple's neutral selection independent of the site accent. */
 @media(max-width:1023px) {
   body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs > .workspace-menu-trigger:not([aria-current="page"]) {
     border:1px solid rgb(var(--site-edge) / .7)!important; border-radius:50%!important;
@@ -87,33 +86,39 @@ body:has([data-capsule-scope="non-home"]) :is(button,a):is(.fire-cap-danger,.dia
     background:color-mix(in srgb,rgb(var(--site-surface)) 80%,transparent)!important;
     box-shadow:0 10px 32px rgb(0 0 0 / .27),inset 0 1px rgb(255 255 255 / .07)!important;
   }
-  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"] {
-    background:var(--dock-selected)!important; border-color:transparent!important; color:#fff!important;
-    border-radius:15px!important; font-weight:var(--site-entry-weight,400)!important;
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs .workspace-dock-main > button[aria-current="page"] {
+    background:var(--dock-selected-fill)!important; border-color:transparent!important; color:var(--dock-selected-text)!important;
+    border-radius:999px!important; font-weight:var(--site-entry-weight,400)!important;
   }
-  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"] .nav-custom-icon {
-    filter:brightness(0) invert(1)!important; opacity:1;
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs .workspace-dock-main > button[aria-current="page"] .nav-custom-icon {
+    filter:var(--dock-selected-icon-filter)!important; opacity:1;
+  }
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs > .workspace-menu-trigger[aria-current="page"] {
+    border:1px solid rgb(var(--site-edge) / .7)!important; border-radius:50%!important;
+    background:rgb(var(--site-ink) / .1)!important; color:rgb(var(--site-ink))!important;
+    font-weight:var(--site-entry-weight,400)!important;
   }
   body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs .workspace-menu-trigger[aria-expanded="true"]:not([aria-current="page"]) {
-    background:color-mix(in srgb,var(--dock-selected) 15%,rgb(var(--site-surface)))!important;
-    color:var(--dock-selected)!important;
+    background:rgb(var(--site-ink) / .1)!important;
+    color:rgb(var(--site-ink))!important;
   }
 }
 @media(max-width:1023px) and (hover:hover) {
-  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"]:hover { background:var(--dock-selected)!important; }
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs .workspace-dock-main > button[aria-current="page"]:hover { background:var(--dock-selected-fill)!important; }
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs > .workspace-menu-trigger[aria-current="page"]:hover { background:rgb(var(--site-ink) / .1)!important; }
 }
 @media(max-width:1023px) and (prefers-reduced-transparency:reduce) {
   body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs > .workspace-menu-trigger:not([aria-current="page"]) { background:rgb(var(--site-surface))!important; box-shadow:none!important; }
 }
 @media(max-width:767px) {
-  /* The selected color is a smaller inset tile; the button keeps its full hit area. */
-  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"],
-  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"]:hover {
+  /* Slightly tighter than a literal pixel copy to match this Dock's icon spacing. */
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs .workspace-dock-main > button[aria-current="page"],
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs .workspace-dock-main > button[aria-current="page"]:hover {
     position:relative; isolation:isolate; background:transparent!important; border-color:transparent!important;
   }
-  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"]::before {
-    content:""; position:absolute; z-index:-1; inset:4px 6px; border-radius:13px;
-    background:var(--dock-selected); pointer-events:none;
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs .workspace-dock-main > button[aria-current="page"]::before {
+    content:""; position:absolute; z-index:-1; width:min(68px,calc(100% + 18px)); height:50px;
+    left:50%; top:50%; transform:translate(-50%,-50%); border-radius:999px;
+    background:var(--dock-selected-fill); pointer-events:none;
   }
-  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs .workspace-menu-trigger[aria-current="page"]::before { inset:6px!important; }
 }

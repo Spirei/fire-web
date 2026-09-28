@@ -8,6 +8,7 @@ export const APPEARANCE_ACCENTS = [
   { id: "orange", name: "橙色", color: "#ba6300", ink: "#ffffff" },
   { id: "green", name: "绿色", color: "#4b7900", ink: "#ffffff" },
   { id: "brown", name: "暖灰", color: "#8e7358", ink: "#ffffff" },
+  { id: "apple-gray", name: "苹果灰", color: "#cdcdcf", ink: "#1c1e21" },
   { id: "white", name: "白色", color: "#ffffff", ink: "#1c1e21" },
 ] as const;
 export type AppearanceAccent = typeof APPEARANCE_ACCENTS[number]["id"];
@@ -16,5 +17,5 @@ export function accentVariables(value: unknown): Record<string, string> {
   const accent = resolveAccent(value);
   const channels = (hex: string) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(" ");
   const rgb = channels(accent.color);
-  return { "--site-action": accent.color, "--site-action-text": accent.ink, "--site-action-icon-filter": accent.id === "white" ? "brightness(0)" : "brightness(0) invert(1)", "--site-action-hover": `color-mix(in srgb, ${accent.color} 90%, #000)`, "--site-accent-light": accent.id === "white" ? channels("#65676b") : rgb, "--site-accent-dark": accent.id === "white" ? channels("#e4e6eb") : rgb };
+  return { "--site-action": accent.color, "--site-action-text": accent.ink, "--site-action-icon-filter": accent.ink === "#1c1e21" ? "brightness(0)" : "brightness(0) invert(1)", "--site-action-hover": `color-mix(in srgb, ${accent.color} 90%, #000)`, "--site-accent-light": accent.ink === "#1c1e21" ? channels("#65676b") : rgb, "--site-accent-dark": accent.ink === "#1c1e21" ? channels("#e4e6eb") : rgb };
 }
