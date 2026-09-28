@@ -6324,10 +6324,10 @@ button.PhotoView-Slider__toolbarIcon {
   .workspace-bottom-tabs { --dock-selected:var(--site-action,#0866ff); position:fixed; z-index:55; inset-inline:16px; bottom:max(12px,env(safe-area-inset-bottom)); display:flex; align-items:center; gap:8px; max-width:440px; margin-inline:auto; }
   html[data-accent="white"] .workspace-bottom-tabs { --dock-selected:#0866ff; }
   .workspace-dock-main,.workspace-bottom-tabs > button { border:1px solid rgb(var(--site-edge) / .7); background:color-mix(in srgb,rgb(var(--site-surface)) 78%,transparent); box-shadow:0 8px 28px rgb(var(--site-ink) / .11),inset 0 1px rgb(255 255 255 / .14); -webkit-backdrop-filter:blur(24px) saturate(1.5); backdrop-filter:blur(24px) saturate(1.5); }
-  .workspace-dock-main { display:flex; flex:1; min-width:0; padding:5px; border-radius:24px; }
+  .workspace-dock-main { display:flex; flex:1; min-width:0; padding:5px; border-radius:999px; }
   .workspace-dock-main > button,.workspace-bottom-tabs > button { display:flex; flex:1; min-width:0; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-height:52px; border-radius:15px; color:rgb(var(--site-ink) / .68); font-size:11px; font-weight:500; }
   .workspace-dock-main > button:not([aria-current="page"]):active,.workspace-bottom-tabs > button:not([aria-current="page"]):active { background:rgb(var(--site-ink) / .08); }
-  .workspace-bottom-tabs > button { flex:none; width:60px; height:64px; border-radius:22px; }
+  .workspace-bottom-tabs > button { flex:none; width:64px; height:64px; border-radius:50%; }
   .workspace-dock-main > button[aria-current="page"],.workspace-bottom-tabs > button[aria-current="page"] { color:#fff; background:var(--dock-selected); font-weight:600; }
   .workspace-bottom-tabs > button[aria-expanded="true"]:not([aria-current="page"]) { color:var(--dock-selected); background:color-mix(in srgb,var(--dock-selected) 15%,rgb(var(--site-surface))); }
   .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"] .nav-custom-icon { filter:brightness(0) invert(1); opacity:1; }
@@ -7019,7 +7019,7 @@ button.PhotoView-Slider__toolbarIcon {
 @keyframes fire-toast-check { to { stroke-dashoffset:0; } }
 @keyframes fire-toast-icon-enter { from { opacity:0; transform:scale(.85); } to { opacity:1; transform:scale(1); } }
 @keyframes fire-toast-symbol-enter { from { opacity:0; } to { opacity:1; } }
-.mobile-nav-preview { --dock-selected:var(--site-action,#0866ff); display:flex; min-height:54px; align-items:center; gap:4px; padding:6px; border:1px solid rgb(var(--site-edge) / .7); border-radius:24px; background:color-mix(in srgb,rgb(var(--site-surface)) 78%,transparent); }
+.mobile-nav-preview { --dock-selected:var(--site-action,#0866ff); display:flex; min-height:54px; align-items:center; gap:4px; padding:6px; border:1px solid rgb(var(--site-edge) / .7); border-radius:999px; background:color-mix(in srgb,rgb(var(--site-surface)) 78%,transparent); }
 html[data-accent="white"] .mobile-nav-preview { --dock-selected:#0866ff; }
 .sc-detail-dialog .mobile-nav-preview > span { display:flex; flex-direction:column; align-items:center; gap:5px; flex:1; min-width:0; text-align:center; font-size:11px; line-height:16px; font-weight:var(--site-entry-weight,400); white-space:nowrap; }
 .sc-detail-dialog .mobile-nav-preview > .mobile-nav-preview-item { min-height:44px; justify-content:center; border-radius:13px; }

@@ -73,9 +73,20 @@ body:has([data-capsule-scope="non-home"]) .workspace-navigation-list button[aria
 body:has([data-capsule-scope="non-home"]) :is(.card-wander-modes,.card-wander-effects) > button[aria-checked="true"] { color:var(--site-action-text,#fff)!important; }
 body:has([data-capsule-scope="non-home"]) :is(button,a):is(.fire-cap-danger,.dialog-btn-danger,.is-danger,[class~="text-up"],[class~="text-red-600"],[class~="text-red-500"]):not([data-capsule="off"]):not([role="switch"]):not([role="checkbox"]) { background:var(--cap-surface)!important; color:var(--cap-danger)!important; border-color:color-mix(in srgb,var(--cap-danger) 40%,transparent)!important; }
 
-/* The mobile glass dock keeps its compact square selection and a matching light glyph,
+/* The mobile glass dock keeps its compact square selection inside a pill-shaped shell,
    including the white palette (whose generic action-icon filter would turn it black). */
 @media(max-width:1023px) {
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs > .workspace-menu-trigger:not([aria-current="page"]) {
+    border:1px solid rgb(var(--site-edge) / .7)!important; border-radius:50%!important;
+    background:color-mix(in srgb,rgb(var(--site-surface)) 78%,transparent)!important;
+    box-shadow:0 8px 28px rgb(var(--site-ink) / .11),inset 0 1px rgb(255 255 255 / .14)!important;
+    color:rgb(var(--site-ink) / .68)!important;
+  }
+  .dark body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs > .workspace-menu-trigger:not([aria-current="page"]) {
+    border-color:rgb(var(--site-edge) / .75)!important;
+    background:color-mix(in srgb,rgb(var(--site-surface)) 80%,transparent)!important;
+    box-shadow:0 10px 32px rgb(0 0 0 / .27),inset 0 1px rgb(255 255 255 / .07)!important;
+  }
   body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"] {
     background:var(--dock-selected)!important; border-color:transparent!important; color:#fff!important;
     border-radius:15px!important; font-weight:var(--site-entry-weight,400)!important;
@@ -90,4 +101,7 @@ body:has([data-capsule-scope="non-home"]) :is(button,a):is(.fire-cap-danger,.dia
 }
 @media(max-width:1023px) and (hover:hover) {
   body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"]:hover { background:var(--dock-selected)!important; }
+}
+@media(max-width:1023px) and (prefers-reduced-transparency:reduce) {
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs > .workspace-menu-trigger:not([aria-current="page"]) { background:rgb(var(--site-surface))!important; box-shadow:none!important; }
 }
