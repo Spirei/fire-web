@@ -1572,7 +1572,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         </div>
         {/* 模式切换（分段控件）是主角，新增卡片 / 卡包缩成两枚图标按钮跟在后面：一排放下，少两个大按钮 */}
         <div className="card-library-actions flex w-full items-center gap-2 sm:w-auto">
-          <div className="card-library-mode flex min-w-0 flex-1 items-center gap-1 rounded-full border border-edge bg-white p-1 sm:w-auto sm:flex-none dark:border-white/10 dark:bg-[#1c222d]">
+          <div className="card-library-mode flex min-w-0 flex-1 items-center gap-2 rounded-full border border-edge bg-white p-1 sm:w-auto sm:flex-none dark:border-white/10 dark:bg-[#1c222d]">
             <button
               type="button"
               onClick={() => setMode("mine")}

@@ -1403,7 +1403,7 @@ function fontHeaderFixture(ext) {
     assert(layout.includes('data-accent={resolveAccent(prefs[ACCENT_KEY]).id}'));
     assert(palette.includes('document.documentElement.dataset.accent = accent;'));
     assert(css.includes('backdrop-filter:blur(24px) saturate(1.5)'));
-    assert(css.includes('.workspace-dock-main { display:flex; flex:1; min-width:0; padding:5px; border-radius:999px; }'));
+    assert(css.includes('.workspace-dock-main { display:flex; flex:1; min-width:0; gap:4px; padding:5px; border-radius:999px; }'));
     assert(css.includes('.workspace-bottom-tabs > button { flex:none; width:64px; height:64px; border-radius:50%; }'));
     assert(css.includes('.mobile-nav-preview { --dock-selected:var(--site-action,#0866ff); display:flex; min-height:54px; align-items:center; gap:4px; padding:6px; border:1px solid rgb(var(--site-edge) / .7); border-radius:999px;'));
     assert(css.includes('color:#fff; background:var(--dock-selected); font-weight:600;'));

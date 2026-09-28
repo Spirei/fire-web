@@ -877,7 +877,7 @@ export default function AssetPnlAnalysis({
             <section className="mt-5 grid gap-5 xl:grid-cols-2">
               <article className="card p-5">
                 <div className="flex items-center justify-between"><h2 className="text-base font-bold">全部盈亏排行榜</h2><span className="text-xs text-muted">更新至 {updatedAt.slice(5).replace("/", ".")}</span></div>
-                <div className="mt-5 grid grid-cols-2 rounded-full bg-bg-gray p-1">
+                <div className="mt-5 grid grid-cols-2 gap-1 rounded-full bg-bg-gray p-1">
                   <button aria-pressed={rankMode === "profit"} onClick={() => setRankMode("profit")} className={`rounded-full py-2.5 font-semibold ${rankMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利 Top5</button>
                   <button aria-pressed={rankMode === "loss"} onClick={() => setRankMode("loss")} className={`rounded-full py-2.5 font-semibold ${rankMode === "loss" ? "bg-white shadow-sm" : "text-muted"}`}>亏损 Top5</button>
                 </div>
@@ -898,7 +898,7 @@ export default function AssetPnlAnalysis({
 
               <article className="card p-5">
                 <div className="flex items-center justify-between"><h2 className="text-base font-bold">股票盈亏明细</h2><span className="text-xs text-muted">{rows.length} 只</span></div>
-                <div className="mt-5 grid grid-cols-2 rounded-full bg-bg-gray p-1">
+                <div className="mt-5 grid grid-cols-2 gap-1 rounded-full bg-bg-gray p-1">
                   <button aria-pressed={detailMode === "profit"} onClick={() => setDetailMode("profit")} className={`rounded-full py-2.5 font-semibold ${detailMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利</button>
                   <button aria-pressed={detailMode === "loss"} onClick={() => setDetailMode("loss")} className={`rounded-full py-2.5 font-semibold ${detailMode === "loss" ? "bg-white shadow-sm" : "text-muted"}`}>亏损</button>
                 </div>

@@ -1505,7 +1505,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
       />
 
       <div className="asset-library-card flex flex-col gap-5 rounded-card border border-edge bg-white p-3 shadow-card sm:p-6">
-        <div className="asset-library-tabs flex max-w-full overflow-x-auto rounded-full border border-edge-strong bg-bg-gray/60 p-0.5 text-xs font-semibold">
+        <div className="asset-library-tabs flex max-w-full gap-1.5 overflow-x-auto rounded-full border border-edge-strong bg-bg-gray/60 p-1 text-xs font-semibold">
           {([
             { key: "stock" as TabKey, label: "股票图标" },
             { key: "crypto" as TabKey, label: "加密货币" },
@@ -1536,7 +1536,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
                 <span className="text-[11px] font-semibold text-faint">市场（按住拖动排序）</span>
                 <span className="text-[11px] text-faint">{assetTotal > 0 ? `${assetTotal} 只` : ""}</span>
               </div>
-              <div className="asset-library-market-tools relative flex flex-wrap items-center gap-1.5">
+              <div className="asset-library-market-tools relative flex flex-wrap items-center gap-2">
                 {(["ALL", ...orderedMarkets.slice(0, 5)] as string[]).map((m, i) => (
                   <button aria-pressed={selected === m}
                     key={m}

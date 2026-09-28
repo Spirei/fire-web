@@ -24,7 +24,7 @@ export default function Pagination({ page, total, onChange }: { page: number; to
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-1.5 pt-2">
+    <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
       <button type="button" disabled={safe <= 1} onClick={() => onChange(safe - 1)} className={btnCls}>
         上一页
       </button>

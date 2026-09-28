@@ -145,7 +145,7 @@ export default function PnlCalendar({
       <div className="pnl-calendar-toolbar flex flex-wrap items-center justify-between gap-4">
         <div className="pnl-calendar-date-row flex items-center gap-3">
           <h2 className="text-base font-bold">{title}</h2>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <button onClick={() => shiftMonth(-1)} className="grid h-7 w-7 place-items-center rounded-full border border-edge text-muted hover:bg-bg-gray" aria-label="上个月">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5"><path d="m15 18-6-6 6-6" /></svg>
             </button>
@@ -211,11 +211,11 @@ export default function PnlCalendar({
           </div>
         </div>
         <div className="pnl-calendar-switches flex items-center gap-2">
-          <div className="flex rounded-full bg-bg-gray p-1 text-sm">
+          <div className="flex gap-1 rounded-full bg-bg-gray p-1 text-sm">
             <button aria-pressed={view === "year"} onClick={() => onViewChange("year")} className={`rounded-full px-5 py-2 font-semibold transition ${view === "year" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>年</button>
             <button aria-pressed={view === "month"} onClick={() => onViewChange("month")} className={`rounded-full px-5 py-2 font-semibold transition ${view === "month" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>月</button>
           </div>
-          <div className="flex rounded-full bg-bg-gray p-1 text-sm">
+          <div className="flex gap-1 rounded-full bg-bg-gray p-1 text-sm">
             <button aria-pressed={mode === "收益"} onClick={() => onModeChange("收益")} className={`rounded-full px-5 py-2 font-semibold transition ${mode === "收益" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>收益</button>
             <button aria-pressed={mode === "收益率"} onClick={() => onModeChange("收益率")} className={`rounded-full px-5 py-2 font-semibold transition ${mode === "收益率" ? "bg-white shadow-sm" : "text-muted hover:text-ink-2"}`}>收益率</button>
           </div>
@@ -285,7 +285,7 @@ export default function PnlCalendar({
           <AppModal title={dayDetail.date.replace(/-/g, "/")} desc={`盈利 ${profitRows.length} 项 · 亏损 ${lossRows.length} 项`} size="sm" onClose={onDayDetailClose} className="pnl-day-dialog">
             <div className="pnl-day-dialog-content flex w-full flex-col overflow-hidden">
               <div className="px-5 pt-4">
-                <div className="grid grid-cols-2 rounded-full bg-bg-gray p-1">
+                <div className="grid grid-cols-2 gap-1 rounded-full bg-bg-gray p-1">
                   <button aria-pressed={dayDetailMode === "profit"} onClick={() => setDayDetailMode("profit")} className={`rounded-full py-2.5 font-semibold ${dayDetailMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利</button>
                   <button aria-pressed={dayDetailMode === "loss"} onClick={() => setDayDetailMode("loss")} className={`rounded-full py-2.5 font-semibold ${dayDetailMode === "loss" ? "bg-white shadow-sm" : "text-muted"}`}>亏损</button>
                 </div>
