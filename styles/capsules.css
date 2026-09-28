@@ -105,3 +105,6 @@ body:has([data-capsule-scope="non-home"]) :is(button,a):is(.fire-cap-danger,.dia
 @media(max-width:1023px) and (prefers-reduced-transparency:reduce) {
   body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs > .workspace-menu-trigger:not([aria-current="page"]) { background:rgb(var(--site-surface))!important; box-shadow:none!important; }
 }
+@media(max-width:767px) {
+  body:has([data-capsule-scope="non-home"]) .workspace-bottom-tabs :is(.workspace-dock-main > button,.workspace-menu-trigger)[aria-current="page"] { border-radius:13px!important; }
+}

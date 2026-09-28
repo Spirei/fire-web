@@ -6350,6 +6350,13 @@ button.PhotoView-Slider__toolbarIcon {
 }
 .settings-mobile-toolbar { display:none; }
 @media(max-width:767px) {
+  /* Keep the phone Dock compact without shrinking its individual touch targets. */
+  .workspace-bottom-tabs { max-width:312px; }
+  .workspace-dock-main { padding:4px; }
+  .workspace-dock-main > button { min-height:44px; gap:2px; border-radius:13px; }
+  .workspace-bottom-tabs > button { width:54px; height:54px; min-height:54px; }
+  .sc-detail-dialog .mobile-nav-preview { min-height:54px; padding:4px; }
+  .sc-detail-dialog .mobile-nav-preview > .mobile-nav-preview-item { min-height:44px; }
   .asset-desktop-holdings { display:none !important; }
   .asset-mobile-holdings { display:block; }
   .asset-mobile-list-caption { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 20px 4px; font-size:11px; color:rgb(var(--site-ink) / .55); }
