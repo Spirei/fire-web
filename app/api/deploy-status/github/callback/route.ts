@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { encryptDeploySecret } from "@/lib/deploySecrets";
+import { githubOAuthCallbackUrl } from "@/lib/publicSiteUrl";
+import { getSiteSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +15,17 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state") || "";
   const cookieState = request.headers.get("cookie")?.match(/(?:^|;\s*)fire_github_oauth_state=([^;]+)/)?.[1] || "";
   const row = getDb().prepare("SELECT value FROM site_settings WHERE key = 'deployGithubOauthState'").get() as { value?: string } | undefined;
-  let stored: { state?: string; userId?: string; expiresAt?: number } = {};
+  let stored: { state?: string; userId?: string; callback?: string; expiresAt?: number } = {};
   try { stored = JSON.parse(row?.value || "{}"); } catch { /* invalid state */ }
   if (!state || state !== cookieState || state !== stored.state || stored.userId !== user.id || !stored.expiresAt || stored.expiresAt < Date.now()) return fail("授权校验失败，请重新开始");
+  const settings = getSiteSettings();
+  let callback: string;
+  try { callback = githubOAuthCallbackUrl(request, process.env.GITHUB_OAUTH_CALLBACK_URL || "", settings.domain, settings.emailLinkOrigin); }
+  catch { return fail("回调地址无效，请通过公网 HTTPS 域名重新授权"); }
+  if (callback !== stored.callback) return fail("回调地址已变化，请重新授权");
   const code = url.searchParams.get("code");
   if (!code) return fail("GitHub 未返回授权码");
-  const tokenResponse = await fetch("https://github.com/login/oauth/access_token", { method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: JSON.stringify({ client_id: process.env.GITHUB_CLIENT_ID, client_secret: process.env.GITHUB_CLIENT_SECRET, code, redirect_uri: process.env.GITHUB_OAUTH_CALLBACK_URL || new URL("/api/deploy-status/github/callback", request.url).toString() }), cache: "no-store" });
+  const tokenResponse = await fetch("https://github.com/login/oauth/access_token", { method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: JSON.stringify({ client_id: process.env.GITHUB_CLIENT_ID, client_secret: process.env.GITHUB_CLIENT_SECRET, code, redirect_uri: callback }), cache: "no-store" });
   const tokenData = await tokenResponse.json() as { access_token?: string; error?: string };
   if (!tokenResponse.ok || !tokenData.access_token) return fail(tokenData.error || "GitHub 授权失败");
   const profileResponse = await fetch("https://api.github.com/user", { headers: { accept: "application/vnd.github+json", authorization: `Bearer ${tokenData.access_token}`, "user-agent": "fire-deploy-status" }, cache: "no-store" });

@@ -1,4 +1,5 @@
 import type { SiteSettings } from "./types";
+import { publicSiteDomain } from "./publicSiteUrl";
 
 // Explicit allowlist: new server settings must be reviewed before reaching a browser.
 const CLIENT_KEYS = [
@@ -15,6 +16,7 @@ const CLIENT_KEYS = [
 export function clientSettings(settings: SiteSettings, admin: boolean) {
   return {
     ...Object.fromEntries(CLIENT_KEYS.map(key => [key, settings[key]])),
+    domain: admin ? settings.domain : publicSiteDomain(settings.domain),
     futuHost: admin ? settings.futuHost : "", futuPort: admin ? settings.futuPort : "",
     pgHost: admin ? settings.pgHost : "", pgPort: admin ? settings.pgPort : "",
     pgDatabase: admin ? settings.pgDatabase : "", pgUser: admin ? settings.pgUser : "",

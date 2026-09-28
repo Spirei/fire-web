@@ -1,5 +1,6 @@
 import { getSiteSettings } from "@/lib/settings";
 import { ok } from "@/lib/api";
+import { publicSiteDomain } from "@/lib/publicSiteUrl";
 
 /** v1 公开站点设置（无需登录：标题 / 图标 / Logo / 域名 / 注册开关等） */
 export async function GET() {
@@ -8,7 +9,7 @@ export async function GET() {
     title: s.title,
     ico: s.ico,
     homepageBg: s.homepageBg,
-    domain: s.domain,
+    domain: publicSiteDomain(s.domain),
     siteLogo: s.siteLogo,
     logoText: s.logoText,
     logoFont: s.logoFont,
