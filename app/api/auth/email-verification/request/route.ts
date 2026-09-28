@@ -12,7 +12,8 @@ export async function POST(request:Request) {
   if(emailVerified(user.id,user.email)) return NextResponse.json({ok:true,verified:true});
   if(!rateLimit(`verify-email-ip:${clientIp(request)}`,10,15*60_000) || !rateLimit(`verify-email-user:${user.id}`,5,15*60_000) || !rateLimit(`verify-email-day:${user.id}`,10,24*60*60_000)) return NextResponse.json({error:"发送过于频繁，请稍后再试"},{status:429});
   const origin=verificationOrigin(request);
-  if(!origin || !mailConfigured()) return NextResponse.json({error:"请先配置邮件服务与网站域名"},{status:503});
+  if(!origin) return NextResponse.json({error:"验证链接未配置公网 HTTPS 域名，或当前地址是内网 IP。请在设置 → 邮件服务填写可从外网访问的地址"},{status:503});
+  if(!mailConfigured()) return NextResponse.json({error:"请先配置邮件服务"},{status:503});
   let permit: MailPermit|undefined;
   let issued: ReturnType<typeof issueEmailVerification>;
   try { issued=issueEmailVerification(user.id,email=>{permit=reserveMailAttempt(email,"verification");}); }

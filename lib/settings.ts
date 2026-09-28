@@ -122,13 +122,14 @@ const DEFAULTS: SiteSettings = {
   smtpPassword: "",
   smtpFromName: "Fire",
   smtpFromEmail: "",
+  emailLinkOrigin: "",
   ticker: DEFAULT_TICKER
 };
 
-const SIMPLE_KEYS: ("domain" | "title" | "ico" | "pwaIcon" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "currencyRefreshPattern" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "smtpHost" | "smtpPort" | "smtpUser" | "smtpPassword" | "smtpFromName" | "smtpFromEmail" | "xueqiuCookie")[] = [
+const SIMPLE_KEYS: ("domain" | "title" | "ico" | "pwaIcon" | "homepageBg" | "loginSideImage" | "siteLogo" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "currencyRefreshPattern" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "smtpHost" | "smtpPort" | "smtpUser" | "smtpPassword" | "smtpFromName" | "smtpFromEmail" | "emailLinkOrigin" | "xueqiuCookie")[] = [
   "domain", "title", "ico", "pwaIcon", "homepageBg", "loginSideImage", "siteLogo", "logoText", "logoFont", "quoteSource", "futuHost", "futuPort", "footerDesc",
   "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl", "currencyRefreshPattern", "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl", "translationProvider", "deepseekApiUrl", "deepseekModel", "deepseekApiKey", "llmProvider", "llmApiUrl", "llmModel", "llmApiKey",
-  "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpFromName", "smtpFromEmail", "xueqiuCookie"
+  "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpFromName", "smtpFromEmail", "emailLinkOrigin", "xueqiuCookie"
 ];
 
 export const NAV_KEYS = ["holdings", "assets", "fire", "watchlist", "global", "trading", "earnings", "assistant", "celebs", "users", "attachments", "library", "cards", "activities", "settings"] as const;

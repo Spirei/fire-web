@@ -22,6 +22,7 @@ export function clientSettings(settings: SiteSettings, admin: boolean) {
     smtpHost: admin ? settings.smtpHost : "", smtpPort: admin ? settings.smtpPort : "",
     smtpSecure: admin && settings.smtpSecure, smtpUser: admin ? settings.smtpUser : "",
     smtpPassword: "", smtpFromName: admin ? settings.smtpFromName : "", smtpFromEmail: admin ? settings.smtpFromEmail : "",
+    emailLinkOrigin: admin ? settings.emailLinkOrigin : "",
     smtpPasswordConfigured: admin && Boolean(settings.smtpPassword),
     pgPasswordConfigured: admin && Boolean(settings.pgPassword),
     llmApiKeyConfigured: admin && Boolean(settings.llmApiKey || settings.deepseekApiKey),

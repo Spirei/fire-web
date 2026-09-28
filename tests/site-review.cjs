@@ -970,6 +970,38 @@ function fontHeaderFixture(ext) {
     assert.equal(verification.emailVerified(account.id,'verify@example.test'),false,'changing back cannot revive prior verification');
     assert(auth.authenticateUser(account.username,'Changed-12345'),'email verification must not reset password');
   });
+  await test('email confirmation never sends intranet links and honors a public mail URL', async () => {
+    const verification=require(path.join(root,'lib/emailVerification.ts'));
+    const settings=require(path.join(root,'lib/settings.ts'));
+    const settingRoute=require(path.join(root,'app/api/settings/route.ts'));
+    const requestRoute=require(path.join(root,'app/api/auth/email-verification/request/route.ts'));
+    const original=settings.getSiteSettings();
+    const request=new Request('http://localhost/api/auth/email-verification/request');
+    assert.equal(verification.publicVerificationOrigin('fire.example.com:18520'),'https://fire.example.com:18520');
+    for (const unsafe of ['http://fire.example.com','https://192.168.1.8:3000','https://10.0.0.1','https://127.0.0.1','https://[::1]','https://fire.local','https://user:pass@fire.example.com','https://fire.example.com/path','https://fire.example.com?x=1']) {
+      assert.equal(verification.publicVerificationOrigin(unsafe),'',unsafe);
+    }
+    try {
+      const save=value=>settingRoute.PUT(new Request('http://localhost/api/settings',{method:'PUT',headers:{cookie:`fire_session=${tokens.admin}`,origin:'http://localhost','content-type':'application/json'},body:JSON.stringify({emailLinkOrigin:value})}));
+      assert.equal((await save('https://192.168.1.8')).status,400);
+      assert.equal((await save('https://fire.example.com:18520')).status,200);
+      assert.equal(settings.getSiteSettings().emailLinkOrigin,'https://fire.example.com:18520');
+      const clientSettings=require(path.join(root,'lib/settingsClient.ts')).clientSettings;
+      assert.equal(clientSettings(settings.getSiteSettings(),true).emailLinkOrigin,'https://fire.example.com:18520');
+      assert.equal(clientSettings(settings.getSiteSettings(),false).emailLinkOrigin,'');
+      assert(fs.readFileSync(path.join(root,'components/views/SettingsView.tsx'),'utf8').includes('value={site.emailLinkOrigin}'));
+      settings.updateSiteSettings({domain:'192.168.1.8:3000',emailLinkOrigin:''});
+      assert.equal(verification.verificationOrigin(request),'');
+      const account=createUser('review_private_mail_link','Recovery-old-123',false,'private-mail@example.test');
+      const session=createSession(account.id);
+      const blocked=await requestRoute.POST(new Request('http://localhost/api/auth/email-verification/request',{method:'POST',headers:{cookie:`fire_session=${session}`,origin:'http://localhost'}}));
+      assert.equal(blocked.status,503);
+      assert.match((await blocked.json()).error,/内网 IP/);
+      assert.equal(db.prepare('SELECT 1 FROM email_verification_tokens WHERE user_id=?').get(account.id),undefined);
+      settings.updateSiteSettings({emailLinkOrigin:'https://fire.example.com:18520'});
+      assert.equal(verification.verificationOrigin(request),'https://fire.example.com:18520');
+    } finally { settings.updateSiteSettings({domain:original.domain,emailLinkOrigin:original.emailLinkOrigin}); }
+  });
   await test('verified email and TOTP are independent recovery methods with no login scope', async () => {
     const reset = require(path.join(root,'lib/passwordReset.ts'));
     const auth = require(path.join(root,'lib/auth.ts'));

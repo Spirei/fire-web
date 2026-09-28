@@ -304,6 +304,8 @@ export interface SiteSettings {
   smtpPasswordConfigured?: boolean;
   smtpFromName: string;
   smtpFromEmail: string;
+  /** Public HTTPS origin used only in email confirmation links; empty follows the site domain. */
+  emailLinkOrigin: string;
   ticker: TickerConfig;
 }
 

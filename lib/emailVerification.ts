@@ -1,20 +1,29 @@
 import { createHash, randomBytes } from "node:crypto";
+import { isIP } from "node:net";
 import { getDb } from "./db";
 import { getSiteSettings } from "./settings";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+/** Never put an intranet address or untrusted URL components in an emailed link. */
+export function publicVerificationOrigin(value: string) {
+  const raw = value.trim();
+  if (!raw || raw.length > 255 || /[\s\\]/.test(raw)) return "";
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) return "";
+    if (!host.includes(".") || isIP(host) || /(?:^|\.)(?:localhost|local|lan|internal)$/.test(host)) return "";
+    return url.origin;
+  } catch { return ""; }
+}
 export function emailVerified(userId: string, email: string) {
   return Boolean(email && getDb().prepare("SELECT 1 FROM verified_emails WHERE user_id=? AND LOWER(email)=LOWER(?)").get(userId,email));
 }
 export function verificationOrigin(request: Request) {
-  const configured = getSiteSettings().domain.trim();
-  if (configured && configured !== "localhost:3000") {
-    try {
-      const candidate = new URL(/^https?:\/\//i.test(configured) ? configured : `https://${configured}`);
-      if (!["http:","https:"].includes(candidate.protocol) || candidate.username || candidate.password) return "";
-      return candidate.origin;
-    } catch { return ""; }
-  }
+  const settings = getSiteSettings();
+  if (settings.emailLinkOrigin.trim()) return publicVerificationOrigin(settings.emailLinkOrigin);
+  const configured = settings.domain.trim();
+  if (configured && configured !== "localhost:3000") return publicVerificationOrigin(configured);
   return process.env.NODE_ENV !== "production" ? new URL(request.url).origin : "";
 }
 export function issueEmailVerification(userId: string, beforeIssue?: (email: string) => void) {

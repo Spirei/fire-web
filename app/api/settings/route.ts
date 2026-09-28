@@ -8,6 +8,7 @@ import { localPathOf, removeFileIfUnused } from "@/lib/fileCleanup";
 import { prepareModelServices } from "@/lib/modelServices";
 import { validateAssistantEndpoint } from "@/lib/assistantSecurity";
 import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
+import { publicVerificationOrigin } from "@/lib/emailVerification";
 
 export async function GET(request: Request) {
   const user = getAuthUser(request);
@@ -57,6 +58,9 @@ export async function PUT(request: Request) {
   }
   if (body.smtpFromEmail !== undefined && String(body.smtpFromEmail).trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(body.smtpFromEmail).trim())) {
     return NextResponse.json({ error: "发件邮箱格式不正确" }, { status: 400 });
+  }
+  if (body.emailLinkOrigin !== undefined && String(body.emailLinkOrigin).trim() && !publicVerificationOrigin(String(body.emailLinkOrigin))) {
+    return NextResponse.json({ error: "验证链接地址须为公网 HTTPS 域名，可带端口，不能使用内网 IP、路径或参数" }, { status: 400 });
   }
   const llmProvider = body.llmProvider === "openai-compatible" ? "custom" : body.llmProvider;
   if (llmProvider !== undefined && !["deepseek", "openai", "custom"].includes(llmProvider)) {
@@ -143,7 +147,8 @@ export async function PUT(request: Request) {
     smtpUser: body.smtpUser !== undefined ? String(body.smtpUser) : undefined,
     smtpPassword: body.smtpPassword !== undefined ? String(body.smtpPassword) : undefined,
     smtpFromName: body.smtpFromName !== undefined ? String(body.smtpFromName) : undefined,
-    smtpFromEmail: body.smtpFromEmail !== undefined ? String(body.smtpFromEmail) : undefined
+    smtpFromEmail: body.smtpFromEmail !== undefined ? String(body.smtpFromEmail) : undefined,
+    emailLinkOrigin: body.emailLinkOrigin !== undefined ? String(body.emailLinkOrigin) : undefined
   });
   if (Array.isArray(body.groups)) {
     syncRecordGroups(before.groups, settings.groups);

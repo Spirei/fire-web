@@ -539,6 +539,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   smtpPassword: "",
   smtpFromName: "Fire",
   smtpFromEmail: "",
+  emailLinkOrigin: "",
   holdingColumns: DEFAULT_HOLDING_COLUMNS,
   ticker: DEFAULT_TICKER
 };
@@ -1760,7 +1761,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [mailResult, setMailResult] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   useEffect(() => {
     setMailResult(null);
-  }, [site.smtpHost, site.smtpPort, site.smtpSecure, site.smtpUser, site.smtpPassword, site.smtpFromName, site.smtpFromEmail]);
+  }, [site.smtpHost, site.smtpPort, site.smtpSecure, site.smtpUser, site.smtpPassword, site.smtpFromName, site.smtpFromEmail, site.emailLinkOrigin]);
 
   async function testMailSettings() {
     if (mailTesting || blockSaving.mail) return;
@@ -3813,11 +3814,16 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <label><span>邮箱</span><input type="email" value={site.smtpFromEmail} onChange={(event) => setSite({ ...site, smtpFromEmail: event.target.value })} placeholder="no-reply@example.com" /></label>
                       </div>
                     </div>
+                    <div className="mail-settings-group">
+                      <div className="mail-settings-group-title"><b>验证链接</b><span>收件人点击后访问的地址</span></div>
+                      <label><span>网站 HTTPS 地址</span><input type="url" value={site.emailLinkOrigin} onChange={(event) => setSite({ ...site, emailLinkOrigin: event.target.value })} placeholder="https://fire.example.com" autoComplete="url" /></label>
+                      <p className="mail-settings-link-note">留空沿用站点域名{site.domain ? `（${site.domain}）` : ""}。内网 IP 不会用于验证邮件；请填写收件人能访问的公网 HTTPS 域名。测试邮件仅检查 SMTP。</p>
+                    </div>
                     </fieldset>
                     {mailResult && <p className={`settings-form-feedback is-${mailResult.type}`} role={mailResult.type === "err" ? "alert" : "status"}><svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" /><g stroke="#fff">{mailResult.type === "ok" ? <path d="m7.5 12 3 3 6-6" /> : <><path d="M12 7v6" /><circle cx="12" cy="16.5" r="1" fill="#fff" stroke="none" /></>}</g></svg><span>{mailResult.text}</span></p>}
                     <div className="mail-settings-actions">
                       <button type="button" disabled={mailTesting || blockSaving.mail} onClick={() => void testMailSettings()} className="mail-settings-test">{mailTesting ? "发送中…" : "发送测试邮件"}</button>
-                      <button type="button" disabled={blockSaving.mail || mailTesting} onClick={() => void saveBlock("mail", { smtpHost: site.smtpHost, smtpPort: site.smtpPort, smtpSecure: site.smtpSecure, smtpUser: site.smtpUser, smtpPassword: site.smtpPassword, smtpFromName: site.smtpFromName, smtpFromEmail: site.smtpFromEmail }, "邮件服务已保存")} className="mail-settings-save">{blockSaving.mail ? "保存中…" : "保存"}</button>
+                      <button type="button" disabled={blockSaving.mail || mailTesting} onClick={() => void saveBlock("mail", { smtpHost: site.smtpHost, smtpPort: site.smtpPort, smtpSecure: site.smtpSecure, smtpUser: site.smtpUser, smtpPassword: site.smtpPassword, smtpFromName: site.smtpFromName, smtpFromEmail: site.smtpFromEmail, emailLinkOrigin: site.emailLinkOrigin }, "邮件服务已保存")} className="mail-settings-save">{blockSaving.mail ? "保存中…" : "保存"}</button>
                     </div>
                   </div>
                 </SettingsSection>
