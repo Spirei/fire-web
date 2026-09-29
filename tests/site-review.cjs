@@ -306,7 +306,10 @@ function fontHeaderFixture(ext) {
     assert(calendar.includes('data-capsule="off"'), 'financial day cells must not inherit danger-button styling');
     assert(calendar.includes('size="sm" onClose={onDayDetailClose} className="pnl-day-dialog"'));
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
-    assert(css.includes('.pnl-day-dialog-content { max-height:min(330px,calc(100dvh - 150px)); }'));
+    assert(css.includes('.pnl-day-dialog-content { max-height:min(386px,50dvh); }'));
+    assert(calendar.includes('data-capsule="off" aria-pressed={dayDetailMode === "profit"}'));
+    assert(calendar.includes('data-capsule="off" aria-pressed={dayDetailMode === "loss"}'));
+    assert(calendar.includes('min-h-[50px] items-center overflow-hidden rounded-xl'));
   });
   await test('mobile sheets avoid desktop row heights, native touch drag and nested fixed dialogs', () => {
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
@@ -325,7 +328,7 @@ function fontHeaderFixture(ext) {
     assert(profile.includes('disabled={profileSaving} maxLength={20}'));
     assert(profile.includes('setProfileSaving(true)'));
     assert(calendar.includes('pnlDayDetailMode(dayDetail, daySelection)'));
-    assert(calendar.includes('pnl-day-dialog-list mt-3 min-h-0'));
+    assert(calendar.includes('pnl-day-dialog-list mt-2 min-h-0'));
     assert(css.includes('touch-action:pan-y pinch-zoom'));
     assert(css.includes('.activities-scope-tabs button { flex:none; white-space:nowrap; }'));
     assert(css.includes('.card-library-mode button { min-width:0; padding-inline:8px; white-space:nowrap; }'));

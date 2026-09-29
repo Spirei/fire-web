@@ -7051,7 +7051,7 @@ html { scrollbar-gutter:stable; }
 .sc-detail-dialog-scroll,.workspace-navigation-modal.modal-glass,.pnl-day-dialog-list { overscroll-behavior-y:contain; touch-action:pan-y pinch-zoom; -webkit-overflow-scrolling:touch; }
 .sc-detail-dialog[data-detail="mobile-nav"] .settings-section-body { border:0!important; padding:0!important; background:transparent!important; }
 .pnl-day-dialog.modal-glass { max-height:min(500px,calc(100dvh - 32px)); padding:20px; border-radius:22px; }
-.pnl-day-dialog-content { max-height:min(330px,calc(100dvh - 150px)); }
+.pnl-day-dialog-content { max-height:min(386px,50dvh); }
 [role="dialog"]:has(> .pnl-day-dialog) > .modal-scrim { background-color:rgba(0,0,0,.18); }
 .dark [role="dialog"]:has(> .pnl-day-dialog) > .modal-scrim { background-color:rgba(0,0,0,.32); }
 @media(max-width:1023px) {

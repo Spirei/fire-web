@@ -284,18 +284,18 @@ export default function PnlCalendar({
         return (
           <AppModal title={dayDetail.date.replace(/-/g, "/")} desc={`盈利 ${profitRows.length} 项 · 亏损 ${lossRows.length} 项`} size="sm" onClose={onDayDetailClose} className="pnl-day-dialog">
             <div className="pnl-day-dialog-content flex w-full flex-col overflow-hidden">
-              <div className="px-5 pt-4">
-                <div className="grid grid-cols-2 gap-1 rounded-full bg-bg-gray p-1">
-                  <button aria-pressed={dayDetailMode === "profit"} onClick={() => setDayDetailMode("profit")} className={`rounded-full py-2.5 font-semibold ${dayDetailMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利</button>
-                  <button aria-pressed={dayDetailMode === "loss"} onClick={() => setDayDetailMode("loss")} className={`rounded-full py-2.5 font-semibold ${dayDetailMode === "loss" ? "bg-white shadow-sm" : "text-muted"}`}>亏损</button>
+              <div className="flex justify-center px-4 pt-2">
+                <div className="inline-grid grid-cols-2 gap-1 rounded-full border border-edge bg-bg-gray p-1">
+                  <button type="button" data-capsule="off" aria-pressed={dayDetailMode === "profit"} onClick={() => setDayDetailMode("profit")} className={`min-h-9 min-w-[74px] rounded-full px-3 text-[13px] font-semibold leading-none transition-colors ${dayDetailMode === "profit" ? "bg-up-bg text-up" : "text-muted hover:text-ink"}`}>盈利</button>
+                  <button type="button" data-capsule="off" aria-pressed={dayDetailMode === "loss"} onClick={() => setDayDetailMode("loss")} className={`min-h-9 min-w-[74px] rounded-full px-3 text-[13px] font-semibold leading-none transition-colors ${dayDetailMode === "loss" ? "bg-down-bg text-down" : "text-muted hover:text-ink"}`}>亏损</button>
                 </div>
               </div>
-              <div className="pnl-day-dialog-list mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-2">
+              <div className="pnl-day-dialog-list mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1 pb-1">
                 {shownRows.length === 0 && <p className="py-10 text-center text-sm text-muted">当日暂无{dayDetailMode === "profit" ? "盈利" : "亏损"}持仓</p>}
                 {(() => {
                   const maxRank = Math.max(...shownRows.map((r) => Math.abs(r.pnl)), 1);
                   return shownRows.map((row, index) => (
-                    <div key={row.id} className="relative flex min-h-16 items-center overflow-hidden rounded-xl px-4">
+                    <div key={row.id} className="relative flex min-h-[50px] items-center overflow-hidden rounded-xl px-3 sm:min-h-16 sm:px-4">
                       <div className={`absolute inset-y-0 right-0 rounded-xl ${dayDetailMode === "profit" ? "bg-up-bg" : "bg-down-bg"}`} style={{ width: `${Math.max(20, Math.abs(row.pnl) / maxRank * 100)}%` }} />
                       <span className="relative mr-3 w-6 flex-none text-xs text-muted">{String(index + 1).padStart(2, "0")}</span>
                       <div className="relative flex min-w-0 flex-1 items-center gap-2.5">
@@ -314,12 +314,12 @@ export default function PnlCalendar({
                           </p>
                         </div>
                       </div>
-                      <strong className={`relative text-xs tabular-nums ${row.pnl >= 0 ? "text-up" : "text-down"}`}>{formatAmount(row.pnl)}</strong>
+                      <strong className={`relative ml-2 flex-none text-xs tabular-nums ${row.pnl >= 0 ? "text-up" : "text-down"}`}>{formatAmount(row.pnl)}</strong>
                     </div>
                   ));
                 })()}
               </div>
-              <div className="flex items-center justify-between border-t border-edge px-5 py-4">
+              <div className="flex items-center justify-between border-t border-edge px-4 py-3">
                 <span className="text-xs text-muted">{dayDetailMode === "profit" ? "盈利合计" : "亏损合计"}</span>
                 <strong className={`text-sm font-bold tabular-nums ${shownTotal >= 0 ? "text-up" : "text-down"}`}>{formatAmount(shownTotal)}</strong>
               </div>
