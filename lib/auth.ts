@@ -3,6 +3,7 @@ import { getDb } from "./db";
 import { hashPassword, verifyPassword } from "./password";
 import type { User } from "./types";
 import { emailVerified } from "./emailVerification";
+import { appIdentity, revokeAppToken, revokeUserAppGrants } from "./appAuth";
 
 export const SESSION_COOKIE = "fire_session";
 export const LEGACY_SESSION_COOKIE = "sto" + "cklog_session";
@@ -162,6 +163,7 @@ export function getUserByToken(token: string | null): User | null {
 
 export function deleteSession(token: string | null) {
   if (!token) return;
+  if (token.startsWith("fat_") || token.startsWith("frt_")) { revokeAppToken(token); return; }
   getDb().prepare("DELETE FROM sessions WHERE token IN (?, ?)").run(sessionDbToken(token), token);
 }
 
@@ -195,6 +197,11 @@ export function getSessionToken(request: Request): string | null {
 }
 
 export function getAuthUser(request: Request): User | null {
+  const bearer = request.headers.get("authorization")?.match(/^Bearer (fat_[A-Za-z0-9_-]{43})$/)?.[1];
+  if (bearer) {
+    const row = appIdentity(bearer, request);
+    return row ? { ...toUser({ ...row, id: row.user_id, role: "user" }), role: "user" } : null;
+  }
   return getUserByToken(getSessionToken(request));
 }
 
@@ -231,6 +238,7 @@ export function isAdmin(user: User | null): boolean {
 }
 
 export function deleteOtherSessions(userId: string, keepToken: string | null) {
+  revokeUserAppGrants(userId);
   const db = getDb();
   if (keepToken) {
     db.prepare("DELETE FROM sessions WHERE user_id = ? AND token NOT IN (?, ?)").run(userId, sessionDbToken(keepToken), keepToken);

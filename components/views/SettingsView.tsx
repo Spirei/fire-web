@@ -3514,6 +3514,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                   </div>
                 </SettingsSection>
+                <a href="/app/devices" className="rounded-2xl border border-edge bg-white px-5 py-4 text-ink">已连接设备 <span className="float-right" aria-hidden="true">›</span></a>
                 <SettingsSection id="password" icon="password" title="更改密码">
                   <form onSubmit={changePassword} className="settings-password-grid settings-password-meta">
                     <div className="settings-account-identity"><span className="settings-account-avatar">{me.avatar ? <img src={me.avatar} alt="" /> : (me.nickname || me.username).slice(0, 1)}</span><span><b>{me.nickname || me.username}</b><small>{me.email || `@${me.username}`}</small></span><span aria-hidden="true">›</span></div>

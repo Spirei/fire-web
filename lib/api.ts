@@ -43,19 +43,24 @@ export interface ApiMeta {
 /** 成功响应（统一信封） */
 export function ok<T>(data: T, meta?: ApiMeta) {
   return NextResponse.json(
-    meta ? { code: API_CODE.OK, message: "ok", data, meta } : { code: API_CODE.OK, message: "ok", data }
+    meta ? { code: API_CODE.OK, message: "ok", data, meta } : { code: API_CODE.OK, message: "ok", data },
+    { headers: { "Cache-Control": "no-store, private" } }
   );
 }
 
 /** 失败响应（统一错误信封 + HTTP 状态码） */
 export function fail(code: number, message: string, status = 400) {
-  return NextResponse.json({ code, message }, { status });
+  return NextResponse.json({ code, message }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
 /** 从请求里读取统一分页参数（page 从 1 开始，pageSize 默认 20、上限 100） */
 export function parsePage(searchParams: URLSearchParams, defaultSize = 20, maxSize = 100) {
-  const page = Math.max(1, Number(searchParams.get("page")) || 1);
-  const pageSize = Math.min(maxSize, Math.max(1, Number(searchParams.get("pageSize")) || defaultSize));
+  const boundedInteger = (value: string | null, fallback: number, maximum: number) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 1 ? Math.min(maximum, Math.floor(n)) : fallback;
+  };
+  const page = boundedInteger(searchParams.get("page"), 1, 1_000_000);
+  const pageSize = boundedInteger(searchParams.get("pageSize"), defaultSize, maxSize);
   return { page, pageSize };
 }
 

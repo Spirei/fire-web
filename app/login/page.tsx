@@ -15,13 +15,14 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams
 }: {
-  searchParams: Promise<{ skipSetup?: string }>;
+  searchParams: Promise<{ skipSetup?: string; next?: string }>;
 }) {
   const params = await searchParams;
+  const destination = params.next?.startsWith("/app/authorize?") ? params.next : "/records";
   if (needsSetup() && params.skipSetup !== "1") redirect("/setup");
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
-  if (getUserByToken(token)) redirect("/records");
+  if (getUserByToken(token)) redirect(destination);
   const settings = getSiteSettings();
   const logoFontCls = logoFontClass(settings.logoFont);
   return (
@@ -91,7 +92,7 @@ export default async function LoginPage({
             </svg>
             <span className={`text-base ${logoFontCls}`}>Fire</span>
           </div>
-          <LoginForm />
+          <LoginForm returnTo={destination} />
         </div>
       </div>
 

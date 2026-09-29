@@ -38,6 +38,42 @@ function migrate(database: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 
+    CREATE TABLE IF NOT EXISTS app_grants (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      client_id TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      device_name TEXT NOT NULL,
+      security_stamp TEXT NOT NULL,
+      passkey_id TEXT,
+      created_at INTEGER NOT NULL,
+      last_used_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      revoked_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_app_grants_user ON app_grants(user_id);
+    CREATE TABLE IF NOT EXISTS app_codes (
+      code_hash TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      session_hash TEXT NOT NULL REFERENCES sessions(token) ON DELETE CASCADE,
+      client_id TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      challenge TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      device_name TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS app_access_tokens (
+      token_hash TEXT PRIMARY KEY,
+      grant_id TEXT NOT NULL REFERENCES app_grants(id) ON DELETE CASCADE,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS app_refresh_tokens (
+      token_hash TEXT PRIMARY KEY,
+      grant_id TEXT NOT NULL REFERENCES app_grants(id) ON DELETE CASCADE,
+      used_at INTEGER
+    );
+
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       token_hash TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

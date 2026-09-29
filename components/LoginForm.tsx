@@ -9,7 +9,8 @@ import { isCompleteBackupCode, isSixDigitTotp, normalizeBackupInput, normalizeTo
 
 type Mode = "login" | "register";
 
-export default function LoginForm({ onClose }: { onClose?: () => void }) {
+export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?: () => void; returnTo?: string }) {
+  const destination = returnTo.startsWith("/app/authorize?") ? returnTo : "/records";
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
   const [loginType, setLoginType] = useState<"username" | "email">("username");
@@ -31,7 +32,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store", credentials: "same-origin" })
       .then((res) => {
-        if (res.ok) router.replace("/records");
+        if (res.ok) router.replace(destination);
       })
       .catch(() => {
         // 超时 / 5xx 保持登录表单，不把瞬时失败当成已登录。
@@ -44,7 +45,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
         }
       })
       .catch(() => {});
-  }, [router]);
+  }, [router, destination]);
 
   const formValid = useMemo(
     () => totpTicket
@@ -75,7 +76,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
         throw new Error(message);
       }
       onClose?.();
-      router.push("/records");
+      router.push(destination);
     } catch (err) {
       setError(err instanceof Error ? err.message : "验证失败");
     } finally {
@@ -125,7 +126,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
       }
       // 登录/注册成功：先关闭弹窗，再跳转到记录页，避免弹窗常驻不消失。
       onClose?.();
-      router.push("/records");
+      router.push(destination);
     } catch (err) {
       setError(err instanceof Error ? err.message : "操作失败");
     } finally {
@@ -178,7 +179,7 @@ export default function LoginForm({ onClose }: { onClose?: () => void }) {
         </div>
       )}
 
-      {mode === "login" && !totpTicket && !recovering && <PasskeyLoginButton disabled={loading} onBusy={setLoading} onError={setError} onSuccess={() => { onClose?.(); router.push("/records"); router.refresh(); }} />}
+      {mode === "login" && !totpTicket && !recovering && <PasskeyLoginButton disabled={loading} onBusy={setLoading} onError={setError} onSuccess={() => { onClose?.(); router.push(destination); router.refresh(); }} />}
       <form onSubmit={submit} className="mt-7 flex flex-col gap-4">
         {totpTicket ? (
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">

@@ -1014,3 +1014,32 @@ PATCH /api/showcase/models/{id}
 </details>
 
 > 新功能统一使用 `/api/v1/**`。旧版 `/api/**` 返回裸数据（`{ error }` 或直接资源），不要混用响应格式。
+
+## 8. 原生 App 网页连接
+
+原生 App 推荐通过系统浏览器授权连接，无需在 App 内收取密码。首先从用户选择的服务器读取 `GET /api/v1/auth/config`；返回版本、client_id、固定回调、scope、S256 与同源相对端点。官方域名和自部署域名共用此合同，非默认 HTTPS 端口受支持。生产站点须配置公网域名或 `FIRE_APP_ORIGIN`。
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| GET | `/api/v1/auth/config` | 公开连接发现 |
+| GET | `/app/authorize` | 网页登录、查看账户并确认权限 |
+| POST | `/api/v1/auth/authorize` | 仅同源浏览器 Cookie 同意/拒绝；返回一次性回调地址 |
+| POST | `/api/v1/auth/token` | 授权码 + verifier 换令牌，或轮换刷新令牌 |
+| POST | `/api/v1/auth/revoke` | 凭当前 refresh token 撤销整个设备连接 |
+| GET / DELETE | `/api/v1/auth/devices` | 浏览器本人查看/撤销设备，DELETE body `{ id }` |
+
+App 使用 `client_id=fire-ios`，`redirect_uri=com.fire.app:/oauth/callback`，`response_type=code` 和 PKCE `S256`。权限为 `portfolio.read portfolio.write`，可申请只读；App 凭据仅访问本人业务，不继承站点管理权。
+
+```json
+{
+  "grant_type": "authorization_code",
+  "client_id": "fire-ios",
+  "redirect_uri": "com.fire.app:/oauth/callback",
+  "code": "fac_<一次性授权码>",
+  "code_verifier": "<本机生成的43至128位随机值>"
+}
+```
+
+成功仍使用 v1 信封，data 为 `{ access_token, refresh_token, token_type: "Bearer", expires_in: 900, grant_id, scope }`。refresh 请求为 `{ grant_type: "refresh_token", client_id: "fire-ios", refresh_token }`，每次成功必须原子替换两个令牌。授权码 60 秒有效；刷新 30 天无活动失效，授权绝对最长 90 天。旧 refresh 重放、设备撤销、改密和 TOTP 变更使整组凭据失效。
+
+完整流程、迁移、权限与本次 API 审查见 [App 连接说明](./app-connection.md)。旧用户名密码 Bearer 登录接口保留兼容，网页活跃续期仅适用于 Cookie，不续期旧移动端会话。
