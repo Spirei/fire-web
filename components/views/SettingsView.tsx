@@ -59,7 +59,7 @@ interface Props {
   initialSub?: string;
   initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
   /** 服务端首帧设置快照，避免刷新时先渲染默认开关再回落到真实值 */
-  initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "groups" | "markets" | "marketLabels" | "modelServices">;
+  initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "modelServices">;
 }
 
 function SettingsDetailShell({ title, category, detailKey, showBack = false, closeDisabled = false, editable = false, editing = false, onBack, onEdit, onSave, onCancel, onClose, children }: { title: string; category: string; detailKey?: string; showBack?: boolean; closeDisabled?: boolean; editable?: boolean; editing?: boolean; onBack?: () => void; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; onClose: () => void; children: React.ReactNode }) {
@@ -769,6 +769,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     marketBadges: normalizeMarketBadges(initialSettings.marketBadges),
     marketBadgesVisible: initialSettings.marketBadgesVisible !== false
   } : DEFAULT_SETTINGS);
+  const settingsSaveGeneration = useRef(0);
   const [tabs, setTabs] = useState<TabConfig[]>(initialSettings?.tabs ?? DEFAULT_TABS);
   const [stockGroups, setStockGroups] = useState<GroupConfig[]>(initialSettings?.groups ?? []);
   const [dbStatus, setDbStatus] = useState<DbStatus | null>(null);
@@ -841,9 +842,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }, [initialSub, isAdminUser]);
 
   useEffect(() => {
+    const generation = settingsSaveGeneration.current;
     fetch("/api/settings")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
+        if (generation !== settingsSaveGeneration.current) return;
         if (data?.settings) {
           setSite({ ...DEFAULT_SETTINGS, ...data.settings, marketBadges: normalizeMarketBadges(data.settings.marketBadges), marketBadgesVisible: data.settings.marketBadgesVisible !== false });
           captureSaved(data.settings);
@@ -980,6 +983,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "保存失败");
+      settingsSaveGeneration.current += 1;
       setSite((s) => ({ ...s, ...data.settings, llmApiKey: s.llmApiKey }));
       captureSaved(data.settings);
       if (data.settings?.marketBadges || typeof data.settings?.marketBadgesVisible === "boolean") {
@@ -2630,7 +2634,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </SettingsSection>
                 </div>
 
-                <SettingsSection id="mobile-nav" icon="mobile-nav" title="手机导航" desc="前四项显示在底部，其余收进更多。保存后生效。">
+                <SettingsSection id="mobile-nav" icon="mobile-nav" title="手机导航" desc="前四项显示在底部，其余收进更多。拖动或用箭头调整后自动保存。">
                   {activeAnchor === "mobile-nav" && <MobileNavigationSettings tabs={tabs} order={site.mobileNavigationOrder ?? []} icons={assetIcons} onSave={order => saveBlock("mobile-nav", { mobileNavigationOrder: order }, "已保存")} />}
                   {blockMsg["mobile-nav"]?.type === "err" && <p role="alert" className="settings-form-message is-error">{blockMsg["mobile-nav"]?.text}</p>}
                 </SettingsSection>

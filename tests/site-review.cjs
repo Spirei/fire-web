@@ -27,6 +27,22 @@ function fontHeaderFixture(ext) {
   return bytes;
 }
 (async () => {
+  await test('appearance preferences persist synchronously and mobile navigation distinguishes preview from saved order', () => {
+    const persisted = fs.readFileSync(path.join(root, 'lib/usePersistedState.ts'), 'utf8');
+    const context = fs.readFileSync(path.join(root, 'lib/prefsContext.tsx'), 'utf8');
+    const nav = fs.readFileSync(path.join(root, 'components/MobileNavigationSettings.tsx'), 'utf8');
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    assert(persisted.indexOf('localStorage.setItem(key, JSON.stringify(resolved))') < persisted.indexOf('setValue(resolved)'));
+    assert(persisted.includes('const cookieSaved = writePrefCookie(key, resolved)'));
+    assert(persisted.includes('if (!localSaved && !cookieSaved) showToast('));
+    assert(context.includes('return JSON.stringify(readPrefsCookie()[key]) === JSON.stringify(value)'));
+    assert(nav.includes('await onSave(next)') && nav.includes('setDraft(order)'));
+    assert(!nav.includes('mobile-nav-transfer') && !nav.includes('恢复默认'));
+    assert(settings.includes('const generation = settingsSaveGeneration.current'));
+    assert(settings.includes('if (generation !== settingsSaveGeneration.current) return'));
+    const shell = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
+    assert(shell.includes('generation !== settingsReloadGeneration.current'));
+  });
   await test('typography has safe local choices, shared weights and cookie-backed SSR preview', () => {
     const type = require(path.join(root, 'lib/typography.ts'));
     assert.equal(type.resolveFont('invalid').id, 'system');
@@ -376,7 +392,7 @@ function fontHeaderFixture(ext) {
     assert(css.includes('.records-content .pnl-calendar h2 { flex:none; font-size:16px;'));
     assert(calendar.includes('<AppModal title={dayDetail.date.replace'));
     assert(!calendar.includes('fixed inset-0 z-[10002]'));
-    assert(nav.includes('draggable={!saving && mouseDrag}'));
+    assert(nav.includes('draggable={mouseDrag}'));
     assert(profile.includes('if (profileSavingRef.current) return;'));
     assert(profile.includes('连接失败，请重试'));
     assert(profile.includes('disabled={profileSaving} maxLength={20}'));
@@ -424,7 +440,7 @@ function fontHeaderFixture(ext) {
     assert(editor.includes('NAV_ICONS[item.key]'));
     assert(editor.includes('IconDots size={20}'));
     assert(!editor.includes('source?.group === group'));
-    assert(editor.includes('"放入底部" : "移到更多"'));
+    assert(editor.includes('pendingRef.current = next') && editor.includes('await onSave(next)'));
     const navigation = fs.readFileSync(path.join(root, 'components/WorkspaceNavigation.tsx'), 'utf8');
     assert(navigation.includes('const navigationKey = activeKey === "pnl" ? "assets" : activeKey;'));
     assert(navigation.includes('!primaryKeys.includes(navigationKey)'));

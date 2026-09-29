@@ -19,12 +19,14 @@ export function useServerPrefs(): PrefMap {
 }
 
 /** 把一条偏好合并写回 cookie（客户端）：下次刷新服务端就能直接读到 */
-export function writePrefCookie(key: string, value: unknown) {
-  if (typeof document === "undefined") return;
+export function writePrefCookie(key: string, value: unknown): boolean {
+  if (typeof document === "undefined") return false;
   try {
     const next: PrefMap = { ...readPrefsCookie(), [key]: value };
     document.cookie = prefsCookieString(next);
+    return JSON.stringify(readPrefsCookie()[key]) === JSON.stringify(value);
   } catch {
-    /* 隐私模式 / cookie 被禁用：localStorage 仍然生效，下次刷新会闪一下而已 */
+    /* 隐私模式 / cookie 被禁用：localStorage 仍然生效。 */
+    return false;
   }
 }

@@ -180,6 +180,7 @@ export default function RecordsApp({
   const skipInitialActivityFetchRef = useRef(initialTab === "activities");
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
   const [mobileNavigationOrder, setMobileNavigationOrder] = useState(initialSettings.mobileNavigationOrder ?? []);
+  const settingsReloadGeneration = useRef(0);
   const mobilePrimaryOrder = useMemo(() => mobileWorkspaceGroups(navTabs, mobileNavigationOrder).primary.map(tab => tab.key), [navTabs, mobileNavigationOrder]);
   const [navReady, setNavReady] = useState(true);
   const [settingsSub, setSettingsSub] = useState<string | null>(null);
@@ -321,9 +322,11 @@ export default function RecordsApp({
   }, [activeTab, reloadActivities]);
 
   const reloadSettings = useCallback(() => {
+    const generation = ++settingsReloadGeneration.current;
     fetch("/api/settings")
       .then((res) => (res.ok ? res.json() : null))
       .then((st) => {
+        if (generation !== settingsReloadGeneration.current) return;
         const s = st?.settings;
         if (!s) return;
         if (s.tabs) {

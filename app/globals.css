@@ -7044,6 +7044,7 @@ button.PhotoView-Slider__toolbarIcon {
 @keyframes fire-toast-icon-enter { from { opacity:0; transform:scale(.85); } to { opacity:1; transform:scale(1); } }
 @keyframes fire-toast-symbol-enter { from { opacity:0; } to { opacity:1; } }
 .mobile-nav-preview { --dock-selected-fill:linear-gradient(180deg,#ceced0,#c6c6c8); --dock-selected-text:#1c1e21; --dock-selected-icon-filter:brightness(0); display:flex; min-height:54px; align-items:center; gap:4px; padding:6px; border:1px solid rgb(var(--site-edge) / .7); border-radius:999px; background:color-mix(in srgb,rgb(var(--site-surface)) 78%,transparent); }
+.mobile-nav-saving { margin:12px 2px 0; font-size:12px; line-height:1.5; color:rgb(var(--site-muted)); }
 .dark .mobile-nav-preview { --dock-selected-fill:linear-gradient(180deg,#4a4a4c,#3f3f41); --dock-selected-text:#f5f5f7; --dock-selected-icon-filter:brightness(0) invert(1); }
 .sc-detail-dialog .mobile-nav-preview > span { display:flex; flex-direction:column; align-items:center; gap:5px; flex:1; min-width:0; text-align:center; font-size:11px; line-height:16px; font-weight:var(--site-entry-weight,400); white-space:nowrap; }
 .sc-detail-dialog .mobile-nav-preview > .mobile-nav-preview-item { min-height:44px; justify-content:center; border-radius:13px; }
@@ -7055,7 +7056,6 @@ button.PhotoView-Slider__toolbarIcon {
 .sc-detail-dialog .mobile-nav-group-title { margin:0 0 8px; font-size:14px; line-height:20px; font-weight:500; }
 .sc-detail-dialog .mobile-nav-item-label { flex:1; min-width:0; font-size:14px; line-height:20px; font-weight:var(--site-entry-weight,400); color:rgb(var(--site-ink)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .mobile-nav-preview { padding:10px 6px; }
-.mobile-nav-sort-list > li > button.mobile-nav-transfer { color:var(--site-action); }
 .sc-detail-dialog .mobile-nav-editor,.sv-center .mobile-nav-editor { border:0!important; padding:0!important; background:transparent!important; }
 .mobile-nav-sort-list { margin:0; padding:0; list-style:none; overflow:hidden; border:1px solid rgb(var(--site-edge)); border-radius:16px; background:rgb(var(--site-surface)); }
 .mobile-nav-sort-list > li { display:flex; min-height:60px; align-items:center; gap:6px; padding:6px 10px; }

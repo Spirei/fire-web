@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerPrefs, writePrefCookie } from "./prefsContext";
+import { readPrefsCookie } from "./prefsCookie";
+import { showToast } from "./toast";
 
 const PERSISTED_STATE_EVENT = "fire:persisted-state";
 
@@ -33,18 +35,20 @@ export function usePersistedState<T>(key: string, initial: T | (() => T)): [T, R
   const [value, setValue] = useState<T>(() =>
     hasServerPref ? (serverPrefs[key] as T) : typeof initial === "function" ? (initial as () => T)() : initial
   );
+  const valueRef = useRef(value);
   const setPersistedValue = useCallback<React.Dispatch<React.SetStateAction<T>>>((next) => {
-    setValue((current) => {
-      const resolved = typeof next === "function" ? (next as (previous: T) => T)(current) : next;
-      try {
-        localStorage.setItem(key, JSON.stringify(resolved));
-        writePrefCookie(key, resolved);
-        queueMicrotask(() => window.dispatchEvent(new CustomEvent(PERSISTED_STATE_EVENT, { detail: { key, value: resolved } })));
-      } catch {
-        /* 存储失败仍更新当前组件 */
-      }
-      return resolved;
-    });
+    // 写入必须发生在用户操作中；React 的 state updater 可能延后或重放，刷新会抢在写入前。
+    const resolved = typeof next === "function" ? (next as (previous: T) => T)(valueRef.current) : next;
+    valueRef.current = resolved;
+    let localSaved = false;
+    try {
+      localStorage.setItem(key, JSON.stringify(resolved));
+      localSaved = true;
+    } catch { /* Safari 存储受限时仍尝试 cookie。 */ }
+    const cookieSaved = writePrefCookie(key, resolved);
+    if (!localSaved && !cookieSaved) showToast("浏览器未允许保存偏好，请检查隐私设置", "err");
+    setValue(resolved);
+    queueMicrotask(() => window.dispatchEvent(new CustomEvent(PERSISTED_STATE_EVENT, { detail: { key, value: resolved } })));
   }, [key]);
   useEffect(() => {
     let hasLocal = true;
@@ -53,15 +57,20 @@ export function usePersistedState<T>(key: string, initial: T | (() => T)): [T, R
     } catch {
       hasLocal = false;
     }
-    if (!hasLocal && hasServerPref) {
-      // cookie 里有、localStorage 里没有（清过缓存 / 换了浏览器配置）：把 cookie 那份补回 localStorage，保持两边一致
+    const cookiePrefs = readPrefsCookie();
+    const hasCookie = Object.prototype.hasOwnProperty.call(cookiePrefs, key);
+    if (!hasLocal && hasCookie) {
+      // localStorage 不可用时仍可从本次最新的 cookie 恢复，不依赖服务端首帧快照。
+      valueRef.current = cookiePrefs[key] as T;
+      setValue(cookiePrefs[key] as T);
       try {
-        localStorage.setItem(key, JSON.stringify(serverPrefs[key]));
+        localStorage.setItem(key, JSON.stringify(cookiePrefs[key]));
       } catch {
         /* 忽略 */
       }
     } else {
       const stored = readPersisted(key, initialRef.current);
+      valueRef.current = stored;
       setValue(stored);
       // 两处不一致就回写 cookie：① 老用户只有 localStorage（这次仍会闪，之后不再闪）；
       // ② cookie 里是旧值（用户清了某一侧 / 手动改过 localStorage）—— 以 localStorage 为准，自愈。
@@ -69,10 +78,17 @@ export function usePersistedState<T>(key: string, initial: T | (() => T)): [T, R
     }
     const sync = (event: Event) => {
       const detail = (event as CustomEvent<{ key?: string; value?: T }>).detail;
-      if (detail?.key === key) setValue(detail.value as T);
+      if (detail?.key === key) {
+        valueRef.current = detail.value as T;
+        setValue(detail.value as T);
+      }
     };
     const syncStorage = (event: StorageEvent) => {
-      if (event.key === key) setValue(readPersisted(key, initialRef.current));
+      if (event.key === key) {
+        const stored = readPersisted(key, initialRef.current);
+        valueRef.current = stored;
+        setValue(stored);
+      }
     };
     window.addEventListener(PERSISTED_STATE_EVENT, sync);
     window.addEventListener("storage", syncStorage);

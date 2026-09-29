@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import type { TabConfig } from "@/lib/types";
 import { mobileWorkspaceGroups, moveMobileNavigation, MOBILE_NAV_LABELS } from "@/lib/workspaceNavigation";
 import { NAV_ICONS } from "@/lib/navIcons";
-import { IconDots, IconArrowUpRight, IconArrowDownRight } from "@tabler/icons-react";
+import { IconDots } from "@tabler/icons-react";
 import SafeAssetImage from "./SafeAssetImage";
+import { showToast } from "@/lib/toast";
 
 export default function MobileNavigationSettings({ tabs, order, icons, onSave }: {
   tabs: TabConfig[];
@@ -17,47 +18,65 @@ export default function MobileNavigationSettings({ tabs, order, icons, onSave }:
   const [saving, setSaving] = useState(false);
   const drag = useRef<{ key: string } | null>(null);
   const savingRef = useRef(false);
+  const pendingRef = useRef<string[] | null>(null);
+  const savedRef = useRef(order);
   const [mouseDrag, setMouseDrag] = useState(false);
-  useEffect(() => { setDraft(order); }, [order]);
+  useEffect(() => {
+    if (!savingRef.current && !pendingRef.current) {
+      savedRef.current = order;
+      setDraft(order);
+    }
+  }, [order]);
   const groups = mobileWorkspaceGroups(tabs, draft);
-  const saved = mobileWorkspaceGroups(tabs, order);
   const currentKeys = [...groups.primary, ...groups.more].map(item => item.key);
-  const savedKeys = [...saved.primary, ...saved.more].map(item => item.key);
-  const changed = currentKeys.join("|") !== savedKeys.join("|") || (draft.length === 0 && order.length > 0);
 
-  function move(from: number, to: number) {
-    if (saving) return;
-    setDraft(moveMobileNavigation(currentKeys, from, to));
-  }
-
-  async function save() {
-    if (savingRef.current || !changed) return;
+  async function flush() {
+    if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
-    try { await onSave(draft.length ? currentKeys : []); }
+    try {
+      while (pendingRef.current) {
+        const next = pendingRef.current;
+        pendingRef.current = null;
+        let saved = false;
+        try { saved = await onSave(next); } catch { /* 交由下方统一处理。 */ }
+        if (saved) savedRef.current = next;
+        else if (!pendingRef.current) {
+          setDraft(savedRef.current);
+          showToast("导航顺序保存失败，已恢复原顺序", "err");
+        }
+      }
+    }
     finally { savingRef.current = false; setSaving(false); }
+  }
+
+  function move(from: number, to: number) {
+    const next = moveMobileNavigation(currentKeys, from, to);
+    if (next.join("|") === currentKeys.join("|")) return;
+    setDraft(next);
+    pendingRef.current = next;
+    void flush();
   }
 
   return <div className="mobile-nav-editor">
     <div className="mobile-nav-preview" aria-label="底部入口预览">{groups.primary.map((item, index) => <span key={item.key} className={index === 0 ? "mobile-nav-preview-item is-selected" : "mobile-nav-preview-item"}><span className="mobile-nav-preview-icon" aria-hidden="true"><SafeAssetImage src={icons[item.key.toUpperCase()]} fallback={NAV_ICONS[item.key] ?? null} className="nav-custom-icon h-5 w-5 object-contain" /></span><span>{MOBILE_NAV_LABELS[item.key] ?? item.label}</span></span>)}<span className="mobile-nav-preview-item text-muted"><IconDots size={20} stroke={1.8} aria-hidden="true"/><span>更多</span></span></div>
     {(["primary", "more"] as const).map(group => <div key={group} className="mt-5">
       <h5 className="mobile-nav-group-title">{group === "primary" ? "底部入口" : "更多功能"}</h5>
-      <ol className="mobile-nav-sort-list">{groups[group].map((item, index) => { const position = group === "primary" ? index : groups.primary.length + index; return <li key={item.key} onDragOver={event => { if (drag.current && !saving) event.preventDefault(); }} onDrop={event => {
+      <ol className="mobile-nav-sort-list">{groups[group].map((item, index) => { const position = group === "primary" ? index : groups.primary.length + index; return <li key={item.key} onDragOver={event => { if (drag.current) event.preventDefault(); }} onDrop={event => {
         event.preventDefault();
         const source = drag.current;
         drag.current = null;
-        if (source) move(currentKeys.indexOf(source.key), position);
+        if (source) void move(currentKeys.indexOf(source.key), position);
       }}>
-        <span role="img" aria-label={`拖动${MOBILE_NAV_LABELS[item.key] ?? item.label}排序`} title="拖动排序" onPointerEnter={event => setMouseDrag(event.pointerType === "mouse")} onPointerDown={event => setMouseDrag(event.pointerType === "mouse")} draggable={!saving && mouseDrag} className="mobile-nav-drag" onDragStart={event => { drag.current = { key: item.key }; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.key); }} onDragEnd={() => { drag.current = null; }}>
+        <span role="img" aria-label={`拖动${MOBILE_NAV_LABELS[item.key] ?? item.label}排序`} title="拖动排序" onPointerEnter={event => setMouseDrag(event.pointerType === "mouse")} onPointerDown={event => setMouseDrag(event.pointerType === "mouse")} draggable={mouseDrag} className="mobile-nav-drag" onDragStart={event => { drag.current = { key: item.key }; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.key); }} onDragEnd={() => { drag.current = null; }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">{[6,12,18].flatMap(y => [9,15].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.5"/>))}</svg>
         </span>
         <span className="mobile-nav-item-icon" aria-hidden="true"><SafeAssetImage src={icons[item.key.toUpperCase()]} fallback={NAV_ICONS[item.key] ?? null} className="nav-custom-icon h-5 w-5 object-contain" /></span>
         <span className="mobile-nav-item-label">{item.label}</span>
-        <button type="button" className="mobile-nav-transfer" disabled={saving || currentKeys.length <= 4} aria-label={`${group === "more" ? "放入底部" : "移到更多"}${item.label}`} title={group === "more" ? "放入第4个入口，原入口移入更多" : "移到更多，下一项补入底部"} onClick={() => move(position, group === "more" ? 3 : 4)}>{group === "more" ? <IconArrowUpRight size={18}/> : <IconArrowDownRight size={18}/>}</button>
-        <button type="button" disabled={saving || position === 0} aria-label={`上移${item.label}`} onClick={() => move(position, position - 1)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="m6 14 6-6 6 6"/></svg></button>
-        <button type="button" disabled={saving || position === currentKeys.length - 1} aria-label={`下移${item.label}`} onClick={() => move(position, position + 1)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="m6 10 6 6 6-6"/></svg></button>
+        <button type="button" disabled={position === 0} aria-label={`上移${item.label}`} onClick={() => move(position, position - 1)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="m6 14 6-6 6 6"/></svg></button>
+        <button type="button" disabled={position === currentKeys.length - 1} aria-label={`下移${item.label}`} onClick={() => move(position, position + 1)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="m6 10 6 6 6-6"/></svg></button>
       </li>; })}</ol>
     </div>)}
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><button type="button" className="btn btn-line btn-sm" disabled={saving} onClick={() => setDraft([])}>恢复默认</button><button type="button" className="btn btn-primary btn-sm" disabled={saving || !changed} onClick={() => void save()}>{saving ? "保存中…" : "保存"}</button></div>
+    {saving && <p className="mobile-nav-saving" role="status">正在保存顺序…</p>}
   </div>;
 }
