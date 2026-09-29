@@ -19,6 +19,7 @@ import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCalendarCompact, fmtMoneyCompac
 import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses, peekPortfolioBundle } from "@/lib/portfolioSeries";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
+import { useProfitLossSwipe } from "@/lib/useProfitLossSwipe";
 
 
 type PnlRow = {
@@ -193,6 +194,8 @@ export default function AssetPnlAnalysis({
   const [chartTab, setChartTab] = useState<"return" | "asset">("return");
   const [rankMode, setRankMode] = useState<"profit" | "loss">("profit");
   const [detailMode, setDetailMode] = useState<"profit" | "loss">("profit");
+  const rankSwipe = useProfitLossSwipe(setRankMode);
+  const detailSwipe = useProfitLossSwipe(setDetailMode);
   // 盈亏总额卡片：货币（与资产分析页共用 key）、基准（多市场）、加权
   const { currency: displayCurrency, setCurrency: setDisplayCurrency } = useDisplayCurrency();
   // 基准 / 加权方式：走 usePersistedState（自动镜像到 cookie），刷新首帧就是用户选的那个，不会先闪默认
@@ -881,7 +884,7 @@ export default function AssetPnlAnalysis({
                   <button type="button" data-capsule="off" aria-pressed={rankMode === "profit"} onClick={() => setRankMode("profit")} className={`min-h-9 min-w-[105px] rounded-full px-3 text-[13px] font-semibold transition-colors sm:py-2.5 ${rankMode === "profit" ? "bg-up-bg text-up" : "text-muted hover:text-ink"}`}>盈利 Top5</button>
                   <button type="button" data-capsule="off" aria-pressed={rankMode === "loss"} onClick={() => setRankMode("loss")} className={`min-h-9 min-w-[105px] rounded-full px-3 text-[13px] font-semibold transition-colors sm:py-2.5 ${rankMode === "loss" ? "bg-down-bg text-down" : "text-muted hover:text-ink"}`}>亏损 Top5</button>
                 </div>
-                <div className="mt-3 space-y-1.5 sm:mt-5 sm:space-y-2">
+                <div {...rankSwipe} className="mt-3 space-y-1.5 sm:mt-5 sm:space-y-2" style={{ touchAction: "pan-y pinch-zoom" }}>
                   {ranking.length === 0 && <p className="py-8 text-center text-sm text-muted">暂无数据</p>}
                   {ranking.map((row, index) => (
                     <div key={row.id} className="relative flex min-h-[52px] items-center overflow-hidden rounded-xl px-3 sm:min-h-16 sm:px-4">
@@ -902,7 +905,7 @@ export default function AssetPnlAnalysis({
                   <button type="button" data-capsule="off" aria-pressed={detailMode === "profit"} onClick={() => setDetailMode("profit")} className={`min-h-9 min-w-[74px] rounded-full px-3 text-[13px] font-semibold transition-colors sm:py-2.5 ${detailMode === "profit" ? "bg-up-bg text-up" : "text-muted hover:text-ink"}`}>盈利</button>
                   <button type="button" data-capsule="off" aria-pressed={detailMode === "loss"} onClick={() => setDetailMode("loss")} className={`min-h-9 min-w-[74px] rounded-full px-3 text-[13px] font-semibold transition-colors sm:py-2.5 ${detailMode === "loss" ? "bg-down-bg text-down" : "text-muted hover:text-ink"}`}>亏损</button>
                 </div>
-                <div className="mt-3 divide-y divide-edge sm:mt-5">
+                <div {...detailSwipe} className="mt-3 divide-y divide-edge sm:mt-5" style={{ touchAction: "pan-y pinch-zoom" }}>
                   {rows.length === 0 && <p className="py-8 text-center text-sm text-muted">暂无数据</p>}
                   {rows.map((row, index) => (
                     <div key={row.id} className="flex items-center gap-3 py-2.5 sm:gap-4 sm:py-3">

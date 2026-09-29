@@ -332,6 +332,19 @@ function fontHeaderFixture(ext) {
     assert(holdings.includes('mb-4 grid grid-cols-3 gap-1 rounded-[12px]'));
     assert(css.includes('.pk-reference-modal.modal-glass { width:100%; min-height:0;'));
   });
+  await test('mobile profit and loss lists switch only on a deliberate horizontal swipe', () => {
+    const { profitLossModeFromSwipe } = require(path.join(root, 'lib/useProfitLossSwipe.ts'));
+    const origin = { x: 180, y: 250 };
+    assert.equal(profitLossModeFromSwipe(origin, { x: 110, y: 260 }), 'loss');
+    assert.equal(profitLossModeFromSwipe(origin, { x: 245, y: 240 }), 'profit');
+    assert.equal(profitLossModeFromSwipe(origin, { x: 140, y: 250 }), null, 'short taps must not switch tabs');
+    assert.equal(profitLossModeFromSwipe(origin, { x: 100, y: 370 }), null, 'vertical scrolling must not switch tabs');
+    const calendar = fs.readFileSync(path.join(root, 'components/PnlCalendar.tsx'), 'utf8');
+    const analysis = fs.readFileSync(path.join(root, 'components/AssetPnlAnalysis.tsx'), 'utf8');
+    assert(calendar.includes('<div {...dayDetailSwipe} className="pnl-day-dialog-list'));
+    assert(analysis.includes('<div {...rankSwipe} className="mt-3 space-y-1.5'));
+    assert(analysis.includes('<div {...detailSwipe} className="mt-3 divide-y'));
+  });
   await test('mobile sheets avoid desktop row heights, native touch drag and nested fixed dialogs', () => {
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
     const calendar = fs.readFileSync(path.join(root, 'components/PnlCalendar.tsx'), 'utf8');

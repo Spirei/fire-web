@@ -7,6 +7,7 @@ import type { CalendarDayCell, CalendarDayRow, CalendarYearCell } from "@/lib/pn
 import { pnlDayDetailMode } from "@/lib/pnlCalendar";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import AppModal from "@/components/AppModal";
+import { useProfitLossSwipe } from "@/lib/useProfitLossSwipe";
 
 const CAL_MARKETS = ["全部", "美股", "港股", "A股"] as const;
 const CAL_MARKET_ICON: Record<string, string> = { 美股: "US", 港股: "HK", A股: "CN" };
@@ -133,6 +134,7 @@ export default function PnlCalendar({
   const [daySelection, setDaySelection] = useState<{ date: string; mode: "profit" | "loss" } | null>(null);
   const dayDetailMode = pnlDayDetailMode(dayDetail, daySelection);
   const setDayDetailMode = (mode: "profit" | "loss") => { if (dayDetail) setDaySelection({ date: dayDetail.date, mode }); };
+  const dayDetailSwipe = useProfitLossSwipe(setDayDetailMode);
 
   const shiftMonth = (delta: number) => {
     const m = month.m + delta;
@@ -290,7 +292,7 @@ export default function PnlCalendar({
                   <button type="button" data-capsule="off" aria-pressed={dayDetailMode === "loss"} onClick={() => setDayDetailMode("loss")} className={`min-h-9 min-w-[74px] rounded-full px-3 text-[13px] font-semibold leading-none transition-colors ${dayDetailMode === "loss" ? "bg-down-bg text-down" : "text-muted hover:text-ink"}`}>亏损</button>
                 </div>
               </div>
-              <div className="pnl-day-dialog-list mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1 pb-1">
+              <div {...dayDetailSwipe} className="pnl-day-dialog-list mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1 pb-1">
                 {shownRows.length === 0 && <p className="py-10 text-center text-sm text-muted">当日暂无{dayDetailMode === "profit" ? "盈利" : "亏损"}持仓</p>}
                 {(() => {
                   const maxRank = Math.max(...shownRows.map((r) => Math.abs(r.pnl)), 1);
