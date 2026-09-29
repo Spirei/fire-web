@@ -58,7 +58,7 @@ function FundDatePicker({ value, onChange, max }: { value: string; onChange: (va
     </button>
     {open && <>
       <button type="button" aria-label="关闭日期选择" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
-      <div className="absolute bottom-full right-0 z-50 mb-2 w-[286px] rounded-2xl border border-edge-strong bg-white p-3 shadow-pop dark:border-[#343d4d] dark:bg-[#1d2430]">
+      <div className="relative z-50 mt-2 w-full rounded-2xl border border-edge-strong bg-white p-3 shadow-pop dark:border-[#343d4d] dark:bg-[#1d2430] sm:absolute sm:bottom-full sm:right-0 sm:mb-2 sm:mt-0 sm:w-[286px]">
         <div className="mb-3 flex items-center justify-between px-1">
           <button type="button" onClick={() => setMonth(new Date(year, mon - 1, 1))} className="flex h-7 w-7 items-center justify-center rounded-full text-muted hover:bg-bg-gray hover:text-ink" aria-label="上个月">‹</button>
           <strong className="text-xs tabular-nums">{year} 年 {mon + 1} 月</strong>
@@ -127,7 +127,7 @@ export default function FundEntryDialog(props: Props) {
   if (typeof document === "undefined") return null;
   return createPortal(
     <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") props.onClose(); }} onMouseDown={(event) => { if (event.target === event.currentTarget) props.onClose(); }}>
-      <form onSubmit={(event) => { event.preventDefault(); if (!props.saving && amountValid) props.onSubmit(); }} role="dialog" aria-modal="true" aria-labelledby="fund-dialog-title" className="w-full max-w-[420px] overflow-visible rounded-[20px] border border-edge bg-white shadow-2xl dark:bg-[#1b2029]">
+      <form onSubmit={(event) => { event.preventDefault(); if (!props.saving && amountValid) props.onSubmit(); }} role="dialog" aria-modal="true" aria-labelledby="fund-dialog-title" className="max-h-[calc(100dvh-32px)] w-full max-w-[420px] overflow-y-auto rounded-[20px] border border-edge bg-white shadow-2xl dark:bg-[#1b2029] sm:max-h-none sm:overflow-visible">
         <div className="flex items-start justify-between border-b border-edge px-5 py-4">
           <div><h3 id="fund-dialog-title" className="text-base font-bold">新增资金记录</h3><p className="mt-1 text-[11px] text-muted">记录后将同步更新现金余额与账户净资产</p></div>
           <button type="button" onClick={props.onClose} className="flex h-8 w-8 items-center justify-center rounded-full border border-edge text-lg leading-none text-muted transition hover:bg-bg-gray hover:text-ink" aria-label="关闭">×</button>
@@ -136,9 +136,9 @@ export default function FundEntryDialog(props: Props) {
         <div className="space-y-4 px-5 py-5">
           <div>
             <span className="mb-2 block text-[11px] font-semibold text-muted">资金方向</span>
-            <div className="grid grid-cols-2 rounded-xl bg-bg-gray p-1 dark:bg-[#141a24]">
-              <button type="button" aria-pressed={props.direction > 0} onClick={() => props.setDirection(1)} className={`rounded-[9px] py-2.5 text-xs font-bold transition ${props.direction > 0 ? "bg-white text-up shadow-sm dark:bg-[#282f3b]" : "text-muted"}`}>＋ 资金流入</button>
-              <button type="button" aria-pressed={props.direction < 0} onClick={() => props.setDirection(-1)} className={`rounded-[9px] py-2.5 text-xs font-bold transition ${props.direction < 0 ? "bg-white text-down shadow-sm dark:bg-[#282f3b]" : "text-muted"}`}>－ 资金流出</button>
+            <div className="mx-auto grid w-fit grid-cols-2 gap-1 rounded-full border border-edge bg-bg-gray p-1 dark:bg-[#141a24] sm:w-full">
+              <button type="button" data-capsule="off" aria-pressed={props.direction > 0} onClick={() => props.setDirection(1)} className={`min-h-9 min-w-[112px] rounded-full px-3 text-xs font-semibold transition-colors ${props.direction > 0 ? "bg-up-bg text-up" : "text-muted hover:text-ink"}`}>＋ 资金流入</button>
+              <button type="button" data-capsule="off" aria-pressed={props.direction < 0} onClick={() => props.setDirection(-1)} className={`min-h-9 min-w-[112px] rounded-full px-3 text-xs font-semibold transition-colors ${props.direction < 0 ? "bg-down-bg text-down" : "text-muted hover:text-ink"}`}>－ 资金流出</button>
             </div>
           </div>
 

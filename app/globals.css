@@ -6171,7 +6171,7 @@ button.PhotoView-Slider__toolbarIcon {
 .dark .pk-reference-modal.modal-glass { --pk-bg:#1c2024; --pk-border:#353b41; --pk-border-strong:#505861; --pk-text:#f1f3f5; --pk-muted:#a4aab3; --pk-soft:#282d32; --pk-soft-hover:#30363d; --pk-primary:#2d88ff; --pk-primary-hover:#1877f2; --pk-link:#75b6ff; background:var(--pk-bg); border-color:var(--pk-border); color:var(--pk-text); }
 @media(max-width:600px) {
   .funds-panel > div:first-child h3 { flex:none; white-space:nowrap; }
-  .pk-reference-modal.modal-glass { width:100%; min-height:min(420px,calc(100dvh - 32px)); max-height:calc(100dvh - 32px); border-radius:24px; padding:58px 18px 24px; }
+  .pk-reference-modal.modal-glass { width:100%; min-height:0; max-height:calc(100dvh - 32px); border-radius:24px; padding:58px 18px 24px; }
   .pk-reference-modal input { font-size:16px; min-height:44px; }
   .pk-reference-modal .dialog-actions { flex-wrap:wrap; }
   .pk-intro-modal.pk-reference-modal { min-height:min(610px,calc(100dvh - 32px)); padding-top:226px; }
@@ -6305,6 +6305,14 @@ button.PhotoView-Slider__toolbarIcon {
 .fund-mobile-breakdown dd { text-align:right; font-size:14px; font-weight:550; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 @media(max-width:767px) { .fund-mobile-overview { display:block; } .fund-desktop-flow { display:none; } .funds-panel .fund-panel-footer { margin-top:0; } }
 .fund-calculation-notes + .fund-records-link { border-top:1px solid rgb(var(--site-ink) / .08); }
+@media(max-width:600px) {
+  .app-modal-panel { padding:20px; border-radius:22px; }
+  .app-modal-panel > div:first-child { margin-bottom:16px; }
+  .modal-with-header-actions > div:first-child { display:grid; grid-template-columns:minmax(0,1fr) 32px; align-items:start; gap:10px; }
+  .modal-with-header-actions > div:first-child > div:first-child { grid-column:1; grid-row:1; }
+  .modal-with-header-actions > div:first-child > div:nth-child(2) { grid-column:1 / -1; grid-row:2; width:100%; max-width:none; margin-left:0; }
+  .modal-with-header-actions > div:first-child > button:last-child { grid-column:2; grid-row:1; margin:0; }
+}
 .asset-mobile-actions.modal-glass { background:rgb(var(--site-surface)) !important; }
 .asset-mobile-action-list { overflow:hidden; border:1px solid rgb(var(--site-edge)); border-radius:16px; }
 .asset-mobile-action-list button { display:flex; align-items:center; justify-content:space-between; width:100%; min-height:52px; padding:12px 16px; color:rgb(var(--site-ink)); }

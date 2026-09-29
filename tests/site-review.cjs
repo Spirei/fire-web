@@ -311,6 +311,27 @@ function fontHeaderFixture(ext) {
     assert(calendar.includes('data-capsule="off" aria-pressed={dayDetailMode === "loss"}'));
     assert(calendar.includes('min-h-[50px] items-center overflow-hidden rounded-xl'));
   });
+  await test('mobile detail dialogs keep compact controls, readable lists and reachable actions', () => {
+    const modal = fs.readFileSync(path.join(root, 'components/AppModal.tsx'), 'utf8');
+    const pnl = fs.readFileSync(path.join(root, 'components/AssetPnlAnalysis.tsx'), 'utf8');
+    const funds = fs.readFileSync(path.join(root, 'components/FundsPanel.tsx'), 'utf8');
+    const entry = fs.readFileSync(path.join(root, 'components/FundEntryDialog.tsx'), 'utf8');
+    const holdings = fs.readFileSync(path.join(root, 'components/views/HoldingsView.tsx'), 'utf8');
+    const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    assert(modal.includes('app-modal-panel modal-glass'));
+    assert(modal.includes('max-h-[calc(100dvh-2rem)]'));
+    assert(modal.includes('headerActions ? "modal-with-header-actions"'));
+    assert(css.includes('.modal-with-header-actions > div:first-child { display:grid; grid-template-columns:minmax(0,1fr) 32px;'));
+    assert(pnl.includes('data-capsule="off" aria-pressed={rankMode === "profit"}'));
+    assert(pnl.includes('data-capsule="off" aria-pressed={detailMode === "loss"}'));
+    assert(funds.includes('fund-records-list -mx-3 max-h-[min(380px,42dvh)]'));
+    assert(funds.includes('className="sm:hidden"> · {item.stockCode}'));
+    assert(!funds.includes('h-[min(520px,62vh)]'));
+    assert(entry.includes('max-h-[calc(100dvh-32px)]'));
+    assert(entry.includes('sm:absolute sm:bottom-full'));
+    assert(holdings.includes('mb-4 grid grid-cols-3 gap-1 rounded-[12px]'));
+    assert(css.includes('.pk-reference-modal.modal-glass { width:100%; min-height:0;'));
+  });
   await test('mobile sheets avoid desktop row heights, native touch drag and nested fixed dialogs', () => {
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
     const calendar = fs.readFileSync(path.join(root, 'components/PnlCalendar.tsx'), 'utf8');

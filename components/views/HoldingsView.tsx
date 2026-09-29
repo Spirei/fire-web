@@ -989,13 +989,13 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
 
         {tradeRecord && (
           <AppModal title={`${editingOrder ? "更正订单" : "交易"} ${tradeRecord.name}`} desc={`${tradeRecord.code} · ${marketMeta(tradeRecord.market).label} · 当前持仓 ${fmtQty(tradeRecord.qty)}`} onClose={() => { setTradeRecord(null); setEditingOrder(null); }} size="md">
-            <div className="mb-4 grid grid-cols-2 gap-1 rounded-[12px] bg-bg-gray p-1">
+            <div className="mb-4 grid grid-cols-3 gap-1 rounded-[12px] bg-bg-gray p-1">
               {(["buy", "sell", "dividend"] as OrderSide[]).map((side) => (
                 <button
                   key={side}
                   type="button"
                   onClick={() => setTradeSide(side)}
-                  className={`rounded-[9px] py-2.5 text-sm font-bold transition-colors ${
+                  className={`min-h-9 rounded-[9px] px-1.5 py-2 text-[13px] font-semibold transition-colors ${
                     tradeSide === side
                       ? "border border-edge-strong bg-white shadow-sm " + (side === "buy" ? "text-up" : side === "sell" ? "text-down" : "text-brand-deep")
                       : "text-muted"

@@ -111,7 +111,7 @@ export default function AppModal({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={draggable ? { translate: `${offset.x}px ${offset.y}px` } : undefined}
-        className={`modal-glass relative w-full ${SIZES[size]} ${className} max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[26px] border border-white/60 p-6 shadow-[0_24px_64px_rgba(0,0,0,.22)] outline-none dark:border-white/10 dark:shadow-[0_24px_64px_rgba(0,0,0,.5)] sm:rounded-[28px] sm:p-7 ${
+        className={`app-modal-panel modal-glass relative w-full ${SIZES[size]} ${className} ${headerActions ? "modal-with-header-actions" : ""} max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[26px] border border-white/60 p-6 shadow-[0_24px_64px_rgba(0,0,0,.22)] outline-none dark:border-white/10 dark:shadow-[0_24px_64px_rgba(0,0,0,.5)] sm:rounded-[28px] sm:p-7 ${
           closing ? "modal-panel-closing" : "modal-panel"
         }`}
       >

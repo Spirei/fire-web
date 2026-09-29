@@ -877,14 +877,14 @@ export default function AssetPnlAnalysis({
             <section className="mt-5 grid gap-5 xl:grid-cols-2">
               <article className="card p-5">
                 <div className="flex items-center justify-between"><h2 className="text-base font-bold">全部盈亏排行榜</h2><span className="text-xs text-muted">更新至 {updatedAt.slice(5).replace("/", ".")}</span></div>
-                <div className="mt-5 grid grid-cols-2 gap-1 rounded-full bg-bg-gray p-1">
-                  <button aria-pressed={rankMode === "profit"} onClick={() => setRankMode("profit")} className={`rounded-full py-2.5 font-semibold ${rankMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利 Top5</button>
-                  <button aria-pressed={rankMode === "loss"} onClick={() => setRankMode("loss")} className={`rounded-full py-2.5 font-semibold ${rankMode === "loss" ? "bg-white shadow-sm" : "text-muted"}`}>亏损 Top5</button>
+                <div className="mt-4 inline-grid grid-cols-2 gap-1 rounded-full border border-edge bg-bg-gray p-1 sm:mt-5 sm:grid sm:w-full">
+                  <button type="button" data-capsule="off" aria-pressed={rankMode === "profit"} onClick={() => setRankMode("profit")} className={`min-h-9 min-w-[105px] rounded-full px-3 text-[13px] font-semibold transition-colors sm:py-2.5 ${rankMode === "profit" ? "bg-up-bg text-up" : "text-muted hover:text-ink"}`}>盈利 Top5</button>
+                  <button type="button" data-capsule="off" aria-pressed={rankMode === "loss"} onClick={() => setRankMode("loss")} className={`min-h-9 min-w-[105px] rounded-full px-3 text-[13px] font-semibold transition-colors sm:py-2.5 ${rankMode === "loss" ? "bg-down-bg text-down" : "text-muted hover:text-ink"}`}>亏损 Top5</button>
                 </div>
-                <div className="mt-5 space-y-2">
+                <div className="mt-3 space-y-1.5 sm:mt-5 sm:space-y-2">
                   {ranking.length === 0 && <p className="py-8 text-center text-sm text-muted">暂无数据</p>}
                   {ranking.map((row, index) => (
-                    <div key={row.id} className="relative flex min-h-16 items-center overflow-hidden rounded-xl px-4">
+                    <div key={row.id} className="relative flex min-h-[52px] items-center overflow-hidden rounded-xl px-3 sm:min-h-16 sm:px-4">
                       <div className={`absolute inset-y-0 right-0 rounded-xl ${rankMode === "profit" ? "bg-up-bg" : "bg-down-bg"}`} style={{ width: `${Math.max(20, Math.abs(row.pnl) / maxRank * 100)}%` }} />
                       <span className="relative mr-3 w-6 flex-none text-xs text-muted">{String(index + 1).padStart(2, "0")}</span>
                       <div className="relative flex min-w-0 flex-1 items-center gap-2">
@@ -898,14 +898,14 @@ export default function AssetPnlAnalysis({
 
               <article className="card p-5">
                 <div className="flex items-center justify-between"><h2 className="text-base font-bold">股票盈亏明细</h2><span className="text-xs text-muted">{rows.length} 只</span></div>
-                <div className="mt-5 grid grid-cols-2 gap-1 rounded-full bg-bg-gray p-1">
-                  <button aria-pressed={detailMode === "profit"} onClick={() => setDetailMode("profit")} className={`rounded-full py-2.5 font-semibold ${detailMode === "profit" ? "bg-white shadow-sm" : "text-muted"}`}>盈利</button>
-                  <button aria-pressed={detailMode === "loss"} onClick={() => setDetailMode("loss")} className={`rounded-full py-2.5 font-semibold ${detailMode === "loss" ? "bg-white shadow-sm" : "text-muted"}`}>亏损</button>
+                <div className="mt-4 inline-grid grid-cols-2 gap-1 rounded-full border border-edge bg-bg-gray p-1 sm:mt-5 sm:grid sm:w-full">
+                  <button type="button" data-capsule="off" aria-pressed={detailMode === "profit"} onClick={() => setDetailMode("profit")} className={`min-h-9 min-w-[74px] rounded-full px-3 text-[13px] font-semibold transition-colors sm:py-2.5 ${detailMode === "profit" ? "bg-up-bg text-up" : "text-muted hover:text-ink"}`}>盈利</button>
+                  <button type="button" data-capsule="off" aria-pressed={detailMode === "loss"} onClick={() => setDetailMode("loss")} className={`min-h-9 min-w-[74px] rounded-full px-3 text-[13px] font-semibold transition-colors sm:py-2.5 ${detailMode === "loss" ? "bg-down-bg text-down" : "text-muted hover:text-ink"}`}>亏损</button>
                 </div>
-                <div className="mt-5 divide-y divide-edge">
+                <div className="mt-3 divide-y divide-edge sm:mt-5">
                   {rows.length === 0 && <p className="py-8 text-center text-sm text-muted">暂无数据</p>}
                   {rows.map((row, index) => (
-                    <div key={row.id} className="flex items-center gap-4 py-3">
+                    <div key={row.id} className="flex items-center gap-3 py-2.5 sm:gap-4 sm:py-3">
                       <span className="w-6 text-xs text-muted">{String(index + 1).padStart(2, "0")}</span>
                       <PnlStockIcon src={stockIcons[`${row.market.toUpperCase()}:${row.code.toUpperCase()}`]} name={row.name} market={row.market} code={row.code} />
                       <div className="min-w-0 flex-1"><AdaptivePnlIdentity row={row} /></div>
