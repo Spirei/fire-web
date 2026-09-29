@@ -6381,8 +6381,8 @@ button.PhotoView-Slider__toolbarIcon {
   .asset-mobile-trade-button { display:block; width:100%; min-height:44px; margin-top:16px; border:1px solid rgb(var(--site-edge)); border-radius:14px; font-size:14px; font-weight:600; }
   .asset-mobile-trade-button:active { background:rgb(var(--site-ink) / .06); }
 }
-/* 单列与触控平板：当日盈亏并入总资产区，现金与持仓两项并排展示。 */
-@media (max-width:1279px), (any-pointer:coarse) {
+/* 窗口宽度只决定紧凑排版；宽屏触控笔记本不能因此套用平板布局。 */
+@media (max-width:1279px) {
   .asset-account-highlight { display:grid; grid-template-columns:minmax(0,1fr) max-content; align-items:stretch; column-gap:10px; margin-top:4px; padding-bottom:18px; }
   .asset-account-primary { display:flex; min-width:0; flex-direction:column; justify-content:space-between; }
   .asset-account-primary-label { min-height:32px; }

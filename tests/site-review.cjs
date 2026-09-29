@@ -75,9 +75,9 @@ function fontHeaderFixture(ext) {
     const tablet = fs.readFileSync(path.join(root,'styles/tablet.css'),'utf8');
     const shell = fs.readFileSync(path.join(root,'components/RecordsApp.tsx'),'utf8');
     assert(desktop.includes('@media (min-width: 1024px) and (max-width: 1279px)'));
-    assert(desktop.includes('.records-app[data-tablet-sidebar-collapsed="true"] > .fire-sidebar { width:72px; }'));
-    assert(desktop.includes('.records-app[data-tablet-sidebar-collapsed="true"] .fire-sidebar-label'));
-    assert(desktop.includes('.records-app[data-tablet-sidebar-side="right"] > .fire-sidebar { order:2; }'));
+    assert(desktop.includes('.records-app[data-tablet-device="true"][data-tablet-sidebar-collapsed="true"] > .fire-sidebar { width:72px; }'));
+    assert(desktop.includes('.records-app[data-tablet-device="true"][data-tablet-sidebar-collapsed="true"] .fire-sidebar-label'));
+    assert(desktop.includes('.records-app[data-tablet-device="true"][data-tablet-sidebar-side="right"] > .fire-sidebar { order:2; }'));
     assert(shell.includes('usePersistedState("fire:tablet-sidebar-collapsed", false)'));
     assert(shell.includes('aria-label="平板侧栏设置"') && shell.includes('移到右侧'));
     assert(!desktop.includes('.fire-sidebar-item > span {'), 'custom image wrapper must not be hidden with the text');
@@ -90,6 +90,43 @@ function fontHeaderFixture(ext) {
     assert(tablet.includes('max-width:560px; height:auto; min-height:0; max-height:calc(100dvh - 96px);'));
     assert(tablet.includes('.sc-detail-dialog-head { min-height:64px;'));
     assert(!tablet.includes('@media (max-width: 767px)'), 'phone layout remains owned by mobile.css');
+  });
+  await test('tablet identity is independent of viewport width and secondary touch support', () => {
+    const { isTabletDevice } = require(path.join(root, 'lib/deviceIdentity.ts'));
+    const identity = (userAgent, platform, maxTouchPoints) => ({ userAgent, platform, maxTouchPoints });
+    const windows = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36';
+    for (const touchPoints of [0, 1, 5, 10]) {
+      assert.equal(isTabletDevice(identity(windows, 'Win32', touchPoints)), false, 'Windows touch laptops remain desktop');
+    }
+    assert.equal(isTabletDevice(identity('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7)', 'MacIntel', 0)), false);
+    assert.equal(isTabletDevice(identity('Mozilla/5.0 (X11; Linux x86_64)', 'Linux x86_64', 5)), false);
+    assert.equal(isTabletDevice(identity('Mozilla/5.0 (X11; CrOS x86_64)', 'Linux x86_64', 10)), false);
+    assert.equal(isTabletDevice(identity('Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)', 'iPad', 5)), true);
+    assert.equal(isTabletDevice(identity('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)', 'MacIntel', 5)), true, 'iPad desktop-site and trackpad mode remain tablet');
+    assert.equal(isTabletDevice(identity('Mozilla/5.0 (Linux; Android 15; SM-X910) AppleWebKit/537.36 Chrome/140.0 Safari/537.36', 'Linux armv8l', 10)), true);
+    assert.equal(isTabletDevice(identity('Mozilla/5.0 (Linux; Android 15; Pixel) AppleWebKit/537.36 Chrome/140.0 Mobile Safari/537.36', 'Linux armv8l', 5)), false);
+    assert.equal(isTabletDevice(identity('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', 'iPhone', 5)), false);
+    const shell = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
+    const viewport = fs.readFileSync(path.join(root, 'lib/useDesktopViewport.ts'), 'utf8');
+    const desktop = fs.readFileSync(path.join(root, 'styles/desktop.css'), 'utf8');
+    const globals = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    assert(shell.includes('data-tablet-device={tabletDevice ? "true" : "false"}'));
+    assert(viewport.includes('!tabletSnapshot() && window.matchMedia(FOUR_DOOR_QUERY).matches'));
+    assert(viewport.includes('(hover: hover) and (pointer: fine)'));
+    assert(!viewport.includes('any-pointer'), 'secondary touch does not disable desktop decoration');
+    assert(!desktop.includes('any-pointer'));
+    assert(!globals.includes('(any-pointer:coarse)'), 'asset card does not equate touch support with tablet layout');
+    const postcss = require('postcss');
+    postcss.parse(desktop).walkRules(rule => {
+      if (rule.selector.includes('.fire-sidebar-tablet-controls')) {
+        assert(rule.selector.includes('[data-tablet-device="true"]'), 'all tablet control rules require tablet identity');
+      }
+    });
+    const React = require('react');
+    const { renderToStaticMarkup } = require('react-dom/server');
+    const { useTabletDevice, useFourDoorViewport } = require(path.join(root, 'lib/useDesktopViewport.ts'));
+    function Probe() { return React.createElement('span', null, `${useTabletDevice()}:${useFourDoorViewport()}`); }
+    assert.equal(renderToStaticMarkup(React.createElement(Probe)), '<span>false:false</span>', 'SSR never reads navigator or starts tablet-only resources');
   });
   await test('selected capsule counts inherit their foreground without changing hydrated markup', () => {
     const cards = fs.readFileSync(path.join(root, 'components/views/CardLibraryView.tsx'), 'utf8');

@@ -1,4 +1,20 @@
 /* Tablet and medium split-view layout. */
+/* Wide tablets keep the compact asset card even with an attached mouse/trackpad. */
+@media (min-width:1280px) {
+  .records-app[data-tablet-device="true"] .asset-account-highlight { display:grid; grid-template-columns:minmax(0,1fr) max-content; align-items:stretch; column-gap:10px; margin-top:4px; padding-bottom:18px; }
+  .records-app[data-tablet-device="true"] .asset-account-primary { display:flex; min-width:0; flex-direction:column; justify-content:space-between; }
+  .records-app[data-tablet-device="true"] .asset-account-primary-label { min-height:32px; }
+  .records-app[data-tablet-device="true"] .asset-account-total { padding:0; }
+  .records-app[data-tablet-device="true"] .asset-account-amount { font-size:32px; }
+  .records-app[data-tablet-device="true"] .asset-account-day { display:flex; flex-direction:column; align-items:flex-end; justify-content:space-between; gap:10px; min-width:0; min-height:76px; padding:1px 9px 10px; border:0; white-space:nowrap; }
+  .records-app[data-tablet-device="true"] .asset-account-day strong { font-size:23px; line-height:1.25; }
+  .records-app[data-tablet-device="true"] .asset-account-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); column-gap:10px; border-top:1px solid rgb(var(--site-edge)); }
+  .records-app[data-tablet-device="true"] .asset-account-metrics > * { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:5px; min-width:0; min-height:76px; padding:12px 0 2px; border-top:0; }
+  .records-app[data-tablet-device="true"] .asset-account-metrics > * > span { flex:initial; white-space:nowrap; font-size:14px; }
+  .records-app[data-tablet-device="true"] .asset-account-metrics strong { margin:0; font-size:18px; line-height:1.25; text-align:left; }
+  .records-app[data-tablet-device="true"] .asset-pnl-shortcut { width:auto; }
+}
+
 @media (min-width: 768px) and (max-width: 1023px) {
   .app-shell-main { padding: 28px 20px 40px; }
   .records-app { display: block; width: 100%; }

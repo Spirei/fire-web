@@ -18,27 +18,31 @@
   .fire-sidebar-panel .four-door-anchor { display:none; }
 }
 
-/* Tablet landscape: show the labeled sidebar by default; keep both controls anchored below the list. */
-@media (min-width: 1024px) and (max-width: 1279px), (min-width: 1280px) and (any-pointer: coarse) {
-  .fire-sidebar-panel .four-door-anchor { display:none; }
-  .app-shell-main .fire-sidebar { display:flex; flex-direction:column; }
-  .fire-sidebar-panel { flex:1; height:auto; min-height:0; padding-bottom:12px; }
-  .fire-sidebar-tablet-controls { display:flex; flex:none; flex-direction:column; gap:4px; padding:8px; border-top:1px solid rgb(var(--site-edge)); }
-  .fire-sidebar-tablet-controls button { display:flex; min-height:40px; align-items:center; gap:10px; border-radius:10px; padding:0 10px; color:rgb(var(--site-ink) / .68); font-size:12px; font-weight:550; text-align:left; }
-  .fire-sidebar-tablet-controls button:hover { background:rgb(var(--site-ink) / .06); color:rgb(var(--site-ink)); }
-  .fire-sidebar-tablet-controls button:focus-visible { outline:2px solid rgb(var(--site-accent)); outline-offset:2px; }
-  .fire-sidebar-tablet-controls svg { width:18px; height:18px; flex:none; }
-  .records-app[data-tablet-sidebar-side="right"] > .fire-sidebar { order:2; }
-  .records-app[data-tablet-sidebar-collapsed="true"] > .fire-sidebar { width:72px; }
-  .records-app[data-tablet-sidebar-collapsed="true"] .fire-sidebar-panel { padding:12px 8px; }
-  .records-app[data-tablet-sidebar-collapsed="true"] .fire-sidebar-panel > * { flex-shrink:0; }
-  .records-app[data-tablet-sidebar-collapsed="true"] .fire-sidebar-panel .four-door-anchor,
-  .records-app[data-tablet-sidebar-collapsed="true"] .fire-sidebar-section-label { display:none; }
-  .records-app[data-tablet-sidebar-collapsed="true"] .fire-sidebar-item { justify-content:center; gap:0; min-height:44px; padding-inline:0; }
+/* Device identity, not window width or secondary touch support, owns tablet controls. */
+@media (min-width: 1024px) {
+  .records-app[data-tablet-device="true"] .four-door-anchor { display:none; }
+  .app-shell-main .records-app[data-tablet-device="true"] .fire-sidebar { display:flex; flex-direction:column; }
+  .records-app[data-tablet-device="true"] .fire-sidebar-panel { flex:1; height:auto; min-height:0; padding-bottom:12px; }
+  .records-app[data-tablet-device="true"] .fire-sidebar-tablet-controls { display:flex; flex:none; flex-direction:column; gap:4px; padding:8px; border-top:1px solid rgb(var(--site-edge)); }
+  .records-app[data-tablet-device="true"] .fire-sidebar-tablet-controls button { display:flex; min-height:40px; align-items:center; gap:10px; border-radius:10px; padding:0 10px; color:rgb(var(--site-ink) / .68); font-size:12px; font-weight:550; text-align:left; }
+  .records-app[data-tablet-device="true"] .fire-sidebar-tablet-controls button:hover { background:rgb(var(--site-ink) / .06); color:rgb(var(--site-ink)); }
+  .records-app[data-tablet-device="true"] .fire-sidebar-tablet-controls svg { width:18px; height:18px; flex:none; }
+  .records-app[data-tablet-device="true"][data-tablet-sidebar-side="right"] > .fire-sidebar { order:2; }
+  .records-app[data-tablet-device="true"][data-tablet-sidebar-collapsed="true"] > .fire-sidebar { width:72px; }
+  .records-app[data-tablet-device="true"][data-tablet-sidebar-collapsed="true"] .fire-sidebar-panel { padding:12px 8px; }
+  .records-app[data-tablet-device="true"][data-tablet-sidebar-collapsed="true"] .fire-sidebar-panel > * { flex-shrink:0; }
+  .records-app[data-tablet-device="true"][data-tablet-sidebar-collapsed="true"] .fire-sidebar-panel .four-door-anchor,
+  .records-app[data-tablet-device="true"][data-tablet-sidebar-collapsed="true"] .fire-sidebar-section-label { display:none; }
+  .records-app[data-tablet-device="true"][data-tablet-sidebar-collapsed="true"] .fire-sidebar-item { justify-content:center; gap:0; min-height:44px; padding-inline:0; }
   /* Labels remain accessible, but only icons occupy the narrow rail. */
-  .records-app[data-tablet-sidebar-collapsed="true"] .fire-sidebar-label { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-  .records-app[data-tablet-sidebar-collapsed="true"] .fire-sidebar-tablet-controls button { justify-content:center; padding:0; }
-  .records-app[data-tablet-sidebar-collapsed="true"] .fire-sidebar-tablet-controls button span { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+  .records-app[data-tablet-device="true"][data-tablet-sidebar-collapsed="true"] .fire-sidebar-label { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+  .records-app[data-tablet-device="true"][data-tablet-sidebar-collapsed="true"] .fire-sidebar-tablet-controls button { justify-content:center; padding:0; }
+  .records-app[data-tablet-device="true"][data-tablet-sidebar-collapsed="true"] .fire-sidebar-tablet-controls button span { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+}
+
+/* Match the primary-input gate used before mounting the decorative navigator. */
+@media (hover: none), (pointer: coarse), (pointer: none) {
+  .fire-sidebar-panel .four-door-anchor { display:none; }
 }
 
 /* Preserve the viewport budget at short heights instead of shrinking the whole UI. */

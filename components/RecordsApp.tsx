@@ -30,7 +30,7 @@ import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import WorkspaceNavigation from "@/components/WorkspaceNavigation";
 import type { WatchGroup } from "@/lib/watchGroups";
-import { useDesktopViewport, useFourDoorViewport } from "@/lib/useDesktopViewport";
+import { useDesktopViewport, useFourDoorViewport, useTabletDevice } from "@/lib/useDesktopViewport";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { preloadView } from "@/lib/viewPreload";
 import { mobileWorkspaceGroups } from "@/lib/workspaceNavigation";
@@ -143,6 +143,7 @@ export default function RecordsApp({
   const router = useRouter();
   const desktopViewport = useDesktopViewport();
   const fourDoorViewport = useFourDoorViewport();
+  const tabletDevice = useTabletDevice();
   const [user] = useState<User>(initialUser);
   const [records, setRecords] = useState<StockRecord[]>(initialRecords);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
@@ -881,7 +882,7 @@ export default function RecordsApp({
   // 实测把「繁體」改成了「繁体」），React 一比对就报 Hydration failed。站内的繁简 / 英文切换不受影响。
   return (
     <>
-    <div translate="no" data-tablet-sidebar-collapsed={tabletSidebarCollapsed === true ? "true" : "false"} data-tablet-sidebar-side={tabletSidebarSide === "right" ? "right" : "left"} className={`records-app notranslate flex items-start${activeTab === "settings" ? " is-settings" : ""}`}>
+    <div translate="no" data-tablet-device={tabletDevice ? "true" : "false"} data-tablet-sidebar-collapsed={tabletSidebarCollapsed === true ? "true" : "false"} data-tablet-sidebar-side={tabletSidebarSide === "right" ? "right" : "left"} className={`records-app notranslate flex items-start${activeTab === "settings" ? " is-settings" : ""}`}>
       {/* 桌面侧边导航 */}
       <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block ${activeTab === "settings" ? "is-settings" : ""}`}>
         <nav id="fire-desktop-nav" ref={desktopNavRef} onScroll={updateSidebarScroll} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
