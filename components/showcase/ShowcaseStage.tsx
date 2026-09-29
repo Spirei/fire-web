@@ -1087,7 +1087,7 @@ export default function ShowcaseStage({
 
           <div className="sc-hud">
             <div className="sc-row sc-backoffice">
-              <Link href="/records" prefetch={false} className="sc-admin-link" aria-label="进入后台" title="进入后台">
+              <Link href="/records" prefetch={false} className="sc-tool sc-admin-link" aria-label="进入后台" title="进入后台">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <rect x="3" y="3" width="7" height="7" rx="1.5" />
                   <rect x="14" y="3" width="7" height="7" rx="1.5" />

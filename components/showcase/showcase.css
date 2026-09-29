@@ -179,32 +179,15 @@ html:has(.showcase) body {
 
 .sc-backoffice {
   left: max(3.4vw, calc(env(safe-area-inset-left) + 12px));
-  top: max(3.2vh, calc(env(safe-area-inset-top) + 12px));
+  top: 3.2vh;
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 2px;
 }
 .sc-admin-link {
   pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--sc-line);
-  border-radius: 14px;
-  background: var(--sc-panel-hover);
-  color: var(--sc-ink);
   text-decoration: none;
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  transition: color .2s ease, border-color .2s ease, transform .16s ease;
-}
-.sc-admin-link svg { width: 21px; height: 21px; }
-.sc-admin-link:hover { border-color: var(--sc-hover-line); color: var(--sc-ink-strong); }
-.sc-admin-link:active { transform: scale(.95); }
-@media (max-width: 640px) {
-  .sc-backoffice { top: max(12px, calc(env(safe-area-inset-top) + 12px)); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .sc-admin-link { transition: none; }
 }
 
 /* 顶部右侧工具条（深浅色切换） */
@@ -1557,14 +1540,14 @@ html:has(.showcase) body {
 .sc-inspecting .sc-tools > button { display: none !important; }
 .sc-inspecting .sc-tools { z-index: 30; }
 
-/* 右上角改为一条轻量工具栏：去掉三个各自悬浮的胶囊，与左右轨道、底部贴边标签统一。 */
+/* 左右顶部入口共用轻量工具样式，后台入口不再单独使用玻璃底框。 */
 .showcase .sc-tools {
   align-items: center;
   gap: 3px;
   padding: 0 2px 5px;
 }
 .showcase .sc-tools::after { content: none; }
-.showcase .sc-tools .sc-tool {
+.showcase :is(.sc-tools, .sc-backoffice) .sc-tool {
   min-width: 31px;
   width: 31px;
   height: 31px;
@@ -1597,9 +1580,9 @@ html:has(.showcase) body {
   color: var(--sc-mute);
 }
 .showcase .sc-tools .sc-glass-trigger > svg { width: 19px; height: 19px; }
-.showcase .sc-tools .sc-tool:hover,
-.showcase .sc-tools .sc-tool:focus-visible,
-.showcase .sc-tools .sc-tool.on {
+.showcase :is(.sc-tools, .sc-backoffice) .sc-tool:hover,
+.showcase :is(.sc-tools, .sc-backoffice) .sc-tool:focus-visible,
+.showcase :is(.sc-tools, .sc-backoffice) .sc-tool.on {
   color: var(--sc-ink-strong);
   background: transparent !important;
 }
@@ -1607,12 +1590,17 @@ html:has(.showcase) body {
   color: var(--sc-ink-strong);
   background: var(--sc-panel-hover) !important;
 }
-.showcase .sc-tools .sc-tool:active { opacity: .7; }
+.showcase :is(.sc-tools, .sc-backoffice) .sc-tool:active { opacity: .7; }
 @media (max-width: 700px) {
   .showcase .sc-tools .sc-glass-trigger { width: 42px; min-width: 42px; height: 42px; min-height: 42px; }
+  .sc-backoffice { height: 42px; }
 }
 @media (pointer: coarse) {
   .showcase .sc-tools .sc-glass-trigger { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+  .sc-backoffice { height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .showcase :is(.sc-tools, .sc-backoffice) .sc-tool { transition: none; }
 }
 
 /* 首页胶囊沿用选中描边，不叠灰色材质阴影；触屏点击由文字与底线反馈。 */
@@ -1711,7 +1699,8 @@ html:has(.showcase) body {
   .sc-headline { top: max(14vh, calc(env(safe-area-inset-top) + 78px)); }
   .sc-copy { top: max(25vh, calc(env(safe-area-inset-top) + 154px)); max-width: 48vw; }
   .sc-tele { top: max(8.5vh, calc(env(safe-area-inset-top) + 48px)); }
-  .sc-tools { top: max(12px, env(safe-area-inset-top)); }
+  .sc-tools, .sc-backoffice { top: max(12px, env(safe-area-inset-top)); }
+  .sc-backoffice { left: max(4vw, calc(env(safe-area-inset-left) + 12px)); }
 
   /* 起步键落到独立的底部操作区，别压住车身、倒影和圆盘。 */
   .sc-ctr { bottom: max(52px, calc(env(safe-area-inset-bottom) + 42px)); }
