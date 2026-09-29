@@ -14,6 +14,7 @@ import CurrencyFlag from "@/components/CurrencyFlag";
 import CardWalletStack, { type WalletCard, type WalletCardDetails } from "@/components/CardWalletStack";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
+import { useMobileHorizontalSwipe } from "@/lib/useMobileHorizontalSwipe";
 import { useRates } from "@/lib/useRates";
 import { REGION_CURRENCY, currencySymbol } from "@/lib/cardCurrencies";
 import { searchKey } from "@/lib/hanConvert";
@@ -464,6 +465,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   /** mine = 我的卡；all = 全量卡面库。记住上次选择，并通过 cookie 保证刷新首帧不闪回默认。 */
   const [storedMode, setMode] = usePersistedState<"mine" | "all">("fire:card-library-mode", "mine");
   const mode: "mine" | "all" = storedMode === "all" ? "all" : "mine";
+  const cardModeSwipe = useMobileHorizontalSwipe((direction) => setMode(direction === "left" ? "all" : "mine"));
   const [updatedAt, setUpdatedAt] = useState<string | null>(() => initial?.updatedAt ?? null);
   const [hint, setHint] = useState("");
   const [loading, setLoading] = useState(!initial);
@@ -1971,6 +1973,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         )}
       </div>
 
+      <div {...cardModeSwipe} className="space-y-4" style={{ touchAction: "pan-y pinch-zoom" }}>
       {loading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, index) => (
@@ -2135,6 +2138,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         )}
         </>
       )}
+      </div>
 
       {/* 新增卡片：素材库里没有的卡，上传卡面 + 填信息新建（自动进我的卡 + 素材库） */}
       {/* 弹层一律 portal 到 body：挂在应用树里会被祖先的层叠上下文困住，

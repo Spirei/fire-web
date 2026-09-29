@@ -19,7 +19,7 @@ import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCalendarCompact, fmtMoneyCompac
 import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses, peekPortfolioBundle } from "@/lib/portfolioSeries";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
-import { useProfitLossSwipe } from "@/lib/useProfitLossSwipe";
+import { useMobileHorizontalSwipe } from "@/lib/useMobileHorizontalSwipe";
 
 
 type PnlRow = {
@@ -194,8 +194,8 @@ export default function AssetPnlAnalysis({
   const [chartTab, setChartTab] = useState<"return" | "asset">("return");
   const [rankMode, setRankMode] = useState<"profit" | "loss">("profit");
   const [detailMode, setDetailMode] = useState<"profit" | "loss">("profit");
-  const rankSwipe = useProfitLossSwipe(setRankMode);
-  const detailSwipe = useProfitLossSwipe(setDetailMode);
+  const rankSwipe = useMobileHorizontalSwipe((direction) => setRankMode(direction === "left" ? "loss" : "profit"));
+  const detailSwipe = useMobileHorizontalSwipe((direction) => setDetailMode(direction === "left" ? "loss" : "profit"));
   // 盈亏总额卡片：货币（与资产分析页共用 key）、基准（多市场）、加权
   const { currency: displayCurrency, setCurrency: setDisplayCurrency } = useDisplayCurrency();
   // 基准 / 加权方式：走 usePersistedState（自动镜像到 cookie），刷新首帧就是用户选的那个，不会先闪默认

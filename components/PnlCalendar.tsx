@@ -7,7 +7,7 @@ import type { CalendarDayCell, CalendarDayRow, CalendarYearCell } from "@/lib/pn
 import { pnlDayDetailMode } from "@/lib/pnlCalendar";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import AppModal from "@/components/AppModal";
-import { useProfitLossSwipe } from "@/lib/useProfitLossSwipe";
+import { useMobileHorizontalSwipe } from "@/lib/useMobileHorizontalSwipe";
 
 const CAL_MARKETS = ["全部", "美股", "港股", "A股"] as const;
 const CAL_MARKET_ICON: Record<string, string> = { 美股: "US", 港股: "HK", A股: "CN" };
@@ -134,7 +134,7 @@ export default function PnlCalendar({
   const [daySelection, setDaySelection] = useState<{ date: string; mode: "profit" | "loss" } | null>(null);
   const dayDetailMode = pnlDayDetailMode(dayDetail, daySelection);
   const setDayDetailMode = (mode: "profit" | "loss") => { if (dayDetail) setDaySelection({ date: dayDetail.date, mode }); };
-  const dayDetailSwipe = useProfitLossSwipe(setDayDetailMode);
+  const dayDetailSwipe = useMobileHorizontalSwipe((direction) => setDayDetailMode(direction === "left" ? "loss" : "profit"));
 
   const shiftMonth = (delta: number) => {
     const m = month.m + delta;
