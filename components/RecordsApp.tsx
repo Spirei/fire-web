@@ -23,6 +23,7 @@ import {
 import { showToast } from "@/lib/toast";
 import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
+import { applyQuoteBatches, quoteInstrumentKey, readQuoteBatches, restoreQuoteSnapshot } from "@/lib/quoteBatches";
 import SettingsWindow from "@/components/SettingsWindow";
 import { primeFlagIconCache, primeMarketIconCache, primeNavIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
 import { pickStockIcon } from "@/lib/stockIconKey";
@@ -146,14 +147,17 @@ export default function RecordsApp({
   const tabletDevice = useTabletDevice();
   const [user] = useState<User>(initialUser);
   const [records, setRecords] = useState<StockRecord[]>(initialRecords);
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const quotesRef = useRef<Record<string, Quote>>({});
-  const [valuationReady, setValuationReady] = useState(false);
+  const [valuationReady, setValuationReady] = useState(() => !initialRecords.some(record => Number(record.qty) > 0 && record.code.trim()));
   const [quoteAt, setQuoteAt] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const refreshingRef = useRef(false);
+  const quoteRequestRef = useRef<AbortController | null>(null);
   const initialQuoteLoadRef = useRef(false);
-  const loadedQuoteIdsRef = useRef(new Set<string>());
+  const loadedQuoteKeysRef = useRef(new Set<string>());
   const quoteCacheKeyRef = useRef("");
   const desktopNavRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -352,14 +356,15 @@ export default function RecordsApp({
     const quoteCacheKey = `fire:quotes:v4:${initialUser.id}`;
     quoteCacheKeyRef.current = quoteCacheKey;
     try {
-      const cached = JSON.parse(localStorage.getItem(quoteCacheKey) || "null") as { updatedAt?: number; quotes?: Record<string, Quote> } | null;
+      const cached = JSON.parse(localStorage.getItem(quoteCacheKey) || "null") as { updatedAt?: number; quotes?: Record<string, Quote>; instruments?: Record<string, string> } | null;
       // 完整成功快照不因时间过期而丢弃：它只承担刷新首帧兜底，挂载后仍会立即请求最新行情。
       // 数据库里的录入价通常更旧，回退到它会让总资产先闪出完全错误的中间值。
       if (cached?.quotes) {
-        quotesRef.current = cached.quotes;
-        setQuotes(cached.quotes);
-        const positionIds = records.filter((record) => Number(record.qty) > 0).map((record) => record.id);
-        setValuationReady(positionIds.every((id) => Number.isFinite(Number(cached.quotes?.[id]?.price))));
+        const validQuotes = restoreQuoteSnapshot(cached.quotes, cached.instruments, records);
+        quotesRef.current = validQuotes;
+        setQuotes(validQuotes);
+        const positionIds = records.filter((record) => Number(record.qty) > 0 && record.code.trim()).map((record) => record.id);
+        setValuationReady(positionIds.every((id) => Number.isFinite(Number(validQuotes[id]?.price))));
       }
     } catch {
       /* 缓存损坏时由行情刷新覆盖 */
@@ -371,71 +376,59 @@ export default function RecordsApp({
     if ((refreshingRef.current) || records.length === 0 || (!options?.force && document.hidden)) return;
     if (options?.initialOnly && initialQuoteLoadRef.current) return;
     const activeMarkets = activeQuoteMarkets(records.map((record) => record.market));
-    const quoteRecords = records.filter((record) =>
-      options?.force || !initialQuoteLoadRef.current || !loadedQuoteIdsRef.current.has(record.id) || (!options?.missingOnly && activeMarkets.has(record.market.toUpperCase()))
-    );
+    const quoteRecords = records.filter((record) => record.code.trim() && (
+      options?.force || !initialQuoteLoadRef.current || !loadedQuoteKeysRef.current.has(quoteInstrumentKey(record)) || (!options?.missingOnly && activeMarkets.has(record.market.toUpperCase()))
+    ));
     // 首次进入拉取全部市场的收盘快照；后续仅轮询当前处于盘前/盘中/盘后的市场。
     if (quoteRecords.length === 0) return;
     refreshingRef.current = true;
+    const controller = new AbortController();
+    quoteRequestRef.current = controller;
     setRefreshing(true);
     try {
-      const data = { quotes: {} as Record<string, Quote> };
-      // The API accepts at most 100 symbols; imports may add up to 2000.
-      for (let offset = 0; offset < quoteRecords.length; offset += 100) {
-        const res = await fetch("/api/quotes", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items: quoteRecords.slice(offset, offset + 100).map(r => ({ id: r.id, market: r.market, code: r.code })) })
-        });
-        if (!res.ok) continue;
-        const result = await res.json();
-        if (result.quotes) Object.assign(data.quotes, result.quotes);
-      }
-      // An empty response is not a successful price update.
-      if (!Object.keys(data.quotes).length) return;
-      if (data.quotes) {
-        const merged = { ...quotesRef.current };
-        Object.entries(data.quotes as Record<string, Quote>).forEach(([id, quote]) => {
-          merged[id] = quote;
-        });
-        // 本次请求了但未返回的标的：删除旧行情，资产估值回退 records.price，
-        // 当日盈亏回退为 0；未参与本次请求的休市标继续保留已有行情。
-        quoteRecords.forEach((r) => {
-          if (!data.quotes[r.id]) delete merged[r.id];
-        });
-        const positionIds = records.filter((record) => Number(record.qty) > 0).map((record) => record.id);
-        const completeSnapshot = positionIds.every((id) => {
-          const quote = merged[id];
-          return Boolean(quote) && Number.isFinite(Number(quote.price));
-        });
-        quotesRef.current = merged;
-        setQuotes(merged);
-        setValuationReady(completeSnapshot);
-        try {
-          // 只缓存完整后端快照，避免下次刷新先恢复一份缺股的资产数据。
-          if (completeSnapshot && quoteCacheKeyRef.current) {
-            localStorage.setItem(quoteCacheKeyRef.current, JSON.stringify({ updatedAt: Date.now(), quotes: merged }));
-          }
-        } catch {
-          /* localStorage 不可用时不影响实时行情 */
+      const result = await readQuoteBatches(quoteRecords.map(r => ({ id: r.id, market: r.market, code: r.code })), controller.signal);
+      // 无有效返回不刷新时间，也不把旧值当作本次新行情。
+      if (!Object.keys(result.quotes).length) return;
+      const currentRecords = recordsRef.current;
+      const merged = applyQuoteBatches(quotesRef.current, result, quoteRecords, currentRecords);
+      const positionIds = currentRecords.filter((record) => Number(record.qty) > 0 && record.code.trim()).map((record) => record.id);
+      const completeSnapshot = positionIds.every((id) => {
+        const quote = merged[id];
+        return Boolean(quote) && Number.isFinite(Number(quote.price));
+      });
+      quotesRef.current = merged;
+      setQuotes(merged);
+      setValuationReady(completeSnapshot);
+      try {
+        // 只缓存完整后端快照，避免下次刷新先恢复一份缺股的资产数据。
+        if (completeSnapshot && quoteCacheKeyRef.current) {
+          localStorage.setItem(quoteCacheKeyRef.current, JSON.stringify({ updatedAt: Date.now(), quotes: merged, instruments: Object.fromEntries(currentRecords.map(record => [record.id, quoteInstrumentKey(record)])) }));
         }
-        Object.keys(data.quotes).forEach((id) => loadedQuoteIdsRef.current.add(id));
-        setQuoteAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
-        try {
-          const refreshedAt = new Date();
-          localStorage.setItem("fire:last-quotes-refresh", refreshedAt.toLocaleTimeString("zh-CN", { hour12: false }));
-          localStorage.setItem("fire:last-quotes-refresh-at", String(refreshedAt.getTime()));
-        } catch {
-          /* 忽略存储不可用 */
-        }
-        initialQuoteLoadRef.current = true;
+      } catch {
+        /* localStorage 不可用时不影响实时行情 */
       }
+      currentRecords.forEach(record => {
+        if (merged[record.id] === result.quotes[record.id] && result.quotes[record.id]) loadedQuoteKeysRef.current.add(quoteInstrumentKey(record));
+      });
+      setQuoteAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
+      try {
+        const refreshedAt = new Date();
+        localStorage.setItem("fire:last-quotes-refresh", refreshedAt.toLocaleTimeString("zh-CN", { hour12: false }));
+        localStorage.setItem("fire:last-quotes-refresh-at", String(refreshedAt.getTime()));
+      } catch {
+        /* 忽略存储不可用 */
+      }
+      initialQuoteLoadRef.current = true;
     } catch {
       /* 行情失败时保留原价 */
     } finally {
+      if (quoteRequestRef.current === controller) quoteRequestRef.current = null;
       refreshingRef.current = false;
       setRefreshing(false);
     }
   }, [records]);
+
+  useEffect(() => () => quoteRequestRef.current?.abort(), []);
 
   useEffect(() => {
     // 自选股页面由自身的刷新间隔控件管理定时器，避免这里的 30 秒兜底计时器覆盖用户选择。
@@ -578,6 +571,7 @@ export default function RecordsApp({
 
   useEffect(() => {
     function onVisibility() {
+      if (document.hidden) { quoteRequestRef.current?.abort(); return; }
       // 自选页有独立的刷新间隔控件；切回标签页时不能绕过用户选择额外刷新。
       if (!document.hidden && ["holdings", "watchlist", "assets", "pnl", "fire"].includes(activeTab)) void refreshQuotes(activeTab === "watchlist" ? { initialOnly: true } : undefined);
     }

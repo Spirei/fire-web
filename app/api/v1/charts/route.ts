@@ -1,5 +1,6 @@
 import { readJsonBody } from "@/lib/requestBody";
-import { fetchIntraday } from "@/lib/quotes";
+import { fetchIntraday, samplePoints } from "@/lib/quotes";
+import { marketResponse } from "@/lib/marketResponse";
 import { parseMarket } from "@/lib/store";
 import type { QuoteItem } from "@/lib/quotes";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
@@ -26,7 +27,11 @@ export async function POST(request: Request) {
     }));
   if (items.length === 0) return fail(40001, "没有有效的股票代码", 400);
   try {
-    return ok({ charts: await fetchIntraday(items) });
+    const charts = await fetchIntraday(items);
+    if (body.sample === true) {
+      for (const chart of Object.values(charts)) chart.points = samplePoints(chart.points, 60);
+    }
+    return await marketResponse(request, { charts });
   } catch {
     return fail(50002, "走势数据获取失败，请稍后重试", 502);
   }

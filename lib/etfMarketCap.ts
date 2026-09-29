@@ -8,6 +8,7 @@
  * 成功缓存 24h、失败缓存 6h，避免每次详情请求都打外部站点。
  */
 import { getDb } from "./db";
+import { proxyFetch } from "./net";
 import type { Quote } from "./quotes";
 
 const STOCKANALYSIS_BASE = "https://stockanalysis.com/etf/";
@@ -16,6 +17,7 @@ const FAIL_TTL_MS = 6 * 60 * 60 * 1000;
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36";
 const US_EXCHANGE_SUFFIX = /\.(AM|N|OQ|PS|K)$/;
+const pending = new Map<string, Promise<{ shares: number | null; aum: number | null }>>();
 
 interface EtfCapRow {
   shares: number | null;
@@ -32,14 +34,14 @@ function parseCompactNumber(raw: string): number | null {
   const m = /^\s*([\d.]+)\s*([KMBTkmbt])?\s*$/.exec(raw.trim());
   if (!m) return null;
   const value = Number(m[1]);
-  if (!Number.isFinite(value)) return null;
+  if (!Number.isFinite(value) || value <= 0) return null;
   const mult: Record<string, number> = { K: 1e3, M: 1e6, B: 1e9, T: 1e12 };
   return m[2] ? value * mult[m[2].toUpperCase()] : value;
 }
 
 async function fetchEtfMarketData(code: string): Promise<{ shares: number | null; aum: number | null }> {
   const url = `${STOCKANALYSIS_BASE}${code.toLowerCase()}/`;
-  const res = await fetch(url, {
+  const res = await proxyFetch(url, {
     headers: { "User-Agent": UA, Accept: "text/html" },
     signal: AbortSignal.timeout(7000)
   });
@@ -53,49 +55,38 @@ async function fetchEtfMarketData(code: string): Promise<{ shares: number | null
   };
 }
 
-/**
- * 富途 / 腾讯给不出市值时，用「份额 × 现价」或基金规模补 ETF 总市值。
- * 仅处理美股；港股 / A股 ETF 腾讯 f44 已有市值，不走这里。
- */
+/** undefined = 缺失/过期；null = 仍在失败冷却期；数值按每位调用者的现价计算。 */
+function cachedCap(row: EtfCapRow | undefined, price: number, now: number): number | null | undefined {
+  if (!row?.fetched_at || now - row.fetched_at < 0) return undefined;
+  const age = now - row.fetched_at;
+  if (row.shares != null && row.shares > 0 && age < OK_TTL_MS) return price * row.shares;
+  if (row.market_cap != null && row.market_cap > 0 && age < OK_TTL_MS) return row.market_cap;
+  if (row.shares == null && row.market_cap == null && age < FAIL_TTL_MS) return null;
+  return undefined;
+}
+
+/** 相同 ETF 的份额读取共用请求；市值仍按各自报价计算，不共用某次旧报价的乘积。 */
 export async function resolveEtfMarketCap(market: string, code: string, price: number): Promise<number | null> {
   if (market.toUpperCase() !== "US" || !Number.isFinite(price) || price <= 0) return null;
   const key = normalizeCode(code);
-  if (!/^[A-Z0-9._-]+$/.test(key)) return null;
-
+  if (!/^[A-Z0-9._-]{1,40}$/.test(key)) return null;
   const db = getDb();
   const row = db.prepare("SELECT shares, market_cap, fetched_at FROM etf_market_caps WHERE code = ?").get(key) as EtfCapRow | undefined;
-  const now = Date.now();
-  if (row?.fetched_at) {
-    const age = now - row.fetched_at;
-    if (row.shares != null && age < OK_TTL_MS) return price * row.shares;
-    if (row.market_cap != null && age < OK_TTL_MS) return row.market_cap;
-    if (row.shares == null && row.market_cap == null && age < FAIL_TTL_MS) return null;
+  const hit = cachedCap(row, price, Date.now());
+  if (hit !== undefined) return hit;
+  let task = pending.get(key);
+  if (!task) {
+    task = fetchEtfMarketData(key).catch(() => ({ shares: null, aum: null })).then(data => {
+      db.prepare(`INSERT INTO etf_market_caps (code, shares, market_cap, fetched_at)
+        VALUES (?, ?, ?, ?) ON CONFLICT(code) DO UPDATE SET shares=excluded.shares,
+        market_cap=excluded.market_cap, fetched_at=excluded.fetched_at`)
+        .run(key, data.shares, data.shares ? price * data.shares : data.aum, Date.now());
+      return data;
+    }).finally(() => pending.delete(key));
+    pending.set(key, task);
   }
-
-  try {
-    const data = await fetchEtfMarketData(key);
-    const cap = data.shares ? price * data.shares : data.aum;
-    db.prepare(
-      `INSERT INTO etf_market_caps (code, shares, market_cap, fetched_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(code) DO UPDATE SET
-         shares = excluded.shares,
-         market_cap = excluded.market_cap,
-         fetched_at = excluded.fetched_at`
-    ).run(key, data.shares, cap, now);
-    return cap;
-  } catch {
-    // 抓取失败也缓存（短 TTL），避免每个详情请求重复打外部站点
-    db.prepare(
-      `INSERT INTO etf_market_caps (code, shares, market_cap, fetched_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(code) DO UPDATE SET
-         shares = excluded.shares,
-         market_cap = excluded.market_cap,
-         fetched_at = excluded.fetched_at`
-    ).run(key, null, null, now);
-    return null;
-  }
+  const data = await task;
+  return data.shares ? price * data.shares : data.aum;
 }
 
 /**
@@ -113,28 +104,31 @@ export async function fillEtfMarketCaps(
     return !!quote && Number.isFinite(quote.price) && quote.price > 0 && !quote.marketCap;
   });
   const db = getDb();
-  const stmt = db.prepare("SELECT shares, market_cap FROM etf_market_caps WHERE code = ?");
-  // 先批量读缓存命中的（SQLite 纯读，不限预算，全部补上，与详情页 resolveEtfMarketCap 同源）
-  const uncached: { id: string; market: string; code: string }[] = [];
-  for (const it of candidates) {
-    const quote = quotes[it.id];
-    if (!quote) continue;
-    const row = stmt.get(normalizeCode(it.code)) as { shares?: number | null; market_cap?: number | null } | undefined;
-    if (row?.shares != null) quote.marketCap = quote.price * row.shares;
-    else if (row?.market_cap != null && row.market_cap > 0) quote.marketCap = row.market_cap;
-    else uncached.push(it); // 未缓存 → 待外部抓取（限预算）
+  const stmt = db.prepare("SELECT shares, market_cap, fetched_at FROM etf_market_caps WHERE code = ?");
+  const due = new Map<string, typeof candidates>();
+  const now = Date.now();
+  for (const item of candidates) {
+    const code = normalizeCode(item.code);
+    const quote = quotes[item.id];
+    const hit = cachedCap(stmt.get(code) as EtfCapRow | undefined, quote.price, now);
+    if (hit !== undefined) {
+      if (hit != null) quote.marketCap = hit;
+    } else {
+      const group = due.get(code) ?? [];
+      group.push(item); due.set(code, group);
+    }
   }
-  // 仅对未缓存标的做外部抓取，限制单请求抓取数量，避免打爆外部站点
-  const BUDGET = 12;
-  for (let i = 0; i < uncached.length && i < BUDGET; i += 4) {
-    const chunk = uncached.slice(i, i + 4);
-    await Promise.all(
-      chunk.map(async (it) => {
-        const quote = quotes[it.id];
-        if (!quote) return;
-        const cap = await resolveEtfMarketCap(it.market, it.code, quote.price);
+  // 预算按证券计数，不按账户记录/交易所后缀计数。
+  const groups = [...due.values()].slice(0, 12);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(4, groups.length) }, async () => {
+    while (next < groups.length) {
+      const group = groups[next++];
+      await Promise.all(group.map(async item => {
+        const quote = quotes[item.id];
+        const cap = await resolveEtfMarketCap(item.market, item.code, quote.price);
         if (cap != null && cap > 0) quote.marketCap = cap;
-      })
-    );
-  }
+      }));
+    }
+  }));
 }

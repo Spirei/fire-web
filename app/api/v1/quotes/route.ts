@@ -1,6 +1,7 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { fetchQuotes } from "@/lib/quotes";
 import { fillEtfMarketCaps } from "@/lib/etfMarketCap";
+import { marketResponse } from "@/lib/marketResponse";
 import { parseMarket } from "@/lib/store";
 import type { QuoteItem } from "@/lib/quotes";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
@@ -28,8 +29,8 @@ export async function POST(request: Request) {
   if (items.length === 0) return fail(40001, "没有有效的股票代码", 400);
   try {
     const quotes = await fetchQuotes(items);
-    await fillEtfMarketCaps(items, quotes);
-    return ok({ quotes });
+    if (body.includeMarketCap !== false) await fillEtfMarketCaps(items, quotes);
+    return await marketResponse(request, { quotes });
   } catch {
     return fail(50002, "行情获取失败，请稍后重试", 502);
   }

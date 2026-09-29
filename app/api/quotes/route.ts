@@ -30,8 +30,8 @@ export async function POST(request: Request) {
 
   try {
     const quotes = await fetchQuotes(items);
-    // 补 ETF 市值（与个股详情页 resolveEtfMarketCap 同源：东财基金规模/份额×价格，带缓存+预算）
-    await fillEtfMarketCaps(items, quotes);
+    // 完整报价补 ETF 市值；只需现价的持仓刷新可跳过份额查询。
+    if (body.includeMarketCap !== false) await fillEtfMarketCaps(items, quotes);
     return NextResponse.json({ quotes });
   } catch (err) {
     return NextResponse.json({ error: "行情获取失败，请稍后重试" }, { status: 502 });
