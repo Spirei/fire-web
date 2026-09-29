@@ -25,6 +25,15 @@ export function localPathOf(url: string): string {
   return target;
 }
 
+/** macOS can resolve differently-cased URLs to the same inode. Never delete the replacement. */
+export function sameLocalFile(a: string | undefined | null, b: string | undefined | null): boolean {
+  if (!isLocalUrl(a) || !isLocalUrl(b)) return false;
+  try {
+    const left = fs.statSync(localPathOf(a)), right = fs.statSync(localPathOf(b));
+    return left.dev === right.dev && left.ino === right.ino;
+  } catch { return false; }
+}
+
 /* 图片是否仍被引用（assets / 网站设置 / 用户头像 / 名人头像 / 卡面库） */
 export function urlReferenced(url: string): boolean {
   if (!isLocalUrl(url)) return false;
@@ -33,7 +42,7 @@ export function urlReferenced(url: string): boolean {
   // 素材库里「恢复原图」就会指向一个不存在的文件 —— 换一次卡面等于把原图弄丢了。
   if (safeDecode(url).startsWith("/uploads/cards/")) return true;
   const db = getDb();
-  const a = (db.prepare("SELECT COUNT(*) AS c FROM assets WHERE url = ?").get(url) as { c: number }).c;
+  const a = (db.prepare("SELECT COUNT(*) AS c FROM assets WHERE url = ? OR url_dark = ?").get(url, url) as { c: number }).c;
   const s = (db.prepare("SELECT COUNT(*) AS c FROM site_settings WHERE value = ?").get(url) as { c: number }).c;
   const modelRow = db.prepare("SELECT value FROM site_settings WHERE key = 'modelServices'").get() as { value?: string } | undefined;
   let modelServiceRef = 0;

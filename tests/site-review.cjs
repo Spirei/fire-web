@@ -456,10 +456,10 @@ function fontHeaderFixture(ext) {
     const assistant = fs.readFileSync(path.join(root, 'components/DeferredAssistant.tsx'), 'utf8');
     const navigation = fs.readFileSync(path.join(root, 'components/WorkspaceNavigation.tsx'), 'utf8');
     const ticker = fs.readFileSync(path.join(root, 'components/WorkspaceTicker.tsx'), 'utf8');
-    assert(shell.includes('desktopViewport ? <FourDoorNavigator'));
+    assert(shell.includes('fourDoorViewport ? <FourDoorNavigator'));
     assert(shell.includes('desktopViewport && activeTab !== "assistant" && floatingAssistantReady'));
     assert(shell.includes('if (!desktopViewport || !nav) return;'));
-    assert(shell.includes('usePrefetchFlagIcons(initialFlagIcons, desktopViewport)'));
+    assert(!shell.includes('usePrefetchFlagIcons('));
     assert(shell.includes('loading="lazy"'));
     assert(shell.includes('while (!cancelled && cursor < missing.length)'));
     assert(shell.includes('["holdings", "watchlist", "assets", "pnl", "fire", "earnings"].includes(activeTab)'));
@@ -1793,6 +1793,28 @@ function fontHeaderFixture(ext) {
   });
   const { applyImport, buildImportPreview } = require(path.join(root, 'lib/importSnapshot.ts'));
   const row = (code, market, extra={}) => ({code, market, name: code, price:null,cost:null,qty:null,...extra});
+  await test('flag SSR and API share identical files without reseeding OTHER-market custom URLs', () => {
+    const modulePath = path.join(root, 'lib/assets.ts');
+    delete require.cache[require.resolve(modulePath)];
+    const assets = require(modulePath);
+    const dir = path.join(temp, 'public/uploads/asset');
+    fs.mkdirSync(path.join(dir, 'flag'), {recursive:true});
+    fs.mkdirSync(path.join(dir, 'market'), {recursive:true});
+    fs.writeFileSync(path.join(dir, 'flag/zz.svg'), '<svg>same</svg>');
+    fs.writeFileSync(path.join(dir, 'market/ZZ.svg'), '<svg>same</svg>');
+    assets.upsertAsset({type:'market', market:'ZZ', code:'ZZ', name:'测试', url:'/uploads/asset/market/ZZ.svg'});
+    assets.upsertAsset({type:'flag', market:'OTHER', code:'ZZ', name:'自定义名称', url:'/uploads/asset/flag/zz.svg'});
+    assert.equal(assets.getFlagIconMap(['ZZ']).ZZ, '/uploads/asset/market/ZZ.svg');
+    assert.equal(assets.getAssets('flag').find(x=>x.code==='ZZ').url, '/uploads/asset/market/ZZ.svg');
+    assert.equal(db.prepare("SELECT name FROM assets WHERE type='flag' AND code='ZZ'").get().name,'自定义名称');
+    fs.writeFileSync(path.join(dir, 'flag/zz.svg'), '<svg>custom</svg>');
+    assert.equal(assets.getFlagIconMap(['ZZ']).ZZ, '/uploads/asset/flag/zz.svg');
+    const alias = path.join(dir,'flag/zz-alias.svg');
+    fs.linkSync(path.join(dir,'flag/zz.svg'),alias);
+    assets.upsertAsset({type:'flag', market:'OTHER', code:'ZZ', name:'自定义名称', url:'/uploads/asset/flag/zz-alias.svg'});
+    assert(fs.existsSync(path.join(dir,'flag/zz.svg')), 'same inode replacement cannot be deleted');
+    db.prepare("DELETE FROM assets WHERE (type='flag' AND code='ZZ') OR (type='market' AND market='ZZ')").run();
+  });
   await test('real SQLite: same ticker across markets remains distinct; leading zeros deduplicate; ambiguity rolls back', () => {
     applyImport(user.id,[row('1928','HK',{price:20,qty:10,cost:15})]);
     let result = applyImport(user.id,[row('1928','JP')]); assert.equal(result.added,1); assert.equal(result.updated,0);

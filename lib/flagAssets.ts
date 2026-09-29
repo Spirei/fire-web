@@ -1,5 +1,10 @@
 const DEFAULT_FLAG_OVERRIDES: Record<string, string> = {
-  eu: "/uploads/asset/flag/欧盟EU.svg"
+  us: "/uploads/asset/market/US.svg",
+  hk: "/uploads/asset/market/HK.svg",
+  cn: "/uploads/asset/market/CN.svg",
+  jp: "/uploads/asset/market/JP.svg",
+  kr: "/uploads/asset/market/KR.svg",
+  eu: "/uploads/asset/flag/eu.svg"
 };
 
 /** 全站固定的 7 种展示货币；资金系统的扩展币种在实际出现时再按代码读取。 */

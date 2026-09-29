@@ -24,13 +24,13 @@ import { showToast } from "@/lib/toast";
 import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import SettingsWindow from "@/components/SettingsWindow";
-import { primeFlagIconCache, primeMarketIconCache, primeNavIconCache, primeStockIconCache, useAssetIcons, usePrefetchFlagIcons } from "@/lib/useAssetIcons";
+import { primeFlagIconCache, primeMarketIconCache, primeNavIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
 import { pickStockIcon } from "@/lib/stockIconKey";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import WorkspaceNavigation from "@/components/WorkspaceNavigation";
 import type { WatchGroup } from "@/lib/watchGroups";
-import { useDesktopViewport } from "@/lib/useDesktopViewport";
+import { useDesktopViewport, useFourDoorViewport } from "@/lib/useDesktopViewport";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { preloadView } from "@/lib/viewPreload";
 import { mobileWorkspaceGroups } from "@/lib/workspaceNavigation";
@@ -142,6 +142,7 @@ export default function RecordsApp({
 }) {
   const router = useRouter();
   const desktopViewport = useDesktopViewport();
+  const fourDoorViewport = useFourDoorViewport();
   const [user] = useState<User>(initialUser);
   const [records, setRecords] = useState<StockRecord[]>(initialRecords);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
@@ -206,7 +207,6 @@ export default function RecordsApp({
   useMemo(() => primeMarketIconCache(initialMarketIcons), [initialMarketIcons]);
   useMemo(() => primeNavIconCache(initialNavIcons), [initialNavIcons]);
   useMemo(() => primeFlagIconCache(initialFlagIcons), [initialFlagIcons]);
-  usePrefetchFlagIcons(initialFlagIcons, desktopViewport);
   useEffect(() => setNavIconsHydrated(true), []);
   useEffect(() => {
     if (!desktopViewport || activeTab === "assistant") return;
@@ -886,7 +886,7 @@ export default function RecordsApp({
       <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block ${activeTab === "settings" ? "is-settings" : ""}`}>
         <nav id="fire-desktop-nav" ref={desktopNavRef} onScroll={updateSidebarScroll} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
           <div className={`four-door-anchor ${fourDoorPinned ? "is-pinned" : ""}`}>
-            {desktopViewport ? <FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} pinned={fourDoorPinned} onTogglePinned={() => setFourDoorPinned(value => !value)} /> : <div className="four-door-zone" aria-hidden="true" />}
+            {fourDoorViewport ? <FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} pinned={fourDoorPinned} onTogglePinned={() => setFourDoorPinned(value => !value)} /> : <div className="four-door-zone" aria-hidden="true" />}
           </div>
           <div className="fire-sidebar-section-label">资产</div>
           {sidebarTabs.map((t, index) => {

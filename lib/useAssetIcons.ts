@@ -32,7 +32,7 @@ type HookOptions = {
 
 const ALL_TYPES: AssetType[] = ["stock", "market", "flag", "broker", "crypto", "metal", "icon"];
 const CACHE_TTL = 5 * 60 * 1000;
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const cache = new Map<AssetType, { assets: Asset[]; at: number }>();
 const inflight = new Map<AssetType, Promise<void>>();
 const listeners = new Set<() => void>();
@@ -184,30 +184,6 @@ export function primeNavIconCache(icons: Record<string, string>) {
     });
   });
   cache.set("icon", { assets: [...byKey.values()], at: current?.at ?? 0 });
-}
-
-/** 首帧结束后把固定货币的小图标送入浏览器图片缓存，打开下拉时无需再等网络。 */
-export function usePrefetchFlagIcons(icons: Record<string, string>, enabled = true) {
-  useEffect(() => {
-    if (!enabled) return;
-    const urls = [...new Set(Object.values(icons).filter((url) => Boolean(url) && !url.startsWith("data:")))];
-    if (!urls.length) return;
-    const prefetch = () => urls.forEach((url) => {
-      const image = new Image();
-      image.decoding = "async";
-      image.src = url;
-    });
-    const idleWindow = window as Window & {
-      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
-      cancelIdleCallback?: (id: number) => void;
-    };
-    if (typeof idleWindow.requestIdleCallback === "function") {
-      const id = idleWindow.requestIdleCallback(prefetch, { timeout: 1500 });
-      return () => idleWindow.cancelIdleCallback?.(id);
-    }
-    const id = setTimeout(prefetch, 200);
-    return () => clearTimeout(id);
-  }, [icons, enabled]);
 }
 
 const flagInflight = new Map<string, Promise<void>>();

@@ -4661,7 +4661,7 @@ const V0_1_44_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_45_ENTRY: VersionEntry = {
   ...V0_1_44_ENTRY,
   version: "v0.1.45",
   date: "2026-09-29",
@@ -4681,11 +4681,24 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_45_ENTRY,
+  version: "v0.1.46",
+  date: "2026-09-30",
+  summary: "隐藏资源按需加载，国旗共用与素材短地址迁移。",
+  software: V0_1_45_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.46" } : item),
+  changes: [
+    { kind: "fix", title: "隐藏装饰资源不加载", desc: "四色门按实际视口和输入设备挂载，手机、平板及短屏不请求装饰图片；停止全页预取未显示的货币旗帜。" },
+    { kind: "fix", title: "国旗共用与短素材地址", desc: "相同国旗统一文件 URL，不再混用内嵌图片；素材上传、同步及历史迁移使用短 ASCII 名称，保留中文股票显示名和卡包身份。迁移先备份、校验再更新引用，并修复默认旗帜初始化覆盖地址及大小写路径误删问题。" }
+  ]
+};
+
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_45_ENTRY,
   V0_1_44_ENTRY,
   V0_1_43_ENTRY,
   V0_1_42_ENTRY,

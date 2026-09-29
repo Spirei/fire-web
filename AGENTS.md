@@ -157,12 +157,12 @@ Review 自查清单（按项目实际走一遍）：
 
 ## 素材库文件命名规范（全局，重要）
 
-- 所有素材文件按「中文名称 + 英文简称/代码」命名，禁止时间戳随机名：
-  - 市场图标：`中文名+市场码`（美股US.svg / 新加坡SG.png）
-  - 加密货币 / 贵金属：`中文名+代码`（比特币BTC.svg / 黄金GOLD.png）
-  - 股票图标：`中文名+股票代码`（苹果AAPL.png / 寒武纪688256.png，与素材库同步一致）
-  - 券商图标：`券商名称`（长桥证劵.png，对应「设置 → 股票设置 → 券商管理」中的券商分组），存放 `public/uploads/asset/broker/`
-  - 分组图标：`分组名称`（科技.png，对应自选股自定义分组，非券商分组），存放 `public/uploads/asset/group/`，素材库「分组图标」分类与 `watch_groups.icon` 同步
+- 2026-09-30 用户要求：素材 URL 使用短 ASCII 文件名，非必要不得含中文。市场 `US.svg`、股票 `AAPL.png`、加密货币 `BTC.svg`；旗帜和 UI 图标保留小写代码。无代码时使用稳定的短哈希，不拼接长中文名称。规则集中在 `lib/assetNaming.cjs`。
+- A 股、港股的中文股票名称和既有中文股票文件名可以保留；任何市场的显示名称与素材存储名分离，不擅自改持仓名称。
+- 卡面路径可能是钱包逻辑标识，只迁移图片 URL，不改卡片 ID、持有关系和金额；新导入卡面通过独立 `url` 字段保存短图片地址。
+- 存量迁移使用 `node scripts/rename-assets.mjs --dry-run`，核对后 `--apply`。在数据库宿主机执行，禁止通过 SMB 修改运行中的 SQLite。先备份、复制和校验图片，再事务更新 URL；保留旧文件兼容，不覆盖不同内容的同名素材。
+- 同图国旗共享同一 URL，禁止 SSR 内嵌 data URI、客户端文件地址与市场文件地址混用。仅内容一致才合并，保留自定义图标。
+- 装饰组件必须按真实可见条件挂载，不能只靠 CSS 隐藏。四色门限宽度至少 1280、高度至少 801 且无粗指针的桌面；手机、平板和短屏不加载。
 
 ## 资源本地化约定（重要）
 
@@ -217,7 +217,7 @@ Review 自查清单（按项目实际走一遍）：
 - 持仓数值校验：现价与数量禁止负数；成本价允许负数，用于返佣、期权收入或累计回款超过投入后的负成本场景。普通 records 接口与 v1 records 接口必须保持一致并返回准确字段提示。
 - 候选去重：素材库「新增主流券商」候选（MAIN_BROKERS）中同一券商只保留一个规范名，其他写法 / 英文名放 `aliases`（如 IBKR = 盈透证券、Schwab = 嘉信理财、Webull = 微牛证券）；添加与 ✓ 置灰判断必须同时比对规范名 + 别名，并做「证劵/证券」归一化（`brokerNameKey`）。新增候选时先检查全表，禁止同一券商以不同名称重复列出。
 - 命名由服务端 `lib/upload.ts` 的 `assetFilename` 统一生成（读上传表单的 name / code / market），前端上传时 FormData 必须带这三个字段；URL 用 `encodeURIComponent` 存库。
-- 存量文件命名迁移 / 规范化一律使用项目内工具 `scripts/rename-assets.mjs`（`node scripts/rename-assets.mjs [--dry-run]`）：只重命名不删除、URL 先 `decodeURIComponent`、路径前缀 `/uploads/...`，并自动同步 `assets.url` / `assets.name`；不要手写遍历脚本改素材文件名。
+- 存量迁移按上方短 URL 规则执行；名称与逻辑 ID 不变，更新所有数据库 URL 引用并保留回滚备份。
 - 文件分类存放：`public/uploads/asset/{market|crypto|metal|stock/{市场}}/`，禁止散落到 `uploads/asset` 根目录；出现根目录残留时按本规范迁移并更新 `assets.url`。
 - 素材库市场图标同步维护：新增市场必须同时补 `MARKET_META`（lib/types.ts，含 label/currency/flag）、`MARKET_CURRENCY`（lib/useRates.ts）、`FALLBACK_RATES` 与服务端 `/api/rates` 拉取币种，否则市值会按 1:1 误算成美元。
 

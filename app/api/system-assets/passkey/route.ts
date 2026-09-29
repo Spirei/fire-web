@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 
 /** Fixed system resource, independent of uploaded assets and host volume overrides. */
 export function GET() {
-  const relative = "feature/passkey/通行密钥PASSKEY.png";
+  const relative = "feature/passkey/passkey.png";
   for (const root of ["resource-default", "public/uploads"]) {
     try {
       const bytes = fs.readFileSync(path.join(process.cwd(), root, relative));

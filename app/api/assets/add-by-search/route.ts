@@ -7,7 +7,8 @@ import { assetId, getAssets, getStockIconMap, upsertAsset } from "@/lib/assets";
 import { getDb } from "@/lib/db";
 import { assetFilePath, validAssetCode } from "@/lib/assetSecurity";
 import { readLimitedResponseBytes } from "@/lib/requestBody";
-import { resolveIcon, sanitizeName } from "@/lib/stockSync";
+import { resolveIcon } from "@/lib/stockSync";
+import { assetFilename } from "@/lib/assetNaming.cjs";
 import { isSafeSvg, sniffImageExt } from "@/lib/imageSecurity";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 
@@ -61,7 +62,7 @@ async function downloadRemoteIcon(iconUrl: string, folder: "crypto" | "metal", c
     if (!ext || (ext === "svg" && !isSafeSvg(buf))) return null;
     const dir = path.join(process.cwd(), "public", "uploads", "asset", folder);
     fs.mkdirSync(dir, { recursive: true });
-    const filename = `${sanitizeName(name)}${code.toUpperCase()}.${ext}`;
+    const filename = assetFilename({ type: folder, code: code.toUpperCase(), name }, `.${ext}`);
     fs.writeFileSync(assetFilePath(dir, filename), buf);
     return `/uploads/asset/${folder}/${encodeURIComponent(filename)}`;
   } catch {

@@ -5,6 +5,7 @@ import { upsertAsset } from "./assets";
 import { isSafeSvg, sniffImageExt } from "./imageSecurity";
 import { assetFilePath, validAssetCode } from "./assetSecurity";
 import { readLimitedResponseBytes } from "./requestBody";
+import { assetFilename } from "./assetNaming.cjs";
 
 export type SyncMarket = "US" | "HK" | "CN" | "JP" | "KR";
 
@@ -228,9 +229,9 @@ export function sanitizeName(name: string): string {
   );
 }
 
-// 分市场文件夹保存，按市场自有名称命名：中文名称 + 股票代码（苹果AAPL / 寒武纪688256 / 腾讯控股00700）
+// 存储地址仅用代码；显示名称不受影响。
 function iconFilename(market: SyncMarket, code: string, name: string, ext: string): string {
-  return `${sanitizeName(name)}${code}${ext}`;
+  return assetFilename({ type: "stock", market, code, name }, ext);
 }
 
 async function downloadIcon(url: string, market: SyncMarket, code: string, name: string): Promise<string | null> {

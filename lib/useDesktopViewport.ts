@@ -15,3 +15,14 @@ const serverSnapshot = () => false;
 export function useDesktopViewport() {
   return useSyncExternalStore(subscribe, snapshot, serverSnapshot);
 }
+
+// 与 desktop.css 的隐藏条件一致；CSS 隐藏不能阻止图片请求。
+export const FOUR_DOOR_QUERY = "(min-width: 1280px) and (min-height: 801px) and (any-pointer: fine) and (not (any-pointer: coarse))";
+function subscribeFourDoor(onChange: () => void) {
+  const media = window.matchMedia(FOUR_DOOR_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+export function useFourDoorViewport() {
+  return useSyncExternalStore(subscribeFourDoor, () => window.matchMedia(FOUR_DOOR_QUERY).matches, serverSnapshot);
+}

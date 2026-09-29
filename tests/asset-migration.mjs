@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import Database from 'better-sqlite3';
+import { migrateAssets } from '../scripts/rename-assets.mjs';
+import naming from '../lib/assetNaming.cjs';
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fire-assets-'));
+const uploads = path.join(root, 'uploads'), dbPath = path.join(root, 'fire.db');
+fs.mkdirSync(uploads);
+const db = new Database(dbPath);
+db.exec('CREATE TABLE assets (id TEXT PRIMARY KEY,type TEXT,market TEXT,code TEXT,name TEXT,url TEXT,url_dark TEXT); CREATE TABLE settings (key TEXT PRIMARY KEY,value TEXT)');
+function add(id, type, market, code, name, rel, bytes) {
+  if (bytes !== null) { fs.mkdirSync(path.dirname(path.join(uploads, rel)), { recursive: true }); fs.writeFileSync(path.join(uploads, rel), bytes); }
+  db.prepare('INSERT INTO assets VALUES (?,?,?,?,?,?,?)').run(id,type,market,code,name,'/uploads/'+rel,'');
+}
+add('us','market','US','US','美股','asset/market/美股US.svg','usa');
+add('flag','flag','','US','美元','asset/flag/us.svg','usa');
+add('custom','flag','','HK','自定义','asset/flag/hk.svg','custom');
+add('hk','market','HK','HK','港股','asset/market/港股HK.svg','hongkong');
+add('stock','stock','CN','600000','浦发银行','asset/stock/CN/浦发银行600000.png','cn');
+add('missing','stock','US','LOST','丢失','asset/stock/US/丢失LOST.png',null);
+add('collision','crypto','','BTC','比特币','asset/crypto/比特币BTC.svg','new');
+fs.writeFileSync(path.join(uploads,'asset/crypto/BTC.svg'),'old');
+db.prepare('INSERT INTO settings VALUES (?,?)').run('nested',JSON.stringify({groups:[{name:'美股',icon:'/uploads/asset/market/美股US.svg'}]}));
+db.close();
+const before = fs.readFileSync(dbPath);
+const dry = await migrateAssets({dbPath,uploads});
+assert.equal(dry.dryRun,true);
+assert.deepEqual(fs.readFileSync(dbPath),before);
+assert(!fs.existsSync(path.join(uploads,'asset/market/US.svg')));
+const result = await migrateAssets({dbPath,uploads,apply:true});
+assert(result.changedCells >= 5);
+assert(fs.existsSync(path.join(result.backupDir,'fire.db')));
+const check = new Database(dbPath);
+const row = id => check.prepare('SELECT * FROM assets WHERE id=?').get(id);
+assert.equal(row('us').url,'/uploads/asset/market/US.svg');
+assert.equal(row('flag').url,row('us').url);
+assert.notEqual(row('custom').url,row('hk').url);
+assert.equal(row('stock').url,'/uploads/asset/stock/CN/浦发银行600000.png');
+assert.equal(row('missing').url,'/uploads/asset/stock/US/丢失LOST.png');
+assert.match(row('collision').url,/BTC-[a-f0-9]+\.svg$/);
+assert.equal(fs.readFileSync(path.join(uploads,'asset/crypto/BTC.svg'),'utf8'),'old');
+assert.equal(row('us').name,'美股');
+assert.equal(JSON.parse(check.prepare('SELECT value FROM settings').get().value).groups[0].icon,row('us').url);
+assert(fs.existsSync(path.join(uploads,'asset/market/美股US.svg')),'old URLs stay valid');
+check.close();
+const again = await migrateAssets({dbPath,uploads,apply:true});
+assert.equal(again.changedCells,0,'rerun must not change identity or URLs');
+assert.equal(naming.assetFilename({type:'market',name:'美股',market:'US'},'.svg'),'US.svg');
+assert.equal(naming.assetFilename({type:'stock',name:'苹果',code:'AAPL'},'.png'),'AAPL.png');
+assert.match(naming.assetFilename({type:'group',name:'科技'},'.svg'),/^group-[a-f0-9]+\.svg$/);
+console.log('PASS asset migration: dry-run, backup, deduplication, custom preservation, collisions, missing files, CN names, nested URLs, rerun');
+// Only the generated, validated test directory is removed.
+fs.rmSync(root,{recursive:true});

@@ -9,6 +9,7 @@ import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
 import { assetFilePath, validAssetCode } from "./assetSecurity";
 import { readFormBody } from "./requestBody";
+import { assetFilename as storageFilename } from "./assetNaming.cjs";
 
 export type UploadKind = "avatar" | "ico" | "background" | "logo" | "login" | "asset";
 
@@ -53,12 +54,7 @@ export class UploadError extends Error {
   }
 }
 
-/* 素材文件规范命名：中文名 + 英文简称/代码
- *  - 市场图标：中文名+市场码（如 美股US.svg / 新加坡SG.svg）
- *  - 加密货币/贵金属：中文名+代码（如 比特币BTC.svg / 黄金GOLD.png）
- *  - 股票图标：中文名+股票代码（如 苹果AAPL.png，与素材库同步一致）
- *  - 自定义卡面：银行名+卡名+地区码（如 中国银行长城借记卡CN.png；同一地区的卡名不会重复）
- */
+/** 素材显示名称与短 ASCII 存储名称分离。 */
 function assetFilename(
   form: FormData,
   folder: string,
@@ -69,16 +65,7 @@ function assetFilename(
   const market = String(form.get("market") ?? "").trim().toUpperCase();
   if (code && !validAssetCode(code)) throw new UploadError("素材代码格式不正确", 400);
   if (name.length > 120) throw new UploadError("素材名称过长", 400);
-  const base =
-    name
-      .replace(/[\\/:*?"<>|\s()（）[\]{}]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "") ||
-    code ||
-    "asset";
-  if (folder === "market" && market) return `${base}${market}${ext}`;
-  if (code) return `${base}${code}${ext}`;
-  return `${base}${ext}`;
+  return storageFilename({ name, code, market, type: folder }, ext);
 }
 
 /** 校验并保存上传文件，返回可访问 URL（失败抛 UploadError） */
@@ -128,7 +115,7 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
       urlPrefix = `/uploads/asset/${folder}`;
     }
   }
-  // 命名规范：素材按「中文名+代码」；头像按「登录名(UID编号)」（如 admin(UID1)，无冒号分隔）；其他类型保持时间戳随机名
+  // 素材使用短代码；头像保留独立身份命名；其他类型保持时间戳随机名。
   let filename: string;
   if (kind === "asset") {
     filename = assetFilename(form, folder, `.${ext}`);

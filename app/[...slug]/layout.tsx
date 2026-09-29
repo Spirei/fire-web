@@ -11,7 +11,7 @@ import UserMenu from "@/components/UserMenu";
 import SiteLogo from "@/components/SiteLogo";
 import WorkspaceTicker from "@/components/WorkspaceTicker";
 import Toaster from "@/components/Toaster";
-import { getAssetsPage, getInlineFlagIconMap, getMarketIconMap, getNavIconMap, getStockIconMap, inlineLocalAssetUrl, stockIconKeysForRecords } from "@/lib/assets";
+import { getAssetsPage, getFlagIconMap, getMarketIconMap, getNavIconMap, getStockIconMap, inlineLocalAssetUrl, stockIconKeysForRecords } from "@/lib/assets";
 import { CURRENCY_FLAG_CODES, displayCurrencyFlagCode } from "@/lib/flagAssets";
 import { cardLibraryForUser, heldCardCoverUrls } from "@/lib/cardLibrary";
 import { CurrencyProvider, DISPLAY_CURRENCY_COOKIE, type CurrencyCode } from "@/lib/currencyPrefs";
@@ -95,7 +95,7 @@ export default async function SlugLayout({
   const initialMarketIcons = getMarketIconMap();
   const initialNavIcons = getNavIconMap(settings.tabs.map((item) => item.key));
   const initialAvatar = inlineLocalAssetUrl(user.avatar);
-  const initialFlagIcons = getInlineFlagIconMap(CURRENCY_FLAG_CODES);
+  const initialFlagIcons = getFlagIconMap(CURRENCY_FLAG_CODES);
   const initialAssetLibrary = tab.key === "library"
     ? getAssetsPage({ type: "stock", market: "ALL", sort: "rank", dir: "desc", page: 1, pageSize: 10 })
     : null;

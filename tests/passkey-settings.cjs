@@ -46,7 +46,7 @@ global.fetch = async url => {
   console.log('PASS seed, expiry, single-flight, failure and invalidation');
 
   process.chdir(temp);
-  const relative = 'feature/passkey/通行密钥PASSKEY.png';
+  const relative = 'feature/passkey/passkey.png';
   fs.mkdirSync(path.dirname(path.join(temp, 'resource-default', relative)), { recursive: true });
   fs.copyFileSync(path.join(root, 'public/uploads', relative), path.join(temp, 'resource-default', relative));
   let response = art.GET();

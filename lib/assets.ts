@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import { isLocalUrl, removeFileIfUnused } from "./fileCleanup";
+import { isLocalUrl, removeFileIfUnused, sameLocalFile } from "./fileCleanup";
 import fs from "fs";
 import path from "path";
 import { RELATED_ETF_MAIN_STOCK } from "./relatedEtfs";
@@ -35,7 +35,7 @@ export interface Asset {
 }
 
 function rowToAsset(r: Record<string, unknown>): Asset {
-  const rawUrl = String(r.url ?? "");
+  const rawUrl = r.type === "flag" ? sharedFlagUrl(String(r.code || ""), String(r.url || "")) : String(r.url ?? "");
   const rawUrlDark = String(r.url_dark ?? "");
   return {
     id: String(r.id),
@@ -123,11 +123,11 @@ export function ensureIconAssets(): void {
 
 /** 默认市场图标：随镜像打包在 /uploads/asset/market，供新用户开箱即用（市场标签/全球预览等） */
 export const DEFAULT_MARKET_ICONS: { market: string; name: string; url: string }[] = [
-  { market: "HK", name: "港股", url: "/uploads/asset/market/港股HK.svg" },
-  { market: "CN", name: "A股", url: "/uploads/asset/market/A股CN.svg" },
-  { market: "US", name: "美股", url: "/uploads/asset/market/美股US.svg" },
-  { market: "JP", name: "日股", url: "/uploads/asset/market/日股JP.svg" },
-  { market: "KR", name: "韩股", url: "/uploads/asset/market/韩股KR.svg" }
+  { market: "HK", name: "港股", url: "/uploads/asset/market/HK.svg" },
+  { market: "CN", name: "A股", url: "/uploads/asset/market/CN.svg" },
+  { market: "US", name: "美股", url: "/uploads/asset/market/US.svg" },
+  { market: "JP", name: "日股", url: "/uploads/asset/market/JP.svg" },
+  { market: "KR", name: "韩股", url: "/uploads/asset/market/KR.svg" }
 ];
 
 /** 进入「市场」类目时补齐缺失的内置市场图标（按 market 判断，缺失才播种，不覆盖用户已上传图标） */
@@ -302,17 +302,17 @@ export function ensureCategoryAssets(type: "crypto" | "metal" | "flag"): void {
   const db = getDb();
   files.forEach((file) => {
     const stem = file.replace(/\.(svg|png|webp|jpg)$/i, "");
-    // 欧盟默认旗帜遵循素材库「中文名 + 代码」命名，但对外仍以 EU 作为唯一代码。
+    // 兼容旧部署文件，不能重新覆盖已迁移的短 URL。
     if (type === "flag" && stem === "欧盟EU") {
-      const existing = db.prepare("SELECT COUNT(*) AS n FROM assets WHERE type = 'flag' AND market = '' AND upper(code) = 'EU'").get() as { n: number };
-      if (existing.n === 0) upsertAsset({ type, market: "", code: "EU", name: "欧盟", url: `/uploads/asset/${subdir}/${file}` });
+      const existing = db.prepare("SELECT COUNT(*) AS n FROM assets WHERE type = 'flag' AND upper(code) = 'EU'").get() as { n: number };
+      if (existing.n === 0) upsertAsset({ type, market: "", code: "EU", name: "欧盟", url: localAssetExists('/uploads/asset/flag/eu.svg') ? '/uploads/asset/flag/eu.svg' : `/uploads/asset/${subdir}/${file}` });
       return;
     }
     const m = type === "flag" ? null : stem.match(/([A-Z0-9]{2,})$/);
     const code = type === "flag" ? stem : m ? m[1] : stem;
     const name = type === "flag" ? stem.toUpperCase() : m ? stem.slice(0, stem.length - m[1].length).trim().replace(/[-_]+$/, "") || stem : stem;
     if (!code) return;
-    const existing = db.prepare("SELECT id, url FROM assets WHERE type = ? AND market = '' AND upper(code) = upper(?) LIMIT 1").get(type, code) as { id?: string; url?: string } | undefined;
+    const existing = db.prepare("SELECT id, url FROM assets WHERE type = ? AND upper(code) = upper(?) LIMIT 1").get(type, code) as { id?: string; url?: string } | undefined;
     if (existing?.id) {
       // 默认素材升级时修复历史错误映射（例如 ETH 曾误指向 BTC 图标）。
       const expected = `/uploads/asset/${subdir}/${file}`;
@@ -372,7 +372,7 @@ export function getFlagIconMap(codes: readonly string[]): Record<string, string>
   normalized.forEach((code) => {
     const row = stmt.get(code) as { code?: string; url?: string } | undefined;
     const url = String(row?.url || "");
-    if (url && localAssetExists(url)) map[code] = url;
+    if (url && localAssetExists(url)) map[code] = sharedFlagUrl(code, url);
   });
   return map;
 }
@@ -398,17 +398,15 @@ export function inlineLocalAssetUrl(url: string): string {
   catch { return url; }
 }
 
-/**
- * 固定货币的首屏版本：仍按素材库记录找文件，但把几百字节的本地图标内联进 HTML，
- * 浏览器第一次绘制无需再等待 /uploads 请求。远程自定义素材保留原 URL。
- */
-export function getInlineFlagIconMap(codes: readonly string[]): Record<string, string> {
-  const urls = getFlagIconMap(codes);
-  const map: Record<string, string> = {};
-  Object.entries(urls).forEach(([code, url]) => {
-    map[code] = inlineLocalAssetUrl(url);
-  });
-  return map;
+/** Both SSR and API return one URL for identical flag bytes, preserving custom artwork. */
+function sharedFlagUrl(code: string, url: string): string {
+  const market = code.toUpperCase() === "GB" ? "UK" : code.toUpperCase();
+  const row = getDb().prepare("SELECT url FROM assets WHERE type='market' AND upper(market)=? LIMIT 1").get(market) as { url?: string } | undefined;
+  if (!row?.url || row.url === url) return url;
+  const a = localUploadFile(url), b = localUploadFile(row.url);
+  if (!a || !b) return url;
+  try { return fs.readFileSync(a).equals(fs.readFileSync(b)) ? row.url : url; }
+  catch { return url; }
 }
 
 /** 按代码批量读取股票素材，供搜索联想补充相关 ETF；返回顺序与 codes 一致。 */
@@ -510,11 +508,11 @@ export function upsertAsset(input: {
   ).run(id, input.type, market, code, name, url, urlDark, marketCap, price, changePct, source, lastCheckedAt, board, updatedAt, updatedAt);
   if (url) existsCache.set(url, true);
   if (urlDark) existsCache.set(urlDark, true);
-  if (oldRow?.url && isLocalUrl(oldRow.url) && oldRow.url !== url) {
+  if (oldRow?.url && isLocalUrl(oldRow.url) && oldRow.url !== url && !sameLocalFile(oldRow.url, url)) {
     // 旧文件仍被其它记录引用时保留（removeFileIfUnused 内部判断）
     removeFileIfUnused(oldRow.url);
   }
-  if (oldRow?.url_dark && isLocalUrl(oldRow.url_dark) && oldRow.url_dark !== urlDark) {
+  if (oldRow?.url_dark && isLocalUrl(oldRow.url_dark) && oldRow.url_dark !== urlDark && !sameLocalFile(oldRow.url_dark, urlDark)) {
     removeFileIfUnused(oldRow.url_dark);
   }
   const row = db.prepare("SELECT * FROM assets WHERE id = ?").get(id) as Record<string, unknown>;

@@ -902,11 +902,11 @@ function migrateDefaultFireIcon(database: Database.Database) {
   })();
 }
 
-/** 既有本地库与线上库都把内置欧元旗帜改为随镜像发布的「欧盟EU.svg」，不覆盖用户上传的其他 URL。 */
+/** 内置欧元旗帜使用短地址；不覆盖用户上传的其他 URL。 */
 function migrateDefaultEuroFlag(database: Database.Database) {
   const migrationKey = "migration.default_euro_flag";
-  const targetVersion = "named_eu_svg_v1";
-  const targetUrl = "/uploads/asset/flag/欧盟EU.svg";
+  const targetVersion = "short_eu_svg_v2";
+  const targetUrl = "/uploads/asset/flag/eu.svg";
   const applied = database.prepare("SELECT value FROM site_settings WHERE key = ?").get(migrationKey) as { value: string } | undefined;
   if (applied?.value === targetVersion) return;
 
@@ -919,7 +919,7 @@ function migrateDefaultEuroFlag(database: Database.Database) {
     database.prepare(`
       UPDATE assets
       SET name = '欧盟', url = ?, updated_at = ?
-      WHERE id = 'flag:EU' AND (url = '/uploads/asset/flag/eu.svg' OR url = ?)
+      WHERE id = 'flag:EU' AND (url IN ('/uploads/asset/flag/eu.svg', '/uploads/asset/flag/欧盟EU.svg') OR url = ?)
     `).run(targetUrl, now, targetUrl);
     database.prepare(`
       DELETE FROM assets

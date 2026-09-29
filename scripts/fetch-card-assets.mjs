@@ -15,6 +15,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import sharp from "sharp";
 
 const REPO = "HarukaKinen/Cardentify";
@@ -196,9 +197,11 @@ async function main() {
       const rawExt = path.extname(relative).toLowerCase();
       const ext = FORMAT === "webp" ? ".webp" : rawExt === ".jpeg" ? ".jpg" : rawExt || ".png";
       const relativeFile = `${safeName(typeLabel)}/${safeName(bankName)}/${safeName(cardName)}${ext}`;
-      const target = path.join(OUT_ROOT, safeName(regionLabel), relativeFile);
+      const imageKey = createHash("sha256").update(`cards/${safeName(regionLabel)}/${relativeFile}`).digest("hex").slice(0, 16);
+      const target = path.join(OUT_ROOT, "images", imageKey + ext);
       const record = {
         name: cardName,
+        url: `/uploads/cards/images/${imageKey}${ext}`,
         type: typeLabel,
         file: path.posix.join(
           ...[safeName(regionLabel), safeName(typeLabel), safeName(bankName), `${safeName(cardName)}${ext}`].map(encodeURIComponent)

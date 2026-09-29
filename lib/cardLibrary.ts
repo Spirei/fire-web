@@ -239,7 +239,7 @@ export function ensureCardAssets(): number {
       const cards = (bank as { cards?: unknown })?.cards;
       if (!Array.isArray(cards)) return;
       cards.forEach((card) => {
-        const item = card as { file?: unknown; name?: unknown };
+        const item = card as { file?: unknown; name?: unknown; url?: unknown };
         if (typeof item?.file !== "string" || !item.file) return;
         const id = cardAssetId(item.file);
         if (existing.has(id)) return;
@@ -247,7 +247,8 @@ export function ensureCardAssets(): number {
         const name = typeof item.name === "string" && item.name ? item.name : item.file;
         // code 只用于展示（upsertAsset 会转大写），真正的身份是 id 里的完整卡面路径
         const stem = item.file.split("/").pop()?.replace(/\.[^.]+$/, "") || name;
-        upsertAsset({ id, type: "card", market: label || "OTHER", code: stem, name, url: manifestCoverUrl(item.file) });
+        const imageUrl = typeof item.url === "string" && /^\/uploads\/cards\/images\/[a-f0-9]+\.[a-z]+$/.test(item.url) ? item.url : manifestCoverUrl(item.file);
+        upsertAsset({ id, type: "card", market: label || "OTHER", code: stem, name, url: imageUrl });
         existing.add(id);
         added += 1;
       });
