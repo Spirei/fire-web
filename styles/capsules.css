@@ -64,6 +64,9 @@ body:has([data-capsule-scope="non-home"]) :is(button,a):is(.btn,.mail-settings-s
   body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger):is(.is-active,.fire-sidebar-item-active,[aria-current="page"]):hover { background:var(--cap-primary-hover)!important; }
 }
 body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger):is(.is-active,.fire-sidebar-item-active,[aria-current="page"]) svg { color:inherit!important; }
+/* Selected capsule counters share the button ink. Keep JSX class names unchanged so a cached tablet bundle can hydrate during a rolling update. */
+body:has([data-capsule-scope="non-home"]) button[aria-pressed="true"][class~="rounded-full"] > span.tabular-nums,
+body:has([data-capsule-scope="non-home"]) button[aria-pressed="true"][class~="rounded-full"] > span[class*="text-white/60"] { color:inherit!important; opacity:1!important; }
 /* Uploaded navigation artwork follows the same ink as built-in SVGs in every entry. */
 .nav-custom-icon { filter:brightness(0); opacity:.72; }
 .dark .nav-custom-icon { filter:brightness(0) invert(1); }

@@ -59,8 +59,11 @@ function fontHeaderFixture(ext) {
     const tablet = fs.readFileSync(path.join(root,'styles/tablet.css'),'utf8');
     const shell = fs.readFileSync(path.join(root,'components/RecordsApp.tsx'),'utf8');
     assert(desktop.includes('@media (min-width: 1024px) and (max-width: 1279px)'));
-    assert(desktop.includes('.app-shell-main .fire-sidebar { width:72px; }'));
-    assert(desktop.includes('.fire-sidebar-item > .fire-sidebar-label'));
+    assert(desktop.includes('.records-app[data-tablet-sidebar-collapsed="true"] > .fire-sidebar { width:72px; }'));
+    assert(desktop.includes('.records-app[data-tablet-sidebar-collapsed="true"] .fire-sidebar-label'));
+    assert(desktop.includes('.records-app[data-tablet-sidebar-side="right"] > .fire-sidebar { order:2; }'));
+    assert(shell.includes('usePersistedState("fire:tablet-sidebar-collapsed", false)'));
+    assert(shell.includes('aria-label="平板侧栏设置"') && shell.includes('移到右侧'));
     assert(!desktop.includes('.fire-sidebar-item > span {'), 'custom image wrapper must not be hidden with the text');
     assert(shell.includes('aria-label={t.label}') && shell.includes('className="fire-sidebar-label truncate"'));
     assert(desktop.includes('(min-width: 1024px) and (max-height: 800px)'));
@@ -71,6 +74,13 @@ function fontHeaderFixture(ext) {
     assert(tablet.includes('max-width:560px; height:auto; min-height:0; max-height:calc(100dvh - 96px);'));
     assert(tablet.includes('.sc-detail-dialog-head { min-height:64px;'));
     assert(!tablet.includes('@media (max-width: 767px)'), 'phone layout remains owned by mobile.css');
+  });
+  await test('selected capsule counts inherit their foreground without changing hydrated markup', () => {
+    const cards = fs.readFileSync(path.join(root, 'components/views/CardLibraryView.tsx'), 'utf8');
+    assert(cards.includes('text-white/60 dark:text-[#111]/50'), 'card count markup stays compatible with cached client bundles');
+    const styles = fs.readFileSync(path.join(root, 'styles/capsules.css'), 'utf8');
+    assert(styles.includes('button[aria-pressed="true"][class~="rounded-full"] > span.tabular-nums'));
+    assert(styles.includes('button[aria-pressed="true"][class~="rounded-full"] > span[class*="text-white/60"] { color:inherit!important; opacity:1!important; }'));
   });
   await test('website preview clips glass layers to its responsive rounded outline', () => {
     const css = fs.readFileSync(path.join(root,'app/globals.css'),'utf8');

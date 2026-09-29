@@ -158,6 +158,8 @@ export default function RecordsApp({
   const assetReturnRef = useRef<{ url: string; top: number; innerTop: number } | null>(null);
   const restoreAssetScrollRef = useRef(false);
   const [fourDoorPinned, setFourDoorPinned] = usePersistedState("fire:four-door-pinned", false);
+  const [tabletSidebarCollapsed, setTabletSidebarCollapsed] = usePersistedState("fire:tablet-sidebar-collapsed", false);
+  const [tabletSidebarSide, setTabletSidebarSide] = usePersistedState<"left" | "right">("fire:tablet-sidebar-side", "left");
   const [sidebarScroll, setSidebarScroll] = useState({ top: 0, height: 0, visible: false });
   const [userLogs, setUserLogs] = useState<SystemLog[]>(initialUserLogs);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
@@ -876,10 +878,10 @@ export default function RecordsApp({
   // 实测把「繁體」改成了「繁体」），React 一比对就报 Hydration failed。站内的繁简 / 英文切换不受影响。
   return (
     <>
-    <div translate="no" className={`records-app notranslate flex items-start${activeTab === "settings" ? " is-settings" : ""}`}>
+    <div translate="no" data-tablet-sidebar-collapsed={tabletSidebarCollapsed === true ? "true" : "false"} data-tablet-sidebar-side={tabletSidebarSide === "right" ? "right" : "left"} className={`records-app notranslate flex items-start${activeTab === "settings" ? " is-settings" : ""}`}>
       {/* 桌面侧边导航 */}
       <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block ${activeTab === "settings" ? "is-settings" : ""}`}>
-        <nav ref={desktopNavRef} onScroll={updateSidebarScroll} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
+        <nav id="fire-desktop-nav" ref={desktopNavRef} onScroll={updateSidebarScroll} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
           <div className={`four-door-anchor ${fourDoorPinned ? "is-pinned" : ""}`}>
             {desktopViewport ? <FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} pinned={fourDoorPinned} onTogglePinned={() => setFourDoorPinned(value => !value)} /> : <div className="four-door-zone" aria-hidden="true" />}
           </div>
@@ -918,6 +920,16 @@ export default function RecordsApp({
             );
           })}
         </nav>
+        <div className="fire-sidebar-tablet-controls" aria-label="平板侧栏设置">
+          <button type="button" onClick={() => setTabletSidebarCollapsed(value => !value)} aria-label={tabletSidebarCollapsed ? "展开侧栏" : "收回侧栏"} aria-controls="fire-desktop-nav" aria-expanded={!tabletSidebarCollapsed} title={tabletSidebarCollapsed ? "展开侧栏" : "收回侧栏"}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16m7-11-3 3 3 3" /></svg>
+            <span>{tabletSidebarCollapsed ? "展开侧栏" : "收回侧栏"}</span>
+          </button>
+          <button type="button" onClick={() => setTabletSidebarSide(value => value === "left" ? "right" : "left")} aria-label={tabletSidebarSide === "right" ? "移到左侧" : "移到右侧"} title={tabletSidebarSide === "right" ? "移到左侧" : "移到右侧"}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" /><path d={tabletSidebarSide === "right" ? "M15 4v16m-4-11-3 3 3 3" : "M9 4v16m4-11 3 3-3 3"} /></svg>
+            <span>{tabletSidebarSide === "right" ? "移到左侧" : "移到右侧"}</span>
+          </button>
+        </div>
         {sidebarScroll.visible && <span aria-hidden="true" className="fire-sidebar-scroll-indicator" style={{ top: sidebarScroll.top + 1, height: sidebarScroll.height }} />}
       </aside>
 
