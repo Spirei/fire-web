@@ -3604,7 +3604,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </div>
             )}
 
-            {sub === "authorizations" && <div>{isAdminUser && <div className="mb-4 flex justify-end"><button type="button" className="app-device-brand-settings" onClick={() => jumpTo({ sub: "site", anchor: "appearance", label: "网站形象" })}>授权页外观</button></div>}<AppDeviceList brand={appConnectionBrand(site)} /></div>}
+            {sub === "authorizations" && <AppDeviceList brand={appConnectionBrand(site)} onAppearance={isAdminUser ? () => jumpTo({ sub: "site", anchor: "appearance", label: "网站形象" }) : undefined} />}
 
             {sub === "totp" && (
               <div id="totp" className="flex flex-col gap-6">

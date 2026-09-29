@@ -7205,37 +7205,10 @@ html { scrollbar-gutter:stable; }
 .app-connection-login [aria-pressed] { min-height:38px; }
 .app-devices-heading { margin-bottom:28px; }
 .app-devices-heading h1 { font-size:28px; line-height:1.3; font-weight:600; letter-spacing:-.5px; }
-.app-device-manager { color:rgb(var(--site-ink,29 29 31)); }
-.app-connection-shell .app-device-manager { color:var(--connection-ink); }
-.app-device-list { display:grid; gap:16px; list-style:none; margin:0; padding:0; }
-.app-device-card { border:1px solid rgb(var(--site-ink,29 29 31) / .12); border-radius:20px; padding:22px; }
-.app-connection-shell .app-device-card { border-color:var(--connection-edge); }
-.app-device-card-header { display:flex; align-items:center; gap:12px; }
-.app-device-name { min-width:0; flex:1; }
-.app-device-name h3 { font-size:16px; font-weight:600; line-height:1.4; overflow-wrap:anywhere; }
-.app-device-name > span { display:block; font-size:12px; color:rgb(var(--site-muted,110 110 115)); margin-top:3px; }
-.app-device-revoke { flex:none; min-height:38px; padding:8px 14px; border:1px solid #c9384340; border-radius:999px; font-size:13px; font-weight:500; color:#c93843; }
-.app-device-details { display:grid; gap:12px; margin-top:22px; padding-top:18px; border-top:1px solid rgb(var(--site-ink,29 29 31) / .10); font-size:13px; }
-.app-device-details > div { display:flex; justify-content:space-between; gap:20px; }
-.app-device-details dt { color:rgb(var(--site-muted,110 110 115)); white-space:nowrap; }
-.app-device-details dd { text-align:right; min-width:0; overflow-wrap:anywhere; }
-.app-devices-empty { min-height:250px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:28px 12px; text-align:center; }
-.app-devices-empty-icon { width:44px; height:44px; color:rgb(var(--site-muted,110 110 115)); opacity:.7; }
-.app-devices-empty h2 { font-size:15px; font-weight:500; }
-.app-devices-empty p { font-size:13px; color:#c93843; overflow-wrap:anywhere; }
-.app-devices-empty .app-connection-button { flex:none; min-height:40px; border-color:rgb(var(--site-ink,29 29 31) / .15); color:inherit; background:transparent; padding:8px 22px; margin-top:0; }
-.app-devices-loading { display:flex; align-items:center; justify-content:center; gap:10px; min-height:250px; font-size:13px; color:rgb(var(--site-muted,110 110 115)); }
-.app-connection-spinner { width:16px; height:16px; border:2px solid currentColor; border-right-color:transparent; opacity:.6; border-radius:50%; animation:app-connection-spin 800ms linear infinite; }
-@keyframes app-connection-spin { to { transform:rotate(360deg); } }
-.dark .app-device-card { border-color:rgb(var(--site-ink,245 245 247) / .16); }
-.dark .app-device-details { border-color:rgb(var(--site-ink,245 245 247) / .12); }
-.dark .app-device-revoke,.dark .app-devices-empty p { color:#ff8a93; border-color:#ff8a9340; }
 @media(hover:hover) {
   .app-connection-button:hover:not(:disabled) { background:var(--connection-hover); }
   .app-connection-button.is-primary:hover:not(:disabled),.app-connection-login button[type="submit"]:hover:not(:disabled) { background:#075ce5; }
   .app-connection-back:hover { color:var(--connection-ink); }
-  .app-device-revoke:hover { background:#c938430a; }
-  .dark .app-device-revoke:hover { background:#ff8a9312; }
 }
 @media(max-width:600px) {
   .app-connection-header-inner { min-height:72px; padding:18px 24px; }
@@ -7248,17 +7221,7 @@ html { scrollbar-gutter:stable; }
   .app-consent-account { padding:15px 16px; gap:12px; }
   .app-consent-permissions { padding-top:24px; }
   .app-connection-footer { padding:20px 24px; }
-  .app-device-card { padding:18px 16px; border-radius:16px; }
-  .app-device-card-header { gap:10px; }
-  .app-device-revoke { padding:8px 12px; font-size:12px; }
-  .app-device-name h3 { font-size:15px; }
-  .app-device-details > div { gap:12px; }
-  .app-device-details { font-size:12px; }
 }
 @media(prefers-reduced-motion:reduce) {
   .app-connection-button { transition:none; }
-  .app-connection-spinner { animation:none; }
 }
-
-.app-device-brand-settings { font-size:13px; font-weight:500; color:#0866ff; padding:8px 0; }
-.dark .app-device-brand-settings { color:#75a8ff; }

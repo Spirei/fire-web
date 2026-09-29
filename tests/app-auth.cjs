@@ -44,6 +44,20 @@ async function redeem(exchange) { return tokenRoute.POST(req('auth/token', excha
 async function connected(values, browserToken) { const { exchange } = await connect(values, browserToken); const response = await redeem(exchange); const body = await response.json(); assert.equal(response.status, 200, JSON.stringify(body)); return body.data; }
 const identity = token => auth.getAuthUser(req('auth/me', null, null, 'GET', null, token));
 (async () => {
+  await test('authorization duration handles minute boundaries, whole days and clock skew', () => {
+    const { appAuthorizationDuration: duration } = require(path.join(root, 'lib/appDeviceTime.ts'));
+    const start = Date.UTC(2026, 8, 27, 14, 32);
+    assert.equal(duration(start, start + 59_999), '不足 1 分钟');
+    assert.equal(duration(start, start + 60_000), '1 分钟');
+    assert.equal(duration(start, start + 3_600_000), '1 小时');
+    assert.equal(duration(start, start + 3_720_000), '1 小时 2 分钟');
+    assert.equal(duration(start, start + 86_400_000), '1 天');
+    assert.equal(duration(start, start + 2 * 86_400_000 + 7 * 3_600_000), '2 天 7 小时');
+    assert.equal(duration(start, start - 60_000), '不足 1 分钟');
+    assert.equal(duration(NaN, start), '—');
+    assert.equal(duration(start, Infinity), '—');
+    assert.equal(duration(0, start), '—');
+  });
   await test('discovery supports a nonstandard HTTPS port and only relative same-origin endpoints', async () => {
     const response = await configRoute.GET(req('auth/config', null, null, 'GET', null));
     const body = await response.json(); assert.equal(response.status, 200); assert.equal(body.data.authorization_path, '/app/authorize'); assert.equal(body.data.redirect_uri, native.APP_REDIRECT_URI);
@@ -122,6 +136,21 @@ const identity = token => auth.getAuthUser(req('auth/me', null, null, 'GET', nul
     assert.equal((await deviceRoute.GET(req('auth/devices',null,null,'GET',null,initial.access_token))).status,401);
     await deviceRoute.DELETE(req('auth/devices',{id:initial.grant_id},otherBrowser,'DELETE')); assert(identity(initial.access_token));
     await deviceRoute.DELETE(req('auth/devices',{id:initial.grant_id},browser,'DELETE')); assert.equal(identity(initial.access_token),null); assert.equal(native.refreshAppTokens('fire-ios',initial.refresh_token),null);
+  });
+  await test('device management preserves first authorization time across token refresh', async () => {
+    const initial = await connected();
+    const createdAt = Date.now() - 2 * 86_400_000 - 7 * 3_600_000;
+    db.prepare('UPDATE app_grants SET created_at=?,last_used_at=? WHERE id=?').run(createdAt, createdAt, initial.grant_id);
+    const rotated = native.refreshAppTokens('fire-ios', initial.refresh_token); assert(rotated);
+    const response = await deviceRoute.GET(req('auth/devices', null, browser, 'GET'));
+    const device = (await response.json()).data.devices.find(item => item.id === initial.grant_id);
+    assert(device); assert.equal(device.name, requestValues.device_name); assert.equal(device.scope, requestValues.scope);
+    assert.equal(device.createdAt, createdAt); assert(device.lastUsedAt > createdAt); assert(device.expiresAt > Date.now());
+    const { appAuthorizationDuration } = require(path.join(root, 'lib/appDeviceTime.ts'));
+    assert.equal(appAuthorizationDuration(device.createdAt, Date.now()), '2 天 7 小时');
+    await deviceRoute.DELETE(req('auth/devices', { id: initial.grant_id }, browser, 'DELETE'));
+    assert(!native.listAppDevices(user.id).some(item => item.id === initial.grant_id));
+    assert.equal(identity(rotated.access_token), null); assert.equal(native.refreshAppTokens('fire-ios', rotated.refresh_token), null);
   });
   await test('App disconnect revokes refresh and access together, independently of browser login', async () => {
     const initial=await connected(); assert.equal((await revokeRoute.POST(req('auth/revoke',{client_id:'fire-ios',token:initial.refresh_token},null))).status,200);
