@@ -12,6 +12,9 @@
 
 import { fetchFutuDailyKline } from "./futuQuotes";
 import { proxyFetch } from "./net";
+import { getSiteSettings } from "./settings";
+import { HistoryCache } from "./historyCache";
+import { normalizeMarketCode } from "./marketCode";
 
 export interface KlineItem {
   d: string; // YYYY-MM-DD
@@ -22,27 +25,14 @@ export interface KlineItem {
   v: number;
 }
 
-const cache = new Map<string, { items: KlineItem[]; at: number }>();
-const pending = new Map<string, Promise<KlineItem[]>>();
-
-async function cachedKline(key: string, load: () => Promise<KlineItem[]>): Promise<KlineItem[]> {
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL) return hit.items;
-  const active = pending.get(key);
-  if (active) return active;
-  const request = load().then((items) => {
-    cache.delete(key);
-    for (const [oldKey, entry] of cache) {
-      if (Date.now() - entry.at >= CACHE_TTL) cache.delete(oldKey);
-    }
-    while (cache.size >= 128) cache.delete(cache.keys().next().value!);
-    cache.set(key, { items, at: Date.now() });
-    return items;
-  }).finally(() => pending.delete(key));
-  pending.set(key, request);
-  return request;
+const cache = new HistoryCache<KlineItem[]>();
+function cachedKline(key: string, load: () => Promise<KlineItem[]>) {
+  return cache.fetch(key, load);
 }
-const CACHE_TTL = 10 * 60 * 1000;
+function historyNamespace() {
+  const settings = getSiteSettings();
+  return JSON.stringify([settings.futuHost, settings.futuPort, process.env.STOCKLOG_FUTU, process.env.STOCKLOG_PROXY]);
+}
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36";
 
@@ -261,8 +251,10 @@ export async function fetchDailyKline(
   index = false,
   adjust: "qfq" | "none" | "hfq" = "qfq"
 ): Promise<KlineItem[]> {
-  // 不同周期需要不同条数；limit 必须进入缓存键，否则先缓存 320 条会污染后续 3200 条请求。
-  const key = `${market}:${code}:${limit}:${adjust}:${index}`;
+  market = market.trim().toUpperCase();
+  code = normalizeMarketCode(market, code);
+  // 不同数据源、复权、指数模式和条数独立缓存。
+  const key = JSON.stringify([historyNamespace(), market, code, limit, adjust, index]);
   return cachedKline(key, async () => {
   const symbol = tencentSymbol(market, code, index);
   let items: KlineItem[] = [];
@@ -270,7 +262,7 @@ export async function fetchDailyKline(
     const usCode = normalizedUsCode(code);
     // 美股：基准指数优先本地富途日 K（最稳，不受外网源限流影响），失败再走 Yahoo（拆股复权）→ 新浪兜底
     if (isFutuBenchmark("US", usCode)) {
-      items = await fetchFutuDailyKline("US", usCode, limit, futuAutype(adjust));
+      items = await fetchFutuDailyKline("US", usCode, limit, futuAutype(adjust)).catch(() => []);
     }
     if (items.length === 0) {
       items = await fetchYahooDaily(usCode, limit, adjust);
@@ -294,10 +286,10 @@ export async function fetchDailyKline(
     // 港股 / A股 / 日股 / 韩股：腾讯前复权日 K（日韩数据可能不全）
     // 港股基准（恒指 02800）优先本地富途日 K，失败再回退腾讯。
     if (isFutuBenchmark("HK", code)) {
-      items = await fetchFutuDailyKline("HK", code, limit, futuAutype(adjust));
+      items = await fetchFutuDailyKline("HK", code, limit, futuAutype(adjust)).catch(() => []);
     }
     if (items.length === 0) {
-      items = await fetchTencentDailyPaged(symbol, limit, adjust);
+      items = await fetchTencentDailyPaged(symbol, limit, adjust).catch(() => []);
     }
     // A股：腾讯前复权最多约 640 条，长周期（季K等）或空结果时用东方财富全量历史兜底
     if (market === "CN" && items.length < Math.min(limit, 800)) {
@@ -350,7 +342,9 @@ export async function fetchPeriodKline(
   adjust: "qfq" | "none" | "hfq" = "qfq",
   index = false
 ): Promise<KlineItem[]> {
-  const key = `${market}:${code}:${period}:${limit}:${adjust}:${index}`;
+  market = market.trim().toUpperCase();
+  code = normalizeMarketCode(market, code);
+  const key = JSON.stringify([historyNamespace(), market, code, period, limit, adjust, index]);
   return cachedKline(key, async () => {
   let items: KlineItem[] = [];
   // 周/月/季/年K一律用日K（qfq/hfq/none）聚合：富途周期K对拆股股未正确前复权（GOOGL 2022-07

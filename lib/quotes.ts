@@ -5,6 +5,7 @@ import { fetchFutuQuotes, searchFutu } from "./futuQuotes";
 import { getCryptoQuote } from "./assetQuotes";
 import { proxyFetch } from "./net";
 import { MarketDataPool } from "./marketDataPool";
+import { normalizeMarketCode } from "./marketCode";
 
 const DEFAULT_QUOTE_URL = "https://qt.gtimg.cn/q=";
 const DEFAULT_SEARCH_URL = "https://smartbox.gtimg.cn/s3/?v=2&q={q}&t=all";
@@ -175,14 +176,7 @@ const sharedQuotes = new MarketDataPool<Quote>(2_000, quote => Number.isFinite(q
 const sharedCharts = new MarketDataPool<Intraday>(30_000, chart => !chart.stale);
 
 function normalizedMarketItem(item: QuoteItem): QuoteItem {
-  let code = item.code.trim().toUpperCase();
-  if (!code) return { ...item, code };
-  if (item.market === "US") code = code.replace(US_EXCHANGE_SUFFIX, "");
-  if (item.market === "HK") code = code.replace(/^0+/, "").padStart(5, "0");
-  if (item.market === "CN") code = code.padStart(6, "0");
-  if (item.market === "JP") code = code.replace(/\.T$/, "");
-  if (item.market === "KR") code = code.replace(/\.(KS|KQ)$/, "");
-  return { ...item, code };
+  return { ...item, code: normalizeMarketCode(item.market, item.code) };
 }
 
 export async function fetchQuotes(items: QuoteItem[]): Promise<Record<string, Quote>> {

@@ -657,15 +657,16 @@ function fontHeaderFixture(ext) {
     let calls = 0;
     let finish;
     global.fetch = (url) => {
-      if (!String(url).includes('US_MinKService.getDailyK')) return Promise.reject(new Error('Network disabled in isolated regression'));
+      if (!String(url).includes('secid=1.600987')) return Promise.reject(new Error('Network disabled in isolated regression'));
       calls++; return new Promise(resolve => { finish = resolve; });
     };
-    const request = () => new Request('http://localhost/api/kline?market=US&code=REGRESSION');
+    const request = () => new Request('http://localhost/api/kline?market=CN&code=600987');
     try {
       const a = GET(request());
       const b = GET(request());
+      await new Promise(resolve => setImmediate(resolve));
       assert.equal(calls, 1);
-      finish(new Response('callback([{"d":"2026-01-30","c":"10"},{"d":"2026-02-27","c":"12"}])'));
+      finish(Response.json({ data: { klines: ['2026-01-30,9,10,11,8,100', '2026-02-27,11,12,13,10,100'] } }));
       assert.deepEqual(await (await a).json(), { closes: [10, 12] });
       assert.deepEqual(await (await b).json(), { closes: [10, 12] });
       assert.deepEqual(await (await GET(request())).json(), { closes: [10, 12] });

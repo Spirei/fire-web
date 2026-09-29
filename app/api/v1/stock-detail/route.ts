@@ -28,9 +28,17 @@ export async function GET(request: Request) {
   const market = String(searchParams.get("market") ?? "").trim().toUpperCase();
   const code = String(searchParams.get("code") ?? "").trim().toUpperCase();
   const includeKline = searchParams.get("includeKline") !== "0";
+  const historyOnly = searchParams.get("view") === "history";
   if (!market || !code) return fail(40001, "缺少 market / code", 400);
-  if (!/^[A-Z0-9._-]+$/.test(code)) return fail(40001, "股票代码不合法", 400);
+  if (code.length > 40 || !/^[A-Z0-9._-]+$/.test(code)) return fail(40001, "股票代码不合法", 400);
   if (!MARKETS.includes(market)) return fail(40001, "暂不支持该市场", 400);
+
+  // 组合曲线只读取历史，避免实时快照、汇率及 ETF 份额查询阻塞日线。
+  // 无此参数时保留完整详情契约；旧容器忽略 view 时 App 仍可读取 kline。
+  if (historyOnly) {
+    try { return ok({ market, code, kline: await fetchDailyKline(market, code, 320) }); }
+    catch { return fail(50002, "K 线获取失败，请稍后重试", 502); }
+  }
 
   const id = `${market}:${code}`;
   const [quoteRes, ratesRes, klineRes] = await Promise.allSettled([
