@@ -4,6 +4,7 @@ import { fetchUsExtendedQuote, fetchUsRegularQuote } from "./usExtendedQuote";
 import { fetchFutuQuotes, searchFutu } from "./futuQuotes";
 import { getCryptoQuote } from "./assetQuotes";
 import { proxyFetch } from "./net";
+import { MarketDataPool } from "./marketDataPool";
 
 const DEFAULT_QUOTE_URL = "https://qt.gtimg.cn/q=";
 const DEFAULT_SEARCH_URL = "https://smartbox.gtimg.cn/s3/?v=2&q={q}&t=all";
@@ -170,7 +171,27 @@ export async function fetchBatch(symbols: string[]): Promise<Map<string, Quote>>
   return map;
 }
 
+const sharedQuotes = new MarketDataPool<Quote>(2_000, quote => Number.isFinite(quote.price) && quote.price > 0);
+const sharedCharts = new MarketDataPool<Intraday>(30_000, chart => !chart.stale);
+
+function normalizedMarketItem(item: QuoteItem): QuoteItem {
+  let code = item.code.trim().toUpperCase();
+  if (!code) return { ...item, code };
+  if (item.market === "US") code = code.replace(US_EXCHANGE_SUFFIX, "");
+  if (item.market === "HK") code = code.replace(/^0+/, "").padStart(5, "0");
+  if (item.market === "CN") code = code.padStart(6, "0");
+  if (item.market === "JP") code = code.replace(/\.T$/, "");
+  if (item.market === "KR") code = code.replace(/\.(KS|KQ)$/, "");
+  return { ...item, code };
+}
+
 export async function fetchQuotes(items: QuoteItem[]): Promise<Record<string, Quote>> {
+  const settings = getSiteSettings();
+  const namespace = JSON.stringify([settings.quoteSource, settings.quoteApiUrl, settings.futuHost, settings.futuPort, process.env.STOCKLOG_FUTU, process.env.STOCKLOG_PROXY]);
+  return sharedQuotes.fetch(items.map(normalizedMarketItem), namespace, fetchQuotesUnshared);
+}
+
+async function fetchQuotesUnshared(items: QuoteItem[]): Promise<Record<string, Quote>> {
   const result: Record<string, Quote> = {};
   const cryptoItems = items.filter((item) => item.market === "ASSET");
   await Promise.all(cryptoItems.map(async (item) => {
@@ -524,10 +545,11 @@ function parseMinutePoints(raw: unknown[]): IntradayPoint[] {
 }
 
 async function fetchIntradayForCode(code: string): Promise<Intraday | null> {
-  const cached = tencentIntradayCache.get(code);
+  const tpl = getSiteSettings().chartApiUrl || DEFAULT_CHART_URL;
+  const cacheKey = JSON.stringify([tpl, code]);
+  const cached = tencentIntradayCache.get(cacheKey);
   if (cached && Date.now() - cached.at < 30_000) return cached.data;
   try {
-    const tpl = getSiteSettings().chartApiUrl || DEFAULT_CHART_URL;
     const res = await fetch(
       tpl.replace("{code}", encodeURIComponent(code)),
       {
@@ -545,7 +567,7 @@ async function fetchIntradayForCode(code: string): Promise<Intraday | null> {
     const points = parseMinutePoints(raw);
     if (points.length === 0) throw new Error("empty chart");
     const data = { date, points };
-    tencentIntradayCache.set(code, { at: Date.now(), data });
+    tencentIntradayCache.set(cacheKey, { at: Date.now(), data });
     return data;
   } catch {
     return cached ? { ...cached.data, stale: true } : null;
@@ -610,6 +632,11 @@ async function fetchYahooIntraday(item: QuoteItem): Promise<Intraday | null> {
 }
 
 export async function fetchIntraday(items: QuoteItem[]): Promise<Record<string, Intraday>> {
+  const namespace = JSON.stringify([getSiteSettings().chartApiUrl, process.env.STOCKLOG_PROXY]);
+  return sharedCharts.fetch(items.map(normalizedMarketItem), namespace, fetchIntradayUnshared);
+}
+
+async function fetchIntradayUnshared(items: QuoteItem[]): Promise<Record<string, Intraday>> {
   const result: Record<string, Intraday> = {};
   const grouped = new Map<string, QuoteItem[]>();
   items.forEach((item) => {
