@@ -333,12 +333,16 @@ function fontHeaderFixture(ext) {
     assert(css.includes('.pk-reference-modal.modal-glass { width:100%; min-height:0;'));
   });
   await test('mobile profit and loss lists switch only on a deliberate horizontal swipe', () => {
-    const { horizontalSwipeDirection } = require(path.join(root, 'lib/useMobileHorizontalSwipe.ts'));
+    const { horizontalSwipeDirection, acceptsSwipeTouch } = require(path.join(root, 'lib/useMobileHorizontalSwipe.ts'));
     const origin = { x: 180, y: 250 };
     assert.equal(horizontalSwipeDirection(origin, { x: 110, y: 260 }), 'left');
     assert.equal(horizontalSwipeDirection(origin, { x: 245, y: 240 }), 'right');
     assert.equal(horizontalSwipeDirection(origin, { x: 140, y: 250 }), null, 'short taps must not switch tabs');
     assert.equal(horizontalSwipeDirection(origin, { x: 100, y: 370 }), null, 'vertical scrolling must not switch tabs');
+    assert.equal(acceptsSwipeTouch(390, false), true, 'narrow phone previews retain swipe support');
+    assert.equal(acceptsSwipeTouch(768, true), true, 'portrait tablets support touch swipes');
+    assert.equal(acceptsSwipeTouch(1366, true), true, 'landscape tablets support touch swipes');
+    assert.equal(acceptsSwipeTouch(1440, false), false, 'desktop mouse and trackpad stay click-driven');
     const calendar = fs.readFileSync(path.join(root, 'components/PnlCalendar.tsx'), 'utf8');
     const analysis = fs.readFileSync(path.join(root, 'components/AssetPnlAnalysis.tsx'), 'utf8');
     const cards = fs.readFileSync(path.join(root, 'components/views/CardLibraryView.tsx'), 'utf8');
@@ -348,7 +352,7 @@ function fontHeaderFixture(ext) {
     assert(analysis.includes('<div {...detailSwipe} className="mt-3 divide-y'));
     assert(cards.includes('<div {...cardModeSwipe} className="space-y-4"'));
     assert(hook.includes('"data-no-back-gesture": "true"'), 'nested swipes must not trigger page back');
-    assert(hook.includes('(pointer: coarse) and (max-height: 500px)'), 'landscape phones must retain swipe navigation');
+    assert(hook.includes('(any-pointer: coarse)'), 'tablets with a paired trackpad must retain touch swipes');
     assert(hook.includes('touch.clientX >= 24 && touch.clientX <= width - 24'), 'browser edge gestures stay native');
   });
   await test('mobile sheets avoid desktop row heights, native touch drag and nested fixed dialogs', () => {
