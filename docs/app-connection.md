@@ -4,7 +4,7 @@
 
 ## 服务器与域名
 
-App 首次预填 `https://fire.6dm.tv:18520`；连接页允许更换，成功前先调用所选源的 `GET /api/v1/auth/config` 验证协议版本。记住所选源，不依赖编译时 API 域名。配置返回同源相对路径，不允许第三方指定任意换令牌服务器。
+App 设置内的连接页首次预填 `https://fire.6dm.tv:18520`，允许更换。点击连接立即用 ASWebAuthenticationSession 打开所选源的 `/app/authorize`，不因预检失败阻止浏览器弹出；`GET /api/v1/auth/config` 保留供协议能力查询。授权及令牌路径遵循固定 v1 合同，不接受第三方指定任意换令牌服务器。App 首屏直接进入本地应用，授权是设置中的可选操作。
 
 生产部署设置正确的公网 HTTPS 域名（含非默认端口），或设置 `FIRE_APP_ORIGIN`；授权、换令牌和撤销只接受该源。开发环境允许 localhost / 127.0.0.1 HTTP。App Release 只接受 HTTPS，Debug 额外接受回环 HTTP。
 
@@ -37,7 +37,7 @@ App 首次预填 `https://fire.6dm.tv:18520`；连接页允许更换，成功前
 | access token | 随机不透明，15 分钟有效，Bearer 请求 |
 | refresh token | 每次成功刷新轮换，30 天无刷新失效，授权绝对最长 90 天 |
 
-1. App 生成 verifier / state，读取所选源 auth/config，使用 ASWebAuthenticationSession 打开 `/app/authorize`。
+1. App 生成 verifier / state，使用 ASWebAuthenticationSession 立即打开所选源的 `/app/authorize`。
 2. Web 验证客户端、固定回调、scope / state / challenge。未登录时保留授权请求，进入既有 Web 登录；通行密钥和 TOTP 不另造一套。
 3. 用户确认账户与权限，浏览器 POST `/api/v1/auth/authorize`。必须带同源 Origin、真实 Cookie 会话，拒绝 Bearer 发起同意。GET 不创建授权码。
 4. 回调只携带 code + state（取消携带 access_denied），不携带访问/刷新令牌。
@@ -59,9 +59,11 @@ App 首次预填 `https://fire.6dm.tv:18520`；连接页允许更换，成功前
 
 一份 Keychain item 原子保存源、grant ID、access/refresh、到期时间与本人资料。actor 合并并发刷新；刷新与登出/连接变更竞争时，旧响应不能覆盖当前凭据。断网/超时不登出，确切刷新 401 才清除连接。
 
-私人读缓存按源 + grant + 请求路径隔离，受 iOS 文件保护，24 小时过期，只在网络不可达/超时恢复。缓存不伪装成在线成功：显示离线及缓存时间。后台刷新成功清除离线状态。401/403/5xx/取消任务不使用缓存掩盖问题。断开/新连接清除私人缓存；公开行情缓存沿用原系统。
+私人读缓存按源 + grant + 请求路径隔离，受 iOS 文件保护，24 小时过期，只在网络不可达/超时恢复。缓存不伪装成在线成功：显示离线及缓存时间。后台刷新成功清除离线状态。401/403/5xx/取消任务不使用缓存掩盖问题。断开/新连接清除私人缓存；公开行情缓存区分数据来源，演示行情与真实行情隔离。
 
-离线不排队写入交易或资金，不自动重放网络失败的写请求。离线断开立即删除本机凭据；服务端撤销需要联网，如撤销请求无法送达，可从 Web 的设备页撤销。第一次升级需重新网页授权，旧 UserDefaults Bearer 不迁移为长期设备授权。
+离线不排队写入交易或资金，不自动重放网络失败的写请求。离线断开立即删除本机凭据；服务端撤销需要联网，如撤销请求无法送达，可从 Web 的设备页撤销。本地账本、iCloud 文件备份与演示数据属于 App 独立能力，不同步到 Web。设置内可开启演示数据，关闭回到原数据来源；演示数据不进入个人备份。
+
+第一次升级需重新网页授权，旧 UserDefaults Bearer 不迁移为长期设备授权。
 
 ## 验证
 
