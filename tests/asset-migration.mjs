@@ -47,6 +47,13 @@ assert(fs.existsSync(path.join(uploads,'asset/market/美股US.svg')),'old URLs s
 check.close();
 const again = await migrateAssets({dbPath,uploads,apply:true});
 assert.equal(again.changedCells,0,'rerun must not change identity or URLs');
+const missingRetry = await migrateAssets({dbPath,uploads,apply:true,once:true});
+assert.equal(missingRetry.missing.length,1,'missing files must not mark automatic upgrade complete');
+const finish = new Database(dbPath);
+finish.prepare("DELETE FROM assets WHERE id='missing'").run();
+finish.close();
+assert.equal((await migrateAssets({dbPath,uploads,apply:true,once:true})).dryRun,false);
+assert.equal((await migrateAssets({dbPath,uploads,apply:true,once:true})).skipped,true,'startup upgrade is idempotent');
 assert.equal(naming.assetFilename({type:'market',name:'美股',market:'US'},'.svg'),'US.svg');
 assert.equal(naming.assetFilename({type:'stock',name:'苹果',code:'AAPL'},'.png'),'AAPL.png');
 assert.match(naming.assetFilename({type:'group',name:'科技'},'.svg'),/^group-[a-f0-9]+\.svg$/);

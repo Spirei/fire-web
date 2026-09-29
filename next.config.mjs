@@ -37,6 +37,8 @@ const nextConfig = {
       // 系统安全插图优先由代码提供，不受宿主机 icons 挂载覆盖。
       { source: "/icons/security-check.svg", destination: "/api/system-assets/security-check" },
       { source: "/uploads/reports/:path*", destination: "/api/private-reports/:path*" },
+      { source: "/uploads/asset/:path*", destination: "/api/managed-upload/asset/:path*" },
+      { source: "/uploads/cards/:path*", destination: "/api/managed-upload/cards/:path*" },
       // 草稿以 .draft- 开头；必须先走动态读取，否则 public 静态服务拒绝隐藏文件并返回 400。
       { source: "/uploads/mclaren/models/:file", destination: "/api/showcase/model-files/:file" }
     ] };
@@ -104,6 +106,13 @@ const nextConfig = {
         source: "/api/:path*",
         headers: [{ key: "Cache-Control", value: "no-store" }]
       },
+      ...["/uploads/asset/:path*", "/uploads/cards/:path*", "/api/asset-image/:path*", "/api/managed-upload/:path*"].map(source => ({
+        source,
+        headers: [
+          { key: "Cache-Control", value: "public, no-cache" },
+          { key: "Content-Security-Policy", value: "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'" }
+        ]
+      })),
       {
         // 浏览器刷新一开始即可复用静态站点图标，不退回通用地球占位。
         source: "/manifest.webmanifest",

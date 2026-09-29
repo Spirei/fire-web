@@ -3,9 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/prepare-assets.mjs",
     "dev": "NEXT_DIST_DIR=.next-dev next dev -H 0.0.0.0 -p 3000",
     "prebuild": "node scripts/generate-showcase-ktx-worker.mjs",
     "build": "next build",
+    "prestart": "node scripts/prepare-assets.mjs",
     "start": "next start -H 0.0.0.0 -p 3000",
     "audit:public": "node scripts/audit-public-repo.mjs",
     "audit:deploy": "node scripts/audit-deploy-parity.mjs",

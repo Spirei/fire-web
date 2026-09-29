@@ -11,6 +11,8 @@ export interface Asset {
   name: string;
   url: string;
   urlDark?: string;
+  imageUrl?: string;
+  imageUrlDark?: string;
   marketCap: number;
   price: number | null;
   changePct: number | null;
@@ -32,7 +34,7 @@ type HookOptions = {
 
 const ALL_TYPES: AssetType[] = ["stock", "market", "flag", "broker", "crypto", "metal", "icon"];
 const CACHE_TTL = 5 * 60 * 1000;
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 const cache = new Map<AssetType, { assets: Asset[]; at: number }>();
 const inflight = new Map<AssetType, Promise<void>>();
 const listeners = new Set<() => void>();
@@ -53,16 +55,16 @@ const iconInflight = new Map<string, Promise<void>>();
 function stockMapFromCache(): Record<string, string> {
   const map: Record<string, string> = {};
   (cache.get("stock")?.assets ?? []).forEach((asset) => {
-    map[`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`] = asset.url;
+    map[`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`] = asset.imageUrl || asset.url;
   });
   return map;
 }
 
-function applyStockIconPayload(data: { assets?: Array<{ type?: string; market?: string; code?: string; url?: string }> } | null) {
+function applyStockIconPayload(data: { assets?: Array<{ type?: string; market?: string; code?: string; url?: string; imageUrl?: string }> } | null) {
   const icons: Record<string, string> = {};
   (Array.isArray(data?.assets) ? data.assets : []).forEach((asset) => {
-    if (asset?.type === "stock" && asset.market && asset.code && asset.url) {
-      icons[`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`] = asset.url;
+    if (asset?.type === "stock" && asset.market && asset.code && (asset.imageUrl || asset.url)) {
+      icons[`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`] = asset.imageUrl || asset.url || "";
     }
   });
   if (Object.keys(icons).length) {
@@ -203,7 +205,7 @@ export function ensureFlagIcons(codes: readonly string[], force = false) {
     .then((data) => {
       const icons: Record<string, string> = {};
       (Array.isArray(data?.assets) ? data.assets : []).forEach((asset: Asset) => {
-        if (asset.type === "flag" && asset.code && asset.url) icons[asset.code.toUpperCase()] = asset.url;
+        if (asset.type === "flag" && asset.code && (asset.imageUrl || asset.url)) icons[asset.code.toUpperCase()] = asset.imageUrl || asset.url;
       });
       if (Object.keys(icons).length) {
         primeFlagIconCache(icons);
@@ -414,7 +416,7 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
   const marketIcons = useMemo(() => {
     const map: Record<string, string> = {};
     assets.forEach((asset) => {
-      if (asset.type === "market") map[asset.market.toUpperCase()] = asset.url;
+      if (asset.type === "market") map[asset.market.toUpperCase()] = asset.imageUrl || asset.url;
     });
     return map;
   }, [assets]);
@@ -422,7 +424,7 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
   const countryFlags = useMemo(() => {
     const map: Record<string, string> = {};
     assets.forEach((asset) => {
-      if (asset.type === "flag") map[asset.code.toUpperCase()] = asset.url;
+      if (asset.type === "flag") map[asset.code.toUpperCase()] = asset.imageUrl || asset.url;
     });
     return map;
   }, [assets]);
@@ -432,7 +434,7 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
     assets.forEach((asset) => {
       if (asset.type !== "stock") return;
       const market = asset.market.toUpperCase();
-      const url = asset.url;
+      const url = asset.imageUrl || asset.url;
       stockIconLookupCodes(market, asset.code).forEach((item) => {
         const key = `${market}:${item}`;
         if (!map[key]) map[key] = url;
@@ -445,7 +447,7 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
     const map: Record<string, string> = {};
     assets.forEach((asset) => {
       if (asset.type === "crypto" || asset.type === "metal" || asset.type === "icon") {
-        map[asset.code.toUpperCase()] = dark ? asset.urlDark || asset.url : asset.url;
+        map[asset.code.toUpperCase()] = dark ? asset.imageUrlDark || asset.urlDark || asset.imageUrl || asset.url : asset.imageUrl || asset.url;
       }
     });
     return map;
@@ -454,7 +456,7 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
   const brokerIcons = useMemo(() => {
     const map: Record<string, string> = {};
     assets.forEach((asset) => {
-      if (asset.type === "broker" && asset.name) map[asset.name] = asset.url;
+      if (asset.type === "broker" && asset.name) map[asset.name] = asset.imageUrl || asset.url;
     });
     return map;
   }, [assets]);

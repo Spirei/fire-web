@@ -43,6 +43,7 @@ interface AssetRow {
   name: string;
   type: "crypto" | "metal";
   url: string;
+  imageUrl?: string;
   price?: number | null;
   marketCap?: number;
   changePct?: number | null;
@@ -608,6 +609,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
           name: custom?.name || b.name,
           type: b.type,
           url: custom?.url ?? "",
+          imageUrl: custom?.imageUrl,
           price: custom?.price,
           marketCap: custom?.marketCap,
           changePct: custom?.changePct
@@ -622,6 +624,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
             name: a.name || code,
             type: a.type as "crypto" | "metal",
             url: a.url,
+            imageUrl: a.imageUrl,
             price: a.price,
             marketCap: a.marketCap,
             changePct: a.changePct
@@ -923,7 +926,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
     const custom = customFor(item.market, item.code) || customForAny(item.code);
     return (
       urls[key] ??
-      custom?.url ??
+      custom?.imageUrl ?? custom?.url ??
       item.url ??
       (cdnEnabled ? externalLogo(item.market, item.code) : "")
     );
@@ -1148,7 +1151,8 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
 
   // 券商图标（分组管理中的券商分组）
   function brokerIconOf(groupId: string): string {
-    return assets.find((a) => a.type === "broker" && a.code.toLowerCase() === groupId.toLowerCase())?.url ?? "";
+    const asset = assets.find((a) => a.type === "broker" && a.code.toLowerCase() === groupId.toLowerCase());
+    return asset?.imageUrl || asset?.url || "";
   }
 
   async function saveBrokerIcon(group: { id: string; name: string }, url: string, id?: string) {
@@ -1873,7 +1877,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
                   const custom = assets.find((asset) => asset.type === "flag" && asset.code.toUpperCase() === country.iso2);
                   const busyKey = `flag:${country.iso2}`;
                   // 默认本地开源高清 SVG（lipis/flag-icons 4x3，public/uploads/asset/flag/{iso2}.svg）
-                  const src = custom?.url || defaultFlagUrl(country.flagCode);
+                  const src = custom?.imageUrl || custom?.url || defaultFlagUrl(country.flagCode);
                   return (
                     <div key={country.iso2} className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-2 border-b border-edge px-4 py-2.5 text-sm last:border-0 hover:bg-brand-hover/40 dark:border-[#2a2f3a] dark:hover:bg-white/5">
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-bg-gray text-[10px] font-bold text-muted">{listStart + index + 1}</span>
@@ -2349,8 +2353,8 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
                             title="点击上传/更换图标"
                           >
                             <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-[10px] border border-[#d3d9e4] bg-[#f3f5f9] shadow-[0_1px_3px_rgba(10,14,25,.08)]">
-                              {row.url ? (
-                                <img src={row.url} alt="" className="h-6 w-6" />
+                              {row.imageUrl || row.url ? (
+                                <img src={row.imageUrl || row.url} alt="" className="h-6 w-6" />
                               ) : (
                                 <span className="text-[10px] font-bold text-muted">?</span>
                               )}
@@ -2409,8 +2413,8 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
                             }}
                             className="group relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-[10px] border border-dashed border-[#3a3f4b]/80 bg-gradient-to-br from-[#333844] to-[#1c212b] shadow-[0_1px_3px_rgba(0,0,0,.3)]"
                           >
-                            {row.urlDark ? (
-                              <img src={row.urlDark} alt="" className="h-6 w-6 object-contain" />
+                            {row.imageUrlDark || row.urlDark ? (
+                              <img src={row.imageUrlDark || row.urlDark} alt="" className="h-6 w-6 object-contain" />
                             ) : (
                               <svg viewBox="0 0 24 24" fill="none" stroke="#dfe4ee" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
@@ -2650,8 +2654,8 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
                           className="group relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)] dark:bg-[#1c1c1e]"
                           title="点击上传/更换图标"
                         >
-                          {row.url ? (
-                            <img src={row.url} alt="" className="h-full w-full rounded-full object-cover" />
+                          {row.imageUrl || row.url ? (
+                            <img src={row.imageUrl || row.url} alt="" className="h-full w-full rounded-full object-cover" />
                           ) : row.type === "crypto" ? (
                             <span className="inline-flex h-full w-full items-center justify-center rounded-full bg-[#f7931a] text-sm font-bold text-white">₿</span>
                           ) : (
@@ -2795,7 +2799,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
                           title="点击上传 / 更换卡面（卡面库与卡包同步）"
                           className="block w-full overflow-hidden rounded-lg border border-edge bg-bg-gray shadow-[0_1px_3px_rgba(10,14,25,.06)] dark:bg-white/5"
                         >
-                          <img src={row.url} alt="" className="aspect-[1.586] w-full object-cover" />
+                          <img src={row.imageUrl || row.url} alt="" className="aspect-[1.586] w-full object-cover" />
                           <span className={`absolute inset-0 grid place-items-center rounded-lg bg-black/25 transition-opacity duration-200 ${saving ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                             {saving && (
                               <svg className="h-5 w-5 animate-spin text-white" viewBox="0 0 24 24" fill="none">
@@ -2852,7 +2856,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
                         title="点击上传 / 更换卡面（卡面库与卡包同步）"
                         className="group relative h-[50px] w-[79px] flex-none overflow-hidden rounded-md border border-[#d3d9e4] bg-[#f3f5f9]"
                       >
-                        <img src={row.url} alt="" className="h-full w-full object-cover" />
+                        <img src={row.imageUrl || row.url} alt="" className="h-full w-full object-cover" />
                         <span className={`absolute inset-0 grid place-items-center bg-black/25 transition-opacity duration-200 ${saving ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                           {saving && (
                             <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">

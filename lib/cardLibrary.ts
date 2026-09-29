@@ -9,6 +9,7 @@ import { REGION_CURRENCY } from "./cardCurrencies";
 import { hasSecurityCode } from "./cardSecurity";
 import { upsertAsset } from "./assets";
 import { getDb } from "./db";
+import { managedImageUrl } from "./managedAssetImages";
 import { FALLBACK_RATES } from "./types";
 
 /** 卡面库清单（由 scripts/fetch-card-assets.mjs 生成） */
@@ -263,7 +264,7 @@ export function cardCoverMap(): Record<string, string> {
   const out: Record<string, string> = {};
   rows.forEach((row) => {
     const key = cardKeyOfAssetId(row.id);
-    if (key && row.url) out[key] = row.url;
+    if (key && row.url) out[key] = managedImageUrl(row.id, row.url);
   });
   return out;
 }

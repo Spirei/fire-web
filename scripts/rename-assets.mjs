@@ -85,11 +85,13 @@ export function replaceUrls(value, moves) {
   // Only whole URL tokens; labels and logical IDs are not filenames.
   return value.replace(new RegExp('(?:' + escaped.join('|') + ')(?=$|[?#[\\]\\s"\'<>)};,])', 'g'), match => map.get(match));
 }
-export async function migrateAssets({ dbPath, uploads, apply = false }) {
+export async function migrateAssets({ dbPath, uploads, apply = false, once = false }) {
   if (dbPath.startsWith('/Volumes/') || uploads.startsWith('/Volumes/')) throw new Error('Run migration on the database host, not SMB');
   const db = new Database(dbPath, { fileMustExist: true, readonly: !apply });
   db.pragma('busy_timeout = 10000');
   try {
+    const hasMigrations = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='asset_migrations'").get();
+    if (once && hasMigrations && db.prepare("SELECT 1 FROM asset_migrations WHERE id='short-urls-v2'").get()) return { skipped: true, reason: 'already migrated' };
     const plan = planAssets(db, uploads);
     if (!apply) return { dryRun: true, ...plan };
     const backupDir = path.join(path.dirname(dbPath), 'asset-migration-backups', new Date().toISOString().replace(/[:.]/g, '-'));
@@ -120,10 +122,15 @@ export async function migrateAssets({ dbPath, uploads, apply = false }) {
       }
     }).immediate();
     if (db.pragma('quick_check', { simple: true }) !== 'ok') throw new Error('Database integrity check failed');
-    return { dryRun: false, copiedAliases: plan.moves.length, changedCells, missing: plan.missing, backupDir };
+    const result = { dryRun: false, copiedAliases: plan.moves.length, changedCells, missing: plan.missing, backupDir };
+    if (once && !plan.missing.length) {
+      db.exec('CREATE TABLE IF NOT EXISTS asset_migrations (id TEXT PRIMARY KEY, completed_at TEXT NOT NULL)');
+      db.prepare('INSERT OR IGNORE INTO asset_migrations VALUES (?,?)').run('short-urls-v2', new Date().toISOString());
+    }
+    return result;
   } finally { db.close(); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const arg = (key, fallback) => process.argv.includes(key) ? process.argv[process.argv.indexOf(key) + 1] : fallback;
-  console.log(JSON.stringify(await migrateAssets({ dbPath: path.resolve(arg('--db', 'data/fire.db')), uploads: path.resolve(arg('--uploads', 'public/uploads')), apply: process.argv.includes('--apply') }), null, 2));
+  console.log(JSON.stringify(await migrateAssets({ dbPath: path.resolve(arg('--db', 'data/fire.db')), uploads: path.resolve(arg('--uploads', 'public/uploads')), apply: process.argv.includes('--apply'), once: process.argv.includes('--once') }), null, 2));
 }

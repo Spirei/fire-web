@@ -63,4 +63,12 @@ if [ -d "$CACHE_DIR" ]; then
     || echo "[entrypoint] 警告：公开缓存种子合并失败（不影响启动，原因见上方报错）" >&2
 fi
 
+# Upgrade legacy image paths inside the container, before the web process accepts writes.
+# The migration creates a SQLite backup, verifies copies, keeps old paths, and runs once.
+ASSET_MIGRATION_SCRIPT="${FIRE_ENTRYPOINT_ASSET_MIGRATION_SCRIPT:-/app/scripts/rename-assets.mjs}"
+if [ -f "$DATA_DIR/fire.db" ] && [ -f "$ASSET_MIGRATION_SCRIPT" ]; then
+  node "$ASSET_MIGRATION_SCRIPT" --apply --once --db "$DATA_DIR/fire.db" --uploads "$UPLOADS_DIR" \
+    || echo "[entrypoint] 素材地址升级未完成，保留旧地址；下次启动自动重试。" >&2
+fi
+
 exec "$@"

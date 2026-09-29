@@ -5,6 +5,7 @@ import path from "path";
 import { RELATED_ETF_MAIN_STOCK } from "./relatedEtfs";
 import { getSiteSettings } from "./settings";
 import { applyRelatedEtfMainStockIcons, stockIconLookupCodes } from "./stockIconKey";
+import { managedImageUrl } from "./managedAssetImages";
 
 const seeded = {
   icon: false,
@@ -13,7 +14,6 @@ const seeded = {
   broker: false,
   category: new Set<string>()
 };
-const existsCache = new Map<string, boolean>();
 
 export type AssetType = "stock" | "market" | "flag" | "crypto" | "metal" | "broker" | "group" | "icon" | "card";
 
@@ -25,6 +25,8 @@ export interface Asset {
   name: string;
   url: string;
   urlDark: string;
+  imageUrl?: string;
+  imageUrlDark?: string;
   marketCap: number;
   price: number | null;
   changePct: number | null;
@@ -47,6 +49,8 @@ function rowToAsset(r: Record<string, unknown>): Asset {
     // 让各组件走现有的内置图标/首字母/CDN 兜底。resource-default 可读时仍视为有效。
     url: localAssetExists(rawUrl) ? rawUrl : "",
     urlDark: localAssetExists(rawUrlDark) ? rawUrlDark : "",
+    imageUrl: imageUrlFor(String(r.id), rawUrl),
+    imageUrlDark: rawUrlDark ? imageUrlFor(String(r.id), rawUrlDark, "dark") : "",
     marketCap: Number(r.market_cap) || 0,
     price: r.price === null || r.price === undefined ? null : Number(r.price),
     changePct: r.change_pct === null || r.change_pct === undefined ? null : Number(r.change_pct),
@@ -55,6 +59,14 @@ function rowToAsset(r: Record<string, unknown>): Asset {
     board: String(r.board ?? ""),
     updatedAt: String(r.updated_at)
   };
+}
+
+function imageUrlFor(id: string, url: string, variant = "light"): string {
+  if (id.startsWith('flag:')) {
+    const shared = getDb().prepare("SELECT id FROM assets WHERE type='market' AND url=? LIMIT 1").get(url) as { id: string } | undefined;
+    if (shared) id = shared.id;
+  }
+  return managedImageUrl(id, url, variant);
 }
 
 export function assetId(type: AssetType, market: string, code = ""): string {
@@ -153,8 +165,6 @@ function bundledAssetUrl(folder: string, file: string): string {
 
 function localAssetExists(url: string): boolean {
   if (!url.startsWith("/uploads/")) return true;
-  const cached = existsCache.get(url);
-  if (cached !== undefined) return cached;
   let rel = url.slice("/uploads/".length);
   try { rel = decodeURIComponent(rel); } catch { /* malformed legacy URL: treat as missing */ }
   const ok = [
@@ -163,7 +173,6 @@ function localAssetExists(url: string): boolean {
   ].some((file) => {
     try { return fs.statSync(file).isFile(); } catch { return false; }
   });
-  existsCache.set(url, ok);
   return ok;
 }
 
@@ -194,18 +203,18 @@ export function stockIconKeysForRecords(records: { market: string; code: string 
 export function getStockIconMap(pairs: Array<{ market: string; code: string }>): Record<string, string> {
   if (!pairs.length) return {};
   const db = getDb();
-  const stmt = db.prepare("SELECT market, code, url FROM assets WHERE type = 'stock' AND upper(market) = upper(?) AND upper(code) = upper(?) LIMIT 1");
+  const stmt = db.prepare("SELECT id, market, code, url FROM assets WHERE type = 'stock' AND upper(market) = upper(?) AND upper(code) = upper(?) LIMIT 1");
   const out: Record<string, string> = {};
   pairs.forEach((pair) => {
     const market = pair.market.toUpperCase();
     for (const code of stockIconLookupCodes(market, pair.code)) {
-      const row = stmt.get(market, code) as { market?: string; code?: string; url?: string } | undefined;
+      const row = stmt.get(market, code) as { id: string; market?: string; code?: string; url?: string } | undefined;
       const url = String(row?.url || "");
-      if (!url || !localAssetExists(url)) continue;
+      if (!url) continue;
       const storedMarket = String(row?.market).toUpperCase();
       const storedCode = String(row?.code).toUpperCase();
-      out[`${storedMarket}:${storedCode}`] = url;
-      out[`${market}:${pair.code.toUpperCase()}`] = url;
+      out[`${storedMarket}:${storedCode}`] = imageUrlFor(row!.id, url);
+      out[`${market}:${pair.code.toUpperCase()}`] = out[`${storedMarket}:${storedCode}`];
       break;
     }
   });
@@ -218,7 +227,8 @@ export function getStockIconMap(pairs: Array<{ market: string; code: string }>):
  */
 export function getMarketIconMap(): Record<string, string> {
   const db = getDb();
-  const rows = db.prepare("SELECT market, code, url FROM assets WHERE type = 'market'").all() as Array<{
+  const rows = db.prepare("SELECT id, market, code, url FROM assets WHERE type = 'market'").all() as Array<{
+    id: string;
     market?: string;
     code?: string;
     url?: string;
@@ -227,8 +237,8 @@ export function getMarketIconMap(): Record<string, string> {
   rows.forEach((row) => {
     const key = String(row.market || row.code || "").trim().toUpperCase();
     const url = String(row.url || "");
-    if (!key || !url || !localAssetExists(url)) return;
-    out[key] = url;
+    if (!key || !url) return;
+    out[key] = imageUrlFor(row.id, url);
   });
   return out;
 }
@@ -237,13 +247,13 @@ export function getMarketIconMap(): Record<string, string> {
 export function getNavIconMap(codes: readonly string[]): Record<string, string> {
   const normalized = [...new Set(codes.map((code) => code.trim().toUpperCase()).filter(Boolean))];
   if (!normalized.length) return {};
-  const stmt = getDb().prepare("SELECT code, url FROM assets WHERE type = 'icon' AND upper(code) = upper(?) LIMIT 1");
+  const stmt = getDb().prepare("SELECT id, code, url FROM assets WHERE type = 'icon' AND upper(code) = upper(?) LIMIT 1");
   const out: Record<string, string> = {};
   normalized.forEach((code) => {
-    const row = stmt.get(code) as { code?: string; url?: string } | undefined;
+    const row = stmt.get(code) as { id: string; code?: string; url?: string } | undefined;
     const url = String(row?.url || "");
-    if (!url || !localAssetExists(url)) return;
-    out[code] = inlineLocalAssetUrl(url);
+    if (!url) return;
+    out[code] = imageUrlFor(row!.id, url);
   });
   return out;
 }
@@ -367,12 +377,12 @@ export function getFlagIconMap(codes: readonly string[]): Record<string, string>
   ensureCategoryAssets("flag");
   const normalized = [...new Set(codes.map((code) => code.trim().toUpperCase()).filter(Boolean))];
   if (!normalized.length) return {};
-  const stmt = getDb().prepare("SELECT code, url FROM assets WHERE type = 'flag' AND upper(code) = upper(?) LIMIT 1");
+  const stmt = getDb().prepare("SELECT id, code, url FROM assets WHERE type = 'flag' AND upper(code) = upper(?) LIMIT 1");
   const map: Record<string, string> = {};
   normalized.forEach((code) => {
-    const row = stmt.get(code) as { code?: string; url?: string } | undefined;
+    const row = stmt.get(code) as { id: string; code?: string; url?: string } | undefined;
     const url = String(row?.url || "");
-    if (url && localAssetExists(url)) map[code] = sharedFlagUrl(code, url);
+    if (url) map[code] = imageUrlFor(row!.id, sharedFlagUrl(code, url));
   });
   return map;
 }
@@ -488,6 +498,8 @@ export function upsertAsset(input: {
   const urlDark = input.urlDark === undefined ? null : input.urlDark;
   // 替换图标时删除旧本地文件，保留唯一（同一条素材多次上传不堆积）
   const oldRow = db.prepare("SELECT url, url_dark FROM assets WHERE id = ?").get(id) as { url?: string; url_dark?: string } | undefined;
+  if (oldRow?.url) managedImageUrl(id, oldRow.url);
+  if (oldRow?.url_dark) managedImageUrl(id, oldRow.url_dark, "dark");
   db.prepare(
     `INSERT INTO assets (id, type, market, code, name, url, url_dark, market_cap, price, change_pct, source, last_checked_at, board, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -506,8 +518,6 @@ export function upsertAsset(input: {
        created_at=assets.created_at,
        updated_at=excluded.updated_at`
   ).run(id, input.type, market, code, name, url, urlDark, marketCap, price, changePct, source, lastCheckedAt, board, updatedAt, updatedAt);
-  if (url) existsCache.set(url, true);
-  if (urlDark) existsCache.set(urlDark, true);
   if (oldRow?.url && isLocalUrl(oldRow.url) && oldRow.url !== url && !sameLocalFile(oldRow.url, url)) {
     // 旧文件仍被其它记录引用时保留（removeFileIfUnused 内部判断）
     removeFileIfUnused(oldRow.url);

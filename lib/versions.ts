@@ -4688,6 +4688,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "隐藏资源按需加载，国旗共用与素材短地址迁移。",
   software: V0_1_45_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.46" } : item),
   changes: [
+    { kind: "fix", title: "素材换图自动维护引用", desc: "素材展示使用固定 ID 与内容版本；替换图片后旧地址跟随新图，同名覆盖重新校验缓存，已登记图片纯改名可按内容指纹找回。旧短地址迁移改为启动时自动备份并执行，完成标记随数据库保存，无需手动登录数据库。" },
     { kind: "fix", title: "隐藏装饰资源不加载", desc: "四色门按实际视口和输入设备挂载，手机、平板及短屏不请求装饰图片；停止全页预取未显示的货币旗帜。" },
     { kind: "fix", title: "国旗共用与短素材地址", desc: "相同国旗统一文件 URL，不再混用内嵌图片；素材上传、同步及历史迁移使用短 ASCII 名称，保留中文股票显示名和卡包身份。迁移先备份、校验再更新引用，并修复默认旗帜初始化覆盖地址及大小写路径误删问题。" }
   ]
