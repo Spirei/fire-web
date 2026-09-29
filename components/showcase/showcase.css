@@ -177,6 +177,36 @@ html:has(.showcase) body {
   position: absolute;
 }
 
+.sc-backoffice {
+  left: max(3.4vw, calc(env(safe-area-inset-left) + 12px));
+  top: max(3.2vh, calc(env(safe-area-inset-top) + 12px));
+}
+.sc-admin-link {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--sc-line);
+  border-radius: 14px;
+  background: var(--sc-panel-hover);
+  color: var(--sc-ink);
+  text-decoration: none;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  transition: color .2s ease, border-color .2s ease, transform .16s ease;
+}
+.sc-admin-link svg { width: 21px; height: 21px; }
+.sc-admin-link:hover { border-color: var(--sc-hover-line); color: var(--sc-ink-strong); }
+.sc-admin-link:active { transform: scale(.95); }
+@media (max-width: 640px) {
+  .sc-backoffice { top: max(12px, calc(env(safe-area-inset-top) + 12px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-admin-link { transition: none; }
+}
+
 /* 顶部右侧工具条（深浅色切换） */
 .sc-tools {
   right: 3.4vw;
@@ -1724,6 +1754,7 @@ html:has(.showcase) body {
 .showcase.sc-immersive .sc-watermark,
 .showcase.sc-immersive .sc-position-coordinate,
 .showcase.sc-immersive .sc-tools,
+.showcase.sc-immersive .sc-backoffice,
 .showcase.sc-immersive .sc-kicker,
 .showcase.sc-immersive .sc-sec,
 .showcase.sc-immersive .sc-headline,

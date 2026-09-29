@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import Link from "next/link";
 import type { ShowcaseConfig, ShowcaseDiscStyle, ShowcaseDriveCamera, ShowcaseHandle, ShowcaseLoadPhase } from "./types";
 import { setThemeCookie } from "@/lib/theme";
 import { usePersistedState } from "@/lib/usePersistedState";
@@ -1085,6 +1086,16 @@ export default function ShowcaseStage({
           <div className="sc-position-coordinate" ref={coordinateRef} aria-label="车型观察角度坐标" aria-live="off" />
 
           <div className="sc-hud">
+            <div className="sc-row sc-backoffice">
+              <Link href="/records" prefetch={false} className="sc-admin-link" aria-label="进入后台" title="进入后台">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                  <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                  <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                  <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                </svg>
+              </Link>
+            </div>
             {immersiveView && <button type="button" className="sc-immersive-exit" onClick={() => setImmersiveView(false)} aria-label="退出沉浸式" title="退出沉浸式">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /><path d="m8 8 3 3m5-3-3 3m-5 5 3-3m5 3-3-3" /></svg>
             </button>}
