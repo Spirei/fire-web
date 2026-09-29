@@ -49,7 +49,8 @@ App 设置内的连接页首次预填 `https://fire.6dm.tv:18520`，允许更换
 ## 设备、权限与撤销
 
 - `GET /api/v1/auth/devices`、`DELETE /api/v1/auth/devices`（body `{ id }`）仅浏览器本人 Cookie 会话可用；删除需同源 Origin，跨账户 ID 不影响他人。
-- 网页「设置 → 个人信息」提供「已连接设备」入口，页面 `/app/devices`。App 设置也可打开该页面。
+- 网页「设置 → 账号与安全 → 管理授权」查看设备名称、授权范围、授权时间和最近使用；撤销使用独立确认弹窗。页面 `/app/devices` 供 App 设置直接打开，未登录时登录后仍返回此页面。
+- 授权页站点名称与标识复用 `logoText` / `siteLogo` / `ico`；「网站形象 → 网页授权」可配置 `appDisplayName`（空值跟随站点名称）与 `appDisplayIcon`（空值使用 PWA 图标或内置默认）。图片支持上传、站内路径及 http(s) 地址；外部图标不发送 Referer，文件清理保护正在使用的图标。显示配置不改变 `client_id`、固定回调或权限边界。
 - App POST `/api/v1/auth/revoke`（`{ client_id, token: refresh_token }`）撤销当前授权，访问/刷新令牌同时失效；浏览器会话独立。
 - 改密/重置密码或 TOTP 开关/密钥变化立即使 App 凭据失效；deleteOtherSessions 同时撤销 App grants 与未兑换 codes；删除作为登录来源的 passkey 也立即失效。删除用户使用 FK 级联清除凭据。
 - 每用户最多保留 20 个 App 授权。数据库只存 token/code 摘要、账号认证状态摘要，不保存明文凭据。

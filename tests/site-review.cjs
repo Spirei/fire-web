@@ -1676,6 +1676,36 @@ function fontHeaderFixture(ext) {
       assert.equal((await iconRoute.GET(new Request('http://localhost' + custom.icons[0].src))).status, 404);
     } finally { settings.updateSiteSettings({ ico: original.ico, pwaIcon: original.pwaIcon }); }
   });
+  await test('authorization branding persists without changing client permissions and keeps uploaded icons referenced', async () => {
+    const { appConnectionBrand, DEFAULT_APP_ICON } = require(path.join(root, 'lib/appConnectionBrand.ts'));
+    const cleanup = require(path.join(root, 'lib/fileCleanup.ts'));
+    const original = settings.getSiteSettings();
+    const iconPath = path.join(temp, 'public/uploads/ico/authorization-test.png');
+    fs.mkdirSync(path.dirname(iconPath), { recursive:true }); fs.writeFileSync(iconPath, 'isolated fixture');
+    fs.utimesSync(iconPath, new Date(0), new Date(0));
+    try {
+      assert.equal((await settingsRoute.PUT(request('user', {appDisplayName:'New App'}, 'PUT'))).status, 403);
+      for (const invalid of ['javascript:alert(1)', '//evil.example/icon.png', 'https://user:password@example.com/icon.png', '/\\evil.example/icon.png']) {
+        assert.equal((await settingsRoute.PUT(request('admin', {appDisplayIcon:invalid}, 'PUT'))).status, 400);
+      }
+      assert.equal((await settingsRoute.PUT(request('admin', {appDisplayName:'Nook App', appDisplayIcon:'/uploads/ico/authorization-test.png'}, 'PUT'))).status, 200);
+      const saved = settings.getSiteSettings(); assert.equal(saved.appDisplayName,'Nook App');
+      assert.equal(appConnectionBrand(saved).appIcon, '/uploads/ico/authorization-test.png');
+      const visible = await (await settingsRoute.GET(request('user'))).json(); assert.equal(visible.settings.appDisplayName,'Nook App');
+      cleanup.cleanupOrphanFiles(); assert(fs.existsSync(iconPath), 'active authorization artwork survives orphan cleanup');
+      assert.equal((await settingsRoute.PUT(request('admin', {appDisplayName:'', appDisplayIcon:''}, 'PUT'))).status, 200);
+      const automatic = appConnectionBrand({...settings.getSiteSettings(), logoText:'Nook', pwaIcon:''});
+      assert.equal(automatic.appName,'Nook App'); assert.equal(automatic.appIcon,DEFAULT_APP_ICON);
+      assert(!fs.existsSync(iconPath), 'unused uploaded artwork is removed when reset');
+      const React = require('react'); const { renderToStaticMarkup } = require('react-dom/server');
+      const Consent = require(path.join(root, 'components/AppAuthorizationConsent.tsx')).default;
+      const auth = require(path.join(root, 'lib/appAuth.ts'));
+      const readOnly = { client_id:auth.APP_CLIENT_ID, redirect_uri:auth.APP_REDIRECT_URI, response_type:'code', code_challenge_method:'S256', code_challenge:'A'.repeat(43), state:'B'.repeat(32), scope:'portfolio.read', device_name:'Review device' };
+      const markup = renderToStaticMarkup(React.createElement(Consent, {authorization:readOnly, account:'Review', username:'Review', avatar:'', serverName:'review.example:18520', brand:automatic}));
+      assert(markup.includes('Nook 账户')); assert(markup.includes('允许 Nook App')); assert(markup.includes('查看投资数据')); assert(!markup.includes('管理投资数据'));
+      assert(!markup.includes('随时撤销')); assert.equal(auth.APP_CLIENT_ID,'fire-ios'); assert.equal(auth.APP_REDIRECT_URI,'com.fire.app:/oauth/callback');
+    } finally { settings.updateSiteSettings({appDisplayName:original.appDisplayName, appDisplayIcon:original.appDisplayIcon}); }
+  });
   await test('settings secrets filtered for admin/user and anonymous rejected; saving preserves secrets', async () => {
     settings.updateSiteSettings({ llmApiKey: 'TEST_ONLY_LLM', deepseekApiKey: 'TEST_ONLY_OLD', xueqiuCookie: 'TEST_ONLY_COOKIE', pgPassword: 'TEST_ONLY_DB', smtpPassword: 'TEST_ONLY_SMTP' });
     for (const role of ['admin','user']) {

@@ -9,6 +9,7 @@ import { prepareModelServices } from "@/lib/modelServices";
 import { validateAssistantEndpoint } from "@/lib/assistantSecurity";
 import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 import { publicVerificationOrigin } from "@/lib/emailVerification";
+import { isConnectionIconUrl } from "@/lib/appConnectionBrand";
 
 export async function GET(request: Request) {
   const user = getAuthUser(request);
@@ -74,6 +75,8 @@ export async function PUT(request: Request) {
   }
 
   const before = getSiteSettings();
+  if (body.appDisplayName !== undefined && (typeof body.appDisplayName !== "string" || body.appDisplayName.trim().length > 80)) return NextResponse.json({ error: "App 名称最多 80 个字符" }, { status: 400 });
+  if (body.appDisplayIcon !== undefined && (typeof body.appDisplayIcon !== "string" || !isConnectionIconUrl(body.appDisplayIcon.trim()))) return NextResponse.json({ error: "App 图标请使用站内路径或 http(s) 图片地址" }, { status: 400 });
   if (body.pwaIcon !== undefined && (typeof body.pwaIcon !== "string" || (body.pwaIcon && !/^\/uploads\/ico\/[^/\\]+$/.test(body.pwaIcon)))) return NextResponse.json({ error: "PWA 图标请使用上传的图片" }, { status: 400 });
   const settings = updateSiteSettings({
     domain: body.domain !== undefined ? String(body.domain) : undefined,
@@ -83,6 +86,8 @@ export async function PUT(request: Request) {
     homepageBg: body.homepageBg !== undefined ? String(body.homepageBg) : undefined,
     loginSideImage: body.loginSideImage !== undefined ? String(body.loginSideImage) : undefined,
     siteLogo: body.siteLogo !== undefined ? String(body.siteLogo) : undefined,
+    appDisplayName: body.appDisplayName !== undefined ? body.appDisplayName : undefined,
+    appDisplayIcon: body.appDisplayIcon !== undefined ? body.appDisplayIcon : undefined,
     logoText: body.logoText !== undefined ? String(body.logoText) : undefined,
     logoFont:
       body.logoFont === "diatype" || body.logoFont === "diatype-regular" || body.logoFont === "system"
@@ -162,7 +167,7 @@ export async function PUT(request: Request) {
     });
   }
   // 网站形象 / 站点 Logo 替换后删除旧本地文件，保留唯一（不堆积 ico / background / logo）
-  ["ico", "pwaIcon", "homepageBg", "siteLogo"].forEach((k) => {
+  ["ico", "pwaIcon", "homepageBg", "siteLogo", "appDisplayIcon"].forEach((k) => {
     const oldVal = before[k as keyof typeof before];
     const newVal = settings[k as keyof typeof settings];
     if (typeof oldVal === "string" && typeof newVal === "string" && oldVal !== newVal) {

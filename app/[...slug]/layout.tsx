@@ -157,6 +157,13 @@ export default async function SlugLayout({
           initialTradingPosts={initialTradingPosts}
           initialTradingFilter={initialTradingFilter}
           initialSettings={{
+            title: settings.title,
+            logoText: settings.logoText,
+            siteLogo: settings.siteLogo,
+            ico: settings.ico,
+            pwaIcon: settings.pwaIcon,
+            appDisplayName: settings.appDisplayName,
+            appDisplayIcon: settings.appDisplayIcon,
             tabs: settings.tabs,
             mobileNavigationOrder: settings.mobileNavigationOrder,
             groups: settings.groups,

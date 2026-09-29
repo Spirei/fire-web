@@ -14,6 +14,7 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
   badges: (<><rect x="3" y="3" width="7" height="18" rx="2"/><rect x="14" y="3" width="7" height="8" rx="2"/><rect x="14" y="15" width="7" height="6" rx="2"/></>),
   currency: (<><circle cx="12" cy="12" r="9"/><path d="M15 8h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4H9m3-10v12"/></>),
   passkeys: (<><circle cx="8" cy="8" r="4" /><path d="M2 21v-3a6 6 0 0 1 10-4.5M18 15v7m0-3h3" /><circle cx="18" cy="12" r="3" /></>),
+  authorizations: (<><rect x="3" y="3" width="10" height="18" rx="2.5"/><path d="M7 17h2m8-10 5 2v4c0 3-5 6-5 6s-5-3-5-6V9Z"/><path d="m14.5 12.5 1.8 1.8 3.2-3.5"/></>),
   "passkey-config": (<><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 9h6M7 13h3"/><circle cx="17" cy="13" r="2"/><path d="M17 15v3"/></>),
   palette: (<><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a3 3 0 0 0 3-3 9 9 0 0 0-9-8Z" /><circle cx="7" cy="10" r=".7" /><circle cx="11" cy="7" r=".7" /><circle cx="16" cy="8" r=".7" /></>),
   site: (

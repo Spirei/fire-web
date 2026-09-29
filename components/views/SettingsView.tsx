@@ -6,6 +6,8 @@ import { createPasskeySettingsData } from "@/lib/passkeySettingsData";
 import SecurityCheck from "@/components/SecurityCheck";
 import SettingsManagedGroup, { SettingsManagedPane } from "@/components/SettingsManagedGroup";
 import AppModal from "@/components/AppModal";
+import AppDeviceList from "@/components/AppDeviceList";
+import { appConnectionBrand } from "@/lib/appConnectionBrand";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
 import PasswordStrength from "@/components/PasswordStrength";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
@@ -59,7 +61,7 @@ interface Props {
   initialSub?: string;
   initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
   /** 服务端首帧设置快照，避免刷新时先渲染默认开关再回落到真实值 */
-  initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "modelServices">;
+  initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "modelServices" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
 }
 
 function SettingsDetailShell({ title, category, detailKey, showBack = false, closeDisabled = false, editable = false, editing = false, onBack, onEdit, onSave, onCancel, onClose, children }: { title: string; category: string; detailKey?: string; showBack?: boolean; closeDisabled?: boolean; editable?: boolean; editing?: boolean; onBack?: () => void; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; onClose: () => void; children: React.ReactNode }) {
@@ -118,7 +120,7 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
   );
 }
 
-const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "passkeys", "database", "cron", "about"] as const;
+const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "passkeys", "authorizations", "database", "cron", "about"] as const;
 type SubKey = (typeof SETTINGS_SUB_KEYS)[number];
 function isSettingsSub(value: string | undefined | null): value is SubKey {
   return Boolean(value && (SETTINGS_SUB_KEYS as readonly string[]).includes(value));
@@ -154,6 +156,7 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "profile", anchor: "delete-account", label: "注销账号", groupLabel: "数据", keywords: "注销 永久删除 账号 数据" },
   { sub: "totp", anchor: "totp", label: "双重验证", groupLabel: "账号", keywords: "2FA 二次验证 TOTP 验证器 备用码 谷歌验证 Google Authenticator 安全" },
   { sub: "passkeys", anchor: "passkeys", label: "通行密钥", groupLabel: "账号", keywords: "Passkey WebAuthn iCloud Bitwarden 1Password Face ID Touch ID 无密码 登录 安全 通行密匙" },
+  { sub: "authorizations", anchor: "authorizations", label: "管理授权", groupLabel: "账号", keywords: "App iOS iPhone 网页授权 连接 设备 权限 撤销 断开" },
   { sub: "passkeys", anchor: "passkey-config", label: "通行密钥域名", groupLabel: "账号", keywords: "Passkey WebAuthn HTTPS 域名 站点名称 登录配置", adminOnly: true },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
@@ -168,7 +171,7 @@ function defaultAnchorFor(sub: SubKey): string {
 }
 
 const SETTINGS_CATEGORIES = [
-  { key: "account", label: "账号与安全", icon: "account", desc: "管理个人资料、密码和登录方式。", anchors: ["profile", "password", "totp", "passkeys", "passkey-config"] },
+  { key: "account", label: "账号与安全", icon: "account", desc: "管理个人资料、密码和登录方式。", anchors: ["profile", "password", "totp", "passkeys", "authorizations", "passkey-config"] },
   { key: "website", label: "外观与网站", icon: "website", desc: "设置网站形象、配色与首页内容。", anchors: ["palette", "info", "appearance", "ticker", "nav", "app-nav", "mobile-nav"] },
   { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "sources", "source-reports", "source-icons", "source-content"] },
   { key: "services", label: "功能与模型", icon: "model", desc: "配置模型服务与内容更新。", anchors: ["translation", "trading-square"] },
@@ -208,6 +211,7 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   profile: "profile",
   totp: "totp",
   passkeys: "passkeys",
+  authorizations: "authorizations",
   "passkey-config": "passkey-config",
   database: "database",
   cron: "cron",
@@ -294,7 +298,8 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
     items: [
       { key: "profile", label: "个人信息", desc: "头像、资料、密码、数据管理" },
       { key: "totp", label: "2FA", desc: "验证器与备用码" },
-      { key: "passkeys", label: "通行密钥", desc: "设备验证与密码管理器" }
+      { key: "passkeys", label: "通行密钥", desc: "设备验证与密码管理器" },
+      { key: "authorizations", label: "管理授权", desc: "App 连接与访问权限" }
     ]
   },
   {
@@ -495,6 +500,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   allowRegister: true,
   stockIconCdn: false,
   siteLogo: "",
+  appDisplayName: "",
+  appDisplayIcon: "",
   logoText: "",
   logoFont: "diatype",
   quoteSource: "auto",
@@ -786,6 +793,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [pwaUploading, setPwaUploading] = useState(false);
   const bgRef = useRef<HTMLInputElement>(null);
   const logoRef = useRef<HTMLInputElement>(null);
+  const appIconRef = useRef<HTMLInputElement>(null);
   const loginImgRef = useRef<HTMLInputElement>(null);
   const avatarRef = useRef<HTMLInputElement>(null);
   const nickInputRef = useRef<HTMLInputElement>(null);
@@ -890,7 +898,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     };
   }, [sub, dbStatusRetry]);
 
-  async function uploadSiteFile(kind: "ico" | "background", file: File, target?: "pwaIcon"): Promise<string> {
+  async function uploadSiteFile(kind: "ico" | "background", file: File, target?: "pwaIcon" | "appDisplayIcon"): Promise<string> {
     if (target) setPwaUploading(true);
     try {
       const fd = new FormData();
@@ -1074,8 +1082,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }, [site]);
 
   async function resetBrand() {
-    if (!await appConfirm("将清空网站图标、Logo 图片、网站背景图与登录页左侧图，Logo 文字恢复为 Fire。", { title: "恢复默认网站形象", danger: true })) return;
-    const ok = await saveBlock("brand", { ico: "", pwaIcon: "", siteLogo: "", logoText: "Fire", logoFont: "diatype", homepageBg: "", loginSideImage: "" }, "网站形象已重置");
+    if (!await appConfirm("将清空自定义网站与授权页图片和 App 名称，Logo 文字恢复为 Fire。", { title: "恢复默认网站形象", danger: true })) return;
+    const ok = await saveBlock("brand", { ico: "", pwaIcon: "", siteLogo: "", logoText: "Fire", logoFont: "diatype", homepageBg: "", loginSideImage: "", appDisplayName: "", appDisplayIcon: "" }, "网站形象已重置");
     if (ok) setEditingAppearance(false);
   }
 
@@ -1411,7 +1419,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const savingEditRef = useRef(false);
   async function saveActiveEdit() {
     if (savingEditRef.current || !activeEditState) return;
-    if (activeAnchor === "appearance" && pwaUploading) { showToast("PWA 图标正在上传，请稍候", "err"); return; }
+    if (activeAnchor === "appearance" && pwaUploading) { showToast("图标正在上传，请稍候", "err"); return; }
     if (activeAnchor === "translation" && uploadingModelIconId) {
       showToast("图标正在上传并保存，请稍候", "err");
       return;
@@ -1428,7 +1436,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         const ok = await saveBlock("siteInfo", { title: site.title, domain: site.domain, allowRegister: site.allowRegister, footerDesc: site.footerDesc }, "站点信息已保存");
         // 站点信息是常驻可编辑 + 自动保存，不再有「保存后转只读」这一步
       } else if (activeAnchor === "appearance") {
-        const ok = await saveBlock("brand", { ico: site.ico, pwaIcon: site.pwaIcon, siteLogo: site.siteLogo, logoText: site.logoText, logoFont: site.logoFont, homepageBg: site.homepageBg, loginSideImage: site.loginSideImage }, "网站形象已保存");
+        const ok = await saveBlock("brand", { ico: site.ico, pwaIcon: site.pwaIcon, siteLogo: site.siteLogo, logoText: site.logoText, logoFont: site.logoFont, homepageBg: site.homepageBg, loginSideImage: site.loginSideImage, appDisplayName: site.appDisplayName, appDisplayIcon: site.appDisplayIcon }, "网站形象已保存");
         if (ok) setEditingAppearance(false);
       } else if (activeAnchor === "ticker") {
         const ok = await saveBlock("ticker", { ticker: site.ticker }, "首页指数已保存");
@@ -2096,7 +2104,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   const categoryList = <>{currentCategory?.key === "account" && <SecurityCheck onNavigate={anchor => { const item = currentCategory.items.find(item => item.anchor === anchor); if (item) jumpTo(item); }} />}{(currentCategory?.key === "account" ? [
     { title: "个人资料", desc: "头像、昵称与邮箱", items: currentCategory.items.filter((item) => item.anchor === "profile") },
-    { title: "账户登录", desc: "密码、验证器与通行密钥", items: currentCategory.items.filter((item) => item.anchor !== "profile") }
+    { title: "账户登录", desc: "密码、验证器与通行密钥", items: currentCategory.items.filter((item) => item.anchor !== "profile" && item.anchor !== "authorizations") },
+    { title: "应用授权", desc: "", items: currentCategory.items.filter((item) => item.anchor === "authorizations") }
   ] : [{ title: "", desc: "", items: currentCategory?.items || [] }]).map((group, index) => <section className="sc-category-section" key={index}>
     {group.title && <><h3>{group.title}</h3><p>{group.desc}</p></>}
     <div className="sc-row-group">{group.items.map((item) => <button type="button" className="sc-setting-row" key={item.anchor} onClick={() => jumpTo(item)}><span><strong>{item.label}</strong>{item.anchor === "passkeys" && <span className="sc-passkey-recommendation">推荐</span>}</span><span className="sc-chevron" aria-hidden="true">›</span></button>)}</div>
@@ -2391,6 +2400,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           </div>
                         </div>
 
+                        <div className="sw-row">
+                          <div className="sw-row-label"><b>Logo 文字</b></div>
+                          <input aria-label="Logo 文字" maxLength={80} readOnly={!editingAppearance} className={`sw-row-input ${editingAppearance ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} value={site.logoText} placeholder={site.title || "Fire"} onChange={e => setSiteField("logoText", e.target.value)} />
+                        </div>
+
                         <section className="brand-settings-group" aria-labelledby="brand-icons-title">
                           <div className="brand-settings-heading"><h3 id="brand-icons-title">应用图标</h3><p>用于浏览器标签、收藏夹和安装到主屏幕后的入口。</p></div>
                           <div className="brand-asset-list">
@@ -2472,6 +2486,17 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           onClear={() => setSiteField("loginSideImage", "")}
                           kind="wide"
                         />
+                          </div>
+                        </section>
+
+                        <section className="brand-settings-group" aria-labelledby="brand-authorization-title">
+                          <div className="brand-settings-heading"><h3 id="brand-authorization-title">网页授权</h3></div>
+                          <div className="sw-row">
+                            <div className="sw-row-label"><b>App 显示名称</b></div>
+                            <input aria-label="App 显示名称" maxLength={80} readOnly={!editingAppearance} className={`sw-row-input ${editingAppearance ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} value={site.appDisplayName} placeholder={appConnectionBrand({ ...site, appDisplayName: "" }).appName} onChange={e => setSiteField("appDisplayName", e.target.value)} />
+                          </div>
+                          <div className="brand-asset-list">
+                            <BrandAssetRow label="App 授权图标" desc="" editable={editingAppearance} value={site.appDisplayIcon} fallbackValue={appConnectionBrand({ ...site, appDisplayIcon: "" }).appIcon} emptyLabel="自动" onChange={v => setSiteField("appDisplayIcon", v)} inputRef={appIconRef} accept="image/png,image/jpeg,image/webp,.svg,.ico" onUpload={f => { void uploadSiteFile("ico", f, "appDisplayIcon"); }} onClear={() => setSiteField("appDisplayIcon", "")} kind="icon" busy={pwaUploading} clearLabel="恢复自动" />
                           </div>
                         </section>
 
@@ -3514,7 +3539,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                   </div>
                 </SettingsSection>
-                <a href="/app/devices" className="rounded-2xl border border-edge bg-white px-5 py-4 text-ink">已连接设备 <span className="float-right" aria-hidden="true">›</span></a>
                 <SettingsSection id="password" icon="password" title="更改密码">
                   <form onSubmit={changePassword} className="settings-password-grid settings-password-meta">
                     <div className="settings-account-identity"><span className="settings-account-avatar">{me.avatar ? <img src={me.avatar} alt="" /> : (me.nickname || me.username).slice(0, 1)}</span><span><b>{me.nickname || me.username}</b><small>{me.email || `@${me.username}`}</small></span><span aria-hidden="true">›</span></div>
@@ -3579,6 +3603,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 </SettingsSection>
               </div>
             )}
+
+            {sub === "authorizations" && <div>{isAdminUser && <div className="mb-4 flex justify-end"><button type="button" className="app-device-brand-settings" onClick={() => jumpTo({ sub: "site", anchor: "appearance", label: "网站形象" })}>授权页外观</button></div>}<AppDeviceList brand={appConnectionBrand(site)} /></div>}
 
             {sub === "totp" && (
               <div id="totp" className="flex flex-col gap-6">

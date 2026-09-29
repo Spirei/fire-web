@@ -6,7 +6,7 @@ const CLIENT_KEYS = [
   "domain", "title", "ico", "pwaIcon", "homepageBg", "loginSideImage", "tabs", "mobileNavigationOrder", "groups", "homeNav",
   "markets", "marketLabels", "marketBadges", "marketBadgesVisible", "assetMarketOrder",
   "assetAnalysisOrder", "indicesOrder", "holdingColumns", "allowRegister", "stockIconCdn",
-  "siteLogo", "logoText", "logoFont", "quoteSource", "footerDesc", "quoteApiUrl", "searchApiUrl",
+  "siteLogo", "appDisplayName", "appDisplayIcon", "logoText", "logoFont", "quoteSource", "footerDesc", "quoteApiUrl", "searchApiUrl",
   "chartApiUrl", "currencyApiUrl", "currencyRefreshPattern", "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl",
   "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl", "translationEnabled",
   "translationProvider", "deepseekApiUrl", "deepseekModel", "llmProvider", "llmApiUrl", "llmModel",

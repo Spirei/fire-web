@@ -253,6 +253,8 @@ export interface SiteSettings {
   allowRegister: boolean;
   stockIconCdn: boolean;
   siteLogo: string;
+  appDisplayName: string;
+  appDisplayIcon: string;
   logoText: string;
   logoFont: "diatype" | "diatype-regular" | "system";
   /** 行情源：auto = 富途优先 + 腾讯/Yahoo 自动回退；futu = 仅富途；tencent = 腾讯 + Yahoo */

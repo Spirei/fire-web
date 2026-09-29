@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import LoginForm from "@/components/LoginForm";
+import AppConnectionShell from "@/components/AppConnectionShell";
+import AppConnectionIcon from "@/components/AppConnectionIcon";
+import { appConnectionBrand } from "@/lib/appConnectionBrand";
 import { getSiteSettings } from "@/lib/settings";
 import { logoFontClass } from "@/lib/logoFont";
 import { getUserByToken, LEGACY_SESSION_COOKIE, needsSetup, SESSION_COOKIE } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "登录 - Fire"
-};
+export function generateMetadata(): Metadata { return { title: `登录 - ${appConnectionBrand(getSiteSettings()).siteName}` }; }
 
 export default async function LoginPage({
   searchParams
@@ -18,11 +19,17 @@ export default async function LoginPage({
   searchParams: Promise<{ skipSetup?: string; next?: string }>;
 }) {
   const params = await searchParams;
-  const destination = params.next?.startsWith("/app/authorize?") ? params.next : "/records";
+  const authorizationLogin = params.next?.startsWith("/app/authorize?") === true;
+  const destination = authorizationLogin ? params.next! : params.next === "/app/devices" ? "/app/devices" : "/records";
   if (needsSetup() && params.skipSetup !== "1") redirect("/setup");
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
   if (getUserByToken(token)) redirect(destination);
+  const brand = appConnectionBrand(getSiteSettings());
+  if (authorizationLogin) return <AppConnectionShell brand={brand} serverName={(await headers()).get("host") || "Fire Web"}>
+    <div className="app-connection-intro"><AppConnectionIcon src={brand.appIcon} /><h1>登录 {brand.siteName} 账户以连接 {brand.appName}</h1></div>
+    <div className="app-connection-login"><LoginForm returnTo={destination} /></div>
+  </AppConnectionShell>;
   const settings = getSiteSettings();
   const logoFontCls = logoFontClass(settings.logoFont);
   return (

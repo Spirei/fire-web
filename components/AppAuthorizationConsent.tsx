@@ -1,31 +1,62 @@
 "use client";
-import { useState } from "react";
+
+import { useRef, useState } from "react";
 import type { AppAuthorization } from "@/lib/appAuth";
-export default function AppAuthorizationConsent({ authorization, account }: { authorization: AppAuthorization; account: string }) {
-  const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+import AppConnectionShell from "@/components/AppConnectionShell";
+import AppConnectionIcon from "@/components/AppConnectionIcon";
+import type { AppConnectionBrand } from "@/lib/appConnectionBrand";
+import { SubNavIcon } from "@/components/SettingsHeader";
+
+export default function AppAuthorizationConsent({ authorization, account, username, avatar, serverName, brand }: {
+  authorization: AppAuthorization; account: string; username: string; avatar: string; serverName: string; brand: AppConnectionBrand;
+}) {
+  const [busy, setBusy] = useState<"allow" | "deny" | null>(null);
+  const [error, setError] = useState("");
+  const [needsLogin, setNeedsLogin] = useState(false);
   const [callback, setCallback] = useState("");
-  async function decide(decision: "allow" | "deny") {
-    if (busy || callback) return;
-    setBusy(true); setError("");
+  const [decision, setDecision] = useState<"allow" | "deny">("allow");
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const inFlight = useRef(false);
+  const writable = authorization.scope.split(" ").includes("portfolio.write");
+
+  async function decide(nextDecision: "allow" | "deny") {
+    if (inFlight.current || callback) return;
+    inFlight.current = true; setBusy(nextDecision); setError("");
     try {
-      const response = await fetch("/api/v1/auth/authorize", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...authorization, decision }) });
+      const response = await fetch("/api/v1/auth/authorize", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...authorization, decision: nextDecision }) });
       const body = await response.json();
-      if (!response.ok || body.code !== 0 || !body.data?.callback) throw new Error(body.message || "连接失败");
-      setCallback(body.data.callback);
+      if (response.status === 401) setNeedsLogin(true);
+      if (!response.ok || body.code !== 0 || typeof body.data?.callback !== "string") throw new Error(body.message || "授权失败，请重试");
+      setDecision(nextDecision); setCallback(body.data.callback);
       window.location.assign(body.data.callback);
-    } catch (e) { setError(e instanceof Error ? e.message : "连接失败，请重试"); }
-    finally { setBusy(false); }
+    } catch (e) { setError(e instanceof Error ? e.message : "授权失败，请重试"); }
+    finally { inFlight.current = false; setBusy(null); }
   }
-  return <main className="flex min-h-screen items-center justify-center bg-bg-gray px-5 py-10 text-ink">
-    <div className="w-full max-w-md rounded-3xl border border-edge bg-white p-7">
-      <h1 className="text-2xl font-semibold">连接 Fire App</h1>
-      <p className="mt-5 font-semibold">{account}</p><p className="mt-1 text-sm text-muted">{authorization.device_name}</p>
-      <p className="mt-6 text-sm text-ink-2">{authorization.scope.includes("portfolio.write") ? "允许查看和修改你的持仓、自选、订单与资金记录。" : "允许查看你的持仓、自选、订单与资金记录。"}</p>
-      {error && <p role="alert" className="mt-4 text-sm text-red-500">{error}</p>}
-      {callback ? <a className="mt-4 block rounded-full bg-[#0866ff] px-5 py-3 text-center font-semibold text-white" href={callback}>返回 Fire App</a> : <div className="mt-4 flex gap-3">
-        <button disabled={busy} onClick={() => void decide("deny")} className="flex-1 rounded-full border border-edge-strong px-5 py-3">取消</button>
-        <button disabled={busy} onClick={() => void decide("allow")} className="flex-1 rounded-full bg-[#0866ff] px-5 py-3 font-semibold text-white disabled:opacity-50">{busy ? "正在连接…" : "连接"}</button>
-      </div>}
+
+  return <AppConnectionShell serverName={serverName} brand={brand}>
+    <div className="app-connection-intro">
+      <AppConnectionIcon src={brand.appIcon} />
+      <h1>{callback ? decision === "allow" ? `已允许连接 ${brand.appName}` : "已取消授权" : `使用 ${brand.siteName} 账户连接 ${brand.appName}`}</h1>
+      <p>{authorization.device_name}</p>
     </div>
-  </main>;
+    {!callback && <>
+      <div className="app-consent-account">
+        <span className="app-consent-avatar" aria-hidden="true">{avatar && !avatarFailed ? <img src={avatar} alt="" onError={() => setAvatarFailed(true)} /> : account.slice(0, 1).toUpperCase()}</span>
+        <div><strong>{account}</strong>{username !== account && <span>{username}</span>}</div>
+        <SubNavIcon name="account" className="app-consent-account-check" />
+      </div>
+      <section className="app-consent-permissions" aria-labelledby="app-permissions-title">
+        <h2 id="app-permissions-title">允许 {brand.appName}</h2>
+        <div className="app-consent-permission"><SubNavIcon name="stocks" /><span><strong>查看投资数据</strong><small>持仓、自选、订单与资金记录</small></span></div>
+        {writable && <div className="app-consent-permission"><SubNavIcon name="pen" /><span><strong>管理投资数据</strong><small>新增、修改和删除你的投资记录</small></span></div>}
+      </section>
+    </>}
+    {error && <p role="alert" className="app-connection-error">{error}</p>}
+    <div className="app-connection-actions" aria-busy={!!busy}>
+      {callback ? <a className="app-connection-button is-primary" href={callback}>返回 {brand.appName}</a> : <>
+        <button type="button" disabled={!!busy} onClick={() => void decide("deny")} className="app-connection-button">{busy === "deny" ? "正在取消…" : "取消"}</button>
+        {needsLogin ? <a className="app-connection-button is-primary" href={`/login?next=${encodeURIComponent(`/app/authorize?${new URLSearchParams({ ...authorization }).toString()}`)}`}>重新登录</a> : <button type="button" disabled={!!busy} onClick={() => void decide("allow")} className="app-connection-button is-primary">{busy === "allow" ? "正在授权…" : "允许连接"}</button>}
+      </>}
+    </div>
+  </AppConnectionShell>;
 }

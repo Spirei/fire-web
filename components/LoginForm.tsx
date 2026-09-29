@@ -10,7 +10,8 @@ import { isCompleteBackupCode, isSixDigitTotp, normalizeBackupInput, normalizeTo
 type Mode = "login" | "register";
 
 export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?: () => void; returnTo?: string }) {
-  const destination = returnTo.startsWith("/app/authorize?") ? returnTo : "/records";
+  const authorizationLogin = returnTo.startsWith("/app/authorize?");
+  const destination = authorizationLogin || returnTo === "/app/devices" ? returnTo : "/records";
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
   const [loginType, setLoginType] = useState<"username" | "email">("username");
@@ -142,24 +143,24 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
   return (
     <div className="flex w-full flex-col px-6 py-7 sm:px-9">
       {/* 标题行：登录 + 关闭 */}
-      <div className="flex items-center justify-between gap-3">
+      {(!authorizationLogin || totpTicket || mode === "register") && <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-[26px] font-extrabold tracking-[-0.3px] text-ink">
             {totpTicket ? "二次验证" : mode === "login" ? "登录" : "注册账号"}
           </h1>
-          <p className="mt-1 text-[13px] text-muted">
+          {(!authorizationLogin || totpTicket) && <p className="mt-1 text-[13px] text-muted">
             {totpTicket ? (useBackupCode ? "请输入一次性备用码" : "请输入验证器中的 6 位数字") : mode === "login" ? "欢迎回来，继续你的投资记录" : "创建账号，数据独立保存在服务端"}
-          </p>
+          </p>}
         </div>
-        <button
+        {!authorizationLogin && <button
           type="button"
           onClick={() => (onClose ? onClose() : router.push("/"))}
           aria-label="关闭"
           className="grid h-9 w-9 place-items-center rounded-full text-faint transition-colors hover:bg-bg-gray hover:text-ink"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M18 6 6 18M6 6l12 12" /></svg>
-        </button>
-      </div>
+        </button>}
+      </div>}
 
       {/* 登录方式：用户名 / 邮箱 */}
       {mode === "login" && !totpTicket && !recovering && (
