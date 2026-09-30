@@ -15,7 +15,7 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [title, setTitle] = useState("Fire");
+  const [title, setTitle] = useState("Alcor");
   const [allowRegister, setAllowRegister] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -69,7 +69,7 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
       const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim() || "Fire", allowRegister })
+        body: JSON.stringify({ title: title.trim() || "Alcor", allowRegister })
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "保存站点信息失败");
@@ -151,13 +151,13 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
         <header className="fr-top">
           <div className="fr-brand">
             <img src="/uploads/asset/icon/fire.svg" alt="" />
-            <span>Fire</span>
+            <span>Alcor</span>
           </div>
           <div className="fr-server"><i />服务已启动 · {host}</div>
         </header>
         <main className="fr-main">
           <p className="fr-kicker">首次设置</p>
-          <h1>{step === 3 ? "可以开始使用了" : "欢迎使用 Fire"}</h1>
+          <h1>{step === 3 ? "可以开始使用了" : "欢迎使用 Alcor"}</h1>
           <p className="fr-lead">
             {step === 1
               ? "完成管理员设置后，开始记录你的资产与自选股。"
@@ -222,7 +222,7 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
                 <div className="fr-fields single">
                   <label htmlFor="fr-title">
                     网站标题
-                    <input id="fr-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Fire" autoFocus />
+                    <input id="fr-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Alcor" autoFocus />
                   </label>
                 </div>
                 <div className="fr-toggle">
@@ -258,7 +258,7 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
                 </div>
                 <div className="fr-actions">
                   <button className="fr-primary" type="button" onClick={() => router.push("/records")}>
-                    进入 Fire
+                    进入 Alcor
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
                   </button>
                 </div>
@@ -268,7 +268,7 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
           <section className="fr-info" aria-label="实例信息">
             <div className="fr-info-block">
               <div className="fr-info-title"><i />实例运行正常</div>
-              <p>Fire Web 已启动，访问地址为 {host}。</p>
+              <p>Alcor Web 已启动，访问地址为 {host}。</p>
             </div>
             <div className="fr-info-block">
               <div className="fr-info-title">数据会被保留</div>
@@ -277,7 +277,7 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
           </section>
         </main>
         <footer className="fr-foot">
-          <span>Fire · 投资记录与行情</span>
+          <span>Alcor · 投资记录与行情</span>
           <span>首次设置不会修改已有数据</span>
         </footer>
       </div>

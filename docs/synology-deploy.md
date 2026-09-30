@@ -1,4 +1,4 @@
-# Fire 投资记实 —— 群晖（Docker）部署
+# Alcor 投资记实 —— 群晖（Docker）部署
 
 面向 **群晖 x86_64（Docker / Container Manager）** 的单机部署。
 镜像不含数据：SQLite 数据库与上传素材通过 `volume` 挂载到宿主机目录，镜像可随时替换重建而不丢数据。

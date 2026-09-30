@@ -62,7 +62,7 @@ export default function HoldingsPnlSankey({ profit, loss, profitTotal, lossTotal
   const [sharing, setSharing] = useState(false);
   const [shareDark, setShareDark] = useState(false);
   const [shareChartUrl, setShareChartUrl] = useState("");
-  const [brand, setBrand] = useState({ logo: "", text: "Fire" });
+  const [brand, setBrand] = useState({ logo: "", text: "Alcor" });
   const empty = profit.length === 0 && loss.length === 0;
   const netTotal = profitTotal - lossTotal;
   const selectedCurrency = MULTI_CURRENCIES.find((item) => item.code === currency) || MULTI_CURRENCIES[0];
@@ -153,12 +153,12 @@ export default function HoldingsPnlSankey({ profit, loss, profitTotal, lossTotal
   async function shareImage() {
     if (empty || !chartRef.current) return;
     let logo = "";
-    let text = "Fire";
+    let text = "Alcor";
     try {
       const res = await fetch("/api/settings/public");
       const data = await res.json();
       logo = data?.settings?.siteLogo ?? "";
-      text = data?.settings?.logoText || "Fire";
+      text = data?.settings?.logoText || "Alcor";
     } catch {
       /* 品牌信息拉取失败时用默认值 */
     }

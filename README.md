@@ -1,4 +1,4 @@
-# Fire · Web（fire-web）
+# Alcor · Web（fire-web）
 
 Next.js 15 + React 19 + TypeScript + Tailwind + SQLite（better-sqlite3）全栈 Web 端，统一使用端口 3000。
 

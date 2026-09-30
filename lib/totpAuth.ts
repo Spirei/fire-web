@@ -33,7 +33,7 @@ export function readTotpSecret(userId: string): string {
   return secret;
 }
 
-export async function beginTotpSetup(userId: string, account: string, issuer = "Fire") {
+export async function beginTotpSetup(userId: string, account: string, issuer = "Alcor") {
   const secret = generateTotpSecret();
   getDb().prepare(
     "INSERT INTO totp_setup (user_id, secret, expires_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET secret = excluded.secret, expires_at = excluded.expires_at"

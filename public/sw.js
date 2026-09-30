@@ -1,4 +1,4 @@
-/* Fire Web · Service Worker（PWA 安装与离线兜底）
+/* Alcor Web · Service Worker（PWA 安装与离线兜底）
  * 策略：页面导航与静态/上传资源网络优先（在线永远拿最新，兼容 dev 热更新），离线回退缓存；
  * /api 动态数据不拦截、跨域（行情/汇率等）不拦截。
  */

@@ -435,7 +435,7 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
       let html = "";
       try {
         const response = await fetch(nextUrl, {
-          headers: { "User-Agent": "Fire/1.0 public archive reader" },
+          headers: { "User-Agent": "Alcor/1.0 public archive reader" },
           cache: "no-store",
           // 归档站有时单页要 2 秒以上；4 秒太紧会把整次刷新打断（异常直接抛出去、一条都写不进来）
           signal: AbortSignal.timeout(8000)

@@ -22,7 +22,7 @@ export default function PasskeySettings({ admin, onClose, mode = "keys", dataSou
   const [intro, setIntro] = useState(false);
   const [flowDirection, setFlowDirection] = useState<"forward" | "back">("forward");
   const [config, setConfig] = useState<Config | null>(initial?.config ?? null);
-  const [draft, setDraft] = useState<Config>(initial?.config ?? { enabled: false, origin: "", name: "Fire", revision: "" });
+  const [draft, setDraft] = useState<Config>(initial?.config ?? { enabled: false, origin: "", name: "Alcor", revision: "" });
   const [keys, setKeys] = useState<Key[]>(initial?.keys ?? []);
   const [totp, setTotp] = useState(initial?.totpEnabled ?? false);
   const [pending, setPending] = useState<PendingAction | null>(null);
@@ -162,7 +162,7 @@ export default function PasskeySettings({ admin, onClose, mode = "keys", dataSou
   }
   const content = <div id="passkeys" className="pk-center flex flex-col gap-4">
     <p className="pk-intro">{mode === "config" ? "设置此部署用于通行密钥登录的 HTTPS 地址和站点名称。" : "使用安全又方便的通行密钥来替代密码。"}{mode === "keys" && <button type="button" className="pk-text-link" onClick={() => setShowHelp(!showHelp)} aria-expanded={showHelp}>详细了解</button>}</p>
-    {showHelp && <div className="pk-help"><p>通过面容、指纹或设备密码登录，无需输入网站密码。</p><p>可保存在 iCloud 钥匙串、Bitwarden、1Password 等密码管理器中。Fire 不会获取你的面容或指纹。</p></div>}
+    {showHelp && <div className="pk-help"><p>通过面容、指纹或设备密码登录，无需输入网站密码。</p><p>可保存在 iCloud 钥匙串、Bitwarden、1Password 等密码管理器中。Alcor 不会获取你的面容或指纹。</p></div>}
     {message && <p role="status" className="rounded-xl border border-edge bg-bg-gray p-3 text-sm text-ink">{message}</p>}
     {refreshRequired && <button type="button" className="btn btn-line btn-sm self-start disabled:opacity-50" disabled={loading || busy} onClick={() => void load(true)}>刷新确认</button>}
     {!config && loading ? <div className="pk-loading-placeholder" role="status" aria-label="正在读取通行密钥"><i /><i /></div> : !config ? <button className="btn btn-line btn-sm self-start" type="button" onClick={() => void load()}>重试</button> : <>
@@ -197,13 +197,13 @@ export default function PasskeySettings({ admin, onClose, mode = "keys", dataSou
   const renderIntroContent = (requestClose: () => void) => <div className={`pk-flow-view is-${flowDirection}`} key="intro">
     <button type="button" className="pk-back" aria-label="返回" onClick={() => { setFlowDirection("back"); setIntro(false); }}>‹</button>
     <PasskeyIllustration />
-    <div className="pk-benefits"><p><SubNavIcon name="passkeys"/><span>使用面容、指纹或设备密码登录，就像解锁设备一样。</span></p><p><SubNavIcon name="account"/><span>你的生物识别信息始终留在设备上，不会分享给 Fire。</span></p></div>
+    <div className="pk-benefits"><p><SubNavIcon name="passkeys"/><span>使用面容、指纹或设备密码登录，就像解锁设备一样。</span></p><p><SubNavIcon name="account"/><span>你的生物识别信息始终留在设备上，不会分享给 Alcor。</span></p></div>
     {!canAdd && <p className="pk-availability">{!config?.enabled ? (admin ? "请先启用网站登录配置。" : "请等待管理员启用通行密钥。") : origin !== config.origin ? <>请访问 <a href={config.origin}>{config.origin}</a> 创建。</> : !supported ? "请在 HTTPS 下使用支持通行密钥的浏览器。" : "已达 20 个密钥，请先移除不再使用的密钥。"}</p>}
     <div className="pk-intro-actions"><button type="button" onClick={requestClose}>以后再说</button><button type="button" disabled={!canAdd || loading || busy || refreshRequired} onClick={() => begin({ kind: "add" })}>创建通行密钥</button></div>
   </div>;
   const verificationContent = pending && <div className={`pk-flow-view is-${flowDirection}`} key="verify">
     <form onSubmit={confirmAction} className="pk-verify-form">
-        <div className="pk-account-row"><span className="pk-account-mark"><SubNavIcon name="account" /></span><span><b>Fire 账号</b><small>安全验证</small></span></div>
+        <div className="pk-account-row"><span className="pk-account-mark"><SubNavIcon name="account" /></span><span><b>Alcor 账号</b><small>安全验证</small></span></div>
         {pending.kind === "add" && <label className="pk-field"><span>通行密钥名称（选填）</span><input value={name} maxLength={64} onChange={e => setName(e.target.value)} placeholder="例如：iCloud 或 Bitwarden" disabled={busy} /></label>}
         <label className="pk-field"><span>当前密码</span><PasswordInput type="password" required autoComplete="current-password" data-autofocus autoFocus value={password} onChange={e => setPassword(e.target.value)} placeholder="输入当前密码" disabled={busy} /></label>
         {totp && <label className="pk-field"><span>二次验证码或备用码</span><input required autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} placeholder="6 位验证码或备用码" disabled={busy} /></label>}

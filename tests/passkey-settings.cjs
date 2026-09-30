@@ -18,7 +18,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'fire-passkey-settings-'));
 const nativeNow = Date.now;
 let time = 100000;
 Date.now = () => time;
-const config = { enabled: true, origin: 'https://fire.example.test', name: 'Fire', revision: '1' };
+const config = { enabled: true, origin: 'https://fire.example.test', name: 'Alcor', revision: '1' };
 const snapshot = { config, keys: [], totpEnabled: true };
 let calls = 0;
 global.fetch = async url => {

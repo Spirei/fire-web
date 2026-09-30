@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   }
   if (userTotpEnabled(user.id)) return NextResponse.json({ error: "已经开启二次验证" }, { status: 409 });
   // Inactive, expiring setup only; activation requires recent authentication or explicit step-up.
-  const setup = await beginTotpSetup(user.id, user.username, "Fire");
+  const setup = await beginTotpSetup(user.id, user.username, "Alcor");
   logSecurityEvent(request, user.id, "auth.totp.setup", "开始绑定二次验证");
   return NextResponse.json({
     secret: setup.secret,

@@ -17,7 +17,7 @@ import { proxyFetch } from "./net";
 import { fetchQuotes } from "./quotes";
 import { resolveEtfMarketCap } from "./etfMarketCap";
 
-const SEC_UA = "Fire Research (self-hosted stock journal; contact: admin@fire.local)";
+const SEC_UA = "Alcor Research (self-hosted stock journal; contact: admin@fire.local)";
 const CACHE_DIR = path.join(process.cwd(), "data");
 const CACHE_FILE = path.join(CACHE_DIR, "celebs-cache.json");
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 小时

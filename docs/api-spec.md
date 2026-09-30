@@ -1,4 +1,4 @@
-# Fire · API 规范（v1）
+# Alcor · API 规范（v1）
 
 Web、iOS 与 Android 共用 `/api/v1`。旧版 `/api/**` 继续兼容。
 

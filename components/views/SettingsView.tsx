@@ -544,7 +544,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   smtpSecure: false,
   smtpUser: "",
   smtpPassword: "",
-  smtpFromName: "Fire",
+  smtpFromName: "Alcor",
   smtpFromEmail: "",
   emailLinkOrigin: "",
   holdingColumns: DEFAULT_HOLDING_COLUMNS,
@@ -1082,8 +1082,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }, [site]);
 
   async function resetBrand() {
-    if (!await appConfirm("将清空自定义网站与授权页图片和 App 名称，Logo 文字恢复为 Fire。", { title: "恢复默认网站形象", danger: true })) return;
-    const ok = await saveBlock("brand", { ico: "", pwaIcon: "", siteLogo: "", logoText: "Fire", logoFont: "diatype", homepageBg: "", loginSideImage: "", appDisplayName: "", appDisplayIcon: "" }, "网站形象已重置");
+    if (!await appConfirm("将清空自定义网站与授权页图片和 App 名称，Logo 文字恢复为 Alcor。", { title: "恢复默认网站形象", danger: true })) return;
+    const ok = await saveBlock("brand", { ico: "", pwaIcon: "", siteLogo: "", logoText: "Alcor", logoFont: "diatype", homepageBg: "", loginSideImage: "", appDisplayName: "", appDisplayIcon: "" }, "网站形象已重置");
     if (ok) setEditingAppearance(false);
   }
 
@@ -1226,7 +1226,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `fire-backup-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.json`;
+      a.download = `alcor-backup-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -1249,7 +1249,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     try {
       payload = JSON.parse(await file.text());
     } catch {
-      showToast("文件解析失败，请选择 fire-backup-*.json", "err");
+      showToast("文件解析失败，请选择 Alcor 或旧版备份 JSON", "err");
       return;
     }
     setBackupBusy("import");
@@ -1893,12 +1893,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   function downloadBackupCodes() {
     if (!totpBackupCodes?.length) return;
-    const body = `Fire 二次验证备用码\n每条只能用一次，请妥善保存。\n\n${totpBackupCodes.join("\n")}\n`;
+    const body = `Alcor 二次验证备用码\n每条只能用一次，请妥善保存。\n\n${totpBackupCodes.join("\n")}\n`;
     const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "fire-backup-codes.txt";
+    a.download = "alcor-backup-codes.txt";
     a.click();
     URL.revokeObjectURL(url);
     showToast("备用码已下载");
@@ -2303,7 +2303,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         {/* 内容头部 */}
         <div className="sw-page-head flex flex-none items-center justify-between gap-3">
           <div className="min-w-0">
-            {homeIsBackground && <span className="sc-mobile-brand">Fire</span>}
+            {homeIsBackground && <span className="sc-mobile-brand">Alcor</span>}
             {!homeIsBackground && <button type="button" className="sc-back sc-category-back" onClick={() => openCategory(categoryPage ? "home" : detailOrigin || currentCategory?.key || "home")}><span aria-hidden="true">←</span> {categoryPage ? "设置首页" : currentCategory?.label || "设置首页"}</button>}
             <h2>{homeIsBackground ? <><span className="hidden md:inline">首页</span><span className="md:hidden">账户设置</span></> : currentCategory?.label || "账户设置"}</h2>
             <p>{homeIsBackground ? "管理个人信息与账户安全。" : currentCategory?.desc}</p>
@@ -2392,17 +2392,17 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     >
                       <div className="brand-settings">
                         <div className="brand-live-preview" style={site.homepageBg ? { backgroundImage: `linear-gradient(135deg, rgba(16,24,32,.72), rgba(16,24,32,.32)), url(${site.homepageBg})` } : undefined}>
-                          <div className="brand-preview-browser"><i/><i/><i/><span><img src={site.ico || "/site-icon.svg"} alt="" />{site.title || "Fire"}</span></div>
+                          <div className="brand-preview-browser"><i/><i/><i/><span><img src={site.ico || "/site-icon.svg"} alt="" />{site.title || "Alcor"}</span></div>
                           <div className="brand-preview-body">
-                            <div className="brand-preview-logo">{(site.siteLogo || site.ico) ? <img src={site.siteLogo || site.ico} alt="" /> : <span>F</span>}<b>{site.logoText || site.title || "Fire"}</b></div>
+                            <div className="brand-preview-logo">{(site.siteLogo || site.ico) ? <img src={site.siteLogo || site.ico} alt="" /> : <span>A</span>}<b>{site.logoText || site.title || "Alcor"}</b></div>
                             <div className="brand-preview-lines"><i/><i/><i/></div>
-                            <div className="brand-preview-app"><img src={site.pwaIcon || site.ico || "/site-icon.svg"} alt="" /><span><b>{site.title || "Fire"}</b><small>主屏幕图标</small></span></div>
+                            <div className="brand-preview-app"><img src={site.pwaIcon || site.ico || "/site-icon.svg"} alt="" /><span><b>{site.title || "Alcor"}</b><small>主屏幕图标</small></span></div>
                           </div>
                         </div>
 
                         <div className="sw-row">
                           <div className="sw-row-label"><b>Logo 文字</b></div>
-                          <input aria-label="Logo 文字" maxLength={80} readOnly={!editingAppearance} className={`sw-row-input ${editingAppearance ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} value={site.logoText} placeholder={site.title || "Fire"} onChange={e => setSiteField("logoText", e.target.value)} />
+                          <input aria-label="Logo 文字" maxLength={80} readOnly={!editingAppearance} className={`sw-row-input ${editingAppearance ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} value={site.logoText} placeholder={site.title || "Alcor"} onChange={e => setSiteField("logoText", e.target.value)} />
                         </div>
 
                         <section className="brand-settings-group" aria-labelledby="brand-icons-title">
@@ -3566,8 +3566,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                   </div>
                   </SettingsManagedPane>
-                  <SettingsManagedPane name="import" title="导入网站数据" summary="从 Fire 备份文件恢复数据">
-                  <p className="settings-managed-note">选择 Fire 导出的 JSON 文件，确认内容后导入。请先导出现有数据留作备份。</p>
+                  <SettingsManagedPane name="import" title="导入网站数据" summary="从 Alcor 备份文件恢复数据">
+                  <p className="settings-managed-note">选择 Alcor 导出的 JSON 文件，确认内容后导入。请先导出现有数据留作备份。</p>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>备份文件</b><span>JSON 格式</span></div>
                     <div className="ctrl">
@@ -3633,7 +3633,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         </button>
                         <div className="totp-meta-method is-unavailable" aria-disabled="true">
                           <span className="totp-meta-method-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 5.5h16v11H9l-4 3v-3H4z"/><path d="M8 9h8M8 12.5h5"/></svg></span>
-                          <span className="totp-meta-method-copy"><b>短信</b><small>Fire 暂未提供短信验证码。</small></span>
+                          <span className="totp-meta-method-copy"><b>短信</b><small>Alcor 暂未提供短信验证码。</small></span>
                           <span className="totp-meta-radio" aria-hidden="true" />
                         </div>
                       </div>
@@ -3841,7 +3841,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <div className="mail-settings-group">
                       <div className="mail-settings-group-title"><b>发件人</b><span>显示在密码重置邮件中</span></div>
                       <div className="mail-settings-sender-grid">
-                        <label><span>名称</span><input type="text" value={site.smtpFromName} onChange={(event) => setSite({ ...site, smtpFromName: event.target.value })} placeholder="Fire" /></label>
+                        <label><span>名称</span><input type="text" value={site.smtpFromName} onChange={(event) => setSite({ ...site, smtpFromName: event.target.value })} placeholder="Alcor" /></label>
                         <label><span>邮箱</span><input type="email" value={site.smtpFromEmail} onChange={(event) => setSite({ ...site, smtpFromEmail: event.target.value })} placeholder="no-reply@example.com" /></label>
                       </div>
                     </div>
@@ -3961,7 +3961,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               <div id="about" className="flex flex-col gap-6">
                 <SettingsSection icon="info" title="关于" desc="版本、技术栈与外部数据源">
                   <button type="button" onClick={() => setVersionOpen(true)} className="sw-row settings-navigation-row" aria-label="查看版本记录">
-                    <span className="sw-row-label"><b>当前版本</b><span>Fire {CURRENT_VERSION.version} · {CURRENT_VERSION.changes.length} 项更新</span></span>
+                    <span className="sw-row-label"><b>当前版本</b><span>Alcor {CURRENT_VERSION.version} · {CURRENT_VERSION.changes.length} 项更新</span></span>
                     <svg className="settings-navigation-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
                   </button>
                   <div className="sw-row">

@@ -1,4 +1,4 @@
-name: Build and publish Fire image
+name: Build and publish Alcor image
 
 on:
   push:

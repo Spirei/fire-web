@@ -46,7 +46,7 @@ export async function prepareSmokeAccount(file, base, name = "fire_smoke") {
     if (await fs.stat(file).then(() => true, () => false)) throw error;
   }
   if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]{3,20}$/.test(name)) throw new Error("测试账号名称需为 3–20 个字母、数字、下划线或中文");
-  const account = { version: 1, origin, username: name, password: `Fire-${randomBytes(24).toString("base64url")}9`, createdAt: new Date().toISOString() };
+  const account = { version: 1, origin, username: name, password: `Alcor-${randomBytes(24).toString("base64url")}9`, createdAt: new Date().toISOString() };
   await fs.mkdir(path.dirname(file), { recursive: true });
   // Save before registration: even an interrupted response cannot lose the new credential.
   await fs.writeFile(file, JSON.stringify(account, null, 2) + "\n", { mode: 0o600, flag: "wx" });

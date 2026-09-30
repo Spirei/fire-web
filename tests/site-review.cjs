@@ -65,7 +65,7 @@ function fontHeaderFixture(ext) {
     assert(settings.includes('menuClassName="typography-select-menu"'));
     assert(settings.includes('aria-pressed={weight === item.value}'));
     assert(settings.includes('name="typography"'));
-    assert(!settings.includes('Fire · 字体预览'));
+    assert(!settings.includes('Alcor · 字体预览'));
     assert(settings.includes('别人贪婪时恐惧，') && settings.includes('别人恐惧时贪婪。'));
     assert(settings.includes('π 3.1415926</span>'));
     assert(fs.readFileSync(path.join(root,'components/SettingsHeader.tsx'),'utf8').includes('typography: (<><path'));
@@ -910,6 +910,60 @@ function fontHeaderFixture(ext) {
   const user = createUser('review_user', 'Review-test-123');
   const other = createUser('review_other', 'Review-test-123');
   const tokens = { user: createSession(user.id), other: createSession(other.id), admin: createSession('demo-user') };
+  await test('Alcor presentation preserves legacy databases, sessions, secrets, passkeys, preferences and backups', () => {
+    const brand = require(path.join(root, 'lib/brand.ts'));
+    const settings = require(path.join(root, 'lib/settings.ts'));
+    const auth = require(path.join(root, 'lib/auth.ts'));
+    const secrets = require(path.join(root, 'lib/secretStorage.ts'));
+    const passkeys = require(path.join(root, 'lib/passkeys.ts'));
+    const transfer = require(path.join(root, 'lib/dataTransfer.ts'));
+    const keys = ['title', 'logoText', 'appDisplayName', 'smtpFromName', 'smtpPassword'];
+    const before = Object.fromEntries(keys.map(key => [key, settings.getSiteSettings()[key]]));
+    const oldPasskeys = db.prepare('SELECT value FROM passkey_config WHERE id=1').get();
+    const oldConfig = { enabled: true, origin: 'https://fire.example.com', rpID: 'fire.example.com', name: 'Fire', revision: 'legacy-unchanged' };
+    const secret = secrets.encryptSecret('legacy-secret-must-survive');
+    try {
+      settings.updateSiteSettings({ title: 'Fire - 股票记录与持仓管理', logoText: 'fire', appDisplayName: 'Fire App', smtpFromName: 'Fire', smtpPassword: 'legacy-secret-must-survive' });
+      const current = settings.getSiteSettings();
+      assert.equal(current.title, 'Alcor - 股票记录与持仓管理');
+      assert.equal(current.logoText, 'Alcor');
+      assert.equal(current.appDisplayName, 'Alcor App');
+      assert.equal(current.smtpFromName, 'Alcor');
+      assert.equal(current.smtpPassword, 'legacy-secret-must-survive');
+      assert.equal(db.prepare("SELECT value FROM site_settings WHERE key='logoText'").get().value, 'fire', 'presentation does not rewrite the original database');
+      assert.equal(secrets.decryptSecret(secret), 'legacy-secret-must-survive');
+      assert.equal(auth.getUserByToken(tokens.user).id, user.id);
+      assert.equal(auth.SESSION_COOKIE, 'fire_session');
+      assert.equal(require(path.join(root, 'lib/prefsCookie.ts')).PREFS_COOKIE, 'fire_prefs');
+      const app = require(path.join(root, 'lib/appAuth.ts'));
+      assert.equal(app.APP_CLIENT_ID, 'fire-ios');
+      assert.equal(app.APP_REDIRECT_URI, 'com.fire.app:/oauth/callback');
+      assert(fs.existsSync(path.join(temp, 'data/fire.db')) && !fs.existsSync(path.join(temp, 'data/alcor.db')));
+      db.prepare('INSERT INTO passkey_config(id,value) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').run(JSON.stringify(oldConfig));
+      assert.deepEqual(passkeys.passkeyConfig(), { ...oldConfig, name: 'Alcor' });
+      assert.deepEqual(JSON.parse(db.prepare('SELECT value FROM passkey_config WHERE id=1').get().value), oldConfig);
+      db.prepare('UPDATE passkey_config SET value=? WHERE id=1').run(JSON.stringify({ ...oldConfig, name: null }));
+      assert.equal(passkeys.passkeyConfig().name, 'Alcor', 'a missing legacy display name must not prevent startup');
+      const snapshot = transfer.buildBackupPayload(user.id, true);
+      assert.equal(snapshot.manifest.app, 'Alcor');
+      assert.equal(snapshot.format, 'fire-site-backup');
+      assert.equal(snapshot.data.siteSettings.logoText, 'Alcor');
+      transfer.validateBackupPayload({ ...snapshot, manifest: { ...snapshot.manifest, app: 'Fire' } });
+      assert.equal(brand.normalizeProductName('Firefox · Campfire'), 'Firefox · Campfire');
+      assert.equal(brand.normalizeProductName('Example 自定义站点'), 'Example 自定义站点');
+      assert.equal(brand.normalizeProductName('Fire · https://fire.example.com/fire · www.fire.example.com · fire@example.com'), 'Alcor · https://fire.example.com/fire · www.fire.example.com · fire@example.com');
+      assert.equal(brand.normalizeBrandSetting('domain', 'https://fire.example.com'), 'https://fire.example.com');
+      assert.equal(brand.normalizeBrandSetting('tabs', '[{"key":"fire","label":"FIRE"}]'), '[{"key":"fire","label":"FIRE"}]');
+      const { VERSIONS } = require(path.join(root, 'lib/versions.ts'));
+      for (const entry of VERSIONS) assert(entry.software.some(item => item.name === 'Alcor'), `version ${entry.version} retains the new product name`);
+      assert.equal(require(path.join(root, 'lib/appConnectionBrand.ts')).DEFAULT_APP_ICON, '/alcor-app-icon.svg');
+      assert(fs.existsSync(path.join(root, 'public/fire-app-icon.svg')), 'previously linked icon remains available');
+    } finally {
+      settings.updateSiteSettings(before);
+      if (oldPasskeys) db.prepare('UPDATE passkey_config SET value=? WHERE id=1').run(oldPasskeys.value);
+      else db.prepare('DELETE FROM passkey_config WHERE id=1').run();
+    }
+  });
   await test('font upload route enforces account ownership, origin, decoding header and quota', async () => {
     const route = require(path.join(root,'app/api/fonts/route.ts'));
     const fonts = require(path.join(root,'lib/customFonts.ts'));
@@ -1306,7 +1360,7 @@ function fontHeaderFixture(ext) {
       global.fetch = async url => {
         calls++;
         return new Response(JSON.stringify(String(url).endsWith('/config')
-          ? { enabled: false, origin: '', name: 'Fire', revision: 'r1' }
+          ? { enabled: false, origin: '', name: 'Alcor', revision: 'r1' }
           : { keys: [], totpEnabled: false }));
       };
       const resource = createPasskeySettingsData();
@@ -3033,10 +3087,10 @@ function fontHeaderFixture(ext) {
     assert.equal(totpInput.isCompleteBackupCode('abcd-ef01'), true);
     const secret = totp.generateTotpSecret();
     assert.match(secret, /^[A-Z2-7]{32}$/);
-    const url = totp.totpOtpauthUrl('Fire', 'review_user', secret);
-    assert(url.startsWith('otpauth://totp/Fire:review_user?'));
+    const url = totp.totpOtpauthUrl('Alcor', 'review_user', secret);
+    assert(url.startsWith('otpauth://totp/Alcor:review_user?'));
     assert(url.includes(`secret=${secret}`));
-    assert(url.includes('issuer=Fire'));
+    assert(url.includes('issuer=Alcor'));
     assert(url.includes('digits=6'));
     assert(url.includes('period=30'));
     assert(!url.includes('algorithm='));
@@ -3060,7 +3114,7 @@ function fontHeaderFixture(ext) {
 
     const totpUser = createUser('totp_review', 'Totp-test-1234');
     assert.equal(totpAuth.userTotpEnabled(totpUser.id), false);
-    const setup = await totpAuth.beginTotpSetup(totpUser.id, totpUser.username, 'Fire');
+    const setup = await totpAuth.beginTotpSetup(totpUser.id, totpUser.username, 'Alcor');
     assert(setup.qrSvg.includes('<svg'));
     assert(setup.qrPng.startsWith('data:image/png'));
     assert(setup.otpauthUrl.includes(`secret=${setup.secret}`));
@@ -3095,7 +3149,7 @@ function fontHeaderFixture(ext) {
     assert.equal(getDb().prepare('SELECT totp_device_name FROM users WHERE id = ?').get(totpUser.id).totp_device_name, '');
     assert.equal(totpAuth.userTotpEnabled(totpUser.id), false);
     const disableUser = createUser('totp_disable', 'Totp-test-1234');
-    const setup2 = await totpAuth.beginTotpSetup(disableUser.id, disableUser.username, 'Fire');
+    const setup2 = await totpAuth.beginTotpSetup(disableUser.id, disableUser.username, 'Alcor');
     totpAuth.enableTotp(disableUser.id, totp.totpCodeAt(setup2.secret));
     assert.equal(totpAuth.disableTotp(disableUser.id, totp.totpCodeAt(setup2.secret), false).ok, false);
     assert.equal(totpAuth.disableTotp(disableUser.id, totp.totpCodeAt(setup2.secret), false).error, '密码或验证码不正确');
@@ -3142,7 +3196,7 @@ function fontHeaderFixture(ext) {
     assert(settings.includes('className="totp-meta-methods" aria-label="双重验证方式"'));
     assert(settings.includes('<b>身份验证应用</b>'));
     assert(settings.includes('<em>推荐</em>'));
-    assert(settings.includes('Fire 暂未提供短信验证码'));
+    assert(settings.includes('Alcor 暂未提供短信验证码'));
     assert(settings.includes('className="totp-meta-method is-unavailable" aria-disabled="true"'));
     assert(!settings.includes('role="radio"'), 'unselectable verification methods must not masquerade as clickable radios');
     assert(settings.includes('showBack={activeAnchor === "totp" && (totpEnabled || !!totpSetup || totpLandingStage === "method")}'));

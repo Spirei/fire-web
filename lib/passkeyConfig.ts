@@ -4,7 +4,7 @@ export type PublicPasskeyConfig = PasskeyConfigFields & { revision: string };
 
 export function parsePasskeyConfig(value: { enabled?: unknown; origin?: unknown; name?: unknown }): PasskeyConfigFields {
   if (typeof value.enabled !== "boolean") throw new Error("请选择是否启用通行密钥");
-  const name = String(value.name ?? "Fire").trim();
+  const name = String(value.name ?? "Alcor").trim();
   if (!name || name.length > 64) throw new Error("站点名称需为 1–64 个字符");
   const raw = String(value.origin ?? "").trim();
   let origin = "";

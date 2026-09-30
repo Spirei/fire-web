@@ -9,7 +9,7 @@ export const OPEN_LOGIN_EVENT = "fire:open-login";
 export default function LoginModal() {
   const [open, setOpen] = useState(false);
   const [sideImage, setSideImage] = useState("");
-  const [logoText, setLogoText] = useState("Fire");
+  const [logoText, setLogoText] = useState("Alcor");
   const [logoFont, setLogoFont] = useState("diatype");
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export default function LoginModal() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         setSideImage(data?.settings?.loginSideImage ?? "");
-        setLogoText(data?.settings?.logoText || "Fire");
+        setLogoText(data?.settings?.logoText || "Alcor");
         setLogoFont(data?.settings?.logoFont ?? "diatype");
       })
       .catch(() => {});

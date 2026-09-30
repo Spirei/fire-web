@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 type FactUnit = { fy?: number; fp?: string; form?: string; filed?: string; end?: string; val?: number; frame?: string };
 type Facts = Record<string, { label?: string; units?: Record<string, FactUnit[]> }>;
 
-const UA = "Fire financial-data/1.0 contact=admin@fire.local";
+const UA = "Alcor financial-data/1.0 contact=admin@fire.local";
 let tickerCache: { at: number; map: Record<string, number> } | null = null;
 const factsCache = new Map<string, { at: number; data: unknown }>();
 

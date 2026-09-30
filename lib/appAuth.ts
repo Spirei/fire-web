@@ -23,7 +23,7 @@ export function parseAppAuthorization(values: Record<string, unknown>): AppAutho
   if (value("code_challenge_method") !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(value("code_challenge"))) throw new Error("无效的授权校验参数");
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(value("state"))) throw new Error("无效的授权请求");
   if (!scope.includes("portfolio.read") || scope.some(s => !APP_SCOPE.split(" ").includes(s))) throw new Error("不支持的授权范围");
-  return { client_id: APP_CLIENT_ID, redirect_uri: APP_REDIRECT_URI, response_type: "code", code_challenge_method: "S256", code_challenge: value("code_challenge"), scope: [...new Set(scope)].join(" "), state: value("state"), device_name: value("device_name").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 64) || "Fire iOS" };
+  return { client_id: APP_CLIENT_ID, redirect_uri: APP_REDIRECT_URI, response_type: "code", code_challenge_method: "S256", code_challenge: value("code_challenge"), scope: [...new Set(scope)].join(" "), state: value("state"), device_name: value("device_name").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 64) || "Alcor iOS" };
 }
 
 /** Production accepts only the configured public HTTPS origin; no request Host discovery. */
@@ -34,7 +34,7 @@ export function assertAppOrigin(request: Request) {
   const host = request.headers.get("host") || url.host;
   const requestHost = new URL(`${url.protocol}//${host}`).hostname;
   if (process.env.NODE_ENV !== "production" && ["localhost", "127.0.0.1"].includes(requestHost) && (!origin || origin === `${url.protocol}//${host}`)) return;
-  if (!configured || host.toLowerCase() !== new URL(configured).host.toLowerCase() || (origin && origin !== configured) || (url.protocol !== "https:" && request.headers.get("x-forwarded-proto") !== "https")) throw new Error("请通过已配置的 Fire HTTPS 域名连接");
+  if (!configured || host.toLowerCase() !== new URL(configured).host.toLowerCase() || (origin && origin !== configured) || (url.protocol !== "https:" && request.headers.get("x-forwarded-proto") !== "https")) throw new Error("请通过已配置的 Alcor HTTPS 域名连接");
 }
 
 type SecurityUser = { password_hash: string; totp_secret: string; totp_enabled: number };

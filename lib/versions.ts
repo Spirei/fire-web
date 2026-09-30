@@ -1,5 +1,5 @@
 /**
- * Fire · 版本记录（单一数据源）
+ * Alcor · 版本记录（单一数据源）
  *
  * 结构：本文件保存类型 + 全部版本条目（V0_1_x_ENTRY）+ CURRENT_VERSION_ENTRY +
  * CURRENT_VERSION + 完整历史数组 VERSIONS —— 版本记录只维护这一个文件。
@@ -63,7 +63,7 @@ export const V0_1_9_ENTRY: VersionEntry = {
       { name: "SwiftUI", version: "iOS 16+", desc: "iOS App（Swift 5.9 · Async/Await · URLSession）对接 /api/v1" }
     ],
     software: [
-      { name: "Fire", version: "v0.1.9", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
+      { name: "Alcor", version: "v0.1.9", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
     ],
     changes: [
       { title: "持仓盈利桑基图优化", desc: "节点标签规则：正股只显示股票名称，2 倍杠杆 ETF（名称含 2倍、2x 并带 ETF 或做多做空）只显示代码，不再「代码加名称」连排。\n每个块下方显示盈亏金额（跟随当前选择货币换算，盈利红色加号、亏损绿色减号，中心「持仓盈亏」块显示净盈亏）。\n新增「分享」按钮：按 2 倍像素导出 PNG，支持复制到剪贴板直接粘贴分享（非安全上下文自动回退下载文件），深浅色背景随主题。", kind: "feature" },
@@ -100,7 +100,7 @@ export const V0_1_10_ENTRY: VersionEntry = {
   date: "2026-08-16",
   summary: "资产分析持仓盈亏排行统一展示股票图标；修复当日盈亏分享图复制后圆角丢失、与预览不一致。",
   software: V0_1_9_ENTRY.software.map((item) =>
-    item.name === "Fire" ? { ...item, version: "v0.1.10" } : item
+    item.name === "Alcor" ? { ...item, version: "v0.1.10" } : item
   ),
   changes: [
     { kind: "fix", title: "外观选中圈与图标", desc: "主题色选中圈改为当前主题色虚线圆环，保留选中勾和白色主题对比；外观与网站使用专属设计面板图标，桌面与手机一致。" },
@@ -146,13 +146,13 @@ export const V0_1_10_ENTRY: VersionEntry = {
       kind: "fix"
     },
     {
-      title: "项目与网站品牌统一为 Fire",
-      desc: "按用户要求暂时将项目与网站名称统一为 Fire，清理对外展示中的旧品牌名称：包名、默认站点标题与 Logo、首页与后台页脚、关于与版本弹窗、桑基图分享品牌、健康检查服务名、财务与名人数据源标识等均改为 Fire；内部旧缓存键、事件名与数据库文件名暂不迁移，避免破坏现有数据。",
+      title: "项目与网站品牌统一为 Alcor",
+      desc: "按用户要求暂时将项目与网站名称统一为 Alcor，清理对外展示中的旧品牌名称：包名、默认站点标题与 Logo、首页与后台页脚、关于与版本弹窗、桑基图分享品牌、健康检查服务名、财务与名人数据源标识等均改为 Alcor；内部旧缓存键、事件名与数据库文件名暂不迁移，避免破坏现有数据。",
       kind: "fix"
     },
     {
       title: "内部标识与数据库文件名迁移",
-      desc: "在品牌统一为 Fire 的基础上继续迁移内部标识：本地存储前缀、全局事件名、会话与主题 Cookie 名、备份文件名、脚本与数据库文件名均改为 fire。\n旧本地存储与 Cookie 做一次性兼容迁移（旧键自动复制到新键后清理，旧会话 Cookie 继续兼容读取），数据库旧文件备份后迁移为新名称。",
+      desc: "在品牌统一为 Alcor 的基础上继续迁移内部标识：本地存储前缀、全局事件名、会话与主题 Cookie 名、备份文件名、脚本与数据库文件名均改为 fire。\n旧本地存储与 Cookie 做一次性兼容迁移（旧键自动复制到新键后清理，旧会话 Cookie 继续兼容读取），数据库旧文件备份后迁移为新名称。",
       kind: "fix"
     },
     {
@@ -166,7 +166,7 @@ export const V0_1_10_ENTRY: VersionEntry = {
       kind: "fix"
     },
     {
-      title: "Fire 迁移连锁问题收尾审计",
+      title: "Alcor 迁移连锁问题收尾审计",
       desc: "继续排查迁移连锁问题：登录、注册与登出时同步清理旧会话 Cookie；历史备份目录改用新前缀；测试数据文件中的旧邮箱与旧名称清理；全项目源码、脚本、文档与数据配置中已无旧品牌标识。",
       kind: "fix"
     },
@@ -552,9 +552,9 @@ export const V0_1_11_ENTRY: VersionEntry = {
   ...V0_1_9_ENTRY,
   version: "v0.1.11",
   date: "2026-08-18",
-  summary: "左上角 FIRE 字标改用 kiro.dev 同款字体（AWS Diatype Rounded Semi Mono Bold），字体文件本地化，深浅色模式一致。",
+  summary: "左上角 Alcor 字标改用 kiro.dev 同款字体（AWS Diatype Rounded Semi Mono Bold），字体文件本地化，深浅色模式一致。",
   software: V0_1_9_ENTRY.software.map((item) =>
-    item.name === "Fire" ? { ...item, version: "v0.1.11" } : item
+    item.name === "Alcor" ? { ...item, version: "v0.1.11" } : item
   ),
   changes: [
     {
@@ -681,7 +681,7 @@ export const V0_1_12_ENTRY: VersionEntry = {
   date: "2026-08-19",
   summary: "版本切换对齐各版本 mockup：V14 补底部随心输入条与最近编辑、颜色对齐；V1 站点信息/交易改卡片式双列字段；V5/V7 补齐细节；全部适配浅色/深色。",
   software: V0_1_9_ENTRY.software.map((item) =>
-    item.name === "Fire" ? { ...item, version: "v0.1.12" } : item
+    item.name === "Alcor" ? { ...item, version: "v0.1.12" } : item
   ),
   changes: [
     {
@@ -706,17 +706,17 @@ export const V0_1_12_ENTRY: VersionEntry = {
     },
     {
       title: "搜索框上方新增发光字标",
-      desc: "按用户分享的视频效果，在设置窗口侧栏搜索框上方制作动态 Fire 字标：字体加粗放大、背景渐变换色流光、呼吸辉光脉动。\n四套版本各自配色（V14 白底淡紫、V1 白橙红火焰、V7 衬线暖橙、V5 极简灰黑），跟随深浅色主题，并尊重系统的减少动态效果设置。",
+      desc: "按用户分享的视频效果，在设置窗口侧栏搜索框上方制作动态 Alcor 字标：字体加粗放大、背景渐变换色流光、呼吸辉光脉动。\n四套版本各自配色（V14 白底淡紫、V1 白橙红火焰、V7 衬线暖橙、V5 极简灰黑），跟随深浅色主题，并尊重系统的减少动态效果设置。",
       kind: "feature"
     },
     {
       title: "搜索框上方只保留小写 fire 发光字标",
-      desc: "按用户要求精简：侧栏搜索框上方只保留小写「fire」发光流光字标，去掉 Logo 圆标与「设置中心」标签，V5 的「Fire 设置」后缀一并移除。",
+      desc: "按用户要求精简：侧栏搜索框上方只保留小写「fire」发光流光字标，去掉 Logo 圆标与「设置中心」标签，V5 的「Alcor 设置」后缀一并移除。",
       kind: "fix"
     },
     {
-      title: "fire 字标居中 + 标题栏去掉「Fire 设置」文字",
-      desc: "侧栏搜索框上方的小写 fire 发光字标改为水平居中。\n设置窗口标题栏删除「Fire 设置」文字，只保留版本切换图标与版本号。",
+      title: "fire 字标居中 + 标题栏去掉「Alcor 设置」文字",
+      desc: "侧栏搜索框上方的小写 fire 发光字标改为水平居中。\n设置窗口标题栏删除「Alcor 设置」文字，只保留版本切换图标与版本号。",
       kind: "fix"
     },
     {
@@ -973,7 +973,7 @@ export const V0_1_13_ENTRY: VersionEntry = {
   date: "2026-08-20",
   summary: "资产盈亏分析页（UI）：账户资产-持仓总盈亏可点击进入，页面含盈亏总额/趋势、盈亏总结、排行榜、明细与收益日历。",
   software: V0_1_12_ENTRY.software.map((item) =>
-    item.name === "Fire" ? { ...item, version: "v0.1.13" } : item
+    item.name === "Alcor" ? { ...item, version: "v0.1.13" } : item
   ),
   changes: [
     {
@@ -1000,7 +1000,7 @@ export const V0_1_14_ENTRY: VersionEntry = {
   date: "2026-08-21",
   summary: "资产盈亏分析：收益日历市场筛选（带市场图标）、盈亏总结页签改全部/美股/港股/A股、页面整体可拖动窗口。",
   software: V0_1_13_ENTRY.software.map((item) =>
-    item.name === "Fire" ? { ...item, version: "v0.1.14" } : item
+    item.name === "Alcor" ? { ...item, version: "v0.1.14" } : item
   ),
   changes: [
     {
@@ -1268,7 +1268,7 @@ export const V0_1_15_ENTRY: VersionEntry = {
     { name: "DeepSeek", version: "deepseek-v4-flash-vision-exp", desc: "视觉识别 · 截图云端 OCR（配 Key 时优先，Apple Vision 兜底）" }
   ],
   software: V0_1_14_ENTRY.software.map((item) =>
-    item.name === "Fire" ? { ...item, version: "v0.1.15" } : item
+    item.name === "Alcor" ? { ...item, version: "v0.1.15" } : item
   ),
   changes: [
     {
@@ -1520,7 +1520,7 @@ export const V0_1_16_ENTRY: VersionEntry = {
   date: "2026-08-24",
   summary: "修复美股盘前/盘后/夜盘当日盈亏基准价错位（富途 prev_close_price 落后一个常规交易日）。",
   software: V0_1_15_ENTRY.software.map((item) =>
-    item.name === "Fire" ? { ...item, version: "v0.1.16" } : item
+    item.name === "Alcor" ? { ...item, version: "v0.1.16" } : item
   ),
   changes: [
     {
@@ -1647,7 +1647,7 @@ export const V0_1_17_ENTRY: VersionEntry = {
   date: "2026-08-29",
   summary: "修复设置侧栏选择项目时右侧内容卡片短暂出现蓝色边框。",
   software: V0_1_16_ENTRY.software.map((item) =>
-    item.name === "Fire" ? { ...item, version: "v0.1.17" } : item
+    item.name === "Alcor" ? { ...item, version: "v0.1.17" } : item
   ),
   changes: [
     {
@@ -1672,7 +1672,7 @@ export const V0_1_17_ENTRY: VersionEntry = {
     },
     {
       title: "设置侧栏品牌头部精修",
-      desc: "按截图重新平衡设置侧栏顶部品牌区：优先展示站点已配置 Logo，无图时回退精修 F 字标；Logo 改为 32px 柔和渐变圆角块，增加细边框、内高光和轻阴影；Fire 字标加粗并收紧字距，副标题缩小压紧；品牌区底部增加细分隔线。\n搜索从悬浮裸图标改为常驻 28px 圆角工具按钮，带边框、背景、轻阴影和克制的上浮悬停效果，消除漂浮感并提升可发现性。",
+      desc: "按截图重新平衡设置侧栏顶部品牌区：优先展示站点已配置 Logo，无图时回退精修 F 字标；Logo 改为 32px 柔和渐变圆角块，增加细边框、内高光和轻阴影；Alcor 字标加粗并收紧字距，副标题缩小压紧；品牌区底部增加细分隔线。\n搜索从悬浮裸图标改为常驻 28px 圆角工具按钮，带边框、背景、轻阴影和克制的上浮悬停效果，消除漂浮感并提升可发现性。",
       kind: "fix"
     },
     {
@@ -1687,7 +1687,7 @@ export const V0_1_17_ENTRY: VersionEntry = {
     },
     {
       title: "设置侧栏品牌花标打磨",
-      desc: "品牌花标改为「点击一次转一圈、连续点击连续转」：每次点击目标角度加 360°，改用临界阻尼弹簧在角度目标上做物理积分（requestAnimationFrame），并设定角速度上限，消除速度突跳与急停导致的卡顿。\n花标外轮廓由细长六瓣星芒打磨为圆凸瓣、浅凹口的云朵与花瓣式外形，内容恢复为 Fire 趋势折线加箭头，并恢复「先描绘自己、箭头在画到末端时浮现」的播放动画（默认静止，仅在悬停或连续点击转动中播放）；去掉多余装饰与外层圆角方框，旋转时花瓣外浮出柔和光晕。\n移除侧栏品牌区的「Fire 投资记实」文案，花瓣在品牌区水平居中；搜索按钮从侧栏移入设置窗口标题栏工具组（置顶图标左侧），点击仍唤起 ⌘K 命令搜索（改为窗口事件触发），命令面板固定在设置窗口右上角、紧贴搜索按钮下方。",
+      desc: "品牌花标改为「点击一次转一圈、连续点击连续转」：每次点击目标角度加 360°，改用临界阻尼弹簧在角度目标上做物理积分（requestAnimationFrame），并设定角速度上限，消除速度突跳与急停导致的卡顿。\n花标外轮廓由细长六瓣星芒打磨为圆凸瓣、浅凹口的云朵与花瓣式外形，内容恢复为 Alcor 趋势折线加箭头，并恢复「先描绘自己、箭头在画到末端时浮现」的播放动画（默认静止，仅在悬停或连续点击转动中播放）；去掉多余装饰与外层圆角方框，旋转时花瓣外浮出柔和光晕。\n移除侧栏品牌区的「Alcor 投资记实」文案，花瓣在品牌区水平居中；搜索按钮从侧栏移入设置窗口标题栏工具组（置顶图标左侧），点击仍唤起 ⌘K 命令搜索（改为窗口事件触发），命令面板固定在设置窗口右上角、紧贴搜索按钮下方。",
       kind: "feature"
     },
     {
@@ -1746,12 +1746,12 @@ export const V0_1_17_ENTRY: VersionEntry = {
       kind: "security"
     },
     {
-      title: "Fire 花标外轮廓精确改为圆润云朵形",
-      desc: "按 ChatGPT 新对话动画参考重新构造设置侧栏 Fire 花标：彻底移除连续小波浪，外轮廓仅保留 7 个清晰的大体块，采用非对称云朵结构、宽缓连接、饱满底瓣和更大的内部留白；中心 Fire 趋势箭头同步放大、简化折点并加粗圆角描边，解决原符号过小过碎的问题。点击一次一圈、连续点击连续旋转的弹簧动画保持不变。",
+      title: "Alcor 花标外轮廓精确改为圆润云朵形",
+      desc: "按 ChatGPT 新对话动画参考重新构造设置侧栏 Alcor 花标：彻底移除连续小波浪，外轮廓仅保留 7 个清晰的大体块，采用非对称云朵结构、宽缓连接、饱满底瓣和更大的内部留白；中心 Alcor 趋势箭头同步放大、简化折点并加粗圆角描边，解决原符号过小过碎的问题。点击一次一圈、连续点击连续旋转的弹簧动画保持不变。",
       kind: "fix"
     },
     {
-      title: "Fire 花标恢复默认设计",
+      title: "Alcor 花标恢复默认设计",
       desc: "按要求撤销本轮 ChatGPT 云朵轮廓与中心符号比例调整，恢复项目原有默认外轮廓、中心趋势箭头、描边粗细和缩放比例；点击旋转交互继续保留。",
       kind: "fix"
     },
@@ -1808,7 +1808,7 @@ export const V0_1_18_ENTRY: VersionEntry = {
   version: "v0.1.18",
   date: "2026-08-30",
   summary: "撤回资金记录以外的全局彩虹输入。",
-  software: V0_1_17_ENTRY.software.map((item) => item.name === "Fire" ? { ...item, version: "v0.1.18" } : item),
+  software: V0_1_17_ENTRY.software.map((item) => item.name === "Alcor" ? { ...item, version: "v0.1.18" } : item),
   changes: [{
     title: "撤回资金记录以外的全局彩虹输入",
     desc: "按要求取消持仓、行情、快捷交易、FIRE、导入、名人持仓、财报、K 线及设置等页面的全局彩虹输入，恢复各页面原有数字控件与交互；仅保留新增资金记录中的专用彩虹输入效果。",
@@ -1875,7 +1875,7 @@ export const V0_1_18_ENTRY: VersionEntry = {
     kind: "fix"
   }, {
     title: "兼容富途 OpenD 主机地址格式",
-    desc: "修复设置中误填 http://192.168.x.x 导致容器 TCP 明明可达但 Fire 判断端口未开放的问题。\n保存设置、读取旧配置和测试连接时统一将 OpenD 主机归一化为纯 hostname 或 IP，自动去掉协议、端口与路径。",
+    desc: "修复设置中误填 http://192.168.x.x 导致容器 TCP 明明可达但 Alcor 判断端口未开放的问题。\n保存设置、读取旧配置和测试连接时统一将 OpenD 主机归一化为纯 hostname 或 IP，自动去掉协议、端口与路径。",
     kind: "fix"
   }, {
     title: "GHCR 镜像内置富途 OpenD 桥接运行时",
@@ -1893,7 +1893,7 @@ export const V0_1_19_ENTRY: VersionEntry = {
   version: "v0.1.19",
   date: "2026-08-31",
   summary: "统一本地与线上资源，并修复导入、行情和即时偏好同步。",
-  software: V0_1_18_ENTRY.software.map((item) => item.name === "Fire" ? { ...item, version: "v0.1.19" } : item),
+  software: V0_1_18_ENTRY.software.map((item) => item.name === "Alcor" ? { ...item, version: "v0.1.19" } : item),
   changes: [{
     title: "线上与本地欧元默认旗帜统一为欧盟 SVG",
     desc: "欧元市场码 EU 不再回退到通用 eu.svg，货币选择器、市场图标、全球经济热图与素材库统一使用 /uploads/asset/flag/欧盟EU.svg。\n新增既有数据库一次性迁移，只替换旧内置 eu.svg，不覆盖用户上传的其他自定义旗帜；新部署会以 EU 代码播种该素材，Docker 镜像同步携带，并在 uploads 挂载缺失时从 resource-default 兜底。",
@@ -2012,7 +2012,7 @@ export const V0_1_19_ENTRY: VersionEntry = {
     kind: "fix"
   }, {
     title: "发布监控页支持一键更新群晖容器",
-    desc: "GHCR 部署增加受限 Watchtower 服务，发布流程可由管理员直接拉取最新 Fire 镜像并观察重启与健康恢复。\n更新器仅匹配 Fire 专属 enable 标签与 scope，API 只在 Compose 内网开放并使用 32 位以上随机 Token；网页服务端固定调用更新端点，不接收任意命令、容器或镜像参数，并限制 30 秒内重复触发；Compose 配置变化仍需群晖手动执行 compose up。",
+    desc: "GHCR 部署增加受限 Watchtower 服务，发布流程可由管理员直接拉取最新 Alcor 镜像并观察重启与健康恢复。\n更新器仅匹配 Alcor 专属 enable 标签与 scope，API 只在 Compose 内网开放并使用 32 位以上随机 Token；网页服务端固定调用更新端点，不接收任意命令、容器或镜像参数，并限制 30 秒内重复触发；Compose 配置变化仍需群晖手动执行 compose up。",
     kind: "security"
   }, {
     title: "修复发布监控页手机端头部错位",
@@ -2274,7 +2274,7 @@ export const V0_1_20_ENTRY: VersionEntry = {
     ...V0_1_19_ENTRY.frontend,
     { name: "react-photo-view", version: "1.2.7", desc: "交易广场配图页内预览（官方组件 · 手势 / 工具栏缩放）" }
   ],
-  software: V0_1_19_ENTRY.software.map((item) => item.name === "Fire" ? { ...item, version: "v0.1.20" } : item),
+  software: V0_1_19_ENTRY.software.map((item) => item.name === "Alcor" ? { ...item, version: "v0.1.20" } : item),
   changes: [{
     title: "空实例首次设置接入真实三步向导",
     desc: "生产空库不再只依赖登录页注册：没有非测试用户时，访问登录或后台会进入 /setup —— 创建管理员、填写站点标题与注册开关、然后开始使用。\n关闭注册时仍允许创建首位管理员；已初始化实例访问 /setup 会回到登录或后台。公开接口 GET /api/auth/setup-status 与 /api/v1/auth/setup-status 只返回 needsSetup 布尔值。",
@@ -2387,7 +2387,7 @@ export const V0_1_21_ENTRY: VersionEntry = {
     ...V0_1_20_ENTRY.frontend,
     { name: "pinyin-match", version: "1.2.10", desc: "中文名 / 拼音首字母 / 全拼搜索" }
   ],
-  software: V0_1_20_ENTRY.software.map((item) => item.name === "Fire" ? { ...item, version: "v0.1.21" } : item),
+  software: V0_1_20_ENTRY.software.map((item) => item.name === "Alcor" ? { ...item, version: "v0.1.21" } : item),
   changes: [{
     title: "资金记录联动股票名称、代码和拼音",
     desc: "资产分析资金记录搜索不再只匹配备注原文：自动记账流水关联成交订单，可用中文名、代码（含港股 700 与 00700）、拼音首字母（中国移动 → zgyd）和全拼查找。\n同时支持买入 / 卖出 / 股息、美股 / 港股 / A股，以及「9月3日」这类日期；列表展示股票代码。",
@@ -2444,7 +2444,7 @@ export const V0_1_22_ENTRY: VersionEntry = {
   date: "2026-09-06",
   summary: "简化版完成桌面与手机自适应打磨，并补齐正式页面、账本导入导出与收益计算。",
   frontend: [...V0_1_21_ENTRY.frontend, { name: "SheetJS(xlsx)", version: "0.18.5", desc: "简化版投资记账「有知有行」xlsx 导入导出" }],
-  software: V0_1_21_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.22" } : item),
+  software: V0_1_21_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.22" } : item),
   changes: [{
     title: "修复有知有行累计收益与曲线计算口径",
     desc: "导入时补回首条总资产代表的初始本金，资金流日期同步调整市值。\n累计收益按期末资产减净投入计算，资金加权收益率改用 Modified Dietz，年化收益率改用 XIRR，汇总曲线按日期携带各账户最新市值。\n旧版重复种子记录和错误本金会在刷新后自动修正。",
@@ -2517,7 +2517,7 @@ export const V0_1_23_ENTRY: VersionEntry = {
   date: "2026-09-07",
   summary: "简化版年度现金流按参考图重做桑基图、编辑流程、分享导出与小屏适配。",
   frontend: V0_1_22_ENTRY.frontend,
-  software: V0_1_22_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.23" } : item),
+  software: V0_1_22_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.23" } : item),
   changes: [{
     title: "简化版新增年度现金流规划与 ECharts 桑基图",
     desc: "年度现金流仅在首次配置时进入计算器，完成后从总览卡片直接打开年度页。\n默认展示收入与支出桑基图，放大后可切换「收入与支出 / 仅支出」以及金额、比例、隐藏数据。\n收支、分类支出与年度结余均由同一年度口径计算。",
@@ -2574,7 +2574,7 @@ export const V0_1_24_ENTRY: VersionEntry = {
   date: "2026-09-08",
   summary: "继续精修简化版交互、投资图表与发布状态体验。",
   frontend: V0_1_23_ENTRY.frontend,
-  software: V0_1_23_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.24" } : item),
+  software: V0_1_23_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.24" } : item),
   changes: [{
     title: "资产构成汇聚曲线精确连接节点边框",
     desc: "按参考图重新校准投入、转出、期初金额、净投入、收益与期末金额之间的曲线：左右支线使用缓弧向中心收拢，汇合后保留短垂直主干，并精确停在下一层卡片的上下边框中心，解决期末金额连线被卡片遮挡、看起来没有连接的问题。",
@@ -2611,7 +2611,7 @@ export const V0_1_25_ENTRY: VersionEntry = {
   date: "2026-09-09",
   summary: "时光机连接简化版与完整版。",
   frontend: [...V0_1_24_ENTRY.frontend, { name: "WebGL", version: "浏览器原生", desc: "哆啦A梦时光机原图纵深与局部视差动效" }],
-  software: V0_1_24_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.25" } : item),
+  software: V0_1_24_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.25" } : item),
   changes: [{ title: "双向版本时光机", desc: "简化版工具栏与完整版页头新增版本穿越入口，点击后以用户提供的哆啦A梦时光机原图衔接页面切换，并以 WebGL 对原图做柔和纵深与局部视差，保护人物区域，不添加额外流光或闪光。\n不支持 WebGL 时回退原图；支持深浅主题、手机小屏与减少动态效果。\n通过预取与应用内路由消除整页重载；隔离简化版样式并恢复返回后的窗口交互，离开前等待账本同步，失败时保留当前页面。", kind: "feature" }, { title: "版本穿越入口布局", desc: "简化版右上角直接显示无外框细线纸飞机，单击立即穿越。\n完整版入口保留在头像菜单，配合「去另一面」及目标版本说明。", kind: "fix" }, { title: "交易广场段永平刷新支持雪球登录 Cookie", desc: "雪球上线阿里云 WAF 反爬后，程序化拉取段永平发文被拦截，刷新拿不到新帖。\n为交易广场新增「雪球 Cookie」设置项，服务端改用登录会话请求，绕过 WAF 并正常获取新发文。", kind: "fix" }]
 };
 
@@ -2620,7 +2620,7 @@ export const V0_1_26_ENTRY: VersionEntry = {
   date: "2026-09-10",
   summary: "修复刷新闪动，并新增全站市场色块设置。",
   frontend: V0_1_25_ENTRY.frontend,
-  software: V0_1_25_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.26" } : item),
+  software: V0_1_25_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.26" } : item),
   changes: [{
     title: "修复资产分析刷新时左侧布局闪扩",
     desc: "刷新资产分析时左侧分栏会先扩大再收回。根因有两层：分栏比例默认 29%，等 useEffect 读完 localStorage 才跳回保存值；CSS minmax(340px, 29%) 在容器宽度未定时把百分比当成内容上限，左栏先被图表与表格撑开。\n修复：在 head 同步脚本里于首屏绘制前写入 fr 比例；组件首帧不写 inline 默认值；桌面分栏改用 fr，并给网格 width:100% 与 contain:inline-size，宽度只跟父级走。",
@@ -2697,7 +2697,7 @@ export const V0_1_27_ENTRY: VersionEntry = {
   date: "2026-09-11",
   summary: "修复金额「水合不一致」：汇率等本地缓存改为挂载后读取，服务端与客户端首帧数字一致。",
   frontend: V0_1_26_ENTRY.frontend,
-  software: V0_1_26_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.27" } : item),
+  software: V0_1_26_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.27" } : item),
   changes: [{
     title: "修复金额水合不一致",
     desc: "现象：资产分析页与我的持仓页刷新后开发环境弹出 hydration 报错，持仓总市值与现金在服务端渲染 51,392.88、客户端首帧 52,546.83。\n根因：AssetAnalysisView.tsx 与 HoldingsView.tsx 的汇率 state 用 useState 初始化函数直接读 localStorage 的 fire:rates —— 服务端读不到、只能用 FALLBACK_RATES，客户端首帧读到实时汇率，跨币种金额必然不同。\n同类写法还有：持仓页的 ratesReady 与各市场盈利卡片顺序、盈亏分析页的日历市场 / 基准 / 加权 / 日历月份四个本地偏好、全球预览页的迷你 K 线缓存。\n修复：新增 lib/ratesCache.ts 统一读写汇率缓存（注释写明只能挂载后读），上述读取一律改为「首帧用默认值 + useLayoutEffect 恢复」—— useLayoutEffect 先于绘制，因此既不会水合报错，也看不到兜底值闪烁。",
@@ -2850,7 +2850,7 @@ export const V0_1_28_ENTRY: VersionEntry = {
   date: "2026-09-12",
   summary: "财报日历接入港股：数据取自雪球财报日历（已发布 / 盘前 / 盘后 / 当日分桶），市值与行情用东方财富补齐。",
   frontend: V0_1_27_ENTRY.frontend,
-  software: V0_1_27_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.28" } : item),
+  software: V0_1_27_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.28" } : item),
   changes: [{
     title: "财报日历接入港股（雪球财报日历）",
     desc: "港股此前只有「该市场财报数据源暂未接入」的占位。\n现在接通雪球财报日历：接口是 /v5/stock/screener/earnings_calendar/hk/list.json，必须带登录 Cookie（匿名请求直接 400），参数用 begin_date / end_date 取区间，并带上 extend=all 才会返回整段区间。\n返回按天分组，组内再分「已发布 / 盘前 / 盘后 / 当日」四个桶，正好对上现有的时段口径。\nlib/earnings.ts 新增 fetchHkMonth()：每月一次请求，按 symbol 与日期去重，用东方财富 push2 的 116. secid 批量补市值、现价、涨跌与简体名，再按「单日市值前 5」收敛，与美股、A股同一套规则。\nEarningsMarket 增加 HK，/api/earnings 放行 market=HK；前端港股进入常驻市场，港股单独一套 HK$ 市值档位，「业绩类型」列显示「2026 中报」这类标签，已发布条目显示「已发布」而不猜测盘前或盘后，空档月给出港股业绩季说明；设置页新增「港股财报」接口地址，关于页数据源补上雪球。\n实测：2026-08 上游返回 2093 条事件（已发布 2032 / 盘前 3 / 盘后 14 / 当日 44），按单日市值前 5 收敛后 111 条；2026-09 为 38 条，均带回市值与现价。",
@@ -2999,7 +2999,7 @@ export const V0_1_29_ENTRY: VersionEntry = {
   date: "2026-09-13",
   summary: "卡面库 NEW 角标美化。",
   frontend: V0_1_28_ENTRY.frontend,
-  software: V0_1_28_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.29" } : item),
+  software: V0_1_28_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.29" } : item),
   changes: [{
     title: "补齐富途式自选分组管理工作台",
     desc: "「编辑分组」升级为完整的左右分栏工作台，并统一深浅色：左侧加入固定的「全部」，市场分组与自建分组合并为一条可自由拖拽排序的列表，数量统一右对齐，操作图标仅在悬停时覆盖显示，侧栏收窄到仍可完整显示最长名称的 240px；分组图标与行情板复用同一份解析结果。\n新增与重命名改为一致的居中弹窗与卡面库风格胶囊按钮，新增入口紧跟在分组列表末尾。\n右侧补齐 min-height 约束并形成独立滚动区，73 条等长列表可从固定表头下滚动到底，切换长短列表不再导致窗口跳动；同时修复暗色模式下半透明浅色背景把侧栏和弹窗染成灰白块的问题。\n详情顶部改为全市场股票联想，选中后直接加入当前自定义分组；明细支持全选、跨分组移动、多选移出、上移/下移/图钉置顶/删除及服务端持久化排序，置顶支持多只股票并连续排列。\n四个操作默认隐藏，悬停或键盘聚焦行时显示；去掉文字徽标、左侧强调线与整行灰底，四个图标（含已置顶图钉）离开行后全部隐藏，划过时已置顶图钉以实心圆底区别于普通图钉。\n明细行增至约 56px，刷新后保留置顶状态；市场列由重复文字改为与分组栏一致的 24px 圆形市场图标，并保留悬停名称。\n勾选框改为 17px 中性色圆角控件，选中使用深灰底与白色对勾，深浅色不再出现系统蓝色；批量移动点击后立即更新当前列表，失败才回滚。\n全部和市场分组恢复上移、下移、置顶与删除操作：排序按全局或当前市场持久化，删除会从自选股中移除；导出可用态改为高对比胶囊，导入在全部及市场分组中同样可以打开并默认导入全部。\n行情板分组条固定显示 5 个完整分组并支持横向滑动，三横杠菜单选中其他分组后会自动滚动，并以能完整容纳当前项的最早分组为左边界，避免首枚胶囊被标题侧裁切；主题切换不再对胶囊背景色做过渡闪帧。\n导出改为富途兼容的制表符 TXT；新增 TXT/CSV/SEL/EBK/JSON 文件导入、列表预览与目标分组选择，并兼容 GBK 券商文件，股票默认进入全部自选并附加到所选分组。\n指定分组导入改为哈希索引匹配、预编译 SQL 与单事务批量写入，移除逐条全表读取造成的等待。\n文件选择按钮固定为 44px，底部取消与导入固定为 40px，统一恢复正常内边距与文字居中；移除重复的「编辑行情板」模式，更多菜单中的编辑入口改为低强调样式。",
@@ -3236,7 +3236,7 @@ export const V0_1_30_ENTRY: VersionEntry = {
   version: "v0.1.30",
   date: "2026-09-14",
   summary: "修复设置密钥泄露、跨市场导入覆盖、币种汇总与刷新，并完善移动端和普通用户权限。",
-  software: V0_1_29_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.30" } : item),
+  software: V0_1_29_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.30" } : item),
   changes: [{
     title: "智能助手补齐附件、空间与调用审计",
     desc: "图片支持「仅本次」与「持久保留」两种模式；保留的文件进入用户隔离的私有数据目录，只能通过登录鉴权接口查看，删除归档时同步清理记录与文件。\n对话可归入自建空间。\n新增模型调用账本，记录实际服务、模型、状态、延迟、错误与提供商返回的 Token；归档内展示调用与失败统计，价格未知时不虚报费用。",
@@ -3493,7 +3493,7 @@ export const V0_1_31_ENTRY: VersionEntry = {
   version: "v0.1.31",
   date: "2026-09-15",
   summary: "四色门工作区入口正式迁入主站，并统一业务页面的自适应上下文顶栏。",
-  software: V0_1_30_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.31" } : item),
+  software: V0_1_30_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.31" } : item),
   changes: [{ title: "公开仓库安全加固与素材分离", desc: "SVG 使用 XML 解析白名单，上传路径与真实图片格式校验，请求体流式限额，财报权限保护。\n首次安装令牌，容器以非 root 运行（保留图片优化缓存的写入权限），兼容历史清理后的提交检查。\n代码采用 MIT，公开仓库不再包含部署素材，由部署者自行提供。", kind: "security" }, {
     title: "四色门工作区入口迁入主站",
     desc: "窗户、转盘、固定指针、手势与声音开关迁入桌面端主导航顶部。\n账户资产、资产分析、FIRE 与全球经济可从色块、转盘或原导航进入；转盘使用连续缓动，并同步棘轮声与停止提示音。\n静音偏好通过全站偏好机制持久化，关闭时立即停止当前声音，重新开启不会自动试听。\n素材限制在侧栏内部，窄高窗口自动缩放，其余导航继续滚动可达。",
@@ -3530,7 +3530,7 @@ export const V0_1_32_ENTRY: VersionEntry = {
   version: "v0.1.32",
   date: "2026-09-16",
   summary: "统一智能助手的分隔线与消息配色，与资产分析、发送按钮保持一致。",
-  software: V0_1_31_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.32" } : item),
+  software: V0_1_31_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.32" } : item),
   changes: [{
     title: "智能助手分隔线与资产分析同色",
     desc: "智能助手工作台里侧栏与对话区之间的竖线此前由两层叠加：侧栏自带的 1px 边框与可拖动分隔条，重叠处比资产分析那根更亮，并多出半像素宽度。\n现在 768px 以上把分隔线完全交给分隔条绘制：浅色 rgba(122,132,146,.24)、深色 rgba(255,255,255,.15)，与资产分析的分隔条取值相同，悬停变宽变蓝的交互保留。\n手机端侧栏是覆盖式抽屉，仍然保留自身边框。",
@@ -3635,7 +3635,7 @@ export const V0_1_33_ENTRY: VersionEntry = {
   version: "v0.1.33",
   date: "2026-09-17",
   summary: "四色门增加样式 2，转盘棘轮声跟随真实转角。",
-  software: V0_1_32_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.33" } : item),
+  software: V0_1_32_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.33" } : item),
   changes: [{
     title: "四色门新增样式 2，棘轮声跟随转动",
     desc: "原插画转盘保留为样式 1，珐琅金边转盘作为样式 2。\n左上角四色圆标切换两套外观（偏好写入 fire:four-door-style），右上角仍是静音开关。\n转动时按真实转角每 15° 发一记棘轮声，转速越快越密越尖，停止时补一声停止音；静音立即切断。\n窗口、挂钩、手型光标与原有缓动时长不变。",
@@ -3696,7 +3696,7 @@ export const V0_1_34_ENTRY: VersionEntry = {
     ...V0_1_33_ENTRY.frontend,
     { name: "qrcode", version: "1.5.4", desc: "二次验证绑定二维码（本地 SVG，密钥不经过第三方）" }
   ],
-  software: V0_1_33_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.34" } : item),
+  software: V0_1_33_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.34" } : item),
   changes: [{
     title: "登录二次验证（TOTP）",
     desc: "在设置 → 二次验证中扫描本地生成的二维码绑定验证器（密钥不经过第三方图片接口）。\n输入 6 位数字后开启，并一次性给出 8 条备用码。\n开启后网页与 iOS 登录在密码正确时只返回 5 分钟有效的 ticket，因此需要再提交验证码或备用码才能登录。\n同一验证码不能重复使用；管理员重置密码会同时关闭该用户的二次验证，用户管理页也可以单独关闭。",
@@ -3797,7 +3797,7 @@ export const V0_1_35_ENTRY: VersionEntry = {
     ...V0_1_34_ENTRY.frontend,
     { name: "three", version: "0.180.0", desc: "首页 F1 滚动叙事的 3D 渲染（模型加载、着色器地面反射、速度线与后期）" }
   ],
-  software: V0_1_34_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.35" } : item),
+  software: V0_1_34_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.35" } : item),
   changes: [{
     title: "车型素材改为按需加载：悬停预热、就绪后再切",
     desc: "车型素材从 20 MB 到 105 MB，默认不再全部加载 —— 首屏只加载当前选中的车型（实测首屏只有一个 glb 请求）。\n交互设计：鼠标划过 / 键盘聚焦 / 手指按下某个车型时，在后台静默预取（写进 Cache Storage / IndexedDB），胶囊里显示一条细进度条，但画面不变；点选时若已就绪立即切换，若还在下载就把旧车留在画面上、等素材到位再切，不会先黑一下；已缓存的车型第二次切换是瞬时的。\n实现：assetCache 增加 isAssetCached / prefetchAsset，并对同一 URL 做 in-flight 去重（预取与真正加载共用同一条请求）；HomeShowcase 负责 idle / loading / ready 状态机与「就绪后再 setModelId」。\n实测：首屏只请求 mcl35m.glb；悬停 Gulf 触发后台请求且画面仍是 MCL35M；未就绪点选时不立即切换，素材到位后自动切到 gulf2022。",
@@ -4127,7 +4127,7 @@ export const V0_1_36_ENTRY: VersionEntry = {
   date: "2026-09-20",
   summary: "车型导入向导上线：上传 .glb 体检后写进 uploads 卷的 showroom.json，可改参数、换封面、拖动排序；首页右下角车型条就按这份顺序排。",
   frontend: [...V0_1_35_ENTRY.frontend],
-  software: V0_1_35_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.36" } : item),
+  software: V0_1_35_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.36" } : item),
   changes: [
     { title: "车型导入草稿、体检与上线流程加固", kind: "fix", desc: "上传通过体检的 GLB 先进入隐藏草稿区，只有预览成功且参数未改动时才能保存上线；保存时原子转正并自动避开同名文件，未保存草稿不会被首页或导入清单自动发现。修复移出清单后因磁盘自动扫描而复活，并拒绝自定义车型占用内置 ID。体检新增顶点数、三角面数、非三角图元、超高面数 / 节点数和外链资源检查；表单补齐 pitch 与轮轴，正则先校验，缺失素材明确标记。预览改为点击重载，避免每次输入都重新解析大模型；登记表使用唯一临时文件原子写入，并增加完整回归。" },
     { title: "模型展示固定机位、车底视角与状态保持", kind: "fix", desc: "模型展示进入后使用用户设置的固定进度、角度和缩放，不再跳到硬编码角度导致车型乱转；展示相机可越过地平线查看完整底盘，并支持连续 360° 环视，复位仍回固定机位。显示模式与六色选择刷新保持，面板内可直接切换车型。四辆现有车型均完成浏览器线框与连续切换实测；低细分大面片生成显示专用线网，高面数受单网格和整车预算保护，蒙皮 / Morph 保留原拓扑，GPU 实例化在导入时拦截。车型导入页在服务端预载胶囊样式，消除进入时的首帧错位闪现。" },
@@ -4235,7 +4235,7 @@ export const V0_1_37_ENTRY: VersionEntry = {
   version: "v0.1.37",
   date: "2026-09-21",
   summary: "修复模型展示恢复后卡在加载 100% 的状态；查看器支持座舱探索与底盘观察高光。",
-  software: V0_1_36_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.37" } : item),
+  software: V0_1_36_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.37" } : item),
   changes: [{
     title: "原画档同步提高画布清晰度",
     desc: "修复原画仅加载大贴图、最终画布仍自动降采样的问题。原画使用设备像素比（最高 3 倍、总输出受 800 万像素预算保护），停止按帧耗时静默降分辨率，并提高斜角贴图过滤精度；切换画质时同步恢复渲染倍率。",
@@ -4305,7 +4305,7 @@ export const V0_1_38_ENTRY: VersionEntry = {
   date: "2026-09-22",
   summary: "首页单屏适配覆盖桌面与平板，修复页面滚动条并统一镜头导航。",
   frontend: [...V0_1_37_ENTRY.frontend, { name: "KTX2 / UASTC", version: "KTX-Software 4.4.2", desc: "本地工具编码 · 网站 Three.js 解码显示 · 保留源贴图尺寸" }],
-  software: V0_1_37_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.38" } : item),
+  software: V0_1_37_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.38" } : item),
   changes: [
     { kind: "fix", title: "手机刷新先恢复画面再升级高清", desc: "同一标签页刷新时先显示上一张成功渲染的车型画面，轻量车可操作后淡出；手机高清升级延后到首帧稳定之后，解码期间保留轻量车而不盖静态冻结图，贴图之间主动让出一帧处理触摸与绘制，减少空白、模糊与无法操作的时间。" },
     { kind: "fix", title: "深色刷新首帧统一", desc: "首页、导入页、工作台与其他页面统一从主题 Cookie 生成首帧；新访客默认深色。已有 Cookie 时不再让旧本地缓存覆盖服务端主题，主题按钮挂载时只读取已渲染状态，避免胶囊和页面短暂闪成浅色。" },
@@ -4398,7 +4398,7 @@ export const V0_1_39_ENTRY: VersionEntry = {
   version: "v0.1.39",
   date: "2026-09-23",
   summary: "全站按需加载资源，减少首页与后台的无关请求。",
-  software: V0_1_38_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.39" } : item),
+  software: V0_1_38_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.39" } : item),
   changes: [
     { kind: "fix", title: "首页无关资源按需加载", desc: "时光机插画只在点击穿越时加载；首页不再请求被舞台遮住的站点背景，1K 展示也不再提前下载高清车型。" },
     { kind: "fix", title: "全站后台请求收敛", desc: "登录弹窗关闭时不再请求设置；后台页签只在打开时下载对应模块，不再空闲预取全部页签。PWA 首次安装不再额外请求首页 HTML。" },
@@ -4433,7 +4433,7 @@ export const V0_1_40_ENTRY: VersionEntry = {
   version: "v0.1.40",
   date: "2026-09-24",
   summary: "首页两侧刻度恢复常驻，并用车型亮色标出当前项。",
-  software: V0_1_39_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.40" } : item),
+  software: V0_1_39_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.40" } : item),
   changes: [
     { kind: "fix", title: "首页两侧刻度保持展开", desc: "手机和平板恢复常驻章节与画质刻度，不再需要点三横入口，也不会选中后收起。当前项保留最长线条，并按车型涂装选亮色；深浅主题均可辨认。" },
     { kind: "fix", title: "深色主题切换同步退出明亮影棚", desc: "明亮影棚会独立强制浅色场景，导致切回深色后界面已变暗但车后背景和地面仍发白。切换深色时同步关闭影棚状态与 3D 引擎光照，避免两种状态冲突。" },
@@ -4458,7 +4458,7 @@ export const V0_1_41_ENTRY: VersionEntry = {
   version: "v0.1.41",
   date: "2026-09-25",
   summary: "模型服务图标上传与配置保存合为一次操作，失败不留文件。",
-  software: V0_1_40_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.41" } : item),
+  software: V0_1_40_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.41" } : item),
   changes: [
     { kind: "fix", title: "模型服务图标原子保存", desc: "上传前检查模型服务配置；上传和图标关联在同一服务端请求完成，失败时回收新文件。" },
     { kind: "fix", title: "模型图标按提供方隔离并消除刷新闪现", desc: "DeepSeek、OpenAI、Jev 和自定义服务各自保存上传图标，切换时只显示对应提供方的图标；自定义服务的默认图标改为圆形虚线加号。模型服务配置进入服务端首帧，刷新时直接显示已保存图标。" },
@@ -4495,7 +4495,7 @@ const V0_1_42_ENTRY: VersionEntry = {
   version: "v0.1.42",
   date: "2026-09-26",
   summary: "后台页面随可视高度自适应，页脚下方不再留空白。",
-  software: V0_1_41_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.42" } : item),
+  software: V0_1_41_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.42" } : item),
   frontend: [...V0_1_41_ENTRY.frontend, { name: "SimpleWebAuthn", version: "14", desc: "WebAuthn 通行密钥 · 浏览器与服务端签名校验" }],
   changes: [
     { kind: "fix", title: "指数休市回退与工作区高度", desc: "指数按完整证券 ID 保存最后有效报价与走势，上游空结果、周末及服务重启不再清空已取得行情；东财失败时支持的指数使用 OpenD 快照或现有行情接口回退，不把不同指数混用。无报价不显示上涨箭头。桌面主体按实际顶栏与页脚分配剩余高度，侧栏和设置窗口共用工作区高度，去掉底部多余空白并保留内部滚动。" },
@@ -4559,7 +4559,7 @@ const V0_1_43_ENTRY: VersionEntry = {
   version: "v0.1.43",
   date: "2026-09-27",
   summary: "重建设置中心与通行密钥交互，统一 API 文档阅读体验。",
-  software: V0_1_42_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.43" } : item),
+  software: V0_1_42_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.43" } : item),
   changes: [
     { kind: "fix", title: "手机短项同排", desc: "修复日志页签、卡面操作及备份数值的多行挤压，富途端口、连接状态和短资料左右同排；长说明和编辑字段保留换行空间。修复日历无明细时读取空对象导致页面报错，并补充回归测试。" },
     { kind: "fix", title: "手机操作状态细化", desc: "个人资料保存明确显示进行中并禁止重复操作，导航排序保存期间阻止关闭。日历明细优先展示有数据的盈亏分组，按日期保留手动切换；列表独立滚动并保留双指缩放。" },
@@ -4626,7 +4626,7 @@ const V0_1_44_ENTRY: VersionEntry = {
   version: "v0.1.44",
   date: "2026-09-28",
   summary: "安全检查插图系统内置，完善全站密码显示与隐藏。",
-  software: V0_1_43_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.44" } : item),
+  software: V0_1_43_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.44" } : item),
   changes: [
     { kind: "fix", title: "手机 Dock 选中背景收紧", desc: "恢复 Dock 外壳和更多入口的原有尺寸，仅把选中后的配色背景改为按钮内缩 4px × 6px 的扁圆角方块；完整按钮仍可点击。手机导航设置预览同步缩小选中背景，平板布局不变。" },
     { kind: "fix", title: "手机与平板胶囊间距统一", desc: "全站逐页检查手机与竖屏平板的相邻胶囊：财报筛选组、素材库标签与市场筛选、资产分析快捷入口、分页、盈亏日历及登录切换补充可辨认间距；底部 Dock 保持一体外壳但让内部选项分离。设置素材操作和附件操作适度疏开，窄屏换行或横向滚动而不挤压文字。" },
@@ -4642,7 +4642,7 @@ const V0_1_44_ENTRY: VersionEntry = {
     { kind: "fix", title: "平板横屏与低分辨率布局", desc: "1024–1279 宽度主导航使用紧凑图标栏，设置侧栏适度收窄，保留字号、图标、排序及无障碍名称；低高度桌面减少上下空白和页脚占位，平板设置分类与内容独立滚动。横屏设置弹窗最大宽度 680px、高度不超过视口 88%，避免细长或铺满屏幕，关闭与编辑操作保持可见。手机现有布局保持不变。" },
     { kind: "fix", title: "网站形象预览圆角裁切", desc: "预览卡片显式按同一圆角裁切并隔离毛玻璃合成层，消除顶部左右角的浅色三角漏底，保留原有预览布局、背景与手机圆角。" },
     { kind: "feature", title: "上传自定义字体", desc: "外观设置支持上传 WOFF2、WOFF、TTF、OTF 字体，上传后直接应用并加入个人字体列表，字体与字重偏好刷新保持。字体存于本地上传卷，按账户隔离列表、内容去重，限制单文件 10 MB 和每账户 20 款；预览数字简化为 π 3.1415926，名言右侧补充沃伦·巴菲特署名。" },
-    { kind: "fix", title: "账户设置标题精简", desc: "设置中心统一改为账户设置，删除侧栏 Fire 与重复说明文字，收紧标题间距；搜索框移除容器底部多余横线，保留输入框边框与搜索功能。" },
+    { kind: "fix", title: "账户设置标题精简", desc: "设置中心统一改为账户设置，删除侧栏 Alcor 与重复说明文字，收紧标题间距；搜索框移除容器底部多余横线，保留输入框边框与搜索功能。" },
     { kind: "fix", title: "字体预览精简文案", desc: "移除窗口标题中的说明文字，中文示例换为巴菲特名言两行，数字示例改为 π 的小数序列，保留即时字体与字重效果。" },
     { kind: "fix", title: "设置详情减少空白", desc: "桌面标题与编辑、关闭按钮同排，移除固定操作栏大留白；外观预览移除重复内边距与空标题，无说明区块不再保留空标题占位，统一覆盖所有设置详情。通行密钥列表、域名与验证弹窗取消固定空高度；插图介绍页、手机独立操作栏和次级区块标题保持，间距不随屏幕分辨率放大。" },
     { kind: "feature", title: "手机底部入口自由配置", desc: "手机导航改为排序前四项显示在底部，更多功能可一键移入/移出，拖动与上下移动支持跨分组；保存到服务端，实际底栏、预览与切页顺序同步，桌面导航不变。预览补齐对应图标并统一字号，所有底部候选使用短标签，权限过滤自动补位。" },
@@ -4666,7 +4666,7 @@ export const V0_1_45_ENTRY: VersionEntry = {
   version: "v0.1.45",
   date: "2026-09-29",
   summary: "手机 Dock 选中块按苹果参考图调整比例、圆角与灰色。",
-  software: V0_1_44_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.45" } : item),
+  software: V0_1_44_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.45" } : item),
   changes: [
     { kind: "fix", title: "手机导航与外观偏好持久化", desc: "手机导航去掉置顶、恢复默认与保存按钮，拖动或箭头调整后立即保存到服务端，失败时回退原顺序；阻止设置页延迟加载的旧响应覆盖刚保存的顺序。配色、字体和字重在点击时同步写入本地存储与首屏 cookie，受限浏览器仍尝试 cookie，双重写入失败时明确提示。" },
     { kind: "fix", title: "手机 Dock 苹果灰选中块", desc: "按参考视频与并排截图取样，选中块收至约 68 × 50 像素并改为满圆角胶囊；浅色使用 #CDCDCF 附近的苹果灰渐变，深色使用相应中性灰，图标与文字保持对比。主导航与独立圆形的「更多」不再跟随主题颜色；外观的全局主题颜色新增可选的苹果灰，手机导航预览同步。" },
@@ -4686,7 +4686,7 @@ export const V0_1_46_ENTRY: VersionEntry = {
   version: "v0.1.46",
   date: "2026-09-30",
   summary: "隐藏资源按需加载，国旗共用与素材短地址迁移。",
-  software: V0_1_45_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.46" } : item),
+  software: V0_1_45_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.46" } : item),
   changes: [
     { kind: "fix", title: "冒烟测试使用独立账号", desc: "本地注册独立普通测试账号，随机凭据以 0600 权限保存在忽略 Git 的运行目录，后续复用并按目标地址校验；不再依赖默认 demo、公开固定密码或六条种子记录，也不重置已有账号。页面巡检按真实管理员权限判断，移除会修改真实实例设置的旧写入分支；业务写入和管理员功能继续在临时数据库回归。" },
     { kind: "feature", title: "实时 API 请求日志", desc: "日志新增管理员请求日志及独立 API 请求页，沿用部署状态的轻量布局；展示概览、趋势、来源、常用接口和分页明细，底部年度请求热力图可按日期筛选。趋势支持鼠标浮层和触摸查看；筛选保存在 URL，实时开关持久化。服务端批量保存真实状态与耗时，明细保留 7 天、汇总保留 400 天；SSE 合并刷新、后台暂停、断线重连，旧页固定边界避免记录跳动。查询参数、动态 ID、令牌和正文不记录，日志自身请求排除，存储故障退避不影响业务。新增真实 HTTP、权限、持久化及故障回归。" },
@@ -4703,7 +4703,7 @@ export const V0_1_46_ENTRY: VersionEntry = {
     { kind: "fix", title: "授权管理细节打磨", desc: "设备卡片突出首次授权时间与持续时长，权限改为简短标记；最近使用和断开操作置于底部，长设备名完整换行。统一 App 图标尺寸，空状态手机与盾牌保留间距并使用轻背景；加载采用静态骨架，授权页外观入口统一为设置行，深浅色和窄屏同步适配。" },
     { kind: "fix", title: "授权设备管理布局与时长", desc: "管理授权改为紧凑设备列表并独立加载样式，空状态设备盾牌固定小尺寸并调整留白；展示设备、首次授权时间、持续时长、最近使用与权限，按分钟更新时长。断开连接需确认，失败保留设备并支持重试；授权页外观入口收至底部，名称和图标仍可配置。" },
     { kind: "feature", title: "授权页外观与授权管理", desc: "网页授权统一居中布局与深浅色样式，精简提示；站点标识复用网站形象，App 名称和图标可独立设置、上传或恢复自动。账号与安全新增管理授权，可查看设备、权限与使用时间并确认撤销；管理入口、搜索和页面位置随 URL 保留。" },
-    { kind: "feature", title: "Fire App 网页授权与设备管理", desc: "支持按所选服务器发现连接协议，通过网页复用通行密钥与双重验证；一次性授权码配合 PKCE，短时访问令牌与设备级刷新令牌轮换。设置账号与安全可查看并单独断开 App 设备，改密与二次验证变化立即撤销连接；App 仅有个人业务权限。" },
+    { kind: "feature", title: "Alcor App 网页授权与设备管理", desc: "支持按所选服务器发现连接协议，通过网页复用通行密钥与双重验证；一次性授权码配合 PKCE，短时访问令牌与设备级刷新令牌轮换。设置账号与安全可查看并单独断开 App 设备，改密与二次验证变化立即撤销连接；App 仅有个人业务权限。" },
     { kind: "fix", title: "移动端 API 对接检查", desc: "信封响应禁止缓存账户数据，分页参数收敛为有界整数；明确持仓分页、站点级券商目录维护权限以及裸文件响应边界，补充多域名和非默认 HTTPS 端口接入文档与隔离回归。" },
     { kind: "fix", title: "素材换图自动维护引用", desc: "素材展示使用固定 ID 与内容版本；替换图片后旧地址跟随新图，同名覆盖重新校验缓存，已登记图片纯改名可按内容指纹找回。旧短地址迁移改为启动时自动备份并执行，完成标记随数据库保存，无需手动登录数据库。" },
     { kind: "fix", title: "隐藏装饰资源不加载", desc: "四色门按实际视口和输入设备挂载，手机、平板及短屏不请求装饰图片；停止全页预取未显示的货币旗帜。" },
@@ -4716,9 +4716,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_46_ENTRY,
   version: "v0.1.47",
   date: "2026-10-01",
-  summary: "后台页面互相切换直接显示，再回来停在离开时的位置，也不会把整页重算一遍；隐藏页的连续动画会停下来。Chrome 里手机设置页可以滑到应用授权。",
-  software: V0_1_46_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.47" } : item),
+  summary: "产品统一更名为 Alcor，保留数据与授权兼容。后台页面切换保留位置、停止隐藏页动画，手机设置可滑到应用授权。",
+  software: V0_1_46_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.47" } : item),
   changes: [
+    { kind: "feature", title: "无损更名为 Alcor", desc: "统一页面、邮件、安装名称、分享与下载文案、源码品牌和全部版本记录。旧品牌站点配置与通行密钥显示名称按读取适配，不重写业务数据、账号、秘密或凭据。保留数据库、Cookie、本地偏好、备份格式、授权 client／callback、域名与群晖部署标识，旧 App 和已上线容器继续兼容；财务独立 FIRE 术语及第三方证券／卡片名称不变。新增旧库、会话、秘密、通行密钥与备份兼容回归。" },
     { kind: "fix", title: "工作区页面切换立即到达", desc: "账户资产、资产分析和其余后台页面互相切换时，不再先淡入或滑入，也不再把已经打开的页面拆掉重画。手机、平板和桌面点击后直接看到目标页面。第一次打开某个页面仍会加载该页；从侧栏进入设置仍回到设置首页。浏览器前进后退按地址重新打开对应页面。" },
     { kind: "fix", title: "切换后回到上次位置", desc: "已经打开的后台页面会记住滚动位置，再切回来停在离开时的地方。手机底部导航不再把页面拉回顶部；从资产分析进入收益明细仍从顶部打开。账户资产、资产分析、FIRE 和收益明细之间换页时，30 秒内刚拿到的行情不会再请求一轮。侧栏页面的代码会在空闲时预先加载，第一次点开等待更短。" },
     { kind: "fix", title: "换页不再重算整页", desc: "已经打开的账户资产、资产分析等页面，在行情和持仓没有变化时，切换只改显示，不再把整页重新计算一遍。隐藏页保留上次排版，手机、平板和桌面来回切换不再顿一下。" },
@@ -4788,7 +4789,7 @@ export const VERSIONS: VersionEntry[] = [
       { name: "SwiftUI", version: "iOS 16+", desc: "iOS App（Swift 5.9 · Async/Await · URLSession）对接 /api/v1" }
     ],
     software: [
-      { name: "Fire Fire", version: "v0.1.8", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
+      { name: "Alcor", version: "v0.1.8", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
     ],
     changes: [
       { title: "订单列表改为券商风格并生成唯一订单号", desc: "按参考图把资产分析底部与我的持仓详情的「当日订单 / 历史订单」从简易表格升级为券商风格订单列表：每笔成交生成 10 位唯一订单号（数据库唯一索引兜底，存量订单统一重排），订单号可点击复制。\n表格列对齐参考图 —— 订单号、订单状态、市场（带图标）、股票代码、股票名称（带图标）、方向、委托类型、委托数量、委托价格、币种、委托时间（含市场时区标签）、成交均价、成交数量、成交金额、费用、已实现盈亏、有效期、时段。\n顶部为当日与历史页签加市场筛选与订单状态筛选，页签与筛选本地持久化；订单加载中仅在已有数据为空时展示，避免刷新闪「加载中」；我的持仓详情保留编辑与删除，删除对当日与历史订单均可用。", kind: "feature" },
@@ -4868,7 +4869,7 @@ export const VERSIONS: VersionEntry[] = [
       { name: "TypeScript", version: "5.7.3", desc: "全链路类型安全" },
       { name: "Tailwind CSS", version: "3.4.17", desc: "原子化样式 · 深浅色主题" }
     ],
-    software: [{ name: "Fire Fire", version: "v0.1.7", desc: "资产分析 · 多市场持仓 · 成交订单账本" }],
+    software: [{ name: "Alcor", version: "v0.1.7", desc: "资产分析 · 多市场持仓 · 成交订单账本" }],
     changes: [
       { title: "资产分析市场筛选与隐私显示完善", desc: "账户资产与持仓改用两组互不干扰的市场胶囊：账户资产筛选只联动当前市场资产指标，持仓筛选只联动持仓表；胶囊补充背景、悬停上浮与点击反馈。\n总资产与累计盈亏支持美元、港币、人民币切换，总资产数字旁新增眼睛按钮，可同步隐藏或显示资产、盈亏与账户指标金额。", kind: "feature" },
       { title: "资产分析市场胶囊布局修复", desc: "修复账户资产市场胶囊上半部分被横向滚动容器裁切的问题，并把持仓市场胶囊从标题同行移到标题下方，使账户资产与持仓两块统计区域保持一致的标题、筛选与数据层级。", kind: "fix" },
@@ -4899,7 +4900,7 @@ export const VERSIONS: VersionEntry[] = [
       { name: "Tailwind CSS", version: "3.4.17", desc: "原子化样式 · 深浅色主题" }
     ],
     software: [
-      { name: "Fire Fire", version: "v0.1.6", desc: "个股详情 · 相关 ETF · 实时行情" }
+      { name: "Alcor", version: "v0.1.6", desc: "个股详情 · 相关 ETF · 实时行情" }
     ],
     changes: [
       { title: "我的持仓新增资产分析子页面", desc: "在「账户资产」标题右侧新增钱币图标入口，进入独立的资产分析仪表板：左侧展示总资产、当日盈亏、持仓市值、总盈亏与多市场资产分布；收益率趋势图与总资产趋势图支持本月、近 1 月、近 6 月、本年、近 1 年与全部区间切换，并提供简单加权与时间加权入口以及标普 500 对照。\n趋势使用当前持仓数量与各标的真实历史收盘价回溯，不生成随机数据；右侧汇总市场资产、实时持仓表与订单账本，并适配深浅色与窄屏布局。", kind: "feature" },
@@ -4935,7 +4936,7 @@ export const VERSIONS: VersionEntry[] = [
       { name: "SwiftUI", version: "iOS 16+", desc: "iOS App（Swift 5.9 · Async/Await · URLSession）对接 /api/v1" }
     ],
     software: [
-      { name: "Fire Fire", version: "v0.1.5", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
+      { name: "Alcor", version: "v0.1.5", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
     ],
     changes: [
       { title: "接入美股盘前/盘中/盘后分钟行情", desc: "新增美股分时接口，接入上游扩展时段一分钟行情并统一转换为美东时间，30 秒缓存与双层限流；个股的全天、盘前、盘中、盘后菜单使用同一数据集按时段过滤。\n实测全天 960 点（盘前 330 点、盘中 391 点、盘后 239 点）；夜盘因公开源不覆盖，保留入口并明确提示暂无数据。", kind: "feature" },
@@ -5010,7 +5011,7 @@ export const VERSIONS: VersionEntry[] = [
       { name: "SwiftUI", version: "iOS 16+", desc: "iOS App（Swift 5.9 · Async/Await · URLSession）对接 /api/v1" }
     ],
     software: [
-      { name: "Fire Fire", version: "v0.1.4", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
+      { name: "Alcor", version: "v0.1.4", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
     ],
     changes: [
       { title: "名人持仓头像融合版", desc: "扇形圆环的人物头像融合两版优点：透明头像拆成双层渲染 —— 下层在圆环之下，遮罩只显示身体下半部分，西装与领带下方被圆环遮挡、不外突（取 F1 效果）；上层在圆环之上，遮罩只显示头部区域，额头与头顶从洞里探出并压住上方扇形（取 F2 效果）。\n头像尺寸与上移量对齐，上下层同位移同过渡，无拼接痕迹；非透明头像维持单层圆形裁剪；已备份对应版本文件并在 AGENTS.md 登记恢复方法，深浅色模式均实测正常。", kind: "feature" },
@@ -5029,7 +5030,7 @@ export const VERSIONS: VersionEntry[] = [
       { title: "财报日历胶囊补齐橙色悬停", desc: "财报日历的市场切换与分组的未选中胶囊此前只有文字变色、没有背景，鼠标划过无橙色效果；修复：未选中分支统一补上橙色悬停与黑色文字，与全站胶囊一致。\n全站排查无其他同类遗漏。", kind: "fix" },
       { title: "接口文档改用 GitHub 风格渲染", desc: "接口规范文档页（含编辑模式实时预览）改为 GitHub 风格的 Markdown 渲染：新增文档正文样式规范（浅色为白底深灰字、标题下边框线、表格完整边框与斑马纹、代码块浅灰底、引用左侧灰条；深色对应暗色配色）；渲染器改为输出纯语义结构，样式统一交给文档样式类，阅读与编辑预览容器都套用该样式。", kind: "feature" },
       { title: "移动端应用骨架", desc: "新增 SwiftUI 应用骨架（对接统一接口与令牌认证）：包含工程配置、网络层、数据模型、登录页、资产总览与持仓列表三页以及全局登录态；说明文档含构建步骤。全部源文件语法检查通过，等待本机安装完整开发环境后构建到模拟器验证。", kind: "feature" },
-      { title: "移动端工程落地与图标", desc: "移动端项目独立为 Fire，工程名、包名、显示名与登录页标题统一；安装完整开发环境后构建通过并在模拟器运行（修复启动黑屏问题）。\n极简应用图标（深色底加橙色上升折线加白色终点圆点）接入资源目录并编译通过；修复登录显示「HTTP 200」的问题 —— 后端登录只返回部分字段而模型必填导致解码失败，改为可选字段后登录、用户信息与总览均解码成功。", kind: "feature" },
+      { title: "移动端工程落地与图标", desc: "移动端项目独立为 Alcor，工程名、包名、显示名与登录页标题统一；安装完整开发环境后构建通过并在模拟器运行（修复启动黑屏问题）。\n极简应用图标（深色底加橙色上升折线加白色终点圆点）接入资源目录并编译通过；修复登录显示「HTTP 200」的问题 —— 后端登录只返回部分字段而模型必填导致解码失败，改为可选字段后登录、用户信息与总览均解码成功。", kind: "feature" },
       { title: "项目目录重组", desc: "为让项目与对话更清晰，把根目录拆分为两个独立子项目：网页全栈项目与移动端项目分别独立（含数据库与素材的整体迁移，服务重新启动正常）。\n清理根目录残留文件，新增根说明与网页子项目说明，约定网页改动只进网页项目、移动端改动只进移动端项目。", kind: "fix" },
       { title: "登录页改为分栏品牌卡", desc: "登录页重构为左右分栏的大圆角卡片：左侧深色品牌区（网格纹理背景、品牌标志与标语、特性列表、底部折线装饰），右侧白色表单区（大标题、登录与注册文字页签加品牌色下划线、大尺寸输入框、黑色实心登录按钮、去注册入口）。\n移动端隐藏左栏并在顶部显示品牌；深浅色均协调，注册开关关闭时仅显示登录。", kind: "feature" },
       { title: "修复素材库股票图标缺失", desc: "记录漏收：上游列表翻页遇到市值缺失或解析失败时被误判为低于门槛而提前截断，导致 A股与港股各缺若干大票；修复为缺失行跳过而不截断，并放宽翻页上限。\n图标错配：上游搜索的股票代码可能与指数冲突，精确匹配未限定类型导致大票图标缺失；修复为精确匹配必须限定股票类型，代码搜不到时用中文名兜底。\n图标被拒：部分图标接口返回通用二进制类型而被误拒，改为接受该类型并按文件魔数校验与推断扩展名；另新增「仅补图标」模式，只对缺图标的存量记录重试下载。", kind: "fix" },
@@ -5076,7 +5077,7 @@ export const VERSIONS: VersionEntry[] = [
       { name: "Node.js", version: "22.23.2", desc: "服务端运行时" }
     ],
     software: [
-      { name: "Fire Fire", version: "v0.1.3", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
+      { name: "Alcor", version: "v0.1.3", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
     ],
     changes: [
       { title: "名人收益分析改为日线", desc: "收益分析 K 线由月粒度改为日粒度：服务端生成近 5 年日线（每天一点，月序列插值平滑），持久化为 CSV 存在附件管理对应的名人文件夹下，并新增接口读取。\n前端按区间取日线（近 3 月、近 1 年、近 5 年，区间起点归零），悬停与横轴显示具体日期。", kind: "feature" },
@@ -5124,7 +5125,7 @@ export const VERSIONS: VersionEntry[] = [
       { name: "Node.js", version: "22.23.2", desc: "服务端运行时" }
     ],
     software: [
-      { name: "Fire Fire", version: "v0.1.2", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
+      { name: "Alcor", version: "v0.1.2", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
     ],
     changes: [
       { title: "素材库与股票图标重塑", desc: "股票图标首次全量同步：按市值门槛拉取各市场（美股与 A股与港股用市值排行，日股与韩股取前 100），仅首次自动拉取，之后手动触发；图标源按市场分别接入，下载到本地并按「中文名加代码」命名，全站秒开且无外部慢请求。\n素材库股票页签重塑为券商软件样式：白色卡片加表头（序号、代码与名称、最新价、涨跌幅、市值，可点击排序，排序写入地址参数防刷新丢失）、圆形图标行（悬停相机上传）与分页（每页 20）；数据直接读本地素材库，不再依赖外部榜单接口。\n素材库标题右侧新增设置入口：股票同步（进度与上次同步时间）、退市检测（连续两次失败才判定删除）、外链图标通道开关（默认关闭）；素材表新增市值、价格、涨跌幅、来源与检查时间字段，自动同步不覆盖手动上传的图标；退市检测比对行情，连续两次失败才删除以防停牌误删，日韩暂未接入检测源。", kind: "feature" },
@@ -5167,7 +5168,7 @@ export const VERSIONS: VersionEntry[] = [
       { name: "Node.js", version: "22.23.2", desc: "服务端运行时" }
     ],
     software: [
-      { name: "Fire Fire", version: "v0.1.1", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
+      { name: "Alcor", version: "v0.1.1", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
     ],
     changes: [
       { title: "名人管理配色改中性灰", desc: "数据来源标签与「新增名人」按钮由绿色改为柔和灰（浅色灰底灰字，深色深灰底浅字），不再刺眼；编辑表单头像的蓝色描边与铅笔按钮蓝底改为灰色，铅笔图标保持白色；列表与表单的头像悬停效果统一（放大加灰色描边）。", kind: "fix" },
@@ -5234,7 +5235,7 @@ export const VERSIONS: VersionEntry[] = [
       { name: "Node.js", version: "22.23.2", desc: "服务端运行时" }
     ],
     software: [
-      { name: "Fire Fire", version: "v0.1.0", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
+      { name: "Alcor", version: "v0.1.0", desc: "账户资产 · 自选股 · 全球预览 · 财报日历 · 素材库 · 日志 · 用户管理 · 设置" }
     ],
     changes: [
       { title: "设置子导航 ReactBits 化", desc: "设置子导航加入磁吸跟随、点击水波纹与品牌色选中态，切换无感不刷新。", kind: "feature" },

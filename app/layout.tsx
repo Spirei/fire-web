@@ -85,7 +85,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="投资记实" />
+        <meta name="apple-mobile-web-app-title" content={settings.logoText || "Alcor"} />
         <link rel="apple-touch-icon" sizes="180x180" href={pwaIconUrl(pwaIcon.version, 180)} />
         {/* 旧品牌本地缓存迁移 + 主题防闪兜底 */}
         <script

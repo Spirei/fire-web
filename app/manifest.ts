@@ -12,8 +12,8 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
   const settings = getSiteSettings();
   const { version } = await pwaArtwork(settings.pwaIcon || settings.ico);
   return {
-    name: settings.title || "Fire - 投资记实",
-    short_name: settings.title ? settings.title.slice(0, 12) : "投资记实",
+    name: settings.title || "Alcor - 投资记实",
+    short_name: (settings.logoText || "Alcor").slice(0, 12),
     description: "记录自选与持仓、自动汇总盈亏的投资记账网站。",
     start_url: "/",
     id: "/",

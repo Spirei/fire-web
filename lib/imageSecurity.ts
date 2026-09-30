@@ -159,16 +159,16 @@ export function validateImageContent(buffer: Buffer, declaredExt: string): SafeI
  */
 export function normalizeSvgAttribution(buffer: Buffer): Buffer {
   const text = buffer.toString("utf8");
-  const normalized = text.replace(/<!--\s*by\s+tradingview\s*-->/gi, "<!-- by fire -->");
+  const normalized = text.replace(/<!--\s*by\s+tradingview\s*-->/gi, "<!-- by alcor -->");
   return normalized === text ? buffer : Buffer.from(normalized, "utf8");
 }
 
 /** 本站 SVG 签名注释。 */
-export const SVG_SIGNATURE = "<!-- by fire -->";
+export const SVG_SIGNATURE = "<!-- by alcor -->";
 
 /**
  * 清洗 SVG：去掉 XML 声明、DOCTYPE 与 `<svg>` 之前的前导内容，
- * 并把它们变为本站签名注释，得到 `<!-- by fire -->\n<svg>…</svg>`。
+ * 并把它们变为本站签名注释，得到 `<!-- by alcor -->\n<svg>…</svg>`。
  */
 export function sanitizeSvg(buffer: Buffer): Buffer {
   let text = buffer.toString("utf8").replace(/^\uFEFF/, "");

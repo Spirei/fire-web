@@ -43,7 +43,7 @@ let server;
     assert.equal(requestDay(Date.parse('2026-09-29T16:05:00Z')), '2026-09-30');
     const parsed = parseRequestFilters(new URLSearchParams('rPage=NaN&rAnchor=-4&rDay=2026-02-30&rStatus=DROP&rMethod=boom&rYear=100'), Date.parse('2026-09-30T04:00:00Z'));
     assert.equal(parsed.page, 1); assert.equal(parsed.anchor, 0); assert.equal(parsed.day, ''); assert.equal(parsed.status, 'all'); assert.equal(parsed.year, 2026);
-    assert.equal(store.requestSource({ 'user-agent': 'Fire/1 CFNetwork/1 Darwin/1' }), 'ios');
+    assert.equal(store.requestSource({ 'user-agent': 'Alcor/1 CFNetwork/1 Darwin/1' }), 'ios');
     assert.equal(store.requestSource({ 'user-agent': 'Mozilla/5.0' }), 'web');
     assert.equal(store.requestSource({ 'user-agent': 'Mozilla/5.0 (iPhone) Safari/1', 'sec-fetch-mode': 'cors' }), 'web');
     assert.equal(store.requestSource({ authorization: 'Bearer SECRET' }), 'app');
@@ -58,7 +58,7 @@ let server;
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   await test('real HTTP finish records final status and duration once, including 4xx/5xx', async () => {
-    for (const route of ['/api/v1/records/private-id?code=SECRET_QUERY', '/api/v1/auth/me', '/api/v1/charts']) await fetch(base + route, { headers: { 'user-agent': 'Fire/1 CFNetwork/1', authorization: 'Bearer SECRET_TOKEN', cookie: 'secret=SECRET_COOKIE' } });
+    for (const route of ['/api/v1/records/private-id?code=SECRET_QUERY', '/api/v1/auth/me', '/api/v1/charts']) await fetch(base + route, { headers: { 'user-agent': 'Alcor/1 CFNetwork/1', authorization: 'Bearer SECRET_TOKEN', cookie: 'secret=SECRET_COOKIE' } });
     store.flushRequestLogs();
     const result = store.readRequestSnapshot(filters({}));
     assert.equal(result.summary.total, 3); assert.equal(result.summary.errors, 2); assert.equal(result.summary.serverErrors, 1);

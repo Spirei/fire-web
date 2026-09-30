@@ -6,7 +6,7 @@ import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
 
 export async function POST(request: Request) {
-  if (!request.headers.get("origin") || !isTrustedMutationRequest(request) || request.headers.has("authorization")) return fail(40301, "请在 Fire 网页确认连接", 403);
+  if (!request.headers.get("origin") || !isTrustedMutationRequest(request) || request.headers.has("authorization")) return fail(40301, "请在 Alcor 网页确认连接", 403);
   try { assertAppOrigin(request); } catch (error) { return fail(40301, (error as Error).message, 403); }
   const token = getCookie(request, SESSION_COOKIE) || getCookie(request, LEGACY_SESSION_COOKIE);
   const user = token && getUserByToken(token);

@@ -875,7 +875,7 @@ export default function RecordsApp({
     const d = new Date();
     const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
     a.href = url;
-    a.download = `fire-backup-${stamp}.json`;
+    a.download = `alcor-backup-${stamp}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }

@@ -5,7 +5,7 @@ import NotFoundActions from "@/components/NotFoundActions";
 import { getSiteSettings } from "@/lib/settings";
 
 export const metadata: Metadata = {
-  title: "页面未找到 · Fire",
+  title: "页面未找到 · Alcor",
   robots: { index: false, follow: false }
 };
 

@@ -342,12 +342,12 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
 
   return <main className="mbl" style={{ "--book-color": palette.cover, "--book-ink": palette.ink } as React.CSSProperties}>
     <header className="mbl-header">
-      <Link href="/" className="mbl-brand" aria-label="返回 Fire 首页" onClick={(event) => { if (bookId === "new" && unsavedDraft && !confirmDiscard()) event.preventDefault(); }}>F<span>IRE</span><i> / </i>MODEL LIBRARY</Link>
+      <Link href="/" className="mbl-brand" aria-label="返回 Alcor 首页" onClick={(event) => { if (bookId === "new" && unsavedDraft && !confirmDiscard()) event.preventDefault(); }}>A<span>LCOR</span><i> / </i>MODEL LIBRARY</Link>
       <div className="mbl-header-right"><span>{String(existing.length).padStart(2, "0")} VOLUMES</span><Link href="/showcase/import" onClick={(event) => { if (bookId === "new" && unsavedDraft && !confirmDiscard()) event.preventDefault(); }}>管理台 ↗</Link></div>
     </header>
 
     {!selected ? <section className="mbl-library" aria-labelledby="library-title">
-      <div className="mbl-library-title"><p>THE ARCHIVE · FIRE SHOWCASE</p><h1 id="library-title">车型画册<span>.</span></h1><span>每台车，都是一段从原件到发布的故事。</span></div>
+      <div className="mbl-library-title"><p>THE ARCHIVE · ALCOR SHOWCASE</p><h1 id="library-title">车型画册<span>.</span></h1><span>每台车，都是一段从原件到发布的故事。</span></div>
       <div
         ref={shelfScrollRef}
         className={`mbl-shelf-scroll${shelfDragging ? " is-dragging" : ""}`}
@@ -425,7 +425,7 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
       <div className="mbl-shelf-preview" aria-live="polite">{hoveredBook && !dragId && <div className="mbl-preview-stack" style={{ left: `${hoverX}px`, "--preview-color": bookTheme(hoveredBook).cover, "--preview-ink": bookTheme(hoveredBook).ink } as React.CSSProperties}><div className="mbl-preview-cover">{hoveredBook.cover ? <img src={hoveredBook.cover} alt={`${hoveredBook.label} 封面预览`} /> : <strong>{hoveredBook.label}</strong>}</div><small>{hoveredBook.label} <span>· {hoveredBook.note || "车型档案"}</span></small></div>}</div>
       <div className="mbl-shelf-caption" aria-live="polite"><span>{String(orderedBooks.length).padStart(2, "0")} VOLUMES / ONE SHELF</span><span>{orderSaving ? "正在保存顺序…" : "拖动排序 · 点击阅读"}</span></div>
     </section> : <section className="mbl-reader" aria-label={`${label} 车型画册`} onTouchStart={(event) => { touchX.current = event.touches[0]?.clientX ?? null; }} onTouchEnd={(event) => { if (touchX.current === null) return; const delta = (event.changedTouches[0]?.clientX ?? touchX.current) - touchX.current; touchX.current = null; if (Math.abs(delta) > 90) flip(delta < 0 ? "next" : "previous"); }}>
-      <div className="mbl-reader-top"><button type="button" onClick={() => leaveTo("", 0)}>← 返回书架</button><span>FIRE / {label.toUpperCase()}</span><span>{String((turnFromPage ?? page) + 1).padStart(2, "0")} / {String(CHAPTERS.length).padStart(2, "0")}</span></div>
+      <div className="mbl-reader-top"><button type="button" onClick={() => leaveTo("", 0)}>← 返回书架</button><span>ALCOR / {label.toUpperCase()}</span><span>{String((turnFromPage ?? page) + 1).padStart(2, "0")} / {String(CHAPTERS.length).padStart(2, "0")}</span></div>
       <div ref={bookRef} className={`mbl-book${page === 0 ? " is-cover" : ""}${turn ? ` is-turning-${turn}` : ""}${bookDragging ? " is-dragging" : ""}`} onPointerDown={(event) => {
         if (event.pointerType !== "mouse" || event.button !== 0 || turn || (event.target instanceof Element && event.target.closest("button, a, input, textarea, select, [contenteditable], .mbl-page-content"))) return;
         if (page === 0 && event.target instanceof Element && !event.target.closest(".mbl-cover")) return;
@@ -445,13 +445,13 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
       }} onPointerCancel={() => { mouseTurnStart.current = null; setBookDragging(false); }}>
         {page === 0 ? <div className="mbl-cover" data-pattern={palette.pattern} style={{ "--cover-edge": palette.edge } as React.CSSProperties}>
           <div className={`mbl-cover-art${book?.cover ? " has-image" : ""}`}>{book?.cover ? <>
-            <div className="mbl-cover-heading"><span>FIRE · MOTOR ARCHIVE</span><strong>{label}</strong><i>{book.note || "A MODEL MONOGRAPH"}</i></div>
+            <div className="mbl-cover-heading"><span>ALCOR · MOTOR ARCHIVE</span><strong>{label}</strong><i>{book.note || "A MODEL MONOGRAPH"}</i></div>
             <div className="mbl-cover-image"><img src={book.cover} alt={`${label} 封面`} /></div>
-          </> : <div className="mbl-cover-typography"><span>FIRE · MOTOR ARCHIVE</span><strong>{label}</strong><i>{book?.note || "THE NEW EDITION"}</i></div>}</div>
+          </> : <div className="mbl-cover-typography"><span>ALCOR · MOTOR ARCHIVE</span><strong>{label}</strong><i>{book?.note || "THE NEW EDITION"}</i></div>}</div>
           <div className="mbl-cover-footer"><span>THE COMPLETE MODEL STORY</span><span>VOL. {String(book ? existing.indexOf(book) + 1 : existing.length + 1).padStart(2, "0")}</span></div>
         </div> : <div className="mbl-spread">
           <div className="mbl-page mbl-page-left">
-            <div className="mbl-page-kicker"><span>FIRE MODEL ARCHIVE</span><span>{CHAPTERS[page].era}</span></div>
+            <div className="mbl-page-kicker"><span>ALCOR MODEL ARCHIVE</span><span>{CHAPTERS[page].era}</span></div>
             <div className="mbl-chapter"><span className="mbl-chapter-index">{String(page).padStart(2, "0")} / {String(CHAPTERS.length - 1).padStart(2, "0")}</span><p>{CHAPTERS[page].en}</p><h2>{CHAPTERS[page].label}<i>.</i></h2><div className="mbl-chapter-rule" /></div>
             <div className="mbl-chapter-copy">
               {page === 1 && <><p>一切从原件开始。</p><span>上传自包含的 GLB，原始文件会完整保留。模型名称、贴图与结构都从这里进入档案。</span></>}
@@ -487,6 +487,6 @@ export default function ModelBookLibrary({ existing, initialBookId = "", initial
       <nav className="mbl-reader-controls" aria-label="书页导航"><button type="button" onClick={() => flip("previous")} disabled={page === 0 || Boolean(turn)} aria-label="上一页">←</button><span className="mbl-reader-position"><strong>{String(turnFromPage ?? page).padStart(2, "0")} / {String(CHAPTERS.length - 1).padStart(2, "0")}</strong><small>拖动、滑动或使用方向键</small></span><button type="button" onClick={() => flip("next")} disabled={page === CHAPTERS.length - 1 || Boolean(turn)} aria-label="下一页">→</button></nav>
       <div className="mbl-chapter-dots" aria-label="快速跳转章节">{CHAPTERS.map((chapter, index) => <button key={chapter.en} type="button" onClick={() => leaveTo(bookId, index)} className={index === (turnFromPage ?? page) ? "active" : ""} aria-current={index === (turnFromPage ?? page) ? "page" : undefined} aria-label={`跳到${chapter.label}`} title={chapter.label} />)}</div>
     </section>}
-    <footer className="mbl-footer"><span>FIRE ARCHIVE © 2026</span><span>MODELS, KEPT IN MOTION.</span></footer>
+    <footer className="mbl-footer"><span>ALCOR ARCHIVE © 2026</span><span>MODELS, KEPT IN MOTION.</span></footer>
   </main>;
 }

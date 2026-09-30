@@ -26,7 +26,7 @@ export default async function LoginPage({
   const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
   if (getUserByToken(token)) redirect(destination);
   const brand = appConnectionBrand(getSiteSettings());
-  if (authorizationLogin) return <AppConnectionShell brand={brand} serverName={(await headers()).get("host") || "Fire Web"}>
+  if (authorizationLogin) return <AppConnectionShell brand={brand} serverName={(await headers()).get("host") || "Alcor Web"}>
     <div className="app-connection-intro"><AppConnectionIcon src={brand.appIcon} /><h1>登录 {brand.siteName} 账户以连接 {brand.appName}</h1></div>
     <div className="app-connection-login"><LoginForm returnTo={destination} /></div>
   </AppConnectionShell>;
@@ -60,7 +60,7 @@ export default async function LoginPage({
               <path d="M4 17 9 12l3 2.5 5-7" />
               <circle cx="17" cy="7.5" r="1.6" fill="#fff" stroke="none" />
             </svg>
-            <span className={`text-lg tracking-wide text-white ${logoFontCls}`}>Fire</span>
+            <span className={`text-lg tracking-wide text-white ${logoFontCls}`}>Alcor</span>
           </div>
           {/* 标语 */}
           <div className={settings.loginSideImage ? "relative opacity-0" : "relative"}>
@@ -97,14 +97,14 @@ export default async function LoginPage({
               <path d="M4 17 9 12l3 2.5 5-7" />
               <circle cx="17" cy="7.5" r="1.6" fill="#1FBE9E" stroke="none" />
             </svg>
-            <span className={`text-base ${logoFontCls}`}>Fire</span>
+            <span className={`text-base ${logoFontCls}`}>Alcor</span>
           </div>
           <LoginForm returnTo={destination} />
         </div>
       </div>
 
       <footer className="mt-6 text-center text-xs text-faint">
-        © 2026 Fire · 记录仅供参考，不构成任何投资建议
+        © 2026 Alcor · 记录仅供参考，不构成任何投资建议
       </footer>
     </div>
   );

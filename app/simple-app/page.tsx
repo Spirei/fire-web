@@ -8,7 +8,7 @@ import "./simple-app.css";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Fire 简化版"
+  title: "Alcor 简化版"
 };
 
 export default async function SimpleAppPage() {

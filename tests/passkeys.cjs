@@ -67,9 +67,9 @@ async function login(device, handle, changes = {}, binding) {
 }
 (async () => {
   await test('configuration accepts HTTPS domains and localhost, rejects unsafe URLs', () => {
-    for (const bad of ['http://example.com', 'https://127.0.0.1', 'https://example.com/path', 'https://name:pass@example.com', 'https://example.com?x=1', 'javascript:alert(1)']) assert.throws(() => store.normalizePasskeyConfig({ enabled: true, origin: bad, name: 'Fire' }));
-    assert.equal(store.normalizePasskeyConfig({ enabled: true, origin: 'http://localhost:3000/', name: 'Fire' }).rpID, 'localhost');
-    store.savePasskeyConfig(store.normalizePasskeyConfig({ enabled: true, origin, name: 'Fire' }));
+    for (const bad of ['http://example.com', 'https://127.0.0.1', 'https://example.com/path', 'https://name:pass@example.com', 'https://example.com?x=1', 'javascript:alert(1)']) assert.throws(() => store.normalizePasskeyConfig({ enabled: true, origin: bad, name: 'Alcor' }));
+    assert.equal(store.normalizePasskeyConfig({ enabled: true, origin: 'http://localhost:3000/', name: 'Alcor' }).rpID, 'localhost');
+    store.savePasskeyConfig(store.normalizePasskeyConfig({ enabled: true, origin, name: 'Alcor' }));
   });
   await test('config is public but mutations require admin password and reject CSRF', async () => {
     assert.equal((await configRoute.GET()).status, 200);
@@ -80,14 +80,14 @@ async function login(device, handle, changes = {}, binding) {
   });
   await test('configuration revisions reject stale writes and unchanged saves preserve pending logins', async () => {
     const before = await (await configRoute.GET()).json();
-    const saved = await configRoute.PUT(request({ enabled: true, origin, name: 'Fire updated', expectedRevision: before.revision, currentPassword: password }, cookie(otherSession), 'PUT'));
+    const saved = await configRoute.PUT(request({ enabled: true, origin, name: 'Alcor updated', expectedRevision: before.revision, currentPassword: password }, cookie(otherSession), 'PUT'));
     assert.equal(saved.status, 200);
     const current = await saved.json(); assert.notEqual(current.revision, before.revision);
     const stale = await configRoute.PUT(request({ enabled: true, origin, name: 'Stale edit', expectedRevision: before.revision, currentPassword: password }, cookie(otherSession), 'PUT'));
-    assert.equal(stale.status, 409); assert.equal(store.passkeyConfig().name, 'Fire updated');
+    assert.equal(stale.status, 409); assert.equal(store.passkeyConfig().name, 'Alcor updated');
     assert.throws(() => store.savePasskeyConfig(store.normalizePasskeyConfig({ enabled: true, origin, name: 'Stale atomic edit' }), before.revision), store.PasskeyConfigConflictError);
     const pending = await options('login-options');
-    const unchanged = await configRoute.PUT(request({ enabled: true, origin: origin + '/', name: ' Fire updated ', expectedRevision: current.revision, currentPassword: password }, cookie(otherSession), 'PUT'));
+    const unchanged = await configRoute.PUT(request({ enabled: true, origin: origin + '/', name: ' Alcor updated ', expectedRevision: current.revision, currentPassword: password }, cookie(otherSession), 'PUT'));
     assert.equal(unchanged.status, 200); assert.equal((await unchanged.json()).revision, current.revision);
     assert(db.prepare('SELECT id FROM passkey_challenges WHERE id=?').get(pending.requestId), 'unchanged settings must not interrupt a login');
   });
@@ -98,10 +98,10 @@ async function login(device, handle, changes = {}, binding) {
     assert(enabled.ok);
     try {
       const before = db.prepare('SELECT totp_backup_codes FROM users WHERE id=?').get(other.id).totp_backup_codes;
-      const invalid = await configRoute.PUT(request({ enabled: true, origin: origin + '/path', name: 'Fire', currentPassword: password, code: enabled.backupCodes[0] }, cookie(otherSession), 'PUT'));
+      const invalid = await configRoute.PUT(request({ enabled: true, origin: origin + '/path', name: 'Alcor', currentPassword: password, code: enabled.backupCodes[0] }, cookie(otherSession), 'PUT'));
       assert.equal(invalid.status, 400);
       assert.equal(db.prepare('SELECT totp_backup_codes FROM users WHERE id=?').get(other.id).totp_backup_codes, before);
-      const valid = await configRoute.PUT(request({ enabled: true, origin, name: 'Fire', expectedRevision: store.passkeyConfig().revision, currentPassword: password, code: enabled.backupCodes[0] }, cookie(otherSession), 'PUT'));
+      const valid = await configRoute.PUT(request({ enabled: true, origin, name: 'Alcor', expectedRevision: store.passkeyConfig().revision, currentPassword: password, code: enabled.backupCodes[0] }, cookie(otherSession), 'PUT'));
       assert.equal(valid.status, 200);
       assert.notEqual(db.prepare('SELECT totp_backup_codes FROM users WHERE id=?').get(other.id).totp_backup_codes, before);
     } finally { totp.clearTotp(other.id); }
@@ -109,12 +109,12 @@ async function login(device, handle, changes = {}, binding) {
   await test('browser configuration validation matches the server and rejects malformed public responses', () => {
     const shared = require(path.join(root, 'lib/passkeyConfig.ts'));
     for (const bad of ['http://example.com', 'https://127.1', 'https://[::1]', 'https://example.com.', origin + '/path', origin + '?x=1', 'not-a-url']) {
-      assert.throws(() => shared.parsePasskeyConfig({ enabled: true, origin: bad, name: 'Fire' }));
-      assert.throws(() => store.normalizePasskeyConfig({ enabled: true, origin: bad, name: 'Fire' }));
+      assert.throws(() => shared.parsePasskeyConfig({ enabled: true, origin: bad, name: 'Alcor' }));
+      assert.throws(() => store.normalizePasskeyConfig({ enabled: true, origin: bad, name: 'Alcor' }));
     }
-    assert.equal(shared.parsePasskeyConfig({ enabled: true, origin: ' https://FIRE.example.test:443/ ', name: ' Fire ' }).origin, origin);
-    assert(shared.isPublicPasskeyConfig({ enabled: false, origin: '', name: 'Fire', revision: '' }));
-    for (const bad of [null, {}, { enabled: true, origin: 'invalid', name: 'Fire', revision: '' }, { enabled: false, origin: '', name: 'Fire' }]) assert(!shared.isPublicPasskeyConfig(bad));
+    assert.equal(shared.parsePasskeyConfig({ enabled: true, origin: ' https://FIRE.example.test:443/ ', name: ' Alcor ' }).origin, origin);
+    assert(shared.isPublicPasskeyConfig({ enabled: false, origin: '', name: 'Alcor', revision: '' }));
+    for (const bad of [null, {}, { enabled: true, origin: 'invalid', name: 'Alcor', revision: '' }, { enabled: false, origin: '', name: 'Alcor' }]) assert(!shared.isPublicPasskeyConfig(bad));
   });
   await test('client requests end on timeout, reject proxy HTML and never silently accept uncertain mutations', async () => {
     const client = require(path.join(root, 'lib/passkeyClient.ts'));
@@ -175,9 +175,9 @@ async function login(device, handle, changes = {}, binding) {
     db.prepare('UPDATE passkey_challenges SET expires_at=0 WHERE id=?').run(pending.requestId);
     assert.equal((await route.POST(request({ action: 'login-verify', requestId: pending.requestId, response: assertion(device, pending.options, handle) }, pending.cookie))).status, 400);
     const another = await options('login-options');
-    store.savePasskeyConfig(store.normalizePasskeyConfig({ enabled: false, origin, name: 'Fire' }));
+    store.savePasskeyConfig(store.normalizePasskeyConfig({ enabled: false, origin, name: 'Alcor' }));
     assert.equal((await route.POST(request({ action: 'login-verify', requestId: another.requestId, response: assertion(device, another.options, handle) }, another.cookie))).status, 400);
-    store.savePasskeyConfig(store.normalizePasskeyConfig({ enabled: true, origin, name: 'Fire' }));
+    store.savePasskeyConfig(store.normalizePasskeyConfig({ enabled: true, origin, name: 'Alcor' }));
   });
   await test('enrollment binds session and password version; cross-user management is denied', async () => {
     const pending = await options('register-options', session);

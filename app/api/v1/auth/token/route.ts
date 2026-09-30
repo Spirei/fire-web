@@ -11,5 +11,5 @@ export async function POST(request: Request) {
     : readJsonBody(request, 8192)).catch(() => null);
   if (!body || !["authorization_code", "refresh_token"].includes(body.grant_type)) return fail(40002, "无效的令牌请求", 400);
   const tokens = body.grant_type === "authorization_code" ? exchangeAppCode(body) : refreshAppTokens(body.client_id, body.refresh_token);
-  return tokens ? ok(tokens) : fail(40102, "连接已失效，请重新连接 Fire 账户", 401);
+  return tokens ? ok(tokens) : fail(40102, "连接已失效，请重新连接 Alcor 账户", 401);
 }

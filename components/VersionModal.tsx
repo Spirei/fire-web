@@ -84,7 +84,7 @@ export default function VersionModal({
         <div className="mb-5 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-[19px] font-bold leading-snug text-ink">版本记录</h3>
-            <p className="mt-1 text-[13px] text-muted">Fire · 每次更新、修复与安全加固都会记录在版本号中</p>
+            <p className="mt-1 text-[13px] text-muted">Alcor · 每次更新、修复与安全加固都会记录在版本号中</p>
           </div>
           <button
             type="button"

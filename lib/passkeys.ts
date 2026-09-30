@@ -4,6 +4,7 @@ import { getCookie, getSessionToken } from "./auth";
 import { hmacWithDataKey } from "./secretStorage";
 import { clientIp, rateLimit } from "./rateLimit";
 import { parsePasskeyConfig } from "./passkeyConfig";
+import { normalizeProductName } from "./brand";
 
 export const PASSKEY_COOKIE = "fire_passkey_challenge";
 export const PASSKEY_CLIENT_COOKIE = "fire_passkey_client";
@@ -34,7 +35,9 @@ export type PasskeyRow = { id: string; user_id: string; user_handle: string; rp_
 export type PasskeyChallenge = { id: string; binding: string; purpose: string; user_id: string | null; challenge: string; config_revision: string; password_hash: string; expires_at: number };
 export function passkeyConfig(): PasskeyConfig {
   const row = getDb().prepare("SELECT value FROM passkey_config WHERE id=1").get() as { value: string } | undefined;
-  return row ? JSON.parse(row.value) : { enabled: false, origin: "", rpID: "", name: "Fire", revision: "" };
+  const config: PasskeyConfig = row ? JSON.parse(row.value) : { enabled: false, origin: "", rpID: "", name: "Alcor", revision: "" };
+  // RP ID, revision and credentials are unchanged, including in-flight challenges.
+  return { ...config, name: normalizeProductName(typeof config.name === "string" && config.name ? config.name : "Alcor") };
 }
 export function normalizePasskeyConfig(value: { enabled?: unknown; origin?: unknown; name?: unknown }): PasskeyConfig {
   const fields = parsePasskeyConfig(value);

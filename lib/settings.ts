@@ -5,6 +5,7 @@ import { DEFAULT_HOLDING_COLUMNS, normalizeHoldingColumns } from "./holdingColum
 import { normalizeModelServices } from "./modelServices";
 import { decryptSecret, encryptSecret } from "./secretStorage";
 import { normalizeMobileNavigationOrder } from "./workspaceNavigation";
+import { normalizeBrandSetting } from "./brand";
 import fs from "fs";
 import path from "path";
 
@@ -43,7 +44,7 @@ export const DEFAULT_TICKER: TickerConfig = {
 const DEFAULTS: SiteSettings = {
   mobileNavigationOrder: [],
   domain: "localhost:3000",
-  title: "Fire - 股票记录与持仓管理",
+  title: "Alcor - 股票记录与持仓管理",
   ico: "",
   pwaIcon: "",
   homepageBg: "",
@@ -80,7 +81,7 @@ const DEFAULTS: SiteSettings = {
   siteLogo: "",
   appDisplayName: "",
   appDisplayIcon: "",
-  logoText: "Fire",
+  logoText: "Alcor",
   logoFont: "diatype",
   quoteSource: "auto",
   futuHost: "127.0.0.1",
@@ -122,7 +123,7 @@ const DEFAULTS: SiteSettings = {
   smtpSecure: false,
   smtpUser: "",
   smtpPassword: "",
-  smtpFromName: "Fire",
+  smtpFromName: "Alcor",
   smtpFromEmail: "",
   emailLinkOrigin: "",
   ticker: DEFAULT_TICKER
@@ -269,7 +270,7 @@ export function getSiteSettings(): SiteSettings {
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   const result: SiteSettings = { ...DEFAULTS };
   SIMPLE_KEYS.forEach((k) => {
-    if (typeof map[k] === "string" && map[k] !== "") (result as unknown as Record<string, string>)[k] = map[k];
+    if (typeof map[k] === "string" && map[k] !== "") (result as unknown as Record<string, string>)[k] = normalizeBrandSetting(k, map[k]);
   });
   (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey"] as const).forEach((key) => {
     result[key] = decryptSecret(result[key]);

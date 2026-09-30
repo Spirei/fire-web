@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { getSiteSettings } from "./settings";
 import { consumeMailPermit, type MailPermit } from "./mailBudget";
+import { normalizeProductName } from "./brand";
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] || char);
@@ -15,7 +16,7 @@ export function getMailConfig() {
     secure: settings.smtpHost ? settings.smtpSecure : process.env.SMTP_SECURE === "true",
     user: settings.smtpUser || process.env.SMTP_USER || "",
     password: settings.smtpPassword || process.env.SMTP_PASSWORD || "",
-    fromName: settings.smtpFromName || process.env.SMTP_FROM_NAME || "Fire",
+    fromName: normalizeProductName(settings.smtpFromName || process.env.SMTP_FROM_NAME || "Alcor"),
     fromEmail: settings.smtpFromEmail || process.env.SMTP_FROM_EMAIL || ""
   };
 }
@@ -32,7 +33,7 @@ function resolveMailConfig(input?: MailConfigInput) {
     secure: typeof input.secure === "boolean" ? input.secure : saved.secure,
     user: String(input.user ?? saved.user).trim(),
     password: input.password ? String(input.password) : saved.password,
-    fromName: String(input.fromName ?? saved.fromName).trim(),
+    fromName: normalizeProductName(String(input.fromName ?? saved.fromName).trim()),
     fromEmail: String(input.fromEmail ?? saved.fromEmail).trim()
   };
 }
@@ -63,7 +64,7 @@ export async function sendPasswordResetEmail(input: { to: string; name: string; 
   if (!config.host || !config.fromEmail) throw new Error("邮件服务未配置");
   consumeMailPermit(input.to, "reset", permit);
   const transport = createMailTransport(config);
-  const siteName = config.fromName || "Fire";
+  const siteName = config.fromName || "Alcor";
   const safeName = escapeHtml(input.name || "你好");
   const safeCode = escapeHtml(input.code);
   await transport.sendMail({
@@ -81,9 +82,9 @@ export async function sendTestEmail(to: string, input?: MailConfigInput) {
   consumeMailPermit(to, "test");
   const transport = createMailTransport(config);
   await transport.sendMail({
-    from: { name: config.fromName || "Fire", address: config.fromEmail },
+    from: { name: config.fromName || "Alcor", address: config.fromEmail },
     to,
-    subject: "Fire 邮件服务测试",
+    subject: "Alcor 邮件服务测试",
     text: "邮件服务配置成功。你现在可以使用邮箱自助找回密码。",
     html: '<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif"><h2>配置成功</h2><p>你现在可以使用邮箱自助找回密码。</p></div>'
   });
@@ -94,5 +95,5 @@ export async function sendEmailVerification(to: string, url: string, permit?: Ma
   if(!config.host || !config.fromEmail) throw new Error("邮件服务未配置");
   consumeMailPermit(to, "verification", permit);
   const transport=createMailTransport(config);
-  await transport.sendMail({from:{name:config.fromName||"Fire",address:config.fromEmail},to,subject:`确认你的 ${config.fromName||"Fire"} 邮箱`,text:`请打开以下链接确认邮箱：\n\n${url}\n\n30 分钟内有效。如果不是你发起的，请忽略此邮件。`,html:`<div style="max-width:480px;margin:24px auto;padding:28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c1e21;border:1px solid #dedfe3;border-radius:16px"><h2>确认邮箱</h2><p>点击下方按钮，确认此邮箱属于你。</p><p><a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;border-radius:24px;background:#0866ff;color:#fff;text-decoration:none;font-weight:600">确认邮箱</a></p><p style="color:#65676b;font-size:13px">30 分钟内有效。如果不是你发起的，请忽略此邮件。</p></div>`});
+  await transport.sendMail({from:{name:config.fromName||"Alcor",address:config.fromEmail},to,subject:`确认你的 ${config.fromName||"Alcor"} 邮箱`,text:`请打开以下链接确认邮箱：\n\n${url}\n\n30 分钟内有效。如果不是你发起的，请忽略此邮件。`,html:`<div style="max-width:480px;margin:24px auto;padding:28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c1e21;border:1px solid #dedfe3;border-radius:16px"><h2>确认邮箱</h2><p>点击下方按钮，确认此邮箱属于你。</p><p><a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;border-radius:24px;background:#0866ff;color:#fff;text-decoration:none;font-weight:600">确认邮箱</a></p><p style="color:#65676b;font-size:13px">30 分钟内有效。如果不是你发起的，请忽略此邮件。</p></div>`});
 }

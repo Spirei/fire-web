@@ -22,7 +22,7 @@ WATCHTOWER_HTTP_API_TOKEN=用_openssl_rand_hex_32_生成的随机值
 DOCKER_CONFIG_DIR=/root/.docker
 ```
 
-随机值可用 `openssl rand -hex 32` 生成。`DOCKER_CONFIG_DIR` 指向执行 `docker login ghcr.io` 后生成 `config.json` 的目录，默认是 root 用户的 `/root/.docker`；该目录以只读方式提供给更新器。`docker-compose.ghcr.yml` 会启动一个仅在 Compose 内网可访问的 `fire-updater`：它只更新同时带有 Fire 专属标签与 scope 的容器，8080 端口不会映射到群晖。不要把 Docker Socket 或 Watchtower API 暴露到局域网 / 公网。
+随机值可用 `openssl rand -hex 32` 生成。`DOCKER_CONFIG_DIR` 指向执行 `docker login ghcr.io` 后生成 `config.json` 的目录，默认是 root 用户的 `/root/.docker`；该目录以只读方式提供给更新器。`docker-compose.ghcr.yml` 会启动一个仅在 Compose 内网可访问的 `fire-updater`：它只更新同时带有 Alcor 专属标签与 scope 的容器，8080 端口不会映射到群晖。不要把 Docker Socket 或 Watchtower API 暴露到局域网 / 公网。
 
 在群晖 Container Manager 的终端执行一次登录（不要把 Token 写进 Compose 文件）：
 
@@ -60,7 +60,7 @@ git commit -m "describe change"
 git push origin main
 ```
 
-Actions 完成后，可由管理员打开 `/deploy-status`，点击流程中的“更新群晖”。页面会通知 Watchtower 拉取最新 GHCR 镜像，并观察 Fire 重启与健康恢复。
+Actions 完成后，可由管理员打开 `/deploy-status`，点击流程中的“更新群晖”。页面会通知 Watchtower 拉取最新 GHCR 镜像，并观察 Alcor 重启与健康恢复。
 
 首次增加 Watchtower 服务、修改端口 / 环境变量 / 挂载目录，或网页更新不可用时，仍在群晖执行：
 

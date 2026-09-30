@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({
       ok: true,
-      message: "已通知群晖拉取最新镜像；若镜像有更新，Fire 将自动重启"
+      message: "已通知群晖拉取最新镜像；若镜像有更新，Alcor 将自动重启"
     });
   } catch (error) {
     lastTriggerAt = 0;

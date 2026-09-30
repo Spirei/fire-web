@@ -8,7 +8,7 @@ const CONTENT = `
         <div class="group">
           <div class="group-title">站点信息</div>
           <div class="rows">
-            <div class="row"><div class="row-label"><b>网站标题</b></div><input class="input" value="Fire - 股票记录与持仓管理" /></div>
+            <div class="row"><div class="row-label"><b>网站标题</b></div><input class="input" value="Alcor - 股票记录与持仓管理" /></div>
             <div class="row"><div class="row-label"><b>网站域名</b></div><input class="input" value="fire.example.com" /></div>
             <div class="row"><div class="row-label"><b>页脚简介文字</b></div><input class="input" value="一个轻量、免费的股票记录网站" /></div>
             <div class="row"><div class="row-label"><b>允许新用户注册</b><span>关闭后仅管理员可创建账号</span></div><div class="switch on"></div></div>
@@ -19,12 +19,12 @@ const CONTENT = `
           <div class="rows">
             <div class="row"><div class="row-label"><b>网站图标</b></div><input class="input" value="/uploads/ico/fire.png" /></div>
             <div class="row"><div class="row-label"><b>Logo</b></div><input class="input" value="/uploads/logo/fire.png" /></div>
-            <div class="row"><div class="row-label"><b>Logo 文字</b></div><input class="input" value="Fire" /></div>
+            <div class="row"><div class="row-label"><b>Logo 文字</b></div><input class="input" value="Alcor" /></div>
             <div class="row">
               <div class="row-label"><b>Logo 字体</b></div>
               <div class="pills"><button class="pill active">KIRO 粗体</button><button class="pill">KIRO 常规</button><button class="pill">系统</button></div>
             </div>
-            <div class="row"><div class="row-label"><b>预览</b></div><span class="font-preview">Fire</span></div>
+            <div class="row"><div class="row-label"><b>预览</b></div><span class="font-preview">Alcor</span></div>
             <div class="row"><div class="row-label"><b>恢复默认形象</b><span>清空图标 / Logo / 背景</span></div><button class="btn">重置</button></div>
           </div>
         </div>
@@ -53,7 +53,7 @@ const CONTENT = `
 
 const SIDEBAR = `
       <aside class="sidebar">
-        <div class="side-logo"><span class="mark">F</span><b>Fire</b></div>
+        <div class="side-logo"><span class="mark">A</span><b>Alcor</b></div>
         <button class="search-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>搜索设置</button>
         <div class="nav-group">
           <div class="nav-group-title">网站</div>
@@ -444,7 +444,7 @@ ${BASE_CSS}
 <div class="window">
   <div class="titlebar">
     <div class="traffic"><i></i><i></i><i></i></div>
-    <span class="tb-title">Fire 设置</span>
+    <span class="tb-title">Alcor 设置</span>
     <div class="tb-right">
       <button class="theme-toggle" id="tt" onclick="document.body.classList.toggle('dark');document.getElementById('tt').textContent=document.body.classList.contains('dark')?'浅色':'深色'">深色</button>
       <span class="save-pill">✓ 已保存</span><span class="ver">v0.1.14</span>

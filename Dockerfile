@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # =====================================================================
-# Fire 投资记实 —— 纯净生产版镜像（Node 22 + SQLite + sharp）
+# Alcor 投资记实 —— 纯净生产版镜像（Node 22 + SQLite + sharp）
 # 目标：运行镜像只含生产依赖 + .next 产物 + 静态资源，无源码/dev 依赖/构建工具。
 # 私有数据与上传走 volume；镜像仅携带公开只读缓存种子，确保新部署首屏与本地一致。
 # 富途 OpenD 桥接（scripts/futu_quotes.py）随生产镜像提供 Python + futu-api，

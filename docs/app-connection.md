@@ -1,4 +1,4 @@
-# Fire App 连接与 API 审查
+# Alcor App 连接与 API 审查
 
 日期：2026-09-30。Web 与 iOS 独立维护，只共享公开 HTTP 合同。
 
@@ -23,7 +23,7 @@ App 设置内的连接页首次预填 `https://fire.6dm.tv:18520`，允许更换
 
 ## 授权合同
 
-这是第一方 App 的授权码 + PKCE S256 流程；v1 JSON 请求/响应遵循 Fire 信封，不是第三方通用 OIDC 身份提供商。
+这是第一方 App 的授权码 + PKCE S256 流程；v1 JSON 请求/响应遵循 Alcor 信封，不是第三方通用 OIDC 身份提供商。
 
 | 项目 | 值 |
 | --- | --- |
@@ -44,7 +44,7 @@ App 设置内的连接页首次预填 `https://fire.6dm.tv:18520`，允许更换
 5. App POST `/api/v1/auth/token`，提交 grant_type=authorization_code、client_id、redirect_uri、code、code_verifier。服务端事务内校验并消费；源浏览器会话退出/过期后不能兑换。
 6. grant_type=refresh_token 携带 client_id / refresh_token，在 IMMEDIATE 事务内轮换。旧刷新令牌重放撤销整个设备授权，包括仍未到期的 access token。
 
-令牌响应位于 data：`{ access_token, refresh_token, token_type, expires_in, grant_id, scope }`。token 接口支持 Fire JSON 和受大小限制的 form-urlencoded 输入；所有响应不缓存。
+令牌响应位于 data：`{ access_token, refresh_token, token_type, expires_in, grant_id, scope }`。token 接口支持 Alcor JSON 和受大小限制的 form-urlencoded 输入；所有响应不缓存。
 
 ## 设备、权限与撤销
 

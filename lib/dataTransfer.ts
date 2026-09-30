@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { generateOrderNo } from "@/lib/orderNo";
 import { syncOrderCashTransactions } from "@/lib/funds";
 import { FUND_CURRENCIES } from "@/lib/fundCurrencies";
+import { normalizeBrandSetting } from "@/lib/brand";
 
 /**
  * 网站设置/数据 导出导入（无损迁移用）
@@ -76,7 +77,7 @@ export function buildBackupPayload(userId: string, isAdmin: boolean) {
   const settingsRows = db.prepare("SELECT key,value FROM site_settings").all() as { key: string; value: string }[];
   const siteSettings: Record<string, string> = {};
   for (const r of settingsRows) {
-    if (SITE_SETTING_KEYS.has(r.key) && !ENV_SETTING_KEYS.has(r.key)) siteSettings[r.key] = r.value;
+    if (SITE_SETTING_KEYS.has(r.key) && !ENV_SETTING_KEYS.has(r.key)) siteSettings[r.key] = normalizeBrandSetting(r.key, r.value);
   }
   const userRow = db.prepare("SELECT nickname FROM users WHERE id = ?").get(userId) as { nickname: string | null } | undefined;
   const profile = { nickname: userRow?.nickname ?? "" };
@@ -113,7 +114,7 @@ export function buildBackupPayload(userId: string, isAdmin: boolean) {
     appVersion: CURRENT_VERSION.version,
     exportedAt,
     manifest: {
-      app: "Fire",
+      app: "Alcor",
       appVersion: CURRENT_VERSION.version,
       exportedAt,
       excluded: "图标/图片与素材库为应用默认、上线自带；数据库连接串等环境专属配置不随备份迁移",
@@ -136,7 +137,7 @@ export function buildBackupPayload(userId: string, isAdmin: boolean) {
 /** 只做校验+条数统计，不做任何写入（供导入前试算/预览） */
 export function validateBackupPayload(payload: unknown) {
   const p = payload as { format?: string; version?: number; data?: Record<string, unknown> };
-  if (!p || p.format !== FORMAT) throw new Error("不是有效的 Fire 备份文件");
+  if (!p || p.format !== FORMAT) throw new Error("不是有效的 Alcor 备份文件");
   if (!Number.isInteger(p.version) || p.version! < 1 || p.version! > SCHEMA_VERSION) throw new Error("备份版本无效或不受支持");
   const d = p.data ?? {};
   const arr = (key: string): Record<string, unknown>[] => {

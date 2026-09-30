@@ -7,7 +7,7 @@ import { getUserByToken, LEGACY_SESSION_COOKIE, needsSetup, SESSION_COOKIE } fro
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "首次设置 - Fire"
+  title: "首次设置 - Alcor"
 };
 
 export default async function SetupPage() {

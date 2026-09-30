@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
 
-export const metadata: Metadata = { title: "重置密码 - Fire" };
+export const metadata: Metadata = { title: "重置密码 - Alcor" };
 
 export default function ResetPasswordPage() {
   return <main className="flex min-h-screen items-center justify-center bg-bg-gray/70 px-4 py-10 dark:bg-[#0a0e19]">

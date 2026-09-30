@@ -1072,7 +1072,7 @@ function dragCfExpenseStart(ev,id){ ev.dataTransfer.setData("text/plain",id); ev
 function dropCfExpense(ev,targetId){ ev.preventDefault(); const sourceId=ev.dataTransfer.getData("text/plain"); if(!sourceId||sourceId===targetId)return; const list=S.cashflow.expenseItems||[],from=list.findIndex(x=>x.id===sourceId),to=list.findIndex(x=>x.id===targetId); if(from<0||to<0)return; const [item]=list.splice(from,1); list.splice(to,0,item); save(); render({resize:false,keepScroll:true}); }
 function openCfShare(){
   const t=cfTotals(),y=new Date().getFullYear();
-  showCfSheet(`<div class="cf-share-preview"><div class="cf-share-brand"><span>〽</span><b>Fire</b><em>${y} 年度支出</em></div><div class="cf-share-image">${cfSankeySvg("expense",true,"amount")}</div><div class="cf-share-footer"><div class="cf-share-tags"><span>年度支出 ${cfShort(t.expenses)}</span><span>数据展示 · 金额</span></div><button class="cf-share-save" onclick="window.downloadSimpleCashflowChart?.('${y}-年度现金流')" aria-label="保存图片"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 19h14"/></svg><span>保存图片</span></button></div></div>`);
+  showCfSheet(`<div class="cf-share-preview"><div class="cf-share-brand"><span>〽</span><b>Alcor</b><em>${y} 年度支出</em></div><div class="cf-share-image">${cfSankeySvg("expense",true,"amount")}</div><div class="cf-share-footer"><div class="cf-share-tags"><span>年度支出 ${cfShort(t.expenses)}</span><span>数据展示 · 金额</span></div><button class="cf-share-save" onclick="window.downloadSimpleCashflowChart?.('${y}-年度现金流')" aria-label="保存图片"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 19h14"/></svg><span>保存图片</span></button></div></div>`);
 }
 function cfShort(n) { n=Number(n)||0; return Math.abs(n)>=10000 ? (Math.round(n/100)/100)+"万" : num(n); }
 function cfTrackCard(x) {
@@ -2689,7 +2689,7 @@ function exportBook(invest) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "fire-simple-" + today() + ".json";
+  a.download = "alcor-simple-" + today() + ".json";
   a.click();
   toast("已导出简化版账本");
 }
@@ -2705,7 +2705,7 @@ async function exportXlsx(invest) {
     const blob = await r.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "fire-simple-invest-" + today() + ".xlsx";
+    a.download = "alcor-simple-invest-" + today() + ".xlsx";
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     toast("已导出 Excel（有知有行格式）");

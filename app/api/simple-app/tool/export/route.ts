@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   const buf = await xlsxBuffer(invest);
   const today = new Date();
   const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  const filename = `fire-simple-invest-${day}.xlsx`;
+  const filename = `alcor-simple-invest-${day}.xlsx`;
 
   return new Response(new Uint8Array(buf), {
     headers: {
