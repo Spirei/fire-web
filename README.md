@@ -12,9 +12,13 @@ Next.js 15 + React 19 + TypeScript + Tailwind + SQLite（better-sqlite3）全栈
 
 ```bash
 npm run dev              # 开发（固定监听 0.0.0.0:3000）
-./scripts/smoke-test.sh  # 冒烟测试（110 项，含登录后全站页面巡检 + 公开数据接口）
+npm run smoke:account    # 首次注册独立本地测试账号，后续执行只验证并复用
+npm run smoke            # 使用独立账号进行只读页面、认证和 API 巡检
+npm run test:review      # 临时数据库中的业务写入与管理员权限回归
 npm run clean:dsstore    # 清理 .DS_Store
 ```
+
+本地测试账号默认名为 `fire_smoke`，注册时为普通权限、不占 UID；随机密码保存在忽略 Git 的 `data/smoke-account.json`（权限 0600），不使用默认 demo。管理员可通过用户管理调整权限，巡检按账号当前权限验证。`SMOKE_USERNAME` 可在首次注册时指定名称，`SMOKE_ACCOUNT_FILE` 可指定凭据文件；文件绑定目标地址，不会把本地凭据发往不同服务器。外部实例只读取它自己的凭据配置，不自动注册账号。`BASE` 默认 `http://localhost:3000`，回环地址 `127.0.0.1` 也可复用同一配置。
 
 ## 关键位置
 

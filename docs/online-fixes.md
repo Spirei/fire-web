@@ -80,7 +80,8 @@
 ```bash
 cd fire-web
 npx tsc --noEmit            # 类型检查（已 PASS）
-./scripts/smoke-test.sh     # 110 项冒烟（需起本地实例，会备份并还原设置）
+npm run smoke:account      # 首次注册独立本地测试账号，后续只验证并复用
+./scripts/smoke-test.sh     # 独立账号只读巡检，不改业务数据或密码
 ```
 
 ---

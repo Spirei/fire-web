@@ -3,7 +3,7 @@
 ## 项目
 
 - 技术栈：Next.js 15（App Router）+ React 19 + TypeScript + Tailwind CSS，SQLite（better-sqlite3）。
-- 常用命令：开发 `npm run dev`（固定监听 `0.0.0.0:3000`，禁止临时切换端口）；构建 `npm run build`；冒烟测试 `./scripts/smoke-test.sh` 默认只读巡检。写入回归使用 `npm run test:review` 的临时数据库；历史冒烟写入分支仅限 `SMOKE_DISPOSABLE_INSTANCE=1` 的可丢弃实例，会覆盖分组、数据库配置和 demo 头像，禁止在真实实例启用。
+- 常用命令：开发 `npm run dev`（固定监听 `0.0.0.0:3000`，禁止临时切换端口）；构建 `npm run build`。首次本地测试运行 `npm run smoke:account` 注册独立普通测试账号，凭据放忽略 Git 的 `data/smoke-account.json`（0600）；之后 `./scripts/smoke-test.sh` / `npm run smoke` 复用此账号只读巡检，不依赖 demo，也不重置账号密码。管理员页面按真实权限验证。业务写入和管理员功能回归使用 `npm run test:review` 的临时数据库；禁止向真实实例写入测试业务数据。
 
 ## 收尾 Review 规范（重要）
 
