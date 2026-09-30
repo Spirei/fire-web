@@ -12,6 +12,26 @@
   .app-shell-main .records-app:has(.assistant-page) .assistant-workspace { height:100%; }
 }
 
+/* Restore the pre-mobile-refinement account card only on non-tablet desktop layouts. */
+@media (min-width: 1024px) {
+  .records-app[data-tablet-device="false"] .asset-account-highlight { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); align-items:end; gap:12px; margin-top:4px; padding-bottom:0; }
+  .records-app[data-tablet-device="false"] .asset-account-primary { display:block; grid-column:span 2; min-width:0; }
+  .records-app[data-tablet-device="false"] .asset-account-primary-label { min-height:0; }
+  .records-app[data-tablet-device="false"] .asset-account-total { gap:8px; margin-top:4px; padding:0; }
+  .records-app[data-tablet-device="false"] .asset-account-amount { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:24px; font-weight:800; line-height:32px; letter-spacing:normal; }
+  .records-app[data-tablet-device="false"] .asset-privacy-button { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; }
+  .records-app[data-tablet-device="false"] .asset-account-day { display:block; min-width:0; min-height:0; padding:0; border:0; white-space:normal; }
+  .records-app[data-tablet-device="false"] .asset-account-day strong { margin-top:4px; font-size:14px; line-height:20px; text-align:left; }
+  .records-app[data-tablet-device="false"] .asset-account-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:20px; border:0; }
+  .records-app[data-tablet-device="false"] .asset-account-metrics > * { display:block; min-width:0; min-height:0; padding:0; border:0; }
+  .records-app[data-tablet-device="false"] .asset-account-metrics > * > span { font-size:12px; white-space:normal; }
+  .records-app[data-tablet-device="false"] .asset-account-metrics strong { margin-top:4px; font-size:14px; line-height:20px; text-align:left; }
+  .records-app[data-tablet-device="false"] .asset-account-metrics > .asset-pnl-shortcut { width:calc(100% + 8px); margin-inline:-4px; padding-inline:4px; border-radius:10px; }
+  .records-app[data-tablet-device="false"] .asset-pnl-shortcut span svg { opacity:0; transition:opacity .15s; }
+  .records-app[data-tablet-device="false"] .asset-pnl-shortcut:is(:hover,:focus-visible) span svg { opacity:1; }
+  .records-app[data-tablet-device="false"] .asset-account-card > div:first-child button { min-width:0; min-height:0; border-radius:7px; }
+}
+
 /* Compact desktop keeps a modest gap around the content. Tablet landscape controls its own rail below. */
 @media (min-width: 1024px) and (max-width: 1279px) {
   .app-shell-main .records-app { gap:16px; padding-inline:16px; }

@@ -128,6 +128,37 @@ function fontHeaderFixture(ext) {
     function Probe() { return React.createElement('span', null, `${useTabletDevice()}:${useFourDoorViewport()}`); }
     assert.equal(renderToStaticMarkup(React.createElement(Probe)), '<span>false:false</span>', 'SSR never reads navigator or starts tablet-only resources');
   });
+  await test('desktop account card restores its original grid without changing phone and tablet refinements', () => {
+    const desktop = fs.readFileSync(path.join(root, 'styles/desktop.css'), 'utf8');
+    const tablet = fs.readFileSync(path.join(root, 'styles/tablet.css'), 'utf8');
+    const globals = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
+    const postcss = require('postcss');
+    const rootCss = postcss.parse(desktop);
+    const properties = selector => {
+      let result;
+      rootCss.walkRules(rule => {
+        if (rule.selector === `.records-app[data-tablet-device="false"] ${selector}`) {
+          assert.equal(rule.parent.params, '(min-width: 1024px)', 'restoration must not reach the mobile viewport');
+          result = Object.fromEntries(rule.nodes.filter(node => node.type === 'decl').map(node => [node.prop, node.value]));
+        }
+      });
+      assert(result, `missing desktop-only ${selector}`);
+      return result;
+    };
+    assert.equal(properties('.asset-account-highlight').display, 'grid');
+    assert.equal(properties('.asset-account-highlight')['grid-template-columns'], 'repeat(3,minmax(0,1fr))');
+    assert.equal(properties('.asset-account-primary')['grid-column'], 'span 2');
+    assert.equal(properties('.asset-account-amount')['font-size'], '24px');
+    assert.equal(properties('.asset-account-day').border, '0');
+    assert.equal(properties('.asset-account-day').display, 'block');
+    assert.equal(properties('.asset-account-metrics')['grid-template-columns'], 'repeat(3,minmax(0,1fr))');
+    assert.equal(properties('.asset-account-metrics > *').border, '0');
+    assert.equal(properties('.asset-account-metrics strong')['font-size'], '14px');
+    assert.equal(properties('.asset-privacy-button').width, '28px');
+    assert(tablet.includes('.records-app[data-tablet-device="true"] .asset-account-highlight'));
+    assert(globals.includes('@media (max-width:1279px) {\n  .asset-account-highlight'));
+    assert(globals.includes('.asset-account-day strong { font-size:clamp(18px,5vw,23px);'));
+  });
   await test('selected capsule counts inherit their foreground without changing hydrated markup', () => {
     const cards = fs.readFileSync(path.join(root, 'components/views/CardLibraryView.tsx'), 'utf8');
     assert(cards.includes('text-white/60 dark:text-[#111]/50'), 'card count markup stays compatible with cached client bundles');
