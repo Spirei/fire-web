@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import Pagination from "@/components/Pagination";
+import ApiRequests from "@/components/ApiRequests";
 import RefreshButton from "@/components/RefreshButton";
 import CurrencySelect from "@/components/CurrencySelect";
 import MarketIcon from "@/components/MarketIcon";
@@ -18,7 +19,7 @@ interface Props {
   onRefresh?: () => Promise<void> | void;
 }
 
-type Scope = "user" | "system";
+type Scope = "user" | "system" | "requests";
 type LogLevel = "ok" | "fail" | "warn" | "info";
 type DailySummary = {
   date: string;
@@ -145,7 +146,7 @@ function readQuery(): { scope: Scope; page: number; query: string } {
   const params = new URLSearchParams(window.location.search);
   const page = Number(params.get("page") || "1");
   return {
-    scope: params.get("scope") === "system" ? "system" : "user",
+    scope: params.get("scope") === "requests" ? "requests" : params.get("scope") === "system" ? "system" : "user",
     page: Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1,
     query: params.get("q") || ""
   };
@@ -153,6 +154,11 @@ function readQuery(): { scope: Scope; page: number; query: string } {
 
 function writeQuery(scope: Scope, page: number, query: string) {
   const url = new URL(window.location.href);
+  if (scope === "requests") {
+    url.searchParams.set("scope", "requests");
+    window.history.replaceState(null, "", url.pathname + "?" + url.searchParams.toString());
+    return;
+  }
   if (scope === "system") url.searchParams.set("scope", "system");
   else url.searchParams.delete("scope");
   ["op", "level", "mod", "market"].forEach((key) => url.searchParams.delete(key));
@@ -172,7 +178,7 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
   const initialFiltersRef = useRef(true);
   useLayoutEffect(() => {
     const initial = readQuery();
-    setScope(initial.scope);
+    setScope(initial.scope === "requests" && !isAdmin ? "user" : initial.scope);
     setQuery(initial.query);
     setPage(initial.page);
     setUrlReady(true);
@@ -224,7 +230,7 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
   useEffect(() => { if (urlReady) writeQuery(scope, safePage, query); }, [query, safePage, scope, urlReady]);
 
   useEffect(() => {
-    if (!onRefresh) return;
+    if (!onRefresh || scope === "requests") return;
     void refreshLogs();
     const timer = window.setInterval(() => { void refreshLogs(); }, 30_000);
     return () => window.clearInterval(timer);
@@ -244,21 +250,21 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
   }, [lastRefreshed, scope]);
 
   return (
-    <div className="w-full max-w-[800px] overflow-hidden rounded-[18px] border border-edge bg-white shadow-card dark:bg-[#151b26]">
-      <div className="activities-toolbar flex items-end justify-between gap-3 border-b border-edge px-5 pt-4">
+    <div className={scope === "requests" ? "w-full max-w-[1040px]" : "w-full max-w-[800px] overflow-hidden rounded-[18px] border border-edge bg-white shadow-card dark:bg-[#151b26]"}>
+      <div className={`activities-toolbar flex items-end justify-between gap-3 border-b border-edge px-5 pt-4 ${scope === "requests" ? "mb-5 rounded-xl bg-white dark:bg-[#151b26]" : ""}`}>
         <div className="activities-scope-tabs flex gap-6">
-          {(["user", "system"] as const).map((key) => (
+          {(["user", "system", ...(isAdmin ? ["requests"] : [])] as Scope[]).map((key) => (
             <button
               key={key}
               type="button"
               onClick={() => setScope(key)}
               className={`border-b-2 pb-3 text-sm font-semibold transition ${scope === key ? "border-ink text-ink dark:border-white dark:text-white" : "border-transparent text-muted hover:text-ink dark:hover:text-white"}`}
             >
-              {key === "user" ? "用户日志" : "系统日志"}
+              {key === "user" ? "用户日志" : key === "system" ? "系统日志" : "请求日志"}
             </button>
           ))}
         </div>
-        <div className="activities-search mb-3 flex min-w-0 items-center gap-2">
+        {scope !== "requests" && <div className="activities-search mb-3 flex min-w-0 items-center gap-2">
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -267,9 +273,10 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
             className="h-8 w-[148px] rounded-lg border border-edge bg-transparent px-2.5 text-[13px] outline-none transition placeholder:text-faint focus:border-ink dark:focus:border-white sm:w-[180px]"
           />
           {onRefresh && <RefreshButton onClick={() => void refreshLogs()} title={refreshing ? "正在刷新日志" : "刷新日志"} />}
-        </div>
+        </div>}
       </div>
 
+      {scope === "requests" && isAdmin && <ApiRequests />}
       {scope === "system" && !isAdmin && <div className="p-10 text-center text-sm text-faint">系统日志仅管理员可见</div>}
 
       {scope === "user" && (

@@ -28,6 +28,9 @@ SETUP_CODE=$(code --max-time 20 "$BASE/setup")
 check "GET /setup（空库 200 / 已初始化 307）" 1 "$(printf '%s' "$SETUP_CODE" | grep -cE '^(200|307)$')"
 check "GET /api/auth/setup-status" 200 "$(code --max-time 20 "$BASE/api/auth/setup-status")"
 check "GET /api/health" 200 "$(code --max-time 20 "$BASE/api/health")"
+check "GET /api-requests" 200 "$(code --max-time 20 "$BASE/api-requests")"
+check "请求日志未登录拒绝" 401 "$(code --max-time 20 "$BASE/api/request-logs")"
+check "请求日志实时订阅未登录拒绝" 401 "$(code --max-time 20 "$BASE/api/request-logs/events")"
 check "GET /api/trading-square/feed" 200 "$(code --max-time 30 "$BASE/api/trading-square/feed")"
 
 QUOTE_BODY='{"items":[{"id":"US:AAPL","market":"US","code":"AAPL"},{"id":"JP:7203","market":"JP","code":"7203"},{"id":"KR:005930","market":"KR","code":"005930"}]}'

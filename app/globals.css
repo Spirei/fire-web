@@ -3923,6 +3923,8 @@ html.dark .watch-import-target {
   .dark .asset-analysis-resizer:hover > i,.dark .asset-analysis-resizer:active > i { color: #58aaff; border-color: rgba(50,151,246,.65); }
 }
 .deploy-heatmap-continuous { width: 100%; }
+.rq-dashboard { --rq-text:#1e293b; --rq-muted:#64748b; --rq-panel:#fff; --rq-border:#e2e8f0; --rq-soft:#f5f7fa; --rq-success:#059669; --rq-danger:#dc2626; --rq-warn:#b45309; --rq-get:#2563eb; --rq-get-bg:#eff6ff; --rq-post:#059669; --rq-post-bg:#ecfdf5; --rq-put:#7c3aed; --rq-put-bg:#f5f3ff; --rq-delete-bg:#fef2f2; --rq-heat-0:#e9eef2; --rq-heat-1:#a7e7cc; --rq-heat-2:#60d3ab; --rq-heat-3:#2bb88d; --rq-heat-4:#139a72; }
+.dark .rq-dashboard { --rq-text:#e2e8f0; --rq-muted:#8c9aaf; --rq-panel:#121923; --rq-border:#253040; --rq-soft:#18212e; --rq-success:#34d399; --rq-danger:#f87171; --rq-warn:#fbbf24; --rq-get:#93baff; --rq-get-bg:#1c2b45; --rq-post:#6ee7b7; --rq-post-bg:#17332d; --rq-put:#c4b5fd; --rq-put-bg:#2c2544; --rq-delete-bg:#3b222b; --rq-heat-0:#26333c; --rq-heat-1:#175341; --rq-heat-2:#197858; --rq-heat-3:#20a16f; --rq-heat-4:#41c58d; }
 .deploy-heatmap-labels { display: grid; width: 100%; height: 20px; align-items: start; }
 .deploy-heatmap-labels > span { overflow: visible; color: rgb(100 116 139); font-size: 10px; line-height: 16px; white-space: nowrap; }
 .deploy-heatmap-grid > button { min-width: 0; padding: 0; border: 0; }

@@ -34,6 +34,8 @@ check "跳转目标为登录页" 1 "$(echo "$LOGIN_LOC" | grep -c '/login')"
 
 echo "== 认证 =="
 check "me 未登录返回 401" 401 "$(code "$BASE/api/auth/me")"
+check "请求日志未登录拒绝" 401 "$(code "$BASE/api/request-logs")"
+check "请求日志实时订阅未登录拒绝" 401 "$(code "$BASE/api/request-logs/events")"
 check "错误密码被拒绝"      401 "$(code -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' -d '{"username":"demo","password":"wrong"}')"
 
 LOGIN=$(curl -s -c "$JAR_DEMO" -w '\n%{http_code}' -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' -d '{"username":"demo","password":"demo1234"}')
@@ -56,7 +58,7 @@ fi
 # 登录后页面巡检：逐页确认服务端渲染没有异常（曾出现 /trading 因 SSR 访问
 # localStorage 直接 500 而测试没发现的情况，这里把主要页面都跑一遍）
 echo "== 页面巡检（登录后） =="
-for PAGE in /holdings /watchlist /fire /global /trading /celebs /earnings /activities /attachments /users /library /cards /settings /asset-analysis /api-docs /deploy-status /simple-app; do
+for PAGE in /holdings /watchlist /fire /global /trading /celebs /earnings /activities /attachments /users /library /cards /settings /asset-analysis /api-docs /deploy-status /api-requests /simple-app; do
   check "GET ${PAGE}（登录后）" 200 "$(code -b "$JAR_DEMO" "$BASE$PAGE")"
 done
 

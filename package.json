@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/prepare-assets.mjs",
+    "predev": "node scripts/generate-api-request-routes.mjs && node scripts/prepare-assets.mjs",
     "dev": "NEXT_DIST_DIR=.next-dev next dev -H 0.0.0.0 -p 3000",
-    "prebuild": "node scripts/generate-showcase-ktx-worker.mjs",
+    "prebuild": "node scripts/generate-api-request-routes.mjs && node scripts/generate-showcase-ktx-worker.mjs",
     "build": "next build",
     "prestart": "node scripts/prepare-assets.mjs",
     "start": "next start -H 0.0.0.0 -p 3000",
@@ -14,7 +14,7 @@
     "check:commit-title": "node scripts/check-commit-title.mjs",
     "smoke": "bash scripts/smoke-test.sh",
     "smoke:ci": "bash scripts/smoke-ci.sh",
-    "test:review": "node tests/asset-migration.mjs && node tests/site-review.cjs && node tests/passkeys.cjs && node tests/passkey-settings.cjs && node tests/rate-limit.cjs && node tests/app-auth.cjs && node tests/market-channel.cjs && node tests/history-channel.cjs && node tests/transfer-channel.cjs && node tests/asset-lookup.cjs",
+    "test:review": "node tests/asset-migration.mjs && node tests/site-review.cjs && node tests/passkeys.cjs && node tests/passkey-settings.cjs && node tests/rate-limit.cjs && node tests/app-auth.cjs && node tests/market-channel.cjs && node tests/history-channel.cjs && node tests/transfer-channel.cjs && node tests/asset-lookup.cjs && node tests/api-request-logs.cjs",
     "test:passkeys": "node tests/passkeys.cjs",
     "clean:caches": "node scripts/clean-next-cache.mjs",
     "clean:dsstore": "find .. -name .DS_Store -not -path '*/node_modules/*' -delete && echo '已清理 .DS_Store'"
