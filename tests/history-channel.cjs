@@ -5,6 +5,10 @@ const path = require('node:path');
 const Module = require('node:module');
 const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
+// The real limiter stays active, but SQLite would start dividend settlement and
+// contaminate synthetic fetch counts (and touch the developer's application DB).
+process.env.RATE_LIMIT_STORE = 'memory';
+let databaseReads = 0;
 const resolve = Module._resolveFilename;
 Module._resolveFilename = function(id, parent, ...rest) { return resolve.call(this, id.startsWith('@/') ? path.join(root, id.slice(2)) : id, parent, ...rest); };
 require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
@@ -12,6 +16,9 @@ let settings = { futuHost: 'localhost', futuPort: '11111' };
 const detailReads = { quotes: 0, rates: 0, cap: 0 };
 const load = Module._load;
 Module._load = function(id, parent, ...rest) {
+  if (Module._resolveFilename(id, parent, ...rest) === path.join(root, 'lib/db.ts')) {
+    return { getDb() { databaseReads++; throw new Error('History regression must not access the application database'); } };
+  }
   if (parent?.filename === path.join(root, 'lib/kline.ts')) {
     if (id === './settings') return { getSiteSettings: () => settings };
     if (id === './futuQuotes') return { fetchFutuDailyKline: async () => { throw new Error('Unavailable OpenD'); } };
@@ -124,6 +131,14 @@ async function test(name, run) { await run(); count++; console.log('PASS ' + nam
       modern(new Request('https://fire.test/api/v1/kline?market=HK&code=00557'))
     ]);
     assert.equal(calls, 1); assert.deepEqual((await web.json()).closes, (await app.json()).data.closes.slice(-12));
+  });
+  await test('history routes use the real memory limiter without loading or accessing the application database', async () => {
+    assert.equal(databaseReads, 0);
+    assert.equal(require.cache[path.join(root, 'lib/db.ts')], undefined);
+    const { rateLimit } = require('../lib/rateLimit.ts');
+    assert.equal(rateLimit('history-regression-budget', 1, 60_000), true);
+    assert.equal(rateLimit('history-regression-budget', 1, 60_000), false);
+    assert.equal(databaseReads, 0);
   });
   console.log(`PASS ${count} history channel suites`);
 })().catch(error => { console.error(error); process.exitCode = 1; });
