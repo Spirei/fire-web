@@ -4681,7 +4681,7 @@ export const V0_1_45_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_46_ENTRY: VersionEntry = {
   ...V0_1_45_ENTRY,
   version: "v0.1.46",
   date: "2026-09-30",
@@ -4712,11 +4712,23 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_46_ENTRY,
+  version: "v0.1.47",
+  date: "2026-10-01",
+  summary: "手机设置页按可见高度滚动，一加可以滑到应用授权。",
+  software: V0_1_46_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.47" } : item),
+  changes: [
+    { kind: "fix", title: "一加设置页滑到应用授权", desc: "手机设置页改为占满浏览器当前可见高度，账号与安全的列表只在这块区域内滚动。一加 13T 这类底部工具栏不随列表滚动收起时，「应用授权」可以滑到工具栏上方；iPhone 仍按可见区域滚动。横屏手机同样避开工具栏遮挡。" }
+  ]
+};
+
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_46_ENTRY,
   V0_1_45_ENTRY,
   V0_1_44_ENTRY,
   V0_1_43_ENTRY,

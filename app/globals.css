@@ -6421,8 +6421,60 @@ button.PhotoView-Slider__toolbarIcon {
   body:has(.records-app.is-settings) .assistant-launcher[aria-pressed="false"] { display:none; }
   .app-shell-root:has(.records-app.is-settings) .app-shell-header,
   .app-shell-root:has(.records-app.is-settings) .app-shell-footer { display:none; }
-  .app-shell-main:has(.records-app.is-settings) { padding:0 !important; }
-  .records-app.is-settings { padding:0; margin:0; width:100%; }
+  /* 一加等浏览器的底部工具栏不随内部滚动收起，100dvh 会高过可见区域，滑到底时「应用授权」仍停在工具栏下面。按可见高度固定整页，只让列表在这块区域内滚动。 */
+  html:has(.records-app.is-settings),
+  body:has(.records-app.is-settings) { height:100%; overflow:hidden; }
+  .app-shell-root:has(.records-app.is-settings) {
+    position:fixed;
+    left:0;
+    right:0;
+    top:var(--settings-visual-top, 0px);
+    width:100%;
+    height:var(--settings-visual-height, 100svh);
+    min-height:0;
+    overflow:hidden;
+    z-index:40;
+  }
+  .app-shell-main:has(.records-app.is-settings) {
+    display:flex;
+    flex:1 1 auto;
+    flex-direction:column;
+    height:100%;
+    min-height:0;
+    overflow:hidden;
+    padding:0 !important;
+  }
+  .records-app.is-settings {
+    display:flex;
+    flex:1 1 auto;
+    flex-direction:column;
+    align-items:stretch;
+    width:100%;
+    height:100%;
+    min-height:0;
+    margin:0;
+    padding:0;
+    overflow:hidden;
+  }
+  .records-app.is-settings .records-content,
+  .records-app.is-settings .tab-panel,
+  .records-app.is-settings .sv-win-root,
+  .records-app.is-settings .sw-window,
+  .records-app.is-settings .settings-page,
+  .records-app.is-settings .sw-content,
+  .records-app.is-settings .sw-window > .relative,
+  .records-app.is-settings .sw-window > .relative > .h-full:not(.hidden) {
+    display:flex;
+    flex:1 1 auto;
+    flex-direction:column;
+    width:100%;
+    height:auto;
+    min-height:0;
+    max-height:100%;
+    overflow:hidden;
+  }
+  .records-app.is-settings .settings-mobile-toolbar,
+  .records-app.is-settings .sw-page-head { flex:none; }
   .sc-mobile-brand { display:block; margin-bottom:10px; font-size:14px; font-weight:600; }
   .settings-mobile-toolbar { display:flex; justify-content:flex-end; padding:0 14px; color:rgb(var(--site-ink)); }
   .settings-mobile-toolbar button { display:grid; place-items:center; width:44px; height:44px; }
@@ -6436,12 +6488,14 @@ button.PhotoView-Slider__toolbarIcon {
   .sv-center .sw-page-head { padding:16px 20px 18px; }
   .sv-center .sw-page-head h2 { font-size:24px; }
   .sv-center .sw-page-head p { font-size:13px; }
-  /* 窄屏设置靠文档滚动。这一层内容未溢出时，auto 加 overscroll contain 会吃掉触摸，底部区块划不到。不能只改 overflow-x，否则 y 会被算回 auto。 */
   .sv-center .sw-content-scroll {
-    overflow: visible;
-    overscroll-behavior: auto;
-    -webkit-overflow-scrolling: auto;
-    padding: 0 20px calc(28px + env(safe-area-inset-bottom));
+    flex:1 1 auto;
+    min-height:0;
+    overflow-x:hidden;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+    padding:0 20px calc(28px + env(safe-area-inset-bottom));
   }
   .sv-center .sc-search-button { display:none; }
   .sv-center .sc-back { min-height:36px; margin-bottom:8px; }

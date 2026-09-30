@@ -170,6 +170,39 @@ export default function RecordsApp({
   const [userLogs, setUserLogs] = useState<SystemLog[]>(initialUserLogs);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
+  useEffect(() => {
+    const root = document.documentElement;
+    const query = window.matchMedia("(max-width: 767px), (min-width: 768px) and (max-width: 1023px) and (max-height: 520px)");
+    let frame = 0;
+    const apply = () => {
+      frame = 0;
+      const viewport = window.visualViewport;
+      if (activeTab !== "settings" || !query.matches || !viewport) {
+        root.style.removeProperty("--settings-visual-height");
+        root.style.removeProperty("--settings-visual-top");
+        return;
+      }
+      const height = `${Math.round(viewport.height)}px`;
+      const top = `${Math.round(viewport.offsetTop)}px`;
+      if (root.style.getPropertyValue("--settings-visual-height") !== height) root.style.setProperty("--settings-visual-height", height);
+      if (root.style.getPropertyValue("--settings-visual-top") !== top) root.style.setProperty("--settings-visual-top", top);
+    };
+    const schedule = () => { if (!frame) frame = window.requestAnimationFrame(apply); };
+    apply();
+    query.addEventListener("change", schedule);
+    window.visualViewport?.addEventListener("resize", schedule);
+    window.visualViewport?.addEventListener("scroll", schedule);
+    window.addEventListener("orientationchange", schedule);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      query.removeEventListener("change", schedule);
+      window.visualViewport?.removeEventListener("resize", schedule);
+      window.visualViewport?.removeEventListener("scroll", schedule);
+      window.removeEventListener("orientationchange", schedule);
+      root.style.removeProperty("--settings-visual-height");
+      root.style.removeProperty("--settings-visual-top");
+    };
+  }, [activeTab]);
   const [panelDirection, setPanelDirection] = useState("none");
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;

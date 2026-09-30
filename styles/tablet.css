@@ -54,6 +54,21 @@
   .sv-center .sw-content-scroll { padding:0 20px 24px; }
 }
 
+/* 横屏手机宽度已超过 767，仍会命中上面的平板内滚动。浏览器底部工具栏不收起时，100dvh 高过可见区域，列表滑到底也到不了最后一项。 */
+@media (min-width: 768px) and (max-width: 1023px) and (max-height: 520px) {
+  html:has(.records-app.is-settings),
+  body:has(.records-app.is-settings) { height:100%; overflow:hidden; }
+  .app-shell-root:has(.records-app.is-settings) {
+    position:fixed;
+    left:0;
+    right:0;
+    top:var(--settings-visual-top, 0px);
+    width:100%;
+    height:var(--settings-visual-height, 100svh);
+    overflow:hidden;
+  }
+}
+
 @media (min-width: 768px) and (max-height: 700px) {
   .sv-center .sw-page-head { padding-top:16px; padding-bottom:14px; }
   .sv-center .sw-side-foot { padding-block:10px; }
