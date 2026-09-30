@@ -176,6 +176,9 @@ export default function RecordsApp({
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
   const pageMemory = useRef(new Map<string, string>());
+  const scrollMemory = useRef(new Map<string, { top: number; inner: number }>());
+  const scrollIntentRef = useRef(false);
+  const quoteFetchedAtRef = useRef(0);
   const panels = useRef(new Map<TabKey, ReactNode>());
   const restoreAssetPosition = useCallback(() => {
     if (!restoreAssetScrollRef.current || !assetReturnRef.current) return;
@@ -187,10 +190,21 @@ export default function RecordsApp({
     });
     return () => cancelAnimationFrame(frame);
   }, []);
+  // 只在本次换页是我们发起时，于绘制前恢复该页自己的滚动。首帧没有意图，刷新位置保持浏览器原来的地方。
   useLayoutEffect(() => {
-    if (activeTab !== "assets") return;
-    return restoreAssetPosition();
-  }, [activeTab, restoreAssetPosition]);
+    if (!scrollIntentRef.current) return;
+    scrollIntentRef.current = false;
+    if (activeTab === "assets" && restoreAssetScrollRef.current && assetReturnRef.current) {
+      const position = assetReturnRef.current;
+      restoreAssetScrollRef.current = false;
+      window.scrollTo({ top: position.top, behavior: "instant" });
+      contentRef.current?.scrollTo({ top: position.innerTop, behavior: "instant" });
+      return;
+    }
+    const spot = scrollMemory.current.get(activeTab) ?? { top: 0, inner: 0 };
+    window.scrollTo({ top: spot.top, behavior: "instant" });
+    contentRef.current?.scrollTo({ top: spot.inner, behavior: "instant" });
+  }, [activeTab]);
   const skipInitialActivityFetchRef = useRef(initialTab === "activities");
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
   const [mobileNavigationOrder, setMobileNavigationOrder] = useState(initialSettings.mobileNavigationOrder ?? []);
@@ -419,6 +433,7 @@ export default function RecordsApp({
         if (merged[record.id] === result.quotes[record.id] && result.quotes[record.id]) loadedQuoteKeysRef.current.add(quoteInstrumentKey(record));
       });
       setQuoteAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
+      quoteFetchedAtRef.current = Date.now();
       try {
         const refreshedAt = new Date();
         localStorage.setItem("fire:last-quotes-refresh", refreshedAt.toLocaleTimeString("zh-CN", { hour12: false }));
@@ -442,15 +457,30 @@ export default function RecordsApp({
     // 自选股页面由自身的刷新间隔控件管理定时器，避免这里的 30 秒兜底计时器覆盖用户选择。
     if (records.length === 0 || !["holdings", "assets", "fire", "pnl", "watchlist"].includes(activeTab)) return;
     if (activeTab === "watchlist") { void refreshQuotes({ missingOnly: true }); return; }
-    refreshQuotes();
-    // 交易时段 30 秒刷新；休市时回调只做本地会话判断，不发送行情请求。
-    const timer = setInterval(refreshQuotes, 30000);
-    return () => clearInterval(timer);
+    // 刚拿到的行情不因为换页再请求一轮，免得新页面刚出现就跟着重绘。
+    const elapsed = quoteFetchedAtRef.current ? Date.now() - quoteFetchedAtRef.current : 30_000;
+    const wait = Math.max(0, 30_000 - elapsed);
+    let interval = 0;
+    const start = window.setTimeout(() => {
+      void refreshQuotes();
+      interval = window.setInterval(() => { void refreshQuotes(); }, 30_000);
+    }, wait);
+    return () => {
+      window.clearTimeout(start);
+      window.clearInterval(interval);
+    };
   }, [records.length, refreshQuotes, activeTab]);
 
   const rememberPage = useCallback((key: string) => {
     pageMemory.current.set(key, `${window.location.pathname}${window.location.search}${window.location.hash}`);
   }, []);
+  const rememberLeaving = useCallback((from: string) => {
+    rememberPage(from);
+    scrollMemory.current.set(from, {
+      top: window.scrollY,
+      inner: contentRef.current?.scrollTop || 0
+    });
+  }, [rememberPage]);
   const retainTab = useCallback((key: TabKey) => {
     setMountedTabs((current) => current.includes(key) ? current : [...current, key]);
   }, []);
@@ -463,7 +493,10 @@ export default function RecordsApp({
   const navigateTo = useCallback(
     (key: TabKey, sub?: string | null) => {
       const from = activeTabRef.current;
-      if (from !== key) rememberPage(from);
+      if (from !== key) {
+        rememberLeaving(from);
+        scrollIntentRef.current = true;
+      }
       setPanelDirection(mobilePanelDirection(from, key, mobilePrimaryOrder));
       activeTabRef.current = key;
       setActiveTab(key);
@@ -473,13 +506,14 @@ export default function RecordsApp({
       if (key === "settings") {
         setSettingsSub(sub ?? null);
         pageMemory.current.delete(key);
+        scrollMemory.current.set(key, { top: 0, inner: 0 });
         reopenTab(key);
         window.history.pushState({}, "", fallback + (sub ? `?sub=${sub}` : ""));
       } else {
         window.history.pushState({}, "", pageMemory.current.get(key) || fallback);
       }
     },
-    [navTabs, mobilePrimaryOrder, rememberPage, retainTab, reopenTab]
+    [navTabs, mobilePrimaryOrder, rememberLeaving, retainTab, reopenTab]
   );
 
   const selectTab = useCallback(
@@ -506,7 +540,10 @@ export default function RecordsApp({
       : navTabs.find((tab) => (tab.url || `/${tab.key}`) === url.pathname)?.key;
     if (!target) return;
     const next = target as TabKey;
-    if (activeTabRef.current !== next) rememberPage(activeTabRef.current);
+    if (activeTabRef.current !== next) {
+      rememberLeaving(activeTabRef.current);
+      scrollIntentRef.current = true;
+    }
     const nextUrl = `${url.pathname}${url.search}${url.hash}`;
     pageMemory.current.set(next, nextUrl);
     setPanelDirection(mobilePanelDirection(activeTabRef.current, next, mobilePrimaryOrder));
@@ -514,7 +551,7 @@ export default function RecordsApp({
     setActiveTab(next);
     retainTab(next);
     window.history.pushState({}, "", nextUrl);
-  }, [navTabs, mobilePrimaryOrder, rememberPage, retainTab]);
+  }, [navTabs, mobilePrimaryOrder, rememberLeaving, retainTab]);
 
   /* ---------- 导航页签可拖动排序 + 自动保存 ---------- */
   const tabDragKeyRef = useRef<TabKey | null>(null);
@@ -585,6 +622,7 @@ export default function RecordsApp({
       reopenTab(key);
       setPanelDirection(mobilePanelDirection(activeTabRef.current, key, mobilePrimaryOrder));
       if (activeTabRef.current === "pnl" && key === "assets") restoreAssetScrollRef.current = Boolean(assetReturnRef.current);
+      if (activeTabRef.current !== key) scrollIntentRef.current = true;
       activeTabRef.current = key;
       setActiveTab(key);
       retainTab(key);
@@ -846,6 +884,30 @@ export default function RecordsApp({
     () => sidebarTabs.filter((tab) => !["users", "attachments", "library", "cards", "activities", "settings"].includes(tab.key)).map((tab) => tab.key),
     [sidebarTabs]
   );
+  useEffect(() => {
+    const keys = sidebarTabs.map((tab) => tab.key).filter((key) => key !== activeTabRef.current);
+    let index = 0;
+    let handle = 0;
+    const win = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const pump = () => {
+      if (index >= keys.length) return;
+      preloadView(keys[index]);
+      index += 1;
+      handle = schedule(pump);
+    };
+    function schedule(task: () => void) {
+      if (typeof win.requestIdleCallback === "function") return win.requestIdleCallback(task, { timeout: 1200 });
+      return window.setTimeout(task, 180);
+    }
+    handle = schedule(pump);
+    return () => {
+      if (typeof win.cancelIdleCallback === "function" && typeof win.requestIdleCallback === "function") win.cancelIdleCallback(handle);
+      else window.clearTimeout(handle);
+    };
+  }, [sidebarTabs]);
 
   const updateSidebarScroll = useCallback(() => {
     const nav = desktopNavRef.current;
@@ -969,7 +1031,6 @@ export default function RecordsApp({
         {activeTab !== "settings" && <WorkspaceNavigation items={sidebarTabs} order={mobileNavigationOrder} activeKey={activeTab} onPrepare={key => preloadView(key as TabKey)} onSelect={key => {
           if (key === activeTab) return;
           selectTab(key as TabKey);
-          window.scrollTo({ top: 0, behavior: "instant" });
         }} />}
         {/* 设置采用独立的分层页面 */}
         {activeTab === "settings" && <div className="settings-mobile-toolbar"><button type="button" aria-label="关闭设置" onClick={() => selectTab("holdings")}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>}
@@ -1029,9 +1090,8 @@ export default function RecordsApp({
               onReady={restoreAssetPosition}
               onOpenPnlAnalysis={() => {
                 assetReturnRef.current = { url: `${window.location.pathname}${window.location.search}${window.location.hash}`, top: window.scrollY, innerTop: contentRef.current?.scrollTop || 0 };
+                scrollMemory.current.set("pnl", { top: 0, inner: 0 });
                 selectTab("pnl");
-                window.scrollTo({ top: 0, behavior: "instant" });
-                contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
               }}
             />
           )}

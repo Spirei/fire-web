@@ -230,6 +230,12 @@ function fontHeaderFixture(ext) {
     assert(app.includes('hidden={!active}'));
     assert(app.includes('panels.current.set(tab, node)'));
     assert(app.includes('pageMemory.current.get(key) || fallback'));
+    assert(app.includes('scrollMemory.current.set(from,'));
+    assert(app.includes('scrollMemory.current.set("pnl", { top: 0, inner: 0 })'));
+    assert(app.includes('scrollIntentRef.current = true'));
+    assert(app.includes('quoteFetchedAtRef.current ? Date.now() - quoteFetchedAtRef.current'));
+    assert(app.includes('preloadView(keys[index])'));
+    assert(!app.includes('selectTab(key as TabKey);\n          window.scrollTo({ top: 0, behavior: "instant" });'));
     assert(css.includes(':has(.tab-panel:not([hidden]) .assistant-page)'));
     const preload = fs.readFileSync(path.join(root, 'lib/viewPreload.ts'), 'utf8');
     assert(preload.includes('assets: () => Promise.all(['));
