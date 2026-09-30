@@ -220,11 +220,17 @@ function fontHeaderFixture(ext) {
     assert.equal(accentVariables('white')['--site-action-icon-filter'], 'brightness(0)');
     assert.equal(accentVariables('brown')['--site-action-icon-filter'], 'brightness(0) invert(1)');
   });
-  await test('desktop workspace switches do not replay page fades and asset intent primes nested chart code', () => {
+  await test('workspace switches stay mounted and do not replay page fades, and asset intent primes nested chart code', () => {
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
-    assert(css.includes('@media(min-width:768px) {\n  body:has([data-capsule-scope="non-home"]) .records-content > .tab-panel,'));
+    const app = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
+    assert(css.includes('.records-content > .tab-panel {\n  animation: none;\n}'));
+    assert(css.includes('.records-content > .tab-panel[hidden] {\n  display: none !important;\n}'));
     assert(css.includes('.sc-detail-dialog .tab-panel { animation:none; }'));
-    assert(css.includes('animation:mobile-panel-forward 200ms'));
+    assert(!css.includes('mobile-panel-forward'));
+    assert(app.includes('hidden={!active}'));
+    assert(app.includes('panels.current.set(tab, node)'));
+    assert(app.includes('pageMemory.current.get(key) || fallback'));
+    assert(css.includes(':has(.tab-panel:not([hidden]) .assistant-page)'));
     const preload = fs.readFileSync(path.join(root, 'lib/viewPreload.ts'), 'utf8');
     assert(preload.includes('assets: () => Promise.all(['));
     assert(preload.includes('import("@/components/PnlTrendChart")'));

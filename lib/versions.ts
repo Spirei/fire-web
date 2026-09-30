@@ -4716,9 +4716,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_46_ENTRY,
   version: "v0.1.47",
   date: "2026-10-01",
-  summary: "Chrome 里手机设置页整页滚动，可以滑到应用授权。",
+  summary: "后台页面互相切换会立即到达；Chrome 里手机设置页可以滑到应用授权。",
   software: V0_1_46_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.47" } : item),
   changes: [
+    { kind: "fix", title: "工作区页面切换立即到达", desc: "账户资产、资产分析和其余后台页面互相切换时，不再先淡入或滑入，也不再把已经打开的页面拆掉重画。手机、平板和桌面点击后直接看到目标页面。第一次打开某个页面仍会加载该页；从侧栏进入设置仍回到设置首页。浏览器前进后退按地址重新打开对应页面。" },
     { kind: "fix", title: "Chrome 设置页可滑到应用授权", desc: "Chrome 底部工具栏不缩小页面，也不随设置里的列表收起。账号与安全滑到底时，「应用授权」仍停在工具栏下面。手机和横屏手机改为整页滚动，并在列表底部留出工具栏的高度，滑到底可以看到「应用授权」。iPhone 同样能滑到这一组；平板仍在设置页内部滚动。" }
   ]
 };

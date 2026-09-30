@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import MobileBackGesture from "@/components/MobileBackGesture";
 import { mobilePanelDirection } from "@/lib/mobileNavigation";
@@ -171,8 +171,12 @@ export default function RecordsApp({
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
   const [panelDirection, setPanelDirection] = useState("none");
+  const [mountedTabs, setMountedTabs] = useState<TabKey[]>(() => [initialTab as TabKey]);
+  const [panelEpoch, setPanelEpoch] = useState<Partial<Record<TabKey, number>>>({});
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
+  const pageMemory = useRef(new Map<string, string>());
+  const panels = useRef(new Map<TabKey, ReactNode>());
   const restoreAssetPosition = useCallback(() => {
     if (!restoreAssetScrollRef.current || !assetReturnRef.current) return;
     const position = assetReturnRef.current;
@@ -183,6 +187,10 @@ export default function RecordsApp({
     });
     return () => cancelAnimationFrame(frame);
   }, []);
+  useLayoutEffect(() => {
+    if (activeTab !== "assets") return;
+    return restoreAssetPosition();
+  }, [activeTab, restoreAssetPosition]);
   const skipInitialActivityFetchRef = useRef(initialTab === "activities");
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
   const [mobileNavigationOrder, setMobileNavigationOrder] = useState(initialSettings.mobileNavigationOrder ?? []);
@@ -440,22 +448,38 @@ export default function RecordsApp({
     return () => clearInterval(timer);
   }, [records.length, refreshQuotes, activeTab]);
 
+  const rememberPage = useCallback((key: string) => {
+    pageMemory.current.set(key, `${window.location.pathname}${window.location.search}${window.location.hash}`);
+  }, []);
+  const retainTab = useCallback((key: TabKey) => {
+    setMountedTabs((current) => current.includes(key) ? current : [...current, key]);
+  }, []);
+  const reopenTab = useCallback((key: TabKey) => {
+    panels.current.delete(key);
+    setPanelEpoch((current) => ({ ...current, [key]: (current[key] ?? 0) + 1 }));
+  }, []);
+
   // 统一的无感导航：只改状态 + 地址栏，不触发路由重载
   const navigateTo = useCallback(
     (key: TabKey, sub?: string | null) => {
-      setPanelDirection(mobilePanelDirection(activeTabRef.current, key, mobilePrimaryOrder));
+      const from = activeTabRef.current;
+      if (from !== key) rememberPage(from);
+      setPanelDirection(mobilePanelDirection(from, key, mobilePrimaryOrder));
       activeTabRef.current = key;
       setActiveTab(key);
+      retainTab(key);
       const tab = navTabs.find((t) => t.key === key);
-      const url = key === "pnl" ? "/asset-pnl-analysis" : tab?.url || `/${key}`;
+      const fallback = key === "pnl" ? "/asset-pnl-analysis" : tab?.url || `/${key}`;
       if (key === "settings") {
         setSettingsSub(sub ?? null);
-        window.history.pushState({}, "", url + (sub ? `?sub=${sub}` : ""));
+        pageMemory.current.delete(key);
+        reopenTab(key);
+        window.history.pushState({}, "", fallback + (sub ? `?sub=${sub}` : ""));
       } else {
-        window.history.pushState({}, "", url);
+        window.history.pushState({}, "", pageMemory.current.get(key) || fallback);
       }
     },
-    [navTabs, mobilePrimaryOrder]
+    [navTabs, mobilePrimaryOrder, rememberPage, retainTab, reopenTab]
   );
 
   const selectTab = useCallback(
@@ -481,10 +505,16 @@ export default function RecordsApp({
       ? "pnl"
       : navTabs.find((tab) => (tab.url || `/${tab.key}`) === url.pathname)?.key;
     if (!target) return;
-    setPanelDirection(mobilePanelDirection(activeTabRef.current, target, mobilePrimaryOrder));
-    setActiveTab(target as TabKey);
-    window.history.pushState({}, "", `${url.pathname}${url.search}`);
-  }, [navTabs, mobilePrimaryOrder]);
+    const next = target as TabKey;
+    if (activeTabRef.current !== next) rememberPage(activeTabRef.current);
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    pageMemory.current.set(next, nextUrl);
+    setPanelDirection(mobilePanelDirection(activeTabRef.current, next, mobilePrimaryOrder));
+    activeTabRef.current = next;
+    setActiveTab(next);
+    retainTab(next);
+    window.history.pushState({}, "", nextUrl);
+  }, [navTabs, mobilePrimaryOrder, rememberPage, retainTab]);
 
   /* ---------- 导航页签可拖动排序 + 自动保存 ---------- */
   const tabDragKeyRef = useRef<TabKey | null>(null);
@@ -549,25 +579,28 @@ export default function RecordsApp({
 
   // 浏览器前进/后退时同步页签
   useEffect(() => {
+    function showFromHistory(key: TabKey) {
+      const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      pageMemory.current.set(key, here);
+      reopenTab(key);
+      setPanelDirection(mobilePanelDirection(activeTabRef.current, key, mobilePrimaryOrder));
+      if (activeTabRef.current === "pnl" && key === "assets") restoreAssetScrollRef.current = Boolean(assetReturnRef.current);
+      activeTabRef.current = key;
+      setActiveTab(key);
+      retainTab(key);
+      if (key === "settings") setSettingsSub(new URLSearchParams(window.location.search).get("sub"));
+    }
     function onPop() {
       if (window.location.pathname === "/asset-pnl-analysis") {
-        setPanelDirection(mobilePanelDirection(activeTabRef.current, "pnl", mobilePrimaryOrder));
-        setActiveTab("pnl");
+        showFromHistory("pnl");
         return;
       }
       const tab = navTabs.find((t) => (t.url || `/${t.key}`) === window.location.pathname);
-      if (tab) {
-        setPanelDirection(mobilePanelDirection(activeTabRef.current, tab.key, mobilePrimaryOrder));
-        if (activeTabRef.current === "pnl" && tab.key === "assets") restoreAssetScrollRef.current = Boolean(assetReturnRef.current);
-        setActiveTab(tab.key as TabKey);
-        if (tab.key === "settings") {
-          setSettingsSub(new URLSearchParams(window.location.search).get("sub"));
-        }
-      }
+      if (tab) showFromHistory(tab.key as TabKey);
     }
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [navTabs, mobilePrimaryOrder]);
+  }, [navTabs, mobilePrimaryOrder, reopenTab, retainTab]);
 
   useEffect(() => {
     function onVisibility() {
@@ -941,7 +974,13 @@ export default function RecordsApp({
         {/* 设置采用独立的分层页面 */}
         {activeTab === "settings" && <div className="settings-mobile-toolbar"><button type="button" aria-label="关闭设置" onClick={() => selectTab("holdings")}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>}
 
-        <div key={activeTab} data-direction={panelDirection} className="tab-panel min-w-0">
+        {mountedTabs.map((tab) => {
+          const active = tab === activeTab;
+          // 隐藏页沿用上次绘制的节点，行情刷新不会带动它重绘，也不会改地址栏。
+          let node = panels.current.get(tab) ?? null;
+          if (active) {
+            node = (
+            <>
           {activeTab === "watchlist" && (
             <WatchlistView
               initialSymbol={initialSymbol}
@@ -1023,7 +1062,16 @@ export default function RecordsApp({
           {activeTab === "settings" && (
             <SettingsWindow version={initialVersion}>{settingsPanel}</SettingsWindow>
           )}
-        </div>
+            </>
+            );
+            panels.current.set(tab, node);
+          }
+          return (
+            <div key={`${tab}:${panelEpoch[tab] ?? 0}`} hidden={!active} inert={!active} data-direction={active ? panelDirection : "none"} className="tab-panel min-w-0">
+              {node}
+            </div>
+          );
+        })}
       </div>
     </div>
     {desktopViewport && activeTab !== "assistant" && floatingAssistantReady && <DeferredAssistant page={activeTab} symbol={initialSymbol} userId={user.id} initialHistory={null} onNavigate={navigateFromAssistant} />}

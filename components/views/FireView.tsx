@@ -358,6 +358,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
     const father = { x: 100, y: 105, vx: 1.15, vy: .22 };
     const child = { x: 250, y: 175, vx: 1.45, vy: -.18 };
     let raf = 0;
+    let running = false;
     let previous = performance.now();
     const stepFish = (fish: typeof father, targetX: number, targetY: number, personality: number, other: typeof father, width: number, height: number, time: number) => {
       const dt = Math.min(2, Math.max(.45, (time - previous) / 16.67));
@@ -383,6 +384,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
       if (fish.y < 8) fish.vy += .1; if (fish.y > height - 92) fish.vy -= .1;
     };
     const tick = (time: number) => {
+      if (!running) return;
       const width = stage.clientWidth || 900;
       const height = stage.clientHeight || 340;
       const pointer = fishPointerRef.current;
@@ -401,8 +403,19 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
       stage.style.setProperty("--fish-child-facing", child.vx >= 0 ? "1" : "-1");
       raf = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const stop = () => { running = false; cancelAnimationFrame(raf); };
+    const start = () => {
+      if (running) return;
+      running = true;
+      previous = performance.now();
+      raf = requestAnimationFrame(tick);
+    };
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) start();
+      else stop();
+    });
+    observer.observe(stage);
+    return () => { stop(); observer.disconnect(); };
   }, [hydrated, oceanSceneEnabled]);
   const [annualExpense, setAnnualExpense] = useState(() => Number(lsGet("fire:p-expense", "60000")) || 60000);
   const [withdrawalRate, setWithdrawalRate] = useState(() => Number(lsGet("fire:p-withdrawal", "4")) || 4); // %
