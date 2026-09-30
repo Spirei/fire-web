@@ -6436,7 +6436,13 @@ button.PhotoView-Slider__toolbarIcon {
   .sv-center .sw-page-head { padding:16px 20px 18px; }
   .sv-center .sw-page-head h2 { font-size:24px; }
   .sv-center .sw-page-head p { font-size:13px; }
-  .sv-center .sw-content-scroll { padding:0 20px calc(28px + env(safe-area-inset-bottom)); }
+  /* 窄屏设置靠文档滚动。这一层内容未溢出时，auto 加 overscroll contain 会吃掉触摸，底部区块划不到。不能只改 overflow-x，否则 y 会被算回 auto。 */
+  .sv-center .sw-content-scroll {
+    overflow: visible;
+    overscroll-behavior: auto;
+    -webkit-overflow-scrolling: auto;
+    padding: 0 20px calc(28px + env(safe-area-inset-bottom));
+  }
   .sv-center .sc-search-button { display:none; }
   .sv-center .sc-back { min-height:36px; margin-bottom:8px; }
   .sv-center .sc-setting-row,.sv-center .sc-account-card { padding:16px; gap:12px; min-height:60px; }
