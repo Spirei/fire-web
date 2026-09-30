@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import MobileBackGesture from "@/components/MobileBackGesture";
 import { mobilePanelDirection } from "@/lib/mobileNavigation";
+import { currentAssistantPage, notifyAssistantPage, setAssistantPage } from "@/lib/assistantPage";
 import { useRouter } from "next/navigation";
 import {
   MARKET_LIST,
@@ -55,6 +56,9 @@ const GlobalPreviewView = dynamic(() => import("@/components/views/GlobalPreview
 const AssetPnlAnalysisView = dynamic(() => import("@/components/AssetPnlAnalysis"));
 const AssistantView = dynamic(() => import("@/components/views/AssistantView"));
 const DeferredAssistant = dynamic(() => import("@/components/DeferredAssistant"));
+const FloatingAssistant = memo(function FloatingAssistant({ symbol, userId, onNavigate }: { symbol?: string; userId: string; onNavigate: (path: string) => void }) {
+  return <DeferredAssistant page={currentAssistantPage()} symbol={symbol} userId={userId} initialHistory={null} onNavigate={onNavigate} />;
+});
 const FourDoorNavigator = dynamic(() => import("@/components/FourDoorNavigator"), { ssr: false, loading: () => <div className="four-door-zone" aria-hidden="true" /> });
 
 type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "assistant" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
@@ -193,18 +197,25 @@ export default function RecordsApp({
   }, []);
   // 只在本次换页是我们发起时，于绘制前恢复该页自己的滚动。首帧没有意图，刷新位置保持浏览器原来的地方。
   useLayoutEffect(() => {
-    if (!scrollIntentRef.current) return;
-    scrollIntentRef.current = false;
-    if (activeTab === "assets" && restoreAssetScrollRef.current && assetReturnRef.current) {
-      const position = assetReturnRef.current;
-      restoreAssetScrollRef.current = false;
-      window.scrollTo({ top: position.top, behavior: "instant" });
-      contentRef.current?.scrollTo({ top: position.innerTop, behavior: "instant" });
-      return;
+    try {
+      if (!scrollIntentRef.current) return;
+      scrollIntentRef.current = false;
+      if (activeTab === "assets" && restoreAssetScrollRef.current && assetReturnRef.current) {
+        const position = assetReturnRef.current;
+        restoreAssetScrollRef.current = false;
+        window.scrollTo({ top: position.top, behavior: "instant" });
+        contentRef.current?.scrollTo({ top: position.innerTop, behavior: "instant" });
+        return;
+      }
+      const spot = scrollMemory.current.get(activeTab) ?? { top: 0, inner: 0 };
+      window.scrollTo({ top: spot.top, behavior: "instant" });
+      contentRef.current?.scrollTo({ top: spot.inner, behavior: "instant" });
+    } finally {
+      document.documentElement.classList.remove("fire-workspace-switching");
     }
-    const spot = scrollMemory.current.get(activeTab) ?? { top: 0, inner: 0 };
-    window.scrollTo({ top: spot.top, behavior: "instant" });
-    contentRef.current?.scrollTo({ top: spot.inner, behavior: "instant" });
+  }, [activeTab]);
+  useLayoutEffect(() => {
+    notifyAssistantPage();
   }, [activeTab]);
   const skipInitialActivityFetchRef = useRef(initialTab === "activities");
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
@@ -482,6 +493,11 @@ export default function RecordsApp({
       inner: contentRef.current?.scrollTop || 0
     });
   }, [rememberPage]);
+  const preparePageSwitch = useCallback(() => {
+    document.documentElement.classList.add("fire-workspace-switching");
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && contentRef.current?.contains(focused)) focused.blur();
+  }, []);
   const retainTab = useCallback((key: TabKey) => {
     setMountedTabs((current) => current.includes(key) ? current : [...current, key]);
   }, []);
@@ -496,6 +512,7 @@ export default function RecordsApp({
     (key: TabKey, sub?: string | null) => {
       const from = activeTabRef.current;
       if (from !== key) {
+        preparePageSwitch();
         rememberLeaving(from);
         scrollIntentRef.current = true;
       }
@@ -515,7 +532,7 @@ export default function RecordsApp({
         window.history.pushState({}, "", pageMemory.current.get(key) || fallback);
       }
     },
-    [navTabs, mobilePrimaryOrder, rememberLeaving, retainTab, reopenTab]
+    [navTabs, mobilePrimaryOrder, preparePageSwitch, rememberLeaving, retainTab, reopenTab]
   );
 
   const selectTab = useCallback(
@@ -543,6 +560,7 @@ export default function RecordsApp({
     if (!target) return;
     const next = target as TabKey;
     if (activeTabRef.current !== next) {
+      preparePageSwitch();
       rememberLeaving(activeTabRef.current);
       scrollIntentRef.current = true;
     }
@@ -553,7 +571,7 @@ export default function RecordsApp({
     setActiveTab(next);
     retainTab(next);
     window.history.pushState({}, "", nextUrl);
-  }, [navTabs, mobilePrimaryOrder, rememberLeaving, retainTab]);
+  }, [navTabs, mobilePrimaryOrder, preparePageSwitch, rememberLeaving, retainTab]);
 
   /* ---------- 导航页签可拖动排序 + 自动保存 ---------- */
   const tabDragKeyRef = useRef<TabKey | null>(null);
@@ -624,7 +642,10 @@ export default function RecordsApp({
       reopenTab(key);
       setPanelDirection(mobilePanelDirection(activeTabRef.current, key, mobilePrimaryOrder));
       if (activeTabRef.current === "pnl" && key === "assets") restoreAssetScrollRef.current = Boolean(assetReturnRef.current);
-      if (activeTabRef.current !== key) scrollIntentRef.current = true;
+      if (activeTabRef.current !== key) {
+        preparePageSwitch();
+        scrollIntentRef.current = true;
+      }
       activeTabRef.current = key;
       setActiveTab(key);
       retainTab(key);
@@ -640,7 +661,7 @@ export default function RecordsApp({
     }
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [navTabs, mobilePrimaryOrder, reopenTab, retainTab]);
+  }, [navTabs, mobilePrimaryOrder, preparePageSwitch, reopenTab, retainTab]);
 
   useEffect(() => {
     function onVisibility() {
@@ -977,6 +998,7 @@ export default function RecordsApp({
     </div>
   );
 
+  if (typeof document !== "undefined") setAssistantPage(activeTab);
   // translate="no" + notranslate：整页禁止机器翻译。<html> 上已经声明过一次，这里在应用主体上再标一次——
   // 翻译扩展通常按「最近的祖先」判断要不要翻。翻译器会在水合前改写 DOM（连 title 属性都会动：
   // 实测把「繁體」改成了「繁体」），React 一比对就报 Hydration failed。站内的繁简 / 英文切换不受影响。
@@ -1139,14 +1161,14 @@ export default function RecordsApp({
             panelBuiltStamp.current.set(tab, panelDataStamp);
           }
           return (
-            <div key={`${tab}:${panelEpoch[tab] ?? 0}`} hidden={!active} inert={!active} data-direction={active ? panelDirection : "none"} className="tab-panel min-w-0">
+            <div key={`${tab}:${panelEpoch[tab] ?? 0}`} hidden={!active} data-direction={active ? panelDirection : "none"} className="tab-panel min-w-0">
               {node}
             </div>
           );
         })}
       </div>
     </div>
-    {desktopViewport && activeTab !== "assistant" && floatingAssistantReady && <DeferredAssistant page={activeTab} symbol={initialSymbol} userId={user.id} initialHistory={null} onNavigate={navigateFromAssistant} />}
+    {desktopViewport && activeTab !== "assistant" && floatingAssistantReady && <FloatingAssistant symbol={initialSymbol} userId={user.id} onNavigate={navigateFromAssistant} />}
     </>
   );
 }

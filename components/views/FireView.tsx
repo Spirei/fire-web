@@ -8,6 +8,7 @@ import CurrencyFlag from "@/components/CurrencyFlag";
 import { CURRENCIES, type CurrencyCode } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
 import FireReefCurrent from "@/components/FireReefCurrent";
+import { observePanelVisibility, panelIsShown } from "@/lib/panelVisibility";
 import { fmtMoneyAdaptive } from "@/lib/format";
 import FireAssetHeatmap from "@/components/FireAssetHeatmap";
 import { readFireAssetHistory, type FireAssetRecord } from "@/lib/fireAssetHistory";
@@ -410,12 +411,18 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
       previous = performance.now();
       raf = requestAnimationFrame(tick);
     };
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry?.isIntersecting) start();
+    let intersecting = false;
+    const sync = () => {
+      if (intersecting && panelIsShown(stage)) start();
       else stop();
+    };
+    const observer = new IntersectionObserver(([entry]) => {
+      intersecting = Boolean(entry?.isIntersecting);
+      sync();
     });
     observer.observe(stage);
-    return () => { stop(); observer.disconnect(); };
+    const releasePanel = observePanelVisibility(stage, sync);
+    return () => { stop(); observer.disconnect(); releasePanel(); };
   }, [hydrated, oceanSceneEnabled]);
   const [annualExpense, setAnnualExpense] = useState(() => Number(lsGet("fire:p-expense", "60000")) || 60000);
   const [withdrawalRate, setWithdrawalRate] = useState(() => Number(lsGet("fire:p-withdrawal", "4")) || 4); // %

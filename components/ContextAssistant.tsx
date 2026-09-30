@@ -13,6 +13,7 @@ import AssistantRichText from "@/components/AssistantRichText";
 import { useThemePreference } from "@/components/ThemePreferenceProvider";
 import { appConfirm } from "@/lib/appDialog";
 import { showToast } from "@/lib/toast";
+import { currentAssistantPage, subscribeAssistantPage } from "@/lib/assistantPage";
 
 const AssistantTraceView = dynamic(() => import("@/components/AssistantTraceView"));
 const AssistantHarnessSettings = dynamic(() => import("@/components/AssistantHarnessSettings"));
@@ -232,7 +233,14 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   const [panelPosition, setPanelPosition] = useState<FloatingPosition | null>(null);
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const suppressLauncherClick = useRef(false);
-  const copy = PAGE_COPY[page] || { label: "当前页面", prompts: ["概览当前数据", "检查数据异常", "给我下一步建议"] };
+  const [trackedPage, setTrackedPage] = useState(page);
+  useEffect(() => {
+    if (embedded || !open) return;
+    setTrackedPage(currentAssistantPage() || page);
+    return subscribeAssistantPage((next) => setTrackedPage(next || page));
+  }, [embedded, open, page]);
+  const visiblePage = embedded ? page : trackedPage;
+  const copy = PAGE_COPY[visiblePage] || { label: "当前页面", prompts: ["概览当前数据", "检查数据异常", "给我下一步建议"] };
 
   useEffect(() => setMounted(true), []);
   useEffect(() => {
@@ -421,10 +429,12 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
         const lastIndex=next.length-1; next=next.map((message,index)=>index===lastIndex?{...message,attachments:saved.attachments}:message); setMessages(next);
       }
       const filter = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("filter") || "";
+      const requestPage = embedded ? page : currentAssistantPage() || page;
+      const requestCopy = PAGE_COPY[requestPage] || copy;
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: activeConversationId, messages: next, images: selectedImages.map(({ name, dataUrl }) => ({ name, dataUrl })), context: { page, label: copy.label, symbol, filter }, dataScope, model: selectedModel === "auto" ? undefined : (() => { const [serviceId, ...modelParts] = selectedModel.split(":"); return { serviceId, model: modelParts.join(":") }; })() }),
+        body: JSON.stringify({ conversationId: activeConversationId, messages: next, images: selectedImages.map(({ name, dataUrl }) => ({ name, dataUrl })), context: { page: requestPage, label: requestCopy.label, symbol, filter }, dataScope, model: selectedModel === "auto" ? undefined : (() => { const [serviceId, ...modelParts] = selectedModel.split(":"); return { serviceId, model: modelParts.join(":") }; })() }),
         signal: controller.signal
       });
       if (response.ok && response.headers.get("content-type")?.includes("application/x-ndjson") && response.body) {
@@ -832,7 +842,7 @@ export default function ContextAssistant({ page, symbol, userId, initialHistory,
   if (!mounted) return null;
   const experience = (
     <>
-      {!embedded && <button ref={launcherRef} type="button" aria-pressed={open} onPointerDown={(event) => startFloatingDrag("launcher", event)} onClick={() => { if (suppressLauncherClick.current) { suppressLauncherClick.current = false; return; } setOpen((value) => !value); }} style={launcherPosition ? { left: launcherPosition.x, top: launcherPosition.y, right: "auto", bottom: "auto" } : undefined} className="assistant-launcher fixed bottom-5 right-5 z-[110] flex h-12 w-12 touch-none cursor-grab items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_12px_34px_rgba(0,0,0,.3)] transition-[background-color,box-shadow,transform] duration-200 hover:bg-[#20252a] hover:shadow-[0_14px_38px_rgba(0,0,0,.36)] active:scale-95 active:cursor-grabbing data-[dragging=true]:scale-100 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label={open ? "收起智能助手" : "打开智能助手"} title={open ? "拖动可移动，点击收起智能助手" : "拖动可移动，点击打开智能助手"}>
+      {!embedded && <button ref={launcherRef} type="button" aria-pressed={open} onPointerDown={(event) => startFloatingDrag("launcher", event)} onClick={() => { if (suppressLauncherClick.current) { suppressLauncherClick.current = false; return; } setTrackedPage(currentAssistantPage() || page); setOpen((value) => !value); }} style={launcherPosition ? { left: launcherPosition.x, top: launcherPosition.y, right: "auto", bottom: "auto" } : undefined} className="assistant-launcher fixed bottom-5 right-5 z-[110] flex h-12 w-12 touch-none cursor-grab items-center justify-center rounded-full border border-white/15 bg-[#15191d] text-white shadow-[0_12px_34px_rgba(0,0,0,.3)] transition-[background-color,box-shadow,transform] duration-200 hover:bg-[#20252a] hover:shadow-[0_14px_38px_rgba(0,0,0,.36)] active:scale-95 active:cursor-grabbing data-[dragging=true]:scale-100 sm:bottom-7 sm:right-7 sm:h-14 sm:w-14" aria-label={open ? "收起智能助手" : "打开智能助手"} title={open ? "拖动可移动，点击收起智能助手" : "拖动可移动，点击打开智能助手"}>
           <AssistantGlyph size={25} />
       </button>}
       {open && (

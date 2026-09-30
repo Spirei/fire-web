@@ -776,6 +776,14 @@
 
 /* 主导航与每个业务工作区之间统一保留清晰的呼吸区。 */
 .records-content { min-width:0; isolation:isolate; overflow-anchor:none; scroll-behavior:auto; }
+/* 手机和平板由文档滚动。换页改变高度时不要跟着平滑滚动。 */
+@media (max-width: 1023px) {
+  html.fire-workspace-switching,
+  html.fire-workspace-switching body {
+    scroll-behavior: auto;
+    overflow-anchor: none;
+  }
+}
 @media (min-width:1024px) {
   /* 工作区实际起点约 128px；底部留 8px，外框完整可见且最后一行不贴边。 */
   .records-app { height:min(916px,calc(100dvh - 136px)); }

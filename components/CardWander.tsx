@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { selectWanderCards } from "@/lib/cardWander";
 import CardWanderImage from "@/components/CardWanderImage";
 import { wanderOriginalQueue } from "@/lib/cardImageQueue";
+import { observePanelVisibility, panelIsShown } from "@/lib/panelVisibility";
 
 export interface WanderCard {
   key: string;
@@ -510,9 +511,10 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
     let frame = 0;
     let previousTime = 0;
     let onScreen = false;
+    let panelShown = panelIsShown(viewportRef.current);
     const frameInterval = window.matchMedia("(pointer: coarse), (max-width: 640px)").matches ? 1000 / 30 : 1000 / 60;
     const animate = (time: number) => {
-      if (!onScreen || document.hidden) return;
+      if (!onScreen || !panelShown || document.hidden) return;
       if (previousTime && time - previousTime < frameInterval - 1) {
         frame = window.requestAnimationFrame(animate);
         return;
@@ -521,7 +523,7 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
       previousTime = time;
       const viewport = viewportRef.current;
       const wall = wallRef.current;
-      if (!selected && !dragRef.current && !document.hidden && onScreen && viewport && wall && elapsed) {
+      if (!selected && !dragRef.current && !document.hidden && onScreen && panelShown && viewport && wall && elapsed) {
         const position = positionRef.current;
         const direction = driftDirectionRef.current;
         const geometry = geometryRef.current;
@@ -539,12 +541,12 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
         if (position.y <= minY || position.y >= maxDriftY) { position.y = Math.max(minY, Math.min(maxDriftY, position.y)); direction.y *= -1; }
         drawPosition();
       }
-      if (onScreen && !document.hidden) frame = window.requestAnimationFrame(animate);
+      if (onScreen && panelShown && !document.hidden) frame = window.requestAnimationFrame(animate);
     };
     const syncVisibility = () => {
       window.cancelAnimationFrame(frame);
       previousTime = 0;
-      if (!document.hidden && onScreen) frame = window.requestAnimationFrame(animate);
+      if (!document.hidden && onScreen && panelShown) frame = window.requestAnimationFrame(animate);
     };
     const watch = viewportRef.current;
     const screen = new IntersectionObserver(([entry]) => {
@@ -552,10 +554,15 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
       syncVisibility();
     });
     if (watch) screen.observe(watch);
+    const releasePanel = watch ? observePanelVisibility(watch, () => {
+      panelShown = panelIsShown(watch);
+      syncVisibility();
+    }) : () => {};
     document.addEventListener("visibilitychange", syncVisibility);
     return () => {
       window.cancelAnimationFrame(frame);
       screen.disconnect();
+      releasePanel();
       document.removeEventListener("visibilitychange", syncVisibility);
     };
   }, [selected]);

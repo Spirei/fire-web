@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { observePanelVisibility, panelIsShown } from "@/lib/panelVisibility";
 
 const REEF_TEXTURE = "/images/fire/coral-reef-transparent.png";
 
@@ -150,6 +151,7 @@ export default function FireReefCurrent() {
     const image = new Image();
     let frame = 0;
     let visible = true;
+    let panelShown = panelIsShown(canvas);
     let pageVisible = !document.hidden;
     let loaded = false;
     let elapsed = 0;
@@ -185,13 +187,13 @@ export default function FireReefCurrent() {
       elapsed += delta;
       previousFrameAt = now;
       draw();
-      if (visible && pageVisible && !reduceMotion.matches) frame = requestAnimationFrame(loop);
+      if (visible && panelShown && pageVisible && !reduceMotion.matches) frame = requestAnimationFrame(loop);
     };
     const restart = () => {
       cancelAnimationFrame(frame);
       previousFrameAt = performance.now();
-      if (visible && pageVisible && loaded && !reduceMotion.matches) frame = requestAnimationFrame(loop);
-      else draw();
+      if (visible && panelShown && pageVisible && loaded && !reduceMotion.matches) frame = requestAnimationFrame(loop);
+      else if (panelShown) draw();
     };
 
     image.onload = () => {
@@ -208,6 +210,10 @@ export default function FireReefCurrent() {
       restart();
     }, { rootMargin: "80px" });
     observer.observe(canvas);
+    const releasePanel = observePanelVisibility(canvas, () => {
+      panelShown = panelIsShown(canvas);
+      restart();
+    });
     const resizeObserver = new ResizeObserver(draw);
     resizeObserver.observe(canvas);
     const handleVisibility = () => {
@@ -220,6 +226,7 @@ export default function FireReefCurrent() {
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      releasePanel();
       resizeObserver.disconnect();
       document.removeEventListener("visibilitychange", handleVisibility);
       reduceMotion.removeEventListener("change", restart);
