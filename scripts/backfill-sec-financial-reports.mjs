@@ -13,7 +13,7 @@ import crypto from "crypto";
 import Database from "better-sqlite3";
 import { execSync } from "child_process";
 
-const UA = "FireFinance admin@example.com";
+const UA = "AlcorFinance admin@example.com";
 const DB_PATH = path.join(process.cwd(), "data", "fire.db");
 const REPORTS_ROOT = path.join(process.cwd(), "public", "uploads", "reports");
 const TMP = "/tmp/sec-backfill";

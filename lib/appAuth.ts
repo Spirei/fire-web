@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { getDb } from "./db";
 import { getSiteSettings } from "./settings";
 import { publicSiteDomain } from "./publicSiteUrl";
+import { DEFAULT_APP_DEVICE_NAME, normalizeAppDeviceName } from "./brand";
 
 export const APP_CLIENT_ID = "fire-ios";
 export const APP_REDIRECT_URI = "com.fire.app:/oauth/callback";
@@ -23,7 +24,8 @@ export function parseAppAuthorization(values: Record<string, unknown>): AppAutho
   if (value("code_challenge_method") !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(value("code_challenge"))) throw new Error("无效的授权校验参数");
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(value("state"))) throw new Error("无效的授权请求");
   if (!scope.includes("portfolio.read") || scope.some(s => !APP_SCOPE.split(" ").includes(s))) throw new Error("不支持的授权范围");
-  return { client_id: APP_CLIENT_ID, redirect_uri: APP_REDIRECT_URI, response_type: "code", code_challenge_method: "S256", code_challenge: value("code_challenge"), scope: [...new Set(scope)].join(" "), state: value("state"), device_name: value("device_name").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 64) || "Alcor iOS" };
+  const deviceName = value("device_name").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 64);
+  return { client_id: APP_CLIENT_ID, redirect_uri: APP_REDIRECT_URI, response_type: "code", code_challenge_method: "S256", code_challenge: value("code_challenge"), scope: [...new Set(scope)].join(" "), state: value("state"), device_name: normalizeAppDeviceName(deviceName) || DEFAULT_APP_DEVICE_NAME };
 }
 
 /** Production accepts only the configured public HTTPS origin; no request Host discovery. */
@@ -140,5 +142,5 @@ export function appIdentity(token: string, request: Request): Grant | null {
 }
 export function listAppDevices(userId: string) {
   const rows = getDb().prepare("SELECT id FROM app_grants WHERE user_id=? AND revoked_at IS NULL ORDER BY created_at DESC").all(userId) as { id: string }[];
-  return rows.map(row => activeGrant(row.id)).filter((g): g is Grant => !!g).map(g => ({ id: g.id, name: g.device_name, scope: g.scope, createdAt: g.created_at, lastUsedAt: g.last_used_at, expiresAt: g.expires_at }));
+  return rows.map(row => activeGrant(row.id)).filter((g): g is Grant => !!g).map(g => ({ id: g.id, name: normalizeAppDeviceName(g.device_name), scope: g.scope, createdAt: g.created_at, lastUsedAt: g.last_used_at, expiresAt: g.expires_at }));
 }

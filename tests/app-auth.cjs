@@ -152,6 +152,32 @@ const identity = token => auth.getAuthUser(req('auth/me', null, null, 'GET', nul
     assert(!native.listAppDevices(user.id).some(item => item.id === initial.grant_id));
     assert.equal(identity(rotated.access_token), null); assert.equal(native.refreshAppTokens('fire-ios', rotated.refresh_token), null);
   });
+  await test('legacy App default names adapt without rewriting grants or requiring authorization again', async () => {
+    for (const name of ['Fire iOS', 'fire ios', 'Fire Fire iOS', '']) {
+      const parsed = native.parseAppAuthorization({ ...requestValues, device_name: name });
+      assert.equal(parsed.device_name, 'Alcor iOS');
+      assert.equal(parsed.client_id, 'fire-ios'); assert.equal(parsed.redirect_uri, 'com.fire.app:/oauth/callback');
+    }
+    for (const name of ['My Fire iPhone', 'FIRE 平板', 'fire.example.com', '自定义设备']) {
+      assert.equal(native.parseAppAuthorization({ ...requestValues, device_name: name }).device_name, name);
+    }
+    const initial = await connected();
+    try {
+      for (const [stored, displayed] of [['Fire iOS', 'Alcor iOS'], ['fire ios', 'Alcor iOS'], ['Fire Fire iOS', 'Alcor iOS'], ['My Fire iPhone', 'My Fire iPhone'], ['自定义设备', '自定义设备']]) {
+        db.prepare('UPDATE app_grants SET device_name=? WHERE id=?').run(stored, initial.grant_id);
+        const before = db.prepare('SELECT * FROM app_grants WHERE id=?').get(initial.grant_id);
+        const response = await deviceRoute.GET(req('auth/devices', null, browser, 'GET'));
+        const device = (await response.json()).data.devices.find(item => item.id === initial.grant_id);
+        assert.equal(device.name, displayed);
+        assert.equal(device.createdAt, before.created_at); assert.equal(device.scope, before.scope);
+        assert.deepEqual(db.prepare('SELECT * FROM app_grants WHERE id=?').get(initial.grant_id), before, 'reading the device list does not migrate the grant');
+        assert(identity(initial.access_token), 'existing access remains valid');
+      }
+      const rotated = native.refreshAppTokens('fire-ios', initial.refresh_token);
+      assert(rotated); assert.equal(rotated.grant_id, initial.grant_id); assert(identity(rotated.access_token));
+      assert(auth.getUserByToken(browser), 'the browser session is unchanged');
+    } finally { native.revokeAppGrant(initial.grant_id); }
+  });
   await test('App disconnect revokes refresh and access together, independently of browser login', async () => {
     const initial=await connected(); assert.equal((await revokeRoute.POST(req('auth/revoke',{client_id:'fire-ios',token:initial.refresh_token},null))).status,200);
     assert.equal(identity(initial.access_token),null); assert(auth.getUserByToken(browser));

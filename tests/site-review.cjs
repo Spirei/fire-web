@@ -27,6 +27,30 @@ function fontHeaderFixture(ext) {
   return bytes;
 }
 (async () => {
+  await test('legacy brand text preserves bare domains, callbacks, image paths and line breaks', () => {
+    const { normalizeProductName, normalizeBrandSetting } = require(path.join(root, 'lib/brand.ts'));
+    const cases = [
+      ['Fire · fire.example.com', 'Alcor · fire.example.com'],
+      ['Fire · fire.example.com:18520/fire?tag[fire]=fire', 'Alcor · fire.example.com:18520/fire?tag[fire]=fire'],
+      ['Fire · /uploads/logo/fire.svg', 'Alcor · /uploads/logo/fire.svg'],
+      ['Fire · ./fire/logo.svg · ../fire/logo.svg · fire/logo.svg', 'Alcor · ./fire/logo.svg · ../fire/logo.svg · fire/logo.svg'],
+      [String.raw`Fire · C:\uploads\fire\logo.svg`, String.raw`Alcor · C:\uploads\fire\logo.svg`],
+      ['Fire · com.fire.app:/oauth/callback · fire-ios:/oauth/callback', 'Alcor · com.fire.app:/oauth/callback · fire-ios:/oauth/callback'],
+      ['Fire · https://[::1]/fire?tag[fire]=fire', 'Alcor · https://[::1]/fire?tag[fire]=fire'],
+      ['Fire · fire@example.com · www.fire.example.com', 'Alcor · fire@example.com · www.fire.example.com'],
+      ['https://fire.example.com/fire，Fire · fire.example.com；Fire', 'https://fire.example.com/fire，Alcor · fire.example.com；Alcor'],
+      ['Fire\nFire\r\nFire', 'Alcor\nAlcor\r\nAlcor'],
+      ['Fire  Fire · FIRE\tFire', 'Alcor · Alcor'],
+      ['Firefox · Campfire · Firefly · Example 自定义名称', 'Firefox · Campfire · Firefly · Example 自定义名称']
+    ];
+    for (const [input, expected] of cases) {
+      assert.equal(normalizeProductName(input), expected, input);
+      assert.equal(normalizeProductName(input), expected, 'repeated SSR/client reads must agree');
+      assert.equal(normalizeProductName(expected), expected, 'normalization must be idempotent');
+      assert.equal(normalizeBrandSetting('footerDesc', input), expected);
+      assert.equal(normalizeBrandSetting('domain', input), input, 'non-brand settings are never adapted');
+    }
+  });
   await test('appearance preferences persist synchronously and mobile navigation distinguishes preview from saved order', () => {
     const persisted = fs.readFileSync(path.join(root, 'lib/usePersistedState.ts'), 'utf8');
     const context = fs.readFileSync(path.join(root, 'lib/prefsContext.tsx'), 'utf8');
