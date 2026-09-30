@@ -229,6 +229,9 @@ function fontHeaderFixture(ext) {
     assert(!css.includes('mobile-panel-forward'));
     assert(app.includes('hidden={!active}'));
     assert(app.includes('panels.current.set(tab, node)'));
+    assert(app.includes('panelBuiltStamp.current.get(tab) !== panelDataStamp'));
+    assert(css.includes('content-visibility: hidden;'));
+    assert(css.includes('.records-content { min-width:0; isolation:isolate; overflow-anchor:none; scroll-behavior:auto; }'));
     assert(app.includes('pageMemory.current.get(key) || fallback'));
     assert(app.includes('scrollMemory.current.set(from,'));
     assert(app.includes('scrollMemory.current.set("pnl", { top: 0, inner: 0 })'));

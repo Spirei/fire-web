@@ -749,6 +749,14 @@
 .records-content > .tab-panel[hidden] {
   display: none !important;
 }
+@supports (content-visibility: hidden) {
+  /* 隐藏页留下排版缓存。设置页继续 display:none，避免挡住文档滚动。 */
+  .records-app:not(.is-settings) .records-content > .tab-panel[hidden] {
+    display: block !important;
+    content-visibility: hidden;
+    pointer-events: none;
+  }
+}
 
 @media(min-width:768px) {
   body:has([data-capsule-scope="non-home"]) .sc-detail-dialog .tab-panel { animation:none; }
@@ -767,7 +775,7 @@
 }
 
 /* 主导航与每个业务工作区之间统一保留清晰的呼吸区。 */
-.records-content { min-width:0; isolation:isolate; }
+.records-content { min-width:0; isolation:isolate; overflow-anchor:none; scroll-behavior:auto; }
 @media (min-width:1024px) {
   /* 工作区实际起点约 128px；底部留 8px，外框完整可见且最后一行不贴边。 */
   .records-app { height:min(916px,calc(100dvh - 136px)); }

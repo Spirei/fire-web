@@ -180,6 +180,7 @@ export default function RecordsApp({
   const scrollIntentRef = useRef(false);
   const quoteFetchedAtRef = useRef(0);
   const panels = useRef(new Map<TabKey, ReactNode>());
+  const panelBuiltStamp = useRef(new Map<TabKey, object>());
   const restoreAssetPosition = useCallback(() => {
     if (!restoreAssetScrollRef.current || !assetReturnRef.current) return;
     const position = assetReturnRef.current;
@@ -486,6 +487,7 @@ export default function RecordsApp({
   }, []);
   const reopenTab = useCallback((key: TabKey) => {
     panels.current.delete(key);
+    panelBuiltStamp.current.delete(key);
     setPanelEpoch((current) => ({ ...current, [key]: (current[key] ?? 0) + 1 }));
   }, []);
 
@@ -935,6 +937,15 @@ export default function RecordsApp({
     };
   }, [desktopViewport, sidebarTabs, updateSidebarScroll]);
 
+  // 行情、持仓等没变时戳保持不变。换页就能沿用上次的节点，不再把整页重算一遍。
+  const panelDataStamp = useMemo(() => ({}), [
+    records, quotes, quoteAt, refreshing, livePrice, valuationReady,
+    groups, markets, marketLabels, marketOptions, userLogs, systemLogs, user,
+    navTabs, mobileNavigationOrder, settingsSub, settingsSubReady,
+    initialNow, initialVersion, initialSymbol, initialCelebAvatars, initialUser,
+    initialWatchGroups, initialAssistantHistory, initialPasskeys, initialFundBalances,
+    initialSettings, initialAssetLibrary, initialCardLibrary, initialTradingPosts, initialTradingFilter
+  ]);
 
   const settingsPanel = (
     <div className="relative h-full min-h-0">
@@ -1037,9 +1048,9 @@ export default function RecordsApp({
 
         {mountedTabs.map((tab) => {
           const active = tab === activeTab;
-          // 隐藏页沿用上次绘制的节点，行情刷新不会带动它重绘，也不会改地址栏。
+          // 隐藏页、以及数据未变的当前页，都沿用上次节点。换页只改隐藏，避免整页重算造成顿挫。
           let node = panels.current.get(tab) ?? null;
-          if (active) {
+          if (active && (node == null || panelBuiltStamp.current.get(tab) !== panelDataStamp)) {
             node = (
             <>
           {activeTab === "watchlist" && (
@@ -1125,6 +1136,7 @@ export default function RecordsApp({
             </>
             );
             panels.current.set(tab, node);
+            panelBuiltStamp.current.set(tab, panelDataStamp);
           }
           return (
             <div key={`${tab}:${panelEpoch[tab] ?? 0}`} hidden={!active} inert={!active} data-direction={active ? panelDirection : "none"} className="tab-panel min-w-0">
