@@ -107,6 +107,20 @@ const identity = token => auth.getAuthUser(req('auth/me', null, null, 'GET', nul
     const second = await recordsRoute.GET(new Request(origin+'/api/v1/records?page=2&pageSize=100',{headers:{authorization:'Bearer '+credential.access_token}})); const b=await second.json();
     assert.equal(a.meta.total,101); assert.equal(a.data.length,100); assert.equal(b.data.length,1); assert(![...a.data,...b.data].some(r=>r.code==='PRIVATE')); assert.match(first.headers.get('cache-control'),/no-store/);
   });
+  await test('App connection reads the shared identity but cannot modify account profiles or avatars', async () => {
+    const uploadRoute = require(path.join(root, 'app/api/v1/upload/route.ts'));
+    const before = db.prepare('SELECT * FROM users WHERE id=?').get(user.id);
+    for (const endpoint of ['auth/profile', 'upload']) {
+      for (const method of ['PUT', 'POST', 'DELETE']) assert.equal(auth.getAuthUser(req(endpoint, null, null, method, null, credential.access_token)), null);
+    }
+    assert.equal(auth.getAuthUser(new Request(origin + '/api/auth/profile', { method: 'PUT', headers: { authorization: 'Bearer ' + credential.access_token, cookie: 'fire_session=' + browser } })), null);
+    const form = new FormData(); form.set('kind', 'avatar'); form.set('file', new File(['not uploaded'], 'avatar.png', { type: 'image/png' }));
+    const denied = await uploadRoute.POST(new Request(origin + '/api/v1/upload', { method: 'POST', headers: { authorization: 'Bearer ' + credential.access_token, cookie: 'fire_session=' + browser }, body: form }));
+    assert.equal(denied.status, 401); assert.equal((await denied.json()).code, 40101);
+    assert.deepEqual(db.prepare('SELECT * FROM users WHERE id=?').get(user.id), before);
+    assert(identity(credential.access_token)); assert(auth.getUserByToken(browser));
+    assert.equal(identity(credential.access_token).id, auth.getUserByToken(browser).id, 'App and Web keep the same user');
+  });
   await test('read-only grants cannot write', async () => {
     const limited = await connected({ ...requestValues, scope: 'portfolio.read' });
     assert(identity(limited.access_token)); assert.equal(auth.getAuthUser(req('records', {name:'bad'}, null,'POST',null,limited.access_token)),null);

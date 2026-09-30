@@ -12,7 +12,7 @@ export default async function Page() {
   const store = await cookies();
   const brand = appConnectionBrand(getSiteSettings());
   if (!getUserByToken(store.get(SESSION_COOKIE)?.value || store.get(LEGACY_SESSION_COOKIE)?.value || null)) redirect("/login?next=%2Fapp%2Fdevices");
-  return <AppConnectionShell brand={brand} serverName={(await headers()).get("host") || "Alcor Web"} section="管理授权" wide headerAction={<Link className="app-connection-back" href="/settings?category=account">返回设置</Link>}>
+  return <AppConnectionShell brand={brand} serverName={(await headers()).get("host") || "Alcor Api"} section="管理授权" wide headerAction={<Link className="app-connection-back" href="/settings?category=account">返回设置</Link>}>
     <div className="app-devices-heading"><h1>管理授权</h1></div><AppDeviceList brand={brand} />
   </AppConnectionShell>;
 }

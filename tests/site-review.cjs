@@ -41,6 +41,8 @@ function fontHeaderFixture(ext) {
       ['https://fire.example.com/fire，Fire · fire.example.com；Fire', 'https://fire.example.com/fire，Alcor · fire.example.com；Alcor'],
       ['Fire\nFire\r\nFire', 'Alcor\nAlcor\r\nAlcor'],
       ['Fire  Fire · FIRE\tFire', 'Alcor · Alcor'],
+      ['Alcor Web · Fire Web', 'Alcor Api · Alcor Api'],
+      ['Alcor Web · https://alcor.web/fire · alcor.web', 'Alcor Api · https://alcor.web/fire · alcor.web'],
       ['Firefox · Campfire · Firefly · Example 自定义名称', 'Firefox · Campfire · Firefly · Example 自定义名称']
     ];
     for (const [input, expected] of cases) {
@@ -1536,6 +1538,56 @@ function fontHeaderFixture(ext) {
       if(env.host===undefined) delete process.env.SMTP_HOST; else process.env.SMTP_HOST=env.host;
       if(env.from===undefined) delete process.env.SMTP_FROM_EMAIL; else process.env.SMTP_FROM_EMAIL=env.from;
     }
+  });
+  await test('nickname-only saves read after the write lock and preserve a preceding concurrent profile edit', () => {
+    const { updateProfile } = require(path.join(root, 'lib/auth.ts'));
+    const before = db.prepare('SELECT * FROM users WHERE id=?').get(user.id);
+    const originalTransaction = db.transaction;
+    let injected = false;
+    // Model a second worker finishing just before this transaction acquires its
+    // lock. Reading the row before the transaction would overwrite that edit.
+    db.transaction = function(callback) {
+      const tx = originalTransaction.call(db, callback);
+      const invoke = (fn, args) => {
+        if (!injected) {
+          injected = true;
+          db.prepare('UPDATE users SET username=?,email=? WHERE id=?').run('recent_profile_name', 'recent@example.test', user.id);
+        }
+        return fn.apply(tx, args);
+      };
+      const wrapped = (...args) => invoke(tx, args);
+      wrapped.immediate = (...args) => invoke(tx.immediate, args);
+      return wrapped;
+    };
+    try {
+      const updated = updateProfile(user.id, { nickname: 'Nickname only' });
+      assert(injected); assert.equal(updated.username, 'recent_profile_name'); assert.equal(updated.email, 'recent@example.test'); assert.equal(updated.nickname, 'Nickname only');
+      assert.equal(db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id).password_hash, before.password_hash);
+      assert.equal(updateProfile('missing-user', { nickname: 'not saved' }), null);
+    } finally {
+      db.transaction = originalTransaction;
+      db.prepare('UPDATE users SET username=?,email=?,nickname=? WHERE id=?').run(before.username, before.email, before.nickname, user.id);
+    }
+  });
+  await test('avatar limits cannot borrow the card allowance and v1 quota errors retain the correct envelope', async () => {
+    const route = require(path.join(root, 'app/api/v1/upload/route.ts'));
+    const { clientIp } = require(path.join(root, 'lib/rateLimit.ts'));
+    const avatarUser = createUser('avatar_bound_review', 'Review-test-123');
+    const token = createSession(avatarUser.id);
+    const upload = (bytes) => {
+      const form = new FormData(); form.set('kind', 'avatar'); form.set('folder', 'card');
+      form.set('file', new File([bytes], 'avatar.png', { type: 'image/png' }));
+      return new Request('http://localhost/api/v1/upload', { method: 'POST', headers: { cookie: `fire_session=${token}`, origin: 'http://localhost' }, body: form });
+    };
+    const before = db.prepare('SELECT * FROM users WHERE id=?').get(avatarUser.id);
+    const oversized = await route.POST(upload(Buffer.alloc(6 * 1024 * 1024)));
+    assert.equal(oversized.status, 400); assert.match((await oversized.json()).message, /5MB/);
+    const throttledRequest = upload(Buffer.from('not uploaded'));
+    db.prepare('INSERT INTO rate_limit(key,count,reset_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET count=excluded.count,reset_at=excluded.reset_at')
+      .run(`upload:${clientIp(throttledRequest)}:${avatarUser.id}`, 60, Date.now()+3600000);
+    const throttled = await route.POST(throttledRequest);
+    assert.equal(throttled.status, 429); assert.equal((await throttled.json()).code, 42901); assert.match(throttled.headers.get('cache-control'), /no-store/);
+    assert.deepEqual(db.prepare('SELECT * FROM users WHERE id=?').get(avatarUser.id), before);
   });
   await test('admin profile edits reject case-insensitive duplicate email', () => {
     const auth = require(path.join(root, 'lib/auth.ts'));

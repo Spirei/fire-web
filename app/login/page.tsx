@@ -26,7 +26,7 @@ export default async function LoginPage({
   const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
   if (getUserByToken(token)) redirect(destination);
   const brand = appConnectionBrand(getSiteSettings());
-  if (authorizationLogin) return <AppConnectionShell brand={brand} serverName={(await headers()).get("host") || "Alcor Web"}>
+  if (authorizationLogin) return <AppConnectionShell brand={brand} serverName={(await headers()).get("host") || "Alcor Api"}>
     <div className="app-connection-intro"><AppConnectionIcon src={brand.appIcon} /><h1>登录 {brand.siteName} 账户以连接 {brand.appName}</h1></div>
     <div className="app-connection-login"><LoginForm returnTo={destination} /></div>
   </AppConnectionShell>;

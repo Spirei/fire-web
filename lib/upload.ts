@@ -85,8 +85,9 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
     throw new UploadError("无效的素材文件夹", 400);
   }
   // 卡面（folder=card）单独放宽：手机拍的卡片原图动辄十几 MB，其它素材仍按类别限制
-  const maxBytes = folder === "card" ? 20 * 1024 * 1024 : config.maxBytes;
-  const sizeHint = folder === "card" ? `${config.hint.split("，最大")[0]}，最大尺寸 20MB` : config.hint;
+  const cardAsset = kind === "asset" && folder === "card";
+  const maxBytes = cardAsset ? 20 * 1024 * 1024 : config.maxBytes;
+  const sizeHint = cardAsset ? `${config.hint.split("，最大")[0]}，最大尺寸 20MB` : config.hint;
   if (kind !== "avatar" && !isAdmin(user)) {
     throw new UploadError("需要管理员权限", 403);
   }

@@ -9,7 +9,7 @@
 
 ## 采集与存储
 
-- Node 22 HTTP diagnostics channel 采集进入当前 Alcor Web 进程的 `/api/*` 请求。完成后记录时间、路由模板、方法、来源、最终 HTTP 状态与服务端处理耗时；客户端提前断开记为 499。
+- Node 22 HTTP diagnostics channel 采集进入当前 Alcor Api 进程的 `/api/*` 请求。完成后记录时间、路由模板、方法、来源、最终 HTTP 状态与服务端处理耗时；客户端提前断开记为 499。
 - 不记录查询参数、动态资源 ID、请求／响应正文、令牌、Cookie、IP 或完整 User-Agent。来源由请求头分类为网页、iOS、App 和其他，是请求特征推断，不是设备身份认证。
 - 路由模板来自 `lib/apiRequestRoutes.ts`，`predev` / `prebuild` 自动重新生成；未知路径统一记为 `/api/[unmatched]`。请求日志自身接口和健康检查排除，避免自循环。
 - 本功能记录进入 Web 的请求，不统计后台访问行情供应商的出站请求，也不回填启用前的历史。

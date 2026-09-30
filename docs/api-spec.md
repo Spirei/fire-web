@@ -1049,6 +1049,8 @@ PATCH /api/showcase/models/{id}
 | POST | `/api/v1/auth/revoke` | 凭当前 refresh token 撤销整个设备连接 |
 | GET / DELETE | `/api/v1/auth/devices` | 浏览器本人查看/撤销设备，DELETE body `{ id }` |
 
+App 设置只保留连接入口，身份通过 `GET /api/v1/auth/me` 与 Web 共用既有 `users`；昵称、头像、账号安全与设备撤销均在 Web 管理，不新增 App 资料写入端点或授权能力。
+
 App 使用 `client_id=fire-ios`，`redirect_uri=com.fire.app:/oauth/callback`，`response_type=code` 和 PKCE `S256`。权限为 `portfolio.read portfolio.write`，可申请只读；App 凭据仅访问本人业务，不继承站点管理权。
 
 ```json

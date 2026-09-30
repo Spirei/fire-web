@@ -8,7 +8,7 @@ export async function POST(request: Request) {
     return ok({ url, kind });
   } catch (err) {
     if (err instanceof UploadError) {
-      const code = err.status === 401 ? 40101 : err.status === 403 ? 40301 : 40001;
+      const code = err.status === 401 ? 40101 : err.status === 403 ? 40301 : err.status === 429 ? 42901 : 40001;
       return fail(code, err.message, err.status);
     }
     return fail(50001, "上传失败，请稍后重试", 500);

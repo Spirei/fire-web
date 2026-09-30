@@ -286,22 +286,22 @@ export function updateProfile(
   patch: { username?: string; email?: string; nickname?: string }
 ): User | null {
   const db = getDb();
-  const row = findUserById(userId);
-  if (!row) return null;
-  const username = patch.username !== undefined ? patch.username.trim() : row.username;
-  const email = patch.email !== undefined ? patch.email.trim() : (row.email ?? "");
-  const nickname = patch.nickname !== undefined ? patch.nickname.trim() : (row.nickname ?? "");
-
-  if (patch.username !== undefined) {
-    const conflict = db.prepare("SELECT id FROM users WHERE username = ? AND id != ?").get(username, userId);
-    if (conflict) return null;
-  }
-  db.transaction(() => {
+  return db.transaction(() => {
+    // Read after acquiring the write lock: another client may have just changed
+    // an unpatched field, which a nickname-only save must never overwrite.
+    const row = findUserById(userId);
+    if (!row) return null;
+    const username = patch.username !== undefined ? patch.username.trim() : row.username;
+    const email = patch.email !== undefined ? patch.email.trim() : (row.email ?? "");
+    const nickname = patch.nickname !== undefined ? patch.nickname.trim() : (row.nickname ?? "");
+    if (patch.username !== undefined) {
+      const conflict = db.prepare("SELECT id FROM users WHERE username = ? AND id != ?").get(username, userId);
+      if (conflict) return null;
+    }
     db.prepare("UPDATE users SET username = ?, email = ?, nickname = ? WHERE id = ?").run(username, email, nickname, userId);
     if (email.toLowerCase() !== (row.email || "").toLowerCase()) invalidateEmailRecovery(userId);
+    return toUser(findUserById(userId)!);
   }).immediate();
-  const updated = findUserById(userId)!;
-  return toUser(updated);
 }
 
 export function updateUserAvatar(userId: string, avatar: string) {

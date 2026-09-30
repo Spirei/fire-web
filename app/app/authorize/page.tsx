@@ -12,7 +12,7 @@ export function generateMetadata() { return { title: `连接 ${appConnectionBran
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
   const brand = appConnectionBrand(getSiteSettings());
-  const serverName = (await headers()).get("host") || "Alcor Web";
+  const serverName = (await headers()).get("host") || "Alcor Api";
   let auth;
   try { auth = parseAppAuthorization(params); }
   catch { return <AppConnectionShell serverName={serverName} brand={brand}><div className="app-connection-intro"><AppConnectionIcon src={brand.appIcon} /><h1>连接请求无效</h1><p>请返回 {brand.appName} 重新连接。</p></div></AppConnectionShell>; }

@@ -11,7 +11,9 @@ const BRAND_ADDRESS_TOKEN = new RegExp([
   String.raw`\b(?:[a-z\d-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#][^\s<>"'，。；！？（）【】]+)?`,
   String.raw`(?:[a-z]:\\|\.\.?\/|\/|[\w@%+.-]+\/)[^\s<>"'，。；！？（）【】]+`
 ].join("|"), "gi");
-const replaceLegacyProductName = (text: string) => text.replace(/\bfire(?:[ \t]+fire)?\b/gi, PRODUCT_NAME);
+const replaceLegacyProductName = (text: string) => text
+  .replace(/\bfire(?:[ \t]+fire)?\b/gi, PRODUCT_NAME)
+  .replace(/\balcor[ \t]+web\b/gi, `${PRODUCT_NAME} Api`);
 
 /** Only brand-bearing settings use this adapter; financial FIRE, stock names and URLs do not. */
 export function normalizeProductName(value: string): string {

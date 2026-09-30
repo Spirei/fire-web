@@ -268,7 +268,7 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
           <section className="fr-info" aria-label="实例信息">
             <div className="fr-info-block">
               <div className="fr-info-title"><i />实例运行正常</div>
-              <p>Alcor Web 已启动，访问地址为 {host}。</p>
+              <p>Alcor Api 已启动，访问地址为 {host}。</p>
             </div>
             <div className="fr-info-block">
               <div className="fr-info-title">数据会被保留</div>
