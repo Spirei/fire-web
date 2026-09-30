@@ -4716,10 +4716,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_46_ENTRY,
   version: "v0.1.47",
   date: "2026-10-01",
-  summary: "手机设置页按可见高度滚动，一加可以滑到应用授权。",
+  summary: "Chrome 里手机设置页整页滚动，可以滑到应用授权。",
   software: V0_1_46_ENTRY.software.map(item => item.name === "Fire" ? { ...item, version: "v0.1.47" } : item),
   changes: [
-    { kind: "fix", title: "一加设置页滑到应用授权", desc: "手机设置页改为占满浏览器当前可见高度，账号与安全的列表只在这块区域内滚动。一加 13T 这类底部工具栏不随列表滚动收起时，「应用授权」可以滑到工具栏上方；iPhone 仍按可见区域滚动。横屏手机同样避开工具栏遮挡。" }
+    { kind: "fix", title: "Chrome 设置页可滑到应用授权", desc: "Chrome 底部工具栏不缩小页面，也不随设置里的列表收起。账号与安全滑到底时，「应用授权」仍停在工具栏下面。手机和横屏手机改为整页滚动，并在列表底部留出工具栏的高度，滑到底可以看到「应用授权」。iPhone 同样能滑到这一组；平板仍在设置页内部滚动。" }
   ]
 };
 
