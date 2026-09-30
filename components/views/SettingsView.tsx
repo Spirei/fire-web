@@ -6,8 +6,7 @@ import { createPasskeySettingsData } from "@/lib/passkeySettingsData";
 import SecurityCheck from "@/components/SecurityCheck";
 import SettingsManagedGroup, { SettingsManagedPane } from "@/components/SettingsManagedGroup";
 import AppModal from "@/components/AppModal";
-import AppDeviceList from "@/components/AppDeviceList";
-import { appConnectionBrand } from "@/lib/appConnectionBrand";
+import AppAuthorizationSettings from "@/components/AppAuthorizationSettings";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
 import PasswordStrength from "@/components/PasswordStrength";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
@@ -156,7 +155,7 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "profile", anchor: "delete-account", label: "注销账号", groupLabel: "数据", keywords: "注销 永久删除 账号 数据" },
   { sub: "totp", anchor: "totp", label: "双重验证", groupLabel: "账号", keywords: "2FA 二次验证 TOTP 验证器 备用码 谷歌验证 Google Authenticator 安全" },
   { sub: "passkeys", anchor: "passkeys", label: "通行密钥", groupLabel: "账号", keywords: "Passkey WebAuthn iCloud Bitwarden 1Password Face ID Touch ID 无密码 登录 安全 通行密匙" },
-  { sub: "authorizations", anchor: "authorizations", label: "管理授权", groupLabel: "账号", keywords: "App iOS iPhone 网页授权 连接 设备 权限 撤销 断开" },
+  { sub: "authorizations", anchor: "authorizations", label: "应用授权", groupLabel: "账号", keywords: "Alcor Api App iOS iPhone 网页授权 连接 地址 公网 配置 测试 调试 名称 图标 设备 权限 撤销 断开" },
   { sub: "passkeys", anchor: "passkey-config", label: "通行密钥域名", groupLabel: "账号", keywords: "Passkey WebAuthn HTTPS 域名 站点名称 登录配置", adminOnly: true },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
@@ -793,7 +792,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [pwaUploading, setPwaUploading] = useState(false);
   const bgRef = useRef<HTMLInputElement>(null);
   const logoRef = useRef<HTMLInputElement>(null);
-  const appIconRef = useRef<HTMLInputElement>(null);
   const loginImgRef = useRef<HTMLInputElement>(null);
   const avatarRef = useRef<HTMLInputElement>(null);
   const nickInputRef = useRef<HTMLInputElement>(null);
@@ -1082,8 +1080,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }, [site]);
 
   async function resetBrand() {
-    if (!await appConfirm("将清空自定义网站与授权页图片和 App 名称，Logo 文字恢复为 Alcor。", { title: "恢复默认网站形象", danger: true })) return;
-    const ok = await saveBlock("brand", { ico: "", pwaIcon: "", siteLogo: "", logoText: "Alcor", logoFont: "diatype", homepageBg: "", loginSideImage: "", appDisplayName: "", appDisplayIcon: "" }, "网站形象已重置");
+    if (!await appConfirm("将清空自定义网站图片，Logo 文字恢复为 Alcor。应用授权配置不受影响。", { title: "恢复默认网站形象", danger: true })) return;
+    const ok = await saveBlock("brand", { ico: "", pwaIcon: "", siteLogo: "", logoText: "Alcor", logoFont: "diatype", homepageBg: "", loginSideImage: "" }, "网站形象已重置");
     if (ok) setEditingAppearance(false);
   }
 
@@ -1436,7 +1434,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         const ok = await saveBlock("siteInfo", { title: site.title, domain: site.domain, allowRegister: site.allowRegister, footerDesc: site.footerDesc }, "站点信息已保存");
         // 站点信息是常驻可编辑 + 自动保存，不再有「保存后转只读」这一步
       } else if (activeAnchor === "appearance") {
-        const ok = await saveBlock("brand", { ico: site.ico, pwaIcon: site.pwaIcon, siteLogo: site.siteLogo, logoText: site.logoText, logoFont: site.logoFont, homepageBg: site.homepageBg, loginSideImage: site.loginSideImage, appDisplayName: site.appDisplayName, appDisplayIcon: site.appDisplayIcon }, "网站形象已保存");
+        const ok = await saveBlock("brand", { ico: site.ico, pwaIcon: site.pwaIcon, siteLogo: site.siteLogo, logoText: site.logoText, logoFont: site.logoFont, homepageBg: site.homepageBg, loginSideImage: site.loginSideImage }, "网站形象已保存");
         if (ok) setEditingAppearance(false);
       } else if (activeAnchor === "ticker") {
         const ok = await saveBlock("ticker", { ticker: site.ticker }, "首页指数已保存");
@@ -2489,16 +2487,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           </div>
                         </section>
 
-                        <section className="brand-settings-group" aria-labelledby="brand-authorization-title">
-                          <div className="brand-settings-heading"><h3 id="brand-authorization-title">网页授权</h3></div>
-                          <div className="sw-row">
-                            <div className="sw-row-label"><b>App 显示名称</b></div>
-                            <input aria-label="App 显示名称" maxLength={80} readOnly={!editingAppearance} className={`sw-row-input ${editingAppearance ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} value={site.appDisplayName} placeholder={appConnectionBrand({ ...site, appDisplayName: "" }).appName} onChange={e => setSiteField("appDisplayName", e.target.value)} />
-                          </div>
-                          <div className="brand-asset-list">
-                            <BrandAssetRow label="App 授权图标" desc="" editable={editingAppearance} value={site.appDisplayIcon} fallbackValue={appConnectionBrand({ ...site, appDisplayIcon: "" }).appIcon} emptyLabel="自动" onChange={v => setSiteField("appDisplayIcon", v)} inputRef={appIconRef} accept="image/png,image/jpeg,image/webp,.svg,.ico" onUpload={f => { void uploadSiteFile("ico", f, "appDisplayIcon"); }} onClear={() => setSiteField("appDisplayIcon", "")} kind="icon" busy={pwaUploading} clearLabel="恢复自动" />
-                          </div>
-                        </section>
+                        <button type="button" className="brand-reset-all" onClick={() => jumpTo({ sub: "authorizations", anchor: "authorizations", label: "应用授权" })}>授权页设置已移至应用授权 ›</button>
 
                         {editingAppearance && <button type="button" className="brand-reset-all" disabled={blockSaving.brand || pwaUploading} onClick={() => { void resetBrand(); }}>恢复默认网站形象</button>}
                       </div>
@@ -3604,7 +3593,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </div>
             )}
 
-            {sub === "authorizations" && <AppDeviceList brand={appConnectionBrand(site)} onAppearance={isAdminUser ? () => jumpTo({ sub: "site", anchor: "appearance", label: "网站形象" }) : undefined} />}
+            {sub === "authorizations" && <AppAuthorizationSettings site={site} admin={isAdminUser} onSave={fields => saveBlock("app-connection", fields, "连接配置已保存")} />}
 
             {sub === "totp" && (
               <div id="totp" className="flex flex-col gap-6">

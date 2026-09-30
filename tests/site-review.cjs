@@ -1924,6 +1924,56 @@ function fontHeaderFixture(ext) {
       assert.equal((await iconRoute.GET(new Request('http://localhost' + custom.icons[0].src))).status, 404);
     } finally { settings.updateSiteSettings({ ico: original.ico, pwaIcon: original.pwaIcon }); }
   });
+  await test('App connection diagnostics normalize origins and only read fixed same-origin endpoints', async () => {
+    const { normalizeAppConnectionOrigin, appConnectionSettingsPatch, runAppConnectionChecks } = require(path.join(root, 'lib/appConnectionChecks.ts'));
+    assert.equal(normalizeAppConnectionOrigin('alcor.example.com:18520'), 'https://alcor.example.com:18520');
+    assert.equal(normalizeAppConnectionOrigin(' https://alcor.example.com/ '), 'https://alcor.example.com');
+    assert.equal(normalizeAppConnectionOrigin('localhost:3000', true), 'http://localhost:3000');
+    assert.equal(normalizeAppConnectionOrigin('localhost:3000/', true), 'http://localhost:3000');
+    assert.equal(normalizeAppConnectionOrigin('http://127.0.0.1:3000', true), 'http://127.0.0.1:3000');
+    for (const value of ['', 'localhost:3000', 'http://alcor.example.com', 'https://192.168.1.1', 'https://[::1]', 'https://alcor.local', 'https://alcor.example.com/api', 'https://user:password@alcor.example.com', 'https://alcor.example.com/?token=secret', 'https://alcor.example.com/#fragment', 'https://alcor.example.com\\@evil.example.com']) assert.equal(normalizeAppConnectionOrigin(value), '', value);
+    const baseline = {domain:'192.168.1.1:3000',appDisplayName:'Alcor App',appDisplayIcon:'/uploads/ico/existing.png'};
+    assert.deepEqual(appConnectionSettingsPatch(baseline, baseline), {});
+    assert.deepEqual(appConnectionSettingsPatch({...baseline,appDisplayName:'New App'}, baseline), {appDisplayName:'New App'}, 'a name-only save neither validates nor overwrites an unchanged legacy domain');
+    assert.deepEqual(appConnectionSettingsPatch({...baseline,domain:'alcor.example.com:18520'}, baseline), {domain:'https://alcor.example.com:18520'});
+    assert.deepEqual(appConnectionSettingsPatch({...baseline,domain:'',appDisplayIcon:''}, baseline), {domain:'',appDisplayIcon:''});
+    assert.throws(() => appConnectionSettingsPatch({...baseline,domain:'https://192.168.1.2'}, baseline), /HTTPS/);
+    const controller = new AbortController();
+    const observed = [];
+    const config = { version: 1, client_id: 'fire-ios', redirect_uri: 'com.fire.app:/oauth/callback', authorization_path: '/app/authorize', token_path: '/api/v1/auth/token', revoke_path: '/api/v1/auth/revoke', code_challenge_methods_supported: ['S256'] };
+    const body = pathname => ({code: 0, data: pathname.endsWith('/config') ? config : pathname.endsWith('/me') ? { id: 'shared-user', username: 'test' } : {devices: []}});
+    const result = await runAppConnectionChecks(controller.signal, async (pathname, options) => {
+      observed.push(pathname); assert.equal(options.method, 'GET'); assert.equal(options.credentials, 'same-origin'); assert.equal(options.redirect, 'error'); assert.equal(options.cache, 'no-store'); assert.equal(options.signal, controller.signal);
+      return Response.json(body(pathname));
+    });
+    assert.deepEqual(observed.sort(), ['/api/v1/auth/config', '/api/v1/auth/devices', '/api/v1/auth/me']);
+    assert(result.every(check => check.ok));
+    const stale = await runAppConnectionChecks(controller.signal, async () => Response.json({code:40101,message:'登录已失效'}, {status:401}));
+    assert(stale.every(check => !check.ok && check.message === '登录已失效'));
+    const html = await runAppConnectionChecks(controller.signal, async () => new Response('<html>proxy</html>'));
+    assert(html.every(check => !check.ok));
+    const malformed = await runAppConnectionChecks(controller.signal, async pathname => Response.json(pathname.endsWith('/me') ? {code:0,data:{user:{id:'wrong-envelope'}}} : body(pathname)));
+    assert.equal(malformed.find(check => check.name === '当前账户').ok, false);
+    const stopped = new AbortController(); stopped.abort();
+    await assert.rejects(() => runAppConnectionChecks(stopped.signal, async () => { throw new Error('aborted'); }));
+  });
+  await test('Web app authorization combines configuration, diagnostics and disconnect without moving account settings', () => {
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    const panel = fs.readFileSync(path.join(root, 'components/AppAuthorizationSettings.tsx'), 'utf8');
+    assert(settings.includes('label: "应用授权"'));
+    assert(settings.includes('<AppAuthorizationSettings site={site} admin={isAdminUser}'));
+    assert(settings.includes('saveBlock("app-connection", fields'));
+    assert(!settings.includes('brand-authorization-title') && !settings.includes('appIconRef'));
+    const brandSaves = [...settings.matchAll(/saveBlock\("brand", \{([^}]+)\}/g)];
+    assert.equal(brandSaves.length, 2); assert(brandSaves.every(match => !match[1].includes('appDisplay')));
+    for (const label of ['连接配置', '连接测试', '已连接设备', '保存配置']) assert(panel.includes(label));
+    assert(panel.includes('editing && admin') && panel.includes('admin && !editing'));
+    assert(panel.includes('10_000') && panel.includes('diagnostic.current?.abort()'));
+    assert(panel.includes('<AppDeviceList brand={brand} compact />'));
+    assert(!panel.includes('onProfile') && !panel.includes('/api/auth/profile') && !panel.includes('password'));
+    const devices = fs.readFileSync(path.join(root, 'components/AppDeviceList.tsx'), 'utf8');
+    assert(devices.includes('title="断开连接？"') && devices.includes('method: "DELETE"'));
+  });
   await test('authorization branding persists without changing client permissions and keeps uploaded icons referenced', async () => {
     const { appConnectionBrand, DEFAULT_APP_ICON } = require(path.join(root, 'lib/appConnectionBrand.ts'));
     const cleanup = require(path.join(root, 'lib/fileCleanup.ts'));
@@ -1940,6 +1990,13 @@ function fontHeaderFixture(ext) {
       const saved = settings.getSiteSettings(); assert.equal(saved.appDisplayName,'Nook App');
       assert.equal(appConnectionBrand(saved).appIcon, '/uploads/ico/authorization-test.png');
       const visible = await (await settingsRoute.GET(request('user'))).json(); assert.equal(visible.settings.appDisplayName,'Nook App');
+      const { appConnectionSettingsPatch } = require(path.join(root, 'lib/appConnectionChecks.ts'));
+      const baseline = {domain:saved.domain,appDisplayName:saved.appDisplayName,appDisplayIcon:saved.appDisplayIcon};
+      settings.updateSiteSettings({domain:'https://other-admin.example.test:18520'});
+      const patch = appConnectionSettingsPatch({...baseline,appDisplayName:'Nook Updated App'}, baseline);
+      assert.equal((await settingsRoute.PUT(request('admin', patch, 'PUT'))).status, 200);
+      const persisted = (await (await settingsRoute.GET(request('admin'))).json()).settings;
+      assert.equal(persisted.domain,'https://other-admin.example.test:18520'); assert.equal(persisted.appDisplayName,'Nook Updated App'); assert.equal(persisted.appDisplayIcon,saved.appDisplayIcon); assert.equal(persisted.title,saved.title);
       cleanup.cleanupOrphanFiles(); assert(fs.existsSync(iconPath), 'active authorization artwork survives orphan cleanup');
       assert.equal((await settingsRoute.PUT(request('admin', {appDisplayName:'', appDisplayIcon:''}, 'PUT'))).status, 200);
       const automatic = appConnectionBrand({...settings.getSiteSettings(), logoText:'Nook', pwaIcon:''});
@@ -1952,7 +2009,7 @@ function fontHeaderFixture(ext) {
       const markup = renderToStaticMarkup(React.createElement(Consent, {authorization:readOnly, account:'Review', username:'Review', avatar:'', serverName:'review.example:18520', brand:automatic}));
       assert(markup.includes('Nook 账户')); assert(markup.includes('允许 Nook App')); assert(markup.includes('查看投资数据')); assert(!markup.includes('管理投资数据'));
       assert(!markup.includes('随时撤销')); assert.equal(auth.APP_CLIENT_ID,'fire-ios'); assert.equal(auth.APP_REDIRECT_URI,'com.fire.app:/oauth/callback');
-    } finally { settings.updateSiteSettings({appDisplayName:original.appDisplayName, appDisplayIcon:original.appDisplayIcon}); }
+    } finally { settings.updateSiteSettings({domain:original.domain, appDisplayName:original.appDisplayName, appDisplayIcon:original.appDisplayIcon}); }
   });
   await test('settings secrets filtered for admin/user and anonymous rejected; saving preserves secrets', async () => {
     settings.updateSiteSettings({ llmApiKey: 'TEST_ONLY_LLM', deepseekApiKey: 'TEST_ONLY_OLD', xueqiuCookie: 'TEST_ONLY_COOKIE', pgPassword: 'TEST_ONLY_DB', smtpPassword: 'TEST_ONLY_SMTP' });

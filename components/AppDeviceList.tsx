@@ -15,7 +15,7 @@ function DeviceTime({ value }: { value: number }) {
   return <time dateTime={date.toISOString()}>{date.toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}</time>;
 }
 
-export default function AppDeviceList({ brand, onAppearance }: { brand: AppConnectionBrand; onAppearance?: () => void }) {
+export default function AppDeviceList({ brand, onAppearance, compact = false }: { brand: AppConnectionBrand; onAppearance?: () => void; compact?: boolean }) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -66,7 +66,7 @@ export default function AppDeviceList({ brand, onAppearance }: { brand: AppConne
     finally { inFlight.current = false; if (!controller.signal.aborted) setBusy(false); }
   }
 
-  return <div className={styles.manager} aria-busy={loading}>
+  return <div className={`${styles.manager}${compact ? ` ${styles.compact}` : ""}`} aria-busy={loading}>
     {loading ? <div className={styles.skeleton} role="status" aria-label="正在读取授权">
       <div className={styles.skeletonHeader} aria-hidden="true"><i /><div><i /><i /></div></div>
       <div className={styles.skeletonDetails} aria-hidden="true"><i /><i /></div>

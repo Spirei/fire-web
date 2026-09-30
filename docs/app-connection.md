@@ -49,8 +49,9 @@ App 设置内的连接页首次预填 `https://fire.6dm.tv:18520`，允许更换
 ## 设备、权限与撤销
 
 - `GET /api/v1/auth/devices`、`DELETE /api/v1/auth/devices`（body `{ id }`）仅浏览器本人 Cookie 会话可用；删除需同源 Origin，跨账户 ID 不影响他人。
-- 网页「设置 → 账号与安全 → 管理授权」查看设备名称、授权范围、授权时间和最近使用；撤销使用独立确认弹窗。页面 `/app/devices` 供 App 设置直接打开，未登录时登录后仍返回此页面。
-- 授权页站点名称与标识复用 `logoText` / `siteLogo` / `ico`；「网站形象 → 网页授权」可配置 `appDisplayName`（空值跟随站点名称）与 `appDisplayIcon`（空值使用 PWA 图标或内置默认）。图片支持上传、站内路径及 http(s) 地址；外部图标不发送 Referer，文件清理保护正在使用的图标。显示配置不改变 `client_id`、固定回调或权限边界。
+- 网页「设置 → 账号与安全 → 应用授权」集中显示连接配置、连接测试和本人已连接设备。管理员可填写站点共用的 HTTPS 地址、App 显示名称与图标，经既有 `/api/settings` 保存；普通用户只读配置并管理自己的授权。断开使用独立确认弹窗，访问和刷新令牌同时失效，不退出 Web 或删除投资记录。旧页面 `/app/devices` 仍可查看与断开设备，未登录时登录后返回此页面。
+- 连接测试只读取当前站点 `/api/v1/auth/config`、`/api/v1/auth/me` 与 `/api/v1/auth/devices`，校验固定 PKCE 协议、当前身份和本人设备读取；10 秒超时、禁止跳转，不读取或显示令牌。不请求管理员输入的地址，避免把当前 Cookie 或授权转发给其他服务器；当前访问源与配置地址不同时，明确提示测试不能代表配置域名的外网可达性。`FIRE_APP_ORIGIN` 仍优先于站点域名。
+- 授权页站点名称与标识复用 `logoText` / `siteLogo` / `ico`；「应用授权 → 连接配置」配置 `appDisplayName`（空值跟随站点名称）与 `appDisplayIcon`（空值使用 PWA 图标或内置默认）。图片支持上传、站内路径及 http(s) 地址；外部图标不发送 Referer，文件清理保护正在使用的图标。显示配置不改变 `client_id`、固定回调或权限边界；网站形象的保存与重置不再覆盖这两项。
 - App POST `/api/v1/auth/revoke`（`{ client_id, token: refresh_token }`）撤销当前授权，访问/刷新令牌同时失效；浏览器会话独立。
 - 改密/重置密码或 TOTP 开关/密钥变化立即使 App 凭据失效；deleteOtherSessions 同时撤销 App grants 与未兑换 codes；删除作为登录来源的 passkey 也立即失效。删除用户使用 FK 级联清除凭据。
 - 每用户最多保留 20 个 App 授权。数据库只存 token/code 摘要、账号认证状态摘要，不保存明文凭据。

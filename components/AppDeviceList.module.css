@@ -31,6 +31,9 @@
 .state p { margin:0; }
 .empty { gap:16px; min-height:188px; padding-block:32px; }
 .empty p { color:var(--device-text); font-weight:500; }
+.compact .empty { min-height:104px; padding-block:16px; gap:10px; }
+.compact .stateIcon { width:40px; height:40px; border-radius:12px; }
+.compact .emptyIcon { width:24px; height:24px; max-width:24px; max-height:24px; }
 .stateIcon { display:grid; place-items:center; flex:none; width:60px; height:60px; border-radius:20px; background:var(--device-fill); }
 .emptyIcon { flex:none; width:36px; height:36px; max-width:36px; max-height:36px; color:var(--device-muted); }
 .error { margin:12px 0 0; color:var(--device-danger,var(--sc-dialog-danger,#c93843)); font-size:13px; line-height:20px; overflow-wrap:anywhere; }
