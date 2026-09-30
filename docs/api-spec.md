@@ -328,12 +328,17 @@ GET /api/v1/rates
 | 方法 | 路径 | 说明 | 鉴权 |
 | --- | --- | --- | --- |
 | GET | `/api/v1/assets` | 素材列表（`type` / `q` 过滤 + 分页） | 无 |
+| GET | `/api/v1/assets/lookup` | 按当前页面所需的素材键精确匹配，最多 50 项 | 无 |
 | POST | `/api/v1/assets` | 注册 / 更新素材（upsert 幂等） | 管理员 |
 | PUT | `/api/v1/assets/{id}` | 重命名素材 | 管理员 |
 | DELETE | `/api/v1/assets/{id}` | 删除素材 | 管理员 |
 | POST | `/api/v1/upload` | 文件上传（`kind=avatar/asset/ico/background/logo`） | 登录 / 管理员 |
 
 素材展示优先使用条目的 `imageUrl`（固定 ID + 内容版本），旧服务器没有该字段时使用 `url`。列表读取按 `meta.total` 结束；一个类型失败时保留该类型缓存，其他已成功类型可更新。素材索引与图片缓存按所选服务器隔离。
+
+原生页面图标优先使用 `assets/lookup?keys=<URL 编码的 JSON 数组>`，如 `[{"type":"stock","market":"US","code":"AAPL"},{"type":"market","market":"","code":"US"}]`。键包含 `type`、`market`、`code`；仅接受 `stock / market / crypto / metal`，股票必须提供市场，单次最多 50 项。响应 `data` 为匹配的素材数组，不包含未请求的目录条目；支持交易所后缀及港股补零别名，返回固定 ID 图片地址。查询不播种、不改写素材，按 IP 与全局限流。
+
+App 图标随实际挂载行合并小批请求，不在启动时读取四类完整目录。旧容器返回 404 时只回退 `assets?type=...&q=所需代码` 的定向搜索，再精确过滤；不回退无筛选全目录。离开页面取消独立读取者，最后一个读取者离开才中断共享传输。
 
 ### 6.6 券商
 | 方法 | 路径 | 说明 | 鉴权 |

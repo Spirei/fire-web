@@ -6,6 +6,7 @@ import { RELATED_ETF_MAIN_STOCK } from "./relatedEtfs";
 import { getSiteSettings } from "./settings";
 import { applyRelatedEtfMainStockIcons, stockIconLookupCodes } from "./stockIconKey";
 import { managedImageUrl } from "./managedAssetImages";
+import type { AssetLookupKey } from "./assetLookup";
 
 const seeded = {
   icon: false,
@@ -370,6 +371,29 @@ export function getAssets(type?: AssetType): Asset[] {
     ? (db.prepare("SELECT * FROM assets WHERE type = ? ORDER BY market, code").all(type) as Record<string, unknown>[])
     : (db.prepare("SELECT * FROM assets ORDER BY type, market, code").all() as Record<string, unknown>[]);
   return rows.map(rowToAsset);
+}
+
+/** 只查询和转换当前界面需要的素材，保留固定 ID 图片与代码别名。 */
+export function getAssetMatches(keys: AssetLookupKey[]): Asset[] {
+  const db = getDb();
+  const result = new Map<string, Asset>();
+  for (const key of keys) {
+    let codes = stockIconLookupCodes(key.market, key.code);
+    if (key.type === "stock" && key.market === "US") codes = [key.code, ...["AM", "N", "OQ", "PS", "K"].map(suffix => `${key.code}.${suffix}`)];
+    if (key.type === "stock" && key.market === "JP") codes.push(`${key.code}.T`);
+    if (key.type === "stock" && key.market === "KR") codes.push(`${key.code}.KS`, `${key.code}.KQ`);
+    const placeholders = codes.map(() => "?").join(",");
+    const clause = key.type === "stock" ? `UPPER(market) = ? AND UPPER(code) IN (${placeholders})`
+      : key.type === "market" ? "(UPPER(market) = ? OR UPPER(code) = ?)" : "UPPER(code) = ?";
+    const params = key.type === "stock" ? [key.type, key.market, ...codes]
+      : key.type === "market" ? [key.type, key.code, key.code] : [key.type, key.code];
+    const rows = db.prepare(`SELECT * FROM assets WHERE type = ? AND ${clause}`).all(...params) as Record<string, unknown>[];
+    for (const row of rows) {
+      const asset = rowToAsset(row);
+      result.set(asset.id, asset);
+    }
+  }
+  return [...result.values()];
 }
 
 /** 服务端首屏按代码读取货币国旗，避免客户端为一个按钮等待完整国旗素材目录。 */
