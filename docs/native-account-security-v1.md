@@ -1,6 +1,6 @@
 # iOS 账户安全 v1 合约 · 2026-10-01
 
-状态：合约冻结，服务端已在隔离分支 codex/native-account-security 实现并完成本地回归，尚未合入 main、尚未部署。隔离目录 `../fire-web-ios-security`。不得把线上缺失字段当可用。所有响应为 {code,message,data}，时间为 Unix 毫秒，写请求不自动重放。
+状态：合约冻结，服务端已实现并完成本地回归，代码通过 main 同步，镜像发布与部署另行进行。不得把线上缺失字段当可用。所有响应为 {code,message,data}，时间为 Unix 毫秒，写请求不自动重放。
 
 App v2 接入见 [迁移合约](app-api-v2.md)：安全 payload、错误码和能力沿用本文件，路径前缀及 security.version 改为 v2；保留 v1 供旧连接使用。
 
@@ -47,4 +47,4 @@ Apple 要求 App 的 Associated Domains entitlement 中包含 webcredentials:RP�
 - npm run test:review 完整回归通过；安全专项 tests/app-native-security.cjs 最终12组通过，均使用临时SQLite与模拟网络/邮件。
 - 公开仓库与部署一致性审计通过。原生注册保持503，不调用生产邮件/安全写接口。
 - 3000端口由其他本地实例占用，未停止该实例、未更换端口；没有对本分支运行真实HTTP smoke-test。路由已编译，处理器回归使用 Request/NextResponse。
-- 仓库 main 已有另一项网页工作未提交改动，交付保持独立分支/工作树，不覆盖、不提交其文件。合入与部署需在两个端都准备好之后进行；本轮未触发镜像发布。
+- 实现与回归使用隔离工作树；同步 main 时保留其他网页工作未提交改动，不提交其文件。本轮仅推送代码，未触发手动镜像发布；部署后的端到端验收仍需以实际服务能力为准。
