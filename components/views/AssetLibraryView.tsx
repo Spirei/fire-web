@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MARKET_LIST, marketMeta } from "@/lib/types";
@@ -281,6 +281,7 @@ function Avatar({
 
 export default function AssetLibraryView({ initialCdnEnabled, initialAssets = [], initialTotal = 0 }: { initialCdnEnabled?: boolean; initialAssets?: Asset[]; initialTotal?: number } = {}) {
   const rates = useRates();
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab");
   const initialSort = searchParams.get("sort");
@@ -369,9 +370,9 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
 
   const stockPageSignature = `${selected}|${topPage}|${sortKey}|${sortDir}|${query.trim()}`;
 
-  // URL 已参与 SSR 首帧；挂载时仅同步浏览器当前位置。
+  // URL 已参与 SSR 首帧；挂载时沿用本页快照，延迟加载的隐藏页不读别页地址。
   useLayoutEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
+    const sp = searchParams;
     const nextTab = sp.get("tab");
     if (nextTab && (["stock", "market", "flag", "broker", "group", "crypto", "metal", "icon", "card"] as string[]).includes(nextTab)) setTab(nextTab as TabKey);
     setSelected(sp.get("market") || "ALL");
@@ -407,6 +408,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
   // URL 状态同步：刷新/分享/前进后退都能保持选中的分类和市场
   useEffect(() => {
     function syncFromUrl() {
+      if (!canUseWorkspaceUrl()) return;
       const sp = new URLSearchParams(window.location.search);
       const t = sp.get("tab");
       if (t && (["stock", "market", "flag", "broker", "group", "crypto", "metal", "icon", "card"] as string[]).includes(t)) setTab(t as TabKey);
@@ -427,6 +429,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
   }, []);
 
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("tab") !== tab) {
       sp.set("tab", tab);
@@ -454,6 +457,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
 
   // 视图模式同步进 URL：list 是默认值，不写进地址栏，保持链接干净
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     const sp = new URLSearchParams(window.location.search);
     const current = sp.get("view");
     if (cardView === "grid" ? current === "grid" : current === null) return;
@@ -463,6 +467,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
   }, [cardView]);
 
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     if (tab !== "stock") return;
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("market") !== selected) {
@@ -885,6 +890,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
 
   // 分页 URL 同步：?page=N，刷新 / 分享保持页码
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     const sp = new URLSearchParams(window.location.search);
     if (topPage > 1) sp.set("page", String(topPage));
     else sp.delete("page");
@@ -893,6 +899,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
 
   // 排序状态写入 URL：?sort=price&dir=asc，刷新 / 分享保持排序
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     const sp = new URLSearchParams(window.location.search);
     if (sortKey !== "rank") sp.set("sort", sortKey);
     else sp.delete("sort");

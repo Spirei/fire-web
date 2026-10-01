@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { createQuoteSchedule } from "@/lib/quoteSchedule";
 import { fmtPct, fmtPrice } from "@/lib/format";
@@ -75,6 +75,7 @@ function filterIdFromToken(groups: WatchGroup[], raw: string): string {
 }
 
 export default function QuotesView({ initialSymbol, initialNow, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, groups, onDetailChange, onToggleWatch }: Props) {
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const filterToken = searchParams.get("filter") ?? "";
   const { brokerIcons, stockIcons, assetIcons } = useAssetIcons(["broker", "stock", "crypto", "metal"]);
@@ -216,6 +217,7 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
   }, []);
 
   function writeFilterToUrl(id: string, mode: "push" | "replace" = "push") {
+    if (!canUseWorkspaceUrl()) return;
     const sp = new URLSearchParams(window.location.search);
     const token = compactFilterToken(watchGroups, id);
     if (token) sp.set("filter", token);
@@ -230,6 +232,7 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
 
   // 市场使用 us/cn/hk 等市场码，自定义分组按当前顺序使用 1/2/3；其他格式直接清理。
   useLayoutEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     if (watchGroups.length === 0) return;
     const raw = filterToken;
     if (!raw) {
@@ -388,6 +391,7 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
 
   useEffect(() => {
     function syncFromPath() {
+      if (!canUseWorkspaceUrl()) return;
       const rawFilter = new URLSearchParams(window.location.search).get("filter") ?? "";
       const nextFilterId = filterIdFromToken(watchGroups, rawFilter);
       setFilterId(nextFilterId);

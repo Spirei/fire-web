@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -67,6 +67,7 @@ function RequestHeatmap({ counts, today, filters, onChange }: { counts: Record<s
 }
 
 export default function ApiRequests({ standalone = false }: { standalone?: boolean }) {
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const [filters, setFilters] = useState<RequestFilters>(() => parseRequestFilters(new URLSearchParams(searchParams.toString())));
   const [ready, setReady] = useState(true);
@@ -86,7 +87,11 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
   const loadingShape = useRef({ rows: 6, endpoints: 3 });
 
   useLayoutEffect(() => {
-    const restore = () => { setFilters(parseRequestFilters(new URLSearchParams(window.location.search))); setReady(true); };
+    const restore = () => {
+      if (!canUseWorkspaceUrl()) return;
+      setFilters(parseRequestFilters(new URLSearchParams(window.location.search)));
+      setReady(true);
+    };
     restore(); window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
   }, []);

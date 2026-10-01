@@ -1,7 +1,7 @@
 "use client";
 
 import { Children, isValidElement, useRef, useState, type ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams } from "@/lib/workspacePanel";
 
 type PaneProps = { name: string; title: string; summary?: ReactNode; heading?: boolean; children: ReactNode };
 export function SettingsManagedPane({ children }: PaneProps) { return <>{children}</>; }

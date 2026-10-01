@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
@@ -160,6 +160,7 @@ function AttachmentModalShell({ children, onClose, labelledBy, alert = false, wi
 
 export default function AttachmentsView() {
   // 分类状态 URL 持久化：刷新保持当前分类（?category=docs|reports|library）
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const [category, setCategory] = useState<"docs" | "reports" | "library">(() => {
     const value = searchParams.get("category");
@@ -167,11 +168,12 @@ export default function AttachmentsView() {
   });
   const [urlReady, setUrlReady] = useState(true);
   useLayoutEffect(() => {
-    const seg = new URLSearchParams(window.location.search).get("category");
+    const seg = searchParams.get("category");
     setCategory(seg === "reports" || seg === "library" ? seg : "docs");
     setUrlReady(true);
   }, []);
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     if (!urlReady) return;
     const url = new URL(window.location.href);
     if (category === "docs") url.searchParams.delete("category");

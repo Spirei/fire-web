@@ -2,7 +2,7 @@
 
 import { usePersistedState } from "@/lib/usePersistedState";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { sharedRead } from "@/lib/sharedRead";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -187,16 +187,18 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const merged = tabOverride ? [...tabOverride, ...baseTabs.filter((m) => !tabOverride.includes(m))] : baseTabs;
     return merged.filter((m) => hasMarketRecords(m));
   }, [tabOverride, baseTabs, hasMarketRecords]);
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const [active, setActive] = useState<string>(() => searchParams.get("market") || "TOTAL");
   useLayoutEffect(() => {
-    setActive(new URLSearchParams(window.location.search).get("market") || "TOTAL");
+    setActive(searchParams.get("market") || "TOTAL");
   }, []);
   const dragIndex = useRef<number | null>(null);
 
   // URL 同步市场标签：刷新保持当前市场
   useEffect(() => {
     function syncFromUrl() {
+      if (!canUseWorkspaceUrl()) return;
       const m = new URLSearchParams(window.location.search).get("market");
       if (m) setActive(m);
     }
@@ -205,6 +207,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   }, []);
 
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("market") !== active) {
       sp.set("market", active);
@@ -757,6 +760,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
 
   useEffect(() => {
     function syncHoldingFromUrl() {
+      if (!canUseWorkspaceUrl()) return;
       const symbol = new URLSearchParams(window.location.search).get("symbol");
       if (!symbol) {
         setSelectedHolding(null);

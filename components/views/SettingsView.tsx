@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import PasswordInput from "@/components/PasswordInput";
 import PasskeySettings from "@/components/PasskeySettings";
@@ -752,6 +752,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       else acc.push({ label: it.groupLabel, items: [{ sub: it.sub, anchor: it.anchor, label: it.label, groupLabel: it.groupLabel }] });
       return acc;
     }, []);
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const initialLocation = resolveSettingsLocation(new URLSearchParams(searchParams.toString()), SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || (!ADMIN_SUB_KEYS.has(item.sub) && !item.adminOnly)), SETTINGS_CATEGORIES);
   const [sub, setSub] = useState<SubKey>(() => {
@@ -840,6 +841,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   useLayoutEffect(() => {
     function restoreLocation() {
+      if (!canUseWorkspaceUrl()) return;
       const location = resolveSettingsLocation(new URLSearchParams(window.location.search), SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || (!ADMIN_SUB_KEYS.has(item.sub) && !item.adminOnly)), SETTINGS_CATEGORIES);
       setCategoryPage(location.category);
       const origin = new URLSearchParams(window.location.search).get("from");

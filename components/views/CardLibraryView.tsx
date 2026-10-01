@@ -1,6 +1,7 @@
 "use client";
 
 import { sharedRead } from "@/lib/sharedRead";
+import { useWorkspaceSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import CardThumbnail from "@/components/CardThumbnail";
@@ -443,6 +444,8 @@ function MultiSelect({
 }
 
 export default function CardLibraryView({ initial = null }: { initial?: CardLibraryPayload | null }) {
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
+  const searchParams = useWorkspaceSearchParams();
   // 首帧直接用服务端注入的清单与个人数据（无注入时才回落到骨架屏 + 客户端请求）
   const [regions, setRegions] = useState<RegionEntry[]>(() => (initial?.regions as RegionEntry[] | undefined) ?? []);
   const [typeOrder, setTypeOrder] = useState<string[]>(() => initial?.typeOrder ?? []);
@@ -541,13 +544,16 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   useEffect(() => { setPreparedWanderSeed(Math.random().toString(36).slice(2, 10)); }, []);
   const wanderOpenedRef = useRef(false);
   useLayoutEffect(() => {
-    const syncFromUrl = () => {
-      const seed = new URLSearchParams(window.location.search).get("wander");
+    const applySeed = (seed: string | null) => {
       const nextSeed = seed && /^[a-z0-9]{6,12}$/.test(seed) ? seed : null;
       if (!nextSeed) wanderOpenedRef.current = false;
       setWanderSeed(nextSeed);
     };
-    syncFromUrl();
+    const syncFromUrl = () => {
+      if (!canUseWorkspaceUrl()) return;
+      applySeed(new URLSearchParams(window.location.search).get("wander"));
+    };
+    applySeed(searchParams.get("wander"));
     window.addEventListener("popstate", syncFromUrl);
     return () => window.removeEventListener("popstate", syncFromUrl);
   }, []);
@@ -2764,7 +2770,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         />,
         document.body
       )}
-      {wanderSeed && typeof document !== "undefined" && createPortal(
+      {wanderSeed && typeof document !== "undefined" && canUseWorkspaceUrl() && createPortal(
         <CardWander
           cards={wanderCards}
           seed={wanderSeed}

@@ -2,8 +2,10 @@
 
 import { useSearchParams } from "next/navigation";
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
+import WorkspacePanel, { WorkspaceBoundary, WorkspaceLoading } from "@/components/WorkspacePanel";
+import FourDoorLoading from "@/components/FourDoorLoading";
 import MobileBackGesture from "@/components/MobileBackGesture";
 import { mobilePanelDirection } from "@/lib/mobileNavigation";
 import { accountHoldingPrice } from "@/lib/accountCash";
@@ -41,28 +43,28 @@ import { preloadView } from "@/lib/viewPreload";
 import { mobileWorkspaceGroups } from "@/lib/workspaceNavigation";
 
 // 默认保留服务端渲染：刷新当前页仍随 HTML 直接呈现内容；仅客户端代码按页签拆包。
-// 不设 loading 挡板，切换页签时也不显示整屏「加载中…」。
-const WatchlistView = dynamic(() => import("@/components/views/WatchlistView"));
-const HoldingsView = dynamic(() => import("@/components/views/HoldingsView"));
-const AssetAnalysisView = dynamic(() => import("@/components/views/AssetAnalysisView"));
-const FireView = dynamic(() => import("@/components/views/FireView"));
-const ActivitiesView = dynamic(() => import("@/components/views/ActivitiesView"));
-const EarningsCalendarView = dynamic(() => import("@/components/views/EarningsCalendarView"));
-const CelebsView = dynamic(() => import("@/components/views/CelebsView"));
-const FeedView = dynamic(() => import("@/components/views/FeedView"));
-const SettingsView = dynamic(() => import("@/components/views/SettingsView"));
-const UsersView = dynamic(() => import("@/components/views/UsersView"));
-const AssetLibraryView = dynamic(() => import("@/components/views/AssetLibraryView"));
-const CardLibraryView = dynamic(() => import("@/components/views/CardLibraryView"));
-const AttachmentsView = dynamic(() => import("@/components/views/AttachmentsView"));
-const GlobalPreviewView = dynamic(() => import("@/components/views/GlobalPreviewView"));
-const AssetPnlAnalysisView = dynamic(() => import("@/components/AssetPnlAnalysis"));
-const AssistantView = dynamic(() => import("@/components/views/AssistantView"));
+// 首次下载页面代码时提供局部静态反馈，不把右侧工作区留白。
+const WatchlistView = dynamic(() => import("@/components/views/WatchlistView"), { loading: WorkspaceLoading });
+const HoldingsView = dynamic(() => import("@/components/views/HoldingsView"), { loading: WorkspaceLoading });
+const AssetAnalysisView = dynamic(() => import("@/components/views/AssetAnalysisView"), { loading: WorkspaceLoading });
+const FireView = dynamic(() => import("@/components/views/FireView"), { loading: WorkspaceLoading });
+const ActivitiesView = dynamic(() => import("@/components/views/ActivitiesView"), { loading: WorkspaceLoading });
+const EarningsCalendarView = dynamic(() => import("@/components/views/EarningsCalendarView"), { loading: WorkspaceLoading });
+const CelebsView = dynamic(() => import("@/components/views/CelebsView"), { loading: WorkspaceLoading });
+const FeedView = dynamic(() => import("@/components/views/FeedView"), { loading: WorkspaceLoading });
+const SettingsView = dynamic(() => import("@/components/views/SettingsView"), { loading: WorkspaceLoading });
+const UsersView = dynamic(() => import("@/components/views/UsersView"), { loading: WorkspaceLoading });
+const AssetLibraryView = dynamic(() => import("@/components/views/AssetLibraryView"), { loading: WorkspaceLoading });
+const CardLibraryView = dynamic(() => import("@/components/views/CardLibraryView"), { loading: WorkspaceLoading });
+const AttachmentsView = dynamic(() => import("@/components/views/AttachmentsView"), { loading: WorkspaceLoading });
+const GlobalPreviewView = dynamic(() => import("@/components/views/GlobalPreviewView"), { loading: WorkspaceLoading });
+const AssetPnlAnalysisView = dynamic(() => import("@/components/AssetPnlAnalysis"), { loading: WorkspaceLoading });
+const AssistantView = dynamic(() => import("@/components/views/AssistantView"), { loading: WorkspaceLoading });
 const DeferredAssistant = dynamic(() => import("@/components/DeferredAssistant"));
 const FloatingAssistant = memo(function FloatingAssistant({ symbol, userId, onNavigate }: { symbol?: string; userId: string; onNavigate: (path: string) => void }) {
   return <DeferredAssistant page={currentAssistantPage()} symbol={symbol} userId={userId} initialHistory={null} onNavigate={onNavigate} />;
 });
-const FourDoorNavigator = dynamic(() => import("@/components/FourDoorNavigator"), { ssr: false, loading: () => <div className="four-door-zone" aria-hidden="true" /> });
+const FourDoorNavigator = lazy(() => import("@/components/FourDoorNavigator"));
 
 type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "assistant" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
 
@@ -1013,7 +1015,7 @@ export default function RecordsApp({
       <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block ${activeTab === "settings" ? "is-settings" : ""}`}>
         <nav id="fire-desktop-nav" ref={desktopNavRef} onScroll={updateSidebarScroll} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
           <div className={`four-door-anchor ${fourDoorPinned ? "is-pinned" : ""}`}>
-            {fourDoorViewport ? <FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} pinned={fourDoorPinned} onTogglePinned={() => setFourDoorPinned(value => !value)} /> : <div className="four-door-zone" aria-hidden="true" />}
+            {fourDoorViewport ? <WorkspaceBoundary fallback={<FourDoorLoading activeKey={activeTab} />}><Suspense fallback={<FourDoorLoading activeKey={activeTab} />}><FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} pinned={fourDoorPinned} onTogglePinned={() => setFourDoorPinned(value => !value)} /></Suspense></WorkspaceBoundary> : <div className="four-door-zone" aria-hidden="true" />}
           </div>
           <div className="fire-sidebar-section-label">资产</div>
           {sidebarTabs.map((t, index) => {
@@ -1167,7 +1169,7 @@ export default function RecordsApp({
           }
           return (
             <div key={`${tab}:${panelEpoch[tab] ?? 0}`} hidden={!active} data-direction={active ? panelDirection : "none"} className="tab-panel min-w-0">
-              {node}
+              <WorkspacePanel active={active} path={tab === "pnl" ? "/asset-pnl-analysis" : navTabs.find(item => item.key === tab)?.url || `/${tab}`} query={active ? searchParams.toString() : new URL(pageMemory.current.get(tab) || "/", "http://workspace.invalid").search}>{node}</WorkspacePanel>
             </div>
           );
         })}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconCheck, IconPencil, IconPlus, IconRefresh, IconX } from "@tabler/icons-react";
@@ -63,12 +63,13 @@ function DragHandle({ label }: { label: string }) {
 export default function FxConverter() {
   const { currency: displayCurrency } = useDisplayCurrency();
   const start = isFxCurrency(displayCurrency) ? displayCurrency : "USD";
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const [base, setBase] = useState<FxCurrency>(() => readUrlState(start, searchParams).from);
   const [text, setText] = useState(() => readUrlState(start, searchParams).amount);
   const [urlReady, setUrlReady] = useState(true);
   useLayoutEffect(() => {
-    const initial = readUrlState(start, new URLSearchParams(window.location.search));
+    const initial = readUrlState(start, searchParams);
     setBase(initial.from);
     setText(initial.amount);
     setUrlReady(true);
@@ -95,6 +96,7 @@ export default function FxConverter() {
   const [over, setOver] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     if (!urlReady) return;
     const params = new URLSearchParams(window.location.search);
     params.set("section", "convert");

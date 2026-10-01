@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
@@ -122,6 +122,7 @@ function financialView(value: string | null) {
 }
 
 export function FinancialAttachments({ standalone }: { standalone?: boolean }) {
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const { stockIcons, marketIcons, assets } = useAssetIcons(["stock", "market"], { fullCatalog: true });
   // SSR 首帧统一为加载态；挂载前恢复本地缓存，避免水合不一致及可见闪烁。
@@ -138,13 +139,14 @@ export function FinancialAttachments({ standalone }: { standalone?: boolean }) {
     const cached = readFinReportCache();
     setCachedFiles(cached);
     if (cached) { setFiles(cached); setLoading(false); }
-    const v = new URLSearchParams(window.location.search).get("view");
+    const v = searchParams.get("view");
     if (v) {
       setView(financialView(v));
     }
     setUrlReady(true);
   }, []);
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     if (!urlReady) return;
     const url = new URL(window.location.href);
     const parts: string[] = [];

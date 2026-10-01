@@ -1,6 +1,7 @@
 "use client";
 
 import { usePnlCalendarState } from "@/lib/usePnlCalendarState";
+import { useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CurrencyFlag from "@/components/CurrencyFlag";
@@ -295,6 +296,7 @@ function DateRangePicker({ range, onApply, onClose }: { range: DateRange; onAppl
 }
 
 export default function AssetAnalysisDashboard({ initialModuleOrder, positions, quotes, livePrice, rates, currency, stockIcons, user, onRefreshMarketData, onOpenPnlAnalysis }: Props) {
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const [period, setPeriod] = usePersistedState<Period>("fire:asset-period", "ytd");
   const [chartTab, setChartTab] = usePersistedState<ChartTab>("fire:asset-chart-tab", "return");
   const [weighting, setWeighting] = usePersistedState<"simple" | "time">("fire:asset-weighting", "simple");
@@ -407,6 +409,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
 
   // 货币选择写入 URL ?cur=，与我的持仓页保持一致（该页按 URL 初始化货币）
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("cur") !== displayCurrency) {
       sp.set("cur", displayCurrency);

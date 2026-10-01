@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
@@ -266,6 +266,7 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
   const [logoBases, setLogoBases] = useState<{ us: string; cn: string } | null>(null);
   const [timeKey, setTimeKey] = usePersistedState<TimeKey>("fire:earnings-time", "all");
   const [capKey, setCapKey] = usePersistedState<CapKey | CapKeyCN>("fire:earnings-cap", "all");
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const [marketKey, setMarketKey] = useState<MarketKey>(() => {
     const value = searchParams.get("market")?.toUpperCase();
@@ -277,7 +278,7 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
   });
   const [urlReady, setUrlReady] = useState(true);
   useLayoutEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
+    const sp = searchParams;
     const m = sp.get("market")?.toUpperCase();
     setMarketKey((["US", "HK", "CN", "JP", "KR", "ALL"] as string[]).includes(m ?? "") ? (m as MarketKey) : "US");
     const s = sp.get("type");
@@ -307,6 +308,7 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
   // URL 同步市场/类型筛选：刷新保持
   useEffect(() => {
     function syncFromUrl() {
+      if (!canUseWorkspaceUrl()) return;
       const sp = new URLSearchParams(window.location.search);
       const m = sp.get("market")?.toUpperCase();
       if (m && (["US", "HK", "CN", "JP", "KR", "ALL"] as string[]).includes(m)) setMarketKey(m as MarketKey);
@@ -318,6 +320,7 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
   }, []);
 
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     if (!urlReady) return;
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("market") !== marketKey) {
@@ -327,6 +330,7 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
   }, [marketKey, urlReady]);
 
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     if (!urlReady) return;
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("type") !== stockKey) {

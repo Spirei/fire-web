@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import FxConverter from "@/components/FxConverter";
@@ -439,17 +439,19 @@ function SectionIcon({ section }: { section: GlobalSection }) {
 }
 
 export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const [section, setSection] = useState<GlobalSection>(() => pageSize ? "assets" : parseGlobalSection(searchParams.get("section")));
   const [urlReady, setUrlReady] = useState(true);
 
   useLayoutEffect(() => {
     if (pageSize) return;
-    setSection(parseGlobalSection(new URLSearchParams(window.location.search).get("section")));
+    setSection(parseGlobalSection(searchParams.get("section")));
     setUrlReady(true);
   }, [pageSize]);
 
   useEffect(() => {
+    if (!canUseWorkspaceUrl()) return;
     if (pageSize || !urlReady) return;
     const params = new URLSearchParams(window.location.search);
     params.set("section", section);

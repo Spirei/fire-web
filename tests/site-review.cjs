@@ -256,7 +256,9 @@ function fontHeaderFixture(ext) {
     assert(app.includes('hidden={!active}'));
     assert(app.includes('panels.current.set(tab, node)'));
     assert(app.includes('panelBuiltStamp.current.get(tab) !== panelDataStamp'));
-    assert(css.includes('content-visibility: hidden;'));
+    assert(!css.includes('content-visibility: hidden;'), 'hidden workspaces must stay display:none on every browser');
+    assert(app.includes('<WorkspacePanel active={active}'));
+    assert.equal((app.match(/loading: WorkspaceLoading/g)||[]).length,16);
     assert(css.includes('.records-content { min-width:0; isolation:isolate; overflow-anchor:none; scroll-behavior:auto; }'));
     assert(css.includes('html.fire-workspace-switching body'));
     assert(css.includes('scroll-behavior: auto;'));
@@ -599,7 +601,7 @@ function fontHeaderFixture(ext) {
     const assistant = fs.readFileSync(path.join(root, 'components/DeferredAssistant.tsx'), 'utf8');
     const navigation = fs.readFileSync(path.join(root, 'components/WorkspaceNavigation.tsx'), 'utf8');
     const ticker = fs.readFileSync(path.join(root, 'components/WorkspaceTicker.tsx'), 'utf8');
-    assert(shell.includes('fourDoorViewport ? <FourDoorNavigator'));
+    assert(shell.includes('fourDoorViewport ? <WorkspaceBoundary fallback={<FourDoorLoading activeKey={activeTab} />}><Suspense fallback={<FourDoorLoading activeKey={activeTab} />}><FourDoorNavigator'));
     assert(shell.includes('desktopViewport && activeTab !== "assistant" && floatingAssistantReady'));
     assert(shell.includes('if (!desktopViewport || !nav) return;'));
     assert(!shell.includes('usePrefetchFlagIcons('));

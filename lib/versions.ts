@@ -4712,7 +4712,7 @@ export const V0_1_46_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_47_ENTRY: VersionEntry = {
   ...V0_1_46_ENTRY,
   version: "v0.1.47",
   date: "2026-10-01",
@@ -4750,11 +4750,23 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_47_ENTRY,
+  version: "v0.1.48",
+  date: "2026-10-02",
+  summary: "修复后台切页留白和隐藏页占位，隔离缓存地址状态，优化四色门加载。",
+  software: V0_1_47_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.48" } : item),
+  changes: [
+    { kind: "fix", title: "后台切页与四色门加载复查", desc: "后台首次下载目标页代码时提供局部静态反馈，每页独立处理渲染或加载失败，不让异常变成整片白屏。隐藏缓存页统一 display:none，保留 React 状态与滚动记忆但不占布局空间；各页保留独立 URL 参数，隐藏监听器和自动同步不能干扰当前页，下载完成时已切走也不串用筛选。四色门静态预览与交互代码并行加载，装饰失败不影响侧栏其他入口；原设备和尺寸挂载条件不变，手机、平板与短屏不额外加载资源。补充首屏、延迟挂载、错误边界和浏览器切换回归，不改财务排版、真实数据或已有偏好。" }
+  ]
+};
+
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_47_ENTRY,
   V0_1_46_ENTRY,
   V0_1_45_ENTRY,
   V0_1_44_ENTRY,

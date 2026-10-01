@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 import { activityFilters, type ActivityScope } from "@/lib/activityFilters";
 
 import Pagination from "@/components/Pagination";
@@ -162,6 +162,7 @@ function writeQuery(scope: Scope, page: number, query: string) {
 }
 
 export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin = false, onRefresh }: Props) {
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const params = useSearchParams();
   const { scope, query, page } = activityFilters(params, isAdmin);
   const setScope = (next: Scope) => writeQuery(next, 1, query);
@@ -206,7 +207,7 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
   const convertedTotal = Object.values(convertedMarkets).reduce((sum, value) => sum + value, 0);
 
   useEffect(() => {
-    if (scope !== "requests" && page !== safePage) writeQuery(scope, safePage, query);
+    if (canUseWorkspaceUrl() && scope !== "requests" && page !== safePage) writeQuery(scope, safePage, query);
   }, [page, query, safePage, scope]);
 
   useEffect(() => {

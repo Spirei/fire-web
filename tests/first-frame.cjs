@@ -18,7 +18,7 @@ require.extensions['.css'] = () => {};
 let query = new URLSearchParams();
 const load = Module._load;
 Module._load = function(id, parent, ...rest) {
-  if (id === 'next/navigation') return {useSearchParams:()=>query,useRouter:()=>({push(){},replace(){},refresh(){}}),usePathname:()=>'/test'};
+  if (id === 'next/navigation') return {ReadonlyURLSearchParams:URLSearchParams,useSearchParams:()=>query,useRouter:()=>({push(){},replace(){},refresh(){}}),usePathname:()=>'/test'};
   // Password worker uses import.meta; it is irrelevant to settings navigation SSR.
   if (id === '@/components/PasswordStrength') return {__esModule:true,default:()=>null};
   if (id === 'next/dynamic') return {__esModule:true,default:()=>()=>null};
@@ -108,6 +108,64 @@ try {
     const html=render('components/AppModal.tsx',{title:'首屏弹窗',onClose(){},children:'详情内容'});
     assert(html.includes('role="dialog"'));
     assert(html.includes('详情内容'));
+  });
+  test('eligible navigator loading art matches saved style without starting browser effects',()=>{
+    const file='components/FourDoorLoading.tsx';
+    const first=render(file,{activeKey:'fire'});
+    assert(first.includes('/four-door/window.png'));
+    assert(first.includes('/four-door/dial.png'));
+    assert(first.includes('rotate(-180deg)'));
+    assert(!first.includes('<button'));
+    const second=render(file,{activeKey:'assets'},'',{'fire:four-door-style':2});
+    assert(second.includes('four-door-dial'));
+    assert(!second.includes('/four-door/dial.png'));
+    assert(second.includes('rotate(-90deg)'));
+  });
+  test('loading and render failure offer local feedback without changing the whole workspace',()=>{
+    const loading=render('components/WorkspacePanel.tsx',{},'',{},'WorkspaceLoading');
+    assert(loading.includes('role="status"'));
+    assert(loading.includes('正在打开'));
+    const shell=fs.readFileSync(path.join(root,'components/RecordsApp.tsx'),'utf8');
+    assert(shell.includes('<WorkspacePanel active={active}'));
+    const panel=fs.readFileSync(path.join(root,'components/WorkspacePanel.tsx'),'utf8');
+    assert(panel.includes('getDerivedStateFromError'));
+    assert(panel.includes('window.location.reload()'));
+    const {WorkspaceBoundary}=require(path.join(root,'components/WorkspacePanel.tsx'));
+    const failed=new WorkspaceBoundary({children:'broken'});failed.state={failed:true};
+    const html=renderToStaticMarkup(failed.render());
+    assert(html.includes('role="alert"')&&html.includes('重新加载')&&!html.includes('broken'));
+    const decoration=new WorkspaceBoundary({children:'broken',fallback:React.createElement('span',null,'静态四色门')});decoration.state={failed:true};
+    assert.equal(renderToStaticMarkup(decoration.render()),'<span>静态四色门</span>');
+    assert(shell.includes('<WorkspaceBoundary fallback={<FourDoorLoading'));
+  });
+  test('cached workspace parameters stay isolated and hidden listeners cannot write another page URL',()=>{
+    const vm=require('node:vm'),file=path.join(root,'lib/workspacePanel.tsx');
+    const output=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+    const exports={},state={active:true,path:'/holdings',query:new URLSearchParams('market=HK'),saved:'market=HK',ref:null},window={location:{pathname:'/holdings'}};
+    let contextId=0;
+    vm.runInNewContext(output,{exports,window,require:id=>id==='react'?{
+      createContext:initial=>({initial,id:contextId++}),useContext:context=>context.id===0?state.active:context.id===1?state.path:state.saved,
+      useMemo:fn=>fn(),useRef:value=>state.ref||(state.ref={current:value}),useCallback:fn=>fn
+    }:{ReadonlyURLSearchParams:URLSearchParams,useSearchParams:()=>state.query}});
+    const first=exports.useWorkspaceSearchParams();state.active=false;state.query=new URLSearchParams('page=99&market=US');
+    assert.equal(exports.useWorkspaceSearchParams(),first);assert.equal(first.get('market'),'HK');
+    state.active=true;assert.equal(exports.useWorkspaceSearchParams(),state.query);
+    state.ref=null;state.active=false;assert.equal(exports.useWorkspaceSearchParams().get('market'),'HK','late hidden mount must initialize from its own URL');
+    state.active=true;
+    state.ref=null;const guard=exports.useWorkspaceLocationGuard();assert.equal(guard(),true);
+    window.location.pathname='/holdings/US.AAPL';assert.equal(guard(),true);
+    window.location.pathname='/library';assert.equal(guard(),false);
+    window.location.pathname='/holdings';state.active=false;exports.useWorkspaceLocationGuard();assert.equal(guard(),false);
+    for(const name of ['AssetLibrary','CardLibrary','Celebs','EarningsCalendar','Holdings','Quotes','Settings']) {
+      const source=fs.readFileSync(path.join(root,`components/views/${name}View.tsx`),'utf8');
+      assert(source.includes('useWorkspaceLocationGuard'),name+' URL listeners must be workspace scoped');
+    }
+    assert(fs.readFileSync(path.join(root,'components/FxConverter.tsx'),'utf8').includes('readUrlState(start, searchParams)'));
+    assert(fs.readFileSync(path.join(root,'components/StockDetailView.tsx'),'utf8').includes('const requested = searchParams.get("tab")'));
+    const quotes=fs.readFileSync(path.join(root,'components/views/QuotesView.tsx'),'utf8');
+    assert(/function writeFilterToUrl[^\n]*\n\s*if \(!canUseWorkspaceUrl\(\)\) return;/.test(quotes));
+    const dashboard=fs.readFileSync(path.join(root,'components/AssetAnalysisDashboard.tsx'),'utf8');
+    assert(/useEffect\(\(\) => \{\s*if \(!canUseWorkspaceUrl\(\)\) return;\s*const sp = new URLSearchParams/.test(dashboard));
   });
   test('celeb URL renders requested detail rather than the default gallery first',()=>{
     const {CELEBS}=require(path.join(root,'lib/celebs.ts'));

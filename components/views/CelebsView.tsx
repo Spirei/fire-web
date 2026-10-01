@@ -2,7 +2,7 @@
 
 import { usePersistedState } from "@/lib/usePersistedState";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { memo, useEffect, useLayoutEffect, useMemo, useId, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from "react";
 import { CELEBS, type Celeb, type CelebHolding } from "@/lib/celebs";
@@ -1255,6 +1255,7 @@ export default function CelebsView({
   initialAvatars?: Record<string, string>;
   initialData?: import("@/lib/celebsData").CelebsResult | null;
 }) {
+  const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const [active, setActive] = useState<Celeb | null>(() => {
     const found = (initialData?.celebs || CELEBS).find(item => item.id === searchParams.get("celeb"));
@@ -1313,7 +1314,7 @@ export default function CelebsView({
   }
 
   useLayoutEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("celeb");
+    const id = searchParams.get("celeb");
     if (!id) return;
     pendingIdRef.current = id;
     if (initialData) return;
@@ -1336,6 +1337,7 @@ export default function CelebsView({
   // 浏览器前进 / 后退：跟随 ?celeb= 变化切换详情与列表
   useEffect(() => {
     const onPop = () => {
+      if (!canUseWorkspaceUrl()) return;
       const id = new URLSearchParams(window.location.search).get("celeb");
       if (!id) {
         setActive(null);

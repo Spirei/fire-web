@@ -79,7 +79,8 @@ assert(fs.readFileSync('components/PaletteSettings.tsx', 'utf8').includes('palet
 console.log('PASS backend skin cannot change other palettes, homepage, Dock, financial colors or layouts');
 const globals = postcss.parse(fs.readFileSync('app/globals.css', 'utf8'));
 let hiddenPanel;
-globals.walkRules('.records-app:not(.is-settings) .records-content > .tab-panel[hidden]', rule => { hiddenPanel = rule; });
-assert.equal(values(hiddenPanel)['content-visibility'], 'hidden');
-for(const property of ['height','min-height','max-height']) assert(hiddenPanel.nodes.some(d=>d.prop===property&&d.value==='0'&&d.important));
+globals.walkRules('.records-content > .tab-panel[hidden]', rule => { hiddenPanel = rule; });
+assert.equal(values(hiddenPanel).display, 'none');
+assert(hiddenPanel.nodes.some(d=>d.prop==='display'&&d.important));
+globals.walkDecls('content-visibility',d=>assert.notEqual(d.value,'hidden'));
 console.log('PASS a cached settings panel cannot occupy space above the newly active page');

@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useWorkspaceSearchParams as useSearchParams } from "@/lib/workspacePanel";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FALLBACK_RATES, marketMeta } from "@/lib/types";
@@ -255,7 +255,7 @@ export default function StockDetailView({ market, initialNow = 0, code, name, qu
 
   // URL 直达时在浏览器绘制前恢复页签，避免先闪现概览再切到目标页签。
   useLayoutEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("tab") as Tab | null;
+    const requested = searchParams.get("tab") as Tab | null;
     setTab(requested && ["overview", "etf", "dividend", "financial", "company"].includes(requested) ? requested : initialTab);
     setTabReady(true);
   }, [market, code]);
