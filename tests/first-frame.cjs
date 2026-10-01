@@ -153,6 +153,34 @@ try {
     } finally {delete global.window;}
   });
 
+  test('calendar colors reflect visible market schedules while normal weekends stay neutral',()=>{
+    const {calendarDayAppearance:appearance}=require(path.join(root,'components/MarketCalendarView.tsx'));
+    assert.deepEqual(appearance(['trading','weekend','weekend']),{tone:'neutral'});
+    assert.deepEqual(appearance(['holiday','weekend']),{tone:'holiday'});
+    assert.deepEqual(appearance(['half_day','trading']),{tone:'half_day'});
+    assert.deepEqual(appearance(['unknown','weekend']),{tone:'unknown'});
+    const mixed=appearance(['holiday','half_day','holiday']);
+    assert.equal(mixed.tone,'mixed');
+    assert(mixed.fill.includes('var(--mc-fill-holiday) 66.67%')&&mixed.fill.includes('var(--mc-fill-half_day) 66.67%'));
+    assert.equal(appearance(['half_day','holiday','holiday']).fill,mixed.fill,'market order cannot change the status palette');
+    const three=appearance(['unknown','holiday','half_day']);
+    assert(three.fill.includes('var(--mc-fill-unknown) 100%'));
+    const cell=(html,date)=>html.match(new RegExp('<button[^>]*aria-label="'+date+'；[^]*?</button>'))[0];
+    const all=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2026-02');
+    assert(cell(all,'2026-02-16').includes('data-tone="mixed"'));
+    assert(cell(all,'2026-02-14').includes('data-tone="neutral"'));
+    assert(cell(all,'2026-02-15').includes('data-tone="holiday"'),'an official holiday on a weekend still has a holiday color');
+    for(const [market,tone] of [['US','holiday'],['HK','half_day'],['CN','holiday']]) {
+      const html=render('components/MarketCalendarView.tsx',{},'market='+market+'&month=2026-02');
+      assert(cell(html,'2026-02-16').includes('data-tone="'+tone+'"'));
+    }
+    const half=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2026-02&status=half_day');
+    assert(cell(half,'2026-02-16').includes('data-tone="half_day"'),'filtered colors include only matching markets');
+    assert(cell(half,'2026-02-15').includes('data-tone="neutral"'));
+    const future=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2027-02');
+    assert(cell(future,'2027-02-06').includes('data-tone="unknown"'),'an unverified weekend must remain unknown');
+  });
+
   test('late client mounts use current preferences while server hydration uses its exact snapshot',()=>{
     const output=ts.transpileModule(fs.readFileSync(path.join(root,'lib/usePersistedState.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
     function firstValue(client,local,cookie,server) {

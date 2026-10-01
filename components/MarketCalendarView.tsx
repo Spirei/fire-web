@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 import AppSelect from "@/components/AppSelect";
 import MarketIcon from "@/components/MarketIcon";
 import { useWorkspaceSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
@@ -10,6 +10,24 @@ const MARKET_ORDER: CalendarMarket[] = ["US", "HK", "CN"];
 type ViewMarket = CalendarMarket | "ALL";
 type ViewDay = CalendarDay & { markets: { market: CalendarMarket; day: CalendarDay }[] };
 const MARKET_NAMES = { ALL: "全部市场", CN: "A 股（沪深）", HK: "港股", US: "美股" };
+type DayTone = "neutral" | "holiday" | "half_day" | "unknown" | "mixed";
+/** Normal weekends stay neutral; only special schedules contribute a color panel. */
+export function calendarDayAppearance(states: readonly CalendarStatus[]): { tone: DayTone; fill?: string } {
+  const panels = (["holiday", "half_day", "unknown"] as const)
+    .map(tone => ({ tone, count: states.filter(status => status === tone).length }))
+    .filter(panel => panel.count > 0);
+  if (panels.length === 0) return { tone: "neutral" };
+  if (panels.length === 1) return { tone: panels[0].tone };
+  const total = panels.reduce((sum, panel) => sum + panel.count, 0);
+  let offset = 0;
+  const stops = panels.flatMap(panel => {
+    const from = Math.round(offset / total * 10000) / 100;
+    offset += panel.count;
+    const to = Math.round(offset / total * 10000) / 100;
+    return [`var(--mc-fill-${panel.tone}) ${from}%`, `var(--mc-fill-${panel.tone}) ${to}%`];
+  });
+  return { tone: "mixed", fill: `linear-gradient(135deg, ${stops.join(", ")})` };
+}
 function dayDescription(day: CalendarDay) {
   const close = day.close ? ` · 连续交易至 ${day.close.continuous}${day.close.auction ? `，收市竞价 ${day.close.auction.earliest}–${day.close.auction.latest} 随机结束（适用证券）` : ""}` : "";
   return `${LABELS[day.status]}${day.name ? ` · ${day.name}` : ""}${close}`;
@@ -73,6 +91,7 @@ export default function MarketCalendarView({ initialNow = Date.UTC(MARKET_CALEND
     </header>
     <div className="mc-legend">
       <div className="mc-market-filters" role="group" aria-label="日历市场"><button type="button" aria-pressed={market === "ALL"} onClick={() => update({ market: "ALL", calDay: "" })}>全部</button>{MARKET_ORDER.map(option => <button type="button" key={option} aria-pressed={market === option} onClick={() => update({ market: option, calDay: "" })}><MarketIcon market={option} size={16} />{MARKET_NAMES[option]}</button>)}</div>
+      <span className="mc-holiday-legend"><i className="mc-holiday-key" aria-hidden="true" />全天休市</span>
       <div className="mc-status-filters" role="group" aria-label="日历状态筛选">{(["half_day", "unknown"] as const).map(option => <button type="button" key={option} aria-pressed={status === option} onClick={() => update({ calStatus: status === option ? "" : option, calDay: "" })}><i className={option === "half_day" ? "mc-half-key" : "mc-unknown-key"} aria-hidden="true" />{LABELS[option]}</button>)}</div>
     </div>
     {status !== "all" && <p className="mc-filter-result text-xs text-muted" role="status">{MARKET_NAMES[market]} · {year} 年 {month} 月{LABELS[status]} {matchingDays.length} 天{matchingDays.length === 0 ? "，可切换月份或再次点击筛选取消" : "，再次点击筛选可查看全部日期"}</p>}
@@ -97,9 +116,10 @@ export default function MarketCalendarView({ initialNow = Date.UTC(MARKET_CALEND
             const closed = marked.some(item => item.day.status === "holiday" || item.day.status === "weekend");
             const names = [...new Set(items.map(item => item.day.name).filter(Boolean))];
             const visible = matches(day);
-            return <button type="button" key={day.date} title={description} aria-label={description} aria-pressed={selectedDate === day.date} aria-current={today === day.date ? "date" : undefined} disabled={!visible} className={`mc-day${!visible ? " is-filtered" : ""}${day.isWeekend ? " is-weekend" : ""}${selectedDate === day.date ? " is-selected" : ""}`} onClick={() => update({ calDay: selectedDate === day.date ? "" : day.date })}>
+            const appearance = calendarDayAppearance(visible ? items.map(item => item.day.status) : []);
+            return <button type="button" key={day.date} title={description} aria-label={description} aria-pressed={selectedDate === day.date} aria-current={today === day.date ? "date" : undefined} disabled={!visible} data-tone={appearance.tone} style={appearance.fill ? { "--mc-status-fill": appearance.fill } as CSSProperties : undefined} className={`mc-day${!visible ? " is-filtered" : ""}${day.isWeekend ? " is-weekend" : ""}${selectedDate === day.date ? " is-selected" : ""}`} onClick={() => update({ calDay: selectedDate === day.date ? "" : day.date })}>
               <span className="mc-number">{Number(day.date.slice(8))}</span>
-              {visible && closed && <svg className="mc-closure-watermark" viewBox="0 0 120 50" aria-hidden="true"><text x="60" y="27" textAnchor="middle" dominantBaseline="middle" fill="none" stroke="currentColor" strokeWidth="0.8" strokeDasharray="1.8 1.6" fontSize="34" fontWeight="700">休市</text></svg>}
+              {visible && closed && <svg className="mc-closure-watermark" viewBox="0 0 100 60" aria-hidden="true"><text x="50" y="31" textAnchor="middle" dominantBaseline="middle" fill="none" stroke="currentColor" strokeWidth="0.9" strokeDasharray="1.5 1.35" fontSize="48" fontWeight="700">休市</text></svg>}
               <span className="mc-market-marks">{visible && marked.map(item => <span key={item.market} className={`mc-market-mark${item.day.status === "half_day" ? " is-half" : ""}`} aria-hidden="true"><MarketIcon market={item.market} size={18} />{item.day.status === "half_day" && <i className="mc-half-dot" />}</span>)}{visible && items.some(item => item.day.status === "unknown") && <span className="mc-unknown-key" aria-hidden="true" />}</span>
               {visible && names.length > 0 && <span className="mc-holiday-name" aria-hidden="true">{names.join(" · ")}</span>}
             </button>;
@@ -109,7 +129,7 @@ export default function MarketCalendarView({ initialNow = Date.UTC(MARKET_CALEND
       </div>
     </section>
     {selected && <section className="mc-selected" aria-label="当日市场安排"><h3>{selected.date}</h3><div>{selected.markets.map(item => <p key={item.market}><MarketIcon market={item.market} size={17} /><b>{MARKET_NAMES[item.market]}</b><span>{dayDescription(item.day)}{item.day.close ? `（${calendars.find(calendar => calendar.market === item.market)?.timeZone}）` : ""}</span></p>)}</div></section>}
-    <p className="mc-note text-xs text-muted">{market === "ALL" ? "当前汇总美股、港股与 A 股安排，同一天按市场分别标记。" : `当前仅显示${MARKET_NAMES[market]}。`}图标及背景字标记全天休市，金色圆点表示半日市，紫色圆点表示未确认。点击市场切换，点击状态筛选，再次点击取消筛选；点击日期查看当前市场安排。年度计划不代表此刻正在交易，临时停市状态未确认。</p>
+    <p className="mc-note text-xs text-muted">{market === "ALL" ? "当前汇总美股、港股与 A 股安排，同一天按市场分别标记。" : `当前仅显示${MARKET_NAMES[market]}。`}粉色标记节假日全天休市，金色标记半日市，紫色标记未确认；不同市场安排拼色显示，普通周末保持中性背景。市场图标及休市背景字保留，圆点分别标记半日市和未确认。点击市场切换，点击状态筛选，再次点击取消筛选；点击日期查看当前市场安排。年度计划不代表此刻正在交易，临时停市状态未确认。</p>
     <footer className="mc-sources"><details><summary>官方安排与来源</summary>{verified ? <><p>已核实 {year} 年 · 核对于 {calendar.coverage.verifiedAt}</p><div className="mc-market-summary">{calendars.map(item => <p key={item.market}><MarketIcon market={item.market} size={16} />{MARKET_NAMES[item.market]} · {item.coverage.exchanges.join(" / ")} · {item.timeZone} · 计划交易 {item.days.filter(day => day.isTradingDay === true).length} 天，半日市 {item.days.filter(day => day.status === "half_day").length} 天</p>)}</div><ul>{sources.map(source => <li key={source.id}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>{source.publishedAt && <span> · 发布于 {source.publishedAt}</span>}</li>)}</ul></> : <p>所选年份尚未收录已核实的官方安排。</p>}<p>仅覆盖所列交易所的现货股票常规交易，不包含盘前、盘后、期权及个股停牌。</p><p>数据版本 {calendar.calendarVersion} · <a href="/api-docs?version=v2" target="_blank" rel="noopener noreferrer">API v2 文档</a></p></details></footer>
   </section>;
 }

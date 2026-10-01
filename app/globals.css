@@ -7339,3 +7339,19 @@ html { scrollbar-gutter:stable; }
 /* Softer all-posts icon; identity rings keep their original platform badge color. */
 .dark .feed-people-filter>button { --feed-filter-accent:#8eaac1; }
 .dark .feed-filter-all { color:#8eaac1; }
+
+/* Market calendar: soft schedule surfaces, including mixed market panels. */
+.dark .market-calendar {
+  --mc-neutral-fill:#242932;
+  --mc-fill-holiday:#3c2d36;
+  --mc-fill-half_day:#3a3428;
+  --mc-fill-unknown:#332d45;
+  --mc-glaze:rgba(255,255,255,.025);
+  --mc-holiday-edge:#5b404d;
+  --mc-half-edge:#5b4c32;
+  --mc-unknown-edge:#4b405f;
+  --mc-watermark-ink:#9eadc1;
+}
+.dark .mc-day[data-tone=holiday] { --mc-watermark-ink:#ce9cb3; }
+.dark .mc-day[data-tone=mixed] { --mc-watermark-ink:#cebaa9; }
+.dark .mc-holiday-key { background:#d095af; }
