@@ -16,7 +16,7 @@ import { feedEventHints, feedSkill } from "./feedSkill";
 import { enrichFeedEvidence } from "./feedEvidence";
 import { FEED_RECOMMENDATIONS, MUSE_OBSERVED_PUBLISHERS, subscriptionSources } from "./feedSubscriptions";
 import { balanceFeedSources } from "./feedSearch";
-import { refreshPeopleFeed, syncPeopleFeed } from "./feedPeople";
+import { refreshPeopleFeed, syncPeopleFeed, feedPeopleProfiles, feedPeopleLatestAt } from "./feedPeople";
 import { getTradingSquareSourceStatus } from "./tradingSquareRefresh";
 export { parseNewsRss, searchFeedSources } from "./feedSearch";
 
@@ -28,7 +28,8 @@ export function feedCapabilities(): FeedPayload["capabilities"] {
 export function feedSnapshot(userId:string,cursor?:string|null,limit=FEED_PAGE_SIZE,groupId="default",author?:string|null):FeedPayload {
   const group=feedGroup(userId,groupId);
   if(group.mode==="people")syncPeopleFeed(userId,group);
-  return {...listFeedPosts(userId,cursor,limit,groupId,author),preferences:feedPreferences(userId,groupId),job:getFeedJob(userId,undefined,groupId),group,groups:listFeedGroups(userId),recommendations:FEED_RECOMMENDATIONS,observedPublishers:MUSE_OBSERVED_PUBLISHERS,...(group.mode==="people"?{peopleSources:getTradingSquareSourceStatus(group.people)}:{}),capabilities:feedCapabilities()};
+  const canEditAvatars=(feedTables().prepare("SELECT role FROM users WHERE id=?").get(userId) as {role:string}|undefined)?.role==="admin";
+  return {...listFeedPosts(userId,cursor,limit,groupId,author),peopleCatalog:feedPeopleProfiles(),preferences:feedPreferences(userId,groupId),job:getFeedJob(userId,undefined,groupId),group,groups:listFeedGroups(userId),recommendations:FEED_RECOMMENDATIONS,observedPublishers:MUSE_OBSERVED_PUBLISHERS,...(group.mode==="people"?{peopleSources:getTradingSquareSourceStatus(group.people),peopleLatestAt:feedPeopleLatestAt(userId,group)}:{}),capabilities:{...feedCapabilities(),editPeopleAvatars:canEditAvatars}};
 }
 /** Administrator-configured endpoints only; article content never chooses an outbound URL. */
 function json(text:string) {

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { FEED_PEOPLE } from "./feedPeopleConfig";
+import { getCelebAvatars } from "./celebsData";
 import type { FeedGroup, FeedPost } from "./feedTypes";
 import { feedId, feedTables, sourceUrl } from "./feedStore";
 import { readTradingSquareSnapshot } from "./tradingSquareSnapshot";
@@ -12,18 +13,27 @@ import type { FeedPersonId } from "./feedTypes";
 
 const imported = new WeakMap<object,Map<string,string>>();
 function cacheSignature() {
-  return ["data/trump-posts.json","data/duan-posts.json","data/trump-translations.json","public/uploads/trading-square/trump","public/uploads/trading-square/duan"].map(name=>{
+  return ["data/trump-posts.json","data/duan-posts.json","data/trump-translations.json","data/celebs-avatars.json","public/uploads/celebs/default-avatars.json","public/uploads/trading-square/trump","public/uploads/trading-square/duan"].map(name=>{
     try{const stat=fs.statSync(path.join(process.cwd(),name));return `${stat.mtimeMs}:${stat.size}`;}catch{return "missing";}
   }).join("/");
 }
 function availableImage(url:string) {
   return isLocalPostImageUrl(url)&&fs.existsSync(path.join(process.cwd(),"public",url));
 }
+export function feedPeopleProfiles() {
+  const avatars=getCelebAvatars();
+  return FEED_PEOPLE.map(person=>({...person,avatar:avatars[person.id]||person.avatar}));
+}
+export function feedPeopleLatestAt(userId:string,group:FeedGroup) {
+  const rows=feedTables().prepare("SELECT author_key,MAX(sort_at) AS latest FROM feed_posts WHERE user_id=? AND group_id=? AND kind='people' AND hidden=0 GROUP BY author_key").all(userId,group.id) as {author_key:string;latest:string}[];
+  return Object.fromEntries((group.people||[]).map(id=>[id,rows.find(row=>row.author_key===id)?.latest||null]));
+}
 /** Source identity stays outside the model. Later translations update payload only, never likes or hidden state. */
 export function syncPeopleFeed(userId:string,group:FeedGroup) {
   const db=feedTables(),key=`${userId}:${group.id}`,signature=`${group.revision}:${cacheSignature()}`;
   const memo=imported.get(db)||new Map<string,string>();imported.set(db,memo);
   if(memo.get(key)===signature)return 0;
+  const profiles=feedPeopleProfiles();
   const posts=readTradingSquareSnapshot(Infinity).filter(post=>group.people?.includes(post.author));
   const added=db.transaction(()=>{
     let count=0;
@@ -31,7 +41,7 @@ export function syncPeopleFeed(userId:string,group:FeedGroup) {
     const insert=db.prepare("INSERT INTO feed_posts(id,user_id,group_id,fingerprint,payload,created_at,kind,sort_at,author_key) VALUES(?,?,?,?,?,?,'people',?,?)");
     const update=db.prepare("UPDATE feed_posts SET payload=?,sort_at=? WHERE id=? AND user_id=?");
     for(const raw of posts) {
-      const person=FEED_PEOPLE.find(person=>person.id===raw.author)!,url=sourceUrl(raw.originalUrl),time=Date.parse(raw.date);
+      const person=profiles.find(person=>person.id===raw.author)!,url=sourceUrl(raw.originalUrl),time=Date.parse(raw.date);
       if(!url||!raw.id||!Number.isFinite(time)||time>Date.now()+60_000)continue;
       const publishedAt=new Date(time).toISOString();
       const media=(raw.images||[]).filter(availableImage).map(url=>({type:"image" as const,url,alt:`${person.name}的原帖图片`}));

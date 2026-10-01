@@ -1,7 +1,7 @@
 import { FEED_PAGE_SIZE } from "@/lib/feedTypes";
 import { after } from "next/server";
 import { ok,fail } from "@/lib/api";
-import { getAuthUser,isTrustedMutationRequest } from "@/lib/auth";
+import { getAuthUser,isTrustedMutationRequest,isAdmin } from "@/lib/auth";
 import { readJsonBody,RequestBodyTooLargeError } from "@/lib/requestBody";
 import { clientIp,rateLimit } from "@/lib/rateLimit";
 import { FeedError,feedMessages,getFeedJob,getFeedPost,saveFeedPreferences,updateFeedPost,createFeedGroup,listFeedGroups,feedGroup } from "@/lib/feedStore";
@@ -22,7 +22,8 @@ async function handle(request:Request,context:Context) {
       if(!key) {
         const q=new URL(request.url).searchParams,raw=q.get("limit"),limit=raw===null?FEED_PAGE_SIZE:Number(raw);
         if(!Number.isInteger(limit)||limit<1||limit>50)throw new FeedError("每页条数为1–50");
-        return ok(feedSnapshot(user.id,q.get("cursor"),limit,groupId,q.get("author")));
+        const snapshot=feedSnapshot(user.id,q.get("cursor"),limit,groupId,q.get("author"));
+        snapshot.capabilities.editPeopleAvatars=isAdmin(user);return ok(snapshot);
       }
       if(key==="groups")return ok({groups:listFeedGroups(user.id)});
       if(action.length===2&&action[0]==="jobs") {

@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
   if (!isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
 
-  const form = await readFormBody(request).catch(() => null);
+  const form = await readFormBody(request,MAX_BYTES+64*1024).catch(() => null);
   if (!form) return NextResponse.json({ error: "无效的上传请求" }, { status: 400 });
   const id = String(form.get("id") ?? "").trim();
   if (!CELEBS.some((c) => c.id === id)) return NextResponse.json({ error: "未知的名人" }, { status: 400 });
@@ -33,6 +33,8 @@ export async function POST(request: Request) {
   if (file.size > MAX_BYTES) return NextResponse.json({ error: "图片最大 2MB" }, { status: 400 });
 
   const buffer = Buffer.from(await file.arrayBuffer());
+  const current=getAuthUser(request);
+  if(current?.id!==user.id||!isAdmin(current))return NextResponse.json({error:"连接已失效"},{status:401});
   if (!validateImageContent(buffer, ext)) {
     return NextResponse.json({ error: "文件内容与图片格式不匹配" }, { status: 400 });
   }

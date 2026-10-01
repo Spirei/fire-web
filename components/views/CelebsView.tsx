@@ -1414,6 +1414,15 @@ export default function CelebsView({
     saveAvatarCache(over);
   }
 
+  useEffect(()=>{
+    const sync=(event:Event)=>{
+      const detail=(event as CustomEvent<{id?:string;avatar?:string}>).detail;
+      if(detail?.id&&detail.avatar&&CELEBS.some(person=>person.id===detail.id))updateAvatar(detail.id,detail.avatar);
+    };
+    window.addEventListener("fire:celebs-avatar-updated",sync);
+    return()=>window.removeEventListener("fire:celebs-avatar-updated",sync);
+  },[]);
+
   async function uploadCelebAvatar(id: string, file: File) {
     setUploadingAvatar(id);
     try {
@@ -1424,6 +1433,7 @@ export default function CelebsView({
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "上传失败");
       updateAvatar(id, data.avatar);
+      window.dispatchEvent(new CustomEvent("fire:celebs-avatar-updated",{detail:{id,avatar:data.avatar}}));
       showToast(`${celebs.find((c) => c.id === id)?.name ?? ""}头像已更新`, "ok");
       setAvatarPickerOpen(false);
     } catch (err) {

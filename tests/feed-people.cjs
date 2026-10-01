@@ -11,7 +11,8 @@ const get=file=>require(path.join(root,file)),auth=get('lib/auth.ts'),store=get(
 const user=auth.createUser('people_owner','People-test-123'),other=auth.createUser('people_other','People-test-123'),session=auth.createSession(user.id),db=get('lib/db.ts').getDb();
 const call=(action='',method='GET',body)=>route[method](new Request(process.env.FIRE_APP_ORIGIN+'/api/v1/feed'+action,{method,headers:{cookie:'fire_session='+session,origin:process.env.FIRE_APP_ORIGIN,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})}),{params:Promise.resolve({action:action.split('?')[0].split('/').filter(Boolean)})});
 const image='/uploads/trading-square/trump/0123456789abcdef.png',duanImage='/uploads/trading-square/duan/abcdef0123456789.png';
-const time=index=>new Date(Date.now()-3600_000+index*1000).toISOString();
+const fixtureTime=Date.now()-3600_000;
+const time=index=>new Date(fixtureTime+index*1000).toISOString();
 fs.mkdirSync('data',{recursive:true});
 for(const url of [image,duanImage]){const file=path.join(temp,'public',url);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,'local image fixture');}
 const trump=Array.from({length:14},(_,i)=>({id:String(i),date:time(i*2),text:i===13?'':'Original '+i,originalUrl:'https://truthsocial.com/@realDonaldTrump/'+i,images:i===13?[image]:undefined}));
@@ -53,6 +54,29 @@ let passed=0;async function test(name,run){await run();passed++;console.log('PAS
     const saved=store.getFeedPost(user.id,original.id);assert.equal(saved.original.textZh,'原帖十二的完整译文');assert.equal(saved.original.text,'Original 12');assert(saved.liked&&saved.hidden);assert.equal(saved.createdAt,original.createdAt);assert.equal(saved.publishedAt,original.publishedAt);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM feed_posts WHERE user_id=? AND group_id=? AND kind='people'").get(user.id,group.id).n,26);
     store.updateFeedPost(user.id,original.id,{hidden:false});
+  });
+  await test('unread avatar state includes authors outside the current ten-item page',()=>{
+    const snapshot=generation.feedSnapshot(user.id,null,10,group.id,'trump');
+    assert(snapshot.posts.every(post=>post.original.person.id==='trump'));
+    assert.equal(snapshot.peopleLatestAt.duan,time(23));assert.equal(snapshot.peopleLatestAt.trump,time(26));
+    const {feedPersonHasUpdates}=get('lib/feedPeopleConfig.ts');
+    assert(feedPersonHasUpdates('duan',snapshot.peopleLatestAt,{duan:time(1)}));
+    assert(!feedPersonHasUpdates('duan',snapshot.peopleLatestAt,{}));
+    assert(!feedPersonHasUpdates('duan',snapshot.peopleLatestAt,{duan:time(23)}));
+    assert(!feedPersonHasUpdates('invented',{invented:time(23)},{invented:time(1)}));
+  });
+  await test('avatar editing reuses shared management and refreshes catalog plus historical original cards',async()=>{
+    const avatarRoute=get('app/api/celebs/avatar/route.ts'),png=Buffer.from('89504e470d0a1a0a','hex');
+    const upload=(id='trump',bytes=png,origin=process.env.FIRE_APP_ORIGIN)=>{const form=new FormData();form.set('id',id);form.set('file',new File([bytes],'portrait.png',{type:'image/png'}));return avatarRoute.POST(new Request(process.env.FIRE_APP_ORIGIN+'/api/celebs/avatar',{method:'POST',headers:{cookie:'fire_session='+session,origin},body:form}));};
+    assert.equal((await upload()).status,403);assert.equal(generation.feedSnapshot(user.id,null,10,group.id).capabilities.editPeopleAvatars,false);
+    db.prepare("UPDATE users SET role='admin' WHERE id=?").run(user.id);
+    assert.equal((await upload('invented')).status,400);assert.equal((await upload('trump',Buffer.from('<svg>not a PNG</svg>'))).status,400);assert.equal((await upload('trump',png,'https://foreign.example')).status,401);
+    const before=generation.feedSnapshot(user.id,null,50,group.id).posts.find(post=>post.original.person.id==='trump'&&post.original.platformPostId==='12');
+    const response=await upload();assert.equal(response.status,200);const result=await response.json();
+    const snapshot=generation.feedSnapshot(user.id,null,50,group.id),after=snapshot.posts.find(post=>post.id===before.id);
+    assert.equal(snapshot.peopleCatalog.find(person=>person.id==='trump').avatar,result.avatar);assert.equal(after.original.person.avatar,result.avatar);assert.equal(after.createdAt,before.createdAt);assert.equal(after.liked,before.liked);assert.equal(snapshot.posts.length,26);assert(snapshot.capabilities.editPeopleAvatars);
+    assert.equal(get('lib/celebsData.ts').getCelebAvatars().trump,result.avatar);assert(fs.existsSync(path.join(temp,'public',result.avatar)));
+    db.prepare("UPDATE users SET role='user' WHERE id=?").run(user.id);
   });
   await test('renaming never changes template and switching templates preserves each history',()=>{
     let pref=store.feedPreferences(user.id,group.id);store.saveFeedPreferences(user.id,{instructions:'旧新闻指示',revision:pref.revision,name:'我的人物',mode:'news',intervalMinutes:60},group.id);
@@ -119,8 +143,21 @@ let passed=0;async function test(name,run){await run();passed++;console.log('PAS
     const html=renderToStaticMarkup(React.createElement(Component,{post:item,isNew:true,busy:false,canDiscuss:false,onMenu(){},onLike(){},onDiscuss(){}}));
     assert(html.includes('段永平')&&html.includes('@slowisquick')&&html.includes('查看原文'));assert(html.includes('&lt;script&gt;'));assert(!html.includes('<script>alert'));assert(html.includes('dateTime="')||html.includes('datetime="'));assert(html.includes('aria-label="新动态"'));
     const viewSource=fs.readFileSync(path.join(root,'components/views/FeedView.tsx'),'utf8');assert(!viewSource.includes('role="status">{FEED_PEOPLE.find'));assert(viewSource.indexOf('data?.peopleSources')>viewSource.indexOf('{tasks&&<AppModal'));
+    const Badge=get('components/FeedPersonBadge.tsx').default;
+    assert.equal(renderToStaticMarkup(React.createElement(Badge,{personId:'invented'})),'');
+    assert(renderToStaticMarkup(React.createElement(Badge,{personId:'trump'})).includes('#f43f6b'));
+    assert(renderToStaticMarkup(React.createElement(Badge,{personId:'duan'})).includes('#1d9bf0'));
+    const Filter=get('components/FeedPeopleFilter.tsx').default,profiles=generation.feedSnapshot(user.id,null,10,group.id).peopleCatalog;
+    const filter=renderToStaticMarkup(React.createElement(Filter,{profiles,selected:'duan',unread:{trump:true,duan:false},onSelect(){}}));
+    assert(filter.includes('全部动态')&&filter.includes('特朗普有新动态')&&!filter.includes('段永平有新动态'));
     const Picker=get('components/FeedTemplatePicker.tsx').default;
-    const picker=renderToStaticMarkup(React.createElement(Picker,{mode:'people',people:['duan'],onMode(){},onPeople(){}}));assert(picker.includes('名人原帖')&&picker.includes('关注段永平'));
+    const picker=renderToStaticMarkup(React.createElement(Picker,{mode:'people',people:['duan'],onMode(){},onPeople(){}}));assert(picker.includes('名人原帖')&&picker.includes('关注段永平')&&picker.includes('雪球认证'));
+    const editable=renderToStaticMarkup(React.createElement(Picker,{mode:'people',people:['duan'],profiles,onMode(){},onPeople(){},onAvatarFile(){}}));assert(editable.includes('修改特朗普头像'));assert(!picker.includes('type="file"'));assert(!editable.includes('<button type="button" data-capsule="off" role="checkbox" aria-label="关注特朗普" aria-checked="false" disabled'));
+  });
+  await test('person switching never flashes empty state and ignores delayed superseded responses',async()=>{
+    const preferences=store.feedPreferences(user.id,group.id);
+    store.saveFeedPreferences(user.id,{instructions:preferences.instructions,revision:preferences.revision,people:['trump','duan']},group.id);
+    await require('./feed-transitions.cjs')(generation.feedSnapshot(user.id,null,50,group.id));
   });
   console.log(`${passed} celebrity-template suites passed; disposable data only`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{db.close();fs.rmSync(temp,{recursive:true,force:true});});

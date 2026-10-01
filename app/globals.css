@@ -7320,3 +7320,7 @@ html { scrollbar-gutter:stable; }
 .dark .api-version-tone-amber { --api-version-ink:#fcd34d; --api-version-bg:#3b2f19; --api-version-border:#785521; }
 .dark .api-version-tone-rose { --api-version-ink:#fda4af; --api-version-bg:#3e2430; --api-version-border:#713247; }
 .dark .api-version-tone-blue { --api-version-ink:#93c5fd; --api-version-bg:#1c2b45; --api-version-border:#365885; }
+
+/* Softer all-posts icon; identity rings keep their original platform badge color. */
+.dark .feed-people-filter>button { --feed-filter-accent:#8eaac1; }
+.dark .feed-filter-all { color:#8eaac1; }
