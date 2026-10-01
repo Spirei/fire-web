@@ -114,11 +114,42 @@ try {
       assert.equal(address.searchParams.get('market'),'HK');
       query=address.searchParams;tree=elements(view.render({initialNow:Date.UTC(2026,9,2)}));
       tree.find(node=>node.type==='button'&&node.key==='half_day').props.onClick();
-      assert.equal(address.searchParams.get('calStatus'),'half_day');
+      assert.equal(address.searchParams.get('status'),'half_day');
       assert.equal(address.searchParams.get('market'),'HK');
       query=address.searchParams;tree=elements(view.render({initialNow:Date.UTC(2026,9,2)}));
       tree.find(node=>node.type==='button'&&node.key==='half_day').props.onClick();
-      assert.equal(address.searchParams.has('calStatus'),false);
+      assert.equal(address.searchParams.has('status'),false);
+    } finally {delete global.window;}
+  });
+
+  test('compact calendar links preserve legacy state and ALL is an explicit three-market overview',()=>{
+    const old=render('components/MarketCalendarView.tsx',{},'market=HK&calYear=2026&calMonth=12&calStatus=half_day&calDay=2026-12-24');
+    const compact=render('components/MarketCalendarView.tsx',{},'market=HK&month=2026-12&status=half_day&day=24');
+    assert.equal(compact,old,'old bookmarks and new compact URLs must render the same first frame');
+    const all=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2026-12&status=half_day&day=24');
+    assert(all.includes('全部市场')&&all.includes('半日市 2 天'));
+    assert(all.includes('13:00')&&all.includes('12:08'));
+    assert.equal((all.match(/class="mc-month card"/g)||[]).length,1);
+    const selected=all.match(/<section class="mc-selected"[^]*?<\/section>/)[0];
+    assert(selected.includes('美股')&&selected.includes('港股')&&selected.includes('A 股（沪深）'));
+    const cn=render('components/MarketCalendarView.tsx',{},'market=CN&month=2026-12&day=24');
+    assert(!cn.includes('13:00')&&!cn.includes('12:08'));
+    const mixed=render('components/MarketCalendarView.tsx',{},'market=US&month=2026-10&calYear=2027&calMonth=12&day=1');
+    assert(mixed.includes('2026 年 10 月')&&!mixed.includes('2027 年安排未确认'));
+    let address=new URL('https://example.test/global?section=calendar&market=US&calYear=2026&calMonth=12&calDay=2026-12-24');
+    global.window={location:{get href(){return address.href;}},history:{replaceState(_a,_b,url){address=new URL(url,address);}}};
+    try {
+      const view=frameHarness('components/MarketCalendarView.tsx',{'@/lib/workspacePanel':{useWorkspaceSearchParams:()=>query,useWorkspaceLocationGuard:()=>()=>true}});
+      query=address.searchParams;
+      let tree=elements(view.render());
+      tree.find(node=>node.type==='button'&&node.props.children==='全部').props.onClick();
+      assert.equal(address.searchParams.get('market'),'ALL');
+      assert.equal(address.searchParams.get('month'),'2026-12');
+      assert(!address.searchParams.has('calYear')&&!address.searchParams.has('calDay'));
+      query=address.searchParams;tree=elements(view.render());
+      tree.find(node=>node.type==='button'&&node.props['aria-label']?.startsWith('2026-12-24；')).props.onClick();
+      assert.equal(address.searchParams.get('day'),'24');
+      assert.equal(address.searchParams.has('status'),false);
     } finally {delete global.window;}
   });
 

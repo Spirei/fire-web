@@ -1108,3 +1108,5 @@ App 使用 `client_id=fire-ios`，`redirect_uri=com.fire.app:/oauth/callback`，
 ## 休市日历能力发现
 
 `auth/config` 的 `data.market_calendar` 指向固定同源 `/api/v2/market-calendar`，api_version=2、access=public，列出市场、时区、交易所、已核实年份及结构/数据版本。休市日历只提供 v2；完整请求、缓存、未知状态与日期语义见 API 文档 v2。后续新 App 功能统一使用 v2，既有 v1 连接继续兼容。
+
+休市日历能力发现还包含 `batch_path:"/api/v2/market-calendar/batch"`，供 App 一次读取 US/HK/CN。批量接口仅提供 v2；不迁移旧授权，也不新增权限。

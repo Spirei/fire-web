@@ -53,6 +53,7 @@ export const APP_V2_ROUTES = [
   {path:"search",methods:["GET"],access:"public"},
   {path:"earnings",methods:["GET"],access:"public"},
   {path:"market-calendar",methods:["GET"],access:"public"},
+  {path:"market-calendar/batch",methods:["GET"],access:"public"},
   {path:"rates",methods:["GET"],access:"public"},
   {path:"indices",methods:["GET"],access:"public"},
   {path:"company-profile",methods:["GET"],access:"public"},

@@ -83,7 +83,11 @@ export function buildMarketCalendar(market: CalendarMarket, year: number, uncert
     coverage: { status: verified ? "verified" : "unknown", from: `${year}-01-01`, to: `${year}-12-31`, verifiedYears: [MARKET_CALENDAR_YEAR], exchanges: [...config.exchanges], verifiedAt: verified ? MARKET_CALENDAR_VERIFIED_AT : null, basis: "official_annual_schedule", temporaryClosures: "unknown" },
     sources: verified ? config.sources.map(item => ({ ...item })) : [], days };
 }
+export function buildMarketCalendars(year: number) {
+  const calendars = Object.fromEntries(CALENDAR_MARKETS.map(market => [market, buildMarketCalendar(market, year)])) as Record<CalendarMarket, MarketCalendar>;
+  return { schemaVersion: MARKET_CALENDAR_SCHEMA_VERSION, calendarVersion: MARKET_CALENDAR_VERSION, year, calendars };
+}
 export function marketCalendarDiscovery() {
-  return { path: "/api/v2/market-calendar", api_version: 2, access: "public", schema_version: MARKET_CALENDAR_SCHEMA_VERSION, calendar_version: MARKET_CALENDAR_VERSION,
+  return { path: "/api/v2/market-calendar", batch_path: "/api/v2/market-calendar/batch", api_version: 2, access: "public", schema_version: MARKET_CALENDAR_SCHEMA_VERSION, calendar_version: MARKET_CALENDAR_VERSION,
     markets: CALENDAR_MARKETS.map(market => ({ market, name: MARKETS[market].name, time_zone: MARKETS[market].timeZone, exchanges: [...MARKETS[market].exchanges], verified_years: [MARKET_CALENDAR_YEAR] })), temporary_closures: "unknown" };
 }

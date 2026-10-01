@@ -4,6 +4,8 @@ Module._resolveFilename=function(id,parent,...rest){return resolve.call(this,id.
 require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,file);
 process.chdir(temp);process.env.STOCKLOG_FUTU='off';process.env.FIRE_APP_ORIGIN='https://calendar.example.test';global.fetch=async()=>{throw Error('Network disabled');};
 const load=file=>require(path.join(root,file)),{buildMarketCalendar,marketCalendarDiscovery}=load('lib/marketCalendar.ts'),route=load('app/api/v2/market-calendar/route.ts');
+const batch=load('app/api/v2/market-calendar/batch/route.ts');
+const batchReq=(query='year=2026',headers={})=>new Request(process.env.FIRE_APP_ORIGIN+'/api/v2/market-calendar/batch?'+query,{headers});
 let count=0;async function test(name,run){await run();count++;console.log('PASS '+name);}
 const req=(query='market=US&year=2026',headers={})=>new Request(process.env.FIRE_APP_ORIGIN+'/api/v2/market-calendar?'+query,{headers});
 const day=(market,date)=>buildMarketCalendar(market,2026).days.find(day=>day.date===date);
@@ -42,11 +44,27 @@ const day=(market,date)=>buildMarketCalendar(market,2026).days.find(day=>day.dat
   assert.equal((await route.GET(req('market=US,HK,CN&year=2026'))).status,400);
  });
  await test('strict query and authorization boundary reject before cached response',async()=>{
-  for(const query of ['', 'market=us&year=2026','market=US&year=26','market=US&year=1999','market=US&year=2101','market=US&year=2026&year=2027','market=US&market=CN&year=2026']){const res=await route.GET(req(query));assert.equal(res.status,400,query);assert.equal((await res.json()).code,40001);assert.match(res.headers.get('cache-control'),/no-store/);}
+  for(const query of ['', 'market=us&year=2026','market=ALL&year=2026','market=US&year=26','market=US&year=1999','market=US&year=2101','market=US&year=2026&year=2027','market=US&market=CN&year=2026']){const res=await route.GET(req(query));assert.equal(res.status,400,query);assert.equal((await res.json()).code,40001);assert.match(res.headers.get('cache-control'),/no-store/);}
   const bad=await route.GET(req(undefined,{authorization:'Bearer invalid','if-none-match':'*'}));assert.equal(bad.status,401);const foreign=await route.GET(req(undefined,{origin:'https://evil.test','if-none-match':'*'}));assert.equal(foreign.status,403);
  });
+ await test('batch returns a versioned market map identical to all single-market responses',async()=>{
+  const res=await batch.GET(batchReq());assert.equal(res.status,200);assert.equal(res.headers.get('x-alcor-api-version'),'2');const body=await res.json();assert.equal(body.code,0);assert.equal(body.data.year,2026);assert.equal(body.data.schemaVersion,1);assert.equal(body.data.calendarVersion,marketCalendarDiscovery().calendar_version);assert.deepEqual(Object.keys(body.data.calendars).sort(),['CN','HK','US']);
+  for(const market of ['CN','HK','US']){const single=(await (await route.GET(req(`market=${market}&year=2026`))).json()).data;assert.deepEqual(body.data.calendars[market],single);}
+  const unknown=(await (await batch.GET(batchReq('year=2027'))).json()).data;assert(Object.values(unknown.calendars).every(c=>c.coverage.status==='unknown'&&c.days.every(d=>d.isTradingDay===null)));
+ });
+ await test('batch cache is distinct from single/year caches and preserves conditional semantics',async()=>{
+  const res=await batch.GET(batchReq()),etag=res.headers.get('etag');assert.match(res.headers.get('cache-control'),/max-age=300/);assert.equal(res.headers.get('vary'),'Origin, Authorization');
+  const same=await batch.GET(batchReq(undefined,{'if-none-match':'"stale", W/'+etag}));assert.equal(same.status,304);assert.equal(await same.text(),'');assert.equal(same.headers.get('etag'),etag);assert.equal(same.headers.get('x-alcor-api-version'),'2');
+  const single=await route.GET(req(undefined,{'if-none-match':etag}));assert.equal(single.status,200);assert.notEqual(single.headers.get('etag'),etag);
+  const next=await batch.GET(batchReq('year=2027',{'if-none-match':etag}));assert.equal(next.status,200);assert.notEqual(next.headers.get('etag'),etag);
+ });
+ await test('batch rejects invalid inputs, invalid bearer and foreign origins before cache hits',async()=>{
+  for(const query of ['', 'year=26','year=1999','year=2101','year=2026&year=2027','year=2026&market=US','year=2026&markets=US,HK']){const res=await batch.GET(batchReq(query,{'if-none-match':'*'}));assert.equal(res.status,400,query);assert.equal((await res.json()).code,40001);assert.match(res.headers.get('cache-control'),/no-store/);}
+  assert.equal((await batch.GET(batchReq(undefined,{authorization:'Bearer invalid','if-none-match':'*'}))).status,401);
+  assert.equal((await batch.GET(batchReq(undefined,{origin:'https://evil.test','if-none-match':'*'}))).status,403);
+ });
  await test('both discovery versions point exclusively to public v2 calendar',async()=>{
-  for(const version of [1,2]){const res=await load(`app/api/v${version}/auth/config/route.ts`).GET(new Request(process.env.FIRE_APP_ORIGIN+`/api/v${version}/auth/config`));const config=(await res.json()).data;assert.deepEqual(config.market_calendar,marketCalendarDiscovery());assert.equal(config.market_calendar.path,'/api/v2/market-calendar');assert.equal(config.market_calendar.access,'public');}
+  for(const version of [1,2]){const res=await load(`app/api/v${version}/auth/config/route.ts`).GET(new Request(process.env.FIRE_APP_ORIGIN+`/api/v${version}/auth/config`));const config=(await res.json()).data;assert.deepEqual(config.market_calendar,marketCalendarDiscovery());assert.equal(config.market_calendar.path,'/api/v2/market-calendar');assert.equal(config.market_calendar.access,'public');assert.equal(config.market_calendar.batch_path,'/api/v2/market-calendar/batch');}
   assert(!fs.existsSync(path.join(root,'app/api/v1/market-calendar/route.ts')));
  });
  console.log(`PASS ${count} market calendar suites`);
