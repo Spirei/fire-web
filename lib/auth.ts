@@ -206,6 +206,8 @@ export function getAuthUser(request: Request): User | null {
     const row = appIdentity(bearer, request);
     return row ? { ...toUser({ ...row, id: row.user_id, role: "user" }), role: "user" } : null;
   }
+  // v2 has no Cookie or legacy Web-session Bearer fallback, even during a second check.
+  if (new URL(request.url).pathname.startsWith("/api/v2/")) return null;
   return getUserByToken(getSessionToken(request));
 }
 

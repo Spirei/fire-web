@@ -2,6 +2,8 @@
 
 状态：合约冻结，服务端已在隔离分支 codex/native-account-security 实现并完成本地回归，尚未合入 main、尚未部署。隔离目录 `../fire-web-ios-security`。不得把线上缺失字段当可用。所有响应为 {code,message,data}，时间为 Unix 毫秒，写请求不自动重放。
 
+App v2 接入见 [迁移合约](app-api-v2.md)：安全 payload、错误码和能力沿用本文件，路径前缀及 security.version 改为 v2；保留 v1 供旧连接使用。
+
 ## 授权和发现
 
 auth/config 保留默认 scope，scopes_supported 新增 security.read、security.write（write 必须同时申请 read）。授权页明确显示查看/管理账户安全。旧 grant 不扩权。所有下列私有接口严格仅接受 PKCE App Bearer，不接受 Cookie 或 Web session token。auth/me 保留直接 User。

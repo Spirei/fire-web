@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { appV2Access } from "./appApiV2Policy";
 import { getDb } from "./db";
 import { getSiteSettings } from "./settings";
 import { publicSiteDomain } from "./publicSiteUrl";
@@ -129,10 +130,24 @@ export function revokeUserAppGrants(userId: string) {
   getDb().prepare("DELETE FROM app_codes WHERE user_id=?").run(userId);
 }
 
+/** Live App token validation shared across versions; never accepts a browser session token. */
+export function authenticateAppAccess(token:string,request:Request): Grant|null {
+  if (!/^fat_[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  try { assertAppOrigin(request); } catch { return null; }
+  const row=getDb().prepare("SELECT grant_id FROM app_access_tokens WHERE token_hash=? AND expires_at>?").get(appTokenHash(token),Date.now()) as {grant_id:string}|undefined;
+  return row ? activeGrant(row.grant_id) : null;
+}
+
 /** Explicit resource/method allowlist; App grants never confer site administrator privileges. */
 export function appIdentity(token: string, request: Request): Grant | null {
   const path = new URL(request.url).pathname;
   const method = request.method.toUpperCase();
+  if (path.startsWith("/api/v2/")) {
+    const access=appV2Access(path,method);
+    if (!access || access === "credential") return null;
+    const grant=authenticateAppAccess(token,request);
+    return grant && (access === "public" || grant.scope.split(" ").includes(access)) ? grant : null;
+  }
   const read = method === "GET" && /^\/api\/v1\/(?:auth\/me|overview|records(?:\/[^/]+)?|watch-groups|brokers|assets|celebs|rates|orders(?:\/[^/]+)?|funds|fire-settings|simple-ledger|portfolio-series)$/.test(path);
   const marketRead = ["GET", "POST"].includes(method) && /^\/api\/v1\/(?:quotes|charts|kline|index-kline|kline-sessions|stock-detail|search|earnings)$/.test(path);
   const write = ["POST", "PUT", "DELETE"].includes(method) && /^\/api\/v1\/(?:records(?:\/[^/]+)?|watch-groups(?:\/[^/]+(?:\/icon)?)?|orders(?:\/[^/]+)?|funds(?:\/[^/]+)?|fire-settings|simple-ledger)$/.test(path);

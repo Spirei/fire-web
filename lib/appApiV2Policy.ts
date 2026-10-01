@@ -1,0 +1,75 @@
+/** App contract allowlist. No password login, Cookie consent, site administration or file export. */
+export const APP_V2_ROUTES = [
+  {path:"auth/config",methods:["GET"],access:"public"},
+  {path:"auth/token",methods:["POST"],access:"credential"},
+  {path:"auth/revoke",methods:["POST"],access:"credential"},
+  {path:"auth/password-reset/request",methods:["POST"],access:"credential"},
+  {path:"auth/password-reset/verify",methods:["POST"],access:"credential"},
+  {path:"auth/password-reset/confirm",methods:["POST"],access:"credential"},
+  {path:"auth/me",methods:["GET"],access:"portfolio.read"},
+  {path:"auth/profile",methods:["PUT"],access:"profile.write"},
+  {path:"auth/email",methods:["PUT"],access:"portfolio.read"},
+  {path:"auth/password",methods:["POST"],access:"portfolio.read"},
+  {path:"auth/email-verification",methods:["GET"],access:"security.read"},
+  {path:"auth/email-verification/request",methods:["POST"],access:"security.write"},
+  {path:"auth/email-verification/confirm",methods:["POST"],access:"security.write"},
+  {path:"auth/totp",methods:["GET"],access:"security.read"},
+  {path:"auth/totp/setup",methods:["POST"],access:"security.write"},
+  {path:"auth/totp/confirm",methods:["POST"],access:"security.write"},
+  {path:"auth/totp/disable",methods:["POST"],access:"security.write"},
+  {path:"auth/totp/backup-codes",methods:["POST"],access:"security.write"},
+  {path:"auth/passkeys",methods:["GET","DELETE"],access:"security.read",writeAccess:"security.write"},
+  {path:"auth/passkeys/register-options",methods:["POST"],access:"security.write"},
+  {path:"auth/passkeys/register-verify",methods:["POST"],access:"security.write"},
+  {path:"auth/security-devices",methods:["GET","DELETE"],access:"security.read",writeAccess:"security.write"},
+  {path:"overview",methods:["GET"],access:"portfolio.read"},
+  {path:"records",methods:["GET","POST"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"records/[id]",methods:["PUT","DELETE"],access:"portfolio.write"},
+  {path:"records/group-assign",methods:["POST"],access:"portfolio.write"},
+  {path:"records/group-reorder",methods:["POST"],access:"portfolio.write"},
+  {path:"watch-groups",methods:["GET","POST"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"watch-groups/[id]",methods:["PUT","DELETE"],access:"portfolio.write"},
+  {path:"watch-groups/[id]/icon",methods:["POST"],access:"portfolio.write"},
+  {path:"watch-groups/reorder",methods:["POST"],access:"portfolio.write"},
+  {path:"orders",methods:["GET","POST"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"orders/[id]",methods:["PUT","DELETE"],access:"portfolio.write"},
+  {path:"funds",methods:["GET","POST"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"funds/[id]",methods:["DELETE"],access:"portfolio.write"},
+  {path:"fire-settings",methods:["GET","PUT"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"simple-ledger",methods:["GET","PUT"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"upload",methods:["POST"],access:"profile.write"},
+  {path:"brokers",methods:["GET"],access:"portfolio.read"},
+  {path:"assets",methods:["GET"],access:"public"},
+  {path:"assets/lookup",methods:["GET"],access:"public"},
+  {path:"celebs",methods:["GET"],access:"public"},
+  {path:"celebs/[id]",methods:["GET"],access:"public"},
+  {path:"celebs/[id]/returns",methods:["GET"],access:"public"},
+  {path:"quotes",methods:["POST"],access:"public"},
+  {path:"charts",methods:["POST"],access:"public"},
+  {path:"kline",methods:["GET"],access:"public"},
+  {path:"index-kline",methods:["GET"],access:"public"},
+  {path:"kline-sessions",methods:["GET"],access:"public"},
+  {path:"stock-detail",methods:["GET"],access:"public"},
+  {path:"search",methods:["GET"],access:"public"},
+  {path:"earnings",methods:["GET"],access:"public"},
+  {path:"rates",methods:["GET"],access:"public"},
+  {path:"indices",methods:["GET"],access:"public"},
+  {path:"company-profile",methods:["GET"],access:"public"},
+  {path:"settings/public",methods:["GET"],access:"public"},
+  {path:"feed",methods:["GET"],access:"feed.read"},
+  {path:"feed/preferences",methods:["PUT"],access:"feed.write"},
+  {path:"feed/refresh",methods:["POST"],access:"feed.write"},
+  {path:"feed/jobs/[jobId]",methods:["GET"],access:"feed.read"},
+  {path:"feed/posts/[postId]",methods:["GET","PUT"],access:"feed.read",writeAccess:"feed.write"},
+  {path:"feed/posts/[postId]/discussion",methods:["GET","POST"],access:"feed.read",writeAccess:"feed.write"}
+] as const;
+type Entry = {path:string;methods:readonly string[];access:string;writeAccess?:string};
+const routes = (APP_V2_ROUTES as readonly Entry[]).map(route=>({route,pattern:new RegExp("^/api/v2/"+route.path.split("/").map(segment=>segment==="[jobId]"?"fj-[a-f0-9]{24}":segment==="[postId]"?"fp-[a-f0-9]{24}":segment==="[id]"?"[^/]+":segment.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("/")+"$")}));
+export function appV2KnownPath(path:string) { return routes.some(item=>item.pattern.test(path)); }
+export function appV2Access(path:string,method:string): string|null {
+  // Literal routes must win over dynamic IDs (e.g. watch-groups/reorder).
+  const candidates=routes.filter(item=>item.pattern.test(path)).sort((a,b)=>Number(a.route.path.includes("["))-Number(b.route.path.includes("[")));
+  const route=candidates[0]?.route;
+  if(!route || !route.methods.includes(method))return null;
+  return method === "GET" ? route.access : route.writeAccess || route.access;
+}
