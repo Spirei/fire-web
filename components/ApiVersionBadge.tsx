@@ -1,5 +1,4 @@
 import { apiVersionTone } from "@/lib/apiVersionPresentation";
-import "@/styles/api-version.css";
 
 export default function ApiVersionBadge({ version, fullLabel = false }: { version: number; fullLabel?: boolean }) {
   return <span className={`api-version-badge api-version-tone-${apiVersionTone(version)}`}

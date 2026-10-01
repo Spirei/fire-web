@@ -4,12 +4,13 @@ import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard 
 
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import FxConverter from "@/components/FxConverter";
+import MarketCalendarView from "@/components/MarketCalendarView";
 import { fmtPct } from "@/lib/format";
 import MarketIcon from "@/components/MarketIcon";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import CurrencySelect from "@/components/CurrencySelect";
 import { useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
-import { IconArrowsExchange, IconChartHistogram } from "@tabler/icons-react";
+import { IconArrowsExchange, IconChartHistogram, IconCalendarPause } from "@tabler/icons-react";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { sharedRead } from "@/lib/sharedRead";
 import { readMiniKline, writeMiniKline, validCloses } from "@/lib/miniKlineCache";
@@ -295,13 +296,15 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
         </p>
       </div>
 
-      {loading ? (
-        <div className="space-y-2.5">
+      {err && items.length > 0 && <p role="status" className="text-xs text-muted">{err}，保留上次数据。</p>}
+      {loading && items.length === 0 ? (
+        <div className="space-y-2.5" role="status" aria-label="正在读取全球市值排行">
+          <p className="text-sm text-muted">正在读取全球市值排行…</p>
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="h-[60px] animate-pulse rounded-[12px] bg-bg-gray" />
           ))}
         </div>
-      ) : err ? (
+      ) : err && items.length === 0 ? (
         <p className="rounded-[14px] border border-dashed border-edge-strong py-12 text-center text-sm text-faint">{err}</p>
       ) : (
         <div className="overflow-hidden rounded-card border border-edge bg-white shadow-card">
@@ -416,20 +419,22 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
   );
 }
 
-type GlobalSection = "assets" | "convert";
+type GlobalSection = "assets" | "convert" | "calendar";
 
 const GLOBAL_SECTIONS: [GlobalSection, string, string][] = [
   ["assets", "市值排行", "全球主要资产的市值、价格与走势"],
-  ["convert", "汇率换算", "输入金额，按当前汇率换算其他货币"]
+  ["convert", "汇率换算", "输入金额，按当前汇率换算其他货币"],
+  ["calendar", "休市日历", "A 股、港股及美股全年交易与休市安排"]
 ];
 
 const SECTION_ICONS = {
   assets: IconChartHistogram,
-  convert: IconArrowsExchange
+  convert: IconArrowsExchange,
+  calendar: IconCalendarPause
 } as const;
 
 function parseGlobalSection(value: string | null): GlobalSection {
-  if (value === "convert") return value;
+  if (value === "convert" || value === "calendar") return value;
   return "assets";
 }
 
@@ -438,29 +443,21 @@ function SectionIcon({ section }: { section: GlobalSection }) {
   return <Icon className="global-section-icon" size={18} stroke={1.65} aria-hidden="true" />;
 }
 
-export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
+export default function GlobalPreviewView({ pageSize, initialNow }: { pageSize?: number; initialNow?: number }) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
-  const [section, setSection] = useState<GlobalSection>(() => pageSize ? "assets" : parseGlobalSection(searchParams.get("section")));
-  const [urlReady, setUrlReady] = useState(true);
-
-  useLayoutEffect(() => {
-    if (pageSize) return;
-    setSection(parseGlobalSection(searchParams.get("section")));
-    setUrlReady(true);
-  }, [pageSize]);
-
-  useEffect(() => {
+  const section = pageSize ? "assets" : parseGlobalSection(searchParams.get("section"));
+  const selectSection = (next: GlobalSection) => {
     if (!canUseWorkspaceUrl()) return;
-    if (pageSize || !urlReady) return;
+    if (pageSize) return;
     const params = new URLSearchParams(window.location.search);
-    params.set("section", section);
-    if (section !== "convert") {
+    params.set("section", next);
+    if (next !== "convert") {
       params.delete("from");
       params.delete("amount");
     }
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
-  }, [pageSize, section, urlReady]);
+  };
 
   if (pageSize) return <AssetMarketCapRanking pageSize={pageSize} />;
 
@@ -471,7 +468,7 @@ export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
           <button
             key={key}
             type="button"
-            onClick={() => setSection(key)}
+            onClick={() => selectSection(key)}
             title={label}
             aria-label={label}
             aria-current={section === key ? "page" : undefined}
@@ -484,7 +481,7 @@ export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
         ))}
       </nav>
       <div key={section} className="global-section-panel">
-        {section === "assets" ? <AssetMarketCapRanking /> : <FxConverter />}
+        {section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter />}
       </div>
     </div>
   );

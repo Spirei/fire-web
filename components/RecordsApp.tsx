@@ -1157,7 +1157,7 @@ export default function RecordsApp({
             /></MobileBackGesture>
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
-          {activeTab === "global" && <GlobalPreviewView />}
+          {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} />}
           {activeTab === "trading" && <FeedView initial={initialFeed} initialNow={initialNow} />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} initialNow={initialNow} />}
           {activeTab === "assistant" && <AssistantView page="assistant" symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}

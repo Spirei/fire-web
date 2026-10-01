@@ -6,7 +6,7 @@
 
 1. 固定只读引导 GET /api/v1/auth/config，无Cookie/Bearer、禁跳转。新增 api_versions_supported:[1,2]、app_api_version:2、app_api_base_path:"/api/v2"；原version:1与全部v1路径保持不变。
 2. 成功且合法的v1发现明确声明支持2时，读取同源固定 GET /api/v2/auth/config 并验证 version:2、固定client_id/redirect_uri/S256以及下述路径；成功后新连接选择2。不接受发现返回的任意主机或地址，不把凭证发给发现指定的第三方。
-3. 旧服务器成功返回合法v1配置但没有v2声明时，新连接选择1。网络失败、5xx、错误结构、声明支持2却v2失败均不能自动降级；用户可稍后重试。
+3. 新 App 连接固定选择2，旧服务器成功返回合法v1配置但没有v2声明时，提示升级服务器，不为新连接选择1。网络失败、5xx、错误结构、声明支持2却v2失败均不能自动降级；用户可稍后重试。
 4. apiVersion:1|2必须持久化到具体origin/grant。旧凭据缺apiVersion默认1；只有重新连接/显式迁移才换版本，不在既有请求途中改。token交换、refresh、revoke、身份、资料、业务和安全都使用同一选定版本；独立公共恢复/本地模式的公开行情也先选固定origin的版本并将其绑定到完整操作流程。
 5. 请求上下文、缓存和异步结果至少核对origin/grant/apiVersion；后台、取消、超时不重放写请求。v2失败不跨版本重试；API自身40101/40102的刷新策略也不得改变选定版本。旧client_id、回调、token格式、TTL/轮换、scope、grant ID不改，旧grant可凭原权限使用v2，不自动增加权限。
 
@@ -29,6 +29,7 @@ security.version=2，read_scope:security.read/write_scope:security.write；secur
 | 路径 | 方法 | 权限 |
 |---|---|---|
 | `auth/config` | GET | public |
+| `market-calendar` | GET | public（仅 v2） |
 | `auth/token` | POST | credential |
 | `auth/revoke` | POST | credential |
 | `auth/password-reset/request` | POST | credential |
@@ -106,3 +107,8 @@ API 文档入口仍为 /api-docs，?version=v1 或 ?version=v2 切换，省略�
 
 - 文档测试5组、迁移测试10组、完整test:review、独立类型检查、生产构建、审计通过。
 - 使用实际React页面与样式做隔离浏览器预览：版本点击、网址、刷新/返回、草稿与保存目标，桌面/平板/手机深浅色通过。预览使用模拟发现/文档读写及导航，不等于已部署Next服务或正式账号联调；仍未占用或改动另一实例的3000端口。
+
+
+## 休市日历
+
+新增公开只读 `GET /api/v2/market-calendar?market=US&year=2026`，仅 v2，无新增 scope。两版 auth/config 均以 market_calendar.path 指向固定 v2 地址。完整合约见 [market-calendar-api.md](market-calendar-api.md)，包括当地日期、半日市、未知年份、临时停市未确认与 ETag。不得改变纽约20:00盈亏归档周期或据未知状态写入业务数据。

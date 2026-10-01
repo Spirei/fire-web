@@ -38,7 +38,152 @@ function render(file, props={}, params='', prefs={}, name='default') {
 }
 let passed=0, failures=0;
 function test(label,run){try{run();passed++;console.log('PASS '+label);}catch(error){failures++;console.error('FAIL '+label+'\n'+error.stack);}}
+// Retain hook state between renders while deliberately never running effects.
+// This catches a wrong frame that a later layout/passive effect could conceal.
+function frameHarness(file, overrides={}) {
+  const states=[],refs=[],effects=[];
+  let cursor=0;
+  const hooks={...React,
+    useState:initial=>{const i=cursor++;if(!(i in states))states[i]=typeof initial==='function'?initial():initial;return[states[i],next=>{states[i]=typeof next==='function'?next(states[i]):next;}];},
+    useRef:initial=>{const i=cursor++;return refs[i]||(refs[i]={current:initial});},
+    useMemo:fn=>fn(),useCallback:fn=>fn,useId:()=>':frame:',
+    useEffect:fn=>effects.push(fn),useLayoutEffect:fn=>effects.push(fn)
+  };
+  const exports={};
+  const output=ts.transpileModule(fs.readFileSync(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+  require('node:vm').runInNewContext(output,{exports,URL,URLSearchParams,Date,Number,Set,Map,window:global.window,
+    require:id=>id==='react'?hooks:overrides[id]||require(id.startsWith('@/')?path.join(root,id.slice(2)):id)
+  });
+  return {states,effects,render(props={}){cursor=0;effects.length=0;return exports.default(props);}};
+}
+function elements(tree) {
+  if(Array.isArray(tree))return tree.flatMap(elements);
+  if(!tree||typeof tree!=='object'||!tree.props)return[];
+  return[tree,...elements(tree.props.children)];
+}
 try {
+  test('single market month calendar restores URL before effects',()=>{
+    const html=render('components/views/GlobalPreviewView.tsx',{initialNow:Date.UTC(2026,9,2)},'section=calendar&calYear=2026&calDay=2026-12-24');
+    assert(html.includes('2026')&&html.includes('休市日历'));
+    assert.equal((html.match(/class="mc-month card"/g)||[]).length,1);
+    assert(html.includes('2026-12-24')&&html.includes('13:00')&&!html.includes('12:08'));
+    const hk=render('components/MarketCalendarView.tsx',{},'market=HK&calYear=2026&calDay=2026-12-24');
+    assert(hk.includes('12:08')&&!hk.includes('13:00'));
+    assert(hk.includes('Asia/Hong_Kong')&&!hk.includes('America/New_York'));
+    assert(html.includes('美股')&&html.includes('港股')&&html.includes('A 股（沪深）'));
+    assert(html.includes('mc-market-mark')&&!html.includes('汇率换算器'));
+    assert(!html.includes('aria-label="2026-01-01；'));
+    const october=render('components/MarketCalendarView.tsx',{initialNow:Date.UTC(2026,9,2)},'market=CN&calYear=2026&calMonth=10');
+    assert(october.includes('aria-label="2026 年 10 月"'));
+    assert(!october.includes('日历月份'),'month dropdown duplicates arrow navigation');
+    const old=render('components/MarketCalendarView.tsx',{initialNow:Date.UTC(2026,9,2)},'calYear=2000&calMonth=1');
+    assert(old.includes('aria-label="2000 年 1 月"'));
+    assert(/aria-label="上个月" disabled/.test(old),'API lower limit is the only earlier-month boundary');
+    const january=render('components/MarketCalendarView.tsx',{initialNow:Date.UTC(2026,9,2)},'calYear=2026&calMonth=1');
+    assert(!/aria-label="上个月" disabled/.test(january),'January of this year must allow viewing previous December');
+    assert(october.includes('2026-10-01')&&!october.includes('aria-label="2026-12-24；'));
+    const closed=october.match(/<button[^>]*aria-label="2026-10-01；[^]*?<\/button>/)[0];
+    const open=october.match(/<button[^>]*aria-label="2026-10-08；[^]*?<\/button>/)[0];
+    assert(closed.includes('mc-closure-watermark')&&!open.includes('mc-closure-watermark'));
+    const half=html.match(/<button[^>]*aria-label="2026-12-24；[^]*?<\/button>/)[0];
+    assert(!half.includes('mc-closure-watermark'),'half-day alone must not imply full closure');
+    const unknown=render('components/MarketCalendarView.tsx',{},'calYear=2027');
+    assert(unknown.includes('2027 年安排未确认'));
+    assert(!unknown.includes('class="mc-market-mark"'));
+    assert(!unknown.includes('计划交易'));
+  });
+
+  test('calendar status filters keep date positions and never mix another market',()=>{
+    const half=render('components/MarketCalendarView.tsx',{},'market=US&calYear=2026&calMonth=12&calStatus=half_day&calDay=2026-12-24');
+    assert(half.includes('半日市 1 天')&&half.includes('13:00')&&!half.includes('12:08'));
+    assert(/aria-label="2026-12-25；[^>]*disabled/.test(half));
+    assert.equal((half.match(/class="mc-market-mark is-half"/g)||[]).length,1);
+    const cn=render('components/MarketCalendarView.tsx',{},'market=CN&calYear=2026&calMonth=12&calStatus=half_day');
+    assert(cn.includes('半日市 0 天')&&!cn.includes('mc-half-dot'));
+    const unverified=render('components/MarketCalendarView.tsx',{},'market=HK&calYear=2027&calMonth=2&calStatus=unknown');
+    assert(unverified.includes('未确认 28 天')&&!unverified.includes('mc-closure-watermark'));
+    const unknown=render('components/MarketCalendarView.tsx',{},'market=US&calYear=2026&calMonth=12&calStatus=unknown');
+    assert(unknown.includes('未确认 0 天'));
+    let address=new URL('https://example.test/global?section=calendar&market=US&calYear=2026&calMonth=12');
+    global.window={location:{get href(){return address.href;}},history:{replaceState(_a,_b,url){address=new URL(url,address);}}};
+    try {
+      const view=frameHarness('components/MarketCalendarView.tsx',{'@/lib/workspacePanel':{useWorkspaceSearchParams:()=>query,useWorkspaceLocationGuard:()=>()=>true}});
+      query=address.searchParams;
+      let tree=elements(view.render({initialNow:Date.UTC(2026,9,2)}));
+      tree.find(node=>node.type==='button'&&node.key==='HK').props.onClick();
+      assert.equal(address.searchParams.get('market'),'HK');
+      query=address.searchParams;tree=elements(view.render({initialNow:Date.UTC(2026,9,2)}));
+      tree.find(node=>node.type==='button'&&node.key==='half_day').props.onClick();
+      assert.equal(address.searchParams.get('calStatus'),'half_day');
+      assert.equal(address.searchParams.get('market'),'HK');
+      query=address.searchParams;tree=elements(view.render({initialNow:Date.UTC(2026,9,2)}));
+      tree.find(node=>node.type==='button'&&node.key==='half_day').props.onClick();
+      assert.equal(address.searchParams.has('calStatus'),false);
+    } finally {delete global.window;}
+  });
+
+  test('late client mounts use current preferences while server hydration uses its exact snapshot',()=>{
+    const output=ts.transpileModule(fs.readFileSync(path.join(root,'lib/usePersistedState.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+    function firstValue(client,local,cookie,server) {
+      const exports={};
+      require('node:vm').runInNewContext(output,{exports,window:{},localStorage:{getItem:()=>{if(local instanceof Error)throw local;return local;}},
+        require:id=>id==='react'?{useRef:value=>({current:value}),useState:fn=>[fn(),()=>{}],useCallback:fn=>fn,useEffect(){},useSyncExternalStore:(_subscribe,get,getServer)=>client?get():getServer()}
+          :id==='./prefsContext'?{useServerPrefs:()=>server,writePrefCookie(){}}
+          :id==='./prefsCookie'?{readPrefsCookie:()=>cookie}:{showToast(){}}
+      });
+      return exports.usePersistedState('fire:display-currency','USD')[0];
+    }
+    assert.equal(firstValue(false,'"HKD"',{'fire:display-currency':'HKD'},{'fire:display-currency':'USD'}),'USD','hydration must match the HTML even if storage changed');
+    assert.equal(firstValue(true,'"HKD"',{'fire:display-currency':'HKD'},{'fire:display-currency':'USD'}),'HKD','new cached page must not flash the old layout choice');
+    assert.equal(firstValue(true,'"HKD"',{'fire:display-currency':'CNY'},{'fire:display-currency':'USD'}),'HKD','current local preference retains priority over a stale cookie');
+    assert.equal(firstValue(true,new Error('blocked'),{'fire:display-currency':'CNY'},{'fire:display-currency':'USD'}),'CNY','cookie-only browsers restore before effects');
+    assert.equal(firstValue(true,null,{}, {'fire:display-currency':'HKD'}),'USD','a cleared preference must not resurrect the stale layout snapshot');
+    assert.equal(firstValue(true,'HKD',{},{}),'HKD','legacy unquoted storage remains compatible');
+  });
+  test('cached global and converter views restore changed URLs on the very next render',()=>{
+    const overrides={
+      '@/lib/workspacePanel':{useWorkspaceSearchParams:()=>query,useWorkspaceLocationGuard:()=>()=>true},
+      '@/lib/currencyPrefs':{useDisplayCurrency:()=>({currency:'USD'})},
+      '@/lib/usePersistedState':{usePersistedState:(_key,value)=>[value,()=>{}]}
+    };
+    const global=frameHarness('components/views/GlobalPreviewView.tsx',overrides);
+    query=new URLSearchParams('section=assets');global.render();
+    query=new URLSearchParams('section=convert&from=USD&amount=250');
+    let tree=elements(global.render());
+    assert.equal(tree.find(node=>node.props['aria-current']==='page').props['aria-label'],'汇率换算');
+    query=new URLSearchParams('section=assets');tree=elements(global.render());
+    assert.equal(tree.find(node=>node.props['aria-current']==='page').props['aria-label'],'市值排行');
+    const converter=frameHarness('components/FxConverter.tsx',overrides);
+    query=new URLSearchParams('section=convert&from=USD&amount=100');
+    assert(elements(converter.render()).some(node=>node.type==='input'&&node.props.value==='100'));
+    query=new URLSearchParams('section=convert&from=USD&amount=250');
+    assert(elements(converter.render()).some(node=>node.type==='input'&&node.props.value==='250'),'the previous amount must not survive one paint');
+    query=new URLSearchParams('section=convert&from=USD&amount=100');
+    assert(elements(converter.render()).some(node=>node.type==='input'&&node.props.value==='100'));
+  });
+  test('request rows disappear in the first render of a different query and preserve dynamic version markup',()=>{
+    const view=frameHarness('components/ApiRequests.tsx',{
+      '@/lib/workspacePanel':{useWorkspaceSearchParams:()=>query,useWorkspaceLocationGuard:()=>()=>true},
+      '@/lib/usePersistedState':{usePersistedState:(_key,value)=>[value,()=>{}]}
+    });
+    const year=new Date().getUTCFullYear();
+    query=new URLSearchParams(`rPeriod=today&rQ=/api/v2&rPage=1&rYear=${year}`);view.render();
+    const snapshot={revision:1,today:`${year}-01-01`,summary:{total:1,errors:0,serverErrors:0,averageMs:1,sources:{web:1,ios:0,app:0,other:0}},chart:[],chartUnit:'hour',endpoints:[],logs:[{id:1,at:Date.UTC(year,0,1),path:'/api/v2/previous-result',method:'GET',source:'web',status:200,duration:1}],pagination:{page:1,pageSize:20,total:1,anchor:0},heatmap:{},detailFrom:0};
+    view.states[0]={key:query.toString(),snapshot};
+    assert(elements(view.render()).some(node=>node.props.path==='/api/v2/previous-result'));
+    query=new URLSearchParams(`rPeriod=today&rQ=/api/v3&rPage=1&rYear=${year}`);
+    const next=elements(view.render());
+    assert(next.some(node=>node.type==='input'&&node.props.value==='/api/v3'));
+    assert(!next.some(node=>node.props.path==='/api/v2/previous-result'),'old rows cannot wait for an effect to clear them');
+    const html=render('components/ApiPathText.tsx',{path:'/api/v3/example'});
+    assert(html.includes('v3')&&html.includes('api-version'),'version coloring remains extensible');
+  });
+  test('request styles belong to the root and FIRE first frame has readable loading feedback',()=>{
+    const layout=fs.readFileSync(path.join(root,'app/layout.tsx'),'utf8');
+    assert(layout.includes('import "@/styles/api-requests.css"')&&layout.includes('import "@/styles/api-version.css"'));
+    const html=render('components/views/FireView.tsx',{records:[],quotes:{},livePrice:()=>0});
+    assert(html.includes('退休规划')&&html.includes('role="status"')&&!html.includes('aria-hidden="true"'));
+  });
   test('global conversion URL renders converter rather than default ranking before hydration',()=>{
     const html=render('components/views/GlobalPreviewView.tsx',{},'section=convert&from=USD&amount=250');
     assert(!html.includes('全球资产市值排行'));
@@ -48,6 +193,7 @@ try {
     assert(!foreign.includes("fx-converter-row is-active"));
     const fallback=render('components/views/GlobalPreviewView.tsx',{},'section=invalid');
     assert(fallback.includes('全球资产市值排行'));
+    assert(fallback.includes('正在读取全球市值排行'));
   });
   test('request filters render their actual URL selection before hydration',()=>{
     const html=render('components/ApiRequests.tsx',{},`rQ=%2Fapi%2Fv3&rPeriod=year&rYear=${new Date().getUTCFullYear()-1}&rPage=3`);

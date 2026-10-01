@@ -228,6 +228,7 @@ export const API_REQUEST_ROUTES = [
   "/api/v2/indices",
   "/api/v2/kline",
   "/api/v2/kline-sessions",
+  "/api/v2/market-calendar",
   "/api/v2/orders",
   "/api/v2/orders/[id]",
   "/api/v2/overview",

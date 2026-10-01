@@ -35,6 +35,9 @@ import "@/styles/typography.css";
 import "@/styles/muse.css";
 // Cached tab views must not own the lifetime of their global stylesheet.
 import "@/styles/feed.css";
+import "@/styles/api-requests.css";
+import "@/styles/api-version.css";
+import "@/styles/market-calendar.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = getSiteSettings();

@@ -2,7 +2,7 @@
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { IconCheck, IconPencil, IconPlus, IconRefresh, IconX } from "@tabler/icons-react";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
@@ -65,15 +65,12 @@ export default function FxConverter() {
   const start = isFxCurrency(displayCurrency) ? displayCurrency : "USD";
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
-  const [base, setBase] = useState<FxCurrency>(() => readUrlState(start, searchParams).from);
-  const [text, setText] = useState(() => readUrlState(start, searchParams).amount);
-  const [urlReady, setUrlReady] = useState(true);
-  useLayoutEffect(() => {
-    const initial = readUrlState(start, searchParams);
-    setBase(initial.from);
-    setText(initial.amount);
-    setUrlReady(true);
-  }, []);
+  const query = searchParams.toString();
+  const { from: base, amount: savedAmount } = readUrlState(start, searchParams);
+  // Keep incomplete input (e.g. an empty field) only for its own URL. History
+  // navigation immediately renders the requested amount, before any effects.
+  const [draft, setDraft] = useState<{ query: string; amount: string } | null>(null);
+  const text = draft?.query === query ? draft.amount : savedAmount;
   const [savedOrder, setSavedOrder] = usePersistedState<FxCurrency[]>(FX_ORDER_KEY, [...FX_CURRENCIES]);
   const [hidden, setHidden] = usePersistedState<FxCurrency[]>(FX_HIDDEN_KEY, []);
   const [rates, setRates] = useState<Record<string, number>>({ USD: 1 });
@@ -95,22 +92,21 @@ export default function FxConverter() {
   const [dragging, setDragging] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
 
-  useEffect(() => {
+  const updateInput = (nextBase: FxCurrency, nextText: string) => {
     if (!canUseWorkspaceUrl()) return;
-    if (!urlReady) return;
     const params = new URLSearchParams(window.location.search);
     params.set("section", "convert");
-    params.set("from", base);
-    const parsed = parseFxAmount(text);
+    params.set("from", nextBase);
+    const parsed = parseFxAmount(nextText);
     if (parsed == null) params.delete("amount");
-    else params.set("amount", sanitizeFxInput(text));
+    else params.set("amount", sanitizeFxInput(nextText));
+    setDraft({ query: params.toString(), amount: nextText });
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
-  }, [base, text, urlReady]);
+  };
 
   useEffect(() => {
     if (codes.length && !codes.includes(base)) {
-      setBase(codes[0]);
-      setText("100");
+      updateInput(codes[0], "100");
     }
   }, [base, visibleKey]);
 
@@ -195,11 +191,8 @@ export default function FxConverter() {
 
   function activate(next: FxCurrency) {
     if (next === base || !hasQuote(next)) return;
-    if (amount != null) {
-      const converted = convertAmount(amount, base, next, rates);
-      setText(converted == null ? "" : amountToDraft(converted, next));
-    }
-    setBase(next);
+    const converted = amount == null ? null : convertAmount(amount, base, next, rates);
+    updateInput(next, amount == null ? text : converted == null ? "" : amountToDraft(converted, next));
   }
 
   function onDrop(to: number) {
@@ -218,8 +211,7 @@ export default function FxConverter() {
     if (!allCodes.includes(code)) setSavedOrder([...allCodes, code]);
     setHidden(current => current.filter(item => item !== code));
     if (!codes.length) {
-      setBase(code);
-      setText("100");
+      updateInput(code, "100");
     }
     setAdding(false);
   }
@@ -231,8 +223,7 @@ export default function FxConverter() {
       else {
         const fallback = codes.find(item => item !== code);
         if (fallback) {
-          setBase(fallback);
-          setText("100");
+          updateInput(fallback, "100");
         }
       }
     }
@@ -331,7 +322,7 @@ export default function FxConverter() {
                       activate(code);
                       requestAnimationFrame(() => inputRefs.current[code]?.select());
                     }}
-                    onChange={(event) => setText(sanitizeFxInput(event.target.value))}
+                    onChange={(event) => updateInput(base, sanitizeFxInput(event.target.value))}
                   />
                 </span>
               </label>

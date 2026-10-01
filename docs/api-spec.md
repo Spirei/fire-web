@@ -1103,3 +1103,8 @@ App 使用 `client_id=fire-ios`，`redirect_uri=com.fire.app:/oauth/callback`，
 成功仍使用 v1 信封，data 为 `{ access_token, refresh_token, token_type: "Bearer", expires_in: 900, grant_id, scope }`。refresh 请求为 `{ grant_type: "refresh_token", client_id: "fire-ios", refresh_token }`，每次成功必须原子替换两个令牌。授权码 60 秒有效；刷新 30 天无活动失效，授权绝对最长 90 天。旧 refresh 重放、设备撤销、改密和 TOTP 变更使整组凭据失效。
 
 完整流程、迁移、权限与本次 API 审查见 [App 连接说明](./app-connection.md)。旧用户名密码 Bearer 登录接口保留兼容，网页活跃续期仅适用于 Cookie，不续期旧移动端会话。
+
+
+## 休市日历能力发现
+
+`auth/config` 的 `data.market_calendar` 指向固定同源 `/api/v2/market-calendar`，api_version=2、access=public，列出市场、时区、交易所、已核实年份及结构/数据版本。休市日历只提供 v2；完整请求、缓存、未知状态与日期语义见 API 文档 v2。后续新 App 功能统一使用 v2，既有 v1 连接继续兼容。

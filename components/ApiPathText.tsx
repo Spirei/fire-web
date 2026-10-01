@@ -1,5 +1,4 @@
 import { apiVersionFromPath, apiVersionTone } from "@/lib/apiVersionPresentation";
-import "@/styles/api-version.css";
 
 export default function ApiPathText({ path }: { path: string }) {
   const version = apiVersionFromPath(path);

@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useServerPrefs, writePrefCookie } from "./prefsContext";
 import { readPrefsCookie } from "./prefsCookie";
 import { showToast } from "./toast";
 
 const PERSISTED_STATE_EVENT = "fire:persisted-state";
+const subscribeHydration = () => () => {};
+const clientMounted = () => true;
+const serverMounted = () => false;
 
 function readPersisted<T>(key: string, fallback: T | (() => T)): T {
   const initial = () => typeof fallback === "function" ? (fallback as () => T)() : fallback;
@@ -31,10 +34,16 @@ export function usePersistedState<T>(key: string, initial: T | (() => T)): [T, R
   const initialRef = useRef(initial);
   const serverPrefs = useServerPrefs();
   const hasServerPref = Object.prototype.hasOwnProperty.call(serverPrefs, key);
-  // SSR 与客户端首帧必须取同一个值：有 cookie（服务端注入）就用它，没有才退回默认值。
-  const [value, setValue] = useState<T>(() =>
-    hasServerPref ? (serverPrefs[key] as T) : typeof initial === "function" ? (initial as () => T)() : initial
-  );
+  // Hydration uses the server snapshot, including a streamed boundary. A new
+  // client-only mount must instead read current storage: the layout snapshot
+  // may predate a preference changed in another cached workspace.
+  const clientOnlyMount = useSyncExternalStore(subscribeHydration, clientMounted, serverMounted);
+  const [value, setValue] = useState<T>(() => {
+    if (!clientOnlyMount) return hasServerPref ? serverPrefs[key] as T : typeof initial === "function" ? (initial as () => T)() : initial;
+    const cookiePrefs = readPrefsCookie();
+    return readPersisted(key, () => Object.prototype.hasOwnProperty.call(cookiePrefs, key)
+      ? cookiePrefs[key] as T : typeof initial === "function" ? (initial as () => T)() : initial);
+  });
   const valueRef = useRef(value);
   const setPersistedValue = useCallback<React.Dispatch<React.SetStateAction<T>>>((next) => {
     // 写入必须发生在用户操作中；React 的 state updater 可能延后或重放，刷新会抢在写入前。

@@ -829,7 +829,10 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
     "w-[130px] rounded-md border border-edge bg-white/80 px-2 py-1 text-right text-sm tabular-nums text-ink-2 outline-none transition-colors focus:border-brand dark:border-edge-strong dark:bg-[#1c1c1e] dark:text-white";
 
   if (!hydrated) {
-    return <div className="fire-page mx-auto min-h-[720px] max-w-[980px] px-4 py-8" aria-hidden="true" />;
+    return <div className="fire-page mx-auto min-h-[720px] max-w-[980px] px-4 py-8">
+      <div className="mb-6 flex items-baseline gap-2"><b className="fire-glowmark">fire</b><span className="text-sm font-medium text-muted">退休规划</span></div>
+      <p role="status" className="text-sm text-muted">正在恢复退休规划…</p>
+    </div>;
   }
 
   return (

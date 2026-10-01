@@ -2,7 +2,7 @@
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { IconActivity, IconArrowLeft, IconArrowUpRight, IconCheck, IconChevronLeft, IconChevronRight, IconPlayerPause, IconPlayerPlay, IconRefresh, IconSearch, IconX } from "@tabler/icons-react";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -10,7 +10,6 @@ import AppSelect from "@/components/AppSelect";
 import ApiPathText from "@/components/ApiPathText";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { parseRequestFilters, requestDay, type RequestFilters, type RequestSnapshot } from "@/lib/apiRequestTypes";
-import "@/styles/api-requests.css";
 
 const SOURCE_NAMES = { web: "网页", ios: "iOS", app: "App", other: "其他" };
 const FILTER_KEYS: Record<keyof RequestFilters, string> = { period: "rPeriod", status: "rStatus", source: "rSource", method: "rMethod", q: "rQ", page: "rPage", anchor: "rAnchor", day: "rDay", year: "rYear" };
@@ -69,9 +68,11 @@ function RequestHeatmap({ counts, today, filters, onChange }: { counts: Record<s
 export default function ApiRequests({ standalone = false }: { standalone?: boolean }) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
-  const [filters, setFilters] = useState<RequestFilters>(() => parseRequestFilters(new URLSearchParams(searchParams.toString())));
-  const [ready, setReady] = useState(true);
-  const [snapshot, setSnapshot] = useState<RequestSnapshot | null>(null);
+  const query = searchParams.toString();
+  const filters = useMemo(() => parseRequestFilters(new URLSearchParams(query)), [query]);
+  const filterKey = filterParams(filters).toString();
+  const [result, setResult] = useState<{ key: string; snapshot: RequestSnapshot } | null>(null);
+  const snapshot = result?.key === filterKey ? result.snapshot : null;
   const [error, setError] = useState("");
   const [blocked, setBlocked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -79,6 +80,7 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
   const [live, setLive] = usePersistedState("fire:api-requests:live", true);
   const [connection, setConnection] = useState<"connecting" | "live" | "reconnecting" | "paused">("connecting");
   const filtersRef = useRef(filters);
+  filtersRef.current = filters;
   const flight = useRef<AbortController | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chartRef = useRef<HTMLDivElement | null>(null);
@@ -86,32 +88,24 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
   const tooltipId = useId();
   const loadingShape = useRef({ rows: 6, endpoints: 3 });
 
-  useLayoutEffect(() => {
-    const restore = () => {
-      if (!canUseWorkspaceUrl()) return;
-      setFilters(parseRequestFilters(new URLSearchParams(window.location.search)));
-      setReady(true);
-    };
-    restore(); window.addEventListener("popstate", restore);
-    return () => window.removeEventListener("popstate", restore);
-  }, []);
-
   const refresh = useCallback(async () => {
     flight.current?.abort();
     const controller = new AbortController(); flight.current = controller;
     setRefreshing(true);
+    const key = filterParams(filtersRef.current).toString();
+    const isCurrent = () => !controller.signal.aborted && key === filterParams(filtersRef.current).toString();
     try {
-      const response = await fetch(`/api/request-logs?${filterParams(filtersRef.current)}`, { cache: "no-store", signal: controller.signal });
+      const response = await fetch(`/api/request-logs?${key}`, { cache: "no-store", signal: controller.signal });
       const data = await response.json();
+      if (!isCurrent()) return;
       if (!response.ok || data.code !== 0) {
-        if (response.status === 401 || response.status === 403) { setBlocked(true); setSnapshot(null); }
+        if (response.status === 401 || response.status === 403) { setBlocked(true); setResult(null); }
         throw new Error(data.message || "请求日志读取失败");
       }
-      if (controller.signal.aborted) return;
       loadingShape.current = { rows: data.data.logs.length, endpoints: data.data.endpoints.length };
-      setSnapshot(data.data); setError(""); setCheckedAt(Date.now());
-    } catch (error) { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "请求日志读取失败"); }
-    finally { if (!controller.signal.aborted) setRefreshing(false); }
+      setResult({ key, snapshot: data.data }); setError(""); setCheckedAt(Date.now());
+    } catch (error) { if (isCurrent()) setError(error instanceof Error ? error.message : "请求日志读取失败"); }
+    finally { if (isCurrent()) setRefreshing(false); }
   }, []);
   const scheduleRefresh = useCallback((delay = 150, replace = false) => {
     // Coalesce live events without postponing an update forever under sustained traffic.
@@ -121,13 +115,11 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
   }, [refresh]);
 
   useEffect(() => {
-    filtersRef.current = filters;
-    if (!ready) return;
-    flight.current?.abort(); setSnapshot(null); scheduleRefresh(180, true);
-  }, [filters, ready, scheduleRefresh]);
+    flight.current?.abort(); setError(""); scheduleRefresh(180, true);
+  }, [filterKey, scheduleRefresh]);
 
   useEffect(() => {
-    if (!ready || !live || blocked) { setConnection("paused"); return; }
+    if (!live || blocked) { setConnection("paused"); return; }
     let events: EventSource | null = null;
     const open = () => {
       events?.close(); events = null;
@@ -143,13 +135,13 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
     // EventSource reconnects itself. This bounded fallback also works behind buffering proxies.
     const fallback = setInterval(() => { if (!document.hidden) scheduleRefresh(); }, 30_000);
     return () => { events?.close(); clearInterval(fallback); document.removeEventListener("visibilitychange", open); };
-  }, [blocked, live, ready, scheduleRefresh]);
+  }, [blocked, live, scheduleRefresh]);
   useEffect(() => () => { flight.current?.abort(); if (timer.current) clearTimeout(timer.current); }, []);
 
   const change = (patch: Partial<RequestFilters>) => {
+    if (!canUseWorkspaceUrl()) return;
     const next = { ...filters, page: 1, anchor: 0, ...patch };
     if (patch.period) next.day = "";
-    setFilters(next);
     const url = new URL(window.location.href);
     for (const key of Object.values(FILTER_KEYS)) url.searchParams.delete(key);
     filterParams(next).forEach((value, key) => url.searchParams.set(key, value));

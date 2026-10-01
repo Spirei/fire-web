@@ -3048,8 +3048,9 @@ function fontHeaderFixture(ext) {
     assert(convert >= 0, '汇率换算入口必须保留');
     assert(!view.includes('GlobalEconomyHeatmap'));
     assert(!view.includes('["heatmap", "经济热图"'));
-    assert.match(view, /section === "assets" \? <AssetMarketCapRanking \/> : <FxConverter \/>/);
-    assert.match(view, /if \(pageSize \|\| !urlReady\) return;/, '读取 URL 前不得回写默认区块覆盖分享链接');
+    assert.match(view, /section === "assets" \? <AssetMarketCapRanking \/> : section === "calendar" \? <MarketCalendarView initialNow=\{initialNow\} \/> : <FxConverter \/>/);
+    assert.match(view, /const section = pageSize \? "assets" : parseGlobalSection\(searchParams.get\("section"\)\)/, '当前地址必须直接决定区块');
+    assert.match(view, /const selectSection = \(next: GlobalSection\) => \{\s*if \(!canUseWorkspaceUrl\(\)\) return;/, '只在本页用户切换区块时写地址');
     assert.match(css, /\.fx-converter-card\s*\{[^}]*grid-template-columns:\s*1fr 1fr/, '汇率换算必须一排两个');
   });
   await test('calendar and stock detail share the server first-frame clock', () => {
