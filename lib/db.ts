@@ -52,6 +52,13 @@ function migrate(database: Database.Database) {
       revoked_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_app_grants_user ON app_grants(user_id);
+    CREATE TABLE IF NOT EXISTS app_security_challenges (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      grant_id TEXT NOT NULL REFERENCES app_grants(id) ON DELETE CASCADE,
+      secret_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS app_codes (
       code_hash TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

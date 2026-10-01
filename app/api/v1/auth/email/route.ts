@@ -7,6 +7,6 @@ export async function PUT(request: Request) {
   try { return ok(appProfile(request, await saveProfile(request, true, true))); }
   catch (error) {
     const status = error instanceof ProfileError ? error.status : 500;
-    return fail(status * 100 + 1, error instanceof ProfileError ? error.message : "邮箱保存失败，请稍后再试", status);
+    return fail(error instanceof ProfileError ? error.code : 50001, error instanceof ProfileError ? error.message : "邮箱保存失败，请稍后再试", status);
   }
 }

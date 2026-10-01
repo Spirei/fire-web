@@ -8,7 +8,7 @@ import { consumeTotpFactor, userTotpEnabled } from "./totpAuth";
 import type { User } from "./types";
 
 export class ProfileError extends Error {
-  constructor(message: string, public status = 400) { super(message); }
+  constructor(message: string, public status = 400, public code = status * 100 + 1) { super(message); }
 }
 
 /** Web and App edit the same row, with identical validation and email verification rules. */
@@ -40,13 +40,13 @@ export async function saveProfile(request: Request, strict = false, emailOnly = 
     if (patch.email !== undefined) {
       const changed = patch.email.toLowerCase() !== (row.email || "").trim().toLowerCase();
       if (emailOnly || changed) {
-        if (typeof body.currentPassword !== "string" || body.currentPassword.length > 512 || !verifyPassword(body.currentPassword, row.password_hash)) throw new ProfileError("修改邮箱需要验证当前密码", 403);
+        if (typeof body.currentPassword !== "string" || body.currentPassword.length > 512 || !verifyPassword(body.currentPassword, row.password_hash)) throw new ProfileError("修改邮箱需要验证当前密码", 403, 40103);
       }
       const existing = patch.email && findUserByEmail(patch.email);
       if (existing && existing.id !== user.id) throw new ProfileError("该邮箱已被其他账号绑定", 409);
       // Recovery email can reset a password. App profile must not become a
       // second route around the dedicated email endpoint's second factor.
-      if (strict && (emailOnly || changed) && userTotpEnabled(user.id) && !consumeTotpFactor(user.id, body.code || "")) throw new ProfileError("二次验证失败", 403);
+      if (strict && (emailOnly || changed) && userTotpEnabled(user.id) && !consumeTotpFactor(user.id, body.code || "")) throw new ProfileError("二次验证失败", 403, 40104);
     }
     const next = updateProfile(user.id, patch);
     if (!next) throw new ProfileError("用户名已被使用", 409);

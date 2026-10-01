@@ -1,3 +1,4 @@
+import { securityCapabilities } from "./appSecurityConfig";
 import { appIdentity } from "./appAuth";
 import { getSessionToken } from "./auth";
 import { userTotpEnabled } from "./totpAuth";
@@ -9,5 +10,5 @@ export function appProfile(request: Request, user: User) {
   const native = token.startsWith("fat_");
   const scope = native ? appIdentity(token, request)?.scope || "" : "";
   const profileWrite = !native || scope.split(" ").includes("profile.write");
-  return { ...user, scope, capabilities: { profileWrite, avatarUpload: profileWrite, emailWrite: true, passwordWrite: true, overviewTotalAssets: true, feedRead: !native || scope.split(" ").includes("feed.read"), feedWrite: !native || scope.split(" ").includes("feed.write") }, security: { twoFactorEnabled: userTotpEnabled(user.id) } };
+  return { ...user, scope, capabilities: { ...securityCapabilities(request, scope, native), profileWrite, avatarUpload: profileWrite, emailWrite: true, passwordWrite: true, overviewTotalAssets: true, feedRead: !native || scope.split(" ").includes("feed.read"), feedWrite: !native || scope.split(" ").includes("feed.write") }, security: { twoFactorEnabled: userTotpEnabled(user.id) } };
 }

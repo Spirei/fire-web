@@ -8,7 +8,7 @@ export const APP_CLIENT_ID = "fire-ios";
 export const APP_REDIRECT_URI = "com.fire.app:/oauth/callback";
 export const APP_SCOPE = "portfolio.read portfolio.write";
 // Default connections stay unchanged. Editing identity requires explicit new consent.
-export const APP_SUPPORTED_SCOPES = [...APP_SCOPE.split(" "), "profile.write", "feed.read", "feed.write"];
+export const APP_SUPPORTED_SCOPES = [...APP_SCOPE.split(" "), "profile.write", "feed.read", "feed.write", "security.read", "security.write"];
 const ACCESS_SECONDS = 15 * 60;
 const REFRESH_IDLE_MS = 30 * 86400_000;
 const REFRESH_MAX_MS = 90 * 86400_000;
@@ -25,7 +25,7 @@ export function parseAppAuthorization(values: Record<string, unknown>): AppAutho
   if (value("client_id") !== APP_CLIENT_ID || value("redirect_uri") !== APP_REDIRECT_URI || value("response_type") !== "code") throw new Error("不支持的 App 或回调地址");
   if (value("code_challenge_method") !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(value("code_challenge"))) throw new Error("无效的授权校验参数");
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(value("state"))) throw new Error("无效的授权请求");
-  if (!scope.includes("portfolio.read") || scope.some(s => !APP_SUPPORTED_SCOPES.includes(s)) || (scope.includes("feed.write") && !scope.includes("feed.read"))) throw new Error("不支持的授权范围");
+  if (!scope.includes("portfolio.read") || scope.some(s => !APP_SUPPORTED_SCOPES.includes(s)) || (scope.includes("feed.write") && !scope.includes("feed.read")) || (scope.includes("security.write") && !scope.includes("security.read"))) throw new Error("不支持的授权范围");
   const deviceName = value("device_name").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 64);
   return { client_id: APP_CLIENT_ID, redirect_uri: APP_REDIRECT_URI, response_type: "code", code_challenge_method: "S256", code_challenge: value("code_challenge"), scope: [...new Set(scope)].join(" "), state: value("state"), device_name: normalizeAppDeviceName(deviceName) || DEFAULT_APP_DEVICE_NAME };
 }
@@ -141,7 +141,10 @@ export function appIdentity(token: string, request: Request): Grant | null {
   const accountWrite = (method === "PUT" && path === "/api/v1/auth/email") || (method === "POST" && path === "/api/v1/auth/password");
   const feedRead = method === "GET" && /^\/api\/v1\/feed(?:\/(?:jobs\/fj-[a-f0-9]{24}|posts\/fp-[a-f0-9]{24}(?:\/discussion)?))?$/.test(path);
   const feedWrite = (method === "PUT" && /^\/api\/v1\/feed\/(?:preferences|posts\/fp-[a-f0-9]{24})$/.test(path)) || (method === "POST" && /^\/api\/v1\/feed\/(?:refresh|posts\/fp-[a-f0-9]{24}\/discussion)$/.test(path));
-  if (!read && !marketRead && !write && !profileWrite && !accountWrite && !feedRead && !feedWrite) return null;
+  const securityRead = method === "GET" && /^\/api\/v1\/auth\/(?:email-verification|totp|passkeys|security-devices)$/.test(path);
+  const securityWrite = (method === "POST" && /^\/api\/v1\/auth\/(?:email-verification\/(?:request|confirm)|totp\/(?:setup|confirm|disable|backup-codes)|passkeys\/(?:register-options|register-verify))$/.test(path)) || (method === "DELETE" && /^\/api\/v1\/auth\/(?:passkeys|security-devices)$/.test(path));
+  // New security handlers check explicit scope and report 403 without invalidating a live grant.
+  if (!securityRead && !securityWrite && !read && !marketRead && !write && !profileWrite && !accountWrite && !feedRead && !feedWrite) return null;
   try { assertAppOrigin(request); } catch { return null; }
   const row = getDb().prepare("SELECT grant_id FROM app_access_tokens WHERE token_hash=? AND expires_at>?").get(appTokenHash(token), Date.now()) as { grant_id: string } | undefined;
   const grant = row && activeGrant(row.grant_id);

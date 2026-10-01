@@ -44,12 +44,12 @@ export function issueEmailVerification(userId: string, beforeIssue?: (email: str
 export function revokeEmailVerification(token:string) {
   getDb().prepare("UPDATE email_verification_tokens SET expires_at=0 WHERE token_hash=?").run(digest(token));
 }
-export function confirmEmailVerification(token:string) {
+export function confirmEmailVerification(token:string, expectedUserId?:string) {
   if(!/^[A-Za-z0-9_-]{43}$/.test(token)) return false;
   const db=getDb();
   return db.transaction(()=>{
     const row=db.prepare("SELECT t.user_id,t.email FROM email_verification_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=? AND t.expires_at>? AND t.password_hash=u.password_hash AND LOWER(t.email)=LOWER(u.email)").get(digest(token),Date.now()) as {user_id:string;email:string}|undefined;
-    if(!row) return false;
+    if(!row || (expectedUserId && row.user_id !== expectedUserId)) return false;
     db.prepare("INSERT OR REPLACE INTO verified_emails (user_id,email,verified_at) VALUES (?,?,?)").run(row.user_id,row.email,Date.now());
     db.prepare("DELETE FROM email_verification_tokens WHERE user_id=?").run(row.user_id);
     return true;
