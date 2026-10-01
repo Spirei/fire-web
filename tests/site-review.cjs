@@ -601,7 +601,10 @@ function fontHeaderFixture(ext) {
     const assistant = fs.readFileSync(path.join(root, 'components/DeferredAssistant.tsx'), 'utf8');
     const navigation = fs.readFileSync(path.join(root, 'components/WorkspaceNavigation.tsx'), 'utf8');
     const ticker = fs.readFileSync(path.join(root, 'components/WorkspaceTicker.tsx'), 'utf8');
-    assert(shell.includes('fourDoorViewport ? <WorkspaceBoundary fallback={<FourDoorLoading activeKey={activeTab} />}><Suspense fallback={<FourDoorLoading activeKey={activeTab} />}><FourDoorNavigator'));
+    assert(shell.includes('fourDoorEnabled === true && fourDoorViewport && ('));
+    assert(!/^import .+ from ["']@\/components\/FourDoor/m.test(shell));
+    assert(shell.includes('const FourDoorLoading = lazy(() => import("@/components/FourDoorLoading"))'));
+    assert(shell.includes('<WorkspaceBoundary fallback={<FourDoorLoading activeKey={activeTab} />}><Suspense fallback={<FourDoorLoading activeKey={activeTab} />}><FourDoorNavigator'));
     assert(shell.includes('desktopViewport && activeTab !== "assistant" && floatingAssistantReady'));
     assert(shell.includes('if (!desktopViewport || !nav) return;'));
     assert(!shell.includes('usePrefetchFlagIcons('));

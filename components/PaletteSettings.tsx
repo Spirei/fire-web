@@ -5,9 +5,11 @@ import { APPEARANCE_ACCENTS } from "@/lib/appearance";
 import { useThemePreference } from "./ThemePreferenceProvider";
 import { IconSun, IconMoon, IconDeviceDesktop, IconCheck } from "@tabler/icons-react";
 import TypographySettings, { TypographyPreview } from "./TypographySettings";
+import { usePersistedState } from "@/lib/usePersistedState";
 export default function PaletteSettings() {
   const { palette, choose, accent, chooseAccent } = useSitePalette();
   const { mode, choose: chooseMode } = useThemePreference();
+  const [fourDoorEnabled, setFourDoorEnabled] = usePersistedState("fire:four-door-enabled", false);
   return <section id="palette" className="site-palette-settings">
     <header><div><h2>外观</h2></div></header>
     <TypographyPreview />
@@ -25,6 +27,13 @@ export default function PaletteSettings() {
           </button>)}
         </div>
       </div>}
+      <div className="appearance-row">
+        <div><span className="appearance-label">四色门</span><p id="four-door-description" className="mt-1 text-xs text-muted">在桌面侧栏显示快捷导航</p></div>
+        <button type="button" role="switch" aria-label="四色门" aria-describedby="four-door-description" aria-checked={fourDoorEnabled === true} onClick={() => setFourDoorEnabled(value => value !== true)}
+          className={`relative h-5 w-9 flex-none rounded-full transition-colors duration-300 ease-out ${fourDoorEnabled === true ? "bg-[#34c759]" : "bg-[#e9e9ea] dark:bg-[#3a3a3c]"}`}>
+          <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full shadow transition-transform duration-300 ${fourDoorEnabled === true ? "translate-x-4" : ""}`} style={{ backgroundColor: "#fff", transitionTimingFunction: "cubic-bezier(.32,.72,0,1)" }} />
+        </button>
+      </div>
     </div>
     <TypographySettings />
     <details className="appearance-more"><summary>更多配色</summary>

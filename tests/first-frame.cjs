@@ -16,8 +16,14 @@ Module._resolveFilename = function(id, parent, ...rest) { return resolve.call(th
 for (const ext of ['.ts','.tsx']) require.extensions[ext] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true,jsx:ts.JsxEmit.ReactJSX}}).outputText, filename);
 require.extensions['.css'] = () => {};
 let query = new URLSearchParams();
+let fourDoorEligible = true;
+const fourDoorLoads = [];
 const load = Module._load;
 Module._load = function(id, parent, ...rest) {
+  if (parent?.filename === path.join(root,'components/RecordsApp.tsx')) {
+    if (id === '@/lib/useDesktopViewport') return {useDesktopViewport:()=>false,useFourDoorViewport:()=>fourDoorEligible,useTabletDevice:()=>false};
+    if (id === 'react') return {...React,lazy:loader=>()=>{fourDoorLoads.push(loader.toString());throw new Promise(()=>{});}};
+  }
   if (id === 'next/navigation') return {ReadonlyURLSearchParams:URLSearchParams,useSearchParams:()=>query,useRouter:()=>({push(){},replace(){},refresh(){}}),usePathname:()=>'/test'};
   // Password worker uses import.meta; it is irrelevant to settings navigation SSR.
   if (id === '@/components/PasswordStrength') return {__esModule:true,default:()=>null};
@@ -120,6 +126,36 @@ try {
     assert(second.includes('four-door-dial'));
     assert(!second.includes('/four-door/dial.png'));
     assert(second.includes('rotate(-90deg)'));
+  });
+  test('four-door appearance switch defaults off and restores the saved choice in server HTML',()=>{
+    const file='components/PaletteSettings.tsx';
+    const switchTag=html=>html.match(/<button[^>]*role="switch"[^>]*aria-label="四色门"[^>]*>/)?.[0];
+    const first=switchTag(render(file));
+    assert(first?.includes('aria-checked="false"'));
+    const saved=switchTag(render(file,{},'',{'fire:four-door-enabled':true}));
+    assert(saved?.includes('aria-checked="true"'));
+    const disabled=switchTag(render(file,{},'',{'fire:four-door-enabled':false}));
+    assert(disabled?.includes('aria-checked="false"'));
+  });
+  test('disabled four-door never initializes either resource loader even on an eligible desktop',()=>{
+    const props={initialTab:'watchlist',initialNow:Date.UTC(2026,9,2),initialVersion:'test',initialUser:{id:'fixture',username:'fixture',role:'user'},initialRecords:[],initialUserLogs:[],initialFundBalances:{},initialSettings:{tabs:[],groups:[],markets:[],marketLabels:[],modelServices:[]},initialStockIcons:{}};
+    const file='components/RecordsApp.tsx';
+    fourDoorEligible=true;
+    fourDoorLoads.length=0;
+    for(const prefs of [{},{'fire:four-door-enabled':false},{'fire:four-door-enabled':'false'}]) {
+      const html=render(file,props,'',prefs);
+      assert(!html.includes('four-door-anchor')&&!html.includes('/four-door/'));
+      assert.equal(fourDoorLoads.length,0,'neither lazy initializer may run while disabled');
+    }
+    const enabled=render(file,props,'',{'fire:four-door-enabled':true});
+    assert(enabled.includes('four-door-anchor'));
+    assert(fourDoorLoads.some(loader=>loader.includes('FourDoorNavigator')));
+    assert(fourDoorLoads.some(loader=>loader.includes('FourDoorLoading')));
+    fourDoorEligible=false;
+    fourDoorLoads.length=0;
+    const compact=render(file,props,'',{'fire:four-door-enabled':true});
+    assert(!compact.includes('four-door-anchor'));
+    assert.equal(fourDoorLoads.length,0,'saved enable must still respect device and viewport restrictions');
   });
   test('loading and render failure offer local feedback without changing the whole workspace',()=>{
     const loading=render('components/WorkspacePanel.tsx',{},'',{},'WorkspaceLoading');

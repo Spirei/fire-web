@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import WorkspacePanel, { WorkspaceBoundary, WorkspaceLoading } from "@/components/WorkspacePanel";
-import FourDoorLoading from "@/components/FourDoorLoading";
 import MobileBackGesture from "@/components/MobileBackGesture";
 import { mobilePanelDirection } from "@/lib/mobileNavigation";
 import { accountHoldingPrice } from "@/lib/accountCash";
@@ -65,6 +64,8 @@ const FloatingAssistant = memo(function FloatingAssistant({ symbol, userId, onNa
   return <DeferredAssistant page={currentAssistantPage()} symbol={symbol} userId={userId} initialHistory={null} onNavigate={onNavigate} />;
 });
 const FourDoorNavigator = lazy(() => import("@/components/FourDoorNavigator"));
+// 预览也按需下载：关闭时不把插图代码打入主页面；开启时与交互代码并行加载。
+const FourDoorLoading = lazy(() => import("@/components/FourDoorLoading"));
 
 type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "assistant" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
 
@@ -172,6 +173,7 @@ export default function RecordsApp({
   const contentRef = useRef<HTMLDivElement>(null);
   const assetReturnRef = useRef<{ url: string; top: number; innerTop: number } | null>(null);
   const restoreAssetScrollRef = useRef(false);
+  const [fourDoorEnabled] = usePersistedState("fire:four-door-enabled", false);
   const [fourDoorPinned, setFourDoorPinned] = usePersistedState("fire:four-door-pinned", false);
   const [tabletSidebarCollapsed, setTabletSidebarCollapsed] = usePersistedState("fire:tablet-sidebar-collapsed", false);
   const [tabletSidebarSide, setTabletSidebarSide] = usePersistedState<"left" | "right">("fire:tablet-sidebar-side", "left");
@@ -1014,9 +1016,14 @@ export default function RecordsApp({
       {/* 桌面侧边导航 */}
       <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block ${activeTab === "settings" ? "is-settings" : ""}`}>
         <nav id="fire-desktop-nav" ref={desktopNavRef} onScroll={updateSidebarScroll} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
-          <div className={`four-door-anchor ${fourDoorPinned ? "is-pinned" : ""}`}>
-            {fourDoorViewport ? <WorkspaceBoundary fallback={<FourDoorLoading activeKey={activeTab} />}><Suspense fallback={<FourDoorLoading activeKey={activeTab} />}><FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} pinned={fourDoorPinned} onTogglePinned={() => setFourDoorPinned(value => !value)} /></Suspense></WorkspaceBoundary> : <div className="four-door-zone" aria-hidden="true" />}
-          </div>
+          {fourDoorEnabled === true && fourDoorViewport && (
+            <div className={`four-door-anchor ${fourDoorPinned ? "is-pinned" : ""}`}>
+              {/* 预览自身也可能等待下载；失败只收起装饰，不影响侧栏入口。 */}
+              <WorkspaceBoundary fallback={<></>}><Suspense fallback={null}>
+                <WorkspaceBoundary fallback={<FourDoorLoading activeKey={activeTab} />}><Suspense fallback={<FourDoorLoading activeKey={activeTab} />}><FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} pinned={fourDoorPinned} onTogglePinned={() => setFourDoorPinned(value => !value)} /></Suspense></WorkspaceBoundary>
+              </Suspense></WorkspaceBoundary>
+            </div>
+          )}
           <div className="fire-sidebar-section-label">资产</div>
           {sidebarTabs.map((t, index) => {
             const isManagement = ["users", "attachments", "library", "cards", "activities", "settings"].includes(t.key);
