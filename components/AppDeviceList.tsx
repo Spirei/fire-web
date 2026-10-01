@@ -5,10 +5,12 @@ import AppModal from "@/components/AppModal";
 import AppConnectionIcon from "@/components/AppConnectionIcon";
 import type { AppConnectionBrand } from "@/lib/appConnectionBrand";
 import { appAuthorizationDuration } from "@/lib/appDeviceTime";
+import { parseAppDevices, type AppDevice } from "@/lib/appConnectionChecks";
+import { readLimitedResponseJson } from "@/lib/requestBody";
 import { SubNavIcon } from "@/components/SettingsHeader";
 import styles from "./AppDeviceList.module.css";
 
-type Device = { id: string; name: string; scope: string; createdAt: number; lastUsedAt: number };
+type Device = AppDevice;
 function DeviceTime({ value }: { value: number }) {
   const date = new Date(value);
   if (!Number.isFinite(value) || !Number.isFinite(date.getTime())) return <>—</>;
@@ -30,15 +32,18 @@ export default function AppDeviceList({ brand, onAppearance, compact = false }: 
   useEffect(() => () => mutation.current?.abort(), []);
   useEffect(() => {
     const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 12_000);
     setLoading(true); setError(""); setLoadError(false);
-    fetch("/api/v1/auth/devices", { cache: "no-store", credentials: "same-origin", signal: controller.signal }).then(async res => {
-      const body = await res.json();
-      if (!res.ok || body.code !== 0 || !Array.isArray(body.data?.devices)) throw new Error(body.message || "读取授权失败");
-      if (!controller.signal.aborted) setDevices(body.data.devices);
+    fetch("/api/v1/auth/devices", { cache: "no-store", credentials: "same-origin", redirect: "error", signal: controller.signal }).then(async res => {
+      const body = await readLimitedResponseJson<any>(res, 64 * 1024);
+      const devices = parseAppDevices(body?.data?.devices);
+      if (!res.ok || body?.code !== 0 || !devices) throw new Error(res.status === 401 ? "登录已失效，请重新登录" : "读取授权失败，请重试");
+      if (!controller.signal.aborted) setDevices(devices);
     }).catch(e => {
-      if (!controller.signal.aborted) { setError(e instanceof Error ? e.message : "读取授权失败"); setLoadError(true); }
-    }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
+      if (!controller.signal.aborted || timedOut) { setError(timedOut ? "读取超时，请重试" : e instanceof Error ? e.message : "读取授权失败"); setLoadError(true); }
+    }).finally(() => { clearTimeout(timer); if (!controller.signal.aborted || timedOut) setLoading(false); });
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [revision]);
 
   const hasDevices = devices.length > 0;
@@ -56,14 +61,21 @@ export default function AppDeviceList({ brand, onAppearance, compact = false }: 
     if (inFlight.current || !target) return;
     const device = target;
     const controller = new AbortController(); mutation.current = controller;
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 15_000);
     inFlight.current = true; setBusy(true); setRevokeError("");
     try {
-      const res = await fetch("/api/v1/auth/devices", { method: "DELETE", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: device.id }), signal: controller.signal });
-      const body = await res.json();
-      if (!res.ok || body.code !== 0) throw new Error(body.message || "断开失败，请重试");
+      const res = await fetch("/api/v1/auth/devices", { method: "DELETE", credentials: "same-origin", redirect: "error", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: device.id }), signal: controller.signal });
+      const body = await readLimitedResponseJson<any>(res, 8192);
+      if (!res.ok || body?.code !== 0 || body.data?.revoked !== true) throw new Error("未能确认断开结果，请重新读取设备状态后重试");
       if (!controller.signal.aborted) { setDevices(current => current.filter(d => d.id !== device.id)); setTarget(null); }
-    } catch (e) { if (!controller.signal.aborted) setRevokeError(e instanceof Error ? e.message : "断开失败，请重试"); }
-    finally { inFlight.current = false; if (!controller.signal.aborted) setBusy(false); }
+    } catch (e) {
+      if (!controller.signal.aborted || timedOut) {
+        setRevokeError(timedOut ? "请求超时，断开结果待确认；请关闭此框核对已重新读取的设备列表" : e instanceof Error ? e.message : "断开失败，请重试");
+        setRevision(value => value + 1);
+      }
+    }
+    finally { clearTimeout(timer); inFlight.current = false; if (!controller.signal.aborted || timedOut) setBusy(false); }
   }
 
   return <div className={`${styles.manager}${compact ? ` ${styles.compact}` : ""}`} aria-busy={loading}>

@@ -135,6 +135,7 @@ export function appIdentity(token: string, request: Request): Grant | null {
   const marketRead = ["GET", "POST"].includes(method) && /^\/api\/v1\/(?:quotes|charts|kline|index-kline|kline-sessions|stock-detail|search|earnings)$/.test(path);
   const write = ["POST", "PUT", "DELETE"].includes(method) && /^\/api\/v1\/(?:records(?:\/[^/]+)?|watch-groups(?:\/[^/]+(?:\/icon)?)?|orders(?:\/[^/]+)?|funds(?:\/[^/]+)?|fire-settings|simple-ledger)$/.test(path);
   if (!read && !marketRead && !write) return null;
+  try { assertAppOrigin(request); } catch { return null; }
   const row = getDb().prepare("SELECT grant_id FROM app_access_tokens WHERE token_hash=? AND expires_at>?").get(appTokenHash(token), Date.now()) as { grant_id: string } | undefined;
   const grant = row && activeGrant(row.grant_id);
   if (!grant || (write && !grant.scope.split(" ").includes("portfolio.write"))) return null;

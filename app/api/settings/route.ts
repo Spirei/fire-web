@@ -10,6 +10,7 @@ import { validateAssistantEndpoint } from "@/lib/assistantSecurity";
 import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 import { publicVerificationOrigin } from "@/lib/emailVerification";
 import { isConnectionIconUrl } from "@/lib/appConnectionBrand";
+import { normalizeAppConnectionOrigin } from "@/lib/appConnectionChecks";
 
 export async function GET(request: Request) {
   const user = getAuthUser(request);
@@ -30,7 +31,7 @@ export async function PUT(request: Request) {
     if (error instanceof RequestBodyTooLargeError) return NextResponse.json({ error: "请求内容过大" }, { status: 413 });
     throw error;
   }
-  if (!body) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
+  if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
 
   // 数据源地址仅允许 http(s)，防止配置成 file:// 或内网探测地址（管理端接口）
   const URL_KEYS = [
@@ -75,6 +76,10 @@ export async function PUT(request: Request) {
   }
 
   const before = getSiteSettings();
+  // Preserve unchanged legacy deployment settings, but never trust browser-only validation.
+  if (body.domain !== undefined && (typeof body.domain !== "string" || (body.domain.trim() !== before.domain.trim() && body.domain.trim() && !normalizeAppConnectionOrigin(body.domain, process.env.NODE_ENV !== "production")))) {
+    return NextResponse.json({ error: "连接地址须为公网 HTTPS 域名，可带端口，不含凭据、路径或参数" }, { status: 400 });
+  }
   if (body.appDisplayName !== undefined && (typeof body.appDisplayName !== "string" || body.appDisplayName.trim().length > 80)) return NextResponse.json({ error: "App 名称最多 80 个字符" }, { status: 400 });
   if (body.appDisplayIcon !== undefined && (typeof body.appDisplayIcon !== "string" || !isConnectionIconUrl(body.appDisplayIcon.trim()))) return NextResponse.json({ error: "App 图标请使用站内路径或 http(s) 图片地址" }, { status: 400 });
   if (body.pwaIcon !== undefined && (typeof body.pwaIcon !== "string" || (body.pwaIcon && !/^\/uploads\/ico\/[^/\\]+$/.test(body.pwaIcon)))) return NextResponse.json({ error: "PWA 图标请使用上传的图片" }, { status: 400 });

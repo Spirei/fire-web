@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import { getDb } from "./db";
 import { decryptSecret, encryptSecret } from "./secretStorage";
+import { revokeUserAppGrants } from "./appAuth";
 import {
   generateBackupCodes,
   generateTotpSecret,
@@ -64,6 +65,7 @@ export function enableTotp(userId: string, code: string, deviceName = "身份验
     ).run(encryptSecret(secret), JSON.stringify(hashes), verified.step, name, userId);
     db.prepare("DELETE FROM totp_setup WHERE user_id = ?").run(userId);
     db.prepare("DELETE FROM totp_tickets WHERE user_id = ?").run(userId);
+    revokeUserAppGrants(userId);
   })();
   return { ok: true, backupCodes };
 }
@@ -101,6 +103,7 @@ export function clearTotp(userId: string) {
     ).run(userId);
     db.prepare("DELETE FROM totp_setup WHERE user_id = ?").run(userId);
     db.prepare("DELETE FROM totp_tickets WHERE user_id = ?").run(userId);
+    revokeUserAppGrants(userId);
   })();
 }
 

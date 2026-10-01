@@ -106,10 +106,14 @@ export function needsSetup(): boolean {
 }
 
 export function updatePassword(userId: string, newPassword: string): boolean {
-  const result = getDb()
-    .prepare("UPDATE users SET password_hash = ? WHERE id = ?")
-    .run(hashPassword(newPassword), userId);
-  return result.changes > 0;
+  const db = getDb();
+  const hash = hashPassword(newPassword);
+  return db.transaction(() => {
+    const result = db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, userId);
+    // Keeping Web sessions never keeps pre-change App consent or token families.
+    if (result.changes) revokeUserAppGrants(userId);
+    return result.changes > 0;
+  }).immediate();
 }
 
 export function createSession(userId: string, passkeyId?: string): string {

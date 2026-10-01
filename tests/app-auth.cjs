@@ -89,6 +89,41 @@ const identity = token => auth.getAuthUser(req('auth/me', null, null, 'GET', nul
     const temporary = auth.createSession(user.id); const second = await connect(requestValues, temporary); auth.deleteSession(temporary);
     assert.equal((await redeem(second.exchange)).status, 401);
   });
+  await test('password changes invalidate pending codes and App grants while preserving requested web sessions', async () => {
+    const pending = await connect(); const initial = await connected();
+    const passwordRoute = require(path.join(root, 'app/api/auth/password/route.ts'));
+    const wrong = await passwordRoute.POST(new Request(origin+'/api/auth/password',{method:'POST',headers:{cookie:'fire_session='+browser,origin,'content-type':'application/json'},body:JSON.stringify({oldPassword:'wrong',newPassword:'Test-app-new-456',signOutOthers:false})}));
+    assert.equal(wrong.status,400); assert(identity(initial.access_token)); assert(db.prepare('SELECT 1 FROM app_codes WHERE code_hash=?').get(native.appTokenHash(pending.code)));
+    const response = await passwordRoute.POST(new Request(origin + '/api/auth/password', {
+      method:'POST', headers:{cookie:'fire_session='+browser,origin,'content-type':'application/json'},
+      body:JSON.stringify({oldPassword:'Test-app-123',newPassword:'Test-app-new-456',signOutOthers:false})
+    }));
+    assert.equal(response.status,200); assert(auth.getUserByToken(browser)); assert(auth.getUserByToken(otherBrowser));
+    assert.equal((await redeem(pending.exchange)).status,401,'pre-change consent must not mint a new grant');
+    assert.equal(identity(initial.access_token),null); assert.equal(native.refreshAppTokens('fire-ios',initial.refresh_token),null);
+    auth.updatePassword(user.id,'Test-app-123');
+  });
+  await test('credential changes and App revocation commit atomically', async () => {
+    const initial=await connected(); const pending=await connect();
+    const before=db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id).password_hash;
+    db.exec("CREATE TEMP TRIGGER block_app_revocation BEFORE UPDATE ON app_grants BEGIN SELECT RAISE(ABORT, 'isolated rollback fixture'); END");
+    try { assert.throws(()=>auth.updatePassword(user.id,'Test-app-never-saved-789'),/isolated rollback/); }
+    finally {db.exec('DROP TRIGGER block_app_revocation');}
+    assert.equal(db.prepare('SELECT password_hash FROM users WHERE id=?').get(user.id).password_hash,before);
+    assert(identity(initial.access_token)); assert.equal((await redeem(pending.exchange)).status,200);
+  });
+  await test('TOTP changes clear pending authorization codes without logging out the current browser', async () => {
+    const totpAuth = require(path.join(root,'lib/totpAuth.ts'));
+    const totp = require(path.join(root,'lib/totp.ts'));
+    const setup = await totpAuth.beginTotpSetup(user.id,'app_admin');
+    const beforeEnable = await connect();
+    const enabled=totpAuth.enableTotp(user.id,totp.totpCodeAt(setup.secret)); assert(enabled.ok);
+    assert.equal((await redeem(beforeEnable.exchange)).status,401);
+    const beforeDisable = await connect(); const initial=await connected();
+    assert(totpAuth.disableTotp(user.id,enabled.backupCodes[0],true).ok);
+    assert.equal((await redeem(beforeDisable.exchange)).status,401);
+    assert.equal(identity(initial.access_token),null); assert(auth.getUserByToken(browser));
+  });
   let credential;
   await test('native access is personal even when the source account is an administrator', async () => {
     credential = await connected(); assert.equal(auth.getUserByToken(browser).role, 'admin'); assert.equal(identity(credential.access_token).role, 'user');
@@ -98,6 +133,16 @@ const identity = token => auth.getAuthUser(req('auth/me', null, null, 'GET', nul
     assert.equal((await assetsRoute.POST(req('assets', { type: 'stock' }, null, 'POST', null, credential.access_token))).status, 401);
     assert.equal(auth.getAuthUser(req('auth/delete-account', null, null, 'POST', null, credential.access_token)), null);
     assert.equal(auth.getAuthUser(new Request(origin+'/api/settings',{method:'PUT',headers:{authorization:'Bearer '+credential.access_token}})), null);
+  });
+  await test('App data access enforces the configured HTTPS origin as well as token identity', async () => {
+    for (const [url, headers] of [
+      ['https://other.example/api/v1/auth/me',{}],
+      [origin.replace('https:','http:')+'/api/v1/auth/me',{}],
+      [origin+'/api/v1/auth/me',{origin:'https://evil.example'}]
+    ]) assert.equal(auth.getAuthUser(new Request(url,{headers:{authorization:'Bearer '+credential.access_token,...headers}})),null);
+    assert(identity(credential.access_token),'invalid origins never revoke an otherwise valid connection');
+    const proxied=new Request(origin.replace('https:','http:')+'/api/v1/auth/me',{headers:{host:new URL(origin).host,'x-forwarded-proto':'https',authorization:'Bearer '+credential.access_token}});
+    assert(auth.getAuthUser(proxied),'trusted HTTPS reverse proxies remain supported');
   });
   await test('native writes remain user-isolated and more than 100 records are available through meta', async () => {
     const store = require(path.join(root, 'lib/store.ts'));

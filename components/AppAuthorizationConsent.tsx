@@ -1,11 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AppAuthorization } from "@/lib/appAuth";
 import AppConnectionShell from "@/components/AppConnectionShell";
 import AppConnectionIcon from "@/components/AppConnectionIcon";
 import type { AppConnectionBrand } from "@/lib/appConnectionBrand";
 import { SubNavIcon } from "@/components/SettingsHeader";
+import { validAppAuthorizationCallback } from "@/lib/appConnectionChecks";
+import { readLimitedResponseJson } from "@/lib/requestBody";
 
 export default function AppAuthorizationConsent({ authorization, account, username, avatar, serverName, brand }: {
   authorization: AppAuthorization; account: string; username: string; avatar: string; serverName: string; brand: AppConnectionBrand;
@@ -17,20 +19,26 @@ export default function AppAuthorizationConsent({ authorization, account, userna
   const [decision, setDecision] = useState<"allow" | "deny">("allow");
   const [avatarFailed, setAvatarFailed] = useState(false);
   const inFlight = useRef(false);
+  const operation = useRef<AbortController | null>(null);
+  useEffect(() => () => operation.current?.abort(), []);
   const writable = authorization.scope.split(" ").includes("portfolio.write");
 
   async function decide(nextDecision: "allow" | "deny") {
     if (inFlight.current || callback) return;
     inFlight.current = true; setBusy(nextDecision); setError("");
+    const controller = new AbortController(); operation.current = controller;
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 15_000);
     try {
-      const response = await fetch("/api/v1/auth/authorize", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...authorization, decision: nextDecision }) });
-      const body = await response.json();
+      const response = await fetch("/api/v1/auth/authorize", { method: "POST", credentials: "same-origin", redirect: "error", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...authorization, decision: nextDecision }), signal: controller.signal });
+      const body = await readLimitedResponseJson<any>(response, 8192);
       if (response.status === 401) setNeedsLogin(true);
-      if (!response.ok || body.code !== 0 || typeof body.data?.callback !== "string") throw new Error(body.message || "授权失败，请重试");
+      if (!response.ok || body?.code !== 0 || !validAppAuthorizationCallback(body.data?.callback, authorization.state, nextDecision)) throw new Error("授权结果无效，请返回 App 重新连接");
+      if (controller.signal.aborted) return;
       setDecision(nextDecision); setCallback(body.data.callback);
       window.location.assign(body.data.callback);
-    } catch (e) { setError(e instanceof Error ? e.message : "授权失败，请重试"); }
-    finally { inFlight.current = false; setBusy(null); }
+    } catch (e) { if (!controller.signal.aborted || timedOut) setError(timedOut ? "授权超时，请返回 App 重新连接" : e instanceof Error ? e.message : "授权失败，请重试"); }
+    finally { clearTimeout(timer); inFlight.current = false; if (!controller.signal.aborted || timedOut) setBusy(null); }
   }
 
   return <AppConnectionShell serverName={serverName} brand={brand}>
@@ -41,7 +49,7 @@ export default function AppAuthorizationConsent({ authorization, account, userna
     </div>
     {!callback && <>
       <div className="app-consent-account">
-        <span className="app-consent-avatar" aria-hidden="true">{avatar && !avatarFailed ? <img src={avatar} alt="" onError={() => setAvatarFailed(true)} /> : account.slice(0, 1).toUpperCase()}</span>
+        <span className="app-consent-avatar" aria-hidden="true">{avatar && !avatarFailed ? <img src={avatar} alt="" referrerPolicy="no-referrer" onError={() => setAvatarFailed(true)} /> : account.slice(0, 1).toUpperCase()}</span>
         <div><strong>{account}</strong>{username !== account && <span>{username}</span>}</div>
         <SubNavIcon name="account" className="app-consent-account-check" />
       </div>

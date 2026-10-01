@@ -1949,13 +1949,52 @@ function fontHeaderFixture(ext) {
     assert.deepEqual(observed.sort(), ['/api/v1/auth/config', '/api/v1/auth/devices', '/api/v1/auth/me']);
     assert(result.every(check => check.ok));
     const stale = await runAppConnectionChecks(controller.signal, async () => Response.json({code:40101,message:'登录已失效'}, {status:401}));
-    assert(stale.every(check => !check.ok && check.message === '登录已失效'));
+    assert(stale.every(check => !check.ok && check.message === '登录已失效，请重新登录'));
     const html = await runAppConnectionChecks(controller.signal, async () => new Response('<html>proxy</html>'));
     assert(html.every(check => !check.ok));
     const malformed = await runAppConnectionChecks(controller.signal, async pathname => Response.json(pathname.endsWith('/me') ? {code:0,data:{user:{id:'wrong-envelope'}}} : body(pathname)));
     assert.equal(malformed.find(check => check.name === '当前账户').ok, false);
     const stopped = new AbortController(); stopped.abort();
     await assert.rejects(() => runAppConnectionChecks(stopped.signal, async () => { throw new Error('aborted'); }));
+    const oversize = await runAppConnectionChecks(controller.signal, async () => new Response('x'.repeat(65 * 1024)));
+    assert(oversize.every(check => !check.ok));
+    const secretError = await runAppConnectionChecks(controller.signal, async () => Response.json({message:'secret-token=must-not-be-shown'},{status:500}));
+    assert(secretError.every(check => !check.ok && !check.message.includes('secret-token')));
+    const falseS256 = await runAppConnectionChecks(controller.signal, async pathname => Response.json(pathname.endsWith('/config') ? {code:0,data:{...config,code_challenge_methods_supported:'notS256'}} : body(pathname)));
+    assert.equal(falseS256.find(check => check.name === '授权协议').ok,false);
+  });
+  await test('native callbacks and device responses reject malformed or redirected authorization results', () => {
+    const { validAppAuthorizationCallback: valid, parseAppDevices } = require(path.join(root,'lib/appConnectionChecks.ts'));
+    const state='S'.repeat(32), code='fac_'+'C'.repeat(43), callback='com.fire.app:/oauth/callback';
+    const allow=callback+'?'+new URLSearchParams({state,code}); const deny=callback+'?'+new URLSearchParams({state,error:'access_denied'});
+    assert(valid(allow,state,'allow')); assert(valid(deny,state,'deny')); assert(!valid(deny,state,'allow')); assert(!valid(allow,state,'deny'));
+    for(const value of ['javascript:alert(1)','https://evil.test/?state='+state,allow.replace(state,'X'.repeat(32)),allow+'&state='+state,allow+'&access_token=secret',allow+'#fragment',allow.replace('com.fire.app:','evil:'),allow.replace(code,'invalid')]) assert(!valid(value,state,'allow'),value);
+    const device={id:'fg_'+'D'.repeat(43),name:'iPhone',scope:'portfolio.read',createdAt:1,lastUsedAt:2};
+    assert.deepEqual(parseAppDevices([device]),[device]); assert.deepEqual(parseAppDevices([]),[]);
+    for(const value of [[{...device,scope:null}],[{...device,name:{}}],[{...device,createdAt:Infinity}],[{...device,lastUsedAt:-1}],[device,device],Array(21).fill(device),{}]) assert.equal(parseAppDevices(value),null);
+    const React = require('react'); const { renderToStaticMarkup } = require('react-dom/server');
+    const Icon = require(path.join(root,'components/AppConnectionIcon.tsx')).default;
+    for(const src of ['javascript:alert(1)','//evil.test/icon.png','https://user:pass@evil.test/icon.png','data:image/svg+xml,secret','']) {
+      const html=renderToStaticMarkup(React.createElement(Icon,{src})); assert(html.includes('/alcor-app-icon.svg')); assert(!html.includes('evil.test'));
+    }
+    for(const file of ['AppAuthorizationSettings.tsx','AppAuthorizationConsent.tsx','AppDeviceList.tsx']) {
+      const source=fs.readFileSync(path.join(root,'components',file),'utf8'); assert(source.includes('redirect: "error"')); assert(source.includes('readLimitedResponseJson')); assert(source.includes('15_000'));
+    }
+  });
+  await test('connection settings enforce server validation, retain unchanged legacy origins and reject cross-site mutations', async () => {
+    const original=settings.getSiteSettings();
+    try {
+      settings.updateSiteSettings({domain:'http://192.168.1.8:3000'});
+      for(const domain of ['javascript:alert(1)','https://user:password@public.test','https://public.test/path','https://public.test/?token=secret','https://192.168.1.9','https://public.test\\@evil.test',{},42]) {
+        assert.equal((await settingsRoute.PUT(request('admin',{domain,title:'must-not-change'},'PUT'))).status,400);
+        assert.equal(settings.getSiteSettings().title,original.title); assert.equal(settings.getSiteSettings().domain,'http://192.168.1.8:3000');
+      }
+      assert.equal((await settingsRoute.PUT(request('admin',{domain:'http://192.168.1.8:3000',appDisplayName:'Legacy connection'},'PUT'))).status,200);
+      assert.equal((await settingsRoute.PUT(request('admin',{domain:'https://alcor.example.test:18520'},'PUT'))).status,200);
+      assert.equal((await settingsRoute.PUT(request('admin',[],'PUT'))).status,400);
+      const crossSite=new Request('http://localhost:3000/api/settings',{method:'PUT',headers:{cookie:'fire_session='+tokens.admin,origin:'https://evil.test','sec-fetch-site':'cross-site','content-type':'application/json'},body:JSON.stringify({appDisplayName:'Cross-site'})});
+      assert.equal((await settingsRoute.PUT(crossSite)).status,401); assert.equal(settings.getSiteSettings().appDisplayName,'Legacy connection');
+    } finally { settings.updateSiteSettings({domain:original.domain,appDisplayName:original.appDisplayName}); }
   });
   await test('Web app authorization combines configuration, diagnostics and disconnect without moving account settings', () => {
     const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');

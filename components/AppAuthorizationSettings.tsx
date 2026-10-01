@@ -6,13 +6,14 @@ import { appConnectionBrand, isConnectionIconUrl } from "@/lib/appConnectionBran
 import { appConnectionSettingsPatch, normalizeAppConnectionOrigin, runAppConnectionChecks, type AppConnectionFields, type ConnectionCheck } from "@/lib/appConnectionChecks";
 import AppConnectionIcon from "@/components/AppConnectionIcon";
 import AppDeviceList from "@/components/AppDeviceList";
+import { readLimitedResponseJson } from "@/lib/requestBody";
 import styles from "./AppAuthorizationSettings.module.css";
 
 type ConnectionFields = AppConnectionFields;
 type Props = {
   site: SiteSettings;
   admin: boolean;
-  onSave: (fields: Partial<ConnectionFields>) => Promise<boolean>;
+  onSave: (fields: Partial<ConnectionFields>, signal: AbortSignal) => Promise<boolean>;
 };
 const fieldsOf = (site: SiteSettings): ConnectionFields => ({ domain: site.domain, appDisplayName: site.appDisplayName, appDisplayIcon: site.appDisplayIcon });
 
@@ -30,8 +31,9 @@ export default function AppAuthorizationSettings({ site, admin, onSave }: Props)
   const baseline = useRef(fieldsOf(site));
   const diagnostic = useRef<AbortController | null>(null);
   const upload = useRef<AbortController | null>(null);
+  const savingRequest = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  useEffect(() => { setBrowserOrigin(window.location.origin); return () => { diagnostic.current?.abort(); upload.current?.abort(); }; }, []);
+  useEffect(() => { setBrowserOrigin(window.location.origin); return () => { diagnostic.current?.abort(); upload.current?.abort(); savingRequest.current?.abort(); }; }, []);
   useEffect(() => { if (!editing) setDraft(fieldsOf(site)); }, [site.domain, site.appDisplayName, site.appDisplayIcon, editing]);
   useEffect(() => { diagnostic.current?.abort(); diagnostic.current = null; setChecks(null); setTesting(false); }, [site.domain]);
   const brand = appConnectionBrand(site);
@@ -49,11 +51,16 @@ export default function AppAuthorizationSettings({ site, admin, onSave }: Props)
     if (fields.appDisplayIcon !== undefined && !isConnectionIconUrl(fields.appDisplayIcon)) { setError("图标须为站内路径或 http(s) 图片地址。"); return; }
     if (!Object.keys(fields).length) { setEditing(false); setNotice("配置未变更"); return; }
     operation.current = true; setSaving(true); setError(""); setNotice("");
+    const controller = new AbortController(); savingRequest.current = controller;
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 15_000);
     try {
-      if (await onSave(fields)) { setEditing(false); setNotice("配置已保存"); }
-      else setError("配置未保存，请重试。");
-    } catch { setError("配置未保存，请重试。"); }
-    finally { operation.current = false; setSaving(false); }
+      const ok = await onSave(fields, controller.signal);
+      if (controller.signal.aborted && !timedOut) return;
+      if (ok && !controller.signal.aborted) { setEditing(false); setNotice("配置已保存"); }
+      else setError("未能确认配置已保存，请刷新核对后重试。");
+    } catch { if (!controller.signal.aborted || timedOut) setError("未能确认配置已保存，请刷新核对后重试。"); }
+    finally { clearTimeout(timer); operation.current = false; if (!controller.signal.aborted || timedOut) setSaving(false); }
   }
 
   async function uploadIcon(file: File) {
@@ -63,9 +70,10 @@ export default function AppAuthorizationSettings({ site, admin, onSave }: Props)
     const timer = setTimeout(() => controller.abort(), 20_000);
     try {
       const form = new FormData(); form.set("kind", "ico"); form.set("file", file);
-      const res = await fetch("/api/upload", { method: "POST", credentials: "same-origin", body: form, signal: controller.signal });
-      const body = await res.json().catch(() => null);
-      if (!res.ok || typeof body?.url !== "string") throw new Error(body?.error || "上传失败");
+      const res = await fetch("/api/upload", { method: "POST", credentials: "same-origin", redirect: "error", body: form, signal: controller.signal });
+      const body = await readLimitedResponseJson<any>(res, 8192);
+      if (!res.ok || typeof body?.url !== "string" || !body.url.startsWith("/uploads/ico/") || !isConnectionIconUrl(body.url)) throw new Error("上传失败，请检查图片格式、大小和登录状态");
+      if (controller.signal.aborted) return;
       setDraft(current => ({ ...current, appDisplayIcon: body.url }));
     } catch (err) { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "上传失败"); else setError("上传超时，请重试。"); }
     finally { clearTimeout(timer); operation.current = false; setUploading(false); }

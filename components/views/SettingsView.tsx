@@ -10,6 +10,7 @@ import AppAuthorizationSettings from "@/components/AppAuthorizationSettings";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
 import PasswordStrength from "@/components/PasswordStrength";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
+import { readLimitedResponseJson } from "@/lib/requestBody";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isSixDigitTotp, normalizeTotpDigits } from "@/lib/totpInput";
@@ -978,17 +979,22 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     }
   }
 
-  async function saveBlock(key: string, fields: Partial<SiteSettings>, hint: string) {
+  async function saveBlock(key: string, fields: Partial<SiteSettings>, hint: string, signal?: AbortSignal) {
     setBlockSaving((b) => ({ ...b, [key]: true }));
     setBlockMsg((m) => ({ ...m, [key]: undefined }));
     try {
       const res = await fetch("/api/settings", {
         method: "PUT",
+        credentials: "same-origin",
+        redirect: "error",
+        signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(fields)
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "保存失败");
+      const data = await readLimitedResponseJson<any>(res, 1024 * 1024);
+      if (signal?.aborted) throw new DOMException("请求已取消", "AbortError");
+      if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error.slice(0, 200) : "保存失败");
+      if (!data?.settings || typeof data.settings !== "object" || Array.isArray(data.settings) || typeof data.settings.domain !== "string" || !Array.isArray(data.settings.tabs)) throw new Error("保存结果无效，请刷新核对后重试");
       settingsSaveGeneration.current += 1;
       setSite((s) => ({ ...s, ...data.settings, llmApiKey: s.llmApiKey }));
       captureSaved(data.settings);
@@ -3593,7 +3599,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </div>
             )}
 
-            {sub === "authorizations" && <AppAuthorizationSettings site={site} admin={isAdminUser} onSave={fields => saveBlock("app-connection", fields, "连接配置已保存")} />}
+            {sub === "authorizations" && <AppAuthorizationSettings site={site} admin={isAdminUser} onSave={(fields, signal) => saveBlock("app-connection", fields, "连接配置已保存", signal)} />}
 
             {sub === "totp" && (
               <div id="totp" className="flex flex-col gap-6">
