@@ -161,7 +161,7 @@ export function mergeVisibleFxOrder(order: FxCurrency[], visible: FxCurrency[]):
 export function usdRate(code: string, rates: Record<string, number>): number {
   if (code === "USD") return 1;
   const rate = rates[code];
-  return typeof rate === "number" && rate > 0 ? rate : 0;
+  return typeof rate === "number" && Number.isFinite(rate) && rate > 0 ? rate : 0;
 }
 
 /** 把 from 币种的金额换算成 to 币种；缺汇率时返回 null。 */
@@ -176,7 +176,8 @@ export function convertAmount(
   const fromRate = usdRate(from, rates);
   const toRate = usdRate(to, rates);
   if (!fromRate || !toRate) return null;
-  return (amount / fromRate) * toRate;
+  const converted = (amount / fromRate) * toRate;
+  return Number.isFinite(converted) ? converted : null;
 }
 
 /** 1 from = ? to */
@@ -185,19 +186,25 @@ export function pairRate(from: string, to: string, rates: Record<string, number>
 }
 
 export function parseFxAmount(text: string): number | null {
-  const trimmed = text.replace(/,/g, "").trim();
-  if (!trimmed || trimmed === ".") return null;
-  const value = Number(trimmed);
+  const trimmed = text.trim();
+  if (!/^(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d*)?|\.\d+)$/.test(trimmed)) return null;
+  const value = Number(trimmed.replace(/,/g, ""));
   if (!Number.isFinite(value) || value < 0 || value > 1e15) return null;
   return value;
 }
 
 /** 输入时只保留数字和一个小数点，避免 type=number 把「1.」吃掉。 */
 export function sanitizeFxInput(raw: string): string {
-  const next = raw.replace(/[^\d.]/g, "");
+  const trimmed = raw.trim();
+  // Keep unsupported numeric syntax visible so it is rejected, not silently
+  // changed into another amount (e.g. 1e3 → 13 or -100 → 100).
+  if (/^[+-]|^0[xob]|(?:\d|\.)e/i.test(trimmed)) return trimmed;
+  const grouped = raw.replace(/[^\d.,]/g, "");
+  if (grouped.includes(",") && !/^\d{1,3}(?:,\d{3})+(?:\.\d*)?$/.test(grouped)) return grouped;
+  const next = grouped.replace(/,/g, "");
   const dot = next.indexOf(".");
-  if (dot === -1) return next.slice(0, 15);
-  return `${next.slice(0, dot).slice(0, 12)}.${next.slice(dot + 1).replace(/\./g, "").slice(0, 6)}`;
+  if (dot === -1) return next;
+  return `${next.slice(0, dot)}.${next.slice(dot + 1).replace(/\./g, "").slice(0, 6)}`;
 }
 
 export function formatFxAmount(value: number, code: string): string {

@@ -20,11 +20,13 @@ for (const ext of ['.ts', '.tsx']) require.extensions[ext] = (module, filename) 
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, jsx: ts.JsxEmit.ReactJSX }
 }).outputText, filename);
 const { extractRateMap, toUsdBase } = require(path.join(root, 'lib/currencyRefresh.ts'));
-const { convertAmount } = require(path.join(root, 'lib/fxConvert.ts'));
+const { convertAmount, parseFxAmount, sanitizeFxInput } = require(path.join(root, 'lib/fxConvert.ts'));
+const { FxRatesError, parseFxRatesSnapshot, readFxRates } = require(path.join(root, 'lib/fxRatesClient.ts'));
 const rates = require(path.join(root, 'lib/rates.ts'));
 const db = require(path.join(root, 'lib/db.ts')).getDb();
 let external;
 let passed = 0;
+const watchdog = setTimeout(() => { console.error('Rate regression did not complete'); process.exit(1); }, 15_000);
 async function test(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
 function writeCache(connection, value) {
   connection.prepare("INSERT INTO site_settings(key,value) VALUES('rates_cache',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(value));
@@ -49,12 +51,16 @@ function converterHarness(read) {
     '@/lib/workspacePanel': { useWorkspaceSearchParams: () => new URLSearchParams('section=convert&from=USD&amount=100'), useWorkspaceLocationGuard: () => () => false },
     '@/lib/currencyPrefs': { useDisplayCurrency: () => ({ currency: 'USD' }) },
     '@/lib/usePersistedState': { usePersistedState: (_key, initial) => hooks.useState(initial) },
-    '@/lib/sharedRead': { sharedRead: read }, '@/lib/toast': { showToast() {} }
+    '@/lib/fxRatesClient': { FxRatesError, readFxRates: async (force, signal) => {
+      const response = await read(force, signal);
+      if (!response.ok) throw new FxRatesError('汇率加载失败，请重试');
+      return parseFxRatesSnapshot(await response.json());
+    } }, '@/lib/toast': { showToast() {} }
   };
   const exports = {};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, 'components/FxConverter.tsx'), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, jsx: ts.JsxEmit.ReactJSX }
-  }).outputText, { exports, window, Event, URLSearchParams, require: id => mocks[id] || require(id.startsWith('@/') ? path.join(root, id.slice(2)) : id) });
+  }).outputText, { exports, window, Event, URLSearchParams, AbortController, setTimeout, clearTimeout, require: id => mocks[id] || require(id.startsWith('@/') ? path.join(root, id.slice(2)) : id) });
   return {
     render() { cursor = 0; effects.length = 0; return elements(exports.default()); },
     mount() { return effects.map(fn => fn()).filter(fn => typeof fn === 'function'); },
@@ -63,6 +69,57 @@ function converterHarness(read) {
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 (async () => {
+  await test('long amounts keep integer digits and invalid inputs or conversion overflow cannot become money', () => {
+    const large = '123456789012345.67';
+    assert.equal(sanitizeFxInput(large), large);
+    assert.equal(parseFxAmount(sanitizeFxInput(large)), parseFxAmount(large));
+    assert.equal(sanitizeFxInput('1000000000000000'), '1000000000000000');
+    assert.equal(parseFxAmount('1000000000000000'), 1e15);
+    assert.equal(parseFxAmount(sanitizeFxInput('10000000000000000')), null);
+    for (const value of ['1e3', '0x10', '1,2', 'Infinity', '-1', '1 000', '1..2']) assert.equal(parseFxAmount(value), null, value);
+    for (const value of ['1e3', '0x10', '1,2', '-100']) assert.equal(parseFxAmount(sanitizeFxInput(value)), null, 'input must not silently change ' + value);
+    assert.equal(sanitizeFxInput('$1,234.50'), '1234.50');
+    assert.equal(parseFxAmount('1,234.50'), 1234.5);
+    assert.equal(parseFxAmount('.25'), 0.25);
+    assert.equal(convertAmount(100, 'USD', 'EUR', { EUR: Infinity }), null);
+    assert.equal(convertAmount(100, 'EUR', 'USD', { EUR: Infinity }), null);
+    assert.equal(convertAmount(1e15, 'EUR', 'JPY', { EUR: 1e-300, JPY: 1e300 }), null);
+  });
+  await test('client trusts only USD snapshots and quoted finite prices, keeping MOP estimates explicit', () => {
+    const snapshot = parseFxRatesSnapshot({ base: 'USD', rates: { USD: 1, EUR: 0.9, GBP: 0.8, HKD: 7.8, JPY: 'Infinity', CNY: true }, quoted: ['USD', 'EUR', 'HKD', 'JPY', 'CNY'], updatedAt: 1000 });
+    assert.equal(snapshot.rates.EUR, 0.9);
+    assert.equal(snapshot.rates.GBP, undefined, 'unquoted valuation fallback cannot enter conversion');
+    assert(!snapshot.quoted.has('JPY') && !snapshot.quoted.has('CNY'));
+    assert.equal(snapshot.rates.MOP, 7.8 * 1.03);
+    assert.equal(snapshot.estimatedMop, true);
+    assert.equal(parseFxRatesSnapshot({ base: 'USD', rates: { USD: 1, HKD: 7.8, MOP: 8 }, quoted: ['HKD', 'MOP'] }).estimatedMop, false);
+    for (const value of [null, [], { base: 'EUR', rates: { USD: 1 }, quoted: [] }, { base: 'USD', rates: { USD: 2 }, quoted: [] }]) assert.throws(() => parseFxRatesSnapshot(value), FxRatesError);
+  });
+  await test('client timeouts include body reads; cancellation is distinct and a subsequent retry works', async () => {
+    for (const bodyStall of [false, true]) {
+      global.fetch = async (_url, { signal }) => {
+        const blocked = () => new Promise((_resolve, reject) => {
+          if (signal.aborted) reject(signal.reason);
+          else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+        return bodyStall ? { ok: true, status: 200, json: blocked } : blocked();
+      };
+      await assert.rejects(readFxRates(false, undefined, 10), error => error instanceof FxRatesError && /超时/.test(error.message));
+    }
+    const controller = new AbortController();
+    const cancelled = readFxRates(false, controller.signal, 1000);
+    controller.abort();
+    await assert.rejects(cancelled, error => error.name === 'AbortError' && !(error instanceof FxRatesError));
+    let calledUrl;
+    global.fetch = async (url, init) => { calledUrl = url; assert.equal(init.cache, 'no-store'); return Response.json({ base: 'USD', rates: { USD: 1, EUR: 0.9 }, quoted: ['USD', 'EUR'], updatedAt: 1000 }); };
+    assert.equal((await readFxRates()).rates.EUR, 0.9);
+    assert.equal(calledUrl, '/api/rates', 'normal retry must not consume an upstream refresh');
+    await readFxRates(true);
+    assert.equal(calledUrl, '/api/rates?refresh=1');
+    global.fetch = async () => Response.json({ error: 'internal diagnostic must never appear' }, { status: 401 });
+    await assert.rejects(readFxRates(), /登录状态已失效/);
+    global.fetch = async () => { throw Error('ordinary reads must never fetch'); };
+  });
   await test('Raycast quotes retain EUR and exclude invalid prices', () => {
     const map = extractRateMap({ success: true, source: 'USD', quotes: { USDEUR: 0.9, USDCNY: '7.2', USDHKD: Infinity, USDJPY: 0, USDSGD: 'bad' } });
     assert.deepEqual(map, { USD: 1, EUR: 0.9, CNY: 7.2 });
@@ -156,7 +213,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
     const euro = tree => tree.find(node => node.type === 'input' && node.props['aria-label'] === '欧元金额');
     assert.equal(euro(view.render()).props.placeholder, '加载中…');
     const cleanups = view.mount();
-    finish(Response.json({ rates: { USD: 1, EUR: 0.9 }, quoted: ['USD', 'EUR'], updatedAt: 2000 }));
+    finish(Response.json({ base: 'USD', rates: { USD: 1, EUR: 0.9 }, quoted: ['USD', 'EUR'], updatedAt: 2000 }));
     await settle();
     assert.equal(euro(view.render()).props.value, '90.00');
     view.update();
@@ -168,8 +225,8 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await test('converter distinguishes initial failure from a successful response genuinely missing EUR', async () => {
     for (const [response, label] of [
       [Response.json({}, { status: 502 }), '加载失败'],
-      [Response.json({ rates: { USD: 1, EUR: 0.9 }, updatedAt: 1000 }), '加载失败'],
-      [Response.json({ rates: { USD: 1, EUR: 0.9 }, quoted: ['USD'], updatedAt: 1000 }), '暂无汇率']
+      [Response.json({ base: 'USD', rates: { USD: 1, EUR: 0.9 }, updatedAt: 1000 }), '加载失败'],
+      [Response.json({ base: 'USD', rates: { USD: 1, EUR: 0.9 }, quoted: ['USD'], updatedAt: 1000 }), '暂无汇率']
     ]) {
       const view = converterHarness(async () => response);
       view.render();
@@ -180,8 +237,42 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
       for (const cleanup of cleanups) cleanup();
     }
   });
+  await test('force refresh cancels an older read, deduplicates rapid clicks and ignores late old prices', async () => {
+    const requests = [];
+    const view = converterHarness((force, signal) => new Promise(resolve => { requests.push({ force, signal, resolve }); }));
+    const refresh = view.render().find(node => node.type === 'button' && node.props['aria-label'] === '刷新汇率');
+    const cleanups = view.mount();
+    refresh.props.onClick();
+    refresh.props.onClick();
+    assert.equal(requests.length, 2, 'one normal read plus one explicit refresh');
+    assert.equal(requests[0].signal.aborted, true);
+    assert.equal(requests[1].force, true);
+    assert.equal(view.render().find(node => node.type === 'button' && node.props['aria-label'] === '正在刷新汇率').props.disabled, true);
+    requests[1].resolve(Response.json({ base: 'USD', rates: { USD: 1, EUR: 0.91 }, quoted: ['USD', 'EUR'], updatedAt: 3000 }));
+    await settle();
+    requests[0].resolve(Response.json({ base: 'USD', rates: { USD: 1, EUR: 0.01 }, quoted: ['USD', 'EUR'], updatedAt: 1000 }));
+    await settle();
+    const tree = view.render();
+    assert.equal(tree.find(node => node.type === 'input' && node.props['aria-label'] === '欧元金额').props.value, '91.00');
+    assert.equal(tree.find(node => node.type === 'button' && node.props['aria-label'] === '汇率已刷新').props.disabled, false);
+    for (const cleanup of cleanups) cleanup();
+  });
+  await test('failed initial read retries without upstream refresh and unmount cancels pending work', async () => {
+    const requests = [];
+    const view = converterHarness((force, signal) => new Promise(resolve => { requests.push({ force, signal, resolve }); }));
+    view.render();
+    const cleanups = view.mount();
+    requests[0].resolve(Response.json({}, { status: 502 }));
+    await settle();
+    const retry = view.render().find(node => node.type === 'button' && node.props['aria-label'] === '重试读取汇率');
+    retry.props.onClick();
+    assert.equal(requests[1].force, false);
+    for (const cleanup of cleanups) cleanup();
+    assert.equal(requests[1].signal.aborted, true);
+  });
   console.log(`Rate regressions: ${passed} passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => {
+  clearTimeout(watchdog);
   external?.close(); db.close(); process.chdir(originalCwd); fs.rmSync(temp, { recursive: true, force: true });
   process.exit(process.exitCode || 0);
 });

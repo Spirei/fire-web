@@ -8,7 +8,7 @@ import CurrencyFlag from "@/components/CurrencyFlag";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { showToast } from "@/lib/toast";
-import { sharedRead } from "@/lib/sharedRead";
+import { FxRatesError, readFxRates } from "@/lib/fxRatesClient";
 import {
   FX_CURRENCIES,
   FX_EXTRA_CURRENCIES,
@@ -79,9 +79,10 @@ export default function FxConverter() {
   const [estimatedMop, setEstimatedMop] = useState(false);
   const [loadingRates, setLoadingRates] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshSuccess, setRefreshSuccess] = useState(false);
   const [adding, setAdding] = useState(false);
   const [managing, setManaging] = useState(false);
-  const [rateError, setRateError] = useState("");
+  const [rateError, setRateError] = useState<{ text: string; force: boolean } | null>(null);
   const allCodes = normalizeFxOrder(savedOrder);
   const codes = visibleFxOrder(savedOrder, hidden);
   const visibleKey = codes.join("|");
@@ -112,52 +113,46 @@ export default function FxConverter() {
   }, [base, visibleKey]);
 
   const rateRequestRef = useRef(0);
+  const rateAbortRef = useRef<AbortController | null>(null);
   const refreshPendingRef = useRef(false);
   const loadRates = useCallback(async (force = false) => {
       if (refreshPendingRef.current) return;
       const requestId = ++rateRequestRef.current;
+      rateAbortRef.current?.abort();
+      const controller = new AbortController();
+      rateAbortRef.current = controller;
       if (force) refreshPendingRef.current = true;
       if (force) setRefreshing(true);
+      setRefreshSuccess(false);
       setLoadingRates(true);
-      setRateError("");
+      setRateError(null);
       try {
-        const response = await sharedRead(force ? "/api/rates?refresh=1" : "/api/rates");
-        const data = await response.json().catch(() => null);
+        const data = await readFxRates(force, controller.signal);
         if (requestId !== rateRequestRef.current) return;
-        if (!response.ok || !data?.rates || typeof data.rates !== "object" || Array.isArray(data.rates) || !Array.isArray(data.quoted)) throw new Error(data?.error || "获取汇率失败");
-        const quotedList = data.quoted.filter((code: unknown): code is string => typeof code === "string" && /^[A-Z]{3}$/.test(code));
-        const nextQuoted = new Set<string>(["USD"]);
-        const nextRates: Record<string, number> = { USD: 1 };
-        quotedList.forEach((code: string) => {
-          const value = Number(data.rates[code]);
-          if (Number.isFinite(value) && value > 0) {
-            nextRates[code] = code === "USD" ? 1 : value;
-            nextQuoted.add(code);
-          }
-        });
-        const mopFromHkd = !nextRates.MOP && nextQuoted.has("HKD") && nextRates.HKD > 0;
-        if (mopFromHkd) {
-          nextRates.MOP = nextRates.HKD * 1.03;
-          nextQuoted.add("MOP");
-        }
-        setEstimatedMop(Boolean(mopFromHkd));
-        setQuoted(nextQuoted);
-        setRates(nextRates);
-        setUpdatedAt(typeof data.updatedAt === "number" && Number.isFinite(data.updatedAt) && data.updatedAt > 0 ? data.updatedAt : null);
+        setEstimatedMop(data.estimatedMop);
+        setQuoted(data.quoted);
+        setRates(data.rates);
+        setUpdatedAt(data.updatedAt);
         if (force) {
+          setRefreshSuccess(true);
           showToast("汇率已刷新");
           window.dispatchEvent(new Event("fire:rates-updated"));
         }
-      } catch {
+      } catch (error) {
         if (requestId !== rateRequestRef.current) return;
-        setRateError(force ? "刷新失败，请稍后重试" : "汇率加载失败，请点击刷新重试");
+        setRateError({ text: error instanceof FxRatesError ? error.message : "汇率加载失败，请重试", force });
         if (force) {
           showToast("汇率刷新失败");
         }
       } finally {
-        if (force) refreshPendingRef.current = false;
-        if (requestId === rateRequestRef.current) setLoadingRates(false);
-        if (force && requestId === rateRequestRef.current) setRefreshing(false);
+        if (rateAbortRef.current === controller) {
+          rateAbortRef.current = null;
+          refreshPendingRef.current = false;
+        }
+        if (requestId === rateRequestRef.current) {
+          setLoadingRates(false);
+          setRefreshing(false);
+        }
       }
   }, []);
 
@@ -167,9 +162,18 @@ export default function FxConverter() {
     window.addEventListener("fire:rates-updated", onRates);
     return () => {
       ++rateRequestRef.current;
+      rateAbortRef.current?.abort();
+      rateAbortRef.current = null;
+      refreshPendingRef.current = false;
       window.removeEventListener("fire:rates-updated", onRates);
     };
   }, [loadRates]);
+
+  useEffect(() => {
+    if (!refreshSuccess) return;
+    const timer = setTimeout(() => setRefreshSuccess(false), 1800);
+    return () => clearTimeout(timer);
+  }, [refreshSuccess]);
 
   useEffect(() => {
     if (!adding) return;
@@ -188,7 +192,9 @@ export default function FxConverter() {
   }, [adding]);
 
   const amount = parseFxAmount(text);
+  const amountError = text && text !== "." && amount == null ? "请输入有效金额（0～1,000 万亿）" : "";
   const unavailableLabel = loadingRates ? "加载中…" : rateError && updatedAt == null ? "加载失败" : "暂无汇率";
+  const refreshLabel = refreshing ? "正在刷新汇率" : refreshSuccess ? "汇率已刷新" : "刷新汇率";
 
   function hasQuote(code: string) {
     return quoted.has(code) && (code === "USD" || (rates[code] ?? 0) > 0);
@@ -242,7 +248,7 @@ export default function FxConverter() {
           <h2 className="text-lg font-bold text-ink">汇率换算</h2>
           <div ref={addMenuRef} className="relative flex items-center gap-2">
             <button type="button" className="fx-converter-add" onClick={() => setAdding(value => !value)} aria-label="新增货币" title="新增货币" aria-expanded={adding}><IconPlus size={15} stroke={1.8} /></button>
-            <button type="button" className="fx-converter-refresh" onClick={() => { setAdding(false); void loadRates(true); }} disabled={refreshing} aria-label="刷新汇率" title="刷新汇率"><IconRefresh size={15} stroke={1.8} className={refreshing ? "animate-spin" : ""} /></button>
+            <button type="button" className={`fx-converter-refresh${refreshing ? " is-refreshing" : ""}${refreshSuccess ? " is-success" : ""}`} onClick={() => { setAdding(false); void loadRates(true); }} disabled={refreshing} aria-label={refreshLabel} title={refreshLabel}>{refreshSuccess ? <IconCheck size={15} stroke={1.8} /> : <IconRefresh size={15} stroke={1.8} className={refreshing ? "animate-spin" : ""} />}</button>
             <button type="button" className="fx-converter-manage" onClick={() => { setAdding(false); setManaging(value => !value); }} aria-pressed={managing} aria-label={managing ? "完成管理货币" : "管理货币"} title={managing ? "完成管理" : "管理货币"}>{managing ? <IconCheck size={15} stroke={1.8} /> : <IconPencil size={15} stroke={1.8} />}</button>
             {adding && <div className="fx-converter-add-menu" role="menu" aria-label="可新增货币">
               {addableByContinent.map(group => <div key={group.continent} role="group" aria-label={group.continent} className="fx-converter-add-group"><div className="fx-converter-add-heading">{group.continent}</div>{group.items.map(code => { const meta = fxCurrencyMeta(code); return <button key={code} type="button" role="menuitem" onClick={() => addCurrency(code)}>{meta.iso ? <CurrencyFlag market={meta.iso} size={18} /> : <span className="fx-converter-code-mark">{code.slice(0, 1)}</span>}<span>{meta.label}</span><small>{code}</small></button>; })}</div>)}
@@ -250,10 +256,11 @@ export default function FxConverter() {
             </div>}
           </div>
         </div>
-        <p className="mt-0.5 text-xs text-muted">
-          输入金额即可换算，拖动手柄排序。
+        <p className="mt-0.5 text-xs text-muted" role="status" aria-live="polite">
+          {loadingRates ? refreshing ? "正在刷新汇率，当前结果保留。" : "正在读取已保存汇率…" : "输入金额即可换算，拖动手柄排序。"}
         </p>
-        {rateError && <p role="alert" className="mt-1 text-xs text-red-500">{rateError}</p>}
+        {rateError && <p role="alert" className="fx-converter-error"><span>{rateError.text}{updatedAt != null && " · 已保留上次汇率"}</span><button type="button" className="fx-converter-retry" aria-label={rateError.force ? "重试刷新汇率" : "重试读取汇率"} title="重试" disabled={loadingRates} onClick={() => void loadRates(rateError.force)}><IconRefresh size={14} stroke={1.8} /></button></p>}
+        {amountError && <p role="alert" className="mt-1 text-xs text-red-500">{amountError}</p>}
       </header>
 
       <div className="fx-converter-card">
@@ -319,6 +326,8 @@ export default function FxConverter() {
                     autoComplete="off"
                     spellCheck={false}
                     aria-label={`${meta.label}金额`}
+                    aria-invalid={active && Boolean(amountError)}
+                    maxLength={64}
                     value={live ? (active ? text : converted == null ? "" : formatFxAmount(converted, code)) : ""}
                     readOnly={!active || !live}
                     placeholder={live ? "" : unavailableLabel}
@@ -346,8 +355,9 @@ export default function FxConverter() {
         })}
       </div>
 
-      <p className="text-xs text-muted">
-        以 1 美元（USD）为基准换算。汇率接口 更新于：{formatRatesDate(updatedAt)}
+      <p className="fx-converter-status text-xs text-muted">
+        <span>以 1 美元（USD）为基准换算</span>
+        <span title={updatedAt == null ? undefined : new Date(updatedAt).toLocaleString("zh-CN")}>最近同步：{formatRatesDate(updatedAt)}</span>
         {estimatedMop && codes.includes("MOP") && <span> · 澳门元按 1 港元≈1.03 澳门元估算</span>}
       </p>
     </section>
