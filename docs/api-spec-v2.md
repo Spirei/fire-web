@@ -1,0 +1,713 @@
+# Alcor · API 规范（v2）
+
+App 专用接口，固定前缀 `/api/v2`。与 Web / v1 共用账号、授权、持仓及账本，版本切换不搬迁数据。私有接口只接受 PKCE App access token；公开行情和图标支持本地模式匿名读取。
+
+## 1. 版本发现与迁移
+
+<details>
+<summary>新连接 · 先发现，再授权</summary>
+
+1. 无 Cookie / Bearer 读取固定同源 `GET /api/v1/auth/config`，禁止跳转。
+2. 合法 v1 配置包含 `api_versions_supported:[1,2]`、`app_api_version:2`、`app_api_base_path:"/api/v2"` 时，再读取固定同源 `GET /api/v2/auth/config`。
+3. 验证 `version:2`、固定 client / callback、S256 和全部接口路径。成功后新连接选择 v2；旧服务器合法配置未声明支持2时选择 v1。
+4. 超时、5xx、结构错误或声明2却 v2 不可用，均不能静默降级。
+
+按 origin / grant 持久化 apiVersion。旧凭据缺少版本时为 v1；重新连接或明确迁移时才切换。授权兑换、刷新、撤销及完整业务请求固定同一版本；缓存和异步结果也区分版本。写请求超时或进入后台后不自动重放，不跨版本重试。
+
+</details>
+
+<details>
+<summary>v2 发现 · 固定路径与能力</summary>
+
+```json
+{
+  "version": 2,
+  "api_versions_supported": [1, 2],
+  "app_api_version": 2,
+  "app_api_base_path": "/api/v2",
+  "client_id": "fire-ios",
+  "redirect_uri": "com.fire.app:/oauth/callback",
+  "authorization_path": "/app/authorize",
+  "authorization_submit_path": "/api/v1/auth/authorize",
+  "token_path": "/api/v2/auth/token",
+  "revoke_path": "/api/v2/auth/revoke"
+}
+```
+
+这是 `auth/config` 的 data 摘要。完整响应还包含 scope、scopes_supported、code_challenge_methods_supported、profile_path、upload_path、email_path、password_path、feed_path 和 security。
+
+security.version 为2，read_scope / write_scope 为 security.read / security.write，email_verification_path、totp_path、passkeys_path、devices_path、password_reset_path 都使用 `/api/v2/auth`。
+
+网页 PKCE 同意仍在 `/app/authorize`，网页提交固定 `/api/v1/auth/authorize`。这两个地址使用浏览器会话；App token 兑换使用选定版本。发现字段不是任意主机的授权，凭据不发送到第三方地址。
+
+</details>
+
+## 2. PKCE 与授权范围
+
+<details>
+<summary>系统浏览器授权 · 一次性代码兑换</summary>
+
+App 本地生成随机 verifier、state 与 S256 challenge；打开授权页面时提交 response_type=code、client_id=fire-ios、redirect_uri=com.fire.app:/oauth/callback、code_challenge_method=S256、code_challenge、state 和 scope。
+
+收到回调后精确核对 callback URI 和 state，仅向同源端点提交：
+
+```http
+POST /api/v2/auth/token
+Content-Type: application/json
+```
+
+```json
+{
+  "grant_type": "authorization_code",
+  "client_id": "fire-ios",
+  "redirect_uri": "com.fire.app:/oauth/callback",
+  "code": "fac_<一次性代码>",
+  "code_verifier": "<原始随机 verifier>"
+}
+```
+
+成功 data 包含 access_token、refresh_token、token_type、expires_in、scope 和 grant_id。代码只能兑换一次，v1/v2 共用这一限制。将凭据与 origin / grant / apiVersion 一起原子保存在安全存储中，不放 URL、日志或公共缓存。
+
+```http
+Authorization: Bearer fat_<App access token>
+```
+
+</details>
+
+<details>
+<summary>Scope · 读写分开，旧授权不扩权</summary>
+
+| 范围 | 能力 |
+| --- | --- |
+| portfolio.read | 本人身份、投资读取、券商读取，凭当前密码修改本人邮箱或密码 |
+| portfolio.write | 本人投资、分组、订单、资金与账本写入 |
+| profile.write | 本人资料和头像编辑 |
+| feed.read / feed.write | 本人动态读取 / 编辑、生成和讨论 |
+| security.read / security.write | 本人账户安全读取 / 管理 |
+
+所有授权必须有 portfolio.read；默认 portfolio.read portfolio.write 保持不变。feed.write 必须同时有 feed.read，security.write 必须同时有 security.read。可选范围必须明确请求并取得网页同意，刷新令牌或切换版本不增加权限。App 授权不继承网站管理员权限。
+
+</details>
+
+<details>
+<summary>刷新与断开 · 不跨版本重试</summary>
+
+POST `/api/v2/auth/token`：`{grant_type:"refresh_token",client_id:"fire-ios",refresh_token}`。access token 有效15分钟；refresh token 轮换，闲置30天、总期限90天。重放旧 refresh 会撤销同一家族，v1/v2 共用撤销状态。
+
+POST `/api/v2/auth/revoke`：`{client_id:"fire-ios",token}`，token 可为 fat_ access 或 frt_ refresh；撤销所属 grant。
+
+刷新保持原 grant 和范围；发生40101/40102可按既有会话策略处理，不能切换API版本。40301权限不足及40103/40104凭据校验失败不等于连接过期。
+
+</details>
+
+## 3. 响应与错误
+
+```json
+{"code":0,"message":"ok","data":{}}
+```
+
+分页接口另含 meta。成功读 data，失败结合 HTTP 状态与 code；不要只按 HTTP401或业务码前缀清除连接。
+
+| HTTP | code | 含义 |
+| --- | --- | --- |
+| 400 | 40001 / 40002 / 40003 | 参数、请求体或恢复验证码无效 |
+| 401 | 40101 / 40102 | 缺少有效 App token / 连接过期或已撤销 |
+| 403 | 40301 | scope不足或来源不可信 |
+| 403 | 40103 / 40104 | 当前密码错误 / 第二因素错误，连接保持 |
+| 404 | 40401 | 本人资源不存在 |
+| 409 | 40901 / 40902 | 数据冲突或安全挑战过期 |
+| 429 | 42901 | 请求限流 |
+| 500 | 50001 | 内部错误 |
+| 503 | 50301 | 原生通行密钥注册未启用 |
+
+已公布方法以外返回405，未公布路径404，不重定向到另一版本。安全响应和令牌不缓存。失败不泄露内部诊断。
+
+## 4. 完整接口清单
+
+public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization 时需有效 App grant。credential 根据请求体内的 PKCE、refresh、revoke 或恢复凭证认证。其他行写出所需 scope，均只操作当前 grant 用户。
+
+### 4.1 连接与身份
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| GET | `/api/v2/auth/config` | public |
+| POST | `/api/v2/auth/token` | credential |
+| POST | `/api/v2/auth/revoke` | credential |
+| GET | `/api/v2/auth/me` | portfolio.read |
+| PUT | `/api/v2/auth/profile` | profile.write |
+| PUT | `/api/v2/auth/email` | portfolio.read |
+| POST | `/api/v2/auth/password` | portfolio.read |
+
+### 4.2 原生账户安全
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| POST | `/api/v2/auth/password-reset/request` | credential |
+| POST | `/api/v2/auth/password-reset/verify` | credential |
+| POST | `/api/v2/auth/password-reset/confirm` | credential |
+| GET | `/api/v2/auth/email-verification` | security.read |
+| POST | `/api/v2/auth/email-verification/request` | security.write |
+| POST | `/api/v2/auth/email-verification/confirm` | security.write |
+| GET | `/api/v2/auth/totp` | security.read |
+| POST | `/api/v2/auth/totp/setup` | security.write |
+| POST | `/api/v2/auth/totp/confirm` | security.write |
+| POST | `/api/v2/auth/totp/disable` | security.write |
+| POST | `/api/v2/auth/totp/backup-codes` | security.write |
+| GET | `/api/v2/auth/passkeys` | security.read |
+| DELETE | `/api/v2/auth/passkeys` | security.write |
+| POST | `/api/v2/auth/passkeys/register-options` | security.write |
+| POST | `/api/v2/auth/passkeys/register-verify` | security.write |
+| GET | `/api/v2/auth/security-devices` | security.read |
+| DELETE | `/api/v2/auth/security-devices` | security.write |
+
+### 4.3 投资与账本
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| GET | `/api/v2/overview` | portfolio.read |
+| GET | `/api/v2/records` | portfolio.read |
+| POST | `/api/v2/records` | portfolio.write |
+| PUT | `/api/v2/records/{id}` | portfolio.write |
+| DELETE | `/api/v2/records/{id}` | portfolio.write |
+| POST | `/api/v2/records/group-assign` | portfolio.write |
+| POST | `/api/v2/records/group-reorder` | portfolio.write |
+| GET | `/api/v2/watch-groups` | portfolio.read |
+| POST | `/api/v2/watch-groups` | portfolio.write |
+| PUT | `/api/v2/watch-groups/{id}` | portfolio.write |
+| DELETE | `/api/v2/watch-groups/{id}` | portfolio.write |
+| POST | `/api/v2/watch-groups/{id}/icon` | portfolio.write |
+| POST | `/api/v2/watch-groups/reorder` | portfolio.write |
+| GET | `/api/v2/orders` | portfolio.read |
+| POST | `/api/v2/orders` | portfolio.write |
+| PUT | `/api/v2/orders/{id}` | portfolio.write |
+| DELETE | `/api/v2/orders/{id}` | portfolio.write |
+| GET | `/api/v2/funds` | portfolio.read |
+| POST | `/api/v2/funds` | portfolio.write |
+| DELETE | `/api/v2/funds/{id}` | portfolio.write |
+| GET | `/api/v2/fire-settings` | portfolio.read |
+| PUT | `/api/v2/fire-settings` | portfolio.write |
+| GET | `/api/v2/simple-ledger` | portfolio.read |
+| PUT | `/api/v2/simple-ledger` | portfolio.write |
+| GET | `/api/v2/brokers` | portfolio.read |
+
+### 4.4 动态
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| GET | `/api/v2/feed` | feed.read |
+| PUT | `/api/v2/feed/preferences` | feed.write |
+| POST | `/api/v2/feed/refresh` | feed.write |
+| GET | `/api/v2/feed/jobs/{jobId}` | feed.read |
+| GET | `/api/v2/feed/posts/{postId}` | feed.read |
+| PUT | `/api/v2/feed/posts/{postId}` | feed.write |
+| GET | `/api/v2/feed/posts/{postId}/discussion` | feed.read |
+| POST | `/api/v2/feed/posts/{postId}/discussion` | feed.write |
+
+### 4.5 行情与公开资源
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| POST | `/api/v2/upload` | profile.write |
+| GET | `/api/v2/assets` | public |
+| GET | `/api/v2/assets/lookup` | public |
+| GET | `/api/v2/celebs` | public |
+| GET | `/api/v2/celebs/{id}` | public |
+| GET | `/api/v2/celebs/{id}/returns` | public |
+| POST | `/api/v2/quotes` | public |
+| POST | `/api/v2/charts` | public |
+| GET | `/api/v2/kline` | public |
+| GET | `/api/v2/index-kline` | public |
+| GET | `/api/v2/kline-sessions` | public |
+| GET | `/api/v2/stock-detail` | public |
+| GET | `/api/v2/search` | public |
+| GET | `/api/v2/earnings` | public |
+| GET | `/api/v2/rates` | public |
+| GET | `/api/v2/indices` | public |
+| GET | `/api/v2/company-profile` | public |
+| GET | `/api/v2/settings/public` | public |
+
+不提供密码 login、Cookie 会话管理、管理员写入、备份/导入导出、财务报表或 portfolio-series。券商目录（brokers）仍需 portfolio.read，本地模式券商使用本地库。
+
+## 5. 原生账户安全
+
+下表所有端点相对于 `/api/v2/auth`；读取需要 security.read，管理需要 security.write。开启二次验证后 code 可为当前TOTP或一次性备用码。错误密码/因素为HTTP403，不注销连接。
+
+- GET email-verification → {email,verified,canRequest}，需要 read。
+- POST email-verification/request，空 JSON → {ok:true,verified:false,retryAfter:60}（已验证则 verified:true）。需要 write。邮件包含既有 HTTPS /verify-email?token=... 链接；发送不标记已验证。
+- POST email-verification/confirm {token} → {ok:true,verified:true,user}，需要 write；token 必须属于 Bearer 用户，绑定现有邮箱/密码且一次性。原生请求发出的邮件正文会显示43字符 token，可复制到原生输入框；现有网页链接确认后 App 用 GET 刷新。
+- GET totp → {enabled,name,backupCodesRemaining}，read，不返回密钥或已有备用码。
+- POST totp/setup {currentPassword} → {challengeId,secret,otpauthUrl,qrPng,expiresAt}，write；临时挑战10分钟、绑定账户和 grant，未确认不启用。
+- POST totp/confirm {challengeId,currentPassword,code,name?} → {ok:true,enabled:true,backupCodes,reauthenticationRequired:true}，write；code 是新验证器首个 TOTP；成功撤销所有 Web 会话和 App grant。先一次展示 backupCodes，再清除匹配旧连接。
+- POST totp/disable {currentPassword,code} → {ok:true,enabled:false,reauthenticationRequired:true}，write；code 为现有 TOTP/备用码，成功撤销所有会话/授权。
+- POST totp/backup-codes {currentPassword,code} → {ok:true,backupCodes,reauthenticationRequired:boolean}，write；原备用码全部失效，明文只本次返回；通常不失效当前 grant，旧明文因子迁移导致安全戳改变时返回 true，按真实状态处理。
+- GET passkeys → {keys:[{id,name,rpID,createdAt,lastUsedAt,backedUp}],registration:{supported:false,rpID,origin,reason}}，read。
+- DELETE passkeys {id,currentPassword,code?} → {ok:true,reauthenticationRequired}，write；删除本人密钥，同时撤销来自该密钥的 Web 会话/App grant，当前 grant 若来自此密钥返回 true。
+- POST passkeys/register-options、POST passkeys/register-verify：当前明确返回 503/50301（关联域名未核验），不得调用系统注册或宣称已支持；未来启用须单独验证部署并约定挑战合约。
+- GET security-devices → {devices:[{id,kind:"web"|"app",name,createdAt:number|null,lastUsedAt:number|null,expiresAt,current,scope?}]}，read；App id 为 grant_id，Web id 为不可用来认证的摘要标识，原生连接下所有 Web 项 current=false。不返回令牌/hash/IP。
+- DELETE security-devices {id,currentPassword,code?} → {revoked:true,reauthenticationRequired}，write；缺/外用户 id 为404；撤销当前 grant 时 true，客户端只清匹配 origin/grant。既有 Cookie /auth/devices 保持兼容。
+
+40101/40102 表示登录/会话失效；权限不足返回40301/HTTP403，客户端可提供显式重新授权；当前密码错误40103/HTTP403、因子错误40104/HTTP403，不能退出 App；挑战过期40902/HTTP409；参数40001、限流42901、内部50001。事务失败不消费因子、不提交部分安全变更。
+
+### 5.1 公共密码恢复
+
+- POST password-reset/request {login,challenge?} → {ok:true,challenge,retryAfter:60,message}，对未知账号、未验证邮箱、邮件服务不可用等使用一致回执与随机 challenge。仅已验证邮箱实际异步发送验证码，限流与共享邮件预算沿用 Web。challenge 不放 URL。
+- POST password-reset/verify {challenge,code} → {ok:true,token,expiresAt}，错误统一40003，不泄露账号；最多5次，5分钟期限，一次性消费验证码。
+- POST password-reset/confirm {token,newPassword} → {ok:true,reauthenticationRequired:true}，一次性恢复凭证与改密/撤销全部会话同事务。成功仅清除发起恢复时仍匹配的本地连接。弱密码不消费 token。token 不放 URL，不记录日志/缓存。
+
+原生新增通行密钥当前不可用，registration.supported=false，reason=associated_domain_unverified；不要仅因 Web 可注册就调用系统注册。列表和删除可用。成功后按 reauthenticationRequired boolean 清除匹配 origin / grant / apiVersion 的旧连接，不清除已经换入的新连接。备用码明文只展示一次。
+
+## 6. 投资与行情示例
+
+<details>
+<summary>记录与总资产</summary>
+
+GET `/api/v2/records?page=1&pageSize=20&market=US` 返回本人数组与 meta={page,pageSize,total}，pageSize 上限100。POST records 示例：
+
+```json
+{"name":"苹果","code":"AAPL","market":"US","price":210.5,"cost":200,"qty":10,"group":"主账户"}
+```
+
+PUT records/{id} 更新、DELETE 删除。price / qty 不允许负数，cost 可为负数。接口不接受客户端选择其他用户。
+
+GET `/api/v2/overview?currency=USD` 返回持仓估值、现金与总资产。totalMarket 是持仓市值；totalAsset 包含现金。缺汇率或来源异常时金额可为null，并返回完整性与缺失币种，不能按1:1换算。
+
+GET fire-settings → data={fire}；PUT 请求 `{fire,assetRecord?}` → data={ok:true,assetHistory}。v1 此资源的历史裸JSON仍保留，v2使用统一信封。simple-ledger 返回账本 data，PUT 部分字段合并；这些端点都共用本人数据。
+
+</details>
+
+<details>
+<summary>批量行情与素材</summary>
+
+POST `/api/v2/quotes` 或 charts，批量 items 最多100只：
+
+```json
+{"items":[{"id":"US:AAPL","market":"US","code":"AAPL"}]}
+```
+
+quotes data={quotes:{证券ID:报价}}，charts data={charts:{证券ID:分时}}。行情保持原币种金额、source / coverage 与缺失状态，不生成假报价。
+
+GET `/api/v2/assets` 或 assets/lookup 读取目录/匹配图标。POST upload 只用于明确 profile.write 的本人头像，不开放公共素材管理员写入；multipart kind=avatar、file，最大5MiB并校验内容。图片URL按当前origin解析，公开资源不会授予个人资料权限。
+
+</details>
+
+### 6.1 个股详情
+
+个股详情页（moomoo 风格：头部行情 + 4 列指标 + 多币种市值 + K 线）的数据统一走该接口，
+Web 前端与 iOS App 消费同一份数据，移动端**无需自行做币种换算 / K 线聚合**。
+
+### 请求
+
+`GET /api/v2/stock-detail?market=US&code=AAPL`
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `market` | 是 | 市场代码：`US` / `HK` / `CN` / `JP` / `KR` |
+| `code` | 是 | 股票代码（如 `AAPL`、`00700`、`600519`），仅允许字母数字 `._-` |
+
+### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "market": "US",
+    "code": "AAPL",
+    "name": "AAPL",
+    "currency": "USD",
+    "quote": {
+      "name": "AAPL",
+      "price": 313.33,
+      "change": 0.92,
+      "changePct": 0.29,
+      "open": 311.45,
+      "high": 314.81,
+      "low": 310.74,
+      "prevClose": 312.41,
+      "volume": 34437191,
+      "amount": 10776446647,
+      "pe": 35.93,
+      "turnover": 1.3,
+      "marketCap": 4569952165000,
+      "time": "2026-08-07 16:00:01"
+    },
+    "marketCap": {
+      "USD": 4569952165000,
+      "HKD": 35850817739208.5,
+      "CNY": 30836209228554,
+      "SGD": 5853651728148.5,
+      "JPY": 723606225806100,
+      "KRW": 6470823768031750
+    },
+    "rates": { "USD": 1, "HKD": 0.1275, "CNY": 0.1482, "SGD": 0.7807, "JPY": 0.0063, "KRW": 0.0007 },
+    "kline": [
+      { "d": "2026-08-07", "o": 311.45, "h": 314.81, "l": 310.74, "c": 313.33, "v": 34437181 }
+    ]
+  }
+}
+```
+
+### 字段说明
+
+| 字段 | 说明 |
+| --- | --- |
+| `quote` | 实时行情（腾讯 / 新浪，含今开 / 最高 / 最低 / 昨收 / 成交量 / 成交额 / 市盈率 / 换手率 / 总市值）；暂无行情时 `null` |
+| `marketCap` | 六币种市值（`USD` / `HKD` / `CNY` / `SGD` / `JPY` / `KRW`），本地币种为原始市值，其余按汇率换算；无市值（如部分 ETF）时为 `null` |
+| `rates` | 对 USD 的汇率（缓存 + 兜底，见 `/api/v2/rates`） |
+| `kline` | 日 K（前复权）：`d` 日期 `YYYY-MM-DD`、`o` 开、`h` 高、`l` 低、`c` 收、`v` 量（A股为手，其余为股）；美股 Yahoo 日线（拆股复权）→ 新浪兜底；港股 A股 日韩腾讯 fqkline，A股可兜底东财；少量基准优先富途，10 分钟缓存，最多 320 条 |
+
+完整详情并行读取行情、汇率、K 线，响应等待三路结束；任一路失败只缺对应字段（`quote: null` / `marketCap: null` / `kline: []`），HTTP 仍返回 `code: 0`。
+
+历史曲线使用 `GET /api/v2/stock-detail?market=US&code=AAPL&view=history`，仅返回 `{ market, code, kline }`，跳过实时行情、汇率及 ETF 市值查询。失败返回 HTTP 502 / `50002`，可立即重试。旧容器忽略 `view` 后仍返回完整详情，客户端只读取其中 `kline`，无需新增授权或切换连接。`includeKline=0` 继续用于完整详情的行情读取；`view=history` 时优先返回历史。
+
+月收盘 `/api/v2/kline` 与旧版 `/api/kline` 共用同一数据与缓存；旧版保持 `{ closes }` 并截取最近 12 个月。两者使用规范化代码、有界缓存和在途请求合并；美股并行探测交易所，首个有效结果取消剩余探测，失败继续腾讯兜底。腾讯月线取收盘列而非开盘列；月份升序、去重并与价格一一对应。上游不可用或返回空历史时为 HTTP 502 / `50002`。
+周 / 月 K 由客户端对 `kline` 聚合（周：ISO 周首日开 / 末日收 / 高低取极值；月：自然月同理）。
+
+### 6.2 公司简况
+
+Web“公司”页与 iOS App 共用同一份公司资料契约。
+
+### 请求
+
+`GET /api/v2/company-profile?market=US&code=AAPL`
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `market` | 是 | 当前首版支持 `US`；其他市场返回 `supported: false` |
+| `code` | 是 | 股票代码，仅允许字母数字 `._-` |
+
+### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "supported": true,
+    "source": "SEC EDGAR",
+    "company": "Apple Inc.",
+    "symbol": "AAPL.US",
+    "exchange": "纳斯达克全球精选市场",
+    "founded": "1976",
+    "industry": "电子计算机",
+    "fiscalYearEnd": "9 月 26 日",
+    "website": "https://www.apple.com/",
+    "description": "苹果公司设计、制造和销售智能手机……",
+    "address": "ONE APPLE PARK WAY, CUPERTINO, CA, 95014",
+    "phone": "(408) 996-1010"
+  }
+}
+```
+
+资料按公司缓存 24 小时。`website`、`address`、`phone` 可能为空字符串；无法覆盖的成立年份返回 `—`。
+
+### 6.3 分时走势
+
+供 Web 行情板、持仓列表和 iOS 迷你走势图共用。一次最多请求 100 只股票，服务端会按市场选择数据源，并在主数据源缺失时自动回退；单只股票无数据不会导致整批请求失败。
+
+### 请求
+
+`POST /api/v2/charts`
+
+```json
+{
+  "items": [
+    { "id": "US.AAPL", "market": "US", "code": "AAPL" },
+    { "id": "HK.00700", "market": "HK", "code": "00700" },
+    { "id": "CN.600519", "market": "CN", "code": "600519" }
+  ]
+}
+```
+
+`id` 由客户端定义，并原样作为 `charts` 的键；建议使用稳定的 `市场.代码` 格式。`market` 支持 `US`、`HK`、`CN`、`JP`、`KR`、`SG` 等标准市场代码。
+
+证券代码必须按字符串传递并保留前导零：A 股使用六位代码（如世纪华通 `002602`、五粮液 `000858`），港股建议使用五位代码（如腾讯 `00700`）。该规则也适用于 `/api/v2/quotes`，iOS 不应先把代码转换为整数。
+
+迷你图可在请求体增加 `"sample": true`，每只证券最多返回 60 个点，保留首尾与分桶高低点；用于列表预览，不用于计算组合资产或详细分析。不传或为 `false` 时保留完整分时。旧容器忽略该字段时仍可解码完整图。客户端缓存必须区分完整图／迷你图及真实／演示来源。
+
+### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "charts": {
+      "HK.00700": {
+        "date": "20260811",
+        "points": [
+          { "time": "09:30", "price": 552.5, "volume": 128400 }
+        ]
+      }
+    }
+  }
+}
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `date` | 数据所属交易日；上游可能返回 `YYYYMMDD` 或 `YYYY-MM-DD`，客户端展示前应统一格式化 |
+| `points[].time` | 交易所当地时间，格式 `HH:mm` |
+| `points[].price` | 最新/收盘价 |
+| `points[].volume` | 当前分钟成交量；上游缺失时为 `0` |
+
+数据策略：
+
+- 美股直接读取含扩展时段的 1 分钟行情，覆盖盘前、盘中、盘后（04:00–19:59，美东时间）。
+- 港股、A 股优先读取主行情源；单只证券缺失时自动回退备用 1 分钟数据源。
+- 日股、韩股、新加坡股在主源不支持时也会尝试对应交易所的备用代码。
+- 未获取到走势的证券不会出现在 `charts` 中；iOS 应保留旧缓存或显示暂无走势，不要把整批响应视为失败。
+
+批量行情 `/api/v2/quotes` 与旧 `/api/quotes` 可传 `"includeMarketCap": false`，跳过额外的 ETF 份额／基金规模补全；已有上游市值仍会返回。省略该字段保持完整报价，供个股详情和 ETF 排序使用。ETF 份额成功缓存 24 小时、失败冷却 6 小时；并发相同代码共用读取，市值按各调用者现价计算，单次补全最多访问 12 个不同证券。
+
+`/api/v2/quotes` 和 `/api/v2/charts` 在客户端接受 gzip 且响应至少 1 KB、压缩可缩小时异步压缩，正确处理 `gzip;q=0`；信封和字段不变。响应为 `Cache-Control: no-store, private` 与 `Vary: Accept-Encoding`，请求 ID 不进入 HTTP 共享缓存，公开市场值只在服务端按证券共享。URLSession／浏览器自动解压。
+
+超过 100 只应拆为最多两个同时进行的滚动批次。网络、限流或上游失败只影响本批，其他批继续返回。App 保留失败批的有效旧值，公开价格回退最长 10 分钟、分时最长 30 分钟，过期／上游旧图不续期；取消、来源切换、证书及权限错误直接结束，不用旧值掩盖。网页失败批保留原价，首帧快照与在途返回都校验记录 ID 对应的市场和代码，修改证券后不会恢复原证券的报价；后台停止未完成的读取。
+
+服务端分时缓存 30 秒，行情结果共享 2 秒。列表页建议只请求当前可见证券（Web 当前每页 6 只）；iOS 前台活跃时建议每 30 秒刷新分时，进入后台或非交易日停止轮询。
+
+- **交易日**：按交易所当地日期计算。美股使用 `America/New_York`，港股与 A 股使用 `Asia/Shanghai`，不按设备时区切换。
+- **单股盈亏**：`(最新价 - 昨收价) × 持仓数量`。
+- **跨市场汇总**：先按本币计算，再用当前汇率换算到展示币种。
+- **刷新**：首次拉取全部市场收盘快照；之后仅在对应市场盘前、盘中或盘后每 30 秒刷新。周末和休市保留最后有效值，不持续请求。
+
+美股当日盈亏覆盖美东盘前、盘中与盘后，并以**美东时间 20:00**作为当天结算边界。到达 20:00 后停止该市场行情轮询、冻结最终当日盈亏并显示“已结算”；下一交易日美东 04:00 盘前恢复更新。不得使用中国时间 20:00 或设备本地午夜切换美股当日盈亏。
+
+- **返回字段**：`price`、`change`、`changePct` 为当前扩展时段有效值，同时返回 `session: PRE | AFTER` 与 `prevClose`。
+- **涨跌基准**：最近一次常规盘收盘价。不要直接使用上游 `previousClose` / `chartPreviousClose`，新上市或杠杆 ETF 的该字段可能来自复权前或更早交易日。
+- **客户端**：Web、持仓盈亏与 iOS 共用上述字段，保持涨跌口径一致。
+
+美股 K 线会先规范化交易所后缀（例如 `SPCH.AM → SPCH`）。日 K 首选新浪，空数据时自动回退 Yahoo 日线；5 日分钟线同样在新浪缺失时回退 Yahoo 5 分钟线。客户端只消费统一的 `items` / `points`，无需识别上游，适用于新上市 ETF 与美交所证券。
+
+### 6.4 K 线时段
+
+返回美股最近交易日 1 分钟分时数据，时间均为**美东时间**。Web 和 iOS 可按 `session` 字段直接筛选，无需自行推断时段。
+
+### 请求
+
+`GET /api/v2/kline-sessions?market=US&code=AAPL`
+
+### 响应示例
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "market": "US",
+    "code": "AAPL",
+    "source": "Yahoo Finance extended hours",
+    "coverage": {
+      "pre": "04:00-09:29",
+      "regular": "09:30-16:00",
+      "after": "16:01-19:59",
+      "overnight": false
+    },
+    "points": [
+      { "date": "2026-08-07", "time": "09:30", "price": 311.45, "volume": 120451, "session": "REGULAR" }
+    ]
+  }
+}
+```
+
+| `session` | 时间范围（美东） | 说明 |
+| --- | --- | --- |
+| `PRE` | 04:00–09:29 | 盘前 |
+| `REGULAR` | 09:30–16:00 | 盘中 |
+| `AFTER` | 16:01–19:59 | 盘后 |
+| 夜盘 | 20:00–03:59 | 当前数据源暂不提供，`coverage.overnight=false` |
+
+行情缓存 30 秒。夜盘暂不返回伪数据；iOS 应根据 `coverage.overnight` 将夜盘入口置灰。
+
+### 6.5 自选股分组
+
+自选股分组为服务端独立实体（`watch_groups` 表），记录通过 `watch_group_id` 归属，券商仍走 `records.group_name`（持仓显示），两者彻底解耦；Web 与 iOS 共享同一份分组数据。
+
+### 分组模型
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 分组 id（`wg-*`） |
+| `name` | 显示名称（市场分组可重命名，自定义分组重命名即时生效） |
+| `icon` | 分组图标 URL（自定义分组相机上传，同时注册素材库 `type=group` 防清理丢失） |
+| `sort` | 展示顺序（`reorder` 批量写入） |
+| `visible` | `-1` 自动（空分组隐藏）/ `0` 隐藏 / `1` 显示 |
+| `kind` | `market` 内置市场分组（美股/港股/A股/新加坡/日股/韩股，不可删除，动态按市场过滤） / `custom` 用户自定义 |
+| `market` | `kind=market` 时的市场代码 |
+
+### 接口示例
+
+**GET /api/v2/watch-groups** —— 列表（首次访问自动播种市场分组 + 迁移旧数据；`sort` 升序）
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "groups": [
+      { "id": "wg-abc123", "name": "美股", "icon": "", "sort": 0, "visible": -1, "kind": "market", "market": "US" },
+      { "id": "wg-def456", "name": "科技", "icon": "/uploads/asset/group/科技.png", "sort": 6, "visible": -1, "kind": "custom", "market": "" }
+    ]
+  }
+}
+```
+
+**POST /api/v2/watch-groups** —— 新建自定义分组
+```json
+// 请求体
+{ "name": "核心持仓" }
+// 成功响应（重复名称返回 40901「分组已存在」）
+{ "code": 0, "message": "ok", "data": { "group": { "id": "wg-xyz789", "name": "核心持仓", "icon": "", "sort": 7, "visible": -1, "kind": "custom", "market": "" } } }
+```
+
+**PUT /api/v2/watch-groups/{id}** —— 更新（字段可选：`name` 重命名 / `icon` 图标 / `visible` 显隐）
+```json
+// 请求体：重命名 + 显隐
+{ "name": "核心持仓", "visible": 1 }
+// 请求体：上传 / 清除图标（icon 传空字符串 = 清除）
+{ "icon": "/uploads/asset/group/科技.png" }
+// 成功响应
+{ "code": 0, "message": "ok", "data": { "group": { "id": "wg-xyz789", "name": "核心持仓", "icon": "", "sort": 7, "visible": 1, "kind": "custom", "market": "" } } }
+```
+
+**DELETE /api/v2/watch-groups/{id}** —— 删除自定义分组（清空记录归属 + 图标素材；市场分组返回 40001「市场分组不可删除」）
+```json
+{ "code": 0, "message": "ok", "data": { "deleted": true } }
+```
+
+**POST /api/v2/watch-groups/reorder** —— 整体排序（body 传全量分组 id，按数组顺序写入 `sort`）
+```json
+// 请求体
+{ "order": ["wg-abc123", "wg-xyz789", "wg-def456"] }
+// 成功响应
+{ "code": 0, "message": "ok", "data": { "updated": 3 } }
+```
+
+**POST /api/v2/records/group-assign** —— 批量分配 / 移出分组
+```json
+// 请求体（groupId 传空字符串 = 移出分组；仅可分配到 custom 分组）
+{ "ids": ["r-001", "r-002"], "groupId": "wg-xyz789" }
+// 成功响应
+{ "code": 0, "message": "ok", "data": { "updated": 2 } }
+```
+
+**约定**
+- 全部接口需登录（`Authorization: Bearer fat_<App access token>` ，不接受 Cookie），未登录返回 `40101`；限流 `42901`。
+- 分组数量（count）由客户端用记录计算：市场分组 = `records.market` 匹配数，自定义分组 = `watch_group_id` 匹配数，接口不额外返回。
+- 分组图标上传：`POST /api/v2/watch-groups/{id}/icon`（multipart `file`），返回 `{ code: 0, data: { group } }`。服务端校验登录、分组归属及图片内容，完成图标存储和素材注册；不需要再次 PUT。公共素材上传仍仅管理员可用。
+- 素材库「分组图标」分类只展示非券商自定义分组（有 `type=broker` 同名图标的券商分组走「券商图标」分类）。
+
+### 行为约定
+
+- 添加股票自动进入「全部 + 对应市场」；市场分组是动态过滤（按 `records.market`），自定义分组才是显式归属（按 `records.watch_group_id`）。
+- 删除自定义分组：清空该分组下所有记录的 `watch_group_id`（一条 SQL），并删除图标素材。
+- 旧版 `?filter=G:名称` / `M:US` URL 自动迁移到分组 id；分组不存在时回退「全部」。
+- 旧 localStorage 分组配置（`fire:watch-groups:v1`）首次加载时一次性同步到服务端并清除。
+
+### 6.6 交易与订单
+
+订单是可审计的成交凭证；持仓记录是订单执行后的最新快照。普通交易只追加订单，录入错误通过专用更正接口修改并重算账本。Web 的持仓一级页只展示组合，点击股票进入二级详情后再执行交易、查看该股票订单。iOS 可直接复用以下接口。
+
+订单录入错误可通过 `PUT /api/v2/orders/{id}` 留痕更正。服务端会按成交时间重放该股票全部已成交订单，重新计算每笔成交后的数量、成本、已实现盈亏以及当前持仓；若更正后任意时点出现超卖，则整次修改回滚并返回 `40001`。
+
+### 查询单只股票订单
+
+```http
+GET /api/v2/orders?recordId=r-aapl&scope=today&limit=200
+Authorization: Bearer fat_<App access token>
+```
+
+- `scope=today`：按 `tradedAt`（成交时间）归入本地时区当日成交；`history`：按成交时间早于当日；`all`：全部（默认）。`createdAt` 仅表示订单记录写入时间，不参与“当日订单”归类。
+- `recordId` 可选；传入后只返回当前用户该条持仓的订单。
+- `limit` 为 `1...5000`，默认 `200`。
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "scope": "today",
+    "recordId": "r-aapl",
+    "orders": [{
+      "id": "o-123",
+      "recordId": "r-aapl",
+      "market": "US",
+      "code": "AAPL",
+      "name": "苹果",
+      "side": "buy",
+      "status": "filled",
+      "qty": 10,
+      "price": 210.5,
+      "fees": 1,
+      "amount": 2105,
+      "realizedPnl": null,
+      "positionQtyBefore": 20,
+      "positionCostBefore": 192.05,
+      "positionQtyAfter": 30,
+      "positionCostAfter": 198.366667,
+      "broker": "长桥证券",
+      "note": "分批建仓",
+      "tradedAt": "2026-08-12T02:30:00.000Z",
+      "createdAt": "2026-08-12T02:30:01.000Z"
+    }]
+  }
+}
+```
+
+### 执行交易
+
+```http
+POST /api/v2/orders
+Content-Type: application/json
+Authorization: Bearer fat_<App access token>
+
+{
+  "recordId": "r-aapl",
+  "side": "sell",
+  "qty": 5,
+  "price": 220,
+  "fees": 1.5,
+  "tradedAt": "2026-08-12T10:30:00.000Z",
+  "note": "分批止盈"
+}
+```
+
+成功返回 `{ order, position }`。
+
+| 项目 | 计算规则 |
+| --- | --- |
+| 买入成本 | 按原持仓成本额、本次成交额与费用加权 |
+| 卖出后成本 | `(卖出前数量 × 卖出前成本 − 卖出数量 × 成交价) ÷ 剩余数量` |
+| 已实现盈亏 | `(成交价 - 卖出前成本) × 数量 - 费用` |
+| 精度 | 成交后成本保留 3 位小数，后续持仓盈亏使用该可见成本 |
+
+- 卖出采用摊薄 / 保本成本：亏损卖出提高剩余成本，盈利卖出降低成本，累计回款超过投入时可为负数。
+- 卖出费用仅计入已实现盈亏，不重复计入剩余成本。
+- 订单返回 `positionQtyBefore`、`positionCostBefore` 及成交后快照，供审计与重放。
+- 超卖返回 `40001`；订单写入与持仓更新在同一数据库事务内完成。
+
+### 删除历史订单
+
+```http
+DELETE /api/v2/orders/o-123
+Authorization: Bearer fat_<App access token>
+```
+
+成功返回 `{ deletedId, position }`。服务端删除目标订单后，会从该股票第一笔成交前的基准持仓开始重放剩余订单，重新计算每笔订单快照和当前持仓；若删除会令后续任一卖出订单超卖，则整次删除回滚并返回 `40001`。该操作不可撤销，客户端应仅在历史订单页提供，并在执行前二次确认。
+
+---
+
+## 7. 动态与分页
+
+feed.read读取本人帖子，feed.write管理指示、生成、喜欢/隐藏和讨论。GET feed 的 limit=1–50，cursor 为不透明游标；资金列表使用 limit / offset，记录使用 page / pageSize，不能把所有接口当同一种分页。
+
+PUT feed/preferences：`{instructions,revision,enabled?,intervalMinutes?}`，revision冲突HTTP409；POST feed/refresh 空JSON启动任务，读取 jobs/{jobId} 的状态，完成后再读取帖子。POST posts/{postId}/discussion：`{text}`，1–2000字符，失败不保存半个讨论。
+
+jobId 格式 fj- 加24位小写hex，postId 格式 fp- 加24位小写hex。读取后只应用仍匹配 origin / grant / apiVersion 的结果，离开页面或进入后台暂停轮询；超时写入结果不确定时先重新读取，不重发写请求。
+
+## 8. 兼容与接入检查
+
+- 旧连接保持v1，新连接确认服务器完整支持2后选择v2；旧客户端和浏览器继续使用原接口。
+- auth/me 的 data 直接是 User；scope 与 capabilities 反映实际 grant，不因版本号自动开启安全编辑。
+- 需要 profile/feed/security 写权限时明确重新授权；不要根据账号管理员角色放大 App 能力。
+- 金额、订单、资金、汇率与分页业务含义沿用现有服务。同一账号在Web与App读取同源数据。
+- HTTP返回不能证明已部署所有版本；先读取实际发现，不向发现字段给出的任意地址发送凭据。

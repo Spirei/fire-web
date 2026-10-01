@@ -132,5 +132,19 @@ const data=async promise=>{const res=await promise;return {status:res.status,hea
   for(const path of ['auth/login','auth/authorize','auth/devices','auth/delete-account','data/export','orders/export','portfolio-series','users','financial-reports'])assert.equal(policy.appV2Access('/api/v2/'+path,'GET'),null);
   const v2=await v2Gate.appV2Response(r2('auth/login',{},grant.access_token,'POST'),()=>assert.fail('not published'));assert.equal(v2.status,404);
  });
+ await test('v2 FIRE uses an envelope while v1 stays bare and revocation during input cannot save',async()=>{
+  const f=fixture(),grant=connect(f.user,f.browser,full);
+  const old=await data(load('app/api/v1/fire-settings/route.ts').GET(req('fire-settings',undefined,grant.access_token,'GET')));
+  assert.equal(old.body.code,undefined);assert(old.body.fire);
+  const get=await data(route2('fire-settings').GET(r2('fire-settings',undefined,grant.access_token)));
+  assert.equal(get.body.code,0);assert.deepEqual(get.body.data,old.body);
+  const invalid=await data(route2('fire-settings').PUT(r2('fire-settings',{},grant.access_token,'PUT')));assert.equal(invalid.status,400);assert.equal(invalid.body.code,40001);
+  const saved=await data(route2('fire-settings').PUT(r2('fire-settings',{fire:{targetAmount:123}},grant.access_token,'PUT')));assert.equal(saved.body.code,0);assert.equal(saved.body.data.ok,true);
+  const before=(await data(route2('fire-settings').GET(r2('fire-settings',undefined,grant.access_token)))).body.data;
+  const read=bodies.readJsonBody;bodies.readJsonBody=async(...args)=>{const body=await read(...args);native.revokeAppGrant(grant.grant_id);return body;};
+  try { const denied=await data(route2('fire-settings').PUT(r2('fire-settings',{fire:{targetAmount:456}},grant.access_token,'PUT')));assert.equal(denied.status,401);assert.equal(denied.body.code,40101); }finally{bodies.readJsonBody=read;}
+  const latest=connect(f.user,f.browser,full);
+  assert.deepEqual((await data(route2('fire-settings').GET(r2('fire-settings',undefined,latest.access_token)))).body.data,before);
+ });
  console.log(`PASS ${count} App v2 migration suites`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{db.close();fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode||0);});

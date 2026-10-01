@@ -22,7 +22,7 @@ security.version=2，read_scope:security.read/write_scope:security.write；secur
 
 私有端点仅接受Authorization: Bearer fat_... App access token，不接受Cookie、Web session Bearer或由客户端选择userId；App永远按普通用户自身权限处理。无效会话40101/40102，scope不足40301且不清会话，密码/因子错误40103/40104且HTTP403。公开行情/图标/目录可匿名读取，忽略Cookie的身份，不授予个人数据或管理员能力；若显式携带Bearer则必须为有效App grant。App专用指受独立合约管理，公开资源不通过User-Agent假装限制调用者身份。
 
-所有已公布JSON端点保持v1的{code,message,data,meta?}、字段、分页及业务语义；错误不泄露内部诊断。不迁移裸JSON、备份/导入导出、管理员素材/券商写入、旧密码login、Cookie auth/devices、delete-account和portfolio-series；这些路径不属于v2。非支持方法返回405，未公布路径404，无跨版本重定向。
+所有已公布JSON端点使用{code,message,data,meta?}，保持原有业务字段、分页及业务语义；fire-settings 的 v1 历史裸JSON仅在v2包装为统一信封，GET data={fire}，PUT data={ok,assetHistory}，请求体仍为{fire,assetRecord?}。错误不泄露内部诊断。不迁移裸JSON、备份/导入导出、管理员素材/券商写入、旧密码login、Cookie auth/devices、delete-account和portfolio-series；这些路径不属于v2。非支持方法返回405，未公布路径404，无跨版本重定向。
 
 ## 完整路径与方法（相对于 /api/v2）
 
@@ -96,6 +96,13 @@ security接口的完整payload见 native-account-security-v1.md，将其中/api/
 ## 服务端交付验证
 
 - npx tsc --noEmit、生产构建、npm run test:review、公开仓库与部署一致性审计、git diff --check 通过。
-- tests/app-v2.cjs 共9组，覆盖 v1/v2 发现、全部私有方法拒绝 Cookie/Web Bearer、旧 scope 不扩权、共享投资数据与本人权限、匿名行情、跨版本一次性 PKCE/refresh、TOTP 原子回滚、异步撤销、动态路径与方法边界。仅使用临时 SQLite 与模拟网络；原生安全12组和既有 v1 回归同样通过。
+- tests/app-v2.cjs 共10组，覆盖 v1/v2 发现、全部私有方法拒绝 Cookie/Web Bearer、旧 scope 不扩权、共享投资数据与本人权限、匿名行情、跨版本一次性 PKCE/refresh、TOTP 原子回滚、异步撤销、动态路径与方法边界。仅使用临时 SQLite 与模拟网络；原生安全12组和既有 v1 回归同样通过。
 - 本机固定3000端口由另一实例占用，未停止该实例或更换端口，未运行此分支 HTTP 冒烟；也未做已部署服务与实体 iOS 的端到端验收。
 - 仍在草稿 PR，未合入 main、未部署、未触发镜像发布。客户端部署前必须依据实际发现结果选择版本，不得假设线上已经有 v2。
+
+## 文档页（2026-10-01）
+
+API 文档入口仍为 /api-docs，?version=v1 或 ?version=v2 切换，省略为v1。v2公开参考为 docs/api-spec-v2.md，包含发现、PKCE、scope、原生安全与全量公布方法；后台文档接口 /api/api-docs 使用相同version参数固定选择文件，不接受路径。两版独立编辑、修订校验、原子文件替换与当前管理员身份检查。生产镜像复制两份文档并允许node用户保存。
+
+- 文档测试5组、迁移测试10组、完整test:review、独立类型检查、生产构建、审计通过。
+- 使用实际React页面与样式做隔离浏览器预览：版本点击、网址、刷新/返回、草稿与保存目标，桌面/平板/手机深浅色通过。预览使用模拟发现/文档读写及导航，不等于已部署Next服务或正式账号联调；仍未占用或改动另一实例的3000端口。

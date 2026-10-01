@@ -21,6 +21,8 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "保存过于频繁，请稍后再试" }, { status: 429 });
   }
   const body = await readJsonBody(request).catch(() => null);
+  const current = getAuthUser(request);
+  if (!current || current.id !== user.id) return NextResponse.json({ error: "登录已失效" }, { status: 401 });
   const fire = body?.fire && typeof body.fire === "object" ? body.fire as Record<string, unknown> : null;
   if (!fire) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
 

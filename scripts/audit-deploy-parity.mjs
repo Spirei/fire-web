@@ -56,6 +56,7 @@ const updaterBlock = ghcrCompose.split("  fire-updater:")[1] || "";
 if (/^\s{4}ports:/m.test(updaterBlock)) failures.push("Watchtower 不得映射宿主机端口");
 
 requireText("生产镜像", dockerfile, [
+  "COPY --from=build --chown=node:node /app/docs/api-spec.md /app/docs/api-spec-v2.md ./docs/",
   "COPY --from=build /app/public/uploads /app/resource-default",
   "/app/public-cache-default/asset-quotes-cache.json",
   "/app/public-cache-default/celebs-cache.json",

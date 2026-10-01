@@ -1,37 +1,36 @@
 import { readJsonBody } from "@/lib/requestBody";
-import fs from "fs";
-import path from "path";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { fail, ok } from "@/lib/api";
-
+import { parseApiDocsVersion } from "@/lib/apiDocsVersion";
+import { API_DOCS_MAX_BYTES, readApiDocument, saveApiDocument } from "@/lib/apiDocs";
 export const dynamic = "force-dynamic";
-
-const DOC_FILE = path.join(process.cwd(), "docs", "api-spec.md");
-const MAX_BYTES = 512 * 1024;
-
-/** 读取 API 规范文档（无需登录，供 /api-docs 页面渲染） */
-export async function GET() {
-  try {
-    const content = fs.readFileSync(DOC_FILE, "utf8");
-    return ok({ content, path: "docs/api-spec.md" });
-  } catch {
-    return fail(50001, "读取文档失败", 500);
-  }
+function versionFor(request?: Request) {
+  if (!request) return 1 as const;
+  const values = new URL(request.url).searchParams.getAll("version");
+  return values.length > 1 ? null : parseApiDocsVersion(values[0]);
 }
-
-/** 保存 API 规范文档（仅管理员；固定写 docs/api-spec.md，不接受任意路径） */
+/** Public reference; the version selects one of two fixed files. */
+export async function GET(request?: Request) {
+  const version = versionFor(request);
+  if (!version) return fail(40001, "不支持的文档版本", 400);
+  try { return ok(readApiDocument(version)); }
+  catch { return fail(50001, "读取文档失败", 500); }
+}
 export async function POST(request: Request) {
-  const user = getAuthUser(request);
-  if (!user) return fail(40101, "未登录", 401);
-  if (!isAdmin(user)) return fail(40301, "需要管理员权限", 403);
-  const body = await readJsonBody(request).catch(() => null);
-  if (!body || typeof body.content !== "string") return fail(40001, "缺少文档内容", 400);
-  if (body.content.length > MAX_BYTES) return fail(40001, "文档内容过大", 400);
+  const version = versionFor(request);
+  if (!version) return fail(40001, "不支持的文档版本", 400);
+  const initial = getAuthUser(request);
+  if (!initial) return fail(40101, "未登录", 401);
+  if (!isAdmin(initial)) return fail(40301, "需要管理员权限", 403);
+  const body = await readJsonBody(request, API_DOCS_MAX_BYTES * 6 + 1024).catch(() => null);
+  if (!body || typeof body.content !== "string" || Object.keys(body).some(key => !["content", "expectedRevision"].includes(key)) ||
+      (body.expectedRevision !== undefined && (typeof body.expectedRevision !== "string" || !/^[a-f0-9]{64}$/.test(body.expectedRevision)))) return fail(40001, "文档参数无效", 400);
+  if (Buffer.byteLength(body.content, "utf8") > API_DOCS_MAX_BYTES) return fail(40001, "文档内容过大", 400);
+  const current = getAuthUser(request);
+  if (!current || current.id !== initial.id) return fail(40101, "登录已失效", 401);
+  if (!isAdmin(current)) return fail(40301, "需要管理员权限", 403);
   try {
-    fs.mkdirSync(path.dirname(DOC_FILE), { recursive: true });
-    fs.writeFileSync(DOC_FILE, body.content, "utf8");
-    return ok({ saved: true, bytes: Buffer.byteLength(body.content, "utf8") });
-  } catch {
-    return fail(50001, "保存文档失败", 500);
-  }
+    const result = saveApiDocument(version, body.content, body.expectedRevision);
+    return result ? ok(result) : fail(40901, "文档已被更新，请重新读取后再保存", 409);
+  } catch { return fail(50001, "保存文档失败", 500); }
 }

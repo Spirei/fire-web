@@ -65,6 +65,7 @@ COPY --from=build /app/data/celebs-cache.json /app/public-cache-default/celebs-c
 COPY --from=build /app/data/earnings-cache/ /app/public-cache-default/earnings-cache/
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/lib ./lib
+COPY --from=build --chown=node:node /app/docs/api-spec.md /app/docs/api-spec-v2.md ./docs/
 COPY package.json ./
 COPY next.config.mjs ./
 COPY scripts/entrypoint.sh /app/entrypoint.sh

@@ -650,7 +650,7 @@ function fontHeaderFixture(ext) {
     assert.deepEqual(resolveApiTocSelection(groups, 'auth', 'start', new Set(['routes'])), { slug: 'auth', accentIndex: 1 });
     assert.deepEqual(resolveApiTocSelection(groups, 'removed-heading', 'routes', new Set()), { slug: 'routes', accentIndex: 1 });
     assert.deepEqual(resolveApiTocSelection([], 'removed-heading', 'start', new Set()), { slug: undefined, accentIndex: 0 });
-    const page = fs.readFileSync(path.join(root, 'app/api-docs/page.tsx'), 'utf8');
+    const page = fs.readFileSync(path.join(root, 'app/api-docs/ApiDocsClient.tsx'), 'utf8');
     assert(!page.includes('onPointerEnter={() => setSelectedSlug'), 'hover must not change committed selection');
     assert(page.includes('tabIndex={open ? 0 : -1}'), 'closed children must leave keyboard traversal');
   });
