@@ -1,5 +1,7 @@
 "use client";
 
+import { usePnlCalendarState } from "@/lib/usePnlCalendarState";
+
 import { sharedRead } from "@/lib/sharedRead";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FALLBACK_RATES, type Quote, type StockRecord, type TradeOrder } from "@/lib/types";
@@ -16,7 +18,7 @@ import { showToast } from "@/lib/toast";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
 import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCalendarCompact, fmtMoneyCompact, localDateKey } from "@/lib/format";
-import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
+import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses, peekPortfolioBundle } from "@/lib/portfolioSeries";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import { useMobileHorizontalSwipe } from "@/lib/useMobileHorizontalSwipe";
@@ -188,9 +190,7 @@ export default function AssetPnlAnalysis({
 
   const [period, setPeriod] = useState("全部");
   const [market, setMarket] = useState("全部");
-  // 本页偏好全部走「首帧用默认值 + 挂载后（绘制前）恢复本地偏好」，
-  // 原因：本页会被服务端渲染（/pnl 直接进），首帧读 localStorage 会造成水合不一致。
-  const [calMarket, setCalMarket] = useState<string>("全部");
+  const { market: calMarket, setMarket: setCalMarket, month: calMonth, setMonth: setCalMonth, view: calView, setView: setCalView, mode: calendarMode, setMode: setCalendarMode } = usePnlCalendarState();
   const [chartTab, setChartTab] = useState<"return" | "asset">("return");
   const [rankMode, setRankMode] = useState<"profit" | "loss">("profit");
   const [detailMode, setDetailMode] = useState<"profit" | "loss">("profit");
@@ -215,23 +215,6 @@ export default function AssetPnlAnalysis({
   const [orders, setOrders] = useState<TradeOrder[]>(() => warmBundle?.orders || []);
   // 收益日历-每日股票盈亏明细（点击日历某天弹出）
   const [dayDetail, setDayDetail] = useState<{ date: string; rows: CalendarDayRow[] } | null>(null);
-  const [calendarMode, setCalendarMode] = useState<"收益" | "收益率">("收益");
-  const [calView, setCalView] = useState<"year" | "month">("month");
-  const [calMonth, setCalMonth] = useState<{ y: number; m: number }>(() => {
-    const now = new Date();
-    return { y: now.getFullYear(), m: now.getMonth() + 1 };
-  });
-  useLayoutEffect(() => {
-    try {
-      const prefs = readPnlCalendarPrefs();
-      if (prefs.market) setCalMarket(prefs.market);
-      if (prefs.month) setCalMonth(prefs.month);
-      if (prefs.view) setCalView(prefs.view);
-      if (prefs.mode) setCalendarMode(prefs.mode);
-    } catch {
-      /* 读取失败保留默认偏好 */
-    }
-  }, []);
   useLayoutEffect(() => {
     const cached = readAssetPnlSnapshot();
     if (!cached) return;

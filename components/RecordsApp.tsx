@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import MobileBackGesture from "@/components/MobileBackGesture";
@@ -107,6 +109,7 @@ export default function RecordsApp({
   initialVersion,
   initialSymbol,
   initialCelebAvatars,
+  initialCelebs,
   initialUser,
   initialRecords,
   initialWatchGroups = [],
@@ -128,6 +131,7 @@ export default function RecordsApp({
   initialVersion: string;
   initialSymbol?: string;
   initialCelebAvatars?: Record<string, string>;
+  initialCelebs?: import("@/lib/celebsData").CelebsResult | null;
   initialUser: User;
   initialRecords: StockRecord[];
   initialWatchGroups?: WatchGroup[];
@@ -135,7 +139,7 @@ export default function RecordsApp({
   initialAssistantHistory?: import("@/lib/assistantHistory").AssistantHistoryState | null;
   initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
   initialFundBalances: Record<string, number>;
-  initialSettings: Pick<SiteSettings, "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
+  initialSettings: Pick<SiteSettings, "assetAnalysisOrder" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
   initialStockIcons: Record<string, string>;
   initialMarketIcons?: Record<string, string>;
   initialNavIcons?: Record<string, string>;
@@ -222,8 +226,9 @@ export default function RecordsApp({
   const settingsReloadGeneration = useRef(0);
   const mobilePrimaryOrder = useMemo(() => mobileWorkspaceGroups(navTabs, mobileNavigationOrder).primary.map(tab => tab.key), [navTabs, mobileNavigationOrder]);
   const [navReady, setNavReady] = useState(true);
-  const [settingsSub, setSettingsSub] = useState<string | null>(null);
-  const [settingsSubReady, setSettingsSubReady] = useState(initialTab !== "settings");
+  const searchParams = useSearchParams();
+  const [settingsSub, setSettingsSub] = useState<string | null>(() => searchParams.get("sub"));
+  const [settingsSubReady, setSettingsSubReady] = useState(true);
   const [groups, setGroups] = useState<GroupConfig[]>(initialSettings.groups);
   const [markets, setMarkets] = useState<Market[]>(initialSettings.markets);
   const [marketLabels, setMarketLabels] = useState<{ key: string; label: string; flag: string }[]>(initialSettings.marketLabels);
@@ -962,7 +967,7 @@ export default function RecordsApp({
     records, quotes, quoteAt, refreshing, livePrice, valuationReady,
     groups, markets, marketLabels, marketOptions, userLogs, systemLogs, user,
     navTabs, mobileNavigationOrder, settingsSub, settingsSubReady,
-    initialNow, initialVersion, initialSymbol, initialCelebAvatars, initialUser,
+    initialNow, initialVersion, initialSymbol, initialCelebAvatars, initialCelebs, initialUser,
     initialWatchGroups, initialAssistantHistory, initialPasskeys, initialFundBalances,
     initialSettings, initialAssetLibrary, initialCardLibrary, initialFeed
   ]);
@@ -1110,6 +1115,7 @@ export default function RecordsApp({
           )}
           {activeTab === "assets" && (
             <AssetAnalysisView
+              initialModuleOrder={initialSettings.assetAnalysisOrder}
               records={records}
               quotes={quotes}
               livePrice={livePrice}
@@ -1146,7 +1152,7 @@ export default function RecordsApp({
           {activeTab === "trading" && <FeedView initial={initialFeed} initialNow={initialNow} />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} initialNow={initialNow} />}
           {activeTab === "assistant" && <AssistantView page="assistant" symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}
-          {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} />}
+          {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} initialData={initialCelebs} />}
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
           {activeTab === "attachments" && (user?.role === "admin" ? <AttachmentsView /> : <NoPermission />)}
           {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView initialCdnEnabled={initialSettings.stockIconCdn} initialAssets={initialAssetLibrary?.assets} initialTotal={initialAssetLibrary?.total} /> : <NoPermission />)}

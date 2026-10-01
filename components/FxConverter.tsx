@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconCheck, IconPencil, IconPlus, IconRefresh, IconX } from "@tabler/icons-react";
 import CurrencyFlag from "@/components/CurrencyFlag";
@@ -32,9 +34,7 @@ import {
 const FX_ORDER_KEY = "fire:fx-order";
 const FX_HIDDEN_KEY = "fire:fx-hidden";
 
-function readUrlState(fallback: FxCurrency): { from: FxCurrency; amount: string } {
-  if (typeof window === "undefined") return { from: fallback, amount: "100" };
-  const params = new URLSearchParams(window.location.search);
+function readUrlState(fallback: FxCurrency, params: { get(name: string): string | null }): { from: FxCurrency; amount: string } {
   const from = params.get("from");
   const amount = params.get("amount");
   const parsed = amount != null ? parseFxAmount(amount) : 100;
@@ -63,11 +63,12 @@ function DragHandle({ label }: { label: string }) {
 export default function FxConverter() {
   const { currency: displayCurrency } = useDisplayCurrency();
   const start = isFxCurrency(displayCurrency) ? displayCurrency : "USD";
-  const [base, setBase] = useState<FxCurrency>(start);
-  const [text, setText] = useState("100");
-  const [urlReady, setUrlReady] = useState(false);
+  const searchParams = useSearchParams();
+  const [base, setBase] = useState<FxCurrency>(() => readUrlState(start, searchParams).from);
+  const [text, setText] = useState(() => readUrlState(start, searchParams).amount);
+  const [urlReady, setUrlReady] = useState(true);
   useLayoutEffect(() => {
-    const initial = readUrlState(start);
+    const initial = readUrlState(start, new URLSearchParams(window.location.search));
     setBase(initial.from);
     setText(initial.amount);
     setUrlReady(true);

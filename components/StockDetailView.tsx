@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FALLBACK_RATES, marketMeta } from "@/lib/types";
 import { fmtCap, fmtNum, fmtNumMarket, fmtPct, fmtPrice } from "@/lib/format";
@@ -206,13 +208,17 @@ export default function StockDetailView({ market, initialNow = 0, code, name, qu
     marketCap: Record<string, number> | null;
     kline: { d: string; o: number; h: number; l: number; c: number; v: number }[];
   } | null>(null);
-  const [faved, setFaved] = useState(false);
+  const [faved, setFaved] = useState(followed);
   const [following, setFollowing] = useState(false);
   const [showCur, setShowCur] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
-  const [tab, setTab] = useState<Tab>(initialTab);
-  const [tabReady, setTabReady] = useState(false);
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => {
+    const requested = searchParams.get("tab");
+    return requested && ["overview", "etf", "dividend", "financial", "company"].includes(requested) ? requested as Tab : initialTab;
+  });
+  const [tabReady, setTabReady] = useState(true);
   const [extendedPrices, setExtendedPrices] = useState<{ pre: ExtendedPoint | null; after: ExtendedPoint | null; regular: ExtendedPoint | null }>({ pre: null, after: null, regular: null });
   const [marketClock, setMarketClock] = useState(initialNow);
   useLayoutEffect(() => { setMarketClock(Date.now()); }, []);
@@ -250,7 +256,7 @@ export default function StockDetailView({ market, initialNow = 0, code, name, qu
   // URL 直达时在浏览器绘制前恢复页签，避免先闪现概览再切到目标页签。
   useLayoutEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("tab") as Tab | null;
-    setTab(requested && ["overview", "etf", "dividend", "financial", "company"].includes(requested) ? requested : "overview");
+    setTab(requested && ["overview", "etf", "dividend", "financial", "company"].includes(requested) ? requested : initialTab);
     setTabReady(true);
   }, [market, code]);
 

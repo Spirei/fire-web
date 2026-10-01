@@ -1,5 +1,7 @@
 "use client";
 
+import { usePersistedState } from "@/lib/usePersistedState";
+
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import echarts, { type EChartsInstance } from "@/lib/echarts";
 import RainbowNumberInput from "@/components/RainbowNumberInput";
@@ -46,11 +48,10 @@ interface KlineView {
   minutes: number;
   allDay: boolean;
 }
-function readKlineView(): KlineView | null {
+function normalizeKlineView(value: unknown): KlineView | null {
   try {
-    const raw = localStorage.getItem(KLINE_VIEW_KEY);
-    if (!raw) return null;
-    const v = JSON.parse(raw) as Partial<KlineView>;
+    if (!value || typeof value !== "object") return null;
+    const v = value as Partial<KlineView>;
     return {
       range: v.range && RANGE_VALUES.includes(v.range) ? v.range : "DAILY",
       session: v.session && SESSION_VALUES.includes(v.session) ? v.session : "ALL",
@@ -61,13 +62,10 @@ function readKlineView(): KlineView | null {
     return null;
   }
 }
-function saveKlineView(view: KlineView) {
-  try {
-    localStorage.setItem(KLINE_VIEW_KEY, JSON.stringify(view));
-  } catch {
-    /* 忽略存储异常 */
-  }
+function readKlineView() {
+  try { return normalizeKlineView(JSON.parse(localStorage.getItem(KLINE_VIEW_KEY) || "null")); } catch { return null; }
 }
+
 
 const KLINE_SETTINGS_KEY = "fire:kline-settings";
 interface KlineSettings {
@@ -79,11 +77,10 @@ interface KlineSettings {
   showMAValues: boolean;
 }
 const INDICATOR_KEYS = ["MA", "EMA", "BOLL", "MACD", "KDJ", "RSI", "VOL", "AMT"] as const;
-function readKlineSettings(): KlineSettings | null {
+function normalizeKlineSettings(value: unknown): KlineSettings | null {
   try {
-    const raw = localStorage.getItem(KLINE_SETTINGS_KEY);
-    if (!raw) return null;
-    const v = JSON.parse(raw) as Partial<KlineSettings>;
+    if (!value || typeof value !== "object") return null;
+    const v = value as Partial<KlineSettings>;
     const indicators = Array.isArray(v.indicators)
       ? v.indicators.filter((x): x is string => typeof x === "string" && (INDICATOR_KEYS as readonly string[]).includes(x))
       : [];
@@ -94,7 +91,7 @@ function readKlineSettings(): KlineSettings | null {
       indicators: Array.isArray(v.indicators) ? Array.from(new Set(indicators)) : ["MA", "VOL"],
       maConfigs: maConfigs.length > 0 ? maConfigs : DEFAULT_MA_CONFIGS,
       adjust: v.adjust === "none" ? "none" : v.adjust === "hfq" ? "hfq" : "qfq",
-      style: v.style && ALL_STYLES.includes(v.style) ? v.style : (readBasicStyleOrder()[0] || "area"),
+      style: v.style && ALL_STYLES.includes(v.style) ? v.style : "area",
       maLinesVisible: typeof v.maLinesVisible === "boolean" ? v.maLinesVisible : true,
       showMAValues: v.showMAValues === true
     };
@@ -102,13 +99,10 @@ function readKlineSettings(): KlineSettings | null {
     return null;
   }
 }
-function saveKlineSettings(s: KlineSettings) {
-  try {
-    localStorage.setItem(KLINE_SETTINGS_KEY, JSON.stringify(s));
-  } catch {
-    /* 忽略存储异常 */
-  }
+function readKlineSettings() {
+  try { return normalizeKlineSettings(JSON.parse(localStorage.getItem(KLINE_SETTINGS_KEY) || "null")); } catch { return null; }
 }
+
 const SESSIONS: { value: Session; label: string; time?: string; available?: boolean }[] = [
   { value: "ALL", label: "全天" },
   { value: "OVERNIGHT", label: "夜盘", time: "20:00–03:59", available: true },
@@ -353,14 +347,15 @@ function tooltipDate(label: string, intradayMode: boolean, marketName: string) {
 }
 
 export default function StockKline({ market, code, name, height = 420 }: Props) {
-  // 服务端与浏览器首帧使用同一默认值；持久化偏好在 layout effect 中恢复，避免详情直达时 hydration 差异。
-  const [initialView] = useState<KlineView | null>(null);
-  const [initialSettings] = useState<KlineSettings | null>(null);
-  const [range, setRange] = useState<Range>("DAY");
-  const [allDayView, setAllDayView] = useState(true);
+  const [savedView, persistView] = usePersistedState<KlineView | null>(KLINE_VIEW_KEY, null);
+  const [savedSettings, persistSettings] = usePersistedState<KlineSettings | null>(KLINE_SETTINGS_KEY, null);
+  const initialView = normalizeKlineView(savedView);
+  const initialSettings = normalizeKlineSettings(savedSettings);
+  const [range, setRange] = useState<Range>(initialView?.range ?? "DAY");
+  const [allDayView, setAllDayView] = useState(initialView?.allDay ?? true);
   const [viewRestored, setViewRestored] = useState(false);
   const [intradayMinutes, setIntradayMinutes] = useState(initialView?.minutes ?? 1);
-  const [session, setSession] = useState<Session>("ALL");
+  const [session, setSession] = useState<Session>(initialView?.session ?? "ALL");
   const [style, setStyle] = useState<ChartStyle>(initialSettings?.style ?? "area");
   const [settingsRestored, setSettingsRestored] = useState(false);
   const [items, setItems] = useState<KlineItem[]>([]);
@@ -430,12 +425,12 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
 
   // 每次进入个股或切换股票时恢复用户最后选择的周期。
   useLayoutEffect(() => {
-    const restored = readKlineView();
+    const restored = readKlineView() ?? initialView;
     setRange(restored?.range ?? "DAY");
     setAllDayView(restored?.allDay ?? true);
     setSession(restored?.session ?? "ALL");
     if (restored) setIntradayMinutes(restored.minutes);
-    const restoredSettings = readKlineSettings();
+    const restoredSettings = readKlineSettings() ?? initialSettings;
     setStyle(restoredSettings?.style ?? (readBasicStyleOrder()[0] || "area"));
     if (restoredSettings) {
       setAdjust(restoredSettings.adjust);
@@ -452,20 +447,20 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   // 记住上次的周期/时段/分钟视图，刷新或切换股票后自动还原
   useEffect(() => {
     if (!viewRestored) return;
-    saveKlineView({ range, session, minutes: intradayMinutes, allDay: allDayView });
+    persistView({ range, session, minutes: intradayMinutes, allDay: allDayView });
   }, [range, session, intradayMinutes, allDayView, viewRestored]);
 
   // 记住技术指标与图表设置（复权/样式/MA），刷新或切换股票后自动还原
   useEffect(() => {
     if (!settingsRestored) return;
-    saveKlineSettings({ indicators: selectedIndicators, maConfigs, adjust, style, maLinesVisible, showMAValues });
+    persistSettings({ indicators: selectedIndicators, maConfigs, adjust, style, maLinesVisible, showMAValues });
   }, [selectedIndicators, maConfigs, adjust, style, maLinesVisible, showMAValues, settingsRestored]);
 
   useEffect(() => {
     const order = readBasicStyleOrder();
     setBasicStyleOrder(order);
     // 样式由上方设置持久化负责，这里只恢复菜单顺序，避免把用户上次选的样式覆盖回第一个基础样式
-    setStyle(readKlineSettings()?.style ?? readBasicStyleOrder()[0] ?? "area");
+    setStyle(readKlineSettings()?.style ?? initialSettings?.style ?? readBasicStyleOrder()[0] ?? "area");
   }, []);
 
   useEffect(() => {

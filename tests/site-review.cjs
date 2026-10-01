@@ -2778,8 +2778,6 @@ function fontHeaderFixture(ext) {
     assert(!view.includes('GlobalEconomyHeatmap'));
     assert(!view.includes('["heatmap", "经济热图"'));
     assert.match(view, /section === "assets" \? <AssetMarketCapRanking \/> : <FxConverter \/>/);
-    assert.match(view, /useState<GlobalSection>\("assets"\)/, '服务端与客户端首帧必须使用相同区块');
-    assert.match(view, /useLayoutEffect\(\(\) => \{[\s\S]*?setSection\(parseGlobalSection\(new URLSearchParams\(window\.location\.search\)/, 'URL 区块只能在水合后读取');
     assert.match(view, /if \(pageSize \|\| !urlReady\) return;/, '读取 URL 前不得回写默认区块覆盖分享链接');
     assert.match(css, /\.fx-converter-card\s*\{[^}]*grid-template-columns:\s*1fr 1fr/, '汇率换算必须一排两个');
   });

@@ -331,8 +331,10 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
     [filtered, safePage]
   );
   const [detail, setDetail] = useState<StockRecord | null>(() => {
-    if (!initialSymbol) return null;
-    const [market, code] = initialSymbol.split(".");
+    const symbol = initialSymbol || searchParams.get("symbol")?.replace(/^([A-Z]{2,5})[:.-]/i, "$1.");
+    if (!symbol) return null;
+    const [market, ...parts] = symbol.toUpperCase().split(".");
+    const code = parts.join(".");
     if (!market || !code) return null;
     return records.find((item) => item.market.toUpperCase() === market && item.code.toUpperCase() === code) ?? {
       id: `symbol:${market}:${code}`,

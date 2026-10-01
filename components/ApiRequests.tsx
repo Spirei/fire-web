@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { IconActivity, IconArrowLeft, IconArrowUpRight, IconCheck, IconChevronLeft, IconChevronRight, IconPlayerPause, IconPlayerPlay, IconRefresh, IconSearch, IconX } from "@tabler/icons-react";
@@ -65,8 +67,9 @@ function RequestHeatmap({ counts, today, filters, onChange }: { counts: Record<s
 }
 
 export default function ApiRequests({ standalone = false }: { standalone?: boolean }) {
-  const [filters, setFilters] = useState<RequestFilters>(() => parseRequestFilters(new URLSearchParams()));
-  const [ready, setReady] = useState(false);
+  const searchParams = useSearchParams();
+  const [filters, setFilters] = useState<RequestFilters>(() => parseRequestFilters(new URLSearchParams(searchParams.toString())));
+  const [ready, setReady] = useState(true);
   const [snapshot, setSnapshot] = useState<RequestSnapshot | null>(null);
   const [error, setError] = useState("");
   const [blocked, setBlocked] = useState(false);

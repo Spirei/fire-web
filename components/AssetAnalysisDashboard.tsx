@@ -1,5 +1,7 @@
 "use client";
 
+import { usePnlCalendarState } from "@/lib/usePnlCalendarState";
+
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCalendarCompact, fmtMoneyCompact, fmtNumMarket, fmtPct, fmtQty } from "@/lib/format";
@@ -32,7 +34,7 @@ import Pagination from "@/components/Pagination";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
 import PnlCalendar from "@/components/PnlCalendar";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
-import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, readPnlCalendarPrefs, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
+import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses } from "@/lib/portfolioSeries";
 
 type Period = "month" | "1m" | "6m" | "ytd" | "1y" | "all" | "custom";
@@ -67,6 +69,7 @@ function readEffectiveBalanceCache(key: string): Record<FundCurrency, number> | 
 }
 
 interface Props {
+  initialModuleOrder?: { left: string[]; right: string[] };
   positions: StockRecord[];
   quotes: Record<string, Quote>;
   livePrice: (record: StockRecord) => number;
@@ -291,7 +294,7 @@ function DateRangePicker({ range, onApply, onClose }: { range: DateRange; onAppl
   </div>;
 }
 
-export default function AssetAnalysisDashboard({ positions, quotes, livePrice, rates, currency, stockIcons, user, onRefreshMarketData, onOpenPnlAnalysis }: Props) {
+export default function AssetAnalysisDashboard({ initialModuleOrder, positions, quotes, livePrice, rates, currency, stockIcons, user, onRefreshMarketData, onOpenPnlAnalysis }: Props) {
   const [period, setPeriod] = usePersistedState<Period>("fire:asset-period", "ytd");
   const [chartTab, setChartTab] = usePersistedState<ChartTab>("fire:asset-chart-tab", "return");
   const [weighting, setWeighting] = usePersistedState<"simple" | "time">("fire:asset-weighting", "simple");
@@ -322,29 +325,16 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const [orders, setOrders] = useState<TradeOrder[]>([]);
 
   // 模块顺序：拖动手柄调整后写回 site_settings.assetAnalysisOrder（左右两栏各一组）
-  const [moduleOrder, setModuleOrder] = useState<{ left: string[]; right: string[] }>(ASSET_MODULE_ORDER_DEFAULT);
+  const [moduleOrder, setModuleOrder] = useState<{ left: string[]; right: string[] }>(() => mergeModuleOrder(initialModuleOrder));
   const [dragModule, setDragModule] = useState<{ column: "left" | "right"; id: string } | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const moduleHandlePressed = useRef<string | null>(null);
 
   // 收益日历（与资产盈亏分析共用 lib/pnlCalendar 口径）
-  const [calMonth, setCalMonth] = useState(() => {
-    const now = new Date();
-    return { y: now.getFullYear(), m: now.getMonth() + 1 };
-  });
-  const [calView, setCalView] = useState<"year" | "month">("month");
-  const [calMode, setCalMode] = useState<"收益" | "收益率">("收益");
-  const [calMarket, setCalMarket] = useState<string>("全部");
+  const { market: calMarket, setMarket: setCalMarket, month: calMonth, setMonth: setCalMonth, view: calView, setView: setCalView, mode: calMode, setMode: setCalMode } = usePnlCalendarState();
   const [dayDetail, setDayDetail] = useState<{ date: string; rows: CalendarDayRow[] } | null>(null);
 
-  // 日历偏好（市场 / 月份 / 年视图 / 指标）恢复：放到 useLayoutEffect 里，绘制前生效、且不破坏水合
-  useLayoutEffect(() => {
-    const prefs = readPnlCalendarPrefs();
-    if (prefs.market) setCalMarket(prefs.market);
-    if (prefs.view) setCalView(prefs.view);
-    if (prefs.mode) setCalMode(prefs.mode);
-    if (prefs.month) setCalMonth(prefs.month);
-  }, []);
+
   const [holdingSearch, setHoldingSearch] = useState("");
   const [holdingPage, setHoldingPage] = useState(1);
   const [holdingSort, setHoldingSort] = usePersistedState<HoldingSort | null>("fire:asset-holdings-sort", null);

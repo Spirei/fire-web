@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import PasswordInput from "@/components/PasswordInput";
 import PasskeySettings from "@/components/PasskeySettings";
 import { createPasskeySettingsData } from "@/lib/passkeySettingsData";
@@ -80,7 +82,7 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     closeTimer.current = setTimeout(() => onCloseRef.current(), reducedMotion ? 0 : 180);
   }, []);
-  useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
+  useLayoutEffect(() => { setMounted(true); }, []);
   useEffect(() => {
     if (!mounted) return;
     const previous = document.body.style.overflow;
@@ -98,8 +100,7 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
       if (closeTimer.current) clearTimeout(closeTimer.current);
     };
   }, [mounted, requestClose]);
-  if (!mounted) return null;
-  return createPortal(
+  const content = (
     <div className={`sc-detail-layer fixed inset-0 z-[10900] flex items-center justify-center p-4 sm:p-8${closing ? " is-closing" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" aria-label="关闭设置详情" className="sc-detail-scrim absolute inset-0" onClick={requestClose} disabled={closing || closeDisabled} />
       <section className="sc-detail-dialog relative flex w-full max-w-[600px] flex-col overflow-hidden" data-detail={detailKey}>
@@ -115,9 +116,9 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
         <div className="sc-detail-dialog-scroll min-h-0 flex-1 overflow-y-auto">{children}</div>
         </div>
       </section>
-    </div>,
-    document.body
+    </div>
   );
+  return mounted ? createPortal(content, document.body) : content;
 }
 
 const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "passkeys", "authorizations", "database", "cron", "about"] as const;
@@ -751,21 +752,26 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       else acc.push({ label: it.groupLabel, items: [{ sub: it.sub, anchor: it.anchor, label: it.label, groupLabel: it.groupLabel }] });
       return acc;
     }, []);
+  const searchParams = useSearchParams();
+  const initialLocation = resolveSettingsLocation(new URLSearchParams(searchParams.toString()), SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || (!ADMIN_SUB_KEYS.has(item.sub) && !item.adminOnly)), SETTINGS_CATEGORIES);
   const [sub, setSub] = useState<SubKey>(() => {
-    const valid = isSettingsSub(initialSub) ? initialSub : (isAdminUser ? "site" : "profile");
+    const requested = initialLocation.item?.sub || initialSub;
+    const valid = isSettingsSub(requested) ? requested : (isAdminUser ? "site" : "profile");
     return isAdminUser || !ADMIN_SUB_KEYS.has(valid) ? valid : "profile";
   });
   const [activeAnchor, setActiveAnchor] = useState<string>(() => {
     const valid = isSettingsSub(initialSub) ? initialSub : (isAdminUser ? "site" : "profile");
-    // 首次渲染必须与服务端完全一致；URL 中的锚点在挂载后的同步 effect 再恢复。
-    return SETTINGS_SEARCH_INDEX.find((x) => x.sub === valid)?.anchor || "info";
+    return initialLocation.item?.anchor || SETTINGS_SEARCH_INDEX.find((x) => x.sub === valid)?.anchor || "info";
   });
   const activeSubMeta = visibleGroups.flatMap((g) => g.items).find((item) => item.key === sub);
-  const [categoryPage, setCategoryPage] = useState<string | null>(initialSub ? null : "home");
+  const [categoryPage, setCategoryPage] = useState<string | null>(initialLocation.category);
   useEffect(() => {
     if (categoryPage === "home" || categoryPage === "account") passkeyData.preload();
   }, [categoryPage, passkeyData]);
-  const [detailOrigin, setDetailOrigin] = useState<string | null>(null);
+  const [detailOrigin, setDetailOrigin] = useState<string | null>(() => {
+    const origin = searchParams.get("from");
+    return origin === "home" || SETTINGS_CATEGORIES.some(item => item.key === origin) ? origin : null;
+  });
   const homeIsBackground = categoryPage === "home" || (!categoryPage && detailOrigin === "home");
   const allowedItems = SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || (!ADMIN_SUB_KEYS.has(item.sub) && !item.adminOnly));
   const categories = SETTINGS_CATEGORIES.map((category) => ({ ...category, items: category.anchors.flatMap((anchor) => allowedItems.filter((item) => item.anchor === anchor)) })).filter((category) => category.items.length > 0);

@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
 import type { StockRecord } from "@/lib/types";
@@ -264,9 +266,16 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
   const [logoBases, setLogoBases] = useState<{ us: string; cn: string } | null>(null);
   const [timeKey, setTimeKey] = usePersistedState<TimeKey>("fire:earnings-time", "all");
   const [capKey, setCapKey] = usePersistedState<CapKey | CapKeyCN>("fire:earnings-cap", "all");
-  const [marketKey, setMarketKey] = useState<MarketKey>("US");
-  const [stockKey, setStockKey] = useState<StockKey>("all");
-  const [urlReady, setUrlReady] = useState(false);
+  const searchParams = useSearchParams();
+  const [marketKey, setMarketKey] = useState<MarketKey>(() => {
+    const value = searchParams.get("market")?.toUpperCase();
+    return value && ["US", "HK", "CN", "JP", "KR", "ALL"].includes(value) ? value as MarketKey : "US";
+  });
+  const [stockKey, setStockKey] = useState<StockKey>(() => {
+    const value = searchParams.get("type");
+    return value === "watch" || value === "hold" || value === "special" ? value : "all";
+  });
+  const [urlReady, setUrlReady] = useState(true);
   useLayoutEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     const m = sp.get("market")?.toUpperCase();

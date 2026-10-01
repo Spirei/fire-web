@@ -1,7 +1,9 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import dynamic from "next/dynamic";
+import FxConverter from "@/components/FxConverter";
 import { fmtPct } from "@/lib/format";
 import MarketIcon from "@/components/MarketIcon";
 import { useAssetIcons } from "@/lib/useAssetIcons";
@@ -212,10 +214,7 @@ function EmptyMarketIcon() {
   );
 }
 
-const FxConverter = dynamic(() => import("@/components/FxConverter"), {
-  ssr: false,
-  loading: () => <div className="h-[420px] animate-pulse rounded-card bg-bg-gray dark:bg-white/[.04]" />
-});
+
 
 function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
   const { stockIcons, assetIcons } = useAssetIcons(["stock", "crypto", "metal", "icon"]);
@@ -440,10 +439,9 @@ function SectionIcon({ section }: { section: GlobalSection }) {
 }
 
 export default function GlobalPreviewView({ pageSize }: { pageSize?: number }) {
-  // 布局内的页签拿不到服务端 searchParams：首帧统一用 assets，水合后再读取 URL。
-  // 不能在 useState 初始化时只在浏览器读 URL，否则 /global?section=convert 会水合不一致。
-  const [section, setSection] = useState<GlobalSection>("assets");
-  const [urlReady, setUrlReady] = useState(false);
+  const searchParams = useSearchParams();
+  const [section, setSection] = useState<GlobalSection>(() => pageSize ? "assets" : parseGlobalSection(searchParams.get("section")));
+  const [urlReady, setUrlReady] = useState(true);
 
   useLayoutEffect(() => {
     if (pageSize) return;

@@ -79,7 +79,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* Google 翻译（含 Chrome 内置翻译）看到这一条就不再动这个页面 */}
         <meta name="google" content="notranslate" />
         <script dangerouslySetInnerHTML={{ __html: `try{if(document.documentElement.dataset.themeMode==='system'){document.documentElement.classList.toggle('dark',matchMedia('(prefers-color-scheme: dark)').matches);}}catch(e){}` }} />
-        <script dangerouslySetInnerHTML={{ __html: `if(location.pathname==='/simple-app')document.documentElement.classList.add('simple-app-active');` }} />
         {/* PWA：可安装（Chrome「在应用中打开」/ Safari 添加到主屏幕） */}
         <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="theme-color" content={dark ? palette.dark[0] : palette.light[0]} />
@@ -94,6 +93,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             __html: `try{var ls=localStorage,ks=Object.keys(ls),legacy='sto'+'cklog',legacyTheme=ls.getItem(legacy+'.theme');for(var i=0;i<ks.length;i++){var k=ks[i];if(k.slice(0,legacy.length)===legacy){var n='fire'+k.slice(legacy.length);if(ls.getItem(n)===null)ls.setItem(n,ls.getItem(k));ls.removeItem(k);}}var root=document.documentElement,hasThemeCookie=/(?:^|; *)(?:fire_theme|stocklog_theme)=/.test(document.cookie);if(!hasThemeCookie){var t=ls.getItem('fire.theme')||legacyTheme;if(t==='dark'||t==='light')root.classList.toggle('dark',t==='dark');}var st=root.style;var sp=Number(ls.getItem('fire:asset-analysis:split-v1'));if(sp>=24&&sp<=52){st.setProperty('--asset-left-fr',sp+'fr');st.setProperty('--asset-right-fr',(100-sp)+'fr');}var tp=JSON.parse(ls.getItem('fire:trading-square-window-pos')||'null');if(tp&&typeof tp.x==='number'&&typeof tp.y==='number'&&isFinite(tp.x)&&isFinite(tp.y)&&tp.x>-10000&&tp.x<10000&&tp.y>=0){st.setProperty('--trading-x',tp.x+'px');st.setProperty('--trading-y',tp.y+'px');}}catch(e){}`
           }}
         />
+        <script dangerouslySetInnerHTML={{ __html: `if(location.pathname==='/simple-app'){document.documentElement.classList.add('simple-app-active');try{document.documentElement.classList.toggle('dark',localStorage.getItem('fire-simple-theme')==='dark');var sw=JSON.parse(localStorage.getItem('fire-simple-win')||'null');if(sw&&Number.isFinite(sw.w))document.documentElement.style.setProperty('--saved-win-w',Math.max(360,sw.w)+'px');}catch(e){}}` }} />
       </head>
       <body className="font-sans">
         <CapsuleScope />

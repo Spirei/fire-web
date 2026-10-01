@@ -1,5 +1,9 @@
 "use client";
 
+import { usePersistedState } from "@/lib/usePersistedState";
+
+import { useSearchParams } from "next/navigation";
+
 import { sharedRead } from "@/lib/sharedRead";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fmtMoney, fmtMoneyCompact, fmtPct, fmtPrice, fmtQty } from "@/lib/format";
@@ -80,19 +84,6 @@ const HOLDING_SORT_KEYS: Record<HoldingColumnKey, SortKey> = {
   weight: "weight"
 };
 
-function loadSavedSort(): SortState | null {
-  try {
-    const raw = localStorage.getItem(SORT_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<SortState>;
-    if (parsed && SORT_KEYS.includes(parsed.key as SortKey) && (parsed.dir === "asc" || parsed.dir === "desc")) {
-      return { key: parsed.key as SortKey, dir: parsed.dir };
-    }
-  } catch {
-    /* 无效的本地排序配置忽略 */
-  }
-  return null;
-}
 
 interface EditorRow {
   key: string;
@@ -196,9 +187,8 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const merged = tabOverride ? [...tabOverride, ...baseTabs.filter((m) => !tabOverride.includes(m))] : baseTabs;
     return merged.filter((m) => hasMarketRecords(m));
   }, [tabOverride, baseTabs, hasMarketRecords]);
-  // 服务端与客户端首帧统一为总资产；URL 中的市场在绘制前恢复，避免刷新时先渲染
-  // 第一个市场并暂时隐藏“显示货币 / 市场盈亏”。
-  const [active, setActive] = useState<string>("TOTAL");
+  const searchParams = useSearchParams();
+  const [active, setActive] = useState<string>(() => searchParams.get("market") || "TOTAL");
   useLayoutEffect(() => {
     setActive(new URLSearchParams(window.location.search).get("market") || "TOTAL");
   }, []);
@@ -236,7 +226,10 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const [editRecord, setEditRecord] = useState<StockRecord | null>(null);
   const [editForm, setEditForm] = useState({ name: "", market: "", price: "", cost: "", qty: "", group: "", note: "" });
   const [editSaving, setEditSaving] = useState(false);
-  const [selectedHolding, setSelectedHolding] = useState<StockRecord | null>(null);
+  const [selectedHolding, setSelectedHolding] = useState<StockRecord | null>(() => {
+    const match = /^([A-Z]{2,5})[:.-](.+)$/i.exec(searchParams.get("symbol") || "");
+    return match ? records.find(record => record.market.toUpperCase() === match[1].toUpperCase() && record.code.toUpperCase() === match[2].toUpperCase()) || null : null;
+  });
   const [orders, setOrders] = useState<TradeOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [tradeRecord, setTradeRecord] = useState<StockRecord | null>(null);
@@ -253,19 +246,14 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const { currency: displayCur, setCurrency: setDisplayCur } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
   // 市场盈亏卡片拖动顺序（本地记忆）
-  const [pnlOrder, setPnlOrder] = useState<string[]>([]);
+  const [savedPnlOrder, setPnlOrder] = usePersistedState<string[]>("fire:holdings:pnl-order", []);
+  const pnlOrder = Array.isArray(savedPnlOrder) ? savedPnlOrder.filter(item => typeof item === "string") : [];
   // 浏览器缓存（汇率 + 市场盈亏卡片顺序）统一在挂载后、绘制前恢复，避免水合不一致与闪烁
   useLayoutEffect(() => {
     const cachedRates = readCachedRates();
     if (cachedRates) {
       setRates((prev) => ({ ...prev, ...cachedRates }));
       setRatesReady(true);
-    }
-    try {
-      const savedOrder = JSON.parse(localStorage.getItem("fire:holdings:pnl-order") || "null");
-      if (Array.isArray(savedOrder)) setPnlOrder(savedOrder);
-    } catch {
-      /* 忽略 */
     }
   }, []);
   const pnlDragIndex = useRef<number | null>(null);
@@ -337,12 +325,8 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const factor = active === "TOTAL" ? toUsd(record.market, 1) : 1;
     return sum + livePrice(record) * (Number(record.qty) || 0) * factor;
   }, 0), [filtered, active, livePrice, rates]);
-  const [sort, setSort] = useState<SortState | null>(null);
-
-  useEffect(() => {
-    const saved = loadSavedSort();
-    if (saved) setSort(saved);
-  }, []);
+  const [savedSort, setSort] = usePersistedState<SortState | null>(SORT_STORAGE_KEY, null);
+  const sort = savedSort && SORT_KEYS.includes(savedSort.key) && ["asc", "desc"].includes(savedSort.dir) ? savedSort : null;
 
   function sortValue(r: StockRecord, key: SortKey): number | string | null {
     const qty = Number(r.qty);
@@ -535,15 +519,6 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
         next = { key, dir: "asc" };
       } else {
         next = null;
-      }
-      try {
-        if (next) {
-          localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(next));
-        } else {
-          localStorage.removeItem(SORT_STORAGE_KEY);
-        }
-      } catch {
-        /* 忽略存储异常 */
       }
       return next;
     });

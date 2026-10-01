@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
 import { useRates, usdCap, fmtUsd } from "@/lib/useRates";
@@ -112,26 +114,33 @@ function writeFinReportCache(data: FinancialAttachment[]) {
   try { localStorage.setItem(FINREPORT_CACHE_KEY, JSON.stringify({ at: Date.now(), data })); } catch { /* 忽略 */ }
 }
 
+function financialView(value: string | null) {
+  if (!value) return {};
+  const decode = (part: string) => { try { return decodeURIComponent(part); } catch { return part; } };
+  const [market, exchange, companyCode, year, category] = value.split("/");
+  return { market: market || undefined, exchange: exchange ? decode(exchange) : undefined, companyCode: companyCode ? decode(companyCode) : undefined, year: year && Number.isFinite(Number(year)) ? Number(year) : undefined, category: category ? reportCategoryName(decode(category)) : undefined };
+}
+
 export function FinancialAttachments({ standalone }: { standalone?: boolean }) {
+  const searchParams = useSearchParams();
   const { stockIcons, marketIcons, assets } = useAssetIcons(["stock", "market"], { fullCatalog: true });
   // SSR 首帧统一为加载态；挂载前恢复本地缓存，避免水合不一致及可见闪烁。
   const [cachedFiles, setCachedFiles] = useState<FinancialAttachment[] | null>(null);
   const [files, setFiles] = useState<FinancialAttachment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [urlReady, setUrlReady] = useState(false);
+  const [urlReady, setUrlReady] = useState(true);
   const [error, setError] = useState("");
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
   // 类网盘文件夹导航：全部 → 市场 → 交易所 → 股票 → 年 → 报告类型；路径持久化到 ?view= 防止刷新重置。
   // 主流存储网站做法：URL 用稳定代码（公司 code / 报告类型英文码），显示时才映射为名称，避免中文长名撑爆 query。
-  const [view, setView] = useState<{ market?: string; exchange?: string; companyCode?: string; year?: number; category?: string }>({});
+  const [view, setView] = useState<{ market?: string; exchange?: string; companyCode?: string; year?: number; category?: string }>(() => financialView(searchParams.get("view")));
   useLayoutEffect(() => {
     const cached = readFinReportCache();
     setCachedFiles(cached);
     if (cached) { setFiles(cached); setLoading(false); }
     const v = new URLSearchParams(window.location.search).get("view");
     if (v) {
-      const [market, exchange, companyCode, year, category] = v.split("/");
-      setView({ market: market || undefined, exchange: exchange ? decodeURIComponent(exchange) : undefined, companyCode: companyCode ? decodeURIComponent(companyCode) : undefined, year: year ? Number(year) : undefined, category: category ? reportCategoryName(decodeURIComponent(category)) : undefined });
+      setView(financialView(v));
     }
     setUrlReady(true);
   }, []);

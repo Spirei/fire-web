@@ -715,6 +715,19 @@ async function refreshCelebs(rows: CelebRow[], cache: CacheShape | null, forceSt
   return { celebs: finalCelebs, detail, anyReal };
 }
 
+/** Read-only first-frame snapshot: no quote requests, refresh jobs or database seeding. */
+export function getCelebsSnapshot(): CelebsResult {
+  const rows = listCelebRows(true);
+  const cache = readCache();
+  const overrides = getCelebAvatars();
+  const celebs = rows.map(row => {
+    const cached = cache?.celebs.find(item => item.id === row.id);
+    const base = cached ? withBenchmarks({ ...cached }) : rowToCeleb(row);
+    return { ...base, avatar: overrides[row.id] || row.avatar || base.avatar };
+  });
+  return { celebs, source: cache?.celebs.length ? "cache" : "sample", updatedAt: cache?.at && Number.isFinite(cache.at) ? new Date(cache.at).toISOString() : "", detail: fillDetail(rows, cache?.detail || {}) };
+}
+
 export async function getCelebsData(): Promise<CelebsResult> {
   seedCelebsIfEmpty();
   const rows = listCelebRows(true);

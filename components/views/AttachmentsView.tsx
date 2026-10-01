@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
 import { showToast } from "@/lib/toast";
@@ -158,8 +160,12 @@ function AttachmentModalShell({ children, onClose, labelledBy, alert = false, wi
 
 export default function AttachmentsView() {
   // 分类状态 URL 持久化：刷新保持当前分类（?category=docs|reports|library）
-  const [category, setCategory] = useState<"docs" | "reports" | "library">("docs");
-  const [urlReady, setUrlReady] = useState(false);
+  const searchParams = useSearchParams();
+  const [category, setCategory] = useState<"docs" | "reports" | "library">(() => {
+    const value = searchParams.get("category");
+    return value === "reports" || value === "library" ? value : "docs";
+  });
+  const [urlReady, setUrlReady] = useState(true);
   useLayoutEffect(() => {
     const seg = new URLSearchParams(window.location.search).get("category");
     setCategory(seg === "reports" || seg === "library" ? seg : "docs");

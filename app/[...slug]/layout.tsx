@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { getSiteSettings } from "@/lib/settings";
-import { getCelebAvatars } from "@/lib/celebsData";
+import { getCelebAvatars, getCelebsSnapshot } from "@/lib/celebsData";
 import { LEGACY_SESSION_COOKIE, SESSION_COOKIE, getUserByToken, isAdmin, needsSetup } from "@/lib/auth";
 import { clientSettings } from "@/lib/settingsClient";
 import { listRecords, listSecurityLogs } from "@/lib/store";
@@ -104,6 +104,7 @@ export default async function SlugLayout({
   const initialCardLibrary = tab.key === "cards" ? cardLibraryForUser(user.id) : null;
   const initialCardCovers = initialCardLibrary ? heldCardCoverUrls(initialCardLibrary) : [];
   // 只读取当前账号的动态快照；保留旧路径和旧广场数据，不加载旧作者头像。
+  const initialCelebs = tab.key === "celebs" ? getCelebsSnapshot() : null;
   const initialFeed = tab.key === "trading" ? feedSnapshot(user.id) : null;
 
   return (
@@ -137,6 +138,7 @@ export default async function SlugLayout({
           initialVersion={CURRENT_VERSION.version}
           initialSymbol={initialSymbol}
           initialCelebAvatars={celebAvatars}
+          initialCelebs={initialCelebs}
           initialUser={user}
           initialRecords={initialRecords}
           initialWatchGroups={initialWatchGroups}
@@ -159,6 +161,7 @@ export default async function SlugLayout({
             pwaIcon: settings.pwaIcon,
             appDisplayName: settings.appDisplayName,
             appDisplayIcon: settings.appDisplayIcon,
+            assetAnalysisOrder: settings.assetAnalysisOrder,
             tabs: settings.tabs,
             mobileNavigationOrder: settings.mobileNavigationOrder,
             groups: settings.groups,

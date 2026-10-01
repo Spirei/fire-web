@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MARKET_LIST, marketMeta } from "@/lib/types";
 import { showToast } from "@/lib/toast";
@@ -279,11 +281,16 @@ function Avatar({
 
 export default function AssetLibraryView({ initialCdnEnabled, initialAssets = [], initialTotal = 0 }: { initialCdnEnabled?: boolean; initialAssets?: Asset[]; initialTotal?: number } = {}) {
   const rates = useRates();
-  const [tab, setTab] = useState<TabKey>("stock");
-  const [selected, setSelected] = useState("ALL");
-  const [assets, setAssets] = useState<Asset[]>(initialAssets);
-  const [assetTotal, setAssetTotal] = useState(initialTotal);
-  const [assetsLoading, setAssetsLoading] = useState(initialAssets.length === 0);
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab");
+  const initialSort = searchParams.get("sort");
+  const initialPage = Number(searchParams.get("page"));
+  const defaultStockPage = (!initialTab || initialTab === "stock") && (!searchParams.get("market") || searchParams.get("market") === "ALL") && (!initialSort || initialSort === "rank") && searchParams.get("dir") !== "asc" && !searchParams.get("q") && (!initialPage || initialPage === 1);
+  const [tab, setTab] = useState<TabKey>(() => initialTab && ["stock", "market", "flag", "broker", "group", "crypto", "metal", "icon", "card"].includes(initialTab) ? initialTab as TabKey : "stock");
+  const [selected, setSelected] = useState(() => searchParams.get("market") || "ALL");
+  const [assets, setAssets] = useState<Asset[]>(defaultStockPage ? initialAssets : []);
+  const [assetTotal, setAssetTotal] = useState(defaultStockPage ? initialTotal : 0);
+  const [assetsLoading, setAssetsLoading] = useState(!defaultStockPage || initialAssets.length === 0);
   const [marketRows, setMarketRows] = useState<MarketRow[]>([]);
   const [countryRows, setCountryRows] = useState<CountryCatalogItem[]>([]);
   const [flagQuery, setFlagQuery] = useState("");
@@ -318,10 +325,10 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
   const [syncStatus, setSyncStatus] = useState<{ running: boolean; total: number; done: number; current: string; error: string; lastSyncAt: string } | null>(null);
   const [checkingDelisted, setCheckingDelisted] = useState(false);
   const [cleaningFiles, setCleaningFiles] = useState(false);
-  const [sortKey, setSortKey] = useState<"rank" | "code" | "name" | "board" | "price" | "changePct" | "marketCap">("rank");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [query, setQuery] = useState<string>("");
-  const [topPage, setTopPage] = useState<number>(1);
+  const [sortKey, setSortKey] = useState<"rank" | "code" | "name" | "board" | "price" | "changePct" | "marketCap">(() => initialSort && ["rank", "code", "name", "board", "price", "changePct", "marketCap"].includes(initialSort) ? initialSort as "rank" : "rank");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(() => searchParams.get("dir") === "asc" ? "asc" : "desc");
+  const [query, setQuery] = useState<string>(() => searchParams.get("q") || "");
+  const [topPage, setTopPage] = useState<number>(() => Number.isFinite(initialPage) && initialPage >= 1 ? Math.floor(initialPage) : 1);
   const [listPage, setListPage] = useState(1);
   /** 卡片类目单独分页（每页条数随列表 / 网格变化，不能共用 listPage） */
   const [cardPage, setCardPage] = useState(1);
@@ -331,13 +338,13 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
   /** 「卡片」类目：卡面素材单独拉（437 张，不进 useAssetIcons 的全局缓存，避免拖慢其他页面） */
   const [cardAssets, setCardAssets] = useState<Asset[]>([]);
   const [cardQuery, setCardQuery] = useState("");
-  const [cardLoading, setCardLoading] = useState(false);
+  const [cardLoading, setCardLoading] = useState(true);
 
   /**
    * 卡片素材的展示方式：列表（一行一张，看信息方便）/ 网格（卡面墙，挑图方便）。
    * 属于「此刻看什么」的视图状态，按约定走 URL（?view=grid），刷新 / 前进后退 / 分享都保持。
    */
-  const [cardView, setCardView] = useState<"list" | "grid">("list");
+  const [cardView, setCardView] = useState<"list" | "grid">(() => searchParams.get("view") === "grid" ? "grid" : "list");
   const [names, setNames] = useState<Record<string, string>>({});
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
@@ -362,7 +369,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
 
   const stockPageSignature = `${selected}|${topPage}|${sortKey}|${sortDir}|${query.trim()}`;
 
-  // SSR 与客户端首帧固定使用同一默认状态；水合完成前再恢复 URL，避免排序/分类属性不一致。
+  // URL 已参与 SSR 首帧；挂载时仅同步浏览器当前位置。
   useLayoutEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     const nextTab = sp.get("tab");
@@ -2731,7 +2738,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
           <div className="overflow-hidden rounded-xl border border-edge">
             <div className="flex items-center justify-between gap-3 border-b border-edge px-4 py-2.5">
               <span className="text-[11px] font-semibold text-faint">
-                卡片素材 · {filteredCardRows.length} 张{cardLoading ? "（加载中…）" : ""}
+                卡片素材 · {cardLoading && cardAssets.length === 0 ? "正在读取…" : `${filteredCardRows.length} 张`}
               </span>
               <span className="ml-auto flex items-center gap-2">
                 <input

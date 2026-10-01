@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const SIZES = {
@@ -35,6 +35,8 @@ export default function AppModal({
   closeDisabled?: boolean;
   priority?: boolean;
 }) {
+  const [mounted, setMounted] = useState(false);
+  useLayoutEffect(() => { setMounted(true); }, []);
   const [closing, setClosing] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
@@ -44,6 +46,7 @@ export default function AppModal({
   const dragRef = useRef<{ pointerId: number; x: number; y: number; startX: number; startY: number; rect: DOMRect } | null>(null);
 
   useEffect(() => {
+    if (!mounted) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (!priority && document.querySelector("[data-system-modal='true']")) return;
@@ -60,7 +63,7 @@ export default function AppModal({
       if (closeTimer.current) clearTimeout(closeTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mounted]);
 
   function requestClose() {
     if (closing || closeDisabledRef.current) return;
@@ -99,7 +102,7 @@ export default function AppModal({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
 
-  return createPortal(
+  const content = (
     <div data-priority-modal="true" data-system-modal={priority ? "true" : undefined} className={`fixed inset-0 ${priority ? "z-[12500]" : "z-[11000]"} flex items-center justify-center p-4 sm:p-8`} role="dialog" aria-modal="true" aria-label={title || "弹窗"}>
       {/* 毛玻璃遮罩（iOS 风格），保持页面可读 */}
       <div
@@ -136,7 +139,7 @@ export default function AppModal({
         </div>
         {typeof children === "function" ? children(requestClose) : children}
       </div>
-    </div>,
-    document.body
+    </div>
   );
+  return mounted ? createPortal(content, document.body) : content;
 }

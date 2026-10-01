@@ -1,6 +1,10 @@
 "use client";
 
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from "react";
+import { usePersistedState } from "@/lib/usePersistedState";
+
+import { useSearchParams } from "next/navigation";
+
+import { memo, useEffect, useLayoutEffect, useMemo, useId, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from "react";
 import { CELEBS, type Celeb, type CelebHolding } from "@/lib/celebs";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import { showToast } from "@/lib/toast";
@@ -854,7 +858,7 @@ const ReturnChart = memo(function ReturnChart({
     return `M ${x(0).toFixed(1)},${(H - padB).toFixed(1)} L ${pts} L ${x(arr.length - 1).toFixed(1)},${(H - padB).toFixed(1)} Z`;
   };
   const yTicks = Array.from({ length: 5 }, (_, i) => minV + ((maxV - minV) * i) / 4);
-  const gradId = useMemo(() => `pf-grad-${Math.random().toString(36).slice(2, 8)}`, []);
+  const gradId = `pf-grad-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   // 悬停层元素 refs：鼠标移动时直接改样式 / 文本，不触发 React 渲染
   const vLineRef = useRef<HTMLDivElement | null>(null);
@@ -1244,21 +1248,27 @@ function ReturnAnalysis({ celeb }: { celeb: Celeb }) {
 
 export default function CelebsView({
   isAdmin = false,
-  initialAvatars
+  initialAvatars,
+  initialData
 }: {
   isAdmin?: boolean;
   initialAvatars?: Record<string, string>;
+  initialData?: import("@/lib/celebsData").CelebsResult | null;
 }) {
-  const [active, setActive] = useState<Celeb | null>(null);
+  const searchParams = useSearchParams();
+  const [active, setActive] = useState<Celeb | null>(() => {
+    const found = (initialData?.celebs || CELEBS).find(item => item.id === searchParams.get("celeb"));
+    return found ? { ...found, avatar: initialAvatars?.[found.id] || found.avatar } : null;
+  });
   // 初始值统一用默认（服务端 / 客户端首帧一致，避免 hydration 不匹配），
   // SSR 首帧即带服务端读出的最新自定义头像，缓存的自定义头像在挂载后的客户端副作用里秒出兜底
   const [celebs, setCelebs] = useState<Celeb[]>(() =>
-    initialAvatars && Object.keys(initialAvatars).length > 0
+    initialData ? initialData.celebs : initialAvatars && Object.keys(initialAvatars).length > 0
       ? CELEBS.map((c) => (initialAvatars[c.id] ? { ...c, avatar: initialAvatars[c.id] } : c))
       : CELEBS
   );
-  const [detail, setDetail] = useState<Record<string, string>>({});
-  const [source, setSource] = useState<string>("sample");
+  const [detail, setDetail] = useState<Record<string, string>>(initialData?.detail || {});
+  const [source, setSource] = useState<string>(initialData?.source || "sample");
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -1267,22 +1277,8 @@ export default function CelebsView({
   const [currencyMenuOpen, setCurrencyMenuOpen] = useState(false);
   const { currency: celebCurrency, setCurrency: setCelebCurrency, rate: curRate, symbol: curSym, fx } = useDisplayCurrency();
   const [colMenuOpen, setColMenuOpen] = useState(false);
-  const [holdCols, setHoldCols] = useState<Record<string, boolean>>(DEFAULT_HOLDING_COLS);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(HOLDING_COLS_KEY);
-      if (raw) setHoldCols({ ...DEFAULT_HOLDING_COLS, ...(JSON.parse(raw) as Record<string, boolean>) });
-    } catch {
-      /* 忽略 */
-    }
-  }, []);
-  useEffect(() => {
-    try {
-      localStorage.setItem(HOLDING_COLS_KEY, JSON.stringify(holdCols));
-    } catch {
-      /* 忽略 */
-    }
-  }, [holdCols]);
+  const [savedHoldCols, setHoldCols] = usePersistedState<Record<string, boolean>>(HOLDING_COLS_KEY, DEFAULT_HOLDING_COLS);
+  const holdCols = { ...DEFAULT_HOLDING_COLS, ...savedHoldCols };
   const avatarFileRef = useRef<HTMLInputElement | null>(null);
   const pendingIdRef = useRef<string | null>(null);
 
@@ -1320,6 +1316,7 @@ export default function CelebsView({
     const id = new URLSearchParams(window.location.search).get("celeb");
     if (!id) return;
     pendingIdRef.current = id;
+    if (initialData) return;
     // 首帧兜底：用示例 + 自定义头像先渲染，防止空白；pendingId 保留到真实数据到位
     const over = loadAvatarCache();
     const fallback = CELEBS.find((x) => x.id === id);
@@ -1355,6 +1352,7 @@ export default function CelebsView({
 
   // 缓存头像在绘制前应用，刷新不闪现原始头像且不影响 hydration
   useLayoutEffect(() => {
+    if (initialData) return;
     const over = loadAvatarCache();
     if (Object.keys(over).length > 0) {
       setCelebs((prev) => prev.map((c) => withCurrentAvatar(over[c.id] ? { ...c, avatar: over[c.id] } : c)));
