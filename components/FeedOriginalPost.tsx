@@ -7,9 +7,9 @@ import SafeAssetImage from "./SafeAssetImage";
 import FeedMedia from "./FeedMedia";
 import FeedPersonBadge from "./FeedPersonBadge";
 
-function originalTime(value:string|null) {
+function originalTime(value:string|null,full=false) {
   const date=new Date(value||"");
-  return Number.isFinite(date.getTime())?new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).format(date):"时间未知";
+  return Number.isFinite(date.getTime())?new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",...(full?{year:"numeric" as const}:{}),month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).format(date):"时间未知";
 }
 export default function FeedOriginalPost({post,isNew,busy,canDiscuss,onMenu,onLike,onDiscuss}:{post:FeedPost;isNew:boolean;busy:boolean;canDiscuss:boolean;onMenu:()=>void;onLike:()=>void;onDiscuss:()=>void}) {
   const [showOriginal,setShowOriginal]=useState(false);
@@ -19,7 +19,7 @@ export default function FeedOriginalPost({post,isNew,busy,canDiscuss,onMenu,onLi
     <SafeAssetImage src={original.person.avatar} alt={original.person.name} loading="lazy" className="feed-person-avatar" fallback={<span className="feed-person-avatar feed-person-avatar-fallback">{original.person.name.slice(0,1)}</span>}/>
     <div className="feed-post-content">
       <div className="feed-original-heading">
-        <div className="feed-original-identity">{isNew&&<span className="feed-unread-dot" aria-label="新动态"/>}<strong className="feed-person-name">{original.person.name}<FeedPersonBadge personId={original.person.id}/></strong><span>{original.person.handle}</span><span className="feed-original-platform">{original.person.platform}</span><time dateTime={post.publishedAt||undefined} title="原帖时间（北京时间）">{originalTime(post.publishedAt)}</time></div>
+        <div className="feed-original-identity">{isNew&&<span className="feed-unread-dot" aria-label="新动态"/>}<strong className="feed-person-name">{original.person.name}<FeedPersonBadge personId={original.person.id}/></strong><span className="feed-original-handle">{original.person.handle}</span><time dateTime={post.publishedAt||undefined} title={`${originalTime(post.publishedAt,true)}（北京时间）`}>{originalTime(post.publishedAt)}</time></div>
         <button type="button" className="feed-more" aria-label={`${original.person.name}原帖的选项`} onClick={onMenu}><IconDots size={17}/></button>
       </div>
       {original.replyTo&&<p className="feed-original-context">回复 @{original.replyTo}</p>}

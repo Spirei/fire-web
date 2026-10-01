@@ -16,7 +16,7 @@ import FeedOriginalPost from "@/components/FeedOriginalPost";
 import FeedTemplatePicker from "@/components/FeedTemplatePicker";
 import FeedPeopleFilter from "@/components/FeedPeopleFilter";
 import AppSelect from "@/components/AppSelect";
-import { FEED_PEOPLE, feedPostTime, feedPersonHasUpdates } from "@/lib/feedPeopleConfig";
+import { FEED_PEOPLE, feedPostTime, feedPersonHasUpdates, mergeFeedSeen } from "@/lib/feedPeopleConfig";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { isUnseenPost, type SeenTimes } from "@/lib/tradingSquareSeen";
 
@@ -94,20 +94,30 @@ function GroupFeedView({initial,initialNow,groupId,author}:{initial:FeedPayload|
   },[groupId,author]);
   useEffect(()=>{loadedCount.current=FEED_PAGE_SIZE;live.current=true;if(!initial||!initialRead.current)void load();initialRead.current=false;const timer=setInterval(()=>{if(!document.hidden&&panelIsShown(root.current)){setNow(Date.now());if(!readController.current)void load(true);}},60_000);setNow(Date.now());return()=>{live.current=false;++loadEpoch.current;readController.current?.abort();moreController.current?.abort();discussionController.current?.abort();clearInterval(timer);};},[load,initial]);
   useEffect(()=>{
+    // A switch blocked by an in-flight like/save must resume when that write finishes.
+    if(readingPerson&&shown&&!requesting&&!saving&&!Object.values(pendingPosts).some(Boolean)&&(!readController.current||readController.current.signal.aborted))void load();
+  },[readingPerson,shown,requesting,saving,pendingPosts,load]);
+  useEffect(()=>{
+    setAvatarSeen(previous=>mergeFeedSeen(previous,savedSeen));
+    latestRead.current=mergeFeedSeen(latestRead.current,savedSeen);
+  },[savedSeen]);
+  useEffect(()=>{
     if(!shown||readingPerson||data?.group?.mode!=="people")return;
     const visible=data.posts.filter(post=>post.original&&(!author||post.original.person.id===author));
-    const first:SeenTimes={};
-    for(const [id,time] of Object.entries(data.peopleLatestAt||{}))if(time&&!seenReady.current.has(id)&&!savedSeen[id]){first[id]=time;latestRead.current[id]=time;seenReady.current.add(id);}
-    if(author&&data.peopleLatestAt?.[author as FeedPersonId])setAvatarSeen(previous=>({...previous,[author]:data.peopleLatestAt![author as FeedPersonId]}));
+    const first:SeenTimes={},read:SeenTimes={};
+    for(const [id,time] of Object.entries(data.peopleLatestAt||{}))if(time&&!seenReady.current.has(id)&&!savedSeen[id]){first[id]=time;seenReady.current.add(id);}
     for(const post of visible){const id=post.original!.person.id,time=post.publishedAt;if(!time)continue;
       if(!seenReady.current.has(id)&&!savedSeen[id])first[id]=!first[id]||time>first[id]! ? time:first[id];
-      if(!latestRead.current[id]||time>latestRead.current[id]!)latestRead.current[id]=time;
+      if(!read[id]||time>read[id]!)read[id]=time;
     }
     for(const post of visible)seenReady.current.add(post.original!.person.id);
-    if(Object.keys(first).length){setVisitSeen(previous=>({...previous,...first}));setAvatarSeen(previous=>({...previous,...first}));}
-  },[data?.posts,data?.peopleLatestAt,author,shown,readingPerson]);
-  useEffect(()=>()=>{if(Object.keys(latestRead.current).length)setSavedSeen(latestRead.current);},[setSavedSeen]);
-  useEffect(()=>{if(!shown&&Object.keys(latestRead.current).length)setSavedSeen(latestRead.current);},[shown,setSavedSeen]);
+    if(Object.keys(first).length)setVisitSeen(previous=>({...previous,...first}));
+    setAvatarSeen(previous=>mergeFeedSeen(previous,{...first,...(author&&read[author]?{[author]:read[author]}:{})}));
+    const next=mergeFeedSeen(latestRead.current,{...first,...read});
+    if(next!==latestRead.current){latestRead.current=next;setSavedSeen(previous=>mergeFeedSeen(previous,next));}
+  },[data?.posts,data?.peopleLatestAt,author,shown,readingPerson,setSavedSeen]);
+  useEffect(()=>()=>{if(Object.keys(latestRead.current).length)setSavedSeen(previous=>mergeFeedSeen(previous,latestRead.current));},[setSavedSeen]);
+  useEffect(()=>{if(!shown&&Object.keys(latestRead.current).length)setSavedSeen(previous=>mergeFeedSeen(previous,latestRead.current));},[shown,setSavedSeen]);
   useEffect(()=>{
     if(!shown||!running(data?.job||null))return;
     const controller=new AbortController();let stopped=false;let timer:ReturnType<typeof setTimeout>;
@@ -138,7 +148,7 @@ function GroupFeedView({initial,initialNow,groupId,author}:{initial:FeedPayload|
   useEffect(()=>{const log=discussionLog.current;if(!log)return;if(following.current)log.scrollTop=log.scrollHeight;else setNewReply(true);},[messages,pendingQuestion,discussionLoading]);
   useEffect(()=>{const element=composer.current;if(element){element.style.height="auto";element.style.height=`${Math.min(112,element.scrollHeight)}px`;}},[question,selected]);
   function chooseGroup(id:string){if(id===groupId)return;invalidateReads();const url=new URL(window.location.href);url.searchParams.delete("feedPerson");if(id==="default")url.searchParams.delete("feedGroup");else url.searchParams.set("feedGroup",id);router.replace(url.pathname+url.search,{scroll:false});}
-  function choosePerson(id:string){const time=data?.peopleLatestAt?.[id as FeedPersonId];if(time){setAvatarSeen(previous=>({...previous,[id]:time}));latestRead.current[id]=time;}if(id===author)return;invalidateReads();setError("");setErrorAction(null);loadedCount.current=FEED_PAGE_SIZE;const url=new URL(window.location.href);if(id)url.searchParams.set("feedPerson",id);else url.searchParams.delete("feedPerson");router.replace(url.pathname+url.search,{scroll:false});}
+  function choosePerson(id:string){if(id===author)return;invalidateReads();setError("");setErrorAction(null);loadedCount.current=FEED_PAGE_SIZE;const url=new URL(window.location.href);if(id)url.searchParams.set("feedPerson",id);else url.searchParams.delete("feedPerson");router.replace(url.pathname+url.search,{scroll:false});}
   async function createGroup(){if(creatingGroup||!newGroupName.trim())return;setCreatingGroup(true);setGroupError("");try{const group=await api<FeedGroup>("/groups","POST",{name:newGroupName.trim(),mode:newMode,people:newPeople});if(live.current){setCreating(false);chooseGroup(group.id);}}catch(e){if(live.current)setGroupError((e as Error).message);}finally{if(live.current)setCreatingGroup(false);}}
   function edit() {if(!data)return;setGroupName(data.group?.name||"动态");setMode(data.group?.mode||"news");setPeople(data.group?.people||["trump","duan"]);setAutoUpdate(data.preferences.enabled);setIntervalMinutes(data.preferences.intervalMinutes);setSubscriptions(data.group?.subscriptions||[]);setSourcesOpen(false);setSourceName("");setSourceUrl("");setSourceResult("");setDraft(data.preferences.instructions);setDraftRevision(data.preferences.revision);setPromptError("");setConflict(false);setEditing(true);}
   async function uploadAvatar(id:FeedPersonId,file:File) {

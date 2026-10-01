@@ -64,6 +64,9 @@ let passed=0;async function test(name,run){await run();passed++;console.log('PAS
     assert(!feedPersonHasUpdates('duan',snapshot.peopleLatestAt,{}));
     assert(!feedPersonHasUpdates('duan',snapshot.peopleLatestAt,{duan:time(23)}));
     assert(!feedPersonHasUpdates('invented',{invented:time(23)},{invented:time(1)}));
+    const {mergeFeedSeen}=get('lib/feedPeopleConfig.ts'),existing={trump:time(26),duan:time(1)};
+    assert.equal(mergeFeedSeen(existing,{trump:time(2),duan:'invalid',invented:time(26)}),existing);
+    assert.deepEqual(mergeFeedSeen(existing,{duan:time(23)}),{trump:time(26),duan:time(23)});
   });
   await test('avatar editing reuses shared management and refreshes catalog plus historical original cards',async()=>{
     const avatarRoute=get('app/api/celebs/avatar/route.ts'),png=Buffer.from('89504e470d0a1a0a','hex');

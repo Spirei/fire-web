@@ -11,3 +11,15 @@ export function feedPersonHasUpdates(id:string,latest:Record<string,string|null|
   const before=Date.parse(seen[id]||""),after=Date.parse(latest?.[id]||"");
   return Number.isFinite(before)&&Number.isFinite(after)&&after>before;
 }
+
+/** Preserve newer reads from another tab and ignore malformed timestamps. */
+export function mergeFeedSeen(previous:Record<string,string|null|undefined>,updates:Record<string,string|null|undefined>) {
+  let next=previous;
+  for(const person of FEED_PEOPLE) {
+    const value=updates[person.id],time=Date.parse(value||""),before=Date.parse(previous[person.id]||"");
+    if(!Number.isFinite(time)||(Number.isFinite(before)&&time<=before))continue;
+    if(next===previous)next={...previous};
+    next[person.id]=value;
+  }
+  return next;
+}
