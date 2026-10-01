@@ -5,8 +5,7 @@ import Link from "next/link";
 import { IconActivity, IconArrowLeft, IconArrowUpRight, IconCheck, IconChevronLeft, IconChevronRight, IconPlayerPause, IconPlayerPlay, IconRefresh, IconSearch, IconX } from "@tabler/icons-react";
 import ThemeToggle from "@/components/ThemeToggle";
 import AppSelect from "@/components/AppSelect";
-import ApiVersionBadge from "@/components/ApiVersionBadge";
-import { apiVersionFromPath } from "@/lib/apiVersionPresentation";
+import ApiPathText from "@/components/ApiPathText";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { parseRequestFilters, requestDay, type RequestFilters, type RequestSnapshot } from "@/lib/apiRequestTypes";
 import "@/styles/api-requests.css";
@@ -28,10 +27,8 @@ function filterParams(filters: RequestFilters) {
 }
 function Method({ value }: { value: string }) { return <span className={`rq-method rq-method-${value.toLowerCase()}`}>{value}</span>; }
 function ApiPath({ path, className = "" }: { path: string; className?: string }) {
-  const version = apiVersionFromPath(path);
   return <span className={`rq-api-path ${className}`}>
-    {version !== null && <ApiVersionBadge version={version} />}
-    <span className="rq-api-path-text" title={path}>{path}</span>
+    <span className="rq-api-path-text" title={path}><ApiPathText path={path} /></span>
   </span>;
 }
 

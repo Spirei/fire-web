@@ -1,6 +1,8 @@
 "use client";
 
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { activityFilters, type ActivityScope } from "@/lib/activityFilters";
 
 import Pagination from "@/components/Pagination";
 import ApiRequests from "@/components/ApiRequests";
@@ -19,7 +21,7 @@ interface Props {
   onRefresh?: () => Promise<void> | void;
 }
 
-type Scope = "user" | "system" | "requests";
+type Scope = ActivityScope;
 type LogLevel = "ok" | "fail" | "warn" | "info";
 type DailySummary = {
   date: string;
@@ -141,17 +143,6 @@ function signedMoney(value: number, symbol: string) {
   return value >= 0 ? `+${symbol}${body}` : `−${symbol}${body}`;
 }
 
-function readQuery(): { scope: Scope; page: number; query: string } {
-  if (typeof window === "undefined") return { scope: "user", page: 1, query: "" };
-  const params = new URLSearchParams(window.location.search);
-  const page = Number(params.get("page") || "1");
-  return {
-    scope: params.get("scope") === "requests" ? "requests" : params.get("scope") === "system" ? "system" : "user",
-    page: Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1,
-    query: params.get("q") || ""
-  };
-}
-
 function writeQuery(scope: Scope, page: number, query: string) {
   const url = new URL(window.location.href);
   if (scope === "requests") {
@@ -171,18 +162,11 @@ function writeQuery(scope: Scope, page: number, query: string) {
 }
 
 export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin = false, onRefresh }: Props) {
-  const [scope, setScope] = useState<Scope>("user");
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
-  const [urlReady, setUrlReady] = useState(false);
-  const initialFiltersRef = useRef(true);
-  useLayoutEffect(() => {
-    const initial = readQuery();
-    setScope(initial.scope === "requests" && !isAdmin ? "user" : initial.scope);
-    setQuery(initial.query);
-    setPage(initial.page);
-    setUrlReady(true);
-  }, []);
+  const params = useSearchParams();
+  const { scope, query, page } = activityFilters(params, isAdmin);
+  const setScope = (next: Scope) => writeQuery(next, 1, query);
+  const setQuery = (next: string) => writeQuery(scope, 1, next);
+  const setPage = (next: number) => writeQuery(scope, next, query);
   const [refreshing, setRefreshing] = useState(false);
   const refreshingRef = useRef(false);
   const [lastRefreshed, setLastRefreshed] = useState("");
@@ -222,12 +206,8 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
   const convertedTotal = Object.values(convertedMarkets).reduce((sum, value) => sum + value, 0);
 
   useEffect(() => {
-    if (!urlReady) return;
-    if (initialFiltersRef.current) { initialFiltersRef.current = false; return; }
-    setPage(1);
-  }, [scope, query, urlReady]);
-  useEffect(() => { if (urlReady && page !== safePage) setPage(safePage); }, [page, safePage, urlReady]);
-  useEffect(() => { if (urlReady) writeQuery(scope, safePage, query); }, [query, safePage, scope, urlReady]);
+    if (scope !== "requests" && page !== safePage) writeQuery(scope, safePage, query);
+  }, [page, query, safePage, scope]);
 
   useEffect(() => {
     if (!onRefresh || scope === "requests") return;
@@ -257,6 +237,7 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
             <button
               key={key}
               type="button"
+              aria-pressed={scope === key}
               onClick={() => setScope(key)}
               className={`border-b-2 pb-3 text-sm font-semibold transition ${scope === key ? "border-ink text-ink dark:border-white dark:text-white" : "border-transparent text-muted hover:text-ink dark:hover:text-white"}`}
             >

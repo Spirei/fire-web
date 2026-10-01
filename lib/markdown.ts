@@ -3,6 +3,8 @@
  * 所有内容先转义再套标签，防 XSS；链接仅允许相对路径与 https/http。
  */
 
+import { apiVersionFromPath, apiVersionTone } from "./apiVersionPresentation";
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -19,9 +21,12 @@ function inline(s: string): string {
     // 方法 + 路径（如 `GET /api/v1/quotes`）是接口说明，不做行内复制提示；
     // 独立 API 路径、完整 URL 与 Bearer Token 仍保留复制能力。
     const copyable = /^\/api(?:\/|$)|^https?:\/\/|^Authorization:\s*Bearer/i.test(code.trim());
+    const version = apiVersionFromPath(code);
+    const label = version === null ? "" : `v${version}`;
+    const display = version === null ? code : `/api/<span class="api-path-version api-version-tone-${apiVersionTone(version)}" data-api-version="${version}">${label}</span>${code.slice(5 + label.length)}`;
     return copyable
-      ? `<code class="markdown-inline-copy" data-copy-inline="true" role="button" tabindex="0" title="点击复制">${code}</code>`
-      : `<code>${code}</code>`;
+      ? `<code class="markdown-inline-copy" data-copy-inline="true" role="button" tabindex="0" title="点击复制">${display}</code>`
+      : `<code>${display}</code>`;
   });
   // 粗体
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");

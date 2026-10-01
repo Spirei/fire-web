@@ -636,6 +636,45 @@ function fontHeaderFixture(ext) {
     assert(html.includes('</ul>\n</details>'));
     assert(!renderMarkdown('```html\n<details>\n```').includes('<details'));
   });
+  await test('API path version colors preserve the complete escaped path and copy target', () => {
+    const { renderMarkdown } = require(path.join(root, 'lib/markdown.ts'));
+    for (const version of [1, 2, 3, 20]) {
+      const route = `/api/v${version}/auth/password-reset/request`;
+      const html = renderMarkdown('`' + route + '`');
+      assert(html.includes(`data-api-version="${version}">v${version}</span>`));
+      assert(html.includes('data-copy-inline="true"'));
+      assert.equal(html.replace(/<[^>]+>/g, ''), route);
+    }
+    for (const route of ['/api/v2wrong/path', '/api/records/v2', '/api/[unmatched]']) assert(!renderMarkdown('`' + route + '`').includes('api-path-version'));
+    const unsafe = renderMarkdown('`/api/v3/<img src=x onerror=alert(1)>`');
+    assert(unsafe.includes('&lt;img') && !unsafe.includes('<img'));
+  });
+  await test('request logs are selected in server HTML before hydration; URL filters and role boundaries agree', () => {
+    const React = require('react');
+    const { renderToStaticMarkup } = require('react-dom/server');
+    const { activityFilters } = require(path.join(root, 'lib/activityFilters.ts'));
+    let params = new URLSearchParams('scope=requests&rPeriod=7d');
+    const load = Module._load, css = require.extensions['.css'];
+    Module._load = function(id, ...rest) { return id === 'next/navigation' ? { useSearchParams: () => params } : load.call(this, id, ...rest); };
+    require.extensions['.css'] = () => {};
+    try {
+      const Activities = require(path.join(root, 'components/views/ActivitiesView.tsx')).default;
+      const html = renderToStaticMarkup(React.createElement(Activities, { isAdmin: true }));
+      assert(html.includes('rq-dashboard') && !html.includes('前一日持仓盈亏'));
+      assert(/aria-pressed="true"[^>]*>请求日志<\/button>/.test(html));
+      assert.deepEqual(activityFilters(params, true), { scope: 'requests', query: '', page: 1 });
+      const ordinary = renderToStaticMarkup(React.createElement(Activities, { isAdmin: false }));
+      assert(!ordinary.includes('rq-dashboard') && ordinary.includes('前一日持仓盈亏'));
+      params = new URLSearchParams('scope=system&page=3&q=失败');
+      assert.deepEqual(activityFilters(params, true), { scope: 'system', query: '失败', page: 3 });
+      const system = renderToStaticMarkup(React.createElement(Activities, { isAdmin: true }));
+      assert(!system.includes('rq-dashboard') && !system.includes('前一日持仓盈亏'));
+      assert(/aria-pressed="true"[^>]*>系统日志<\/button>/.test(system));
+    } finally {
+      Module._load = load;
+      if (css) require.extensions['.css'] = css; else delete require.extensions['.css'];
+    }
+  });
   await test('API directory keeps committed selection, resolves collapsed children and survives edited headings', () => {
     const { resolveApiReadingHeading, resolveApiTocSelection } = require(path.join(root, 'lib/apiDocsNavigation.ts'));
     const headings = [{ slug: 'start', top: -500 }, { slug: 'middle', top: -100 }, { slug: 'last', top: 600 }];
