@@ -22,7 +22,7 @@ async function handle(request:Request,context:Context) {
       if(!key) {
         const q=new URL(request.url).searchParams,raw=q.get("limit"),limit=raw===null?FEED_PAGE_SIZE:Number(raw);
         if(!Number.isInteger(limit)||limit<1||limit>50)throw new FeedError("每页条数为1–50");
-        return ok(feedSnapshot(user.id,q.get("cursor"),limit,groupId));
+        return ok(feedSnapshot(user.id,q.get("cursor"),limit,groupId,q.get("author")));
       }
       if(key==="groups")return ok({groups:listFeedGroups(user.id)});
       if(action.length===2&&action[0]==="jobs") {
@@ -35,7 +35,13 @@ async function handle(request:Request,context:Context) {
     const body=await readJsonBody(request,20_000);
     // Revalidate after asynchronous input: revoked tokens cannot finish a queued mutation.
     if(getAuthUser(request)?.id!==user.id)throw new FeedError("连接已失效",401);
-    if(method==="POST"&&key==="groups")return ok(createFeedGroup(user.id,body));
+    if(method==="POST"&&key==="groups") {
+      const group=createFeedGroup(user.id,body);
+      if(group.mode==="people") {
+        try{const result=requestFeedGeneration(user.id,group.id);if(result.created)after(()=>runFeedJob(user.id,result.job.id));}catch{/* Group is saved; scheduler/manual retry can read its originals later. */}
+      }
+      return ok(group);
+    }
     if(method==="POST"&&key==="subscriptions/test") {
       if(!rateLimit(`feed-source-test:${user.id}`,6,60_000))throw new FeedError("测试较频繁，请稍后再试",429);
       const source=normalizeFeedSubscriptions([body])[0];

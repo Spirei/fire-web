@@ -16,6 +16,8 @@ import { feedEventHints, feedSkill } from "./feedSkill";
 import { enrichFeedEvidence } from "./feedEvidence";
 import { FEED_RECOMMENDATIONS, MUSE_OBSERVED_PUBLISHERS, subscriptionSources } from "./feedSubscriptions";
 import { balanceFeedSources } from "./feedSearch";
+import { refreshPeopleFeed, syncPeopleFeed } from "./feedPeople";
+import { getTradingSquareSourceStatus } from "./tradingSquareRefresh";
 export { parseNewsRss, searchFeedSources } from "./feedSearch";
 
 export function feedCapabilities(): FeedPayload["capabilities"] {
@@ -23,8 +25,10 @@ export function feedCapabilities(): FeedPayload["capabilities"] {
   const fallback=process.env.BRAVE_SEARCH_API_KEY?"brave":"news-rss";
   return {generate:modelAttempts(getSiteSettings()).length>0,search:fallback,searchProvider:officialFeedSearch()?"deepseek":fallback,avatar:{image:"/uploads/feature/feed/alcor.png",video:hasVideo?"/uploads/feature/feed/alcor-idle.mp4":null}};
 }
-export function feedSnapshot(userId:string,cursor?:string|null,limit=FEED_PAGE_SIZE,groupId="default"):FeedPayload {
-  return {...listFeedPosts(userId,cursor,limit,groupId),preferences:feedPreferences(userId,groupId),job:getFeedJob(userId,undefined,groupId),group:feedGroup(userId,groupId),groups:listFeedGroups(userId),recommendations:FEED_RECOMMENDATIONS,observedPublishers:MUSE_OBSERVED_PUBLISHERS,capabilities:feedCapabilities()};
+export function feedSnapshot(userId:string,cursor?:string|null,limit=FEED_PAGE_SIZE,groupId="default",author?:string|null):FeedPayload {
+  const group=feedGroup(userId,groupId);
+  if(group.mode==="people")syncPeopleFeed(userId,group);
+  return {...listFeedPosts(userId,cursor,limit,groupId,author),preferences:feedPreferences(userId,groupId),job:getFeedJob(userId,undefined,groupId),group,groups:listFeedGroups(userId),recommendations:FEED_RECOMMENDATIONS,observedPublishers:MUSE_OBSERVED_PUBLISHERS,...(group.mode==="people"?{peopleSources:getTradingSquareSourceStatus(group.people)}:{}),capabilities:feedCapabilities()};
 }
 /** Administrator-configured endpoints only; article content never chooses an outbound URL. */
 function json(text:string) {
@@ -68,10 +72,11 @@ async function modelText(userId:string,system:string,data:unknown,signal?:AbortS
   throw lastError || new FeedError("模型服务暂不可用，请稍后重试",502);
 }
 export function requestFeedGeneration(userId:string,groupId="default") {
-  if(!feedCapabilities().generate) throw new FeedError("请先在设置中配置可用的大模型服务",503);
+  const people=feedGroup(userId,groupId).mode==="people";
+  if(!people&&!feedCapabilities().generate) throw new FeedError("请先在设置中配置可用的大模型服务",503);
   const existing=getFeedJob(userId,undefined,groupId);
   if(existing && ["queued","searching","writing"].includes(existing.status))return {job:existing,created:false};
-  if(!rateLimit(`feed-generate:${userId}`,6,60*60_000)||!rateLimitGlobal("feed-generate",120,60*60_000))throw new FeedError("更新较频繁，请稍后再试",429);
+  if(!rateLimit(`feed-generate:${people?"people:":""}${userId}`,people?30:6,60*60_000)||!rateLimitGlobal("feed-generate",120,60*60_000))throw new FeedError("更新较频繁，请稍后再试",429);
   return createFeedJob(userId,groupId);
 }
 export async function runFeedJob(userId:string,id:string) {
@@ -82,6 +87,16 @@ export async function runFeedJob(userId:string,id:string) {
   const signal=AbortSignal.timeout(4*60_000);
   const heartbeat=setInterval(()=>{change(getFeedJob(userId,id)?.status=== "writing"?"writing":"searching");},30_000);heartbeat.unref?.();
   try {
+    const group=feedGroup(userId,row.group_id);
+    if(group.mode==="people") {
+      const statuses=await refreshPeopleFeed(group);
+      if(signal.aborted)throw new FeedError("原帖更新超时，稍后重试",504);
+      if(feedPreferences(userId,row.group_id).revision!==row.revision)throw new FeedError("指示已更新，请按新的指示刷新",409);
+      const added=syncPeopleFeed(userId,group);
+      if(statuses.length&&statuses.every(status=>status.error))throw new FeedError("暂未取得人物来源，已保存的原帖仍可查看",502);
+      change("done",added,statuses.some(status=>status.error)?"部分人物来源暂不可用，已保存内容保留":null);
+      return;
+    }
     const hints=feedEventHints(row.instructions);
     const result=json(await modelText(userId,feedSkill("Plan"),{instructions:row.instructions,earningsHints:hints,today:new Date().toISOString()},signal,true));
     // Two independent calendar-led queries cannot be dropped by an over-broad planner.
@@ -129,11 +144,11 @@ export function startFeedScheduler() {
 export async function tickFeedScheduler() {
   if(ticking)return;ticking=true;
   try {
-    if(!feedCapabilities().generate)return;
+    const canGenerate=feedCapabilities().generate;
     const db=feedTables();
     // Recover orphaned jobs even when their normal six-hour interval has not elapsed.
     db.prepare("UPDATE feed_jobs SET status='error',error='服务中断，请重试',updated_at=? WHERE status IN ('queued','searching','writing') AND updated_at<?").run(new Date().toISOString(),new Date(Date.now()-5*60_000).toISOString());
-    const rows=db.prepare("SELECT p.user_id,p.group_id,p.interval_minutes,(SELECT created_at FROM feed_jobs WHERE user_id=p.user_id AND group_id=p.group_id ORDER BY created_at DESC,id DESC LIMIT 1) AS last_at,(SELECT updated_at FROM feed_jobs WHERE user_id=p.user_id AND group_id=p.group_id ORDER BY created_at DESC,id DESC LIMIT 1) AS last_updated,(SELECT status FROM feed_jobs WHERE user_id=p.user_id AND group_id=p.group_id ORDER BY created_at DESC,id DESC LIMIT 1) AS last_status FROM (SELECT user_id,'default' AS group_id,interval_minutes,enabled,instructions FROM feed_preferences UNION ALL SELECT user_id,group_id,interval_minutes,enabled,instructions FROM feed_group_preferences) p JOIN users u ON u.id=p.user_id WHERE p.enabled=1 AND p.instructions<>'' AND u.is_test=0 ORDER BY last_at LIMIT 20").all() as {user_id:string;group_id:string;interval_minutes:number;last_at:string|null;last_updated:string|null;last_status:string|null}[];
+    const rows=db.prepare("SELECT p.user_id,p.group_id,p.interval_minutes,(SELECT created_at FROM feed_jobs WHERE user_id=p.user_id AND group_id=p.group_id ORDER BY created_at DESC,id DESC LIMIT 1) AS last_at,(SELECT updated_at FROM feed_jobs WHERE user_id=p.user_id AND group_id=p.group_id ORDER BY created_at DESC,id DESC LIMIT 1) AS last_updated,(SELECT status FROM feed_jobs WHERE user_id=p.user_id AND group_id=p.group_id ORDER BY created_at DESC,id DESC LIMIT 1) AS last_status FROM (SELECT user_id,'default' AS group_id,interval_minutes,enabled,instructions FROM feed_preferences UNION ALL SELECT user_id,group_id,interval_minutes,enabled,instructions FROM feed_group_preferences) p JOIN users u ON u.id=p.user_id LEFT JOIN feed_groups g ON g.user_id=p.user_id AND g.id=p.group_id WHERE p.enabled=1 AND (g.mode='people' OR (?=1 AND p.instructions<>'')) AND u.is_test=0 ORDER BY last_at LIMIT 20").all(canGenerate?1:0) as {user_id:string;group_id:string;interval_minutes:number;last_at:string|null;last_updated:string|null;last_status:string|null}[];
     for(const row of rows) {
       const failed=row.last_status==="error",last=failed?row.last_updated:row.last_at;
       if(last && Date.now()-Date.parse(last)<(failed?Math.min(15,row.interval_minutes):row.interval_minutes)*60_000)continue;

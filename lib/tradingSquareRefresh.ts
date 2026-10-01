@@ -9,12 +9,23 @@ import { normalizeTradingText } from "@/lib/tradingSquareText";
 import { COMMENTS_CACHE_VERSION, commentsFilePath, mapXueqiuComment, readDuanComments, type CommentsCache, type XueqiuComment } from "@/lib/tradingSquareComments";
 import { backfillTrumpTranslations, translateTrumpPostsNow } from "@/lib/tradingSquareTranslate";
 import { proxyFetch } from "@/lib/net";
+import type { FeedPeopleSourceStatus, FeedPersonId } from "@/lib/feedTypes";
 
 const DATA = path.join(process.cwd(), "data");
 const TRUMP_FILE = path.join(DATA, "trump-posts.json");
 const DUAN_FILE = path.join(DATA, "duan-posts.json");
 const TRUMP_SOURCE = "https://trumpstruth.org/";
 const DUAN_USER = "1247347556";
+const STATUS_FILE = path.join(DATA,"trading-square-source-status.json");
+export function getTradingSquareSourceStatus(ids:FeedPersonId[]=["trump","duan"]):FeedPeopleSourceStatus[] {
+  const saved=readJsonFile<Record<string,FeedPeopleSourceStatus>>(STATUS_FILE,{});
+  return ids.map(personId=>saved[personId]||{personId,lastAttemptAt:null,lastSuccessAt:null,error:null});
+}
+function saveSourceStatus(personId:FeedPersonId,started:string,success:boolean,error?:string) {
+  const saved=readJsonFile<Record<string,FeedPeopleSourceStatus>>(STATUS_FILE,{});
+  saved[personId]={personId,lastAttemptAt:started,lastSuccessAt:success?new Date().toISOString():saved[personId]?.lastSuccessAt||null,error:success?null:error||"暂未取得来源新数据，继续显示已保存的原帖"};
+  try{writeJsonAtomic(STATUS_FILE,saved);}catch{/* Cache remains readable on read-only deployments. */}
+}
 
 export type TrumpPost = { id: string; date: string; text: string; originalUrl: string; archiveUrl: string; images?: string[] };
 type DuanCategory = "hot" | "original" | "longform";
@@ -53,6 +64,7 @@ type XueqiuStatus = {
 };
 
 let xueqiuCookie = "";
+let xueqiuAuthRejected=false;
 
 function mergeSetCookie(existing: string, setCookies: string[]): string {
   const map = new Map<string, string>();
@@ -98,10 +110,11 @@ async function xueqiuFetch(pathAndQuery: string): Promise<unknown | null> {
         headers.Cookie = xueqiuCookie;
       }
       const contentType = response.headers.get("content-type") || "";
-      if (!response.ok || !contentType.includes("json")) continue;
+      if (!contentType.includes("json")) continue;
       const json = await response.json() as { error_code?: unknown };
+      if(xueqiuErrorCode(json?.error_code)===400016)xueqiuAuthRejected=true;
       // Xueqiu uses error_code 0 or "0" for success; a truthy string "0" must not be treated as failure.
-      if (json && typeof json === "object" && xueqiuErrorCode(json.error_code) !== 0) continue;
+      if (!response.ok || (json && typeof json === "object" && xueqiuErrorCode(json.error_code) !== 0)) continue;
       return json;
     } catch {
       /* try next host */
@@ -419,9 +432,10 @@ export function readDuanPosts(): DuanPost[] {
 }
 
 /** 有缓存时只翻到与旧帖重叠为止；不再按天数丢弃历史。 */
-export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
+export async function refreshTrumpPosts(options:{translateBeforeSave?:boolean;maxPages?:number}={}): Promise<TrumpPost[]> {
   if (trumpRunning) return readTrumpPosts();
   trumpRunning = true;
+  const started=new Date().toISOString();let success=false;
   const existing = readTrumpPosts();
   const known = new Set(existing.map((post) => post.id));
   const settings = getSiteSettings();
@@ -429,12 +443,12 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
   const incoming: TrumpPost[] = [];
   let nextUrl = source;
   let overlap = 0;
-  const maxPages = existing.length < 200 ? 40 : 5;
+  const maxPages = options.maxPages ?? (existing.length < 200 ? 40 : 5);
   try {
     for (let page = 0; page < maxPages && nextUrl; page += 1) {
       let html = "";
       try {
-        const response = await fetch(nextUrl, {
+        const response = await proxyFetch(nextUrl, {
           headers: { "User-Agent": "Alcor/1.0 public archive reader" },
           cache: "no-store",
           // 归档站有时单页要 2 秒以上；4 秒太紧会把整次刷新打断（异常直接抛出去、一条都写不进来）
@@ -448,6 +462,7 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
       }
       const parsed = parseTrumpPage(html, source);
       if (!parsed.length) break;
+      success=true;
       for (const post of parsed) {
         if (known.has(post.id)) overlap += 1;
         else known.add(post.id);
@@ -457,7 +472,7 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
       nextUrl = next ? new URL(next.replace(/&amp;/g, "&"), source).toString() : "";
       if (existing.length >= 200 && overlap >= 2) nextUrl = "";
     }
-    if (incoming.length) {
+    if (incoming.length&&options.translateBeforeSave!==false) {
       const newest = [...incoming].sort((a, b) => postTimestamp(b.date) - postTimestamp(a.date));
       await translateTrumpPostsNow(newest.slice(0, 15));
     }
@@ -486,6 +501,7 @@ export async function refreshTrumpPosts(): Promise<TrumpPost[]> {
     // 兜底：翻译 / 图片本地化等任何一步失败都不该让已有缓存白刷一轮
     return existing;
   } finally {
+    saveSourceStatus("trump",started,success);
     trumpRunning = false;
   }
 }
@@ -645,13 +661,15 @@ async function refreshDuanComments(posts: DuanPost[], now = Date.now()): Promise
   return cache;
 }
 
-export async function refreshDuanPosts(): Promise<DuanPost[]> {
+export async function refreshDuanPosts(options:{includeComments?:boolean;maxPages?:number}={}): Promise<DuanPost[]> {
   if (duanRunning) return readDuanPosts();
   duanRunning = true;
+  xueqiuAuthRejected=false;
+  const started=new Date().toISOString();let success=false;
   const existing = readDuanPosts();
   const known = new Set(existing.map((post) => post.id));
   const live: DuanPost[] = [];
-  const maxPages = existing.length < 50 ? 15 : 8;
+  const maxPages = options.maxPages ?? (existing.length < 50 ? 15 : 8);
   try {
     await warmXueqiuSession();
     for (let page = 1; page <= maxPages; page += 1) {
@@ -659,6 +677,7 @@ export async function refreshDuanPosts(): Promise<DuanPost[]> {
       // /statuses/user_timeline.json 才是完整时间线（实测含 2026-09-10 的新帖）。
       const data = await xueqiuFetch(`/statuses/user_timeline.json?user_id=${DUAN_USER}&page=${page}&count=20`) as { statuses?: XueqiuStatus[] } | null;
       if (!data) break;
+      if(Array.isArray(data.statuses))success=true;
       const batch = (data.statuses || []).map(mapDuanStatus).filter((item): item is DuanPost => item !== null);
       if (!batch.length) break;
       let overlap = 0;
@@ -674,7 +693,7 @@ export async function refreshDuanPosts(): Promise<DuanPost[]> {
     if (!quoted.length) return existing;
     // 评论只是附加信息：拉取失败不影响帖子本身
     try {
-      await refreshDuanComments(quoted);
+      if(options.includeComments!==false)await refreshDuanComments(quoted);
     } catch {
       /* ignore */
     }
@@ -709,6 +728,7 @@ export async function refreshDuanPosts(): Promise<DuanPost[]> {
   } catch {
     return existing;
   } finally {
+    saveSourceStatus("duan",started,success,xueqiuAuthRejected?"雪球未通过登录验证，请在设置中更新 Cookie；已保存的原帖仍可查看":undefined);
     duanRunning = false;
   }
 }

@@ -15,7 +15,7 @@ function Item({media,onPreview}:{media:Media;onPreview:(media:Media)=>void}) {
       <video src={media.url} poster={media.poster} controls playsInline preload="none" aria-label={media.alt} onError={()=>setFailed(true)}/>}
   </div>;
 }
-export default function FeedMedia({media}:{media:Media[]}) {
+export default function FeedMedia({media,limit=3}:{media:Media[];limit?:number}) {
   const [preview,setPreview]=useState<Media|null>(null);
-  return <><div className="feed-media">{media.slice(0,3).map(m=><Item key={m.url} media={m} onPreview={setPreview}/>)}</div>{preview&&<AppModal title={preview.alt||"报道图片"} size="lg" className="feed-theme feed-themed-modal feed-media-modal" onClose={()=>setPreview(null)}><img className="feed-media-preview" src={preview.url} alt={preview.alt} referrerPolicy="no-referrer"/></AppModal>}</>;
+  return <><div className="feed-media">{media.slice(0,limit).map(m=><Item key={m.url} media={m} onPreview={setPreview}/>)}</div>{preview&&<AppModal title={preview.alt||"报道图片"} size="lg" className="feed-theme feed-themed-modal feed-media-modal" onClose={()=>setPreview(null)}><img className="feed-media-preview" src={preview.url} alt={preview.alt} referrerPolicy="no-referrer"/></AppModal>}</>;
 }

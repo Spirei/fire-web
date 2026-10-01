@@ -37,6 +37,10 @@ export async function feedRequest<T>(path = "", method = "GET", body?: unknown, 
 export const feedJobRunning = (job: FeedJob | null) => !!job && ["queued", "searching", "writing"].includes(job.status);
 
 export function feedEmptyCopy(data: FeedPayload) {
+  if(data.group?.mode==="people") {
+    if(feedJobRunning(data.job))return {title:"正在读取人物原帖",body:"原帖取得后立即保存，中文翻译会随后补齐。"};
+    return {title:"还没有可显示的原帖",body:data.job?.status==="error"?"来源暂不可用，已保存内容保留。可以稍后重试更新。":"已选人物的原帖会自动更新，也可以点右上角立即读取。"};
+  }
   if (!data.preferences.instructions) return { title: "你的动态，由你来定义", body: "在右上角写下你想关注的内容，Alcor 会在后台寻找来源、提炼重点。" };
   if (feedJobRunning(data.job)) return { title: "正在寻找值得关注的变化", body: "Alcor 正在按你的指示搜集来源、提炼重点。可以离开页面，稍后回来查看。" };
   if (!data.capabilities.generate) return { title: "准备好你的第一条动态", body: "指示已保存。连接大模型服务后，Alcor 才能搜集来源、提炼重点；已有内容不会受影响。" };
