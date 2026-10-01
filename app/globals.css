@@ -7343,15 +7343,16 @@ html { scrollbar-gutter:stable; }
 /* Market calendar: soft schedule surfaces, including mixed market panels. */
 .dark .market-calendar {
   --mc-neutral-fill:#242932;
-  --mc-fill-holiday:#3c2d36;
-  --mc-fill-half_day:#3a3428;
-  --mc-fill-unknown:#332d45;
-  --mc-glaze:rgba(255,255,255,.025);
-  --mc-holiday-edge:#5b404d;
-  --mc-half-edge:#5b4c32;
-  --mc-unknown-edge:#4b405f;
+  --mc-fill-holiday:#28292b;
+  --mc-fill-half_day:#343126;
+  --mc-fill-unknown:#302d3b;
+  --mc-holiday-edge:#ffffff1f;
+  --mc-half-edge:#514935;
+  --mc-unknown-edge:#454053;
   --mc-watermark-ink:#9eadc1;
 }
-.dark .mc-day[data-tone=holiday] { --mc-watermark-ink:#ce9cb3; }
-.dark .mc-day[data-tone=mixed] { --mc-watermark-ink:#cebaa9; }
-.dark .mc-holiday-key { background:#d095af; }
+.dark .mc-day[data-tone=holiday] { --mc-watermark-ink:#f1f6ff61; }
+.dark .mc-day[data-tone=mixed] { --mc-watermark-ink:#a5b1b4; }
+.dark .mc-holiday-key { background:#c2c5ca; }
+
+.dark .mc-closure-reasons { color:#b7c0cf; }

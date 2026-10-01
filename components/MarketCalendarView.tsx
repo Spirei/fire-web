@@ -10,9 +10,16 @@ const MARKET_ORDER: CalendarMarket[] = ["US", "HK", "CN"];
 type ViewMarket = CalendarMarket | "ALL";
 type ViewDay = CalendarDay & { markets: { market: CalendarMarket; day: CalendarDay }[] };
 const MARKET_NAMES = { ALL: "全部市场", CN: "A 股（沪深）", HK: "港股", US: "美股" };
+const SHORT_MARKET_NAMES: Record<CalendarMarket, string> = { US: "美股", HK: "港股", CN: "A 股" };
+const SHORT_HOLIDAY_NAMES: Record<string, string> = {
+  "国庆节": "国庆", "国庆日": "国庆", "清明节": "清明", "端午节": "端午", "中秋节": "中秋",
+  "农历新年": "春节", "农历新年前夕": "春节前夕", "圣诞节": "圣诞", "圣诞节前夕": "圣诞前夕",
+  "香港特别行政区成立纪念日": "香港回归纪念", "马丁·路德·金纪念日": "马丁路德金纪念日"
+};
 type DayTone = "neutral" | "holiday" | "half_day" | "unknown" | "mixed";
-/** Normal weekends stay neutral; only special schedules contribute a color panel. */
-export function calendarDayAppearance(states: readonly CalendarStatus[]): { tone: DayTone; fill?: string } {
+/** Confirmed weekends stay neutral even inside an exchange holiday range. */
+export function calendarDayAppearance(states: readonly CalendarStatus[], isWeekend = false): { tone: DayTone; fill?: string } {
+  if (isWeekend && !states.includes("unknown")) return { tone: "neutral" };
   const panels = (["holiday", "half_day", "unknown"] as const)
     .map(tone => ({ tone, count: states.filter(status => status === tone).length }))
     .filter(panel => panel.count > 0);
@@ -114,14 +121,14 @@ export default function MarketCalendarView({ initialNow = Date.UTC(MARKET_CALEND
             const items = day.markets.filter(item => status === "all" || item.day.status === status);
             const marked = items.filter(item => item.day.status === "holiday" || item.day.status === "weekend" || item.day.status === "half_day");
             const closed = marked.some(item => item.day.status === "holiday" || item.day.status === "weekend");
-            const names = [...new Set(items.map(item => item.day.name).filter(Boolean))];
+            const reasons = items.filter(item => !day.isWeekend && (item.day.status === "holiday" || item.day.status === "half_day") && item.day.name);
             const visible = matches(day);
-            const appearance = calendarDayAppearance(visible ? items.map(item => item.day.status) : []);
-            return <button type="button" key={day.date} title={description} aria-label={description} aria-pressed={selectedDate === day.date} aria-current={today === day.date ? "date" : undefined} disabled={!visible} data-tone={appearance.tone} style={appearance.fill ? { "--mc-status-fill": appearance.fill } as CSSProperties : undefined} className={`mc-day${!visible ? " is-filtered" : ""}${day.isWeekend ? " is-weekend" : ""}${selectedDate === day.date ? " is-selected" : ""}`} onClick={() => update({ calDay: selectedDate === day.date ? "" : day.date })}>
+            const appearance = calendarDayAppearance(visible ? items.map(item => item.day.status) : [], day.isWeekend);
+            return <button type="button" key={day.date} title={description} aria-label={description} aria-pressed={selectedDate === day.date} aria-current={today === day.date ? "date" : undefined} disabled={!visible} data-tone={appearance.tone} style={appearance.fill ? { "--mc-status-fill": appearance.fill } as CSSProperties : undefined} className={`mc-day${visible && reasons.length ? " has-reasons" : ""}${!visible ? " is-filtered" : ""}${day.isWeekend ? " is-weekend" : ""}${selectedDate === day.date ? " is-selected" : ""}`} onClick={() => update({ calDay: selectedDate === day.date ? "" : day.date })}>
               <span className="mc-number">{Number(day.date.slice(8))}</span>
               {visible && closed && <svg className="mc-closure-watermark" viewBox="0 0 100 60" aria-hidden="true"><text x="50" y="31" textAnchor="middle" dominantBaseline="middle" fill="none" stroke="currentColor" strokeWidth="0.9" strokeDasharray="1.5 1.35" fontSize="48" fontWeight="700">休市</text></svg>}
               <span className="mc-market-marks">{visible && marked.map(item => <span key={item.market} className={`mc-market-mark${item.day.status === "half_day" ? " is-half" : ""}`} aria-hidden="true"><MarketIcon market={item.market} size={18} />{item.day.status === "half_day" && <i className="mc-half-dot" />}</span>)}{visible && items.some(item => item.day.status === "unknown") && <span className="mc-unknown-key" aria-hidden="true" />}</span>
-              {visible && names.length > 0 && <span className="mc-holiday-name" aria-hidden="true">{names.join(" · ")}</span>}
+              {visible && reasons.length > 0 && <span className="mc-closure-reasons" aria-hidden="true">{reasons.map(item => <span className="mc-closure-reason" data-market={item.market} key={item.market} title={`${SHORT_MARKET_NAMES[item.market]}：${item.day.name}`}><b>{SHORT_MARKET_NAMES[item.market]}：</b><span>{SHORT_HOLIDAY_NAMES[item.day.name!] || item.day.name}</span></span>)}</span>}
             </button>;
           })}
           {Array.from({ length: 42 - leading - monthDays.length }, (_, i) => <span className="mc-blank" aria-hidden="true" key={`end-${i}`} />)}

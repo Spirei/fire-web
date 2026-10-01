@@ -157,6 +157,7 @@ try {
     const {calendarDayAppearance:appearance}=require(path.join(root,'components/MarketCalendarView.tsx'));
     assert.deepEqual(appearance(['trading','weekend','weekend']),{tone:'neutral'});
     assert.deepEqual(appearance(['holiday','weekend']),{tone:'holiday'});
+    assert.deepEqual(appearance(['holiday','weekend'],true),{tone:'neutral'},'verified weekends inside a holiday range must not gain a holiday tint');
     assert.deepEqual(appearance(['half_day','trading']),{tone:'half_day'});
     assert.deepEqual(appearance(['unknown','weekend']),{tone:'unknown'});
     const mixed=appearance(['holiday','half_day','holiday']);
@@ -169,7 +170,7 @@ try {
     const all=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2026-02');
     assert(cell(all,'2026-02-16').includes('data-tone="mixed"'));
     assert(cell(all,'2026-02-14').includes('data-tone="neutral"'));
-    assert(cell(all,'2026-02-15').includes('data-tone="holiday"'),'an official holiday on a weekend still has a holiday color');
+    assert(cell(all,'2026-02-15').includes('data-tone="neutral"'),'a weekend inside an official holiday range stays neutral');
     for(const [market,tone] of [['US','holiday'],['HK','half_day'],['CN','holiday']]) {
       const html=render('components/MarketCalendarView.tsx',{},'market='+market+'&month=2026-02');
       assert(cell(html,'2026-02-16').includes('data-tone="'+tone+'"'));
@@ -179,6 +180,24 @@ try {
     assert(cell(half,'2026-02-15').includes('data-tone="neutral"'));
     const future=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2027-02');
     assert(cell(future,'2027-02-06').includes('data-tone="unknown"'),'an unverified weekend must remain unknown');
+  });
+
+  test('closure reasons stay paired with each market and omit ordinary weekends',()=>{
+    const cell=(html,date)=>html.match(new RegExp('<button[^>]*aria-label="'+date+'；[^]*?</button>'))[0];
+    const reasons=html=>[...html.matchAll(/class="mc-closure-reason" data-market="([A-Z]+)"[^>]*><b>([^]*?)<\/b><span>([^]*?)<\/span>/g)].map(match=>({market:match[1],label:match[2],name:match[3]}));
+    const october=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2026-10');
+    assert.deepEqual(reasons(cell(october,'2026-10-01')),[{market:'HK',label:'港股：',name:'国庆'},{market:'CN',label:'A 股：',name:'国庆'}]);
+    assert.deepEqual(reasons(cell(october,'2026-10-10')),[]);
+    assert.deepEqual(reasons(cell(october,'2026-10-03')),[],'weekend holiday dates do not add weekday closure reasons');
+    assert(cell(october,'2026-10-03').includes('data-tone="neutral"'));
+    assert.deepEqual(reasons(cell(october,'2026-10-08')),[]);
+    const mixed=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2026-02');
+    assert.deepEqual(reasons(cell(mixed,'2026-02-16')).map(row=>row.market),['US','HK','CN']);
+    const hk=render('components/MarketCalendarView.tsx',{},'market=HK&month=2026-02&status=half_day&day=16');
+    assert.deepEqual(reasons(cell(hk,'2026-02-16')),[{market:'HK',label:'港股：',name:'春节前夕'}]);
+    assert(hk.includes('农历新年前夕')&&hk.includes('12:08'),'full official reason and half-day hours remain in details');
+    const unknown=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2027-10');
+    assert.deepEqual(reasons(unknown),[],'unconfirmed dates must not invent holiday reasons');
   });
 
   test('late client mounts use current preferences while server hydration uses its exact snapshot',()=>{
