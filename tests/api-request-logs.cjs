@@ -14,6 +14,7 @@ const temp = process.argv.includes('--persist-check') ? process.cwd() : fs.mkdte
 process.chdir(temp);
 process.env.STOCKLOG_FUTU = 'off';
 const { parseRequestFilters, requestDay } = require(path.join(root, 'lib/apiRequestTypes.ts'));
+const { apiVersionFromPath, apiVersionTone } = require(path.join(root, 'lib/apiVersionPresentation.ts'));
 const store = require(path.join(root, 'lib/apiRequestLog.ts'));
 if (process.argv.includes('--persist-check')) {
   console.log(JSON.stringify(store.readRequestSnapshot(parseRequestFilters(new URLSearchParams())).summary));
@@ -40,6 +41,13 @@ let server;
     assert.deepEqual([...require(path.join(root, 'lib/apiRequestRoutes.ts')).API_REQUEST_ROUTES].sort(), actual.sort(), 'Regenerate the endpoint allowlist');
   });
   await test('filter bounds and Beijing midnight are deterministic across server timezones', () => {
+    for (const version of [1, 2, 3, 4, 20]) {
+      assert.equal(apiVersionFromPath(`/api/v${version}/records/[id]`), version);
+      assert.equal(apiVersionFromPath(`/api/v${version}`), version);
+    }
+    for (const route of ['/api/v2wrong/records', '/api/records/v2', '/api/[unmatched]', '/api/v0/records', '/api/v02/records', '/api/v9007199254740992/records']) assert.equal(apiVersionFromPath(route), null);
+    assert.notEqual(apiVersionTone(2), apiVersionTone(3));
+    assert.equal(apiVersionTone(2), apiVersionTone(7));
     assert.equal(requestDay(Date.parse('2026-09-29T16:05:00Z')), '2026-09-30');
     const parsed = parseRequestFilters(new URLSearchParams('rPage=NaN&rAnchor=-4&rDay=2026-02-30&rStatus=DROP&rMethod=boom&rYear=100'), Date.parse('2026-09-30T04:00:00Z'));
     assert.equal(parsed.page, 1); assert.equal(parsed.anchor, 0); assert.equal(parsed.day, ''); assert.equal(parsed.status, 'all'); assert.equal(parsed.year, 2026);

@@ -234,8 +234,11 @@
 }
 
 .api-reference-title { display:flex; align-items:baseline; gap:16px; min-width:0; }
+.api-reference-title-heading { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.api-reference-title-heading .api-version-badge { font-size:13px; padding:5px 9px; border-radius:7px; }
+.api-version-pages .api-version-badge { font-size:12px; padding:3px 7px; }
 .api-reference-heading { justify-content:space-between; flex-wrap:wrap; gap:12px; }
-.api-version-pages { display:flex; gap:4px; padding:4px; border:1px solid #7d818126; border-radius:10px; background:#ffffff25; flex:none; }
+.api-version-pages { display:flex; flex-wrap:wrap; gap:4px; padding:4px; border:1px solid #7d818126; border-radius:10px; background:#ffffff25; max-width:100%; }
 .api-version-pages a { display:flex; align-items:center; justify-content:center; min-width:52px; min-height:34px; padding:5px 14px; border-radius:7px; color:var(--reference-muted); font-size:13px; font-weight:600; text-decoration:none; }
 .api-version-pages a:hover { background:#ffffff40; color:var(--reference-ink); }
 .api-version-pages a[aria-current="page"] { background:#fcfdfb; color:#34414b; box-shadow:0 1px 4px #34454818; }

@@ -7284,3 +7284,17 @@ html { scrollbar-gutter:stable; }
 @media(prefers-reduced-motion:reduce) {
   .app-connection-button { transition:none; }
 }
+
+/* API versions share the same colors in request logs and documentation. */
+.api-version-tone-neutral { --api-version-ink:#475569; --api-version-bg:#f1f5f9; --api-version-border:#cbd5e1; }
+.api-version-tone-violet { --api-version-ink:#6d28d9; --api-version-bg:#f5f3ff; --api-version-border:#ddd6fe; }
+.api-version-tone-cyan { --api-version-ink:#0e7490; --api-version-bg:#ecfeff; --api-version-border:#a5f3fc; }
+.api-version-tone-amber { --api-version-ink:#92400e; --api-version-bg:#fffbeb; --api-version-border:#fde68a; }
+.api-version-tone-rose { --api-version-ink:#be123c; --api-version-bg:#fff1f2; --api-version-border:#fecdd3; }
+.api-version-tone-blue { --api-version-ink:#1d4ed8; --api-version-bg:#eff6ff; --api-version-border:#bfdbfe; }
+.dark .api-version-tone-neutral { --api-version-ink:#cbd5e1; --api-version-bg:#263241; --api-version-border:#475569; }
+.dark .api-version-tone-violet { --api-version-ink:#c4b5fd; --api-version-bg:#2c2544; --api-version-border:#514076; }
+.dark .api-version-tone-cyan { --api-version-ink:#67e8f9; --api-version-bg:#12343e; --api-version-border:#155e75; }
+.dark .api-version-tone-amber { --api-version-ink:#fcd34d; --api-version-bg:#3b2f19; --api-version-border:#785521; }
+.dark .api-version-tone-rose { --api-version-ink:#fda4af; --api-version-bg:#3e2430; --api-version-border:#713247; }
+.dark .api-version-tone-blue { --api-version-ink:#93c5fd; --api-version-bg:#1c2b45; --api-version-border:#365885; }

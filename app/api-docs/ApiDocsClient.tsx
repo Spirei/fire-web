@@ -7,10 +7,11 @@ import { showToast } from "@/lib/toast";
 import { copyText } from "@/lib/clipboard";
 import { resolveApiReadingHeading, resolveApiTocSelection } from "@/lib/apiDocsNavigation";
 import ThemeToggle from "@/components/ThemeToggle";
+import ApiVersionBadge from "@/components/ApiVersionBadge";
 import Toaster from "@/components/Toaster";
 import "./api-docs.css";
 
-import { API_DOCS, type ApiDocument, type ApiDocsVersion } from "@/lib/apiDocsVersion";
+import { API_DOCS, API_DOCS_VERSIONS, type ApiDocument, type ApiDocsVersion } from "@/lib/apiDocsVersion";
 
 type Mode = "read" | "edit";
 
@@ -409,10 +410,10 @@ export default function ApiDocsClient({ initialDocument }: { initialDocument: Ap
         </div>
 
         <section className="api-reference-heading">
-          <div className="api-reference-title"><h1>接口参考</h1><p>{API_DOCS[version].description}</p></div>
+          <div className="api-reference-title"><div className="api-reference-title-heading"><h1>接口参考</h1><ApiVersionBadge version={version} fullLabel /></div><p>{API_DOCS[version].description}</p></div>
           <nav className="api-version-pages" aria-label="API 文档版本">
-            {([1, 2] as const).map(item => <Link key={item} href={`/api-docs?version=v${item}`} scroll={false}
-              aria-current={version === item ? "page" : undefined}>{API_DOCS[item].label}</Link>)}
+            {API_DOCS_VERSIONS.map(item => <Link key={item} href={`/api-docs?version=v${item}`} scroll={false}
+              aria-current={version === item ? "page" : undefined}><ApiVersionBadge version={item} /></Link>)}
           </nav>
         </section>
 
@@ -518,7 +519,7 @@ export default function ApiDocsClient({ initialDocument }: { initialDocument: Ap
             <article
               ref={contentRef}
               tabIndex={0}
-              aria-label={`API ${API_DOCS[version].label} 规范正文`}
+              aria-label={`API v${version} 规范正文`}
               onScroll={trackReadingScroll}
               onWheel={resumeReading}
               onTouchMove={resumeReading}
