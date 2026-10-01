@@ -1,13 +1,16 @@
 "use client";
 
 import PasswordInput from "@/components/PasswordInput";
+import { clientRandomId } from "@/lib/randomId";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconBrain, IconCheck, IconChevronDown, IconDatabaseCog, IconMoon, IconSettings, IconSun, IconTrash, IconX } from "@tabler/icons-react";
 
 export type AssistantAppearance = "light" | "dark" | "system";
 export type AssistantDensity = "compact" | "comfortable";
-type ServiceDraft = { id:string; name:string; provider:string; apiUrl:string; apiKey:string; apiKeyConfigured?:boolean; models:string[]; icon?:string };
+import type { ModelServiceConfig } from "@/lib/types";
+import { updateModelEndpoint } from "@/lib/modelServiceDrafts";
+type ServiceDraft = ModelServiceConfig;
 
 export default function AssistantHarnessSettings({ open, section, appearance, fontSize, density, dataScope, models = [], selectedModel = "auto", spaces = [], selectedSpace = "", memoryEnabled = false, memory = "", usage = { calls:0, errors:0, tokens:0, cost:0 }, onClose, onSection, onAppearance, onFontSize, onDensity, onDataScope, onSelectModel, onModelsSaved, onMoveSpace, onAddSpace, onDeleteSpace, onMemoryEnabled, onMemoryChange, onMemorySave, onClearMemory }: {
   open: boolean;
@@ -44,10 +47,49 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
   const [saving,setSaving]=useState(false);
   const [saveMessage,setSaveMessage]=useState("");
   const [spaceMenuOpen,setSpaceMenuOpen]=useState(false);
-  useEffect(()=>{if(!open||section!=="models")return;void fetch("/api/settings").then(r=>r.ok?r.json():null).then(data=>{const rows=data?.settings?.modelServices;if(Array.isArray(rows))setServices(rows);}).catch(()=>undefined);},[open,section]);
+  const savedModels = useRef<ServiceDraft[]>([]);
+  const modelRevision = useRef<string | undefined>(undefined);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+  useEffect(() => {
+    if (!open || section !== "models") {
+      setServices([]); setEditingModels(false); setModelsLoaded(false); setSaveMessage("");
+      return;
+    }
+    const controller = new AbortController();
+    setModelsLoaded(false);
+    void fetch("/api/settings", { signal: controller.signal, cache: "no-store" })
+      .then(async response => { if (!response.ok) throw new Error("模型配置读取失败，请关闭后重试"); return response.json(); })
+      .then(data => {
+        if (controller.signal.aborted) return;
+        if (data?.settings?.modelServicesError) throw new Error(data.settings.modelServicesError);
+        if (!Array.isArray(data?.settings?.modelServices)) throw new Error("模型配置读取失败，请关闭后重试");
+        savedModels.current = data.settings.modelServices;
+        modelRevision.current = data.settings.modelServicesRevision;
+        setServices(data.settings.modelServices); setModelsLoaded(true);
+      }).catch(error => { if (!controller.signal.aborted) setSaveMessage(error instanceof Error ? error.message : "模型配置读取失败"); });
+    return () => controller.abort();
+  }, [open, section]);
+  const toggleModelEditing = () => {
+    if (saving || !modelsLoaded) return;
+    setServices(savedModels.current); setSaveMessage(""); setEditingModels(value => !value);
+  };
   useEffect(()=>{if(!spaceMenuOpen)return;const close=(event:KeyboardEvent)=>{if(event.key==="Escape")setSpaceMenuOpen(false);};window.addEventListener("keydown",close);return()=>window.removeEventListener("keydown",close);},[spaceMenuOpen]);
   const updateService=(id:string,patch:Partial<ServiceDraft>)=>setServices(current=>current.map(item=>item.id===id?{...item,...patch}:item));
-  const saveModels=async()=>{setSaving(true);setSaveMessage("");try{const response=await fetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({modelServices:services})});if(!response.ok)throw new Error();setEditingModels(false);setSaveMessage("模型服务已保存");onModelsSaved?.();}catch{setSaveMessage("保存失败，请重试");}finally{setSaving(false);}};
+  const saveModels = async () => {
+    if (saving || !modelsLoaded) return;
+    setSaving(true); setSaveMessage("");
+    try {
+      const response = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ modelServices: services, modelServicesRevision: modelRevision.current }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "保存失败，请重试");
+      if (!Array.isArray(data?.settings?.modelServices)) throw new Error("保存结果未确认，请刷新核对");
+      savedModels.current = data.settings.modelServices;
+      modelRevision.current = data.settings.modelServicesRevision;
+      setServices(data.settings.modelServices); // The canonical response contains empty keys.
+      setEditingModels(false); setSaveMessage("模型服务已保存"); onModelsSaved?.();
+    } catch (error) { setSaveMessage(error instanceof Error ? error.message : "保存结果未确认，请刷新核对"); }
+    finally { setSaving(false); }
+  };
   if (!open) return null;
   const nav = [
     ["general", "通用设置", IconSettings],
@@ -55,14 +97,14 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
     ["models", "模型", IconDatabaseCog],
   ] as const;
   return <div className="harness-settings-overlay" data-assistant-theme={appearance} role="dialog" aria-modal="true" aria-label="设置">
-    <button type="button" className="harness-settings-mask" aria-label="关闭设置" onClick={onClose} />
+    <button type="button" className="harness-settings-mask" aria-label="关闭设置" disabled={saving} onClick={onClose} />
     <section className="harness-settings-panel">
       <aside className="harness-settings-nav">
         <h2>设置</h2>
-        <div>{nav.map(([key,label,Icon]) => <button key={key} type="button" aria-current={section===key || undefined} onClick={()=>onSection(key)}><Icon size={18}/><span>{label}</span></button>)}</div>
+        <div>{nav.map(([key,label,Icon]) => <button key={key} type="button" aria-current={section===key || undefined} disabled={saving} onClick={()=>onSection(key)}><Icon size={18}/><span>{label}</span></button>)}</div>
       </aside>
       <main className="harness-settings-content">
-        <header>{section==="models"&&<button type="button" className="harness-config-button" onClick={()=>setEditingModels(value=>!value)}>{editingModels?"取消编辑":"配置模型服务"}</button>}<button type="button" onClick={onClose} aria-label="关闭"><IconX size={21}/></button></header>
+        <header>{section==="models"&&<button type="button" className="harness-config-button" disabled={saving || !modelsLoaded} onClick={toggleModelEditing}>{editingModels?"取消编辑":"配置模型服务"}</button>}<button type="button" disabled={saving} onClick={onClose} aria-label="关闭"><IconX size={21}/></button></header>
         <div className="harness-settings-options">
           {section === "general" && <>
             <div className="harness-setting-block"><div className="harness-setting-title">数据权限</div><p className="harness-block-desc">选择发送给模型的数据范围</p><div className="harness-scope-options">{([{value:"none",label:"不附带数据"},{value:"page",label:"仅当前页面"},{value:"account",label:"账户摘要"}] as const).map(item=><button type="button" key={item.value} aria-pressed={dataScope===item.value} onClick={()=>onDataScope(item.value)}>{item.label}{dataScope===item.value&&<IconCheck size={15}/>}</button>)}</div></div>
@@ -80,7 +122,7 @@ export default function AssistantHarnessSettings({ open, section, appearance, fo
             <div className="harness-setting-block"><div className="harness-memory-head"><div><div className="harness-setting-title">跨对话记忆</div><p>让智能助手记住你的回答偏好</p></div><label className="harness-switch"><input type="checkbox" checked={memoryEnabled} onChange={event=>onMemoryEnabled?.(event.target.checked)}/><span/></label></div><textarea className="harness-memory-editor" value={memory} maxLength={2000} rows={5} onChange={event=>onMemoryChange?.(event.target.value)} onBlur={onMemorySave} placeholder="例如：偏好简洁回答、默认使用港币……"/><div className="harness-memory-foot"><span>{memory.length}/2000</span><button type="button" onClick={onClearMemory}>清除记忆</button></div></div>
             <div className="harness-setting-block"><div className="harness-setting-title">模型调用</div><p className="harness-block-desc">当前账户的智能助手调用概览</p><div className="harness-usage-grid"><div><b>{usage.calls.toLocaleString()}</b><span>调用</span></div><div><b>{usage.tokens.toLocaleString()}</b><span>Token</span></div><div><b>{usage.errors.toLocaleString()}</b><span>失败</span></div><div><b>{usage.cost>0?usage.cost.toFixed(4):"—"}</b><span>估算费用</span></div></div></div>
           </>}
-          {section === "models" && <><h3>模型</h3><p className="harness-section-intro">直接复用“模型服务”中配置的提供方和模型，所有操作都在当前弹窗完成。</p>{editingModels?<div className="harness-inline-model-editor">{services.map(service=><article key={service.id}><div className="harness-inline-model-head"><b>{service.name||"未命名服务"}</b><button type="button" onClick={()=>setServices(current=>current.filter(item=>item.id!==service.id))} disabled={services.length===1} aria-label="删除模型服务"><IconTrash size={16}/></button></div><label><span>服务名称</span><input value={service.name} onChange={event=>updateService(service.id,{name:event.target.value})}/></label><label><span>API 地址</span><input value={service.apiUrl} onChange={event=>updateService(service.id,{apiUrl:event.target.value})}/></label><label><span>API 密钥</span><PasswordInput allowReveal={false} type="password" autoComplete="new-password" value={service.apiKey||""} placeholder={service.apiKeyConfigured?"已配置，留空不会覆盖":"输入 API Key"} onChange={event=>updateService(service.id,{apiKey:event.target.value})}/></label><label><span>模型 ID</span><textarea rows={2} value={service.models.join("\n")} onChange={event=>updateService(service.id,{models:event.target.value.split("\n")})}/></label></article>)}<button type="button" className="harness-add-provider" onClick={()=>setServices(current=>[...current,{id:`assistant-model-${Date.now().toString(36)}`,name:"新模型服务",provider:"custom",apiUrl:"",apiKey:"",models:[""]}])}>＋ 添加模型服务</button><button type="button" className="harness-model-save" disabled={saving} onClick={()=>void saveModels()}>{saving?"保存中…":"保存"}</button>{saveMessage&&<p className="harness-model-message">{saveMessage}</p>}</div>:<><div className="harness-model-settings-list"><button type="button" className={selectedModel==="auto"?"selected":""} onClick={()=>onSelectModel?.("auto")}><div><b>自动选择模型</b><span>按模型服务顺序自动回退</span></div>{selectedModel==="auto"&&<IconCheckmark/>}</button>{models.filter(model=>model.configured).map(model=>{const value=`${model.serviceId}:${model.model}`;return <button type="button" key={value} className={selectedModel===value?"selected":""} onClick={()=>onSelectModel?.(value)}><div><b>{model.model}</b><span>{model.serviceName}</span></div><i className={model.health?.ok===false?"error":""}/>{selectedModel===value&&<IconCheckmark/>}</button>})}</div><button type="button" className="harness-add-provider" onClick={()=>setEditingModels(true)}>＋ 管理模型服务</button>{saveMessage&&<p className="harness-model-message">{saveMessage}</p>}</>}</>}
+          {section === "models" && <><h3>模型</h3><p className="harness-section-intro">直接复用“模型服务”中配置的提供方和模型，所有操作都在当前弹窗完成。</p>{editingModels?<div className="harness-inline-model-editor"><fieldset disabled={saving} style={{ border: 0, padding: 0, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>{services.map(service=><article key={service.id}><div className="harness-inline-model-head"><b>{service.name||"未命名服务"}</b><button type="button" onClick={()=>setServices(current=>current.filter(item=>item.id!==service.id))} disabled={services.length===1 || saving} aria-label="删除模型服务"><IconTrash size={16}/></button></div><label><span>服务名称</span><input value={service.name} onChange={event=>updateService(service.id,{name:event.target.value})}/></label><label><span>API 地址</span><input value={service.apiUrl} onChange={event=>updateService(service.id,updateModelEndpoint(service,event.target.value))}/></label><label><span>API 密钥</span><PasswordInput allowReveal={false} type="password" autoComplete="new-password" value={service.apiKey||""} placeholder={service.apiKeyConfigured?"已配置，留空不会覆盖":"输入 API Key"} onChange={event=>updateService(service.id,{apiKey:event.target.value})}/></label><label><span>模型 ID</span><textarea rows={2} value={service.models.join("\n")} onChange={event=>updateService(service.id,{models:event.target.value.split("\n")})}/></label></article>)}<button type="button" className="harness-add-provider" onClick={()=>setServices(current=>[...current,{id:clientRandomId("assistant-model-"),name:"新模型服务",provider:"custom",icon:"",apiUrl:"",apiKey:"",models:[""]}])}>＋ 添加模型服务</button><button type="button" className="harness-model-save" disabled={saving} onClick={()=>void saveModels()}>{saving?"保存中…":"保存"}</button>{saveMessage&&<p className="harness-model-message">{saveMessage}</p>}</fieldset></div>:<><div className="harness-model-settings-list"><button type="button" className={selectedModel==="auto"?"selected":""} onClick={()=>onSelectModel?.("auto")}><div><b>自动选择模型</b><span>按模型服务顺序自动回退</span></div>{selectedModel==="auto"&&<IconCheckmark/>}</button>{models.filter(model=>model.configured).map(model=>{const value=`${model.serviceId}:${model.model}`;return <button type="button" key={value} className={selectedModel===value?"selected":""} onClick={()=>onSelectModel?.(value)}><div><b>{model.model}</b><span>{model.serviceName}</span></div><i className={model.health?.ok===false?"error":""}/>{selectedModel===value&&<IconCheckmark/>}</button>})}</div><button type="button" className="harness-add-provider" disabled={!modelsLoaded || saving} onClick={toggleModelEditing}>＋ 管理模型服务</button>{saveMessage&&<p className="harness-model-message">{saveMessage}</p>}</>}</>}
         </div>
       </main>
     </section>

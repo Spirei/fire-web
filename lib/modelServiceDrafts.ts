@@ -14,7 +14,7 @@ export function switchModelProvider(service: ModelServiceConfig, provider: Model
 
 export function resetModelProvider(service: ModelServiceConfig, defaults: { name: string; apiUrl: string; models: string[] }): ModelServiceConfig {
   const apiUrl = defaults.apiUrl || service.apiUrl;
-  const sameEndpoint = apiUrl.trim() === service.apiUrl.trim();
+  const sameEndpoint = canonicalEndpoint(apiUrl) === canonicalEndpoint(service.apiUrl);
   return {
     ...service, name: defaults.name, apiUrl, models: [...defaults.models],
     icon: "", icons: { ...service.icons, [service.provider]: "" },
@@ -22,4 +22,18 @@ export function resetModelProvider(service: ModelServiceConfig, defaults: { name
     apiKeyConfigured: sameEndpoint && Boolean(service.apiKey || service.apiKeyConfigured),
     providerConfigs: { ...service.providerConfigs, [service.provider]: modelProviderConfig(service) }
   };
+}
+
+function canonicalEndpoint(value: string) {
+  try { return new URL(value.trim()).toString(); } catch { return value.trim(); }
+}
+
+/** Editing the destination must never carry a newly typed key to another endpoint. */
+export function updateModelEndpoint(service: ModelServiceConfig, apiUrl: string): ModelServiceConfig {
+  const changed = canonicalEndpoint(service.apiUrl) !== canonicalEndpoint(apiUrl);
+  const providerConfigs = { ...service.providerConfigs };
+  if (!providerConfigs[service.provider] || canonicalEndpoint(providerConfigs[service.provider]!.apiUrl) === canonicalEndpoint(service.apiUrl)) providerConfigs[service.provider] = modelProviderConfig(service);
+  const saved = providerConfigs[service.provider];
+  const restored = saved && canonicalEndpoint(saved.apiUrl) === canonicalEndpoint(apiUrl);
+  return { ...service, apiUrl, providerConfigs, apiKey: changed ? (restored ? saved.apiKey : "") : service.apiKey, apiKeyConfigured: restored ? Boolean(saved.apiKey || saved.apiKeyConfigured) : !changed && Boolean(service.apiKeyConfigured) };
 }

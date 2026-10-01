@@ -17,7 +17,7 @@ import { getAssets } from "@/lib/assets";
 import { normalizeAssistantContext } from "@/lib/assistantSecurity";
 import { buildAssistantLiveData } from "@/lib/assistantLiveData";
 import { modelAttempts } from "@/lib/modelServices";
-import { getModelHealth, setModelHealth } from "@/lib/modelHealth";
+import { getModelHealth, modelHealthSignature, setModelHealth } from "@/lib/modelHealth";
 import { readLimitedJson, readLimitedResponseJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 import { getAssistantPreferences } from "@/lib/assistantPreferences";
 import { logAssistantUsage } from "@/lib/assistantWorkspace";
@@ -69,7 +69,7 @@ function buildAssistantContextBlock(input: {
   return lines.join("\n");
 }
 
-function streamAssistantResponse(response: Response, meta: { serviceId: string; serviceName: string; model: string }, fallbackUsed: boolean, startedAt: number, userId: string, conversationId: string, trace: { turnId: string; attemptIndex: number; imageCount: number; dataScope: string }) {
+function streamAssistantResponse(response: Response, meta: { serviceId: string; serviceName: string; model: string }, fallbackUsed: boolean, startedAt: number, userId: string, conversationId: string, trace: { turnId: string; attemptIndex: number; imageCount: number; dataScope: string }, healthSignature: string) {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   let buffered = "", answer = "", received = 0, promptTokens = 0, completionTokens = 0, firstTokenMs = 0;
@@ -99,7 +99,7 @@ function streamAssistantResponse(response: Response, meta: { serviceId: string; 
             } catch { /* Ignore provider keepalive or non-data frames. */ }
           }
         }
-        setModelHealth(meta.serviceId, meta.model, { ok: Boolean(answer), latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString(), ...(answer ? {} : { error: "empty" }) });
+        setModelHealth(meta.serviceId, meta.model, { ok: Boolean(answer), latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString(), ...(answer ? {} : { error: "empty" }) }, healthSignature);
         logAssistantUsage({ userId, conversationId, serviceId: meta.serviceId, serviceName: meta.serviceName, model: meta.model, status: answer ? "ok" : "empty", latencyMs: Date.now()-startedAt, promptTokens, completionTokens, firstTokenMs, ...trace });
         controller.enqueue(encoder.encode(`${JSON.stringify({ done: true, model: meta, fallbackUsed })}\n`));
         controller.close();
@@ -385,7 +385,7 @@ export async function POST(request: Request) {
   const settings = getSiteSettings();
   const configuredAttempts = modelAttempts(settings, body?.model);
   const attempts = [...configuredAttempts].sort((left, right) => {
-    const recentlyFailed = (item: typeof left) => { const health = getModelHealth(item.service.id, item.model); return health && !health.ok && Date.now() - Date.parse(health.checkedAt) < 30_000 ? 1 : 0; };
+    const recentlyFailed = (item: typeof left) => { const health = getModelHealth(item.service.id, item.model, modelHealthSignature(item.service.provider, item.apiUrl, item.service.apiKey, item.model)); return health && !health.ok && Date.now() - Date.parse(health.checkedAt) < 30_000 ? 1 : 0; };
     return recentlyFailed(left) - recentlyFailed(right);
   });
   const pageSnapshot = dataScope === "none" ? null : compactPageSnapshot(user.id, context.page);
@@ -432,22 +432,22 @@ export async function POST(request: Request) {
         cache: "no-store"
       });
       if (response.ok && response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
-        return streamAssistantResponse(response, { serviceId: attempt.service.id, serviceName: attempt.service.name, model: attempt.model }, attempts[0] !== attempt, startedAt, user.id, conversationId, { turnId, attemptIndex, imageCount: images.length, dataScope });
+        return streamAssistantResponse(response, { serviceId: attempt.service.id, serviceName: attempt.service.name, model: attempt.model }, attempts[0] !== attempt, startedAt, user.id, conversationId, { turnId, attemptIndex, imageCount: images.length, dataScope }, modelHealthSignature(attempt.service.provider, attempt.apiUrl, attempt.service.apiKey, attempt.model));
       }
       const data = await readLimitedResponseJson<{ choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } }>(response, 2 * 1024 * 1024).catch(() => null);
       const answer = data?.choices?.[0]?.message?.content?.trim();
       if (response.ok && answer) {
-        setModelHealth(attempt.service.id, attempt.model, { ok: true, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString() });
+        setModelHealth(attempt.service.id, attempt.model, { ok: true, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString() }, modelHealthSignature(attempt.service.provider, attempt.apiUrl, attempt.service.apiKey, attempt.model));
         logAssistantUsage({ userId:user.id, conversationId, serviceId:attempt.service.id, serviceName:attempt.service.name, model:attempt.model, status:"ok", latencyMs:Date.now()-startedAt, firstTokenMs:Date.now()-startedAt, promptTokens:Number(data?.usage?.prompt_tokens||0), completionTokens:Number(data?.usage?.completion_tokens||0), turnId, attemptIndex, imageCount:images.length, dataScope });
         return NextResponse.json({ answer: answer.slice(0, 4000), mode: "llm", model: { serviceId: attempt.service.id, serviceName: attempt.service.name, model: attempt.model }, fallbackUsed: attempts[0] !== attempt });
       }
-      setModelHealth(attempt.service.id, attempt.model, { ok: false, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString(), error: `HTTP ${response.status || "empty"}` });
+      setModelHealth(attempt.service.id, attempt.model, { ok: false, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString(), error: `HTTP ${response.status || "empty"}` }, modelHealthSignature(attempt.service.provider, attempt.apiUrl, attempt.service.apiKey, attempt.model));
       logAssistantUsage({ userId:user.id, conversationId, serviceId:attempt.service.id, serviceName:attempt.service.name, model:attempt.model, status:"error", latencyMs:Date.now()-startedAt, error:`HTTP ${response.status||"empty"}`, turnId, attemptIndex, imageCount:images.length, dataScope });
       console.warn(`[assistant] ${attempt.service.name}/${attempt.model} returned HTTP ${response.status || "empty"}, trying fallback`);
     } catch (error) {
       if (request.signal.aborted) return new Response(null, { status: 499 });
       sawTimeout ||= error instanceof Error && error.name === "TimeoutError";
-      setModelHealth(attempt.service.id, attempt.model, { ok: false, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString(), error: error instanceof Error && error.name === "TimeoutError" ? "timeout" : "request_failed" });
+      setModelHealth(attempt.service.id, attempt.model, { ok: false, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString(), error: error instanceof Error && error.name === "TimeoutError" ? "timeout" : "request_failed" }, modelHealthSignature(attempt.service.provider, attempt.apiUrl, attempt.service.apiKey, attempt.model));
       logAssistantUsage({ userId:user.id, conversationId, serviceId:attempt.service.id, serviceName:attempt.service.name, model:attempt.model, status:"error", latencyMs:Date.now()-startedAt, error:error instanceof Error&&error.name==="TimeoutError"?"timeout":"request_failed", turnId, attemptIndex, imageCount:images.length, dataScope });
       console.warn(`[assistant] ${attempt.service.name}/${attempt.model} failed, trying fallback`);
     }

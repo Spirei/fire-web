@@ -52,6 +52,7 @@ async function translateWithLlm(text: string): Promise<string | undefined> {
           ]
         }),
         signal: AbortSignal.timeout(12000),
+        redirect: "error",
         cache: "no-store"
       });
       rateLimited &&= translation.status === 429;

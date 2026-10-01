@@ -28,8 +28,12 @@ export function clientSettings(settings: SiteSettings, admin: boolean) {
     smtpPasswordConfigured: admin && Boolean(settings.smtpPassword),
     pgPasswordConfigured: admin && Boolean(settings.pgPassword),
     llmApiKeyConfigured: admin && Boolean(settings.llmApiKey || settings.deepseekApiKey),
+    modelServicesError: admin ? settings.modelServicesError : undefined,
+    modelServicesInitialized: admin && settings.modelServicesInitialized,
+    modelServicesRevision: admin ? settings.modelServicesRevision : undefined,
     modelServices: admin ? settings.modelServices.map(service => ({
-      ...service,
+      id: service.id, name: service.name, provider: service.provider, icon: service.icon, icons: service.icons,
+      apiUrl: service.apiUrl, models: service.models,
       apiKey: "",
       apiKeyConfigured: Boolean(service.apiKey),
       providerConfigs: Object.fromEntries(Object.entries(service.providerConfigs || {}).map(([provider, config]) => [provider, {

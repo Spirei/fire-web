@@ -5,7 +5,8 @@ import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getSiteSettings, normalizeFutuHost, updateSiteSettings } from "@/lib/settings";
 import { syncRecordGroups } from "@/lib/brokers";
 import { localPathOf, removeFileIfUnused } from "@/lib/fileCleanup";
-import { prepareModelServices } from "@/lib/modelServices";
+import { ModelSettingsConflictError } from "@/lib/modelSettingsRevision";
+import { configuredModelServices, prepareModelServices } from "@/lib/modelServices";
 import { validateAssistantEndpoint } from "@/lib/assistantSecurity";
 import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 import { publicVerificationOrigin } from "@/lib/emailVerification";
@@ -69,13 +70,23 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "不支持的模型提供方" }, { status: 400 });
   }
 
+  const before = getSiteSettings();
+  const legacy = configuredModelServices({ ...before, modelServices: [], modelServicesInitialized: false })[0];
+  const replacedLegacyKey = typeof body.llmApiKey === "string" && Boolean(body.llmApiKey.trim()) && body.llmApiKey.trim() !== "********";
+  const legacyDestinationChanged = (llmProvider !== undefined && llmProvider !== before.llmProvider)
+    || (body.llmApiUrl !== undefined && validateAssistantEndpoint(String(body.llmApiUrl).trim()) !== validateAssistantEndpoint(before.llmApiUrl));
+  if (legacy?.apiKey && legacyDestinationChanged && !replacedLegacyKey) return NextResponse.json({ error: "旧版模型地址或提供方已更改，请输入新配置的密钥；原配置未修改" }, { status: 400 });
+  if (body.deepseekApiUrl !== undefined && (before.deepseekApiKey || process.env.DEEPSEEK_API_KEY) && validateAssistantEndpoint(String(body.deepseekApiUrl).trim()) !== validateAssistantEndpoint(before.deepseekApiUrl)
+    && !(typeof body.deepseekApiKey === "string" && body.deepseekApiKey.trim() && body.deepseekApiKey.trim() !== "********")) return NextResponse.json({ error: "旧版 DeepSeek 地址已更改，请输入新地址的密钥；原配置未修改" }, { status: 400 });
   let modelServices = undefined;
   if (body.modelServices !== undefined) {
-    try { modelServices = prepareModelServices(body.modelServices, getSiteSettings()); }
+    if (body.modelServicesRevision === undefined) return NextResponse.json({ error: "缺少模型配置版本，请刷新后重新编辑" }, { status: 428 });
+    if (body.modelServicesRevision !== undefined && (typeof body.modelServicesRevision !== "string" || !/^[a-f0-9]{64}$/.test(body.modelServicesRevision))) return NextResponse.json({ error: "模型配置版本无效，请刷新后重试" }, { status: 400 });
+    if (body.modelServicesRevision !== undefined && body.modelServicesRevision !== before.modelServicesRevision) return NextResponse.json({ error: new ModelSettingsConflictError().message }, { status: 409 });
+    try { modelServices = prepareModelServices(body.modelServices, before); }
     catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "模型服务格式无效" }, { status: 400 }); }
   }
 
-  const before = getSiteSettings();
   // Preserve unchanged legacy deployment settings, but never trust browser-only validation.
   if (body.domain !== undefined && (typeof body.domain !== "string" || (body.domain.trim() !== before.domain.trim() && body.domain.trim() && !normalizeAppConnectionOrigin(body.domain, process.env.NODE_ENV !== "production")))) {
     return NextResponse.json({ error: "连接地址须为公网 HTTPS 域名，可带端口，不含凭据、路径或参数" }, { status: 400 });
@@ -83,7 +94,8 @@ export async function PUT(request: Request) {
   if (body.appDisplayName !== undefined && (typeof body.appDisplayName !== "string" || body.appDisplayName.trim().length > 80)) return NextResponse.json({ error: "App 名称最多 80 个字符" }, { status: 400 });
   if (body.appDisplayIcon !== undefined && (typeof body.appDisplayIcon !== "string" || !isConnectionIconUrl(body.appDisplayIcon.trim()))) return NextResponse.json({ error: "App 图标请使用站内路径或 http(s) 图片地址" }, { status: 400 });
   if (body.pwaIcon !== undefined && (typeof body.pwaIcon !== "string" || (body.pwaIcon && !/^\/uploads\/ico\/[^/\\]+$/.test(body.pwaIcon)))) return NextResponse.json({ error: "PWA 图标请使用上传的图片" }, { status: 400 });
-  const settings = updateSiteSettings({
+  let settings;
+  try { settings = updateSiteSettings({
     domain: body.domain !== undefined ? String(body.domain) : undefined,
     title: body.title !== undefined ? String(body.title) : undefined,
     ico: body.ico !== undefined ? String(body.ico) : undefined,
@@ -159,7 +171,11 @@ export async function PUT(request: Request) {
     smtpFromName: body.smtpFromName !== undefined ? String(body.smtpFromName) : undefined,
     smtpFromEmail: body.smtpFromEmail !== undefined ? String(body.smtpFromEmail) : undefined,
     emailLinkOrigin: body.emailLinkOrigin !== undefined ? String(body.emailLinkOrigin) : undefined
-  });
+  }, modelServices ? before.modelServicesRevision : undefined); }
+  catch (error) {
+    if (error instanceof ModelSettingsConflictError) return NextResponse.json({ error: error.message }, { status: 409 });
+    return NextResponse.json({ error: "设置保存失败，本次修改未保存，请重试" }, { status: 500 });
+  }
   if (Array.isArray(body.groups)) {
     syncRecordGroups(before.groups, settings.groups);
   }

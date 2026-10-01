@@ -142,7 +142,7 @@ export default function RecordsApp({
   initialAssistantHistory?: import("@/lib/assistantHistory").AssistantHistoryState | null;
   initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
   initialFundBalances: Record<string, number>;
-  initialSettings: Pick<SiteSettings, "assetAnalysisOrder" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
+  initialSettings: Pick<SiteSettings, "assetAnalysisOrder" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices" | "modelServicesRevision" | "modelServicesInitialized" | "modelServicesError" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
   initialStockIcons: Record<string, string>;
   initialMarketIcons?: Record<string, string>;
   initialNavIcons?: Record<string, string>;

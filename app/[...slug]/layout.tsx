@@ -172,7 +172,10 @@ export default async function SlugLayout({
             marketBadgesVisible: settings.marketBadgesVisible,
             allowRegister: settings.allowRegister,
             translationEnabled: settings.translationEnabled,
-            modelServices: clientSettings(settings, isAdmin(user)).modelServices
+            modelServices: clientSettings(settings, isAdmin(user)).modelServices,
+            modelServicesRevision: isAdmin(user) ? settings.modelServicesRevision : undefined,
+            modelServicesInitialized: isAdmin(user) && settings.modelServicesInitialized,
+            modelServicesError: isAdmin(user) ? settings.modelServicesError : undefined
           }}
         />
         </CurrencyProvider>

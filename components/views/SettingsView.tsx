@@ -3,6 +3,7 @@
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import PasswordInput from "@/components/PasswordInput";
+import { clientRandomId } from "@/lib/randomId";
 import ModelTestButton from "@/components/ModelTestButton";
 import PasskeySettings from "@/components/PasskeySettings";
 import { createPasskeySettingsData } from "@/lib/passkeySettingsData";
@@ -14,7 +15,7 @@ import EmailRecoveryForm from "@/components/EmailRecoveryForm";
 import PasswordStrength from "@/components/PasswordStrength";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
 import { readLimitedResponseJson } from "@/lib/requestBody";
-import { resetModelProvider, switchModelProvider } from "@/lib/modelServiceDrafts";
+import { resetModelProvider, switchModelProvider, updateModelEndpoint } from "@/lib/modelServiceDrafts";
 import { moveMobileNavigation } from "@/lib/workspaceNavigation";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -66,7 +67,7 @@ interface Props {
   initialSub?: string;
   initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
   /** 服务端首帧设置快照，避免刷新时先渲染默认开关再回落到真实值 */
-  initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "modelServices" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
+  initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "modelServices" | "modelServicesRevision" | "modelServicesInitialized" | "modelServicesError" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
 }
 
 function SettingsDetailShell({ title, category, detailKey, showBack = false, closeDisabled = false, editable = false, editing = false, onBack, onEdit, onSave, onCancel, onClose, children }: { title: string; category: string; detailKey?: string; showBack?: boolean; closeDisabled?: boolean; editable?: boolean; editing?: boolean; onBack?: () => void; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; onClose: () => void; children: React.ReactNode }) {
@@ -950,6 +951,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     fd.set("code", `${serviceId.slice(0, 20)}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
     fd.set("serviceId", serviceId);
     fd.set("modelServices", JSON.stringify(services));
+    if (site.modelServicesRevision) fd.set("modelServicesRevision", site.modelServicesRevision);
     fd.set("file", file);
     const res = await fetch("/api/settings/model-icon", { method: "POST", body: fd });
     const data = await res.json().catch(() => null);
@@ -1003,14 +1005,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         redirect: "error",
         signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fields)
+        body: JSON.stringify({ ...fields, ...(fields.modelServices ? { modelServicesRevision: site.modelServicesRevision } : {}) })
       });
       const data = await readLimitedResponseJson<any>(res, 1024 * 1024);
       if (signal?.aborted) throw new DOMException("请求已取消", "AbortError");
       if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error.slice(0, 200) : "保存失败");
       if (!data?.settings || typeof data.settings !== "object" || Array.isArray(data.settings) || typeof data.settings.domain !== "string" || !Array.isArray(data.settings.tabs)) throw new Error("保存结果无效，请刷新核对后重试");
       settingsSaveGeneration.current += 1;
-      setSite((s) => ({ ...s, ...data.settings, llmApiKey: s.llmApiKey }));
+      setSite((s) => ({ ...s, ...data.settings, ...(fields.modelServices === undefined ? { modelServices: s.modelServices, modelServicesRevision: s.modelServicesRevision, modelServicesInitialized: s.modelServicesInitialized } : {}), llmApiKey: s.llmApiKey }));
       captureSaved(data.settings);
       if (data.settings?.marketBadges || typeof data.settings?.marketBadgesVisible === "boolean") {
         applyMarketBadges(data.settings.marketBadges, data.settings.marketBadgesVisible);
@@ -1514,6 +1516,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     else if (activeAnchor === "database") setEditingDb(false);
   }
   function cancelActiveEdit() {
+    for (const service of site.modelServices) modelTestRevisions.current[service.id] = (modelTestRevisions.current[service.id] || 0) + 1;
+    setModelTestStates({});
     const snapshot = lastSavedRef.current;
     if (snapshot) {
       setSite(snapshot.site);
@@ -3156,7 +3160,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
                 {(() => {
                   const legacyProvider = normalizedModelProvider(site.llmProvider);
-                  const services: ModelServiceConfig[] = site.modelServices.length ? site.modelServices : [{
+                  const services: ModelServiceConfig[] = site.modelServices.length || site.modelServicesInitialized ? site.modelServices : [{
                     id: "legacy-primary",
                     name: legacyProvider === "deepseek" ? "DeepSeek" : legacyProvider === "openai" ? "OpenAI" : "自定义服务",
                     provider: legacyProvider,
@@ -3182,7 +3186,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     void saveBlock("model-order", { modelServices: next }, "模型优先级已保存").then(ok => { if (!ok) updateServices(services); });
                   };
                   const addService = () => {
-                    const id = `model-service-${Date.now().toString(36)}`;
+                    const id = clientRandomId("model-service-");
                     updateServices([...services, {
                     id,
                     name: "新模型服务",
@@ -3203,9 +3207,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       title="模型服务"
                       desc="管理聊天与决策模型。聊天模型按顺序回退。"
                       className="settings-model-section"
-                      action={editingModel ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" disabled={!!uploadingModelIconId || !!blockSaving.model} onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">{uploadingModelIconId ? "图标保存中…" : "保存"}</button></div> : <button type="button" onClick={() => { if (!site.modelServices.length) updateServices(services); setEditingModel(true); }} className="btn btn-ghost btn-sm">编辑</button>}
+                      action={editingModel ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" disabled={!!site.modelServicesError || !!uploadingModelIconId || !!blockSaving.model} onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">{uploadingModelIconId ? "图标保存中…" : "保存"}</button></div> : <button type="button" disabled={!!site.modelServicesError} onClick={() => { if (!site.modelServices.length) updateServices(services); setEditingModel(true); }} className="btn btn-ghost btn-sm">编辑</button>}
                     >
                       <div className="model-service-stack">
+                        {site.modelServicesError && <p role="alert" className="text-sm text-red-500">{site.modelServicesError}</p>}
                         <SettingsManagedGroup scope="models" inline={services.length === 1} headings={false} editing={editingModel} onReorder={blockSaving["model-order"] ? undefined : reorderServices}>
                         {services.map((service, serviceIndex) => {
                           const meta = MODEL_PROVIDERS.find(item => item.id === service.provider) || MODEL_PROVIDERS[3];
@@ -3280,7 +3285,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                       {service.icon && <button type="button" onClick={() => updateService(service.id, { icon: "", icons: { ...service.icons, [service.provider]: "" } })}>恢复默认</button>}
                                     </div>
                                   </div>
-                                  <label className="model-field"><span>API 地址<small>{service.provider === "jev" ? "TypeSafe System One 决策接口" : "OpenAI 兼容的 Chat Completions 地址"}</small></span><input className="sw-row-input" value={service.apiUrl} onChange={event => updateService(service.id, { apiUrl: event.target.value, apiKeyConfigured: service.providerConfigs?.[service.provider]?.apiUrl === event.target.value.trim() && Boolean(service.providerConfigs?.[service.provider]?.apiKeyConfigured) })} placeholder={service.provider === "jev" ? "https://api.typesafe.ai/v1/systemone" : "https://api.example.com/v1/chat/completions"} autoComplete="off" /></label>
+                                  <label className="model-field"><span>API 地址<small>{service.provider === "jev" ? "TypeSafe System One 决策接口" : "Chat Completions 地址；公网使用 HTTPS"}</small></span><input className="sw-row-input" value={service.apiUrl} onChange={event => updateService(service.id, updateModelEndpoint(service, event.target.value))} placeholder={service.provider === "jev" ? "https://api.typesafe.ai/v1/systemone" : "https://api.example.com/v1/chat/completions"} autoComplete="off" /></label>
                                   <label className="model-field"><span>API 密钥<small>留空不会覆盖已保存密钥</small></span><div className="relative min-w-0 flex-1"><PasswordInput allowReveal={false} className="sw-row-input !w-full pr-24" type="password" autoComplete="new-password" value={service.apiKey} onChange={event => updateService(service.id, { apiKey: event.target.value })} placeholder={service.apiKeyConfigured ? "已配置，输入新值可替换" : "输入 API Key"} /><span className={`model-key-state ${service.apiKey || service.apiKeyConfigured ? "is-ready" : ""}`}><i />{service.apiKey || service.apiKeyConfigured ? "已保护" : "未配置"}</span></div></label>
                                   <div>
                                     <div className="model-list-heading"><span>{service.provider === "jev" ? "决策模型" : "模型与回退顺序"}<small>{service.provider === "jev" ? "测试连接使用结构化判断请求；不参与聊天与翻译回退" : "从上到下依次尝试"}</small></span><button type="button" onClick={() => updateService(service.id, { models: [...service.models, ""] })}><b>＋</b> 添加模型</button></div>
@@ -3325,7 +3330,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           );
                         })}
                         </SettingsManagedGroup>
-                        {editingModel && <button type="button" className="model-add-service" onClick={addService}><b>＋</b><span>添加模型服务<small>接入聊天或决策模型</small></span></button>}
+                        {editingModel && <button type="button" className="model-add-service" disabled={!!site.modelServicesError} onClick={addService}><b>＋</b><span>添加模型服务<small>接入聊天或决策模型</small></span></button>}
                         <div className="model-privacy-note"><SubNavIcon name="key" className="h-4 w-4" /><span>API 密钥只保存在服务端。聊天模型按顺序回退；Jev 仅用于结构化决策配置与连接测试。</span></div>
                       </div>
                     </SettingsSection>

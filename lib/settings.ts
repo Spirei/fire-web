@@ -2,6 +2,7 @@ import { getDb } from "./db";
 import type { GroupConfig, HomeNavItem, Market, SiteSettings, TabConfig, TickerConfig } from "./types";
 import { DEFAULT_MARKET_BADGES, normalizeMarketBadges } from "./marketBadge";
 import { DEFAULT_HOLDING_COLUMNS, normalizeHoldingColumns } from "./holdingColumns";
+import { modelSettingsRevision, ModelSettingsConflictError } from "./modelSettingsRevision";
 import { normalizeModelServices } from "./modelServices";
 import { decryptSecret, encryptSecret } from "./secretStorage";
 import { normalizeMobileNavigationOrder } from "./workspaceNavigation";
@@ -263,7 +264,8 @@ export function normalizeFutuHost(value: string): string {
 }
 
 export function getSiteSettings(): SiteSettings {
-  if (settingsCache) return settingsCache;
+  const revision = modelSettingsRevision();
+  if (settingsCache?.modelServicesRevision === revision) return settingsCache;
   const rows = getDb()
     .prepare("SELECT key, value FROM site_settings")
     .all() as { key: string; value: string }[];
@@ -273,7 +275,12 @@ export function getSiteSettings(): SiteSettings {
     if (typeof map[k] === "string" && map[k] !== "") (result as unknown as Record<string, string>)[k] = normalizeBrandSetting(k, map[k]);
   });
   (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey"] as const).forEach((key) => {
-    result[key] = decryptSecret(result[key]);
+    const modelKey = key === "llmApiKey" || key === "deepseekApiKey";
+    try { result[key] = decryptSecret(result[key], modelKey); }
+    catch {
+      result[key] = "";
+      if (typeof map.modelServices !== "string") result.modelServicesError = "模型密钥无法解密，请检查加密密钥或恢复备份；原配置未修改";
+    }
   });
   // 用户可能在外部删除 uploads 文件，或从旧备份恢复了已过期路径。
   // 本地站点素材不存在时按空值下发，让首页/登录页正常显示内置兜底，而不是空白或破图。
@@ -443,16 +450,20 @@ export function getSiteSettings(): SiteSettings {
   if (typeof map.modelServices === "string") {
     try {
       const stored = JSON.parse(map.modelServices);
+      if (!Array.isArray(stored)) throw new Error("无效的模型配置");
       result.modelServices = normalizeModelServices(Array.isArray(stored) ? stored.map(service => ({
         ...service,
-        apiKey: decryptSecret(typeof service?.apiKey === "string" ? service.apiKey : ""),
+        apiKey: decryptSecret(typeof service?.apiKey === "string" ? service.apiKey : "", true),
         providerConfigs: Object.fromEntries(Object.entries(service?.providerConfigs || {}).map(([provider, raw]) => {
           const config = raw as { apiKey?: string } | null;
-          return [provider, { ...config, apiKey: decryptSecret(typeof config?.apiKey === "string" ? config.apiKey : "") }];
+          return [provider, { ...config, apiKey: decryptSecret(typeof config?.apiKey === "string" ? config.apiKey : "", true) }];
         }))
       })) : []);
     }
-    catch { /* 无效模型服务配置忽略 */ }
+    catch {
+      result.modelServices = [];
+      result.modelServicesError = "模型配置读取失败，请检查加密密钥或恢复备份；已保存配置未修改";
+    }
   }
   result.allowRegister = map.allowRegister !== "0";
   result.stockIconCdn = map.stockIconCdn === "1";
@@ -460,12 +471,17 @@ export function getSiteSettings(): SiteSettings {
   result.smtpSecure = map.smtpSecure === "1";
   result.tradingSquareTrumpRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareTrumpRefreshMinutes) || 5)));
   result.tradingSquareDuanRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareDuanRefreshMinutes) || 5)));
+  result.modelServicesInitialized = typeof map.modelServices === "string";
+  result.modelServicesRevision = revision;
   settingsCache = result;
   return result;
 }
 
-export function updateSiteSettings(patch: Partial<SiteSettings>): SiteSettings {
+export function updateSiteSettings(patch: Partial<SiteSettings>, expectedModelRevision?: string): SiteSettings {
   const db = getDb();
+  db.transaction(() => {
+  if (Array.isArray(patch.modelServices) && getSiteSettings().modelServicesError) throw new Error(getSiteSettings().modelServicesError);
+  if (expectedModelRevision !== undefined && modelSettingsRevision() !== expectedModelRevision) throw new ModelSettingsConflictError();
   const upsert = db.prepare(`
     INSERT INTO site_settings (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
@@ -659,6 +675,7 @@ export function updateSiteSettings(patch: Partial<SiteSettings>): SiteSettings {
   if (typeof patch.tradingSquareDuanRefreshMinutes === "number") {
     upsert.run("tradingSquareDuanRefreshMinutes", String(Math.min(1440, Math.max(1, Math.round(patch.tradingSquareDuanRefreshMinutes)))));
   }
+  })();
   settingsCache = null;
   return getSiteSettings();
 }

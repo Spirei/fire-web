@@ -38,7 +38,8 @@ export function normalizeModelServices(value: unknown): ModelServiceConfig[] {
     if (provider === "custom" && !icons.custom && typeof item.icon === "string") icons.custom = item.icon.trim().slice(0, 500);
     const fallbackId = `model-service-${index + 1}`;
     let id = String(item.id || fallbackId).trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || fallbackId;
-    while (seen.has(id)) id = `${fallbackId}-${seen.size + 1}`;
+    let suffix = 1;
+    while (seen.has(id)) id = `${fallbackId}-${suffix++}`;
     seen.add(id);
     const providerConfigs: NonNullable<ModelServiceConfig["providerConfigs"]> = {};
     if (item.providerConfigs && typeof item.providerConfigs === "object" && !Array.isArray(item.providerConfigs)) {
@@ -60,20 +61,66 @@ export function normalizeModelServices(value: unknown): ModelServiceConfig[] {
   });
 }
 
+function validateProviderConfig(raw: Record<string, unknown>, name: string) {
+  if (typeof raw.apiUrl !== "string" || raw.apiUrl.length > 2048 || (raw.apiUrl.trim() && !validateAssistantEndpoint(raw.apiUrl.trim()))) throw new Error(`${name} 的 API 地址无效或不安全`);
+  if (typeof raw.apiKey !== "string" || raw.apiKey.trim().length > 500 || /[\r\n\0]/.test(raw.apiKey) || raw.apiKey.startsWith("enc:")) throw new Error(`${name} 的 API 密钥格式无效`);
+  if (!Array.isArray(raw.models) || raw.models.length > 20 || raw.models.some(model => typeof model !== "string" || model.trim().length > 160 || /[\r\n\0]/.test(model))) throw new Error(`${name} 的模型 ID 格式无效，最多配置 20 个模型`);
+  const models = raw.models.map(model => (model as string).trim()).filter(Boolean);
+  if (new Set(models).size !== models.length) throw new Error(`${name} 的模型 ID 不能重复`);
+}
+
+function validModelIcon(icon: unknown) {
+  if (typeof icon !== "string") return false;
+  if (!icon) return true;
+  if (!/^\/uploads\/(?:asset\/icon|logo)\/[^/\\?#]+$/.test(icon)) return false;
+  try { const name = decodeURIComponent(icon.split("/").at(-1)!); return name !== "." && name !== ".." && !/[\/\\\0]/.test(name); } catch { return false; }
+}
+
+/** Validate before normalization: invalid IDs and oversized keys must never be silently rewritten. */
+function validateModelServiceInput(value: unknown): asserts value is Record<string, unknown>[] {
+  if (!Array.isArray(value) || value.length > 12) throw new Error("模型服务格式无效，最多配置 12 个服务");
+  const ids = new Set<string>();
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || !PROVIDERS.has(raw.provider)) throw new Error("模型服务提供方无效");
+    if (typeof raw.id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(raw.id) || ids.has(raw.id)) throw new Error("模型服务 ID 无效或重复，请重新添加服务");
+    ids.add(raw.id);
+    if (typeof raw.name !== "string" || !raw.name.trim() || raw.name.trim().length > 50) throw new Error("模型服务名称须为 1-50 个字符");
+    validateProviderConfig(raw, raw.name);
+    if (!validModelIcon(raw.icon ?? "")) throw new Error(`${raw.name} 的图标路径无效`);
+    for (const field of ["providerConfigs", "icons"]) {
+      const entries = raw[field];
+      if (entries === undefined) continue;
+      if (!entries || typeof entries !== "object" || Array.isArray(entries)) throw new Error("模型服务格式无效");
+      for (const [provider, config] of Object.entries(entries)) {
+        if (!PROVIDERS.has(provider)) throw new Error("模型服务提供方无效");
+        if (field === "icons") { if (!validModelIcon(config)) throw new Error(`${raw.name} 的图标路径无效`); }
+        else {
+          if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("模型服务格式无效");
+          validateProviderConfig(config as Record<string, unknown>, raw.name);
+        }
+      }
+    }
+  }
+}
+
 /** 与设置接口共用同一套校验和密钥继承规则，避免图标上传绕过配置检查。 */
 export function prepareModelServices(value: unknown, previous: SiteSettings): ModelServiceConfig[] {
-  if (!Array.isArray(value)) throw new Error("模型服务格式无效");
-  if (value.some(item => !item || typeof item !== "object" || !PROVIDERS.has(String(item.provider)))) {
-    throw new Error("模型服务提供方无效");
-  }
+  if (previous.modelServicesError) throw new Error(previous.modelServicesError);
+  validateModelServiceInput(value);
   const incoming = normalizeModelServices(value);
   if (incoming.length !== value.length) throw new Error("模型服务格式无效");
   const saved = new Map(previous.modelServices.map(item => [item.id, item]));
   return incoming.map(item => {
     const old = saved.get(item.id) || (item.id === "legacy-primary" && !previous.modelServices.length ? configuredModelServices(previous)[0] : undefined);
     const providerConfigs = { ...old?.providerConfigs, ...(old ? { [old.provider]: modelProviderConfig(old) } : {}) };
+    const protectExistingEndpoint = (provider: string, apiUrl: string, apiKey: string) => {
+      const existing = old?.provider === provider ? old : old?.providerConfigs?.[provider as ModelServiceConfig["provider"]];
+      if (existing?.apiKey && !apiKey && validateAssistantEndpoint(existing.apiUrl) !== validateAssistantEndpoint(apiUrl)) throw new Error(`${item.name} 的 API 地址已更改，请输入新地址的密钥；原配置未修改`);
+    };
+    protectExistingEndpoint(item.provider, item.apiUrl, item.apiKey);
     for (const [provider, config] of Object.entries(item.providerConfigs || {})) {
       if (!config) continue;
+      protectExistingEndpoint(provider, config.apiUrl, config.apiKey);
       if (config.apiUrl && !validateAssistantEndpoint(config.apiUrl)) throw new Error(`${item.name} 的 API 地址无效或不安全`);
       providerConfigs[provider as ModelServiceConfig["provider"]] = { ...config, apiKey: config.apiKey || savedModelProviderConfig(old, provider, config.apiUrl)?.apiKey || "" };
     }
@@ -92,16 +139,19 @@ export function prepareModelServices(value: unknown, previous: SiteSettings): Mo
 }
 
 export function configuredModelServices(settings: SiteSettings): ModelServiceConfig[] {
+  if (settings.modelServicesError) return [];
   const services = normalizeModelServices(settings.modelServices);
-  if (services.length) return services;
-  const key = (settings.llmApiKey || settings.deepseekApiKey || process.env.LLM_API_KEY || process.env.DEEPSEEK_API_KEY || "").trim();
+  if (services.length || settings.modelServicesInitialized) return services;
   const provider = settings.llmProvider === "openai" ? "openai" : settings.llmProvider === "custom" ? "custom" : "deepseek";
+  const apiUrl = settings.llmApiUrl || settings.deepseekApiUrl;
+  const dedicatedDeepSeek = provider === "deepseek" && validateAssistantEndpoint(apiUrl) === validateAssistantEndpoint(settings.deepseekApiUrl);
+  const key = (settings.llmApiKey || (dedicatedDeepSeek ? settings.deepseekApiKey : "") || process.env.LLM_API_KEY || (dedicatedDeepSeek ? process.env.DEEPSEEK_API_KEY : "") || "").trim();
   return [{
     id: "legacy-primary",
     name: provider === "openai" ? "OpenAI" : provider === "custom" ? "自定义服务" : "DeepSeek",
     provider,
     icon: "",
-    apiUrl: settings.llmApiUrl || settings.deepseekApiUrl,
+    apiUrl,
     apiKey: key,
     models: [settings.llmModel || settings.deepseekModel || "deepseek-chat"]
   }];

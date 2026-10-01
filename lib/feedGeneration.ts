@@ -3,7 +3,7 @@ import path from "node:path";
 import { readLimitedResponseJson } from "./requestBody";
 import { modelAttempts } from "./modelServices";
 import { getSiteSettings } from "./settings";
-import { setModelHealth } from "./modelHealth";
+import { modelHealthSignature, setModelHealth } from "./modelHealth";
 import { logAssistantUsage } from "./assistantWorkspace";
 import { rateLimit, rateLimitGlobal } from "./rateLimit";
 import { appendFeedMessages, appendFeedPosts, createFeedJob, FeedError, feedMessages, feedPreferences, feedTables, getFeedJob, getFeedPost, normalizeGeneratedPosts, feedGroup, listFeedGroups } from "./feedStore";
@@ -56,14 +56,14 @@ async function modelText(userId:string,system:string,data:unknown,signal?:AbortS
         if(structured) {
           try {if(body?.choices?.[0]?.finish_reason==="length")throw new FeedError("模型输出未完整返回，请重试",502);json(answer);}catch(e){formatError=e as FeedError;}
         }
-        setModelHealth(attempt.service.id,attempt.model,{ok:!formatError,latencyMs:Date.now()-started,checkedAt:new Date().toISOString(),...(formatError?{error:"feed_output_invalid"}:{})});
+        setModelHealth(attempt.service.id,attempt.model,{ok:!formatError,latencyMs:Date.now()-started,checkedAt:new Date().toISOString(),...(formatError?{error:"feed_output_invalid"}:{})},modelHealthSignature(attempt.service.provider,attempt.apiUrl,attempt.service.apiKey,attempt.model));
         logAssistantUsage({userId,serviceId:attempt.service.id,serviceName:attempt.service.name,model:attempt.model,status:formatError?"error":"ok",latencyMs:Date.now()-started,promptTokens:body?.usage?.prompt_tokens,completionTokens:body?.usage?.completion_tokens,attemptIndex:index,dataScope:"feed",...(formatError?{error:"feed_output_invalid"}:{})});
         if(formatError){lastError=formatError;continue;}
         return answer;
       } catch {
         if(signal?.aborted) throw new FeedError(structured?"动态更新超时，稍后会重试":"讨论已取消",structured?504:499);
         lastError=undefined;
-        setModelHealth(attempt.service.id,attempt.model,{ok:false,latencyMs:Date.now()-started,checkedAt:new Date().toISOString(),error:"feed_upstream_failed"});
+        setModelHealth(attempt.service.id,attempt.model,{ok:false,latencyMs:Date.now()-started,checkedAt:new Date().toISOString(),error:"feed_upstream_failed"},modelHealthSignature(attempt.service.provider,attempt.apiUrl,attempt.service.apiKey,attempt.model));
         logAssistantUsage({userId,serviceId:attempt.service.id,serviceName:attempt.service.name,model:attempt.model,status:"error",latencyMs:Date.now()-started,error:"feed_upstream_failed",attemptIndex:index,dataScope:"feed"});
         break;
       }

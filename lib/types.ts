@@ -288,6 +288,9 @@ export interface SiteSettings {
   llmApiKey: string;
   llmApiKeyConfigured?: boolean;
   modelServices: ModelServiceConfig[];
+  modelServicesRevision?: string;
+  modelServicesInitialized?: boolean;
+  modelServicesError?: string;
   tradingSquareTrumpRefreshMinutes: number;
   tradingSquareDuanRefreshMinutes: number;
   xueqiuCookie: string;

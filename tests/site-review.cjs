@@ -1942,7 +1942,7 @@ function fontHeaderFixture(ext) {
       assert(Number.isInteger(body.data.pagination.offset));
     }
   });
-  const request = (role, body, method='GET') => new Request('http://localhost:3000/api/settings', { method, headers: { ...(role ? { cookie: `fire_session=${tokens[role]}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  const request = (role, body, method='GET') => new Request('http://localhost:3000/api/settings', { method, headers: { ...(role ? { cookie: `fire_session=${tokens[role]}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body.modelServices !== undefined && body.modelServicesRevision === undefined ? { ...body, modelServicesRevision: settings.getSiteSettings().modelServicesRevision } : body) } : {}) });
   const settings = require(path.join(root, 'lib/settings.ts'));
   const settingsRoute = require(path.join(root, 'app/api/settings/route.ts'));
   await test('PWA icon override persists, reset restores automatic and public images reject stale addresses', async () => {
@@ -2141,7 +2141,8 @@ function fontHeaderFixture(ext) {
     assert.equal((await settingsRoute.PUT(request('admin', {llmApiUrl:'file:///etc/passwd'},'PUT'))).status,400);
     assert.equal((await settingsRoute.PUT(request('admin', {llmModel:'x'.repeat(161)},'PUT'))).status,400);
     assert.equal((await settingsRoute.PUT(request('admin', {llmProvider:'unknown'},'PUT'))).status,400);
-    const saved = await settingsRoute.PUT(request('admin', {llmProvider:'openai',llmApiUrl:'https://api.openai.com/v1/chat/completions',llmModel:'gpt-test'},'PUT'));
+    assert.equal((await settingsRoute.PUT(request('admin', {llmProvider:'openai',llmApiUrl:'https://api.openai.com/v1/chat/completions'},'PUT'))).status, 400, 'legacy provider changes cannot reuse the old provider key');
+    const saved = await settingsRoute.PUT(request('admin', {llmProvider:'openai',llmApiUrl:'https://api.openai.com/v1/chat/completions',llmModel:'gpt-test',llmApiKey:'TEST_NEW_PROVIDER_KEY'},'PUT'));
     assert.equal(saved.status,200);
     assert.equal(settings.getSiteSettings().llmProvider,'openai');
     assert.equal(settings.getSiteSettings().llmModel,'gpt-test');
@@ -2242,13 +2243,13 @@ function fontHeaderFixture(ext) {
       assert.equal(settings.getSiteSettings().modelServices[0].apiKey, 'SECRET_DEEPSEEK');
       assert.deepEqual(modelAttempts(settings.getSiteSettings()).map(item => item.model), ['deepseek-v4-flash']);
       const changedEndpoint = { ...await reload(), apiUrl: 'https://other.example.com/chat/completions' };
-      assert.equal(prepareModelServices([changedEndpoint], settings.getSiteSettings())[0].apiKey, '');
+      assert.throws(() => prepareModelServices([changedEndpoint], settings.getSiteSettings()), /API 地址已更改/, 'changing a saved endpoint without a new key must not silently discard its existing key');
       const differentService = { ...await reload(), id: 'another-service' };
       assert.equal(prepareModelServices([differentService], settings.getSiteSettings())[0].apiKey, '');
       client = switchModelProvider(await reload(), 'openai', openaiUrl);
       await save(client);
       assert.equal(settings.getSiteSettings().modelServices[0].apiKey, 'SECRET_OPENAI');
-      const legacySettings = { ...settings.getSiteSettings(), modelServices: [], llmProvider: 'deepseek', llmApiUrl: deepseekUrl, llmApiKey: 'SECRET_LEGACY' };
+      const legacySettings = { ...settings.getSiteSettings(), modelServices: [], modelServicesInitialized: false, llmProvider: 'deepseek', llmApiUrl: deepseekUrl, llmApiKey: 'SECRET_LEGACY' };
       const legacy = { ...original, id: 'legacy-primary', apiKey: '', apiKeyConfigured: true };
       const migrated = prepareModelServices([{ ...switchModelProvider(legacy, 'openai', openaiUrl), apiKey: 'SECRET_NEW_PROVIDER', models: ['gpt-test'] }], legacySettings)[0];
       assert.equal(migrated.apiKey, 'SECRET_NEW_PROVIDER');
@@ -2320,6 +2321,141 @@ function fontHeaderFixture(ext) {
     assert(!source.includes('aria-label="模型上移"') && !source.includes('aria-label="模型下移"'));
     assert(source.includes('modelRowDragRef.current?.serviceId === service.id'));
     assert(source.includes('moveMobileNavigation(service.models, source.index, modelIndex)'));
+  });
+  await test('model configuration rejects malformed IDs, keys and duplicate models without altering saved secrets', async () => {
+    const { normalizeModelServices, prepareModelServices } = require(path.join(root, 'lib/modelServices.ts'));
+    const previous = settings.getSiteSettings();
+    const base = { id: 'strict-model', name: 'Strict', provider: 'custom', icon: '', apiUrl: 'https://models.example.com/v1/chat/completions', apiKey: 'SECRET_STRICT', models: ['first'] };
+    const normalized = normalizeModelServices([{ ...base, id: 'model-service-3-3' }, { ...base, id: 'same' }, { ...base, id: 'same' }]);
+    assert.equal(new Set(normalized.map(item => item.id)).size, 3, 'legacy collision repair must terminate');
+    const invalid = [
+      [{ ...base, id: 'bad:id' }], [base, base], [{ ...base, apiKey: 'K'.repeat(501) }],
+      [{ ...base, apiKey: 'enc:v1:forged' }], [{ ...base, apiKey: 'key\nheader' }],
+      [{ ...base, models: ['first', ' first '] }], [{ ...base, models: ['m'.repeat(161)] }],
+      [{ ...base, models: Array.from({ length: 21 }, (_, i) => `model-${i}`) }],
+      [{ ...base, providerConfigs: { custom: { apiUrl: base.apiUrl, apiKey: 'K'.repeat(501), models: ['first'] } } }],
+      [{ ...base, icon: '/uploads/asset/icon/%2e%2e%2fsecret' }]
+    ];
+    for (const services of invalid) {
+      assert.throws(() => prepareModelServices(services, previous));
+      assert.equal((await settingsRoute.PUT(request('admin', { modelServices: services }, 'PUT'))).status, 400);
+      assert.deepEqual(settings.getSiteSettings().modelServices, previous.modelServices);
+    }
+    const { clientSettings } = require(path.join(root, 'lib/settingsClient.ts'));
+    const redacted = clientSettings({ ...previous, modelServices: [{ ...base, futureSecret: 'SECRET_FUTURE' }] }, true);
+    assert(!JSON.stringify(redacted).includes('SECRET_'), 'service fields also require an explicit client allowlist');
+    const publicSettings = clientSettings(previous, false);
+    assert.equal(publicSettings.modelServicesRevision, undefined);
+  });
+  await test('model revision prevents blind and stale saves without blocking unrelated settings', async () => {
+    const previous = settings.getSiteSettings().modelServices;
+    const first = (await (await settingsRoute.GET(request('admin'))).json()).settings;
+    const blind = new Request('http://localhost/api/settings', { method: 'PUT', headers: { cookie: `fire_session=${tokens.admin}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ modelServices: first.modelServices }) });
+    assert.equal((await settingsRoute.PUT(blind)).status, 428);
+    const changed = first.modelServices.map((service, index) => index ? service : { ...service, name: 'Newer configuration' });
+    try {
+      const saved = await settingsRoute.PUT(request('admin', { modelServices: changed, modelServicesRevision: first.modelServicesRevision }, 'PUT'));
+      assert.equal(saved.status, 200);
+      const latest = (await saved.json()).settings;
+      assert.notEqual(latest.modelServicesRevision, first.modelServicesRevision);
+      const stale = await settingsRoute.PUT(request('admin', { title: 'Must not overwrite', modelServices: first.modelServices, modelServicesRevision: first.modelServicesRevision }, 'PUT'));
+      assert.equal(stale.status, 409);
+      assert.equal(settings.getSiteSettings().modelServices[0].name, 'Newer configuration');
+      assert.notEqual(settings.getSiteSettings().title, 'Must not overwrite');
+      assert.equal(settings.getSiteSettings().modelServices[0].apiKey, previous[0].apiKey);
+      assert.equal((await settingsRoute.PUT(request('admin', { footerDesc: settings.getSiteSettings().footerDesc }, 'PUT'))).status, 200);
+      assert.equal(settings.getSiteSettings().modelServicesRevision, latest.modelServicesRevision);
+      assert.throws(() => settings.updateSiteSettings({ modelServices: previous }, first.modelServicesRevision), /其他页面更新/);
+    } finally { settings.updateSiteSettings({ modelServices: previous }); }
+  });
+  await test('model encryption failure and database errors never partially commit settings', () => {
+    const previous = settings.getSiteSettings();
+    const row = db.prepare("SELECT value FROM site_settings WHERE key='modelServices'").get().value;
+    db.exec("CREATE TEMP TRIGGER fail_model_save BEFORE INSERT ON site_settings WHEN NEW.key='modelServices' BEGIN SELECT RAISE(ABORT, 'simulated disk failure'); END");
+    try {
+      assert.throws(() => settings.updateSiteSettings({ title: 'Partial change', modelServices: previous.modelServices }), /simulated disk failure/);
+      assert.equal(settings.getSiteSettings().title, previous.title);
+      assert.equal(db.prepare("SELECT value FROM site_settings WHERE key='modelServices'").get().value, row);
+    } finally { db.exec('DROP TRIGGER fail_model_save'); }
+    const broken = JSON.parse(row); broken[0].apiKey = 'enc:v1:corrupted';
+    db.prepare("UPDATE site_settings SET value=? WHERE key='modelServices'").run(JSON.stringify(broken));
+    try {
+      assert.match(settings.getSiteSettings().modelServicesError, /读取失败/);
+      assert.equal(settings.getSiteSettings().title, previous.title, 'unrelated website settings remain available');
+      const { modelAttempts } = require(path.join(root, 'lib/modelServices.ts'));
+      assert.deepEqual(modelAttempts(settings.getSiteSettings()), [], 'decryption failures disable model calls instead of activating legacy secrets');
+      assert.throws(() => settings.updateSiteSettings({ modelServices: [] }), /读取失败/, 'broken configuration cannot be overwritten as an empty draft');
+      assert.equal(settings.updateSiteSettings({ footerDesc: previous.footerDesc }).title, previous.title);
+      assert.equal(db.prepare("SELECT value FROM site_settings WHERE key='modelServices'").get().value, JSON.stringify(broken));
+    } finally { db.prepare("UPDATE site_settings SET value=? WHERE key='modelServices'").run(row); }
+    assert.equal(settings.getSiteSettings().modelServices[0].apiKey, previous.modelServices[0].apiKey);
+    const { encryptSecret, decryptSecret } = require(path.join(root, 'lib/secretStorage.ts'));
+    assert.equal(decryptSecret(encryptSecret('enc:v1:literal-api-key'), true), 'enc:v1:literal-api-key', 'encryption must not trust a caller supplied ciphertext prefix');
+  });
+  await test('editing endpoints clears typed keys, restores their own drafts, and empty configuration disables legacy fallback', async () => {
+    const { updateModelEndpoint } = require(path.join(root, 'lib/modelServiceDrafts.ts'));
+    const { modelAttempts } = require(path.join(root, 'lib/modelServices.ts'));
+    const original = { id: 'endpoint-draft', name: 'Draft', provider: 'custom', icon: '', apiUrl: 'https://old.example.com/v1/chat', apiKey: 'SECRET_TYPED', apiKeyConfigured: true, models: ['m'] };
+    const changed = updateModelEndpoint(original, 'https://new.example.com/v1/chat');
+    assert.equal(changed.apiKey, ''); assert.equal(changed.apiKeyConfigured, false);
+    const restored = updateModelEndpoint(changed, original.apiUrl);
+    assert.equal(restored.apiKey, original.apiKey); assert.equal(restored.apiKeyConfigured, true);
+    assert.equal(updateModelEndpoint(original, 'https://OLD.example.com:443/v1/chat').apiKey, original.apiKey);
+    const legacyOnly = { ...settings.getSiteSettings(), modelServices: [], modelServicesInitialized: false, llmApiKey: '', llmProvider: 'openai', llmApiUrl: 'https://api.openai.com/v1/chat/completions', deepseekApiKey: 'SECRET_DEEPSEEK_ONLY' };
+    const envKey = process.env.LLM_API_KEY; const envDeepSeek = process.env.DEEPSEEK_API_KEY;
+    delete process.env.LLM_API_KEY; delete process.env.DEEPSEEK_API_KEY;
+    try { assert.deepEqual(modelAttempts(legacyOnly), [], 'legacy DeepSeek credentials cannot become OpenAI or gateway credentials'); }
+    finally { if (envKey !== undefined) process.env.LLM_API_KEY = envKey; if (envDeepSeek !== undefined) process.env.DEEPSEEK_API_KEY = envDeepSeek; }
+    const previous = settings.getSiteSettings().modelServices;
+    try {
+      assert.equal((await settingsRoute.PUT(request('admin', { modelServices: [] }, 'PUT'))).status, 200);
+      assert.deepEqual(modelAttempts({ ...settings.getSiteSettings(), llmApiKey: 'SECRET_OLD' }), [], 'explicit removal must never resurrect a legacy key');
+      const modelsRoute = require(path.join(root, 'app/api/assistant/models/route.ts'));
+      assert.deepEqual((await (await modelsRoute.GET(request('user'))).json()).services, []);
+    } finally { settings.updateSiteSettings({ modelServices: previous }); }
+    const randomSource = fs.readFileSync(path.join(root, 'lib/randomId.ts'), 'utf8');
+    const sandbox = { exports: {}, Uint8Array, Array, Math: Object.assign(Object.create(Math), { random: () => 0.5 }), globalThis: {} };
+    require('node:vm').runInNewContext(ts.transpileModule(randomSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, sandbox);
+    assert.equal(sandbox.exports.clientRandomId('model-'), 'model-' + '80'.repeat(12), 'an absent crypto object must use the fallback instead of generating duplicate zero IDs');
+    const harness = fs.readFileSync(path.join(root, 'components/AssistantHarnessSettings.tsx'), 'utf8');
+    assert(harness.includes('setServices(data.settings.modelServices)') && harness.includes('setServices(savedModels.current)'));
+    assert(harness.includes('return () => controller.abort()') && harness.includes('modelServicesRevision: modelRevision.current'));
+  });
+  await test('draft probes and late results cannot poison saved model health, and invalid probes never send keys', async () => {
+    const route = require(path.join(root, 'app/api/settings/model-test/route.ts'));
+    const { getModelHealth, modelHealthSignature, setModelHealth } = require(path.join(root, 'lib/modelHealth.ts'));
+    const previous = settings.getSiteSettings().modelServices;
+    const service = { id: 'health-isolation', name: 'Health', provider: 'custom', icon: '', apiUrl: 'https://health.example.com/v1/chat', apiKey: 'SECRET_HEALTH', models: ['health-model'] };
+    db.prepare("DELETE FROM rate_limit WHERE key LIKE 'model-test:%' OR key='global:model-test'").run();
+    const offline = global.fetch;
+    const probe = patch => new Request('http://localhost/api/settings/model-test', { method: 'POST', headers: { cookie: `fire_session=${tokens.admin}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ serviceId: service.id, provider: service.provider, apiUrl: service.apiUrl, model: service.models[0], ...patch }) });
+    try {
+      settings.updateSiteSettings({ modelServices: [service] });
+      let calls = 0;
+      global.fetch = async () => { calls++; return Response.json({ choices: [{ message: { content: 'OK' } }] }); };
+      for (const invalid of [{ apiKey: 'key\nheader' }, { model: 'x'.repeat(161) }, { serviceId: 'bad:id' }, { apiUrl: [] }]) assert.equal((await route.POST(probe(invalid))).status, 400);
+      assert.equal(calls, 0);
+      assert.equal((await route.POST(probe({ apiKey: 'SECRET_DRAFT' }))).status, 200);
+      assert.equal(getModelHealth(service.id, service.models[0]), null);
+      assert.deepEqual((await (await route.GET(request('admin'))).json()).tests, {});
+      const gate = {}; gate.promise = new Promise(resolve => { gate.resolve = resolve; });
+      global.fetch = async () => { await gate.promise; return Response.json({ choices: [{ message: { content: 'OK' } }] }); };
+      const pending = route.POST(probe({}));
+      await new Promise(resolve => setImmediate(resolve));
+      settings.updateSiteSettings({ modelServices: [{ ...service, apiKey: 'SECRET_NEW_KEY' }] });
+      gate.resolve(); assert.equal((await pending).status, 200);
+      assert.equal(getModelHealth(service.id, service.models[0]), null, 'late result belongs to the previous key');
+      assert.deepEqual((await (await route.GET(request('admin'))).json()).tests, {});
+      global.fetch = async (_, init) => { assert.equal(init.redirect, 'manual'); return new Response('<html>gateway error SECRET_HEALTH</html>', { status: 401 }); };
+      const rejected = await route.POST(probe({})); assert.equal(rejected.status, 502);
+      assert.equal((await rejected.json()).error, '连接失败（HTTP 401）');
+      const modelsRoute = require(path.join(root, 'app/api/assistant/models/route.ts'));
+      assert(!JSON.stringify(await (await modelsRoute.GET(request('user'))).json()).includes('SECRET_'));
+      setModelHealth(service.id, service.models[0], { ok: true, latencyMs: 4, checkedAt: new Date().toISOString() }, modelHealthSignature(service.provider, service.apiUrl, 'SECRET_OLD_KEY', service.models[0]));
+      assert.equal((await (await modelsRoute.GET(request('user'))).json()).services[0].health, null, 'runtime health from an old key cannot be reused');
+      settings.updateSiteSettings({ modelServices: [service, { ...service, id: 'backup-priority', models: ['second', 'third'] }] });
+      assert.deepEqual((await (await modelsRoute.GET(request('user'))).json()).services.map(item => item.priority), [1, 2, 3]);
+    } finally { global.fetch = offline; settings.updateSiteSettings({ modelServices: previous }); }
   });
   await test('model service navigation and provider icons stay explicit', () => {
     const source=fs.readFileSync(path.join(root,'components/views/SettingsView.tsx'),'utf8');
@@ -2496,6 +2632,9 @@ function fontHeaderFixture(ext) {
     assert.equal(validateAssistantEndpoint('https://user:pass@example.com/v1/chat'),null);
     assert.equal(validateAssistantEndpoint('http://192.168.28.8:11434/v1/chat/completions'),'http://192.168.28.8:11434/v1/chat/completions');
     assert.equal(validateAssistantEndpoint('https://api.deepseek.com/chat/completions'),'https://api.deepseek.com/chat/completions');
+    assert.equal(validateAssistantEndpoint('http://models.example.com/v1/chat'), null, 'public bearer transport requires HTTPS');
+    assert.equal(validateAssistantEndpoint('http://localhost:11434/v1/chat'), 'http://localhost:11434/v1/chat');
+    assert.equal(validateAssistantEndpoint('https://metadata.google.internal./latest'), null);
   });
   await test('assistant launcher and panel positions are draggable, isolated and persistent',()=>{
     const source=fs.readFileSync(path.join(root,'components/ContextAssistant.tsx'),'utf8');
@@ -3122,11 +3261,32 @@ function fontHeaderFixture(ext) {
     const makeRequest = (services, code) => {
       const fd = new FormData();
       fd.set('kind', 'asset'); fd.set('folder', 'icon'); fd.set('name', 'Test Model'); fd.set('code', code);
-      fd.set('serviceId', before[0].id); fd.set('modelServices', JSON.stringify(services));
+      fd.set('serviceId', before[0].id); fd.set('modelServices', JSON.stringify(services)); fd.set('modelServicesRevision', settings.getSiteSettings().modelServicesRevision);
       fd.set('file', new File([png], 'icon.png', { type: 'image/png' }));
       return new Request('http://localhost/api/settings/model-icon', { method: 'POST', headers: { cookie: `fire_session=${tokens.admin}` }, body: fd });
     };
     const originalCount = files();
+    const staleUpload = makeRequest(before, 'STALE-MODEL');
+    const changed = before.map((service, i) => i ? service : { ...service, name: 'Concurrent configuration' });
+    settings.updateSiteSettings({ modelServices: changed });
+    assert.equal((await route.POST(staleUpload)).status, 409);
+    assert.equal(files(), originalCount);
+    assert.equal(settings.getSiteSettings().modelServices[0].name, 'Concurrent configuration');
+    settings.updateSiteSettings({ modelServices: before });
+    const upload = require(path.join(root, 'lib/upload.ts'));
+    const saveUpload = upload.saveUpload;
+    let conflictingUrl;
+    upload.saveUpload = async request => {
+      const saved = await saveUpload(request); conflictingUrl = saved.url;
+      settings.updateSiteSettings({ modelServices: changed });
+      return saved;
+    };
+    try {
+      const racing = await route.POST(makeRequest(before, 'RACING-MODEL'));
+      assert.equal(racing.status, 409);
+      assert.equal(settings.getSiteSettings().modelServices[0].name, 'Concurrent configuration');
+      assert.equal(fs.existsSync(path.join(temp, 'public', conflictingUrl.slice(1))), false, 'failed concurrent upload must be removed');
+    } finally { upload.saveUpload = saveUpload; settings.updateSiteSettings({ modelServices: before }); }
     const invalid = await route.POST(makeRequest(before.map((s, i) => i === 0 ? { ...s, apiUrl: 'file:///bad' } : s), 'INVALID-MODEL'));
     assert.equal(invalid.status, 400);
     assert.equal(files(), originalCount, 'invalid settings must not leave uploaded files');

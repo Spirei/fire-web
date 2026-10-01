@@ -9,7 +9,8 @@
 export function clientRandomId(prefix = ""): string {
   const bytes = new Uint8Array(12);
   try {
-    globalThis.crypto?.getRandomValues(bytes);
+    if (!globalThis.crypto?.getRandomValues) throw new Error("Random API unavailable");
+    globalThis.crypto.getRandomValues(bytes);
     return `${prefix}${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
   } catch {
     const fallback = Array.from({ length: 12 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, "0")).join("");

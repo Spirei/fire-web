@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getSiteSettings, updateSiteSettings } from "@/lib/settings";
 import { clientSettings } from "@/lib/settingsClient";
+import { ModelSettingsConflictError } from "@/lib/modelSettingsRevision";
 import { prepareModelServices } from "@/lib/modelServices";
 import { removeFileIfUnused } from "@/lib/fileCleanup";
 import { readFormBody } from "@/lib/requestBody";
@@ -18,6 +19,9 @@ export async function POST(request: Request) {
   }
   const serviceId = String(form.get("serviceId") || "");
   const before = getSiteSettings();
+  const revision = form.get("modelServicesRevision");
+  if (revision === null) return NextResponse.json({ error: "缺少模型配置版本，请刷新后重新编辑" }, { status: 428 });
+  if (revision !== before.modelServicesRevision) return NextResponse.json({ error: new ModelSettingsConflictError().message }, { status: 409 });
   let services;
   try {
     services = prepareModelServices(JSON.parse(String(form.get("modelServices") || "")), before);
@@ -31,16 +35,17 @@ export async function POST(request: Request) {
   try {
     ({ url } = await saveUpload(request));
     const next = services.map(item => item.id === serviceId ? { ...item, icon: url, icons: { ...item.icons, [item.provider]: url } } : item);
-    const settings = updateSiteSettings({ modelServices: next });
+    const settings = updateSiteSettings({ modelServices: next }, before.modelServicesRevision);
     const activeIcons = new Set(settings.modelServices.flatMap(item => [item.icon, ...Object.values(item.icons || {})]).filter(Boolean));
     before.modelServices.forEach(item => {
       for (const icon of new Set([item.icon, ...Object.values(item.icons || {})])) {
         if (icon && !activeIcons.has(icon)) removeFileIfUnused(icon);
       }
     });
-    return NextResponse.json({ url, settings: clientSettings(settings, true) });
+    return NextResponse.json({ url, settings: clientSettings(settings, true) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (url) removeFileIfUnused(url);
+    if (error instanceof ModelSettingsConflictError) return NextResponse.json({ error: error.message }, { status: 409 });
     if (error instanceof UploadError) return NextResponse.json({ error: error.message }, { status: error.status });
     return NextResponse.json({ error: "图标保存失败，请重试" }, { status: 500 });
   }
