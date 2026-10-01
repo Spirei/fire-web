@@ -130,7 +130,7 @@ const data=async promise=>{const res=await promise;return {status:res.status,hea
   assert.equal(policy.appV2Access('/api/v2/feed/jobs/bad','GET'),null);assert.equal(policy.appV2Access('/api/v2/feed/posts/fp-'+ 'a'.repeat(24)+'/discussion','DELETE'),null);
   assert.equal(policy.appV2Access('/api/v2/watch-groups/reorder','DELETE'),null);
   for(const path of ['auth/login','auth/authorize','auth/devices','auth/delete-account','data/export','orders/export','portfolio-series','users','financial-reports'])assert.equal(policy.appV2Access('/api/v2/'+path,'GET'),null);
-  const v2=await v2Gate.appV2Response(r2('auth/login',{},grant.access_token,'POST'),()=>assert.fail('not published'));assert.equal(v2.status,404);
+  const v2=await v2Gate.appV2Response(r2('auth/authorize',{},grant.access_token,'POST'),()=>assert.fail('Cookie consent is not published in v2'));assert.equal(v2.status,404);
  });
  await test('v2 FIRE uses an envelope while v1 stays bare and revocation during input cannot save',async()=>{
   const f=fixture(),grant=connect(f.user,f.browser,full);

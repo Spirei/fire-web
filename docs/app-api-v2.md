@@ -22,13 +22,16 @@ security.version=2，read_scope:security.read/write_scope:security.write；secur
 
 私有端点仅接受Authorization: Bearer fat_... App access token，不接受Cookie、Web session Bearer或由客户端选择userId；App永远按普通用户自身权限处理。无效会话40101/40102，scope不足40301且不清会话，密码/因子错误40103/40104且HTTP403。公开行情/图标/目录可匿名读取，忽略Cookie的身份，不授予个人数据或管理员能力；若显式携带Bearer则必须为有效App grant。App专用指受独立合约管理，公开资源不通过User-Agent假装限制调用者身份。
 
-所有已公布JSON端点使用{code,message,data,meta?}，保持原有业务字段、分页及业务语义；fire-settings 的 v1 历史裸JSON仅在v2包装为统一信封，GET data={fire}，PUT data={ok,assetHistory}，请求体仍为{fire,assetRecord?}。错误不泄露内部诊断。不迁移裸JSON、备份/导入导出、管理员素材/券商写入、旧密码login、Cookie auth/devices、delete-account和portfolio-series；这些路径不属于v2。非支持方法返回405，未公布路径404，无跨版本重定向。
+所有已公布JSON端点使用{code,message,data,meta?}，保持原有业务字段、分页及业务语义；fire-settings 的 v1 历史裸JSON仅在v2包装为统一信封，GET data={fire}，PUT data={ok,assetHistory}，请求体仍为{fire,assetRecord?}。错误不泄露内部诊断。不迁移裸JSON、备份/导入导出、管理员素材/券商写入、旧密码login的Web会话合同、Cookie auth/devices、delete-account和portfolio-series。v2原生登录是独立短期App令牌合同，见下文。非支持方法返回405，未公布路径404，无跨版本重定向。
 
 ## 完整路径与方法（相对于 /api/v2）
 
 | 路径 | 方法 | 权限 |
 |---|---|---|
 | `auth/config` | GET | public |
+| `auth/login` | POST | credential |
+| `auth/login/totp` | POST | credential |
+| `auth/permissions` | POST | portfolio.read；当前密码与已开启的二步验证 |
 | `market-calendar` | GET | public（仅 v2） |
 | `market-calendar/batch` | GET | public（仅 v2） |
 | `auth/token` | POST | credential |
@@ -93,7 +96,13 @@ security.version=2，read_scope:security.read/write_scope:security.write；secur
 | `feed/posts/[postId]` | GET,PUT | feed.read；写入 feed.write |
 | `feed/posts/[postId]/discussion` | GET,POST | feed.read；写入 feed.write |
 
-security接口的完整payload见 native-account-security-v1.md，将其中/api/v1替换为/api/v2；其余业务请求/响应沿用docs/api-spec.md对应v1资源，不变更金额、订单和分页含义。credentials类端点以请求体里的PKCE/refresh/revoke/recovery凭证验证，不依赖Cookie。
+security接口的完整payload见 native-account-security-v1.md，将其中/api/v1替换为/api/v2；其余业务请求/响应沿用docs/api-spec.md对应v1资源，不变更金额、订单和分页含义。credentials类端点以请求体里的PKCE/refresh/revoke/recovery或原生登录凭证验证，不依赖Cookie。
+
+## App 内账号密码登录
+
+两版 auth/config 的 native_login 声明固定 v2 登录、二步与扩权路径。基础登录仅授予 portfolio.read portfolio.write，返回15分钟 access、轮换 refresh、grant、apiVersion 与同 auth/me 的完整 User；不建立 Web 会话。TOTP/备用码使用5分钟、最多8次、单次成功消费的独立摘要挑战。额外 profile/feed/security 权限由用户明确申请并重新校验，成功签发新 grant，客户端原子保存后再撤销旧 grant；失败保留旧连接。
+
+完整发现、请求、响应和错误码见 [native-app-login-v2.md](native-app-login-v2.md)。未声明 native_login 的服务器不可猜端点或降级为 v1 长期 Web token。测试只使用临时数据库，不表示线上已部署；新登录凭证和既有 PKCE 凭证使用同一刷新、撤销和设备管理服务。
 
 ## 服务端交付验证
 

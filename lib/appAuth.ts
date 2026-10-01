@@ -43,7 +43,7 @@ export function assertAppOrigin(request: Request) {
 }
 
 type SecurityUser = { password_hash: string; totp_secret: string; totp_enabled: number };
-function securityStamp(user: SecurityUser) { return appTokenHash(`${user.password_hash}:${user.totp_enabled}:${user.totp_secret}`); }
+export function appSecurityStamp(user: SecurityUser) { return appTokenHash(`${user.password_hash}:${user.totp_enabled}:${user.totp_secret}`); }
 interface Grant extends SecurityUser {
   id: string; user_id: string; scope: string; passkey_id: string | null; security_stamp: string;
   device_name: string; last_used_at: number; created_at: number; expires_at: number; revoked_at: number | null;
@@ -54,7 +54,7 @@ function activeGrant(id: string): Grant | null {
     u.username,u.nickname,u.uid,u.email,u.avatar,u.is_test FROM app_grants g JOIN users u ON u.id=g.user_id WHERE g.id=?`).get(id) as Grant | undefined;
   const now = Date.now();
   if (!row || row.revoked_at !== null || row.expires_at <= now || row.created_at + REFRESH_MAX_MS <= now) return null;
-  if (row.security_stamp !== securityStamp(row) || (row.passkey_id && !getDb().prepare("SELECT 1 FROM passkeys WHERE id=? AND user_id=?").get(row.passkey_id, row.user_id))) {
+  if (row.security_stamp !== appSecurityStamp(row) || (row.passkey_id && !getDb().prepare("SELECT 1 FROM passkeys WHERE id=? AND user_id=?").get(row.passkey_id, row.user_id))) {
     revokeAppGrant(row.id); return null;
   }
   return row;
@@ -81,6 +81,25 @@ function issueTokens(grantId: string) {
   db.prepare("INSERT INTO app_refresh_tokens(token_hash,grant_id) VALUES(?,?)").run(appTokenHash(refresh), grantId);
   return { access_token: access, refresh_token: refresh, token_type: "Bearer", expires_in: ACCESS_SECONDS, grant_id: grantId };
 }
+function createAppGrant(userId: string, user: SecurityUser, scope: string, deviceName: string, passkeyId: string | null, preserveGrantId?: string) {
+  const db = getDb(), id = opaque("fg_"), now = Date.now();
+  const old = (preserveGrantId
+    ? db.prepare("SELECT id FROM app_grants WHERE user_id=? AND id<>? ORDER BY created_at DESC LIMIT -1 OFFSET 18").all(userId,preserveGrantId)
+    : db.prepare("SELECT id FROM app_grants WHERE user_id=? ORDER BY created_at DESC LIMIT -1 OFFSET 19").all(userId)) as { id: string }[];
+  for (const grant of old) db.prepare("DELETE FROM app_grants WHERE id=?").run(grant.id);
+  db.prepare(`INSERT INTO app_grants(id,user_id,client_id,scope,device_name,security_stamp,passkey_id,created_at,last_used_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, userId, APP_CLIENT_ID, scope, deviceName, appSecurityStamp(user), passkeyId, now, now, now + REFRESH_IDLE_MS);
+  return { ...issueTokens(id), scope };
+}
+/** Called only after password/factor verification, inside the caller's atomic transaction. */
+export function createNativeAppGrant(userId: string, scope: string, deviceName: string, preserveGrantId?: string) {
+  if (!getDb().inTransaction) throw new Error("App 令牌签发必须位于验证事务中");
+  const scopes = scope.split(" ").filter(Boolean);
+  if (!scopes.includes("portfolio.read") || scopes.some(value => !APP_SUPPORTED_SCOPES.includes(value)) || (scopes.includes("feed.write") && !scopes.includes("feed.read")) || (scopes.includes("security.write") && !scopes.includes("security.read"))) throw new Error("不支持的授权范围");
+  const user = getDb().prepare("SELECT password_hash,totp_secret,totp_enabled FROM users WHERE id=?").get(userId) as SecurityUser | undefined;
+  if (!user) throw new Error("账户已失效");
+  return createAppGrant(userId, user, [...new Set(scopes)].join(" "), deviceName, null,preserveGrantId);
+}
 export function exchangeAppCode(values: Record<string, unknown>) {
   if (values.client_id !== APP_CLIENT_ID || values.redirect_uri !== APP_REDIRECT_URI || typeof values.code !== "string" || !/^fac_[A-Za-z0-9_-]{43}$/.test(values.code) || typeof values.code_verifier !== "string" || !/^[A-Za-z0-9._~-]{43,128}$/.test(values.code_verifier)) return null;
   const db = getDb();
@@ -93,13 +112,7 @@ export function exchangeAppCode(values: Record<string, unknown>) {
     const session = db.prepare("SELECT passkey_id FROM sessions WHERE token=? AND user_id=? AND expires_at>?").get(code.session_hash, code.user_id, Date.now()) as { passkey_id: string | null } | undefined;
     const user = db.prepare("SELECT * FROM users WHERE id=?").get(code.user_id) as SecurityUser | undefined;
     if (!session || !user) return null;
-    const id = opaque("fg_"); const now = Date.now();
-    // Keep the device list bounded; old grants and their token families are removed together.
-    const old = db.prepare("SELECT id FROM app_grants WHERE user_id=? ORDER BY created_at DESC LIMIT -1 OFFSET 19").all(code.user_id) as { id: string }[];
-    for (const grant of old) db.prepare("DELETE FROM app_grants WHERE id=?").run(grant.id);
-    db.prepare(`INSERT INTO app_grants(id,user_id,client_id,scope,device_name,security_stamp,passkey_id,created_at,last_used_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
-      .run(id, code.user_id, APP_CLIENT_ID, code.scope, code.device_name, securityStamp(user), session.passkey_id, now, now, now + REFRESH_IDLE_MS);
-    return { ...issueTokens(id), scope: code.scope };
+    return createAppGrant(code.user_id, user, code.scope, code.device_name, session.passkey_id);
   }).immediate();
 }
 export function refreshAppTokens(clientId: unknown, token: unknown) {

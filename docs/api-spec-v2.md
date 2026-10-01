@@ -1,6 +1,6 @@
 # Alcor · API 规范（v2）
 
-App 专用接口，固定前缀 `/api/v2`。与 Web / v1 共用账号、授权、持仓及账本，版本切换不搬迁数据。私有接口只接受 PKCE App access token；公开行情和图标支持本地模式匿名读取。
+App 专用接口，固定前缀 `/api/v2`。与 Web / v1 共用账号、授权、持仓及账本，版本切换不搬迁数据。私有接口只接受 App access token；公开行情和图标支持本地模式匿名读取。
 
 ## 1. 版本发现与迁移
 
@@ -34,7 +34,7 @@ App 专用接口，固定前缀 `/api/v2`。与 Web / v1 共用账号、授权�
 }
 ```
 
-这是 `auth/config` 的 data 摘要。完整响应还包含 scope、scopes_supported、code_challenge_methods_supported、profile_path、upload_path、email_path、password_path、feed_path 和 security。
+这是 `auth/config` 的 data 摘要。完整响应还包含 scope、scopes_supported、code_challenge_methods_supported、profile_path、upload_path、email_path、password_path、feed_path、security 和 native_login。
 
 security.version 为2，read_scope / write_scope 为 security.read / security.write，email_verification_path、totp_path、passkeys_path、devices_path、password_reset_path 都使用 `/api/v2/auth`。
 
@@ -42,7 +42,33 @@ security.version 为2，read_scope / write_scope 为 security.read / security.wr
 
 </details>
 
-## 2. PKCE 与授权范围
+## 2. 原生登录、PKCE 与授权范围
+
+<details>
+<summary>App 内登录 · 账号密码与二步验证</summary>
+
+两版 `auth/config` 的 `native_login` 明确声明 `supported:true`、`version:1`、`api_version:2`、固定 `client_id:"fire-ios"`、`login_path:"/api/v2/auth/login"`、`two_factor_path:"/api/v2/auth/login/totp"`、`permissions_path:"/api/v2/auth/permissions"`、基础 scope、scopes_supported、factors:["totp","backup_code"] 和 challenge_expires_in:300。缺少能力声明不猜端点，不降级到旧 Web 长期令牌。
+
+匿名 POST `/api/v2/auth/login`：`{client_id:"fire-ios",username,password,device_name?}`。支持用户名或邮箱，拒绝额外 `scope/userId`。基础范围固定 `portfolio.read portfolio.write`，不设置 Cookie、不建立 Web session。
+
+无二步验证，成功 data 为 `{status:"authenticated",apiVersion:2,access_token,refresh_token,token_type:"Bearer",expires_in:900,grant_id,scope,user}`。User 与该 access 调用 auth/me 完全相同，包含真实头像、完整 capabilities 与 security；App role 固定 user。
+
+启用二步时仅返回 `{status:"requires_2fa",apiVersion:2,purpose:"login",challenge_token:"flc_...",expires_in:300,factors:["totp","backup_code"]}`，不返回 User 或会话令牌。匿名 POST `/api/v2/auth/login/totp`：`{client_id:"fire-ios",challenge_token,code}`，成功返回同一 authenticated 结构。挑战保存摘要、绑定账户安全状态/client/origin/scope/用途，5分钟过期、最多8次、成功单次消费；不能与 Web ticket 混用。
+
+密码错误40103、因子错误40104、挑战无效/过期/已使用40105均为 HTTP403，保留旧连接；限流42901。凭证消费与 grant 创建同事务，失败不部分写入或消费备用码。新 grant 使用相同的15分钟 access、轮换 refresh、30天空闲/90天最长与重放撤销策略。
+
+</details>
+
+<details>
+<summary>额外权限 · 用户明确申请后重新验证</summary>
+
+POST `/api/v2/auth/permissions`，携带当前 App Bearer：`{client_id:"fire-ios",scope:"profile.write",currentPassword}`。scope 为明确申请的范围，最终并入原 scope，security.write/feed.write 需各自 read；普通登录、启动及恢复连接不能自动扩权。
+
+无二步验证直接返回 authenticated；启用二步返回 purpose:"permissions" 的挑战，完成 login/totp 时必须携带同一来源 grant 的当前有效 access token（刷新后的同 grant token 可用）。另一用户/另一 grant 不能消费挑战。
+
+成功产生新 grant，返回 replaces_grant_id；旧 grant 权限不变。客户端原子保存新 access、refresh 与 origin/grant/apiVersion 后再撤销旧 grant。失败、取消、过期或限流不清旧连接；只有当前 Bearer 确实无效时返回 HTTP401/40101或40102。
+
+</details>
 
 <details>
 <summary>系统浏览器授权 · 一次性代码兑换</summary>
@@ -85,7 +111,7 @@ Authorization: Bearer fat_<App access token>
 | feed.read / feed.write | 本人动态读取 / 编辑、生成和讨论 |
 | security.read / security.write | 本人账户安全读取 / 管理 |
 
-所有授权必须有 portfolio.read；默认 portfolio.read portfolio.write 保持不变。feed.write 必须同时有 feed.read，security.write 必须同时有 security.read。可选范围必须明确请求并取得网页同意，刷新令牌或切换版本不增加权限。App 授权不继承网站管理员权限。
+所有授权必须有 portfolio.read；默认 portfolio.read portfolio.write 保持不变。feed.write 必须同时有 feed.read，security.write 必须同时有 security.read。可选范围必须由用户明确请求，经原生扩权重新验证或网页 PKCE 同意；刷新令牌或切换版本不增加权限。App 授权不继承网站管理员权限。
 
 </details>
 
@@ -113,7 +139,7 @@ POST `/api/v2/auth/revoke`：`{client_id:"fire-ios",token}`，token 可为 fat_ 
 | 400 | 40001 / 40002 / 40003 | 参数、请求体或恢复验证码无效 |
 | 401 | 40101 / 40102 | 缺少有效 App token / 连接过期或已撤销 |
 | 403 | 40301 | scope不足或来源不可信 |
-| 403 | 40103 / 40104 | 当前密码错误 / 第二因素错误，连接保持 |
+| 403 | 40103 / 40104 / 40105 | 密码错误 / 第二因素错误 / 原生登录挑战无效，旧连接保持 |
 | 404 | 40401 | 本人资源不存在 |
 | 409 | 40901 / 40902 | 数据冲突或安全挑战过期 |
 | 429 | 42901 | 请求限流 |
@@ -124,13 +150,16 @@ POST `/api/v2/auth/revoke`：`{client_id:"fire-ios",token}`，token 可为 fat_ 
 
 ## 4. 完整接口清单
 
-public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization 时需有效 App grant。credential 根据请求体内的 PKCE、refresh、revoke 或恢复凭证认证。其他行写出所需 scope，均只操作当前 grant 用户。
+public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization 时需有效 App grant。credential 根据请求体内的 PKCE、refresh、revoke、恢复或原生登录凭证认证。其他行写出所需 scope，均只操作当前 grant 用户。
 
 ### 4.1 连接与身份
 
 | 方法 | 路径 | 权限 |
 | --- | --- | --- |
 | GET | `/api/v2/auth/config` | public |
+| POST | `/api/v2/auth/login` | credential |
+| POST | `/api/v2/auth/login/totp` | credential |
+| POST | `/api/v2/auth/permissions` | portfolio.read |
 | GET | `/api/v2/market-calendar` | public |
 | GET | `/api/v2/market-calendar/batch` | public |
 | POST | `/api/v2/auth/token` | credential |
@@ -228,7 +257,7 @@ public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization �
 | GET | `/api/v2/company-profile` | public |
 | GET | `/api/v2/settings/public` | public |
 
-不提供密码 login、Cookie 会话管理、管理员写入、备份/导入导出、财务报表或 portfolio-series。券商目录（brokers）仍需 portfolio.read，本地模式券商使用本地库。
+不提供旧 Web 登录会话合同、Cookie 会话管理、管理员写入、备份/导入导出、财务报表或 portfolio-series。券商目录（brokers）仍需 portfolio.read，本地模式券商使用本地库。
 
 ## 5. 原生账户安全
 
