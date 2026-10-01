@@ -77,6 +77,7 @@ export default function FxConverter() {
   const [quoted, setQuoted] = useState<Set<string>>(() => new Set(["USD"]));
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [estimatedMop, setEstimatedMop] = useState(false);
+  const [loadingRates, setLoadingRates] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [managing, setManaging] = useState(false);
@@ -117,20 +118,22 @@ export default function FxConverter() {
       const requestId = ++rateRequestRef.current;
       if (force) refreshPendingRef.current = true;
       if (force) setRefreshing(true);
+      setLoadingRates(true);
       setRateError("");
       try {
         const response = await sharedRead(force ? "/api/rates?refresh=1" : "/api/rates");
         const data = await response.json().catch(() => null);
         if (requestId !== rateRequestRef.current) return;
-        if (!response.ok || !data?.rates) throw new Error(data?.error || "获取汇率失败");
-        const quotedList = Array.isArray(data.quoted)
-          ? data.quoted.filter((code: unknown): code is string => typeof code === "string" && /^[A-Z]{3}$/.test(code))
-          : [];
-        const nextQuoted = new Set<string>(["USD", ...quotedList]);
+        if (!response.ok || !data?.rates || typeof data.rates !== "object" || Array.isArray(data.rates) || !Array.isArray(data.quoted)) throw new Error(data?.error || "获取汇率失败");
+        const quotedList = data.quoted.filter((code: unknown): code is string => typeof code === "string" && /^[A-Z]{3}$/.test(code));
+        const nextQuoted = new Set<string>(["USD"]);
         const nextRates: Record<string, number> = { USD: 1 };
-        nextQuoted.forEach((code) => {
+        quotedList.forEach((code: string) => {
           const value = Number(data.rates[code]);
-          if (value > 0) nextRates[code] = code === "USD" ? 1 : value;
+          if (Number.isFinite(value) && value > 0) {
+            nextRates[code] = code === "USD" ? 1 : value;
+            nextQuoted.add(code);
+          }
         });
         const mopFromHkd = !nextRates.MOP && nextQuoted.has("HKD") && nextRates.HKD > 0;
         if (mopFromHkd) {
@@ -140,7 +143,7 @@ export default function FxConverter() {
         setEstimatedMop(Boolean(mopFromHkd));
         setQuoted(nextQuoted);
         setRates(nextRates);
-        setUpdatedAt(typeof data.updatedAt === "number" && data.updatedAt > 0 ? data.updatedAt : null);
+        setUpdatedAt(typeof data.updatedAt === "number" && Number.isFinite(data.updatedAt) && data.updatedAt > 0 ? data.updatedAt : null);
         if (force) {
           showToast("汇率已刷新");
           window.dispatchEvent(new Event("fire:rates-updated"));
@@ -153,6 +156,7 @@ export default function FxConverter() {
         }
       } finally {
         if (force) refreshPendingRef.current = false;
+        if (requestId === rateRequestRef.current) setLoadingRates(false);
         if (force && requestId === rateRequestRef.current) setRefreshing(false);
       }
   }, []);
@@ -184,6 +188,7 @@ export default function FxConverter() {
   }, [adding]);
 
   const amount = parseFxAmount(text);
+  const unavailableLabel = loadingRates ? "加载中…" : rateError && updatedAt == null ? "加载失败" : "暂无汇率";
 
   function hasQuote(code: string) {
     return quoted.has(code) && (code === "USD" || (rates[code] ?? 0) > 0);
@@ -231,7 +236,7 @@ export default function FxConverter() {
   }
 
   return (
-    <section className={`fx-converter flex flex-col gap-4${managing ? " is-managing" : ""}`}>
+    <section className={`fx-converter flex flex-col gap-4${managing ? " is-managing" : ""}`} aria-busy={loadingRates}>
       <header>
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-bold text-ink">汇率换算</h2>
@@ -316,7 +321,7 @@ export default function FxConverter() {
                     aria-label={`${meta.label}金额`}
                     value={live ? (active ? text : converted == null ? "" : formatFxAmount(converted, code)) : ""}
                     readOnly={!active || !live}
-                    placeholder={live ? "" : "暂无汇率"}
+                    placeholder={live ? "" : unavailableLabel}
                     onMouseDown={() => activate(code)}
                     onFocus={() => {
                       activate(code);
@@ -328,11 +333,11 @@ export default function FxConverter() {
               </label>
               <span className="fx-converter-rate">
                 {!live
-                  ? "暂无汇率"
+                  ? unavailableLabel
                   : active
                     ? "正在输入"
                     : rate == null
-                      ? "暂无汇率"
+                      ? unavailableLabel
                       : `1 ${base} = ${formatPairRate(rate)} ${code}`}
               </span>
               <button type="button" className="fx-converter-remove" aria-label={`移除${meta.label}`} title={`移除${meta.label}`} onClick={() => removeCurrency(code)}><IconX size={13} stroke={1.8} /></button>

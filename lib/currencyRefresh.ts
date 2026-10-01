@@ -86,12 +86,18 @@ function takeNumber(value: unknown): number {
   return NaN;
 }
 
-function collectRates(source: unknown): Record<string, number> {
+function currencyCode(value: unknown): string | null {
+  const code = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return /^[A-Z]{3}$/.test(code) ? code : null;
+}
+
+function collectRates(source: unknown, base: string | null = null): Record<string, number> {
   const rates: Record<string, number> = {};
   if (!source || typeof source !== "object" || Array.isArray(source)) return rates;
   for (const [rawKey, rawValue] of Object.entries(source as Record<string, unknown>)) {
     const key = rawKey.trim().toUpperCase();
-    const code = /^USD[A-Z]{3}$/.test(key) ? key.slice(3) : key;
+    const pair = /^([A-Z]{3})([A-Z]{3})$/.exec(key);
+    const code = pair && pair[1] === (base ?? "USD") ? pair[2] : key;
     if (!/^[A-Z]{3}$/.test(code)) continue;
     const amount = takeNumber(rawValue);
     if (Number.isFinite(amount) && amount > 0) rates[code] = amount;
@@ -101,14 +107,22 @@ function collectRates(source: unknown): Record<string, number> {
 
 /** 从常见汇率接口 JSON 里抽出「币种 → 数量」表。 */
 export function extractRateMap(data: unknown): Record<string, number> | null {
-  if (!data || typeof data !== "object") return null;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   const root = data as Record<string, unknown>;
-  const candidates = [root.rates, root.conversion_rates, root.quotes, root.data, root];
-  for (const candidate of candidates) {
-    const nested = candidate && typeof candidate === "object" && !Array.isArray(candidate)
-      ? collectRates((candidate as Record<string, unknown>).rates ?? candidate)
-      : collectRates(candidate);
-    if (Object.keys(nested).length) return nested;
+  if (root.success === false || root.result === "error") return null;
+  const payloads = [root, root.data].filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value));
+  for (const payload of payloads) {
+    if (payload.success === false || payload.result === "error") continue;
+    const base = currencyCode(payload.base ?? payload.base_code ?? payload.source ?? root.base ?? root.base_code ?? root.source);
+    for (const candidate of [payload.rates, payload.conversion_rates, payload.quotes, payload]) {
+      const rates = collectRates(candidate, base);
+      if (!Object.keys(rates).length) continue;
+      // 上游常省略基准币种（例如 EUR）。它的汇率应为 1，不能当成缺失。
+      if (base) rates[base] = 1;
+      // 非美元基准必须有美元桥接价，禁止把 EUR 等汇率误当成 USD 汇率。
+      if (base && base !== "USD" && !rates.USD) return null;
+      return rates;
+    }
   }
   return null;
 }
@@ -117,15 +131,17 @@ export function extractRateMap(data: unknown): Record<string, number> | null {
 export function toUsdBase(rates: Record<string, number>): Record<string, number> {
   const usd = rates.USD;
   const out: Record<string, number> = { USD: 1 };
+  if (usd !== undefined && (!Number.isFinite(usd) || usd <= 0)) return out;
   if (!usd || usd === 1) {
     for (const [code, value] of Object.entries(rates)) {
-      if (code !== "USD" && value > 0) out[code] = value;
+      if (/^[A-Z]{3}$/.test(code) && code !== "USD" && Number.isFinite(value) && value > 0) out[code] = value;
     }
     return out;
   }
   for (const [code, value] of Object.entries(rates)) {
-    if (code === "USD" || !(value > 0)) continue;
-    out[code] = value / usd;
+    if (!/^[A-Z]{3}$/.test(code) || code === "USD" || !Number.isFinite(value) || !(value > 0)) continue;
+    const normalized = value / usd;
+    if (Number.isFinite(normalized) && normalized > 0) out[code] = normalized;
   }
   return out;
 }

@@ -10,6 +10,7 @@ import { getDb } from "./db";
 import { getSiteSettings } from "./settings";
 import { FALLBACK_RATES } from "./types";
 import { extractRateMap, toUsdBase } from "./currencyRefresh";
+import { proxyFetch } from "./net";
 
 const RATES_KEY = "rates_cache";
 const REFRESH_URL = "https://api.frankfurter.dev/v1/latest?base=USD";
@@ -21,45 +22,50 @@ interface PersistedCache {
 }
 
 let memory: PersistedCache | null = null;
-const pendingRefreshes = new Map<string, Promise<Record<string, number>>>();
+let persistedValue: string | null = null;
+const pendingRefreshes = new Map<string, Promise<PersistedCache>>();
 
 function loadPersisted(): PersistedCache | null {
   try {
     const row = getDb()
       .prepare("SELECT value FROM site_settings WHERE key = ?")
       .get(RATES_KEY) as { value?: string } | undefined;
-    if (!row?.value) return null;
+    if (!row?.value) {
+      memory = null;
+      persistedValue = null;
+      return null;
+    }
+    if (row.value === persistedValue) return memory;
     const parsed = JSON.parse(row.value) as Partial<PersistedCache>;
-    if (!parsed || typeof parsed.rates !== "object" || parsed.rates === null || typeof parsed.at !== "number") return null;
-    const rates = parsed.rates as Record<string, number>;
-    if (!(rates.USD > 0)) return null;
+    if (!parsed || !Number.isFinite(parsed.at) || !(Number(parsed.at) > 0)) return null;
+    const rates = extractRateMap({ rates: parsed.rates });
+    if (!rates || rates.USD !== 1) return null;
     const quoted = Array.isArray(parsed.quoted)
-      ? parsed.quoted.filter((code): code is string => typeof code === "string" && /^[A-Z]{3}$/.test(code))
+      ? [...new Set(parsed.quoted.filter((code): code is string => typeof code === "string" && /^[A-Z]{3}$/.test(code) && rates[code] > 0))]
       : [];
-    return { at: parsed.at, rates, quoted };
+    memory = { at: Number(parsed.at), rates, quoted };
+    persistedValue = row.value;
+    return memory;
   } catch {
-    return null;
+    return memory;
   }
 }
 
 function savePersisted(cache: PersistedCache) {
-  try {
-    getDb()
-      .prepare(
-        `INSERT INTO site_settings (key, value) VALUES (?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value`
-      )
-      .run(RATES_KEY, JSON.stringify(cache));
-  } catch {
-    /* 写入失败不影响主流程 */
-  }
+  const value = JSON.stringify(cache);
+  getDb()
+    .prepare(
+      `INSERT INTO site_settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+    )
+    .run(RATES_KEY, value);
+  memory = cache;
+  persistedValue = value;
 }
 
 function liveCache(): PersistedCache | null {
-  if (memory?.rates) return memory;
-  const persisted = loadPersisted();
-  if (persisted) memory = persisted;
-  return persisted;
+  // Next 路由、调度器和其他进程共享 SQLite，不能永久使用各自的旧内存快照。
+  return loadPersisted();
 }
 
 function withFallback(live: Record<string, number> | null): Record<string, number> {
@@ -68,6 +74,10 @@ function withFallback(live: Record<string, number> | null): Record<string, numbe
 
 /** 立即从设置中的汇率接口拉取并写入内存 + SQLite */
 export async function refreshRates(): Promise<Record<string, number>> {
+  return withFallback((await refreshCache()).rates);
+}
+
+async function refreshCache(): Promise<PersistedCache> {
   const settings = getSiteSettings();
   const url = (settings.currencyApiUrl || REFRESH_URL).trim();
   const pending = pendingRefreshes.get(url);
@@ -79,8 +89,8 @@ export async function refreshRates(): Promise<Record<string, number>> {
   return task;
 }
 
-async function fetchRates(url: string): Promise<Record<string, number>> {
-  const res = await fetch(url, {
+async function fetchRates(url: string): Promise<PersistedCache> {
+  const res = await proxyFetch(url, {
     cache: "no-store",
     headers: {
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36"
@@ -92,16 +102,27 @@ async function fetchRates(url: string): Promise<Record<string, number>> {
   const extracted = extractRateMap(data);
   if (!extracted) throw new Error("汇率接口返回格式异常");
   const rates = toUsdBase(extracted);
-  if (Object.keys(rates).length <= 1 && !extracted.USD) throw new Error("汇率数据无效");
+  if (Object.keys(rates).length <= 1) throw new Error("汇率数据无效");
   const quoted = Object.keys(rates).sort();
-  memory = { at: Date.now(), rates, quoted };
-  savePersisted(memory);
-  return withFallback(rates);
+  const cache = { at: Date.now(), rates, quoted };
+  savePersisted(cache);
+  return cache;
+}
+
+/** 汇率、可用币种和时间从同一快照返回，刷新期间也不会拼出不一致的响应。 */
+export async function getRatesSnapshot(force = false) {
+  const cache = force ? await refreshCache() : liveCache();
+  return {
+    base: "USD" as const,
+    rates: withFallback(cache?.rates ?? null),
+    quoted: [...(cache?.quoted ?? [])],
+    updatedAt: cache?.at ?? null
+  };
 }
 
 export function quotedCurrencies(): string[] {
   const cache = liveCache();
-  return cache?.quoted?.length ? cache.quoted : [];
+  return [...(cache?.quoted ?? [])];
 }
 
 export function ratesUpdatedAt(): number | null {
@@ -109,7 +130,7 @@ export function ratesUpdatedAt(): number | null {
   return typeof at === "number" && at > 0 ? at : null;
 }
 
-/** 读取汇率：优先内存 → SQLite → 兜底值；不自动请求外部接口。 */
+/** 读取共享的已保存汇率；不自动请求外部接口。 */
 export async function getRates(): Promise<Record<string, number>> {
   return withFallback(liveCache()?.rates ?? null);
 }
