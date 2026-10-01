@@ -1,0 +1,91 @@
+.alcor-feed{width:100%;max-width:840px;margin:0 auto;padding:12px 24px 64px;color:var(--ink,#17191b)}
+.feed-mascot-top{display:flex;justify-content:center;margin:0 0 26px}
+.feed-mascot-top .feed-mascot{width:72px;height:72px}
+.feed-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 34px 56px}
+.feed-header h1{font-size:30px;font-weight:700;letter-spacing:-.035em;line-height:1.2;margin:0}
+.feed-header-actions{display:flex;align-items:center;gap:8px}
+.feed-icon-button,.feed-more{display:inline-flex;justify-content:center;align-items:center;border:0;background:transparent;color:inherit;flex:none;padding:0}
+.feed-icon-button{width:36px;height:36px;border-radius:50%;transition:background .2s}
+.feed-settings-button,.feed-icon-button:hover{background:#eeeeef}
+.feed-icon-button:disabled{opacity:.45;cursor:default}
+.feed-mascot{position:relative;width:44px;height:44px;flex:none;border-radius:50%;border:1px solid rgba(0,0,0,.05);background:#faf7f1;overflow:hidden;box-shadow:0 5px 20px #0000000b}
+.feed-mascot-poster{width:100%;height:100%;object-fit:cover}
+.feed-mascot-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .5s ease-out}
+.feed-mascot-video.is-ready{opacity:1}
+.feed-post{display:grid;grid-template-columns:40px minmax(0,1fr);gap:16px;margin-bottom:38px;align-items:start}
+.feed-post-icon{height:40px;width:40px;object-fit:contain;flex:none}
+.feed-icon-fallback{display:flex;width:40px;height:40px;align-items:center;justify-content:center;color:#939399}
+.feed-post-content{min-width:0;padding-top:3px}
+.feed-post-heading{display:flex;align-items:baseline;gap:12px}
+.feed-post h2{margin:0;font-size:18px;line-height:1.45;font-weight:650;letter-spacing:-.015em;overflow-wrap:anywhere}
+.feed-post-heading h2{flex:1;min-width:0}
+.feed-post-heading time{font-size:12px;line-height:20px;color:#858589;white-space:nowrap;flex:none}
+.feed-more{width:24px;height:24px;align-self:flex-start;color:#747478;border-radius:50%;margin-top:1px}
+.feed-more:hover{background:#eeeeef}
+.feed-body{font-size:16px;line-height:1.55;font-weight:400;margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.feed-body a,.feed-inline-action,.feed-sources a{color:#0866ff;text-decoration:none}
+.feed-body a:hover,.feed-inline-action:hover,.feed-sources a:hover{text-decoration:underline;text-underline-offset:3px}
+.feed-post-actions{display:flex;align-items:center;gap:22px;margin-top:16px}
+.feed-post-actions button{display:flex;align-items:center;gap:9px;padding:3px 0;border:0;background:none;color:inherit;font-size:14px;line-height:22px}
+.feed-post-actions button:disabled{opacity:.5}
+.feed-post-actions .is-liked{color:#e45376}
+.feed-published{font-size:11px;color:#8e8e93;margin-left:auto;white-space:nowrap}
+.feed-media{display:flex;gap:8px;overflow-x:auto;margin-top:14px;max-width:100%;padding-bottom:2px}
+.feed-media img{width:150px;height:150px;border-radius:12px;object-fit:cover;flex:none}
+.feed-media video{width:300px;max-width:100%;border-radius:12px;aspect-ratio:16/9;object-fit:cover}
+.feed-inline-action{display:inline-flex;align-items:center;gap:8px;margin-top:14px;font-size:14px;border:0;background:none;padding:0}
+.feed-welcome{margin-bottom:42px}
+.feed-status{margin:0 0 24px 56px;display:flex;align-items:center;gap:9px;font-size:13px;color:#86868b;line-height:1.5;flex-wrap:wrap}
+.feed-status-dot{width:6px;height:6px;background:#0866ff;border-radius:50%}
+.feed-undo button{border:0;background:none;color:inherit;padding:3px 5px;font-size:13px}
+.feed-undo button:first-of-type{color:#0866ff}
+.feed-undo button:last-of-type{margin-left:auto;font-size:18px}
+.feed-error{font-size:13px;color:#ce5353;line-height:1.5;margin-top:10px}
+.feed-error button{color:inherit;text-decoration:underline;margin-left:8px}
+.feed-skeleton{margin-left:56px;display:grid;gap:24px}
+.feed-skeleton i{height:68px;border-radius:12px;background:#00000004}
+.feed-load-more{display:block;margin:12px auto 0;border:1px solid #dddde1;border-radius:999px;padding:9px 20px;background:transparent;font-size:13px;color:inherit}
+.feed-prompt-modal.app-modal-panel{max-width:512px!important;border-radius:32px!important;background:#fcfcfc!important;border:0!important;padding:28px!important}
+.feed-prompt-modal h3{font-size:19px;font-weight:650}
+.feed-prompt-modal .mb-5>div>p{font-size:15px;line-height:1.5;margin-top:6px}
+.feed-instructions{display:block;width:100%;min-height:240px;resize:vertical;border:1px solid #d8d8dc;border-radius:16px;background:#f3f3f4;color:inherit;padding:16px;font-size:14px;line-height:1.5;max-height:45dvh}
+.feed-instructions:focus{border-color:#0866ff}
+.feed-prompt-meta{display:flex;justify-content:space-between;margin-top:10px;color:#8b8b91;font-size:11px}
+.feed-prompt-meta label{display:flex;gap:6px;align-items:center}
+.feed-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}
+.feed-modal-actions button{border:0;border-radius:999px;height:40px;font-size:14px;font-weight:550;background:#efeff0;color:#17191b}
+.feed-primary{background:#0866ff!important;color:#fff!important;border:0;border-radius:999px}
+.feed-primary:disabled{opacity:.45;cursor:default}
+.feed-task-detail{text-align:center;padding:8px 0 20px}
+.feed-task-detail img{width:64px;height:64px;object-fit:contain;margin:0 auto 16px}
+.feed-task-detail h4{font-size:16px;font-weight:600}
+.feed-task-detail p{font-size:13px;color:#8b8b91;line-height:1.6;margin:8px 0}
+.feed-task-detail small{font-size:11px;color:#96969b}
+.feed-task-button{display:block;width:100%;padding:10px 16px;font-size:14px}
+.feed-option-title{font-size:15px;font-weight:600;line-height:1.5}
+.feed-sources{display:grid;gap:14px;margin-top:16px}
+.feed-sources a{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.feed-sources small{display:block;color:#96969b;font-size:11px;margin-top:4px}
+.feed-option-hide{margin-top:22px;padding:10px 16px;border-radius:999px;border:1px solid #dddde1;font-size:13px;color:inherit}
+.feed-discussion-log{min-height:160px;max-height:45dvh;overflow-y:auto;overscroll-behavior:contain;padding:4px 2px}
+.feed-discussion-hint{font-size:14px;line-height:1.6;color:#9a9aa0;padding:32px 0;text-align:center}
+.feed-message{font-size:14px;line-height:1.65;margin-bottom:18px;white-space:pre-wrap;overflow-wrap:anywhere}
+.feed-message small{font-size:11px;color:#939399}
+.feed-message-user{background:#f3f3f4;border-radius:18px;padding:12px 16px;margin-left:36px}
+.feed-message-assistant{padding:8px 4px}
+.feed-composer{display:flex;align-items:flex-end;gap:12px;border:1px solid #dddde1;border-radius:24px;margin-top:16px;padding:10px}
+.feed-composer textarea{flex:1;min-width:0;resize:none;border:0;background:transparent;min-height:44px;max-height:100px;font-size:14px;line-height:1.5;padding:4px 8px;color:inherit}
+.feed-composer button{width:34px;height:34px;display:grid;place-items:center;flex:none}
+.feed-discussion-footnote{display:flex;gap:4px;align-items:center;justify-content:center;font-size:10px;color:#96969b;margin-top:10px}
+.dark .alcor-feed{color:#ececef}
+.dark .feed-settings-button,.dark .feed-icon-button:hover,.dark .feed-more:hover{background:#ffffff0d}
+.dark .feed-prompt-modal.app-modal-panel{background:#222224!important}
+.dark .feed-instructions,.dark .feed-message-user{background:#2c2c2f;border-color:#414145}
+.dark .feed-modal-actions button{background:#343438;color:#ececef}
+.dark .feed-load-more,.dark .feed-option-hide,.dark .feed-composer{border-color:#ffffff20}
+.dark .feed-body a,.dark .feed-inline-action,.dark .feed-sources a{color:#5b9bff}
+.dark .feed-skeleton i{background:#ffffff08}
+@media(max-width:1023px){.alcor-feed{max-width:800px;padding:8px 16px 56px}.feed-header{margin-bottom:30px}.feed-post{margin-bottom:32px}.feed-prompt-modal.app-modal-panel{max-width:min(512px,80vw)!important}}
+@media(max-width:639px){.alcor-feed{padding:4px 2px 32px}.feed-header{grid-template-columns:36px minmax(0,1fr) auto;gap:12px;margin-bottom:26px}.feed-mascot{width:36px;height:36px}.feed-header h1{font-size:27px}.feed-post{grid-template-columns:30px minmax(0,1fr);gap:12px;margin-bottom:30px}.feed-post-icon{width:30px;height:30px}.feed-post h2{font-size:16px;line-height:1.5}.feed-post-heading{gap:6px;flex-wrap:wrap}.feed-post-heading h2{flex-basis:calc(100% - 30px);order:0}.feed-more{order:1}.feed-post-heading time{font-size:11px;order:2;flex-basis:100%;line-height:14px}.feed-body{font-size:14px;line-height:1.65;margin-top:7px}.feed-post-content{padding-top:0}.feed-post-actions{margin-top:12px;gap:20px}.feed-published{font-size:10px}.feed-status,.feed-skeleton{margin-left:42px}.feed-prompt-modal.app-modal-panel{padding:22px!important;max-width:100%!important;border-radius:28px!important}.feed-prompt-modal .mb-5>div>p{font-size:13px}.feed-instructions{min-height:210px;max-height:38dvh;font-size:16px;padding:14px}.feed-modal-actions{margin-top:18px}.feed-discussion-log{max-height:38dvh}.feed-message-user{margin-left:20px}.feed-media img{width:140px;height:140px}}
+@media(prefers-reduced-motion:reduce){.feed-mascot-video{display:none}}
+@media(max-width:639px){.feed-header{margin-left:42px}.feed-mascot-top .feed-mascot{width:64px;height:64px}.feed-mascot-top{margin-bottom:22px}.feed-icon-fallback{width:30px;height:30px}}

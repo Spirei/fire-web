@@ -2,6 +2,23 @@
 
 Web、iOS 与 Android 共用 `/api/v1`。旧版 `/api/**` 继续兼容。
 
+## 动态（feed）
+
+新增账号独立的 `/api/v1/feed`、指示、任务、喜欢/隐藏和逐帖 AI 讨论。App 明确申请可选 `feed.read feed.write`；默认和旧授权不扩权。完整字段和错误、轮询、媒体、搜索边界见[动态 API 合同](feed-api.md)，共享类型 `lib/feedTypes.ts`。
+
+| 方法 | 路径 | 内容 |
+| --- | --- | --- |
+| GET | `/api/v1/feed?limit=20&cursor=…` | 本人帖子、下一页游标、指示、任务、能力；limit 1–50 |
+| PUT | `/api/v1/feed/preferences` | `{instructions,revision,enabled?,intervalMinutes?}`，服务端持久化；旧 revision 返回 409 |
+| POST | `/api/v1/feed/refresh` | `{}` → 持久化任务；失败保留历史 |
+| GET | `/api/v1/feed/jobs/{id}` | 本人任务 queued/searching/writing/done/error |
+| GET | `/api/v1/feed/posts/{id}` | 本人单条动态、来源、喜欢及隐藏状态 |
+| PUT | `/api/v1/feed/posts/{id}` | `{liked?:boolean,hidden?:boolean}`，false 可恢复 |
+| GET | `/api/v1/feed/posts/{id}/discussion` | `{messages}`，本人最近40条正序讨论 |
+| POST | `/api/v1/feed/posts/{id}/discussion` | `{text}`，1–2000字 → 完整讨论；失败不存半个回合 |
+
+读接口需 `feed.read`，写接口需 `feed.write` 且同时有 `feed.read`。时间使用 UTC ISO 8601，发稿日期未知为 null；来源以 `segments[].sourceId` 关联，不解析模型 HTML。小人视频、静态回退和图标地址由能力字段及帖子 icon 返回。离开或进入后台停止任务轮询、暂停小人；不要将尚未提供的真实新闻配图当作已有功能。
+
 ## 1. 基础信息
 
 连接地址、请求格式与服务状态。

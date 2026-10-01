@@ -1,5 +1,5 @@
 export const MOBILE_PRIMARY_KEYS = ["assets", "watchlist", "holdings", "settings"] as const;
-export const MOBILE_NAV_LABELS: Record<string, string> = { assets: "总览", watchlist: "自选", holdings: "持仓", settings: "设置", fire: "FIRE", global: "全球", trading: "交易", earnings: "财报", assistant: "助手", celebs: "名人", users: "用户", attachments: "附件", library: "素材", cards: "卡面", activities: "日志" };
+export const MOBILE_NAV_LABELS: Record<string, string> = { assets: "总览", watchlist: "自选", holdings: "持仓", settings: "设置", fire: "FIRE", global: "全球", trading: "动态", earnings: "财报", assistant: "助手", celebs: "名人", users: "用户", attachments: "附件", library: "素材", cards: "卡面", activities: "日志" };
 
 export function normalizeMobileNavigationOrder(value: unknown, available: readonly string[]): string[] {
   if (!Array.isArray(value)) return [];

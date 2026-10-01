@@ -23,6 +23,8 @@ export default function AppAuthorizationConsent({ authorization, account, userna
   useEffect(() => () => operation.current?.abort(), []);
   const writable = authorization.scope.split(" ").includes("portfolio.write");
   const profileWritable = authorization.scope.split(" ").includes("profile.write");
+  const feedReadable = authorization.scope.split(" ").includes("feed.read");
+  const feedWritable = authorization.scope.split(" ").includes("feed.write");
 
   async function decide(nextDecision: "allow" | "deny") {
     if (inFlight.current || callback) return;
@@ -59,6 +61,8 @@ export default function AppAuthorizationConsent({ authorization, account, userna
         <div className="app-consent-permission"><SubNavIcon name="stocks" /><span><strong>查看投资数据</strong><small>持仓、自选、订单与资金记录</small></span></div>
         {writable && <div className="app-consent-permission"><SubNavIcon name="pen" /><span><strong>管理投资数据</strong><small>新增、修改和删除你的投资记录</small></span></div>}
         {profileWritable && <div className="app-consent-permission"><SubNavIcon name="profile" /><span><strong>修改个人资料</strong><small>昵称、用户名、邮箱和头像；改邮箱仍需当前密码</small></span></div>}
+        {feedReadable && <div className="app-consent-permission"><SubNavIcon name="source-content" /><span><strong>查看个人动态</strong><small>动态、指示、任务与独立讨论记录</small></span></div>}
+        {feedWritable && <div className="app-consent-permission"><SubNavIcon name="pen" /><span><strong>管理个人动态</strong><small>修改指示、生成动态、喜欢、隐藏与 AI 讨论</small></span></div>}
       </section>
     </>}
     {error && <p role="alert" className="app-connection-error">{error}</p>}

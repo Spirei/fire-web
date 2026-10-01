@@ -124,6 +124,7 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
   "source-reports": (<><path d="M6 3h9l4 4v14H6Z"/><path d="M15 3v5h5M9 12h7M9 16h5"/></>),
   "source-icons": (<><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m5 18 5-5 3 3 3-4 3 4"/></>),
   "source-content": (<><path d="M4 5h16v11H9l-5 4Z"/><path d="M8 9h8M8 12h5"/></>),
+  trading: (<><path d="M7 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12"/><rect x="7" y="3" width="14" height="18" rx="2.5"/><path d="M11 7h6M11 11h6M11 15h3"/></>),
   backups: (<><path d="M4 7a8 8 0 1 1-1 8"/><path d="M4 3v4H8M12 8v5l3 2"/></>),
   "delete-account": (<><circle cx="9" cy="8" r="4"/><path d="M3 21v-2a6 6 0 0 1 10-5.5M17 14l5 5m0-5-5 5"/></>),
   key: (

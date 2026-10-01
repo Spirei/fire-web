@@ -14,7 +14,7 @@ const loaders: Record<string, () => Promise<unknown>> = {
   activities: () => import("@/components/views/ActivitiesView"),
   earnings: () => import("@/components/views/EarningsCalendarView"),
   celebs: () => import("@/components/views/CelebsView"),
-  trading: () => import("@/components/views/TradingSquareView"),
+  trading: () => import("@/components/views/FeedView"),
   settings: () => import("@/components/views/SettingsView"),
   users: () => import("@/components/views/UsersView"),
   library: () => import("@/components/views/AssetLibraryView"),

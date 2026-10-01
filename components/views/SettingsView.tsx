@@ -139,7 +139,7 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "site", anchor: "nav", label: "首页导航", groupLabel: "网站", keywords: "导航 菜单 首页 入口" },
   { sub: "site", anchor: "app-nav", label: "应用导航", groupLabel: "网站", keywords: "后台 侧栏 移动端 默认页 图标 顺序" },
   { sub: "site", anchor: "mobile-nav", label: "手机导航", groupLabel: "网站", keywords: "手机 底部 胶囊 更多 导航 顺序 排序" },
-  { sub: "features", anchor: "trading-square", label: "交易广场", groupLabel: "功能", keywords: "交易广场 特朗普 段永平 更新 刷新 频率 缓存" },
+  { sub: "features", anchor: "trading-square", label: "公开动态来源", groupLabel: "功能", keywords: "交易广场 特朗普 段永平 更新 刷新 频率 缓存" },
   { sub: "stocks", anchor: "groups", label: "券商分组", groupLabel: "股票", keywords: "券商 分组 别名 持仓" },
   { sub: "stocks", anchor: "market-badges", label: "市场色块", groupLabel: "股票", keywords: "市场 色块 徽标 颜色 显示 US HK A股 上证 深证 加密" },
   { sub: "stocks", anchor: "translation", label: "模型服务", groupLabel: "智能服务", keywords: "模型服务 AI 大模型 账户助手 翻译 DeepSeek OpenAI API" },
@@ -621,7 +621,7 @@ const SOURCE_SECTIONS = [
   { id: "sources", icon: "plug", title: "行情与汇率接口", desc: "实时行情、搜索、分时走势与汇率换算", keys: ["quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl"] },
   { id: "source-reports", icon: "source-reports", title: "财报接口", desc: "美股、A 股与港股财报日历数据源", keys: ["earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl"] },
   { id: "source-icons", icon: "source-icons", title: "公司图标接口", desc: "美股与 A 股公司图标数据源", keys: ["usLogoApiUrl", "cnLogoApiUrl"] },
-  { id: "source-content", icon: "source-content", title: "公开内容接口", desc: "交易广场公开动态与翻译数据源", keys: ["trumpArchiveApiUrl", "translationApiUrl"] }
+  { id: "source-content", icon: "source-content", title: "公开内容接口", desc: "原公开动态与翻译数据源", keys: ["trumpArchiveApiUrl", "translationApiUrl"] }
 ] as const;
 
 const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
@@ -2720,17 +2720,17 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <div className={editingTabs ? "flex min-w-0 items-center gap-2" : "flex min-w-0 flex-1 items-center gap-2"}>
                           <button
                             type="button"
-                            disabled={!editingTabs || !!blockSaving[`nav-icon:${t.key}`]}
+                            disabled={t.key === "trading" || !editingTabs || !!blockSaving[`nav-icon:${t.key}`]}
                             onClick={() => navIconRefs.current[t.key]?.click()}
                             className="group relative flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-[9px] border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)] disabled:cursor-default dark:bg-[#1c1c1e]"
-                            title={`上传/更换「${t.label}」导航图标`}
+                            title={t.key === "trading" ? "动态使用专属报纸图标" : `上传/更换「${t.label}」导航图标`}
                           >
                             <SafeAssetImage
-                              src={assetIcons[t.key.toUpperCase()]}
+                              src={t.key === "trading" ? undefined : assetIcons[t.key.toUpperCase()]}
                               fallback={<span className="flex h-[18px] w-[18px] items-center justify-center text-ink opacity-[.72]">{NAV_ICONS[t.key] ?? null}</span>}
                               className="nav-custom-icon h-full w-full object-contain"
                             />
-                            {editingTabs && <span className="absolute inset-0 flex items-center justify-center rounded-[9px] bg-black/45 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                            {editingTabs && t.key !== "trading" && <span className="absolute inset-0 flex items-center justify-center rounded-[9px] bg-black/45 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                               {blockSaving[`nav-icon:${t.key}`] ? (
                                 <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
                                   <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
@@ -2793,14 +2793,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 <SettingsSection
                   id="trading-square"
                   icon="features"
-                  title="交易广场"
-                  desc="公开动态按设定频率更新本地缓存。"
+                  title="原公开动态来源"
+                  desc="保留原公开内容的缓存配置；新的个性化动态在页面右上角编辑指示。"
                   action={editingTradingSquare ? (
                     <button type="button" disabled={blockSaving.tradingSquare} onClick={async () => {
                       const ok = await saveBlock("tradingSquare", {
                         tradingSquareTrumpRefreshMinutes: site.tradingSquareTrumpRefreshMinutes,
                         tradingSquareDuanRefreshMinutes: site.tradingSquareDuanRefreshMinutes
-                      }, "交易广场更新频率已保存");
+                      }, "公开内容更新频率已保存");
                       if (ok) setEditingTradingSquare(false);
                     }} className="btn btn-line btn-sm disabled:opacity-60">{blockSaving.tradingSquare ? "保存中…" : "保存"}</button>
                   ) : <button type="button" onClick={() => setEditingTradingSquare(true)} className="btn btn-ghost btn-sm">编辑</button>}
@@ -3965,7 +3965,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>数据与服务</b><span>本地优先，可切换企业数据库</span></div>
-                    <span className="settings-detail-value">Node.js · SQLite · PostgreSQL · ExcelJS · saxes（SVG 校验）· SimpleWebAuthn（通行密钥）</span>
+                    <span className="settings-detail-value">Node.js · SQLite · PostgreSQL · ExcelJS · saxes（SVG / RSS 校验）· SimpleWebAuthn（通行密钥）</span>
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>部署运行</b><span>容器镜像与受限更新</span></div>
@@ -3973,7 +3973,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>外部数据源</b><span>行情、财报、汇率与公开披露</span></div>
-                    <span className="settings-detail-value">腾讯行情 · 东方财富 · 雪球 · SEC EDGAR · CompaniesMarketCap</span>
+                    <span className="settings-detail-value">腾讯行情 · 东方财富 · 雪球 · SEC EDGAR · CompaniesMarketCap · Google News RSS · Brave Search（可选）</span>
                   </div>
                 </SettingsSection>
               </div>

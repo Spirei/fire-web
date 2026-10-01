@@ -7,5 +7,6 @@ export async function GET(request: Request) {
   return ok({ version: 1, client_id: APP_CLIENT_ID, redirect_uri: APP_REDIRECT_URI, scope: APP_SCOPE,
     scopes_supported: APP_SUPPORTED_SCOPES, profile_path: "/api/v1/auth/profile", upload_path: "/api/v1/upload",
     email_path: "/api/v1/auth/email", password_path: "/api/v1/auth/password",
+    feed_path: "/api/v1/feed", feed_scopes: ["feed.read", "feed.write"],
     authorization_path: "/app/authorize", token_path: "/api/v1/auth/token", revoke_path: "/api/v1/auth/revoke", devices_path: "/app/devices", code_challenge_methods_supported: ["S256"] });
 }

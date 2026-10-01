@@ -36,7 +36,9 @@ export const NAV_ICONS: Record<string, React.ReactNode> = {
   ),
   trading: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
-      <path d="M4 6.5h16v11H4z" /><path d="m7 10 3 3 2-2 3 3 2-2" /><path d="M8 20h8" />
+      <path d="M7 7H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12" />
+      <rect x="7" y="3" width="14" height="18" rx="2.5" />
+      <path d="M11 7h6M11 11h6M11 15h3" />
     </svg>
   ),
   earnings: (

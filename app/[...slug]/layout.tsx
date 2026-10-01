@@ -20,7 +20,7 @@ import { unstable_noStore } from "next/cache";
 import { totalFundBalances } from "@/lib/fundState";
 import { listWatchGroups } from "@/lib/watchGroupsStore";
 import { getAssistantHistoryState } from "@/lib/assistantHistory";
-import { readTradingSquareSnapshot } from "@/lib/tradingSquareSnapshot";
+import { feedSnapshot } from "@/lib/feedGeneration";
 import { CURRENT_VERSION } from "@/lib/versions";
 import { passkeySettingsSnapshot } from "@/lib/passkeySettingsSnapshot";
 
@@ -103,18 +103,14 @@ export default async function SlugLayout({
   // 避免「HTML → JS → 水合 → 再请求」的串行等待（卡面图片本身随后按需加载）
   const initialCardLibrary = tab.key === "cards" ? cardLibraryForUser(user.id) : null;
   const initialCardCovers = initialCardLibrary ? heldCardCoverUrls(initialCardLibrary) : [];
-  // 交易广场：把服务端已有的帖子快照随首屏下发，刷新时列表与作者头像立刻可见，
-  // 不再先渲染一整屏骨架、等 /api/trading-square/feed 返回后才出现（本地缓存不可用时也一样）。
-  const initialTradingPosts = tab.key === "trading" ? readTradingSquareSnapshot(40) : null;
-  // 交易广场的筛选状态（谁 / 分类 / 页码 / 个股）由客户端镜像到 cookie，
-  // 这里读回来交给首屏，避免刷新后标签行先消失、水合后才补上。
-  const initialTradingFilter = tab.key === "trading" ? (cookieStore.get("fire_trading_square_filter")?.value ?? null) : null;
+  // 只读取当前账号的动态快照；保留旧路径和旧广场数据，不加载旧作者头像。
+  const initialFeed = tab.key === "trading" ? feedSnapshot(user.id) : null;
 
   return (
     <div className="app-shell-root flex min-h-[100dvh] flex-col bg-page">
       {tab.key === "settings" && <link rel="preload" as="image" href="/api/system-assets/passkey" />}
-      {/* 名人持仓与交易广场都会用到名人头像：HTML 阶段并行预加载，刷新时人物不闪现文字占位 */}
-      {(tab.key === "celebs" || tab.key === "trading") &&
+      {/* 只有名人持仓需要这组头像。 */}
+      {tab.key === "celebs" &&
         Object.values(celebAvatars)
           .filter(Boolean)
           .map((u) => <link key={u} rel="preload" as="image" href={u} fetchPriority="high" />)}
@@ -154,8 +150,7 @@ export default async function SlugLayout({
           initialFlagIcons={initialFlagIcons}
           initialAssetLibrary={initialAssetLibrary}
           initialCardLibrary={initialCardLibrary}
-          initialTradingPosts={initialTradingPosts}
-          initialTradingFilter={initialTradingFilter}
+          initialFeed={initialFeed}
           initialSettings={{
             title: settings.title,
             logoText: settings.logoText,

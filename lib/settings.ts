@@ -55,7 +55,7 @@ const DEFAULTS: SiteSettings = {
     { key: "fire", label: "FIRE", url: "/fire" },
     { key: "watchlist", label: "自选股", url: "/watchlist" },
     { key: "global", label: "全球经济", url: "/global" },
-    { key: "trading", label: "交易广场", url: "/trading" },
+    { key: "trading", label: "动态", url: "/trading" },
     { key: "earnings", label: "财报日历", url: "/earnings" },
     { key: "assistant", label: "智能助手", url: "/assistant" },
     { key: "celebs", label: "名人持仓", url: "/celebs" },
@@ -305,6 +305,7 @@ export function getSiteSettings(): SiteSettings {
     result.tabs = parsedTabs.map((t) => {
       if (t.key === "quotes") return { ...t, key: "global", label: "全球经济", url: t.url === "/quotes" ? "/global" : t.url };
       if (t.key === "global" && t.label === "全球预览") return { ...t, label: "全球经济" };
+      if (t.key === "trading" && t.label === "交易广场") return { ...t, label: "动态" };
       return t;
     });
   }

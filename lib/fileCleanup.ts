@@ -183,6 +183,8 @@ export function cleanupOrphanFiles(options: { scope?: "showcase-unsaved" } = {})
     for (const ent of entries) {
       const full = path.join(dir, ent.name);
       if (ent.isDirectory()) {
+        // 动态内置资源不依赖素材库数据库引用，不能被当作孤立上传清理。
+        if (ent.name === "feed" && path.basename(dir) === "feature") continue;
         if (ent.name === "trading-square" && path.basename(dir) === "uploads") continue;
         // 卡面清单原图目录整棵跳过：卡面库直接从 manifest.json 读这些文件，
         // 数据库里没有任何引用，扫下去会整目录被当孤立文件清掉

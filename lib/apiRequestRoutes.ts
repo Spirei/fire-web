@@ -143,6 +143,7 @@ export const API_REQUEST_ROUTES = [
   "/api/v1/data/import",
   "/api/v1/dividends",
   "/api/v1/earnings",
+  "/api/v1/feed/[[...action]]",
   "/api/v1/financial-reports",
   "/api/v1/financial-reports/[id]",
   "/api/v1/fire-settings",

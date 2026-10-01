@@ -41,7 +41,23 @@ const publicMediaAllowlist = new Set([
   "public/uploads/feature/four-door/pointer.png",
   "public/uploads/feature/four-door/cursor-hand.png",
   // 通行密钥引导的内置插图，已获准随公开仓库分发。
-  "public/uploads/feature/passkey/passkey.png"
+  "public/uploads/feature/passkey/passkey.png",
+  // 用户为动态页提供并授权的默认图标及小人。
+  "public/uploads/feature/feed/world.webp",
+  "public/uploads/feature/feed/security.webp",
+  "public/uploads/feature/feed/technology.webp",
+  "public/uploads/feature/feed/note.webp",
+  "public/uploads/feature/feed/time.webp",
+  "public/uploads/feature/feed/check.webp",
+  "public/uploads/feature/feed/conversation.webp",
+  "public/uploads/feature/feed/chart.webp",
+  "public/uploads/feature/feed/magic.webp",
+  "public/uploads/feature/feed/image.webp",
+  "public/uploads/feature/feed/palette.webp",
+  "public/uploads/feature/feed/market.webp",
+  "public/uploads/feature/feed/idea.webp",
+  "public/uploads/feature/feed/alcor.png",
+  "public/uploads/feature/feed/alcor-idle.mp4"
 ]);
 
 const findings = [];

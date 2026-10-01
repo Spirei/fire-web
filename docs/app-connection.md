@@ -2,6 +2,8 @@
 
 日期：2026-10-01。Web 与 iOS 独立维护，只共享公开 HTTP 合同。
 
+动态新增可选 `feed.read/feed.write`，不改变默认及旧 grant。发现字段 `feed_path/feed_scopes`，本人能力 `feedRead/feedWrite`；完整接入合同见[动态 API](feed-api.md)。
+
 ## 服务器与域名
 
 App 设置内的连接页首次预填 `https://fire.6dm.tv:18520`，允许更换。点击连接立即用 ASWebAuthenticationSession 打开所选源的 `/app/authorize`，不因预检失败阻止浏览器弹出；`GET /api/v1/auth/config` 保留供协议能力查询。授权及令牌路径遵循固定 v1 合同，不接受第三方指定任意换令牌服务器。App 首屏直接进入本地应用，授权是设置中的可选操作。

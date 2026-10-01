@@ -47,7 +47,7 @@ const FireView = dynamic(() => import("@/components/views/FireView"));
 const ActivitiesView = dynamic(() => import("@/components/views/ActivitiesView"));
 const EarningsCalendarView = dynamic(() => import("@/components/views/EarningsCalendarView"));
 const CelebsView = dynamic(() => import("@/components/views/CelebsView"));
-const TradingSquareView = dynamic(() => import("@/components/views/TradingSquareView"));
+const FeedView = dynamic(() => import("@/components/views/FeedView"));
 const SettingsView = dynamic(() => import("@/components/views/SettingsView"));
 const UsersView = dynamic(() => import("@/components/views/UsersView"));
 const AssetLibraryView = dynamic(() => import("@/components/views/AssetLibraryView"));
@@ -79,7 +79,7 @@ const DEFAULT_TABS: TabConfig[] = [
   { key: "fire", label: "FIRE", url: "/fire" },
   { key: "watchlist", label: "自选股", url: "/watchlist" },
   { key: "global", label: "全球经济", url: "/global" },
-  { key: "trading", label: "交易广场", url: "/trading" },
+  { key: "trading", label: "动态", url: "/trading" },
   { key: "quotes", label: "股票添加", url: "/quotes" },
   { key: "earnings", label: "财报日历", url: "/earnings" },
   { key: "assistant", label: "智能助手", url: "/assistant" },
@@ -121,8 +121,7 @@ export default function RecordsApp({
   initialFlagIcons = {},
   initialAssetLibrary = null,
   initialCardLibrary = null,
-  initialTradingPosts = null,
-  initialTradingFilter = null
+  initialFeed = null
 }: {
   initialTab: string;
   initialNow: number;
@@ -143,8 +142,7 @@ export default function RecordsApp({
   initialFlagIcons?: Record<string, string>;
   initialAssetLibrary?: { assets: import("@/lib/useAssetIcons").Asset[]; total: number } | null;
   initialCardLibrary?: import("@/lib/cardLibrary").CardLibraryPayload | null;
-  initialTradingPosts?: import("@/lib/tradingSquareSnapshot").TradingSquareSnapshotPost[] | null;
-  initialTradingFilter?: string | null;
+  initialFeed?: import("@/lib/feedTypes").FeedPayload | null;
 }) {
   const router = useRouter();
   const desktopViewport = useDesktopViewport();
@@ -888,7 +886,7 @@ export default function RecordsApp({
         .map((t) => {
           // SSR 与客户端水合首帧必须使用同一份服务端快照；本地缓存只在水合完成后补充。
           const key = t.key.toUpperCase();
-          const custom = initialNavIcons[key] || (navIconsHydrated ? assetIcons[key] : undefined);
+          const custom = key === "TRADING" ? undefined : initialNavIcons[key] || (navIconsHydrated ? assetIcons[key] : undefined);
           return {
             key: t.key as TabKey,
             label: t.label,
@@ -966,7 +964,7 @@ export default function RecordsApp({
     navTabs, mobileNavigationOrder, settingsSub, settingsSubReady,
     initialNow, initialVersion, initialSymbol, initialCelebAvatars, initialUser,
     initialWatchGroups, initialAssistantHistory, initialPasskeys, initialFundBalances,
-    initialSettings, initialAssetLibrary, initialCardLibrary, initialTradingPosts, initialTradingFilter
+    initialSettings, initialAssetLibrary, initialCardLibrary, initialFeed
   ]);
 
   const settingsPanel = (
@@ -1145,7 +1143,7 @@ export default function RecordsApp({
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
           {activeTab === "global" && <GlobalPreviewView />}
-          {activeTab === "trading" && <TradingSquareView avatars={initialCelebAvatars} records={records} initialPosts={initialTradingPosts} initialFilter={initialTradingFilter} />}
+          {activeTab === "trading" && <FeedView initial={initialFeed} initialNow={initialNow} />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} initialNow={initialNow} />}
           {activeTab === "assistant" && <AssistantView page="assistant" symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} />}
