@@ -127,6 +127,7 @@ export const API_REQUEST_ROUTES = [
   "/api/v1/auth/login/totp",
   "/api/v1/auth/logout",
   "/api/v1/auth/me",
+  "/api/v1/auth/profile",
   "/api/v1/auth/revoke",
   "/api/v1/auth/setup-status",
   "/api/v1/auth/token",

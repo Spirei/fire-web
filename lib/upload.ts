@@ -2,8 +2,9 @@
 import fs from "fs";
 import path from "path";
 import { randomBytes } from "crypto";
-import { getAuthUser, isAdmin, updateUserAvatar } from "@/lib/auth";
-import { removeFileIfUnused } from "@/lib/fileCleanup";
+import { getAuthUser, getSessionToken, isAdmin, updateUserAvatar } from "@/lib/auth";
+import { getDb } from "./db";
+import { removeFileIfUnused, sameLocalFile } from "@/lib/fileCleanup";
 import { normalizeSvgAttribution, sanitizeSvg, validateImageContent } from "@/lib/imageSecurity";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
@@ -75,9 +76,11 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
   if (!rateLimit(`upload:${clientIp(request)}:${user.id}`, 60, 60 * 60 * 1000) || !rateLimitGlobal("upload", 600, 60 * 60 * 1000)) {
     throw new UploadError("上传过于频繁，请稍后再试", 429);
   }
-  const form = await readFormBody(request, 21 * 1024 * 1024).catch(() => null);
+  const native = (getSessionToken(request) || "").startsWith("fat_");
+  const form = await readFormBody(request, native ? KIND_CONFIG.avatar.maxBytes + 65536 : 21 * 1024 * 1024).catch(() => null);
   if (!form) throw new UploadError("无效的上传请求", 400);
   const kind = String(form.get("kind") ?? "avatar") as UploadKind;
+  if (native && kind !== "avatar") throw new UploadError("App 仅可上传自己的头像", 403);
   const config = KIND_CONFIG[kind];
   if (!config) throw new UploadError("不支持的上传类型", 400);
   const folder = String(form.get("folder") ?? "").trim();
@@ -104,6 +107,44 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
     throw new UploadError("文件内容与图片格式不匹配或包含不安全内容", 400);
   }
   const outputBuffer = validatedExt === "svg" ? sanitizeSvg(normalizeSvgAttribution(buffer)) : buffer;
+  if (kind === "avatar") {
+    let target = "", pending = "", previous: Buffer | null = null, written = false;
+    let old = "";
+    let url: string;
+    try {
+      url = getDb().transaction(() => {
+        // Body/file reads await I/O; verify that the connection is still valid afterwards.
+        const current = getAuthUser(request);
+        if (!current || current.id !== user.id) throw new UploadError("登录或连接已失效", 401);
+        const stem = `${current.username}(UID${current.uid})`.replace(/[\\/:*?"<>|\s]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "avatar";
+        const filename = `${stem}.${ext}`;
+        const dir = path.join(process.cwd(), "public", "uploads", "avatar");
+        target = assetFilePath(dir, filename);
+        pending = `${target}.${randomBytes(8).toString("hex")}.tmp`;
+        fs.mkdirSync(dir, { recursive: true });
+        previous = fs.existsSync(target) ? fs.readFileSync(target) : null;
+        fs.writeFileSync(pending, outputBuffer, { flag: "wx" });
+        fs.renameSync(pending, target); written = true;
+        const next = `/uploads/avatar/${encodeURIComponent(filename)}`;
+        old = current.avatar || "";
+        updateUserAvatar(current.id, next);
+        return next;
+      }).immediate();
+    } catch (error) {
+      // Failed database commits must not destroy the previously served image.
+      if (written) {
+        if (previous) { fs.writeFileSync(pending, previous); fs.renameSync(pending, target); }
+        else if (fs.existsSync(target)) fs.unlinkSync(target);
+      }
+      if (pending && fs.existsSync(pending)) fs.unlinkSync(pending);
+      if (error instanceof UploadError) throw error;
+      throw new UploadError("头像保存失败，请检查磁盘空间或稍后重试", 500);
+    }
+    try { if (old && old !== url && !sameLocalFile(old, url)) removeFileIfUnused(old); }
+    catch { /* Cleanup failure must not turn a committed upload into an apparent failure. */ }
+    logSecurityEvent(request, user.id, "file_upload", `${kind}:${file.size}:${validatedExt}`);
+    return { url, kind };
+  }
   let dir = path.join(process.cwd(), "public", "uploads", kind);
   let urlPrefix = `/uploads/${kind}`;
   if (kind === "asset" && folder) {
@@ -120,11 +161,6 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
   let filename: string;
   if (kind === "asset") {
     filename = assetFilename(form, folder, `.${ext}`);
-  } else if (kind === "avatar") {
-    const username = (user as { username?: string }).username ?? "user";
-    const uid = (user as { uid?: string }).uid ?? "";
-    const stem = `${username}(UID${uid})`.replace(/[\\/:*?"<>|\s]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "avatar";
-    filename = `${stem}.${ext}`;
   } else {
     filename = `${Date.now()}-${randomBytes(4).toString("hex")}.${ext}`;
   }
@@ -135,11 +171,6 @@ export async function saveUpload(request: Request): Promise<{ url: string; kind:
     throw new UploadError("文件保存失败，请检查磁盘空间或上传目录权限", 500);
   }
   const url = `${urlPrefix}/${encodeURIComponent(filename)}`;
-  if (kind === "avatar") {
-    const old = (user as { avatar?: string }).avatar;
-    updateUserAvatar(user.id, url);
-    if (old && old !== url) removeFileIfUnused(old);
-  }
   logSecurityEvent(request, user.id, "file_upload", `${kind}:${file.size}:${validatedExt}`);
   return { url, kind };
 }

@@ -25,6 +25,7 @@ const PnlTrendChart = dynamic(() => import("@/components/PnlTrendChart"), {
 import QuickTradeDialog from "@/components/QuickTradeDialog";
 import HoldingDividendDialog from "@/components/HoldingDividendDialog";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
+import { ACCOUNT_MARKET_CURRENCY, accountTotals, convertAccountAmount, investmentEquities, reconcileAccountCash, type InvestmentEquity } from "@/lib/accountCash";
 import FundsPanel from "@/components/FundsPanel";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import Pagination from "@/components/Pagination";
@@ -51,14 +52,14 @@ interface TrendPoint {
 interface CloseItem { d: string; c: number }
 interface HoldingSort { key: HoldingColumnKey; dir: "asc" | "desc" }
 interface DateRange { start: string; end: string }
-interface SimpleInvestmentEquity { market: string; cur: CurrencyCode; amount: number }
+type SimpleInvestmentEquity = InvestmentEquity;
 /** 资金余额按资金系统的币种清单（比展示币种多：含卡面库里会出现的台币 / 英镑等） */
 const EMPTY_CURRENCY_BALANCES: Record<FundCurrency, number> = emptyFundBalances();
 
 function readEffectiveBalanceCache(key: string): Record<FundCurrency, number> | null {
   try {
     const value = JSON.parse(localStorage.getItem(key) || "null");
-    if (!value || typeof value !== "object") return null;
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.values(value).some(amount => !Number.isFinite(amount))) return null;
     return { ...EMPTY_CURRENCY_BALANCES, ...value };
   } catch {
     return null;
@@ -80,7 +81,7 @@ interface Props {
 }
 
 const PERIODS: Array<[Period, string]> = [["month", "本月"], ["1m", "近 1 月"], ["6m", "近 6 月"], ["ytd", "本年"], ["1y", "近 1 年"], ["all", "全部"]];
-const ISO_BY_MARKET: Record<string, string> = { US: "USD", HK: "HKD", CN: "CNY", JP: "JPY", KR: "KRW" };
+const ISO_BY_MARKET = ACCOUNT_MARKET_CURRENCY;
 // 基准对比（收益率趋势图）：主要市场指数（日 K 数据源：US/HK 用指数 ETF，CN 用指数代码）
 type BenchKey = "spy" | "qqq" | "dia" | "hsi" | "sse" | "szse";
 const BENCHMARKS: { key: BenchKey; label: string; market: string; code: string; index?: boolean }[] = [
@@ -376,11 +377,9 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
         if (cancelled) return;
         const state = payload?.data ?? payload;
         const rows = Array.isArray(state?.invest) ? state.invest : [];
-        setSimpleInvestmentEquities(rows.map((row: Record<string, unknown>) => ({
-          market: String(row.market || "").toUpperCase(),
-          cur: String(row.cur || "USD").toUpperCase() as CurrencyCode,
-          amount: Number(row.amount) || 0
-        })).filter((row: SimpleInvestmentEquity) => row.market && row.amount > 0));
+        const parsed = investmentEquities(rows);
+        if (!parsed.complete) throw new Error("Invalid investment ledger");
+        setSimpleInvestmentEquities(parsed.equities);
         setSimpleLedgerSucceeded(true);
         setSimpleLedgerReady(true);
       })
@@ -594,9 +593,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   const currencyFactor = rates[displayCurrency] || 1;
   const symbol = CURRENCY_SYMBOLS[displayCurrency] || displayCurrency;
   const toDisplay = (record: StockRecord, value: number) => {
-    const iso = ISO_BY_MARKET[record.market] || "USD";
-    const usd = value / (rates[iso] || 1);
-    return usd * currencyFactor;
+    return convertAccountAmount(value, ISO_BY_MARKET[record.market], rates, displayCurrency);
   };
 
   /* ---------- 收益日历：数据口径与资产盈亏分析页完全一致（lib/pnlCalendar） ---------- */
@@ -667,33 +664,18 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     return acc;
   }, {} as Record<string, { asset: number; cost: number; pnl: number; day: number }>), [positions, quotes, livePrice]);
   const portfolioLedger = useMemo(() => buildPortfolioLedger(positions, orders, livePrice), [positions, orders, livePrice]);
-  const primaryEquityByMarket = useMemo(() => simpleInvestmentEquities.reduce((result, row) => {
-    // 完整版目前每个市场只有一套持仓账。若简化版同一市场记录了多个券商，
-    // 取资产额最大的主账户与之对应，避免把未导入持仓的其他券商现金混入。
-    const current = result[row.market];
-    if (!current || row.amount > current.amount) result[row.market] = row;
-    return result;
-  }, {} as Record<string, SimpleInvestmentEquity>), [simpleInvestmentEquities]);
-  const reconciledFundBalances = useMemo(() => {
-    const next = { ...fundBalances };
-    Object.entries(primaryEquityByMarket).forEach(([market, equity]) => {
-      const holdings = nativeSummary[market]?.asset;
-      // 简化版账本给出的是「该市场账户总资产」，现金按 总资产 − 持仓 反推；这里要把已经并进
-      // 余额的银行卡现金加回来，否则一导入简化版持仓，卡里的钱就被这次覆盖吃掉了
-      if (holdings !== undefined && equity.cur === ISO_BY_MARKET[market]) next[equity.cur] = equity.amount - holdings + (cardCash[equity.cur] || 0);
-    });
-    return next;
-  }, [fundBalances, cardCash, primaryEquityByMarket, nativeSummary]);
+  const reconciledFundBalances = useMemo(() => reconcileAccountCash(fundBalances, cardCash, simpleInvestmentEquities, Object.fromEntries(Object.entries(nativeSummary).map(([market, row]) => [market, row.asset]))), [fundBalances, cardCash, simpleInvestmentEquities, nativeSummary]);
   const effectiveFundBalances = (!fundBalancesReady || !simpleLedgerReady || !simpleLedgerSucceeded) && cachedEffectiveBalances ? cachedEffectiveBalances : reconciledFundBalances;
   const effectiveBalancesReady = cachedEffectiveBalances !== null || (fundBalancesReady && simpleLedgerReady);
   useEffect(() => {
-    if (!fundBalancesReady || !simpleLedgerSucceeded) return;
+    if (!fundBalancesReady || !simpleLedgerSucceeded || Object.values(reconciledFundBalances).some(amount => !Number.isFinite(amount))) return;
     try { localStorage.setItem(effectiveBalanceCacheKey, JSON.stringify(reconciledFundBalances)); } catch { /* 缓存失败不影响最新数据 */ }
   }, [effectiveBalanceCacheKey, reconciledFundBalances, fundBalancesReady, simpleLedgerSucceeded]);
-  const cashTotal = useMemo(() => (Object.entries(effectiveFundBalances) as [string, number][]).reduce((total, [iso, value]) => total + value / (rates[iso] || 1) * currencyFactor, 0), [effectiveFundBalances, rates, currencyFactor]);
+  const accountSummaryTotals = useMemo(() => accountTotals(summary.asset, effectiveFundBalances, rates, displayCurrency, Number.isFinite(summary.asset), simpleLedgerSucceeded || cachedEffectiveBalances !== null), [summary.asset, effectiveFundBalances, rates, displayCurrency, simpleLedgerSucceeded, cachedEffectiveBalances]);
+  const cashTotal = accountSummaryTotals.totalCash ?? Number.NaN;
   // 银行卡现金：服务端已把它并进 balances（所以 cashTotal / 可用现金 / 净资产都含它），
   // 这里单独折算出显示货币的金额，用来在「账户资产」里说明这部分来源
-  const cardCashTotal = useMemo(() => Object.entries(cardCash).reduce((total, [iso, value]) => total + value / (rates[iso] || 1) * currencyFactor, 0), [cardCash, rates, currencyFactor]);
+  const cardCashTotal = useMemo(() => Object.entries(cardCash).reduce((total, [iso, value]) => total + (value === 0 ? 0 : convertAccountAmount(value, iso, rates, displayCurrency)), 0), [cardCash, rates, displayCurrency]);
   // 只为当前已满足成交条件的买入委托预留现金；尚未触价的挂单不占用可用现金。
   const isCashReservedOrder = (order: TradeOrder, record: StockRecord) => {
     if (order.status !== "pending" || order.side !== "buy") return false;
@@ -707,7 +689,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
     const record = positions.find((item) => item.id === order.recordId);
     return record && isCashReservedOrder(order, record) ? total + orderReservedAmount(order, record) : total;
   }, 0), [orders, positions, livePrice, rates, displayCurrency]);
-  const totalAsset = summary.asset + cashTotal;
+  const totalAsset = accountSummaryTotals.totalAsset ?? Number.NaN;
 
   const ledgerCumulativePnl = useMemo(() => positions.reduce((total, record) => {
     const row = portfolioLedger.get(record.id);
@@ -1064,7 +1046,7 @@ export default function AssetAnalysisDashboard({ positions, quotes, livePrice, r
   }, [positions, pnlMarket, recordCloses, activeRange, period, rates, displayCurrency, livePrice]);
   const shownPnlPositions = pnlExpanded ? pnlPositions : pnlPositions.slice(0, 10);
   const maskMoney = (value: number, signed = false, withSymbol = false) => assetsVisible ? `${signed ? (value >= 0 ? "+" : "−") : ""}${compactMoney(Math.abs(value), withSymbol)}` : "******";
-  const maskCashMoney = (value: number, withSymbol = false) => !effectiveBalancesReady ? "—" : assetsVisible ? `${value < 0 ? "−" : ""}${compactMoney(Math.abs(value), withSymbol)}` : "******";
+  const maskCashMoney = (value: number, withSymbol = false) => !effectiveBalancesReady ? "—" : assetsVisible ? Number.isFinite(value) ? `${value < 0 ? "−" : ""}${compactMoney(Math.abs(value), withSymbol)}` : "—" : "******";
   const MarketPills = ({ value, onChange, includeAll = true }: { value: string; onChange: (key: string) => void; includeAll?: boolean }) => <div className="flex gap-2 overflow-x-auto px-0.5 pb-1 pt-1.5">
     {(includeAll ? ["ALL", ...marketKeys] : marketKeys).map((key) => <button aria-pressed={value === key} key={key} type="button" onClick={() => onChange(key)} className={`flex-none rounded-full border px-4 py-1.5 text-xs font-bold transition-colors ${value === key ? "border-[#3297f6] bg-[#3297f6]/15 text-[#3297f6] shadow-sm" : "border-edge-strong bg-bg-gray text-muted hover:bg-brand-hover hover:text-ink"}`}>{key === "ALL" ? "全部" : marketMeta(key).label}</button>)}
   </div>;

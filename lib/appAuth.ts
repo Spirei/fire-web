@@ -7,6 +7,8 @@ import { DEFAULT_APP_DEVICE_NAME, normalizeAppDeviceName } from "./brand";
 export const APP_CLIENT_ID = "fire-ios";
 export const APP_REDIRECT_URI = "com.fire.app:/oauth/callback";
 export const APP_SCOPE = "portfolio.read portfolio.write";
+// Default connections stay unchanged. Editing identity requires explicit new consent.
+export const APP_SUPPORTED_SCOPES = [...APP_SCOPE.split(" "), "profile.write"];
 const ACCESS_SECONDS = 15 * 60;
 const REFRESH_IDLE_MS = 30 * 86400_000;
 const REFRESH_MAX_MS = 90 * 86400_000;
@@ -23,7 +25,7 @@ export function parseAppAuthorization(values: Record<string, unknown>): AppAutho
   if (value("client_id") !== APP_CLIENT_ID || value("redirect_uri") !== APP_REDIRECT_URI || value("response_type") !== "code") throw new Error("不支持的 App 或回调地址");
   if (value("code_challenge_method") !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(value("code_challenge"))) throw new Error("无效的授权校验参数");
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(value("state"))) throw new Error("无效的授权请求");
-  if (!scope.includes("portfolio.read") || scope.some(s => !APP_SCOPE.split(" ").includes(s))) throw new Error("不支持的授权范围");
+  if (!scope.includes("portfolio.read") || scope.some(s => !APP_SUPPORTED_SCOPES.includes(s))) throw new Error("不支持的授权范围");
   const deviceName = value("device_name").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 64);
   return { client_id: APP_CLIENT_ID, redirect_uri: APP_REDIRECT_URI, response_type: "code", code_challenge_method: "S256", code_challenge: value("code_challenge"), scope: [...new Set(scope)].join(" "), state: value("state"), device_name: normalizeAppDeviceName(deviceName) || DEFAULT_APP_DEVICE_NAME };
 }
@@ -134,11 +136,12 @@ export function appIdentity(token: string, request: Request): Grant | null {
   const read = method === "GET" && /^\/api\/v1\/(?:auth\/me|overview|records(?:\/[^/]+)?|watch-groups|brokers|assets|celebs|rates|orders(?:\/[^/]+)?|funds|fire-settings|simple-ledger|portfolio-series)$/.test(path);
   const marketRead = ["GET", "POST"].includes(method) && /^\/api\/v1\/(?:quotes|charts|kline|index-kline|kline-sessions|stock-detail|search|earnings)$/.test(path);
   const write = ["POST", "PUT", "DELETE"].includes(method) && /^\/api\/v1\/(?:records(?:\/[^/]+)?|watch-groups(?:\/[^/]+(?:\/icon)?)?|orders(?:\/[^/]+)?|funds(?:\/[^/]+)?|fire-settings|simple-ledger)$/.test(path);
-  if (!read && !marketRead && !write) return null;
+  const profileWrite = (method === "PUT" && path === "/api/v1/auth/profile") || (method === "POST" && path === "/api/v1/upload");
+  if (!read && !marketRead && !write && !profileWrite) return null;
   try { assertAppOrigin(request); } catch { return null; }
   const row = getDb().prepare("SELECT grant_id FROM app_access_tokens WHERE token_hash=? AND expires_at>?").get(appTokenHash(token), Date.now()) as { grant_id: string } | undefined;
   const grant = row && activeGrant(row.grant_id);
-  if (!grant || (write && !grant.scope.split(" ").includes("portfolio.write"))) return null;
+  if (!grant || (write && !grant.scope.split(" ").includes("portfolio.write")) || (profileWrite && !grant.scope.split(" ").includes("profile.write"))) return null;
   return grant;
 }
 export function listAppDevices(userId: string) {

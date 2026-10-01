@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import dynamic from "next/dynamic";
 import MobileBackGesture from "@/components/MobileBackGesture";
 import { mobilePanelDirection } from "@/lib/mobileNavigation";
+import { accountHoldingPrice } from "@/lib/accountCash";
 import { currentAssistantPage, notifyAssistantPage, setAssistantPage } from "@/lib/assistantPage";
 import { useRouter } from "next/navigation";
 import {
@@ -335,7 +336,7 @@ export default function RecordsApp({
   );
 
   const livePrice = useCallback(
-    (r: StockRecord) => quotes[r.id]?.price ?? Number(r.price),
+    (r: StockRecord) => accountHoldingPrice(r, quotes),
     [quotes]
   );
 

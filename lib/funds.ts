@@ -142,12 +142,16 @@ function settlementCurrency(market: string): FundCurrency {
   return "USD";
 }
 
+function orderCashAmount(order: Pick<FilledOrderCashRow, "amount" | "qty" | "price" | "fees" | "side">) {
+  const gross = Number(order.amount) > 0 ? Number(order.amount) : Number(order.qty) * Number(order.price);
+  const fees = Math.max(0, Number(order.fees) || 0);
+  return order.side === "buy" ? -(gross + fees) : gross - fees;
+}
+
 function writeOrderCashTransaction(order: FilledOrderCashRow) {
   const db = getDb();
   const id = `${AUTO_ORDER_PREFIX}${order.id}`;
-  const gross = Number(order.amount) > 0 ? Number(order.amount) : Number(order.qty) * Number(order.price);
-  const fees = Math.max(0, Number(order.fees) || 0);
-  const signed = order.side === "buy" ? -(gross + fees) : gross - fees;
+  const signed = orderCashAmount(order);
   db.prepare("DELETE FROM fund_transactions WHERE id=? AND user_id=?").run(id, order.user_id);
   if (!Number.isFinite(signed) || Math.abs(signed) < 0.00000001) return;
   const action = order.side === "buy" ? "买入" : order.side === "sell" ? "卖出" : "股息";
@@ -222,6 +226,21 @@ export function fundBalances(userId: string): Record<FundCurrency, number> {
     // 兜底 || 0：历史数据里若有清单外的币种，也不能让它把整个余额算成 NaN
     result[row.currency] = Number(row.balance) || 0;
   });
+  return result;
+}
+
+/** Canonical read-only balance, including historical orders without repairing SQLite on GET. */
+export function readFundBalances(userId: string): Record<FundCurrency, number> {
+  const db = getDb();
+  const result = emptyFundBalances();
+  const rows = db.prepare("SELECT currency,SUM(amount*direction) AS balance FROM fund_transactions WHERE user_id=? AND id NOT LIKE ? GROUP BY currency").all(userId, `${AUTO_ORDER_PREFIX}%`) as { currency: FundCurrency; balance: number }[];
+  for (const row of rows) result[row.currency] = Number(row.balance);
+  const orders = db.prepare("SELECT market,side,qty,price,fees,amount FROM trade_orders WHERE user_id=? AND status='filled'").all(userId) as (Pick<FilledOrderCashRow, "market" | "side" | "qty" | "price" | "fees" | "amount">)[];
+  for (const order of orders) {
+    const signed = orderCashAmount(order);
+    const currency = settlementCurrency(order.market);
+    result[currency] = (result[currency] ?? 0) + signed;
+  }
   return result;
 }
 export function createFundTransaction(input: { userId: string; currency: FundCurrency; type: FundType; amount: number; direction: 1 | -1; note?: string; occurredAt?: string }) {

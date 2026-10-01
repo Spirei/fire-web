@@ -19,7 +19,7 @@ App 设置内的连接页首次预填 `https://fire.6dm.tv:18520`，允许更换
 - API 信封增加 no-store/private，分页参数只接受有界有限整数，避免 Infinity / 小数产生不完整列表。
 - Web 的 Cookie 活跃续期不能解决原 App Bearer 固定 7 天失效：新增独立设备授权和短时访问/轮换刷新令牌，不修改旧客户端登录合同。
 - 备份下载、Excel 导出、portfolio-series 等部分 v1 接口仍有文件/裸响应合同；App 本次不消费这些裸 JSON 接口，不全站改格式，避免影响既有 Web 调用方。
-- overview 已经由服务端统一币种、报价回退与完整性计算，本次不改变资产/收益口径；iOS 历史走势仍沿用既有真实行情回溯规则。
+- overview 增加含现金的总资产，Web 与 App 共用价格、汇率及账户现金核算；保留证券汇总和历史走势的含义，不把持仓市值冒充总资产，不虚构历史现金。
 
 ## 授权合同
 
@@ -30,7 +30,7 @@ App 设置内的连接页首次预填 `https://fire.6dm.tv:18520`，允许更换
 | client_id | fire-ios（公开客户端，安装包中无 client_secret） |
 | response_type | code |
 | redirect_uri | com.fire.app:/oauth/callback（精确匹配） |
-| scope | portfolio.read portfolio.write；可以申请仅 portfolio.read |
+| scope | 默认 portfolio.read portfolio.write；可仅 portfolio.read；资料编辑另明确申请 profile.write |
 | code_challenge_method | S256 |
 | state | 32–128 位 URL-safe 随机字符串，App 校验精确匹配 |
 | authorization code | 随机、不透明、一次性，60 秒有效 |
@@ -57,7 +57,25 @@ App 设置内的连接页首次预填 `https://fire.6dm.tv:18520`，允许更换
 - 每用户最多保留 20 个 App 授权。数据库只存 token/code 摘要、账号认证状态摘要，不保存明文凭据。
 - App 请求限制为 `/api/v1` 个人资源与公开行情；服务器强制 scope。管理员通过 App 返回个人业务身份，不能操作站点设置、素材维护、券商目录维护或账号安全配置。
 
-本轮已实现权限合同：本人身份通过 `GET /api/v1/auth/me` 读取既有 `users`，资料／头像写入与账号安全配置仍在 Web 管理，App 不能以 `portfolio.write` 修改资料或头像，也不创建独立 App 账号。后续若新增原生资料编辑，需要独立权限、明确同意及兼容降级，不能自动扩张旧授权。
+本人身份通过 `GET /api/v1/auth/me` 读取既有 `users`，不创建独立 App 账号。`portfolio.write` 仍不能修改资料或头像。`auth/config.scope` 保留默认范围，`scopes_supported` 公布可选 `profile.write`，旧 grant 及刷新不扩权；编辑连接必须重新明确申请、在网页同意。设备页单独标注「资料编辑」。密码、TOTP、通行密钥及设备撤销仍由网站安全设置管理。
+
+### 本人资料与头像
+
+- `GET /api/v1/auth/me` 和 `PUT /api/v1/auth/profile` 的 `data` 都是直接 User，不嵌套 `user`；新增 `scope` 与 `capabilities: { profileWrite, avatarUpload, overviewTotalAssets }`。App 角色始终为 `user`；Cookie/旧网站会话的 `scope` 为空，其本人编辑能力保持原有规则。
+- `PUT /api/v1/auth/profile` 仅部分更新 `username`、`nickname`、`email`；未提交字段保留最新值。Web 与 App 共用校验及冲突检查，禁止修改 ID、UID、角色、密码或任意头像地址。邮箱实际改变需 `currentPassword`，验证状态与恢复凭据按网站原规则失效；不自动验证新邮箱。
+- `POST /api/v1/upload` 使用 multipart `kind=avatar`、`file`，返回 `data: { url, kind }`。App 只可上传本人的 JPG/PNG/GIF/WEBP 头像，5 MiB 上限，拒绝 SVG/伪格式及共享素材上传；命名继续用 `username(UID编号)`。Web/读取本人资料立即看到同一头像。
+- 缺少编辑授权返回 401 / `40101`（不从 Cookie 补权），邮箱密码验证失败 403 / `40301`，用户名/邮箱冲突 409 / `40901`，参数错误 400 / `40001`，限流 429 / `42901`。保存失败不返回数据库内部错误。
+- 异步读取请求体/图片后在写锁内再次认证，撤销/改密与并发资料更新不能绕过检查；图片原子替换，数据库写入失败恢复旧图片，未保存文件不留在上传目录。
+
+### 规范总资产
+
+`GET /api/v1/overview?currency=USD` 返回原有证券字段，以及 `totalAsset`、`totalCash`、`totalAssetComplete`、`cashComplete`、`unconvertedCurrencies`。金额同响应 `currency`，默认 USD；新金额可能为 `null`，不得当作 0。
+
+- `totalAsset = 当前持仓市值 + 核算现金`。现金含有符号资金流水、已成交订单现金、借记卡/预付卡余额一次，不含信用额度；挂单预留现金不从总资产扣除。历史订单只读派生，不为读取 overview 修补真实流水。
+- 简化账本按 Web 原有规则选同市场最大正资产的主账户，仅已导入的 US/HK/CN/JP/KR 且结算币种一致时，使用 `账户权益 − 本币持仓 + 银行卡现金` 覆盖该币种余额，不叠加其他未导入券商。报价变化会同时改变反推现金，App 不能把旧现金加到新市值。
+- Web `AssetAnalysisDashboard` 与 API 共用 `lib/accountCash.ts`，资金出口共用只读订单余额；页面布局不变。FX 缺失不按 1:1；缺失来源/损坏账本使新金额为 null。`complete/unconverted` 保持证券 FX 语义；`cashComplete` 仅现金，`totalAssetComplete` 综合检查。`unconvertedCurrencies` 含缺失现金/持仓币种，无法识别卡元数据标记 `UNKNOWN`，未知市场为 `UNKNOWN:市场`。
+- 响应 `no-store, private`，最新持仓/现金在报价 I/O 后同一只读快照汇总；标的改动丢弃旧标的报价。使用网站同一汇率表（含已有明确兜底，不是 1:1）；价格缺失使用记录价格，空记录价格与 Web 一致按 0。
+- 建议 App 前台每 30 秒、回到首页/前台以及下拉时刷新 overview，休市也同步现金；直接显示服务端 totalAsset。历史图没有现金快照时继续标明「持仓市值」，不拼造历史总资产。
 
 ## 2026-10-01 第二轮安全审查
 
@@ -79,4 +97,4 @@ App 设置内的连接页首次预填 `https://fire.6dm.tv:18520`，允许更换
 
 ## 验证
 
-`node tests/app-auth.cjs` 使用临时数据库覆盖 PKCE / 回调 / state、同源同意、代码重放与过期、访问/刷新有效期、令牌重放、并发刷新、账户隔离、100+ 持仓分页、scope / 管理权限、设备撤销、改密和 TOTP 变更、FK 级联及数据库凭据摘要；加入 test:review。iOS 构建和模拟器测试单独记录在其版本日志。
+`node tests/app-auth.cjs` 使用临时数据库覆盖 PKCE / 回调 / state、同源同意、代码重放与过期、访问/刷新有效期、令牌重放、并发刷新、账户隔离、100+ 持仓分页、scope / 管理权限、设备撤销、改密和 TOTP 变更、FK 级联及凭据摘要。新增 `tests/app-profile.cjs` 和 `tests/account-overview.cjs` 验证双向资料同步、旧授权不扩权、邮箱验证、头像安全与失败回滚、现金同源/去重/负余额、主账户权益覆盖、缺 FX/源异常、读接口不补写账本、分页外持仓和异步快照；全部加入 test:review，不改真实账号或资金。iOS 构建和模拟器测试单独记录在其版本日志。

@@ -6,7 +6,8 @@ import { getSimpleLedger, normalizeSimple, setSimpleLedger } from "@/lib/simpleS
 export async function GET(request: Request) {
   const user = getAuthUser(request);
   if (!user) return fail(40101, "未登录", 401);
-  return ok(getSimpleLedger(user.id));
+  try { return ok(getSimpleLedger(user.id, true)); }
+  catch { return fail(50001, "账本暂时无法读取，请检查数据或稍后重试", 500); }
 }
 
 export async function PUT(request: Request) {

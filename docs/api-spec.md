@@ -273,6 +273,7 @@ GET /api/v1/rates
 | POST | `/api/v1/auth/login/totp` | 二次验证：ticket + 6 位验证码或备用码，返回 user + token | 无（持有效 ticket） |
 | GET | `/api/v1/auth/setup-status` | 空实例是否需要首次管理员设置（`{ needsSetup }`） | 无 |
 | GET | `/api/v1/auth/me` | 当前用户 | 登录 |
+| PUT | `/api/v1/auth/profile` | 本人昵称、用户名、邮箱部分更新；改邮箱需 currentPassword | 本人会话；App 需 profile.write |
 | POST | `/api/v1/auth/logout` | 登出 | 登录 |
 | POST | `/api/v1/auth/delete-account` | 注销当前账号（body 必须提供 `password`；已开启二次验证时还需 `code`；级联删除其全部数据；保护最后一个管理员） | 登录 + 当前密码 + 可选 TOTP |
 
@@ -1005,12 +1006,21 @@ GET /api/v1/overview?currency=USD
 
 - 默认美元，支持汇率表内币种。
 - `totalCost`、`totalMarket`、`totalPnl` 和 `byMarket` 的金额均使用响应 `currency`，不要再次按市场本币换算。
+- `totalMarket` 仍仅证券市值。新增 `totalAsset`（含现金总资产）、`totalCash`（有符号现金），同样使用 `currency`；计算复用 Web `lib/accountCash.ts`，返回前才统一舍入到两位。
 
 ### 估值
 
 - 优先实时行情，缺失时使用记录价格。
 - `valuation` 返回每条记录的 `id`、`source`（quote / record）和 `at`。
 - 无法换算的记录列入 `unconverted`。当 `complete=false` 时，提示汇总不完整。
+
+### 含现金总资产
+
+- 现金含资金账本、已成交订单现金和已持有借记卡/预付卡余额一次，不含信用额度。保留负现金，不从总资产扣掉挂单冻结金额。
+- 已导入简化主账户权益按 Web 原有市场/结算币种规则使用 `权益 − 当前持仓 + 银行卡现金`，不累加其他券商。报价改变时现金可能反向改变，客户端应直接读取服务端总资产，不能用静态现金加新报价。
+- 新字段：`totalAsset: number|null`、`totalCash: number|null`、`totalAssetComplete: boolean`、`cashComplete: boolean`、`unconvertedCurrencies: string[]`。缺 FX 不按 1:1；现金来源异常/损坏时 totalCash/totalAsset 为 null；持仓 FX 不完整时 totalAsset 为 null，即使 cashComplete=true。原 `complete/unconverted` 仍只描述持仓 FX。
+- 无法识别现金来源标记 `UNKNOWN`；未知市场为 `UNKNOWN:市场`。已有明确汇率兜底与 Web 一致。新接口只读派生历史订单现金，不修补真实资金表。
+- 建议 App 前台 30 秒、回前台/首页或下拉刷新；账户响应不缓存。休市仍读取现金变化，历史走势无现金快照时保持「持仓市值」标签。
 
 </details>
 
@@ -1048,10 +1058,14 @@ PATCH /api/showcase/models/{id}
 | POST | `/api/v1/auth/token` | 授权码 + verifier 换令牌，或轮换刷新令牌 |
 | POST | `/api/v1/auth/revoke` | 凭当前 refresh token 撤销整个设备连接 |
 | GET / DELETE | `/api/v1/auth/devices` | 浏览器本人查看/撤销设备，DELETE body `{ id }` |
+| PUT | `/api/v1/auth/profile` | profile.write：部分更新本人 username/nickname/email；邮箱改变需 currentPassword |
+| POST | `/api/v1/upload` | profile.write：multipart kind=avatar,file；仅本人头像 |
 
-App 设置只保留连接入口，身份通过 `GET /api/v1/auth/me` 与 Web 共用既有 `users`；昵称、头像、账号安全与设备撤销均在 Web 管理，不新增 App 资料写入端点或授权能力。
+身份通过 `GET /api/v1/auth/me` 与 Web 共用既有 `users`；显式获得 `profile.write` 的连接可编辑本人资料和头像，密码、TOTP、通行密钥与设备管理仍保持网站原有安全设置。未提交字段保留，不接受 ID/UID/角色/密码/任意头像地址等额外字段。邮箱验证状态和恢复凭据沿用网站失效规则，修改不等于验证。头像 JPG/PNG/GIF/WEBP、5 MiB，拒绝 SVG 和共享素材上传。
 
-App 使用 `client_id=fire-ios`，`redirect_uri=com.fire.app:/oauth/callback`，`response_type=code` 和 PKCE `S256`。权限为 `portfolio.read portfolio.write`，可申请只读；App 凭据仅访问本人业务，不继承站点管理权。
+me/profile 的 `data` 都是直接 User（非 `{user:...}`），新增 `scope` 及 `capabilities: { profileWrite, avatarUpload, overviewTotalAssets }`。上传返回 `data: {url,kind}`。旧 grant 无编辑能力返回 40101，不从浏览器 Cookie 补权；邮箱密码错误40301、用户名/邮箱冲突40901、参数错误40001、限流42901；所有响应禁止缓存。
+
+App 使用 `client_id=fire-ios`，`redirect_uri=com.fire.app:/oauth/callback`，`response_type=code` 和 PKCE `S256`。默认仍为 `portfolio.read portfolio.write`，可申请只读；发现接口 `scope` 保留默认值，`scopes_supported` 新增可选 `profile.write`，并返回 `profile_path/upload_path`。必须始终包含 portfolio.read；编辑连接明确加 profile.write 并重新取得网页同意。旧 grant 和刷新不会自动扩权；App 仅访问本人业务，不继承站点管理权。
 
 ```json
 {

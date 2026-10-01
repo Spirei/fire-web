@@ -1,4 +1,6 @@
 "use client";
+
+import { convertAccountAmount } from "@/lib/accountCash";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconReceipt, IconSearch, IconTrash } from "@tabler/icons-react";
 import { fmtMoney, fmtMoneyAdaptive, localDateKey } from "@/lib/format";
@@ -141,7 +143,7 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
     recordsCache.current.clear();
     await load(); await loadRecords(currency, recordsPage, debouncedQuery);
   };
-  const convert = useCallback((value: number, from: Currency) => value / (rates[from] || 1) * (rates[currency] || 1), [currency, rates]);
+  const convert = useCallback((value: number, from: Currency) => value === 0 ? 0 : convertAccountAmount(value, from, rates, currency), [currency, rates]);
   const displayedBalances = useMemo(() => ({ ...balances, ...balanceOverrides }), [balances, balanceOverrides]);
   const cash = useMemo(() => (Object.entries(displayedBalances) as [Currency, number][]).reduce((sum, [iso, value]) => sum + convert(value, iso), 0), [displayedBalances, convert]);
   const holdings = useMemo(() => (Object.entries(holdingAssets) as [Currency, number][]).reduce((sum, [iso, value]) => sum + convert(value, iso), 0), [holdingAssets, convert]);
@@ -156,7 +158,7 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
   const currentInvestment = cashNetFlow + otherNetFlow;
   const endingAsset = cash + holdings;
   const profit = endingAsset - openingAsset - currentInvestment;
-  const exactMoney = (value: number, signed = false) => `${signed && value > 0 ? "+" : ""}${fmtMoney(value, fundCurrencySymbol(currency))}`;
+  const exactMoney = (value: number, signed = false) => Number.isFinite(value) ? `${signed && value > 0 ? "+" : ""}${fmtMoney(value, fundCurrencySymbol(currency))}` : "—";
   const cardMoney = (value: number, signed = false) => <>{signed && value > 0 ? "+" : ""}{fmtMoneyAdaptive(value, fundCurrencySymbol(currency), 1e5)}</>;
   const metric = (label: string, value: number, tone: "plain" | "flow" | "result" = "plain") => <div className={`fund-flow-card fund-flow-card--${tone}`} title={`${label}：${exactMoney(value, tone !== "result")}`}><span className="fund-flow-label">{label}</span><strong className={`fund-flow-value ${tone !== "result" && value !== 0 ? value > 0 ? "text-up" : "text-down" : ""}`}>{cardMoney(value, tone !== "result")}</strong></div>;
   const calculationNotes = <div className="space-y-2 text-xs leading-relaxed text-muted"><p>盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>买卖与股息是账户内部现金流，不计入外部投入。</p><p>借记卡、预付卡余额计入现金；信用卡额度不计入。券商与卡包互转时，启用「券商账户」会同步反向流水，避免重复计算。</p></div>;

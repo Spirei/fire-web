@@ -161,19 +161,24 @@ function cardMetaMap(): Map<string, { type: string; region: string }> {
  * 卡币种取值顺序与卡包 / 卡面库一致（金额上记的币种 → 卡背信息里的币种 → 地区默认币种），
  * 保证「卡包上显示的这个余额」和「算进现金的这个余额」是同一笔、同一币种。
  */
-export function cardCashByCurrency(userId: string): Record<string, number> {
+export function cardCashByCurrency(userId: string, strict = false): Record<string, number> {
   const meta = cardMetaMap();
+  const customMeta = new Map(listCustomCards(userId).map(card => [card.image, { type: card.type, region: card.region }]));
   const held = new Set(listCardHoldings(userId));
   const details = listCardDetails(userId);
   const out: Record<string, number> = {};
   listCardAmounts(userId).forEach((amount) => {
     if (!held.has(amount.cardKey)) return;
-    const info = meta.get(amount.cardKey);
+    const info = meta.get(amount.cardKey) || customMeta.get(amount.cardKey);
+    if (strict && !info && Number(amount.amount) !== 0) { out.UNKNOWN = Number.NaN; return; }
     if (!CASH_CARD_TYPES.has(info?.type ?? "")) return;
     const currency = String(
       amount.currency || details[amount.cardKey]?.currency || REGION_CURRENCY[info?.region ?? ""] || ""
     ).toUpperCase();
-    if (!RATE_CURRENCIES.has(currency)) return;
+    if (!RATE_CURRENCIES.has(currency)) {
+      if (strict && Number(amount.amount) !== 0) out[currency || "UNKNOWN"] = Number.NaN;
+      return;
+    }
     const value = Number(amount.amount) || 0;
     if (!value) return;
     out[currency] = (out[currency] || 0) + value;

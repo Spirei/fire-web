@@ -113,12 +113,15 @@ export function normalizeSimple(raw: unknown): SimpleState {
   };
 }
 
-export function getSimpleLedger(userId: string): SimpleState {
+export function getSimpleLedger(userId: string, strict = false): SimpleState {
   try {
     const row = getDb().prepare("SELECT simple FROM user_settings WHERE user_id = ?").get(userId) as { simple?: string } | undefined;
     if (!row?.simple) return { ...EMPTY_SIMPLE };
-    return normalizeSimple(JSON.parse(row.simple));
-  } catch {
+    const raw = JSON.parse(row.simple);
+    if (strict && (!raw || typeof raw !== "object" || Array.isArray(raw) || (raw.invest !== undefined && !Array.isArray(raw.invest)))) throw new Error("Invalid simple ledger");
+    return normalizeSimple(raw);
+  } catch (error) {
+    if (strict) throw error;
     return { ...EMPTY_SIMPLE };
   }
 }
