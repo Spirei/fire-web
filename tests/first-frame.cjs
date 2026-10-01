@@ -122,6 +122,67 @@ try {
     } finally {delete global.window;}
   });
 
+  test('full closure capsule includes holidays and weekends, excludes half days, and restores its URL',()=>{
+    const cell=(html,date)=>html.match(new RegExp('<button[^>]*aria-label="'+date+'；[^]*?</button>'))[0];
+    const cn=render('components/MarketCalendarView.tsx',{},'market=CN&month=2026-10&status=closed');
+    assert(cn.includes('全天休市 14 天'));
+    assert(!cell(cn,'2026-10-01').includes('disabled'));
+    assert(!cell(cn,'2026-10-10').includes('disabled'));
+    assert(cell(cn,'2026-10-10').includes('data-tone="neutral"'),'full closure filter must preserve neutral weekends');
+    assert(cell(cn,'2026-10-08').includes('disabled'));
+    const all=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2026-10&status=closed');
+    assert(all.includes('全天休市 15 天'),'count dates rather than individual market closures');
+    const mixed=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2026-02&status=closed');
+    const feb16=cell(mixed,'2026-02-16');
+    assert(feb16.includes('data-market="US"')&&feb16.includes('data-market="CN"'));
+    assert(!feb16.includes('data-market="HK"')&&!feb16.includes('mc-half-dot'));
+    const hk=render('components/MarketCalendarView.tsx',{},'market=HK&month=2026-02&status=closed');
+    assert(cell(hk,'2026-02-16').includes('disabled'),'half days are not full closure days');
+    const future=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2027-10&status=closed');
+    assert(future.includes('全天休市 0 天')&&!future.includes('class="mc-market-mark"'));
+    let address=new URL('https://example.test/global?section=calendar&market=HK&month=2026-10&day=1');
+    global.window={location:{get href(){return address.href;}},history:{replaceState(_a,_b,url){address=new URL(url,address);}}};
+    try {
+      const view=frameHarness('components/MarketCalendarView.tsx',{'@/lib/workspacePanel':{useWorkspaceSearchParams:()=>query,useWorkspaceLocationGuard:()=>()=>true}});
+      query=address.searchParams;
+      let tree=elements(view.render());
+      tree.find(node=>node.type==='button'&&node.key==='closed').props.onClick();
+      assert.equal(address.searchParams.get('status'),'closed');
+      assert.equal(address.searchParams.get('market'),'HK');
+      assert.equal(address.searchParams.get('month'),'2026-10');
+      assert(!address.searchParams.has('day'));
+      query=address.searchParams;tree=elements(view.render());
+      assert.equal(tree.find(node=>node.type==='button'&&node.key==='closed').props['aria-pressed'],true);
+      tree.find(node=>node.type==='button'&&node.key==='closed').props.onClick();
+      assert(!address.searchParams.has('status'));
+    } finally {delete global.window;}
+  });
+
+  test('market images hide the globe until genuine failure and retry new sources without an old error frame',()=>{
+    const {primeMarketIconCache}=require(path.join(root,'lib/useAssetIcons.ts'));
+    primeMarketIconCache({ZZ:'/uploads/asset/market/custom-zz.svg'});
+    const html=render('components/MarketIcon.tsx',{market:'ZZ',size:18});
+    assert(html.includes('src="/uploads/asset/market/custom-zz.svg"'),'SSR must retain the custom market URL');
+    assert(html.includes('visibility:hidden'),'pending market images must not display a globe underlay');
+    const fallback=React.createElement('span',{},'fallback');
+    const view=frameHarness('components/SafeAssetImage.tsx');
+    const props={src:'/uploads/market-a.svg',fallback,style:{width:18,height:18},showFallbackWhileLoading:false};
+    const first=elements(view.render(props));
+    assert(first.some(node=>node.props.style?.visibility==='hidden'));
+    const firstImage=first.find(node=>node.type==='img');
+    assert.deepEqual(firstImage.props.style,{width:18,height:18});
+    firstImage.props.onError();
+    assert(elements(view.render(props)).includes(fallback),'a genuine failure must display the fallback');
+    const replacement={...props,src:'/uploads/market-b.svg'};
+    assert(elements(view.render(replacement)).some(node=>node.type==='img'),'a new source retries before any effect');
+    firstImage.props.onError();
+    assert(elements(view.render(replacement)).some(node=>node.type==='img'),'late previous-source failures cannot hide the new image');
+    assert(elements(view.render(props)).some(node=>node.type==='img'),'returning to a previous source can retry it');
+    assert(elements(view.render({...props,src:null})).includes(fallback));
+    const other=frameHarness('components/SafeAssetImage.tsx');
+    assert(!elements(other.render({src:props.src,fallback})).some(node=>node.props.style?.visibility==='hidden'),'other icon callers retain their loading fallback');
+  });
+
   test('compact calendar links preserve legacy state and ALL is an explicit three-market overview',()=>{
     const old=render('components/MarketCalendarView.tsx',{},'market=HK&calYear=2026&calMonth=12&calStatus=half_day&calDay=2026-12-24');
     const compact=render('components/MarketCalendarView.tsx',{},'market=HK&month=2026-12&status=half_day&day=24');

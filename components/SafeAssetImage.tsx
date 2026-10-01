@@ -1,13 +1,14 @@
 "use client";
 
-import { useLayoutEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 
 /**
  * 素材库图标安全加载：图片加载失败（如容器内默认素材文件缺失，或用户上传后文件被清理）
  * 时回退到内置默认图标，避免出现浏览器「? / 破图」占位。用于导航、货币/市场图标等场景。
  *
  * 图片始终参与绘制（不做 opacity 切换）：命中浏览器缓存时首帧就是真图，刷新不再先闪一次占位；
- * 尚未加载完成时图片是透明的，垫底的占位自然透出；alt 为空，加载失败也不会出现破图图标。
+ * 尚未加载完成时图片是透明的，默认垫底的占位自然透出；市场图标可仅在失败时显示兜底，
+ * 加载期间保留相同尺寸、不画地球。alt 为空，加载失败也不会出现破图图标。
  *
  * 尺寸约定（重要）：外层 span 由 fallback 撑开，图片用 absolute 覆盖在 fallback 之上，
  * 因此调用方直接传 `h-full w-full` 这类百分比尺寸也是安全的。
@@ -24,7 +25,8 @@ export default function SafeAssetImage({
   style,
   title,
   alt = "",
-  loading
+  loading,
+  showFallbackWhileLoading = true
 }: {
   src?: string | null;
   fallback: ReactNode;
@@ -33,24 +35,23 @@ export default function SafeAssetImage({
   title?: string;
   alt?: string;
   loading?: "lazy" | "eager";
+  showFallbackWhileLoading?: boolean;
 }) {
-  const [failed, setFailed] = useState(false);
+  const [imageState, setImageState] = useState(() => ({ src, failed: false }));
+  // A changed URL retries immediately; a late error from the previous image cannot hide it.
+  if (imageState.src !== src) setImageState({ src, failed: false });
 
-  useLayoutEffect(() => {
-    setFailed(false);
-  }, [src]);
-
-  if (!src || failed) return <>{fallback}</>;
+  if (!src || (imageState.src === src && imageState.failed)) return <>{fallback}</>;
   return (
     <span className="relative inline-flex flex-none items-center justify-center" style={style} title={title}>
-      <span aria-hidden>{fallback}</span>
+      <span aria-hidden style={showFallbackWhileLoading ? undefined : { visibility: "hidden" }}>{fallback}</span>
       <img
         src={src}
         alt={alt}
         loading={loading}
         className={`absolute inset-0 ${className}`}
         style={style}
-        onError={() => setFailed(true)}
+        onError={() => setImageState(current => current.src === src ? { src, failed: true } : current)}
       />
     </span>
   );

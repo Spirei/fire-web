@@ -6,6 +6,7 @@ import { useWorkspaceSearchParams, useWorkspaceLocationGuard } from "@/lib/works
 import { buildMarketCalendar, isCalendarMarket, MARKET_CALENDAR_YEAR, type CalendarMarket, type CalendarDay, type CalendarStatus } from "@/lib/marketCalendar";
 
 const LABELS: Record<CalendarStatus, string> = { trading: "交易日", weekend: "周末休市", holiday: "节假日休市", half_day: "半日市", unknown: "未确认" };
+const FILTER_LABELS = { closed: "全天休市", half_day: "半日市", unknown: "未确认" };
 const MARKET_ORDER: CalendarMarket[] = ["US", "HK", "CN"];
 type ViewMarket = CalendarMarket | "ALL";
 type ViewDay = CalendarDay & { markets: { market: CalendarMarket; day: CalendarDay }[] };
@@ -53,7 +54,7 @@ export default function MarketCalendarView({ initialNow = Date.UTC(MARKET_CALEND
   const requestedMarket = params.get("market");
   const market: ViewMarket = requestedMarket === "ALL" ? "ALL" : isCalendarMarket(requestedMarket || "") ? requestedMarket as CalendarMarket : "US";
   const requestedStatus = params.get("status") ?? params.get("calStatus");
-  const status = requestedStatus === "half_day" || requestedStatus === "unknown" ? requestedStatus : "all";
+  const status = requestedStatus === "closed" || requestedStatus === "half_day" || requestedStatus === "unknown" ? requestedStatus : "all";
   const legacyDay = params.get("calDay");
   const requestedMonth = Number(compactMonth ? compactMonth.slice(5) : params.get("calMonth"));
   const selectedMonth = legacyDay?.startsWith(`${year}-`) ? Number(legacyDay.slice(5, 7)) : 0;
@@ -65,7 +66,8 @@ export default function MarketCalendarView({ initialNow = Date.UTC(MARKET_CALEND
   const calendars = useMemo(() => (market === "ALL" ? MARKET_ORDER : [market]).map(item => buildMarketCalendar(item, year)), [market, year]);
   const calendar = calendars[0];
   const monthDays = useMemo(() => calendar.days.map((day, index) => ({ ...day, markets: calendars.map(item => ({ market: item.market, day: item.days[index] })) })).filter(day => Number(day.date.slice(5, 7)) === month), [calendars, calendar, month]);
-  const matches = (day: ViewDay) => status === "all" || day.markets.some(item => item.day.status === status);
+  const matchesStatus = (day: CalendarDay) => status === "all" || (status === "closed" ? day.status === "holiday" || day.status === "weekend" : day.status === status);
+  const matches = (day: ViewDay) => day.markets.some(item => matchesStatus(item.day));
   const selected = monthDays.find(day => day.date === selectedDate && matches(day));
   const matchingDays = monthDays.filter(matches);
   const leading = ((monthDays[0]?.weekday || 0) + 6) % 7;
@@ -98,10 +100,9 @@ export default function MarketCalendarView({ initialNow = Date.UTC(MARKET_CALEND
     </header>
     <div className="mc-legend">
       <div className="mc-market-filters" role="group" aria-label="日历市场"><button type="button" aria-pressed={market === "ALL"} onClick={() => update({ market: "ALL", calDay: "" })}>全部</button>{MARKET_ORDER.map(option => <button type="button" key={option} aria-pressed={market === option} onClick={() => update({ market: option, calDay: "" })}><MarketIcon market={option} size={16} />{MARKET_NAMES[option]}</button>)}</div>
-      <span className="mc-holiday-legend"><i className="mc-holiday-key" aria-hidden="true" />全天休市</span>
-      <div className="mc-status-filters" role="group" aria-label="日历状态筛选">{(["half_day", "unknown"] as const).map(option => <button type="button" key={option} aria-pressed={status === option} onClick={() => update({ calStatus: status === option ? "" : option, calDay: "" })}><i className={option === "half_day" ? "mc-half-key" : "mc-unknown-key"} aria-hidden="true" />{LABELS[option]}</button>)}</div>
+      <div className="mc-status-filters" role="group" aria-label="日历状态筛选">{(["closed", "half_day", "unknown"] as const).map(option => <button type="button" key={option} aria-pressed={status === option} onClick={() => update({ calStatus: status === option ? "" : option, calDay: "" })}><i className={option === "closed" ? "mc-holiday-key" : option === "half_day" ? "mc-half-key" : "mc-unknown-key"} aria-hidden="true" />{FILTER_LABELS[option]}</button>)}</div>
     </div>
-    {status !== "all" && <p className="mc-filter-result text-xs text-muted" role="status">{MARKET_NAMES[market]} · {year} 年 {month} 月{LABELS[status]} {matchingDays.length} 天{matchingDays.length === 0 ? "，可切换月份或再次点击筛选取消" : "，再次点击筛选可查看全部日期"}</p>}
+    {status !== "all" && <p className="mc-filter-result text-xs text-muted" role="status">{MARKET_NAMES[market]} · {year} 年 {month} 月{FILTER_LABELS[status]} {matchingDays.length} 天</p>}
     {!verified && <div className="mc-coverage is-unknown" role="status"><strong>{year} 年安排未确认</strong><span>当前已核实 {MARKET_CALENDAR_YEAR} 年。该年份全部日期保持未知，不能据工作日判定开市。</span></div>}
     <section className="mc-month card" aria-label={`${year} 年 ${month} 月`}>
       <div className="mc-toolbar">
@@ -118,7 +119,7 @@ export default function MarketCalendarView({ initialNow = Date.UTC(MARKET_CALEND
           {Array.from({ length: leading }, (_, i) => <span className="mc-blank" aria-hidden="true" key={`pad-${i}`} />)}
           {monthDays.map(day => {
             const description = `${day.date}；${day.markets.map(item => `${MARKET_NAMES[item.market]}：${dayDescription(item.day)}`).join("；")}`;
-            const items = day.markets.filter(item => status === "all" || item.day.status === status);
+            const items = day.markets.filter(item => matchesStatus(item.day));
             const marked = items.filter(item => item.day.status === "holiday" || item.day.status === "weekend" || item.day.status === "half_day");
             const closed = marked.some(item => item.day.status === "holiday" || item.day.status === "weekend");
             const reasons = items.filter(item => !day.isWeekend && (item.day.status === "holiday" || item.day.status === "half_day") && item.day.name);

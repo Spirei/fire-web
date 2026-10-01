@@ -44,6 +44,7 @@ export default function MarketIcon({
         title={title ?? code}
         className={`block flex-none rounded-full object-cover ${className}`}
         style={imgStyle}
+        showFallbackWhileLoading={false}
         fallback={<VectorFallback size={size} className={className} title={title ?? code} />}
       />
     );
