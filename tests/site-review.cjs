@@ -418,12 +418,17 @@ function fontHeaderFixture(ext) {
     const disabled = renderToStaticMarkup(React.createElement(PasswordInput,{disabled:true}));
     const readOnly = renderToStaticMarkup(React.createElement(PasswordInput,{readOnly:true}));
     assert(!disabled.includes('<button') && !readOnly.includes('<button'));
+    const apiKey = renderToStaticMarkup(React.createElement(PasswordInput,{allowReveal:false,type:'password',value:'key-draft',onChange:()=>{}}));
+    assert(apiKey.includes('type="password"') && !apiKey.includes('<button'));
+    for (const file of ['components/views/SettingsView.tsx', 'components/AssistantHarnessSettings.tsx']) {
+      assert(fs.readFileSync(path.join(root, file), 'utf8').includes('<PasswordInput allowReveal={false}'), 'API key entry has no reveal button');
+    }
     const component = fs.readFileSync(path.join(root, 'components/PasswordInput.tsx'), 'utf8');
     assert(component.includes('type={shown ? "text" : "password"}'));
     assert(component.includes('type="button"'));
     assert(component.includes('aria-pressed={shown}'));
     assert(component.includes('aria-controls={inputId}'));
-    assert(component.includes('const canReveal = !disabled && !readOnly'));
+    assert(component.includes('const canReveal = allowReveal && !disabled && !readOnly'));
     assert(component.includes('event.preventDefault()'));
     assert(!component.includes('fetch(') && !component.includes('localStorage'));
     for (const file of ['components/FirstRunSetup.tsx','components/PasswordResetForm.tsx','components/PasskeySettings.tsx','components/views/SettingsView.tsx','components/views/UsersView.tsx','components/AssistantHarnessSettings.tsx','app/deploy-status/page.tsx']) {
@@ -2194,6 +2199,128 @@ function fontHeaderFixture(ext) {
       assert(!('messages' in observed.body));
     } finally { global.fetch=offline; }
   });
+  await test('provider drafts survive switches, encrypted saves and redacted reloads without sharing keys', async () => {
+    const { switchModelProvider } = require(path.join(root, 'lib/modelServiceDrafts.ts'));
+    const { modelAttempts, prepareModelServices } = require(path.join(root, 'lib/modelServices.ts'));
+    const before = settings.getSiteSettings().modelServices;
+    const deepseekUrl = 'https://api.deepseek.com/chat/completions';
+    const openaiUrl = 'https://api.openai.com/v1/chat/completions';
+    const original = { id: 'switch-test', name: '切换测试', provider: 'deepseek', icon: '', apiUrl: deepseekUrl, apiKey: 'SECRET_DEEPSEEK', models: ['deepseek-v4-flash'] };
+    const save = async service => assert.equal((await settingsRoute.PUT(request('admin', { modelServices: [service] }, 'PUT'))).status, 200);
+    const reload = async () => (await (await settingsRoute.GET(request('admin'))).json()).settings.modelServices[0];
+    try {
+      let draft = switchModelProvider(original, 'openai', openaiUrl);
+      assert.equal(draft.apiKey, ''); assert.deepEqual(draft.models, ['']);
+      draft = { ...draft, apiKey: 'SECRET_OPENAI', models: ['gpt-test'] };
+      const back = switchModelProvider(draft, 'deepseek', deepseekUrl);
+      assert.equal(back.apiKey, original.apiKey); assert.deepEqual(back.models, original.models);
+      assert.equal(switchModelProvider(back, 'openai', openaiUrl).apiKey, 'SECRET_OPENAI');
+      await save(draft);
+      let client = await reload();
+      assert(!JSON.stringify(client).includes('SECRET_'));
+      assert.equal(client.providerConfigs.deepseek.apiKeyConfigured, true);
+      assert.equal(client.providerConfigs.openai.apiKeyConfigured, true);
+      assert.deepEqual((await (await settingsRoute.GET(request('user'))).json()).settings.modelServices, []);
+      let stored = JSON.parse(db.prepare("SELECT value FROM site_settings WHERE key='modelServices'").get().value)[0];
+      assert(stored.apiKey.startsWith('enc:v1:'));
+      assert(stored.providerConfigs.deepseek.apiKey.startsWith('enc:v1:'));
+      assert(!JSON.stringify(stored).includes('SECRET_'));
+      const route = require(path.join(root, 'app/api/settings/model-test/route.ts'));
+      const offline = global.fetch; let observed; let calls = 0;
+      global.fetch = async (url, init) => { calls++; observed = { url, auth: init.headers.Authorization }; return Response.json({ choices: [{ message: { content: 'OK' } }] }); };
+      try {
+        const testRequest = body => new Request('http://localhost:3000/api/settings/model-test', { method: 'POST', headers: { cookie: `fire_session=${tokens.admin}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        assert.equal((await route.POST(testRequest({ serviceId: client.id, provider: 'deepseek', apiUrl: deepseekUrl, model: 'deepseek-v4-flash' }))).status, 200);
+        assert.equal(observed.auth, 'Bearer SECRET_DEEPSEEK');
+        assert.equal((await route.POST(testRequest({ serviceId: client.id, provider: 'deepseek', apiUrl: 'https://other.example.com/chat/completions', model: 'deepseek-v4-flash' }))).status, 400);
+        assert.equal((await route.POST(testRequest({ serviceId: 'other-service', provider: 'deepseek', apiUrl: deepseekUrl, model: 'deepseek-v4-flash' }))).status, 400);
+        assert.equal(calls, 1, 'a stored key must never reach a different endpoint or service');
+      } finally { global.fetch = offline; }
+      const restored = switchModelProvider(client, 'deepseek', deepseekUrl);
+      assert.equal(restored.apiKey, ''); assert.equal(restored.apiKeyConfigured, true);
+      await save(restored);
+      assert.equal(settings.getSiteSettings().modelServices[0].apiKey, 'SECRET_DEEPSEEK');
+      assert.deepEqual(modelAttempts(settings.getSiteSettings()).map(item => item.model), ['deepseek-v4-flash']);
+      const changedEndpoint = { ...await reload(), apiUrl: 'https://other.example.com/chat/completions' };
+      assert.equal(prepareModelServices([changedEndpoint], settings.getSiteSettings())[0].apiKey, '');
+      const differentService = { ...await reload(), id: 'another-service' };
+      assert.equal(prepareModelServices([differentService], settings.getSiteSettings())[0].apiKey, '');
+      client = switchModelProvider(await reload(), 'openai', openaiUrl);
+      await save(client);
+      assert.equal(settings.getSiteSettings().modelServices[0].apiKey, 'SECRET_OPENAI');
+      const legacySettings = { ...settings.getSiteSettings(), modelServices: [], llmProvider: 'deepseek', llmApiUrl: deepseekUrl, llmApiKey: 'SECRET_LEGACY' };
+      const legacy = { ...original, id: 'legacy-primary', apiKey: '', apiKeyConfigured: true };
+      const migrated = prepareModelServices([{ ...switchModelProvider(legacy, 'openai', openaiUrl), apiKey: 'SECRET_NEW_PROVIDER', models: ['gpt-test'] }], legacySettings)[0];
+      assert.equal(migrated.apiKey, 'SECRET_NEW_PROVIDER');
+      assert.equal(migrated.providerConfigs.deepseek.apiKey, 'SECRET_LEGACY', 'legacy key survives saving a different provider');
+      assert.equal(prepareModelServices([{ ...legacy, provider: 'custom', apiUrl: 'https://other.example.com/chat/completions' }], legacySettings)[0].apiKey, '', 'legacy key is not inherited by another provider or endpoint');
+      const { moveMobileNavigation } = require(path.join(root, 'lib/workspaceNavigation.ts'));
+      const reorderedModels = moveMobileNavigation(['first-model', 'second-model', 'third-model'], 2, 0);
+      await save({ ...client, models: reorderedModels });
+      assert.deepEqual((await reload()).models, ['third-model', 'first-model', 'second-model']);
+      assert.deepEqual(modelAttempts(settings.getSiteSettings()).map(item => item.model), reorderedModels, 'saved drag order is the real chat fallback order');
+      const { resetModelProvider } = require(path.join(root, 'lib/modelServiceDrafts.ts'));
+      const defaultConfig = resetModelProvider({ ...await reload(), name: 'Renamed', models: ['custom-model'] }, { name: 'OpenAI', apiUrl: openaiUrl, models: ['gpt-4o-mini'] });
+      assert.equal(defaultConfig.apiKeyConfigured, true);
+      await save(defaultConfig);
+      assert.deepEqual((await reload()).models, ['gpt-4o-mini']);
+      assert.equal(settings.getSiteSettings().modelServices[0].apiKey, 'SECRET_OPENAI');
+      await save({ ...await reload(), models: [] });
+      assert.deepEqual((await reload()).models, [], 'deleting the last model persists an incomplete service');
+      assert.equal(settings.getSiteSettings().modelServices[0].apiKey, 'SECRET_OPENAI');
+      assert.deepEqual(modelAttempts(settings.getSiteSettings()), [], 'empty services must not silently fall back to a legacy model');
+      await save(resetModelProvider(await reload(), { name: 'OpenAI', apiUrl: openaiUrl, models: ['gpt-4o-mini'] }));
+      const longKey = 'L'.repeat(500);
+      await save({ ...client, apiKey: longKey });
+      assert.equal(settings.getSiteSettings().modelServices[0].apiKey, longKey, 'decrypt before normalization to preserve full encrypted keys');
+      assert.equal(settings.getSiteSettings().modelServices[0].providerConfigs.deepseek.apiKey, 'SECRET_DEEPSEEK');
+    } finally { assert.equal((await settingsRoute.PUT(request('admin', { modelServices: before }, 'PUT'))).status, 200); }
+  });
+  await test('DeepSeek connection probe disables thinking and distinguishes truncated answers from incompatible data', async () => {
+    const route = require(path.join(root, 'app/api/settings/model-test/route.ts'));
+    const offline = global.fetch; let observed; let payload;
+    global.fetch = async (url, init) => { observed = JSON.parse(init.body); return Response.json(payload); };
+    const req = () => new Request('http://localhost:3000/api/settings/model-test', { method: 'POST', headers: { cookie: `fire_session=${tokens.admin}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ serviceId: 'probe', provider: 'deepseek', apiUrl: 'https://api.deepseek.com/chat/completions', apiKey: 'SECRET_PROBE', model: 'deepseek-v4-flash' }) });
+    try {
+      payload = { choices: [{ finish_reason: 'stop', message: { content: 'OK' } }] };
+      assert.equal((await route.POST(req())).status, 200);
+      assert.deepEqual(observed.thinking, { type: 'disabled' }); assert.equal(observed.max_tokens, 512);
+      payload = { choices: [{ finish_reason: 'length', message: { content: null, reasoning_content: 'Thinking only' } }] };
+      let response = await route.POST(req()); assert.equal(response.status, 502);
+      assert.match((await response.json()).error, /token 上限/);
+      for (const invalid of [{ choices: [{ message: { content: { text: 'OK' } } }] }, { choices: [{ message: { content: '   ' } }] }, { result: 'OK' }]) {
+        payload = invalid; response = await route.POST(req()); assert.equal(response.status, 502);
+        assert.match((await response.json()).error, /格式不兼容/);
+      }
+      global.fetch = async () => new Response(new ReadableStream({ start(controller) { controller.error(new DOMException('timed out while reading', 'TimeoutError')); } }), { status: 200 });
+      response = await route.POST(req()); assert.equal(response.status, 502);
+      assert.equal((await response.json()).error, '连接超时', 'body timeout must not be swallowed and misreported as incompatible JSON');
+      global.fetch = async () => new Response('too large', { status: 200, headers: { 'Content-Length': String(256 * 1024 + 1) } });
+      response = await route.POST(req()); assert.equal(response.status, 502);
+      assert.equal((await response.json()).error, '模型响应内容过大');
+    } finally { global.fetch = offline; }
+  });
+  await test('model test capsule renders loading, success and icon retry without repeated busy copy', () => {
+    const React = require('react');
+    const { renderToStaticMarkup } = require('react-dom/server');
+    const Button = require(path.join(root, 'components/ModelTestButton.tsx')).default;
+    const render = result => renderToStaticMarkup(React.createElement(Button, { model: 'test-model', result, onTest: () => {} }));
+    const idle = render(); assert(idle.includes('测试连接'));
+    const loading = render({ state: 'loading', text: '测试中' });
+    assert(loading.includes('aria-busy="true"') && loading.includes('disabled=""') && loading.includes('model-test-wave on'));
+    const success = render({ state: 'ok', text: '230ms' });
+    assert(success.includes('model-test-dot is-ok') && success.includes('成功') && success.includes('230ms') && !success.includes('disabled=""'));
+    assert(loading.includes('class="sr-only">测试中</span>'));
+    const failed = render({ state: 'error', text: '连接超时' });
+    assert(failed.includes('model-test-retry') && failed.includes('aria-label="重新测试 test-model"') && failed.includes('连接超时；点击重新测试'));
+    assert(!failed.includes('>重试<'));
+    const source = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    const readOnly = source.slice(source.indexOf('<div className="model-service-readonly">'), source.indexOf('</SettingsManagedPane>', source.indexOf('<div className="model-service-readonly">')));
+    assert(readOnly.includes('?.state === "error" && <small'));
+    assert(!source.includes('aria-label="模型上移"') && !source.includes('aria-label="模型下移"'));
+    assert(source.includes('modelRowDragRef.current?.serviceId === service.id'));
+    assert(source.includes('moveMobileNavigation(service.models, source.index, modelIndex)'));
+  });
   await test('model service navigation and provider icons stay explicit', () => {
     const source=fs.readFileSync(path.join(root,'components/views/SettingsView.tsx'),'utf8');
     assert(source.includes('label: "模型服务"'));
@@ -2201,7 +2328,7 @@ function fontHeaderFixture(ext) {
     assert(!source.includes('label: "翻译配置"'));
     assert(source.includes('const input = event.currentTarget'));
     assert(source.includes('icon={service.icons?.[item.id] || ""}'), 'provider cards use their own uploaded icon');
-    assert(source.includes('icon: service.icons?.[item.id] || ""'), 'switching provider restores only its own icon');
+    assert(fs.readFileSync(path.join(root, 'lib/modelServiceDrafts.ts'), 'utf8').includes('icon: service.icons?.[provider] || ""'), 'switching provider restores only its own icon');
     assert(source.includes('r="12.5" strokeDasharray="3 3"'), 'custom provider uses a dashed circular plus by default');
     const layout=fs.readFileSync(path.join(root,'app/[...slug]/layout.tsx'),'utf8');
     assert(layout.includes('modelServices: clientSettings(settings, isAdmin(user)).modelServices'), 'server first frame must have redacted model icons');

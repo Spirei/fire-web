@@ -17,11 +17,11 @@ const WAVE_BARS = [
 /** 每根条的动画相位（秒）：从左往右依次错开，兜底动画也是从左往右过 */
 const PHASE = [0.0, 0.08, 0.16, 0.24, 0.32, 0.4];
 
-export default function MusicIcon({ playing, live = false }: { playing: boolean; live?: boolean }) {
+export default function MusicIcon({ playing, live = false, className = "sc-wave" }: { playing: boolean; live?: boolean; className?: string }) {
   // live = 频谱可视化已接手：这时关掉 CSS 兜底动画，条高完全由每帧的 transform 决定
-  const className = ["sc-wave", playing ? "on" : "", live ? "live" : ""].filter(Boolean).join(" ");
+  const waveClassName = [className, playing ? "on" : "", live ? "live" : ""].filter(Boolean).join(" ");
   return (
-    <svg viewBox="0 0 57.5593 49.9383" className={className} aria-hidden="true">
+    <svg viewBox="0 0 57.5593 49.9383" className={waveClassName} aria-hidden="true">
       {WAVE_BARS.map((d, i) => (
         <path key={d.slice(0, 12)} d={d} className="sc-wave-bar" style={{ animationDelay: `${PHASE[i]}s` }} />
       ))}

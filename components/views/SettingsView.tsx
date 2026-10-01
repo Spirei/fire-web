@@ -3,6 +3,7 @@
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import PasswordInput from "@/components/PasswordInput";
+import ModelTestButton from "@/components/ModelTestButton";
 import PasskeySettings from "@/components/PasskeySettings";
 import { createPasskeySettingsData } from "@/lib/passkeySettingsData";
 import SecurityCheck from "@/components/SecurityCheck";
@@ -13,6 +14,8 @@ import EmailRecoveryForm from "@/components/EmailRecoveryForm";
 import PasswordStrength from "@/components/PasswordStrength";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
 import { readLimitedResponseJson } from "@/lib/requestBody";
+import { resetModelProvider, switchModelProvider } from "@/lib/modelServiceDrafts";
+import { moveMobileNavigation } from "@/lib/workspaceNavigation";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isSixDigitTotp, normalizeTotpDigits } from "@/lib/totpInput";
@@ -956,6 +959,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   async function testModelService(service: ModelServiceConfig, model: string) {
     const key = `${service.id}:${model}`;
+    const revision = modelTestRevisions.current[service.id] || 0;
     setModelTestStates(current => ({ ...current, [key]: { state: "loading", text: "测试中" } }));
     try {
       const res = await fetch("/api/settings/model-test", {
@@ -964,9 +968,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         body: JSON.stringify({ serviceId: service.id, provider: service.provider, apiUrl: service.apiUrl, apiKey: service.apiKey, model })
       });
       const data = await res.json().catch(() => null);
+      if (revision !== (modelTestRevisions.current[service.id] || 0)) return;
       if (!res.ok) throw new Error(data?.error || "测试失败");
       setModelTestStates(current => ({ ...current, [key]: { state: "ok", text: `${data.latencyMs}ms` } }));
     } catch (error) {
+      if (revision !== (modelTestRevisions.current[service.id] || 0)) return;
       setModelTestStates(current => ({ ...current, [key]: { state: "error", text: error instanceof Error ? error.message : "测试失败" } }));
     }
   }
@@ -1363,6 +1369,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [editingModel, setEditingModel] = useState(false);
   const [uploadingModelIconId, setUploadingModelIconId] = useState<string | null>(null);
   const modelDragIndexRef = useRef<number | null>(null);
+  const modelRowDragRef = useRef<{ serviceId: string; index: number } | null>(null);
+  const modelTestRevisions = useRef<Record<string, number>>({});
   const [modelTestStates, setModelTestStates] = useState<Record<string, { state: "loading" | "ok" | "error"; text: string }>>({});
   useEffect(() => {
     let cancelled = false;
@@ -1370,9 +1378,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       .then(response => response.ok ? response.json() : null)
       .then((data: { tests?: Record<string, { ok: boolean; latencyMs: number; error?: string }> } | null) => {
         if (cancelled || !data?.tests) return;
-        const restored = Object.fromEntries(Object.entries(data.tests).map(([key, result]) => [key, {
+        const restored = Object.fromEntries(Object.entries(data.tests).filter(([key]) => !modelTestRevisions.current[key.split(":")[0]]).map(([key, result]) => [key, {
           state: result.ok ? "ok" as const : "error" as const,
-          text: result.ok ? `${result.latencyMs}ms` : result.error || "上次测试失败"
+          text: result.ok ? `${result.latencyMs}ms` : result.error === "output_limit" ? "模型在输出答案前达到 token 上限" : result.error === "incompatible" ? "接口已响应，但格式不兼容" : result.error === "timeout" ? "连接超时" : result.error || "上次测试失败"
         }]));
         setModelTestStates(current => ({ ...restored, ...current }));
       })
@@ -3160,6 +3168,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   }];
                   const updateServices = (next: ModelServiceConfig[]) => setSite(current => ({ ...current, modelServices: next }));
                   const updateService = (id: string, patch: Partial<ModelServiceConfig>) => {
+                    modelTestRevisions.current[id] = (modelTestRevisions.current[id] || 0) + 1;
                     setModelTestStates(current => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${id}:`))));
                     updateServices(services.map(item => item.id === id ? { ...item, ...patch } : item));
                   };
@@ -3226,9 +3235,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 </div>
                                 {!editingModel ? <span className="model-service-use">{service.provider === "jev" ? "决策专用" : blockSaving["model-order"] ? "保存排序…" : `优先级 ${serviceIndex + 1}`}</span> : (
                                   <div className="model-order-actions">
-                                    <button type="button" onClick={() => reorderServices(serviceIndex, serviceIndex - 1)} disabled={serviceIndex === 0 || !!blockSaving["model-order"]} aria-label="服务上移">↑</button>
-                                    <button type="button" onClick={() => reorderServices(serviceIndex, serviceIndex + 1)} disabled={serviceIndex === services.length - 1 || !!blockSaving["model-order"]} aria-label="服务下移">↓</button>
-                                    <button type="button" className="is-danger" onClick={() => updateServices(services.filter(item => item.id !== service.id))} disabled={services.length === 1} aria-label="删除服务"><DeleteIcon className="h-4 w-4" /></button>
+                                    <button type="button" disabled={!!uploadingModelIconId} onClick={() => {
+                                      updateService(service.id, resetModelProvider(service, { name: meta.name, apiUrl: meta.url, models: [service.provider === "deepseek" ? "deepseek-flash" : service.provider === "openai" ? "gpt-4o-mini" : service.provider === "jev" ? "jev-latest" : ""] }));
+                                      showToast("已恢复默认配置，保存后生效");
+                                    }} aria-label="恢复默认配置" title="恢复当前提供方的默认配置，保留同一地址的密钥"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2.6 8.4" /><path d="M3 4v6h6" /></svg></button>
                                   </div>
                                 )}
                               </div>
@@ -3237,7 +3247,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 <div className="model-service-editor">
                                   <div className="model-provider-grid">
                                     {MODEL_PROVIDERS.map(item => (
-                                      <button key={item.id} type="button" disabled={!!uploadingModelIconId} onClick={() => updateService(service.id, { provider: item.id, name: service.name === "新模型服务" || MODEL_PROVIDERS.some(candidate => candidate.name === service.name) ? item.name : service.name, apiUrl: item.url || service.apiUrl, icon: service.icons?.[item.id] || "", apiKey: item.id === service.provider ? service.apiKey : "", apiKeyConfigured: item.id === service.provider ? service.apiKeyConfigured : false, models: item.id === "jev" && service.provider !== "jev" ? ["jev-latest"] : service.provider === "jev" && item.id !== "jev" ? [""] : service.models })} className={`model-provider-option ${service.provider === item.id ? "is-active" : ""}`}>
+                                      <button key={item.id} type="button" disabled={!!uploadingModelIconId} onClick={() => updateService(service.id, { ...switchModelProvider(service, item.id, item.url), name: service.name === "新模型服务" || MODEL_PROVIDERS.some(candidate => candidate.name === service.name) ? item.name : service.name })} className={`model-provider-option ${service.provider === item.id ? "is-active" : ""}`}>
                                         <ModelProviderIcon provider={item.id} icon={service.icons?.[item.id] || ""} className="h-8 w-8" />
                                         <span><b>{item.name}</b><small>{item.hint}</small></span><i className="model-provider-check" />
                                       </button>
@@ -3270,19 +3280,33 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                       {service.icon && <button type="button" onClick={() => updateService(service.id, { icon: "", icons: { ...service.icons, [service.provider]: "" } })}>恢复默认</button>}
                                     </div>
                                   </div>
-                                  <label className="model-field"><span>API 地址<small>{service.provider === "jev" ? "TypeSafe System One 决策接口" : "OpenAI 兼容的 Chat Completions 地址"}</small></span><input className="sw-row-input" value={service.apiUrl} onChange={event => updateService(service.id, { apiUrl: event.target.value })} placeholder={service.provider === "jev" ? "https://api.typesafe.ai/v1/systemone" : "https://api.example.com/v1/chat/completions"} autoComplete="off" /></label>
-                                  <label className="model-field"><span>API 密钥<small>留空不会覆盖已保存密钥</small></span><div className="relative min-w-0 flex-1"><PasswordInput className="sw-row-input !w-full pr-24" type="password" autoComplete="new-password" value={service.apiKey} onChange={event => updateService(service.id, { apiKey: event.target.value })} placeholder={service.apiKeyConfigured ? "已配置，输入新值可替换" : "输入 API Key"} /><span className={`model-key-state ${service.apiKey || service.apiKeyConfigured ? "is-ready" : ""}`}><i />{service.apiKey || service.apiKeyConfigured ? "已保护" : "未配置"}</span></div></label>
+                                  <label className="model-field"><span>API 地址<small>{service.provider === "jev" ? "TypeSafe System One 决策接口" : "OpenAI 兼容的 Chat Completions 地址"}</small></span><input className="sw-row-input" value={service.apiUrl} onChange={event => updateService(service.id, { apiUrl: event.target.value, apiKeyConfigured: service.providerConfigs?.[service.provider]?.apiUrl === event.target.value.trim() && Boolean(service.providerConfigs?.[service.provider]?.apiKeyConfigured) })} placeholder={service.provider === "jev" ? "https://api.typesafe.ai/v1/systemone" : "https://api.example.com/v1/chat/completions"} autoComplete="off" /></label>
+                                  <label className="model-field"><span>API 密钥<small>留空不会覆盖已保存密钥</small></span><div className="relative min-w-0 flex-1"><PasswordInput allowReveal={false} className="sw-row-input !w-full pr-24" type="password" autoComplete="new-password" value={service.apiKey} onChange={event => updateService(service.id, { apiKey: event.target.value })} placeholder={service.apiKeyConfigured ? "已配置，输入新值可替换" : "输入 API Key"} /><span className={`model-key-state ${service.apiKey || service.apiKeyConfigured ? "is-ready" : ""}`}><i />{service.apiKey || service.apiKeyConfigured ? "已保护" : "未配置"}</span></div></label>
                                   <div>
                                     <div className="model-list-heading"><span>{service.provider === "jev" ? "决策模型" : "模型与回退顺序"}<small>{service.provider === "jev" ? "测试连接使用结构化判断请求；不参与聊天与翻译回退" : "从上到下依次尝试"}</small></span><button type="button" onClick={() => updateService(service.id, { models: [...service.models, ""] })}><b>＋</b> 添加模型</button></div>
                                     <div className="model-list">
+                                      {!service.models.length && <p className="model-list-empty">尚未添加模型，点击“添加模型”配置回退顺序。</p>}
                                       {service.models.map((model, modelIndex) => (
-                                        <div className="model-row" key={`${service.id}-${modelIndex}`}>
+                                        <div className="model-row" key={`${service.id}-${modelIndex}`} onDragOver={event => {
+                                          if (modelRowDragRef.current?.serviceId === service.id) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }
+                                        }} onDrop={event => {
+                                          event.preventDefault();
+                                          const source = modelRowDragRef.current;
+                                          modelRowDragRef.current = null;
+                                          if (source?.serviceId === service.id && source.index !== modelIndex) updateService(service.id, { models: moveMobileNavigation(service.models, source.index, modelIndex) });
+                                        }}>
+                                          <button type="button" className="drag-handle model-drag-handle" draggable={service.models.length > 1} disabled={service.models.length < 2} aria-label={`拖动模型 ${modelIndex + 1} 排序`} title="拖动调整回退顺序" onDragStart={event => {
+                                            event.stopPropagation();
+                                            modelRowDragRef.current = { serviceId: service.id, index: modelIndex };
+                                            event.dataTransfer.effectAllowed = "move";
+                                            event.dataTransfer.setData("text/plain", `${service.id}:${modelIndex}`);
+                                          }} onDragEnd={() => { modelRowDragRef.current = null; }}>
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">{[6, 12, 18].flatMap(y => [9, 15].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.5" />))}</svg>
+                                          </button>
                                           <span className="model-priority">{modelIndex + 1}</span>
                                           <input className="sw-row-input" value={model} maxLength={160} onChange={event => updateService(service.id, { models: service.models.map((item, index) => index === modelIndex ? event.target.value : item) })} placeholder={service.provider === "jev" ? "jev-latest" : "模型 ID"} />
-                                          <button type="button" className={`model-test-button is-${modelTestStates[`${service.id}:${model}`]?.state || "idle"}`} onClick={() => { void testModelService(service, model); }} disabled={!model || modelTestStates[`${service.id}:${model}`]?.state === "loading"} title={modelTestStates[`${service.id}:${model}`]?.state === "ok" ? `连接成功，耗时 ${modelTestStates[`${service.id}:${model}`].text}；点击重新测试` : modelTestStates[`${service.id}:${model}`]?.text || "测试模型连接"}>{modelTestStates[`${service.id}:${model}`]?.state === "loading" ? "…" : modelTestStates[`${service.id}:${model}`]?.state === "ok" ? <><span aria-hidden="true">✓</span><span>{modelTestStates[`${service.id}:${model}`].text}</span></> : modelTestStates[`${service.id}:${model}`]?.state === "error" ? "重试" : "测试"}</button>
-                                          <button type="button" onClick={() => { const next=[...service.models]; const [item]=next.splice(modelIndex,1); next.splice(modelIndex-1,0,item); updateService(service.id,{models:next}); }} disabled={modelIndex === 0} aria-label="模型上移">↑</button>
-                                          <button type="button" onClick={() => { const next=[...service.models]; const [item]=next.splice(modelIndex,1); next.splice(modelIndex+1,0,item); updateService(service.id,{models:next}); }} disabled={modelIndex === service.models.length - 1} aria-label="模型下移">↓</button>
-                                          <button type="button" onClick={() => updateService(service.id, { models: service.models.filter((_, index) => index !== modelIndex) })} disabled={service.models.length === 1} aria-label="删除模型"><DeleteIcon className="h-4 w-4" /></button>
+                                          <ModelTestButton compact model={model} result={modelTestStates[`${service.id}:${model}`]} onTest={() => { void testModelService(service, model); }} />
+                                          <button type="button" onClick={() => updateService(service.id, { models: service.models.filter((_, index) => index !== modelIndex) })} aria-label={`删除模型 ${modelIndex + 1}`} title="删除模型"><DeleteIcon className="h-4 w-4" /></button>
                                           {modelTestStates[`${service.id}:${model}`]?.state === "error" && <span className="model-test-result is-error">{modelTestStates[`${service.id}:${model}`].text}</span>}
                                         </div>
                                       ))}
@@ -3292,7 +3316,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                               ) : (
                                 <div className="model-service-readonly">
                                   <div><span>API 地址</span><b title={service.apiUrl}>{service.apiUrl || "未设置"}</b></div>
-                                  {service.models.filter(Boolean).map(model => <div key={model} className="model-readonly-test-row"><span className="model-readonly-test-copy"><b title={model}>{model}</b>{modelTestStates[`${service.id}:${model}`]?.text && <small className={modelTestStates[`${service.id}:${model}`]?.state === "error" ? "text-up" : "text-muted"}>{modelTestStates[`${service.id}:${model}`].text}</small>}</span><button type="button" className="btn btn-line btn-sm" onClick={() => void testModelService(service, model)} disabled={modelTestStates[`${service.id}:${model}`]?.state === "loading"}>{modelTestStates[`${service.id}:${model}`]?.state === "loading" ? "测试中…" : modelTestStates[`${service.id}:${model}`]?.state === "ok" ? "重新测试" : "测试连接"}</button></div>)}
+                                  {service.models.filter(Boolean).map(model => <div key={model} className="model-readonly-test-row"><span className="model-readonly-test-copy"><b title={model}>{model}</b>{modelTestStates[`${service.id}:${model}`]?.state === "error" && <small className="text-up">{modelTestStates[`${service.id}:${model}`].text}</small>}</span><ModelTestButton model={model} result={modelTestStates[`${service.id}:${model}`]} onTest={() => { void testModelService(service, model); }} /></div>)}
                                   <div><span>密钥</span><b>{service.apiKeyConfigured || service.apiKey ? "已安全保存" : "未配置"}</b></div>
                                 </div>
                               )}

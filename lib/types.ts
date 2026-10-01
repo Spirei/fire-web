@@ -321,6 +321,14 @@ export interface ModelServiceConfig {
   apiKey: string;
   apiKeyConfigured?: boolean;
   models: string[];
+  providerConfigs?: Partial<Record<ModelServiceConfig["provider"], ModelProviderConfig>>;
+}
+
+export interface ModelProviderConfig {
+  apiUrl: string;
+  apiKey: string;
+  apiKeyConfigured?: boolean;
+  models: string[];
 }
 
 export interface TickerItemConfig {

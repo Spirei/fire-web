@@ -31,7 +31,10 @@ export function clientSettings(settings: SiteSettings, admin: boolean) {
     modelServices: admin ? settings.modelServices.map(service => ({
       ...service,
       apiKey: "",
-      apiKeyConfigured: Boolean(service.apiKey)
+      apiKeyConfigured: Boolean(service.apiKey),
+      providerConfigs: Object.fromEntries(Object.entries(service.providerConfigs || {}).map(([provider, config]) => [provider, {
+        apiUrl: config!.apiUrl, models: config!.models, apiKey: "", apiKeyConfigured: Boolean(config!.apiKey)
+      }]))
     })) : [],
     xueqiuCookieConfigured: admin && Boolean(settings.xueqiuCookie)
   };

@@ -1,7 +1,25 @@
 import type { ModelServiceConfig, SiteSettings } from "./types";
 import { validateAssistantEndpoint } from "./assistantSecurity";
+import { modelProviderConfig } from "./modelServiceDrafts";
 
 const PROVIDERS = new Set(["deepseek", "openai", "jev", "custom"]);
+
+function normalizeProviderConfig(item: Record<string, unknown>) {
+  return {
+    apiUrl: String(item.apiUrl || "").trim().slice(0, 2048),
+    apiKey: String(item.apiKey || "").trim().slice(0, 500),
+    models: Array.isArray(item.models)
+      ? [...new Set(item.models.map(model => String(model).trim()).filter(Boolean))].slice(0, 20).map(model => model.slice(0, 160)) : []
+  };
+}
+
+/** A stored secret belongs to one service, provider and endpoint. */
+export function savedModelProviderConfig(service: ModelServiceConfig | undefined, provider: string, apiUrl: string) {
+  if (!service || !PROVIDERS.has(provider)) return undefined;
+  const config = service.provider === provider ? modelProviderConfig(service) : service.providerConfigs?.[provider as ModelServiceConfig["provider"]];
+  const endpoint = validateAssistantEndpoint(apiUrl);
+  return config && endpoint && validateAssistantEndpoint(config.apiUrl) === endpoint ? config : undefined;
+}
 
 export function normalizeModelServices(value: unknown): ModelServiceConfig[] {
   if (!Array.isArray(value)) return [];
@@ -22,18 +40,22 @@ export function normalizeModelServices(value: unknown): ModelServiceConfig[] {
     let id = String(item.id || fallbackId).trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || fallbackId;
     while (seen.has(id)) id = `${fallbackId}-${seen.size + 1}`;
     seen.add(id);
-    const models = Array.isArray(item.models)
-      ? [...new Set(item.models.map(model => String(model).trim()).filter(Boolean))].slice(0, 20).map(model => model.slice(0, 160))
-      : [];
+    const providerConfigs: NonNullable<ModelServiceConfig["providerConfigs"]> = {};
+    if (item.providerConfigs && typeof item.providerConfigs === "object" && !Array.isArray(item.providerConfigs)) {
+      for (const [key, config] of Object.entries(item.providerConfigs)) {
+        if (PROVIDERS.has(key) && config && typeof config === "object" && !Array.isArray(config)) {
+          providerConfigs[key as ModelServiceConfig["provider"]] = normalizeProviderConfig(config as Record<string, unknown>);
+        }
+      }
+    }
     return [{
       id,
       name: String(item.name || (provider === "deepseek" ? "DeepSeek" : provider === "openai" ? "OpenAI" : provider === "jev" ? "Jev" : "自定义服务")).trim().slice(0, 50),
       provider,
       icon: icons[provider] || "",
       icons,
-      apiUrl: String(item.apiUrl || "").trim().slice(0, 2048),
-      apiKey: String(item.apiKey || "").trim().slice(0, 500),
-      models
+      ...normalizeProviderConfig(item),
+      providerConfigs
     }];
   });
 }
@@ -48,11 +70,20 @@ export function prepareModelServices(value: unknown, previous: SiteSettings): Mo
   if (incoming.length !== value.length) throw new Error("模型服务格式无效");
   const saved = new Map(previous.modelServices.map(item => [item.id, item]));
   return incoming.map(item => {
+    const old = saved.get(item.id) || (item.id === "legacy-primary" && !previous.modelServices.length ? configuredModelServices(previous)[0] : undefined);
+    const providerConfigs = { ...old?.providerConfigs, ...(old ? { [old.provider]: modelProviderConfig(old) } : {}) };
+    for (const [provider, config] of Object.entries(item.providerConfigs || {})) {
+      if (!config) continue;
+      if (config.apiUrl && !validateAssistantEndpoint(config.apiUrl)) throw new Error(`${item.name} 的 API 地址无效或不安全`);
+      providerConfigs[provider as ModelServiceConfig["provider"]] = { ...config, apiKey: config.apiKey || savedModelProviderConfig(old, provider, config.apiUrl)?.apiKey || "" };
+    }
     const service = {
       ...item,
-      apiKey: item.apiKey || (saved.get(item.id)?.provider === item.provider ? saved.get(item.id)?.apiKey : "") || (item.id === "legacy-primary" && item.provider !== "jev" ? previous.llmApiKey || previous.deepseekApiKey : "")
+      providerConfigs,
+      apiKey: item.apiKey || savedModelProviderConfig(old, item.provider, item.apiUrl)?.apiKey || ""
     };
-    if (!service.name || !service.models.length) throw new Error("每个模型服务都需要名称和至少一个模型");
+    service.providerConfigs[service.provider] = modelProviderConfig(service);
+    if (!service.name) throw new Error("每个模型服务都需要名称");
     if (!validateAssistantEndpoint(service.apiUrl)) throw new Error(`${service.name} 的 API 地址无效或不安全`);
     if (service.icon && !/^\/uploads\/(?:asset\/icon|logo)\//.test(service.icon)) throw new Error(`${service.name} 的图标路径无效`);
     if (Object.values(service.icons || {}).some(icon => icon && !/^\/uploads\/(?:asset\/icon|logo)\//.test(icon))) throw new Error(`${service.name} 的图标路径无效`);
@@ -64,10 +95,11 @@ export function configuredModelServices(settings: SiteSettings): ModelServiceCon
   const services = normalizeModelServices(settings.modelServices);
   if (services.length) return services;
   const key = (settings.llmApiKey || settings.deepseekApiKey || process.env.LLM_API_KEY || process.env.DEEPSEEK_API_KEY || "").trim();
+  const provider = settings.llmProvider === "openai" ? "openai" : settings.llmProvider === "custom" ? "custom" : "deepseek";
   return [{
     id: "legacy-primary",
-    name: settings.llmProvider === "openai" ? "OpenAI" : "DeepSeek",
-    provider: settings.llmProvider === "openai" ? "openai" : "deepseek",
+    name: provider === "openai" ? "OpenAI" : provider === "custom" ? "自定义服务" : "DeepSeek",
+    provider,
     icon: "",
     apiUrl: settings.llmApiUrl || settings.deepseekApiUrl,
     apiKey: key,

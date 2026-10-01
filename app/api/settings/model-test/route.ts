@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getSiteSettings } from "@/lib/settings";
+import { configuredModelServices, savedModelProviderConfig } from "@/lib/modelServices";
 import { validateAssistantEndpoint } from "@/lib/assistantSecurity";
 import { readLimitedJson, readLimitedResponseJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { getModelTestHealth, setModelHealth, setModelTestHealth } from "@/lib/modelHealth";
+import { proxyFetch } from "@/lib/net";
 
 type TestBody = { serviceId?: string; provider?: string; apiUrl?: string; apiKey?: string; model?: string };
 
@@ -18,7 +20,7 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
   if (!isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
   const tests: Record<string, { ok: boolean; latencyMs: number; error?: string }> = {};
-  for (const service of getSiteSettings().modelServices) {
+  for (const service of configuredModelServices(getSiteSettings())) {
     const apiUrl = validateAssistantEndpoint(service.apiUrl);
     if (!apiUrl || !service.apiKey) continue;
     for (const model of service.models) {
@@ -43,11 +45,12 @@ export async function POST(request: Request) {
     throw error;
   }
   const serviceId = String(body?.serviceId || "").trim();
-  const saved = getSiteSettings().modelServices.find(item => item.id === serviceId);
-  const apiUrl = validateAssistantEndpoint(String(body?.apiUrl || saved?.apiUrl || "").trim());
-  const model = String(body?.model || "").trim().slice(0, 160);
+  const saved = configuredModelServices(getSiteSettings()).find(item => item.id === serviceId);
   const provider = String(body?.provider || saved?.provider || "");
-  const apiKey = String(body?.apiKey || (saved?.provider === provider ? saved.apiKey : "") || "").trim();
+  const providerConfig = saved?.provider === provider ? saved : saved?.providerConfigs?.[provider as NonNullable<typeof saved>["provider"]];
+  const apiUrl = validateAssistantEndpoint(String(body?.apiUrl ?? providerConfig?.apiUrl ?? "").trim());
+  const model = String(body?.model || "").trim().slice(0, 160);
+  const apiKey = String(body?.apiKey || (apiUrl ? savedModelProviderConfig(saved, provider, apiUrl)?.apiKey : "") || "").trim();
   if (provider !== "jev" && provider !== "deepseek" && provider !== "openai" && provider !== "custom") {
     return NextResponse.json({ error: "模型提供方无效" }, { status: 400 });
   }
@@ -62,26 +65,36 @@ export async function POST(request: Request) {
     setModelTestHealth(serviceId, model, testSignature, value);
   };
   try {
-    const response = await fetch(apiUrl, {
+    const response = await proxyFetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(provider === "jev"
         ? { model, state: "The quote source returned a timeout.", questions: { needs_review: { type: "noul", instructions: "Did the quote source time out?" } } }
-        : { model, temperature: 0, max_tokens: 128, messages: [{ role: "user", content: "只回复 OK" }] }),
-      signal: AbortSignal.any([request.signal, AbortSignal.timeout(12_000)]),
+        : { model, temperature: 0, max_tokens: 512, stream: false, ...(provider === "deepseek" ? { thinking: { type: "disabled" } } : {}), messages: [{ role: "user", content: "只回复 OK" }] }),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(30_000)]),
       redirect: "manual",
       cache: "no-store"
     });
-    const data = await readLimitedResponseJson<{ choices?: Array<{ message?: { content?: string } }>; answers?: { needs_review?: { type?: string; noul?: number } } }>(response, 256 * 1024).catch(() => null);
+    const data = await readLimitedResponseJson<{ choices?: Array<{ finish_reason?: string; message?: { content?: unknown; reasoning_content?: unknown } }>; answers?: { needs_review?: { type?: string; noul?: number } } }>(response, 256 * 1024);
     if (!response.ok) { record({ ok: false, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: `HTTP ${response.status}` }); return NextResponse.json({ error: `连接失败（HTTP ${response.status}）` }, { status: 502 }); }
+    const choice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
+    const content = choice?.message?.content;
     const compatible = provider === "jev"
       ? data?.answers?.needs_review?.type === "noul" && typeof data.answers.needs_review.noul === "number" && data.answers.needs_review.noul >= 0 && data.answers.needs_review.noul <= 1
-      : Boolean(data?.choices?.[0]?.message?.content);
+      : typeof content === "string" && Boolean(content.trim());
+    if (!compatible && provider !== "jev" && choice?.finish_reason === "length") {
+      record({ ok: false, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: "output_limit" });
+      return NextResponse.json({ error: "接口已连接，但模型在输出答案前达到 token 上限，请调整模型或重试" }, { status: 502 });
+    }
     if (!compatible) { record({ ok: false, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: "incompatible" }); return NextResponse.json({ error: "接口已响应，但格式不兼容" }, { status: 502 }); }
     const latencyMs = Date.now() - started;
     record({ ok: true, latencyMs, checkedAt: new Date().toISOString() });
     return NextResponse.json({ ok: true, latencyMs });
   } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      record({ ok: false, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: "response_too_large" });
+      return NextResponse.json({ error: "模型响应内容过大" }, { status: 502 });
+    }
     record({ ok: false, latencyMs: Date.now() - started, checkedAt: new Date().toISOString(), error: error instanceof Error && error.name === "TimeoutError" ? "timeout" : "request_failed" });
     return NextResponse.json({ error: error instanceof Error && error.name === "TimeoutError" ? "连接超时" : "无法连接模型服务" }, { status: 502 });
   }

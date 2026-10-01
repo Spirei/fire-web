@@ -441,7 +441,17 @@ export function getSiteSettings(): SiteSettings {
     } catch { /* 无效指数配置忽略 */ }
   }
   if (typeof map.modelServices === "string") {
-    try { result.modelServices = normalizeModelServices(JSON.parse(map.modelServices)).map(service => ({ ...service, apiKey: decryptSecret(service.apiKey) })); }
+    try {
+      const stored = JSON.parse(map.modelServices);
+      result.modelServices = normalizeModelServices(Array.isArray(stored) ? stored.map(service => ({
+        ...service,
+        apiKey: decryptSecret(typeof service?.apiKey === "string" ? service.apiKey : ""),
+        providerConfigs: Object.fromEntries(Object.entries(service?.providerConfigs || {}).map(([provider, raw]) => {
+          const config = raw as { apiKey?: string } | null;
+          return [provider, { ...config, apiKey: decryptSecret(typeof config?.apiKey === "string" ? config.apiKey : "") }];
+        }))
+      })) : []);
+    }
     catch { /* 无效模型服务配置忽略 */ }
   }
   result.allowRegister = map.allowRegister !== "0";
@@ -471,7 +481,12 @@ export function updateSiteSettings(patch: Partial<SiteSettings>): SiteSettings {
   });
   if (typeof patch.smtpSecure === "boolean") upsert.run("smtpSecure", patch.smtpSecure ? "1" : "0");
   if (Array.isArray(patch.modelServices)) {
-    upsert.run("modelServices", JSON.stringify(normalizeModelServices(patch.modelServices).map(service => ({ ...service, apiKey: encryptSecret(service.apiKey) }))));
+    upsert.run("modelServices", JSON.stringify(normalizeModelServices(patch.modelServices).map(service => ({
+      ...service, apiKey: encryptSecret(service.apiKey),
+      providerConfigs: Object.fromEntries(Object.entries(service.providerConfigs || {}).map(([provider, config]) => [provider, {
+        ...config, apiKey: encryptSecret(config!.apiKey)
+      }]))
+    }))));
   }
   if (patch.dbType === "sqlite" || patch.dbType === "postgres") {
     upsert.run("dbType", patch.dbType);

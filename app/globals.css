@@ -2335,12 +2335,35 @@ html.dark .watch-import-target {
 .model-list-heading button:hover { background: color-mix(in srgb, var(--sv-accent, #16a085) 7%, transparent); }
 .model-list-heading button b { font-size: 16px; line-height: 1; }
 .model-list { display: flex; flex-direction: column; gap: 7px; }
-.model-row { display: grid; grid-template-columns: 28px minmax(0,1fr) 68px 28px 28px 28px; align-items: center; gap: 5px; }
-.model-row .model-test-button { width: 68px; gap: 4px; color: var(--sv-accent, #168b78); font-size: 10px; font-weight: 700; white-space: nowrap; }
-.model-row .model-test-button.is-ok { border-color: rgba(34,197,94,.28); background: rgba(34,197,94,.07); color: #168447; font-variant-numeric: tabular-nums; }
-.dark .model-row .model-test-button.is-ok { border-color: rgba(74,222,128,.35); background: rgba(74,222,128,.1); color: #86efac; }
-.model-row .model-test-button.is-error { border-color: rgba(239,68,68,.25); background: rgba(239,68,68,.06); color: #dc2626; }
-.model-test-result { grid-column: 2 / -1; margin-top: -1px; color: var(--sv-text-3, #8b93a0); font-size: 10px; }
+.model-list-empty { margin:0; padding:12px 0; color:var(--sv-text-3, #8b93a0); font-size:12px; line-height:20px; }
+.model-row { display: grid; grid-template-columns: 28px 24px minmax(0,1fr) 68px 28px; align-items: center; gap: 5px; }
+.model-row .model-drag-handle { border:0; background:transparent; cursor:grab; }
+.model-row .model-drag-handle:active { cursor:grabbing; }
+.model-row .model-drag-handle:disabled { cursor:default; }
+.model-connection-test,.model-row .model-connection-test { position:relative; isolation:isolate; display:inline-flex; flex:none; align-items:center; justify-content:center; min-width:104px; height:40px; overflow:hidden; border:1px solid transparent; border-radius:999px; background:var(--site-action,#0866ff); color:var(--site-action-text,#fff); padding:0 16px; font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; cursor:pointer; transition:background-color 180ms ease,transform 180ms ease,opacity 180ms ease; }
+.model-row .model-connection-test.is-compact { width:68px; min-width:68px; height:30px; padding:0 5px; font-size:10px; }
+.model-connection-test:hover:not(:disabled),.model-row .model-connection-test:hover:not(:disabled) { border-color:transparent; background:var(--site-action-hover,#075ce5); color:var(--site-action-text,#fff); }
+.model-connection-test:active:not(:disabled) { transform:scale(.96); }
+.model-connection-test:disabled:not([data-state="loading"]) { opacity:.4; cursor:default; }
+.model-connection-test[data-state="loading"],.model-row .model-connection-test[data-state="loading"] { opacity:1; cursor:progress; }
+.model-test-content { position:relative; z-index:1; display:inline-flex; align-items:center; justify-content:center; gap:5px; animation:model-test-arrive 220ms ease both; }
+.model-service-readonly .model-test-content { display:inline-flex; color:inherit; font-size:inherit; line-height:1.2; }
+.model-test-content > span { color:inherit; font-size:inherit; line-height:inherit; white-space:nowrap; }
+.model-test-wave { width:28px; height:24px; overflow:visible; }
+.model-test-wave .sc-wave-bar { fill:currentColor; transform-box:fill-box; transform-origin:center; animation:model-test-wave-dance .58s ease-in-out infinite; }
+.model-test-dot { flex:none; width:7px; height:7px; border-radius:50%; }
+.model-test-dot.is-ok { background:#38e77a; }
+.model-test-dot.is-error { background:#ff6b75; }
+.dark .model-test-dot.is-ok { background:#4ade80; }
+.dark .model-test-dot.is-error { background:#ff8793; }
+.model-row .model-test-retry { width:12px; height:12px; }
+.model-test-retry { transition:transform 250ms ease; }
+.model-connection-test:hover .model-test-retry { transform:rotate(-35deg); }
+.dark .model-connection-test,.dark .model-row .model-connection-test { background:var(--site-action,#0866ff); color:var(--site-action-text,#fff); }
+@keyframes model-test-wave-dance { 0%,100% { transform:scaleY(.5); } 35% { transform:scaleY(1.12); } 70% { transform:scaleY(.72); } }
+@keyframes model-test-arrive { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
+@media(prefers-reduced-motion:reduce) { .model-connection-test,.model-test-content,.model-test-retry { transition:none; animation:none; } .model-test-wave .sc-wave-bar { animation:none; } .model-connection-test:active:not(:disabled),.model-connection-test:hover .model-test-retry { transform:none; } }
+.model-test-result { grid-column: 3 / -1; margin-top: -1px; color: var(--sv-text-3, #8b93a0); font-size: 10px; }
 .model-test-result.is-ok { color: #168447; }
 .model-test-result.is-error { color: #dc2626; }
 .model-priority { display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 7px; background: var(--sv-bg, #f3f5f8); color: var(--sv-text-3, #8b93a0); font-size: 10px; font-weight: 800; }
@@ -2362,8 +2385,8 @@ html.dark .watch-import-target {
   .model-identity-row { grid-template-columns: 1fr; align-items: stretch; }
   .model-icon-upload { width: fit-content; }
   .model-icon-controls { justify-content: flex-start; }
-  .model-row { grid-template-columns: 24px minmax(0,1fr) 62px 28px 28px 28px; }
-  .model-row .model-test-button { width: 62px; }
+  .model-row { grid-template-columns: 28px 24px minmax(0,1fr) 62px 28px; }
+  .model-row .model-connection-test.is-compact { width:62px; min-width:62px; }
   .model-list-heading small { display: block; margin: 2px 0 0; }
 }
 
@@ -7176,6 +7199,9 @@ html { scrollbar-gutter:stable; }
 .sc-detail-dialog .settings-password-meta .password-input-control { min-height:60px; padding-left:16px; border-radius:16px; font-size:15px; font-weight:500; line-height:19px; }
 .model-field .model-key-state { right:48px; }
 .model-field .password-input > input { padding-right:132px!important; }
+.password-input[data-reveal="false"] > input { padding-right:16px!important; }
+.model-field .password-input[data-reveal="false"] > input { padding-right:96px!important; }
+.model-field .password-input[data-reveal="false"] + .model-key-state { right:12px; }
 /* Short mobile controls share a baseline; prose and editable long fields keep their space. */
 @media(max-width:600px) {
   .activities-toolbar { display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; padding-inline:16px; }
