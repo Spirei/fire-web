@@ -3,11 +3,29 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), ts = require('typescript');
 require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, file);
 const { feedRequest, FeedRequestError, feedEmptyCopy } = require('../lib/feedClient.ts');
+const { restrainedFeedSegments, feedBodyParts } = require('../lib/feedPresentation.ts');
 const originalFetch = global.fetch;
 let count = 0;
 async function test(name, run) { await run(); console.log('PASS ' + name); count++; }
 const snapshot = (patch = {}) => ({ posts: [], nextCursor: null, job: null, preferences: { instructions: 'technology', revision: 1, enabled: true, intervalMinutes: 360 }, capabilities: { generate: true, search: 'news-rss', avatar: { image: '', video: null } }, ...patch });
 (async () => {
+  await test('evidence does not make the whole sentence a link; short highlights are bounded and text is unchanged', () => {
+    const sources = [{ id: 's1', url: 'https://news.example/a' }];
+    const segments = [{ text: '公司公布了最新季度财报，其中营收同比增长10%，同时提醒下一季度成本压力仍然存在。', sourceId: 's1', linkText: '营收同比增长10%' }];
+    const parts = feedBodyParts(segments, sources);
+    assert.equal(parts.map(p => p.text).join(''), segments[0].text);
+    assert.deepEqual(parts.filter(p => p.sourceId).map(p => p.text), ['营收同比增长10%']);
+    const bad = [{ text: '全段链接不能接受。', sourceId: 's1', linkText: '全段链接不能接受。' }, { text: '仍要保留正文与事实引用。', sourceId: 's1', linkText: '编造的子串' }];
+    assert(restrainedFeedSegments(bad).every(p => !p.linkText));
+    assert(restrainedFeedSegments(bad).every(p => p.sourceId === 's1'));
+    assert(feedBodyParts(segments, []).every(p => !p.sourceId));
+    const repeated = Array.from({ length: 4 }, () => ({ text: '财报显示关键变化，相关背景仍有不确定性，需要仔细区分预测与实际结果。', sourceId: 's1', linkText: '关键变化' }));
+    assert.equal(feedBodyParts(repeated, sources).filter(p => p.sourceId).length, 2);
+    const old = [{ text: '路透社报道，某公司公布新变化，同时披露了交易的规模与后续限制。', sourceId: 's1' }];
+    assert.deepEqual(feedBodyParts(old, sources).filter(p => p.sourceId).map(p => p.text), ['路透社报道']);
+    assert.equal(old[0].linkText, undefined, 'never rewrite old stored content');
+    assert(feedBodyParts([{text:'已核实的摘要',sourceId:'s1'}],sources).every(p=>!p.sourceId));
+  });
   await test('same-origin feed request uses no-store and never replays a write', async () => {
     let calls = 0;
     global.fetch = async (url, init) => { calls++; assert.equal(url, '/api/v1/feed/preferences'); assert.equal(init.credentials, 'same-origin'); assert.equal(init.cache, 'no-store'); assert.equal(init.method, 'PUT'); assert.deepEqual(JSON.parse(init.body), { revision: 1 }); return Response.json({ code: 0, data: { revision: 2 } }); };

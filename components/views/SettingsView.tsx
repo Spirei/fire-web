@@ -3981,7 +3981,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>外部数据源</b><span>行情、财报、汇率与公开披露</span></div>
-                    <span className="settings-detail-value">腾讯行情 · 东方财富 · 雪球 · SEC EDGAR · CompaniesMarketCap · Google News RSS · Brave Search（可选）</span>
+                    <span className="settings-detail-value">腾讯行情 · 东方财富 · 雪球 · SEC EDGAR · CompaniesMarketCap · DeepSeek 原生联网搜索 · Google News RSS · Brave Search（可选）</span>
                   </div>
                 </SettingsSection>
               </div>

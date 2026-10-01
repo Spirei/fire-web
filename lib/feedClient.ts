@@ -37,9 +37,9 @@ export async function feedRequest<T>(path = "", method = "GET", body?: unknown, 
 export const feedJobRunning = (job: FeedJob | null) => !!job && ["queued", "searching", "writing"].includes(job.status);
 
 export function feedEmptyCopy(data: FeedPayload) {
-  if (!data.preferences.instructions) return { title: "你的动态，由你来定义", body: "告诉 Alcor 你想关注什么。大新闻、公司动向、科技进展，或任何你感兴趣的话题——把值得关注的变化，变成容易读完的动态。" };
+  if (!data.preferences.instructions) return { title: "你的动态，由你来定义", body: "在右上角写下你想关注的内容，Alcor 会在后台寻找来源、提炼重点。" };
   if (feedJobRunning(data.job)) return { title: "正在寻找值得关注的变化", body: "Alcor 正在按你的指示搜集来源、提炼重点。可以离开页面，稍后回来查看。" };
   if (!data.capabilities.generate) return { title: "准备好你的第一条动态", body: "指示已保存。连接大模型服务后，Alcor 才能搜集来源、提炼重点；已有内容不会受影响。" };
-  if (data.job?.status === "error") return { title: "这次更新还没有完成", body: "你的指示已保留，没有生成未经核实的内容。可以重试，或调整关注范围。" };
+  if (data.job?.status === "error") return { title: "这次更新还没有完成", body: "指示已保留，已有动态不会被替换。点上方小人查看详情，或在右上角重试更新。" };
   return { title: "还没有可显示的动态", body: data.job?.status === "done" ? `这次没有可显示的新内容。${data.preferences.enabled ? "之后会继续按你的指示更新" : "可以在右上角手动更新"}，也可以调整关注范围，稍后再看看。` : "指示已保存，点右上角更新即可开始。每条动态都会保留来源，修改指示不会替换已有内容。" };
 }

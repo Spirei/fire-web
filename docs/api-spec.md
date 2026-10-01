@@ -8,7 +8,7 @@
 
 | 方法 | 路径 | 内容 |
 | --- | --- | --- |
-| GET | `/api/v1/feed?limit=20&cursor=…` | 本人帖子、下一页游标、指示、任务、能力；limit 1–50 |
+| GET | `/api/v1/feed?limit=10&cursor=…` | 本人帖子、下一页游标、指示、任务、能力；默认10条，limit 1–50 |
 | PUT | `/api/v1/feed/preferences` | `{instructions,revision,enabled?,intervalMinutes?}`，服务端持久化；旧 revision 返回 409 |
 | POST | `/api/v1/feed/refresh` | `{}` → 持久化任务；失败保留历史 |
 | GET | `/api/v1/feed/jobs/{id}` | 本人任务 queued/searching/writing/done/error |

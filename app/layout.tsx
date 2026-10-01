@@ -33,6 +33,8 @@ import TypographyProvider from "@/components/TypographyProvider";
 import { FONT_KEY, FONT_WEIGHT_KEY, typographyVariables, customFontCss } from "@/lib/typography";
 import "@/styles/typography.css";
 import "@/styles/muse.css";
+// Cached tab views must not own the lifetime of their global stylesheet.
+import "@/styles/feed.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = getSiteSettings();

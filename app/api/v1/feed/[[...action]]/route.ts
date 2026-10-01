@@ -1,10 +1,12 @@
+import { FEED_PAGE_SIZE } from "@/lib/feedTypes";
 import { after } from "next/server";
 import { ok,fail } from "@/lib/api";
 import { getAuthUser,isTrustedMutationRequest } from "@/lib/auth";
 import { readJsonBody,RequestBodyTooLargeError } from "@/lib/requestBody";
 import { clientIp,rateLimit } from "@/lib/rateLimit";
-import { FeedError,feedMessages,getFeedJob,getFeedPost,saveFeedPreferences,updateFeedPost } from "@/lib/feedStore";
+import { FeedError,feedMessages,getFeedJob,getFeedPost,saveFeedPreferences,updateFeedPost,createFeedGroup,listFeedGroups,feedGroup } from "@/lib/feedStore";
 import { discussFeed,feedSnapshot,requestFeedGeneration,runFeedJob } from "@/lib/feedGeneration";
+import { normalizeFeedSubscriptions,readFeedSubscription } from "@/lib/feedSubscriptions";
 
 export const dynamic="force-dynamic";
 type Context={params:Promise<{action?:string[]}>};
@@ -15,12 +17,14 @@ async function handle(request:Request,context:Context) {
     if(!isTrustedMutationRequest(request))throw new FeedError("不允许跨站操作",403);
     if(!rateLimit(`feed-api:${user.id}:${clientIp(request)}`,180,60_000))throw new FeedError("请求过于频繁",429);
     const action=(await context.params).action||[],key=action.join("/"),method=request.method;
+    const groupId=new URL(request.url).searchParams.get("group")||"default";
     if(method==="GET") {
       if(!key) {
-        const q=new URL(request.url).searchParams,raw=q.get("limit"),limit=raw===null?20:Number(raw);
+        const q=new URL(request.url).searchParams,raw=q.get("limit"),limit=raw===null?FEED_PAGE_SIZE:Number(raw);
         if(!Number.isInteger(limit)||limit<1||limit>50)throw new FeedError("每页条数为1–50");
-        return ok(feedSnapshot(user.id,q.get("cursor"),limit));
+        return ok(feedSnapshot(user.id,q.get("cursor"),limit,groupId));
       }
+      if(key==="groups")return ok({groups:listFeedGroups(user.id)});
       if(action.length===2&&action[0]==="jobs") {
         const job=getFeedJob(user.id,action[1]);if(!job)throw new FeedError("任务不存在",404);return ok(job);
       }
@@ -31,10 +35,20 @@ async function handle(request:Request,context:Context) {
     const body=await readJsonBody(request,20_000);
     // Revalidate after asynchronous input: revoked tokens cannot finish a queued mutation.
     if(getAuthUser(request)?.id!==user.id)throw new FeedError("连接已失效",401);
-    if(method==="PUT"&&key==="preferences")return ok(saveFeedPreferences(user.id,body));
+    if(method==="POST"&&key==="groups")return ok(createFeedGroup(user.id,body));
+    if(method==="POST"&&key==="subscriptions/test") {
+      if(!rateLimit(`feed-source-test:${user.id}`,6,60_000))throw new FeedError("测试较频繁，请稍后再试",429);
+      const source=normalizeFeedSubscriptions([body])[0];
+      try{const result=await readFeedSubscription(source);return ok({title:result.title,count:result.sources.length,url:source.url});}catch{throw new FeedError("未读到有效订阅，请检查公开RSS/Atom地址及服务器网络；不会保存无效数据",502);}
+    }
+    if(method==="PUT"&&action.length===2&&action[0]==="groups") {
+      if(!body||typeof body!=="object"||Array.isArray(body)||Object.keys(body).some(k=>!["name","revision"].includes(k))||typeof body.name!=="string")throw new FeedError("请填写名称及版本");
+      const current=feedSnapshot(user.id,null,1,action[1]);saveFeedPreferences(user.id,{instructions:current.preferences.instructions,name:body.name,revision:body.revision},action[1]);return ok(feedGroup(user.id,action[1]));
+    }
+    if(method==="PUT"&&key==="preferences")return ok(saveFeedPreferences(user.id,body,groupId));
     if(method==="POST"&&key==="refresh") {
       if(body && (typeof body!=="object"||Array.isArray(body)||Object.keys(body).length))throw new FeedError("刷新不接受额外字段");
-      const result=requestFeedGeneration(user.id);
+      const result=requestFeedGeneration(user.id,groupId);
       if(result.created)after(()=>runFeedJob(user.id,result.job.id));
       return ok(result.job);
     }
