@@ -273,7 +273,9 @@ GET /api/v1/rates
 | POST | `/api/v1/auth/login/totp` | 二次验证：ticket + 6 位验证码或备用码，返回 user + token | 无（持有效 ticket） |
 | GET | `/api/v1/auth/setup-status` | 空实例是否需要首次管理员设置（`{ needsSetup }`） | 无 |
 | GET | `/api/v1/auth/me` | 当前用户 | 登录 |
-| PUT | `/api/v1/auth/profile` | 本人昵称、用户名、邮箱部分更新；改邮箱需 currentPassword | 本人会话；App 需 profile.write |
+| PUT | `/api/v1/auth/profile` | 本人昵称、用户名、邮箱部分更新；改邮箱需 currentPassword，开启 TOTP 时需 code | 本人会话；App 需 profile.write |
+| PUT | `/api/v1/auth/email` | 本人修改/解绑邮箱，回传完整公开身份 | 有效本人连接 + currentPassword，开启 TOTP 时需 code；不需 profile.write |
+| POST | `/api/v1/auth/password` | 本人改密；成功后旧凭据失效并需重新登录 | 有效本人连接 + currentPassword；已开启 TOTP 时还需 code |
 | POST | `/api/v1/auth/logout` | 登出 | 登录 |
 | POST | `/api/v1/auth/delete-account` | 注销当前账号（body 必须提供 `password`；已开启二次验证时还需 `code`；级联删除其全部数据；保护最后一个管理员） | 登录 + 当前密码 + 可选 TOTP |
 
@@ -1058,14 +1060,18 @@ PATCH /api/showcase/models/{id}
 | POST | `/api/v1/auth/token` | 授权码 + verifier 换令牌，或轮换刷新令牌 |
 | POST | `/api/v1/auth/revoke` | 凭当前 refresh token 撤销整个设备连接 |
 | GET / DELETE | `/api/v1/auth/devices` | 浏览器本人查看/撤销设备，DELETE body `{ id }` |
-| PUT | `/api/v1/auth/profile` | profile.write：部分更新本人 username/nickname/email；邮箱改变需 currentPassword |
+| PUT | `/api/v1/auth/profile` | profile.write：部分更新本人 username/nickname/email；邮箱改变需 currentPassword，开启 TOTP 时需 code |
+| PUT | `/api/v1/auth/email` | 有效本人连接自助改邮箱/解绑；currentPassword 必填，开启 TOTP 时需 code，直接回传 User |
+| POST | `/api/v1/auth/password` | 有效本人连接自助改密；currentPassword/newPassword/code，撤销本人旧凭据 |
 | POST | `/api/v1/upload` | profile.write：multipart kind=avatar,file；仅本人头像 |
 
-身份通过 `GET /api/v1/auth/me` 与 Web 共用既有 `users`；显式获得 `profile.write` 的连接可编辑本人资料和头像，密码、TOTP、通行密钥与设备管理仍保持网站原有安全设置。未提交字段保留，不接受 ID/UID/角色/密码/任意头像地址等额外字段。邮箱验证状态和恢复凭据沿用网站失效规则，修改不等于验证。头像 JPG/PNG/GIF/WEBP、5 MiB，拒绝 SVG 和共享素材上传。
+身份通过 `GET /api/v1/auth/me` 与 Web 共用既有 `users`；显式获得 `profile.write` 的连接可编辑本人资料和头像。任何有效本人连接均可在专用邮箱/密码接口验证账号凭据后自助操作，不要求管理员或投资写权限；TOTP、通行密钥与设备管理仍保持网站安全设置。资料未提交字段保留，不接受 ID/UID/角色/密码/任意头像地址等额外字段。邮箱验证状态和恢复凭据沿用网站失效规则，修改不等于验证。头像 JPG/PNG/GIF/WEBP、5 MiB，拒绝 SVG 和共享素材上传。
 
-me/profile 的 `data` 都是直接 User（非 `{user:...}`），新增 `scope` 及 `capabilities: { profileWrite, avatarUpload, overviewTotalAssets }`。上传返回 `data: {url,kind}`。旧 grant 无编辑能力返回 40101，不从浏览器 Cookie 补权；邮箱密码错误40301、用户名/邮箱冲突40901、参数错误40001、限流42901；所有响应禁止缓存。
+me/profile/email 的 `data` 都是直接 User（非 `{user:...}`），新增 `scope` 及 `capabilities: { profileWrite, avatarUpload, emailWrite, passwordWrite, overviewTotalAssets }`、`security: { twoFactorEnabled }`。上传返回 `data: {url,kind}`。无 profile.write 的 grant 仍不能通用编辑资料/头像，但可验证凭据后使用专用邮箱/密码接口；不从浏览器 Cookie 补权。邮箱密码错误40301、用户名/邮箱冲突40901、参数错误40001、限流42901；所有响应禁止缓存。
 
-App 使用 `client_id=fire-ios`，`redirect_uri=com.fire.app:/oauth/callback`，`response_type=code` 和 PKCE `S256`。默认仍为 `portfolio.read portfolio.write`，可申请只读；发现接口 `scope` 保留默认值，`scopes_supported` 新增可选 `profile.write`，并返回 `profile_path/upload_path`。必须始终包含 portfolio.read；编辑连接明确加 profile.write 并重新取得网页同意。旧 grant 和刷新不会自动扩权；App 仅访问本人业务，不继承站点管理权。
+邮箱请求 `{email,currentPassword,code?}`，email 空字符串可解绑，即使未变也验证密码，开启TOTP时code必填（失败40301）；通用v1 profile改邮箱同样检查。改密请求 `{currentPassword,newPassword,code?}`，新密码8–128位且含字母、数字，开启TOTP时code必填（验证码或一次性备份码）。改密成功 `data: {ok:true,signedOutOthers:true,reauthenticationRequired:true,user:User}`，在同一事务内修改密码并撤销本人全部Web/App旧凭据及未兑换code，不回传新令牌；App收到明确成功后清除旧连接并重新登录。错误密码HTTP403/code40103、TOTP失败HTTP403/code40104不是连接过期；连接失效40101、存储失败50001。异步读取后重新认证，16KiB体积与账号/来源/全站限流，失败完整回滚，审计不保存密码/因子。详细重试与Web兼容合同见 App 连接说明。
+
+App 使用 `client_id=fire-ios`，`redirect_uri=com.fire.app:/oauth/callback`，`response_type=code` 和 PKCE `S256`。默认仍为 `portfolio.read portfolio.write`，可申请只读；发现接口 `scope` 保留默认值，`scopes_supported` 公布可选 `profile.write`，并返回 `profile_path/upload_path/email_path/password_path`。必须始终包含 portfolio.read；通用资料/头像编辑连接明确加 profile.write 并重新取得网页同意。旧 grant 和刷新不会增加 scope；专用邮箱/密码自助由账号凭据验证，不继承站点管理权。
 
 ```json
 {

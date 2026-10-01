@@ -15,7 +15,7 @@
     "smoke": "bash scripts/smoke-test.sh",
     "smoke:account": "node scripts/smoke-account.mjs --create",
     "smoke:ci": "bash scripts/smoke-ci.sh",
-    "test:review": "node tests/asset-migration.mjs && node tests/site-review.cjs && node tests/passkeys.cjs && node tests/passkey-settings.cjs && node tests/rate-limit.cjs && node tests/app-auth.cjs && node tests/app-profile.cjs && node tests/account-overview.cjs && node tests/net-security.cjs && node tests/market-channel.cjs && node tests/history-channel.cjs && node tests/transfer-channel.cjs && node tests/asset-lookup.cjs && node tests/api-request-logs.cjs && node tests/smoke-account.mjs",
+    "test:review": "node tests/asset-migration.mjs && node tests/site-review.cjs && node tests/passkeys.cjs && node tests/passkey-settings.cjs && node tests/rate-limit.cjs && node tests/app-auth.cjs && node tests/app-profile.cjs && node tests/app-account-security.cjs && node tests/account-overview.cjs && node tests/net-security.cjs && node tests/market-channel.cjs && node tests/history-channel.cjs && node tests/transfer-channel.cjs && node tests/asset-lookup.cjs && node tests/api-request-logs.cjs && node tests/smoke-account.mjs",
     "test:passkeys": "node tests/passkeys.cjs",
     "clean:caches": "node scripts/clean-next-cache.mjs",
     "clean:dsstore": "find .. -name .DS_Store -not -path '*/node_modules/*' -delete && echo '已清理 .DS_Store'"

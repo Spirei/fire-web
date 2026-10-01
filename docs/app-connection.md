@@ -57,15 +57,25 @@ App 设置内的连接页首次预填 `https://fire.6dm.tv:18520`，允许更换
 - 每用户最多保留 20 个 App 授权。数据库只存 token/code 摘要、账号认证状态摘要，不保存明文凭据。
 - App 请求限制为 `/api/v1` 个人资源与公开行情；服务器强制 scope。管理员通过 App 返回个人业务身份，不能操作站点设置、素材维护、券商目录维护或账号安全配置。
 
-本人身份通过 `GET /api/v1/auth/me` 读取既有 `users`，不创建独立 App 账号。`portfolio.write` 仍不能修改资料或头像。`auth/config.scope` 保留默认范围，`scopes_supported` 公布可选 `profile.write`，旧 grant 及刷新不扩权；编辑连接必须重新明确申请、在网页同意。设备页单独标注「资料编辑」。密码、TOTP、通行密钥及设备撤销仍由网站安全设置管理。
+本人身份通过 `GET /api/v1/auth/me` 读取既有 `users`，不创建独立 App 账号。通用资料和头像编辑仍需显式 `profile.write`，旧 grant 的 scope 及刷新不扩权。邮箱与密码使用下述专用本人自助接口，任何有效的本人连接均可在验证账号凭据后操作，不要求管理员或投资写权限。TOTP、通行密钥及设备撤销仍由网站安全设置管理。
 
 ### 本人资料与头像
 
-- `GET /api/v1/auth/me` 和 `PUT /api/v1/auth/profile` 的 `data` 都是直接 User，不嵌套 `user`；新增 `scope` 与 `capabilities: { profileWrite, avatarUpload, overviewTotalAssets }`。App 角色始终为 `user`；Cookie/旧网站会话的 `scope` 为空，其本人编辑能力保持原有规则。
-- `PUT /api/v1/auth/profile` 仅部分更新 `username`、`nickname`、`email`；未提交字段保留最新值。Web 与 App 共用校验及冲突检查，禁止修改 ID、UID、角色、密码或任意头像地址。邮箱实际改变需 `currentPassword`，验证状态与恢复凭据按网站原规则失效；不自动验证新邮箱。
+- `GET /api/v1/auth/me` 和 `PUT /api/v1/auth/profile` 的 `data` 都是直接 User，不嵌套 `user`；新增 `scope` 与 `capabilities: { profileWrite, avatarUpload, emailWrite, passwordWrite, overviewTotalAssets }`，以及 `security: { twoFactorEnabled }`。App 角色始终为 `user`；Cookie/旧网站会话的 `scope` 为空。只返回本人安全能力，不返回密码摘要、TOTP 密钥或备份码。
+- `PUT /api/v1/auth/profile` 仅部分更新 `username`、`nickname`、`email`；未提交字段保留最新值。Web 与 App 共用校验及冲突检查，禁止修改 ID、UID、角色、密码或任意头像地址。邮箱实际改变需 `currentPassword`，v1 已开启 TOTP 时还需 `code`，与专用邮箱入口一致；验证状态与恢复凭据按网站原规则失效，不自动验证新邮箱。
 - `POST /api/v1/upload` 使用 multipart `kind=avatar`、`file`，返回 `data: { url, kind }`。App 只可上传本人的 JPG/PNG/GIF/WEBP 头像，5 MiB 上限，拒绝 SVG/伪格式及共享素材上传；命名继续用 `username(UID编号)`。Web/读取本人资料立即看到同一头像。
 - 缺少编辑授权返回 401 / `40101`（不从 Cookie 补权），邮箱密码验证失败 403 / `40301`，用户名/邮箱冲突 409 / `40901`，参数错误 400 / `40001`，限流 429 / `42901`。保存失败不返回数据库内部错误。
 - 异步读取请求体/图片后在写锁内再次认证，撤销/改密与并发资料更新不能绕过检查；图片原子替换，数据库写入失败恢复旧图片，未保存文件不留在上传目录。
+
+### 本人邮箱与密码自助
+
+连接发现新增 `email_path` 和 `password_path`；App 必须先发现能力，旧服务器没有相应端点/能力时不得宣称修改成功。普通账号、站点管理员的 App 个人身份、默认或 `portfolio.read` 只读连接均适用；令牌仍只能操作自己的账号，拒绝 ID/UID/角色/其他安全字段，不能用浏览器 Cookie 替无效 Bearer 补权。
+
+- `PUT /api/v1/auth/email`：JSON `{ "email": "new@example.com", "currentPassword": "当前密码", "code": "可选二次验证码或一次性备用码" }`；邮箱可为空以解绑。即便邮箱未变，也须验证当前密码；已开启 TOTP 时 code 必填（失败 HTTP403/code40301），通用 v1 profile 改邮箱也不能绕过。共用 Web 格式、大小写无关冲突检查、事务保存及邮箱验证/恢复凭据失效规则；不自动验证新邮箱。成功 `data` 是直接 User + scope/capabilities/security，Web 与后续 me 立即读取同一行。错密码 HTTP 403 / `40301`，冲突 409 / `40901`。
+- `POST /api/v1/auth/password`：JSON `{ "currentPassword": "当前密码", "newPassword": "新密码", "code": "可选二次验证码或一次性备用码" }`。密码与 Web 共用 8–128 位、同时含字母和数字的规则；已开启 TOTP 时 code 必填，不允许绕过。错误密码 HTTP 403 / `40103`，二次验证失败 HTTP 403 / `40104`；这些错误不等于连接过期，不应清空连接。
+- 改密成功 `data: { ok: true, signedOutOthers: true, reauthenticationRequired: true, user: User }`。在同一事务内更新密码、消费成功因子、撤销本人全部 Web 会话、App 授权及未兑换授权码；所有旧访问/刷新令牌失效，旧恢复凭据不能使用。只回传公开身份，不生成或返回新令牌，不自动扩权。App 在收到明确成功后清除旧凭据并提示重新登录/网页授权；若请求超时结果不确定，先提示重新登录确认，不自动重试改密或把失败说成成功。
+- 邮箱/密码修改均在异步请求读取后重新认证，16 KiB JSON 上限；不接受任意额外身份字段。参数错误 400 / `40001`、连接失效 401 / `40101`、限流 429 / `42901`、存储失败 500 / `50001`，错误不包含内部诊断。密码、TOTP、备份码不进入审计日志；仅记录行为和结果。
+- 资料/邮箱共用每账号及来源 30 次/小时、全站 300 次/小时限制；密码共用 Web/App 每账号及来源 20 次/15 分钟、全站 100 次/15 分钟限制，换 IP 不绕过账号配额。保存或会话撤销失败完整回滚，包括已验证的一次性因子；他人账号、会话与投资数据不受影响。旧 Web 改密仍使用 oldPassword/newPassword/signOutOthers/code，保留当前 Web 会话与可选退出其他 Web 会话的既有行为；App 凭据始终失效。
 
 ### 规范总资产
 
@@ -97,4 +107,4 @@ App 设置内的连接页首次预填 `https://fire.6dm.tv:18520`，允许更换
 
 ## 验证
 
-`node tests/app-auth.cjs` 使用临时数据库覆盖 PKCE / 回调 / state、同源同意、代码重放与过期、访问/刷新有效期、令牌重放、并发刷新、账户隔离、100+ 持仓分页、scope / 管理权限、设备撤销、改密和 TOTP 变更、FK 级联及凭据摘要。新增 `tests/app-profile.cjs` 和 `tests/account-overview.cjs` 验证双向资料同步、旧授权不扩权、邮箱验证、头像安全与失败回滚、现金同源/去重/负余额、主账户权益覆盖、缺 FX/源异常、读接口不补写账本、分页外持仓和异步快照；全部加入 test:review，不改真实账号或资金。iOS 构建和模拟器测试单独记录在其版本日志。
+`node tests/app-auth.cjs` 使用临时数据库覆盖 PKCE / 回调 / state、同源同意、代码重放与过期、访问/刷新有效期、令牌重放、并发刷新、账户隔离、100+ 持仓分页、scope / 管理权限、设备撤销、改密和 TOTP 变更、FK 级联及凭据摘要。`tests/app-profile.cjs`、`tests/app-account-security.cjs` 和 `tests/account-overview.cjs` 验证双向资料同步、本人邮箱/密码自助、凭据原子失效、二次验证及失败回滚、跨 IP 限流、头像安全、现金同源/去重/负余额、主账户权益覆盖、缺 FX/源异常、读接口不补写账本、分页外持仓和异步快照；全部加入 test:review，不改真实账号或资金。iOS 构建和模拟器测试单独记录在其版本日志。

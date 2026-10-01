@@ -47,7 +47,7 @@ const row = id => db.prepare('SELECT * FROM users WHERE id=?').get(id);
   const grant = connect('portfolio.read profile.write'), token = grant.access_token;
   await test('profile-only write is explicit and never grants portfolio/admin/legacy writes', () => {
     assert(auth.getAuthUser(request('auth/profile', {}, token)));
-    for (const [path, method] of [['records','POST'], ['brokers','POST'], ['auth/devices','DELETE'], ['auth/password','POST'], ['settings','PUT']]) assert.equal(auth.getAuthUser(request(path, undefined, token, method)), null);
+    for (const [path, method] of [['records','POST'], ['brokers','POST'], ['auth/devices','DELETE'], ['settings','PUT']]) assert.equal(auth.getAuthUser(request(path, undefined, token, method)), null);
     assert.equal(auth.getAuthUser(new Request(origin + '/api/auth/profile', { method:'PUT', headers:{authorization:'Bearer '+token,cookie:'fire_session='+browser,origin} })), null);
     assert.equal(db.prepare('SELECT scope FROM app_grants WHERE id=?').get(grant.grant_id).scope, 'portfolio.read profile.write');
   });
