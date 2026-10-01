@@ -1,0 +1,69 @@
+/* Opt-in preset only. Existing palettes, user preferences, financial colors and homepage controls stay intact. */
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]){
+  --muse-bg:#fcfcfc;--muse-surface:#fff;--muse-dialog:#fcfcfc;--muse-field:#f3f4f5;
+  --muse-ink:#111112;--muse-muted:#00040996;--muse-faint:#0007115e;
+  --muse-link:#0064d4;--muse-fill:#0000000d;--muse-edge:#0000001a;--muse-overlay:#0000001a;
+  --site-action:color-mix(in srgb,#0064d4 90%,#000);--site-action-text:#fff;
+  --site-action-hover:color-mix(in srgb,var(--site-action) 95%,#000);--site-action-icon-filter:brightness(0) invert(1);
+  --cap-primary:var(--site-action);--cap-primary-hover:var(--site-action-hover);--cap-selected:var(--site-action);
+  --cap-surface:var(--muse-fill);--cap-text:var(--muse-ink);--cap-border:transparent;--cap-hover:var(--muse-field);
+  --material-fill:var(--muse-fill);--material-edge:var(--muse-edge);--material-blur:none;--material-shadow:none;
+  background:var(--muse-bg);color:var(--muse-ink);
+}
+html:root.dark[data-palette="muse"] body:has([data-capsule-scope="non-home"]){
+  --muse-bg:#181819;--muse-surface:#28292b;--muse-dialog:#28292b;--muse-field:#181819;
+  --muse-ink:#fff;--muse-muted:#f2f7ff87;--muse-faint:#f1f6ff61;
+  --muse-link:#1793ff;--muse-fill:#ffffff1f;--muse-edge:#ffffff1f;--muse-overlay:#00000066;
+  --site-action:#1793ff;--site-action-text:#000;--site-action-icon-filter:brightness(0);
+  --site-action-hover:color-mix(in srgb,#1793ff 90%,#fff);
+}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.app-shell-root,.app-shell-main,.app-shell-header,.site-header,.records-app,.records-content,.rq-page){background:var(--muse-bg)!important;color:var(--muse-ink)}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.card,.bg-white,.appearance-card,.rq-card){background:var(--muse-surface)!important;border-color:var(--muse-edge)!important;box-shadow:none!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.text-ink,.text-ink-2){color:var(--muse-ink)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .text-muted{color:var(--muse-muted)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .text-faint{color:var(--muse-faint)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.text-brand,.text-brand-deep){color:var(--muse-link)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.border-edge,.border-edge-strong,.divide-edge>:not([hidden])~:not([hidden])){border-color:var(--muse-edge)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.bg-bg-gray,.bg-brand-hover,.bg-brand-light){background:var(--muse-field)!important}
+/* Preserve widths, pinning, ordering and tablet controls; only remove tinted navigation surfaces. */
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .fire-sidebar{background:var(--muse-bg)!important;color:var(--muse-ink);box-shadow:none!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .fire-sidebar::after{box-shadow:inset 0 0 0 1px var(--muse-edge)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.sw-nav-item){color:var(--muse-ink);box-shadow:none!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item-active,.sc-nav-link.is-active,.sw-nav-item.is-active){background:var(--muse-fill)!important;border-color:transparent!important;color:var(--muse-ink)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item-active,.sc-nav-link.is-active) .nav-custom-icon{filter:brightness(0);opacity:1}
+html:root.dark[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item-active,.sc-nav-link.is-active) .nav-custom-icon{filter:brightness(0) invert(1)}
+/* Shared settings, portalled details and passkey panels previously had independent hard-coded palettes. */
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.sv-win-root,.sc-detail-layer,.pk-reference-modal){
+  --sv-shell:var(--muse-bg);--sv-bg:var(--muse-bg);--sv-text:var(--muse-ink);--sv-text-2:var(--muse-ink);--sv-text-3:var(--muse-muted);--sv-text-4:var(--muse-faint);
+  --sv-border:var(--muse-edge);--sv-border-strong:var(--muse-edge);--sv-card:var(--muse-surface);--sv-card-border:var(--muse-edge);--sv-input:var(--muse-field);--sv-surface-2:var(--muse-field);--sv-hover-bg:var(--muse-fill);--sv-card-shadow:none;--sv-accent:var(--muse-link);
+  --sc-dialog-bg:var(--muse-dialog);--sc-dialog-text:var(--muse-ink);--sc-dialog-muted:var(--muse-muted);--sc-dialog-soft:var(--muse-field);--sc-dialog-soft-hover:var(--muse-fill);--sc-dialog-border:var(--muse-edge);--sc-dialog-border-strong:var(--muse-edge);--sc-dialog-primary:var(--site-action);--sc-dialog-primary-hover:var(--site-action-hover);--sc-dialog-link:var(--muse-link);
+  --pk-bg:var(--muse-dialog);--pk-text:var(--muse-ink);--pk-muted:var(--muse-muted);--pk-soft:var(--muse-field);--pk-soft-hover:var(--muse-fill);--pk-border:var(--muse-edge);--pk-border-strong:var(--muse-edge);--pk-primary:var(--site-action);--pk-link:var(--muse-link);
+}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.app-modal-panel,.sc-detail-dialog,.pk-reference-modal){background:var(--muse-dialog)!important;color:var(--muse-ink)!important;border-color:var(--muse-edge)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:0 6px 16px #11111229,0 8px 32px #1111121f!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.modal-scrim,.sc-detail-scrim){background:var(--muse-overlay)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.typography-preview,.typography-preview-chrome,.typography-specimen){background:var(--muse-field)!important;border-color:var(--muse-edge)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.field,input[type="text"],input[type="email"],input[type="password"],input[type="number"],input[type="url"],input[type="search"],textarea){background-color:var(--muse-field)!important;color:var(--muse-ink)!important;border-color:var(--muse-edge)!important;box-shadow:none!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(input,textarea)::placeholder{color:var(--muse-muted);opacity:1}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.feed-composer,.assistant-composer-card,.rq-search) :is(input,textarea){background:transparent!important;border:0!important}
+/* No financial gain/loss colors, calendar cells, wallet artwork, switch tracks, or Dock-selection variables are remapped. */
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.attachments-page,.rq-dashboard){
+  --attachment-surface:var(--muse-surface);--attachment-surface-soft:var(--muse-field);--attachment-surface-hover:var(--muse-fill);
+  --attachment-border:var(--muse-edge);--attachment-border-strong:var(--muse-edge);--attachment-text:var(--muse-ink);--attachment-muted:var(--muse-muted);--attachment-faint:var(--muse-faint);
+  --attachment-accent:var(--muse-link);--attachment-accent-soft:var(--muse-fill);--attachment-folder:var(--muse-link);--attachment-folder-soft:var(--muse-fill);
+  --rq-panel:var(--muse-surface);--rq-text:var(--muse-ink);--rq-muted:var(--muse-muted);--rq-border:var(--muse-edge);--rq-soft:var(--muse-field);
+}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .rq-title-icon{color:var(--muse-link)}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .fx-converter-card{background:var(--muse-surface)!important;border-color:var(--muse-edge)!important;box-shadow:none!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .fx-converter-row{border-color:var(--muse-edge)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fx-converter-name,.fx-converter-input){color:var(--muse-ink)!important;background:transparent!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fx-converter-code,.fx-converter-rate,.fx-converter-symbol){color:var(--muse-muted)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .fx-converter-row:is(:hover,.is-active,.is-over){background:var(--muse-fill)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.assistant-workspace,.assistant-panel){--assistant-surface:var(--muse-bg);--assistant-raised:var(--muse-surface);--assistant-line:var(--muse-edge);--assistant-label:var(--muse-ink);--assistant-muted:var(--muse-muted);background:var(--muse-bg)!important;color:var(--muse-ink)}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .assistant-surface-header{background:var(--muse-bg)!important;border-color:var(--muse-edge)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .assistant-workspace-sidebar{background:var(--muse-field)!important;border-color:var(--muse-edge)!important;color:var(--muse-ink)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .assistant-composer-dock{background:linear-gradient(to bottom,transparent,var(--muse-bg) 28%)!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .assistant-message-list>.justify-end>div{background:var(--muse-surface)!important;border-color:var(--muse-edge)!important;color:var(--muse-ink)!important;box-shadow:none!important}
+.muse-color-note{font-size:12px;line-height:20px;color:rgb(var(--site-muted));text-align:right}
+@media(hover:hover){
+  html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.sw-nav-item):hover{background:var(--muse-fill)!important;color:var(--muse-ink)!important}
+}

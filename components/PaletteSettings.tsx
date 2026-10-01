@@ -18,13 +18,13 @@ export default function PaletteSettings() {
             <button key={id} type="button" data-capsule="off" aria-label={name} title={name} aria-pressed={mode === id} onClick={() => chooseMode(id)}><Icon size={23} stroke={1.7}/></button>)}
         </div>
       </div>
-      <div className="appearance-row appearance-colors-row"><span className="appearance-label">主题颜色</span>
+      {palette === "muse" ? <div className="appearance-row"><span className="appearance-label">Muse 原色</span><span className="muse-color-note">蓝色链接 · 中性背景<br/>自选主题色在其他配色中保留</span></div> : <div className="appearance-row appearance-colors-row"><span className="appearance-label">主题颜色</span>
         <div className="appearance-colors" role="group" aria-label="主题颜色">
           {APPEARANCE_ACCENTS.map(a => <button type="button" key={a.id} data-capsule="off" className="appearance-swatch" aria-label={a.name} title={a.name} aria-pressed={accent === a.id} style={{ "--swatch": a.color } as React.CSSProperties} onClick={() => chooseAccent(a.id)}>
             {accent === a.id && <span className="appearance-check"><IconCheck size={12} stroke={2.5}/></span>}
           </button>)}
         </div>
-      </div>
+      </div>}
     </div>
     <TypographySettings />
     <details className="appearance-more"><summary>更多配色</summary>
