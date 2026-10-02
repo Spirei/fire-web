@@ -31,6 +31,11 @@ const snapshot = (patch = {}) => ({ posts: [], nextCursor: null, job: null, pref
     global.fetch = async (url, init) => { calls++; assert.equal(url, '/api/v1/feed/preferences'); assert.equal(init.credentials, 'same-origin'); assert.equal(init.cache, 'no-store'); assert.equal(init.method, 'PUT'); assert.deepEqual(JSON.parse(init.body), { revision: 1 }); return Response.json({ code: 0, data: { revision: 2 } }); };
     assert.deepEqual(await feedRequest('/preferences', 'PUT', { revision: 1 }), { revision: 2 }); assert.equal(calls, 1);
   });
+  await test('avatar upload uses multipart boundary and remains a single bounded write',async()=>{
+    let calls=0;const form=new FormData();form.set('revision','2');form.set('file',new File(['test'],'image.png'));
+    global.fetch=async(url,init)=>{calls++;assert.equal(url,'/api/v1/feed/profile/avatar');assert.equal(init.headers,undefined);assert.equal(init.body,form);return Response.json({code:0,data:{revision:3}});};
+    assert.deepEqual(await feedRequest('/profile/avatar','POST',form),{revision:3});assert.equal(calls,1);
+  });
   await test('conflicts remain distinguishable without discarding caller-owned drafts', async () => {
     global.fetch = async () => Response.json({ code: 40901, message: '指示已在另一端修改' }, { status: 409 });
     await assert.rejects(() => feedRequest('/preferences', 'PUT', {}), e => e instanceof FeedRequestError && e.status === 409 && e.message.includes('另一端'));

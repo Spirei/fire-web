@@ -15,8 +15,8 @@ export async function feedRequest<T>(path = "", method = "GET", body?: unknown, 
   try {
     const response = await fetch(`/api/v1/feed${path}`, {
       method, credentials: "same-origin", cache: "no-store", signal: controller.signal,
-      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      headers: body === undefined || body instanceof FormData ? undefined : { "Content-Type": "application/json" },
+      ...(body === undefined ? {} : { body: body instanceof FormData ? body : JSON.stringify(body) })
     });
     let value;
     try { value = await response.json(); }

@@ -7,10 +7,11 @@ import { useWorkspaceSearchParams as useSearchParams } from "@/lib/workspacePane
 import AppModal from "@/components/AppModal";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import { FEED_PAGE_SIZE } from "@/lib/feedTypes";
-import type { FeedIcon,FeedJob,FeedMessage,FeedPayload,FeedPost,FeedGroup,FeedSubscription,FeedMode,FeedPersonId } from "@/lib/feedTypes";
+import type { FeedIcon,FeedJob,FeedMessage,FeedPayload,FeedPost,FeedGroup,FeedSubscription,FeedMode,FeedPersonId,FeedAgentProfile } from "@/lib/feedTypes";
 import { observePanelVisibility,panelIsShown } from "@/lib/panelVisibility";
 import { feedRequest as api,FeedRequestError,feedJobRunning as running,feedEmptyCopy } from "@/lib/feedClient";
 import { feedBodyParts } from "@/lib/feedPresentation";
+import FeedAgentPanel, { validFeedAgentTab, type FeedAgentTab } from "@/components/FeedAgentPanel";
 import FeedMedia from "@/components/FeedMedia";
 import FeedOriginalPost from "@/components/FeedOriginalPost";
 import FeedTemplatePicker from "@/components/FeedTemplatePicker";
@@ -21,12 +22,13 @@ import { usePersistedState } from "@/lib/usePersistedState";
 import { isUnseenPost, type SeenTimes } from "@/lib/tradingSquareSeen";
 
 const ICON_URL=(icon:FeedIcon)=>`/uploads/feature/feed/${icon}.webp`;
-const JOB_LABEL={queued:"已排队",searching:"正在搜集来源",writing:"正在提炼动态",done:"更新完成",error:"更新未完成"};
 function dateText(value:string|null) {return value?value.slice(0,10).replaceAll("-","/"):"日期未提供";}
 function relative(value:string,now:number) {const n=Math.max(0,now-Date.parse(value));return n<60_000?"刚刚":n<3600_000?`${Math.floor(n/60_000)}分钟前`:n<86400_000?`${Math.floor(n/3600_000)}小时前`:`${Math.floor(n/86400_000)}天前`;}
 
-function Mascot({image,video,onClick}:{image:string;video:string|null;onClick:()=>void}) {
-  const [ready,setReady]=useState(false),[failed,setFailed]=useState(false),[reduced,setReduced]=useState(true);
+function Mascot({image,video,name,onClick}:{image:string;video:string|null;name:string;onClick:()=>void}) {
+  const [videoState,setVideoState]=useState({src:video,ready:false,failed:false}),[reduced,setReduced]=useState(true);
+  if(videoState.src!==video)setVideoState({src:video,ready:false,failed:false});
+  const ready=videoState.src===video&&videoState.ready,failed=videoState.src===video&&videoState.failed;
   const videoRef=useRef<HTMLVideoElement>(null),buttonRef=useRef<HTMLButtonElement>(null);
   useEffect(()=>{const media=matchMedia("(prefers-reduced-motion: reduce)");const sync=()=>setReduced(media.matches);sync();media.addEventListener("change",sync);return()=>media.removeEventListener("change",sync);},[]);
   useEffect(()=>{
@@ -35,18 +37,21 @@ function Mascot({image,video,onClick}:{image:string;video:string|null;onClick:()
     document.addEventListener("visibilitychange",sync);sync();return()=>{release();document.removeEventListener("visibilitychange",sync);};
   },[reduced,video]);
   // Intrinsic constraints survive the first paint, failed CSS delivery and bfcache restoration.
-  return <button ref={buttonRef} type="button" className="feed-mascot" style={{position:"relative",display:"block",width:"var(--feed-mascot-size,72px)",height:"var(--feed-mascot-size,72px)",maxWidth:72,maxHeight:72,minWidth:0,minHeight:0,flex:"none",overflow:"hidden",borderRadius:"50%",padding:0}} onClick={onClick} aria-label="查看 Alcor 动态任务" title="Alcor">
-    <SafeAssetImage src={image} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}} className="feed-mascot-poster" alt="Alcor" fallback={<span>A</span>} />
-    {video&&!failed&&!reduced&&<video ref={videoRef} src={video} width={72} height={72} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:ready?1:0}} muted autoPlay loop playsInline preload="metadata" aria-hidden="true" onCanPlay={()=>{setReady(true);if(document.hidden||!panelIsShown(buttonRef.current))videoRef.current?.pause();}} onError={()=>setFailed(true)} className={`feed-mascot-video ${ready?"is-ready":""}`} />}
+  return <button ref={buttonRef} type="button" className="feed-mascot" style={{position:"relative",display:"block",width:"var(--feed-mascot-size,72px)",height:"var(--feed-mascot-size,72px)",maxWidth:72,maxHeight:72,minWidth:0,minHeight:0,flex:"none",overflow:"hidden",borderRadius:"50%",padding:0}} onClick={onClick} aria-label={`查看 ${name} 的动态`} title={name}>
+    <SafeAssetImage src={image} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}} className="feed-mascot-poster" alt={name} fallback={<span>A</span>} />
+    {video&&!failed&&!reduced&&<video key={video} ref={videoRef} src={video} width={72} height={72} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:ready?1:0}} muted autoPlay loop playsInline preload="metadata" aria-hidden="true" onCanPlay={()=>{setVideoState(current=>current.src===video?{...current,ready:true}:current);if(document.hidden||!panelIsShown(buttonRef.current))videoRef.current?.pause();}} onError={()=>setVideoState(current=>current.src===video?{...current,failed:true}:current)} className={`feed-mascot-video ${ready?"is-ready":""}`} />}
   </button>;
 }
 
 export default function FeedView({initial=null,initialNow=0}:{initial?:FeedPayload|null;initialNow?:number}) {
   const search=useSearchParams(),groupId=search.get("feedGroup")||"default",author=search.get("feedPerson")||"";
-  return <GroupFeedView key={groupId} groupId={groupId} author={author} initial={groupId==="default"&&!author?initial:null} initialNow={initialNow}/>;
+  return <GroupFeedView key={groupId} groupId={groupId} author={author} initial={groupId==="default"&&!author?initial:null} initialNow={initialNow} initialAgent={initial?.agent} initialAvatar={initial?.capabilities.avatar}/>;
 }
-function GroupFeedView({initial,initialNow,groupId,author}:{initial:FeedPayload|null;initialNow:number;groupId:string;author:string}) {
-  const router=useRouter();
+function GroupFeedView({initial,initialNow,groupId,author,initialAgent,initialAvatar}:{initial:FeedPayload|null;initialNow:number;groupId:string;author:string;initialAgent?:FeedAgentProfile;initialAvatar?:FeedPayload["capabilities"]["avatar"]}) {
+  const router=useRouter(),search=useSearchParams(),tasks=search.get("feedAgent")==="profile",agentTab=validFeedAgentTab(search.get("feedAgentTab"));
+  function agentView(open:boolean,tab:FeedAgentTab=agentTab) {const url=new URLSearchParams(search.toString());if(open){url.set("feedAgent","profile");if(tab!=="activity")url.set("feedAgentTab",tab);else url.delete("feedAgentTab");}else{url.delete("feedAgent");url.delete("feedAgentTab");}router.replace(`/trading?${url.toString()}`,{scroll:false});}
+  const setTasks=(open:boolean)=>agentView(open);
+
   const groupPath=(path="")=>`${path}${path.includes("?")?"&":"?"}group=${encodeURIComponent(groupId)}${author?`&author=${encodeURIComponent(author)}`:""}`;
   const [data,setData]=useState(initial),[now,setNow]=useState(initialNow),[error,setError]=useState("");
   const [dataAuthor,setDataAuthor]=useState(author),readingPerson=dataAuthor!==author;
@@ -60,7 +65,7 @@ function GroupFeedView({initial,initialNow,groupId,author}:{initial:FeedPayload|
   const [creating,setCreating]=useState(false),[newGroupName,setNewGroupName]=useState(""),[creatingGroup,setCreatingGroup]=useState(false),[groupError,setGroupError]=useState("");
   const [errorAction,setErrorAction]=useState<"load"|"refresh"|null>(null),[promptError,setPromptError]=useState(""),[conflict,setConflict]=useState(false),[recovering,setRecovering]=useState(false);
   const [editing,setEditing]=useState(false),[draft,setDraft]=useState(""),[draftRevision,setDraftRevision]=useState(0),[saving,setSaving]=useState(false);
-  const [requesting,setRequesting]=useState(false),[loadingMore,setLoadingMore]=useState(false),[tasks,setTasks]=useState(false),[selected,setSelected]=useState<FeedPost|null>(null),[menu,setMenu]=useState<FeedPost|null>(null);
+  const [requesting,setRequesting]=useState(false),[loadingMore,setLoadingMore]=useState(false),[selected,setSelected]=useState<FeedPost|null>(null),[menu,setMenu]=useState<FeedPost|null>(null);
   const [messages,setMessages]=useState<FeedMessage[]>([]),[question,setQuestion]=useState(""),[sending,setSending]=useState(false),[discussionLoading,setDiscussionLoading]=useState(false),[discussionError,setDiscussionError]=useState("");
   const [pendingQuestion,setPendingQuestion]=useState(""),[newReply,setNewReply]=useState(false),[discussionNeedsRead,setDiscussionNeedsRead]=useState(false);
   const [pendingPosts,setPendingPosts]=useState<Record<string,boolean>>({});
@@ -73,7 +78,7 @@ function GroupFeedView({initial,initialNow,groupId,author}:{initial:FeedPayload|
   if(!readingPerson)loadedCount.current=data?.posts.length||FEED_PAGE_SIZE;
   useEffect(()=>{const sync=()=>setShown(panelIsShown(root.current));sync();return root.current?observePanelVisibility(root.current,sync):undefined;},[]);
   function invalidateReads(){++loadEpoch.current;readController.current?.abort();moreController.current?.abort();}
-  useEffect(()=>{if(!shown){invalidateReads();discussionController.current?.abort();sendLock.current=false;setEditing(false);setTasks(false);setMenu(null);setSelected(null);setSending(false);setPendingQuestion("");}},[shown]);
+  useEffect(()=>{if(!shown){invalidateReads();discussionController.current?.abort();sendLock.current=false;setEditing(false);setMenu(null);setSelected(null);setSending(false);setPendingQuestion("");}},[shown]);
   const load=useCallback(async(quiet=false)=>{
     if(pendingIds.current.size||saveLock.current||requestLock.current||!panelIsShown(root.current))return;
     readController.current?.abort();moreController.current?.abort();
@@ -233,7 +238,7 @@ function GroupFeedView({initial,initialNow,groupId,author}:{initial:FeedPayload|
   const leadingNew=posts.findIndex(post=>!isNew(post));
   const changed=!!data&&(draft.trim()!==data.preferences.instructions||groupName.trim()!==(data.group?.name||"动态")||JSON.stringify(subscriptions)!==JSON.stringify(data.group?.subscriptions||[])||mode!==(data.group?.mode||"news")||JSON.stringify(people)!==JSON.stringify(data.group?.people||["trump","duan"])||autoUpdate!==data.preferences.enabled||interval!==data.preferences.intervalMinutes);
   return <section ref={root} className="alcor-feed feed-theme" aria-label="动态">
-    <div className="feed-mascot-top"><Mascot image={data?.capabilities.avatar.image||"/uploads/feature/feed/alcor.png"} video={data?.capabilities.avatar.video||null} onClick={()=>setTasks(true)} /></div>
+    <div className="feed-mascot-top">{data||initialAgent?<><Mascot name={data?.agent?.name||initialAgent?.name||"Alcor"} image={data?.capabilities.avatar.image||initialAvatar?.image||"/uploads/feature/feed/alcor.png"} video={data?data.capabilities.avatar.video:initialAvatar?.video||null} onClick={()=>setTasks(true)} /><button type="button" className="feed-mascot-name" onClick={()=>setTasks(true)}>{data?.agent?.name||initialAgent?.name||"Alcor"}</button></>:<div className="feed-mascot-placeholder" aria-hidden="true"/>}</div>
     <header className="feed-header">
       <h1>{data?.group?.name||"动态"}</h1>
       <div className="feed-header-actions">
@@ -279,7 +284,8 @@ function GroupFeedView({initial,initialNow,groupId,author}:{initial:FeedPayload|
       {promptError&&<p role="alert" className={conflict?"feed-error":"feed-prompt-note"}>{promptError}{conflict&&<button type="button" disabled={recovering} onClick={()=>void recoverDraft()}>{recovering?"正在读取":"读取最新版本，保留草稿"}</button>}</p>}
       <div className="feed-modal-actions"><button type="button" disabled={saving||recovering||!!uploadingAvatar} onClick={()=>setEditing(false)}>取消</button><button type="button" className="feed-primary" onClick={()=>void save()} disabled={saving||recovering||!!uploadingAvatar||testingSource||conflict||!groupName.trim()||!changed}>{saving?"正在保存":"保存"}</button></div>
     </AppModal>}
-    {tasks&&<AppModal title="Alcor 的动态任务" size="sm" className="feed-theme feed-themed-modal feed-small-modal" onClose={()=>setTasks(false)}><div className="feed-task-detail"><img src="/uploads/feature/feed/time.webp" alt="" width={64} height={64}/><h4>{job?JOB_LABEL[job.status]:peopleMode?"名人原帖模板已启用":data?.preferences.instructions?"指示已保存":"告诉我你想关注什么"}</h4><p>{job?.error||(job?.status==="done"?job.added?`新增 ${job.added} 条动态；已有内容保持不变。`:"暂无新的动态，已有内容保持不变。":running(job)?peopleMode?"正在读取人物原帖，中文翻译会随后补齐。":"正在搜集和提炼内容，可以离开页面，稍后回来查看。":peopleMode?"正在追踪已选人物的原帖，可在右上角更换人物或更新间隔。":"用右上角的指示塑造你的动态。")}</p>{job&&<small>更新于 <time dateTime={job.updatedAt}>{job.updatedAt.slice(0,16).replace("T"," ")} UTC</time></small>}</div>{peopleMode&&data?.peopleSources?.filter(status=>status.error).map(status=><p key={status.personId} className="feed-source-status">{FEED_PEOPLE.find(person=>person.id===status.personId)?.name}：{status.error}</p>)}{job?.status==="error"&&<button type="button" className="feed-primary feed-task-button" disabled={requesting||!canRefresh} onClick={()=>void refresh()}>重试更新</button>}</AppModal>}
+    {tasks&&shown&&data&&<FeedAgentPanel data={data} tab={agentTab} onTabChange={tab=>agentView(true,tab)} onClose={()=>setTasks(false)} onProfileChange={(profile:FeedAgentProfile)=>{invalidateReads();setData(current=>current?{...current,agent:profile,capabilities:{...current.capabilities,avatar:{image:profile.image||"/uploads/feature/feed/alcor.png",video:null}}}:current);void load(true);}} onRefresh={()=>void refresh()} refreshDisabled={requesting||!canRefresh}/>}
+
     {menu&&<AppModal title="动态来源与选项" size="sm" className="feed-theme feed-themed-modal feed-small-modal" onClose={()=>setMenu(null)}><h4 className="feed-option-title">{menu.title}</h4><div className="feed-sources">{menu.sources.map(s=><a key={s.id} href={s.url} target="_blank" rel="noopener noreferrer">{s.title}<small>{s.publisher} · {dateText(s.publishedAt)}</small></a>)}</div><button type="button" className="feed-option-hide" disabled={pendingPosts[menu.id]} onClick={()=>{void updatePost(menu,{hidden:true});setMenu(null);}}>不再显示这条动态</button></AppModal>}
     {selected&&<AppModal title="讨论" desc={selected.title} size="lg" className="feed-theme feed-themed-modal feed-discussion-modal" onClose={closeDiscussion}>
       <div className="feed-discussion-area"><div className="feed-discussion-log" ref={discussionLog} role="log" aria-busy={sending||discussionLoading} onScroll={()=>{const log=discussionLog.current;if(log){following.current=log.scrollHeight-log.clientHeight-log.scrollTop<48;if(following.current)setNewReply(false);}}}>{discussionLoading&&!messages.length?<p className="feed-discussion-hint">正在读取讨论…</p>:messages.length===0&&!pendingQuestion?<p className="feed-discussion-hint">从这条动态聊起。你想了解什么？</p>:messages.map(m=><div key={m.id} className={`feed-message feed-message-${m.role}`}><small>{m.role==="user"?"你":"Alcor"}</small><p>{m.text}</p></div>)}{pendingQuestion&&<><div className="feed-message feed-message-user"><small>你 · 正在发送</small><p>{pendingQuestion}</p></div><p className="feed-thinking" role="status">Alcor 正在结合来源整理回答…</p></>}</div>

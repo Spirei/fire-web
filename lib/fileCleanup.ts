@@ -59,7 +59,9 @@ export function urlReferenced(url: string): boolean {
   } catch {
     /* 无文件忽略 */
   }
-  return a + s + u + c + celebJson + modelServiceRef > 0;
+  const agent = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='feed_agent_profiles'").get()
+    ? (db.prepare("SELECT COUNT(*) AS c FROM feed_agent_profiles WHERE image=?").get(url) as {c:number}).c : 0;
+  return a + s + u + c + celebJson + modelServiceRef + agent > 0;
 }
 
 /* 删除本地文件（仅当没有其他引用，避免误删共享图片） */
@@ -151,6 +153,8 @@ export function cleanupOrphanFiles(options: { scope?: "showcase-unsaved" } = {})
   (db.prepare("SELECT url FROM assets").all() as { url: string }[]).forEach((r) => addRef(r.url));
   (db.prepare("SELECT avatar FROM users WHERE avatar <> ''").all() as { avatar: string }[]).forEach((r) => addRef(r.avatar));
   (db.prepare("SELECT avatar FROM celebs WHERE avatar <> ''").all() as { avatar: string }[]).forEach((r) => addRef(r.avatar));
+  if(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='feed_agent_profiles'").get())
+    (db.prepare("SELECT image FROM feed_agent_profiles WHERE image IS NOT NULL").all() as {image:string}[]).forEach(r=>addRef(r.image));
   (db.prepare("SELECT image FROM card_details WHERE image <> ''").all() as { image: string }[]).forEach((r) => addRef(r.image));
   (
     db.prepare("SELECT value FROM site_settings WHERE key IN ('ico','pwaIcon','homepageBg','siteLogo','appDisplayIcon')").all() as { value: string }[]

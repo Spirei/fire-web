@@ -226,6 +226,10 @@ public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization �
 | 方法 | 路径 | 权限 |
 | --- | --- | --- |
 | GET | `/api/v2/feed` | feed.read |
+| GET | `/api/v2/feed/profile` | feed.read |
+| PUT | `/api/v2/feed/profile` | feed.write |
+| POST | `/api/v2/feed/profile/avatar` | feed.write |
+| GET | `/api/v2/feed/jobs` | feed.read |
 | PUT | `/api/v2/feed/preferences` | feed.write |
 | POST | `/api/v2/feed/refresh` | feed.write |
 | GET | `/api/v2/feed/jobs/{jobId}` | feed.read |

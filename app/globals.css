@@ -7357,3 +7357,7 @@ html { scrollbar-gutter:stable; }
 
 .dark .mc-closure-reasons { color:#b7c0cf; }
 .dark .mc-day.is-quiet-weekend { background-color:#20252d;color:#8992a1; }
+
+/* Dynamic agent profile: matching glass menu and connection indicator in both themes. */
+.feed-theme{--feed-agent-connected:#23b457;--feed-agent-bolt:#fff;--feed-agent-menu:#fffffff0}
+.dark .feed-theme{--feed-agent-connected:#36bb69;--feed-agent-bolt:#fff;--feed-agent-menu:#28292bf2}

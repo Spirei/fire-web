@@ -20,6 +20,8 @@ export type FeedPost = {
 };
 export type FeedPreferences = { instructions: string; revision: number; enabled: boolean; intervalMinutes: number; updatedAt: string | null };
 export type FeedJob = { id: string; status: "queued" | "searching" | "writing" | "done" | "error"; createdAt: string; updatedAt: string; added: number; error: string | null; revision: number; groupId?:string };
+export type FeedAgentProfile = { name:string; image:string|null; revision:number; updatedAt:string|null };
+export type FeedJobPage = { jobs:FeedJob[]; nextCursor:string|null };
 export type FeedMessage = { id: string; role: "user" | "assistant"; text: string; createdAt: string };
 export type FeedPeopleSourceStatus = { personId:FeedPersonId; lastAttemptAt:string|null; lastSuccessAt:string|null; error:string|null };
-export type FeedPayload = { posts: FeedPost[]; nextCursor: string | null; preferences: FeedPreferences; job: FeedJob | null; group?:FeedGroup; groups?:FeedGroup[]; recommendations?:FeedSubscription[]; observedPublishers?:string[]; peopleSources?:FeedPeopleSourceStatus[]; peopleCatalog?:FeedPerson[]; peopleLatestAt?:Partial<Record<FeedPersonId,string|null>>; capabilities: { generate: boolean; editPeopleAvatars?:boolean; search: "brave" | "news-rss"; searchProvider?: "deepseek" | "brave" | "news-rss"; avatar: { image: string; video: string | null } } };
+export type FeedPayload = { agent?:FeedAgentProfile; posts: FeedPost[]; nextCursor: string | null; preferences: FeedPreferences; job: FeedJob | null; group?:FeedGroup; groups?:FeedGroup[]; recommendations?:FeedSubscription[]; observedPublishers?:string[]; peopleSources?:FeedPeopleSourceStatus[]; peopleCatalog?:FeedPerson[]; peopleLatestAt?:Partial<Record<FeedPersonId,string|null>>; capabilities: { generate: boolean; editPeopleAvatars?:boolean; search: "brave" | "news-rss"; searchProvider?: "deepseek" | "brave" | "news-rss"; avatar: { image: string; video: string | null } } };

@@ -92,6 +92,9 @@ security.version=2，read_scope:security.read/write_scope:security.write；secur
 | `feed` | GET | feed.read |
 | `feed/preferences` | PUT | feed.write |
 | `feed/refresh` | POST | feed.write |
+| `feed/profile` | GET/PUT | feed.read / feed.write |
+| `feed/profile/avatar` | POST | feed.write |
+| `feed/jobs` | GET | feed.read |
 | `feed/jobs/[jobId]` | GET | feed.read |
 | `feed/posts/[postId]` | GET,PUT | feed.read；写入 feed.write |
 | `feed/posts/[postId]/discussion` | GET,POST | feed.read；写入 feed.write |

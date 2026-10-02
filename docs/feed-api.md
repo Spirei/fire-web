@@ -75,3 +75,15 @@
 管理员在「动态模板与指示 → 关注人物」点击头像选择图片，通过既有 `POST /api/celebs/avatar` 保存；上传独立于组名称、关注范围的保存，即时同步其他已打开的名人视图和历史原帖卡。图片限制 JPG/PNG/GIF/WEBP、2 MiB、内容校验、同源写请求，并在异步读取后重新验证身份。头像保存在现有 uploads/data 卷，不写浏览器临时地址或提交运行素材。`capabilities.editPeopleAvatars` 仅为 Web 管理员返回 true，普通账号和 App 不取得头像写权限。
 
 - 名人动态的已读时间在对应人物原帖读取成功并显示后立即持久化；读取失败不提前清除头像更新圆点。已读时间合并只向前推进，保护其他标签页的较新阅读记录。人物切换遇到未完成的点赞/保存时，在写入完成后恢复读取，继续用请求序号排除迟到响应。
+
+## 小人名称、形象与任务历史（2026-10-02）
+
+小人资料是当前账号的跨组配置，和人物白名单头像、动态组指示分开保存。以下接口同时由 v1/v2 提供，继续使用已有 `feed.read` / `feed.write` 权限；不会扩大旧 App 授权。
+
+- `GET /feed/profile`：返回 `{name,image,revision,updatedAt}`；默认名称 `Alcor`，`image=null` 表示内置形象。
+- `PUT /feed/profile`：`{name,revision}` 编辑名称（1–40字），或 `{resetAvatar:true,revision}` 恢复默认形象。字段严格校验，不接受用户 ID 或外部图片地址，版本冲突返回409。
+- `POST /feed/profile/avatar`：multipart `file` + `revision`；PNG/JPG/WebP/GIF，最大2 MiB，读取请求后重新鉴权，内容与扩展名匹配后写入当前账号上传目录。版本冲突回收新文件，替换后仅清理无人引用的旧图，通用孤立文件清理保护在用形象。上传及默认恢复均保留名称，不修改动态指示或中止更新任务。
+- `GET /feed/jobs?group={id}&cursor={cursor}`：当前账号、当前组真实历史，按创建时间和 ID 降序，每页30条，返回 `{jobs,nextCursor}`。仅公开 `FeedJob` 字段，不返回指示、其他账号或组的记录。
+- `FeedPayload.agent` 为资料快照；`capabilities.avatar` 同步当前形象。自定义图片时 `video=null`，避免内置循环动画覆盖自定义形象；恢复默认后按已有本地视频能力返回。
+
+Web 入口在小人下方显示名称，点击打开个人面板。第一图标页签承载任务历史、当前错误和重试；其余展示关注来源、运行状态、更新计划及名称与形象。`feedAgent=profile` 与可选 `feedAgentTab` 保存当前视图，刷新恢复；名称和形象保存服务器，关闭编辑不保存草稿。请求超时或冲突先重新读取资料，不自动重放上传或改名。

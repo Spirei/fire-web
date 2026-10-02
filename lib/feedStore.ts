@@ -17,6 +17,7 @@ export function feedTables() {
     CREATE TABLE IF NOT EXISTS feed_posts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, fingerprint TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, liked INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0, UNIQUE(user_id,fingerprint));
     CREATE INDEX IF NOT EXISTS feed_posts_owner ON feed_posts(user_id,created_at DESC,id DESC);
     CREATE TABLE IF NOT EXISTS feed_jobs (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL, instructions TEXT NOT NULL, revision INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, added INTEGER NOT NULL DEFAULT 0, error TEXT);
+    CREATE TABLE IF NOT EXISTS feed_agent_profiles (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL DEFAULT 'Alcor', image TEXT, revision INTEGER NOT NULL DEFAULT 0, updated_at TEXT);
     CREATE INDEX IF NOT EXISTS feed_jobs_owner ON feed_jobs(user_id,created_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS feed_jobs_running ON feed_jobs(user_id) WHERE status IN ('queued','searching','writing');
     CREATE TABLE IF NOT EXISTS feed_messages (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, post_id TEXT NOT NULL REFERENCES feed_posts(id) ON DELETE CASCADE, role TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL);
@@ -27,6 +28,7 @@ export function feedTables() {
     for(const table of ["feed_posts","feed_jobs"]){if(!(db.prepare(`PRAGMA table_info(${table})`).all() as {name:string}[]).some(c=>c.name==="group_id"))db.exec(`ALTER TABLE ${table} ADD COLUMN group_id TEXT NOT NULL DEFAULT 'default'`);}
     db.exec(`CREATE TABLE IF NOT EXISTS feed_groups (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,id TEXT NOT NULL,name TEXT NOT NULL,subscriptions TEXT NOT NULL DEFAULT '[]',updated_at TEXT,PRIMARY KEY(user_id,id));
       CREATE TABLE IF NOT EXISTS feed_group_preferences (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,group_id TEXT NOT NULL,instructions TEXT NOT NULL DEFAULT '',revision INTEGER NOT NULL DEFAULT 0,enabled INTEGER NOT NULL DEFAULT 0,interval_minutes INTEGER NOT NULL DEFAULT 360,updated_at TEXT,PRIMARY KEY(user_id,group_id));
+      CREATE INDEX IF NOT EXISTS feed_jobs_group ON feed_jobs(user_id,group_id,created_at DESC,id DESC);
       CREATE INDEX IF NOT EXISTS feed_posts_group ON feed_posts(user_id,group_id,created_at DESC,id DESC);`);
     for(const [table,column,definition] of [
       ["feed_groups","mode","TEXT NOT NULL DEFAULT 'news'"],

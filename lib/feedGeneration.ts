@@ -1,3 +1,4 @@
+import { feedAgentProfile } from "./feedAgent";
 import fs from "node:fs";
 import path from "node:path";
 import { readLimitedResponseJson } from "./requestBody";
@@ -28,8 +29,10 @@ export function feedCapabilities(): FeedPayload["capabilities"] {
 export function feedSnapshot(userId:string,cursor?:string|null,limit=FEED_PAGE_SIZE,groupId="default",author?:string|null):FeedPayload {
   const group=feedGroup(userId,groupId);
   if(group.mode==="people")syncPeopleFeed(userId,group);
+  const agent=feedAgentProfile(userId),capabilities=feedCapabilities();
+  if(agent.image)capabilities.avatar={image:agent.image,video:null};
   const canEditAvatars=(feedTables().prepare("SELECT role FROM users WHERE id=?").get(userId) as {role:string}|undefined)?.role==="admin";
-  return {...listFeedPosts(userId,cursor,limit,groupId,author),peopleCatalog:feedPeopleProfiles(),preferences:feedPreferences(userId,groupId),job:getFeedJob(userId,undefined,groupId),group,groups:listFeedGroups(userId),recommendations:FEED_RECOMMENDATIONS,observedPublishers:MUSE_OBSERVED_PUBLISHERS,...(group.mode==="people"?{peopleSources:getTradingSquareSourceStatus(group.people),peopleLatestAt:feedPeopleLatestAt(userId,group)}:{}),capabilities:{...feedCapabilities(),editPeopleAvatars:canEditAvatars}};
+  return {agent,...listFeedPosts(userId,cursor,limit,groupId,author),peopleCatalog:feedPeopleProfiles(),preferences:feedPreferences(userId,groupId),job:getFeedJob(userId,undefined,groupId),group,groups:listFeedGroups(userId),recommendations:FEED_RECOMMENDATIONS,observedPublishers:MUSE_OBSERVED_PUBLISHERS,...(group.mode==="people"?{peopleSources:getTradingSquareSourceStatus(group.people),peopleLatestAt:feedPeopleLatestAt(userId,group)}:{}),capabilities:{...capabilities,editPeopleAvatars:canEditAvatars}};
 }
 /** Administrator-configured endpoints only; article content never chooses an outbound URL. */
 function json(text:string) {

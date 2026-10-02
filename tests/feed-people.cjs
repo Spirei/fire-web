@@ -145,7 +145,8 @@ let passed=0;async function test(name,run){await run();passed++;console.log('PAS
     const Component=get('components/FeedOriginalPost.tsx').default;
     const html=renderToStaticMarkup(React.createElement(Component,{post:item,isNew:true,busy:false,canDiscuss:false,onMenu(){},onLike(){},onDiscuss(){}}));
     assert(html.includes('段永平')&&html.includes('@slowisquick')&&html.includes('查看原文'));assert(html.includes('&lt;script&gt;'));assert(!html.includes('<script>alert'));assert(html.includes('dateTime="')||html.includes('datetime="'));assert(html.includes('aria-label="新动态"'));
-    const viewSource=fs.readFileSync(path.join(root,'components/views/FeedView.tsx'),'utf8');assert(!viewSource.includes('role="status">{FEED_PEOPLE.find'));assert(viewSource.indexOf('data?.peopleSources')>viewSource.indexOf('{tasks&&<AppModal'));
+    const viewSource=fs.readFileSync(path.join(root,'components/views/FeedView.tsx'),'utf8');assert(!viewSource.includes('role="status">{FEED_PEOPLE.find'));assert(!viewSource.includes('data?.peopleSources'));assert(viewSource.includes('<FeedAgentPanel'));
+    const agentSource=fs.readFileSync(path.join(root,'components/FeedAgentPanel.tsx'),'utf8');assert(agentSource.includes('data.peopleSources?.filter'));assert(agentSource.includes('i===0&&sourceErrors.map'));
     const Badge=get('components/FeedPersonBadge.tsx').default;
     assert.equal(renderToStaticMarkup(React.createElement(Badge,{personId:'invented'})),'');
     assert(renderToStaticMarkup(React.createElement(Badge,{personId:'trump'})).includes('#f43f6b'));

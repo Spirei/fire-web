@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const postcss = require('postcss');
 const css = postcss.parse(fs.readFileSync('styles/feed.css', 'utf8'));
+const agentPanel = fs.readFileSync("components/FeedAgentPanel.tsx", "utf8");
 const view = fs.readFileSync('components/views/FeedView.tsx', 'utf8');
 const base = css.nodes.find(n => n.type === 'rule' && n.selector.startsWith('.feed-theme,'));
 const dark = css.nodes.find(n => n.type === 'rule' && n.selector.startsWith('.dark .feed-theme,'));
@@ -26,7 +27,7 @@ css.walkRules(rule => {
   if (rule.selector.includes('.app-shell-main')) assert.match(rule.selector, /\.tab-panel:not\(\[hidden\]\) \.alcor-feed/, 'cached feed scope');
   rule.walkDecls(d => assert(!/^--(?:site|cap|dock)-/.test(d.prop), 'global preference override'));
 });
-assert.equal((view.match(/className="feed-theme feed-themed-modal feed-/g) || []).length, 5);
+assert.equal(((view+agentPanel).match(/className="feed-theme feed-themed-modal feed-/g) || []).length, 5);
 assert(view.includes('className="alcor-feed feed-theme"'));
 assert(css.nodes.some(n => n.type === 'rule' && n.selector.includes(':has(>.feed-themed-modal)>.modal-scrim')));
 console.log('PASS feed-only scope, visible-panel guard and all five body-portal dialogs');

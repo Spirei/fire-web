@@ -247,3 +247,77 @@ html:root body:has([data-capsule-scope="non-home"]) .feed-themed-modal.app-modal
   .feed-original-identity time{font-size:12px}
   .feed-original-identity>span:not(.feed-unread-dot){font-size:12px}
 }
+
+/* Agent profile: portrait, quiet name capsule and chronological activity. */
+.feed-mascot-top{flex-direction:column;align-items:center;gap:0}
+.feed-mascot-name{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:36px;margin-top:-2px;padding:5px 18px;border:1px solid var(--feed-divider);border-radius:999px;background:var(--feed-panel);color:var(--feed-ink);font-size:16px;line-height:24px;box-shadow:0 3px 12px var(--feed-fill)}
+[role="dialog"]:has(>.feed-agent-modal){padding:88px 32px 24px}
+.feed-agent-modal.app-modal-panel{max-width:540px!important;height:min(760px,calc(100dvh - 112px));padding:24px!important;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.feed-agent-modal>.mb-5{position:sticky;top:0;z-index:3;height:46px;align-items:center;margin-bottom:-46px}
+.feed-agent-modal>.mb-5>div:first-child{display:none}
+.feed-agent-modal>.mb-5>div.ml-auto{order:2;flex:none;margin-left:auto;max-width:none}
+.feed-agent-round,html:root body:has([data-capsule-scope="non-home"]) .feed-agent-modal.app-modal-panel>.mb-5>button[aria-label="关闭"]{display:inline-flex;align-items:center;justify-content:center;width:46px;height:46px;border:1px solid var(--feed-divider)!important;border-radius:50%;background:var(--feed-panel)!important;color:var(--feed-ink)!important;box-shadow:0 3px 14px var(--feed-fill)!important;padding:0}
+.feed-agent-modal>.mb-5>button[aria-label="关闭"]{order:0}
+.feed-agent-modal>.mb-5>button[aria-label="关闭"] svg{width:23px;height:23px;stroke-width:1.7}
+.feed-agent-hero{display:flex;flex-direction:column;align-items:center;padding:8px 52px 25px;text-align:center}
+.feed-agent-portrait{position:relative;width:116px;height:116px;flex:none;border:1px solid var(--feed-divider);border-radius:50%;background:var(--feed-field)}
+.feed-agent-portrait>img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.feed-agent-portrait>.safe-asset-fallback{border-radius:50%}
+.feed-agent-pencil{position:absolute;right:-6px;bottom:-1px;width:39px;height:39px;z-index:4}
+.feed-agent-modal .feed-agent-hero h2{max-width:100%;font-size:30px;line-height:1.18;font-weight:650!important;letter-spacing:-.8px;margin:22px 0 9px;overflow-wrap:anywhere;color:var(--feed-ink)}
+.feed-agent-connected{display:flex;align-items:center;gap:7px;font-size:16px;line-height:24px;color:var(--feed-ink)}
+.feed-agent-connected>span{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--feed-agent-connected,#23b457);color:var(--feed-agent-bolt,#fff)}
+.feed-agent-edit-menu{position:absolute;z-index:5;top:calc(100% + 6px);left:50%;transform:translateX(-50%);width:290px;max-width:calc(100vw - 64px);padding:12px;border:1px solid var(--feed-divider);border-radius:28px;background:var(--feed-agent-menu,#fffffff0);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 12px 40px var(--feed-overlay)}
+.feed-agent-edit-menu button{display:flex;align-items:center;gap:18px;width:100%;padding:15px 16px;border:0;border-radius:18px;background:transparent;font-size:19px;line-height:28px;color:var(--feed-ink);text-align:left}
+.feed-agent-edit-menu button:hover{background:var(--feed-fill)}
+.feed-agent-tabs{display:flex;align-items:center;gap:4px;padding:5px;border:1px solid var(--feed-divider);border-radius:999px;margin:0 0 28px;background:var(--feed-panel)}
+.feed-agent-tabs button{display:grid;place-items:center;flex:1;min-width:0;height:44px;border:0;border-radius:999px;background:transparent;color:var(--feed-ink)}
+.feed-agent-tabs button[aria-pressed="true"]{background:var(--feed-fill)}
+.feed-agent-tabs button:hover{background:var(--feed-fill)}
+.feed-agent-content{padding:0 0 12px}
+.feed-agent-day{font-size:17px;font-weight:600;margin:28px 0 20px;color:var(--feed-ink)}
+.feed-agent-day:first-child{margin-top:0}
+.feed-agent-event{display:grid;grid-template-columns:48px minmax(0,1fr);gap:16px;margin-bottom:24px}
+.feed-agent-event-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:50%;background:var(--feed-fill)}
+.feed-agent-event-icon img{width:34px;height:34px;object-fit:contain}
+.feed-agent-event h4,.feed-agent-source h4{font-size:18px;line-height:25px;font-weight:550;margin:0 0 3px;color:var(--feed-ink)}
+.feed-agent-event p,.feed-agent-source p{font-size:15px;line-height:23px;color:var(--feed-secondary);margin:0;overflow-wrap:anywhere}
+.feed-agent-event time{display:block;font-size:14px;line-height:22px;color:var(--feed-tertiary);margin-top:2px}
+.feed-agent-retry{border:0;background:transparent;padding:6px 0;font-size:14px;color:var(--feed-link)}
+.feed-agent-empty{font-size:15px;color:var(--feed-secondary);padding:22px 0;text-align:center}
+.feed-agent-older{display:block;margin:24px auto 0;padding:9px 18px;border:1px solid var(--feed-divider);border-radius:999px;background:transparent;color:var(--feed-ink);font-size:14px}
+.feed-agent-fact{display:block;width:100%;padding:16px 0;border:0;border-bottom:1px solid var(--feed-divider);background:transparent;text-align:left}
+.feed-agent-fact>span{font-size:13px;color:var(--feed-secondary)}
+.feed-agent-fact p{font-size:17px;line-height:26px;margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--feed-ink)}
+.feed-agent-fact-button p{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.feed-agent-source{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.feed-agent-source>img{width:48px;height:48px;object-fit:cover;border-radius:50%}
+.feed-agent-source-link{display:block;color:var(--feed-link);padding:15px 0;font-size:16px;border-bottom:1px solid var(--feed-divider)}
+.feed-agent-editor h3,.feed-agent-editor label{display:block;font-size:16px;color:var(--feed-ink);margin:0 0 12px}
+.feed-agent-editor input:not([type="file"]){width:100%;padding:13px 15px;border:1px solid var(--feed-divider);border-radius:16px;background:var(--feed-field)!important;color:var(--feed-ink);font-size:17px}
+.feed-agent-editor-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+.feed-agent-editor-actions button{padding:10px 24px;font-size:15px}
+.feed-agent-avatar-options{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.feed-agent-avatar-options button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:132px;border:1px solid var(--feed-divider);border-radius:22px;background:var(--feed-field);color:var(--feed-ink);font-size:15px}
+.feed-agent-avatar-options img{width:64px;height:64px;object-fit:cover;border-radius:50%}
+@media(max-width:639px){
+  [role="dialog"]:has(>.feed-agent-modal){padding:72px 12px 12px}
+  .feed-agent-modal.app-modal-panel{padding:20px!important;height:calc(100dvh - 84px);max-height:calc(100dvh - 84px);border-radius:28px!important}
+  .feed-agent-hero{padding:14px 44px 25px}
+  .feed-agent-portrait{width:112px;height:112px}
+  .feed-agent-tabs{margin-bottom:26px}
+  .feed-agent-tabs button{height:42px}
+  .feed-agent-event{gap:14px;grid-template-columns:44px minmax(0,1fr)}
+  .feed-agent-event-icon{width:44px;height:44px}
+  .feed-agent-event h4{font-size:17px;line-height:24px}
+  .feed-agent-edit-menu{width:276px}
+}
+@media(prefers-reduced-motion:reduce){.feed-agent-modal{scroll-behavior:auto}}
+/* AppModal places header actions on a second row on phones; this profile keeps its two round controls together. */
+.feed-agent-modal.app-modal-panel>.mb-5{display:flex!important;align-items:center!important}
+.feed-agent-modal.app-modal-panel>.mb-5>div.ml-auto{width:46px!important;flex:0 0 auto!important;grid-area:auto!important}
+.feed-agent-modal.app-modal-panel>.mb-5>button[aria-label="关闭"]{grid-area:auto!important}
+
+.feed-mascot-placeholder{width:72px;height:108px;position:relative}
+.feed-mascot-placeholder::before{content:"";display:block;width:72px;height:72px;border-radius:50%;background:var(--feed-fill)}
+@media(max-width:639px){.feed-mascot-placeholder{width:64px;height:100px}.feed-mascot-placeholder::before{width:64px;height:64px}}

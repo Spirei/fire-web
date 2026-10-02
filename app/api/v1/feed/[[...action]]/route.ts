@@ -1,8 +1,9 @@
+import { feedAgentProfile,saveFeedAgentProfile,saveFeedAgentImage,feedAgentJobs } from "@/lib/feedAgent";
 import { FEED_PAGE_SIZE } from "@/lib/feedTypes";
 import { after } from "next/server";
 import { ok,fail } from "@/lib/api";
 import { getAuthUser,isTrustedMutationRequest,isAdmin } from "@/lib/auth";
-import { readJsonBody,RequestBodyTooLargeError } from "@/lib/requestBody";
+import { readJsonBody,readFormBody,RequestBodyTooLargeError } from "@/lib/requestBody";
 import { clientIp,rateLimit } from "@/lib/rateLimit";
 import { FeedError,feedMessages,getFeedJob,getFeedPost,saveFeedPreferences,updateFeedPost,createFeedGroup,listFeedGroups,feedGroup } from "@/lib/feedStore";
 import { discussFeed,feedSnapshot,requestFeedGeneration,runFeedJob } from "@/lib/feedGeneration";
@@ -25,6 +26,8 @@ async function handle(request:Request,context:Context) {
         const snapshot=feedSnapshot(user.id,q.get("cursor"),limit,groupId,q.get("author"));
         snapshot.capabilities.editPeopleAvatars=isAdmin(user);return ok(snapshot);
       }
+      if(key==="profile")return ok(feedAgentProfile(user.id));
+      if(key==="jobs")return ok(feedAgentJobs(user.id,groupId,new URL(request.url).searchParams.get("cursor")));
       if(key==="groups")return ok({groups:listFeedGroups(user.id)});
       if(action.length===2&&action[0]==="jobs") {
         const job=getFeedJob(user.id,action[1]);if(!job)throw new FeedError("任务不存在",404);return ok(job);
@@ -33,9 +36,20 @@ async function handle(request:Request,context:Context) {
       if(action.length===3&&action[0]==="posts"&&action[2]==="discussion")return ok({messages:feedMessages(user.id,action[1])});
       throw new FeedError("接口不存在",404);
     }
+    if(method==="POST"&&key==="profile/avatar") {
+      if(!rateLimit(`feed-agent-upload:${user.id}`,30,60*60_000))throw new FeedError("上传较频繁，请稍后再试",429);
+      let form:FormData;
+      try{form=await readFormBody(request,2*1024*1024+65536);}catch(error){if(error instanceof RequestBodyTooLargeError)throw error;throw new FeedError("图片上传格式无效");}
+      const file=form.get("file"),rawRevision=form.get("revision");
+      if(!(file instanceof File)||typeof rawRevision!=="string"||!/^\d+$/.test(rawRevision)||[...form.keys()].some(k=>!["file","revision"].includes(k))||form.getAll("file").length!==1||form.getAll("revision").length!==1)throw new FeedError("请选择图片后上传");
+      const buffer=Buffer.from(await file.arrayBuffer());
+      if(getAuthUser(request)?.id!==user.id)throw new FeedError("连接已失效",401);
+      return ok(saveFeedAgentImage(user.id,buffer,file.name,Number(rawRevision)));
+    }
     const body=await readJsonBody(request,20_000);
     // Revalidate after asynchronous input: revoked tokens cannot finish a queued mutation.
     if(getAuthUser(request)?.id!==user.id)throw new FeedError("连接已失效",401);
+    if(method==="PUT"&&key==="profile")return ok(saveFeedAgentProfile(user.id,body));
     if(method==="POST"&&key==="groups") {
       const group=createFeedGroup(user.id,body);
       if(group.mode==="people") {
