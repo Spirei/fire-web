@@ -4,18 +4,22 @@
 
 ## 权限与发现
 
-所有端点使用现有 `{code,message,data}` 信封，账号数据 `no-store, private`。Web 用本人 Cookie 与同源保护；App 使用现有 PKCE Bearer grant。
+所有端点使用现有 `{code,message,data}` 信封，账号数据 `no-store, private`。Web 用本人 Cookie 与同源保护；App 使用现有 PKCE 或原生登录的 Bearer grant，两版共用业务服务。
 
 - `feed.read`：本人动态、指示、任务、讨论。
 - `feed.write`：修改指示、生成、喜欢/隐藏、讨论，必须同时申请 `feed.read`。
-- 默认/旧 grant 不扩权；App 重新通过网页明确同意取得权限，`portfolio.write` 不能代替动态权限。
+- 默认/旧 grant 不扩权；App 通过原生明确扩权并重新验证密码/因子，或网页PKCE明确同意取得权限，`portfolio.write` 不能代替动态权限。有效grant缺权限返回40301，保留连接。
 - `/api/v1/auth/config` 增加 `feed_path,feed_scopes`；`auth/me.capabilities` 增加实际 `feedRead,feedWrite`。跨账号资源统一 404，不接受 `userId`。
+- 两版发现的可选 `feed_contract` 修订1声明本版 `groups_path` 和 `subscriptions_test_path`，用于确认App分组管理及订阅测试已放行。App本轮仅使用news，完整冻结合约见 [App新闻动态](app-feed-news.md)。
 
 ## 端点
 
 | 方法 | 路径 | 请求 / 返回 |
 | --- | --- | --- |
 | GET | `/api/v1/feed?limit=10&cursor=…` | `FeedPayload`；默认10条，limit 1–50，新闻按创建时间、名人按原帖时间 / id 降序游标 |
+| GET/POST | `/api/v1/feed/groups` | `{groups}` / `{name,mode?}` → `FeedGroup` |
+| PUT | `/api/v1/feed/groups/{groupId}` | `{name,revision}` → `FeedGroup`；保留原指示、订阅和计划 |
+| POST | `/api/v1/feed/subscriptions/test` | `{name,url}` → `{title,count,url}`；只测试，保存走偏好接口 |
 | PUT | `/api/v1/feed/preferences` | `{instructions,revision,enabled?,intervalMinutes?}` → `FeedPreferences` |
 | POST | `/api/v1/feed/refresh` | `{}` → 持久化 `FeedJob`；后台执行 |
 | GET | `/api/v1/feed/jobs/{id}` | 本人 `FeedJob` |
@@ -26,7 +30,7 @@
 
 唯一字段类型是 `lib/feedTypes.ts`。时间统一 UTC ISO 8601，`publishedAt` 来自来源发稿时间，未知 null；`createdAt` 是生成时间。Web正文底部不显示发稿日期；来源选项仍保留，App字段兼容不变。帖子 id `fp-` + 24 位 hex，任务 `fj-`，消息 `fm-`。
 
-`FeedPayload` 含 `posts,nextCursor,preferences,job,capabilities`。帖子含 `title,icon,segments,sources,media,publishedAt,createdAt,liked,hidden`。`segments[].sourceId` 是事实引用，不等于整段可点击；新增可选 `linkText` 仅指定 `text` 中的一处原样关键短语。Web 与 App 应只将该短语标蓝可点，其余文字保持正文色，不解析模型 HTML。每帖最多2处，每处2–32字、总长度不超过正文35%；服务端和 Web 均校验，超限降为普通文字、仍保留引用。无 `linkText` 的旧帖子正文保持普通文字，Web 最多链接开头的短媒体署名；原文和引用保留在来源选项里，不改旧数据。旧 App 忽略新字段不会崩溃，但要改为此呈现逻辑才能去掉整段链接。共享规则见 `lib/feedPresentation.ts`。图标为 `/uploads/feature/feed/{icon}.webp`。媒体只预留经校验资源；没有实际素材返回 `[]`，不能用模型生成 URL 伪造图片。
+`FeedPayload` 含 `posts,nextCursor,preferences,job,capabilities`。帖子含 `title,icon,segments,sources,media,publishedAt,createdAt,liked,hidden`。`segments[].sourceId` 是事实引用，不等于整段可点击；新增可选 `linkText` 仅指定 `text` 中的一处原样关键短语。Web 与 App 应只将该短语标蓝可点，其余文字保持正文色，不解析模型 HTML。每帖最多2处，每处2–32字、总长度不超过正文35%；服务端和 Web 均校验，超限降为普通文字、仍保留引用。无 `linkText` 的旧帖子正文保持普通文字，Web 最多链接开头的短媒体署名；原文和引用保留在来源选项里，不改旧数据。旧 App 忽略新字段不会崩溃，但要改为此呈现逻辑才能去掉整段链接。共享规则见 `lib/feedPresentation.ts`。图标为 `/uploads/feature/feed/{icon}.webp`。媒体只采用经校验的真实资源；没有实际素材返回 `[]`，不能用模型生成 URL 伪造图片。
 
 指示最多 4000 字，`revision` 必填并做 CAS，旧版本 40901。修改只影响未来动态，历史不替换；同时取消旧版本任务。Web 只有右上角一个模板与指示编辑入口，更新开关和间隔仅在此编辑弹窗内配置；新闻模板保存非空指示后启用服务端静默生成，清空则停止。旧 App 的 `enabled`、`intervalMinutes` 参数仍兼容，既有偏好不批量覆盖。默认内部间隔 360 分钟，可设 60–1440；生产容器自动执行，开发默认关闭；本地需要自动更新时显式设置 `FIRE_FEED_SCHEDULER=1` 并重启开发服务。失败任务15分钟后重试（从失败结束时间计算），成功仍按保存的间隔更新。
 

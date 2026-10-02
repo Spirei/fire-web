@@ -90,6 +90,9 @@ security.version=2，read_scope:security.read/write_scope:security.write；secur
 | `company-profile` | GET | public |
 | `settings/public` | GET | public |
 | `feed` | GET | feed.read |
+| `feed/groups` | GET/POST | feed.read / feed.write |
+| `feed/groups/[groupId]` | PUT | feed.write |
+| `feed/subscriptions/test` | POST | feed.write |
 | `feed/preferences` | PUT | feed.write |
 | `feed/refresh` | POST | feed.write |
 | `feed/profile` | GET/PUT | feed.read / feed.write |
@@ -100,6 +103,8 @@ security.version=2，read_scope:security.read/write_scope:security.write；secur
 | `feed/posts/[postId]/discussion` | GET,POST | feed.read；写入 feed.write |
 
 security接口的完整payload见 native-account-security-v1.md，将其中/api/v1替换为/api/v2；其余业务请求/响应沿用docs/api-spec.md对应v1资源，不变更金额、订单和分页含义。credentials类端点以请求体里的PKCE/refresh/revoke/recovery或原生登录凭证验证，不依赖Cookie。
+
+动态新闻分组、订阅、文章、讨论及Agent的冻结接入见 [app-feed-news.md](app-feed-news.md)。发现的可选feed_contract修订1返回本版groups_path与subscriptions_test_path；缺声明的旧部署不能视为分组管理已支持。现有App保持所选API版本、原凭据与明确扩权边界，people模式本轮不纳入App。
 
 ## App 内账号密码登录
 

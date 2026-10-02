@@ -61,8 +61,8 @@ let count=0;async function test(name,run){db.prepare('DELETE FROM rate_limit').r
     const read=connect('portfolio.read feed.read'),write=connect('portfolio.read feed.read feed.write');
     assert.equal((await bearerCall('profile','GET',undefined,read.access_token)).status,200);
     assert.equal((await bearerCall('jobs','GET',undefined,read.access_token)).status,200);
-    assert.equal((await bearerCall('profile','PUT',{name:'unauthorized',revision:5},read.access_token)).status,401);
-    assert.equal((await bearerCall('profile/avatar','POST',upload(5),read.access_token)).status,401);
+    assert.equal((await bearerCall('profile','PUT',{name:'unauthorized',revision:5},read.access_token)).status,403);
+    assert.equal((await bearerCall('profile/avatar','POST',upload(5),read.access_token)).status,403);
     const bodies=load('lib/requestBody.ts'),original=bodies.readFormBody;
     bodies.readFormBody=async(...args)=>{const form=await original(...args);native.revokeAppGrant(write.grant_id);return form;};
     try{assert.equal((await bearerCall('profile/avatar','POST',upload(5),write.access_token)).status,401);}finally{bodies.readFormBody=original;}

@@ -63,9 +63,9 @@ async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await r
   });
   await test('App scopes are optional, read/write are separate and old grants never expand',async()=>{
     const old=connect(),read=connect('portfolio.read feed.read'),write=connect('portfolio.read feed.read feed.write');
-    assert.equal((await call('','GET',undefined,old.access_token)).status,401);
+    assert.equal((await call('','GET',undefined,old.access_token)).status,403);
     assert.equal((await call('','GET',undefined,read.access_token)).status,200);
-    assert.equal((await call('preferences','PUT',{instructions:'bad',revision:1},read.access_token)).status,401);
+    assert.equal((await call('preferences','PUT',{instructions:'bad',revision:1},read.access_token)).status,403);
     assert.equal((await call('posts/'+post.id,'PUT',{liked:true},write.access_token)).status,200);
     assert.equal(store.getFeedPost(user.id,post.id).liked,true);
     assert.equal(native.refreshAppTokens(native.APP_CLIENT_ID,old.refresh_token).scope,native.APP_SCOPE);
@@ -124,7 +124,7 @@ async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await r
     assert.equal(store.feedGroup(user.id,group.id).name,'我的科技');assert.equal(store.feedGroup(user.id,group.id).subscriptions.length,1);assert.equal(store.feedPreferences(user.id,group.id).revision,1);assert.equal(store.feedPreferences(user.id).revision,1);
     assert.equal(store.appendFeedPosts(user.id,normalized(),group.id),1);assert.equal(store.appendFeedPosts(user.id,normalized(),group.id),0);assert.equal(store.listFeedPosts(user.id,null,20,group.id).posts.length,1);
     assert.throws(()=>store.feedGroup(other.id,group.id),/不存在/);assert.equal((await call('?group='+group.id)).status,200);assert.equal((await call('preferences?group='+group.id,'PUT',{instructions:'stale',revision:0})).status,409);
-    const token=connect('portfolio.read feed.read');assert.equal((await call('groups','POST',{name:'No permission'},token.access_token)).status,401);
+    const token=connect('portfolio.read feed.read');assert.equal((await call('groups','POST',{name:'No permission'},token.access_token)).status,403);
     const {job}=store.createFeedJob(user.id,group.id);assert.equal(job.groupId,group.id);assert.equal(store.getFeedJob(user.id,undefined,group.id).id,job.id);assert.throws(()=>store.createFeedJob(user.id),/另一动态组/);db.prepare("UPDATE feed_jobs SET status='error' WHERE id=?").run(job.id);
   });
   await test('search has fixed endpoints, strict budgets and does not transmit credential-like queries',async()=>{

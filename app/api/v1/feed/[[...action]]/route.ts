@@ -3,9 +3,11 @@ import { FEED_PAGE_SIZE } from "@/lib/feedTypes";
 import { after } from "next/server";
 import { ok,fail } from "@/lib/api";
 import { getAuthUser,isTrustedMutationRequest,isAdmin } from "@/lib/auth";
+import { authenticateAppAccess } from "@/lib/appAuth";
+import { appV2Access } from "@/lib/appApiV2Policy";
 import { readJsonBody,readFormBody,RequestBodyTooLargeError } from "@/lib/requestBody";
 import { clientIp,rateLimit } from "@/lib/rateLimit";
-import { FeedError,feedMessages,getFeedJob,getFeedPost,saveFeedPreferences,updateFeedPost,createFeedGroup,listFeedGroups,feedGroup } from "@/lib/feedStore";
+import { FeedError,feedMessages,getFeedJob,getFeedPost,saveFeedPreferences,updateFeedPost,createFeedGroup,listFeedGroups,feedGroup,feedPreferences } from "@/lib/feedStore";
 import { discussFeed,feedSnapshot,requestFeedGeneration,runFeedJob } from "@/lib/feedGeneration";
 import { normalizeFeedSubscriptions,readFeedSubscription } from "@/lib/feedSubscriptions";
 
@@ -14,7 +16,14 @@ type Context={params:Promise<{action?:string[]}>};
 async function handle(request:Request,context:Context) {
   try {
     const user=getAuthUser(request);
-    if(!user)throw new FeedError("请先登录或重新连接",401);
+    if(!user) {
+      // A live App grant lacking an optional scope is not an expired connection.
+      const token=request.headers.get("authorization")?.match(/^Bearer (fat_[A-Za-z0-9_-]{43})$/)?.[1];
+      const grant=token?authenticateAppAccess(token,request):null;
+      const access=appV2Access(new URL(request.url).pathname.replace(/^\/api\/v1\//,"/api/v2/"),request.method);
+      if(grant&&access?.startsWith("feed.")&&!grant.scope.split(" ").includes(access))throw new FeedError("连接缺少此操作的授权范围",403);
+      throw new FeedError("请先登录或重新连接",401);
+    }
     if(!isTrustedMutationRequest(request))throw new FeedError("不允许跨站操作",403);
     if(!rateLimit(`feed-api:${user.id}:${clientIp(request)}`,180,60_000))throw new FeedError("请求过于频繁",429);
     const action=(await context.params).action||[],key=action.join("/"),method=request.method;
@@ -64,7 +73,7 @@ async function handle(request:Request,context:Context) {
     }
     if(method==="PUT"&&action.length===2&&action[0]==="groups") {
       if(!body||typeof body!=="object"||Array.isArray(body)||Object.keys(body).some(k=>!["name","revision"].includes(k))||typeof body.name!=="string")throw new FeedError("请填写名称及版本");
-      const current=feedSnapshot(user.id,null,1,action[1]);saveFeedPreferences(user.id,{instructions:current.preferences.instructions,name:body.name,revision:body.revision},action[1]);return ok(feedGroup(user.id,action[1]));
+      const current=feedPreferences(user.id,action[1]);saveFeedPreferences(user.id,{instructions:current.instructions,enabled:current.enabled,intervalMinutes:current.intervalMinutes,name:body.name,revision:body.revision},action[1]);return ok(feedGroup(user.id,action[1]));
     }
     if(method==="PUT"&&key==="preferences")return ok(saveFeedPreferences(user.id,body,groupId));
     if(method==="POST"&&key==="refresh") {

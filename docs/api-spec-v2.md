@@ -226,6 +226,10 @@ public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization �
 | 方法 | 路径 | 权限 |
 | --- | --- | --- |
 | GET | `/api/v2/feed` | feed.read |
+| GET | `/api/v2/feed/groups` | feed.read |
+| POST | `/api/v2/feed/groups` | feed.write |
+| PUT | `/api/v2/feed/groups/{groupId}` | feed.write |
+| POST | `/api/v2/feed/subscriptions/test` | feed.write |
 | GET | `/api/v2/feed/profile` | feed.read |
 | PUT | `/api/v2/feed/profile` | feed.write |
 | POST | `/api/v2/feed/profile/avatar` | feed.write |
@@ -735,7 +739,9 @@ Authorization: Bearer fat_<App access token>
 
 ## 7. 动态与分页
 
-feed.read读取本人帖子，feed.write管理指示、生成、喜欢/隐藏和讨论。GET feed 的 limit=1–50，cursor 为不透明游标；资金列表使用 limit / offset，记录使用 page / pageSize，不能把所有接口当同一种分页。
+feed.read读取本人帖子和分组，feed.write管理分组、订阅、指示、生成、喜欢/隐藏和讨论。两版发现新增可选 `feed_contract:{version:1,groups_path,subscriptions_test_path}`；路径使用被选择版本，修订号不改变API版本。完整冻结合约见 [App新闻动态](app-feed-news.md)，App本轮只选news组，不纳入people原帖；default也可能是people，先读groups再选择。
+
+GET feed 的 limit=1–50，cursor 为不透明游标；资金列表使用 limit / offset，记录使用 page / pageSize，不能把所有接口当同一种分页。POST feed/groups `{name,mode:"news"}` 新建；PUT feed/groups/{groupId} `{name,revision}` 改名并保留指示、订阅、开关和间隔。POST feed/subscriptions/test `{name,url}` 只测试公开RSS/Atom，不保存；实际订阅通过当前组preferences保存，最多8项。
 
 PUT feed/preferences：`{instructions,revision,enabled?,intervalMinutes?}`，revision冲突HTTP409；POST feed/refresh 空JSON启动任务，读取 jobs/{jobId} 的状态，完成后再读取帖子。POST posts/{postId}/discussion：`{text}`，1–2000字符，失败不保存半个讨论。
 

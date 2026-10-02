@@ -167,8 +167,8 @@ export function appIdentity(token: string, request: Request): Grant | null {
   const profileWrite = (method === "PUT" && path === "/api/v1/auth/profile") || (method === "POST" && path === "/api/v1/upload");
   // These owner-only actions verify account credentials again in the handler.
   const accountWrite = (method === "PUT" && path === "/api/v1/auth/email") || (method === "POST" && path === "/api/v1/auth/password");
-  const feedRead = method === "GET" && /^\/api\/v1\/feed(?:\/(?:profile|jobs(?:\/fj-[a-f0-9]{24})?|posts\/fp-[a-f0-9]{24}(?:\/discussion)?))?$/.test(path);
-  const feedWrite = (method === "PUT" && /^\/api\/v1\/feed\/(?:profile|preferences|posts\/fp-[a-f0-9]{24})$/.test(path)) || (method === "POST" && /^\/api\/v1\/feed\/(?:profile\/avatar|refresh|posts\/fp-[a-f0-9]{24}\/discussion)$/.test(path));
+  const feedRead = method === "GET" && /^\/api\/v1\/feed(?:\/(?:groups|profile|jobs(?:\/fj-[a-f0-9]{24})?|posts\/fp-[a-f0-9]{24}(?:\/discussion)?))?$/.test(path);
+  const feedWrite = (method === "PUT" && /^\/api\/v1\/feed\/(?:groups\/(?:default|fg-[a-f0-9]{24})|profile|preferences|posts\/fp-[a-f0-9]{24})$/.test(path)) || (method === "POST" && /^\/api\/v1\/feed\/(?:groups|subscriptions\/test|profile\/avatar|refresh|posts\/fp-[a-f0-9]{24}\/discussion)$/.test(path));
   const securityRead = method === "GET" && /^\/api\/v1\/auth\/(?:email-verification|totp|passkeys|security-devices)$/.test(path);
   const securityWrite = (method === "POST" && /^\/api\/v1\/auth\/(?:email-verification\/(?:request|confirm)|totp\/(?:setup|confirm|disable|backup-codes)|passkeys\/(?:register-options|register-verify))$/.test(path)) || (method === "DELETE" && /^\/api\/v1\/auth\/(?:passkeys|security-devices)$/.test(path));
   // New security handlers check explicit scope and report 403 without invalidating a live grant.
