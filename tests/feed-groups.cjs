@@ -31,7 +31,8 @@ module.exports=async function checkGroupSwitches(snapshot) {
     compiled._compile(ts.transpileModule(fs.readFileSync(file,'utf8')+'\nexport { GroupFeedView };',{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,file);
     Parent=compiled.exports.default;Group=compiled.exports.GroupFeedView;
   }finally{Module._load=originalLoad;}
-  const saved={document:global.document,window:global.window,matchMedia:global.matchMedia,setInterval:global.setInterval,clearInterval:global.clearInterval},events={addEventListener(){},removeEventListener(){}};
+  const saved={document:global.document,window:global.window,matchMedia:global.matchMedia,setInterval:global.setInterval,clearInterval:global.clearInterval},listeners=new Map(),events={addEventListener(key,fn){if(!listeners.has(key))listeners.set(key,new Set());listeners.get(key).add(fn);},removeEventListener(key,fn){listeners.get(key)?.delete(fn);}};
+  const dispatch=key=>{for(const fn of [...(listeners.get(key)||[])])fn();};
   let tick;
   global.setInterval=fn=>{tick=fn;return {fixture:true};};global.clearInterval=()=>{};
   global.document={...events,hidden:false};global.window={...events,history:{replaceState(state,unused,url){historyWrites.push({state,url});global.window.location.href=new URL(url,global.window.location.href).href;}},location:{href:'https://groups.test.example/trading?keep=1#feed'}};global.matchMedia=()=>({...events,matches:true});
@@ -59,6 +60,16 @@ module.exports=async function checkGroupSwitches(snapshot) {
     const mascot=nodes(parentTree).find(node=>node.type?.name==='Mascot');
     html=render(groups[1].id);assert(html.includes('<h1>名人动态</h1>'));assert(html.includes('动态信息组'));assert(html.includes('全部动态'));assert(html.includes('正在加载动态'));assert(!html.includes('美国新闻正文'));effects();
     const latePeople=requests.at(-1);assert(latePeople.url.includes('group='+groups[1].id));
+    global.document.hidden=true;dispatch('visibilitychange');assert(latePeople.signal.aborted,'backgrounding cancels the initial read');
+    const beforeResume=requests.length;
+    global.document.hidden=false;dispatch('visibilitychange');dispatch('focus');dispatch('pageshow');
+    assert.equal(requests.length,beforeResume+1,'foreground returns restart immediately and overlapping events share that read');
+    const resumed=requests.at(-1);assert(!resumed.signal.aborted);
+    resumed.reject(new client.FeedRequestError('恢复读取失败'));await settle();
+    html=render(groups[1].id);effects();assert(html.includes('恢复读取失败'),'a missing first snapshot has visible retry feedback even after a quiet resume');
+    const retryFirst=nodes(tree).find(node=>node.type==='button'&&node.props.children==='重新读取');
+    assert(retryFirst);retryFirst.props.onClick();retryFirst.props.onClick();assert.equal(requests.length,beforeResume+2,'retry starts exactly one bounded read');
+
     html=render();assert(html.includes('美国测试动态'));assert(!html.includes('正在加载动态'));effects();assert(latePeople.signal.aborted);
     latePeople.resolve(people);await settle();html=render();effects();assert(!html.includes('特朗普的原帖'));
     const updated={...news,posts:[{...newsPost,title:'美国已同步动态'}]};requests.at(-1).resolve(updated);await settle();html=render();effects();assert(html.includes('美国已同步动态'));

@@ -302,8 +302,7 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
   const dragMarketIndex = useRef<number | null>(null);
   // 已发起过请求的月份键：避免缓存回填导致的重复请求
   const loadedKeys = useRef<Set<string>>(new Set());
-  // 今日格子引用：打开财报日历自动定位到当前日期
-  const todayCellRef = useRef<HTMLButtonElement | null>(null);
+  const initializedDateKeys = useRef(new Set<string>());
 
   // URL 同步市场/类型筛选：刷新保持
   useEffect(() => {
@@ -420,20 +419,14 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
 
   const caps = marketKey === "CN" ? CN_CAPS : marketKey === "HK" ? HK_CAPS : US_CAPS;
 
-  // 自动定位当前日期：财报数据就绪后，若正处于本月，滚动到今日格子
+  // 初次显示本月时展开今日；后台数据刷新不能覆盖手选日期，也不能滚动其他工作区。
   useEffect(() => {
-    if (items === null) return;
+    if (items === null || initializedDateKeys.current.has(dataKey)) return;
     const now = new Date();
     if (cursor.y !== now.getFullYear() || cursor.m !== now.getMonth()) return;
-    const t = window.setTimeout(() => {
-      // 定位到今日并置顶，让下方财报详情直接可见
-      todayCellRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      // 自动展开今日财报详情，更直观
-      setSelectedDate(dateKey(now.getFullYear(), now.getMonth(), now.getDate()));
-    }, 300);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, cursorKey]);
+    initializedDateKeys.current.add(dataKey);
+    setSelectedDate(current => current ?? dateKey(now.getFullYear(), now.getMonth(), now.getDate()));
+  }, [items, dataKey, cursor.y, cursor.m]);
 
   const changeMarket = (k: MarketKey) => {
     setMarketKey(k);
@@ -784,7 +777,6 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
                   ) : (
                     <button
                       key={cell.key}
-                      ref={cell.isToday ? todayCellRef : undefined}
                       type="button"
                       aria-current={cell.isToday ? "date" : undefined}
                       onClick={() => toggleDate(cell.key)}

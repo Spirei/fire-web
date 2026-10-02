@@ -860,7 +860,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     restoreLocation();
     window.addEventListener("popstate", restoreLocation);
     return () => window.removeEventListener("popstate", restoreLocation);
-  }, [initialSub, isAdminUser]);
+  }, [initialSub, isAdminUser, searchParams]);
 
   useEffect(() => {
     const generation = settingsSaveGeneration.current;

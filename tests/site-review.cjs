@@ -294,7 +294,7 @@ function fontHeaderFixture(ext) {
     stop();
     assistantPage.notifyAssistantPage();
     assistantPage.setAssistantPage("");
-    assert(app.includes('pageMemory.current.get(key) || fallback'));
+    assert(app.includes('workspaceDestination(key,navTabs,pageMemory.current,visit,url,sub)'));
     assert(app.includes('scrollMemory.current.set(from,'));
     assert(app.includes('scrollMemory.current.set("pnl", { top: 0, inner: 0 })'));
     assert(app.includes('scrollIntentRef.current = true'));
@@ -306,6 +306,89 @@ function fontHeaderFixture(ext) {
     assert(preload.includes('assets: () => Promise.all(['));
     assert(preload.includes('import("@/components/PnlTrendChart")'));
   });
+  await test('calendar data opens today once without moving the document or overriding a chosen date', () => {
+    const source=fs.readFileSync(path.join(root,'components/views/EarningsCalendarView.tsx'),'utf8');
+    const start=source.indexOf('  // 初次显示本月时展开今日');
+    const code=require('typescript').transpileModule(source.slice(start,source.indexOf('  const changeMarket',start)),{compilerOptions:{target:99}}).outputText;
+    const now=new Date(),cursor={y:now.getFullYear(),m:now.getMonth()},initializedDateKeys={current:new Set()};
+    let selected=null,calls=0;
+    const state={items:[],dataKey:'US:month',cursor,initializedDateKeys,Date,useEffect:fn=>fn(),dateKey:()=> 'today',setSelectedDate:fn=>{selected=fn(selected);++calls;}};
+    require('node:vm').runInNewContext(code,state);assert.equal(selected,'today');assert.equal(calls,1);
+    selected='chosen';state.items=[{}];require('node:vm').runInNewContext(code,state);assert.equal(selected,'chosen');assert.equal(calls,1);
+    state.dataKey='HK:month';require('node:vm').runInNewContext(code,state);assert.equal(selected,'chosen');
+    assert(!code.includes('scrollIntoView')&&!code.includes('setTimeout'));
+  });
+  await test('reload scroll waits for feed content and yields to user input or cancellation', () => {
+    const {restoreWorkspaceScroll}=require('../lib/workspaceScroll.ts');
+    const original={MutationObserver:global.MutationObserver,requestAnimationFrame:global.requestAnimationFrame,cancelAnimationFrame:global.cancelAnimationFrame,window:global.window};
+    const frames=new Map(),listeners=new Map();let mutation,loading=true,restored=0,seq=0;
+    global.MutationObserver=class{constructor(fn){mutation=fn;}observe(){}disconnect(){}};
+    global.requestAnimationFrame=fn=>{frames.set(++seq,fn);return seq;};global.cancelAnimationFrame=id=>frames.delete(id);
+    global.window={addEventListener:(key,fn)=>listeners.set(key,fn),removeEventListener:key=>listeners.delete(key)};
+    const paint=()=>{const batch=[...frames.values()];frames.clear();batch.forEach(fn=>fn());};
+    try{
+      const panel={querySelector:()=>loading?{}:null};
+      restoreWorkspaceScroll(panel,()=>++restored);assert.equal(frames.size,0);
+      loading=false;mutation();paint();paint();assert.equal(restored,1);assert.equal(listeners.size,0);
+      restoreWorkspaceScroll(panel,()=>++restored);listeners.get('wheel')();paint();paint();assert.equal(restored,1);
+      const cancel=restoreWorkspaceScroll(panel,()=>++restored);cancel();paint();paint();assert.equal(restored,1);assert.equal(listeners.size,0);
+    }finally{Object.assign(global,original);}
+  });
+  await test('workspace navigation claims history scroll once and releases the original policy on exit', () => {
+    const {ownWorkspaceScroll}=require('../lib/workspaceScroll.ts');
+    const history={scrollRestoration:'auto'};
+    const listeners=new Map(),events={addEventListener:(key,fn)=>listeners.set(key,fn),removeEventListener:key=>listeners.delete(key)};
+    const release=ownWorkspaceScroll(history,events);
+    assert.equal(history.scrollRestoration,'manual');
+    listeners.get('pagehide')();assert.equal(history.scrollRestoration,'auto','refresh stays browser-owned');
+    listeners.get('pageshow')();assert.equal(history.scrollRestoration,'manual','BFCache return resumes workspace policy');
+    release();assert.equal(history.scrollRestoration,'auto');
+    assert.equal(listeners.size,0);
+    history.scrollRestoration='manual';
+    ownWorkspaceScroll(history,events)();assert.equal(history.scrollRestoration,'manual');
+    const app=fs.readFileSync(path.join(root,'components/RecordsApp.tsx'),'utf8');
+    assert(app.includes('releaseScrollOwnershipRef.current ??= ownWorkspaceScroll(window.history, window)'));
+    assert(app.includes('releaseScrollOwnershipRef.current = null'));
+  });
+  await test('tabs, links and browser history share retention, route ownership and settings reset rules', () => {
+    const {workspaceForPath,workspaceDestination}=require('../lib/workspaceRouting.ts');
+    const tabs=[{key:'holdings',url:'/holdings'},{key:'watchlist',url:'/watchlist'},{key:'settings',url:'/settings'},{key:'assets',url:'/asset-analysis'}];
+    const memory=new Map([['watchlist','/watchlist?market=HK#saved'],['settings','/settings?sub=palette']]);
+    assert.equal(workspaceForPath('/watchlist/US.AAPL',tabs),'watchlist');
+    assert.equal(workspaceForPath('/watchlisting',tabs),undefined);
+    assert.equal(workspaceForPath('/asset-pnl-analysis',tabs),'pnl');
+    assert.equal(workspaceDestination('watchlist',tabs,memory,'tab').url,'/watchlist?market=HK#saved');
+    assert.deepEqual(workspaceDestination('watchlist',tabs,memory,'history','/watchlist/US.AAPL'),{url:'/watchlist/US.AAPL',reset:false,push:false});
+    assert.equal(workspaceDestination('settings',tabs,memory,'tab').url,'/settings');
+    assert.equal(workspaceDestination('settings',tabs,memory,'history','/settings?sub=palette').reset,false,'history keeps unsaved settings drafts');
+    assert.deepEqual(workspaceDestination('settings',tabs,memory,'link','/settings?category=account'),{url:'/settings?category=account',reset:true,push:true});
+    assert.equal(workspaceDestination('unknown',tabs,memory,'tab'),null);
+    const source=fs.readFileSync(path.join(root,'components/RecordsApp.tsx'),'utf8');
+    const start=source.indexOf('  const activateWorkspace');
+    const end=source.indexOf('  const navigateTo',start);
+    const runtime=ts.transpileModule(source.slice(start,end)+'\nexports.activateWorkspace=activateWorkspace;',{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+    const exports={},writes=[],reset=[],left=[],retained=[],activeTabRef={current:'holdings'},pageMemory={current:memory},workspaceUrlRef={current:'/holdings?symbol=US.AAPL'};
+    const window={location:{origin:'https://local.test',pathname:'/watchlist',search:'?market=HK',hash:''},history:{pushState:(_,__,url)=>writes.push(url)}};
+    require('node:vm').runInNewContext(runtime,{exports,window,URL,performance:{now:()=>100},navigationTimingRef:{current:null},workspaceDestination,navTabs:tabs,pageMemory,workspaceUrlRef,activeTabRef,scrollMemory:{current:new Map()},scrollIntentRef:{current:false},assetReturnRef:{current:null},restoreAssetScrollRef:{current:false},mobilePrimaryOrder:[],useCallback:fn=>fn,preparePageSwitch(){},rememberLeaving:(key,url)=>left.push([key,url]),mobilePanelDirection:()=>'',setPanelDirection(){},setActiveTab(){},retainTab:key=>retained.push(key),setSettingsSub(){},reopenTab:key=>reset.push(key)});
+    exports.activateWorkspace('watchlist','history','/watchlist?market=HK');
+    assert.deepEqual(left,[['holdings','/holdings?symbol=US.AAPL']],'popstate captures the leaving URL before the address bar changes');
+    assert.equal(reset.length,0);assert.equal(writes.length,0);assert.deepEqual(retained,['watchlist']);
+    exports.activateWorkspace('settings','link','/settings?category=account');assert.deepEqual(reset,['settings']);assert.deepEqual(writes,['/settings?category=account']);
+  });
+  await test('navigation timing waits for page code and ignores a superseded measurement', () => {
+    const {observeWorkspaceReady}=require('../lib/workspaceTiming.ts');
+    const saved={MutationObserver:global.MutationObserver,requestAnimationFrame:global.requestAnimationFrame,cancelAnimationFrame:global.cancelAnimationFrame,performance:global.performance};
+    let check,waiting=true,now=100,id=0;const frames=new Map(),samples=[];
+    global.MutationObserver=class{constructor(fn){check=fn;}observe(){}disconnect(){}};
+    global.requestAnimationFrame=fn=>{frames.set(++id,fn);return id;};global.cancelAnimationFrame=id=>frames.delete(id);global.performance={now:()=>now};
+    const paint=()=>{const [key,fn]=frames.entries().next().value;frames.delete(key);fn();};
+    const panel={querySelector:selector=>selector==='.workspace-view-loading'&&waiting?{}:null};
+    try {
+      const stop=observeWorkspaceReady(panel,now,(ms,failed)=>samples.push([ms,failed]));assert.equal(frames.size,0);
+      waiting=false;check();paint();now=140;paint();assert.deepEqual(samples,[[40,false]]);stop();
+      const cancelled=observeWorkspaceReady(panel,now,()=>samples.push('late'));cancelled();assert.equal(frames.size,0);assert.equal(samples.length,1);
+    }finally {for(const [key,value] of Object.entries(saved)){if(value===undefined)delete global[key];else global[key]=value;}}
+  });
   await test('reselecting workspace preserves position while settings tab clears stale detail links', () => {
     const vm = require('node:vm');
     const source = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
@@ -316,7 +399,7 @@ function fontHeaderFixture(ext) {
     exports.selectTab('assets'); assert.equal(calls.length,0);
     exports.selectTab('settings'); exports.selectTab('settings'); assert.deepEqual(calls,[['settings',null]]);
     exports.selectTab('holdings'); assert.deepEqual(calls[1],['holdings',null]);
-    assert(source.includes('activeTabRef.current = key;\n      setActiveTab(key);'));
+    assert(/activeTabRef.current = key;\s+setActiveTab\(key\)/.test(source));
     const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
     assert(settings.includes('function openCategory(key: string) {\n    if (categoryPage === key) return;'));
     const workspace = fs.readFileSync(path.join(root, 'components/WorkspaceNavigation.tsx'), 'utf8');

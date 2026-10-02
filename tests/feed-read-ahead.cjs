@@ -19,5 +19,26 @@ module.exports=async function checkReadAhead(snapshot) {
   warm=cache.preload('people','duan');requests.at(-1).reject(new Error('401'));await warm;assert.equal(cache.peek('people','duan'),null);
   const savedNow=Date.now;let clock=savedNow();Date.now=()=>clock;
   try{warm=cache.preload('people','duan');requests.at(-1).resolve(snapshot);await warm;clock+=20_001;assert.equal(cache.peek('people','duan'),null);}finally{Date.now=savedNow;cache.invalidate();}
+  const {FeedTimelineCache}=require('../lib/feedTimelineCache.ts');
+  const seed={...snapshot,group:{...snapshot.group,id:'default'}};
+  const timelines=new FeedTimelineCache(request,seed);
+  assert.equal(timelines.initial('default','',seed.preferences.revision),seed);
+  assert.equal(timelines.initial('other',''),null);assert.equal(timelines.initial('default','duan'),null);
+  timelines.invalidate('default');assert.equal(timelines.initial('default',''),null,'a mutation cannot resurrect the original server snapshot');
+  timelines.remember('people','duan',snapshot);assert.equal(timelines.restore('people','duan',snapshot.preferences.revision),snapshot);
+  assert.equal(timelines.restore('people','trump'),null);assert.equal(timelines.restore('people','duan',snapshot.preferences.revision+1),null);
+  const intent=timelines.preload('people','trump'),previousIntent=requests.at(-1);
+  const changed={...snapshot,preferences:{...snapshot.preferences,revision:snapshot.preferences.revision+1}};
+  timelines.remember('people','duan',changed);assert(previousIntent.signal.aborted,'a confirmed new revision cancels old intent reads');
+  previousIntent.resolve(snapshot);await intent;assert.equal(timelines.restore('people','trump'),null);
+  const translationIntent=timelines.preload('people','trump'),oldTranslation=requests.at(-1);
+  timelines.remember('people','duan',{...changed,posts:changed.posts.map((post,index)=>index===0?{...post,title:'translation changed'}:post)});
+  assert(oldTranslation.signal.aborted,'new content also invalidates intent reads when preferences stay unchanged');
+  oldTranslation.resolve(changed);await translationIntent;assert.equal(timelines.restore('people','trump'),null);
+  const another=timelines.preload('other','duan'),otherIntent=requests.at(-1);
+  timelines.invalidate('people');assert(!otherIntent.signal.aborted,'writes only invalidate their own group');
+  timelines.pause();assert(otherIntent.signal.aborted);otherIntent.resolve(snapshot);await another;
+  assert.equal(timelines.restore('people','duan'),null);
+  console.log('PASS one timeline cache isolates confirmed/warm snapshots, removes stale seeds and applies group-scoped revision invalidation');
   console.log('PASS bounded read-ahead shares requests, isolates groups/authors, and rejects expired, cancelled or invalidated results');
 };

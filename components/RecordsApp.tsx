@@ -41,6 +41,9 @@ import type { WatchGroup } from "@/lib/watchGroups";
 import { useDesktopViewport, useFourDoorViewport, useTabletDevice } from "@/lib/useDesktopViewport";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { preloadView } from "@/lib/viewPreload";
+import { workspaceForPath, workspaceDestination, type WorkspaceVisit } from "@/lib/workspaceRouting";
+import { observeWorkspaceReady } from "@/lib/workspaceTiming";
+import { ownWorkspaceScroll, restoreWorkspaceScroll } from "@/lib/workspaceScroll";
 import { mobileWorkspaceGroups } from "@/lib/workspaceNavigation";
 
 // 默认保留服务端渲染：刷新当前页仍随 HTML 直接呈现内容；仅客户端代码按页签拆包。
@@ -188,8 +191,42 @@ export default function RecordsApp({
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
   const pageMemory = useRef(new Map<string, string>());
+  const workspaceUrlRef = useRef<string | null>(null);
+  const navigationTimingRef = useRef<{key:string;start:number}|null>(null);
   const scrollMemory = useRef(new Map<string, { top: number; inner: number }>());
   const scrollIntentRef = useRef(false);
+  const releaseScrollOwnershipRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => {
+    releaseScrollOwnershipRef.current?.();
+    releaseScrollOwnershipRef.current = null;
+  }, []);
+  useLayoutEffect(() => {
+    const url = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    let saved: { url: string; top: number; inner: number } | null = null;
+    try {
+      saved = JSON.parse(sessionStorage.getItem("fire:workspace-reload-scroll") || "null");
+      if (saved?.url !== url) sessionStorage.removeItem("fire:workspace-reload-scroll");
+    } catch { /* Restricted storage leaves restoration to the browser. */ }
+    const panel = contentRef.current?.querySelector<HTMLElement>(".tab-panel:not([hidden])");
+    if (panel) panel.dataset.workspaceScrollResult = saved?.url === url ? "waiting" : "browser";
+    const cancel = saved?.url === url && Number.isFinite(saved.top) && Number.isFinite(saved.inner) && panel
+      ? restoreWorkspaceScroll(panel, () => {
+        if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== url) return;
+        panel.dataset.workspaceScrollResult = "restored";
+        window.scrollTo({ top: saved.top, behavior: "instant" });
+        contentRef.current?.scrollTo({ top: saved.inner, behavior: "instant" });
+        try { sessionStorage.removeItem("fire:workspace-reload-scroll"); } catch { /* Optional snapshot. */ }
+      }) : undefined;
+    const save = () => {
+      cancel?.();
+      try { sessionStorage.setItem("fire:workspace-reload-scroll", JSON.stringify({
+        url: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+        top: window.scrollY, inner: contentRef.current?.scrollTop || 0
+      })); } catch { /* Scroll snapshots are optional. */ }
+    };
+    window.addEventListener("pagehide", save);
+    return () => { cancel?.(); window.removeEventListener("pagehide", save); };
+  }, []);
   const quoteFetchedAtRef = useRef(0);
   const panels = useRef(new Map<TabKey, ReactNode>());
   const panelBuiltStamp = useRef(new Map<TabKey, object>());
@@ -232,6 +269,22 @@ export default function RecordsApp({
   const mobilePrimaryOrder = useMemo(() => mobileWorkspaceGroups(navTabs, mobileNavigationOrder).primary.map(tab => tab.key), [navTabs, mobileNavigationOrder]);
   const [navReady, setNavReady] = useState(true);
   const searchParams = useSearchParams();
+  useLayoutEffect(() => {
+    const timing=navigationTimingRef.current;
+    const panel=contentRef.current?.querySelector<HTMLElement>(".tab-panel:not([hidden])");
+    if(!timing||timing.key!==activeTab||!panel)return;
+    delete panel.dataset.workspaceOpenMs;
+    panel.dataset.workspaceOpenResult="loading";
+    return observeWorkspaceReady(panel,timing.start,(ms,failed)=>{
+      if(navigationTimingRef.current!==timing)return;
+      panel.dataset.workspaceOpenMs=String(ms);
+      panel.dataset.workspaceOpenResult=failed?"error":"ready";
+      navigationTimingRef.current=null;
+    });
+  },[activeTab,searchParams,panelEpoch]);
+  useLayoutEffect(() => {
+    workspaceUrlRef.current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  }, [activeTab, searchParams]);
   const [settingsSub, setSettingsSub] = useState<string | null>(() => searchParams.get("sub"));
   const [settingsSubReady, setSettingsSubReady] = useState(true);
   const [groups, setGroups] = useState<GroupConfig[]>(initialSettings.groups);
@@ -492,17 +545,18 @@ export default function RecordsApp({
     };
   }, [records.length, refreshQuotes, activeTab]);
 
-  const rememberPage = useCallback((key: string) => {
-    pageMemory.current.set(key, `${window.location.pathname}${window.location.search}${window.location.hash}`);
+  const rememberPage = useCallback((key: string, previousUrl?: string | null) => {
+    pageMemory.current.set(key, previousUrl || `${window.location.pathname}${window.location.search}${window.location.hash}`);
   }, []);
-  const rememberLeaving = useCallback((from: string) => {
-    rememberPage(from);
+  const rememberLeaving = useCallback((from: string, previousUrl?: string | null) => {
+    rememberPage(from, previousUrl);
     scrollMemory.current.set(from, {
       top: window.scrollY,
       inner: contentRef.current?.scrollTop || 0
     });
   }, [rememberPage]);
   const preparePageSwitch = useCallback(() => {
+    releaseScrollOwnershipRef.current ??= ownWorkspaceScroll(window.history, window);
     document.documentElement.classList.add("fire-workspace-switching");
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && contentRef.current?.contains(focused)) focused.blur();
@@ -516,33 +570,32 @@ export default function RecordsApp({
     setPanelEpoch((current) => ({ ...current, [key]: (current[key] ?? 0) + 1 }));
   }, []);
 
-  // 统一的无感导航：只改状态 + 地址栏，不触发路由重载
-  const navigateTo = useCallback(
-    (key: TabKey, sub?: string | null) => {
-      const from = activeTabRef.current;
-      if (from !== key) {
-        preparePageSwitch();
-        rememberLeaving(from);
-        scrollIntentRef.current = true;
-      }
-      setPanelDirection(mobilePanelDirection(from, key, mobilePrimaryOrder));
-      activeTabRef.current = key;
-      setActiveTab(key);
-      retainTab(key);
-      const tab = navTabs.find((t) => t.key === key);
-      const fallback = key === "pnl" ? "/asset-pnl-analysis" : tab?.url || `/${key}`;
-      if (key === "settings") {
-        setSettingsSub(sub ?? null);
-        pageMemory.current.delete(key);
-        scrollMemory.current.set(key, { top: 0, inner: 0 });
-        reopenTab(key);
-        window.history.pushState({}, "", fallback + (sub ? `?sub=${sub}` : ""));
-      } else {
-        window.history.pushState({}, "", pageMemory.current.get(key) || fallback);
-      }
-    },
-    [navTabs, mobilePrimaryOrder, preparePageSwitch, rememberLeaving, retainTab, reopenTab]
-  );
+  // Tabs, explicit links and browser history use the same activation and retention rules.
+  const activateWorkspace = useCallback((key:TabKey,visit:WorkspaceVisit,url?:string,sub?:string|null) => {
+    const destination=workspaceDestination(key,navTabs,pageMemory.current,visit,url,sub);
+    if(!destination)return;
+    const from=activeTabRef.current;
+    if(from!==key||destination.reset)navigationTimingRef.current={key,start:performance.now()};
+    if(from!==key){
+      preparePageSwitch();
+      rememberLeaving(from,visit==="history"?workspaceUrlRef.current:undefined);
+      scrollIntentRef.current = true;
+    }
+    setPanelDirection(mobilePanelDirection(from,key,mobilePrimaryOrder));
+    activeTabRef.current = key;
+    setActiveTab(key);
+    retainTab(key);
+    pageMemory.current.set(key,destination.url);
+    if(key==="settings")setSettingsSub(new URL(destination.url,window.location.origin).searchParams.get("sub"));
+    if(destination.reset){
+      scrollMemory.current.set(key,{top:0,inner:0});
+      reopenTab(key);
+    }
+    if(from==="pnl"&&key==="assets")restoreAssetScrollRef.current=Boolean(assetReturnRef.current);
+    workspaceUrlRef.current=destination.url;
+    if(destination.push&&`${window.location.pathname}${window.location.search}${window.location.hash}`!==destination.url)window.history.pushState({},"",destination.url);
+  },[navTabs,mobilePrimaryOrder,preparePageSwitch,rememberLeaving,retainTab,reopenTab]);
+  const navigateTo = useCallback((key:TabKey,sub?:string|null)=>activateWorkspace(key,"tab",undefined,sub),[activateWorkspace]);
 
   const selectTab = useCallback(
     (key: TabKey) => {
@@ -563,24 +616,10 @@ export default function RecordsApp({
 
   const navigateFromAssistant = useCallback((path: string) => {
     const url = new URL(path, window.location.origin);
-    const target = url.pathname === "/asset-pnl-analysis"
-      ? "pnl"
-      : navTabs.find((tab) => (tab.url || `/${tab.key}`) === url.pathname)?.key;
-    if (!target) return;
-    const next = target as TabKey;
-    if (activeTabRef.current !== next) {
-      preparePageSwitch();
-      rememberLeaving(activeTabRef.current);
-      scrollIntentRef.current = true;
-    }
-    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
-    pageMemory.current.set(next, nextUrl);
-    setPanelDirection(mobilePanelDirection(activeTabRef.current, next, mobilePrimaryOrder));
-    activeTabRef.current = next;
-    setActiveTab(next);
-    retainTab(next);
-    window.history.pushState({}, "", nextUrl);
-  }, [navTabs, mobilePrimaryOrder, preparePageSwitch, rememberLeaving, retainTab]);
+    if(url.origin!==window.location.origin)return;
+    const key=workspaceForPath(url.pathname,navTabs);
+    if(key)activateWorkspace(key as TabKey,"link",`${url.pathname}${url.search}${url.hash}`);
+  },[navTabs,activateWorkspace]);
 
   /* ---------- 导航页签可拖动排序 + 自动保存 ---------- */
   const tabDragKeyRef = useRef<TabKey | null>(null);
@@ -643,34 +682,15 @@ export default function RecordsApp({
     }
   }, [navTabs, activeTab, navReady]);
 
-  // 浏览器前进/后退时同步页签
+  // History updates URL filters without remounting an already-open workspace.
   useEffect(() => {
-    function showFromHistory(key: TabKey) {
-      const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      pageMemory.current.set(key, here);
-      reopenTab(key);
-      setPanelDirection(mobilePanelDirection(activeTabRef.current, key, mobilePrimaryOrder));
-      if (activeTabRef.current === "pnl" && key === "assets") restoreAssetScrollRef.current = Boolean(assetReturnRef.current);
-      if (activeTabRef.current !== key) {
-        preparePageSwitch();
-        scrollIntentRef.current = true;
-      }
-      activeTabRef.current = key;
-      setActiveTab(key);
-      retainTab(key);
-      if (key === "settings") setSettingsSub(new URLSearchParams(window.location.search).get("sub"));
-    }
     function onPop() {
-      if (window.location.pathname === "/asset-pnl-analysis") {
-        showFromHistory("pnl");
-        return;
-      }
-      const tab = navTabs.find((t) => (t.url || `/${t.key}`) === window.location.pathname);
-      if (tab) showFromHistory(tab.key as TabKey);
+      const key=workspaceForPath(window.location.pathname,navTabs);
+      if(key)activateWorkspace(key as TabKey,"history",`${window.location.pathname}${window.location.search}${window.location.hash}`);
     }
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [navTabs, mobilePrimaryOrder, preparePageSwitch, reopenTab, retainTab]);
+    window.addEventListener("popstate",onPop);
+    return()=>window.removeEventListener("popstate",onPop);
+  },[navTabs,activateWorkspace]);
 
   useEffect(() => {
     function onVisibility() {
@@ -1194,7 +1214,7 @@ export default function RecordsApp({
             panelBuiltStamp.current.set(tab, panelDataStamp);
           }
           return (
-            <div key={`${tab}:${panelEpoch[tab] ?? 0}`} hidden={!active} data-direction={active ? panelDirection : "none"} className="tab-panel min-w-0">
+            <div key={`${tab}:${panelEpoch[tab] ?? 0}`} hidden={!active} data-workspace={tab} data-direction={active ? panelDirection : "none"} className="tab-panel min-w-0">
               <WorkspacePanel active={active} path={tab === "pnl" ? "/asset-pnl-analysis" : navTabs.find(item => item.key === tab)?.url || `/${tab}`} query={active ? searchParams.toString() : new URL(pageMemory.current.get(tab) || "/", "http://workspace.invalid").search.slice(1)}>{node}</WorkspacePanel>
             </div>
           );

@@ -9,6 +9,22 @@ let count = 0;
 async function test(name, run) { await run(); console.log('PASS ' + name); count++; }
 const snapshot = (patch = {}) => ({ posts: [], nextCursor: null, job: null, preferences: { instructions: 'technology', revision: 1, enabled: true, intervalMinutes: 360 }, capabilities: { generate: true, search: 'news-rss', avatar: { image: '', video: null } }, ...patch });
 (async () => {
+  await test('read lifecycle resumes cancelled first reads, coalesces foreground events and ignores late results', () => {
+    const {FeedReadLifecycle}=require('../lib/feedReadLifecycle.ts');
+    const now=Date.now;let clock=1000;Date.now=()=>clock;
+    try {
+      const reads=new FeedReadLifecycle();assert(reads.shouldResume());
+      const first=reads.begin();assert(first);assert.equal(reads.begin(),null);
+      reads.cancel();assert(first.controller.signal.aborted);assert(reads.shouldResume());
+      const resumed=reads.begin();assert(resumed);assert.equal(reads.begin(),null);
+      reads.confirm(first.epoch);assert(!reads.current(first.epoch));
+      reads.finish(first.controller);assert(reads.pending,'an old finally cannot unlock the current read');
+      reads.confirm(resumed.epoch);reads.finish(resumed.controller);assert(!reads.shouldResume());
+      clock+=30_001;assert(reads.shouldResume());
+      const refresh=reads.begin();reads.finish(refresh.controller);assert(reads.shouldResume(),'failed refreshes remain retryable');
+      const warm=new FeedReadLifecycle(true);assert(!warm.shouldResume());
+    }finally {Date.now=now;}
+  });
   await test('evidence does not make the whole sentence a link; short highlights are bounded and text is unchanged', () => {
     const sources = [{ id: 's1', url: 'https://news.example/a' }];
     const segments = [{ text: '公司公布了最新季度财报，其中营收同比增长10%，同时提醒下一季度成本压力仍然存在。', sourceId: 's1', linkText: '营收同比增长10%' }];

@@ -10,7 +10,8 @@ import type { FeedJob,FeedMessage,FeedChrome,FeedPayload,FeedPost,FeedGroup,Feed
 import { observePanelVisibility,panelIsShown } from "@/lib/panelVisibility";
 import { feedRequest as api,FeedRequestError,feedJobRunning as running,feedEmptyCopy } from "@/lib/feedClient";
 import { feedChromeKey,reconcileFeedPayload } from "@/lib/feedSnapshots";
-import { FeedReadAhead } from "@/lib/feedReadAhead";
+import { FeedTimelineCache } from "@/lib/feedTimelineCache";
+import { FeedReadLifecycle } from "@/lib/feedReadLifecycle";
 import FeedAgentPanel, { validFeedAgentTab, type FeedAgentTab } from "@/components/FeedAgentPanel";
 import FeedNewsPost from "@/components/FeedNewsPost";
 import FeedOriginalPost from "@/components/FeedOriginalPost";
@@ -45,37 +46,32 @@ function Mascot({image,video,name,onClick}:{image:string;video:string|null;name:
 
 export default function FeedView({initial=null,initialNow=0}:{initial?:FeedPayload|FeedChrome|null;initialNow?:number}) {
   const canNavigate=useWorkspaceLocationGuard(),search=useSearchParams(),groupId=search.get("feedGroup")||"default",author=search.get("feedPerson")||"";
-  const entryGroup=useRef(groupId).current,readAhead=useRef<FeedReadAhead|null>(null),pageRoot=useRef<HTMLElement>(null);
-  if(!readAhead.current)readAhead.current=new FeedReadAhead(api);
-  const preload=useCallback((id:string,person="")=>{if(canNavigate()&&!document.hidden&&panelIsShown(pageRoot.current))void readAhead.current?.preload(id,person);},[canNavigate]);
-  const read=useCallback((id:string,person:string,limit:number,signal:AbortSignal)=>readAhead.current!.read(id,person,limit,signal),[]);
+  const entryGroup=useRef(groupId).current,timeline=useRef<FeedTimelineCache|null>(null),pageRoot=useRef<HTMLElement>(null);
+  if(!timeline.current)timeline.current=new FeedTimelineCache(api,initial&&"posts" in initial?initial:null);
+  const preload=useCallback((id:string,person="")=>{if(canNavigate()&&!document.hidden&&panelIsShown(pageRoot.current))void timeline.current?.preload(id,person);},[canNavigate]);
+  const read=useCallback((id:string,person:string,limit:number,signal:AbortSignal)=>timeline.current!.read(id,person,limit,signal),[]);
   // The shared header stays mounted; snapshots belong to this page/account only.
-  const [chrome,setChrome]=useState<FeedChrome|null>(initial),snapshots=useRef(new Map<string,{revision:number;byAuthor:Map<string,FeedPayload>}>()),active=useRef({groupId,author});
+  const [chrome,setChrome]=useState<FeedChrome|null>(initial),active=useRef({groupId,author});
   active.current={groupId,author};
   const remember=useCallback((id:string,person:string,payload:FeedPayload)=>{
     if(id!==active.current.groupId||person!==active.current.author)return;
-    const previous=snapshots.current.get(id),group=previous?.revision===payload.preferences.revision?previous:{revision:payload.preferences.revision,byAuthor:new Map<string,FeedPayload>()};
-    const prior=group.byAuthor.get(person);
-    if(prior&&prior.posts!==payload.posts)group.byAuthor.clear();
-    group.byAuthor.set(person,payload);snapshots.current.delete(id);snapshots.current.set(id,group);
-    while(snapshots.current.size>8)snapshots.current.delete(snapshots.current.keys().next().value!);
+    timeline.current!.remember(id,person,payload);
     setChrome(previous=>feedChromeKey(previous)===feedChromeKey(payload)?previous:payload);
   },[]);
   const revision=chrome?.groups?.find(group=>group.id===groupId)?.revision;
-  const candidate=snapshots.current.get(groupId)?.byAuthor.get(author)||readAhead.current.peek(groupId,author);
-  const restored=candidate&&(revision===undefined||candidate.preferences.revision===revision)?candidate:null,seed=restored||(groupId==="default"&&!author&&initial&&"posts" in initial&&(revision===undefined||initial.preferences.revision===revision)?initial:null);
-  const invalidateSnapshots=useCallback((id:string)=>{snapshots.current.get(id)?.byAuthor.clear();readAhead.current?.invalidate(id);},[]);
+  const restored=timeline.current.restore(groupId,author,revision),seed=restored||timeline.current.initial(groupId,author,revision);
+  const invalidateSnapshots=useCallback((id:string)=>{timeline.current?.invalidate(id);},[]);
   useEffect(()=>{
     // Warm one person in the current group. Other groups only load on user intent.
     let cancelled=false;
     const timer=setTimeout(()=>{
       if(!canNavigate()||document.hidden||!panelIsShown(pageRoot.current))return;
-      const person=chrome?.groups?.find(group=>group.id===groupId&&group.mode==="people")?.people?.find(id=>id!==author&&!snapshots.current.get(groupId)?.byAuthor.has(id));
-      if(person&&!cancelled)void readAhead.current?.preload(groupId,person);
+      const person=chrome?.groups?.find(group=>group.id===groupId&&group.mode==="people")?.people?.find(id=>id!==author&&!timeline.current?.restore(groupId,id,revision));
+      if(person&&!cancelled)void timeline.current?.preload(groupId,person);
     },800);
     return()=>{cancelled=true;clearTimeout(timer);};
   },[chrome,groupId,author,canNavigate]);
-  useEffect(()=>{const pause=()=>{if(document.hidden||!panelIsShown(pageRoot.current))readAhead.current?.invalidate();};document.addEventListener("visibilitychange",pause);const release=pageRoot.current?observePanelVisibility(pageRoot.current,pause):()=>{};return()=>{release();document.removeEventListener("visibilitychange",pause);readAhead.current?.invalidate();};},[]);
+  useEffect(()=>{const pause=()=>{if(document.hidden||!panelIsShown(pageRoot.current))timeline.current?.pause();};document.addEventListener("visibilitychange",pause);const release=pageRoot.current?observePanelVisibility(pageRoot.current,pause):()=>{};return()=>{release();document.removeEventListener("visibilitychange",pause);timeline.current?.pause();};},[]);
   function openAgent(){if(!canNavigate())return;const url=new URL(window.location.href);url.searchParams.set("feedAgent","profile");window.history.replaceState(null,"",url.pathname+url.search+url.hash);}
   return <section ref={pageRoot} className="alcor-feed feed-theme" aria-label="动态">
     <div className="feed-mascot-top">{chrome?<><Mascot name={chrome.agent?.name||"Alcor"} image={chrome.capabilities.avatar.image} video={chrome.capabilities.avatar.video} onClick={openAgent}/><button type="button" className="feed-mascot-name" onClick={openAgent}>{chrome.agent?.name||"Alcor"}</button></>:<div className="feed-mascot-placeholder" aria-hidden="true"/>}</div>
@@ -110,8 +106,11 @@ function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=ini
   const [shown,setShown]=useState(true);
   const root=useRef<HTMLDivElement>(null),loadedCount=useRef(initialSnapshot?.posts.length||FEED_PAGE_SIZE);
   const discussionLog=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null),discussionController=useRef<AbortController|null>(null),live=useRef(true);
-  const loadEpoch=useRef(0),readController=useRef<AbortController|null>(null),moreController=useRef<AbortController|null>(null),pendingIds=useRef(new Set<string>());
-  const following=useRef(true),readSince=useRef(0),requestLock=useRef(false),saveLock=useRef(false),sendLock=useRef(false);
+  const reads=useRef<FeedReadLifecycle|null>(null);
+  if(!reads.current)reads.current=new FeedReadLifecycle(!!initialSnapshot);
+  const readLifecycle=reads.current;
+  const moreController=useRef<AbortController|null>(null),pendingIds=useRef(new Set<string>());
+  const following=useRef(true),hasConfirmed=useRef(!!initialSnapshot),requestLock=useRef(false),saveLock=useRef(false),sendLock=useRef(false);
   const manualRefresh=useRef<{id:string;revision:number;result:FeedJob|null}|null>(null);
   if(!readingPerson)loadedCount.current=data?.posts.length||FEED_PAGE_SIZE;
   useEffect(()=>{const sync=()=>setShown(panelIsShown(root.current));sync();return root.current?observePanelVisibility(root.current,sync):undefined;},[]);
@@ -123,27 +122,28 @@ function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=ini
   },[shown,dataAuthor,readingPerson,!!data]);
   const cachedRead=useRef(cached),observedAuthor=useRef(author),awaitingPersonRead=useRef(false);
   cachedRead.current=cached;
-  if(observedAuthor.current!==author){observedAuthor.current=author;awaitingPersonRead.current=true;}
+  if(observedAuthor.current!==author){observedAuthor.current=author;awaitingPersonRead.current=true;hasConfirmed.current=!!cached;}
   // React repeats this render before committing, so a confirmed cached person never flashes a skeleton.
   if(readingPerson&&cached&&!pendingIds.current.size&&!saveLock.current&&!requestLock.current){setData(cached);setDataAuthor(author);setError("");setErrorAction(null);loadedCount.current=cached.posts.length||FEED_PAGE_SIZE;}
-  const invalidateReads=useCallback(()=>{++loadEpoch.current;readController.current?.abort();moreController.current?.abort();readController.current=null;moreController.current=null;setLoadingMore(false);},[]);
+  const invalidateReads=useCallback(()=>{readLifecycle.cancel();moreController.current?.abort();moreController.current=null;setLoadingMore(false);},[]);
   useEffect(()=>{if(!shown){invalidateReads();discussionController.current?.abort();sendLock.current=false;manualRefresh.current=null;setRefreshPending(false);setEditing(false);setMenu(null);setSelected(null);setSending(false);setPendingQuestion("");}},[shown]);
   useEffect(()=>()=>{manualRefresh.current=null;},[]);
   const load=useCallback(async(quiet=false)=>{
-    if(pendingIds.current.size||saveLock.current||requestLock.current||!panelIsShown(root.current))return;
+    if(pendingIds.current.size||saveLock.current||requestLock.current||document.hidden||!panelIsShown(root.current))return;
     if(quiet&&moreController.current&&!moreController.current.signal.aborted)return;
-    awaitingPersonRead.current=false;readController.current?.abort();moreController.current?.abort();moreController.current=null;setLoadingMore(false);
-    const controller=new AbortController();readController.current=controller;readSince.current=Date.now();
-    const epoch=++loadEpoch.current,target=Math.max(FEED_PAGE_SIZE,loadedCount.current);
+    const ticket=readLifecycle.begin();if(!ticket)return;
+    awaitingPersonRead.current=false;moreController.current?.abort();moreController.current=null;setLoadingMore(false);
+    const {controller,epoch}=ticket,target=Math.max(FEED_PAGE_SIZE,loadedCount.current);
     try{
       const next=onRead?await onRead(groupId,author,Math.min(50,target),controller.signal):await api<FeedPayload>(groupPath(`?limit=${Math.min(50,target)}`),"GET",undefined,controller.signal);
-      while(next.nextCursor&&next.posts.length<target&&epoch===loadEpoch.current){
+      while(next.nextCursor&&next.posts.length<target&&readLifecycle.current(epoch)){
         const page=await api<FeedPayload>(groupPath(`?limit=${Math.min(50,target-next.posts.length)}&cursor=${encodeURIComponent(next.nextCursor)}`),"GET",undefined,controller.signal);
         next.posts.push(...page.posts.filter(p=>!next.posts.some(old=>old.id===p.id)));
         if(!page.posts.length||page.nextCursor===next.nextCursor){next.nextCursor=null;break;}
         next.nextCursor=page.nextCursor;
       }
-      if(!live.current||epoch!==loadEpoch.current)return;
+      if(!live.current||!readLifecycle.current(epoch))return;
+      readLifecycle.confirm(epoch);hasConfirmed.current=true;
       setData(previous=>reconcileFeedPayload(previous,next));setDataAuthor(author);setError("");setErrorAction(null);setMoreError("");
       const tracked=manualRefresh.current;
       if(tracked){
@@ -151,14 +151,14 @@ function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=ini
         if(next.preferences.revision!==tracked.revision){manualRefresh.current=null;setRefreshPending(false);}
         else if(completed){manualRefresh.current=null;setRefreshPending(false);const succeeded=completed.status==="done"&&!completed.error;showToast(succeeded?"已刷新":completed.status==="done"?"部分来源未更新":"刷新失败",succeeded?"ok":"err");}
       }
-    }catch(e){if(live.current&&!controller.signal.aborted&&epoch===loadEpoch.current){if(manualRefresh.current?.result){manualRefresh.current=null;setRefreshPending(false);showToast("读取刷新结果失败","err");}if(!quiet||(e instanceof FeedRequestError&&e.status===401)){setError((e as Error).message);setErrorAction("load");}}}
-    finally{if(readController.current===controller)readController.current=null;}
+    }catch(e){if(live.current&&!controller.signal.aborted&&readLifecycle.current(epoch)){if(manualRefresh.current?.result){manualRefresh.current=null;setRefreshPending(false);showToast("读取刷新结果失败","err");}if(!quiet||!hasConfirmed.current||(e instanceof FeedRequestError&&e.status===401)){setError((e as Error).message);setErrorAction("load");}}}
+    finally{readLifecycle.finish(controller);}
   },[groupId,author,onRead]);
-  useEffect(()=>{const first=initialRead.current;loadedCount.current=(first?initialSnapshot:cachedRead.current)?.posts.length||FEED_PAGE_SIZE;live.current=true;if(!initialSnapshot||!first||restoreRead)void load(!!cachedRead.current||(first&&!!initialSnapshot&&restoreRead));initialRead.current=false;const timer=setInterval(()=>{if(!document.hidden&&panelIsShown(root.current)){setNow(Date.now());if(!readController.current)void load(true);}},60_000);setNow(Date.now());return()=>{live.current=false;++loadEpoch.current;readController.current?.abort();moreController.current?.abort();discussionController.current?.abort();clearInterval(timer);};},[load,initialSnapshot,restoreRead]);
+  useEffect(()=>{const first=initialRead.current;loadedCount.current=(first?initialSnapshot:cachedRead.current)?.posts.length||FEED_PAGE_SIZE;live.current=true;if(!initialSnapshot||!first||restoreRead)void load(!!cachedRead.current||(first&&!!initialSnapshot&&restoreRead));initialRead.current=false;const timer=setInterval(()=>{if(!document.hidden&&panelIsShown(root.current)){setNow(Date.now());if(!readLifecycle.pending)void load(true);}},60_000);setNow(Date.now());return()=>{live.current=false;readLifecycle.cancel();moreController.current?.abort();discussionController.current?.abort();clearInterval(timer);};},[load,initialSnapshot,restoreRead]);
   useEffect(()=>{if(data&&!readingPerson&&!pendingIds.current.size&&!saveLock.current&&!requestLock.current)onSnapshot?.(groupId,author,data);},[data,dataAuthor,groupId,author,onSnapshot,readingPerson,pendingPosts,saving,requesting]);
   useEffect(()=>{
     // A switch blocked by an in-flight like/save must resume when that write finishes.
-    if((readingPerson||awaitingPersonRead.current)&&shown&&!requesting&&!saving&&!Object.values(pendingPosts).some(Boolean)&&(!readController.current||readController.current.signal.aborted))void load(!!cachedRead.current);
+    if((readingPerson||awaitingPersonRead.current)&&shown&&!requesting&&!saving&&!Object.values(pendingPosts).some(Boolean)&&!readLifecycle.pending)void load(!!cachedRead.current);
   },[readingPerson,shown,requesting,saving,pendingPosts,load]);
   useEffect(()=>{
     setAvatarSeen(previous=>mergeFeedSeen(previous,savedSeen));
@@ -192,14 +192,14 @@ function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=ini
         if(!controller.signal.aborted&&!pendingIds.current.size&&!saveLock.current){
           if(manualRefresh.current?.id===next.id&&!running(next))manualRefresh.current.result=next;
           setData(p=>p&&p.job?.id===next.id?{...p,job:next}:p);
-          if(!running(next))void load(true);
+          if(!running(next)){invalidateReads();void load(true);}
         }
       }}catch{/* A background read failure must not replace the current feed. */}
       if(!stopped)timer=setTimeout(poll,2500);
     };
     timer=setTimeout(poll,2500);return()=>{stopped=true;controller.abort();clearTimeout(timer);};
-  },[data?.job?.id,data?.job?.status,refreshPending,load,shown]);
-  useEffect(()=>{const sync=()=>{if(document.hidden||!panelIsShown(root.current)){readController.current?.abort();moreController.current?.abort();return;}if(Date.now()-readSince.current>30_000&&!pendingIds.current.size&&!saveLock.current&&!requestLock.current)void load(true);};document.addEventListener("visibilitychange",sync);window.addEventListener("focus",sync);window.addEventListener("pageshow",sync);const release=root.current?observePanelVisibility(root.current,sync):()=>{};return()=>{release();document.removeEventListener("visibilitychange",sync);window.removeEventListener("focus",sync);window.removeEventListener("pageshow",sync);};},[load]);
+  },[data?.job?.id,data?.job?.status,refreshPending,load,shown,invalidateReads]);
+  useEffect(()=>{const sync=()=>{if(document.hidden||!panelIsShown(root.current)){invalidateReads();return;}if(readLifecycle.shouldResume()&&!pendingIds.current.size&&!saveLock.current&&!requestLock.current)void load(true);};document.addEventListener("visibilitychange",sync);window.addEventListener("focus",sync);window.addEventListener("pageshow",sync);const release=root.current?observePanelVisibility(root.current,sync):()=>{};return()=>{release();document.removeEventListener("visibilitychange",sync);window.removeEventListener("focus",sync);window.removeEventListener("pageshow",sync);};},[load,invalidateReads]);
   useEffect(()=>{
     const sync=(event:Event)=>{
       const detail=(event as CustomEvent<{id?:string;avatar?:string}>).detail;
@@ -266,22 +266,22 @@ function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=ini
   },[invalidateReads,groupId,onMutation]);
   const likePost=useCallback((post:FeedPost)=>void updatePost(post,{liked:!post.liked}),[updatePost]);
   async function more() {
-    if(readingPerson||!data?.nextCursor||moreController.current||pendingIds.current.size||saveLock.current||requestLock.current||!panelIsShown(root.current))return;
+    if(readingPerson||!data?.nextCursor||moreController.current||pendingIds.current.size||saveLock.current||requestLock.current||document.hidden||!panelIsShown(root.current))return;
     // A requested page takes priority over a quiet read of the existing range.
-    readController.current?.abort();readController.current=null;++loadEpoch.current;
+    readLifecycle.cancel();
     setLoadingMore(true);setMoreError("");
     const controller=new AbortController();moreController.current=controller;
-    const epoch=loadEpoch.current;let revalidate=false;
+    const epoch=readLifecycle.epoch;let revalidate=false;
     try{
       const next=await api<FeedPayload>(groupPath(`?limit=${FEED_PAGE_SIZE}&cursor=${encodeURIComponent(data.nextCursor)}`),"GET",undefined,controller.signal);
-      if(live.current&&!controller.signal.aborted&&epoch===loadEpoch.current){
+      if(live.current&&!controller.signal.aborted&&readLifecycle.current(epoch)){
         if(next.preferences.revision!==data.preferences.revision)revalidate=true;
         else{setData(p=>p?{...p,posts:[...p.posts,...next.posts.filter(n=>!p.posts.some(old=>old.id===n.id))],nextCursor:next.nextCursor}:next);setError("");setErrorAction(null);}
       }
-    }catch(e){if(live.current&&!controller.signal.aborted&&epoch===loadEpoch.current){if(e instanceof FeedRequestError&&e.status===401){setError(e.message);setErrorAction("load");}else setMoreError((e as Error).message);}}
+    }catch(e){if(live.current&&!controller.signal.aborted&&readLifecycle.current(epoch)){if(e instanceof FeedRequestError&&e.status===401){setError(e.message);setErrorAction("load");}else setMoreError((e as Error).message);}}
     finally{
       if(moreController.current===controller){moreController.current=null;if(live.current)setLoadingMore(false);}
-      if(live.current&&!controller.signal.aborted&&epoch===loadEpoch.current){if(revalidate)void load();else if(manualRefresh.current?.result)void load(true);}
+      if(live.current&&!controller.signal.aborted&&readLifecycle.current(epoch)){if(revalidate)void load();else if(manualRefresh.current?.result)void load(true);}
     }
   }
   const discuss=useCallback(async(post:FeedPost)=>{
@@ -313,7 +313,7 @@ function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=ini
   const isNew=(post:FeedPost)=>!!post.original&&!!visitSeen[post.original.person.id]&&isUnseenPost({author:post.original.person.id,date:post.publishedAt||""},visitSeen);
   const leadingNew=posts.findIndex(post=>!isNew(post));
   const changed=!!data&&(draft.trim()!==data.preferences.instructions||groupName.trim()!==(data.group?.name||"动态")||JSON.stringify(subscriptions)!==JSON.stringify(data.group?.subscriptions||[])||mode!==(data.group?.mode||"news")||JSON.stringify(people)!==JSON.stringify(data.group?.people||["trump","duan"])||autoUpdate!==data.preferences.enabled||interval!==data.preferences.intervalMinutes);
-  return <div ref={root} className="feed-group-view">
+  return <div ref={root} className="feed-group-view" data-feed-state={error?"error":!data||readingPerson?"loading":"ready"} data-feed-reads={readLifecycle.requests} data-feed-read-ms={readLifecycle.lastReadMs}>
     <header className="feed-header">
       <h1>{group?.name||"动态"}</h1>
       <div className="feed-header-actions">
