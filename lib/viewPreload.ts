@@ -24,13 +24,16 @@ const loaders: Record<string, () => Promise<unknown>> = {
   pnl: () => import("@/components/AssetPnlAnalysis"),
   assistant: () => import("@/components/views/AssistantView")
 };
-const loaded = new Set<string>();
+const loaded = new Map<string, Promise<void>>();
 
 export function preloadView(key: string) {
   if (typeof navigator === "undefined") return;
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
   if (connection?.saveData || ["slow-2g", "2g"].includes(connection?.effectiveType ?? "")) return;
-  if (!Object.prototype.hasOwnProperty.call(loaders, key) || loaded.has(key)) return;
-  loaded.add(key);
-  void loaders[key]().catch(() => loaded.delete(key));
+  if (!Object.prototype.hasOwnProperty.call(loaders, key)) return;
+  const existing = loaded.get(key);
+  if (existing) return existing;
+  const pending = loaders[key]().then(() => {}, () => { loaded.delete(key); });
+  loaded.set(key, pending);
+  return pending;
 }

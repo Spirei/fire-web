@@ -11,6 +11,7 @@ import DeleteIcon from "@/components/DeleteIcon";
 import AppSelect from "@/components/AppSelect";
 import AdminBadge from "@/components/AdminBadge";
 import { appConfirm, appPrompt } from "@/lib/appDialog";
+import { useWorkspaceActive } from "@/lib/workspacePanel";
 
 interface AdminUser extends User {
   createdAt: string;
@@ -71,6 +72,7 @@ function UserAvatar({ user, size = "md" }: { user: Pick<User, "username" | "avat
 }
 
 export default function UsersView() {
+  const active = useWorkspaceActive();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [me, setMe] = useState("");
   const [loading, setLoading] = useState(true);
@@ -115,10 +117,11 @@ export default function UsersView() {
   }
 
   useEffect(() => {
+    if (!active) return;
     void load();
-    const timer = window.setInterval(() => void load(), 60000);
+    const timer = window.setInterval(() => { if (!document.hidden) void load(); }, 60000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [active]);
 
   async function requestAdminStepUp(): Promise<{ currentPassword: string; code: string } | null> {
     const currentPassword = await appPrompt("请输入你的管理员密码以继续", { title: "安全验证", placeholder: "当前密码" });

@@ -7,6 +7,7 @@ import { showToast } from "@/lib/toast";
 import QuotesView from "@/components/views/QuotesView";
 import MarketIcon from "@/components/MarketIcon";
 import type { WatchGroup } from "@/lib/watchGroups";
+import { useWorkspaceActive } from "@/lib/workspacePanel";
 
 interface Props {
   /** 个股详情直达代码（如 US.GOOGL），来自 /watchlist/US.GOOGL 路径 */
@@ -124,6 +125,8 @@ function FearGreedGauge({ score }: { score: number }) {
 }
 
 export default function WatchlistView({ initialSymbol, initialNow, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onToggleWatch, groups }: Props) {
+  const active = useWorkspaceActive();
+  const indicesFetchedAt = useRef(0);
   const [indexGroups, setIndexGroups] = useState<MarketIndices[]>([]);
   const [indicesLoading, setIndicesLoading] = useState(true);
   const [indicesError, setIndicesError] = useState("");
@@ -132,7 +135,9 @@ export default function WatchlistView({ initialSymbol, initialNow, records, init
   const INDICES_CACHE_KEY = "fire:indices:cache";
 
   useEffect(() => {
+    if (!active) return;
     let cancelled = false;
+    let request: AbortController | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
     // 先用本地缓存秒出指数卡片，再后台拉取最新数据
     try {
@@ -148,11 +153,15 @@ export default function WatchlistView({ initialSymbol, initialNow, records, init
       /* 缓存无效忽略 */
     }
     const load = () => {
+      if (document.hidden || request) return;
+      const controller = new AbortController();
+      request = controller;
       setIndicesError("");
-      fetch("/api/indices")
+      fetch("/api/indices", { signal: controller.signal })
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (!cancelled && data?.groups) {
+            indicesFetchedAt.current = Date.now();
             setIndexGroups(data.groups);
             try {
               localStorage.setItem(INDICES_CACHE_KEY, JSON.stringify(data.groups));
@@ -162,27 +171,31 @@ export default function WatchlistView({ initialSymbol, initialNow, records, init
           }
         })
         .catch(() => {
-          if (!cancelled && indexGroups.length === 0) setIndicesError("全球指数暂时不可用");
+          if (!cancelled && !controller.signal.aborted && !indicesFetchedAt.current) setIndicesError("全球指数暂时不可用");
         })
         .finally(() => {
+          if (request === controller) request = null;
           if (!cancelled) setIndicesLoading(false);
         });
     };
-    load();
+    const loadIfDue = () => { if (Date.now() - indicesFetchedAt.current >= 60000) load(); };
+    loadIfDue();
     // 实时圆点：每分钟刷新一次开市状态与涨跌
     timer = setInterval(() => {
-      if (!document.hidden) load();
+      loadIfDue();
     }, 60000);
     const onVisibility = () => {
-      if (!document.hidden) load();
+      if (document.hidden) { request?.abort(); request = null; }
+      else loadIfDue();
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       cancelled = true;
+      request?.abort();
       if (timer) clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, []);
+  }, [active]);
 
   const dragIndex = useRef<number | null>(null);
 

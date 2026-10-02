@@ -7,6 +7,7 @@ import AppModal from "@/components/AppModal";
 import { MULTI_CURRENCIES } from "@/lib/currency";
 import { localDateKey } from "@/lib/format";
 import { showToast } from "@/lib/toast";
+import { observePanelVisibility, panelIsShown } from "@/lib/panelVisibility";
 
 export interface PnlSankeyItem { name: string; code: string; market: string; pnl: number }
 interface Props {
@@ -130,23 +131,34 @@ export default function HoldingsPnlSankey({ profit, loss, profitTotal, lossTotal
   }
 
   useEffect(() => {
-    if (!ref.current || empty) return;
-    const chart = echarts.init(ref.current, null, { renderer: "canvas" });
-    chartRef.current = chart;
-    const dark = document.documentElement.classList.contains("dark");
-    let compact = ref.current.clientWidth < 520;
-    chart.setOption(buildOption(dark, compact));
-    const resize = new ResizeObserver(() => {
-      if (!ref.current) return;
-      const nextCompact = ref.current.clientWidth < 520;
-      chart.resize();
+    const element = ref.current;
+    if (!element || empty) return;
+    let chart: EChartsInstance | null = null;
+    let compact = false;
+    let width = 0, height = 0;
+    const sync = () => {
+      if (!panelIsShown(element) || !element.clientWidth || !element.clientHeight) return;
+      const nextCompact = element.clientWidth < 520;
+      if (!chart) {
+        chart = echarts.init(element, null, { renderer: "canvas" });
+        chartRef.current = chart;
+        compact = nextCompact;
+        chart.setOption(buildOption(document.documentElement.classList.contains("dark"), compact));
+      } else if (width !== element.clientWidth || height !== element.clientHeight) {
+        chart.resize();
+      }
+      width = element.clientWidth;
+      height = element.clientHeight;
       if (nextCompact !== compact) {
         compact = nextCompact;
-        chart.setOption(buildOption(dark, compact), true);
+        chart.setOption(buildOption(document.documentElement.classList.contains("dark"), compact), true);
       }
-    });
-    resize.observe(ref.current);
-    return () => { resize.disconnect(); chart.dispose(); chartRef.current = null; };
+    };
+    sync();
+    const resize = new ResizeObserver(sync);
+    resize.observe(element);
+    const stopWatching = observePanelVisibility(element, sync);
+    return () => { stopWatching(); resize.disconnect(); chart?.dispose(); chartRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profit, loss, empty, currency, currencyRate]);
 

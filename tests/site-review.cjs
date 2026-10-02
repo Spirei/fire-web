@@ -611,7 +611,9 @@ function fontHeaderFixture(ext) {
     assert(shell.includes('const FourDoorLoading = lazy(() => import("@/components/FourDoorLoading"))'));
     assert(shell.includes('<WorkspaceBoundary fallback={<FourDoorLoading activeKey={activeTab} />}><Suspense fallback={<FourDoorLoading activeKey={activeTab} />}><FourDoorNavigator'));
     assert(shell.includes('desktopViewport && activeTab !== "assistant" && floatingAssistantReady'));
-    assert(shell.includes('if (!desktopViewport || !nav) return;'));
+    assert(shell.includes('<SidebarScrollIndicator navRef={desktopNavRef} enabled={desktopViewport}'));
+    const rail = fs.readFileSync(path.join(root, 'components/SidebarScrollIndicator.tsx'), 'utf8');
+    assert(rail.includes('if (!enabled || !nav || !indicator) return;'));
     assert(!shell.includes('usePrefetchFlagIcons('));
     assert(shell.includes('loading="lazy"'));
     assert(shell.includes('while (!cancelled && cursor < missing.length)'));
@@ -1144,6 +1146,47 @@ function fontHeaderFixture(ext) {
     };
     console.log(`BENCH 20000 ledger rows median: JS=${measure(old)}ms SQL=${measure(()=>fundBalances(benchmarkUser.id))}ms`);
   });
+  await test('cached holdings chart waits for a visible size and retains its canvas across switches', () => {
+    const source=fs.readFileSync(path.join(root,'components/HoldingsPnlSankey.tsx'),'utf8');
+    const start=source.indexOf('  useEffect(() => {'),end=source.indexOf('  async function shareImage()',start);
+    const runtime=ts.transpileModule(source.slice(start,end),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+    const element={clientWidth:800,clientHeight:340},chartRef={current:null};
+    let shown=false,cleanup,resize,visibility,initialized=0,resized=0,disposed=0,configured=0,stopped=false;
+    const chart={setOption:()=>configured++,resize:()=>resized++,dispose:()=>disposed++};
+    require('node:vm').runInNewContext(runtime,{useEffect:fn=>{cleanup=fn();},ref:{current:element},chartRef,empty:false,profit:[],loss:[],currency:'USD',currencyRate:1,buildOption:()=>({}),document:{documentElement:{classList:{contains:()=>false}}},echarts:{init:()=>{initialized++;return chart;}},panelIsShown:()=>shown,observePanelVisibility:(_element,fn)=>{visibility=fn;return()=>{stopped=true;};},ResizeObserver:class{constructor(fn){resize=fn;}observe(){}disconnect(){}}});
+    assert.equal(initialized,0,'hidden async mounts cannot create a zero-size chart');
+    shown=true;element.clientWidth=0;visibility();assert.equal(initialized,0);
+    element.clientWidth=800;resize();assert.equal(initialized,1);assert.equal(configured,1);
+    shown=false;visibility();resize();assert.equal(disposed,0);assert.equal(resized,0);
+    shown=true;visibility();assert.equal(initialized,1,'show the existing canvas rather than rebuilding it');
+    element.clientWidth=390;resize();assert.equal(resized,1);assert.equal(configured,2,'compact labels adapt on a real width change');
+    cleanup();assert.equal(disposed,1);assert.equal(chartRef.current,null);assert(stopped);
+  });
+  await test('idle workspace imports yield to input, stay serial and stop on hide or cleanup', async () => {
+    const source=fs.readFileSync(path.join(root,'components/RecordsApp.tsx'),'utf8');
+    const start=source.indexOf('  useEffect(() => {\n    // Warm only');
+    const end=source.indexOf('  // 行情、持仓等没变时',start);
+    const runtime=ts.transpileModule(source.slice(start,end),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+    const timers=new Map(), idles=new Map(), listeners=new Map(), calls=[];
+    let id=0, release, cleanup;
+    const document={hidden:false,addEventListener:(key,fn)=>listeners.set(key,fn),removeEventListener:key=>listeners.delete(key)};
+    const window={setTimeout:fn=>{timers.set(++id,fn);return id;},clearTimeout:key=>timers.delete(key),requestIdleCallback:fn=>{idles.set(++id,fn);return id;},cancelIdleCallback:key=>idles.delete(key),addEventListener:document.addEventListener,removeEventListener:document.removeEventListener};
+    const run=queue=>{const [key,fn]=queue.entries().next().value;queue.delete(key);fn();};
+    require('node:vm').runInNewContext(runtime,{window,document,activeTab:'holdings',mobilePrimaryOrder:['holdings','watchlist','assets','trading'],sidebarTabs:['holdings','watchlist','assets','trading'].map(key=>({key})),useEffect:fn=>{cleanup=fn();},preloadView:key=>{calls.push(key);return new Promise(resolve=>{release=resolve;});}});
+    assert.equal(calls.length,0);run(timers);assert.equal(idles.size,1);
+    listeners.get('pointerdown')();assert.equal(idles.size,0);assert.equal(timers.size,1);
+    run(timers);run(idles);assert.deepEqual(calls,['watchlist']);
+    listeners.get('keydown')();assert.equal(timers.size,0,'never overlap an import still evaluating');
+    release();await new Promise(resolve=>setImmediate(resolve));assert.equal(timers.size,1);
+    document.hidden=true;listeners.get('visibilitychange')();assert.equal(timers.size,0);
+    document.hidden=false;listeners.get('visibilitychange')();run(timers);run(idles);assert.deepEqual(calls,['watchlist','assets']);
+    release();await new Promise(resolve=>setImmediate(resolve));assert.equal(timers.size,0,'only two likely destinations are warmed');
+    cleanup();assert.equal(listeners.size,0);
+    // A chunk that finishes after the workspace is left cannot schedule more work.
+    calls.length=0;document.hidden=false;
+    require('node:vm').runInNewContext(runtime,{window,document,activeTab:'holdings',mobilePrimaryOrder:['watchlist','assets'],sidebarTabs:['watchlist','assets'].map(key=>({key})),useEffect:fn=>{cleanup=fn();},preloadView:key=>{calls.push(key);return new Promise(resolve=>{release=resolve;});}});
+    run(timers);run(idles);cleanup();release();await new Promise(resolve=>setImmediate(resolve));assert.equal(timers.size,0);assert.equal(idles.size,0);
+  });
   await test('navigation code preload is deduplicated, data-saving aware and retryable', async () => {
     const vm = require('node:vm');
     const output = ts.transpileModule(fs.readFileSync(path.join(root, 'lib/viewPreload.ts'),'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -1151,7 +1194,7 @@ function fontHeaderFixture(ext) {
     let calls=0, fail=false;
     vm.runInNewContext(output, { exports, navigator, require: () => { calls++; if(fail) throw Error('offline'); return {}; } });
     const flush = () => new Promise(resolve => setImmediate(resolve));
-    exports.preloadView('settings'); exports.preloadView('settings'); await flush(); assert.equal(calls,1);
+    const pending=exports.preloadView('settings'); assert.equal(pending,exports.preloadView('settings')); await pending; assert.equal(calls,1);
     navigator.connection.saveData=true; exports.preloadView('cards'); await flush(); assert.equal(calls,1);
     navigator.connection.saveData=false; navigator.connection.effectiveType='2g'; exports.preloadView('cards'); await flush(); assert.equal(calls,1);
     navigator.connection.effectiveType='4g'; fail=true; exports.preloadView('cards'); await flush(); assert.equal(calls,2);
@@ -3104,7 +3147,20 @@ function fontHeaderFixture(ext) {
     assert.match(css, /\.fire-sidebar-panel::-webkit-scrollbar,\.dark \.fire-sidebar-panel::-webkit-scrollbar\s*\{\s*display:none;/, 'WebKit 原生条也必须隐藏');
     assert.match(css, /\.dark \.fire-sidebar-scroll-indicator\s*\{\s*background:rgba\(255,255,255,\.26\)/, '深色滑块应遵循全站 26% 白色规范');
     assert.match(css, /\.fire-sidebar:hover \.fire-sidebar-scroll-indicator/, 'macOS 叠加式滚动条需要可见的悬停滑块');
-    assert.match(app, /sidebarScroll\.visible && <span aria-hidden="true" className="fire-sidebar-scroll-indicator"/, '只在实际可滚动时渲染滑块');
+    assert(app.includes('<SidebarScrollIndicator navRef={desktopNavRef} enabled={desktopViewport}'));
+    const source=fs.readFileSync(path.join(root,'components/SidebarScrollIndicator.tsx'),'utf8');
+    const frames=new Map(),listeners=new Map(),indicator={style:{}};
+    const nav={clientHeight:100,scrollHeight:200,scrollTop:50,addEventListener:(key,fn)=>listeners.set(key,fn),removeEventListener:key=>listeners.delete(key)};
+    let id=0,cleanup,resize,disconnected=false;
+    const exports={};
+    const runtime=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+    require('node:vm').runInNewContext(runtime,{exports,require:key=>key==='react'?{useRef:()=>({current:indicator}),useEffect:fn=>{cleanup=fn();}}:require(key),ResizeObserver:class{constructor(fn){resize=fn;}observe(){}disconnect(){disconnected=true;}},window:{addEventListener(){},removeEventListener(){}},requestAnimationFrame:fn=>{frames.set(++id,fn);return id;},cancelAnimationFrame:key=>frames.delete(key)});
+    exports.default({navRef:{current:nav},enabled:true,itemCount:15});
+    const paint=()=>{const [key,fn]=frames.entries().next().value;frames.delete(key);fn();};
+    paint();assert.equal(indicator.style.display,'');assert.equal(indicator.style.height,'50px');assert.equal(indicator.style.top,'26px');
+    listeners.get('scroll')();listeners.get('scroll')();assert.equal(frames.size,1,'scroll updates are batched without workspace setState');paint();
+    nav.scrollHeight=100;resize();paint();assert.equal(indicator.style.display,'none','only a genuinely scrollable rail is visible');
+    listeners.get('scroll')();cleanup();assert.equal(frames.size,0);assert.equal(listeners.size,0);assert(disconnected);
   });
   await test('client code never calls crypto.randomUUID (insecure LAN HTTP breaks it)', () => {
     const { clientRandomId } = require(path.join(root, 'lib/randomId.ts'));

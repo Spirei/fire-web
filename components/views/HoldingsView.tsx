@@ -2,7 +2,7 @@
 
 import { usePersistedState } from "@/lib/usePersistedState";
 
-import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard, useWorkspaceActive } from "@/lib/workspacePanel";
 
 import { sharedRead } from "@/lib/sharedRead";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -127,6 +127,7 @@ function SortTh({
 }
 
 export default function HoldingsView({ records, quotes, livePrice, refreshQuotes, onAddMatch, onUpdate, onRemove, groups, markets, marketLabels, marketOptions, onMarketsChange, onOrdersChanged, initialFundBalances, valuationReady }: Props) {
+  const workspaceActive = useWorkspaceActive();
   const { brokerIcons, stockIcons, assetIcons } = useAssetIcons(["broker", "stock", "crypto", "metal"]);
   const { columns: holdingColumns } = useHoldingColumns();
   const enabledHoldingColumns = holdingColumns.filter((column) => column.visible);
@@ -142,7 +143,9 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   // 行情在休市后会停止轮询，但结算状态仍需在交易所当地结算点自动推进。
   // 这只更新本地会话时钟，不会触发任何行情请求。
   useEffect(() => {
-    const syncSessionClock = () => setSessionNow(new Date());
+    if (!workspaceActive) return;
+    const syncSessionClock = () => { if (!document.hidden) setSessionNow(new Date()); };
+    syncSessionClock();
     const timer = window.setInterval(syncSessionClock, 15_000);
     window.addEventListener("focus", syncSessionClock);
     document.addEventListener("visibilitychange", syncSessionClock);
@@ -151,7 +154,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       window.removeEventListener("focus", syncSessionClock);
       document.removeEventListener("visibilitychange", syncSessionClock);
     };
-  }, []);
+  }, [workspaceActive]);
 
   // 空市场标签自动隐藏：设置里的 markets 只负责市场顺序，标签只为「有持仓 / 本页
   // 添加记录」的市场显示（与自选股「空分组自动隐藏」一致）；某市场有记录后标签自动出现。

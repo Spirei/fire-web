@@ -1,6 +1,6 @@
 "use client";
 
-import { Component, type ReactNode } from "react";
+import { Component, memo, type ReactNode } from "react";
 import { WorkspaceActiveContext, WorkspacePathContext, WorkspaceQueryContext } from "@/lib/workspacePanel";
 
 export class WorkspaceBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }, { failed: boolean }> {
@@ -23,6 +23,8 @@ export function WorkspaceLoading() {
   </div>;
 }
 
-export default function WorkspacePanel({ active, path, query, children }: { active: boolean; path: string; query: string; children: ReactNode }) {
+const WorkspacePanel = memo(function WorkspacePanel({ active, path, query, children }: { active: boolean; path: string; query: string; children: ReactNode }) {
   return <WorkspaceActiveContext.Provider value={active}><WorkspacePathContext.Provider value={path}><WorkspaceQueryContext.Provider value={query}><WorkspaceBoundary>{children}</WorkspaceBoundary></WorkspaceQueryContext.Provider></WorkspacePathContext.Provider></WorkspaceActiveContext.Provider>;
-}
+});
+
+export default WorkspacePanel;

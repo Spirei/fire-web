@@ -860,7 +860,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
 
   useEffect(() => {
     const render = () => {
-      if (!chartRef.current) return;
+      if (!chartRef.current || !chartRef.current.clientWidth || !chartRef.current.clientHeight) return;
       if (data.values.length === 0) { chartInst.current?.clear(); return; }
       if (!chartInst.current) chartInst.current = echarts.init(chartRef.current, null, { renderer: "canvas" });
       const dark = document.documentElement.classList.contains("dark");

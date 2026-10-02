@@ -7,6 +7,10 @@ export const WorkspaceActiveContext = createContext(true);
 export const WorkspacePathContext = createContext<string | null>(null);
 export const WorkspaceQueryContext = createContext<string | null>(null);
 
+export function useWorkspaceActive() {
+  return useContext(WorkspaceActiveContext);
+}
+
 export function useWorkspaceLocationGuard() {
   const active = useContext(WorkspaceActiveContext), path = useContext(WorkspacePathContext);
   const latest = useRef({ active, path });

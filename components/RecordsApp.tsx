@@ -35,6 +35,7 @@ import { pickStockIcon } from "@/lib/stockIconKey";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import WorkspaceNavigation from "@/components/WorkspaceNavigation";
+import SidebarScrollIndicator from "@/components/SidebarScrollIndicator";
 import type { WatchGroup } from "@/lib/watchGroups";
 import { useDesktopViewport, useFourDoorViewport, useTabletDevice } from "@/lib/useDesktopViewport";
 import { usePersistedState } from "@/lib/usePersistedState";
@@ -177,7 +178,6 @@ export default function RecordsApp({
   const [fourDoorPinned, setFourDoorPinned] = usePersistedState("fire:four-door-pinned", false);
   const [tabletSidebarCollapsed, setTabletSidebarCollapsed] = usePersistedState("fire:tablet-sidebar-collapsed", false);
   const [tabletSidebarSide, setTabletSidebarSide] = usePersistedState<"left" | "right">("fire:tablet-sidebar-side", "left");
-  const [sidebarScroll, setSidebarScroll] = useState({ top: 0, height: 0, visible: false });
   const [userLogs, setUserLogs] = useState<SystemLog[]>(initialUserLogs);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
@@ -916,58 +916,60 @@ export default function RecordsApp({
     [sidebarTabs]
   );
   useEffect(() => {
-    const keys = sidebarTabs.map((tab) => tab.key).filter((key) => key !== activeTabRef.current);
+    // Warm only the two likely next destinations. Other views load on hover,
+    // focus or press; importing every page at once competes with button input.
+    const keys = [...mobilePrimaryOrder, "holdings", "watchlist", "assets"]
+      .filter((key, index, all) => key !== activeTab && all.indexOf(key) === index && sidebarTabs.some(tab => tab.key === key))
+      .slice(0, 2);
     let index = 0;
-    let handle = 0;
+    let idle = 0;
+    let timer = 0;
+    let cancelled = false;
+    let running = false;
     const win = window as Window & {
-      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      requestIdleCallback?: (cb: () => void) => number;
       cancelIdleCallback?: (id: number) => void;
     };
-    const pump = () => {
-      if (index >= keys.length) return;
-      preloadView(keys[index]);
+    const stop = () => {
+      if (idle) win.cancelIdleCallback?.(idle);
+      window.clearTimeout(timer);
+      idle = timer = 0;
+    };
+    const pump = async () => {
+      idle = timer = 0;
+      if (cancelled || running || document.hidden || index >= keys.length) return;
+      running = true;
+      await preloadView(keys[index]);
+      running = false;
       index += 1;
-      handle = schedule(pump);
+      // Keep imports serial; the next idle slot follows chunk evaluation.
+      if (!cancelled) schedule();
     };
-    function schedule(task: () => void) {
-      if (typeof win.requestIdleCallback === "function") return win.requestIdleCallback(task, { timeout: 1200 });
-      return window.setTimeout(task, 180);
+    function schedule() {
+      stop();
+      if (cancelled || running || document.hidden || index >= keys.length) return;
+      timer = window.setTimeout(() => {
+        timer = 0;
+        if (win.requestIdleCallback) idle = win.requestIdleCallback(() => { void pump(); });
+        else void pump();
+      }, 1500);
     }
-    handle = schedule(pump);
+    const onVisibility = () => { if (document.hidden) stop(); else schedule(); };
+    schedule();
+    window.addEventListener("pointerdown", schedule, { passive: true });
+    window.addEventListener("keydown", schedule);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      if (typeof win.cancelIdleCallback === "function" && typeof win.requestIdleCallback === "function") win.cancelIdleCallback(handle);
-      else window.clearTimeout(handle);
+      cancelled = true;
+      stop();
+      window.removeEventListener("pointerdown", schedule);
+      window.removeEventListener("keydown", schedule);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [sidebarTabs]);
-
-  const updateSidebarScroll = useCallback(() => {
-    const nav = desktopNavRef.current;
-    if (!nav) return;
-    const railHeight = nav.clientHeight;
-    const scrollable = nav.scrollHeight > railHeight + 1;
-    const visible = scrollable;
-    const height = scrollable ? Math.max(32, railHeight * railHeight / nav.scrollHeight) : 0;
-    const top = scrollable ? nav.scrollTop / (nav.scrollHeight - railHeight) * (railHeight - height) : 0;
-    setSidebarScroll(previous => previous.top === top && previous.height === height && previous.visible === visible
-      ? previous : { top, height, visible });
-  }, []);
-
-  useEffect(() => {
-    const nav = desktopNavRef.current;
-    if (!desktopViewport || !nav) return;
-    const observer = new ResizeObserver(updateSidebarScroll);
-    observer.observe(nav);
-    window.addEventListener("resize", updateSidebarScroll);
-    const frame = window.requestAnimationFrame(updateSidebarScroll);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", updateSidebarScroll);
-      window.cancelAnimationFrame(frame);
-    };
-  }, [desktopViewport, sidebarTabs, updateSidebarScroll]);
+  }, [sidebarTabs, mobilePrimaryOrder, activeTab]);
 
   // 行情、持仓等没变时戳保持不变。换页就能沿用上次的节点，不再把整页重算一遍。
-  const panelDataStamp = useMemo(() => ({}), [
+  const financialPanelDataStamp = useMemo(() => ({}), [
     records, quotes, quoteAt, refreshing, livePrice, valuationReady,
     groups, markets, marketLabels, marketOptions, userLogs, systemLogs, user,
     navTabs, mobileNavigationOrder, settingsSub, settingsSubReady,
@@ -975,6 +977,21 @@ export default function RecordsApp({
     initialWatchGroups, initialAssistantHistory, initialPasskeys, initialFundBalances,
     initialSettings, initialAssetLibrary, initialCardLibrary, initialFeed
   ]);
+  // A quote refresh must not rebuild settings, calendars or other non-price views.
+  // Keep records in the settings stamp because its export action captures them.
+  const settingsPanelDataStamp = useMemo(() => ({}), [records, user, settingsSub, settingsSubReady, initialSettings, initialPasskeys, initialVersion]);
+  const globalPanelDataStamp = useMemo(() => ({}), [initialNow]);
+  const feedPanelDataStamp = useMemo(() => ({}), [initialNow, initialFeed]);
+  const celebsPanelDataStamp = useMemo(() => ({}), [user, initialCelebAvatars, initialCelebs]);
+  const earningsPanelDataStamp = useMemo(() => ({}), [records, initialNow, initialUser]);
+  const managementPanelDataStamp = useMemo(() => ({}), [user, initialSettings, initialAssetLibrary, initialCardLibrary]);
+  const assistantPanelDataStamp = useMemo(() => ({}), [user, initialSymbol, initialAssistantHistory, navigateFromAssistant]);
+  const independentPanelStamps: Partial<Record<TabKey, object>> = {
+    settings: settingsPanelDataStamp, global: globalPanelDataStamp,
+    trading: feedPanelDataStamp, celebs: celebsPanelDataStamp, earnings: earningsPanelDataStamp,
+    users: managementPanelDataStamp, attachments: managementPanelDataStamp,
+    library: managementPanelDataStamp, cards: managementPanelDataStamp, assistant: assistantPanelDataStamp
+  };
 
   const settingsPanel = (
     <div className="relative h-full min-h-0">
@@ -1015,7 +1032,7 @@ export default function RecordsApp({
     <div translate="no" data-tablet-device={tabletDevice ? "true" : "false"} data-tablet-sidebar-collapsed={tabletSidebarCollapsed === true ? "true" : "false"} data-tablet-sidebar-side={tabletSidebarSide === "right" ? "right" : "left"} className={`records-app notranslate flex items-start${activeTab === "settings" ? " is-settings" : ""}`}>
       {/* 桌面侧边导航 */}
       <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block ${activeTab === "settings" ? "is-settings" : ""}`}>
-        <nav id="fire-desktop-nav" ref={desktopNavRef} onScroll={updateSidebarScroll} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
+        <nav id="fire-desktop-nav" ref={desktopNavRef} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
           {fourDoorEnabled === true && fourDoorViewport && (
             <div className={`four-door-anchor ${fourDoorPinned ? "is-pinned" : ""}`}>
               {/* 预览自身也可能等待下载；失败只收起装饰，不影响侧栏入口。 */}
@@ -1069,7 +1086,7 @@ export default function RecordsApp({
             <span>{tabletSidebarSide === "right" ? "移到左侧" : "移到右侧"}</span>
           </button>
         </div>
-        {sidebarScroll.visible && <span aria-hidden="true" className="fire-sidebar-scroll-indicator" style={{ top: sidebarScroll.top + 1, height: sidebarScroll.height }} />}
+        <SidebarScrollIndicator navRef={desktopNavRef} enabled={desktopViewport} itemCount={sidebarTabs.length} />
       </aside>
 
       {/* 内容区 */}
@@ -1083,6 +1100,7 @@ export default function RecordsApp({
 
         {mountedTabs.map((tab) => {
           const active = tab === activeTab;
+          const panelDataStamp = independentPanelStamps[tab] ?? financialPanelDataStamp;
           // 隐藏页、以及数据未变的当前页，都沿用上次节点。换页只改隐藏，避免整页重算造成顿挫。
           let node = panels.current.get(tab) ?? null;
           if (active && (node == null || panelBuiltStamp.current.get(tab) !== panelDataStamp)) {
@@ -1176,7 +1194,7 @@ export default function RecordsApp({
           }
           return (
             <div key={`${tab}:${panelEpoch[tab] ?? 0}`} hidden={!active} data-direction={active ? panelDirection : "none"} className="tab-panel min-w-0">
-              <WorkspacePanel active={active} path={tab === "pnl" ? "/asset-pnl-analysis" : navTabs.find(item => item.key === tab)?.url || `/${tab}`} query={active ? searchParams.toString() : new URL(pageMemory.current.get(tab) || "/", "http://workspace.invalid").search}>{node}</WorkspacePanel>
+              <WorkspacePanel active={active} path={tab === "pnl" ? "/asset-pnl-analysis" : navTabs.find(item => item.key === tab)?.url || `/${tab}`} query={active ? searchParams.toString() : new URL(pageMemory.current.get(tab) || "/", "http://workspace.invalid").search.slice(1)}>{node}</WorkspacePanel>
             </div>
           );
         })}

@@ -140,6 +140,8 @@ async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await r
     const calendar=path.join(folder,'US:2026-09.json'),today=new Date('2026-10-01T08:00:00Z');
     fs.writeFileSync(calendar,JSON.stringify({at:today.getTime()-86400_000,items:[{symbol:'MU',name:'Micron Technology',date:'2026-09-30',time:'time-after-hours',marketCap:100_000_000_000},{symbol:'FAKE',name:'Old',date:'2026-09-20',marketCap:999_000_000_000},{symbol:'SMALL',name:'Small',date:'2026-09-30',marketCap:10},{symbol:'NEXT',name:'Future',date:'2026-10-02',marketCap:999_000_000_000}]}));
     assert.deepEqual(skill.feedEventHints('美股大事件与公司财报',today).map(s=>s.symbol),['MU']);assert.deepEqual(skill.feedEventHints('欧洲天气',today),[]);
+    // The dated hint fixture must not also enter the runtime-date search below.
+    fs.unlinkSync(calendar);
     assert(skill.feedSkill('Edit').includes('linkText'));assert(!skill.feedSkill('Plan').includes('"posts"'));
     let calls=[];settings.updateSiteSettings({modelServices:[{id:'skill-native',provider:'deepseek',name:'Native',apiUrl:'https://api.deepseek.com/chat/completions',apiKey:'isolated-native-key',models:['deepseek-flash']}]});
     store.saveFeedPreferences(other.id,{revision:0,instructions:'美股公司财报'});
@@ -157,7 +159,7 @@ async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await r
     };
     const {job}=generation.requestFeedGeneration(other.id);await generation.runFeedJob(other.id,job.id);
     assert.equal(store.getFeedJob(other.id,job.id).status,'done');const saved=store.listFeedPosts(other.id).posts[0];assert(saved.segments[0].linkText);assert.equal(saved.sources[0].excerpt,'Revenue rose 10%. Costs remain uncertain.');assert.equal(calls.length,5);assert(calls.some(b=>b.tools&&b.messages[0].content[0].text.includes('Micron Technology MU')&&b.messages[0].content[0].text.includes('results investor relations')));
-    fs.unlinkSync(nowCalendar);if(nowCalendar!==calendar)fs.unlinkSync(calendar);
+    fs.unlinkSync(nowCalendar);
   });
   await test('native DeepSeek search trusts retrieval blocks, not generated prose or private/future links',()=>{
     const blocks={content:[{type:'text',text:'Invented https://evil.example/date',citations:[{url:source.url+'?utm_source=tracking',cited_text:'Verified <b>excerpt</b>'}]},{type:'web_search_tool_result',content:[{type:'web_search_result',url:source.url,title:source.title,page_age:source.publishedAt},{type:'web_search_result',url:source.url,title:'duplicate'},{type:'web_search_result',url:'https://127.0.0.1/private',title:'private'},{type:'web_search_result',url:'https://news.example/future',title:'Future',page_age:'2099-01-01'}]}]};
