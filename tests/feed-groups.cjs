@@ -36,11 +36,12 @@ module.exports=async function checkGroupSwitches(snapshot) {
   global.setInterval=fn=>{tick=fn;return {fixture:true};};global.clearInterval=()=>{};
   global.document={...events,hidden:false};global.window={...events,history:{replaceState(state,unused,url){historyWrites.push({state,url});global.window.location.href=new URL(url,global.window.location.href).href;}},location:{href:'https://groups.test.example/trading?keep=1#feed'}};global.matchMedia=()=>({...events,matches:true});
   const groups=[{id:'default',name:'美国动态',mode:'news',people:[],revision:1,subscriptions:[],updatedAt:null},{...snapshot.group,name:'名人动态'}];
+  groups.push({...snapshot.group,id:'fixture-third-group',name:'另一名人组'});
   const newsPost={...snapshot.posts[0],id:'fixture-news',title:'美国测试动态',original:undefined,segments:[{text:'美国新闻正文'}],sources:[],media:[]};
-  const news={...snapshot,group:groups[0],groups,posts:[newsPost],nextCursor:null,job:null};
+  const news={...snapshot,preferences:{...snapshot.preferences,revision:groups[0].revision},group:groups[0],groups,posts:[newsPost],nextCursor:null,job:null};
   const people={...snapshot,group:groups[1],groups,posts:snapshot.posts.slice(0,10),nextCursor:'fixture-second-page',job:null};
   const effects=()=>{while(pending.length)pending.shift()();};
-  const settle=async()=>{await Promise.resolve();await Promise.resolve();};
+  const settle=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
   const render=(group='default',author='')=>{
     query=new URLSearchParams({...group==='default'?{}:{feedGroup:group},...author?{feedPerson:author}:{}});
     hooks=parents;cursor=0;parentTree=Parent({initial:news,initialNow:Date.now()});
@@ -87,6 +88,14 @@ module.exports=async function checkGroupSwitches(snapshot) {
     const stableCards=nodes(tree).filter(node=>(node.type?.name||node.type?.type?.name)==='FeedOriginalPost');
     assert.equal(stableCards[0].props.post,cards[0].props.post,'unchanged checks reuse card content');assert.equal(stableCards[0].props.onLike,cards[0].props.onLike,'card actions remain stable across quiet checks');
     lateAuthor.resolve({...people,posts:[]});await settle();html=render(groups[1].id);effects();assert(!html.includes('feed-empty'));
+    const warmGroup=nodes(parentTree).find(node=>node.type===Group);
+    warmGroup.props.onPreload(groups[2].id,'duan');const warmRequest=requests.at(-1),warmCount=requests.length;
+    warmGroup.props.onPreload(groups[2].id,'duan');assert.equal(requests.length,warmCount);
+    const third={...people,group:groups[2],posts:snapshot.posts.filter(post=>post.original.person.id==='duan').slice(0,10),nextCursor:null};
+    warmRequest.resolve(third);await settle();html=render(groups[2].id,'duan');assert(!html.includes('正在加载动态'));assert(html.includes('段永平的原帖'));assert(!html.includes('特朗普的原帖'));effects();await settle();assert.equal(requests.length,warmCount,'the visible first visit consumes its warm request');
+    html=render(groups[2].id,'trump');assert(html.includes('正在加载动态'));effects();assert(requests.at(-1).url.includes('group='+groups[2].id)&&requests.at(-1).url.includes('author=trump'));
+    render();effects();
+    console.log('PASS first visits restore read-ahead immediately and share a single group/person request');
     console.log('PASS visited authors restore immediately, keep expanded ranges and stable cards, and reject superseded reads');
     console.log('PASS group switches preserve navigation and mascot, restore expanded posts, revalidate quietly, and reject late/cross-author results');
   }finally{

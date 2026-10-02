@@ -29,6 +29,15 @@ let passed=0;async function test(name,run){await run();passed++;console.log('PAS
     assert.equal(background.length,1);assert.throws(()=>store.feedGroup(other.id,group.id),/不存在/);
     for(const invalid of [{mode:'unknown'},{people:[]},{people:['trump','trump']},{people:['invented']},{people:['trump'],userId:other.id}])assert.equal((await call('/groups','POST',{name:'bad',mode:'people',...invalid})).status,400);
   });
+  await test('SSR shell never reads another group’s prompts or imports the default timeline',()=>{
+    store.saveFeedPreferences(user.id,{instructions:'默认组的独立提示词',revision:0,mode:'people',people:['trump','duan'],enabled:false},'default');
+    const count=db.prepare('SELECT COUNT(*) AS n FROM feed_posts WHERE user_id=?').get(user.id).n;
+    const shell=generation.feedBootstrap(user.id);assert(shell.groups.some(item=>item.id===group.id));
+    for(const field of ['posts','preferences','job','peopleSources','peopleLatestAt'])assert(!(field in shell));
+    assert(!JSON.stringify(shell).includes('默认组的独立提示词'));
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM feed_posts WHERE user_id=?').get(user.id).n,count,'bootstrap does not sync/import default originals');
+    store.saveFeedPreferences(user.id,{instructions:'',revision:1,mode:'news',enabled:false},'default');
+  });
   await test('original caches backfill one post per platform ID, including pure image and quote/reply posts',async()=>{
     const response=await call('?group='+group.id);assert.equal(response.status,200);const first=(await response.json()).data;
     assert.equal(first.posts.length,10);assert(first.nextCursor);assert(first.posts.every(post=>post.original));
@@ -168,6 +177,29 @@ let passed=0;async function test(name,run){await run();passed++;console.log('PAS
   });
   await test('group switching keeps shared layout and restores isolated snapshots',async()=>{
     await require('./feed-groups.cjs')(generation.feedSnapshot(user.id,null,50,group.id));
+  });
+  await test('first switches share bounded reads without mixing groups or authors',async()=>{
+    await require('./feed-read-ahead.cjs')(generation.feedSnapshot(user.id,null,10,group.id));
+  });
+  await test('prompts, original timelines and post actions belong to their own group',()=>{
+    const second=store.createFeedGroup(user.id,{name:'仅段永平',mode:'people',people:['duan']});
+    const before=generation.feedSnapshot(user.id,null,50,group.id),separate=generation.feedSnapshot(user.id,null,50,second.id);
+    assert(separate.posts.every(post=>post.original.person.id==='duan'));assert(separate.posts.length>=12);
+    assert(!separate.posts.some(post=>before.posts.some(first=>first.id===post.id)));
+    store.updateFeedPost(user.id,separate.posts[0].id,{hidden:true,liked:true});
+    assert.equal(generation.feedSnapshot(user.id,null,50,second.id).posts.length,separate.posts.length-1);
+    assert.deepEqual(generation.feedSnapshot(user.id,null,50,group.id).posts,before.posts);
+    const first=store.createFeedGroup(user.id,{name:'美国新闻'}),otherNews=store.createFeedGroup(user.id,{name:'公司新闻'});
+    store.saveFeedPreferences(user.id,{instructions:'只关注美国大新闻',revision:0},first.id);
+    store.saveFeedPreferences(user.id,{instructions:'只关注公司财报',revision:0},otherNews.id);
+    const unchanged=store.feedPreferences(user.id,otherNews.id);
+    store.saveFeedPreferences(user.id,{instructions:'本组新的独立提示语',revision:1},first.id);
+    assert.deepEqual(store.feedPreferences(user.id,otherNews.id),unchanged);
+    assert.equal(store.feedPreferences(user.id,first.id).instructions,'本组新的独立提示语');
+    assert.equal(generation.feedSnapshot(user.id,null,50,first.id).posts.length,0);
+    const rows=db.prepare('SELECT COUNT(*) AS n FROM feed_posts WHERE user_id=? AND group_id=?').get(user.id,second.id).n;
+    for(let i=0;i<3;i++)generation.feedSnapshot(user.id,null,50,second.id);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM feed_posts WHERE user_id=? AND group_id=?').get(user.id,second.id).n,rows);
   });
   await test('quiet snapshots reuse unchanged cards while edits, translation, avatar and media update immediately',()=>{
     const {reconcileFeedPayload,feedChromeKey}=get('lib/feedSnapshots.ts');

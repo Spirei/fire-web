@@ -38,6 +38,14 @@ function render(file, props={}, params='', prefs={}, name='default') {
 }
 let passed=0, failures=0;
 function test(label,run){try{run();passed++;console.log('PASS '+label);}catch(error){failures++;console.error('FAIL '+label+'\n'+error.stack);}}
+test('feed SSR bootstraps only shared navigation and never reads the default timeline',()=>{
+  const layout=fs.readFileSync(path.join(root,'app/[...slug]/layout.tsx'),'utf8');
+  assert(layout.includes('feedBootstrap(user.id)'));assert(!layout.includes('feedSnapshot(user.id)'));
+  const initial={groups:[{id:'default',name:'默认特朗普组',mode:'people',people:['trump']},{id:'fg-0123456789abcdef01234567',name:'当前段永平组',mode:'people',people:['duan']}],capabilities:{generate:false,search:'news-rss',avatar:{image:'/local-mascot.png',video:null}}};
+  const html=render('components/views/FeedView.tsx',{initial},'feedGroup=fg-0123456789abcdef01234567&feedPerson=duan');
+  assert(html.includes('<h1>当前段永平组</h1>'));assert(html.includes('aria-label="段永平" aria-pressed="true"'));
+  assert(!html.includes('aria-label="特朗普"'));assert(html.includes('正在加载动态'));assert(!html.includes('还没有可显示的原帖'));
+});
 // Retain hook state between renders while deliberately never running effects.
 // This catches a wrong frame that a later layout/passive effect could conceal.
 function frameHarness(file, overrides={}) {

@@ -46,7 +46,8 @@ export function feedGroup(userId:string,id="default"):FeedGroup {
   if(id!=="default"&&!/^fg-[a-f0-9]{24}$/.test(id))throw new FeedError("动态组不存在",404);
   const row=feedTables().prepare("SELECT name,subscriptions,updated_at,mode,people FROM feed_groups WHERE user_id=? AND id=?").get(userId,id) as {name:string;subscriptions:string;updated_at:string|null;mode:FeedMode;people:string}|undefined;
   if(!row&&id!=="default")throw new FeedError("动态组不存在",404);
-  return {id,name:row?.name||"动态",subscriptions:row?JSON.parse(row.subscriptions):[],updatedAt:row?.updated_at||null,revision:feedPreferences(userId,id).revision,mode:row?.mode||"news",people:row?JSON.parse(row.people):["trump","duan"]};
+  const db=feedTables(),pref=(id==="default"?db.prepare("SELECT revision FROM feed_preferences WHERE user_id=?").get(userId):db.prepare("SELECT revision FROM feed_group_preferences WHERE user_id=? AND group_id=?").get(userId,id)) as {revision:number}|undefined;
+  return {id,name:row?.name||"动态",subscriptions:row?JSON.parse(row.subscriptions):[],updatedAt:row?.updated_at||null,revision:pref?.revision||0,mode:row?.mode||"news",people:row?JSON.parse(row.people):["trump","duan"]};
 }
 function normalizeFeedMode(value:unknown):FeedMode {
   if(value!=="news"&&value!=="people")throw new FeedError("请选择新闻提炼或人物原帖");return value;

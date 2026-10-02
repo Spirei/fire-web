@@ -6,10 +6,11 @@ import { useWorkspaceSearchParams as useSearchParams,useWorkspaceLocationGuard }
 import AppModal from "@/components/AppModal";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import { FEED_PAGE_SIZE } from "@/lib/feedTypes";
-import type { FeedJob,FeedMessage,FeedPayload,FeedPost,FeedGroup,FeedSubscription,FeedMode,FeedPersonId,FeedAgentProfile } from "@/lib/feedTypes";
+import type { FeedJob,FeedMessage,FeedChrome,FeedPayload,FeedPost,FeedGroup,FeedSubscription,FeedMode,FeedPersonId,FeedAgentProfile } from "@/lib/feedTypes";
 import { observePanelVisibility,panelIsShown } from "@/lib/panelVisibility";
 import { feedRequest as api,FeedRequestError,feedJobRunning as running,feedEmptyCopy } from "@/lib/feedClient";
 import { feedChromeKey,reconcileFeedPayload } from "@/lib/feedSnapshots";
+import { FeedReadAhead } from "@/lib/feedReadAhead";
 import FeedAgentPanel, { validFeedAgentTab, type FeedAgentTab } from "@/components/FeedAgentPanel";
 import FeedNewsPost from "@/components/FeedNewsPost";
 import FeedOriginalPost from "@/components/FeedOriginalPost";
@@ -42,11 +43,14 @@ function Mascot({image,video,name,onClick}:{image:string;video:string|null;name:
   </button>;
 }
 
-export default function FeedView({initial=null,initialNow=0}:{initial?:FeedPayload|null;initialNow?:number}) {
+export default function FeedView({initial=null,initialNow=0}:{initial?:FeedPayload|FeedChrome|null;initialNow?:number}) {
   const canNavigate=useWorkspaceLocationGuard(),search=useSearchParams(),groupId=search.get("feedGroup")||"default",author=search.get("feedPerson")||"";
-  const entryGroup=useRef(groupId).current;
+  const entryGroup=useRef(groupId).current,readAhead=useRef<FeedReadAhead|null>(null),pageRoot=useRef<HTMLElement>(null);
+  if(!readAhead.current)readAhead.current=new FeedReadAhead(api);
+  const preload=useCallback((id:string,person="")=>{if(canNavigate()&&!document.hidden&&panelIsShown(pageRoot.current))void readAhead.current?.preload(id,person);},[canNavigate]);
+  const read=useCallback((id:string,person:string,limit:number,signal:AbortSignal)=>readAhead.current!.read(id,person,limit,signal),[]);
   // The shared header stays mounted; snapshots belong to this page/account only.
-  const [chrome,setChrome]=useState(initial),snapshots=useRef(new Map<string,{revision:number;byAuthor:Map<string,FeedPayload>}>()),active=useRef({groupId,author});
+  const [chrome,setChrome]=useState<FeedChrome|null>(initial),snapshots=useRef(new Map<string,{revision:number;byAuthor:Map<string,FeedPayload>}>()),active=useRef({groupId,author});
   active.current={groupId,author};
   const remember=useCallback((id:string,person:string,payload:FeedPayload)=>{
     if(id!==active.current.groupId||person!==active.current.author)return;
@@ -57,15 +61,28 @@ export default function FeedView({initial=null,initialNow=0}:{initial?:FeedPaylo
     while(snapshots.current.size>8)snapshots.current.delete(snapshots.current.keys().next().value!);
     setChrome(previous=>feedChromeKey(previous)===feedChromeKey(payload)?previous:payload);
   },[]);
-  const restored=snapshots.current.get(groupId)?.byAuthor.get(author),seed=restored||(groupId==="default"&&!author?initial:null);
-  const invalidateSnapshots=useCallback((id:string)=>{snapshots.current.get(id)?.byAuthor.clear();},[]);
+  const revision=chrome?.groups?.find(group=>group.id===groupId)?.revision;
+  const candidate=snapshots.current.get(groupId)?.byAuthor.get(author)||readAhead.current.peek(groupId,author);
+  const restored=candidate&&(revision===undefined||candidate.preferences.revision===revision)?candidate:null,seed=restored||(groupId==="default"&&!author&&initial&&"posts" in initial&&(revision===undefined||initial.preferences.revision===revision)?initial:null);
+  const invalidateSnapshots=useCallback((id:string)=>{snapshots.current.get(id)?.byAuthor.clear();readAhead.current?.invalidate(id);},[]);
+  useEffect(()=>{
+    // Warm one person in the current group. Other groups only load on user intent.
+    let cancelled=false;
+    const timer=setTimeout(()=>{
+      if(!canNavigate()||document.hidden||!panelIsShown(pageRoot.current))return;
+      const person=chrome?.groups?.find(group=>group.id===groupId&&group.mode==="people")?.people?.find(id=>id!==author&&!snapshots.current.get(groupId)?.byAuthor.has(id));
+      if(person&&!cancelled)void readAhead.current?.preload(groupId,person);
+    },800);
+    return()=>{cancelled=true;clearTimeout(timer);};
+  },[chrome,groupId,author,canNavigate]);
+  useEffect(()=>{const pause=()=>{if(document.hidden||!panelIsShown(pageRoot.current))readAhead.current?.invalidate();};document.addEventListener("visibilitychange",pause);const release=pageRoot.current?observePanelVisibility(pageRoot.current,pause):()=>{};return()=>{release();document.removeEventListener("visibilitychange",pause);readAhead.current?.invalidate();};},[]);
   function openAgent(){if(!canNavigate())return;const url=new URL(window.location.href);url.searchParams.set("feedAgent","profile");window.history.replaceState(null,"",url.pathname+url.search+url.hash);}
-  return <section className="alcor-feed feed-theme" aria-label="动态">
+  return <section ref={pageRoot} className="alcor-feed feed-theme" aria-label="动态">
     <div className="feed-mascot-top">{chrome?<><Mascot name={chrome.agent?.name||"Alcor"} image={chrome.capabilities.avatar.image} video={chrome.capabilities.avatar.video} onClick={openAgent}/><button type="button" className="feed-mascot-name" onClick={openAgent}>{chrome.agent?.name||"Alcor"}</button></>:<div className="feed-mascot-placeholder" aria-hidden="true"/>}</div>
-    <GroupFeedView key={groupId} groupId={groupId} author={author} initial={seed} cached={restored||null} initialNow={initialNow} chrome={chrome} revalidate={!!restored||groupId!==entryGroup} onSnapshot={remember} onMutation={invalidateSnapshots}/>
+    <GroupFeedView key={groupId} groupId={groupId} author={author} initial={seed} cached={restored||null} initialNow={initialNow} chrome={chrome} revalidate={!!restored||groupId!==entryGroup} onSnapshot={remember} onMutation={invalidateSnapshots} onPreload={preload} onRead={read}/>
   </section>;
 }
-function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=initial,revalidate=false,onSnapshot,onMutation}:{initial:FeedPayload|null;cached?:FeedPayload|null;initialNow:number;groupId:string;author:string;chrome?:FeedPayload|null;revalidate?:boolean;onSnapshot?:(id:string,person:string,payload:FeedPayload)=>void;onMutation?:(id:string)=>void}) {
+function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=initial,revalidate=false,onSnapshot,onMutation,onPreload,onRead}:{initial:FeedPayload|null;cached?:FeedPayload|null;initialNow:number;groupId:string;author:string;chrome?:FeedChrome|null;revalidate?:boolean;onSnapshot?:(id:string,person:string,payload:FeedPayload)=>void;onMutation?:(id:string)=>void;onPreload?:(id:string,person?:string)=>void;onRead?:(id:string,person:string,limit:number,signal:AbortSignal)=>Promise<FeedPayload>}) {
   const canNavigate=useWorkspaceLocationGuard(),search=useSearchParams(),tasks=search.get("feedAgent")==="profile",agentTab=validFeedAgentTab(search.get("feedAgentTab"));
   function agentView(open:boolean,tab:FeedAgentTab=agentTab) {if(!canNavigate())return;const url=new URL(window.location.href);if(open){url.searchParams.set("feedAgent","profile");if(tab!=="activity")url.searchParams.set("feedAgentTab",tab);else url.searchParams.delete("feedAgentTab");}else{url.searchParams.delete("feedAgent");url.searchParams.delete("feedAgentTab");}window.history.replaceState(null,"",url.pathname+url.search+url.hash);}
   const setTasks=(open:boolean)=>agentView(open);
@@ -98,6 +115,12 @@ function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=ini
   const manualRefresh=useRef<{id:string;revision:number;result:FeedJob|null}|null>(null);
   if(!readingPerson)loadedCount.current=data?.posts.length||FEED_PAGE_SIZE;
   useEffect(()=>{const sync=()=>setShown(panelIsShown(root.current));sync();return root.current?observePanelVisibility(root.current,sync):undefined;},[]);
+  useEffect(()=>{
+    if(!shown||!data||readingPerson||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+    const element=root.current?.querySelector<HTMLElement>(".feed-posts");
+    const transition=element?.animate?.([{opacity:.35,transform:"translateY(4px)"},{opacity:1,transform:"translateY(0)"}],{duration:180,easing:"cubic-bezier(.22,.61,.36,1)"});
+    return()=>transition?.cancel();
+  },[shown,dataAuthor,readingPerson,!!data]);
   const cachedRead=useRef(cached),observedAuthor=useRef(author),awaitingPersonRead=useRef(false);
   cachedRead.current=cached;
   if(observedAuthor.current!==author){observedAuthor.current=author;awaitingPersonRead.current=true;}
@@ -113,7 +136,7 @@ function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=ini
     const controller=new AbortController();readController.current=controller;readSince.current=Date.now();
     const epoch=++loadEpoch.current,target=Math.max(FEED_PAGE_SIZE,loadedCount.current);
     try{
-      const next=await api<FeedPayload>(groupPath(`?limit=${Math.min(50,target)}`),"GET",undefined,controller.signal);
+      const next=onRead?await onRead(groupId,author,Math.min(50,target),controller.signal):await api<FeedPayload>(groupPath(`?limit=${Math.min(50,target)}`),"GET",undefined,controller.signal);
       while(next.nextCursor&&next.posts.length<target&&epoch===loadEpoch.current){
         const page=await api<FeedPayload>(groupPath(`?limit=${Math.min(50,target-next.posts.length)}&cursor=${encodeURIComponent(next.nextCursor)}`),"GET",undefined,controller.signal);
         next.posts.push(...page.posts.filter(p=>!next.posts.some(old=>old.id===p.id)));
@@ -130,7 +153,7 @@ function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=ini
       }
     }catch(e){if(live.current&&!controller.signal.aborted&&epoch===loadEpoch.current){if(manualRefresh.current?.result){manualRefresh.current=null;setRefreshPending(false);showToast("读取刷新结果失败","err");}if(!quiet||(e instanceof FeedRequestError&&e.status===401)){setError((e as Error).message);setErrorAction("load");}}}
     finally{if(readController.current===controller)readController.current=null;}
-  },[groupId,author]);
+  },[groupId,author,onRead]);
   useEffect(()=>{const first=initialRead.current;loadedCount.current=(first?initialSnapshot:cachedRead.current)?.posts.length||FEED_PAGE_SIZE;live.current=true;if(!initialSnapshot||!first||restoreRead)void load(!!cachedRead.current||(first&&!!initialSnapshot&&restoreRead));initialRead.current=false;const timer=setInterval(()=>{if(!document.hidden&&panelIsShown(root.current)){setNow(Date.now());if(!readController.current)void load(true);}},60_000);setNow(Date.now());return()=>{live.current=false;++loadEpoch.current;readController.current?.abort();moreController.current?.abort();discussionController.current?.abort();clearInterval(timer);};},[load,initialSnapshot,restoreRead]);
   useEffect(()=>{if(data&&!readingPerson&&!pendingIds.current.size&&!saveLock.current&&!requestLock.current)onSnapshot?.(groupId,author,data);},[data,dataAuthor,groupId,author,onSnapshot,readingPerson,pendingPosts,saving,requesting]);
   useEffect(()=>{
@@ -298,8 +321,8 @@ function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=ini
         <button type="button" className="feed-icon-button feed-settings-button" onClick={edit} disabled={!data} title="编辑动态模板与指示" aria-label="编辑动态模板与指示"><IconAdjustmentsHorizontal size={21} stroke={1.8}/></button>
       </div>
     </header>
-    {shell&&<nav className="feed-groups" aria-label="动态信息组">{(shell.groups||[{id:"default",name:"动态"}]).map(g=><button key={g.id} type="button" aria-pressed={g.id===groupId} onClick={()=>chooseGroup(g.id)}>{g.name}</button>)}<button type="button" className="feed-group-add" aria-label="新建动态组" onClick={()=>{setNewGroupName("");setNewMode("news");setNewPeople(["trump","duan"]);setGroupError("");setCreating(true);}}><IconPlus size={16}/></button></nav>}
-    {peopleMode&&<FeedPeopleFilter profiles={(shell?.peopleCatalog||FEED_PEOPLE).filter(person=>group?.people?.includes(person.id))} selected={author} unread={Object.fromEntries(FEED_PEOPLE.map(person=>[person.id,feedPersonHasUpdates(person.id,data?.peopleLatestAt,avatarSeen)]))} onSelect={choosePerson}/>}
+    {shell&&<nav className="feed-groups" aria-label="动态信息组">{(shell.groups||[{id:"default",name:"动态"}]).map(g=><button key={g.id} type="button" aria-pressed={g.id===groupId} onPointerEnter={()=>g.id!==groupId&&onPreload?.(g.id)} onFocus={()=>g.id!==groupId&&onPreload?.(g.id)} onPointerDown={()=>g.id!==groupId&&onPreload?.(g.id)} onClick={()=>chooseGroup(g.id)}>{g.name}</button>)}<button type="button" className="feed-group-add" aria-label="新建动态组" onClick={()=>{setNewGroupName("");setNewMode("news");setNewPeople(["trump","duan"]);setGroupError("");setCreating(true);}}><IconPlus size={16}/></button></nav>}
+    {peopleMode&&<FeedPeopleFilter profiles={(shell?.peopleCatalog||FEED_PEOPLE).filter(person=>group?.people?.includes(person.id))} selected={author} unread={Object.fromEntries(FEED_PEOPLE.map(person=>[person.id,feedPersonHasUpdates(person.id,data?.peopleLatestAt,avatarSeen)]))} onSelect={choosePerson} onPreload={id=>id!==author&&onPreload?.(groupId,id)}/>}
     {error&&!editing&&<p className="feed-status feed-error" role="alert">{error}{errorAction&&<button type="button" disabled={requesting} onClick={()=>void (errorAction==="load"?load():refresh())}>{errorAction==="load"?"重新读取":"重试更新"}</button>}</p>}
     {undoPost&&<p className="feed-status feed-undo" role="status">已隐藏这条动态<button type="button" disabled={pendingPosts[undoPost.id]} onClick={()=>void updatePost(undoPost,{hidden:false})}>撤销</button><button type="button" aria-label="关闭隐藏提示" onClick={()=>setUndoPost(null)}>×</button></p>}
     {(!data||readingPerson)&&!error&&<div className="feed-skeleton" aria-label="正在加载动态"><i/><i/><i/></div>}
@@ -309,7 +332,7 @@ function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=ini
     </div>
     {!readingPerson&&data?.nextCursor&&<div className="feed-pagination" aria-busy={loadingMore}>{moreError&&<p className="feed-error" role="alert">{moreError}</p>}<button type="button" className="feed-load-more" disabled={loadingMore||saving||requesting||Object.values(pendingPosts).some(Boolean)} onClick={()=>void more()}>{loadingMore?"正在读取":moreError?"重试读取更早动态":"查看更早动态"}</button></div>}
     {creating&&<AppModal title="新建动态组" size="sm" className="feed-theme feed-themed-modal feed-group-modal" onClose={()=>setCreating(false)} closeDisabled={creatingGroup}><label className="feed-config-label" htmlFor="feed-group-name">组名称</label><input id="feed-group-name" className="feed-config-input" value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} maxLength={40} placeholder="例如：美国与美股、特朗普、段永平" data-autofocus disabled={creatingGroup}/><FeedTemplatePicker mode={newMode} people={newPeople} profiles={data?.peopleCatalog} disabled={creatingGroup} onMode={value=>{setNewMode(value);if(!newGroupName.trim()&&value==="people")setNewGroupName("名人动态");}} onPeople={setNewPeople}/>{groupError&&<p className="feed-error" role="alert">{groupError}</p>}<div className="feed-modal-actions"><button type="button" onClick={()=>setCreating(false)} disabled={creatingGroup}>取消</button><button type="button" className="feed-primary" disabled={creatingGroup||!newGroupName.trim()} onClick={()=>void createGroup()}>{creatingGroup?"正在创建":"创建"}</button></div></AppModal>}
-    {editing&&data&&<AppModal title="动态模板与指示" size="md" className="feed-theme feed-themed-modal feed-prompt-modal" onClose={()=>setEditing(false)} closeDisabled={saving||recovering||!!uploadingAvatar}>
+    {editing&&data&&<AppModal title={`${data.group?.name||"动态"} · 模板与指示`} size="md" className="feed-theme feed-themed-modal feed-prompt-modal" onClose={()=>setEditing(false)} closeDisabled={saving||recovering||!!uploadingAvatar}>
       <label className="feed-config-label" htmlFor="feed-config-name">组名称</label><input id="feed-config-name" className="feed-config-input" maxLength={40} value={groupName} onChange={e=>setGroupName(e.target.value)} disabled={saving}/>
       <FeedTemplatePicker mode={mode} people={people} profiles={data.peopleCatalog} onAvatarFile={data.capabilities.editPeopleAvatars?(id,file)=>void uploadAvatar(id,file):undefined} uploadingAvatar={uploadingAvatar} disabled={saving||recovering||!!uploadingAvatar} onMode={value=>{if(value===mode)return;setMode(value);setIntervalMinutes(value==="people"?5:360);setAutoUpdate(true);}} onPeople={setPeople}/>
       <div className="feed-update-settings"><span>自动更新</span><button type="button" role="switch" aria-label="自动更新动态" aria-checked={autoUpdate} disabled={saving} onClick={()=>setAutoUpdate(value=>!value)} className={`relative h-5 w-9 flex-none rounded-full transition-colors duration-300 ease-out ${autoUpdate?"bg-[#34c759]":"bg-[#e9e9ea] dark:bg-[#3a3a3c]"}`}><span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full shadow transition-transform duration-300 ${autoUpdate?"translate-x-4":""}`} style={{backgroundColor:"#fff",transitionTimingFunction:"cubic-bezier(.32,.72,0,1)"}}/></button></div>

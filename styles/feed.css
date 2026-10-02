@@ -198,7 +198,11 @@ html:root body:has([data-capsule-scope="non-home"]) .feed-themed-modal.app-modal
 .feed-template-avatar-edit input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border-radius:50%}
 .feed-template-avatar-edit:focus-within{outline:2px solid var(--feed-link);outline-offset:3px}
 .feed-template-avatar-edit:has(input:disabled){cursor:default;opacity:.65}
-.feed-avatar-edit-mark{position:absolute;right:-3px;bottom:-2px;display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--feed-link);color:var(--feed-action-ink);border:2px solid var(--feed-panel);pointer-events:none}
+.feed-avatar-edit-mark{position:absolute;inset:0;display:grid;place-items:center;border-radius:50%;background:#00000073;color:#fff;opacity:0;transition:opacity .2s ease-out;pointer-events:none}
+.dark .feed-avatar-edit-mark{background:#00000073;color:#fff}
+@media(hover:hover){.feed-template-avatar-edit:not(:has(input:disabled)):hover .feed-avatar-edit-mark{opacity:1}}
+.feed-template-avatar-edit:not(:has(input:disabled)):is(:focus-within,:active) .feed-avatar-edit-mark,.feed-template-avatar-edit[data-uploading=true] .feed-avatar-edit-mark{opacity:1}
+@media(prefers-reduced-motion:reduce){.feed-avatar-edit-mark{transition:none}.feed-avatar-edit-mark .animate-spin{animation:none}}
 .feed-update-settings{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:18px;font-size:14px}
 .feed-update-settings .app-select{max-width:180px}
 .feed-people-filter{display:flex;gap:24px;overflow-x:auto;margin:0 0 28px 52px;padding:4px 3px 8px;scrollbar-width:thin}

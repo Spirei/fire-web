@@ -25,3 +25,5 @@ export type FeedJobPage = { jobs:FeedJob[]; nextCursor:string|null };
 export type FeedMessage = { id: string; role: "user" | "assistant"; text: string; createdAt: string };
 export type FeedPeopleSourceStatus = { personId:FeedPersonId; lastAttemptAt:string|null; lastSuccessAt:string|null; error:string|null };
 export type FeedPayload = { agent?:FeedAgentProfile; posts: FeedPost[]; nextCursor: string | null; preferences: FeedPreferences; job: FeedJob | null; group?:FeedGroup; groups?:FeedGroup[]; recommendations?:FeedSubscription[]; observedPublishers?:string[]; peopleSources?:FeedPeopleSourceStatus[]; peopleCatalog?:FeedPerson[]; peopleLatestAt?:Partial<Record<FeedPersonId,string|null>>; capabilities: { generate: boolean; editPeopleAvatars?:boolean; search: "brave" | "news-rss"; searchProvider?: "deepseek" | "brave" | "news-rss"; avatar: { image: string; video: string | null } } };
+/** Shell data is independent of the group selected in the browser URL. */
+export type FeedChrome = Pick<FeedPayload,"agent"|"groups"|"peopleCatalog"|"capabilities">;

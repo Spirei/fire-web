@@ -150,7 +150,7 @@ export default function RecordsApp({
   initialFlagIcons?: Record<string, string>;
   initialAssetLibrary?: { assets: import("@/lib/useAssetIcons").Asset[]; total: number } | null;
   initialCardLibrary?: import("@/lib/cardLibrary").CardLibraryPayload | null;
-  initialFeed?: import("@/lib/feedTypes").FeedPayload | null;
+  initialFeed?: import("@/lib/feedTypes").FeedChrome | import("@/lib/feedTypes").FeedPayload | null;
 }) {
   const router = useRouter();
   const desktopViewport = useDesktopViewport();

@@ -1,4 +1,4 @@
-import type { FeedPayload } from "./feedTypes";
+import type { FeedChrome, FeedPayload } from "./feedTypes";
 
 /** Reuse unchanged cards so quiet checks do not repaint text, images or videos. */
 export function reconcileFeedPayload(previous:FeedPayload|null,next:FeedPayload):FeedPayload {
@@ -14,6 +14,6 @@ export function reconcileFeedPayload(previous:FeedPayload|null,next:FeedPayload)
 }
 
 /** Only these fields affect the persistent header and a group's loading shell. */
-export function feedChromeKey(payload:FeedPayload|null) {
+export function feedChromeKey(payload:FeedChrome|null) {
   return payload?JSON.stringify([payload.agent,payload.groups,payload.peopleCatalog,payload.capabilities]):"";
 }

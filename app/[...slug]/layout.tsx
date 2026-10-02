@@ -20,7 +20,7 @@ import { unstable_noStore } from "next/cache";
 import { totalFundBalances } from "@/lib/fundState";
 import { listWatchGroups } from "@/lib/watchGroupsStore";
 import { getAssistantHistoryState } from "@/lib/assistantHistory";
-import { feedSnapshot } from "@/lib/feedGeneration";
+import { feedBootstrap } from "@/lib/feedGeneration";
 import { CURRENT_VERSION } from "@/lib/versions";
 import { passkeySettingsSnapshot } from "@/lib/passkeySettingsSnapshot";
 
@@ -105,7 +105,9 @@ export default async function SlugLayout({
   const initialCardCovers = initialCardLibrary ? heldCardCoverUrls(initialCardLibrary) : [];
   // 只读取当前账号的动态快照；保留旧路径和旧广场数据，不加载旧作者头像。
   const initialCelebs = tab.key === "celebs" ? getCelebsSnapshot() : null;
-  const initialFeed = tab.key === "trading" ? feedSnapshot(user.id) : null;
+  // Layouts do not receive query parameters. Never import the default group's
+  // posts before the browser reads the group actually requested in the URL.
+  const initialFeed = tab.key === "trading" ? feedBootstrap(user.id) : null;
 
   return (
     <div className="app-shell-root flex min-h-[100dvh] flex-col bg-page">
