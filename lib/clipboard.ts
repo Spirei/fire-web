@@ -10,8 +10,10 @@ export async function copyText(text: string): Promise<boolean> {
   } catch {
     /* 继续走回退 */
   }
+  let ta: HTMLTextAreaElement | null = null;
+  const previousFocus = document.activeElement;
   try {
-    const ta = document.createElement("textarea");
+    ta = document.createElement("textarea");
     ta.value = text;
     ta.setAttribute("readonly", "");
     ta.style.position = "fixed";
@@ -21,9 +23,12 @@ export async function copyText(text: string): Promise<boolean> {
     ta.select();
     ta.setSelectionRange(0, ta.value.length);
     const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
     return ok;
   } catch {
     return false;
+  } finally {
+    // Never leave copied credentials in the DOM, even when the browser rejects copying.
+    if (ta) { ta.value = ""; ta.remove(); }
+    if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
   }
 }

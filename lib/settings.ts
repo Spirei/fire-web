@@ -251,6 +251,7 @@ function normalizeDefault(tabs: TabConfig[]) {
 // 用内存缓存避免每次全表 SELECT + 逐项 JSON.parse。写入口只有 updateSiteSettings，
 // 写后统一失效重建，保证跨请求一致。
 let settingsCache: SiteSettings | null = null;
+let cachedXueqiuCookieRow = "";
 
 /** OpenD 主机只接受 hostname/IP；兼容旧版误填的 http(s)://地址和附带端口。 */
 export function normalizeFutuHost(value: string): string {
@@ -265,7 +266,9 @@ export function normalizeFutuHost(value: string): string {
 
 export function getSiteSettings(): SiteSettings {
   const revision = modelSettingsRevision();
-  if (settingsCache?.modelServicesRevision === revision) return settingsCache;
+  // Cookie can be replaced/cleared by another worker without changing model configuration.
+  const cookieRow = getDb().prepare("SELECT value FROM site_settings WHERE key='xueqiuCookie'").get() as { value: string } | undefined;
+  if (settingsCache?.modelServicesRevision === revision && cachedXueqiuCookieRow === (cookieRow?.value || "")) return settingsCache;
   const rows = getDb()
     .prepare("SELECT key, value FROM site_settings")
     .all() as { key: string; value: string }[];
@@ -473,11 +476,12 @@ export function getSiteSettings(): SiteSettings {
   result.tradingSquareDuanRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareDuanRefreshMinutes) || 5)));
   result.modelServicesInitialized = typeof map.modelServices === "string";
   result.modelServicesRevision = revision;
+  cachedXueqiuCookieRow = map.xueqiuCookie || "";
   settingsCache = result;
   return result;
 }
 
-export function updateSiteSettings(patch: Partial<SiteSettings>, expectedModelRevision?: string): SiteSettings {
+export function updateSiteSettings(patch: Partial<SiteSettings> & { clearXueqiuCookie?: boolean }, expectedModelRevision?: string): SiteSettings {
   const db = getDb();
   db.transaction(() => {
   if (Array.isArray(patch.modelServices) && getSiteSettings().modelServicesError) throw new Error(getSiteSettings().modelServicesError);
@@ -490,11 +494,11 @@ export function updateSiteSettings(patch: Partial<SiteSettings>, expectedModelRe
     const v = patch[k];
     if (typeof v !== "string") return;
     const trimmed = v.trim();
-    // 雪球 Cookie：GET 会把真实值藏成空串、输入框未改时显示 ********。
-    // 这两种都不能写回，否则会把已保存的登录会话清掉。
+    // Empty redacted values must not erase saved credentials.
     if (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey"].includes(k) && (!trimmed || trimmed === "********")) return;
     upsert.run(k, ["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey"].includes(k) ? encryptSecret(trimmed) : trimmed);
   });
+  if (patch.clearXueqiuCookie === true) upsert.run("xueqiuCookie", "");
   if (typeof patch.smtpSecure === "boolean") upsert.run("smtpSecure", patch.smtpSecure ? "1" : "0");
   if (Array.isArray(patch.modelServices)) {
     upsert.run("modelServices", JSON.stringify(normalizeModelServices(patch.modelServices).map(service => ({

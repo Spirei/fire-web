@@ -70,7 +70,7 @@ body .alcor-feed .feed-post .feed-post-content h2{font-size:18px;line-height:26p
 .feed-media-item>a span{position:absolute;display:flex;align-items:center;gap:8px;border-radius:999px;padding:10px 16px;background:#000b;color:#fff;font-size:13px}
 .feed-media-preview{display:block;max-width:100%;max-height:70dvh;object-fit:contain;margin:auto;border-radius:12px}
 .feed-groups{display:flex;align-items:center;gap:8px;overflow-x:auto;margin:-12px 0 30px 52px;padding:2px 0}
-.feed-groups button{flex:none;white-space:nowrap;border:1px dashed var(--feed-divider);border-radius:999px;background:transparent;color:var(--feed-secondary);padding:7px 14px;font-size:13px;line-height:20px}
+.feed-groups button{flex:none;white-space:nowrap;border:1px dashed var(--feed-divider);border-radius:999px;background:transparent;color:var(--feed-secondary);padding:7px 14px;font-size:13px;line-height:20px;transition:background-color .16s ease-out,color .16s ease-out,border-color .16s ease-out}
 .feed-groups button[aria-pressed=true]{border:1px solid transparent;background:var(--feed-fill);color:var(--feed-ink)}
 .feed-groups .feed-group-add{display:grid;place-items:center;padding:8px;width:36px;height:36px}
 .feed-groups button:hover{background:var(--feed-fill)}
@@ -201,6 +201,9 @@ html:root body:has([data-capsule-scope="non-home"]) .feed-themed-modal.app-modal
 .feed-people-filter>button{display:flex;flex-direction:column;align-items:center;gap:10px;flex:none;width:90px;padding:0;border:0;border-radius:0;background:transparent;color:var(--feed-secondary);font-size:14px;text-align:center}
 .feed-people-filter>button{--feed-filter-accent:var(--feed-windmill)}
 .feed-people-filter>button[aria-pressed="true"]{color:var(--feed-filter-accent)}
+.feed-people-filter>button{transition:color .16s ease-out}
+.feed-filter-avatar{transition:border-color .16s ease-out}
+@media(prefers-reduced-motion:reduce){.feed-groups button,.feed-people-filter>button,.feed-filter-avatar{transition:none}}
 .feed-filter-avatar{position:relative;display:grid;place-items:center;width:64px;height:64px;border:1px solid transparent;border-radius:50%;background:transparent}
 .feed-people-filter>button[aria-pressed="true"] .feed-filter-avatar{border-color:var(--feed-filter-accent)}
 .feed-people-filter>button:focus-visible{outline:none}

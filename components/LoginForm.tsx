@@ -1,5 +1,7 @@
 "use client";
 
+import VisibilityIcon from "@/components/VisibilityIcon";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PasskeyLoginButton from "@/components/PasskeyLoginButton";
@@ -239,11 +241,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
               aria-label={showPwd ? "隐藏密码" : "查看密码"}
               className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-faint transition-colors hover:bg-brand-hover hover:text-ink"
             >
-              {showPwd ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><path d="m1 1 22 22" /></svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
-              )}
+              <VisibilityIcon hidden={showPwd} className="h-[18px] w-[18px]" />
             </button>
           </div>
           {mode === "register" && <PasswordStrength password={password} userInputs={[username]} />}
@@ -270,11 +268,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
                 aria-label={showConfirm ? "隐藏密码" : "查看密码"}
                 className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-faint transition-colors hover:bg-brand-hover hover:text-ink"
               >
-                {showConfirm ? (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><path d="m1 1 22 22" /></svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
-                )}
+                <VisibilityIcon hidden={showConfirm} className="h-[18px] w-[18px]" />
               </button>
             </div>
           </label>

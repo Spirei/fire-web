@@ -33,6 +33,9 @@ export async function PUT(request: Request) {
     throw error;
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
+  if (body.xueqiuCookie !== undefined && (typeof body.xueqiuCookie !== "string" || body.xueqiuCookie.length > 16384 || /[\u0000-\u001f\u007f]/.test(body.xueqiuCookie))) return NextResponse.json({ error: "Cookie 格式无效或过长，请复制完整的单行 Cookie" }, { status: 400 });
+  if (body.clearXueqiuCookie !== undefined && typeof body.clearXueqiuCookie !== "boolean") return NextResponse.json({ error: "无效的 Cookie 清除请求" }, { status: 400 });
+  if (body.clearXueqiuCookie === true && typeof body.xueqiuCookie === "string" && body.xueqiuCookie.trim()) return NextResponse.json({ error: "不能同时替换和清除 Cookie" }, { status: 400 });
 
   // 数据源地址仅允许 http(s)，防止配置成 file:// 或内网探测地址（管理端接口）
   const URL_KEYS = [
@@ -142,6 +145,7 @@ export async function PUT(request: Request) {
     tradingSquareTrumpRefreshMinutes: Number.isFinite(Number(body.tradingSquareTrumpRefreshMinutes)) ? Number(body.tradingSquareTrumpRefreshMinutes) : undefined,
     tradingSquareDuanRefreshMinutes: Number.isFinite(Number(body.tradingSquareDuanRefreshMinutes)) ? Number(body.tradingSquareDuanRefreshMinutes) : undefined,
     xueqiuCookie: body.xueqiuCookie !== undefined ? String(body.xueqiuCookie) : undefined,
+    clearXueqiuCookie: body.clearXueqiuCookie === true,
     homeNav: Array.isArray(body.homeNav) ? body.homeNav : undefined,
     tabs: Array.isArray(body.tabs) ? body.tabs : undefined,
     mobileNavigationOrder: Array.isArray(body.mobileNavigationOrder) ? body.mobileNavigationOrder : undefined,

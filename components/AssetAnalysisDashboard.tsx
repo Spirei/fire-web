@@ -1,5 +1,7 @@
 "use client";
 
+import VisibilityIcon from "@/components/VisibilityIcon";
+
 import { usePnlCalendarState } from "@/lib/usePnlCalendarState";
 import { useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
@@ -1105,7 +1107,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
             <div className="asset-account-highlight">
               <div className="asset-account-primary">
                 <div className="asset-account-primary-label"><CurrencyPicker context="asset" prefix="总资产" /></div>
-                <div className="asset-account-total"><strong className="asset-account-amount tabular-nums">{maskCashMoney(totalAsset, true)}</strong><button type="button" onClick={() => setAssetsVisible((visible) => !visible)} className="asset-privacy-button text-muted" title={assetsVisible ? "隐藏资产金额" : "显示资产金额"} aria-label={assetsVisible ? "隐藏资产金额" : "显示资产金额"}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />{assetsVisible ? <circle cx="12" cy="12" r="2.6" /> : <path d="m4 4 16 16" />}</svg></button></div>
+                <div className="asset-account-total"><strong className="asset-account-amount tabular-nums">{maskCashMoney(totalAsset, true)}</strong><button type="button" onClick={() => setAssetsVisible((visible) => !visible)} className="asset-privacy-button text-muted" title={assetsVisible ? "隐藏资产金额" : "显示资产金额"} aria-label={assetsVisible ? "隐藏资产金额" : "显示资产金额"}><VisibilityIcon hidden={!assetsVisible} className="h-4 w-4" /></button></div>
               </div>
               <div className="asset-account-day"><span className="block text-xs text-muted">当日盈亏</span><strong className={`mt-1 block text-sm tabular-nums ${summary.day >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.day, true)}</strong></div>
             </div>

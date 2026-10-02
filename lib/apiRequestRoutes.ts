@@ -90,6 +90,7 @@ export const API_REQUEST_ROUTES = [
   "/api/settings/model-icon",
   "/api/settings/model-test",
   "/api/settings/public",
+  "/api/settings/xueqiu-cookie",
   "/api/showcase/model-files/[file]",
   "/api/showcase/models",
   "/api/showcase/models/[id]",

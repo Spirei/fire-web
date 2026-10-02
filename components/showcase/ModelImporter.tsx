@@ -1,5 +1,7 @@
 "use client";
 
+import VisibilityIcon from "@/components/VisibilityIcon";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -1279,14 +1281,7 @@ export default function ModelImporter({ existing, mode = "manage", processingMet
                     title={(visibility[row.id] ?? row.hidden) ? "恢复首页显示" : "首页隐藏（不参与预载）"}
                     aria-label={(visibility[row.id] ?? row.hidden) ? "恢复首页显示" : "首页隐藏"}
                     aria-busy={visibilityBusy === row.id} aria-pressed={visibility[row.id] ?? row.hidden ?? false} onClick={() => void toggleVisibility(row)}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      {(visibility[row.id] ?? row.hidden) ? <>
-                        <path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.3A10 10 0 0 1 12 5c5.5 0 9 7 9 7a17 17 0 0 1-2.2 3.2M6.2 6.2C3.6 8.3 2 12 2 12s4 7 10 7a9.5 9.5 0 0 0 5-1.6" />
-                      </> : <>
-                        <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </>}
-                    </svg>
+                    <VisibilityIcon hidden={visibility[row.id] ?? row.hidden ?? false} strokeWidth="1.6" />
                   </button>
                   <button type="button" className="fire-cap mp-asset-action px-2 py-1 text-[11px] font-semibold" disabled={previewUploadBusy !== null || row.present === false} onClick={() => { previewTargetRef.current = row.id; previewInputRef.current?.click(); }}>
                     {previewUploadBusy === row.id ? "正在上传…" : row.previewReady ? "替换首页预览" : "上传首页预览"}

@@ -1,5 +1,7 @@
 "use client";
 
+import VisibilityIcon from "@/components/VisibilityIcon";
+
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -739,10 +741,7 @@ export default function LibraryAttachmentsView() {
                   </button>
                 )}
                 <button type="button" title="预览" onClick={(event) => { event.stopPropagation(); setPreview(a); }} className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-[8px] border border-edge text-muted transition-all duration-200 hover:border-edge-strong hover:bg-brand-hover hover:text-ink active:scale-[.97]">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
+                  <VisibilityIcon className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"

@@ -7210,6 +7210,19 @@ html { scrollbar-gutter:stable; }
 .password-input > input { display:block; width:100%!important; min-width:0; padding-right:48px!important; }
 .password-input > .password-visibility-toggle { position:absolute; right:2px; top:50%; transform:translateY(-50%); z-index:1; display:flex; align-items:center; justify-content:center; width:44px; height:44px; min-width:44px; min-height:44px; padding:0; margin:0; border:0; border-radius:12px; background:transparent; color:inherit; opacity:.65; box-shadow:none; cursor:pointer; transition:opacity 150ms ease; }
 .password-input > .password-visibility-toggle:hover { opacity:1; }
+.password-visibility-toggle > svg { display:block; flex:none; width:20px; height:20px; }
+.xueqiu-cookie-field { flex:1; width:100%; min-width:0; }
+.xueqiu-cookie-control { position:relative; min-width:0; }
+.xueqiu-cookie-control > input.sw-row-input { display:block; width:100%!important; min-width:0; padding-right:120px!important; }
+.xueqiu-cookie-actions { position:absolute; right:3px; top:50%; transform:translateY(-50%); display:flex; align-items:center; }
+.xueqiu-cookie-actions > button { display:flex; align-items:center; justify-content:center; width:36px; height:36px; flex:none; padding:0; border:0; border-radius:9px; background:transparent; color:#687386; cursor:pointer; }
+.xueqiu-cookie-actions > button:hover:not(:disabled) { background:rgba(104,115,134,.08); color:#202938; }
+.xueqiu-cookie-actions > button:disabled { opacity:.35; cursor:default; }
+.xueqiu-cookie-actions > button > svg { display:block; flex:none; }
+.xueqiu-cookie-pending,.xueqiu-cookie-error { display:block; margin-top:7px; color:#c93646; font-size:11px; line-height:1.5; }
+.dark .xueqiu-cookie-actions > button { color:#9ca7b6; }
+.dark .xueqiu-cookie-actions > button:hover:not(:disabled) { background:rgba(255,255,255,.07); color:#e4e9f0; }
+.dark .xueqiu-cookie-pending,.dark .xueqiu-cookie-error { color:#f57783; }
 .sv-win-root .sw-row > .password-input { flex:1; min-width:0; }
 .sc-detail-dialog .settings-password-meta .password-input-control { min-height:60px; padding-left:16px; border-radius:16px; font-size:15px; font-weight:500; line-height:19px; }
 .model-field .model-key-state { right:48px; }

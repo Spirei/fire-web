@@ -3,6 +3,8 @@
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import PasswordInput from "@/components/PasswordInput";
+import XueqiuCookieInput from "@/components/XueqiuCookieInput";
+import { xueqiuCookiePatch, type XueqiuCookieDraft } from "@/lib/xueqiuCookieClient";
 import { clientRandomId } from "@/lib/randomId";
 import ModelTestButton from "@/components/ModelTestButton";
 import PasskeySettings from "@/components/PasskeySettings";
@@ -995,7 +997,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     }
   }
 
-  async function saveBlock(key: string, fields: Partial<SiteSettings>, hint: string, signal?: AbortSignal) {
+  async function saveBlock(key: string, fields: Partial<SiteSettings> & { clearXueqiuCookie?: boolean }, hint: string, signal?: AbortSignal) {
     setBlockSaving((b) => ({ ...b, [key]: true }));
     setBlockMsg((m) => ({ ...m, [key]: undefined }));
     try {
@@ -1390,6 +1392,20 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     return () => { cancelled = true; };
   }, []);
   const [editingTradingSquare, setEditingTradingSquare] = useState(false);
+  const [cookieDraft, setCookieDraft] = useState<XueqiuCookieDraft>({ value: "", dirty: false });
+  const tradingSquareSaveRef = useRef(false);
+  async function saveTradingSquare() {
+    if (tradingSquareSaveRef.current) return;
+    tradingSquareSaveRef.current = true;
+    try {
+      const ok = await saveBlock("tradingSquare", {
+        tradingSquareTrumpRefreshMinutes: site.tradingSquareTrumpRefreshMinutes,
+        tradingSquareDuanRefreshMinutes: site.tradingSquareDuanRefreshMinutes,
+        ...xueqiuCookiePatch(cookieDraft)
+      }, "公开动态来源已保存");
+      if (ok) { setCookieDraft({ value: "", dirty: false }); setEditingTradingSquare(false); }
+    } finally { tradingSquareSaveRef.current = false; }
+  }
   const [editingProfile, setEditingProfile] = useState(false);
   // 站点信息：不再有「编辑 / 保存」两步 —— 字段常驻可编辑，改动由全局自动保存（700ms 防抖 + 胶囊提示）落库
   const [editingSiteInfo] = useState(true);
@@ -1449,11 +1465,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     savingEditRef.current = true;
     try {
       if (activeAnchor === "trading-square") {
-        const ok = await saveBlock("tradingSquare", {
-          tradingSquareTrumpRefreshMinutes: site.tradingSquareTrumpRefreshMinutes,
-          tradingSquareDuanRefreshMinutes: site.tradingSquareDuanRefreshMinutes
-        }, "交易广场更新频率已保存");
-        if (ok) setEditingTradingSquare(false);
+        await saveTradingSquare();
       } else if (activeAnchor === "info") {
         const ok = await saveBlock("siteInfo", { title: site.title, domain: site.domain, allowRegister: site.allowRegister, footerDesc: site.footerDesc }, "站点信息已保存");
         // 站点信息是常驻可编辑 + 自动保存，不再有「保存后转只读」这一步
@@ -1516,6 +1528,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     else if (activeAnchor === "database") setEditingDb(false);
   }
   function cancelActiveEdit() {
+    setCookieDraft({ value: "", dirty: false });
     for (const service of site.modelServices) modelTestRevisions.current[service.id] = (modelTestRevisions.current[service.id] || 0) + 1;
     setModelTestStates({});
     const snapshot = lastSavedRef.current;
@@ -2350,7 +2363,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             category={currentCategory?.label || "账户设置"}
             detailKey={activeAnchor}
             showBack={activeAnchor === "totp" && (totpEnabled || !!totpSetup || totpLandingStage === "method")}
-            closeDisabled={(activeAnchor === "totp" && totpBusy) || (activeAnchor === "profile" && profileSaving) || (activeAnchor === "mobile-nav" && !!blockSaving["mobile-nav"])}
+            closeDisabled={(activeAnchor === "totp" && totpBusy) || (activeAnchor === "profile" && profileSaving) || (activeAnchor === "trading-square" && !!blockSaving.tradingSquare) || (activeAnchor === "mobile-nav" && !!blockSaving["mobile-nav"])}
             onBack={activeAnchor === "totp" ? () => {
               if (totpBusy) return;
               if (totpSetup && totpSetupStage === "verify") { setTotpSetupStage("name"); setTotpSetupCode(""); setTotpMsg(null); return; }
@@ -2816,13 +2829,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   title="原公开动态来源"
                   desc="保留原公开内容的缓存配置；新的个性化动态在页面右上角编辑指示。"
                   action={editingTradingSquare ? (
-                    <button type="button" disabled={blockSaving.tradingSquare} onClick={async () => {
-                      const ok = await saveBlock("tradingSquare", {
-                        tradingSquareTrumpRefreshMinutes: site.tradingSquareTrumpRefreshMinutes,
-                        tradingSquareDuanRefreshMinutes: site.tradingSquareDuanRefreshMinutes
-                      }, "公开内容更新频率已保存");
-                      if (ok) setEditingTradingSquare(false);
-                    }} className="btn btn-line btn-sm disabled:opacity-60">{blockSaving.tradingSquare ? "保存中…" : "保存"}</button>
+                    <button type="button" disabled={blockSaving.tradingSquare} onClick={() => void saveTradingSquare()} className="btn btn-line btn-sm disabled:opacity-60">{blockSaving.tradingSquare ? "保存中…" : "保存"}</button>
                   ) : <button type="button" onClick={() => setEditingTradingSquare(true)} className="btn btn-ghost btn-sm">编辑</button>}
                 >
                   <div className="flex flex-col">
@@ -2844,21 +2851,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <div className="ctrl"><span className="inline-flex items-center gap-1.5 text-[12px] text-muted"><i className="h-1.5 w-1.5 rounded-full bg-emerald-500" />缓存优先 · 访问触发</span></div>
                     </div>
                     <div className="sw-row">
-                      <div className="sw-row-label"><b>雪球 Cookie</b><span>登录雪球后复制整段 Cookie；服务端带登录会话请求，绕过雪球 WAF 反爬（仅服务端使用）</span></div>
+                      <div className="sw-row-label"><b>雪球 Cookie</b><span>用于雪球登录会话；修改后保存生效</span></div>
                       <div className="ctrl">
-                        <PasswordInput className="sw-row-input" type="password" autoComplete="off" readOnly={!editingTradingSquare}
-                          placeholder="xq_a_token=…; u=…; …"
-                          value={!site.xueqiuCookie && site.xueqiuCookieConfigured ? "********" : (site.xueqiuCookie || "")}
-                          onFocus={(e) => { if (e.currentTarget.value === "********") e.currentTarget.value = ""; }}
-                          onChange={(e) => setSite((s) => ({ ...s, xueqiuCookie: e.target.value }))}
-                          onBlur={(e) => {
-                            const v = e.currentTarget.value.trim();
-                            if (!v || v === "********") return;
-                            fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ xueqiuCookie: v }) })
-                              .then(() => setSite((s) => ({ ...s, xueqiuCookie: v, xueqiuCookieConfigured: true })))
-                              .catch(() => {});
-                          }}
-                        />
+                        <XueqiuCookieInput draft={cookieDraft} configured={!!site.xueqiuCookieConfigured} editing={editingTradingSquare} disabled={!!blockSaving.tradingSquare} onChange={setCookieDraft} />
                         <span className={`ml-2 inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle ring-2 ring-white dark:ring-[#151b26] ${site.xueqiuCookieConfigured ? "bg-emerald-500" : "bg-slate-300"}`} title={site.xueqiuCookieConfigured ? "已配置" : "未配置"} />
                       </div>
                     </div>
