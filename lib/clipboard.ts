@@ -1,15 +1,22 @@
 "use client";
 
 // 复制文本：优先 Clipboard API，失败时回退到 textarea + execCommand（兼容 http / 权限受限环境）
-export async function copyText(text: string): Promise<boolean> {
+export async function copyText(text: string, signal?: AbortSignal): Promise<boolean> {
+  if (signal?.aborted) throw new DOMException("请求已取消", "AbortError");
   try {
     if (navigator.clipboard && typeof navigator.clipboard.writeText === "function" && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
+      const write = navigator.clipboard.writeText(text);
+      await (signal ? waitForCopy(write, signal) : write);
       return true;
     }
   } catch {
     /* 继续走回退 */
   }
+  if (signal?.aborted) throw new DOMException("请求已取消", "AbortError");
+  return copyTextFallback(text);
+}
+
+function copyTextFallback(text: string): boolean {
   let ta: HTMLTextAreaElement | null = null;
   const previousFocus = document.activeElement;
   try {
@@ -31,4 +38,40 @@ export async function copyText(text: string): Promise<boolean> {
     if (ta) { ta.value = ""; ta.remove(); }
     if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
   }
+}
+
+function waitForCopy<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(new DOMException("请求已取消", "AbortError"));
+    signal.addEventListener("abort", abort, { once: true });
+    operation.then(value => { signal.removeEventListener("abort", abort); resolve(value); }, error => { signal.removeEventListener("abort", abort); reject(error); });
+    if (signal.aborted) abort();
+  });
+}
+
+/** Start clipboard access during the click, before asynchronously loading protected text (Safari). */
+export async function copyTextFrom(load: () => Promise<string>, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted) throw new DOMException("请求已取消", "AbortError");
+  const text = waitForCopy(Promise.resolve().then(() => {
+    if (signal.aborted) throw new DOMException("请求已取消", "AbortError");
+    return load();
+  }), signal);
+  // Some browsers reject clipboard access before consuming the promised data.
+  void text.catch(() => {});
+  if (window.isSecureContext && typeof ClipboardItem !== "undefined" && typeof navigator.clipboard?.write === "function") {
+    const blob = text.then(value => new Blob([value], { type: "text/plain" }));
+    void blob.catch(() => {});
+    try {
+      const item = new ClipboardItem({ "text/plain": blob });
+      await waitForCopy(navigator.clipboard.write([item]), signal);
+      return true;
+    } catch {
+      const value = await text; // Preserve read errors; never copy an error message.
+      if (signal.aborted) throw new DOMException("请求已取消", "AbortError");
+      return copyTextFallback(value);
+    }
+  }
+  const value = await text;
+  if (signal.aborted) throw new DOMException("请求已取消", "AbortError");
+  return copyText(value, signal);
 }

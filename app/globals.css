@@ -7213,9 +7213,10 @@ html { scrollbar-gutter:stable; }
 .password-visibility-toggle > svg { display:block; flex:none; width:20px; height:20px; }
 .xueqiu-cookie-field { flex:1; width:100%; min-width:0; }
 .xueqiu-cookie-control { position:relative; min-width:0; }
-.xueqiu-cookie-control > input.sw-row-input { display:block; width:100%!important; min-width:0; padding-right:120px!important; }
+.xueqiu-cookie-control > input.sw-row-input { display:block; width:100%!important; min-width:0; padding-right:92px!important; }
+.xueqiu-cookie-control[data-editing="true"] > input.sw-row-input { padding-right:132px!important; }
 .xueqiu-cookie-actions { position:absolute; right:3px; top:50%; transform:translateY(-50%); display:flex; align-items:center; }
-.xueqiu-cookie-actions > button { display:flex; align-items:center; justify-content:center; width:36px; height:36px; flex:none; padding:0; border:0; border-radius:9px; background:transparent; color:#687386; cursor:pointer; }
+.xueqiu-cookie-actions > button { display:flex; align-items:center; justify-content:center; width:40px; height:40px; flex:none; padding:0; border:0; border-radius:9px; background:transparent; color:#687386; cursor:pointer; transition:background-color .15s,color .15s; }
 .xueqiu-cookie-actions > button:hover:not(:disabled) { background:rgba(104,115,134,.08); color:#202938; }
 .xueqiu-cookie-actions > button:disabled { opacity:.35; cursor:default; }
 .xueqiu-cookie-actions > button > svg { display:block; flex:none; }
@@ -7223,6 +7224,14 @@ html { scrollbar-gutter:stable; }
 .dark .xueqiu-cookie-actions > button { color:#9ca7b6; }
 .dark .xueqiu-cookie-actions > button:hover:not(:disabled) { background:rgba(255,255,255,.07); color:#e4e9f0; }
 .dark .xueqiu-cookie-pending,.dark .xueqiu-cookie-error { color:#f57783; }
+.xueqiu-cookie-spinner { animation:xueqiu-cookie-spin .85s linear infinite; }
+@keyframes xueqiu-cookie-spin { to { transform:rotate(360deg); } }
+@media (max-width:640px) {
+  .xueqiu-cookie-actions > button { width:44px; height:44px; }
+  .xueqiu-cookie-control > input.sw-row-input { padding-right:100px!important; }
+  .xueqiu-cookie-control[data-editing="true"] > input.sw-row-input { padding-right:144px!important; }
+}
+@media (prefers-reduced-motion:reduce) { .xueqiu-cookie-spinner { animation:none; } }
 .sv-win-root .sw-row > .password-input { flex:1; min-width:0; }
 .sc-detail-dialog .settings-password-meta .password-input-control { min-height:60px; padding-left:16px; border-radius:16px; font-size:15px; font-weight:500; line-height:19px; }
 .model-field .model-key-state { right:48px; }

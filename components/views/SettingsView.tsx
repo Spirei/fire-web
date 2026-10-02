@@ -1397,14 +1397,18 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   async function saveTradingSquare() {
     if (tradingSquareSaveRef.current) return;
     tradingSquareSaveRef.current = true;
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 20_000);
     try {
       const ok = await saveBlock("tradingSquare", {
         tradingSquareTrumpRefreshMinutes: site.tradingSquareTrumpRefreshMinutes,
         tradingSquareDuanRefreshMinutes: site.tradingSquareDuanRefreshMinutes,
         ...xueqiuCookiePatch(cookieDraft)
-      }, "公开动态来源已保存");
+      }, "公开动态来源已保存", controller.signal);
       if (ok) { setCookieDraft({ value: "", dirty: false }); setEditingTradingSquare(false); }
-    } finally { tradingSquareSaveRef.current = false; }
+      else if (timedOut) setBlockMsg(current => ({ ...current, tradingSquare: { type: "err", text: "保存超时，请刷新核对后重试" } }));
+    } finally { clearTimeout(timeout); tradingSquareSaveRef.current = false; }
   }
   const [editingProfile, setEditingProfile] = useState(false);
   // 站点信息：不再有「编辑 / 保存」两步 —— 字段常驻可编辑，改动由全局自动保存（700ms 防抖 + 胶囊提示）落库

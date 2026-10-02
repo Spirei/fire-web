@@ -45,7 +45,12 @@ function harness(options = {}) {
   };
   const mocks = { react: hooks,
     '@/lib/xueqiuCookieClient': { readXueqiuCookie: signal => { calls++; return options.read ? options.read(signal) : Promise.resolve('xq_a_token=ISOLATED_ONLY; u=123'); } },
-    '@/lib/clipboard': { copyText: async text => { copies.push(text); return options.copy !== false; } }, '@/lib/toast': { showToast() {} }
+    '@/lib/clipboard': { copyTextFrom: async (load, signal) => {
+      const text = await load();
+      if (signal.aborted) throw new DOMException('aborted', 'AbortError');
+      if (options.stallCopy) await new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true }));
+      copies.push(text); return options.copy !== false;
+    } }, '@/lib/toast': { showToast() {} }
   };
   const exports = {};
   const window = { addEventListener: (key, fn) => listeners.set(key, fn), removeEventListener: key => listeners.delete(key) };
@@ -132,6 +137,8 @@ const watchdog = setTimeout(() => { console.error('Cookie regression timed out')
     await assert.rejects(client.readXueqiuCookie(new AbortController().signal), error => !error.message.includes('ISOLATED_ONLY'));
     global.fetch = async () => Response.json({ cookie: { value: 'ISOLATED_ONLY' } });
     await assert.rejects(client.readXueqiuCookie(new AbortController().signal));
+    global.fetch = async () => Response.json({ error: 'ISOLATED_ONLY' }, { status: 404 });
+    await assert.rejects(client.readXueqiuCookie(new AbortController().signal), { message: '未找到可读取的 Cookie，请重新配置' });
   });
   await test('saved cookie starts blank, reveals in read-only mode and is discarded when hidden', async () => {
     const h = harness(); assert.equal(h.input().props.value, ''); assert.equal(h.calls(), 0);
@@ -168,6 +175,90 @@ const watchdog = setTimeout(() => { console.error('Cookie regression timed out')
   await test('timeout releases controls and communicates failure', async () => {
     const h = harness({ timeout: true, read: signal => new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true })) });
     h.button('显示雪球 Cookie').props.onClick(); await new Promise(resolve => setTimeout(resolve, 15)); assert.equal(h.button('显示雪球 Cookie').props.disabled, false); assert(elements(h.render()).some(el => el.props.role === 'alert')); h.unmount();
+  });
+  await test('Escape masks revealed text without discarding a local draft', async () => {
+    const h = harness(); h.render({ editing: true, draft: { value: 'LOCAL_DRAFT', dirty: true } });
+    h.button('显示雪球 Cookie').props.onClick(); await settle();
+    let prevented = false, stopped = false;
+    h.input().props.onKeyDown({ key: 'Escape', preventDefault() { prevented = true; }, stopPropagation() { stopped = true; } });
+    assert(prevented && stopped); assert.equal(h.input().props.type, 'password'); assert.equal(h.input().props.value, 'LOCAL_DRAFT');
+    assert.equal(h.input().props.autoCapitalize, 'off'); assert.equal(h.input().props.autoCorrect, 'off'); h.unmount();
+  });
+  await test('a stalled clipboard prompt restores controls and keeps the draft masked', async () => {
+    const h = harness({ timeout: true, stallCopy: true }); h.render({ editing: true, draft: { value: 'LOCAL_DRAFT', dirty: true } });
+    h.button('复制雪球 Cookie').props.onClick(); await new Promise(resolve => setTimeout(resolve, 15));
+    assert.equal(h.button('复制雪球 Cookie').props.disabled, false); assert.equal(h.input().props.type, 'password'); assert.equal(h.input().props.value, 'LOCAL_DRAFT');
+    assert(elements(h.render()).some(el => el.props.role === 'alert' && el.props.children === '复制超时，请重试')); h.unmount();
+  });
+  function saveHarness(saveBlock) {
+    const file = path.join(root, 'components/views/SettingsView.tsx');
+    const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let saveFunction;
+    function visit(node) { if (ts.isFunctionDeclaration(node) && node.name?.text === 'saveTradingSquare') saveFunction = node; ts.forEachChild(node, visit); }
+    visit(source); assert(saveFunction);
+    let draft = { value: 'LOCAL_DRAFT', dirty: true }, editing = true, message;
+    const lock = { current: false }, timers = new Map(); let timerId = 0;
+    const exports = {};
+    const compiled = ts.transpileModule(`${saveFunction.getText(source)}\nexports.save = saveTradingSquare;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    vm.runInNewContext(compiled, { exports, AbortController, tradingSquareSaveRef: lock, site: { tradingSquareTrumpRefreshMinutes: 30, tradingSquareDuanRefreshMinutes: 30 }, cookieDraft: draft,
+      xueqiuCookiePatch: client.xueqiuCookiePatch, saveBlock,
+      setCookieDraft: value => { draft = value; }, setEditingTradingSquare: value => { editing = value; }, setBlockMsg: update => { message = update({}); },
+      setTimeout: (fn, ms) => { assert.equal(ms, 20000); timers.set(++timerId, fn); return timerId; }, clearTimeout: id => timers.delete(id) });
+    return { ...exports, lock, timers, timeout: () => [...timers.values()].forEach(fn => fn()), draft: () => draft, editing: () => editing, message: () => message };
+  }
+  await test('Cookie save prevents duplicates, retains failed drafts and clears only confirmed saves', async () => {
+    let calls = 0, complete;
+    const h = saveHarness(async (key, fields) => { calls++; assert.equal(key, 'tradingSquare'); assert.equal(fields.xueqiuCookie, 'LOCAL_DRAFT'); return new Promise(resolve => { complete = resolve; }); });
+    const save = h.save(); await h.save(); assert.equal(calls, 1); complete(false); await save;
+    assert.equal(h.draft().value, 'LOCAL_DRAFT'); assert(h.editing()); assert(!h.lock.current); assert.equal(h.timers.size, 0);
+    const retry = h.save(); complete(true); await retry; assert.equal(h.draft().value, ''); assert.equal(h.draft().dirty, false); assert.equal(h.editing(), false);
+  });
+  await test('Cookie save timeout cancels transport, preserves the draft and asks to verify server state', async () => {
+    let signal;
+    const h = saveHarness((key, fields, hint, current) => { signal = current; return new Promise(resolve => current.addEventListener('abort', () => resolve(false), { once: true })); });
+    const save = h.save(); h.timeout(); await save; assert(signal.aborted); assert(!h.lock.current); assert.equal(h.timers.size, 0);
+    assert.equal(h.draft().value, 'LOCAL_DRAFT'); assert(h.editing()); assert.equal(h.message().tradingSquare.text, '保存超时，请刷新核对后重试');
+  });
+  function clipboardHarness(options = {}) {
+    const exports = {}, writes = [], fallbacks = [];
+    class HTMLElement { constructor() { this.isConnected = true; } focus() {} }
+    class Item { constructor(data) { this.data = data; } }
+    const textarea = { value: '', setAttribute() {}, style: {}, select() {}, setSelectionRange() {}, remove() {} };
+    const clipboard = { write: items => { writes.push(items); return options.write ? options.write(items) : items[0].data['text/plain'].then(() => {}); }, writeText: value => options.writeText ? options.writeText(value) : Promise.resolve() };
+    vm.runInNewContext(compile(path.join(root, 'lib/clipboard.ts')), { exports, navigator: { clipboard }, window: { isSecureContext: options.secure !== false }, ClipboardItem: options.legacy ? undefined : Item, HTMLElement, AbortController, DOMException, Blob,
+      document: { activeElement: new HTMLElement(), createElement: () => textarea, body: { appendChild() {} }, execCommand() { fallbacks.push(textarea.value); return true; } } });
+    return { ...exports, writes, fallbacks, textarea };
+  }
+  await test('Safari clipboard starts in the click before the protected text loads', async () => {
+    const h = clipboardHarness(); let loadStarted = false, complete;
+    const data = new Promise(resolve => { complete = resolve; });
+    const copy = h.copyTextFrom(() => { loadStarted = true; return data; }, new AbortController().signal);
+    assert.equal(h.writes.length, 1); assert.equal(loadStarted, false);
+    await settle(); complete('ISOLATED_ONLY'); assert.equal(await copy, true);
+    const blob = await h.writes[0][0].data['text/plain']; assert.equal(await blob.text(), 'ISOLATED_ONLY'); assert.equal(h.fallbacks.length, 0);
+  });
+  await test('denied clipboard access falls back once; failed reads never copy server errors', async () => {
+    const h = clipboardHarness({ write: () => Promise.reject(Error('denied')) });
+    assert.equal(await h.copyTextFrom(async () => 'ISOLATED_ONLY', new AbortController().signal), true);
+    assert.deepEqual(h.fallbacks, ['ISOLATED_ONLY']); assert.equal(h.textarea.value, '');
+    const failed = clipboardHarness({ write: () => Promise.reject(Error('denied')) });
+    await assert.rejects(failed.copyTextFrom(async () => { throw Error('登录已过期，请重新登录'); }, new AbortController().signal), { message: '登录已过期，请重新登录' });
+    assert.equal(failed.fallbacks.length, 0);
+  });
+  await test('stalled clipboard prompts release on abort without a late fallback write', async () => {
+    for (const legacy of [false, true]) {
+      let rejectWrite;
+      const stalled = () => new Promise((resolve, reject) => { rejectWrite = reject; });
+      const h = clipboardHarness({ legacy, write: stalled, writeText: stalled });
+      const controller = new AbortController();
+      const copy = h.copyTextFrom(async () => 'ISOLATED_ONLY', controller.signal);
+      await settle(); controller.abort(); await assert.rejects(copy, { name: 'AbortError' });
+      rejectWrite(Error('late rejection')); await settle(); assert.equal(h.fallbacks.length, 0);
+    }
+    const controller = new AbortController(); controller.abort();
+    const h = clipboardHarness(); let loaded = false;
+    await assert.rejects(h.copyTextFrom(async () => { loaded = true; return 'ISOLATED_ONLY'; }, controller.signal), { name: 'AbortError' });
+    assert(!loaded); assert.equal(h.writes.length, 0);
   });
   await test('fallback copying clears temporary text even after browser rejection', async () => {
     const exports = {}; let removed = false, refocused = false;
