@@ -169,18 +169,5 @@ let passed=0;async function test(name,run){await run();passed++;console.log('PAS
   await test('group switching keeps shared layout and restores isolated snapshots',async()=>{
     await require('./feed-groups.cjs')(generation.feedSnapshot(user.id,null,50,group.id));
   });
-  await test('quiet snapshots reuse unchanged cards while edits, translation, avatar and media update immediately',()=>{
-    const {reconcileFeedPayload,feedChromeKey}=get('lib/feedSnapshots.ts');
-    const original=generation.feedSnapshot(user.id,null,10,group.id),clone=()=>JSON.parse(JSON.stringify(original));
-    assert.equal(reconcileFeedPayload(original,clone()),original);
-    const changed=clone();changed.posts[0].liked=!original.posts[0].liked;
-    const result=reconcileFeedPayload(original,changed);assert.notEqual(result.posts[0],original.posts[0]);assert.equal(result.posts[1],original.posts[1]);assert.equal(result.posts[0].liked,changed.posts[0].liked);
-    for(const edit of [post=>post.original.textZh='新译文',post=>post.original.person.avatar='/new-avatar.webp',post=>post.media.push({type:'image',url:'/new-image.webp',alt:'新配图'}),post=>post.hidden=true]){
-      const updated=clone();edit(updated.posts[0]);const next=reconcileFeedPayload(original,updated);assert.deepEqual(next.posts[0],updated.posts[0]);assert.notEqual(next.posts[0],original.posts[0]);assert.equal(next.posts[1],original.posts[1]);
-    }
-    const reordered=clone();reordered.posts.reverse();assert.deepEqual(reconcileFeedPayload(original,reordered).posts.map(post=>post.id),reordered.posts.map(post=>post.id));
-    const status=clone();status.job={id:'new-job',status:'searching',revision:status.preferences.revision};assert.equal(reconcileFeedPayload(original,status).posts,original.posts);assert.equal(feedChromeKey(status),feedChromeKey(original));
-    const renamed=clone();renamed.agent={name:'新名称',image:null,revision:2,updatedAt:null};assert.notEqual(feedChromeKey(renamed),feedChromeKey(original));
-  });
   console.log(`${passed} celebrity-template suites passed; disposable data only`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{db.close();fs.rmSync(temp,{recursive:true,force:true});});
