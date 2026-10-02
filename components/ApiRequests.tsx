@@ -10,6 +10,7 @@ import AppSelect from "@/components/AppSelect";
 import ApiPathText from "@/components/ApiPathText";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { parseRequestFilters, requestDay, type RequestFilters, type RequestSnapshot } from "@/lib/apiRequestTypes";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 
 const SOURCE_NAMES = { web: "网页", ios: "iOS", app: "App", other: "其他" };
 const FILTER_KEYS: Record<keyof RequestFilters, string> = { period: "rPeriod", status: "rStatus", source: "rSource", method: "rMethod", q: "rQ", page: "rPage", anchor: "rAnchor", day: "rDay", year: "rYear" };
@@ -66,6 +67,9 @@ function RequestHeatmap({ counts, today, filters, onChange }: { counts: Record<s
 }
 
 export default function ApiRequests({ standalone = false }: { standalone?: boolean }) {
+  const foreground = useWorkspaceForeground();
+  const foregroundRef = useRef(foreground);
+  foregroundRef.current = foreground;
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const query = searchParams.toString();
@@ -82,6 +86,10 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
   const flight = useRef<AbortController | null>(null);
+  const flightKey = useRef("");
+  const changedDuringRead = useRef(false);
+  const confirmed = useRef({ key: "", at: 0 });
+  const queueRefresh = useRef<() => void>(() => {});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chartRef = useRef<HTMLDivElement | null>(null);
   const [chartHover, setChartHover] = useState<{ index: number; x: number } | null>(null);
@@ -89,11 +97,17 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
   const loadingShape = useRef({ rows: 6, endpoints: 3 });
 
   const refresh = useCallback(async () => {
+    if (!foregroundRef.current || document.hidden) return;
+    const key = filterParams(filtersRef.current).toString();
+    if (flight.current && !flight.current.signal.aborted && flightKey.current === key) {
+      changedDuringRead.current = true;
+      return;
+    }
     flight.current?.abort();
     const controller = new AbortController(); flight.current = controller;
+    flightKey.current = key;
     setRefreshing(true);
-    const key = filterParams(filtersRef.current).toString();
-    const isCurrent = () => !controller.signal.aborted && key === filterParams(filtersRef.current).toString();
+    const isCurrent = () => !controller.signal.aborted && foregroundRef.current && !document.hidden && key === filterParams(filtersRef.current).toString();
     try {
       const response = await fetch(`/api/request-logs?${key}`, { cache: "no-store", signal: controller.signal });
       const data = await response.json();
@@ -103,39 +117,60 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
         throw new Error(data.message || "请求日志读取失败");
       }
       loadingShape.current = { rows: data.data.logs.length, endpoints: data.data.endpoints.length };
-      setResult({ key, snapshot: data.data }); setError(""); setCheckedAt(Date.now());
+      const at = Date.now(); confirmed.current = { key, at };
+      setResult({ key, snapshot: data.data }); setError(""); setCheckedAt(at);
     } catch (error) { if (isCurrent()) setError(error instanceof Error ? error.message : "请求日志读取失败"); }
-    finally { if (isCurrent()) setRefreshing(false); }
+    finally {
+      if (flight.current === controller) {
+        flight.current = null;
+        setRefreshing(false);
+        if (changedDuringRead.current && !controller.signal.aborted && foregroundRef.current && !document.hidden) {
+          changedDuringRead.current = false;
+          queueRefresh.current();
+        }
+      }
+    }
   }, []);
   const scheduleRefresh = useCallback((delay = 150, replace = false) => {
+    if (!foregroundRef.current || document.hidden) return;
     // Coalesce live events without postponing an update forever under sustained traffic.
     if (timer.current && !replace) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => { timer.current = null; void refresh(); }, delay);
   }, [refresh]);
+  queueRefresh.current = scheduleRefresh;
 
   useEffect(() => {
-    flight.current?.abort(); setError(""); scheduleRefresh(180, true);
-  }, [filterKey, scheduleRefresh]);
+    if (foreground) {
+      setError("");
+      if (confirmed.current.key !== filterKey || Date.now() - confirmed.current.at >= 30_000) scheduleRefresh(180, true);
+    } else setRefreshing(false);
+    return () => {
+      flight.current?.abort(); flight.current = null; changedDuringRead.current = false;
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+    };
+  }, [filterKey, foreground, scheduleRefresh]);
 
   useEffect(() => {
-    if (!live || blocked) { setConnection("paused"); return; }
+    if (!foreground || !live || blocked) { setConnection("paused"); return; }
     let events: EventSource | null = null;
+    let stopped = false;
     const open = () => {
       events?.close(); events = null;
       if (document.hidden) { setConnection("paused"); return; }
       setConnection("connecting");
       events = new EventSource("/api/request-logs/events");
-      events.onopen = () => setConnection("live");
-      events.addEventListener("change", () => scheduleRefresh());
-      events.onerror = () => { setConnection("reconnecting"); scheduleRefresh(); };
-      scheduleRefresh();
+      events.onopen = () => { if (!stopped) setConnection("live"); };
+      events.addEventListener("change", () => { if (!stopped) scheduleRefresh(); });
+      events.onerror = () => { if (!stopped) { setConnection("reconnecting"); scheduleRefresh(); } };
+      if (confirmed.current.key !== filterParams(filtersRef.current).toString() || Date.now() - confirmed.current.at >= 30_000) scheduleRefresh();
     };
-    open(); document.addEventListener("visibilitychange", open);
+    open();
     // EventSource reconnects itself. This bounded fallback also works behind buffering proxies.
     const fallback = setInterval(() => { if (!document.hidden) scheduleRefresh(); }, 30_000);
-    return () => { events?.close(); clearInterval(fallback); document.removeEventListener("visibilitychange", open); };
-  }, [blocked, live, scheduleRefresh]);
+    return () => { stopped = true; events?.close(); clearInterval(fallback); };
+  }, [blocked, live, foreground, scheduleRefresh]);
   useEffect(() => () => { flight.current?.abort(); if (timer.current) clearTimeout(timer.current); }, []);
 
   const change = (patch: Partial<RequestFilters>) => {

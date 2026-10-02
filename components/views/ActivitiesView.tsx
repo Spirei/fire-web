@@ -3,6 +3,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 import { activityFilters, type ActivityScope } from "@/lib/activityFilters";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
+import { showToast } from "@/lib/toast";
 
 import Pagination from "@/components/Pagination";
 import ApiRequests from "@/components/ApiRequests";
@@ -18,7 +20,8 @@ interface Props {
   userLogs?: SystemLog[];
   systemLogs?: SystemLog[];
   isAdmin?: boolean;
-  onRefresh?: () => Promise<void> | void;
+  onRefresh?: (signal?: AbortSignal) => Promise<void> | void;
+  initialCheckedAt?: number;
 }
 
 type Scope = ActivityScope;
@@ -161,7 +164,10 @@ function writeQuery(scope: Scope, page: number, query: string) {
   window.history.replaceState(null, "", next);
 }
 
-export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin = false, onRefresh }: Props) {
+export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin = false, onRefresh, initialCheckedAt = 0 }: Props) {
+  const foreground = useWorkspaceForeground();
+  const foregroundRef = useRef(foreground);
+  foregroundRef.current = foreground;
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const params = useSearchParams();
   const { scope, query, page } = activityFilters(params, isAdmin);
@@ -169,23 +175,34 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
   const setQuery = (next: string) => writeQuery(scope, 1, next);
   const setPage = (next: number) => writeQuery(scope, next, query);
   const [refreshing, setRefreshing] = useState(false);
-  const refreshingRef = useRef(false);
+  const logRead = useRef<{ controller: AbortController; promise: Promise<void> } | null>(null);
+  const logsCheckedAt = useRef(initialCheckedAt);
+  const completeLogs = useRef(false); // SSR seeds user logs only; system scope still needs its first read.
   const [lastRefreshed, setLastRefreshed] = useState("");
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryRevision, setSummaryRevision] = useState(0);
+  const summaryConfirmed = useRef({ revision: -1, at: 0 });
   const { currency, setCurrency, symbol, rates, fx } = useDisplayCurrency();
 
-  const refreshLogs = async () => {
-    if (!onRefresh || refreshingRef.current) return;
-    refreshingRef.current = true;
+  const refreshLogs = (manual = true) => {
+    if (!onRefresh || !foregroundRef.current || document.hidden) return Promise.resolve();
+    if (logRead.current && !logRead.current.controller.signal.aborted) return logRead.current.promise;
+    const controller = new AbortController();
     setRefreshing(true);
-    try {
-      await onRefresh();
-      setLastRefreshed(new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }));
-    } finally {
-      refreshingRef.current = false;
-      setRefreshing(false);
-    }
+    const promise = (async () => {
+      try {
+        await onRefresh(controller.signal);
+        if (!controller.signal.aborted && foregroundRef.current && !document.hidden) { completeLogs.current = true; setLastRefreshed(new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })); }
+      } catch (error) {
+        if (manual && !controller.signal.aborted) showToast(error instanceof Error ? error.message : "日志读取失败", "err");
+      } finally {
+        if (!controller.signal.aborted && foregroundRef.current && !document.hidden) { logsCheckedAt.current = Date.now(); setSummaryRevision(value => value + 1); }
+        if (logRead.current?.controller === controller) { logRead.current = null; setRefreshing(false); }
+      }
+    })();
+    logRead.current = { controller, promise };
+    return promise;
   };
 
   const sourceLogs = scope === "user" ? userLogs : systemLogs;
@@ -211,24 +228,45 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
   }, [page, query, safePage, scope]);
 
   useEffect(() => {
-    if (!onRefresh || scope === "requests") return;
-    void refreshLogs();
-    const timer = window.setInterval(() => { void refreshLogs(); }, 30_000);
-    return () => window.clearInterval(timer);
+    if (!foreground || !onRefresh || scope === "requests") return;
+    let stopped = false, timer: ReturnType<typeof setTimeout>;
+    const remaining = () => logsCheckedAt.current && (scope !== "system" || completeLogs.current) ? Math.max(0, 30_000 - (Date.now() - logsCheckedAt.current)) : 0;
+    const run = async () => {
+      const delay = remaining();
+      if (delay > 0) { timer = setTimeout(run, delay); return; }
+      await refreshLogs(false);
+      if (!stopped) timer = setTimeout(run, 30_000);
+    };
+    timer = setTimeout(run, remaining());
+    return () => { stopped = true; clearTimeout(timer); logRead.current?.controller.abort(); logRead.current = null; setRefreshing(false); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, onRefresh, scope]);
+  }, [foreground, isAdmin, onRefresh, scope]);
 
   useEffect(() => {
-    if (scope !== "user") return;
+    const updated = () => {
+      logsCheckedAt.current = 0;
+      if (scope === "requests" || !foregroundRef.current) return;
+      const pending = logRead.current;
+      if (pending) void pending.promise.then(() => refreshLogs(false));
+      else void refreshLogs(false);
+    };
+    window.addEventListener("fire:records-updated", updated);
+    return () => window.removeEventListener("fire:records-updated", updated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, onRefresh]);
+
+  useEffect(() => {
+    if (!foreground || document.hidden || scope !== "user" || (!summaryRevision && !initialCheckedAt && onRefresh)) return;
+    if (summaryConfirmed.current.revision === summaryRevision && Date.now() - summaryConfirmed.current.at < 30_000) return;
     const controller = new AbortController();
-    setSummaryLoading(true);
+    setSummaryLoading(!summaryConfirmed.current.at);
     fetch("/api/activities/daily-summary", { cache: "no-store", signal: controller.signal })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data) setDailySummary(data); })
+      .then((data) => { if (data && !controller.signal.aborted && foregroundRef.current && !document.hidden) { summaryConfirmed.current = { revision: summaryRevision, at: Date.now() }; setDailySummary(data); } })
       .catch(() => {})
       .finally(() => { if (!controller.signal.aborted) setSummaryLoading(false); });
     return () => controller.abort();
-  }, [lastRefreshed, scope]);
+  }, [summaryRevision, scope, foreground, initialCheckedAt, onRefresh]);
 
   return (
     <div className={scope === "requests" ? "w-full max-w-[1040px]" : "w-full max-w-[800px] overflow-hidden rounded-[18px] border border-edge bg-white shadow-card dark:bg-[#151b26]"}>

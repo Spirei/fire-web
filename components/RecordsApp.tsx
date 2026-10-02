@@ -262,7 +262,6 @@ export default function RecordsApp({
   useLayoutEffect(() => {
     notifyAssistantPage();
   }, [activeTab]);
-  const skipInitialActivityFetchRef = useRef(initialTab === "activities");
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
   const [mobileNavigationOrder, setMobileNavigationOrder] = useState(initialSettings.mobileNavigationOrder ?? []);
   const settingsReloadGeneration = useRef(0);
@@ -401,26 +400,15 @@ export default function RecordsApp({
     [quotes]
   );
 
-  const reloadActivities = useCallback(() => {
-    if (activeTabRef.current !== "activities") return;
-    fetch("/api/activities")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.userLogs) setUserLogs(data.userLogs);
-        if (data?.systemLogs) setSystemLogs(data.systemLogs);
-      })
-      .catch(() => {});
+  const reloadActivities = useCallback(async (signal?: AbortSignal) => {
+    if (activeTabRef.current !== "activities" || document.hidden || signal?.aborted) return;
+    const response = await fetch("/api/activities", { cache: "no-store", signal });
+    if (!response.ok) throw new Error("日志读取失败");
+    const data = await response.json();
+    if (signal?.aborted || document.hidden || activeTabRef.current !== "activities") return;
+    if (data?.userLogs) setUserLogs(data.userLogs);
+    if (data?.systemLogs) setSystemLogs(data.systemLogs);
   }, []);
-
-  useEffect(() => {
-    if (activeTab !== "activities") return;
-    // 直达日志页已有服务端首屏数据，其他页切入日志时才请求。
-    if (skipInitialActivityFetchRef.current) {
-      skipInitialActivityFetchRef.current = false;
-      return;
-    }
-    reloadActivities();
-  }, [activeTab, reloadActivities]);
 
   const reloadSettings = useCallback(() => {
     const generation = ++settingsReloadGeneration.current;
@@ -707,11 +695,10 @@ export default function RecordsApp({
       fetch("/api/records")
         .then((res) => (res.ok ? res.json() : null))
         .then((d) => d && setRecords(d));
-      if (activeTabRef.current === "activities") reloadActivities();
     }
     window.addEventListener("fire:records-updated", reloadRecords);
     return () => window.removeEventListener("fire:records-updated", reloadRecords);
-  }, [reloadActivities]);
+  }, []);
 
   useEffect(() => {
     window.addEventListener("fire:settings-updated", reloadSettings);
@@ -1195,7 +1182,7 @@ export default function RecordsApp({
               initialQuotes={quotes}
             /></MobileBackGesture>
           )}
-          {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} />}
+          {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" ? initialNow : 0} />}
           {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} />}
           {activeTab === "trading" && <FeedView initial={initialFeed} initialNow={initialNow} />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} initialNow={initialNow} />}

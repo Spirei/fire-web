@@ -711,7 +711,11 @@ function fontHeaderFixture(ext) {
     assert(ticker.includes('visible ? <IndexTicker />'));
     assert(ticker.includes('observer.disconnect()'));
     assert(shell.includes('!document.hidden && ["holdings", "watchlist", "assets", "pnl", "fire"].includes(activeTab)'));
-    assert(shell.includes('if (activeTabRef.current === "activities") reloadActivities()'));
+    assert(!shell.includes('if (activeTabRef.current === "activities") reloadActivities()'));
+    assert(fs.readFileSync(path.join(root, 'components/views/ActivitiesView.tsx'),'utf8').includes('window.addEventListener("fire:records-updated", updated)'));
+  });
+  await test('retained background pages pause connections, share reads and bound missing-data retries', async () => {
+    await require('./workspace-background.cjs')();
   });
   await test('API route tables preserve escaped pipes and label mobile cells safely', () => {
     const { renderMarkdown } = require(path.join(root, 'lib/markdown.ts'));

@@ -18,6 +18,7 @@ import { appConfirm } from "@/lib/appDialog";
 import AppSelect from "@/components/AppSelect";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { manifestCoverUrl } from "@/lib/cardAssets";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 
 type TabKey = "stock" | "market" | "flag" | "broker" | "group" | "crypto" | "metal" | "icon" | "card";
 
@@ -280,6 +281,9 @@ function Avatar({
 }
 
 export default function AssetLibraryView({ initialCdnEnabled, initialAssets = [], initialTotal = 0 }: { initialCdnEnabled?: boolean; initialAssets?: Asset[]; initialTotal?: number } = {}) {
+  const foreground = useWorkspaceForeground();
+  const foregroundRef = useRef(foreground);
+  foregroundRef.current = foreground;
   const rates = useRates();
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
@@ -367,6 +371,9 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
   const customMarkets = useRef<Set<string>>(new Set());
   const topMountedRef = useRef(false);
   const assetRequestRef = useRef(0);
+  const assetRead = useRef<AbortController | null>(null);
+  const syncRead = useRef<{ controller: AbortController; promise: Promise<void> } | null>(null);
+  const quoteRetried = useRef(false);
 
   const stockPageSignature = `${selected}|${topPage}|${sortKey}|${sortDir}|${query.trim()}`;
 
@@ -568,6 +575,10 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
   }
 
   async function loadAssets(silent = false) {
+    if (!foregroundRef.current || document.hidden) return;
+    assetRead.current?.abort();
+    const controller = new AbortController();
+    assetRead.current = controller;
     const requestId = ++assetRequestRef.current;
     if (!silent) setAssetsLoading(true);
     try {
@@ -581,10 +592,10 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
         params.set("dir", sortDir);
         if (query.trim()) params.set("q", query.trim());
       }
-      const res = await fetch(`/api/assets?${params}`);
+      const res = await fetch(`/api/assets?${params}`, { signal: controller.signal });
       const data = await res.json().catch(() => null);
       // 快速切换分类/市场/页码时，只接受最后一次请求，防止旧响应覆盖新页面。
-      if (requestId !== assetRequestRef.current) return;
+      if (controller.signal.aborted || !foregroundRef.current || document.hidden || requestId !== assetRequestRef.current) return;
       if (!res.ok) throw new Error(data?.error || "素材加载失败");
       const list: Asset[] = data?.assets ?? [];
       setAssets(list);
@@ -645,8 +656,9 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
       });
       setAssetRows(rows);
     } catch (error) {
-      if (!silent) showToast(error instanceof Error ? error.message : "素材加载失败", "err");
+      if (!silent && !controller.signal.aborted) showToast(error instanceof Error ? error.message : "素材加载失败", "err");
     } finally {
+      if (assetRead.current === controller) assetRead.current = null;
       if (requestId === assetRequestRef.current) setAssetsLoading(false);
     }
   }
@@ -665,12 +677,12 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
 
   // 股票素材由服务端按当前页、市场、搜索和排序读取；其他小类只在进入时请求该分类。
   useEffect(() => {
-    if (tab === "card") return;
+    if (!foreground || tab === "card") return;
     const delay = tab === "stock" && query.trim() ? 180 : 0;
     const timer = window.setTimeout(() => void loadAssets(), delay);
-    return () => window.clearTimeout(timer);
+    return () => { window.clearTimeout(timer); assetRead.current?.abort(); assetRead.current = null; ++assetRequestRef.current; setAssetsLoading(false); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, tab === "stock" ? selected : "", tab === "stock" ? topPage : 1, tab === "stock" ? sortKey : "", tab === "stock" ? sortDir : "", tab === "stock" ? query : ""]);
+  }, [foreground, tab, tab === "stock" ? selected : "", tab === "stock" ? topPage : 1, tab === "stock" ? sortKey : "", tab === "stock" ? sortDir : "", tab === "stock" ? query : ""]);
 
   // 股票分类的市场筛选只需要十几条市场素材，独立加载，不再为此拉整个素材库。
   useEffect(() => {
@@ -704,13 +716,14 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
   }, [countryRows, flagQuery]);
 
   // crypto / metal 行情由服务端后台刷新（CoinGecko / CMC）：数据未就绪时静默重取一次，避免一直显示 —
+  useEffect(() => { quoteRetried.current = false; }, [foreground, tab]);
   useEffect(() => {
-    if (tab !== "crypto" && tab !== "metal") return;
-    if (assetRows.some((r) => r.price == null || !r.marketCap)) {
-      const t = setTimeout(() => loadAssets(true), 2200);
+    if (!foreground || quoteRetried.current || (tab !== "crypto" && tab !== "metal")) return;
+    if (assetRows.some((r) => r.type === tab && (r.price == null || !r.marketCap))) {
+      const t = setTimeout(() => { quoteRetried.current = true; void loadAssets(true); }, 2200);
       return () => clearTimeout(t);
     }
-  }, [tab, assetRows]);
+  }, [foreground, tab, assetRows]);
 
   // 加密货币 / 贵金属排序（市值 / 最新价 / 涨跌幅；未选择排序时保持默认顺序）
   const sortedAssetRows = useMemo(() => {
@@ -1014,14 +1027,21 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
     showToast("已恢复默认");
   }
 
-  async function refreshSyncStatus() {
-    try {
-      const res = await fetch("/api/assets/sync");
-      const d = await res.json().catch(() => null);
-      if (d?.status) setSyncStatus(d.status);
-    } catch {
-      /* 忽略 */
-    }
+  function refreshSyncStatus(force = false) {
+    if (!foregroundRef.current || document.hidden) return Promise.resolve();
+    if (!force && syncRead.current && !syncRead.current.controller.signal.aborted) return syncRead.current.promise;
+    syncRead.current?.controller.abort();
+    const controller = new AbortController();
+    const promise = (async () => {
+      try {
+        const res = await fetch("/api/assets/sync", { cache: "no-store", signal: controller.signal });
+        const d = await res.json().catch(() => null);
+        if (res.ok && !controller.signal.aborted && foregroundRef.current && !document.hidden && d?.status) setSyncStatus(d.status);
+      } catch { /* A failed status read leaves the last confirmed progress visible. */ }
+      finally { if (syncRead.current?.controller === controller) syncRead.current = null; }
+    })();
+    syncRead.current = { controller, promise };
+    return promise;
   }
 
   async function startSync() {
@@ -1032,7 +1052,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
       return;
     }
     showToast("股票同步已开始");
-    await refreshSyncStatus();
+    await refreshSyncStatus(true);
   }
 
   async function runDelistedCheck() {
@@ -1116,11 +1136,11 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
 
   // 弹窗打开期间轮询同步进度
   useEffect(() => {
-    if (!settingsOpen) return;
-    refreshSyncStatus();
-    const timer = window.setInterval(refreshSyncStatus, 3000);
-    return () => window.clearInterval(timer);
-  }, [settingsOpen]);
+    if (!foreground || !settingsOpen) return;
+    void refreshSyncStatus();
+    const timer = window.setInterval(() => void refreshSyncStatus(), 3000);
+    return () => { window.clearInterval(timer); syncRead.current?.controller.abort(); syncRead.current = null; };
+  }, [foreground, settingsOpen]);
 
   async function saveMarketIcon(key: string, url: string, id?: string) {
     setBusy((b) => ({ ...b, [`market:${key}`]: true }));

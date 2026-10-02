@@ -4754,7 +4754,7 @@ export const V0_1_47_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_48_ENTRY: VersionEntry = {
   ...V0_1_47_ENTRY,
   version: "v0.1.48",
   date: "2026-10-02",
@@ -4803,10 +4803,22 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
 };
 
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_48_ENTRY,
+  version: "v0.1.49",
+  date: "2026-10-03",
+  summary: "后台隐藏页面暂停日志连接和素材轮询，合并重复读取，限制缺失行情补读次数。",
+  software: V0_1_48_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.49" } : item),
+  changes: [
+    { kind: "fix", title: "后台日志与素材读取流畅度", desc: "共用工作区前台状态，隐藏页面或浏览器进入后台时关闭请求日志实时连接与兜底轮询，取消普通日志、汇总、素材列表和同步进度的在途读取。日志只保留一个首次读取入口，刷新等待实际返回，复用未到期快照；系统日志首次读取不受仅含用户日志的服务端快照限制。实时变化共用同一查询，慢响应不被反复重启，读取期间的变化只补一次后续更新，筛选变化取消旧请求。同步进度共用在途请求，启动同步后淘汰此前的状态读取；加密货币和贵金属在每次进入前台分类时最多补读一次，避免缺失行情循环请求。补充前后台切换、慢响应、迟到结果、重试次数与连接清理回归。" },
+  ]
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_48_ENTRY,
   V0_1_47_ENTRY,
   V0_1_46_ENTRY,
   V0_1_45_ENTRY,

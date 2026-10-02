@@ -331,13 +331,15 @@ try {
   });
   test('request rows disappear in the first render of a different query and preserve dynamic version markup',()=>{
     const view=frameHarness('components/ApiRequests.tsx',{
+      '@/lib/useWorkspaceForeground':{useWorkspaceForeground:()=>true},
       '@/lib/workspacePanel':{useWorkspaceSearchParams:()=>query,useWorkspaceLocationGuard:()=>()=>true},
       '@/lib/usePersistedState':{usePersistedState:(_key,value)=>[value,()=>{}]}
     });
     const year=new Date().getUTCFullYear();
     query=new URLSearchParams(`rPeriod=today&rQ=/api/v2&rPage=1&rYear=${year}`);view.render();
     const snapshot={revision:1,today:`${year}-01-01`,summary:{total:1,errors:0,serverErrors:0,averageMs:1,sources:{web:1,ios:0,app:0,other:0}},chart:[],chartUnit:'hour',endpoints:[],logs:[{id:1,at:Date.UTC(year,0,1),path:'/api/v2/previous-result',method:'GET',source:'web',status:200,duration:1}],pagination:{page:1,pageSize:20,total:1,anchor:0},heatmap:{},detailFrom:0};
-    view.states[0]={key:query.toString(),snapshot};
+    const resultSlot=view.states.findIndex(value=>value===null);assert(resultSlot>=0);
+    view.states[resultSlot]={key:query.toString(),snapshot};
     assert(elements(view.render()).some(node=>node.props.path==='/api/v2/previous-result'));
     query=new URLSearchParams(`rPeriod=today&rQ=/api/v3&rPage=1&rYear=${year}`);
     const next=elements(view.render());
