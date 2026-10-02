@@ -166,5 +166,8 @@ let passed=0;async function test(name,run){await run();passed++;console.log('PAS
     store.saveFeedPreferences(user.id,{instructions:preferences.instructions,revision:preferences.revision,people:['trump','duan']},group.id);
     await require('./feed-transitions.cjs')(generation.feedSnapshot(user.id,null,50,group.id));
   });
+  await test('group switching keeps shared layout and restores isolated snapshots',async()=>{
+    await require('./feed-groups.cjs')(generation.feedSnapshot(user.id,null,50,group.id));
+  });
   console.log(`${passed} celebrity-template suites passed; disposable data only`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{db.close();fs.rmSync(temp,{recursive:true,force:true});});
