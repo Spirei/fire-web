@@ -1,4 +1,11 @@
 /* Tablet and medium split-view layout. */
+/* Keep the three economy categories compact in portrait, with a full touch target. */
+@media (min-width: 768px) and (max-width: 1279px) and (orientation: portrait) {
+  .global-section-nav { gap: 20px; min-height: 44px; -webkit-text-size-adjust: 100%; }
+  .global-section-button { flex: none; height: 44px; gap: 6px; padding: 0 4px; font-size: 12px; line-height: 18px; font-weight: 550; }
+  .global-section-button .global-section-icon { width: 16px; height: 16px; flex: none; }
+}
+
 /* Wide tablets keep the compact asset card even with an attached mouse/trackpad. */
 @media (min-width:1280px) {
   .records-app[data-tablet-device="true"] .asset-account-highlight { display:grid; grid-template-columns:minmax(0,1fr) max-content; align-items:stretch; column-gap:10px; margin-top:4px; padding-bottom:18px; }
