@@ -46,6 +46,8 @@ jobs:
         run: npm run check:commit-title -- "${PR_BASE_SHA:-$BEFORE_SHA}" "$HEAD_SHA"
       - name: Install dependencies
         run: npm ci
+      - name: Install model optimizer dependencies
+        run: npm ci --prefix tools/model-optimizer
       - name: Public repository safety audit
         run: npm run audit:public
       - name: Local and GHCR deployment parity audit
@@ -55,7 +57,7 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
       - name: Model optimizer tests
-        run: npm ci --prefix tools/model-optimizer && npm test --prefix tools/model-optimizer
+        run: npm test --prefix tools/model-optimizer
       - name: Production build check
         run: npm run build
       - name: Start app and run public smoke
