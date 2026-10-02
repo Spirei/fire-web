@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 
 import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
+import preloadedWorkspace from "@/components/PreloadedWorkspaceView";
 import WorkspacePanel, { WorkspaceBoundary, WorkspaceLoading } from "@/components/WorkspacePanel";
 import MobileBackGesture from "@/components/MobileBackGesture";
 import { mobilePanelDirection } from "@/lib/mobileNavigation";
@@ -43,23 +44,23 @@ import { preloadView } from "@/lib/viewPreload";
 import { mobileWorkspaceGroups } from "@/lib/workspaceNavigation";
 
 // 默认保留服务端渲染：刷新当前页仍随 HTML 直接呈现内容；仅客户端代码按页签拆包。
-// 首次下载页面代码时提供局部静态反馈，不把右侧工作区留白。
-const WatchlistView = dynamic(() => import("@/components/views/WatchlistView"), { loading: WorkspaceLoading });
-const HoldingsView = dynamic(() => import("@/components/views/HoldingsView"), { loading: WorkspaceLoading });
-const AssetAnalysisView = dynamic(() => import("@/components/views/AssetAnalysisView"), { loading: WorkspaceLoading });
-const FireView = dynamic(() => import("@/components/views/FireView"), { loading: WorkspaceLoading });
-const ActivitiesView = dynamic(() => import("@/components/views/ActivitiesView"), { loading: WorkspaceLoading });
-const EarningsCalendarView = dynamic(() => import("@/components/views/EarningsCalendarView"), { loading: WorkspaceLoading });
-const CelebsView = dynamic(() => import("@/components/views/CelebsView"), { loading: WorkspaceLoading });
-const FeedView = dynamic(() => import("@/components/views/FeedView"), { loading: WorkspaceLoading });
-const SettingsView = dynamic(() => import("@/components/views/SettingsView"), { loading: WorkspaceLoading });
-const UsersView = dynamic(() => import("@/components/views/UsersView"), { loading: WorkspaceLoading });
-const AssetLibraryView = dynamic(() => import("@/components/views/AssetLibraryView"), { loading: WorkspaceLoading });
-const CardLibraryView = dynamic(() => import("@/components/views/CardLibraryView"), { loading: WorkspaceLoading });
-const AttachmentsView = dynamic(() => import("@/components/views/AttachmentsView"), { loading: WorkspaceLoading });
-const GlobalPreviewView = dynamic(() => import("@/components/views/GlobalPreviewView"), { loading: WorkspaceLoading });
-const AssetPnlAnalysisView = dynamic(() => import("@/components/AssetPnlAnalysis"), { loading: WorkspaceLoading });
-const AssistantView = dynamic(() => import("@/components/views/AssistantView"), { loading: WorkspaceLoading });
+// 已预读代码直接呈现；首次下载仅使用延迟显露的轻量占位，不显示打开提示。
+const WatchlistView = preloadedWorkspace("watchlist", dynamic(() => import("@/components/views/WatchlistView"), { loading: WorkspaceLoading }));
+const HoldingsView = preloadedWorkspace("holdings", dynamic(() => import("@/components/views/HoldingsView"), { loading: WorkspaceLoading }));
+const AssetAnalysisView = preloadedWorkspace("assets", dynamic(() => import("@/components/views/AssetAnalysisView"), { loading: WorkspaceLoading }));
+const FireView = preloadedWorkspace("fire", dynamic(() => import("@/components/views/FireView"), { loading: WorkspaceLoading }));
+const ActivitiesView = preloadedWorkspace("activities", dynamic(() => import("@/components/views/ActivitiesView"), { loading: WorkspaceLoading }));
+const EarningsCalendarView = preloadedWorkspace("earnings", dynamic(() => import("@/components/views/EarningsCalendarView"), { loading: WorkspaceLoading }));
+const CelebsView = preloadedWorkspace("celebs", dynamic(() => import("@/components/views/CelebsView"), { loading: WorkspaceLoading }));
+const FeedView = preloadedWorkspace("trading", dynamic(() => import("@/components/views/FeedView"), { loading: WorkspaceLoading }));
+const SettingsView = preloadedWorkspace("settings", dynamic(() => import("@/components/views/SettingsView"), { loading: WorkspaceLoading }));
+const UsersView = preloadedWorkspace("users", dynamic(() => import("@/components/views/UsersView"), { loading: WorkspaceLoading }));
+const AssetLibraryView = preloadedWorkspace("library", dynamic(() => import("@/components/views/AssetLibraryView"), { loading: WorkspaceLoading }));
+const CardLibraryView = preloadedWorkspace("cards", dynamic(() => import("@/components/views/CardLibraryView"), { loading: WorkspaceLoading }));
+const AttachmentsView = preloadedWorkspace("attachments", dynamic(() => import("@/components/views/AttachmentsView"), { loading: WorkspaceLoading }));
+const GlobalPreviewView = preloadedWorkspace("global", dynamic(() => import("@/components/views/GlobalPreviewView"), { loading: WorkspaceLoading }));
+const AssetPnlAnalysisView = preloadedWorkspace("pnl", dynamic(() => import("@/components/AssetPnlAnalysis"), { loading: WorkspaceLoading }));
+const AssistantView = preloadedWorkspace("assistant", dynamic(() => import("@/components/views/AssistantView"), { loading: WorkspaceLoading }));
 const DeferredAssistant = dynamic(() => import("@/components/DeferredAssistant"));
 const FloatingAssistant = memo(function FloatingAssistant({ symbol, userId, onNavigate }: { symbol?: string; userId: string; onNavigate: (path: string) => void }) {
   return <DeferredAssistant page={currentAssistantPage()} symbol={symbol} userId={userId} initialHistory={null} onNavigate={onNavigate} />;

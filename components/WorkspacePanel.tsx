@@ -17,8 +17,7 @@ export class WorkspaceBoundary extends Component<{ children: ReactNode; fallback
 }
 
 export function WorkspaceLoading() {
-  return <div className="workspace-view-loading" role="status" aria-label="正在打开页面">
-    <p>正在打开…</p>
+  return <div className="workspace-view-loading" role="status" aria-label="加载页面">
     <div aria-hidden="true"><span /><span /><span /></div>
   </div>;
 }

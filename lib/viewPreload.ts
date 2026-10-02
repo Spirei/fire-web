@@ -1,5 +1,7 @@
 "use client";
 
+import type { ComponentType } from "react";
+
 // 仅在导航意图明确时取页面代码；不提前挂载，也不调用页面的数据接口。
 const loaders: Record<string, () => Promise<unknown>> = {
   holdings: () => import("@/components/views/HoldingsView"),
@@ -25,6 +27,10 @@ const loaders: Record<string, () => Promise<unknown>> = {
   assistant: () => import("@/components/views/AssistantView")
 };
 const loaded = new Map<string, Promise<void>>();
+const ready = new Map<string, ComponentType<object>>();
+
+/** Reuse evaluated page code on its first mount, without another lazy boundary. */
+export function preloadedView(key:string) {return ready.get(key);}
 
 export function preloadView(key: string) {
   if (typeof navigator === "undefined") return;
@@ -33,7 +39,10 @@ export function preloadView(key: string) {
   if (!Object.prototype.hasOwnProperty.call(loaders, key)) return;
   const existing = loaded.get(key);
   if (existing) return existing;
-  const pending = loaders[key]().then(() => {}, () => { loaded.delete(key); });
+  const pending = loaders[key]().then(value => {
+    const page=(Array.isArray(value)?value[0]:value) as {default?:ComponentType<object>}|undefined;
+    if(page?.default)ready.set(key,page.default);
+  }, () => { loaded.delete(key); });
   loaded.set(key, pending);
   return pending;
 }

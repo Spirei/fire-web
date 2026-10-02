@@ -474,7 +474,9 @@ try {
   test('loading and render failure offer local feedback without changing the whole workspace',()=>{
     const loading=render('components/WorkspacePanel.tsx',{},'',{},'WorkspaceLoading');
     assert(loading.includes('role="status"'));
-    assert(loading.includes('正在打开'));
+    assert(loading.includes('aria-label="加载页面"'));
+    assert(loading.includes('aria-hidden="true"'));
+    assert(!loading.includes('正在打开')&&!loading.includes('<p>'));
     const shell=fs.readFileSync(path.join(root,'components/RecordsApp.tsx'),'utf8');
     assert(shell.includes('<WorkspacePanel active={active}'));
     const panel=fs.readFileSync(path.join(root,'components/WorkspacePanel.tsx'),'utf8');
