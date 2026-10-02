@@ -4,7 +4,7 @@ module.exports=async function checkTransitions(snapshot) {
   const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
   const file=path.resolve(__dirname,'../components/views/FeedView.tsx');
   const client=require('../lib/feedClient.ts'),originalLoad=Module._load;
-  const slots=[],pending=[],requests=[];let cursor=0,lastTree;
+  const slots=[],pending=[],requests=[],notices=[];let cursor=0,lastTree;
   let readSeen=Object.fromEntries(snapshot.peopleCatalog.map(person=>[person.id,'2000-01-01T00:00:00.000Z']));
   const persistSeen=value=>{readSeen=typeof value==='function'?value(readSeen):value;};
   const nodes=node=>Array.isArray(node)?node.flatMap(nodes):node&&typeof node==='object'?[node,...nodes(node.props?.children)]:[];
@@ -22,6 +22,7 @@ module.exports=async function checkTransitions(snapshot) {
       if(id==='@/lib/workspacePanel')return {useWorkspaceSearchParams:()=>new URLSearchParams()};
       if(id==='@/lib/usePersistedState')return {usePersistedState:()=>[readSeen,persistSeen]};
       if(id==='@/lib/panelVisibility')return {panelIsShown:()=>true,observePanelVisibility:()=>()=>{}};
+      if(id==='@/lib/toast')return {showToast:(text,type)=>notices.push({text,type})};
       if(id==='@/lib/feedClient')return {...client,feedRequest:(url,method,body,signal)=>new Promise((resolve,reject)=>requests.push({url,method,body,signal,resolve,reject}))};
     }
     return originalLoad.call(this,id,parent,...rest);
@@ -32,7 +33,7 @@ module.exports=async function checkTransitions(snapshot) {
     compiled._compile(ts.transpileModule(fs.readFileSync(file,'utf8')+'\nexport { GroupFeedView };',{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,file);
     View=compiled.exports.GroupFeedView;
   }finally{Module._load=originalLoad;}
-  const saved={document:global.document,window:global.window,matchMedia:global.matchMedia};
+  const saved={document:global.document,window:global.window,matchMedia:global.matchMedia,setTimeout:global.setTimeout,clearTimeout:global.clearTimeout};
   const events={addEventListener(){},removeEventListener(){}};
   global.document={...events,hidden:false};global.window={...events,location:{href:'https://people.test.example/trading?feedPerson=trump'}};global.matchMedia=()=>({...events,matches:true});
   const render=author=>{cursor=0;lastTree=View({initial:snapshot,initialNow:Date.now(),groupId:snapshot.group.id,author});return renderToStaticMarkup(lastTree);};
@@ -65,7 +66,40 @@ module.exports=async function checkTransitions(snapshot) {
     like.resolve({...card.props.post,liked:true});await settle();render('trump');effects();
     assert.equal(requests.at(-1).method,'GET');assert(requests.at(-1).url.includes('author=trump'),'switch automatically resumes once the write finishes');
     requests.at(-1).resolve({...snapshot,posts:[],nextCursor:null});await settle();
-    html=render('trump');assert(html.includes('feed-empty'));assert(!html.includes('正在加载动态'));
+    html=render('trump');assert(html.includes('feed-empty'));assert(!html.includes('正在加载动态'));effects();
+    let pollTimer;
+    global.setTimeout=(fn,ms,...args)=>ms===2500?(pollTimer={fn,fake:true}):saved.setTimeout(fn,ms,...args);
+    global.clearTimeout=timer=>{if(!timer?.fake)saved.clearTimeout(timer);};
+    const refreshButton=()=>nodes(lastTree).find(node=>node.type==='button'&&node.props['aria-label']==='更新动态');
+    const queued={id:'manual-refresh-1',revision:snapshot.preferences.revision,status:'queued',added:0,error:null,createdAt:'2026-10-02T09:00:00.000Z',updatedAt:'2026-10-02T09:00:00.000Z'};
+    const beforeRefresh=requests.length;refreshButton().props.onClick();refreshButton().props.onClick();
+    assert.equal(requests.length,beforeRefresh+1,'two quick clicks start one manual job');assert.equal(requests.at(-1).method,'POST');
+    html=render('trump');assert(html.includes('feed-refresh-button is-working'));assert.equal(refreshButton().props['aria-busy'],true);effects();
+    requests.at(-1).resolve(queued);await settle();render('trump');effects();assert.equal(notices.length,0,'enqueue is not refresh success');
+    const polling=pollTimer.fn();assert(requests.at(-1).url.endsWith('/jobs/'+queued.id));
+    const completed={...queued,status:'done',added:2};requests.at(-1).resolve(completed);await polling;
+    assert.equal(requests.at(-1).method,'GET');assert(requests.at(-1).url.includes('?limit='));
+    html=render('trump');effects();assert(html.includes('feed-refresh-button is-working'));assert.equal(notices.length,0,'job completion waits for the feed snapshot');
+    requests.at(-1).resolve({...snapshot,job:completed});await settle();html=render('trump');effects();
+    assert(!html.includes('feed-refresh-button is-working'));assert.equal(refreshButton().props['aria-busy'],false);assert.deepEqual(notices,[{text:'已刷新',type:'ok'}]);
+    render('trump');effects();assert.equal(notices.length,1,'renders cannot repeat the success toast');
+    refreshButton().props.onClick();requests.at(-1).resolve({...queued,id:'manual-superseded'});await settle();render('trump');effects();
+    render('duan');effects();const newer={...queued,id:'automatic-newer',status:'searching'};
+    requests.at(-1).resolve({...select('duan'),job:newer});await settle();render('duan');effects();
+    const supersededPoll=pollTimer.fn();assert(requests.at(-1).url.endsWith('/jobs/manual-superseded'),'poll follows the clicked job when a newer background job appears');
+    requests.at(-1).resolve({...completed,id:'manual-superseded'});await supersededPoll;
+    requests.at(-1).resolve({...select('duan'),job:{...newer,status:'done'}});await settle();html=render('duan');effects();
+    assert(!html.includes('feed-refresh-button is-working'));assert.deepEqual(notices.at(-1),{text:'已刷新',type:'ok'});
+    refreshButton().props.onClick();requests.at(-1).resolve({...completed,id:'manual-partial',error:'some sources failed'});await settle();
+    requests.at(-1).resolve({...snapshot,job:{...completed,id:'manual-partial',error:'some sources failed'}});await settle();html=render('duan');effects();
+    assert(!html.includes('feed-refresh-button is-working'));assert.deepEqual(notices.at(-1),{text:'部分来源未更新',type:'err'});
+    refreshButton().props.onClick();requests.at(-1).resolve({...completed,id:'manual-read-failure'});await settle();
+    requests.at(-1).reject(new client.FeedRequestError('snapshot unavailable'));await settle();html=render('duan');effects();
+    assert(!html.includes('feed-refresh-button is-working'));assert.deepEqual(notices.at(-1),{text:'读取刷新结果失败',type:'err'});
+    const beforeBackground=notices.length;
+    render('trump');effects();requests.at(-1).resolve({...select('trump'),job:{...completed,id:'automatic-refresh'}});await settle();render('trump');effects();
+    assert.equal(notices.length,beforeBackground,'background completions stay silent');
+    console.log('PASS manual refresh spins unchanged icon, locks clicks, waits for committed results, reports partial/read failure, and keeps background reads silent');
   }finally {
     for(const slot of slots)slot?.cleanup?.();
     for(const [key,value] of Object.entries(saved)){if(value===undefined)delete global[key];else global[key]=value;}

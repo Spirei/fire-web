@@ -20,6 +20,7 @@ import AppSelect from "@/components/AppSelect";
 import { FEED_PEOPLE, feedPostTime, feedPersonHasUpdates, mergeFeedSeen } from "@/lib/feedPeopleConfig";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { isUnseenPost, type SeenTimes } from "@/lib/tradingSquareSeen";
+import { showToast } from "@/lib/toast";
 
 const ICON_URL=(icon:FeedIcon)=>`/uploads/feature/feed/${icon}.webp`;
 function dateText(value:string|null) {return value?value.slice(0,10).replaceAll("-","/"):"日期未提供";}
@@ -38,7 +39,7 @@ function Mascot({image,video,name,onClick}:{image:string;video:string|null;name:
   },[reduced,video]);
   // Intrinsic constraints survive the first paint, failed CSS delivery and bfcache restoration.
   return <button ref={buttonRef} type="button" className="feed-mascot" style={{position:"relative",display:"block",width:"var(--feed-mascot-size,72px)",height:"var(--feed-mascot-size,72px)",maxWidth:72,maxHeight:72,minWidth:0,minHeight:0,flex:"none",overflow:"hidden",borderRadius:"50%",padding:0}} onClick={onClick} aria-label={`查看 ${name} 的动态`} title={name}>
-    <SafeAssetImage src={image} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}} className="feed-mascot-poster" alt={name} fallback={<span>A</span>} />
+    <SafeAssetImage src={image} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}} className="feed-mascot-poster" showFallbackWhileLoading={false} alt={name} fallback={<span>A</span>} />
     {video&&!failed&&!reduced&&<video key={video} ref={videoRef} src={video} width={72} height={72} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:ready?1:0}} muted autoPlay loop playsInline preload="metadata" aria-hidden="true" onCanPlay={()=>{setVideoState(current=>current.src===video?{...current,ready:true}:current);if(document.hidden||!panelIsShown(buttonRef.current))videoRef.current?.pause();}} onError={()=>setVideoState(current=>current.src===video?{...current,failed:true}:current)} className={`feed-mascot-video ${ready?"is-ready":""}`} />}
   </button>;
 }
@@ -66,6 +67,7 @@ function GroupFeedView({initial,initialNow,groupId,author,initialAgent,initialAv
   const [errorAction,setErrorAction]=useState<"load"|"refresh"|null>(null),[promptError,setPromptError]=useState(""),[conflict,setConflict]=useState(false),[recovering,setRecovering]=useState(false);
   const [editing,setEditing]=useState(false),[draft,setDraft]=useState(""),[draftRevision,setDraftRevision]=useState(0),[saving,setSaving]=useState(false);
   const [requesting,setRequesting]=useState(false),[loadingMore,setLoadingMore]=useState(false),[selected,setSelected]=useState<FeedPost|null>(null),[menu,setMenu]=useState<FeedPost|null>(null);
+  const [refreshPending,setRefreshPending]=useState(false);
   const [messages,setMessages]=useState<FeedMessage[]>([]),[question,setQuestion]=useState(""),[sending,setSending]=useState(false),[discussionLoading,setDiscussionLoading]=useState(false),[discussionError,setDiscussionError]=useState("");
   const [pendingQuestion,setPendingQuestion]=useState(""),[newReply,setNewReply]=useState(false),[discussionNeedsRead,setDiscussionNeedsRead]=useState(false);
   const [pendingPosts,setPendingPosts]=useState<Record<string,boolean>>({});
@@ -75,10 +77,12 @@ function GroupFeedView({initial,initialNow,groupId,author,initialAgent,initialAv
   const discussionLog=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null),discussionController=useRef<AbortController|null>(null),live=useRef(true);
   const loadEpoch=useRef(0),readController=useRef<AbortController|null>(null),moreController=useRef<AbortController|null>(null),pendingIds=useRef(new Set<string>());
   const following=useRef(true),readSince=useRef(0),requestLock=useRef(false),saveLock=useRef(false),sendLock=useRef(false);
+  const manualRefresh=useRef<{id:string;revision:number;result:FeedJob|null}|null>(null);
   if(!readingPerson)loadedCount.current=data?.posts.length||FEED_PAGE_SIZE;
   useEffect(()=>{const sync=()=>setShown(panelIsShown(root.current));sync();return root.current?observePanelVisibility(root.current,sync):undefined;},[]);
   function invalidateReads(){++loadEpoch.current;readController.current?.abort();moreController.current?.abort();}
-  useEffect(()=>{if(!shown){invalidateReads();discussionController.current?.abort();sendLock.current=false;setEditing(false);setMenu(null);setSelected(null);setSending(false);setPendingQuestion("");}},[shown]);
+  useEffect(()=>{if(!shown){invalidateReads();discussionController.current?.abort();sendLock.current=false;manualRefresh.current=null;setRefreshPending(false);setEditing(false);setMenu(null);setSelected(null);setSending(false);setPendingQuestion("");}},[shown]);
+  useEffect(()=>()=>{manualRefresh.current=null;},[]);
   const load=useCallback(async(quiet=false)=>{
     if(pendingIds.current.size||saveLock.current||requestLock.current||!panelIsShown(root.current))return;
     readController.current?.abort();moreController.current?.abort();
@@ -94,7 +98,13 @@ function GroupFeedView({initial,initialNow,groupId,author,initialAgent,initialAv
       }
       if(!live.current||epoch!==loadEpoch.current)return;
       setData(next);setDataAuthor(author);setError("");setErrorAction(null);
-    }catch(e){if(live.current&&!controller.signal.aborted&&epoch===loadEpoch.current&&(!quiet||(e instanceof FeedRequestError&&e.status===401))){setError((e as Error).message);setErrorAction("load");}}
+      const tracked=manualRefresh.current;
+      if(tracked){
+        const completed=tracked.result||(next.job?.id===tracked.id&&!running(next.job)?next.job:null);
+        if(next.preferences.revision!==tracked.revision){manualRefresh.current=null;setRefreshPending(false);}
+        else if(completed){manualRefresh.current=null;setRefreshPending(false);const succeeded=completed.status==="done"&&!completed.error;showToast(succeeded?"已刷新":completed.status==="done"?"部分来源未更新":"刷新失败",succeeded?"ok":"err");}
+      }
+    }catch(e){if(live.current&&!controller.signal.aborted&&epoch===loadEpoch.current){if(manualRefresh.current?.result){manualRefresh.current=null;setRefreshPending(false);showToast("读取刷新结果失败","err");}if(!quiet||(e instanceof FeedRequestError&&e.status===401)){setError((e as Error).message);setErrorAction("load");}}}
     finally{if(readController.current===controller)readController.current=null;}
   },[groupId,author]);
   useEffect(()=>{loadedCount.current=FEED_PAGE_SIZE;live.current=true;if(!initial||!initialRead.current)void load();initialRead.current=false;const timer=setInterval(()=>{if(!document.hidden&&panelIsShown(root.current)){setNow(Date.now());if(!readController.current)void load(true);}},60_000);setNow(Date.now());return()=>{live.current=false;++loadEpoch.current;readController.current?.abort();moreController.current?.abort();discussionController.current?.abort();clearInterval(timer);};},[load,initial]);
@@ -124,13 +134,15 @@ function GroupFeedView({initial,initialNow,groupId,author,initialAgent,initialAv
   useEffect(()=>()=>{if(Object.keys(latestRead.current).length)setSavedSeen(previous=>mergeFeedSeen(previous,latestRead.current));},[setSavedSeen]);
   useEffect(()=>{if(!shown&&Object.keys(latestRead.current).length)setSavedSeen(previous=>mergeFeedSeen(previous,latestRead.current));},[shown,setSavedSeen]);
   useEffect(()=>{
-    if(!shown||!running(data?.job||null))return;
+    const watched=manualRefresh.current&&!manualRefresh.current.result?manualRefresh.current.id:running(data?.job||null)?data!.job!.id:null;
+    if(!shown||!watched)return;
     const controller=new AbortController();let stopped=false;let timer:ReturnType<typeof setTimeout>;
     const poll=async()=>{
       if(stopped)return;
       try{if(!document.hidden){
-        const next=await api<FeedJob>(`/jobs/${data!.job!.id}`,"GET",undefined,controller.signal);
+        const next=await api<FeedJob>(`/jobs/${watched}`,"GET",undefined,controller.signal);
         if(!controller.signal.aborted&&!pendingIds.current.size&&!saveLock.current){
+          if(manualRefresh.current?.id===next.id&&!running(next))manualRefresh.current.result=next;
           setData(p=>p&&p.job?.id===next.id?{...p,job:next}:p);
           if(!running(next))void load(true);
         }
@@ -138,7 +150,7 @@ function GroupFeedView({initial,initialNow,groupId,author,initialAgent,initialAv
       if(!stopped)timer=setTimeout(poll,2500);
     };
     timer=setTimeout(poll,2500);return()=>{stopped=true;controller.abort();clearTimeout(timer);};
-  },[data?.job?.id,data?.job?.status,load,shown]);
+  },[data?.job?.id,data?.job?.status,refreshPending,load,shown]);
   useEffect(()=>{const sync=()=>{if(document.hidden||!panelIsShown(root.current)){readController.current?.abort();moreController.current?.abort();return;}if(Date.now()-readSince.current>30_000&&!pendingIds.current.size&&!saveLock.current&&!requestLock.current)void load(true);};document.addEventListener("visibilitychange",sync);window.addEventListener("focus",sync);window.addEventListener("pageshow",sync);const release=root.current?observePanelVisibility(root.current,sync):()=>{};return()=>{release();document.removeEventListener("visibilitychange",sync);window.removeEventListener("focus",sync);window.removeEventListener("pageshow",sync);};},[load]);
   useEffect(()=>{
     const sync=(event:Event)=>{
@@ -170,10 +182,10 @@ function GroupFeedView({initial,initialNow,groupId,author,initialAgent,initialAv
   }
   async function addSource(){if(testingSource||!sourceName.trim()||!sourceUrl.trim()||subscriptions.length>=8)return;if(subscriptions.some(s=>s.url===sourceUrl.trim())){setSourceResult("本组已添加这个订阅源。");return;}setTestingSource(true);setSourceResult("");try{const result=await api<{title:string;count:number;url:string}>("/subscriptions/test","POST",{name:sourceName.trim(),url:sourceUrl.trim()},undefined,20000);if(!live.current)return;setSubscriptions(prev=>prev.some(s=>s.url===result.url)?prev:[...prev,{name:sourceName.trim(),url:result.url}]);setSourceName("");setSourceUrl("");setSourceResult(`已读到 ${result.count} 条，保存后加入本组。`);}catch(e){if(live.current)setSourceResult((e as Error).message);}finally{if(live.current)setTestingSource(false);}}
   async function refresh(afterSave=false) {
-    if(requestLock.current||(!afterSave&&running(data?.job||null)))return;
-    requestLock.current=true;setRequesting(true);setError("");
-    try{const job=await api<FeedJob>(groupPath("/refresh"),"POST",{});invalidateReads();if(live.current)setData(prev=>prev?{...prev,job}:prev);}
-    catch(e){if(live.current){setError((e as Error).message);setErrorAction(e instanceof FeedRequestError&&e.unconfirmed?"load":"refresh");}}finally{requestLock.current=false;if(live.current)setRequesting(false);}
+    if(requestLock.current||(!afterSave&&(refreshPending||running(data?.job||null))))return;
+    let terminal=false;requestLock.current=true;manualRefresh.current=null;setRefreshPending(!afterSave);setRequesting(true);setError("");
+    try{const job=await api<FeedJob>(groupPath("/refresh"),"POST",{});invalidateReads();if(live.current){terminal=!running(job);if(!afterSave&&panelIsShown(root.current))manualRefresh.current={id:job.id,revision:job.revision,result:terminal?job:null};setData(prev=>prev?{...prev,job}:prev);}}
+    catch(e){if(live.current){manualRefresh.current=null;setRefreshPending(false);setError((e as Error).message);setErrorAction(e instanceof FeedRequestError&&e.unconfirmed?"load":"refresh");}}finally{requestLock.current=false;if(live.current){setRequesting(false);if(terminal)void load(true);}}
   }
   async function save() {
     if(saveLock.current||conflict)return;let saved=false;saveLock.current=true;setSaving(true);setPromptError("");
@@ -234,6 +246,7 @@ function GroupFeedView({initial,initialNow,groupId,author,initialAgent,initialAv
   function closeDiscussion(){discussionController.current?.abort();sendLock.current=false;setSelected(null);setSending(false);setPendingQuestion("");}
   const peopleMode=data?.group?.mode==="people",canRefresh=peopleMode||!!data?.capabilities.generate;
   const job=data?.job&&data.job.revision===data.preferences.revision?data.job:null,posts=readingPerson?[]:data?.posts.filter(p=>!p.hidden&&!!p.original===peopleMode&&(!author||p.original?.person.id===author))||[],empty=data&&!readingPerson?feedEmptyCopy({...data,job}):null;
+  const refreshing=requesting||refreshPending||running(job);
   const isNew=(post:FeedPost)=>!!post.original&&!!visitSeen[post.original.person.id]&&isUnseenPost({author:post.original.person.id,date:post.publishedAt||""},visitSeen);
   const leadingNew=posts.findIndex(post=>!isNew(post));
   const changed=!!data&&(draft.trim()!==data.preferences.instructions||groupName.trim()!==(data.group?.name||"动态")||JSON.stringify(subscriptions)!==JSON.stringify(data.group?.subscriptions||[])||mode!==(data.group?.mode||"news")||JSON.stringify(people)!==JSON.stringify(data.group?.people||["trump","duan"])||autoUpdate!==data.preferences.enabled||interval!==data.preferences.intervalMinutes);
@@ -242,7 +255,7 @@ function GroupFeedView({initial,initialNow,groupId,author,initialAgent,initialAv
     <header className="feed-header">
       <h1>{data?.group?.name||"动态"}</h1>
       <div className="feed-header-actions">
-        {(peopleMode||data?.preferences.instructions)&&<button type="button" className={`feed-icon-button ${running(job)?"is-working":""}`} onClick={()=>void refresh()} disabled={requesting||running(job)||!canRefresh} title="更新动态" aria-label="更新动态"><IconRefresh size={19} stroke={1.8}/></button>}
+        {(peopleMode||data?.preferences.instructions)&&<button type="button" className={`feed-icon-button feed-refresh-button ${shown&&refreshing?"is-working":""}`} onClick={()=>void refresh()} disabled={refreshing||!canRefresh} title="更新动态" aria-label="更新动态" aria-busy={refreshing}><IconRefresh size={19} stroke={1.8}/></button>}
         <button type="button" className="feed-icon-button feed-settings-button" onClick={edit} disabled={!data} title="编辑动态模板与指示" aria-label="编辑动态模板与指示"><IconAdjustmentsHorizontal size={21} stroke={1.8}/></button>
       </div>
     </header>
@@ -284,7 +297,7 @@ function GroupFeedView({initial,initialNow,groupId,author,initialAgent,initialAv
       {promptError&&<p role="alert" className={conflict?"feed-error":"feed-prompt-note"}>{promptError}{conflict&&<button type="button" disabled={recovering} onClick={()=>void recoverDraft()}>{recovering?"正在读取":"读取最新版本，保留草稿"}</button>}</p>}
       <div className="feed-modal-actions"><button type="button" disabled={saving||recovering||!!uploadingAvatar} onClick={()=>setEditing(false)}>取消</button><button type="button" className="feed-primary" onClick={()=>void save()} disabled={saving||recovering||!!uploadingAvatar||testingSource||conflict||!groupName.trim()||!changed}>{saving?"正在保存":"保存"}</button></div>
     </AppModal>}
-    {tasks&&shown&&data&&<FeedAgentPanel data={data} tab={agentTab} onTabChange={tab=>agentView(true,tab)} onClose={()=>setTasks(false)} onProfileChange={(profile:FeedAgentProfile)=>{invalidateReads();setData(current=>current?{...current,agent:profile,capabilities:{...current.capabilities,avatar:{image:profile.image||"/uploads/feature/feed/alcor.png",video:null}}}:current);void load(true);}} onRefresh={()=>void refresh()} refreshDisabled={requesting||!canRefresh}/>}
+    {tasks&&shown&&data&&<FeedAgentPanel data={data} tab={agentTab} onTabChange={tab=>agentView(true,tab)} onClose={()=>setTasks(false)} onProfileChange={(profile:FeedAgentProfile)=>{invalidateReads();setData(current=>current?{...current,agent:profile,capabilities:{...current.capabilities,avatar:{image:profile.image||"/uploads/feature/feed/alcor.png",video:null}}}:current);void load(true);}} onRefresh={()=>void refresh()} refreshDisabled={refreshing||!canRefresh}/>}
 
     {menu&&<AppModal title="动态来源与选项" size="sm" className="feed-theme feed-themed-modal feed-small-modal" onClose={()=>setMenu(null)}><h4 className="feed-option-title">{menu.title}</h4><div className="feed-sources">{menu.sources.map(s=><a key={s.id} href={s.url} target="_blank" rel="noopener noreferrer">{s.title}<small>{s.publisher} · {dateText(s.publishedAt)}</small></a>)}</div><button type="button" className="feed-option-hide" disabled={pendingPosts[menu.id]} onClick={()=>{void updatePost(menu,{hidden:true});setMenu(null);}}>不再显示这条动态</button></AppModal>}
     {selected&&<AppModal title="讨论" desc={selected.title} size="lg" className="feed-theme feed-themed-modal feed-discussion-modal" onClose={closeDiscussion}>

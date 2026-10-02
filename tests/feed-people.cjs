@@ -144,7 +144,10 @@ let passed=0;async function test(name,run){await run();passed++;console.log('PAS
     const item=generation.feedSnapshot(user.id,null,10,group.id).posts[0];item.original.text='<script>alert(1)</script>';
     const Component=get('components/FeedOriginalPost.tsx').default;
     const html=renderToStaticMarkup(React.createElement(Component,{post:item,isNew:true,busy:false,canDiscuss:false,onMenu(){},onLike(){},onDiscuss(){}}));
-    assert(html.includes('段永平')&&html.includes('@slowisquick')&&html.includes('查看原文'));assert(html.includes('&lt;script&gt;'));assert(!html.includes('<script>alert'));assert(html.includes('dateTime="')||html.includes('datetime="'));assert(html.includes('aria-label="新动态"'));
+    assert(html.includes('段永平')&&html.includes('@slowisquick'));assert(!html.includes('href="'+item.original.originalUrl+'"'));assert(!html.includes('feed-original-links'));assert(html.includes('&lt;script&gt;'));assert(!html.includes('<script>alert'));assert(html.includes('dateTime="')||html.includes('datetime="'));assert(html.includes('aria-label="新动态"'));
+    const translated={...item,original:{...item.original,textZh:'完整译文',quote:{name:'引用作者',text:'引用正文',url:'https://xueqiu.com/quote/retained',media:[]}}};
+    const translatedHtml=renderToStaticMarkup(React.createElement(Component,{post:translated,isNew:false,busy:false,canDiscuss:false,onMenu(){},onLike(){},onDiscuss(){}}));
+    assert(translatedHtml.includes('完整译文'));assert(translatedHtml.includes('aria-pressed="false">原文</button>'));assert(!translatedHtml.includes('href="'+item.original.originalUrl+'"'));assert(translatedHtml.includes('href="https://xueqiu.com/quote/retained"'));assert(translatedHtml.includes('查看转发原帖'));
     const viewSource=fs.readFileSync(path.join(root,'components/views/FeedView.tsx'),'utf8');assert(!viewSource.includes('role="status">{FEED_PEOPLE.find'));assert(!viewSource.includes('data?.peopleSources'));assert(viewSource.includes('<FeedAgentPanel'));
     const agentSource=fs.readFileSync(path.join(root,'components/FeedAgentPanel.tsx'),'utf8');assert(agentSource.includes('data.peopleSources?.filter'));assert(agentSource.includes('i===0&&sourceErrors.map'));
     const Badge=get('components/FeedPersonBadge.tsx').default;

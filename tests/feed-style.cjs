@@ -23,6 +23,7 @@ assert.equal(darkValues['--feed-action'], '#1793ff');
 assert.equal(darkValues['--feed-action-ink'], '#000');
 console.log('PASS measured Muse light/dark palette and exact primary-action mix');
 css.walkRules(rule => {
+  if(rule.parent.type==='atrule'&&rule.parent.name==='keyframes'){assert.match(rule.parent.params,/^feed-/,'unscoped animation');return;}
   assert.match(rule.selector, /\.feed-|\.alcor-feed/, 'unscoped rule: ' + rule.selector);
   if (rule.selector.includes('.app-shell-main')) assert.match(rule.selector, /\.tab-panel:not\(\[hidden\]\) \.alcor-feed/, 'cached feed scope');
   rule.walkDecls(d => assert(!/^--(?:site|cap|dock)-/.test(d.prop), 'global preference override'));

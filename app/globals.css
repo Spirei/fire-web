@@ -7337,8 +7337,8 @@ html { scrollbar-gutter:stable; }
 .dark .api-version-tone-blue { --api-version-ink:#93c5fd; --api-version-bg:#1c2b45; --api-version-border:#365885; }
 
 /* Softer all-posts icon; identity rings keep their original platform badge color. */
-.dark .feed-people-filter>button { --feed-filter-accent:#8eaac1; }
-.dark .feed-filter-all { color:#8eaac1; }
+.dark .feed-people-filter>button { --feed-filter-accent:var(--feed-windmill); }
+.dark .feed-filter-all { color:var(--feed-windmill); }
 
 /* Market calendar: soft schedule surfaces, including mixed market panels. */
 .dark .market-calendar {
@@ -7361,3 +7361,5 @@ html { scrollbar-gutter:stable; }
 /* Dynamic agent profile: matching glass menu and connection indicator in both themes. */
 .feed-theme{--feed-agent-connected:#23b457;--feed-agent-bolt:#fff;--feed-agent-menu:#fffffff0}
 .dark .feed-theme{--feed-agent-connected:#36bb69;--feed-agent-bolt:#fff;--feed-agent-menu:#28292bf2}
+.feed-theme{--feed-windmill:#4e91d6}
+.dark .feed-theme{--feed-windmill:#79ade5}
