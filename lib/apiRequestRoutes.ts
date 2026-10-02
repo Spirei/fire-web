@@ -3,6 +3,8 @@ export const API_REQUEST_ROUTES = [
   "/api/activities",
   "/api/activities/daily-summary",
   "/api/api-docs",
+  "/api/app-packages",
+  "/api/app-packages/download/[id]",
   "/api/asset-image/[key]",
   "/api/assets",
   "/api/assets/add-by-search",

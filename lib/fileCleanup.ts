@@ -211,6 +211,8 @@ export function cleanupOrphanFiles(options: { scope?: "showcase-unsaved" } = {})
         if (ent.name === "fonts" && path.basename(dir) === "uploads") continue;
         // 车型由 showroom.json 管理，不能按通用素材库的数据库引用判定为孤立文件。
         if (ent.name === "mclaren" && path.basename(dir) === "uploads") continue;
+        // 安装包与 iOS 发布清单由独立登记表管理。
+        if (ent.name === "alcor-test" && path.basename(dir) === "uploads") continue;
         walk(full);
         continue;
       }
