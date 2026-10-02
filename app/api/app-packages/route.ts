@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rateLimit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
+  if (!isAdmin(getAuthUser(request))) return Response.json({ error: "仅管理员可访问内部安装包" }, { status: 403 });
   return Response.json({ packages: await listPackages(), maxBytes: PACKAGE_LIMIT, canUpload: isAdmin(getAuthUser(request)) });
 }
 export async function POST(request: Request) {

@@ -40,7 +40,9 @@ const nextConfig = {
       { source: "/uploads/asset/:path*", destination: "/api/managed-upload/asset/:path*" },
       { source: "/uploads/cards/:path*", destination: "/api/managed-upload/cards/:path*" },
       // 草稿以 .draft- 开头；必须先走动态读取，否则 public 静态服务拒绝隐藏文件并返回 400。
-      { source: "/uploads/mclaren/models/:file", destination: "/api/showcase/model-files/:file" }
+      { source: "/uploads/mclaren/models/:file", destination: "/api/showcase/model-files/:file" },
+      // Run upload authorization before static public files, including encoded folder names.
+      { source: "/:uploadPrefix((?:u|%75)(?:p|%70)(?:l|%6[cC])(?:o|%6[fF])(?:a|%61)(?:d|%64)(?:s|%73))/:path*", destination: "/api/upload-files/:path*" }
     ] };
   },
   async headers() {

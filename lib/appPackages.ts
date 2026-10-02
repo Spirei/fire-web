@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 export const PACKAGE_LIMIT = 2 * 1024 ** 3;
-export const packageRoot = path.join(process.cwd(), "public/uploads/alcor-test/packages");
+export const packageRoot = path.join(process.cwd(), "data/app-packages/files");
 export const metadataRoot = path.join(process.cwd(), "data/app-packages");
 export type AppPackage = { id: string; name: string; size: number; platform: string; createdAt: string };
 export async function listPackages(): Promise<AppPackage[]> {

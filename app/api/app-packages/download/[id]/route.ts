@@ -2,9 +2,11 @@ import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { getAuthUser, isAdmin } from "@/lib/auth";
 import { packageRoot, metadataRoot } from "@/lib/appPackages";
 export const runtime = "nodejs";
 export async function GET(_request: Request, ctx: { params: Promise<{ id: string }> }) {
+  if (!isAdmin(getAuthUser(_request))) return new Response("Forbidden", { status: 403, headers: { "Cache-Control": "private, no-store" } });
   const { id } = await ctx.params;
   if (!/^[a-f0-9]{32}$/.test(id)) return new Response("Not Found", { status: 404 });
   try {

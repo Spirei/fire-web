@@ -40,7 +40,7 @@ export async function GET(
   if (!rel || rel.includes("..") || rel.includes("\0") || segs.some(segment => /[\\/]/.test(segment))) {
     return new NextResponse("Bad Request", { status: 400 });
   }
-  const privateReport = segs[0].toLowerCase() === "reports";
+  const privateReport = ["reports", "alcor-test"].includes(segs[0].toLowerCase());
   if (privateReport) { const user = getAuthUser(request); if (!user || !isAdmin(user)) return new NextResponse("Forbidden", { status: 403 }); }
   const normalized = path.normalize(rel);
   const abs = path.join(ROOT, normalized);

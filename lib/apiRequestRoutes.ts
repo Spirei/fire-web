@@ -115,6 +115,7 @@ export const API_REQUEST_ROUTES = [
   "/api/trading-square/feed",
   "/api/trading-square/trump",
   "/api/upload",
+  "/api/upload-files/[...path]",
   "/api/users",
   "/api/users/[id]",
   "/api/users/[id]/disable-totp",
