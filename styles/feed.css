@@ -28,8 +28,8 @@ body .alcor-feed .feed-post .feed-post-content h2{font-size:18px;line-height:26p
 .feed-mascot-top{display:flex;justify-content:center;margin:0 0 26px}
 .feed-mascot-top .feed-mascot{--feed-mascot-size:72px;width:72px;height:72px}
 .feed-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 32px 52px}
-.feed-header h1{font-size:34px;font-weight:600;letter-spacing:normal;line-height:40px;margin:0}
-.feed-header-actions{display:flex;align-items:center;gap:8px}
+.feed-header h1{min-width:0;overflow-wrap:anywhere;font-size:34px;font-weight:600;letter-spacing:normal;line-height:40px;margin:0}
+.feed-header-actions{display:flex;align-items:center;gap:8px;flex:none}
 .feed-icon-button,.feed-more{display:inline-flex;justify-content:center;align-items:center;border:0;background:transparent;color:inherit;flex:none;padding:0}
 .feed-icon-button{width:36px;height:36px;border-radius:50%;transition:background .2s}
 .feed-settings-button,.feed-icon-button:hover{background:var(--feed-fill)}
@@ -70,7 +70,7 @@ body .alcor-feed .feed-post .feed-post-content h2{font-size:18px;line-height:26p
 .feed-media-item>a span{position:absolute;display:flex;align-items:center;gap:8px;border-radius:999px;padding:10px 16px;background:#000b;color:#fff;font-size:13px}
 .feed-media-preview{display:block;max-width:100%;max-height:70dvh;object-fit:contain;margin:auto;border-radius:12px}
 .feed-groups{display:flex;align-items:center;gap:8px;overflow-x:auto;margin:-12px 0 30px 52px;padding:2px 0}
-.feed-groups button{flex:none;white-space:nowrap;border:1px dashed var(--feed-divider);border-radius:999px;background:transparent;color:var(--feed-secondary);padding:7px 14px;font-size:13px;line-height:20px}
+.feed-groups button{flex:none;white-space:nowrap;border:1px dashed var(--feed-divider);border-radius:999px;background:transparent;color:var(--feed-secondary);padding:7px 14px;font-size:13px;line-height:20px;transition:background-color .16s ease-out,color .16s ease-out,border-color .16s ease-out}
 .feed-groups button[aria-pressed=true]{border:1px solid transparent;background:var(--feed-fill);color:var(--feed-ink)}
 .feed-groups .feed-group-add{display:grid;place-items:center;padding:8px;width:36px;height:36px}
 .feed-groups button:hover{background:var(--feed-fill)}
@@ -104,6 +104,10 @@ body .alcor-feed .feed-post .feed-post-content h2{font-size:18px;line-height:26p
 .feed-skeleton{margin-left:52px;display:grid;gap:24px}
 .feed-skeleton i{height:68px;border-radius:12px;background:var(--feed-fill)}
 .feed-load-more{display:block;margin:12px auto 0;border:1px solid var(--feed-divider);border-radius:999px;padding:12px 24px;min-height:44px;background:transparent;font-size:14px;line-height:20px;color:inherit}
+.feed-pagination{text-align:center;overflow-wrap:anywhere}
+.feed-pagination .feed-error{margin:12px 0 0}
+.feed-load-more:disabled{opacity:.5;cursor:default}
+@media(hover:hover){.feed-load-more:hover:not(:disabled){background:var(--feed-fill)}}
 .feed-prompt-modal.app-modal-panel{max-width:512px!important}
 .feed-prompt-modal h3{font-size:18px;font-weight:600}
 .feed-prompt-modal .mb-5>div>p{font-size:16px;line-height:22px;margin-top:4px}
@@ -201,6 +205,9 @@ html:root body:has([data-capsule-scope="non-home"]) .feed-themed-modal.app-modal
 .feed-people-filter>button{display:flex;flex-direction:column;align-items:center;gap:10px;flex:none;width:90px;padding:0;border:0;border-radius:0;background:transparent;color:var(--feed-secondary);font-size:14px;text-align:center}
 .feed-people-filter>button{--feed-filter-accent:var(--feed-windmill)}
 .feed-people-filter>button[aria-pressed="true"]{color:var(--feed-filter-accent)}
+.feed-people-filter>button{transition:color .16s ease-out}
+.feed-filter-avatar{transition:border-color .16s ease-out}
+@media(prefers-reduced-motion:reduce){.feed-groups button,.feed-people-filter>button,.feed-filter-avatar{transition:none}}
 .feed-filter-avatar{position:relative;display:grid;place-items:center;width:64px;height:64px;border:1px solid transparent;border-radius:50%;background:transparent}
 .feed-people-filter>button[aria-pressed="true"] .feed-filter-avatar{border-color:var(--feed-filter-accent)}
 .feed-people-filter>button:focus-visible{outline:none}
@@ -264,14 +271,16 @@ html:root body:has([data-capsule-scope="non-home"]) .feed-themed-modal.app-modal
 .feed-agent-modal>.mb-5>button[aria-label="关闭"] svg{width:23px;height:23px;stroke-width:1.7}
 .feed-agent-hero{display:flex;flex-direction:column;align-items:center;padding:8px 52px 25px;text-align:center}
 .feed-agent-portrait{position:relative;display:grid;place-items:center;width:116px;height:116px;flex:none;border:1px solid var(--feed-divider);border-radius:50%;background:var(--feed-field)}
-.feed-agent-portrait-crop{display:grid;place-items:center;width:100%;height:100%;overflow:hidden;border-radius:50%}
+.feed-agent-portrait-crop{position:relative;display:grid;place-items:center;width:100%;height:100%;overflow:hidden;border-radius:50%}
 .feed-agent-portrait-crop>img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.feed-agent-face-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;pointer-events:none}
 .feed-agent-avatar-sample{display:grid;place-items:center;width:64px;height:64px;overflow:hidden;border-radius:50%}
 .feed-agent-portrait-crop.is-default .feed-agent-face-image,.feed-agent-avatar-sample.is-default .feed-agent-face-image{transform:scale(1.65);transform-origin:50% 0}
 .feed-agent-pencil{position:absolute;right:-6px;bottom:-1px;width:39px;height:39px;z-index:4}
 .feed-agent-modal .feed-agent-hero h2{max-width:100%;font-size:30px;line-height:1.18;font-weight:650!important;letter-spacing:-.8px;margin:22px 0 9px;overflow-wrap:anywhere;color:var(--feed-ink)}
 .feed-agent-connected{display:flex;align-items:center;gap:7px;font-size:16px;line-height:24px;color:var(--feed-ink)}
-.feed-agent-connected>span{display:grid;place-items:center;width:18px;height:18px;flex:none;border-radius:50%;background:var(--feed-agent-connected,#23b457);color:var(--feed-agent-bolt,#fff)}
+.feed-agent-connected>span{display:grid;place-items:center;width:16px;height:16px;flex:none;border-radius:50%;background:var(--feed-agent-connected,#23b457);color:var(--feed-agent-bolt,#fff)}
+.feed-agent-connected .feed-agent-bolt{display:block;width:9px;height:13px;flex:none}
 .feed-agent-edit-menu{position:absolute;z-index:5;top:calc(100% + 6px);left:50%;transform:translateX(-50%);width:290px;max-width:calc(100vw - 64px);padding:12px;border:1px solid var(--feed-divider);border-radius:28px;background:var(--feed-agent-menu,#fffffff0);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 12px 40px var(--feed-overlay)}
 .feed-agent-edit-menu button{display:flex;align-items:center;gap:18px;width:100%;padding:15px 16px;border:0;border-radius:18px;background:transparent;font-size:19px;line-height:28px;color:var(--feed-ink);text-align:left}
 .feed-agent-edit-menu button:hover,.feed-agent-edit-menu button:focus-visible{background:var(--feed-fill)}
@@ -322,7 +331,7 @@ html:root body:has([data-capsule-scope="non-home"]) .feed-themed-modal.app-modal
   .feed-agent-event h4{font-size:17px;line-height:24px}
   .feed-agent-edit-menu{width:276px}
 }
-@media(prefers-reduced-motion:reduce){.feed-agent-modal{scroll-behavior:auto}}
+@media(prefers-reduced-motion:reduce){.feed-agent-modal{scroll-behavior:auto}.feed-agent-face-video{display:none}}
 /* AppModal places header actions on a second row on phones; this profile keeps its two round controls together. */
 .feed-agent-modal.app-modal-panel>.mb-5{display:flex!important;align-items:center!important}
 .feed-agent-modal.app-modal-panel>.mb-5>div.ml-auto{width:46px!important;flex:0 0 auto!important;grid-area:auto!important}

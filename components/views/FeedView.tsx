@@ -1,18 +1,17 @@
 "use client";
 
-import { Fragment,useCallback,useEffect,useRef,useState } from "react";
-import { IconAdjustmentsHorizontal,IconArrowDown,IconArrowUp,IconCheck,IconDots,IconHeart,IconMessageCircle,IconRefresh,IconPlus,IconX,IconRss } from "@tabler/icons-react";
-import { useRouter } from "next/navigation";
-import { useWorkspaceSearchParams as useSearchParams } from "@/lib/workspacePanel";
+import { Fragment,useCallback,useEffect,useMemo,useRef,useState } from "react";
+import { IconAdjustmentsHorizontal,IconArrowDown,IconArrowUp,IconCheck,IconDots,IconRefresh,IconPlus,IconX,IconRss } from "@tabler/icons-react";
+import { useWorkspaceSearchParams as useSearchParams,useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 import AppModal from "@/components/AppModal";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import { FEED_PAGE_SIZE } from "@/lib/feedTypes";
-import type { FeedIcon,FeedJob,FeedMessage,FeedPayload,FeedPost,FeedGroup,FeedSubscription,FeedMode,FeedPersonId,FeedAgentProfile } from "@/lib/feedTypes";
+import type { FeedJob,FeedMessage,FeedPayload,FeedPost,FeedGroup,FeedSubscription,FeedMode,FeedPersonId,FeedAgentProfile } from "@/lib/feedTypes";
 import { observePanelVisibility,panelIsShown } from "@/lib/panelVisibility";
 import { feedRequest as api,FeedRequestError,feedJobRunning as running,feedEmptyCopy } from "@/lib/feedClient";
-import { feedBodyParts } from "@/lib/feedPresentation";
+import { feedChromeKey,reconcileFeedPayload } from "@/lib/feedSnapshots";
 import FeedAgentPanel, { validFeedAgentTab, type FeedAgentTab } from "@/components/FeedAgentPanel";
-import FeedMedia from "@/components/FeedMedia";
+import FeedNewsPost from "@/components/FeedNewsPost";
 import FeedOriginalPost from "@/components/FeedOriginalPost";
 import FeedTemplatePicker from "@/components/FeedTemplatePicker";
 import FeedPeopleFilter from "@/components/FeedPeopleFilter";
@@ -22,30 +21,29 @@ import { usePersistedState } from "@/lib/usePersistedState";
 import { isUnseenPost, type SeenTimes } from "@/lib/tradingSquareSeen";
 import { showToast } from "@/lib/toast";
 
-const ICON_URL=(icon:FeedIcon)=>`/uploads/feature/feed/${icon}.webp`;
 function dateText(value:string|null) {return value?value.slice(0,10).replaceAll("-","/"):"日期未提供";}
-function relative(value:string,now:number) {const n=Math.max(0,now-Date.parse(value));return n<60_000?"刚刚":n<3600_000?`${Math.floor(n/60_000)}分钟前`:n<86400_000?`${Math.floor(n/3600_000)}小时前`:`${Math.floor(n/86400_000)}天前`;}
-
 function Mascot({image,video,name,onClick}:{image:string;video:string|null;name:string;onClick:()=>void}) {
   const [videoState,setVideoState]=useState({src:video,ready:false,failed:false}),[reduced,setReduced]=useState(true);
   if(videoState.src!==video)setVideoState({src:video,ready:false,failed:false});
   const ready=videoState.src===video&&videoState.ready,failed=videoState.src===video&&videoState.failed;
-  const videoRef=useRef<HTMLVideoElement>(null),buttonRef=useRef<HTMLButtonElement>(null);
+  const videoRef=useRef<HTMLVideoElement>(null),buttonRef=useRef<HTMLButtonElement>(null),inViewport=useRef(true);
   useEffect(()=>{const media=matchMedia("(prefers-reduced-motion: reduce)");const sync=()=>setReduced(media.matches);sync();media.addEventListener("change",sync);return()=>media.removeEventListener("change",sync);},[]);
   useEffect(()=>{
-    const sync=()=>{const element=videoRef.current;if(!element)return;if(document.hidden||reduced||!panelIsShown(buttonRef.current))element.pause();else void element.play().catch(()=>undefined);};
+    const sync=()=>{const element=videoRef.current;if(!element)return;if(document.hidden||reduced||!inViewport.current||!panelIsShown(buttonRef.current))element.pause();else void element.play().catch(()=>undefined);};
     const release=buttonRef.current?observePanelVisibility(buttonRef.current,sync):()=>{};
-    document.addEventListener("visibilitychange",sync);sync();return()=>{release();document.removeEventListener("visibilitychange",sync);};
+    const observer=typeof IntersectionObserver!=="undefined"?new IntersectionObserver(entries=>{inViewport.current=entries[0]?.isIntersecting??true;sync();}):null;
+    if(buttonRef.current)observer?.observe(buttonRef.current);
+    document.addEventListener("visibilitychange",sync);sync();return()=>{release();observer?.disconnect();videoRef.current?.pause();document.removeEventListener("visibilitychange",sync);};
   },[reduced,video]);
   // Intrinsic constraints survive the first paint, failed CSS delivery and bfcache restoration.
   return <button ref={buttonRef} type="button" className="feed-mascot" style={{position:"relative",display:"block",width:"var(--feed-mascot-size,72px)",height:"var(--feed-mascot-size,72px)",maxWidth:72,maxHeight:72,minWidth:0,minHeight:0,flex:"none",overflow:"hidden",borderRadius:"50%",padding:0}} onClick={onClick} aria-label={`查看 ${name} 的动态`} title={name}>
     <SafeAssetImage src={image} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}} className="feed-mascot-poster" showFallbackWhileLoading={false} alt={name} fallback={<span>A</span>} />
-    {video&&!failed&&!reduced&&<video key={video} ref={videoRef} src={video} width={72} height={72} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:ready?1:0}} muted autoPlay loop playsInline preload="metadata" aria-hidden="true" onCanPlay={()=>{setVideoState(current=>current.src===video?{...current,ready:true}:current);if(document.hidden||!panelIsShown(buttonRef.current))videoRef.current?.pause();}} onError={()=>setVideoState(current=>current.src===video?{...current,failed:true}:current)} className={`feed-mascot-video ${ready?"is-ready":""}`} />}
+    {video&&!failed&&!reduced&&<video key={video} ref={videoRef} src={video} width={72} height={72} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:ready?1:0}} muted autoPlay loop playsInline preload="metadata" aria-hidden="true" onCanPlay={()=>{setVideoState(current=>current.src===video?{...current,ready:true}:current);if(document.hidden||!inViewport.current||!panelIsShown(buttonRef.current))videoRef.current?.pause();}} onError={()=>setVideoState(current=>current.src===video?{...current,failed:true}:current)} className={`feed-mascot-video ${ready?"is-ready":""}`} />}
   </button>;
 }
 
 export default function FeedView({initial=null,initialNow=0}:{initial?:FeedPayload|null;initialNow?:number}) {
-  const router=useRouter(),search=useSearchParams(),groupId=search.get("feedGroup")||"default",author=search.get("feedPerson")||"";
+  const canNavigate=useWorkspaceLocationGuard(),search=useSearchParams(),groupId=search.get("feedGroup")||"default",author=search.get("feedPerson")||"";
   const entryGroup=useRef(groupId).current;
   // The shared header stays mounted; snapshots belong to this page/account only.
   const [chrome,setChrome]=useState(initial),snapshots=useRef(new Map<string,{revision:number;byAuthor:Map<string,FeedPayload>}>()),active=useRef({groupId,author});
@@ -53,20 +51,23 @@ export default function FeedView({initial=null,initialNow=0}:{initial?:FeedPaylo
   const remember=useCallback((id:string,person:string,payload:FeedPayload)=>{
     if(id!==active.current.groupId||person!==active.current.author)return;
     const previous=snapshots.current.get(id),group=previous?.revision===payload.preferences.revision?previous:{revision:payload.preferences.revision,byAuthor:new Map<string,FeedPayload>()};
+    const prior=group.byAuthor.get(person);
+    if(prior&&prior.posts!==payload.posts)group.byAuthor.clear();
     group.byAuthor.set(person,payload);snapshots.current.delete(id);snapshots.current.set(id,group);
     while(snapshots.current.size>8)snapshots.current.delete(snapshots.current.keys().next().value!);
-    setChrome(payload);
+    setChrome(previous=>feedChromeKey(previous)===feedChromeKey(payload)?previous:payload);
   },[]);
   const restored=snapshots.current.get(groupId)?.byAuthor.get(author),seed=restored||(groupId==="default"&&!author?initial:null);
-  function openAgent(){const url=new URLSearchParams(search.toString());url.set("feedAgent","profile");router.replace(`/trading?${url.toString()}`,{scroll:false});}
+  const invalidateSnapshots=useCallback((id:string)=>{snapshots.current.get(id)?.byAuthor.clear();},[]);
+  function openAgent(){if(!canNavigate())return;const url=new URL(window.location.href);url.searchParams.set("feedAgent","profile");window.history.replaceState(null,"",url.pathname+url.search+url.hash);}
   return <section className="alcor-feed feed-theme" aria-label="动态">
     <div className="feed-mascot-top">{chrome?<><Mascot name={chrome.agent?.name||"Alcor"} image={chrome.capabilities.avatar.image} video={chrome.capabilities.avatar.video} onClick={openAgent}/><button type="button" className="feed-mascot-name" onClick={openAgent}>{chrome.agent?.name||"Alcor"}</button></>:<div className="feed-mascot-placeholder" aria-hidden="true"/>}</div>
-    <GroupFeedView key={groupId} groupId={groupId} author={author} initial={seed} initialNow={initialNow} chrome={chrome} revalidate={!!restored||groupId!==entryGroup} onSnapshot={remember}/>
+    <GroupFeedView key={groupId} groupId={groupId} author={author} initial={seed} cached={restored||null} initialNow={initialNow} chrome={chrome} revalidate={!!restored||groupId!==entryGroup} onSnapshot={remember} onMutation={invalidateSnapshots}/>
   </section>;
 }
-function GroupFeedView({initial,initialNow,groupId,author,chrome=initial,revalidate=false,onSnapshot}:{initial:FeedPayload|null;initialNow:number;groupId:string;author:string;chrome?:FeedPayload|null;revalidate?:boolean;onSnapshot?:(id:string,person:string,payload:FeedPayload)=>void}) {
-  const router=useRouter(),search=useSearchParams(),tasks=search.get("feedAgent")==="profile",agentTab=validFeedAgentTab(search.get("feedAgentTab"));
-  function agentView(open:boolean,tab:FeedAgentTab=agentTab) {const url=new URLSearchParams(search.toString());if(open){url.set("feedAgent","profile");if(tab!=="activity")url.set("feedAgentTab",tab);else url.delete("feedAgentTab");}else{url.delete("feedAgent");url.delete("feedAgentTab");}router.replace(`/trading?${url.toString()}`,{scroll:false});}
+function GroupFeedView({initial,cached=null,initialNow,groupId,author,chrome=initial,revalidate=false,onSnapshot,onMutation}:{initial:FeedPayload|null;cached?:FeedPayload|null;initialNow:number;groupId:string;author:string;chrome?:FeedPayload|null;revalidate?:boolean;onSnapshot?:(id:string,person:string,payload:FeedPayload)=>void;onMutation?:(id:string)=>void}) {
+  const canNavigate=useWorkspaceLocationGuard(),search=useSearchParams(),tasks=search.get("feedAgent")==="profile",agentTab=validFeedAgentTab(search.get("feedAgentTab"));
+  function agentView(open:boolean,tab:FeedAgentTab=agentTab) {if(!canNavigate())return;const url=new URL(window.location.href);if(open){url.searchParams.set("feedAgent","profile");if(tab!=="activity")url.searchParams.set("feedAgentTab",tab);else url.searchParams.delete("feedAgentTab");}else{url.searchParams.delete("feedAgent");url.searchParams.delete("feedAgentTab");}window.history.replaceState(null,"",url.pathname+url.search+url.hash);}
   const setTasks=(open:boolean)=>agentView(open);
 
   const groupPath=(path="")=>`${path}${path.includes("?")?"&":"?"}group=${encodeURIComponent(groupId)}${author?`&author=${encodeURIComponent(author)}`:""}`;
@@ -83,7 +84,7 @@ function GroupFeedView({initial,initialNow,groupId,author,chrome=initial,revalid
   const [creating,setCreating]=useState(false),[newGroupName,setNewGroupName]=useState(""),[creatingGroup,setCreatingGroup]=useState(false),[groupError,setGroupError]=useState("");
   const [errorAction,setErrorAction]=useState<"load"|"refresh"|null>(null),[promptError,setPromptError]=useState(""),[conflict,setConflict]=useState(false),[recovering,setRecovering]=useState(false);
   const [editing,setEditing]=useState(false),[draft,setDraft]=useState(""),[draftRevision,setDraftRevision]=useState(0),[saving,setSaving]=useState(false);
-  const [requesting,setRequesting]=useState(false),[loadingMore,setLoadingMore]=useState(false),[selected,setSelected]=useState<FeedPost|null>(null),[menu,setMenu]=useState<FeedPost|null>(null);
+  const [requesting,setRequesting]=useState(false),[loadingMore,setLoadingMore]=useState(false),[moreError,setMoreError]=useState(""),[selected,setSelected]=useState<FeedPost|null>(null),[menu,setMenu]=useState<FeedPost|null>(null);
   const [refreshPending,setRefreshPending]=useState(false);
   const [messages,setMessages]=useState<FeedMessage[]>([]),[question,setQuestion]=useState(""),[sending,setSending]=useState(false),[discussionLoading,setDiscussionLoading]=useState(false),[discussionError,setDiscussionError]=useState("");
   const [pendingQuestion,setPendingQuestion]=useState(""),[newReply,setNewReply]=useState(false),[discussionNeedsRead,setDiscussionNeedsRead]=useState(false);
@@ -97,12 +98,18 @@ function GroupFeedView({initial,initialNow,groupId,author,chrome=initial,revalid
   const manualRefresh=useRef<{id:string;revision:number;result:FeedJob|null}|null>(null);
   if(!readingPerson)loadedCount.current=data?.posts.length||FEED_PAGE_SIZE;
   useEffect(()=>{const sync=()=>setShown(panelIsShown(root.current));sync();return root.current?observePanelVisibility(root.current,sync):undefined;},[]);
-  function invalidateReads(){++loadEpoch.current;readController.current?.abort();moreController.current?.abort();}
+  const cachedRead=useRef(cached),observedAuthor=useRef(author),awaitingPersonRead=useRef(false);
+  cachedRead.current=cached;
+  if(observedAuthor.current!==author){observedAuthor.current=author;awaitingPersonRead.current=true;}
+  // React repeats this render before committing, so a confirmed cached person never flashes a skeleton.
+  if(readingPerson&&cached&&!pendingIds.current.size&&!saveLock.current&&!requestLock.current){setData(cached);setDataAuthor(author);setError("");setErrorAction(null);loadedCount.current=cached.posts.length||FEED_PAGE_SIZE;}
+  const invalidateReads=useCallback(()=>{++loadEpoch.current;readController.current?.abort();moreController.current?.abort();readController.current=null;moreController.current=null;setLoadingMore(false);},[]);
   useEffect(()=>{if(!shown){invalidateReads();discussionController.current?.abort();sendLock.current=false;manualRefresh.current=null;setRefreshPending(false);setEditing(false);setMenu(null);setSelected(null);setSending(false);setPendingQuestion("");}},[shown]);
   useEffect(()=>()=>{manualRefresh.current=null;},[]);
   const load=useCallback(async(quiet=false)=>{
     if(pendingIds.current.size||saveLock.current||requestLock.current||!panelIsShown(root.current))return;
-    readController.current?.abort();moreController.current?.abort();
+    if(quiet&&moreController.current&&!moreController.current.signal.aborted)return;
+    awaitingPersonRead.current=false;readController.current?.abort();moreController.current?.abort();moreController.current=null;setLoadingMore(false);
     const controller=new AbortController();readController.current=controller;readSince.current=Date.now();
     const epoch=++loadEpoch.current,target=Math.max(FEED_PAGE_SIZE,loadedCount.current);
     try{
@@ -114,7 +121,7 @@ function GroupFeedView({initial,initialNow,groupId,author,chrome=initial,revalid
         next.nextCursor=page.nextCursor;
       }
       if(!live.current||epoch!==loadEpoch.current)return;
-      setData(next);setDataAuthor(author);setError("");setErrorAction(null);
+      setData(previous=>reconcileFeedPayload(previous,next));setDataAuthor(author);setError("");setErrorAction(null);setMoreError("");
       const tracked=manualRefresh.current;
       if(tracked){
         const completed=tracked.result||(next.job?.id===tracked.id&&!running(next.job)?next.job:null);
@@ -124,11 +131,11 @@ function GroupFeedView({initial,initialNow,groupId,author,chrome=initial,revalid
     }catch(e){if(live.current&&!controller.signal.aborted&&epoch===loadEpoch.current){if(manualRefresh.current?.result){manualRefresh.current=null;setRefreshPending(false);showToast("读取刷新结果失败","err");}if(!quiet||(e instanceof FeedRequestError&&e.status===401)){setError((e as Error).message);setErrorAction("load");}}}
     finally{if(readController.current===controller)readController.current=null;}
   },[groupId,author]);
-  useEffect(()=>{const first=initialRead.current;loadedCount.current=first?initialSnapshot?.posts.length||FEED_PAGE_SIZE:FEED_PAGE_SIZE;live.current=true;if(!initialSnapshot||!first||restoreRead)void load(first&&!!initialSnapshot&&restoreRead);initialRead.current=false;const timer=setInterval(()=>{if(!document.hidden&&panelIsShown(root.current)){setNow(Date.now());if(!readController.current)void load(true);}},60_000);setNow(Date.now());return()=>{live.current=false;++loadEpoch.current;readController.current?.abort();moreController.current?.abort();discussionController.current?.abort();clearInterval(timer);};},[load,initialSnapshot,restoreRead]);
+  useEffect(()=>{const first=initialRead.current;loadedCount.current=(first?initialSnapshot:cachedRead.current)?.posts.length||FEED_PAGE_SIZE;live.current=true;if(!initialSnapshot||!first||restoreRead)void load(!!cachedRead.current||(first&&!!initialSnapshot&&restoreRead));initialRead.current=false;const timer=setInterval(()=>{if(!document.hidden&&panelIsShown(root.current)){setNow(Date.now());if(!readController.current)void load(true);}},60_000);setNow(Date.now());return()=>{live.current=false;++loadEpoch.current;readController.current?.abort();moreController.current?.abort();discussionController.current?.abort();clearInterval(timer);};},[load,initialSnapshot,restoreRead]);
   useEffect(()=>{if(data&&!readingPerson&&!pendingIds.current.size&&!saveLock.current&&!requestLock.current)onSnapshot?.(groupId,author,data);},[data,dataAuthor,groupId,author,onSnapshot,readingPerson,pendingPosts,saving,requesting]);
   useEffect(()=>{
     // A switch blocked by an in-flight like/save must resume when that write finishes.
-    if(readingPerson&&shown&&!requesting&&!saving&&!Object.values(pendingPosts).some(Boolean)&&(!readController.current||readController.current.signal.aborted))void load();
+    if((readingPerson||awaitingPersonRead.current)&&shown&&!requesting&&!saving&&!Object.values(pendingPosts).some(Boolean)&&(!readController.current||readController.current.signal.aborted))void load(!!cachedRead.current);
   },[readingPerson,shown,requesting,saving,pendingPosts,load]);
   useEffect(()=>{
     setAvatarSeen(previous=>mergeFeedSeen(previous,savedSeen));
@@ -182,8 +189,8 @@ function GroupFeedView({initial,initialNow,groupId,author,chrome=initial,revalid
   },[]);
   useEffect(()=>{const log=discussionLog.current;if(!log)return;if(following.current)log.scrollTop=log.scrollHeight;else setNewReply(true);},[messages,pendingQuestion,discussionLoading]);
   useEffect(()=>{const element=composer.current;if(element){element.style.height="auto";element.style.height=`${Math.min(112,element.scrollHeight)}px`;}},[question,selected]);
-  function chooseGroup(id:string){if(id===groupId)return;invalidateReads();const url=new URL(window.location.href);url.searchParams.delete("feedPerson");if(id==="default")url.searchParams.delete("feedGroup");else url.searchParams.set("feedGroup",id);router.replace(url.pathname+url.search,{scroll:false});}
-  function choosePerson(id:string){if(id===author)return;invalidateReads();setError("");setErrorAction(null);loadedCount.current=FEED_PAGE_SIZE;const url=new URL(window.location.href);if(id)url.searchParams.set("feedPerson",id);else url.searchParams.delete("feedPerson");router.replace(url.pathname+url.search,{scroll:false});}
+  function chooseGroup(id:string){if(!canNavigate())return;const url=new URL(window.location.href);if(id===(url.searchParams.get("feedGroup")||"default"))return;invalidateReads();url.searchParams.delete("feedPerson");if(id==="default")url.searchParams.delete("feedGroup");else url.searchParams.set("feedGroup",id);window.history.replaceState(null,"",url.pathname+url.search+url.hash);}
+  function choosePerson(id:string){if(!canNavigate())return;const url=new URL(window.location.href);if(id===(url.searchParams.get("feedPerson")||""))return;invalidateReads();setError("");setErrorAction(null);setMoreError("");loadedCount.current=FEED_PAGE_SIZE;if(id)url.searchParams.set("feedPerson",id);else url.searchParams.delete("feedPerson");window.history.replaceState(null,"",url.pathname+url.search+url.hash);}
   async function createGroup(){if(creatingGroup||!newGroupName.trim())return;setCreatingGroup(true);setGroupError("");try{const group=await api<FeedGroup>("/groups","POST",{name:newGroupName.trim(),mode:newMode,people:newPeople});if(live.current){setCreating(false);chooseGroup(group.id);}}catch(e){if(live.current)setGroupError((e as Error).message);}finally{if(live.current)setCreatingGroup(false);}}
   function edit() {if(!data)return;setGroupName(data.group?.name||"动态");setMode(data.group?.mode||"news");setPeople(data.group?.people||["trump","duan"]);setAutoUpdate(data.preferences.enabled);setIntervalMinutes(data.preferences.intervalMinutes);setSubscriptions(data.group?.subscriptions||[]);setSourcesOpen(false);setSourceName("");setSourceUrl("");setSourceResult("");setDraft(data.preferences.instructions);setDraftRevision(data.preferences.revision);setPromptError("");setConflict(false);setEditing(true);}
   async function uploadAvatar(id:FeedPersonId,file:File) {
@@ -206,7 +213,7 @@ function GroupFeedView({initial,initialNow,groupId,author,chrome=initial,revalid
     catch(e){if(live.current){manualRefresh.current=null;setRefreshPending(false);setError((e as Error).message);setErrorAction(e instanceof FeedRequestError&&e.unconfirmed?"load":"refresh");}}finally{requestLock.current=false;if(live.current){setRequesting(false);if(terminal)void load(true);}}
   }
   async function save() {
-    if(saveLock.current||conflict)return;let saved=false;saveLock.current=true;setSaving(true);setPromptError("");
+    if(saveLock.current||conflict)return;let saved=false;saveLock.current=true;onMutation?.(groupId);setSaving(true);setPromptError("");
     try{const pref=await api<FeedPayload["preferences"]>(groupPath("/preferences"),"PUT",{instructions:draft,revision:draftRevision,name:groupName,subscriptions,mode,people,enabled:autoUpdate,intervalMinutes:interval});saved=true;invalidateReads();if(!live.current)return;setData(p=>p?{...p,preferences:pref,group:p.group?{...p.group,name:groupName,subscriptions,mode,people,revision:pref.revision}:p.group,groups:p.groups?.map(g=>g.id===groupId?{...g,name:groupName,subscriptions,mode,people,revision:pref.revision}:g),job:null,posts:(p.group?.mode||"news")!==mode?[]:p.posts,nextCursor:(p.group?.mode||"news")!==mode?null:p.nextCursor}:p);setEditing(false);if(mode==="people"||(pref.instructions&&data?.capabilities.generate))await refresh(true);}
     catch(e){if(live.current){setPromptError((e as Error).message);setConflict(e instanceof FeedRequestError&&(e.status===409||e.unconfirmed));}}finally{saveLock.current=false;if(live.current){setSaving(false);if(saved&&author&&(mode!=="people"||!people.includes(author as FeedPersonId)))choosePerson("");else void load(true);}}
   }
@@ -215,9 +222,9 @@ function GroupFeedView({initial,initialNow,groupId,author,chrome=initial,revalid
     try{const next=await api<FeedPayload>(groupPath());if(!live.current)return;invalidateReads();setData(p=>p?{...p,preferences:next.preferences,group:next.group,groups:next.groups,job:next.job}:next);setDraftRevision(next.preferences.revision);setConflict(false);setPromptError(draft.trim()===next.preferences.instructions?"已确认这份指示已保存。可关闭弹窗。":"已读取最新版本，你的草稿仍保留。确认后再保存。");}
     catch(e){if(live.current)setPromptError((e as Error).message);}finally{if(live.current)setRecovering(false);}
   }
-  async function updatePost(post:FeedPost,patch:{liked?:boolean;hidden?:boolean}) {
+  const updatePost=useCallback(async(post:FeedPost,patch:{liked?:boolean;hidden?:boolean})=>{
     if(pendingIds.current.has(post.id))return;
-    pendingIds.current.add(post.id);invalidateReads();
+    pendingIds.current.add(post.id);onMutation?.(groupId);invalidateReads();
     setPendingPosts(p=>({...p,[post.id]:true}));
     setData(p=>p?{...p,posts:p.posts.map(item=>item.id===post.id?{...item,...patch}:item)}:p);
     try{
@@ -233,21 +240,34 @@ function GroupFeedView({initial,initialNow,groupId,author,chrome=initial,revalid
     }
     catch(e){if(live.current){invalidateReads();setData(p=>p?{...p,posts:p.posts.map(item=>item.id===post.id?post:item)}:p);setError((e as Error).message);setErrorAction("load");}}
     finally{pendingIds.current.delete(post.id);if(live.current)setPendingPosts(p=>({...p,[post.id]:false}));}
-  }
+  },[invalidateReads,groupId,onMutation]);
+  const likePost=useCallback((post:FeedPost)=>void updatePost(post,{liked:!post.liked}),[updatePost]);
   async function more() {
-    if(readingPerson||!data?.nextCursor||moreController.current)return;setLoadingMore(true);
+    if(readingPerson||!data?.nextCursor||moreController.current||pendingIds.current.size||saveLock.current||requestLock.current||!panelIsShown(root.current))return;
+    // A requested page takes priority over a quiet read of the existing range.
+    readController.current?.abort();readController.current=null;++loadEpoch.current;
+    setLoadingMore(true);setMoreError("");
     const controller=new AbortController();moreController.current=controller;
-    const epoch=loadEpoch.current;
-    try{const next=await api<FeedPayload>(groupPath(`?limit=${FEED_PAGE_SIZE}&cursor=${encodeURIComponent(data.nextCursor)}`),"GET",undefined,controller.signal);if(live.current&&epoch===loadEpoch.current){setData(p=>p?{...p,posts:[...p.posts,...next.posts.filter(n=>!p.posts.some(old=>old.id===n.id))],nextCursor:next.nextCursor}:next);setError("");}}
-    catch(e){if(live.current&&!controller.signal.aborted&&epoch===loadEpoch.current){setError((e as Error).message);setErrorAction(null);}}finally{if(moreController.current===controller)moreController.current=null;if(live.current)setLoadingMore(false);}
+    const epoch=loadEpoch.current;let revalidate=false;
+    try{
+      const next=await api<FeedPayload>(groupPath(`?limit=${FEED_PAGE_SIZE}&cursor=${encodeURIComponent(data.nextCursor)}`),"GET",undefined,controller.signal);
+      if(live.current&&!controller.signal.aborted&&epoch===loadEpoch.current){
+        if(next.preferences.revision!==data.preferences.revision)revalidate=true;
+        else{setData(p=>p?{...p,posts:[...p.posts,...next.posts.filter(n=>!p.posts.some(old=>old.id===n.id))],nextCursor:next.nextCursor}:next);setError("");setErrorAction(null);}
+      }
+    }catch(e){if(live.current&&!controller.signal.aborted&&epoch===loadEpoch.current){if(e instanceof FeedRequestError&&e.status===401){setError(e.message);setErrorAction("load");}else setMoreError((e as Error).message);}}
+    finally{
+      if(moreController.current===controller){moreController.current=null;if(live.current)setLoadingMore(false);}
+      if(live.current&&!controller.signal.aborted&&epoch===loadEpoch.current){if(revalidate)void load();else if(manualRefresh.current?.result)void load(true);}
+    }
   }
-  async function discuss(post:FeedPost) {
+  const discuss=useCallback(async(post:FeedPost)=>{
     discussionController.current?.abort();const controller=new AbortController();discussionController.current=controller;
     following.current=true;sendLock.current=false;setNewReply(false);setPendingQuestion("");setSending(false);
     setSelected(post);setMessages([]);setQuestion("");setDiscussionError("");setDiscussionNeedsRead(false);setDiscussionLoading(true);
     try{const result=await api<{messages:FeedMessage[]}>(`/posts/${post.id}/discussion`,"GET",undefined,controller.signal);if(!controller.signal.aborted)setMessages(result.messages);}
     catch(e){if(!controller.signal.aborted)setDiscussionError((e as Error).message);}finally{if(!controller.signal.aborted)setDiscussionLoading(false);}
-  }
+  },[]);
   async function rereadDiscussion(){
     if(!selected||discussionLoading||sendLock.current)return;
     const controller=new AbortController();discussionController.current?.abort();discussionController.current=controller;setDiscussionLoading(true);
@@ -264,7 +284,8 @@ function GroupFeedView({initial,initialNow,groupId,author,chrome=initial,revalid
   function closeDiscussion(){discussionController.current?.abort();sendLock.current=false;setSelected(null);setSending(false);setPendingQuestion("");}
   const shell=data||chrome,group=data?.group||shell?.groups?.find(item=>item.id===groupId);
   const peopleMode=group?.mode==="people",canRefresh=!!data&&(peopleMode||!!data.capabilities.generate);
-  const job=data?.job&&data.job.revision===data.preferences.revision?data.job:null,posts=readingPerson?[]:data?.posts.filter(p=>!p.hidden&&!!p.original===peopleMode&&(!author||p.original?.person.id===author))||[],empty=data&&!readingPerson?feedEmptyCopy({...data,job}):null;
+  const posts=useMemo(()=>readingPerson?[]:data?.posts.filter(p=>!p.hidden&&!!p.original===peopleMode&&(!author||p.original?.person.id===author))||[],[data?.posts,readingPerson,peopleMode,author]);
+  const job=data?.job&&data.job.revision===data.preferences.revision?data.job:null,empty=data&&!readingPerson?feedEmptyCopy({...data,job}):null;
   const refreshing=requesting||refreshPending||running(job);
   const isNew=(post:FeedPost)=>!!post.original&&!!visitSeen[post.original.person.id]&&isUnseenPost({author:post.original.person.id,date:post.publishedAt||""},visitSeen);
   const leadingNew=posts.findIndex(post=>!isNew(post));
@@ -283,18 +304,10 @@ function GroupFeedView({initial,initialNow,groupId,author,chrome=initial,revalid
     {undoPost&&<p className="feed-status feed-undo" role="status">已隐藏这条动态<button type="button" disabled={pendingPosts[undoPost.id]} onClick={()=>void updatePost(undoPost,{hidden:false})}>撤销</button><button type="button" aria-label="关闭隐藏提示" onClick={()=>setUndoPost(null)}>×</button></p>}
     {(!data||readingPerson)&&!error&&<div className="feed-skeleton" aria-label="正在加载动态"><i/><i/><i/></div>}
     <div className="feed-posts" role="feed" aria-busy={readingPerson||running(job)}>
-      {posts.map((post,index)=><Fragment key={post.id}>{post.original?<FeedOriginalPost post={post} isNew={isNew(post)} busy={!!pendingPosts[post.id]} canDiscuss={!!data?.capabilities.generate} onMenu={()=>setMenu(post)} onLike={()=>void updatePost(post,{liked:!post.liked})} onDiscuss={()=>void discuss(post)}/>:<article className="feed-post" key={post.id} aria-labelledby={`feed-title-${post.id}`}>
-        <SafeAssetImage src={ICON_URL(post.icon)} alt="" loading="lazy" className="feed-post-icon" fallback={<span className="feed-icon-fallback">✦</span>} />
-        <div className="feed-post-content">
-          <div className="feed-post-heading"><h2 id={`feed-title-${post.id}`}>{post.title}</h2><time dateTime={post.createdAt} title={post.createdAt}>{relative(post.createdAt,now)}</time><button type="button" className="feed-more" aria-label={`${post.title}的选项`} onClick={()=>setMenu(post)}><IconDots size={17}/></button></div>
-          <p className="feed-body">{feedBodyParts(post.segments,post.sources).map((part,i)=>{const source=post.sources.find(s=>s.id===part.sourceId);return source?<a key={i} href={source.url} target="_blank" rel="noopener noreferrer" title={`${source.publisher} · ${dateText(source.publishedAt)}`}>{part.text}</a>:<span key={i}>{part.text}</span>;})}</p>
-          {post.media.length>0&&<FeedMedia media={post.media}/>}
-          <div className="feed-post-actions"><button type="button" aria-label={post.liked?"取消喜欢":"喜欢"} aria-pressed={post.liked} disabled={pendingPosts[post.id]} onClick={()=>void updatePost(post,{liked:!post.liked})} className={post.liked?"is-liked":""}><IconHeart size={21} stroke={1.8} fill={post.liked?"currentColor":"none"}/></button><button type="button" onClick={()=>void discuss(post)}><IconMessageCircle size={21} stroke={1.8}/><span>讨论</span></button></div>
-        </div>
-      </article>}{peopleMode&&leadingNew>0&&index===leadingNew-1&&<div className="feed-unread-divider">以上 {leadingNew} 条为新动态</div>}</Fragment>)}
+      {posts.map((post,index)=><Fragment key={post.id}>{post.original?<FeedOriginalPost post={post} isNew={isNew(post)} busy={!!pendingPosts[post.id]} canDiscuss={!!data?.capabilities.generate} onMenu={setMenu} onLike={likePost} onDiscuss={discuss}/>:<FeedNewsPost post={post} now={now} busy={!!pendingPosts[post.id]} canDiscuss={!!data?.capabilities.generate} onMenu={setMenu} onLike={likePost} onDiscuss={discuss}/>}{peopleMode&&leadingNew>0&&index===leadingNew-1&&<div className="feed-unread-divider">以上 {leadingNew} 条为新动态</div>}</Fragment>)}
       {data&&!readingPerson&&!error&&posts.length===0&&<div className="feed-empty" role="status"><p>{empty?.title}</p><span>{empty?.body}</span>{!peopleMode&&!data.capabilities.generate&&<a className="feed-inline-action" href="/settings?sub=stocks&anchor=translation&from=services">配置大模型服务 →</a>}</div>}
     </div>
-    {!readingPerson&&data?.nextCursor&&<button type="button" className="feed-load-more" disabled={loadingMore} onClick={()=>void more()}>{loadingMore?"正在读取":"查看更早动态"}</button>}
+    {!readingPerson&&data?.nextCursor&&<div className="feed-pagination" aria-busy={loadingMore}>{moreError&&<p className="feed-error" role="alert">{moreError}</p>}<button type="button" className="feed-load-more" disabled={loadingMore||saving||requesting||Object.values(pendingPosts).some(Boolean)} onClick={()=>void more()}>{loadingMore?"正在读取":moreError?"重试读取更早动态":"查看更早动态"}</button></div>}
     {creating&&<AppModal title="新建动态组" size="sm" className="feed-theme feed-themed-modal feed-group-modal" onClose={()=>setCreating(false)} closeDisabled={creatingGroup}><label className="feed-config-label" htmlFor="feed-group-name">组名称</label><input id="feed-group-name" className="feed-config-input" value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} maxLength={40} placeholder="例如：美国与美股、特朗普、段永平" data-autofocus disabled={creatingGroup}/><FeedTemplatePicker mode={newMode} people={newPeople} profiles={data?.peopleCatalog} disabled={creatingGroup} onMode={value=>{setNewMode(value);if(!newGroupName.trim()&&value==="people")setNewGroupName("名人动态");}} onPeople={setNewPeople}/>{groupError&&<p className="feed-error" role="alert">{groupError}</p>}<div className="feed-modal-actions"><button type="button" onClick={()=>setCreating(false)} disabled={creatingGroup}>取消</button><button type="button" className="feed-primary" disabled={creatingGroup||!newGroupName.trim()} onClick={()=>void createGroup()}>{creatingGroup?"正在创建":"创建"}</button></div></AppModal>}
     {editing&&data&&<AppModal title="动态模板与指示" size="md" className="feed-theme feed-themed-modal feed-prompt-modal" onClose={()=>setEditing(false)} closeDisabled={saving||recovering||!!uploadingAvatar}>
       <label className="feed-config-label" htmlFor="feed-config-name">组名称</label><input id="feed-config-name" className="feed-config-input" maxLength={40} value={groupName} onChange={e=>setGroupName(e.target.value)} disabled={saving}/>
@@ -315,7 +328,7 @@ function GroupFeedView({initial,initialNow,groupId,author,chrome=initial,revalid
       {promptError&&<p role="alert" className={conflict?"feed-error":"feed-prompt-note"}>{promptError}{conflict&&<button type="button" disabled={recovering} onClick={()=>void recoverDraft()}>{recovering?"正在读取":"读取最新版本，保留草稿"}</button>}</p>}
       <div className="feed-modal-actions"><button type="button" disabled={saving||recovering||!!uploadingAvatar} onClick={()=>setEditing(false)}>取消</button><button type="button" className="feed-primary" onClick={()=>void save()} disabled={saving||recovering||!!uploadingAvatar||testingSource||conflict||!groupName.trim()||!changed}>{saving?"正在保存":"保存"}</button></div>
     </AppModal>}
-    {tasks&&shown&&data&&<FeedAgentPanel data={data} tab={agentTab} onTabChange={tab=>agentView(true,tab)} onClose={()=>setTasks(false)} onProfileChange={(profile:FeedAgentProfile)=>{invalidateReads();setData(current=>current?{...current,agent:profile,capabilities:{...current.capabilities,avatar:{image:profile.image||"/uploads/feature/feed/alcor.png",video:null}}}:current);void load(true);}} onRefresh={()=>void refresh()} refreshDisabled={refreshing||!canRefresh}/>}
+    {tasks&&shown&&data&&<FeedAgentPanel data={data} tab={agentTab} onTabChange={tab=>agentView(true,tab)} onClose={()=>setTasks(false)} onProfileChange={(profile:FeedAgentProfile)=>{invalidateReads();setData(current=>current?{...current,agent:profile,capabilities:{...current.capabilities,avatar:{image:profile.image||"/uploads/feature/feed/alcor.png",video:profile.image?null:current.capabilities.avatar.video}}}:current);void load(true);}} onRefresh={()=>void refresh()} refreshDisabled={refreshing||!canRefresh}/>}
 
     {menu&&<AppModal title="动态来源与选项" size="sm" className="feed-theme feed-themed-modal feed-small-modal" onClose={()=>setMenu(null)}><h4 className="feed-option-title">{menu.title}</h4><div className="feed-sources">{menu.sources.map(s=><a key={s.id} href={s.url} target="_blank" rel="noopener noreferrer">{s.title}<small>{s.publisher} · {dateText(s.publishedAt)}</small></a>)}</div><button type="button" className="feed-option-hide" disabled={pendingPosts[menu.id]} onClick={()=>{void updatePost(menu,{hidden:true});setMenu(null);}}>不再显示这条动态</button></AppModal>}
     {selected&&<AppModal title="讨论" desc={selected.title} size="lg" className="feed-theme feed-themed-modal feed-discussion-modal" onClose={closeDiscussion}>

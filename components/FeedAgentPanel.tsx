@@ -1,10 +1,11 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
-import { IconBolt, IconCheck, IconClock, IconDeviceDesktop, IconFingerprint, IconList, IconPencil, IconShieldCheck, IconUpload, IconUserCircle } from "@tabler/icons-react";
+import { IconCheck, IconClock, IconDeviceDesktop, IconFingerprint, IconList, IconPencil, IconShieldCheck, IconUpload, IconUserCircle } from "@tabler/icons-react";
 import { copyText } from "@/lib/clipboard";
 import AppModal from "./AppModal";
 import SafeAssetImage from "./SafeAssetImage";
+import FeedAgentPortrait from "./FeedAgentPortrait";
 import { feedRequest, FeedRequestError, feedJobRunning } from "@/lib/feedClient";
 import type { FeedAgentProfile, FeedJob, FeedJobPage, FeedPayload } from "@/lib/feedTypes";
 
@@ -102,12 +103,12 @@ export default function FeedAgentPanel({data,tab,onTabChange,onClose,onProfileCh
     <div className="feed-agent-hero">
       <div className="feed-agent-portrait">
         <div className={`feed-agent-portrait-crop${portraitImage===DEFAULT_IMAGE?" is-default":""}`}>
-          {editing==="avatar"&&avatarDraft.kind==="upload"?(avatarDraft.failed?<IconUserCircle size={88} stroke={1}/>:<img key={avatarDraft.url} src={avatarDraft.url} alt={`${profile.name} 的形象预览`} onLoad={()=>setAvatarDraft(current=>current.kind==="upload"&&current.url===avatarDraft.url?{...current,ready:true}:current)} onError={()=>{if(previewRef.current!==avatarDraft.url)return;setAvatarDraft(current=>current.kind==="upload"&&current.url===avatarDraft.url?{...current,ready:false,failed:true}:current);setError("图片无法读取，请重新选择");}}/>):<SafeAssetImage src={portraitImage} className="feed-agent-face-image" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}} showFallbackWhileLoading={false} alt={profile.name} fallback={<IconUserCircle size={88} stroke={1}/>}/>}
+          {editing==="avatar"&&avatarDraft.kind==="upload"?(avatarDraft.failed?<IconUserCircle size={88} stroke={1}/>:<img key={avatarDraft.url} src={avatarDraft.url} alt={`${profile.name} 的形象预览`} onLoad={()=>setAvatarDraft(current=>current.kind==="upload"&&current.url===avatarDraft.url?{...current,ready:true}:current)} onError={()=>{if(previewRef.current!==avatarDraft.url)return;setAvatarDraft(current=>current.kind==="upload"&&current.url===avatarDraft.url?{...current,ready:false,failed:true}:current);setError("图片无法读取，请重新选择");}}/>):<FeedAgentPortrait image={portraitImage} video={portraitImage===DEFAULT_IMAGE?data.capabilities.avatar.video:null} name={profile.name}/>}
         </div>
         <button ref={pencilRef} type="button" className="feed-agent-round feed-agent-pencil" aria-label="编辑小人" aria-haspopup="menu" aria-expanded={menu} aria-controls="feed-agent-edit-menu" disabled={busy} onClick={()=>setMenu(v=>!v)}><IconPencil size={23} stroke={1.7}/></button>
         {menu&&<div id="feed-agent-edit-menu" ref={menuRef} role="menu" className="feed-agent-edit-menu" aria-label="编辑小人选项" onKeyDown={event=>{if(!["ArrowDown","ArrowUp","Home","End"].includes(event.key))return;event.preventDefault();const buttons=Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button")),index=buttons.indexOf(document.activeElement as HTMLButtonElement);buttons[event.key==="Home"?0:event.key==="End"?buttons.length-1:(index+(event.key==="ArrowDown"?1:-1)+buttons.length)%buttons.length]?.focus();}}><button type="button" role="menuitem" onClick={()=>edit("avatar")}><IconUserCircle size={27} stroke={1.7}/>更换虚拟形象</button><button type="button" role="menuitem" onClick={()=>edit("name")}><IconPencil size={27} stroke={1.7}/>编辑名称</button></div>}
       </div>
-      <h2>{profile.name}</h2><div className="feed-agent-connected"><span aria-hidden="true"><IconBolt size={13} stroke={1.5}/></span>已连接</div>
+      <h2>{profile.name}</h2><div className="feed-agent-connected"><span aria-hidden="true"><svg className="feed-agent-bolt" width="9" height="13" viewBox="0 0 12 20" fill="currentColor" focusable="false"><path d="M7.6 1.5 2.3 10.6H5.9L4.6 18.5 9.7 8.1H6.3Z"/></svg></span>已连接</div>
     </div>
     <nav className="feed-agent-tabs" aria-label="小人详情">{TABS.map(item=><button type="button" key={item.id} disabled={busy} aria-label={item.label} title={item.label} aria-pressed={tab===item.id} onClick={()=>{onTabChange(item.id);cancelEdit();setMenu(false);}}><item.icon size={26} stroke={1.7}/></button>)}</nav>
     {error&&<p className="feed-error" role="alert">{error}{needsRead&&<button type="button" disabled={busy} onClick={()=>void reread()}>重新读取</button>}</p>}
